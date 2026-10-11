@@ -46,7 +46,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
-	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild}},
+	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse,
@@ -195,6 +195,7 @@ const (
 	TypeKnowledgeListDelete        = "knowledge:list_delete"  // 批量删除知识任务
 	TypeKnowledgeListReparse       = "knowledge:list_reparse" // 批量重解析知识任务
 	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
+	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
 	TypeManualProcess              = "manual:process"  // 手工知识更新任务（cleanup + 重新索引）
 	TypeDataSourceSync             = "datasource:sync" // 数据源同步任务
 )

@@ -1,7 +1,9 @@
 package types
 
 import (
+	"crypto/sha256"
 	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"time"
@@ -101,9 +103,27 @@ const (
 
 // EmbeddingParameters represents the embedding parameters for a model
 type EmbeddingParameters struct {
-	Dimension                 int  `yaml:"dimension"                   json:"dimension"`
-	TruncatePromptTokens      int  `yaml:"truncate_prompt_tokens"      json:"truncate_prompt_tokens"`
-	SupportsDimensionOverride bool `yaml:"supports_dimension_override" json:"supports_dimension_override"`
+	Dimension                 int    `yaml:"dimension"                   json:"dimension"`
+	TruncatePromptTokens      int    `yaml:"truncate_prompt_tokens"      json:"truncate_prompt_tokens"`
+	SupportsDimensionOverride bool   `yaml:"supports_dimension_override" json:"supports_dimension_override"`
+	SupportsImages            bool   `yaml:"supports_images" json:"supports_images"`
+	MultimodalFormat          string `yaml:"multimodal_format,omitempty" json:"multimodal_format,omitempty"`
+}
+
+// EmbeddingProfileHash identifies vector semantics while excluding credentials,
+// display labels and request limits. It is shared by indexing and rebuilds.
+func EmbeddingProfileHash(modelID string, dimension int, model *Model) string {
+	value := map[string]any{"model_id": modelID, "dimension": dimension}
+	if model != nil {
+		value["name"] = model.Name
+		value["source"] = model.Source
+		value["type"] = model.Type
+		value["parameters"] = map[string]any{"base_url": model.Parameters.BaseURL, "interface_type": model.Parameters.InterfaceType, "provider": model.Parameters.Provider, "embedding": model.Parameters.EmbeddingParameters, "extra_config": model.Parameters.ExtraConfig}
+		value["status"] = model.Status
+	}
+	encoded, _ := json.Marshal(value)
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
 }
 
 type ModelParameters struct {

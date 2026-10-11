@@ -3,9 +3,11 @@ package embedding
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -27,7 +29,95 @@ type OpenAIEmbedder struct {
 	maxRetries                int
 	customHeaders             map[string]string
 	supportsDimensionOverride bool
+	supportsImages            bool
 	EmbedderPooler
+}
+
+type multimodalEmbedInput struct {
+	Text  string `json:"text,omitempty"`
+	Image string `json:"image,omitempty"`
+}
+
+type multimodalEmbedRequest struct {
+	Model          string                 `json:"model"`
+	Input          []multimodalEmbedInput `json:"input"`
+	EncodingFormat string                 `json:"encoding_format"`
+	Dimensions     int                    `json:"dimensions,omitempty"`
+}
+
+func (e *OpenAIEmbedder) SupportsImages() bool { return e.supportsImages }
+
+func (e *OpenAIEmbedder) EmbedImage(ctx context.Context, image string) ([]float32, error) {
+	if !e.supportsImages {
+		return nil, fmt.Errorf("embedding model does not support images")
+	}
+	header, payload, found := strings.Cut(image, ",")
+	if !found || !strings.HasPrefix(header, "data:image/") || !strings.HasSuffix(header, ";base64") {
+		return nil, fmt.Errorf("image embedding input must be an image base64 data URI")
+	}
+	data, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil || len(data) == 0 {
+		return nil, fmt.Errorf("image embedding input contains invalid or empty base64")
+	}
+	vectors, err := e.multimodalEmbed(ctx, []multimodalEmbedInput{{Image: image}})
+	if err != nil {
+		return nil, err
+	}
+	return vectors[0], nil
+}
+
+func (e *OpenAIEmbedder) multimodalEmbed(ctx context.Context, inputs []multimodalEmbedInput) ([][]float32, error) {
+	request := multimodalEmbedRequest{Model: e.modelName, Input: inputs, EncodingFormat: "float"}
+	if e.supportsDimensionsParam() {
+		request.Dimensions = e.dimensions
+	}
+	data, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("marshal multimodal embedding request: %w", err)
+	}
+	response, err := e.doRequestWithRetry(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("send multimodal embedding request: %w", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read multimodal embedding response: %w", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		if len(body) > 1000 {
+			body = body[:1000]
+		}
+		return nil, fmt.Errorf("multimodal embedding HTTP %d: %s", response.StatusCode, body)
+	}
+	var result OpenAIEmbedResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("decode multimodal embedding response: %w", err)
+	}
+	if len(result.Data) != len(inputs) {
+		return nil, fmt.Errorf("multimodal embedding count mismatch: got %d, expected %d", len(result.Data), len(inputs))
+	}
+	vectors := make([][]float32, len(inputs))
+	for _, item := range result.Data {
+		if item.Index < 0 || item.Index >= len(vectors) || vectors[item.Index] != nil {
+			return nil, fmt.Errorf("multimodal embedding response has invalid or duplicate index %d", item.Index)
+		}
+		if len(item.Embedding) == 0 || (e.dimensions > 0 && len(item.Embedding) != e.dimensions) {
+			return nil, fmt.Errorf("multimodal embedding dimension mismatch: got %d, expected %d", len(item.Embedding), e.dimensions)
+		}
+		var norm float64
+		for _, value := range item.Embedding {
+			if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+				return nil, fmt.Errorf("multimodal embedding contains a non-finite value")
+			}
+			norm += float64(value) * float64(value)
+		}
+		if norm == 0 {
+			return nil, fmt.Errorf("multimodal embedding has zero length")
+		}
+		vectors[item.Index] = item.Embedding
+	}
+	return vectors, nil
 }
 
 // OpenAIEmbedRequest represents an OpenAI embedding request
@@ -164,6 +254,19 @@ func (e *OpenAIEmbedder) doRequestWithRetry(ctx context.Context, jsonData []byte
 }
 
 func (e *OpenAIEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
+	if e.supportsImages {
+		if len(texts) == 0 {
+			return [][]float32{}, nil
+		}
+		inputs := make([]multimodalEmbedInput, len(texts))
+		for index, text := range texts {
+			if strings.TrimSpace(text) == "" {
+				return nil, fmt.Errorf("multimodal text embedding input must not be empty")
+			}
+			inputs[index].Text = text
+		}
+		return e.multimodalEmbed(ctx, inputs)
+	}
 	// Create request body
 	reqBody := OpenAIEmbedRequest{
 		Model:                e.modelName,

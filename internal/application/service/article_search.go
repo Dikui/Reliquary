@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	knowledgesearch "reliquary/internal/application/service/knowledge_search"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
@@ -117,12 +118,21 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 	pool := min(max(limit*5, config.GetEffectiveEmbeddingTopK()), maxRetrievalPoolSize)
 	var queryVector []float32
 	modelID := ""
+	queryProfileHash := ""
 	if kb.IsVectorEnabled() {
 		modelID, err = ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
 		if err != nil {
 			return nil, err
 		}
 		if modelID != "" {
+			var metadata types.Model
+			read := s.db.WithContext(ctx).Where("id=? AND (tenant_id=? OR is_builtin=true)", modelID, tenantID).Find(&metadata)
+			if read.Error != nil {
+				return nil, read.Error
+			}
+			if read.RowsAffected > 0 {
+				queryProfileHash = types.EmbeddingProfileHash(modelID, metadata.Parameters.EmbeddingParameters.Dimension, &metadata)
+			}
 			queryVector, err = s.knowledgeBaseService.GetQueryEmbedding(ctx, kb.ID, f.request.Query)
 			if err != nil {
 				return nil, err
@@ -130,17 +140,48 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 		}
 	}
 	response := &types.ArticleSearchResponse{Results: []*types.ArticleSearchResult{}}
-	if f.from != nil || f.to != nil {
-		response.ExcludedMissingPublishedAt, err = s.countMissingArticleDates(ctx, tenantID, kb, f, queryVector, modelID, config)
-		if err != nil {
-			return nil, err
+	var merged []*types.ArticleSearchResult
+	// Query generation happens before this short read transaction. Shared
+	// metadata locks keep every recall channel in the query's model space.
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(queryVector) > 0 {
+			var currentKB types.KnowledgeBase
+			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND tenant_id=?", kb.ID, tenantID).First(&currentKB).Error; err != nil {
+				return err
+			}
+			currentID, err := ResolveModelTier(ctx, tx, &currentKB, types.ModelTierEmbedding)
+			if err != nil {
+				return err
+			}
+			if currentID != modelID {
+				return fmt.Errorf("embedding model selection changed during query generation")
+			}
+			if queryProfileHash != "" {
+				var metadata types.Model
+				if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (tenant_id=? OR is_builtin=true)", modelID, tenantID).First(&metadata).Error; err != nil {
+					return err
+				}
+				if types.EmbeddingProfileHash(modelID, metadata.Parameters.EmbeddingParameters.Dimension, &metadata) != queryProfileHash {
+					return fmt.Errorf("embedding model profile changed during query generation")
+				}
+			}
 		}
-	}
-	lanes, err := s.retrieveArticleLanes(ctx, tenantID, kb, f, queryVector, modelID, config, pool, true)
-	if err != nil {
-		return nil, err
-	}
-	merged, err := s.mergeArticleHits(ctx, tenantID, lanes, config)
+		reader := *s
+		reader.db = tx
+		if f.from != nil || f.to != nil {
+			var err error
+			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, tenantID, kb, f, queryVector, modelID, config)
+			if err != nil {
+				return err
+			}
+		}
+		lanes, err := reader.retrieveArticleLanes(ctx, tenantID, kb, f, queryVector, modelID, config, pool, true)
+		if err != nil {
+			return err
+		}
+		merged, err = reader.mergeArticleHits(ctx, tenantID, lanes, config)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -15,7 +15,7 @@ import (
 
 func (s *knowledgeSearchService) mergeArticleHits(ctx context.Context, tenantID uint64, lanes [][]articleSearchHit, config *types.RetrievalConfig) ([]*types.ArticleSearchResult, error) {
 	vectorWeight, keywordWeight := config.GetEffectiveRRFWeights()
-	weights := []float64{vectorWeight / 2, vectorWeight / 2, keywordWeight}
+	weights := []float64{vectorWeight / 2, vectorWeight / 2, keywordWeight, config.GetEffectiveRRFImageWeight()}
 	scores := map[string]float64{}
 	metadataMatch := map[string]string{}
 	snippets := map[string]map[string]types.ArticleSearchSnippet{}
@@ -27,18 +27,25 @@ func (s *knowledgeSearchService) mergeArticleHits(ctx context.Context, tenantID 
 				ranks[hit.KnowledgeID] = rank
 				scores[hit.KnowledgeID] += weights[lane] / float64(config.GetEffectiveRRFK()+rank)
 			}
-			if hit.ChunkID == "" {
+			if hit.ChunkID == "" && hit.ImagePath == "" {
 				metadataMatch[hit.KnowledgeID] = articleSearchMatchName(hit.MatchType)
 				continue
 			}
 			if snippets[hit.KnowledgeID] == nil {
 				snippets[hit.KnowledgeID] = map[string]types.ArticleSearchSnippet{}
 			}
-			part := snippets[hit.KnowledgeID][hit.ChunkID]
+			key := hit.ChunkID
+			if hit.ImagePath != "" {
+				key = "image:" + hit.ImagePath
+			}
+			part := snippets[hit.KnowledgeID][key]
 			part.ChunkID, part.Content, part.ChunkIndex = hit.ChunkID, hit.Content, hit.ChunkIndex
 			part.Score += weights[lane] / float64(config.GetEffectiveRRFK()+index+1)
 			part.MatchType = articleSearchMatchName(hit.MatchType)
-			snippets[hit.KnowledgeID][hit.ChunkID] = part
+			if hit.ImagePath != "" {
+				part.ImagePath, part.ChunkIndex, part.MatchType = hit.ImagePath, -1, "image"
+			}
+			snippets[hit.KnowledgeID][key] = part
 		}
 	}
 	results := make([]*types.ArticleSearchResult, 0, len(scores))
@@ -99,9 +106,19 @@ func (s *knowledgeSearchService) mergeArticleHits(ctx context.Context, tenantID 
 			if a.Score < b.Score {
 				return 1
 			}
-			return strings.Compare(a.ChunkID, b.ChunkID)
+			return strings.Compare(a.ChunkID+a.ImagePath, b.ChunkID+b.ImagePath)
 		})
 		if len(result.Snippets) > 3 {
+			// Preserve one matched image even when three text passages score higher.
+			// The thumbnail explains why this additional channel recalled the article.
+			if !slices.ContainsFunc(result.Snippets[:3], func(snippet types.ArticleSearchSnippet) bool { return snippet.ImagePath != "" }) {
+				for _, snippet := range result.Snippets[3:] {
+					if snippet.ImagePath != "" {
+						result.Snippets[2] = snippet
+						break
+					}
+				}
+			}
 			result.Snippets = result.Snippets[:3]
 		}
 		if len(result.Snippets) == 0 {
@@ -237,7 +254,11 @@ func (s *knowledgeSearchService) collapseArticleReports(ctx context.Context, ten
 		Embedding   pgvector.HalfVector
 	}
 	var rows []vectorRow
-	if err := s.db.WithContext(ctx).Table("article_embeddings").Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Scan(&rows).Error; err != nil {
+	modelID, err := ResolveModelTier(ctx, s.db, nil, types.ModelTierEmbedding)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Table("article_embeddings").Where("tenant_id=? AND knowledge_id IN ? AND model_id=?", tenantID, ids, modelID).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	vectors := map[string]vectorRow{}

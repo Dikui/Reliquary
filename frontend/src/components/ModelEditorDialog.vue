@@ -281,6 +281,21 @@
           </div>
         </div>
 
+        <div v-if="activeModelType === 'embedding'" class="form-item">
+          <label class="form-label">{{ $t('model.editor.supportsImagesLabel') }}</label>
+          <div class="vision-toggle">
+            <t-switch v-model="formData.supportsImages" :disabled="formData.source === 'local'" :aria-label="$t('model.editor.supportsImagesLabel')" />
+            <span class="form-desc form-desc--inline">{{ $t(formData.source === 'local' ? 'model.editor.supportsImagesLocalHint' : 'model.editor.supportsImagesDesc') }}</span>
+          </div>
+        </div>
+        <div v-if="activeModelType === 'embedding' && formData.supportsImages && formData.source === 'remote'" class="form-item">
+          <label class="form-label">{{ $t('model.editor.multimodalFormatLabel') }}</label>
+          <t-select v-model="formData.multimodalFormat" :aria-label="$t('model.editor.multimodalFormatLabel')">
+            <t-option value="jina" :label="$t('model.editor.multimodalFormatJina')" />
+          </t-select>
+          <p class="form-desc">{{ $t('model.editor.multimodalFormatHint') }}</p>
+        </div>
+
         <!-- Text and vision model context window. -->
         <div v-if="activeModelType === 'chat'" class="form-item">
           <label class="form-label">{{ $t('model.editor.contextWindowLabel') }}</label>
@@ -380,6 +395,8 @@ interface ModelFormData {
   apiKey?: string
   dimension?: number
   supportsDimensionOverride?: boolean
+  supportsImages?: boolean
+  multimodalFormat?: 'jina' | ''
   interfaceType?: 'ollama' | 'openai'
   isDefault: boolean
   supportsVision?: boolean
@@ -607,6 +624,8 @@ const formData = ref<ModelFormData>({
   apiKey: '',
   dimension: undefined,
   supportsDimensionOverride: false,
+  supportsImages: false,
+  multimodalFormat: 'jina',
   interfaceType: 'ollama',
   isDefault: false,
   supportsVision: false,
@@ -726,6 +745,8 @@ const selectModelType = async (type: EditorModelType) => {
   if (type !== 'embedding') {
     formData.value.dimension = undefined
     formData.value.supportsDimensionOverride = false
+    formData.value.supportsImages = false
+    formData.value.multimodalFormat = 'jina'
     dimensionChecked.value = false
     dimensionSuccess.value = false
     dimensionMessage.value = ''
@@ -782,6 +803,8 @@ watch(() => props.visible, (val) => {
         // not by this form's apiKey field.
         formData.value = {
           ...props.modelData,
+          supportsImages: props.modelData.supportsImages ?? false,
+          multimodalFormat: props.modelData.multimodalFormat || 'jina',
           apiKey: '',
           customHeaders: Array.isArray(props.modelData.customHeaders)
             ? props.modelData.customHeaders.map(h => ({ key: h.key, value: h.value }))
@@ -827,6 +850,8 @@ const resetForm = () => {
     apiKey: '',
     dimension: undefined, // 默认不填，让用户手动输入或通过检测按钮获取
     supportsDimensionOverride: false,
+    supportsImages: false,
+    multimodalFormat: 'jina',
     interfaceType: undefined,
     isDefault: false,
     supportsVision: false,
@@ -970,6 +995,7 @@ const handleSourceChange = async (source: 'local' | 'remote') => {
   }
   formData.value.source = source
   if (source === 'local') {
+    formData.value.supportsImages = false
     formData.value.interfaceType = 'ollama'
     await loadOllamaModels()
   }
@@ -1117,6 +1143,8 @@ const checkRemoteAPI = async () => {
           apiKey: formData.value.apiKey || '',
           dimension: formData.value.dimension,
           supportsDimensionOverride: formData.value.supportsDimensionOverride ?? false,
+          supportsImages: formData.value.supportsImages ?? false,
+          multimodalFormat: formData.value.supportsImages ? (formData.value.multimodalFormat || 'jina') : '',
           provider: formData.value.provider,
           ...idPayload,
           ...headerPayload,

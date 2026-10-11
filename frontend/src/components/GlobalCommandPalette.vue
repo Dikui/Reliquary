@@ -52,14 +52,15 @@
             <template v-for="(item, i) in flatChunkItems" :key="'c-' + item.file.knowledgeId">
               <ResultItem :index="flatIndexFor('chunks', i)" :selected="selectedIndex === flatIndexFor('chunks', i)"
                 :shortcut="shortcutFor(flatIndexFor('chunks', i))" icon-name="file"
-                :badge="item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
-                :badge-variant="item.chunk.match_type === 'vector' ? 'vector' : 'keyword'" :score="item.chunk.score"
+                :badge="item.chunk.image_path ? t('knowledgeSearch.imageMatch') : item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
+                :badge-variant="item.chunk.image_path || item.chunk.match_type === 'vector' ? 'vector' : 'keyword'" :score="item.chunk.score"
                 :source-unverified="item.file.source_unverified"
                 @primary="openChunk(item)" @hover="selectItemAt($event)">
                 <template #title>
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>
                 </template>
                 <template #subtitle>
+                  <KnowledgeSearchImage v-if="item.file.imagePath" :article-id="item.file.knowledgeId" :path="item.file.imagePath" :title="item.file.title" compact />
                   <span v-html="highlight(item.chunk.matched_content || item.chunk.content)" />
                 </template>
               </ResultItem>
@@ -127,6 +128,7 @@ import { highlightText } from './GlobalCommandPalette/useHighlight'
 import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
 import ResultGroup from './GlobalCommandPalette/ResultGroup.vue'
 import ResultItem from './GlobalCommandPalette/ResultItem.vue'
+import KnowledgeSearchImage from './KnowledgeSearchImage.vue'
 import RetrievalSettings from '@/views/settings/RetrievalSettings.vue'
 
 const { t } = useI18n()

@@ -18,6 +18,7 @@ type articleSearchHit struct {
 	Content     string          `gorm:"column:content"`
 	Score       float64         `gorm:"column:score"`
 	MatchType   types.MatchType `gorm:"-"`
+	ImagePath   string          `gorm:"column:image_path"`
 }
 
 const articleSearchableChunks = `c.deleted_at IS NULL AND (c.is_enabled IS NULL OR c.is_enabled = true)
@@ -41,6 +42,23 @@ func (s *knowledgeSearchService) articleVectorQuery(ctx context.Context, tenantI
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 
+func (s *knowledgeSearchService) imageVectorQuery(ctx context.Context, tenantID uint64, kbID string, f articleSearchFilters, dates bool, vector []float32, modelID string, config *types.RetrievalConfig) *gorm.DB {
+	expression := fmt.Sprintf("i.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
+	return s.eligibleArticles(ctx, tenantID, kbID, f, dates).
+		Joins("JOIN image_embeddings i ON i.knowledge_id=k.id AND i.tenant_id=k.tenant_id").
+		Where("k.source_kind='article' AND k.processing_mode='full' AND i.dimension=? AND i.model_id=?", len(vector), modelID).
+		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
+}
+
+func (s *knowledgeSearchService) imageSearchEnabled(ctx context.Context, tenantID uint64, modelID string) (bool, error) {
+	var model types.Model
+	query := s.db.WithContext(ctx).Where("id=? AND (tenant_id=? OR is_builtin=true) AND type=?", modelID, tenantID, types.ModelTypeEmbedding).Limit(1).Find(&model)
+	if query.Error != nil {
+		return false, query.Error
+	}
+	return query.RowsAffected > 0 && model.Parameters.EmbeddingParameters.SupportsImages, nil
+}
+
 func (s *knowledgeSearchService) articleChunkKeywordQuery(ctx context.Context, tenantID uint64, kbID string, f articleSearchFilters, dates bool) *gorm.DB {
 	return s.eligibleArticles(ctx, tenantID, kbID, f, dates).
 		Joins("JOIN chunks c ON c.knowledge_id=k.id AND c.tenant_id=k.tenant_id").
@@ -58,11 +76,11 @@ func (s *knowledgeSearchService) articleHeaderKeywordQuery(ctx context.Context, 
 }
 
 func (s *knowledgeSearchService) retrieveArticleLanes(ctx context.Context, tenantID uint64, kb *types.KnowledgeBase, f articleSearchFilters, vector []float32, modelID string, config *types.RetrievalConfig, pool int, dates bool) ([][]articleSearchHit, error) {
-	lanes := make([][]articleSearchHit, 3)
+	lanes := make([][]articleSearchHit, 4)
 	if len(vector) > 0 {
 		expression := fmt.Sprintf("e.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
 		query := s.articleChunkVectorQuery(ctx, tenantID, kb.ID, f, dates, vector, config).
-			Where("k.embedding_model_id=?", modelID).
+			Where("e.model_id=? OR (e.model_id='' AND k.embedding_model_id=?)", modelID, modelID).
 			Select("k.id AS knowledge_id,c.id AS chunk_id,c.chunk_index,c.content,1-("+expression+") AS score,ROW_NUMBER() OVER (PARTITION BY k.id ORDER BY "+expression+",c.id) AS article_rank", pgvector.NewHalfVector(vector), pgvector.NewHalfVector(vector))
 		if err := s.db.WithContext(ctx).Table("(?) AS candidates", query).Where("article_rank <= 3").
 			Order("score DESC,chunk_id ASC").Limit(poolLimit(pool)).Scan(&lanes[0]).Error; err != nil {
@@ -73,6 +91,19 @@ func (s *knowledgeSearchService) retrieveArticleLanes(ctx context.Context, tenan
 		if err := query.Select("k.id AS knowledge_id,1-("+expression+") AS score", pgvector.NewHalfVector(vector)).
 			Order("score DESC, k.id ASC").Limit(poolLimit(pool)).Scan(&lanes[1]).Error; err != nil {
 			return nil, err
+		}
+		enabled, err := s.imageSearchEnabled(ctx, tenantID, modelID)
+		if err != nil {
+			return nil, err
+		}
+		if enabled {
+			expression = fmt.Sprintf("i.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
+			query = s.imageVectorQuery(ctx, tenantID, kb.ID, f, dates, vector, modelID, config).
+				Select("k.id AS knowledge_id,i.attachment_path AS image_path,1-("+expression+") AS score,ROW_NUMBER() OVER (PARTITION BY k.id ORDER BY "+expression+",i.attachment_path) AS article_rank", pgvector.NewHalfVector(vector), pgvector.NewHalfVector(vector))
+			if err := s.db.WithContext(ctx).Table("(?) AS candidates", query).Where("article_rank <= 3").
+				Order("score DESC,image_path ASC").Limit(poolLimit(pool)).Scan(&lanes[3]).Error; err != nil {
+				return nil, err
+			}
 		}
 	}
 	if kb.IsKeywordEnabled() {

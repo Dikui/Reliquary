@@ -13,6 +13,7 @@ import { CONTENT_TYPES } from '../../types/knowledgeClassification'
 import { SEARCH_SOURCES, type KnowledgeSearchArticle, type KnowledgeSearchRequest } from '../../types/knowledgeSearch'
 import * as helpers from '../../utils/knowledgeSearch'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
+import * as protectedAccess from '../../utils/protectedFileAccess'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zh, 'en-US': en }
@@ -59,6 +60,7 @@ const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({
 function articleComponent() {
   return component('../../components/KnowledgeSearchArticle.vue', {
     './KnowledgeClassification.vue': moduleOf(component('../../components/KnowledgeClassification.vue', classificationModules)),
+    './KnowledgeSearchImage.vue': moduleOf(component('../../components/KnowledgeSearchImage.vue', { '@/utils/protectedFileAccess': protectedAccess })),
     './GlobalCommandPalette/useHighlight': highlight,
   })
 }
@@ -84,6 +86,16 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }], excluded_missing_published_at: 0 } }), locale)
     assert.ok(result.html.includes(messages[locale].knowledgeReview.sourceUnverified))
     assert.match(result.html, /data-article-id="a"/)
+  })
+  test(`${locale}: real search API loading forwards image snippets to the protected thumbnail component`, async () => {
+    const imagePath = '../../attachments/image-article/only-in-image.png'
+    const result = await pageScenario(async state => {
+      state.query.value = 'red bicycle'
+      await state.runSearch()
+      assert.equal(state.results.value[0].snippets[0].image_path, imagePath)
+    }, async () => ({ success: true, data: { results: [{ ...article, article_id: 'image-article', processing_mode: 'full', snippets: [{ chunk_id: 'image', chunk_index: 0, content: '', score: 0.99, match_type: 'image', image_path: imagePath }] }] } }), locale)
+    assert.ok(result.html.includes(`data-image-path="${imagePath}"`))
+    assert.ok(result.html.includes(messages[locale].knowledgeSearch.imageMatch))
   })
   test(`${locale}: article results show summary, attribution, safe link and at most three highlighted snippets`, async () => {
     const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
@@ -198,6 +210,20 @@ for (const count of [1, 2]) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: command palette API loading retains a matched image behind the representative text snippet`, async () => {
+    const imagePath = '../../attachments/palette-image/chart.png'
+    const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), {
+      '@/utils/knowledgeSearch': helpers,
+      '@/api/knowledge-search': { searchKnowledgeArticles: async () => ({ success: true, data: { results: [{ ...article, snippets: [article.snippets[0], { chunk_id: '', chunk_index: -1, content: '', match_type: 'image', score: 0.5, image_path: imagePath }] }] } }) },
+    })
+    const palette = defineComponent({ setup() {
+      const state = hook.useCmdkSearch({})
+      onServerPrefetch(async () => { state.query.value = 'Launch'; await state.retry(); assert.equal(state.fileGroups.value[0].imagePath, imagePath); assert.equal(state.fileGroups.value[0].chunks[0].content, article.snippets[0].content) })
+      return () => null
+    } })
+    await render(palette, {}, locale)
+    assert.match(readFileSync(new URL('../../components/GlobalCommandPalette.vue', import.meta.url), 'utf8'), /:path="item.file.imagePath"/)
+  })
   test(`${locale}: command palette API loading preserves and renders the source unverified marker`, async () => {
     const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), {
       '@/utils/knowledgeSearch': helpers,

@@ -113,6 +113,7 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'batchDelete',
   'indexDelete',
   'entityNameEmbeddingRebuild',
+  'embeddingRebuild',
 ] as const
 
 test('runtime queue worker pool and queue labels exist in every locale', () => {

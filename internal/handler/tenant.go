@@ -450,6 +450,10 @@ func (h *TenantHandler) updateTenantRetrievalConfigInternal(c *gin.Context) {
 	}
 
 	// Validate thresholds
+	if cfg.RRFImageWeight < 0 || cfg.RRFImageWeight > 10 {
+		c.Error(errors.NewBadRequestError("rrf_image_weight must be between 0 and 10"))
+		return
+	}
 	if cfg.VectorThreshold < 0 || cfg.VectorThreshold > 1 {
 		c.Error(errors.NewBadRequestError("vector_threshold must be between 0 and 1"))
 		return

@@ -12,6 +12,7 @@ export interface CmdkChunk {
   knowledge_title: string
   content: string
   matched_content?: string
+  image_path?: string
   match_type: 'vector' | 'keyword' | string
   score: number
 }
@@ -24,6 +25,7 @@ export interface CmdkFileGroup {
   source?: KnowledgeSearchArticle['source']
   source_unverified?: boolean
   similarCount?: number
+  imagePath?: string
 }
 
 export function articleFileGroups(articles: KnowledgeSearchArticle[]): CmdkFileGroup[] {
@@ -31,10 +33,12 @@ export function articleFileGroups(articles: KnowledgeSearchArticle[]): CmdkFileG
     knowledgeId: article.article_id, kbId: '', title: article.title, source: article.source,
     source_unverified: Boolean(article.source_unverified),
     similarCount: article.similar_reports?.length || 0,
+    imagePath: article.source === 'article' ? article.snippets?.find(snippet => snippet.image_path)?.image_path : undefined,
     chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.article_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
       id: snippet.chunk_id, chunk_index: snippet.chunk_index, knowledge_id: article.article_id,
       knowledge_base_id: '', knowledge_title: article.title, content: snippet.content,
       match_type: snippet.match_type, score: article.score,
+      image_path: 'image_path' in snippet ? snippet.image_path : undefined,
     })),
   }))
 }

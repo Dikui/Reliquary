@@ -148,6 +148,8 @@ export function testEmbeddingModel(modelConfig: {
     apiKey?: string;
     dimension?: number;
     supportsDimensionOverride?: boolean;
+    supportsImages?: boolean;
+    multimodalFormat?: 'jina' | '';
     provider?: string;
     modelId?: string;
 } & BaseModelTestPayload): Promise<{ available: boolean; message?: string; dimension?: number }> {

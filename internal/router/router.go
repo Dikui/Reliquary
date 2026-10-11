@@ -35,10 +35,11 @@ type RouterParams struct {
 	VaultHandler                 *handler.VaultHandler `optional:"true"`
 	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
 	EntityHandler                *handler.EntityHandler
-	TopicHandler                 *handler.TopicHandler        `optional:"true"`
-	FollowHandler                *handler.FollowHandler       `optional:"true"`
-	OperationLogHandler          *handler.OperationLogHandler `optional:"true"`
-	MCPHandler                   *mcpserver.Handler           `optional:"true"`
+	EmbeddingRebuildHandler      *handler.EmbeddingRebuildHandler `optional:"true"`
+	TopicHandler                 *handler.TopicHandler            `optional:"true"`
+	FollowHandler                *handler.FollowHandler           `optional:"true"`
+	OperationLogHandler          *handler.OperationLogHandler     `optional:"true"`
+	MCPHandler                   *mcpserver.Handler               `optional:"true"`
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
@@ -136,6 +137,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
 		v1.GET("/knowledge-search/options", params.KnowledgeSearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
+		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)
 		if params.TopicHandler != nil {
 			RegisterTopicRoutes(v1, params.TopicHandler, accessGuards)
 		}

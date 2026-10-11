@@ -86,6 +86,11 @@
         />
       </div>
       <div class="setting-item">
+        <div class="setting-label-row"><span>{{ t('retrievalSettings.imageWeightLabel') }}</span></div>
+        <t-input-number v-model="localConfig.rrf_image_weight" :min="0" :max="1" :step="0.05" :decimal-places="2" :aria-label="t('retrievalSettings.imageWeightLabel')" @change="handleParamChange" />
+        <p class="setting-desc">{{ t('retrievalSettings.imageWeightHint') }}</p>
+      </div>
+      <div class="setting-item">
         <div class="setting-label-row"><span>{{ t('retrievalSettings.similarReportsThresholdLabel') }}</span></div>
         <t-input-number v-model="localConfig.similar_reports_threshold" :min="0.01" :max="1" :step="0.01" :decimal-places="2" :aria-label="t('retrievalSettings.similarReportsThresholdLabel')" @change="handleParamChange" />
       </div>
@@ -117,6 +122,7 @@ const defaultConfig: RetrievalConfig = {
   rerank_threshold: 0.2,
   similar_reports_threshold: 0.85,
   similar_reports_window_days: 3,
+  rrf_image_weight: 0.2,
 }
 
 const localConfig = reactive<RetrievalConfig>({ ...defaultConfig })
@@ -132,6 +138,7 @@ const loadConfig = async () => {
         ...(cfg.rrf_k !== undefined ? { rrf_k: cfg.rrf_k } : {}),
         ...(cfg.rrf_vector_weight !== undefined ? { rrf_vector_weight: cfg.rrf_vector_weight } : {}),
         ...(cfg.rrf_keyword_weight !== undefined ? { rrf_keyword_weight: cfg.rrf_keyword_weight } : {}),
+        rrf_image_weight: cfg.rrf_image_weight ?? defaultConfig.rrf_image_weight,
         embedding_top_k: cfg.embedding_top_k || defaultConfig.embedding_top_k,
         vector_threshold: cfg.vector_threshold || defaultConfig.vector_threshold,
         keyword_threshold: cfg.keyword_threshold || defaultConfig.keyword_threshold,

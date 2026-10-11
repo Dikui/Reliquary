@@ -96,6 +96,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   modules['@/components/FollowToggle.vue'] = modules['./FollowToggle.vue'] = moduleOf(toggle)
   const classification = loadComponent(new URL('../../components/KnowledgeClassification.vue', import.meta.url), modules)
   modules['@/components/KnowledgeClassification.vue'] = modules['./KnowledgeClassification.vue'] = moduleOf(classification)
+  modules['./KnowledgeSearchImage.vue'] = empty
   const result = loadComponent(new URL('../../components/KnowledgeSearchArticle.vue', import.meta.url), modules)
   modules['@/components/KnowledgeSearchArticle.vue'] = moduleOf(result)
   function mount(component: any, props = {}) {

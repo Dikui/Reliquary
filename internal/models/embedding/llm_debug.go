@@ -14,6 +14,29 @@ type debugEmbedder struct {
 	inner Embedder
 }
 
+func (d *debugEmbedder) GetProfileHash() string {
+	if model, ok := d.inner.(ProfiledEmbedder); ok {
+		return model.GetProfileHash()
+	}
+	return ""
+}
+
+func (d *debugEmbedder) SupportsImages() bool {
+	e, ok := d.inner.(ImageEmbedder)
+	return ok && e.SupportsImages()
+}
+
+func (d *debugEmbedder) EmbedImage(ctx context.Context, image string) ([]float32, error) {
+	e, ok := d.inner.(ImageEmbedder)
+	if !ok || !e.SupportsImages() {
+		return nil, fmt.Errorf("embedding model does not support images")
+	}
+	start := time.Now()
+	result, err := e.EmbedImage(ctx, image)
+	logEmbeddingDebug(ctx, d.inner.GetModelName(), []string{fmt.Sprintf("image data URI (%d bytes)", len(image))}, singleToDouble(result), err, time.Since(start))
+	return result, err
+}
+
 func (d *debugEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	start := time.Now()
 	result, err := d.inner.Embed(ctx, text)

@@ -21,6 +21,7 @@ type pgVector struct {
 	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
 	KnowledgeID     string              `json:"knowledge_id"      gorm:"column:knowledge_id"`
 	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
+	ModelID         string              `json:"model_id" gorm:"column:model_id"`
 	Dimension       int                 `json:"dimension"         gorm:"column:dimension;not null"`
 	Embedding       pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
 	IsEnabled       bool                `json:"is_enabled"        gorm:"column:is_enabled;index"`
@@ -77,6 +78,9 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 	}
 	// Get is_enabled from additionalParams if available
 	if additionalParams != nil {
+		if modelID, ok := additionalParams["model_id"].(string); ok {
+			pgVector.ModelID = modelID
+		}
 		if chunkEnabledMap, ok := additionalParams["chunk_enabled"].(map[string]bool); ok {
 			if enabled, exists := chunkEnabledMap[indexInfo.ChunkID]; exists {
 				pgVector.IsEnabled = enabled

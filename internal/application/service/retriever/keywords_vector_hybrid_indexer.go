@@ -77,6 +77,8 @@ func (v *KeywordsVectorHybridRetrieveEngineService) Index(ctx context.Context,
 			return err
 		}
 		embeddingMap[indexInfo.SourceID] = embedding
+		params["model_id"] = embedder.GetModelID()
+		params["model_profile_hash"] = embedderProfileHash(embedder)
 	}
 	params["embedding"] = embeddingMap
 	return v.indexRepository.Save(ctx, indexInfo, params)
@@ -109,11 +111,11 @@ func (v *KeywordsVectorHybridRetrieveEngineService) BatchIndex(ctx context.Conte
 		const maxConcurrency = 5
 		if len(chunks) <= maxConcurrency {
 			// For small number of batches, use simple concurrency
-			return v.concurrentBatchSave(ctx, chunks, embeddings, batchSize)
+			return v.concurrentBatchSave(ctx, chunks, embeddings, batchSize, embedder.GetModelID(), embedderProfileHash(embedder))
 		}
 
 		// For large number of batches, use bounded concurrency
-		return v.boundedConcurrentBatchSave(ctx, chunks, embeddings, batchSize, maxConcurrency)
+		return v.boundedConcurrentBatchSave(ctx, chunks, embeddings, batchSize, maxConcurrency, embedder.GetModelID(), embedderProfileHash(embedder))
 	}
 
 	// For non-vector retrieval, use concurrent batch saving as well
@@ -180,6 +182,8 @@ func (v *KeywordsVectorHybridRetrieveEngineService) concurrentBatchSave(
 	chunks [][]*types.IndexInfo,
 	embeddings [][]float32,
 	batchSize int,
+	modelID string,
+	profileHash string,
 ) error {
 	g, ctx := errgroup.WithContext(ctx)
 	for i, indexChunk := range chunks {
@@ -190,6 +194,8 @@ func (v *KeywordsVectorHybridRetrieveEngineService) concurrentBatchSave(
 				embeddingMap[indexInfo.SourceID] = embeddings[i*batchSize+j]
 			}
 			params["embedding"] = embeddingMap
+			params["model_id"] = modelID
+			params["model_profile_hash"] = profileHash
 			return v.indexRepository.BatchSave(ctx, indexChunk, params)
 		})
 	}
@@ -203,6 +209,8 @@ func (v *KeywordsVectorHybridRetrieveEngineService) boundedConcurrentBatchSave(
 	embeddings [][]float32,
 	batchSize int,
 	maxConcurrency int,
+	modelID string,
+	profileHash string,
 ) error {
 	g, ctx := errgroup.WithContext(ctx)
 	sem := make(chan struct{}, maxConcurrency)
@@ -222,10 +230,19 @@ func (v *KeywordsVectorHybridRetrieveEngineService) boundedConcurrentBatchSave(
 				embeddingMap[indexInfo.SourceID] = embeddings[i*batchSize+j]
 			}
 			params["embedding"] = embeddingMap
+			params["model_id"] = modelID
+			params["model_profile_hash"] = profileHash
 			return v.indexRepository.BatchSave(ctx, indexChunk, params)
 		})
 	}
 	return g.Wait()
+}
+
+func embedderProfileHash(embedder embedding.Embedder) string {
+	if profile, ok := embedder.(embedding.ProfiledEmbedder); ok {
+		return profile.GetProfileHash()
+	}
+	return ""
 }
 
 // concurrentBatchSaveNoEmbedding saves all batches concurrently without embeddings

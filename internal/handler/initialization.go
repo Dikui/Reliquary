@@ -444,6 +444,8 @@ type ModelTestRequest struct {
 	InterfaceType             string            `json:"interfaceType,omitempty"`
 	Dimension                 int               `json:"dimension,omitempty"`
 	SupportsDimensionOverride bool              `json:"supportsDimensionOverride,omitempty"`
+	SupportsImages            bool              `json:"supportsImages,omitempty"`
+	MultimodalFormat          string            `json:"multimodalFormat,omitempty"`
 	CustomHeaders             map[string]string `json:"customHeaders,omitempty"`
 	ExtraConfig               map[string]string `json:"extraConfig,omitempty"`
 	// AppSecret 保留模型凭据的存储与测试请求兼容。
@@ -526,6 +528,8 @@ func (h *InitializationHandler) buildTestModel(
 				Dimension:                 req.Dimension,
 				TruncatePromptTokens:      256,
 				SupportsDimensionOverride: req.SupportsDimensionOverride,
+				SupportsImages:            req.SupportsImages,
+				MultimodalFormat:          req.MultimodalFormat,
 			},
 		},
 	}

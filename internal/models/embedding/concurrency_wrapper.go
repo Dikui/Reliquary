@@ -2,10 +2,30 @@ package embedding
 
 import (
 	"context"
+	"fmt"
 
 	"reliquary/internal/models/limiter"
 	"reliquary/internal/types"
 )
+
+func (w *concurrencyEmbedder) SupportsImages() bool {
+	e, ok := w.inner.(ImageEmbedder)
+	return ok && e.SupportsImages()
+}
+
+func (w *concurrencyEmbedder) EmbedImage(ctx context.Context, image string) ([]float32, error) {
+	e, ok := w.inner.(ImageEmbedder)
+	if !ok || !e.SupportsImages() {
+		return nil, fmt.Errorf("embedding model does not support images")
+	}
+	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
+	if err := limiter.WaitRate(ctx, w.inner.GetModelID(), w.requestsPerMinute); err != nil {
+		return nil, err
+	}
+	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
+	defer release()
+	return e.EmbedImage(ctx, image)
+}
 
 // Embedding is the highest-volume background model call: document ingestion
 // vectorises every chunk, so a single batch upload can burst the whole worker
@@ -29,7 +49,10 @@ type concurrencyEmbedder struct {
 	// to the process-wide default (see limiter.GateN).
 	limit             int
 	requestsPerMinute int
+	profileHash       string
 }
+
+func (w *concurrencyEmbedder) GetProfileHash() string { return w.profileHash }
 
 func (w *concurrencyEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)

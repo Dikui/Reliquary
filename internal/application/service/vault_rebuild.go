@@ -99,6 +99,10 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 		if err := indexArticleEmbedding(ctx, s.db, s.models, kb, knowledge); err != nil {
 			return fmt.Errorf("index rebuilt article summary %s: %w", rel, err)
 		}
+		vault := &VaultService{db: s.db, root: s.root}
+		if err := indexArticleImages(ctx, s.db, s.models, kb, vault, knowledge); err != nil {
+			return fmt.Errorf("index rebuilt article images %s: %w", rel, err)
+		}
 		result.Articles++
 		return nil
 	})

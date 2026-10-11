@@ -91,7 +91,12 @@ func (g *pgRepository) Save(ctx context.Context, indexInfo *types.IndexInfo, add
 	if embeddingDB.Dimension == 0 {
 		return nil
 	}
-	err := g.db.WithContext(ctx).Create(embeddingDB).Error
+	err := g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := checkVectorModelProfile(ctx, tx, additionalParams); err != nil {
+			return err
+		}
+		return tx.Create(embeddingDB).Error
+	})
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("[Postgres] Failed to save index: %v", err)
 		return err
@@ -115,7 +120,12 @@ func (g *pgRepository) BatchSave(
 	if len(indexInfoDBList) == 0 {
 		return nil
 	}
-	err := g.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(indexInfoDBList).Error
+	err := g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := checkVectorModelProfile(ctx, tx, additionalParams); err != nil {
+			return err
+		}
+		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(indexInfoDBList).Error
+	})
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("[Postgres] Batch save failed: %v", err)
 		return err

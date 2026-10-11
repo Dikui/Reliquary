@@ -441,6 +441,9 @@ func (s *knowledgeService) persistArticleProcessingResult(ctx context.Context, k
 			return err
 		}
 	}
+	if err := indexArticleImages(ctx, s.db, s.modelService, kb, s.vault, k); err != nil {
+		return err
+	}
 	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType, "processing_mode": k.ProcessingMode}, "", "")
 	return nil
 }

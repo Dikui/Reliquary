@@ -63,11 +63,16 @@ func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.E
 	if norm == 0 {
 		return fmt.Errorf("article embedding has zero length")
 	}
-	return db.WithContext(ctx).Exec(`INSERT INTO article_embeddings
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := checkEmbeddingProfile(ctx, tx, embedder, article.TenantID); err != nil {
+			return err
+		}
+		return tx.Exec(`INSERT INTO article_embeddings
 		(tenant_id, knowledge_id, knowledge_base_id, model_id, dimension, embedding, content_hash)
 		VALUES (?, ?, ?, ?, ?, ?::halfvec, ?)
 		ON CONFLICT (knowledge_id) DO UPDATE SET
 		model_id=EXCLUDED.model_id, dimension=EXCLUDED.dimension,
 		embedding=EXCLUDED.embedding, content_hash=EXCLUDED.content_hash, updated_at=NOW()`,
-		article.TenantID, article.ID, article.KnowledgeBaseID, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
+			article.TenantID, article.ID, article.KnowledgeBaseID, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
+	})
 }

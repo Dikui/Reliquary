@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import type { KnowledgeSearchArticle } from '@/types/knowledgeSearch'
 import type { FollowFeedArticle } from '@/types/follows'
 import KnowledgeClassification from './KnowledgeClassification.vue'
+import KnowledgeSearchImage from './KnowledgeSearchImage.vue'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
 
 const props = withDefaults(defineProps<{ article: KnowledgeSearchArticle; query: string; nested?: boolean; followFeed?: boolean }>(), { nested: false, followFeed: false })
@@ -30,7 +31,10 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
     <KnowledgeClassification v-if="article.source === 'article'" :knowledge="classification" compact @open-entity="emit('open-entity', $event)" />
     <div v-if="article.snippets?.length" class="article-snippets">
       <strong>{{ t('knowledgeSearch.snippets') }}</strong>
-      <p v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || index" v-html="highlightText(snippet.content, query)" />
+      <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="article-snippet">
+        <KnowledgeSearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.article_id" :path="snippet.image_path" :title="article.title" />
+        <p v-if="snippet.content" v-html="highlightText(snippet.content, query)" />
+      </div>
     </div>
     <template v-if="!nested && article.similar_reports?.length">
       <button type="button" class="similar-toggle" :aria-expanded="expanded" :aria-controls="similarRegionID" @click="expanded = !expanded">
@@ -59,6 +63,7 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
 .article-snippets { display: grid; gap: 8px; margin-top: 14px; color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.7; }
 .article-snippets strong { color: var(--td-text-color-primary); font-weight: 500; }
 .article-snippets p { margin: 0; white-space: pre-wrap; }
+.article-snippet { display: grid; gap: 8px; }
 .article-snippets :deep(.search-highlight) { color: var(--td-brand-color); background: var(--td-brand-color-light); border-radius: var(--td-radius-small); }
 .similar-toggle { display: inline-flex; gap: 6px; align-items: center; border: 0; border-radius: var(--td-radius-small); background: transparent; color: var(--td-brand-color); padding: 6px 0; margin-top: 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .similar-toggle:hover { text-decoration: underline; }

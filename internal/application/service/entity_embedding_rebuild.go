@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,17 +37,7 @@ type entityEmbeddingProfile struct {
 }
 
 func entityEmbeddingProfileHash(modelID string, dimension int, model *types.Model) string {
-	value := map[string]any{"model_id": modelID, "dimension": dimension}
-	if model != nil {
-		value["name"] = model.Name
-		value["source"] = model.Source
-		value["type"] = model.Type
-		value["parameters"] = map[string]any{"base_url": model.Parameters.BaseURL, "interface_type": model.Parameters.InterfaceType, "provider": model.Parameters.Provider, "embedding": model.Parameters.EmbeddingParameters, "extra_config": model.Parameters.ExtraConfig}
-		value["status"] = model.Status
-	}
-	encoded, _ := json.Marshal(value)
-	digest := sha256.Sum256(encoded)
-	return hex.EncodeToString(digest[:])
+	return types.EmbeddingProfileHash(modelID, dimension, model)
 }
 func (r *EntityNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id string, tenantID uint64) (*types.Model, error) {
 	var metadata types.Model

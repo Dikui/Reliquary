@@ -108,10 +108,10 @@
                   :title="contextWindowTitle(model.contextWindow)"
                 >{{ formatContextWindow(model.contextWindow) }}</span>
               </template>
-              <template v-if="model._modelType === 'chat' && model.supportsVision">
+              <template v-if="(model._modelType === 'chat' && model.supportsVision) || (model._modelType === 'embedding' && model.supportsImages)">
                 <span class="model-card__sep">·</span>
-                <span class="model-card__vision" :title="$t('model.editor.supportsVisionLabel')"
-                  :aria-label="$t('model.editor.supportsVisionLabel')">
+                <span class="model-card__vision" :title="$t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel')"
+                  :aria-label="$t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel')">
                   <t-icon name="image" size="12px" />
                 </span>
               </template>
@@ -294,6 +294,8 @@ function convertToLegacyFormat(model: ModelConfig) {
     provider: model.parameters.provider || '',
     dimension: model.parameters.embedding_parameters?.dimension,
     supportsDimensionOverride: model.parameters.embedding_parameters?.supports_dimension_override || false,
+    supportsImages: model.parameters.embedding_parameters?.supports_images || false,
+    multimodalFormat: model.parameters.embedding_parameters?.multimodal_format || 'jina',
     isBuiltin: model.is_builtin || false,
     supportsVision: model.parameters.supports_vision || false,
     contextWindow: model.parameters.context_window || undefined,
@@ -527,7 +529,9 @@ const handleModelSave = async (modelData: any) => {
           embedding_parameters: {
             dimension: modelData.dimension,
             truncate_prompt_tokens: 0,
-            supports_dimension_override: modelData.supportsDimensionOverride ?? false
+            supports_dimension_override: modelData.supportsDimensionOverride ?? false,
+            supports_images: modelData.source === 'remote' && !!modelData.supportsImages,
+            multimodal_format: modelData.source === 'remote' && modelData.supportsImages ? (modelData.multimodalFormat || 'jina') : '',
           }
         } : {}),
         ...(saveType === 'chat' ? {

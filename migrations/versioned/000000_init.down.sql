@@ -20,7 +20,10 @@ DROP FUNCTION IF EXISTS public.sync_article_search_topic();
 DROP FUNCTION IF EXISTS public.refresh_knowledge_search_text(bigint, text);
 DROP FUNCTION IF EXISTS public.build_knowledge_search_text(text, bigint, text, text, jsonb, jsonb);
 DROP FUNCTION IF EXISTS public.search_published_at(text);
+DROP TABLE IF EXISTS public.embedding_rebuild_items;
+DROP TABLE IF EXISTS public.embedding_rebuild_runs;
 DROP TABLE IF EXISTS public.article_embeddings;
+DROP TABLE IF EXISTS public.image_embeddings;
 
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;

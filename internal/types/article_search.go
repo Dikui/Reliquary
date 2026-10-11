@@ -30,6 +30,7 @@ type ArticleSearchTopic struct {
 }
 
 type ArticleSearchSnippet struct {
+	ImagePath  string  `json:"image_path,omitempty"`
 	ChunkID    string  `json:"chunk_id"`
 	Content    string  `json:"content"`
 	ChunkIndex int     `json:"chunk_index"`

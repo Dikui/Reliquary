@@ -4,7 +4,7 @@ import type { ContentType, KnowledgeTopic, StructuredSummary } from './knowledge
 export const SEARCH_SOURCES = ['article', 'mine', 'report'] as const
 export type SearchSource = typeof SEARCH_SOURCES[number]
 export interface KnowledgeSearchEntity { id: string; canonical_name: string; entity_type: EntityType; aliases?: string[] }
-export interface KnowledgeSearchSnippet { chunk_id: string; content: string; chunk_index: number; score: number; match_type: string }
+export interface KnowledgeSearchSnippet { chunk_id: string; content: string; chunk_index: number; score: number; match_type: string; image_path?: string }
 export interface KnowledgeSearchArticle {
   article_id: string
   title: string

@@ -32,9 +32,20 @@ type RetrievalConfig struct {
 	RRFVectorWeight float64 `json:"rrf_vector_weight,omitempty"`
 	// RRFKeywordWeight is the keyword counterpart. Default: 0.3.
 	RRFKeywordWeight float64 `json:"rrf_keyword_weight,omitempty"`
+	RRFImageWeight   float64 `json:"rrf_image_weight,omitempty"`
 	// Similarity and publication distance are evaluated during each search.
 	SimilarReportsThreshold  float64 `json:"similar_reports_threshold,omitempty"`
 	SimilarReportsWindowDays int     `json:"similar_reports_window_days,omitempty"`
+}
+
+// GetEffectiveRRFImageWeight gives the image channel a modest recall boost.
+// Its default is lower than either text vector channel because image similarity
+// is often broader than a matching passage or article summary.
+func (c *RetrievalConfig) GetEffectiveRRFImageWeight() float64 {
+	if c == nil || c.RRFImageWeight <= 0 {
+		return 0.2
+	}
+	return c.RRFImageWeight
 }
 
 func (c *RetrievalConfig) GetEffectiveSimilarReportsThreshold() float64 {

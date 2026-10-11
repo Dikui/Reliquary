@@ -149,6 +149,28 @@ type tierEmbedder struct {
 	modelID string
 }
 
+func (m *tierEmbedder) GetProfileHash() string {
+	if model, ok := m.inner.(embedding.ProfiledEmbedder); ok {
+		return model.GetProfileHash()
+	}
+	return ""
+}
+
+func (m *tierEmbedder) SupportsImages() bool {
+	images, ok := m.inner.(embedding.ImageEmbedder)
+	return ok && images.SupportsImages()
+}
+
+func (m *tierEmbedder) EmbedImage(ctx context.Context, image string) ([]float32, error) {
+	images, ok := m.inner.(embedding.ImageEmbedder)
+	if !ok || !images.SupportsImages() {
+		return nil, fmt.Errorf("embedding model does not support images")
+	}
+	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
+	types.RecordModelCall(ctx, m.GetModelID())
+	return images.EmbedImage(ctx, image)
+}
+
 func (m *tierEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
 	types.RecordModelCall(ctx, m.GetModelID())

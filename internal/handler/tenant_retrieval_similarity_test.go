@@ -17,6 +17,8 @@ func TestRetrievalConfigRejectsInvalidSimilarityRules(t *testing.T) {
 		{`{"similar_reports_threshold":1.1}`, "similar_reports_threshold"},
 		{`{"similar_reports_window_days":-1}`, "similar_reports_window_days"},
 		{`{"similar_reports_window_days":366}`, "similar_reports_window_days"},
+		{`{"rrf_image_weight":-0.1}`, "rrf_image_weight"},
+		{`{"rrf_image_weight":10.1}`, "rrf_image_weight"},
 	} {
 		t.Run(test.body, func(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())

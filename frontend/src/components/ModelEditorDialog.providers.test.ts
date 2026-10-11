@@ -33,13 +33,16 @@ const presets: ModelProviderOption[] = presetIds.map(value => ({
 }))
 presets.find(preset => preset.value === 'aliyun')!.defaultUrls.embedding = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
-async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProviders = async (type: string) => presets.filter(preset => preset.modelTypes.includes(type)), scenario = async () => {} }: {
+async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = null, testEmbedding = async () => ({ available: true, dimension: 512 }), listProviders = async (type: string) => presets.filter(preset => preset.modelTypes.includes(type)), scenario = async () => {} }: {
   locale?: 'zh-CN' | 'en-US'
   modelType?: 'chat' | 'embedding' | 'rerank'
+  modelData?: any
+  testEmbedding?: (payload: any) => Promise<{ available: boolean; dimension?: number }>
   listProviders?: (type: string) => Promise<ModelProviderOption[]>
   scenario?: (state: any) => Promise<void>
 } = {}) {
   const requests: string[] = []
+  const confirmed: any[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const stub = defineComponent({ setup: (_, { attrs, slots }) => () => h('div', attrs, slots.default?.()) })
   const modules: Record<string, unknown> = {
@@ -48,6 +51,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProvider
     '@/api/initialization': {
       listModelProviders: (type: string) => { requests.push(type); return listProviders(type) },
       listOllamaModels: async () => [{ name: 'qwen3:8b', size: 5 * 1024 * 1024 * 1024, digest: 'local-model', modified_at: '2026-10-10T00:00:00Z' }],
+      testEmbeddingModel: testEmbedding,
     },
     '@/api/model': {},
     '@/stores/ui': { useUIStore: () => ({}) },
@@ -72,7 +76,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProvider
     onServerPrefetch(async () => { await state.loadProviders(); await scenario(state); await nextTick() })
     return state
   }
-  const app = createSSRApp(component, { visible: true, modelType })
+  const app = createSSRApp(component, { visible: true, modelType, modelData, onConfirm: (value: unknown) => confirmed.push(value) })
   app.use(i18n)
   for (const name of new Set(descriptor.template!.content.match(/t-[a-z-]+(?=[\s>])/g))) {
     if (name !== 't-select' && name !== 't-option') app.component(name, stub)
@@ -82,13 +86,32 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProvider
     setup: (props, { slots }) => () => h('div', { 'data-provider-select': props.popupProps?.overlayClassName === 'provider-select-popup' || undefined }, slots.default?.()),
   }))
   app.component('t-option', defineComponent({
-    props: ['value'],
-    setup: (props, { slots }) => () => h('div', { 'data-option-value': props.value }, slots.default?.()),
+    props: ['value', 'label'],
+    setup: (props, { slots }) => () => h('div', { 'data-option-value': props.value }, [props.label, slots.default?.()]),
   }))
-  return { html: await renderToString(app), state, requests }
+  return { html: await renderToString(app), state, requests, confirmed }
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: image embedding fields render and send the multimodal connection format`, async () => {
+    const payloads: any[] = []
+    const modelData = { id: 'image-model', modelName: 'siglip-local', source: 'remote', provider: 'generic', baseUrl: 'http://localhost:18092/v1', supportsImages: true, multimodalFormat: 'jina', dimension: 512 }
+    const { html, state } = await renderEditor({ locale, modelType: 'embedding', modelData, testEmbedding: async payload => { payloads.push(payload); return { available: true, dimension: 512 } }, scenario: async state => { state.formData.value = { ...state.formData.value, ...modelData }; await state.checkRemoteAPI() } })
+    assert.ok(html.includes((locale === 'zh-CN' ? zhCN : enUS).model.editor.supportsImagesLabel))
+    assert.ok(html.includes((locale === 'zh-CN' ? zhCN : enUS).model.editor.multimodalFormatJina))
+    assert.equal(state.formData.value.supportsImages, true)
+    assert.equal(payloads[0].supportsImages, true)
+    assert.equal(payloads[0].multimodalFormat, 'jina')
+    assert.equal(payloads[0].modelId, 'image-model')
+  })
+  test(`${locale}: switching an image embedding model to Ollama clears unsupported image capability`, async () => {
+    const { html, state } = await renderEditor({ locale, modelType: 'embedding', scenario: async state => {
+      state.formData.value.supportsImages = true
+      await state.handleSourceChange('local')
+    } })
+    assert.equal(state.formData.value.supportsImages, false)
+    assert.ok(html.includes((locale === 'zh-CN' ? zhCN : enUS).model.editor.supportsImagesLocalHint))
+  })
   test(`${locale}: the provider dropdown renders exactly the twelve server presets`, async () => {
     const { html, state, requests } = await renderEditor({ locale })
     assert.deepEqual(requests, ['chat'])

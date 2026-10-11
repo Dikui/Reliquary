@@ -1,4 +1,29 @@
 export default {
+  embeddingRebuild: {
+    title: 'Rebuild all embeddings',
+    description: 'Use the current model to rebuild body chunks, articles, images, your documents, saved reports and entity name embeddings.',
+    currentModel: 'Current model: {name}',
+    runModel: 'Model for this rebuild: {name}, {dimension} dimensions',
+    saveFirst: 'Save model settings before starting or continuing a rebuild.',
+    configureFirst: 'Select and save an embedding model first.',
+    start: 'Rebuild all embeddings',
+    pause: 'Pause rebuild',
+    resume: 'Resume rebuild',
+    retryFailed: 'Retry failed items',
+    confirm: 'Rebuild all embeddings with {name}? This background task may take some time. You can pause and resume it.',
+    searchHint: 'Search stays available during rebuilding. Only embeddings from the current model are used. Full text search still finds content awaiting new embeddings.',
+    modelChanged: 'The model settings have changed. Restore the original settings to resume or retry, or start a new rebuild with the current model.',
+    noRun: 'No full embedding rebuild has run yet.',
+    loadFailed: 'Unable to load rebuild progress. Please retry.',
+    actionFailed: 'The action failed. Refresh progress and retry.',
+    progress: 'All embedding rebuild progress',
+    total: 'Total', completed: 'Completed', failed: 'Failed',
+    failures: 'View failed items',
+    failureLimit: 'Showing the first {shown} of {total} failed items.',
+    attempts: 'Attempts: {count}',
+    status: { pending: 'Queued', running: 'Rebuilding', paused: 'Paused, ready to resume', completed: 'Rebuild complete', completed_with_errors: 'Finished with failed items', failed: 'Failed, ready to resume' },
+    kinds: { article_chunk: 'Body chunk', article: 'Article', image: 'Image', mine_chunk: 'Your document chunk', report_chunk: 'Saved report chunk', entity: 'Entity name' },
+  },
   follows: {
     title: 'Following',
     description: 'Read articles about entities and topics you follow. Articles entering the feed since your last visit are marked new.',
@@ -272,6 +297,7 @@ export default {
     "entity_resolution": "Entity identity resolution",
     "entity_embedding": "Entity name embedding",
     "entity_embedding_rebuild": "Entity name embedding rebuild",
+    "image_embedding": "Image embedding",
     "intake": "Intake review",
     "filter": "Intake review",
     "generation": "Content generation"
@@ -839,6 +865,8 @@ export default {
     },
   },
   retrievalSettings: {
+    imageWeightLabel: 'Image retrieval weight',
+    imageWeightHint: 'Defaults to 0.2 so images supplement body and article matches. A value of 0 uses the default weight of 0.2. The current model must support images.',
     title: 'Search Settings',
     description: 'Configure global retrieval parameters and similar report folding rules',
     embeddingTopKLabel: 'Vector Search Top K',
@@ -1523,6 +1551,7 @@ export default {
             indexDelete: 'Index deletion',
 
             entityNameEmbeddingRebuild: 'Entity name embedding rebuild',
+            embeddingRebuild: 'Rebuild all embeddings',
           }
         },
         models: {
@@ -1551,7 +1580,7 @@ export default {
         },
         poolDescriptions: {
           core: 'Guaranteed document and manual parsing capacity',
-          enrichment: "Entity name embedding rebuild",
+          enrichment: "Rebuild entity name embeddings or all embeddings",
           maintenance: 'Source sync, batch work, and deletion cleanup',
           shared: 'Borrowed by core or enrichment according to backlog',
         },
@@ -1565,7 +1594,7 @@ export default {
           default: 'Document parse, manual reparse',
           sync: 'Manual & scheduled sync',
           low: "Batch reparse and cleanup",
-          entity: "Entity name embedding rebuild",
+          entity: "Rebuild entity name embeddings or all embeddings",
         }
       },
       keyLabels: {
@@ -1592,7 +1621,7 @@ export default {
         },
         asynq: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual parsing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
-          enrichment_concurrency: "Reserved concurrency per instance for entity name embedding rebuilds, with shared capacity available. Restart after changing.",
+          enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings, with shared capacity available. Restart after changing.",
           maintenance_concurrency: 'Per-process concurrency for source sync, batch work, and cleanup, hard-isolated from the user-facing pipeline. Minimum 1; requires a service restart.',
           shared_concurrency: 'Per-process elastic concurrency shared by core parsing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
@@ -1731,6 +1760,12 @@ export default {
       remoteDimensionDetected: 'Detected vector dimension: {value}',
       dimensionOverrideLabel: 'Custom Output Dimension',
       dimensionOverrideDesc: 'Enable only if the provider documentation says this model accepts a dimensions parameter.',
+      supportsImagesLabel: 'Supports images',
+      supportsImagesDesc: 'Text and images must share a vector space from the same model. This indexes images in full text articles for text searches.',
+      supportsImagesLocalHint: 'Ollama does not support image embeddings. Configure the local multimodal service using a remote API model.',
+      multimodalFormatLabel: 'Multimodal request format',
+      multimodalFormatJina: 'Jina multimodal embeddings',
+      multimodalFormatHint: 'The service must accept both text and image inputs. Use its /v1 endpoint as the Base URL.',
       supportsVisionLabel: 'Supports Vision / Multimodal',
       supportsVisionDesc: "Whether the model accepts images. When enabled, article processing sends body images to the generation model.",
       contextWindowLabel: 'Context Window',
@@ -2109,6 +2144,10 @@ export default {
     videoNotSupported: 'Your browser does not support video playback'
   },
   knowledgeSearch: {
+    imageMatch: 'Image match',
+    imageAlt: 'Matching image from {title}',
+    previewImage: 'View image: {title}',
+    imageLoadFailed: 'Unable to load image',
     title: 'Knowledge search',
     description: 'Search articles, your documents and saved reports, with matches grouped by article.',
     query: 'Search query',

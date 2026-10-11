@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"gorm.io/gorm"
 
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
@@ -28,7 +29,18 @@ func (s *knowledgeBaseService) GetQueryEmbedding(ctx context.Context, kbID strin
 		return nil, err
 	}
 
-	return embeddingModel.Embed(ctx, queryText)
+	vector, err := embeddingModel.Embed(ctx, queryText)
+	if err != nil {
+		return nil, err
+	}
+	if s.db != nil {
+		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return checkEmbeddingProfile(ctx, tx, embeddingModel, kb.TenantID)
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return vector, nil
 }
 
 // ResolveEmbeddingModelKeys resolves embedding model IDs to their actual model

@@ -13,6 +13,7 @@ export interface RetrievalConfig {
   rrf_k?: number
   rrf_vector_weight?: number
   rrf_keyword_weight?: number
+  rrf_image_weight?: number
 }
 
 // Get tenant retrieval config via KV API

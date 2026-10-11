@@ -225,6 +225,7 @@ CREATE TABLE public.embeddings (
     chunk_id character varying(64),
     knowledge_id character varying(64),
     knowledge_base_id character varying(64),
+	model_id character varying(64) DEFAULT '' NOT NULL,
     dimension integer NOT NULL,
     embedding public.halfvec,
     is_enabled boolean DEFAULT true
@@ -1842,6 +1843,68 @@ CREATE INDEX article_embeddings_embedding_idx_1024 ON public.article_embeddings 
     (((embedding)::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 1024;
 CREATE INDEX article_embeddings_embedding_idx_3584 ON public.article_embeddings USING hnsw
     (((embedding)::public.halfvec(3584)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 3584;
+
+CREATE TABLE public.image_embeddings (
+    knowledge_id character varying(36) NOT NULL,
+    tenant_id bigint NOT NULL,
+    knowledge_base_id character varying(36) NOT NULL,
+    attachment_path text NOT NULL,
+    model_id character varying(64) NOT NULL,
+    dimension integer NOT NULL CHECK (dimension > 0),
+    embedding public.halfvec NOT NULL,
+    content_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (knowledge_id, attachment_path),
+    CHECK (public.vector_dims(embedding) = dimension),
+    FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX image_embeddings_tenant_model ON public.image_embeddings (tenant_id, model_id, dimension);
+CREATE INDEX image_embeddings_embedding_idx_512 ON public.image_embeddings USING hnsw
+    (((embedding)::public.halfvec(512)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 512;
+CREATE INDEX image_embeddings_embedding_idx_768 ON public.image_embeddings USING hnsw
+    (((embedding)::public.halfvec(768)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 768;
+CREATE INDEX image_embeddings_embedding_idx_1024 ON public.image_embeddings USING hnsw
+    (((embedding)::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 1024;
+CREATE TABLE public.embedding_rebuild_runs (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    status character varying(32) NOT NULL CHECK (status IN ('pending','running','paused','completed','completed_with_errors','failed')),
+    model_id character varying(64) NOT NULL,
+    model_name text NOT NULL DEFAULT '',
+    dimension integer NOT NULL CHECK (dimension > 0),
+    profile_hash character varying(64) NOT NULL,
+    total_count bigint NOT NULL DEFAULT 0 CHECK (total_count >= 0),
+    completed_count bigint NOT NULL DEFAULT 0 CHECK (completed_count >= 0),
+    failed_count bigint NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+    error text NOT NULL DEFAULT '',
+    attempt_id character varying(36) NOT NULL DEFAULT '',
+    lease_until timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    CHECK (completed_count + failed_count <= total_count)
+);
+CREATE INDEX idx_embedding_rebuild_runs_latest ON public.embedding_rebuild_runs(tenant_id,created_at DESC);
+CREATE UNIQUE INDEX idx_embedding_rebuild_runs_active ON public.embedding_rebuild_runs(tenant_id) WHERE status IN ('pending','running','paused');
+
+CREATE TABLE public.embedding_rebuild_items (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    run_id character varying(36) NOT NULL REFERENCES public.embedding_rebuild_runs(id) ON DELETE CASCADE,
+    kind character varying(16) NOT NULL CHECK (kind IN ('article_chunk','article','image','mine_chunk','report_chunk','entity')),
+    source_id character varying(36) NOT NULL,
+    attachment_path text NOT NULL DEFAULT '',
+    status character varying(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','completed','failed')),
+    attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    error text NOT NULL DEFAULT '',
+    created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (run_id,kind,source_id,attachment_path)
+);
+CREATE INDEX idx_embedding_rebuild_items_pending ON public.embedding_rebuild_items(run_id,status,kind,source_id);
+
+
 CREATE INDEX idx_knowledges_search_published_at ON public.knowledges (tenant_id, search_published_at);
 
 -- Only explicit source dates enter the search range. Never use collected_at.
@@ -1896,6 +1959,9 @@ BEGIN
         OR NEW.title IS DISTINCT FROM OLD.title OR NEW.structured_summary IS DISTINCT FROM OLD.structured_summary) THEN
         DELETE FROM public.article_embeddings WHERE tenant_id=NEW.tenant_id AND knowledge_id=NEW.id;
     END IF;
+	IF TG_OP = 'UPDATE' AND (NEW.deleted_at IS NOT NULL OR NEW.source_kind <> 'article' OR NEW.processing_mode <> 'full') THEN
+		DELETE FROM public.image_embeddings WHERE tenant_id=NEW.tenant_id AND knowledge_id=NEW.id;
+	END IF;
     RETURN NEW;
 END;
 $$;
@@ -1963,7 +2029,7 @@ END;
 $$;
 
 CREATE TRIGGER set_knowledge_search_header BEFORE INSERT OR UPDATE OF
-    title, description, structured_summary, metadata, source_kind, deleted_at ON public.knowledges
+    title, description, structured_summary, metadata, source_kind, processing_mode, deleted_at ON public.knowledges
     FOR EACH ROW EXECUTE FUNCTION public.set_knowledge_search_header();
 CREATE TRIGGER sync_article_search_entities AFTER INSERT OR UPDATE OR DELETE ON public.knowledge_entities
     FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_links();

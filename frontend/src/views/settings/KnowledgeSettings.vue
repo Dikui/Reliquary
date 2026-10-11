@@ -62,7 +62,8 @@
                 <!-- 模型配置 -->
                 <div v-show="currentSection === 'models'" class="section">
 
-                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" :all-models="allModels" :before-navigate="confirmLeave" :disabled="saving" :embedding-locked="hasFiles && needsEmbedding" @resolved="resolvedModelTiers = $event" />
+                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" :all-models="allModels" :before-navigate="confirmLeave" :disabled="saving" @resolved="resolvedModelTiers = $event" />
+                  <EmbeddingRebuild v-if="formData && currentSection === 'models'" :model-id="formData.modelTiers.embedding || ''" :models="allModels" :disabled="dirty || saving" />
                 </div>
 
                 <!-- 解析引擎 -->
@@ -110,6 +111,7 @@ import { useUIStore } from '@/stores/ui'
 import { copyModelTiers } from '@/utils/modelTiers'
 import type { ResolvedModelTiers } from '@/types/modelTiers'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
+import EmbeddingRebuild from '@/components/EmbeddingRebuild.vue'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import KBParserSettings from '@/views/knowledge/settings/KBParserSettings.vue'
 import KBChunkingSettings from '@/views/knowledge/settings/KBChunkingSettings.vue'

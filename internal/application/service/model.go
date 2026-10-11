@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 
 	apperrors "reliquary/internal/errors"
@@ -73,6 +74,9 @@ func (s *modelService) decryptAppSecret(encrypted string) string {
 func (s *modelService) CreateModel(ctx context.Context, model *types.Model) error {
 	if !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
+	}
+	if err := validateImageEmbeddingModel(model); err != nil {
+		return err
 	}
 	logger.Infof(ctx, "Creating model: %s, type: %s, source: %s", model.Name, model.Type, model.Source)
 
@@ -205,6 +209,9 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	if model.Type != "" && !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
 	}
+	if err := validateImageEmbeddingModel(model); err != nil {
+		return err
+	}
 	logger.Info(ctx, "Start updating model")
 	logger.Infof(ctx, "Updating model ID: %s, name: %s", model.ID, model.Name)
 
@@ -229,8 +236,27 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 		model.ManagedBy = ""
 	}
 
-	// Update model in repository
-	err = s.repo.Update(ctx, model)
+	// Configuration and vector invalidation commit together. A model ID can
+	// retain its dimensions while pointing at completely different weights.
+	if s.db != nil {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var current types.Model
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", model.ID, model.TenantID).First(&current).Error; err != nil {
+				return err
+			}
+			changed := (current.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
+				entityEmbeddingProfileHash(current.ID, current.Parameters.EmbeddingParameters.Dimension, &current) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model)
+			if err := tx.Model(&types.Model{}).Where("id=? AND tenant_id=?", model.ID, model.TenantID).Select("*").Updates(model).Error; err != nil {
+				return err
+			}
+			if !changed {
+				return nil
+			}
+			return types.RetireEmbeddingVectors(ctx, tx, model.ID)
+		})
+	} else {
+		err = s.repo.Update(ctx, model)
+	}
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,
@@ -252,6 +278,20 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 				return fmt.Errorf("model saved but name embedding rebuild could not be queued: %w", err)
 			}
 		}
+	}
+	return nil
+}
+
+func validateImageEmbeddingModel(model *types.Model) error {
+	parameters := model.Parameters.EmbeddingParameters
+	if !parameters.SupportsImages {
+		return nil
+	}
+	if model.Type != types.ModelTypeEmbedding || model.Source != types.ModelSourceRemote {
+		return apperrors.NewValidationError("image embedding requires a remote HTTP embedding model")
+	}
+	if format := strings.TrimSpace(parameters.MultimodalFormat); format != "" && format != "jina" {
+		return apperrors.NewValidationError("multimodal_format must be jina")
 	}
 	return nil
 }

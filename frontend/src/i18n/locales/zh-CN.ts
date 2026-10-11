@@ -1,4 +1,29 @@
 export default {
+  embeddingRebuild: {
+    title: '重建全部向量',
+    description: '使用当前模型重新生成正文分块、文章、图片、用户文档、整理结果和实体名称的向量。',
+    currentModel: '当前模型：{name}',
+    runModel: '本次重建模型：{name}，{dimension} 维',
+    saveFirst: '先保存模型设置，再开始或继续重建。',
+    configureFirst: '先选择并保存 Embedding 模型。',
+    start: '重建全部向量',
+    pause: '中断重建',
+    resume: '继续重建',
+    retryFailed: '重试失败项',
+    confirm: '使用 {name} 重建全部向量？后台任务可能持续较长时间，可中断后继续。',
+    searchHint: '重建期间仍可检索。仅使用当前模型已生成的向量，未完成的内容仍可通过全文检索找到。',
+    modelChanged: '模型设置已变化。恢复原设置可继续或重试，也可使用当前模型开始新的重建。',
+    noRun: '还没有全部向量重建任务。',
+    loadFailed: '无法读取重建进度，请重试。',
+    actionFailed: '操作失败，请刷新进度后重试。',
+    progress: '全部向量重建进度',
+    total: '总数', completed: '已完成', failed: '失败',
+    failures: '查看失败项',
+    failureLimit: '显示前 {shown} 项，共 {total} 项失败。',
+    attempts: '已尝试 {count} 次',
+    status: { pending: '等待执行', running: '重建中', paused: '已中断，可继续', completed: '重建完成', completed_with_errors: '重建结束，有失败项', failed: '重建失败，可继续' },
+    kinds: { article_chunk: '正文分块', article: '文章', image: '图片', mine_chunk: '用户文档分块', report_chunk: '整理结果分块', entity: '实体名称' },
+  },
   follows: {
     title: '关注',
     description: '集中查看关注实体与主题的文章。上次打开后进入动态的文章标为新。',
@@ -272,6 +297,7 @@ export default {
     "entity_resolution": "实体身份解析",
     "entity_embedding": "实体名称向量生成",
     "entity_embedding_rebuild": "实体名称向量重建",
+    "image_embedding": "图片向量生成",
     "intake": "收录审核",
     "filter": "收录审核",
     "generation": "内容生成"
@@ -661,6 +687,10 @@ export default {
     },
   },
   knowledgeSearch: {
+    imageMatch: '图片命中',
+    imageAlt: '{title} 的命中图片',
+    previewImage: '查看图片：{title}',
+    imageLoadFailed: '图片读取失败',
     title: '知识检索',
     description: '从文章、用户文档和整理结果中检索，按文章展示命中内容。',
     query: '检索内容',
@@ -1040,6 +1070,12 @@ export default {
       remoteDimensionDetected: '检测到向量维度：{value}',
       dimensionOverrideLabel: '自定义输出维度',
       dimensionOverrideDesc: '仅在确认该模型支持 dimensions 参数时开启；默认只使用检测到的实际维度。',
+      supportsImagesLabel: '支持图片',
+      supportsImagesDesc: '文字与图片必须由同一个模型生成同一向量空间的向量。开启后会索引全文文章的图片，并用于文字检索。',
+      supportsImagesLocalHint: 'Ollama 暂不支持图片向量。请使用远程 API 类型配置本地多模态服务。',
+      multimodalFormatLabel: '多模态请求格式',
+      multimodalFormatJina: 'Jina 多模态 Embeddings',
+      multimodalFormatHint: '服务需同时接受 text 和 image 输入。Base URL 填服务的 /v1 地址。',
       supportsVisionLabel: '支持视觉/多模态',
       supportsVisionDesc: "模型是否接受图片输入。开启后，文章处理会把正文中的图片一同发送给生成模型。",
       contextWindowLabel: '上下文窗口',
@@ -1293,7 +1329,7 @@ export default {
         },
         asynq: {
           core_concurrency: '文档解析与手工重解析的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
-          enrichment_concurrency: "实体名称向量重建的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
+          enrichment_concurrency: "实体名称向量重建与全部向量重建的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
           maintenance_concurrency: '数据源同步、批处理和清理任务的每实例并发，与用户面流水线硬隔离；修改后需重启。',
           shared_concurrency: '核心解析与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
@@ -1438,6 +1474,7 @@ export default {
             indexDelete: '索引删除',
 
             entityNameEmbeddingRebuild: '实体名称向量重建',
+            embeddingRebuild: '全部向量重建',
           }
         },
         failedNotice: {
@@ -1478,7 +1515,7 @@ export default {
         },
         poolDescriptions: {
           core: '文档解析与手工重解析的保底容量',
-          enrichment: "实体名称向量重建",
+          enrichment: "实体名称向量重建与全部向量重建",
           maintenance: '数据源同步、批处理与删除清理',
           shared: '由核心解析与内容富化按积压借用',
         },
@@ -1492,7 +1529,7 @@ export default {
           default: '文档解析、手工重解析',
           sync: '手动与定时同步',
           low: "批量重解析、删除清理",
-          entity: "实体名称向量重建",
+          entity: "实体名称向量重建与全部向量重建",
         },
         errors: {
           generic: '获取队列状态失败'
@@ -1984,6 +2021,8 @@ export default {
     next: '下一步'
   },
   retrievalSettings: {
+    imageWeightLabel: '图片检索通道权重',
+    imageWeightHint: '默认 0.2，图片作为正文和文章检索的补充。设为 0 时使用默认权重 0.2；当前模型必须支持图片。',
     title: '搜索设置',
     description: '配置知识检索的全局检索参数与相似报道折叠规则',
     embeddingTopKLabel: '向量检索数量 (Top K)',

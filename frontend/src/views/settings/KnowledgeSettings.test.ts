@@ -35,20 +35,32 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
       listKnowledgeFiles: async (id: string) => { requests.push({ articleListId: id }); return { data: [], total: 0 } },
       updateKnowledgeBase: async (body: unknown) => { requests.push({ method: 'put', body }); return failSave ? { success: false, message: 'Save unavailable' } : { success: true } },
     },
+    '@/api/embedding-rebuild': {
+      getEmbeddingRebuild: async () => { requests.push({ method: 'embedding-status' }); return { success: true, data: { latest_run: { id: 'run-1', model_id: 'embedding-new', model_name: 'New image model', dimension: 512, status: 'paused', total_count: 7, completed_count: 3, failed_count: 1 }, failed_items: [], current_model_matches: true } } },
+    },
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', compiled)((name: string) => name.endsWith('.vue') ? { __esModule: true, default: stub } : modules[name] ?? require(name), module, module.exports)
+    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name.endsWith('.vue') ? { __esModule: true, default: stub } : require(name)), module, module.exports)
     return module.exports
   }
+  const { descriptor: rebuildDescriptor } = parse(readFileSync(new URL('../../components/EmbeddingRebuild.vue', import.meta.url), 'utf8'), { filename: 'EmbeddingRebuild.vue' })
+  const rebuildScript = compileScript(rebuildDescriptor, { id: 'settings-rebuild' })
+  const rebuildTemplate = compileTemplate({ id: 'settings-rebuild', filename: 'EmbeddingRebuild.vue', source: rebuildDescriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: rebuildScript.bindings } })
+  assert.deepEqual(rebuildTemplate.errors, [])
+  const rebuildComponent = evaluate(rebuildScript.content).default
+  rebuildComponent.ssrRender = evaluate(rebuildTemplate.code).ssrRender
+  const rebuildSetup = rebuildComponent.setup
+  rebuildComponent.setup = (props: object, context: object) => { const state = rebuildSetup(props, context); onServerPrefetch(() => state.load()); return state }
+  modules['@/components/EmbeddingRebuild.vue'] = { __esModule: true, default: rebuildComponent }
   const component = evaluate(script.content).default
   component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup
   component.setup = (props: object, context: object) => { const state = setup(props, context); onServerPrefetch(async () => { await state.load(); await action(state, requests) }); return state }
   const app = createSSRApp(component)
   app.use(i18n)
-  for (const name of ['t-alert', 't-button', 't-loading', 't-tabs', 't-tab-panel', 't-input', 't-checkbox', 't-switch', 't-select', 't-option']) app.component(name, stub)
+  for (const name of ['t-alert', 't-button', 't-popconfirm', 't-loading', 't-tabs', 't-tab-panel', 't-input', 't-checkbox', 't-switch', 't-select', 't-option']) app.component(name, stub)
   const errors: unknown[] = []
   app.config.errorHandler = error => errors.push(error)
   try { const html = await renderToString(app); assert.deepEqual(errors, []); return { html, requests, events } }
@@ -56,6 +68,24 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: knowledge settings save a replacement embedding model and load the real rebuild entry and progress`, async () => {
+    const { html, requests } = await scenario(locale, async state => {
+      state.currentSection.value = 'models'
+      state.hasFiles.value = true
+      state.formData.value.modelTiers.embedding = 'embedding-new'
+      await state.handleSubmit()
+      assert.equal(state.dirty.value, false)
+    })
+    const copy = (locale === 'zh-CN' ? zhCN : enUS).embeddingRebuild
+    assert.ok(html.includes(copy.title))
+    assert.ok(html.includes(copy.status.paused))
+    assert.ok(html.includes(copy.resume))
+    assert.ok(html.includes('New image model'))
+    assert.match(html, /<progress[^>]*value="4"[^>]*max="7"/)
+    assert.equal(requests.find(item => item.method === 'put').body.config.model_tiers.embedding, 'embedding-new')
+    assert.equal(requests.filter(item => item.method === 'embedding-status').length, 1)
+    assert.doesNotMatch(source, /:embedding-locked=/)
+  })
   test(`${locale}: the settings page saves model tiers and chunking together on the unique knowledge base`, async () => {
     const { requests, events } = await scenario(locale, async state => {
       assert.equal(state.dirty.value, false)

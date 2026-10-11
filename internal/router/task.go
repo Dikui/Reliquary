@@ -35,6 +35,7 @@ type AsynqTaskParams struct {
 	KnowledgeBaseService interfaces.KnowledgeBaseService
 	DataSourceService    interfaces.DataSourceService
 	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
+	EmbeddingRebuild     *service.EmbeddingRebuilder
 	DeadLetterRepo       interfaces.TaskDeadLetterRepository
 	SpanTracker          service.SpanTracker
 }
@@ -217,6 +218,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 
 	// Register entity name vector rebuild handler
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
+	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
 
 	// Register data source sync handler
 	mux.HandleFunc(types.TypeDataSourceSync, params.DataSourceService.ProcessSync)
