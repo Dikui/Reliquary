@@ -54,6 +54,7 @@ const formatTime = (time?: string) => {
 };
 
 const getSourceInfo = (item: KnowledgeItem): { icon: string; label: string } => {
+  if (item.source_kind === 'mine' || item.source_kind === 'report') return { icon: 'file', label: t(`knowledgeBase.sourceKinds.${item.source_kind}`) };
   const ch = item.channel;
   if (ch === 'rss') return { icon: 'cloud-download', label: t(`datasource.connector.${ch}`) };
   if (item.type === 'url') return { icon: 'link', label: t('knowledgeBase.channelUrl') };

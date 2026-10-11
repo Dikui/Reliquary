@@ -1527,6 +1527,9 @@ func (s *knowledgeService) convert(
 		return s.failKnowledge(ctx, knowledge, isLastRetry, "document read failed: %v", err)
 	}
 	sanitizeReadResult(result)
+	if err := extractIntakeOriginalLink(knowledge, result.MarkdownContent, req.FileContent, fileType, result.Metadata); err != nil {
+		return nil, err
+	}
 	if result.Error != "" {
 		logger.Errorf(ctx, "[convert] parser returned error kb=%s knowledge=%s file=%q type=%s engine=%q: %s",
 			kb.ID, knowledge.ID, req.FileName, fileType, parserEngine, result.Error)

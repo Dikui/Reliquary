@@ -37,4 +37,10 @@ test('sidebar navigation and article tabs remain synchronized without remounting
   activeKbTab.value = 'documents'
   await nextTick()
   assert.deepEqual(route.query, { knowledge_id: 'article-a' })
+  activeKbTab.value = 'reviews'
+  await nextTick()
+  assert.deepEqual(route.query, { tab: 'reviews', knowledge_id: 'article-a' })
+  route.query.tab = 'entities'
+  await nextTick()
+  assert.equal(activeKbTab.value, 'entities')
 })

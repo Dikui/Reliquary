@@ -138,6 +138,12 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 	if header.ContentType != "" && types.NormalizeContentType(header.ContentType) != header.ContentType {
 		return fmt.Errorf("invalid content_type %q", header.ContentType)
 	}
+	if header.ProcessingMode != "" && header.ProcessingMode != types.ProcessingModeFull && header.ProcessingMode != types.ProcessingModeSummaryOnly {
+		return fmt.Errorf("invalid processing_mode %q", header.ProcessingMode)
+	}
+	if header.SourceUnverified && header.URL != "" {
+		return fmt.Errorf("unverified source must not contain an original URL")
+	}
 	if !utf8.Valid(body) {
 		return fmt.Errorf("article body must be valid UTF-8")
 	}
@@ -160,6 +166,9 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *types.KnowledgeBase, path string, header VaultArticleHeader, body []byte) (*types.Knowledge, error) {
 	collected, _ := time.Parse(time.RFC3339Nano, header.CollectedAt)
 	mode := types.ProcessingModeForContentType(header.ContentType)
+	if header.SourceUnverified || header.ProcessingMode == types.ProcessingModeFull {
+		mode = types.ProcessingModeFull
+	}
 	if mode == types.ProcessingModeSummaryOnly {
 		body = nil
 	}
@@ -168,7 +177,8 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 		Type: types.KnowledgeTypeManual, SourceKind: "article", VaultPath: path, VaultBody: string(body),
 		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true, ProcessingMode: mode,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
-		ParseStatus: types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
+		SourceUnverified: header.SourceUnverified,
+		ParseStatus:      types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
 		EnableStatus: "enabled", Channel: types.ChannelAPI, FileName: filepath.Base(path), FileType: "md",
 		CreatedAt: collected.UTC(), UpdatedAt: now, ProcessedAt: &now,
 		FileHash: vaultContentHash(string(body)), FileSize: int64(len(body))}

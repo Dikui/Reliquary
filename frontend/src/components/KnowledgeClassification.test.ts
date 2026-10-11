@@ -35,12 +35,13 @@ function component(path: string, modules: Record<string, unknown>) {
 const classification = component('./KnowledgeClassification.vue', {
   '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) },
 })
+const reviewModule = { __esModule: true, default: component('./KnowledgeReviewActions.vue', { '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/api/knowledge-review': {}, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, 'tdesign-vue-next': { MessagePlugin: {} } }) }
 const classificationModule = { __esModule: true, default: classification }
 async function render(value: any, props: Record<string, unknown>, locale: keyof typeof messages) {
   const app = createSSRApp(value, props)
   app.use(createI18n({ legacy: false, locale, messages }))
   const stub = defineComponent({ props: ['visible'], setup(props, { attrs, slots }) { return () => props.visible === false ? null : h('div', attrs, [slots.header?.(), slots.default?.()]) } })
-  for (const name of ['t-drawer', 't-button', 't-icon', 't-tag', 't-tooltip', 't-loading', 't-select', 't-input', 't-textarea', 't-checkbox', 't-popconfirm', 't-popup', 't-empty', 't-switch', 't-pagination', 't-radio']) app.component(name, stub)
+  for (const name of ['t-drawer', 't-button', 't-icon', 't-tag', 't-tooltip', 't-loading', 't-select', 't-input', 't-textarea', 't-checkbox', 't-popconfirm', 't-popup', 't-empty', 't-switch', 't-pagination', 't-radio', 't-dialog']) app.component(name, stub)
   const errors: unknown[] = []; const warnings: string[] = []
   app.config.errorHandler = error => errors.push(error); app.config.warnHandler = warning => warnings.push(warning)
   const html = await renderToString(app)
@@ -81,7 +82,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 25, reprocessKnowledge: async (id: string) => { requests.push(id); return { success: true, data: { parse_status: 'pending' } } } },
       '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/document-preview.vue': emptyModule,
       '@/utils/clipboard': { copyWithToast() {} },
-      '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/knowledge-processing-timeline.vue': emptyModule, '@/views/knowledge/components/RepostSources.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+      '@/components/KnowledgeReviewActions.vue': reviewModule, '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/knowledge-processing-timeline.vue': emptyModule, '@/views/knowledge/components/RepostSources.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
     }
     const detail = component('./doc-content.vue', modules)
     const html = await render(detail, { visible: true, details: { ...article, processing_mode: 'summary_only', source: 'https://example.com/tutorial' } }, locale)
@@ -89,7 +90,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.doesNotMatch(html, /class="[^\"]*doc-content-section/)
     const failed = await render(detail, { visible: true, details: { ...article, parse_status: 'failed', error_message: 'Cannot fetch original article: HTTP 404' } }, locale)
     assert.match(failed, /role="alert"[^>]*>Cannot fetch original article: HTTP 404/)
-    const rejected = await render(detail, { visible: true, details: { ...article, parse_status: 'rejected', metadata: { intake: { source: 'url', decision: 'rejected', source_info: {} } } } }, locale)
+    const rejected = await render(detail, { visible: true, details: { ...article, parse_status: 'rejected', metadata: { intake: { source: 'url', decision: 'rejected', source_info: { original_url: 'https://example.com/article' } } } } }, locale)
     for (const text of [messages[locale].articleJudgments.approveReview, messages[locale].articleJudgments.rejectReview, copy.intakeRetry, copy.intakeDiscard]) assert.ok(rejected.includes(text))
     const setup = detail.setup
     detail.setup = (props: object, context: object) => {

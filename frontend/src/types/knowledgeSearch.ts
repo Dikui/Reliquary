@@ -21,6 +21,7 @@ export interface KnowledgeSearchArticle {
   vault_path: string
   original_url: string
   starred?: boolean
+  source_unverified?: boolean
 }
 export interface KnowledgeSearchFilters {
   content_types: ContentType[]

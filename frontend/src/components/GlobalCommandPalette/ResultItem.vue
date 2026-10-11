@@ -19,6 +19,7 @@
         <span v-if="badge" :class="['cmdk-item__badge', `cmdk-item__badge--${badgeVariant || 'default'}`]">
           {{ badge }}
         </span>
+        <span v-if="sourceUnverified" class="cmdk-item__badge cmdk-item__badge--keyword">{{ t('knowledgeReview.sourceUnverified') }}</span>
         <span v-if="score != null" class="cmdk-item__score">{{ (score * 100).toFixed(0) }}%</span>
       </div>
       <div v-if="$slots.subtitle || subtitle" class="cmdk-item__subtitle">
@@ -37,6 +38,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 /**
  * A single result row inside the command palette.
  * Host component owns selection state; this one just mirrors it via the
@@ -51,6 +54,7 @@ defineProps<{
   badge?: string
   badgeVariant?: 'vector' | 'keyword' | 'default'
   score?: number
+  sourceUnverified?: boolean
   /** Visible hint for the ⌘N shortcut that triggers this row (N: 1-9). */
   shortcut?: number | string
 }>()

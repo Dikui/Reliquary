@@ -17,7 +17,7 @@ const typeSaving = ref(false), topicsSaving = ref(false), typeError = ref(''), t
 const confirmRemoveBody = ref(false)
 const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })))
 const topicOptions = computed(() => topics.value.map(topic => ({ value: topic.id, label: topic.name })))
-const changesModeToSummary = computed(() => props.knowledge.processing_mode !== 'summary_only' && ['tutorial', 'case', 'reference'].includes(typeDraft.value))
+const changesModeToSummary = computed(() => !props.knowledge.source_unverified && props.knowledge.processing_mode !== 'summary_only' && ['tutorial', 'case', 'reference'].includes(typeDraft.value))
 const busy = computed(() => props.disabled || typeSaving.value || topicsSaving.value)
 watch([typeSaving, topicsSaving], () => emit('busy-change', typeSaving.value || topicsSaving.value))
 onUnmounted(() => { optionsGeneration++; emit('busy-change', false) })

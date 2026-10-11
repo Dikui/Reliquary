@@ -1,4 +1,46 @@
 export default {
+  knowledgeReview: {
+  "title": "待审区",
+  "intake": "收录待审",
+  "processing": "处理待复核",
+  "intakeHint": "未通过收录审核的内容保留在这里，审核通过后开始处理。",
+  "processingHint": "这些文章已全文保存并可检索。模型对内容类型拿不准，请确认、修正或忽略。",
+  "emptyIntake": "没有收录待审的内容。",
+  "emptyProcessing": "没有处理待复核的文章。",
+  "sourceUnverified": "来源未核实",
+  "extractedLink": "原始链接：从文件提取",
+  "modelType": "模型给出的类型",
+  "missingLinkHint": "缺少原始链接，尚未调用模型审核。可补链接后重新审核，也可确认无链接入库或转为本人文档。",
+  "uploadLinkHint": "原始链接可留空。程序会先从文件或正文提取；提取不到时进入收录待审。",
+  "invalidLink": "请填写有效的 HTTP 或 HTTPS 原始链接。",
+  "chooseType": "请选择内容类型。",
+  "failed": "审核操作失败，请重试。",
+  "loadFailed": "待审内容加载失败，请重试。",
+  "saved": "审核操作已保存",
+  "actions": {
+    "supplement_url": "补链接并重新审核",
+    "admit_unverified": "无链接入库",
+    "convert_to_mine": "转为本人文档",
+    "confirm": "确认模型类型",
+    "correct": "改为所选类型",
+    "ignore": "忽略并移出列表",
+    "discard": "确认不收录"
+  },
+  "confirmations": {
+    "admit_unverified": {
+      "title": "确认无链接入库",
+      "description": "文章会跳过收录审核，全文保存并标记为来源未核实，原始链接留空。"
+    },
+    "convert_to_mine": {
+      "title": "转为本人文档",
+      "description": "正文将保存到 mine/，附件按文件库规则保留，并按用户文档索引。该收录记录会被删除。"
+    },
+    "discard": {
+      "title": "确认不收录",
+      "description": "这条收录记录和暂存内容会被删除。"
+    }
+  }
+},
   articleJudgments: {
   "approveReview": "通过并收录",
   "rejectReview": "拒绝收录",
@@ -80,6 +122,12 @@ export default {
   "loadFailed": "无法加载操作日志，请重试。",
   "empty": "没有符合条件的操作日志。",
   "types": {
+    "processing_review_confirm": "确认处理类型",
+    "processing_review_correct": "复核修正类型",
+    "processing_review_ignore": "忽略处理复核",
+    "review_supplement_url": "补链接重新审核",
+    "review_admit_unverified": "无链接入库",
+    "review_convert_to_mine": "转为本人文档",
     "review_approve": "审核通过",
     "review_reject": "审核拒绝",
     "review_retry": "审核重试",
@@ -339,7 +387,7 @@ export default {
       baseUrl: 'API 地址',
       baseUrlDesc: '与 REST API 路径拼接使用。',
       ingestUrl: '外部 Agent 收录接口',
-      ingestUrlDesc: '发送 JSON，url 与 content 必填。作为主动收藏直接处理，返回文章 ID 和状态。内网访问，使用 Authorization: Bearer API_KEY。',
+      ingestUrlDesc: '发送 JSON，url 与 content 必填。与 RSS 和上传一样经过模型收录审核；未通过时返回 pending_review 和原因，进入待审区。调用方的判断不替代审核。内网访问，使用 Authorization: Bearer API_KEY。',
       copyIngestUrl: '复制收录接口地址',
       mcpUrl: 'MCP 服务地址',
       mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取文章、收录、待审区、星标和写入整理结果。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
@@ -2176,6 +2224,7 @@ export default {
     }
   },
   knowledgeBase: {
+    sourceKinds: { mine: '本人文档', report: '整理结果' },
     collectReason: '收藏理由',
     vaultPath: '文件库路径',
     copyVaultPath: '复制文件库路径',

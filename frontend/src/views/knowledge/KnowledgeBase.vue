@@ -27,7 +27,6 @@ import {
   getKnowledgeSpans,
   getKnowledgeDetails,
   downKnowledgeDetails,
-  reviewKnowledge,
 } from "@/api/knowledge-base/index";
 import { knowledgeSpansPayloadHasTrace } from '@/utils/knowledgeTrace';
 import DocumentListView from './components/DocumentListView.vue';
@@ -35,6 +34,7 @@ import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import KnowledgeWorkbench from './components/KnowledgeWorkbench.vue';
+import PendingReviews from './components/PendingReviews.vue';
 import { CONTENT_TYPES } from '@/types/knowledgeClassification';
 import type { ArticleJudgment } from '@/api/knowledge-judgments';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
@@ -56,7 +56,7 @@ const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(
 const uploading = ref(false);
 const kbLoading = ref(false);
 const docListLoading = ref(true);
-const validTabs = ['documents', 'entities'] as const
+const validTabs = ['documents', 'reviews', 'entities'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeKbTab = ref<KbTab>(initTab);
@@ -400,10 +400,10 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
 // 唯一知识库加载后获取文章内容
 // Sync activeKbTab to URL query so it survives page refresh
 watch(() => route.query.tab, (tab) => {
-  activeKbTab.value = tab === 'entities' ? 'entities' : 'documents'
+  activeKbTab.value = tab === 'entities' ? 'entities' : tab === 'reviews' ? 'reviews' : 'documents'
 })
 watch(activeKbTab, (tab) => {
-  if (route.query.tab === (tab === 'entities' ? 'entities' : undefined)) return
+  if (route.query.tab === (tab === 'documents' ? undefined : tab)) return
   const query = { ...route.query }
   if (tab === 'documents') {
     delete query.tab
@@ -1207,27 +1207,12 @@ const openKnowledgeItem = (item: KnowledgeCard) => {
   openCardDetails(item);
 };
 
-const intakeReviewLoading = ref(false), intakeReviewError = ref('');
-watch(() => details.id, () => { intakeReviewError.value = ''; });
-const handleIntakeReview = async (payload: { action: 'approve' | 'reject' | 'retry' | 'discard'; sourceInfo?: IntakeSourceInfo }) => {
-  if (!details.id || intakeReviewLoading.value) return
-  const id = details.id
-  intakeReviewLoading.value = true
-  intakeReviewError.value = ''
-  try {
-    const response = await reviewKnowledge(id, { action: payload.action, source_info: payload.sourceInfo })
-    MessagePlugin.success(t('knowledgeBase.intakeReviewSubmitted'))
-    if (details.id === id) {
-      if (payload.action === 'discard') closeDoc()
-      else if (response?.data) Object.assign(details, response.data)
-      else details.parse_status = payload.action === 'reject' ? 'rejected' : 'pending'
-    }
-    resetPage()
-    await loadKnowledgeFiles(kbId.value)
-  } catch (error: any) {
-    if (details.id === id) intakeReviewError.value = error?.message || t('knowledgeBase.intakeReviewFailed')
-  } finally { intakeReviewLoading.value = false }
-}
+const pendingReviewsRef = ref<InstanceType<typeof PendingReviews>>();
+const handleReviewChanged = async (_value: unknown, removed: boolean) => {
+  if (removed) closeDoc();
+  else if (details.id) getCardDetails({ id: details.id });
+  await Promise.all([loadKnowledgeFiles(kbId.value), pendingReviewsRef.value?.refresh()]);
+};
 
 const confirmBatchDelete = async () => {
   if (batchDeleting.value || batchReparsing.value || selectedIds.value.size === 0) return;
@@ -1370,6 +1355,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
               <t-icon name="chevron-right" class="breadcrumb-separator" />
                 <button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]" :aria-pressed="activeKbTab === 'documents'"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>
+                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'reviews' }]" :aria-pressed="activeKbTab === 'reviews'" @click="activeKbTab = 'reviews'">{{ $t('knowledgeReview.title') }}</button>
                 <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'entities' }]" :aria-pressed="activeKbTab === 'entities'"
                     @click="activeKbTab = 'entities'">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
             </h2>
@@ -1385,7 +1371,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
               </t-tooltip>
             </div>
           </div>
-          <p v-if="activeKbTab !== 'entities'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
+          <p v-if="activeKbTab === 'documents'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
           <p v-if="unsupportedFileTypes.length" class="parser-hint knowledge-header-hint" @click="goToParserSettings">
             <t-icon name="info-circle" class="parser-hint-icon" />
             <span class="knowledge-header-hint__text">{{$t('knowledgeBase.unsupportedTypesHint', {
@@ -1403,6 +1389,8 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
         <KnowledgeWorkbench v-if="kbId" :initial-entity-id="selectedEntityId"
           @open-source="openSourceDoc" />
       </div>
+
+      <PendingReviews v-if="activeKbTab === 'reviews' && kbId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="loadKnowledgeFiles(kbId)" />
 
       <template v-if="activeKbTab === 'documents'">
         <div class="knowledge-main">
@@ -1568,8 +1556,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
       <!-- Document content drawer -->
       <DocContent ref="docContentRef" :visible="isCardDetails" :details="details"
         :kbId="kbId"
-        :review-loading="intakeReviewLoading" :review-error="intakeReviewError"
-        @openEntity="openArticleEntity" @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @intake-review="handleIntakeReview">
+        @openEntity="openArticleEntity" @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">
       </DocContent>
     </div>
 

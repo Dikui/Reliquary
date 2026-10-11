@@ -3,7 +3,7 @@ import type { ModelTierConfig } from '@/types/modelTiers';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import type { KnowledgeSearchRequest } from '@/types/knowledgeSearch';
 
-export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; published_at?: string }
+export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }
 
 export type KnowledgeDuplicateCode = 'duplicate_manual' | 'duplicate_file' | 'duplicate_url';
 export type KnowledgeDuplicateMatchMethod = 'url' | 'file_hash' | 'content_hash' | 'simhash';

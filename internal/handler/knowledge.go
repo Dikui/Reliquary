@@ -1230,11 +1230,13 @@ func (h *KnowledgeHandler) ReviewKnowledgeIntake(c *gin.Context) {
 	var req struct {
 		Action     string           `json:"action"`
 		SourceInfo types.SourceInfo `json:"source_info"`
+		Confirmed  bool             `json:"confirmed"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(errors.NewBadRequestError(err.Error()))
 		return
 	}
+	req.SourceInfo.Confirmed = req.Confirmed
 	knowledge, err := h.kgService.ReviewKnowledgeIntake(ctx, id, req.Action, req.SourceInfo)
 	if err != nil {
 		c.Error(err)

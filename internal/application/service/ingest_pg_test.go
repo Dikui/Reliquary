@@ -63,9 +63,8 @@ func TestIngestRequiredFieldsAndStructuredValidation(t *testing.T) {
 	require.Empty(t, h.queue.tasks)
 }
 
-func TestIngestBodyStructureImagesReviewBypassAnnotationsAndAudit(t *testing.T) {
+func TestIngestBodyStructureImagesModelReviewAnnotationsAndAudit(t *testing.T) {
 	h, vault := newIngestHarness(t)
-	h.processor.reject = true
 	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
 	utils.ResetSSRFWhitelistForTest()
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
@@ -84,7 +83,7 @@ func TestIngestBodyStructureImagesReviewBypassAnnotationsAndAudit(t *testing.T) 
 	}))
 	defer server.Close()
 	request := &types.IngestRequest{
-		URL: "https://x.com/ada/status/123", Content: "# 主内容\n\n这是主文的完整内容。", Title: "Grok 收录样例",
+		URL: "https://example.org/ada/status/123", Content: "# 主内容\n\n这是主文的完整内容。", Title: "Grok 收录样例",
 		Author: "Ada", Publisher: "X", PublishedAt: "2026-10-01T08:00:00+08:00", CollectReason: "收藏测试中的测量结果",
 		AgentSummary: "agent-secret-summary", AgentTags: []string{"agent-secret-tag"}, SourceName: "agent-secret-source",
 		Thread: []types.IngestThreadItem{{Author: "Ada", PublishedAt: "2026-10-01T00:01:00Z", Content: "第一条推文\n\n补充数据。"}},
@@ -123,8 +122,8 @@ func TestIngestBodyStructureImagesReviewBypassAnnotationsAndAudit(t *testing.T) 
 	require.Equal(t, request.AgentSummary, article.AgentSummary)
 	require.JSONEq(t, `["agent-secret-tag"]`, string(article.AgentTags))
 	require.Equal(t, request.SourceName, article.SourceName)
-	require.NotContains(t, h.processor.stages, "intake_review")
-	require.Equal(t, []string{"article_processing"}, h.processor.stages)
+	require.Contains(t, h.processor.stages, "intake_review")
+	require.Equal(t, []string{"intake_review", "article_processing"}, h.processor.stages)
 	require.Len(t, h.processor.requests, 1)
 	data, header, body := readVaultArticle(t, vault, article)
 	require.Contains(t, string(header), "collect_reason: \"收藏测试中的测量结果\"")
@@ -159,13 +158,13 @@ func TestIngestBodyStructureImagesReviewBypassAnnotationsAndAudit(t *testing.T) 
 
 func TestIngestDuplicateReturnsExistingAndFillsReasonWithoutReprocessing(t *testing.T) {
 	h, vault := newIngestHarness(t)
-	request := &types.IngestRequest{URL: "https://x.com/ada/status/456?utm_source=grok", Content: "An original result with measurements and complete supported evidence.", Title: "去重测试"}
+	request := &types.IngestRequest{Publisher: "Acme", URL: "https://example.org/ada/status/456?utm_source=grok", Content: "An original result with measurements and complete supported evidence.", Title: "去重测试"}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	h.drain(t)
 	article := h.article(t, first.ArticleID)
 	_, _, originalBody := readVaultArticle(t, vault, article)
-	request.URL = "https://x.com/ada/status/456#thread"
+	request.URL = "https://example.org/ada/status/456#thread"
 	request.CollectReason = "保留做研究"
 	request.Content = "Repeated URL arrives with a modified delivery."
 	duplicate, err := h.service.Ingest(h.ctx, request)
@@ -222,7 +221,7 @@ func TestIngestDuplicateReasonSurvivesInFlightProcessingAndVaultWrite(t *testing
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService = &summaryStateModelService{model: paused, metadata: models.metadata}
 	h.service.modelService = models
-	request := &types.IngestRequest{URL: "https://x.com/ada/status/concurrent-reason", Content: "Original measurements describe the complete supported product capabilities.", Title: "并发收藏理由"}
+	request := &types.IngestRequest{Publisher: "Acme", URL: "https://example.org/ada/status/concurrent-reason", Content: "Original measurements describe the complete supported product capabilities.", Title: "并发收藏理由"}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	result := make(chan error, 1)
@@ -278,7 +277,7 @@ func TestIngestDuplicateReasonSurvivesInFlightProcessingAndVaultWrite(t *testing
 
 func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	request := &types.IngestRequest{URL: "https://x.com/ada/status/501", Content: "A sourced original with measured product observations.", Images: []types.IngestImage{{Data: strings.SplitN(articleImageDataURI(t, 13), ",", 2)[1], Caption: "Same chart"}}}
+	request := &types.IngestRequest{Publisher: "Acme", URL: "https://example.org/ada/status/501", Content: "A sourced original with measured product observations.", Images: []types.IngestImage{{Data: strings.SplitN(articleImageDataURI(t, 13), ",", 2)[1], Caption: "Same chart"}}}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	canonical, _, _ := messageBodyFingerprint(assembleIngestBody(request, []string{ingestCanonicalImageReference(request.Images[0])}))
@@ -316,7 +315,7 @@ func TestIngestImageSSRFRejectionIsSkippedAndReported(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{URL: "https://x.com/ada/status/unsafe-image", Content: "The sourced article remains usable when its supporting image is unreachable.", Images: []types.IngestImage{{URL: server.URL + "/image.png", Caption: "Blocked attachment"}}})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Publisher: "Acme", URL: "https://example.org/ada/status/unsafe-image", Content: "The sourced article remains usable when its supporting image is unreachable.", Images: []types.IngestImage{{URL: server.URL + "/image.png", Caption: "Blocked attachment"}}})
 	require.NoError(t, err)
 	require.Equal(t, "pending", result.Status)
 	require.Len(t, result.ImageFailures, 1)
@@ -337,7 +336,7 @@ func TestIngestFailedImageFingerprintMatchesSameBodyWithoutImage(t *testing.T) {
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
-	request := &types.IngestRequest{URL: "https://x.com/ada/status/failed-image", Content: "An original announcement includes measured results.", Images: []types.IngestImage{{URL: server.URL + "/missing.png", Caption: "Unavailable chart", Text: "Unavailable measurements"}}}
+	request := &types.IngestRequest{Publisher: "Acme", URL: "https://example.org/ada/status/failed-image", Content: "An original announcement includes measured results.", Images: []types.IngestImage{{URL: server.URL + "/missing.png", Caption: "Unavailable chart", Text: "Unavailable measurements"}}}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.Len(t, first.ImageFailures, 1)
@@ -363,7 +362,7 @@ func TestIngestFailedImageFingerprintMatchesSameBodyWithoutImage(t *testing.T) {
 
 func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	request := &types.IngestRequest{URL: "https://example.org/audit-existing", Content: "The original article is retained for an audit failure test."}
+	request := &types.IngestRequest{Publisher: "Acme", URL: "https://example.org/audit-existing", Content: "The original article is retained for an audit failure test."}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.NoError(t, h.db.Exec(`CREATE FUNCTION fail_ingest_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$; CREATE TRIGGER fail_ingest_audit BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION fail_ingest_audit()`).Error)

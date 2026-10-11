@@ -23,6 +23,7 @@ import { useI18n } from 'vue-i18n';
 import DocumentPreview from '@/components/document-preview.vue';
 import RepostSources from '@/views/knowledge/components/RepostSources.vue';
 import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
+import KnowledgeReviewActions from '@/components/KnowledgeReviewActions.vue';
 import KnowledgeArticleJudgments from '@/components/KnowledgeArticleJudgments.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import { resolveKnowledgeDownloadFileName } from '@/views/knowledge/knowledgeDownloadFileName';
@@ -189,8 +190,8 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "parse_status", "kbId", "reviewLoading", "reviewError"]);
-const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "intakeReview"]);
+const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "parse_status", "kbId"]);
+const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
 const intakeOriginalLoading = ref(false);
@@ -206,8 +207,6 @@ const intakeOriginalURL = computed(() => {
   const url = intakeSourceInfo.value?.original_url;
   return typeof url === 'string' && /^https?:\/\//i.test(url) && isValidURL(url) ? url : '';
 });
-const intakeSourceDraft = ref({ author: '', publisher: '', original_url: '', published_at: '' });
-watch(intakeSourceInfo, (value) => { intakeSourceDraft.value = { ...value }; }, { immediate: true, deep: true });
 const resetIntakePreview = () => {
   intakePreviewController?.abort();
   intakePreviewController = null;
@@ -966,12 +965,14 @@ const channelLabelMap: Record<string, string> = {
 };
 
 const getChannelLabel = (channel: string) => {
+  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return t(`knowledgeBase.sourceKinds.${props.details.source_kind}`);
   const key = channelLabelMap[channel];
   return key ? t(key) : t('knowledgeBase.channelUnknown');
 };
 
 // 获取类型标签
 const getTypeLabel = () => {
+  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return props.details.file_type?.toUpperCase() || t('knowledgeBase.typeFile');
   if (props.details.channel === 'rss') return t('datasource.connector.rss');
   switch (props.details.type) {
     case 'url':
@@ -1197,7 +1198,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                 <t-tag size="small" :theme="getTypeTheme()" variant="light">{{ getTypeLabel() }}</t-tag>
               </span>
             </div>
-            <div v-if="details.channel && details.channel !== 'web'" class="doc-detail-row">
+            <div v-if="['mine', 'report'].includes(details.source_kind || '') || (details.channel && details.channel !== 'web')" class="doc-detail-row">
               <span class="doc-detail-label">{{ $t('knowledgeBase.infoCard.source') }}</span>
               <span class="doc-detail-value">
                 <t-tag size="small" variant="light" theme="warning">{{ getChannelLabel(details.channel) }}</t-tag>
@@ -1224,23 +1225,17 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <p v-if="intakeSourceInfo.author">{{ $t('knowledgeBase.intakeAuthor') }}: {{ intakeSourceInfo.author }}</p>
           <p v-if="intakeSourceInfo.publisher">{{ $t('knowledgeBase.intakePublisher') }}: {{ intakeSourceInfo.publisher }}</p>
           <a v-if="intakeOriginalURL" :href="intakeOriginalURL" target="_blank" rel="noopener">{{ intakeOriginalURL }}</a>
+          <p v-if="intakeSourceInfo.original_url_source === 'from_file'">{{ $t('knowledgeReview.extractedLink') }}</p>
           <p v-if="intakeSourceInfo.published_at">{{ $t('knowledgeBase.intakePublishedAt') }}: {{ intakeSourceInfo.published_at }}</p>
           <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('knowledgeBase.intakePreviewOriginal') : $t('knowledgeBase.intakeLoadMore')) : $t('knowledgeBase.intakePreviewOriginal') }}</t-button>
           <p v-if="intakeOriginalError" class="field-hint field-hint--error">{{ intakeOriginalError }}</p>
           <div v-if="intakeOriginal" class="md-content" v-html="processMarkdown(intakeOriginal)" />
-          <template v-if="isIntakeRejected">
-            <t-input v-model="intakeSourceDraft.author" :placeholder="$t('knowledgeBase.intakeAuthor')" />
-            <t-input v-model="intakeSourceDraft.publisher" :placeholder="$t('knowledgeBase.intakePublisher')" />
-            <t-input v-model="intakeSourceDraft.original_url" :placeholder="$t('knowledgeBase.intakeOriginalUrl')" />
-            <t-input v-model="intakeSourceDraft.published_at" :placeholder="$t('knowledgeBase.intakePublishedAt')" />
-            <div class="intake-review-actions">
-              <t-button theme="primary" :loading="reviewLoading" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'approve', sourceInfo: intakeSourceDraft })">{{ $t('articleJudgments.approveReview') }}</t-button>
-              <t-button variant="outline" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'reject', sourceInfo: intakeSourceDraft })">{{ $t('articleJudgments.rejectReview') }}</t-button>
-              <t-button variant="outline" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'retry', sourceInfo: intakeSourceDraft })">{{ $t('knowledgeBase.intakeRetry') }}</t-button>
-              <t-button theme="danger" variant="outline" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'discard' })">{{ $t('knowledgeBase.intakeDiscard') }}</t-button>
-            </div>
-            <p v-if="reviewError" class="processing-error" role="alert">{{ reviewError }}</p>
-          </template>
+          <KnowledgeReviewActions v-if="isIntakeRejected" :knowledge="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
+        </section>
+
+        <section v-if="details.processing_review_status === 'pending'" class="setting-drawer__section">
+          <h4 class="setting-drawer__section-title">{{ $t('knowledgeReview.processing') }}</h4>
+          <KnowledgeReviewActions :knowledge="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
         </section>
 
         <section v-if="details.repost_sources?.length" class="setting-drawer__section doc-repost-section">
@@ -1461,7 +1456,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 <style scoped lang="less">
 @import "./css/markdown.less";
 
-.intake-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 .section-title-actions,
 .metadata-actions,

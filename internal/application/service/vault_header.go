@@ -17,19 +17,21 @@ import (
 
 // VaultArticleHeader is the portable article metadata used by vault rebuild.
 type VaultArticleHeader struct {
-	ID            string                  `yaml:"id" json:"id"`
-	URL           string                  `yaml:"url" json:"url"`
-	Title         string                  `yaml:"title" json:"title"`
-	Publisher     string                  `yaml:"publisher" json:"publisher"`
-	Author        string                  `yaml:"author" json:"author"`
-	PublishedAt   string                  `yaml:"published_at" json:"published_at"`
-	CollectedAt   string                  `yaml:"collected_at" json:"collected_at"`
-	ContentType   string                  `yaml:"content_type" json:"content_type"`
-	Summary       *types.KnowledgeSummary `yaml:"summary" json:"summary"`
-	Entities      []string                `yaml:"entities" json:"entities"`
-	Topics        []string                `yaml:"topics" json:"topics"`
-	Starred       bool                    `yaml:"starred" json:"starred"`
-	CollectReason string                  `yaml:"collect_reason" json:"collect_reason"`
+	ID               string                  `yaml:"id" json:"id"`
+	URL              string                  `yaml:"url" json:"url"`
+	Title            string                  `yaml:"title" json:"title"`
+	Publisher        string                  `yaml:"publisher" json:"publisher"`
+	Author           string                  `yaml:"author" json:"author"`
+	PublishedAt      string                  `yaml:"published_at" json:"published_at"`
+	CollectedAt      string                  `yaml:"collected_at" json:"collected_at"`
+	ContentType      string                  `yaml:"content_type" json:"content_type"`
+	Summary          *types.KnowledgeSummary `yaml:"summary" json:"summary"`
+	Entities         []string                `yaml:"entities" json:"entities"`
+	Topics           []string                `yaml:"topics" json:"topics"`
+	Starred          bool                    `yaml:"starred" json:"starred"`
+	CollectReason    string                  `yaml:"collect_reason" json:"collect_reason"`
+	SourceUnverified bool                    `yaml:"source_unverified,omitempty" json:"source_unverified"`
+	ProcessingMode   string                  `yaml:"processing_mode,omitempty" json:"processing_mode,omitempty"`
 }
 
 // RenderVaultArticleHeader uses a fixed field order and JSON double quoted
@@ -59,6 +61,12 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	writeVaultList(&b, "topics", h.Topics, true)
 	fmt.Fprintf(&b, "starred: %t\n", h.Starred)
 	writeVaultScalar(&b, "collect_reason", h.CollectReason)
+	if h.SourceUnverified {
+		b.WriteString("source_unverified: true\n")
+	}
+	if h.ProcessingMode != "" {
+		writeVaultScalar(&b, "processing_mode", h.ProcessingMode)
+	}
 	b.WriteString("---\n")
 	return []byte(b.String())
 }

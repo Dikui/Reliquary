@@ -121,22 +121,28 @@ type Knowledge struct {
 	// Title of the knowledge
 	Title string `json:"title"`
 	// Description of the knowledge
-	Description          string            `json:"description"`
-	ContentType          string            `json:"content_type" gorm:"type:varchar(16)"`
-	ContentTypeCorrected bool              `json:"content_type_corrected" gorm:"not null;default:false"`
-	ProcessingMode       string            `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
-	SourceKind           string            `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
-	VaultPath            string            `json:"vault_path" gorm:"type:text;not null;default:''"`
-	VaultBody            string            `json:"-" gorm:"type:text;not null;default:''"`
-	VaultOriginalPath    string            `json:"-" gorm:"type:text;not null;default:''"`
-	Starred              bool              `json:"starred" gorm:"not null;default:false"`
-	CollectReason        string            `json:"collect_reason" gorm:"type:text;not null;default:''"`
-	AgentSummary         string            `json:"agent_summary" gorm:"type:text;not null;default:''"`
-	AgentTags            JSON              `json:"agent_tags" gorm:"type:jsonb;not null"`
-	SourceName           string            `json:"source_name" gorm:"type:text;not null;default:''"`
-	StructuredSummary    *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
-	Entities             []Entity          `json:"entities" gorm:"-"`
-	Topics               []Topic           `json:"topics" gorm:"-"`
+	Description                 string            `json:"description"`
+	ContentType                 string            `json:"content_type" gorm:"type:varchar(16)"`
+	ContentTypeCorrected        bool              `json:"content_type_corrected" gorm:"not null;default:false"`
+	ContentTypeUncertain        bool              `json:"content_type_uncertain" gorm:"not null;default:false"`
+	ProcessingReviewStatus      string            `json:"processing_review_status" gorm:"type:varchar(16);not null;default:''"`
+	ProcessingReviewContentType string            `json:"processing_review_content_type" gorm:"type:varchar(16);not null;default:''"`
+	ProcessingReviewReason      string            `json:"processing_review_reason" gorm:"type:text;not null;default:''"`
+	SourceUnverified            bool              `json:"source_unverified" gorm:"not null;default:false"`
+	ReviewKind                  string            `json:"review_kind,omitempty" gorm:"-"`
+	ProcessingMode              string            `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
+	SourceKind                  string            `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
+	VaultPath                   string            `json:"vault_path" gorm:"type:text;not null;default:''"`
+	VaultBody                   string            `json:"-" gorm:"type:text;not null;default:''"`
+	VaultOriginalPath           string            `json:"-" gorm:"type:text;not null;default:''"`
+	Starred                     bool              `json:"starred" gorm:"not null;default:false"`
+	CollectReason               string            `json:"collect_reason" gorm:"type:text;not null;default:''"`
+	AgentSummary                string            `json:"agent_summary" gorm:"type:text;not null;default:''"`
+	AgentTags                   JSON              `json:"agent_tags" gorm:"type:jsonb;not null"`
+	SourceName                  string            `json:"source_name" gorm:"type:text;not null;default:''"`
+	StructuredSummary           *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
+	Entities                    []Entity          `json:"entities" gorm:"-"`
+	Topics                      []Topic           `json:"topics" gorm:"-"`
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`
@@ -269,10 +275,12 @@ type ManualKnowledgeMetadata struct {
 // SourceInfo is supplied or extracted source evidence. Values remain strings so
 // a publisher's original date precision is never invented by this service.
 type SourceInfo struct {
-	Author      string `json:"author,omitempty"`
-	Publisher   string `json:"publisher,omitempty"`
-	OriginalURL string `json:"original_url,omitempty"`
-	PublishedAt string `json:"published_at,omitempty"`
+	Author            string `json:"author,omitempty"`
+	Publisher         string `json:"publisher,omitempty"`
+	OriginalURL       string `json:"original_url,omitempty"`
+	PublishedAt       string `json:"published_at,omitempty"`
+	OriginalURLSource string `json:"original_url_source,omitempty"`
+	Confirmed         bool   `json:"-"`
 }
 
 // KnowledgeIntakeMetadata records the single-message intake decision. Original

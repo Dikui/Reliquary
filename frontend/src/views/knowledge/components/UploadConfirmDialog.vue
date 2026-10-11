@@ -30,6 +30,7 @@
               </div>
 
               <div class="files-list-wrap">
+                <p v-if="mode === 'manual' || mode === 'file'" class="manual-source-meta">{{ t('knowledgeReview.uploadLinkHint') }}</p>
                 <div v-if="mode === 'manual' && manualPreview" class="manual-source-panel">
                   <p class="manual-source-title" :title="manualPreview.title">{{ manualPreview.title }}</p>
                   <p class="manual-source-meta">

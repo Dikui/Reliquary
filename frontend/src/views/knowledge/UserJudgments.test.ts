@@ -128,6 +128,17 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(value.processing_mode, 'summary_only')
     assert.deepEqual(calls, [['article-a', 'tutorial', true]])
   })
+  test(`${locale}: source unverified content type corrections keep full text without a removal dialog`, async () => {
+    const value = { ...article, source_unverified: true }, calls: unknown[] = []
+    const view = judgments({ correctKnowledgeContentType: async (...input: unknown[]) => { calls.push(input); return { success: true, data: { ...value, content_type: 'tutorial', processing_mode: 'full' } } } })
+    await render(view, { knowledge: value, onUpdated: (update: any) => Object.assign(value, update) }, locale, async state => {
+      state.typeDraft.value = 'tutorial'
+      await state.saveType()
+      assert.equal(state.confirmRemoveBody.value, false)
+    })
+    assert.deepEqual(calls, [['article-a', 'tutorial', false]])
+    assert.equal(value.processing_mode, 'full')
+  })
   test(`${locale}: summary to full fetch failure keeps the original article and visible reason`, async () => {
     const value = { ...article, content_type: 'tutorial', processing_mode: 'summary_only' }
     const view = judgments({ correctKnowledgeContentType: async () => { throw new Error('Cannot fetch original article: HTTP 404') } })
@@ -234,7 +245,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const view = component('./OperationLogs.vue', {
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {} }) },
       '@/api/operation-logs': { OPERATION_TYPES, listOperationLogs: async (input: unknown) => { calls.push(input); return { success: true, data: {
-        items: ['ingest', 'write_report'].map((operation_type, index) => ({ id: String(index), actor: 'api_key:2', actor_name: 'Grok Bot', operation_type, object_id: 'article-a', before: null, after: { source_name: 'grok-bot' }, created_at: '2026-10-11T04:00:00Z' })), total: 2,
+        items: ['ingest', 'write_report', 'processing_review_confirm', 'processing_review_correct', 'processing_review_ignore', 'review_supplement_url', 'review_admit_unverified', 'review_convert_to_mine'].map((operation_type, index) => ({ id: String(index), actor: 'api_key:2', actor_name: 'Grok Bot', operation_type, object_id: 'article-a', before: null, after: { source_name: 'grok-bot' }, created_at: '2026-10-11T04:00:00Z' })), total: 8,
       } } } },
     })
     const html = await render(view, {}, locale, async state => {
@@ -246,6 +257,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.deepEqual(calls, [{ operation_type: 'ingest', page: 1, page_size: 30 }])
     assert.ok(html.includes(messages[locale].operationLogs.types.ingest))
     assert.ok(html.includes(messages[locale].operationLogs.types.write_report))
+    for (const type of ['processing_review_confirm', 'processing_review_correct', 'processing_review_ignore', 'review_supplement_url', 'review_admit_unverified', 'review_convert_to_mine'] as const) {
+      assert.ok(html.includes(messages[locale].operationLogs.types[type]))
+      assert.ok(OPERATION_TYPES.includes(type))
+    }
     assert.doesNotMatch(html, /operationLogs\.types\./)
   })
   test(`${locale}: a duplicate topic name keeps the editor and entered text`, async () => {

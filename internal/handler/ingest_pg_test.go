@@ -17,8 +17,10 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/middleware"
+	"reliquary/internal/models/chat"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 )
 
 type ingestHandlerQueue struct{ tasks []*asynq.Task }
@@ -28,14 +30,42 @@ func (q *ingestHandlerQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asyn
 	return &asynq.TaskInfo{ID: "ingest-test-task"}, nil
 }
 
+type ingestHandlerChat struct{}
+
+func (ingestHandlerChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
+	if strings.Contains(messages[1].Content, "rejectfixture") {
+		return &types.ChatResponse{Content: `{"approved":false,"reason":"model rejected source"}`}, nil
+	}
+	return &types.ChatResponse{Content: `{"approved":true,"reason":"verified original"}`}, nil
+}
+func (ingestHandlerChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
+	return nil, nil
+}
+func (ingestHandlerChat) GetModelID() string   { return "intake-test" }
+func (ingestHandlerChat) GetModelName() string { return "intake-test" }
+
+type ingestHandlerModels struct{ interfaces.ModelService }
+
+func (ingestHandlerModels) GetChatModel(context.Context, string) (chat.Chat, error) {
+	return ingestHandlerChat{}, nil
+}
+
+type ingestHandlerBases struct{ stubArticleKBService }
+
+func (ingestHandlerBases) GetKnowledgeBase(ctx context.Context) (*types.KnowledgeBase, error) {
+	kb, err := (&stubArticleKBService{}).GetKnowledgeBase(ctx)
+	kb.SummaryModelID = "intake-test"
+	return kb, err
+}
+
 func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Personal space"}).Error)
-	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "kb-1", TenantID: 1, Name: "Articles", Type: types.KnowledgeBaseTypeDocument}).Error)
+	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "kb-1", TenantID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.KnowledgeBaseTypeDocument}).Error)
 	queue := &ingestHandlerQueue{}
-	bases := &stubArticleKBService{}
+	bases := &ingestHandlerBases{}
 	articles, err := service.NewKnowledgeService(db, &config.Config{}, repository.NewKnowledgeRepository(db), bases,
-		repository.NewTenantRepository(db), nil, nil, nil, file.NewLocalFileService(t.TempDir(), ""), nil, nil,
+		repository.NewTenantRepository(db), nil, nil, nil, file.NewLocalFileService(t.TempDir(), ""), nil, ingestHandlerModels{},
 		queue, nil, nil, nil, docparser.NewImageResolver(), nil)
 	require.NoError(t, err)
 	vault, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: t.TempDir()}})
@@ -66,7 +96,23 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
 	require.Empty(t, queue.tasks)
-	input := types.IngestRequest{URL: "https://x.com/ada/status/123", Content: "# Complete original\n\nMeasured product capabilities.", Title: "External article", SourceName: "grok-bot", AgentSummary: "annotation-summary", AgentTags: []string{"annotation-tag"}, Thread: []types.IngestThreadItem{{Author: "Ada", PublishedAt: "2026-10-01", Content: "Supporting thread."}}, Quotes: []types.IngestQuote{{Content: "Quoted external source."}}}
+	rejectedResponse := httptest.NewRecorder()
+	rejectedRequest := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", strings.NewReader(`{"url":"https://example.org/rejected","content":"rejectfixture complete original","publisher":"Journal"}`))
+	rejectedRequest.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rejectedResponse, rejectedRequest)
+	require.Equal(t, http.StatusCreated, rejectedResponse.Code, rejectedResponse.Body.String())
+	var rejected struct {
+		Data types.IngestResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rejectedResponse.Body.Bytes(), &rejected))
+	require.Equal(t, "pending_review", rejected.Data.Status)
+	require.Equal(t, "model rejected source", rejected.Data.Reason)
+	require.Empty(t, queue.tasks)
+	var pending types.Knowledge
+	require.NoError(t, db.First(&pending, "id=?", rejected.Data.ArticleID).Error)
+	require.Equal(t, types.ParseStatusRejected, pending.ParseStatus)
+	require.Empty(t, pending.VaultPath)
+	input := types.IngestRequest{URL: "https://example.org/ada/article123", Publisher: "Journal", Content: "# Complete original\n\nMeasured product capabilities.", Title: "External article", SourceName: "grok-bot", AgentSummary: "annotation-summary", AgentTags: []string{"annotation-tag"}, Thread: []types.IngestThreadItem{{Author: "Ada", PublishedAt: "2026-10-01", Content: "Supporting thread."}}, Quotes: []types.IngestQuote{{Content: "Quoted external source."}}}
 	var articleID string
 	for _, attempt := range []struct {
 		status int
@@ -113,9 +159,9 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	require.JSONEq(t, `["annotation-tag"]`, string(article.AgentTags))
 	var logs []types.OperationLog
 	require.NoError(t, db.Where("operation_type=?", "ingest").Order("created_at,id").Find(&logs).Error)
-	require.Len(t, logs, 2)
+	require.Len(t, logs, 3)
 	for _, log := range logs {
 		require.Equal(t, "api_key:external-test", log.Actor)
-		require.Equal(t, articleID, log.ObjectID)
+		require.Contains(t, []string{articleID, rejected.Data.ArticleID}, log.ObjectID)
 	}
 }

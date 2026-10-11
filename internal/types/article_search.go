@@ -38,21 +38,22 @@ type ArticleSearchSnippet struct {
 }
 
 type ArticleSearchResult struct {
-	ArticleID      string                 `json:"article_id"`
-	Title          string                 `json:"title"`
-	Source         string                 `json:"source"`
-	PublishedAt    *time.Time             `json:"published_at"`
-	ContentType    string                 `json:"content_type"`
-	ProcessingMode string                 `json:"processing_mode"`
-	Starred        bool                   `json:"starred"`
-	Summary        *KnowledgeSummary      `json:"summary"`
-	Entities       []ArticleSearchEntity  `json:"entities"`
-	Topics         []ArticleSearchTopic   `json:"topics"`
-	Snippets       []ArticleSearchSnippet `json:"snippets"`
-	Score          float64                `json:"score"`
-	SimilarReports []*ArticleSearchResult `json:"similar_reports"`
-	VaultPath      string                 `json:"vault_path"`
-	OriginalURL    string                 `json:"original_url"`
+	ArticleID        string                 `json:"article_id"`
+	Title            string                 `json:"title"`
+	Source           string                 `json:"source"`
+	PublishedAt      *time.Time             `json:"published_at"`
+	ContentType      string                 `json:"content_type"`
+	ProcessingMode   string                 `json:"processing_mode"`
+	SourceUnverified bool                   `json:"source_unverified"`
+	Starred          bool                   `json:"starred"`
+	Summary          *KnowledgeSummary      `json:"summary"`
+	Entities         []ArticleSearchEntity  `json:"entities"`
+	Topics           []ArticleSearchTopic   `json:"topics"`
+	Snippets         []ArticleSearchSnippet `json:"snippets"`
+	Score            float64                `json:"score"`
+	SimilarReports   []*ArticleSearchResult `json:"similar_reports"`
+	VaultPath        string                 `json:"vault_path"`
+	OriginalURL      string                 `json:"original_url"`
 }
 
 type ArticleSearchResponse struct {

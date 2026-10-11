@@ -19,6 +19,7 @@ const originalURL = computed(() => {
     <div class="classification-tags">
       <t-tag size="small" variant="light-outline">{{ t(`knowledgeBase.contentTypes.${type}`) }}</t-tag>
       <t-tag size="small" variant="light-outline">{{ t(knowledge.processing_mode === 'summary_only' ? 'knowledgeBase.processingModes.summary_only' : 'knowledgeBase.processingModes.full') }}</t-tag>
+      <t-tag v-if="knowledge.source_unverified" size="small" theme="warning" variant="light-outline">{{ t('knowledgeReview.sourceUnverified') }}</t-tag>
     </div>
     <div v-if="knowledge.structured_summary" class="structured-summary">
       <div class="summary-overview"><strong>{{ t('knowledgeBase.summaryOverview') }}</strong><p>{{ knowledge.structured_summary.overview }}</p></div>

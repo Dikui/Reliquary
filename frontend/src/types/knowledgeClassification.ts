@@ -6,6 +6,11 @@ export interface StructuredSummary { overview: string; points: string[]; key_ter
 export interface KnowledgeTopic { id: string; name: string; description?: string }
 export interface ClassifiedKnowledge {
   starred?: boolean
+  source_unverified?: boolean
+  content_type_uncertain?: boolean
+  processing_review_status?: string
+  processing_review_content_type?: string
+  processing_review_reason?: string
   source_kind?: 'article' | 'mine' | 'report'
   vault_path?: string
   content_type?: ContentType | string | null
@@ -13,7 +18,7 @@ export interface ClassifiedKnowledge {
   structured_summary?: StructuredSummary | null
   description?: string
   source?: string
-  metadata?: { intake?: { source_info?: { original_url?: string } } }
+  metadata?: { intake?: { decision?: string; reason?: string; source?: string; original_path?: string; source_info?: { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string } } }
   entities?: Pick<Entity, 'id' | 'canonical_name' | 'entity_type'>[]
   topics?: KnowledgeTopic[]
 }

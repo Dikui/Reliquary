@@ -12,15 +12,16 @@ import (
 
 // ArticleReadResult exposes the database-owned header and a Unicode-safe body slice.
 type ArticleReadResult struct {
-	Header         VaultArticleHeader `json:"header"`
-	Body           string             `json:"body"`
-	OriginalURL    string             `json:"original_url"`
-	ProcessingMode string             `json:"processing_mode"`
-	ParseStatus    string             `json:"parse_status"`
-	Offset         int                `json:"offset"`
-	Length         int                `json:"length"`
-	TotalLength    int                `json:"total_length"`
-	NextOffset     *int               `json:"next_offset,omitempty"`
+	Header           VaultArticleHeader `json:"header"`
+	Body             string             `json:"body"`
+	OriginalURL      string             `json:"original_url"`
+	ProcessingMode   string             `json:"processing_mode"`
+	ParseStatus      string             `json:"parse_status"`
+	SourceUnverified bool               `json:"source_unverified"`
+	Offset           int                `json:"offset"`
+	Length           int                `json:"length"`
+	TotalLength      int                `json:"total_length"`
+	NextOffset       *int               `json:"next_offset,omitempty"`
 }
 
 // GetArticle reuses the article and immutable-body services used by HTTP.
@@ -52,7 +53,7 @@ func (s *knowledgeService) GetArticle(ctx context.Context, id string, offset, le
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
 	result := &ArticleReadResult{Header: header, OriginalURL: header.URL,
-		ProcessingMode: article.ProcessingMode, ParseStatus: article.ParseStatus, Offset: offset}
+		ProcessingMode: article.ProcessingMode, ParseStatus: article.ParseStatus, SourceUnverified: article.SourceUnverified, Offset: offset}
 	if article.ProcessingMode == "summary_only" {
 		if offset > 0 {
 			return nil, werrors.NewBadRequestError("offset exceeds the stored body length")
@@ -80,8 +81,11 @@ func (s *knowledgeService) GetArticle(ctx context.Context, id string, offset, le
 	return result, nil
 }
 
-// ListPending shares the paginated rejected-article query with the HTTP pending area.
-func (s *knowledgeService) ListPending(ctx context.Context, page, pageSize int) (*types.PageResult, error) {
+// ListPending lists intake and processing reviews without changing article visibility.
+func (s *knowledgeService) ListPending(ctx context.Context, page, pageSize int, kinds ...string) (*types.PageResult, error) {
+	if s.db == nil {
+		return nil, werrors.NewInternalServerError("pending reviews require PostgreSQL")
+	}
 	if page == 0 {
 		page = 1
 	}
@@ -91,10 +95,40 @@ func (s *knowledgeService) ListPending(ctx context.Context, page, pageSize int) 
 	if page < 1 || pageSize < 1 || pageSize > 100 {
 		return nil, werrors.NewBadRequestError("page must be positive and page_size must be between 1 and 100")
 	}
+	kind := ""
+	if len(kinds) > 0 {
+		kind = kinds[0]
+	}
+	if kind != "" && kind != "intake" && kind != "processing" {
+		return nil, werrors.NewBadRequestError("kind must be intake or processing")
+	}
 	kb, err := s.kbService.GetKnowledgeBase(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.ListPagedKnowledgeByKnowledgeBaseID(ctx, kb.ID,
-		&types.Pagination{Page: page, PageSize: pageSize}, types.KnowledgeListFilter{ParseStatus: types.ParseStatusRejected})
+	query := s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("tenant_id=? AND knowledge_base_id=? AND source_kind='article'", kb.TenantID, kb.ID)
+	switch kind {
+	case "intake":
+		query = query.Where("parse_status=?", types.ParseStatusRejected)
+	case "processing":
+		query = query.Where("processing_review_status='pending' AND parse_status=?", types.ParseStatusCompleted)
+	default:
+		query = query.Where("parse_status=? OR (processing_review_status='pending' AND parse_status=?)", types.ParseStatusRejected, types.ParseStatusCompleted)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, err
+	}
+	items := []*types.Knowledge{}
+	if err := query.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if item.ParseStatus == types.ParseStatusRejected {
+			item.ReviewKind = "intake"
+		} else {
+			item.ReviewKind = "processing"
+		}
+	}
+	return types.NewPageResult(total, &types.Pagination{Page: page, PageSize: pageSize}, items), nil
 }

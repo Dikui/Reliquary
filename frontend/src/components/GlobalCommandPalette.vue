@@ -54,6 +54,7 @@
                 :shortcut="shortcutFor(flatIndexFor('chunks', i))" icon-name="file"
                 :badge="item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
                 :badge-variant="item.chunk.match_type === 'vector' ? 'vector' : 'keyword'" :score="item.chunk.score"
+                :source-unverified="item.file.source_unverified"
                 @primary="openChunk(item)" @hover="selectItemAt($event)">
                 <template #title>
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>

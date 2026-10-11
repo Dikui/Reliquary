@@ -29,8 +29,8 @@ type vaultContentTypeChange struct {
 }
 
 func (v *VaultService) changeCorrectedArticleBody(ctx context.Context, tx *gorm.DB, k *types.Knowledge, body string, read func(context.Context, string) (io.ReadCloser, error)) (*vaultContentTypeChange, error) {
-	if !k.ContentTypeCorrected || k.SourceKind != "article" || k.ParseStatus != types.ParseStatusCompleted || k.VaultPath == "" {
-		return nil, errors.New("body conversion requires a completed user-corrected vault article")
+	if (!k.ContentTypeCorrected && k.ProcessingReviewStatus != types.ProcessingReviewConfirmed) || k.SourceKind != "article" || k.ParseStatus != types.ParseStatusCompleted || k.VaultPath == "" {
+		return nil, errors.New("body conversion requires a completed user-reviewed vault article")
 	}
 	if _, err := uuid.Parse(k.ID); err != nil {
 		return nil, err

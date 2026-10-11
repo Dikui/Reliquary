@@ -1091,6 +1091,7 @@ func mergeSourceInfo(old, updated types.SourceInfo) types.SourceInfo {
 	}
 	if updated.OriginalURL == "" {
 		updated.OriginalURL = old.OriginalURL
+		updated.OriginalURLSource = old.OriginalURLSource
 	}
 	if updated.PublishedAt == "" {
 		updated.PublishedAt = old.PublishedAt
@@ -1263,6 +1264,10 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 			_ = s.repo.UpdateKnowledge(ctx, knowledge)
 			return errors.New("manual article processing failed")
 		}
+	}
+	if err := extractIntakeOriginalLink(knowledge, clean, nil, knowledge.FileType, nil); err != nil {
+		knowledge.ParseStatus = types.ParseStatusFailed
+		return err
 	}
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
 		existing, err := s.checkMessageDuplicate(ctx, knowledge, clean)

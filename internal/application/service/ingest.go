@@ -70,7 +70,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
 		EmbeddingModelID: kb.EmbeddingModelID, CollectReason: strings.TrimSpace(request.CollectReason),
 		AgentSummary: request.AgentSummary, AgentTags: types.JSON(tags), SourceName: request.SourceName}
-	intake := &types.KnowledgeIntakeMetadata{Source: "ingest", Decision: "approved", SourceInfo: types.SourceInfo{
+	intake := &types.KnowledgeIntakeMetadata{Source: "ingest", Decision: "pending", SourceInfo: types.SourceInfo{
 		OriginalURL: article.Source, Author: request.Author, Publisher: request.Publisher,
 		PublishedAt: normalizeIntakePublicationDate(request.PublishedAt)}}
 	if err := article.SetIntakeMetadata(intake); err != nil {
@@ -192,6 +192,17 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		return result, nil
 	}
 	s.bindContentResources(ctx, tenantID, article.ID, body)
+	rejected, err := s.reviewIntake(ctx, kb, article, body)
+	if err != nil {
+		s.markArticleProcessingFailed(ctx, article, err)
+		s.failIntake(ctx, article)
+		return nil, err
+	}
+	if rejected {
+		intake, _ = article.IntakeMetadata()
+		result.ArticleID, result.Status, result.Message, result.Reason = article.ID, "pending_review", "等待收录审核", intake.Reason
+		return result, nil
+	}
 	if _, err := s.enqueueManualProcessing(ctx, article, body, false); err != nil {
 		s.markKnowledgeEnqueueFailed(ctx, article)
 		result.ArticleID, result.Status, result.Message = article.ID, types.ParseStatusFailed, "处理入队失败"

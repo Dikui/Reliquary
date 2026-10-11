@@ -80,6 +80,11 @@ test('search requests and URL state preserve all filters without old scope param
   assert.deepEqual(invalid.filters.content_types, ['event']); assert.deepEqual(invalid.filters.sources, ['mine']); assert.equal(invalid.filters.limit, 20)
 })
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: source unverified marker reaches search results through the page API loading path`, async () => {
+    const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }], excluded_missing_published_at: 0 } }), locale)
+    assert.ok(result.html.includes(messages[locale].knowledgeReview.sourceUnverified))
+    assert.match(result.html, /data-article-id="a"/)
+  })
   test(`${locale}: article results show summary, attribution, safe link and at most three highlighted snippets`, async () => {
     const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
     for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
@@ -193,6 +198,21 @@ for (const count of [1, 2]) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: command palette API loading preserves and renders the source unverified marker`, async () => {
+    const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), {
+      '@/utils/knowledgeSearch': helpers,
+      '@/api/knowledge-search': { searchKnowledgeArticles: async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }] } }) },
+    })
+    const item = component('../../components/GlobalCommandPalette/ResultItem.vue', {})
+    const palette = defineComponent({ setup() {
+      const state = hook.useCmdkSearch({})
+      onServerPrefetch(async () => { state.query.value = 'Launch'; await state.retry(); assert.equal(state.fileGroups.value[0].source_unverified, true) })
+      return () => state.fileGroups.value.length ? h(item, { index: 0, title: state.fileGroups.value[0].title, sourceUnverified: state.fileGroups.value[0].source_unverified }) : null
+    } })
+    const html = await render(palette, {}, locale)
+    assert.ok(html.includes(messages[locale].knowledgeReview.sourceUnverified))
+    assert.match(readFileSync(new URL('../../components/GlobalCommandPalette.vue', import.meta.url), 'utf8'), /:source-unverified="item.file.source_unverified"/)
+  })
   test(`${locale}: command palette failure is localized and retry restores article results`, async () => {
     let attempts = 0
     const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), {

@@ -16,6 +16,7 @@ import { safeExternalUrl } from '../utils/externalUrl'
 import type { KnowledgeRepostSource } from '../api/knowledge-base/index'
 import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML } from '../utils/security'
 import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
+import { CONTENT_TYPES } from '../types/knowledgeClassification'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
@@ -98,6 +99,7 @@ interface DetailRenderOptions {
   ssrContext?: Record<string, any>
   details?: Record<string, unknown>
   loadedDetails?: Record<string, unknown>
+  classification?: unknown
 }
 async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
   const component = detailSFC.create({
@@ -112,7 +114,7 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/KnowledgeClassification.vue': emptyModule,
+    '@/components/KnowledgeReviewActions.vue': emptyModule, '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/KnowledgeClassification.vue': options.classification || emptyModule,
     '@/components/document-preview.vue': emptyModule,
     '@/components/knowledge-processing-timeline.vue': emptyModule,
     '@/views/knowledge/components/RepostSources.vue': sharedRepostModule,
@@ -164,6 +166,14 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
+    const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
+    const classification = compileSFC('./KnowledgeClassification.vue').create({ '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const flagged = await renderDetails([], locale, { loadedDetails: await loader.load('unverified'), classification: { __esModule: true, default: classification } })
+    assert.ok(flagged.includes(messages[locale].knowledgeReview.sourceUnverified))
+    const verified = await renderDetails([], locale, { loadedDetails: await loader.load('verified'), classification: { __esModule: true, default: classification } })
+    assert.ok(!verified.includes(messages[locale].knowledgeReview.sourceUnverified))
+  })
   test(`${locale}: API collection reason reaches the actual loading hook and article drawer`, async () => {
     const reason = locale === 'zh-CN' ? '保存测量方法与来源。' : 'Keep measurement methods and sources.'
     const loader = createArticleDetailsLoader({ article: { collect_reason: reason } })
@@ -630,5 +640,19 @@ for (const count of [1, 2]) {
   test(`English message details use the segment quantity ${count}`, async () => {
     const html = await renderDetails([], 'en-US', { details: { total: count } })
     assert.ok(html.includes(`Total ${count} ${count === 1 ? 'segment' : 'segments'}<`), html)
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: vault source identity reaches full detail through the production loading hook`, async () => {
+    const loader = createArticleDetailsLoader({ converted: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Converted.md' }, direct: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Direct.md' }, report: { source_kind: 'report', channel: 'api', file_type: 'md', vault_path: 'reports/Report.md' } })
+    for (const [id, kind] of [['converted', 'mine'], ['direct', 'mine'], ['report', 'report']] as const) {
+      const html = await renderDetails([], locale, { loadedDetails: await loader.load(id) })
+      assert.ok(html.includes(messages[locale].knowledgeBase.sourceKinds[kind]), id)
+      assert.ok(!html.includes(messages[locale].knowledgeBase.typeManual), id)
+      assert.ok(!html.includes(`>${messages[locale].knowledgeBase.channelApi}<`), id)
+      assert.ok(html.includes('MD'), id)
+    }
+    assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
   })
 }

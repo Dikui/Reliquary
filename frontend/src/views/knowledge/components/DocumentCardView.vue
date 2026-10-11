@@ -92,6 +92,7 @@ const formatDocTime = (time?: string) => {
 };
 
 const getKnowledgeType = (item: KnowledgeCard) => {
+  if (item.source_kind === 'mine' || item.source_kind === 'report') return t(`knowledgeBase.sourceKinds.${item.source_kind}`);
   if (item.channel === 'rss') return t('datasource.connector.rss');
   if (item.type === 'url') return t('knowledgeBase.typeURL') || 'URL';
   if (item.type === 'manual') return t('knowledgeBase.typeManual');
@@ -419,7 +420,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
         <div class="card-popover-meta">
           <span class="card-popover-time">{{ $t('knowledgeBase.updatedAt') }}：{{ formatDocTime(hoveredCardItem.updated_at) }}</span>
           <span
-            v-if="(hoveredCardItem as any).channel && (hoveredCardItem as any).channel !== 'web'"
+            v-if="!(['mine', 'report'].includes(hoveredCardItem.source_kind || '')) && (hoveredCardItem as any).channel && (hoveredCardItem as any).channel !== 'web'"
             class="card-popover-channel"
           >{{ getChannelLabel((hoveredCardItem as any).channel) }}</span>
 

@@ -33,10 +33,14 @@ type ArticleContentTypeCorrector interface {
 // synchronously so a failed fetch or model/index call leaves the old article
 // available with its original classification, summary, body and indexes.
 func (s *knowledgeService) CorrectContentType(ctx context.Context, id, contentType string, confirmRemoveBody bool) (*types.Knowledge, error) {
+	return s.correctContentType(ctx, id, contentType, confirmRemoveBody, "")
+}
+
+func (s *knowledgeService) correctContentType(ctx context.Context, id, contentType string, confirmRemoveBody bool, reviewAction string) (*types.Knowledge, error) {
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, werrors.NewUnauthorizedError("authenticated editor required")
 	}
-	if types.NormalizeContentType(contentType) != contentType || contentType == "" {
+	if reviewAction != "confirm" && (types.NormalizeContentType(contentType) != contentType || contentType == "") {
 		return nil, werrors.NewBadRequestError("invalid content type")
 	}
 	if s.db == nil {
@@ -55,11 +59,23 @@ func (s *knowledgeService) CorrectContentType(ctx context.Context, id, contentTy
 	if before.SourceKind != "article" || before.ParseStatus != types.ParseStatusCompleted {
 		return nil, werrors.NewBadRequestError("only completed articles can have their content type corrected")
 	}
+	if reviewAction != "" && before.ProcessingReviewStatus != types.ProcessingReviewPending {
+		return nil, werrors.NewBadRequestError("the article is not pending processing review")
+	}
+	if reviewAction == "confirm" {
+		contentType = before.ProcessingReviewContentType
+		if types.NormalizeContentType(contentType) != contentType || contentType == "" {
+			return nil, werrors.NewBadRequestError("the model type cannot be confirmed; choose a valid content type")
+		}
+	}
 	mode := types.ProcessingModeForContentType(contentType)
+	if before.SourceUnverified {
+		mode = types.ProcessingModeFull
+	}
 	if before.ProcessingMode == types.ProcessingModeFull && mode == types.ProcessingModeSummaryOnly && !confirmRemoveBody {
 		return nil, werrors.NewBadRequestError("confirm_remove_body is required because the article body, body vectors and attachments will be removed")
 	}
-	if before.ContentType == contentType && before.ContentTypeCorrected {
+	if reviewAction == "" && before.ContentType == contentType && before.ContentTypeCorrected && before.ProcessingReviewStatus != types.ProcessingReviewPending {
 		return s.GetKnowledgeByID(ctx, id)
 	}
 	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, before.KnowledgeBaseID)
@@ -72,7 +88,8 @@ func (s *knowledgeService) CorrectContentType(ctx context.Context, id, contentTy
 	}
 	eff := ResolveProcessConfig(kb, overrides)
 	fetched := *before
-	fetched.ContentType, fetched.ContentTypeCorrected, fetched.ProcessingMode = contentType, true, mode
+	corrected := reviewAction != "confirm"
+	fetched.ContentType, fetched.ContentTypeCorrected, fetched.ProcessingMode = contentType, corrected, mode
 	var body string
 	var images []docparser.StoredImage
 	var result *articleProcessingResult
@@ -100,10 +117,15 @@ func (s *knowledgeService) CorrectContentType(ctx context.Context, id, contentTy
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", id, tenantID).First(&updated).Error; err != nil {
 			return err
 		}
-		if updated.ContentType != before.ContentType || updated.ProcessingMode != before.ProcessingMode || updated.ParseStatus != types.ParseStatusCompleted {
+		if updated.ContentType != before.ContentType || updated.ProcessingMode != before.ProcessingMode || updated.ParseStatus != types.ParseStatusCompleted || updated.ProcessingReviewStatus != before.ProcessingReviewStatus || updated.SourceUnverified != before.SourceUnverified {
 			return werrors.NewConflictError("the article changed during conversion; reload it and try again")
 		}
-		updated.ContentType, updated.ContentTypeCorrected, updated.ProcessingMode, updated.UpdatedAt = contentType, true, mode, time.Now()
+		updated.ContentType, updated.ContentTypeCorrected, updated.ProcessingMode, updated.UpdatedAt = contentType, corrected, mode, time.Now()
+		if reviewAction == "confirm" {
+			updated.ProcessingReviewStatus = types.ProcessingReviewConfirmed
+		} else if before.ProcessingReviewStatus == types.ProcessingReviewPending || reviewAction == "correct" {
+			updated.ProcessingReviewStatus = types.ProcessingReviewCorrected
+		}
 		if result != nil {
 			updated.FilePath, updated.FileName, updated.FileType = fetched.FilePath, fetched.FileName, fetched.FileType
 		}
@@ -143,9 +165,12 @@ func (s *knowledgeService) CorrectContentType(ctx context.Context, id, contentTy
 			}
 			temporaryRefs = append(temporaryRefs, updated.GetMetadata()["processed_body_path"])
 		}
-		return NewOperationLogService(s.db).RecordTx(ctx, tx, "correct_content_type", id,
-			map[string]any{"content_type": before.ContentType, "processing_mode": before.ProcessingMode, "content_type_corrected": before.ContentTypeCorrected},
-			map[string]any{"content_type": updated.ContentType, "processing_mode": updated.ProcessingMode, "content_type_corrected": true})
+		operationType := "correct_content_type"
+		if reviewAction != "" {
+			operationType = "processing_review_" + reviewAction
+		}
+		return NewOperationLogService(s.db).RecordTx(ctx, tx, operationType, id,
+			processingReviewLogValue(before), processingReviewLogValue(&updated))
 	})
 	if err != nil {
 		if fileChange != nil {

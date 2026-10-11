@@ -1,4 +1,46 @@
 export default {
+  knowledgeReview: {
+  "title": "Pending reviews",
+  "intake": "Intake review",
+  "processing": "Processing review",
+  "intakeHint": "Articles that did not pass intake review stay here. Processing starts after approval.",
+  "processingHint": "These articles are saved in full and searchable. The model is uncertain about their content type. Confirm, correct or ignore the suggestion.",
+  "emptyIntake": "No articles need intake review.",
+  "emptyProcessing": "No articles need processing review.",
+  "sourceUnverified": "Source unverified",
+  "extractedLink": "Original URL: extracted from file",
+  "modelType": "Model content type",
+  "missingLinkHint": "The original URL is missing, so model review has not run. Add a URL to review again, confirm collection without a URL or convert to a personal document.",
+  "uploadLinkHint": "The original URL is optional. Reliquary first extracts it from the file or text. If none is found, the item waits for intake review.",
+  "invalidLink": "Enter a valid HTTP or HTTPS original URL.",
+  "chooseType": "Choose a content type.",
+  "failed": "Review action failed. Try again.",
+  "loadFailed": "Pending reviews could not load. Try again.",
+  "saved": "Review action saved",
+  "actions": {
+    "supplement_url": "Add URL and review again",
+    "admit_unverified": "Collect without URL",
+    "convert_to_mine": "Convert to personal document",
+    "confirm": "Confirm model type",
+    "correct": "Use selected type",
+    "ignore": "Ignore and remove from list",
+    "discard": "Discard collection"
+  },
+  "confirmations": {
+    "admit_unverified": {
+      "title": "Collect without an original URL?",
+      "description": "This article will skip intake review, be saved in full and marked as source unverified. Its original URL will be empty."
+    },
+    "convert_to_mine": {
+      "title": "Convert to a personal document?",
+      "description": "The text will be saved under mine/ and indexed as a personal document. Attachments will be retained under the file library rules. This intake record will be deleted."
+    },
+    "discard": {
+      "title": "Discard this collection?",
+      "description": "This intake record and its temporary content will be deleted."
+    }
+  }
+},
   articleJudgments: {
   "approveReview": "Approve and collect",
   "rejectReview": "Reject collection",
@@ -80,6 +122,12 @@ export default {
   "loadFailed": "Could not load the operation log. Try again.",
   "empty": "No operations match these filters.",
   "types": {
+    "processing_review_confirm": "Confirm processing type",
+    "processing_review_correct": "Correct processing type",
+    "processing_review_ignore": "Ignore processing review",
+    "review_supplement_url": "Add URL and review again",
+    "review_admit_unverified": "Collect without URL",
+    "review_convert_to_mine": "Convert to personal document",
     "review_approve": "Approve review",
     "review_reject": "Reject review",
     "review_retry": "Retry review",
@@ -284,6 +332,7 @@ export default {
     tenantTooltipWithCreator: 'Created by {creator}',
   },
   knowledgeBase: {
+    sourceKinds: { mine: 'Personal document', report: 'Report' },
     collectReason: 'Collection reason',
     vaultPath: 'Vault path',
     copyVaultPath: 'Copy vault path',
@@ -2319,7 +2368,7 @@ export default {
       baseUrl: 'API Base URL',
       baseUrlDesc: 'Use this base URL with REST API paths.',
       ingestUrl: 'External Agent ingest endpoint',
-      ingestUrlDesc: 'Send JSON with required url and content. Active collections are processed directly and return an article ID and status. Access over the intranet using Authorization: Bearer API_KEY.',
+      ingestUrlDesc: 'Send JSON with required url and content. Model intake review applies just as it does to RSS and uploads. Rejected articles return pending_review with a reason and enter pending reviews. The caller\'s judgment does not replace review. Access over the intranet using Authorization: Bearer API_KEY.',
       copyIngestUrl: 'Copy ingest endpoint',
       mcpUrl: 'MCP server URL',
       mcpUrlDesc: 'Connect via Streamable HTTP to search, read articles, ingest, review pending articles, set stars and write reports. Access over the intranet with the same API key: Authorization: Bearer API_KEY.',

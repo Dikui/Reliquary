@@ -39,6 +39,7 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 	k := kgrp
 	kRead := k
 	{
+		kRead.GET("/pending", handler.ListPending)
 		kRead.GET("/batch", handler.GetKnowledgeBatch)
 		kRead.GET("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledge)
 		kRead.GET("/:id/stages", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
@@ -52,6 +53,7 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		k.POST("/:id/reparse", g.KBExistsFromKnowledgeIDParam("id"), handler.ReparseKnowledge)
 		k.POST("/:id/cancel-parse", g.KBExistsFromKnowledgeIDParam("id"), handler.CancelKnowledgeParse)
 		k.POST("/:id/review", g.KBExistsFromKnowledgeIDParam("id"), handler.ReviewKnowledgeIntake)
+		k.POST("/:id/processing-review", g.KBExistsFromKnowledgeIDParam("id"), handler.ResolveProcessingReview)
 		kRead.GET("/:id/download", g.KBExistsFromKnowledgeIDParam("id"), handler.DownloadKnowledgeFile)
 		kRead.GET("/:id/preview", g.KBExistsFromKnowledgeIDParam("id"), handler.PreviewKnowledgeFile)
 		kRead.GET("/search", handler.SearchKnowledge)

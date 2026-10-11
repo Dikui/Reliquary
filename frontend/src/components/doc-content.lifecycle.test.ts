@@ -91,7 +91,7 @@ test('mounted detail switches articles and modes, closes and unmounts without un
       '@/utils/clipboard': { copyWithToast() {} },
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
-      '@/components/SafeTextarea.vue': empty, '@/components/document-preview.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeArticleJudgments.vue': empty, '@/components/KnowledgeClassification.vue': empty,
+      '@/components/SafeTextarea.vue': empty, '@/components/document-preview.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeReviewActions.vue': empty, '@/components/KnowledgeArticleJudgments.vue': empty, '@/components/KnowledgeClassification.vue': empty,
       '@/views/knowledge/components/RepostSources.vue': empty, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
     }).default
     detail.render = evaluate(template.code, {}).render

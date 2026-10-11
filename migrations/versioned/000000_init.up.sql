@@ -427,6 +427,11 @@ CREATE TABLE public.knowledges (
     title character varying(255) NOT NULL,
     description text,
     content_type character varying(16) CHECK (content_type IS NULL OR content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
+    content_type_uncertain boolean DEFAULT false NOT NULL,
+    processing_review_status character varying(16) DEFAULT '' NOT NULL CHECK (processing_review_status IN ('', 'pending', 'confirmed', 'corrected', 'ignored')),
+    processing_review_content_type character varying(16) DEFAULT '' NOT NULL CHECK (processing_review_content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
+    processing_review_reason text DEFAULT '' NOT NULL,
+    source_unverified boolean DEFAULT false NOT NULL,
     processing_mode character varying(16) DEFAULT 'full' NOT NULL CHECK (processing_mode IN ('full', 'summary_only')),
 	 source_kind character varying(16) DEFAULT 'article' NOT NULL CHECK (source_kind IN ('article', 'mine', 'report')),
 	 vault_path text DEFAULT '' NOT NULL,
@@ -1376,6 +1381,7 @@ CREATE INDEX idx_knowledges_kb_metadata_external_id ON public.knowledges USING b
 --
 
 CREATE INDEX idx_knowledges_parse_status ON public.knowledges USING btree (parse_status);
+CREATE INDEX idx_knowledges_processing_review ON public.knowledges (tenant_id, created_at DESC) WHERE processing_review_status = 'pending' AND deleted_at IS NULL;
 
 
 --

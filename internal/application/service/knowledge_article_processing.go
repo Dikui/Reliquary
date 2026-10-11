@@ -30,12 +30,12 @@ const articleProcessingPrompt = `你负责为个人知识库处理一篇审核�
 - tutorial（教程）：学会怎么做，包括指南、上手教程。
 - case（案例）：看别人怎么做、结果如何。
 - reference（参考）：供查阅的资料，包括产品文档、说明页。
-不确定时在 event、opinion、research 中选最合适的一项，以便保存全文。
+content_type 选择最合适的一项。content_type_uncertain 必须是布尔值；在两种以上类型之间难以判断时设为 true，尤其是在全文保存类型（event、opinion、research）与摘要加链接类型（tutorial、case、reference）之间难以判断时。content_type_reason 说明选择的原因，拿不准时说明候选类型与疑点。content_type_uncertain 为 true 时系统会保留全文，并请用户复核类型。
 摘要统一包含 overview（一句话概述）、points（3 到 5 条要点）、key_terms（人名、公司、产品、工具、关键数字，可为空数组）。准确保留关键事实和数字，不虚构正文中没有的内容，使用文章的主要语言。
 entities 提取文章提到的实体，name 是名称，type 只能是 company、person、product、project、organization、other，aliases 是可选的别名数组。没有实体时返回空数组。
 topics 只能从输入 existing_topics 中选择符合名称和说明的主题 ID，可选多个，也可为空数组，禁止创建主题或编造 ID。
 如果附有图片，按正文中的出现顺序结合图片理解文章，不单独输出 OCR 或图片描述。
-输出所有字段，格式：{"content_type":"event","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[{"name":"名称","type":"company","aliases":["别名"]}],"topics":["已给定的主题 ID"]}`
+输出所有字段，格式：{"content_type":"event","content_type_uncertain":false,"content_type_reason":"文章主要报道已经发生的事件","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[{"name":"名称","type":"company","aliases":["别名"]}],"topics":["已给定的主题 ID"]}`
 
 const defaultArticleBodyChars = 24000
 const defaultArticleImages = 8
@@ -44,9 +44,11 @@ const defaultArticleCompletionTokens = 4096
 // articleProcessingResult keeps required fields nullable while decoding so an
 // omitted field is distinguishable from an intentionally empty array.
 type articleProcessingResult struct {
-	ContentType *string                 `json:"content_type"`
-	Summary     *types.KnowledgeSummary `json:"summary"`
-	Entities    []struct {
+	ContentType          *string                 `json:"content_type"`
+	ContentTypeUncertain *bool                   `json:"content_type_uncertain"`
+	ContentTypeReason    string                  `json:"content_type_reason"`
+	Summary              *types.KnowledgeSummary `json:"summary"`
+	Entities             []struct {
 		Name    string   `json:"name"`
 		Type    *string  `json:"type"`
 		Aliases []string `json:"aliases,omitempty"`
@@ -75,9 +77,12 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		return nil, fmt.Errorf("article processing output is not valid JSON: %w", err)
 	}
-	if result.ContentType == nil || result.Summary == nil || result.Entities == nil || result.Topics == nil ||
+	if result.ContentType == nil || result.ContentTypeUncertain == nil || result.Summary == nil || result.Entities == nil || result.Topics == nil ||
 		strings.TrimSpace(result.Summary.Overview) == "" || result.Summary.Points == nil || result.Summary.KeyTerms == nil {
 		return nil, errors.New("article processing output is missing required fields")
+	}
+	if *result.ContentTypeUncertain && strings.TrimSpace(result.ContentTypeReason) == "" {
+		return nil, errors.New("uncertain article processing output must explain the content type")
 	}
 	if len(result.Summary.Points) < 3 || len(result.Summary.Points) > 5 {
 		return nil, errors.New("article processing summary must contain 3 to 5 points")
@@ -280,7 +285,7 @@ func (s *knowledgeService) callArticleProcessing(ctx context.Context, kb *types.
 	if err != nil {
 		return nil, err
 	}
-	s.endStage(ctx, k.ID, types.StageProcessing, types.JSONMap{"body_chars": len([]rune(input.Body)), "body_truncated": input.BodyTruncated, "images": len(images), "topic_options": len(input.ExistingTopics), "model_id": modelID, "content_type": *result.ContentType, "entities": len(result.Entities), "topics": len(result.Topics), "model_calls": calls.Snapshot(), "model_tier": types.ModelTierGeneration})
+	s.endStage(ctx, k.ID, types.StageProcessing, types.JSONMap{"body_chars": len([]rune(input.Body)), "body_truncated": input.BodyTruncated, "images": len(images), "topic_options": len(input.ExistingTopics), "model_id": modelID, "content_type": *result.ContentType, "content_type_uncertain": *result.ContentTypeUncertain, "content_type_reason": result.ContentTypeReason, "entities": len(result.Entities), "topics": len(result.Topics), "model_calls": calls.Snapshot(), "model_tier": types.ModelTierGeneration})
 	return result, nil
 }
 
@@ -310,23 +315,56 @@ func (s *knowledgeService) persistArticleProcessingResult(ctx context.Context, k
 	}
 	if s.db != nil {
 		var current struct {
-			ContentType          string
-			ContentTypeCorrected bool
+			ContentType                 string
+			ContentTypeCorrected        bool
+			ProcessingMode              string
+			SourceUnverified            bool
+			ProcessingReviewStatus      string
+			ProcessingReviewContentType string
+			ProcessingReviewReason      string
 		}
-		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Select("content_type", "content_type_corrected").Where("id=? AND tenant_id=?", k.ID, k.TenantID).Take(&current).Error; err != nil {
+		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Select("content_type", "content_type_corrected", "processing_mode", "source_unverified", "processing_review_status", "processing_review_content_type", "processing_review_reason").Where("id=? AND tenant_id=?", k.ID, k.TenantID).Take(&current).Error; err != nil {
 			return err
 		}
-		if current.ContentTypeCorrected {
-			k.ContentType, k.ContentTypeCorrected = current.ContentType, true
+		k.SourceUnverified = current.SourceUnverified
+		k.ProcessingReviewStatus, k.ProcessingReviewContentType, k.ProcessingReviewReason = current.ProcessingReviewStatus, current.ProcessingReviewContentType, current.ProcessingReviewReason
+		if current.ContentTypeCorrected || current.ProcessingReviewStatus == types.ProcessingReviewConfirmed || current.ProcessingReviewStatus == types.ProcessingReviewIgnored {
+			k.ContentType, k.ContentTypeCorrected = current.ContentType, current.ContentTypeCorrected
+		}
+		if current.ProcessingReviewStatus == types.ProcessingReviewIgnored {
+			k.ProcessingMode = current.ProcessingMode
 		}
 	}
-	if !k.ContentTypeCorrected {
+	if !k.ContentTypeCorrected && k.ProcessingReviewStatus != types.ProcessingReviewConfirmed && k.ProcessingReviewStatus != types.ProcessingReviewIgnored {
 		k.ContentType = types.NormalizeContentType(*result.ContentType)
 		if k.ContentType != *result.ContentType {
 			k.ContentType = ""
 		}
 	}
-	k.ProcessingMode = types.ProcessingModeForContentType(k.ContentType)
+	k.ContentTypeUncertain = *result.ContentTypeUncertain
+	if k.ProcessingReviewStatus == "" || k.ProcessingReviewStatus == types.ProcessingReviewPending {
+		k.ProcessingReviewStatus = ""
+		k.ProcessingReviewContentType = types.NormalizeContentType(*result.ContentType)
+		k.ProcessingReviewReason = strings.TrimSpace(result.ContentTypeReason)
+		if k.ContentTypeUncertain && !k.ContentTypeCorrected {
+			k.ProcessingReviewStatus = types.ProcessingReviewPending
+		}
+		if s.db != nil {
+			if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND tenant_id=? AND processing_review_status IN ?", k.ID, k.TenantID, []string{"", types.ProcessingReviewPending}).Updates(map[string]any{
+				"content_type_uncertain":         k.ContentTypeUncertain,
+				"processing_review_status":       k.ProcessingReviewStatus,
+				"processing_review_content_type": k.ProcessingReviewContentType,
+				"processing_review_reason":       k.ProcessingReviewReason,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	} else if s.db != nil {
+		if err := s.repo.UpdateKnowledgeColumn(ctx, k.ID, "content_type_uncertain", k.ContentTypeUncertain); err != nil {
+			return err
+		}
+	}
+	k.ProcessingMode = types.ArticleProcessingMode(k)
 	k.StructuredSummary = result.Summary
 	k.Description = result.Summary.RenderText()
 	k.SummaryStatus = types.SummaryStatusCompleted

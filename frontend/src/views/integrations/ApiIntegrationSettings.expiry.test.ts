@@ -95,6 +95,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await scenario(locale, async () => {})
     assert.deepEqual(result.warnings, [])
     for (const text of [messages.ingestUrl, messages.mcpUrl, 'POST http://localhost/api/v1/ingest', 'http://localhost/mcp', 'Streamable HTTP', 'Authorization: Bearer API_KEY']) assert.ok(result.html.includes(text), text)
+    assert.ok(result.html.includes('pending_review'))
+    assert.ok(result.html.includes(locale === 'zh-CN' ? '调用方的判断不替代审核' : 'judgment does not replace review'))
     for (const label of [messages.copyIngestUrl, messages.copyMcpUrl]) {
       const button = result.buttons.find(button => button.label === label)
       assert.ok(button?.click, label)

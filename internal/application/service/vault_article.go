@@ -88,6 +88,13 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Knowledge) (V
 	h := VaultArticleHeader{ID: k.ID, URL: url, Title: k.Title, Publisher: source.Publisher, Author: source.Author,
 		PublishedAt: canonicalVaultDate(source.PublishedAt), CollectedAt: k.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
 		ContentType: k.ContentType, Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason}
+	h.SourceUnverified = k.SourceUnverified
+	if k.SourceUnverified {
+		h.URL = ""
+	}
+	if k.ProcessingMode == types.ProcessingModeFull && types.ProcessingModeForContentType(k.ContentType) == types.ProcessingModeSummaryOnly {
+		h.ProcessingMode = types.ProcessingModeFull
+	}
 	var names []string
 	if err = v.db.WithContext(ctx).Table("entities e").Select("e.canonical_name").
 		Joins("JOIN knowledge_entities links ON links.entity_id=e.id AND links.tenant_id=e.tenant_id").

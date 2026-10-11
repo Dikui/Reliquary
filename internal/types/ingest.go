@@ -47,5 +47,6 @@ type IngestResult struct {
 	ArticleID     string               `json:"article_id"`
 	Status        string               `json:"status"`
 	Message       string               `json:"message"`
+	Reason        string               `json:"reason,omitempty"`
 	ImageFailures []IngestImageFailure `json:"image_failures"`
 }

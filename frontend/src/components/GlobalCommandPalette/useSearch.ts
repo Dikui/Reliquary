@@ -22,12 +22,14 @@ export interface CmdkFileGroup {
   title: string
   chunks: CmdkChunk[]
   source?: KnowledgeSearchArticle['source']
+  source_unverified?: boolean
   similarCount?: number
 }
 
 export function articleFileGroups(articles: KnowledgeSearchArticle[]): CmdkFileGroup[] {
   return articles.map(article => ({
     knowledgeId: article.article_id, kbId: '', title: article.title, source: article.source,
+    source_unverified: Boolean(article.source_unverified),
     similarCount: article.similar_reports?.length || 0,
     chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.article_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
       id: snippet.chunk_id, chunk_index: snippet.chunk_index, knowledge_id: article.article_id,
