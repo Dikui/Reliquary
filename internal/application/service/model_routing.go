@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -16,22 +15,6 @@ import (
 type ResolvedModelTier struct {
 	ModelID string `json:"model_id"`
 	Source  string `json:"source"`
-}
-type ModelRoutingView struct {
-	Overrides types.ModelTierConfig                 `json:"overrides"`
-	Resolved  map[types.ModelTier]ResolvedModelTier `json:"resolved"`
-}
-
-func ModelRoutingForScope(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, overrides types.ModelTierConfig) (ModelRoutingView, error) {
-	view := ModelRoutingView{Overrides: overrides, Resolved: map[types.ModelTier]ResolvedModelTier{}}
-	for _, tier := range types.ModelTiers {
-		resolved, err := resolveModelTier(ctx, db, kb, tier)
-		if err != nil {
-			return view, err
-		}
-		view.Resolved[tier] = resolved
-	}
-	return view, nil
 }
 
 func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.ModelTierConfig) error {
@@ -64,8 +47,7 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 	return nil
 }
 
-// ResolveModelTier resolves a KB override, domain override, then global default.
-// Legacy model fields apply only after all three scopes are unconfigured.
+// ResolveModelTier reads the model choices stored on the only knowledge base.
 func ResolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, tier types.ModelTier) (string, error) {
 	resolved, err := resolveModelTier(ctx, db, kb, tier)
 	return resolved.ModelID, err
@@ -81,64 +63,35 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 	if !valid {
 		return ResolvedModelTier{}, fmt.Errorf("unknown model tier %q", tier)
 	}
-	tenantID, _ := types.TenantIDFromContext(ctx)
-	if tenantID == 0 {
-		tenantID = 1
+	if kb == nil && db != nil {
+		tenantID := types.MustTenantIDFromContext(ctx)
+		kb = &types.KnowledgeBase{}
+		if err := db.WithContext(ctx).Where("tenant_id = ?", tenantID).First(kb).Error; err != nil {
+			return ResolvedModelTier{}, fmt.Errorf("read knowledge base model tiers: %w", err)
+		}
 	}
 	if kb != nil {
-		if kb.TenantID != 0 {
-			tenantID = kb.TenantID
-		}
 		if id := kb.ModelTiers.ModelID(tier); id != "" {
 			return ResolvedModelTier{id, "knowledge_base"}, nil
-		}
-		if db != nil && kb.DomainID != "" {
-			var domain types.KnowledgeDomain
-			if err := db.WithContext(ctx).Select("model_tiers").Where("tenant_id = ? AND id = ?", tenantID, kb.DomainID).First(&domain).Error; err != nil {
-				return ResolvedModelTier{}, fmt.Errorf("read domain model tiers: %w", err)
-			}
-			if id := domain.ModelTiers.ModelID(tier); id != "" {
-				return ResolvedModelTier{id, "domain"}, nil
-			}
-		}
-	}
-	if db != nil {
-		var tenant types.Tenant
-		if err := db.WithContext(ctx).Select("model_tiers").Where("id = ?", tenantID).First(&tenant).Error; err != nil {
-			return ResolvedModelTier{}, fmt.Errorf("read global default model tiers: %w", err)
-		}
-		if id := tenant.ModelTiers.ModelID(tier); id != "" {
-			return ResolvedModelTier{id, "global"}, nil
 		}
 	}
 	if kb != nil {
 		id := ""
 		switch tier {
 		case types.ModelTierLight:
-			if kb.AutoTagConfig != nil {
-				id = kb.AutoTagConfig.ModelID
-			}
 			if strings.TrimSpace(id) == "" {
 				id = kb.SummaryModelID
 			}
-		case types.ModelTierExtraction, types.ModelTierGeneration:
+		case types.ModelTierEntityResolution, types.ModelTierGeneration:
 			id = kb.SummaryModelID
 		case types.ModelTierEmbedding:
 			id = kb.EmbeddingModelID
 		}
 		if id = strings.TrimSpace(id); id != "" {
-			return ResolvedModelTier{id, "legacy"}, nil
+			return ResolvedModelTier{id, "knowledge_base"}, nil
 		}
 	}
 	return ResolvedModelTier{Source: "unconfigured"}, nil
-}
-
-// ResolveGenerationModel preserves an explicit session or workflow selection.
-func ResolveGenerationModel(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, explicit string) (string, error) {
-	if id := strings.TrimSpace(explicit); id != "" {
-		return id, nil
-	}
-	return ResolveModelTier(ctx, db, kb, types.ModelTierGeneration)
 }
 
 func GetTierChatModel(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, tier types.ModelTier) (chat.Chat, error) {
@@ -173,29 +126,6 @@ func (m *tierChat) ChatStream(ctx context.Context, messages []chat.Message, opts
 	return m.inner.ChatStream(ctx, messages, opts)
 }
 
-// ReadModelLimits reads current configuration, rather than a stale client copy.
-func ReadModelLimits(ctx context.Context, db *gorm.DB, modelID string) (contextWindow, maxOutputTokens int, err error) {
-	contextWindow, maxOutputTokens = 8192, 2048
-	if db == nil || modelID == "" {
-		return
-	}
-	var model types.Model
-	if readErr := db.WithContext(ctx).Select("parameters").Where("id = ? AND (tenant_id = ? OR is_builtin = true)", modelID, types.MustTenantIDFromContext(ctx)).First(&model).Error; readErr != nil {
-		if errors.Is(readErr, gorm.ErrRecordNotFound) {
-			return
-		}
-		err = readErr
-		return
-	}
-	if model.Parameters.ContextWindow > 0 {
-		contextWindow = model.Parameters.ContextWindow
-	}
-	if model.Parameters.MaxOutputTokens > 0 {
-		maxOutputTokens = model.Parameters.MaxOutputTokens
-	}
-	return
-}
-
 func (m *tierChat) GetModelName() string { return m.inner.GetModelName() }
 func (m *tierChat) GetModelID() string   { return m.modelID }
 
@@ -217,6 +147,28 @@ func GetTierEmbeddingModel(ctx context.Context, db *gorm.DB, models interfaces.M
 type tierEmbedder struct {
 	inner   embedding.Embedder
 	modelID string
+}
+
+func (m *tierEmbedder) GetProfileHash() string {
+	if model, ok := m.inner.(embedding.ProfiledEmbedder); ok {
+		return model.GetProfileHash()
+	}
+	return ""
+}
+
+func (m *tierEmbedder) SupportsImages() bool {
+	images, ok := m.inner.(embedding.ImageEmbedder)
+	return ok && images.SupportsImages()
+}
+
+func (m *tierEmbedder) EmbedImage(ctx context.Context, image string) ([]float32, error) {
+	images, ok := m.inner.(embedding.ImageEmbedder)
+	if !ok || !images.SupportsImages() {
+		return nil, fmt.Errorf("embedding model does not support images")
+	}
+	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
+	types.RecordModelCall(ctx, m.GetModelID())
+	return images.EmbedImage(ctx, image)
 }
 
 func (m *tierEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
@@ -242,12 +194,4 @@ func modelRoutingDB(reader any) *gorm.DB {
 		return provider.ModelRoutingDB()
 	}
 	return nil
-}
-
-func getGenerationChatModel(ctx context.Context, models interfaces.ModelService, id string) (chat.Chat, error) {
-	model, err := models.GetChatModel(types.WithModelTier(ctx, types.ModelTierGeneration), id)
-	if err != nil {
-		return nil, err
-	}
-	return &tierChat{inner: model, tier: types.ModelTierGeneration, modelID: id}, nil
 }

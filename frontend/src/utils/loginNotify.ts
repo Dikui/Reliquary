@@ -1,5 +1,6 @@
 import { NotifyPlugin } from 'tdesign-vue-next'
 import { renderWorkspaceNotifyContent } from './workspaceNotifyContent'
+import { workspaceName } from './workspaceCopy'
 
 type Translator = (key: string, params?: Record<string, unknown>) => string
 // TemplateResolver returns the raw i18n message verbatim — placeholders
@@ -23,7 +24,7 @@ export function notifyLoginSuccess(
   const activeTenant = response?.active_tenant || response?.tenant
   if (!activeTenant) return
 
-  const tenantName = activeTenant.name || String(activeTenant.id || '')
+  const tenantName = workspaceName(activeTenant.name, t) || String(activeTenant.id || '')
   const rawTemplate = tm('auth.loginSuccessContent')
   const template = typeof rawTemplate === 'string' ? rawTemplate : ''
 

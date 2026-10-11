@@ -11,6 +11,8 @@ import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import * as personalError from '../utils/personalServerError'
+import * as searchHelpers from '../utils/knowledgeSearch'
+import * as workspaceCopy from '../utils/workspaceCopy'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../utils/sfcStyleTestHelpers'
 
 const require = createRequire(import.meta.url)
@@ -27,6 +29,9 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   const t = translator(locale)
   const mocks: Record<string, unknown> = {
     '@/components/SafeTextarea.vue': safeTextareaTestModule,
+    '@/components/KnowledgeSearchFilters.vue': { default: stub, __esModule: true },
+    '@/utils/knowledgeSearch': searchHelpers,
+    '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     'vue-i18n': { useI18n: () => ({ t, tm: () => [], locale: ref(locale) }) },
     '@/utils/personalServerError': personalError,
     '@/stores/auth': { useAuthStore: () => ({ currentTenantId: '1', isLoggedIn: false }) },
@@ -34,16 +39,15 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
     '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
     '@/utils/clipboard': { copyWithToast() {} },
     '@/utils/loginNotify': { notifyLoginSuccess() {} },
+    '@/utils/workspaceCopy': workspaceCopy,
     '@/utils/passwordValidation': { newPasswordRules: () => [] },
     'vue-router': { useRouter: () => ({ replace() {}, push() {} }) },
-    'swiper/vue': { Swiper: stub, SwiperSlide: stub },
-    'swiper/modules': {},
     ...modules,
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
     new Function('require', 'module', 'exports', ts.transpileModule(code.replaceAll('__FRONTEND_VERSION__', "'test'").replaceAll('__FRONTEND_COMMIT__', "'test'"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(
-      (name: string) => (name.endsWith('.css') || name.startsWith('swiper/css')) ? {} : name.endsWith('.svg') ? { default: '', __esModule: true } : mocks[name] ?? require(name), module, module.exports)
+      (name: string) => name.endsWith('.css') ? {} : name.endsWith('.svg') ? { default: '', __esModule: true } : mocks[name] ?? require(name), module, module.exports)
     return module.exports
   }
   const component = evaluate(script.content).default
@@ -147,6 +151,31 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes(translator(locale)('tenant.details.editName')))
   })
 
+  test(`${locale}: default space copy is localized while unchanged edits retain server values`, async () => {
+    const updates: unknown[] = []
+    const { html, state } = await componentScenario('./settings/TenantInfo.vue', locale, {
+      'tdesign-vue-next': { MessagePlugin: { success() {} } },
+      '@/api/tenant': {
+        getTenantInfo: async () => ({ success: true, data: { id: 1, name: 'Personal workspace', description: 'Personal knowledge' } }),
+        updateTenant: async (input: unknown) => { updates.push(input); return { success: true } },
+      },
+    }, async state => {
+      await state.loadInfo()
+      state.startEditName()
+      assert.equal(state.canSubmit.value, false)
+      await state.saveTenantName()
+      state.startEditDescription()
+      assert.equal(state.canSubmitDescription.value, false)
+      await state.saveTenantDescription()
+    })
+    assert.ok(html.includes(translator(locale)('tenant.defaultName')))
+    assert.ok(html.includes(translator(locale)('tenant.defaultDescription')))
+    if (locale === 'zh-CN') assert.doesNotMatch(html, /Personal workspace|Personal knowledge/)
+    assert.equal(state.tenantInfo.value.name, 'Personal workspace')
+    assert.equal(state.tenantInfo.value.description, 'Personal knowledge')
+    assert.deepEqual(updates, [])
+  })
+
   for (const encrypted of [false, true]) {
     test(`${locale}: system info displays ${encrypted ? 'encrypted' : 'plaintext'} credential storage`, async () => {
       const { html } = await componentScenario('./settings/SystemInfo.vue', locale, {
@@ -158,19 +187,4 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       if (encrypted) assert.ok(!html.includes(t('system.credentialEncryptionDisabledDescription')))
     })
   }
-}
-
-for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: saved context result aliases render the same visible entity summary`, async () => {
-    const summary = { nodes: [{ id: 'entity-a', label: 'Saved object', type: 'object', kb_id: 'kb-a' }], edges: [], total_nodes: 1, total_edges: 0 }
-    const html: string[] = []
-    for (const legacy of [false, true]) {
-      const rendered = await componentScenario('./chat/components/tool-results/ContextQueryResults.vue', locale, {
-        '@/api/knowledge-context': {},
-      }, async () => {}, { data: { display_type: legacy ? 'graph_query_results' : 'context_query_results', contexts: {}, knowledge_base_ids: ['kb-a'], [legacy ? 'graph_data' : 'context_data']: summary } })
-      assert.ok(rendered.html.includes('Saved object'))
-      html.push(rendered.html)
-    }
-    assert.equal(html[0], html[1])
-  })
 }

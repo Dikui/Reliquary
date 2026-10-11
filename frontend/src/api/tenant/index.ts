@@ -16,6 +16,7 @@ export interface TenantInfo {
 }
 
 export interface TenantAPIKey {
+  status?: 'active' | 'migration_invalidated' | 'expired' | 'revoked'
   id: number
   name: string
   api_key: string

@@ -7,16 +7,16 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { compileScript, compileStyleAsync, compileTemplate, parse } from '@vue/compiler-sfc'
 import { renderToString } from '@vue/server-renderer'
-import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch } from 'vue'
+import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import { safeExternalUrl } from '../utils/externalUrl'
-import * as display from '../views/knowledge/components/knowledgeContextDisplay'
-import * as scope from '../api/knowledge-context-scope'
-import * as citation from '../utils/markdownCitation'
-import type { KnowledgeRepostSource } from '../api/knowledge-context'
+import type { KnowledgeRepostSource } from '../api/knowledge-base/index'
+import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML } from '../utils/security'
+import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
+import { CONTENT_TYPES } from '../types/knowledgeClassification'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
@@ -49,7 +49,8 @@ function compileSFC(path: string) {
 }
 const repostSFC = compileSFC('../views/knowledge/components/RepostSources.vue')
 const detailSFC = compileSFC('./doc-content.vue')
-const workbenchSFC = compileSFC('../views/knowledge/components/KnowledgeWorkbench.vue')
+const actionMenuSFC = compileSFC('../views/knowledge/components/DocumentActionMenu.vue')
+const batchBarSFC = compileSFC('../views/knowledge/components/DocumentBatchBar.vue')
 const actualRepostSources = repostSFC.create({ '@/utils/externalUrl': { safeExternalUrl } })
 const sharedRepostModule = { __esModule: true, default: actualRepostSources }
 const emptyComponent = defineComponent({ setup: () => () => null })
@@ -92,10 +93,13 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
 }
 
 interface DetailRenderOptions {
+  copyRequests?: { text: string; successKey: string }[]
   environment?: Record<string, unknown>
   scenario?: (state: any) => void | Promise<void>
   ssrContext?: Record<string, any>
   details?: Record<string, unknown>
+  loadedDetails?: Record<string, unknown>
+  classification?: unknown
 }
 async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
   const component = detailSFC.create({
@@ -105,9 +109,12 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
     mermaid: { __esModule: true, default: { initialize() {} } },
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI } },
     '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 20, getKnowledgeDetails: unexpectedAPI },
-    '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) },
-    '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
+    '@/utils/clipboard': { copyWithToast: async (text: string, successKey: string) => { options.copyRequests?.push({ text, successKey }); return true } },
+    '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL,
+      safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
+    '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
+    '@/components/KnowledgeReviewActions.vue': emptyModule, '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/KnowledgeClassification.vue': options.classification || emptyModule,
     '@/components/document-preview.vue': emptyModule,
     '@/components/knowledge-processing-timeline.vue': emptyModule,
     '@/views/knowledge/components/RepostSources.vue': sharedRepostModule,
@@ -123,36 +130,80 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
   }
   return renderComponent(component, {
     visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', knowledgeType: 'document',
-    details: { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
-      summary_status: 'completed', md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
+    details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
+      md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
   }, locale, options.ssrContext)
 }
 
-async function renderWorkbench(sources: KnowledgeRepostSource[], locale: keyof typeof messages) {
-  const component = workbenchSFC.create({
-    'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI } },
-    './MergeSuggestions.vue': emptyModule, './EvidenceExtractionDetails.vue': emptyModule,
-    './EventsCoverageNotice.vue': emptyModule, './HistoryBackfill.vue': emptyModule,
-    './ReportMarkdown.vue': emptyModule, './RepostSources.vue': sharedRepostModule,
-    './knowledgeContextDisplay': display,
-    '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/api/knowledge-domains': { listKnowledgeDomains: () => envelope([]) },
-    '@/api/knowledge-context-scope': scope,
-    '@/api/knowledge-context': {
-      listKnowledgeContextEntities: () => envelope([]), listKnowledgeContextEvents: () => envelope([]),
-      listKnowledgeContextEvidence: () => envelope([{ id: 'evidence-a', title: 'Original source',
-        knowledge_base_id: 'kb-a', body_hash: 'abc', version: 1, status: 'current', extraction_status: 'complete', repost_sources: sources }]),
+// Use the production article-detail loader; only its network and store dependencies
+// are replaced. The resulting reactive details object is passed to the real drawer.
+function createArticleDetailsLoader(records: Record<string, Record<string, unknown>>) {
+  const calls: string[] = []
+  const hookSource = readFileSync(new URL('../hooks/useKnowledgeBase.ts', import.meta.url), 'utf8')
+  const modules = {
+    pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
+    '../utils/index': { formatStringDate: () => '2026-10-11' },
+    'tdesign-vue-next': { MessagePlugin: {} },
+    '@/api/knowledge-base/index': {
+      getKnowledgeDetails: async (id: string) => {
+        calls.push(id)
+        return { success: true, data: { id, title: id, type: 'manual', source_kind: 'article',
+          parse_status: 'completed', updated_at: '2026-10-11T00:00:00Z', ...records[id] } }
+      },
+      getKnowledgeDetailsCon: async () => ({ success: true, data: [], total: 0 }),
     },
-    '@/api/knowledge-workflows': {}, '@/api/chat/index': {}, '@/utils/markdownCitation': citation,
-  })
-  const setup = component.setup
-  component.setup = (props: object, context: object) => {
-    const state = setup(props, context)
-    onServerPrefetch(async () => { await state.selectSection('evidence'); await nextTick() })
-    return state
+    '@/stores/knowledge': { knowledgeStore: () => ({}) },
+    'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
+    '@/stores/resources': { useResourcesStore: () => ({}) },
+    './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) },
   }
-  return renderComponent(component, { kbId: 'kb-a', canManage: false }, locale)
+  const hook = evaluate(hookSource, modules).default('kb-a')
+  return { hook, calls, async load(id: string) {
+    hook.getCardDetails({ id })
+    await new Promise<void>(resolve => setImmediate(resolve))
+    return hook.details
+  } }
 }
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
+    const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
+    const classification = compileSFC('./KnowledgeClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const flagged = await renderDetails([], locale, { loadedDetails: await loader.load('unverified'), classification: { __esModule: true, default: classification } })
+    assert.ok(flagged.includes(messages[locale].knowledgeReview.sourceUnverified))
+    const verified = await renderDetails([], locale, { loadedDetails: await loader.load('verified'), classification: { __esModule: true, default: classification } })
+    assert.ok(!verified.includes(messages[locale].knowledgeReview.sourceUnverified))
+  })
+  test(`${locale}: API collection reason reaches the actual loading hook and article drawer`, async () => {
+    const reason = locale === 'zh-CN' ? '保存测量方法与来源。' : 'Keep measurement methods and sources.'
+    const loader = createArticleDetailsLoader({ article: { collect_reason: reason } })
+    const loadedDetails = await loader.load('article')
+    const html = await renderDetails([], locale, { loadedDetails })
+    assert.deepEqual(loader.calls, ['article'], 'The production hook requested article details')
+    assert.match(html, /doc-collect-reason-row/, 'The API reason survives projection into drawer props')
+    assert.ok(html.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(html.includes(reason))
+  })
+
+  test(`${locale}: actual loading path clears the previous reason and hides empty API values`, async () => {
+    const loader = createArticleDetailsLoader({
+      saved: { collect_reason: 'Keep the source.' },
+      empty: { collect_reason: '' }, missing: {}, nullable: { collect_reason: null },
+      whitespace: { collect_reason: '   ' },
+    })
+    for (const id of ['empty', 'missing', 'nullable', 'whitespace']) {
+      await loader.load('saved')
+      loader.hook.getCardDetails({ id })
+      assert.equal(loader.hook.details.collect_reason, '', 'Changing articles clears the reason immediately')
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const html = await renderDetails([], locale, { loadedDetails: loader.hook.details })
+      assert.doesNotMatch(html, /doc-collect-reason-row/)
+      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+      assert.ok(!html.includes('Keep the source.'))
+    }
+  })
+}
+
 function repostBlock(html: string) {
   const block = html.match(/<div class="repost-sources"[^>]*>[\s\S]*?<\/ul><\/div>/)?.[0]
   assert.ok(block, 'the actual shared component rendered a repost list')
@@ -160,6 +211,100 @@ function repostBlock(html: string) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: article basic information displays and escapes the collection reason`, async () => {
+    const html = await renderDetails([], locale, { details: { collect_reason: '保存研究来源 <script>alert(1)</script>' } })
+    const row = html.match(/<div class="doc-detail-row doc-collect-reason-row">([\s\S]*?)<\/div>/)?.[1]
+    assert.ok(row, 'The reason is a basic-information row')
+    assert.ok(row.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(row.includes('保存研究来源 &lt;script&gt;alert(1)&lt;/script&gt;'))
+    assert.doesNotMatch(row, /<script>/)
+  })
+
+  for (const collect_reason of [undefined, null, '', '   ']) {
+    test(`${locale}: article basic information hides an empty collection reason ${JSON.stringify(collect_reason)}`, async () => {
+      const html = await renderDetails([], locale, { details: { collect_reason } })
+      assert.doesNotMatch(html, /doc-collect-reason-row/)
+      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+    })
+  }
+
+  test(`${locale}: article renderer sends relative attachment images through protected vault access`, async () => {
+    const ref = '../../attachments/vault-article/图表.png'
+    let imageHTML = ''
+    await renderDetails([], locale, {
+      details: { id: 'vault-article', source_kind: 'article', vault_path: 'articles/2026-10/标题-vaultart.md' },
+      scenario: async state => { imageHTML = state.renderer.image({ href: ref, title: '图表', text: 'Chart' }) },
+    })
+    const source = `vault://vault-article/${encodeURIComponent(ref)}`
+    assert.ok(imageHTML.includes(`src="${source}"`))
+    const protectedHTML = protectProviderImageSrcInHTML(imageHTML)
+    assert.ok(protectedHTML.includes(`data-protected-src="${source}"`))
+    const request = buildProtectedFileRequest(source, { mode: 'tenant' })!
+    const url = new URL(request.url, 'http://localhost')
+    assert.equal(url.pathname, '/api/v1/knowledge/vault-article/vault-attachment')
+    assert.equal(url.searchParams.get('path'), ref)
+    assert.doesNotMatch(request.url, /token=/)
+  })
+
+  test(`${locale}: article HTML images also use protected relative attachment access`, async () => {
+    const ref = '../../attachments/vault-article/图表.png'
+    let html = ''
+    await renderDetails([], locale, {
+      details: { id: 'vault-article', source_kind: 'article', vault_path: 'articles/2026-10/标题-vaultart.md' },
+      scenario: state => { html = state.processMarkdown(`<img src="${ref}" alt="Chart">`) },
+    })
+    const source = `vault://vault-article/${encodeURIComponent(ref)}`
+    assert.ok(protectProviderImageSrcInHTML(html).includes(`data-protected-src="${source}"`))
+  })
+
+  for (const source_kind of ['mine', 'report']) {
+    test(`${locale}: ${source_kind} detail hides reprocessing and never submits a model request`, async () => {
+      const html = await renderDetails([], locale, {
+        details: { source_kind, vault_path: `${source_kind}/note.md` },
+        scenario: state => state.reprocess(),
+      })
+      assert.ok(!html.includes(messages[locale].knowledgeBase.reprocess))
+    })
+  }
+
+  test(`${locale}: vault documents have no body editor and personal documents have no reprocessing action`, async () => {
+    const component = actionMenuSFC.create()
+    const item = { id: 'article', type: 'manual', parse_status: 'completed', processing_mode: 'full' }
+    const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
+    const editable = await render({})
+    const editLabel = `<span>${messages[locale].knowledgeBase.editDocument}</span>`
+    const reprocessLabel = `<span>${messages[locale].knowledgeBase.rebuildDocument}</span>`
+    assert.ok(editable.includes(editLabel))
+    assert.ok(editable.includes(reprocessLabel))
+    const article = await render({ source_kind: 'article', vault_path: 'articles/note.md' })
+    assert.ok(!article.includes(editLabel))
+    assert.ok(article.includes(reprocessLabel))
+    for (const source_kind of ['mine', 'report']) {
+      for (const parse_status of ['completed', 'processing']) {
+        const html = await render({ source_kind, parse_status })
+        assert.ok(!html.includes(editLabel))
+        assert.ok(!html.includes(reprocessLabel))
+      }
+    }
+    const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2, reparseAllowed: false }, locale)
+    assert.ok(!mixedBatch.includes(messages[locale].knowledgeBase.rebuildDocument))
+    assert.ok(mixedBatch.includes(messages[locale].knowledgeBase.batchDelete))
+  })
+
+  test(`${locale}: article detail shows the relative vault path and copies it through the shared clipboard helper`, async () => {
+    const path = 'articles/2026-10/中文文章-abc12345.md'
+    const copyRequests: { text: string; successKey: string }[] = []
+    const html = await renderDetails([], locale, {
+      details: { vault_path: path }, copyRequests,
+      scenario: async state => { await state.copyWithToast(path, 'common.copySuccess') },
+    })
+    assert.ok(html.includes(messages[locale].knowledgeBase.vaultPath))
+    assert.ok(html.includes(messages[locale].knowledgeBase.copyVaultPath))
+    assert.ok(html.includes(`<code>${path}</code>`))
+    assert.deepEqual(copyRequests, [{ text: path, successKey: 'common.copySuccess' }])
+    assert.doesNotMatch(await renderDetails([], locale), /doc-vault-path-row/)
+  })
+
   test(`${locale} full message detail SFC shows publishers, safe URLs, times and all four duplicate methods`, async () => {
     const html = await renderDetails(sourceRows, locale)
     assert.match(html, /class="setting-drawer__section doc-repost-section"/)
@@ -178,13 +323,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.doesNotMatch(block, /knowledgeWorkbench\.sourceTime\./)
   })
 
-  test(`${locale} workbench and detail render the same real RepostSources component`, async () => {
-    const detail = await renderDetails(sourceRows, locale)
-    const workbench = await renderWorkbench(sourceRows, locale)
-    assert.equal(repostBlock(detail), repostBlock(workbench), 'shared rendering gives identical labels, fields and links')
-    assert.match(detailSFC.source, /import RepostSources from ['"]@\/views\/knowledge\/components\/RepostSources\.vue['"]/)
-    assert.match(workbenchSFC.source, /import RepostSources from ['"]\.\/RepostSources\.vue['"]/)
-  })
 
   test(`${locale} fallback publisher, missing publication time and unknown method stay localized`, async () => {
     const html = await renderDetails([source({ publisher: '', author: '', published_at_missing: true, match_method: 'future' })], locale)
@@ -502,5 +640,19 @@ for (const count of [1, 2]) {
   test(`English message details use the segment quantity ${count}`, async () => {
     const html = await renderDetails([], 'en-US', { details: { total: count } })
     assert.ok(html.includes(`Total ${count} ${count === 1 ? 'segment' : 'segments'}<`), html)
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: vault source identity reaches full detail through the production loading hook`, async () => {
+    const loader = createArticleDetailsLoader({ converted: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Converted.md' }, direct: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Direct.md' }, report: { source_kind: 'report', channel: 'api', file_type: 'md', vault_path: 'reports/Report.md' } })
+    for (const [id, kind] of [['converted', 'mine'], ['direct', 'mine'], ['report', 'report']] as const) {
+      const html = await renderDetails([], locale, { loadedDetails: await loader.load(id) })
+      assert.ok(html.includes(messages[locale].knowledgeBase.sourceKinds[kind]), id)
+      assert.ok(!html.includes(messages[locale].knowledgeBase.typeManual), id)
+      assert.ok(!html.includes(`>${messages[locale].knowledgeBase.channelApi}<`), id)
+      assert.ok(html.includes('MD'), id)
+    }
+    assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
   })
 }

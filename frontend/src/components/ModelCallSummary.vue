@@ -1,24 +1,20 @@
 <template>
   <section class="model-call-summary">
-    <h4>{{ t('extractionDetails.callsTitle') }}</h4>
-    <p v-if="!calls.length">{{ t('extractionDetails.noCalls') }}</p>
-    <table v-else><caption class="sr-only">{{ t('extractionDetails.callsTitle') }}</caption><thead><tr><th>{{ t('extractionDetails.stage') }}</th><th>{{ t('extractionDetails.tier') }}</th><th>{{ t('extractionDetails.calls') }}</th></tr></thead><tbody><tr v-for="(call, index) in calls" :key="`${call.stage}:${call.tier}:${index}`"><td>{{ stageLabel(call.stage) }}</td><td>{{ label('modelTiers.names', call.tier) }}</td><td>{{ call.calls }}</td></tr></tbody><tfoot><tr><th colspan="2">{{ t('extractionDetails.totalCalls') }}</th><td>{{ total }}</td></tr></tfoot></table>
+    <h4>{{ t('modelCalls.callsTitle') }}</h4>
+    <p v-if="!calls.length">{{ t('modelCalls.noCalls') }}</p>
+    <table v-else><caption class="sr-only">{{ t('modelCalls.callsTitle') }}</caption><thead><tr><th>{{ t('modelCalls.stage') }}</th><th>{{ t('modelCalls.tier') }}</th><th>{{ t('modelCalls.calls') }}</th></tr></thead><tbody><tr v-for="(call, index) in calls" :key="`${call.stage}:${call.tier}:${index}`"><td>{{ stageLabel(call.stage) }}</td><td>{{ label('modelTiers.names', call.tier) }}</td><td>{{ call.calls }}</td></tr></tbody><tfoot><tr><th colspan="2">{{ t('modelCalls.totalCalls') }}</th><td>{{ total }}</td></tr></tfoot></table>
   </section>
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { KnowledgeModelCall } from '@/api/knowledge-context'
-const props = defineProps<{ calls: KnowledgeModelCall[]; extractionPath?: string }>()
+import type { KnowledgeModelCall } from '@/utils/modelCalls'
+const props = defineProps<{ calls: KnowledgeModelCall[] }>()
 const { t, te } = useI18n()
 const total = computed(() => props.calls.reduce((sum, call) => sum + call.calls, 0))
 function stageLabel(stage: string) {
-  if (stage === 'context_extraction') {
-    if (props.extractionPath === 'precheck_hit') return t('extractionDetails.fullExtraction')
-    if (!['precheck_miss', 'precheck_miss_supplemented'].includes(props.extractionPath || '')) return t('extractionDetails.unspecifiedExtraction')
-  }
-  const key = `extractionDetails.stages.${stage}`
-  return te(key) ? t(key) : t('extractionDetails.otherCall')
+  const key = `modelCalls.stages.${stage}`
+  return te(key) ? t(key) : t('modelCalls.otherCall')
 }
 function label(root: string, value: string) { const key = `${root}.${value}`; return te(key) ? t(key) : value }
 </script>

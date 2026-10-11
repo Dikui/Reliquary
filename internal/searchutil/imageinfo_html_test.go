@@ -2,7 +2,6 @@ package searchutil
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"reliquary/internal/types"
@@ -77,44 +76,6 @@ func TestFilterImageInfoByContentURLs_StillDropsUnreferenced(t *testing.T) {
 	}
 }
 
-func TestEnrichContentWithImageInfoForChat_HTMLTag(t *testing.T) {
-	info := types.ImageInfo{
-		URL:     "local://images/shot.png",
-		Caption: "the login screen",
-		OCRText: "Sign in with SSO",
-	}
-	content := `<p><img src="local://images/shot.png" alt="login"></p>`
-
-	got := EnrichContentWithImageInfoForChat(content, imageInfoJSON(t, info))
-
-	if !strings.Contains(got, "Sign in with SSO") {
-		t.Errorf("OCR text was not injected for an HTML image: %s", got)
-	}
-	if !strings.Contains(got, "the login screen") {
-		t.Errorf("caption was not injected for an HTML image: %s", got)
-	}
-	if !strings.Contains(got, `<img src="local://images/shot.png"`) {
-		t.Errorf("the original tag should be preserved: %s", got)
-	}
-}
-
-func TestEnrichContentWithImageInfoForChat_MarkdownUnchanged(t *testing.T) {
-	info := types.ImageInfo{
-		URL:     "local://images/shot.png",
-		OCRText: "Sign in with SSO",
-	}
-	content := "![login](local://images/shot.png)"
-
-	got := EnrichContentWithImageInfoForChat(content, imageInfoJSON(t, info))
-
-	if !strings.Contains(got, "![login](local://images/shot.png)") {
-		t.Errorf("markdown image should be preserved: %s", got)
-	}
-	if !strings.Contains(got, "Sign in with SSO") {
-		t.Errorf("markdown enrichment regressed: %s", got)
-	}
-}
-
 func TestFilterImageInfoByMatchRange_HTMLTagInsideWindow(t *testing.T) {
 	info := types.ImageInfo{URL: "local://images/shot.png", OCRText: "Sign in with SSO"}
 	parent := `intro text
@@ -135,37 +96,6 @@ tail text`
 	}
 }
 
-func TestEnrichContentWithImageInfoForChat_DoesNotRescanInjectedMetadata(t *testing.T) {
-	// The OCR text of a screenshot that documents an <img> tag contains one.
-	// Scanning the injected metadata would splice a second block into the middle
-	// of the first.
-	info := types.ImageInfo{
-		URL:     "local://images/x.png",
-		OCRText: `use <img src="local://images/x.png"> to embed`,
-	}
-	content := "![a](local://images/x.png)"
-
-	got := EnrichContentWithImageInfoForChat(content, imageInfoJSON(t, info))
-
-	if n := strings.Count(got, "**Image text (OCR):**"); n != 1 {
-		t.Errorf("expected exactly 1 metadata block, got %d:\n%s", n, got)
-	}
-	if !strings.Contains(got, "to embed") {
-		t.Errorf("OCR sentence was truncated:\n%s", got)
-	}
-}
-
-func TestEnrichContentWithImageInfoForChat_BothSyntaxesOneBlockEach(t *testing.T) {
-	info := types.ImageInfo{URL: "local://images/x.png", Caption: "shot"}
-	content := "![a](local://images/x.png)\n\n<img src=\"local://images/x.png\">"
-
-	got := EnrichContentWithImageInfoForChat(content, imageInfoJSON(t, info))
-
-	if n := strings.Count(got, "**Image caption:** shot"); n != 2 {
-		t.Errorf("expected one block per reference (2), got %d:\n%s", n, got)
-	}
-}
-
 func TestHTMLImageSrcRegex_HyphenatedAttributeIsNotSrc(t *testing.T) {
 	urls := ImageURLsInContent(`<img data-src="local://images/placeholder.png" src="local://images/real.png">`)
 	if urls["local://images/placeholder.png"] {
@@ -173,21 +103,5 @@ func TestHTMLImageSrcRegex_HyphenatedAttributeIsNotSrc(t *testing.T) {
 	}
 	if !urls["local://images/real.png"] {
 		t.Errorf("src was not collected: %v", urls)
-	}
-}
-
-func TestEnrichContentWithImageInfoForChat_UnmatchedImageStaysBare(t *testing.T) {
-	// The chat variant deliberately enriches only images that appear in the
-	// passage, so an entry for some other page must not be appended.
-	info := types.ImageInfo{URL: "local://images/other.png", OCRText: "another page"}
-	content := `<p><img src="local://images/shot.png"></p>`
-
-	got := EnrichContentWithImageInfoForChat(content, imageInfoJSON(t, info))
-
-	if got != content {
-		t.Errorf("expected content untouched, got %s", got)
-	}
-	if strings.Contains(got, "another page") {
-		t.Errorf("an orphan entry leaked into the passage: %s", got)
 	}
 }

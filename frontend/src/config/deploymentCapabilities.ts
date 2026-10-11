@@ -1,7 +1,5 @@
 export const DEPLOYMENT_CAPABILITY_KEYS = [
-  'agents',
   'integrations.api',
-  'settings.mcp',
 ] as const
 
 export type DeploymentCapabilityKey = typeof DEPLOYMENT_CAPABILITY_KEYS[number]
@@ -26,5 +24,4 @@ export function isDeploymentCapabilitySupported(
 }
 
 export const SETTINGS_SECTION_CAPABILITY: Partial<Record<string, DeploymentCapabilityKey>> = {
-  mcp: 'settings.mcp',
 }

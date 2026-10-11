@@ -1,28 +1,25 @@
 import { listModels, type ModelConfig } from '@/api/model'
 
 export interface TenantModelReadiness {
-  chatCount: number
+  generationCount: number
   embeddingCount: number
-  hasChat: boolean
+  hasGeneration: boolean
   hasEmbedding: boolean
   /** 文档库默认开启向量/关键词检索时所需的模型是否齐备 */
   isReadyForDocumentKb: boolean
-  /** 创建智能体至少需要对话模型 */
-  isReadyForAgent: boolean
 }
 
 export function evaluateTenantModelReadiness(models: ModelConfig[]): TenantModelReadiness {
-  const chatCount = models.filter((m) => m.type === 'KnowledgeQA').length
+  const generationCount = models.filter((m) => m.type === 'KnowledgeQA').length
   const embeddingCount = models.filter((m) => m.type === 'Embedding').length
-  const hasChat = chatCount > 0
+  const hasGeneration = generationCount > 0
   const hasEmbedding = embeddingCount > 0
   return {
-    chatCount,
+    generationCount,
     embeddingCount,
-    hasChat,
+    hasGeneration,
     hasEmbedding,
-    isReadyForDocumentKb: hasChat && hasEmbedding,
-    isReadyForAgent: hasChat,
+    isReadyForDocumentKb: hasGeneration && hasEmbedding,
   }
 }
 

@@ -22,9 +22,6 @@
         <Settings />
         <!-- 全局命令面板 (⌘K)，随 platform 路由存活 -->
         <GlobalCommandPalette />
-        <!-- 全局右上角"待处理邀请"铃铛。固定定位，z-index 低于抽屉，业务页面
-             右侧抽屉弹出时会自然覆盖；仅在有待处理邀请时渲染。 -->
-        <!-- 带遮罩层的新手引导：首次进入自动开启，可从用户菜单顶部昵称旁帮助按钮重新打开 -->
     </div>
 </template>
 <script setup lang="ts">
@@ -36,8 +33,7 @@ import UploadMask from '@/components/upload-mask.vue'
 import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
-import { useChatResourcesStore } from '@/stores/chatResources'
-import { getKnowledgeBaseById } from '@/api/knowledge-base/index'
+import { useResourcesStore } from '@/stores/resources'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { collectDroppedFiles } from './collectDroppedFiles'
@@ -74,18 +70,12 @@ let dragCounter = 0;
 
 // 获取当前知识库ID
 const getCurrentKbId = (): string | null => {
-    return (route.params as any)?.kbId as string || null
-}
-
-const CHAT_DROP_ROUTE_NAMES = new Set(['chat', 'globalCreatChat', 'kbCreatChat']);
-
-const isChatDropRoute = () => {
-    return CHAT_DROP_ROUTE_NAMES.has(String(route.name || ''));
+    return useResourcesStore().knowledgeBase?.id || null
 }
 
 // 检查知识库初始化状态
 const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
-    const currentKbId = getCurrentKbId();
+    const currentKbId = (await useResourcesStore().fetchKnowledgeBase())?.id;
 
     if (!currentKbId) {
         MessagePlugin.error(t('knowledgeBase.missingId'));
@@ -93,8 +83,7 @@ const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
     }
 
     try {
-        const kbResponse = await getKnowledgeBaseById(currentKbId);
-        const kb = kbResponse.data;
+        const kb = await useResourcesStore().fetchKnowledgeBase();
 
         if (!kb.summary_model_id) {
             MessagePlugin.warning(t('knowledgeBase.notInitialized'));
@@ -115,7 +104,7 @@ const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
 
 // isFileDrag distinguishes an OS file drag (the only thing the global upload
 // drop zone cares about) from an in-app element drag such as the document
-// folder/page drag-and-drop. Element drags carry only "text/*" types, never
+// drag-and-drop. Element drags carry only "text/*" types, never
 // "Files", so we bail out and let the originating component handle the drop.
 const isFileDrag = (event: DragEvent): boolean => {
     const types = event.dataTransfer?.types
@@ -163,14 +152,6 @@ const handleGlobalDrop = async (event: DragEvent) => {
         return;
     }
 
-    if (isChatDropRoute()) {
-        event.stopPropagation();
-        window.dispatchEvent(new CustomEvent('reliquary:chat-file-drop', {
-            detail: { files: droppedFiles }
-        }));
-        return;
-    }
-
     const isInitialized = await checkKnowledgeBaseInitialization();
     if (!isInitialized) {
         return;
@@ -191,8 +172,6 @@ onMounted(() => {
     // 支持通过 URL 查询参数打开全局命令面板，例如旧路径
     // /platform/knowledge-search?q=foo 重定向后携带 ?cmdk=foo
     maybeOpenCmdkFromRoute()
-    // 后台预取对话输入栏资源，进入 creatChat / chat 时复用缓存
-    void useChatResourcesStore().prefetchChatInput()
 });
 
 // 监听路由变化，兼容 SPA 内部跳转时的 ?cmdk= 参数

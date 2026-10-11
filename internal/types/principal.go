@@ -6,6 +6,7 @@ import (
 )
 
 const PrincipalWebUser = "web_user"
+const PrincipalAPIKey = "api_key"
 
 type Principal struct {
 	Type string
@@ -51,10 +52,4 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 		return Principal{Type: PrincipalWebUser, ID: uid}, true
 	}
 	return Principal{}, false
-}
-
-// SessionOwnerIDFromContext resolves the authenticated user for session ownership.
-func SessionOwnerIDFromContext(ctx context.Context) string {
-	userID, _ := UserIDFromContext(ctx)
-	return userID
 }

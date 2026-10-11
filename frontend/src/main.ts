@@ -10,11 +10,7 @@ import "tdesign-vue-next/dist/tdesign.css";
 import "./assets/popup-word-wrapping.css";
 import "@/assets/theme/theme.css";
 import "@/assets/dropdown-menu.less";
-import "@/components/css/chat-hljs-dark.less";
-// vue-virtual-scroller ships its own tiny stylesheet — required for
-// RecycleScroller/DynamicScroller to size their viewport correctly.
-// Without it the scroller computes 0 height and renders no items.
-import "vue-virtual-scroller/dist/vue-virtual-scroller.css";
+import "@/components/css/highlight.less";
 import i18n from "./i18n";
 import { initTheme } from "@/composables/useTheme";
 import { initFont } from "@/composables/useFont";

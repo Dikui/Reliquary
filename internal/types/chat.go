@@ -162,19 +162,10 @@ type LLMToolCall struct {
 	Type             string           `json:"type"` // "function"
 	Function         FunctionCall     `json:"function"`
 	ProviderMetadata ToolCallMetadata `json:"provider_metadata,omitempty"`
-
-	// ModelArguments and the resolution fields are request-local observability
-	// state. ModelArguments preserves the exact JSON emitted by the model while
-	// Function.Arguments is decoded to durable application identifiers before
-	// tool execution. These fields must never be sent back to a provider or
-	// persisted in chat history.
-	ModelArguments     string   `json:"-"`
-	ArgumentResolution string   `json:"-"`
-	UnresolvedHandles  []string `json:"-"`
 }
 
 // ToolCallMetadata carries provider-specific tool-call state that must round-trip
-// with the assistant tool call, without teaching core agent code vendor fields.
+// with the assistant tool call through the provider adapter.
 type ToolCallMetadata map[string]json.RawMessage
 
 // FunctionCall represents the function details
@@ -192,57 +183,16 @@ type ChatResponse struct {
 	ToolCalls        []LLMToolCall `json:"tool_calls,omitempty"`
 	FinishReason     string        `json:"finish_reason,omitempty"`
 	Usage            TokenUsage    `json:"usage"`
-
-	// AnswerStreamed reports whether the user-facing answer text was already
-	// streamed live to the final-answer UI area during this round (i.e. the
-	// model answered with plain content). When true, the natural-stop branch
-	// must only emit the closing
-	// Done marker for AnswerEventID instead of re-emitting the whole answer —
-	// otherwise the answer would render twice and "jump" at end of stream.
-	// Transient, never persisted.
-	AnswerStreamed bool `json:"-"`
-	// AnswerEventID is the EventBus event ID under which the live answer
-	// chunks were streamed, so the natural-stop branch can close the same
-	// stream with a Done marker. Empty when AnswerStreamed is false.
-	AnswerEventID string `json:"-"`
 }
 
 // Response type
 type ResponseType string
 
 const (
-	// Answer response type
-	ResponseTypeAnswer ResponseType = "answer"
-	// References response type
-	ResponseTypeReferences ResponseType = "references"
-	// Thinking response type (for agent thought process)
+	ResponseTypeAnswer   ResponseType = "answer"
 	ResponseTypeThinking ResponseType = "thinking"
-	// Tool call response type (for agent tool invocations)
 	ResponseTypeToolCall ResponseType = "tool_call"
-	// Tool result response type (for agent tool results)
-	ResponseTypeToolResult ResponseType = "tool_result"
-	// Error response type
-	ResponseTypeError ResponseType = "error"
-	// Reflection response type (for agent reflection)
-	ResponseTypeReflection ResponseType = "reflection"
-	// Session title response type
-	ResponseTypeSessionTitle ResponseType = "session_title"
-	// Agent query response type (query received and processing started)
-	ResponseTypeAgentQuery ResponseType = "agent_query"
-	// Complete response type (agent complete)
-	ResponseTypeComplete ResponseType = "complete"
-	// copied into persistent storage after the answer has already streamed.
-	// The UI shows a toolbar placeholder until ResponseTypeComplete carries
-	// the file list.
-	// ToolApprovalRequired: MCP tool marked dangerous — UI must collect user approval before execution continues
-	ResponseTypeToolApprovalRequired ResponseType = "tool_approval_required"
-	// ToolApprovalResolved: user approved/rejected (or timeout); informational for UI replay
-	ResponseTypeToolApprovalResolved ResponseType = "tool_approval_resolved"
-	// ResponseTypeContextCompacted is older conversation summarized away to
-	// fit the context window. Surfaced because it changes what the agent
-	// remembers — an answer that forgets an earlier instruction is otherwise
-	// indistinguishable from the model ignoring it.
-	ResponseTypeContextCompacted ResponseType = "context_compacted"
+	ResponseTypeError    ResponseType = "error"
 )
 
 // StreamResponse stream response
@@ -253,35 +203,12 @@ const (
 const FinishReasonIncomplete = "incomplete"
 
 type StreamResponse struct {
-	ID                  string                 `json:"id"`
-	ResponseType        ResponseType           `json:"response_type"`
-	Content             string                 `json:"content"`
-	Done                bool                   `json:"done"`
-	KnowledgeReferences References             `json:"knowledge_references,omitempty"`
-	SessionID           string                 `json:"session_id,omitempty"`
-	AssistantMessageID  string                 `json:"assistant_message_id,omitempty"`
-	ToolCalls           []LLMToolCall          `json:"tool_calls,omitempty"`
-	Data                map[string]interface{} `json:"data,omitempty"`
-	Usage               *TokenUsage            `json:"usage,omitempty"`
-	FinishReason        string                 `json:"finish_reason,omitempty"`
-}
-
-// References references
-type References []*SearchResult
-
-// Value implements the driver.Valuer interface, used to convert References to database values
-func (c References) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database values to References
-func (c *References) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
+	ID           string                 `json:"id"`
+	ResponseType ResponseType           `json:"response_type"`
+	Content      string                 `json:"content"`
+	Done         bool                   `json:"done"`
+	ToolCalls    []LLMToolCall          `json:"tool_calls,omitempty"`
+	Data         map[string]interface{} `json:"data,omitempty"`
+	Usage        *TokenUsage            `json:"usage,omitempty"`
+	FinishReason string                 `json:"finish_reason,omitempty"`
 }

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -59,9 +59,9 @@ type failingReparseTaskEnqueuer struct {
 }
 
 func (e failingReparseTaskEnqueuer) Enqueue(
-	_ *asynq.Task,
-	_ ...asynq.Option,
-) (*asynq.TaskInfo, error) {
+	_ *taskqueue.Task,
+	_ ...taskqueue.Option,
+) (*taskqueue.TaskInfo, error) {
 	return nil, e.err
 }
 
@@ -118,7 +118,7 @@ func TestRunKnowledgeListReparseSubmissionsReportsPartialFailure(t *testing.T) {
 
 	require.Equal(t, []string{"ok-1", "bad-1", "ok-2", "bad-2"}, attempted)
 	require.Equal(t, knowledgeListReparseOutcome{Submitted: 2, Failed: 2}, outcome)
-	require.ErrorIs(t, err, asynq.SkipRetry)
+	require.ErrorIs(t, err, taskqueue.SkipRetry)
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, secondErr)
 	require.ErrorContains(t, err, "knowledge bad-1")

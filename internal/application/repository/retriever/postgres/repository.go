@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/pgvector/pgvector-go"
@@ -68,7 +69,7 @@ func (g *pgRepository) EstimateStorageSize(
 	var totalStorageSize int64 = 0
 	for _, indexInfo := range indexInfoList {
 		embeddingDB := toDBVectorEmbedding(indexInfo, additionalParams)
-		// The indexer keys estimate-only placeholders by chunk ID, including questions.
+		// The indexer keys estimate-only placeholders by chunk ID.
 		if embeddingDB.Dimension == 0 && additionalParams != nil {
 			if embeddings, ok := additionalParams["embedding"].(map[string][]float32); ok {
 				embeddingDB.Dimension = len(embeddings[indexInfo.ChunkID])
@@ -90,7 +91,12 @@ func (g *pgRepository) Save(ctx context.Context, indexInfo *types.IndexInfo, add
 	if embeddingDB.Dimension == 0 {
 		return nil
 	}
-	err := g.db.WithContext(ctx).Create(embeddingDB).Error
+	err := g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := checkVectorModelProfile(ctx, tx, additionalParams); err != nil {
+			return err
+		}
+		return tx.Create(embeddingDB).Error
+	})
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("[Postgres] Failed to save index: %v", err)
 		return err
@@ -114,7 +120,12 @@ func (g *pgRepository) BatchSave(
 	if len(indexInfoDBList) == 0 {
 		return nil
 	}
-	err := g.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(indexInfoDBList).Error
+	err := g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := checkVectorModelProfile(ctx, tx, additionalParams); err != nil {
+			return err
+		}
+		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(indexInfoDBList).Error
+	})
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("[Postgres] Batch save failed: %v", err)
 		return err
@@ -201,32 +212,25 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 			Values: common.ToInterfaceSlice(params.KnowledgeIDs),
 		})
 	}
-	// Filter by tag IDs if specified
-	if len(params.TagIDs) > 0 {
-		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by tag IDs: %v", params.TagIDs)
-		conds = append(conds, clause.IN{
-			Column: "c.tag_id",
-			Values: common.ToInterfaceSlice(params.TagIDs),
-		})
-	}
 
-	// Match only searchable text, including the generated questions in metadata.
+	// Match searchable body text and article titles.
 	conds = append(conds, clause.Expr{
 		SQL: `c.seq_id @@@ paradedb.boolean(should => ARRAY[
 			paradedb.match_disjunction('content', ?),
 			paradedb.match_disjunction('context_header', ?),
-			paradedb.match_disjunction('search_title', ?),
-			paradedb.match_disjunction('metadata.generated_questions.question', ?)
+			paradedb.match_disjunction('search_title', ?)
 		])`,
-		Vars: []interface{}{params.Query, params.Query, params.Query, params.Query},
+		Vars: []interface{}{params.Query, params.Query, params.Query},
 	})
 
 	// A chunk is the source of keyword availability, even without a vector row.
+	// Keep the parent-context exclusion explicit: ParadeDB includes heap-filter
+	// clauses in its scoring plan, and this preserves existing keyword scores.
 	conds = append(conds, clause.Expr{
 		SQL: `c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
-			AND c.index_status NOT IN ('processing', 'failed')
-			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
+			AND c.chunk_type <> 'parent_text'
+			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column')
 			AND k.deleted_at IS NULL AND kb.deleted_at IS NULL
 			AND (kb.indexing_strategy IS NULL OR kb.indexing_strategy->>'keyword_enabled' = 'true')`,
 	})
@@ -248,7 +252,6 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 			"c.id AS chunk_id",
 			"c.knowledge_id",
 			"c.knowledge_base_id",
-			"c.tag_id",
 		}).
 		Limit(int(params.TopK)).
 		Find(&embeddingDBList).Error
@@ -260,6 +263,24 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("[Postgres] Keywords retrieval failed: %v", err)
 		return nil, err
+	}
+
+	summaries, err := g.retrieveArticleSummaries(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	embeddingDBList = append(embeddingDBList, summaries...)
+	slices.SortStableFunc(embeddingDBList, func(a, b pgVectorWithScore) int {
+		if a.Score > b.Score {
+			return -1
+		}
+		if a.Score < b.Score {
+			return 1
+		}
+		return 0
+	})
+	if params.TopK > 0 && len(embeddingDBList) > params.TopK {
+		embeddingDBList = embeddingDBList[:params.TopK]
 	}
 
 	logger.GetLogger(ctx).Infof("[Postgres] Keywords retrieval found %d results", len(embeddingDBList))
@@ -343,21 +364,6 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		whereParts = append(whereParts, fmt.Sprintf("knowledge_id IN (%s)",
 			strings.Join(placeholders, ", ")))
 	}
-	// Filter by tag IDs if specified
-	if len(params.TagIDs) > 0 {
-		logger.GetLogger(ctx).Debugf(
-			"[Postgres] Filtering vector search by tag IDs: %v",
-			params.TagIDs,
-		)
-		placeholders := make([]string, len(params.TagIDs))
-		paramStart := len(allVars) + 1
-		for i := range params.TagIDs {
-			placeholders[i] = fmt.Sprintf("$%d", paramStart+i)
-			allVars = append(allVars, params.TagIDs[i])
-		}
-		whereParts = append(whereParts, fmt.Sprintf("tag_id IN (%s)",
-			strings.Join(placeholders, ", ")))
-	}
 
 	// is_enabled filter
 	whereParts = append(whereParts, fmt.Sprintf("(is_enabled IS NULL OR is_enabled = $%d)", len(allVars)+1))
@@ -406,7 +412,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	querySQL := fmt.Sprintf(`
 		SELECT 
 			e.id, c.content, c.context_header, k.title, c.metadata,
-			e.source_id, e.source_type, e.chunk_id, e.knowledge_id, e.knowledge_base_id, c.tag_id,
+			e.source_id, e.source_type, e.chunk_id, e.knowledge_id, e.knowledge_base_id,
 			(1 - candidates.distance) as score
 		FROM (
 			SELECT 
@@ -423,8 +429,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		WHERE candidates.distance <= $%[4]d
 			AND c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
-			AND c.index_status NOT IN ('processing', 'failed')
-			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
+			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column')
 			AND k.deleted_at IS NULL
 		ORDER BY candidates.distance ASC
 		LIMIT $%[5]d
@@ -458,7 +463,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		}
 		// pgvector >= 0.8 supports iterative scan, which keeps pulling more
 		// candidates from HNSW until the post-filter (knowledge_base_id /
-		// knowledge_id / tag_id / is_enabled) yields enough rows. Without it,
+		// knowledge_id / is_enabled) yields enough rows. Without it,
 		// HNSW returns at most ef_search candidates and the outer filter may
 		// silently lose recall when the filter is selective.
 		// Best-effort: ignore failure on older pgvector versions.
@@ -524,197 +529,6 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	}, nil
 }
 
-// CopyIndices copies index data
-func (g *pgRepository) CopyIndices(ctx context.Context,
-	sourceKnowledgeBaseID string,
-	sourceToTargetKBIDMap map[string]string,
-	sourceToTargetChunkIDMap map[string]string,
-	targetKnowledgeBaseID string,
-	dimension int,
-	knowledgeType string,
-) error {
-	logger.GetLogger(ctx).Infof(
-		"[Postgres] Copying indices, source knowledge base: %s, target knowledge base: %s, mapping count: %d",
-		sourceKnowledgeBaseID, targetKnowledgeBaseID, len(sourceToTargetChunkIDMap),
-	)
-
-	if len(sourceToTargetChunkIDMap) == 0 {
-		logger.GetLogger(ctx).Warnf("[Postgres] Mapping is empty, no need to copy")
-		return nil
-	}
-
-	// Moving a message keeps its chunk and source IDs, which are unique in embeddings.
-	// Update these rows in place rather than attempting a duplicate INSERT.
-	isIdentityMove := sourceKnowledgeBaseID != targetKnowledgeBaseID
-	for sourceID, targetID := range sourceToTargetChunkIDMap {
-		isIdentityMove = isIdentityMove && sourceID == targetID
-	}
-	for sourceID, targetID := range sourceToTargetKBIDMap {
-		isIdentityMove = isIdentityMove && sourceID == targetID
-	}
-	if isIdentityMove {
-		chunkIDs := make([]string, 0, len(sourceToTargetChunkIDMap))
-		for chunkID := range sourceToTargetChunkIDMap {
-			chunkIDs = append(chunkIDs, chunkID)
-		}
-		knowledgeIDs := make([]string, 0, len(sourceToTargetKBIDMap))
-		for knowledgeID := range sourceToTargetKBIDMap {
-			knowledgeIDs = append(knowledgeIDs, knowledgeID)
-		}
-		return g.db.WithContext(ctx).Model(&pgVector{}).
-			Where("knowledge_base_id = ? AND chunk_id IN ? AND knowledge_id IN ?",
-				sourceKnowledgeBaseID, chunkIDs, knowledgeIDs).
-			Update("knowledge_base_id", targetKnowledgeBaseID).Error
-	}
-
-	// Batch processing parameters
-	batchSize := 500 // Number of records to process per batch
-	offset := 0      // Offset for pagination
-	totalCopied := 0 // Total number of copied records
-
-	for {
-		// Paginated query for source data
-		var sourceVectors []*pgVector
-		if err := g.db.WithContext(ctx).
-			Where("knowledge_base_id = ?", sourceKnowledgeBaseID).
-			Order("id").
-			Limit(batchSize).
-			Offset(offset).
-			Find(&sourceVectors).Error; err != nil {
-			logger.GetLogger(ctx).Errorf("[Postgres] Failed to query source index data: %v", err)
-			return err
-		}
-
-		// If no more data, exit the loop
-		if len(sourceVectors) == 0 {
-			if offset == 0 {
-				logger.GetLogger(ctx).Warnf("[Postgres] No source index data found")
-			}
-			break
-		}
-
-		batchCount := len(sourceVectors)
-		logger.GetLogger(ctx).Infof(
-			"[Postgres] Found %d source index data, batch start position: %d",
-			batchCount, offset,
-		)
-
-		chunkIDs := make([]string, 0, batchCount*2)
-		for _, vector := range sourceVectors {
-			chunkIDs = append(chunkIDs, vector.ChunkID)
-			if targetChunkID, ok := sourceToTargetChunkIDMap[vector.ChunkID]; ok {
-				chunkIDs = append(chunkIDs, targetChunkID)
-			}
-		}
-		var chunks []*types.Chunk
-		if err := g.db.WithContext(ctx).Select("id", "metadata", "tag_id").
-			Where("id IN ?", chunkIDs).Find(&chunks).Error; err != nil {
-			return err
-		}
-		chunksByID := make(map[string]*types.Chunk, len(chunks))
-		for _, chunk := range chunks {
-			chunksByID[chunk.ID] = chunk
-		}
-
-		// Create target vector index
-		targetVectors := make([]*pgVector, 0, batchCount)
-		for _, sourceVector := range sourceVectors {
-			if sourceVector.Dimension == 0 {
-				continue
-			}
-			// Get the mapped target chunk ID
-			targetChunkID, ok := sourceToTargetChunkIDMap[sourceVector.ChunkID]
-			if !ok {
-				logger.GetLogger(ctx).Warnf(
-					"[Postgres] Source chunk %s not found in target chunk mapping, skipping",
-					sourceVector.ChunkID,
-				)
-				continue
-			}
-
-			// Get the mapped target knowledge ID
-			targetKnowledgeID, ok := sourceToTargetKBIDMap[sourceVector.KnowledgeID]
-			if !ok {
-				logger.GetLogger(ctx).Warnf(
-					"[Postgres] Source knowledge %s not found in target knowledge mapping, skipping",
-					sourceVector.KnowledgeID,
-				)
-				continue
-			}
-
-			// Recover the original question ID before rebuilding its stable source ID.
-			targetSourceID := ""
-			if sourceVector.SourceID == sourceVector.ChunkID {
-				targetSourceID = targetChunkID
-			} else if chunk := chunksByID[sourceVector.ChunkID]; chunk != nil {
-				metadata, err := chunk.DocumentMetadata()
-				if err != nil {
-					return err
-				}
-				if metadata != nil {
-					for _, question := range metadata.GeneratedQuestions {
-						if types.GeneratedQuestionSourceID(sourceVector.ChunkID, question.ID) == sourceVector.SourceID {
-							targetSourceID = types.GeneratedQuestionSourceID(targetChunkID, question.ID)
-							break
-						}
-					}
-				}
-			}
-			if targetSourceID == "" {
-				logger.GetLogger(ctx).Warnf("[Postgres] Skipping vector for missing question source: %s", sourceVector.SourceID)
-				continue
-			}
-
-			targetTagID := sourceVector.TagID
-			if chunk := chunksByID[targetChunkID]; chunk != nil {
-				targetTagID = chunk.TagID
-			}
-
-			// Copy vectors and source identifiers; keyword indexing follows chunks.
-			targetVector := &pgVector{
-				SourceID:        targetSourceID, // Handle SourceID transformation properly
-				SourceType:      sourceVector.SourceType,
-				ChunkID:         targetChunkID,         // Update to target chunk ID
-				KnowledgeID:     targetKnowledgeID,     // Update to target knowledge ID
-				KnowledgeBaseID: targetKnowledgeBaseID, // Update to target knowledge base ID
-				TagID:           targetTagID,
-				IsEnabled:       sourceVector.IsEnabled,
-				Dimension:       sourceVector.Dimension,
-				Embedding:       sourceVector.Embedding, // Copy the vector embedding directly, avoid recalculation
-			}
-
-			targetVectors = append(targetVectors, targetVector)
-		}
-
-		// Batch insert target vector index
-		if len(targetVectors) > 0 {
-			if err := g.db.WithContext(ctx).
-				Clauses(clause.OnConflict{DoNothing: true}).Create(targetVectors).Error; err != nil {
-				logger.GetLogger(ctx).Errorf("[Postgres] Failed to batch create target index: %v", err)
-				return err
-			}
-
-			totalCopied += len(targetVectors)
-			logger.GetLogger(ctx).Infof(
-				"[Postgres] Successfully copied batch data, batch size: %d, total copied: %d",
-				len(targetVectors),
-				totalCopied,
-			)
-		}
-
-		// Move to the next batch
-		offset += batchCount
-
-		// If the number of returned records is less than the requested size, it means the last page has been reached
-		if batchCount < batchSize {
-			break
-		}
-	}
-
-	logger.GetLogger(ctx).Infof("[Postgres] Index copying completed, total copied: %d", totalCopied)
-	return nil
-}
-
 // BatchUpdateChunkEnabledStatus updates the enabled status of chunks in batch
 func (g *pgRepository) BatchUpdateChunkEnabledStatus(ctx context.Context, chunkStatusMap map[string]bool) error {
 	if len(chunkStatusMap) == 0 {
@@ -763,37 +577,5 @@ func (g *pgRepository) BatchUpdateChunkEnabledStatus(ctx context.Context, chunkS
 	}
 
 	logger.GetLogger(ctx).Infof("[Postgres] Successfully batch updated chunk enabled status")
-	return nil
-}
-
-// BatchUpdateChunkTagID updates the tag ID of chunks in batch
-func (g *pgRepository) BatchUpdateChunkTagID(ctx context.Context, chunkTagMap map[string]string) error {
-	if len(chunkTagMap) == 0 {
-		logger.GetLogger(ctx).Warnf("[Postgres] Chunk tag map is empty, skipping update")
-		return nil
-	}
-
-	logger.GetLogger(ctx).Infof("[Postgres] Batch updating chunk tag ID, count: %d", len(chunkTagMap))
-
-	// Group chunks by tag ID for batch updates
-	tagGroups := make(map[string][]string)
-	for chunkID, tagID := range chunkTagMap {
-		tagGroups[tagID] = append(tagGroups[tagID], chunkID)
-	}
-
-	// Batch update chunks for each tag ID
-	for tagID, chunkIDs := range tagGroups {
-		result := g.db.WithContext(ctx).Model(&pgVector{}).
-			Where("chunk_id IN ?", chunkIDs).
-			Update("tag_id", tagID)
-		if result.Error != nil {
-			logger.GetLogger(ctx).Errorf("[Postgres] Failed to update chunks with tag_id %s: %v", tagID, result.Error)
-			return result.Error
-		}
-		logger.GetLogger(ctx).
-			Infof("[Postgres] Updated %d chunks to tag_id=%s, rows affected: %d", len(chunkIDs), tagID, result.RowsAffected)
-	}
-
-	logger.GetLogger(ctx).Infof("[Postgres] Successfully batch updated chunk tag ID")
 	return nil
 }

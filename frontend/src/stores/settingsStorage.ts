@@ -1,68 +1,19 @@
-import { safeRemoveItem, safeSetItem } from "@/composables/preferenceStorage";
-import { reconcileBuiltinAgentMode } from "@/utils/agent-mode";
-
-export const SETTINGS_STORAGE_KEY = "Reliquary_settings";
-
-/** Deep-clone settings so nested arrays/objects are not shared with defaults. */
-export function cloneSettings<T>(settings: T): T {
-  return JSON.parse(JSON.stringify(settings));
+import { safeRemoveItem } from '@/composables/preferenceStorage'
+export const SETTINGS_STORAGE_KEY = 'Reliquary_settings'
+export function cloneSettings<T>(settings: T): T { return JSON.parse(JSON.stringify(settings)) }
+export function isStoredSettingsRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
-
-export function isStoredSettingsRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-type ReconcilableSettings = {
-  selectedTags?: unknown;
-  selectedMCPServices?: unknown;
-  selectedFileKbMap?: unknown;
-  isAgentEnabled: boolean;
-  selectedAgentId?: string;
-};
-
-function reconcileLoadedSettings<T extends ReconcilableSettings>(loaded: T): T {
-  loaded.selectedTags ||= [];
-  loaded.selectedMCPServices ||= [];
-  loaded.selectedFileKbMap ||= {};
-  const reconciledAgentMode = reconcileBuiltinAgentMode(loaded);
-  if (reconciledAgentMode) {
-    safeSetItem(SETTINGS_STORAGE_KEY, JSON.stringify(loaded));
-  }
-  return loaded;
-}
-
-function resetStoredSettings<T extends ReconcilableSettings>(
-  defaultSettings: T,
-  reason: unknown,
-): T {
-  console.error(
-    "[settings] Failed to parse Reliquary_settings from localStorage, resetting to defaults:",
-    reason,
-  );
-  safeRemoveItem(SETTINGS_STORAGE_KEY);
-  return reconcileLoadedSettings(cloneSettings(defaultSettings));
-}
-
-/** Load settings from localStorage, reconcile builtin agent mode, fall back on corruption. */
-export function loadAndReconcileSettings<T extends ReconcilableSettings>(
-  defaultSettings: T,
-): T {
+export function loadAndReconcileSettings<T extends Record<string, unknown>>(defaults: T): T {
   try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) {
-      return reconcileLoadedSettings(cloneSettings(defaultSettings));
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!isStoredSettingsRecord(parsed)) {
-      return resetStoredSettings(
-        defaultSettings,
-        new Error("stored value is not a settings object"),
-      );
-    }
-    return reconcileLoadedSettings(parsed as T);
-  } catch (e) {
-    return resetStoredSettings(defaultSettings, e);
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return cloneSettings(defaults)
+    const parsed: unknown = JSON.parse(raw)
+    if (!isStoredSettingsRecord(parsed)) throw new Error('stored value is not a settings object')
+    return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, parsed[key] ?? fallback])) as T
+  } catch (cause) {
+    console.error('[settings] Failed to read local settings, resetting to defaults:', cause)
+    safeRemoveItem(SETTINGS_STORAGE_KEY)
+    return cloneSettings(defaults)
   }
 }

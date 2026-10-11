@@ -55,7 +55,7 @@ show_help() {
     echo "用法: $0 [命令] [选项]"
     echo ""
     echo "命令:"
-    echo "  start      启动基础设施服务（postgres, redis）"
+    echo "  start      启动基础设施服务（postgres）"
     echo "  stop       停止所有服务"
     echo "  restart    重启所有服务"
     echo "  logs       查看服务日志"
@@ -169,7 +169,6 @@ start_services() {
         echo ""
         log_info "服务访问地址:"
         echo "  - PostgreSQL:    localhost:5432"
-        echo "  - Redis:         localhost:6379"
         
         echo ""
         log_info "接下来的步骤:"
@@ -240,15 +239,9 @@ check_remote_dev_connectivity() {
     fi
 
     local db_port="${DB_PORT:-5432}"
-    local redis_port
-    redis_port="${REDIS_ADDR#*:}"
-    if [ "$redis_port" = "$REDIS_ADDR" ]; then
-        redis_port=6379
-    fi
-
     log_info "检查远程基础设施连通性 (${host})..."
     local failed=0
-    for spec in "PostgreSQL:${host}:${db_port}" "Redis:${host}:${redis_port}"; do
+    for spec in "PostgreSQL:${host}:${db_port}"; do
         local name="${spec%%:*}"
         local rest="${spec#*:}"
         local h="${rest%%:*}"
@@ -269,10 +262,10 @@ check_remote_dev_connectivity() {
         echo ""
         log_error "无法连接远程开发环境 ${host}"
         log_info "排查建议:"
-        echo "  1. 确认远程机器 Docker 容器在运行 (postgres/redis)"
+        echo "  1. 确认远程机器 Docker 容器在运行 (postgres)"
         echo "  2. 确认本机与 ${host} 在同一局域网 (本机: $(ipconfig getifaddr en0 2>/dev/null || echo '未知'))"
         echo "  3. 在远程检查端口映射: docker ps --format 'table {{.Names}}\t{{.Ports}}'"
-        echo "  4. 检查远程防火墙是否放行 5432/6379"
+        echo "  4. 检查远程防火墙是否放行 5432"
         return 1
     fi
     return 0
@@ -351,10 +344,8 @@ start_app() {
     if [ -n "${DEV_REMOTE_HOST:-}" ]; then
         log_info "远程开发模式: 基础设施 → ${DEV_REMOTE_HOST}"
         export DB_HOST="${DB_HOST:-$DEV_REMOTE_HOST}"
-        export REDIS_ADDR="${REDIS_ADDR:-$DEV_REMOTE_HOST:6379}"
     else
         export DB_HOST=127.0.0.1
-        export REDIS_ADDR=127.0.0.1:6379
     fi
 
     if ! check_remote_dev_connectivity; then
@@ -370,6 +361,10 @@ start_app() {
         export LOCAL_STORAGE_BASE_DIR="$PROJECT_ROOT/.local-data/files"
     fi
     mkdir -p "$LOCAL_STORAGE_BASE_DIR"
+    if [ -z "${VAULT_ROOT:-}" ] || [ "$VAULT_ROOT" = "/data/vault" ]; then
+        export VAULT_ROOT="$PROJECT_ROOT/.local-data/vault"
+    fi
+    mkdir -p "$VAULT_ROOT"
     
     # 确保必要的环境变量已设置
     if [ -z "$DB_DRIVER" ]; then

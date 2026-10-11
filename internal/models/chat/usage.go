@@ -25,20 +25,13 @@ func logUsage(ctx context.Context, model string, u *types.TokenUsage) {
 		u.PromptCacheHitRate(), u.CacheReported, u.CacheStatus, usageAttribution(ctx))
 }
 
-// usageAttribution renders the ", session_id=…, principal=…" suffix that
-// attributes a usage line to the session and terminal principal that
-// triggered the call. Calls that run outside a session or without a resolved
-// principal (document parsing, title generation, background jobs) render an
-// empty suffix, keeping their lines byte-identical to before.
+// usageAttribution adds the model tier and authenticated principal to a usage
+// line when the caller supplied them in the execution context.
 func usageAttribution(ctx context.Context) string {
 	var b strings.Builder
 	if tier := types.ModelTierFromContext(ctx); tier != "" {
 		b.WriteString(", tier=")
 		b.WriteString(string(tier))
-	}
-	if sessionID, ok := types.SessionIDFromContext(ctx); ok && sessionID != "" {
-		b.WriteString(", session_id=")
-		b.WriteString(sessionID)
 	}
 	if principal, ok := types.PrincipalFromContext(ctx); ok {
 		b.WriteString(", principal=")

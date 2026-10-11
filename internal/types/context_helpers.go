@@ -57,52 +57,36 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 // TaskInitiator is the authenticated caller that submitted an asynchronous
 // task. Workers restore this identity into their execution context.
 type TaskInitiator struct {
-	UserID string `json:"user_id,omitempty"`
+	UserID    string    `json:"user_id,omitempty"`
+	Principal Principal `json:"principal,omitempty"`
 }
 
 // TaskInitiatorFromContext snapshots the authenticated user for a task payload.
 func TaskInitiatorFromContext(ctx context.Context) TaskInitiator {
 	userID, ok := UserIDFromContext(ctx)
-	if !ok {
+	principal, hasPrincipal := PrincipalFromContext(ctx)
+	if !ok && !hasPrincipal {
 		return TaskInitiator{}
 	}
-	return TaskInitiator{UserID: userID}
+	return TaskInitiator{UserID: userID, Principal: principal}
 }
 
 // Apply restores a captured task initiator onto a worker context. Empty or
 // legacy payloads are a no-op and therefore retain the system-task fallback.
 func (i TaskInitiator) Apply(ctx context.Context) context.Context {
-	if i.UserID == "" {
-		return ctx
+	if i.UserID != "" {
+		ctx = context.WithValue(ctx, UserIDContextKey, i.UserID)
 	}
-	ctx = context.WithValue(ctx, UserIDContextKey, i.UserID)
+	if i.Principal.Valid() {
+		ctx = WithPrincipal(ctx, i.Principal)
+	}
 
 	return ctx
 }
 
-func SessionTenantIDFromContext(ctx context.Context) (uint64, bool) { return TenantIDFromContext(ctx) }
-
-// WithSessionID carries the active conversation ID.
-func WithSessionID(ctx context.Context, sessionID string) context.Context {
-	if sessionID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, SessionIDContextKey, sessionID)
-}
-
-// SessionIDFromContext extracts the current session ID from ctx.
-// Returns ("", false) when the key is absent or the value is not a non-empty string.
-func SessionIDFromContext(ctx context.Context) (string, bool) {
-	if ctx == nil {
-		return "", false
-	}
-	v, ok := ctx.Value(SessionIDContextKey).(string)
-	return v, ok && v != ""
-}
-
-// WithBackgroundTask marks ctx as originating from an asynq background worker
-// (document parse / summary / question / context / multimodal enrichment). The
-// chat concurrency governor throttles only background LLM traffic, so this flag
+// WithBackgroundTask marks ctx as originating from an queue background worker
+// (document parse / summary / question / multimodal enrichment). The
+// model concurrency governor throttles only background LLM traffic, so this flag
 // determines whether the per-model concurrency limit applies. See
 // BackgroundTaskContextKey.
 func WithBackgroundTask(ctx context.Context) context.Context {
@@ -125,14 +109,14 @@ type taskRetryMetadata struct {
 }
 
 // WithTaskRetryMetadata records retry counters for task executors that do not
-// provide Asynq's native worker context, notably direct test handlers.
+// provide queue's native worker context, notably direct test handlers.
 func WithTaskRetryMetadata(ctx context.Context, retried, maxRetry int) context.Context {
 	return context.WithValue(ctx, taskRetryMetadataContextKey{}, taskRetryMetadata{
 		retried: retried, maxRetry: maxRetry,
 	})
 }
 
-// TaskRetryMetadataFromContext returns retry counters supplied by a non-Asynq
+// TaskRetryMetadataFromContext returns retry counters supplied by a non-queue
 // task executor. The boolean is false for ordinary request contexts.
 func TaskRetryMetadataFromContext(ctx context.Context) (retried, maxRetry int, ok bool) {
 	if ctx == nil {

@@ -17,7 +17,7 @@ func TestBuildSpanTree_AssemblesParentChild(t *testing.T) {
 	rows := []types.KnowledgeProcessingSpan{
 		{KnowledgeID: "kid", Attempt: 1, SpanID: "root", Name: "knowledge_processing", Kind: types.SpanKindRoot, Status: types.SpanStatusRunning, StartedAt: &now},
 		{KnowledgeID: "kid", Attempt: 1, SpanID: "doc", ParentSpanID: "root", Name: types.StageDocReader, Kind: types.SpanKindStage, Status: types.SpanStatusDone, StartedAt: &now},
-		{KnowledgeID: "kid", Attempt: 1, SpanID: "mm", ParentSpanID: "root", Name: types.StageMultimodal, Kind: types.SpanKindStage, Status: types.SpanStatusRunning, StartedAt: &now},
+		{KnowledgeID: "kid", Attempt: 1, SpanID: "mm", ParentSpanID: "root", Name: types.StageProcessing, Kind: types.SpanKindStage, Status: types.SpanStatusRunning, StartedAt: &now},
 		{KnowledgeID: "kid", Attempt: 1, SpanID: "img0", ParentSpanID: "mm", Name: "multimodal.image[0]", Kind: types.SpanKindGeneration, Status: types.SpanStatusRunning, StartedAt: &now},
 	}
 
@@ -25,7 +25,7 @@ func TestBuildSpanTree_AssemblesParentChild(t *testing.T) {
 	require := assert.New(t)
 	require.NotNil(tree)
 	require.Equal("root", tree.SpanID)
-	require.Equal(types.StageMultimodal, currentStage,
+	require.Equal(types.StageProcessing, currentStage,
 		"running stage span surfaces as current_stage")
 	require.Nil(lastFail)
 
@@ -42,14 +42,14 @@ func TestBuildSpanTree_AssemblesParentChild(t *testing.T) {
 		require.True(ok, "stage %s must appear in tree", name)
 	}
 	require.Equal(types.SpanStatusDone, stageNames[types.StageDocReader])
-	require.Equal(types.SpanStatusRunning, stageNames[types.StageMultimodal])
+	require.Equal(types.SpanStatusRunning, stageNames[types.StageProcessing])
 	require.Equal(types.SpanStatusPending, stageNames[types.StageEmbedding],
 		"missing stage rows must synthesize as pending placeholders")
 
 	// The image subspan must hang under multimodal, not at root level.
 	var mmNode *types.SpanTreeNode
 	for _, c := range tree.Children {
-		if c.Name == types.StageMultimodal {
+		if c.Name == types.StageProcessing {
 			mmNode = c
 			break
 		}

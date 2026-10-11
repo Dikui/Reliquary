@@ -1,5 +1,6 @@
 // src/utils/request.js
 import axios from "axios";
+import { ref } from "vue";
 import { translatePersonalServerMessage } from './personalServerError';
 import { generateRandomString, MAX_FILE_SIZE_MB } from "./index";
 import i18n from '@/i18n'
@@ -20,6 +21,38 @@ const instance = axios.create({
     "X-Request-ID": `${generateRandomString(12)}`,
   },
 });
+
+// Temporary outages keep the session and retry a read-only availability check.
+export const serviceUnavailable = ref(false);
+let availabilityTimer: ReturnType<typeof setInterval> | undefined;
+let checkingAvailability = false;
+export function stopServiceAvailabilityRetry() {
+  if (availabilityTimer) clearInterval(availabilityTimer);
+  availabilityTimer = undefined;
+}
+function serviceAvailable() {
+  serviceUnavailable.value = false;
+  stopServiceAvailabilityRetry();
+}
+function markServiceUnavailable() {
+  serviceUnavailable.value = true;
+  if (!availabilityTimer) availabilityTimer = setInterval(retryServiceAvailability, 5000);
+}
+export async function retryServiceAvailability() {
+  if (checkingAvailability) return;
+  checkingAvailability = true;
+  try {
+    const signedIn = Boolean(localStorage.getItem('reliquary_token'));
+    const data: any = await instance.get(signedIn ? '/api/v1/auth/me' : '/health');
+    if (signedIn || data?.queue_connection?.state !== 'reconnecting') serviceAvailable();
+  } catch { /* The response interceptor retains the outage and session state. */ }
+  finally { checkingAvailability = false; }
+}
+async function expireSession() {
+  const { useAuthStore } = await import('@/stores/auth');
+  useAuthStore().logout();
+  redirectToLogin();
+}
 
 // 获取当前用户语言（用于 Accept-Language header）
 export function getCurrentLanguage(): string {
@@ -81,6 +114,7 @@ instance.interceptors.response.use(
     // 根据业务状态码处理逻辑
     const { status, data } = response;
     if (status >= 200 && status < 300) {
+      if (response.config?.url !== '/health') serviceAvailable();
       return data;
     } else {
       return Promise.reject(data);
@@ -90,8 +124,11 @@ instance.interceptors.response.use(
     const originalRequest = error.config;
 
     if (!error.response) {
-      return Promise.reject({ message: t('error.networkError') });
+      if (error.code !== 'ERR_CANCELED') markServiceUnavailable();
+      return Promise.reject({ code: error.code, message: t('error.networkError') });
     }
+
+    if ([502, 503, 504].includes(error.response.status) && error.response.data?.error?.code !== 'chatgpt_generation_paused') markServiceUnavailable();
 
     if ((error.response.status === 401 || error.response.status === 403) && isPublicAuthRequest(originalRequest?.url)) {
       const { status, data } = error.response;
@@ -143,33 +180,26 @@ instance.interceptors.response.use(
 
             return instance(originalRequest);
           } else {
-            throw new Error(response.message || t('error.tokenRefreshFailed'));
+            throw { status: response.status, message: response.message || t('error.tokenRefreshFailed') };
           }
         } catch (refreshError) {
-          // 刷新失败，清除所有token并跳转到登录页
-          localStorage.removeItem('reliquary_token');
-          localStorage.removeItem('reliquary_refresh_token');
-          localStorage.removeItem('reliquary_user');
-          localStorage.removeItem('reliquary_tenant');
-
           processQueue(refreshError, null);
-
-          redirectToLogin();
+          if ((refreshError as any)?.status === 401) await expireSession();
 
           return Promise.reject(refreshError);
         } finally {
           isRefreshing = false;
         }
       } else {
-        // 没有refresh token，直接跳转到登录页
-        localStorage.removeItem('reliquary_token');
-        localStorage.removeItem('reliquary_user');
-        localStorage.removeItem('reliquary_tenant');
-
-        redirectToLogin();
+        isRefreshing = false;
+        await expireSession();
 
         return Promise.reject({ message: t('error.pleaseRelogin') });
       }
+    }
+
+    if (error.response.status === 401 && !isPublicAuthRequest(originalRequest?.url) && !originalRequest?.url?.includes('/auth/refresh')) {
+      await expireSession();
     }
 
     // 处理 Nginx 413 Request Entity Too Large
@@ -231,15 +261,6 @@ export function postUpload(
     },
     onUploadProgress: onUploadProgress || config.onUploadProgress,
   }) as unknown as Promise<any>;
-}
-
-export function postChat<T = any>(url: string, data = {}): Promise<T> {
-  return instance.post(url, data, {
-    headers: {
-      "Content-Type": "text/event-stream;charset=utf-8",
-      "X-Request-ID": `${generateRandomString(12)}`,
-    },
-  }) as unknown as Promise<T>;
 }
 
 export function post<T = any>(url: string, data = {}, config?: any): Promise<T> {

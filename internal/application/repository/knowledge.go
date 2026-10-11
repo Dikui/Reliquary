@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"reliquary/internal/common"
 	"reliquary/internal/types"
@@ -41,7 +42,9 @@ func escapeLikeKeyword(keyword string) string {
 // counter jump back up and never reach zero (the "stuck
 // pending_subtasks_count / never promoted to completed" bug). Omitting
 // the column here means Save can never touch it.
-var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount"}
+// User star choices, collection reasons and the correction marker are owned by dedicated
+// editing methods, so background snapshots cannot overwrite those columns.
+var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified", "ContentTypeUncertain", "ProcessingReviewStatus", "ProcessingReviewContentType", "ProcessingReviewReason"}
 
 // knowledgeRepository implements knowledge base and knowledge repository interface
 type knowledgeRepository struct {
@@ -104,19 +107,19 @@ func (r *knowledgeRepository) ListKnowledgeByKnowledgeBaseID(
 // KnowledgeListFilter to a GORM query. Tenant / knowledge base scoping must be
 // applied by the caller before invoking this helper.
 func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) *gorm.DB {
-	// Historical versions remain addressable by citation but are absent from the current document list.
-	query = query.Where("COALESCE(metadata->>'source_archived', 'false') <> 'true'")
-	if len(filter.TagIDs) > 0 {
-		query = query.Where(
-			"knowledges.id IN (SELECT knowledge_id FROM knowledge_tag_relations WHERE tag_id IN (?))",
-			filter.TagIDs,
-		)
+	if filter.Starred != nil {
+		query = query.Where("source_kind='article' AND starred=?", *filter.Starred)
+	}
+	if filter.ContentType == "unclassified" {
+		query = query.Where("(content_type IS NULL OR content_type = '')")
+	} else if filter.ContentType != "" {
+		query = query.Where("content_type = ?", filter.ContentType)
 	}
 	if filter.Keyword != "" {
 		// Case-insensitive (LOWER … LIKE LOWER) so keyword search matches
 		// regardless of the stored casing — consistent with the sibling
 		// LOWER() filters in this file and with the client-side `search kb`
-		// / `search sessions` filters. Plain LIKE is case-sensitive in
+		// and article filters. Plain LIKE is case-sensitive in
 		// Postgres, which surprised callers searching with lowercase.
 		escaped := strings.ToLower(escapeLikeKeyword(filter.Keyword))
 		query = query.Where("(LOWER(file_name) LIKE ? OR LOWER(title) LIKE ?)", "%"+escaped+"%", "%"+escaped+"%")
@@ -158,21 +161,6 @@ func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) 
 	if !filter.UpdatedTo.IsZero() {
 		query = query.Where("updated_at <= ?", filter.UpdatedTo)
 	}
-	switch filter.FolderScope {
-	case types.FolderScopeExact:
-		query = query.Where("folder_path = ?", filter.FolderPath)
-	case types.FolderScopeSubtree:
-		// An empty path means "the whole knowledge base", so no predicate is
-		// needed; otherwise match the folder itself plus everything below it.
-		if filter.FolderPath != "" {
-			query = query.Where(
-				"(folder_path = ? OR folder_path LIKE ? ESCAPE ?)",
-				filter.FolderPath,
-				escapeLikeKeyword(filter.FolderPath)+"/%",
-				likeEscapeChar,
-			)
-		}
-	}
 	return query
 }
 
@@ -209,106 +197,6 @@ func (r *knowledgeRepository) ListPagedKnowledgeByKnowledgeBaseID(
 	return knowledges, total, nil
 }
 
-// ListKnowledgeFolderCounts aggregates how many knowledge entries live directly
-// in each folder of a knowledge base. Rows mid-deletion are excluded so the
-// sidebar tree counts match the document list.
-func (r *knowledgeRepository) ListKnowledgeFolderCounts(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-) ([]*types.KnowledgeFolderCount, error) {
-	var counts []*types.KnowledgeFolderCount
-	if err := r.db.WithContext(ctx).
-		Model(&types.Knowledge{}).
-		Select("folder_path AS folder_path, COUNT(*) AS count").
-		Where("tenant_id = ? AND knowledge_base_id = ? AND parse_status <> ?",
-			tenantID, kbID, types.ParseStatusDeleting).
-		Group("folder_path").
-		Find(&counts).Error; err != nil {
-		return nil, err
-	}
-	return counts, nil
-}
-
-// UpdateKnowledgeFolderPath files the given knowledge entries under folderPath.
-// Only the display/navigation column is touched: chunks, embeddings and the
-// stored file are unaffected, which is why re-filing needs no re-processing.
-// Returns the number of affected rows.
-func (r *knowledgeRepository) UpdateKnowledgeFolderPath(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	ids []string,
-	folderPath string,
-) (int64, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	result := r.db.WithContext(ctx).
-		Model(&types.Knowledge{}).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND id IN (?)", tenantID, kbID, ids).
-		Updates(map[string]interface{}{"folder_path": folderPath, "updated_at": time.Now()})
-	if result.Error != nil {
-		return 0, result.Error
-	}
-	return result.RowsAffected, nil
-}
-
-// RenameKnowledgeFolderPath rewrites folder_path for a folder and every folder
-// below it, which is how a folder rename or move is applied. Renaming onto an
-// existing path merges the two folders. Returns the number of affected rows.
-func (r *knowledgeRepository) RenameKnowledgeFolderPath(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	from string,
-	to string,
-) (int64, error) {
-	if from == "" {
-		return 0, errors.New("source folder path is required")
-	}
-
-	// The rewrite is done row by row rather than with SQL string functions so it
-	// behaves identically on PostgreSQL.
-	var rows []*types.Knowledge
-	if err := r.db.WithContext(ctx).
-		Select("id", "folder_path").
-		Where("tenant_id = ? AND knowledge_base_id = ? AND (folder_path = ? OR folder_path LIKE ? ESCAPE ?)",
-			tenantID, kbID, from, escapeLikeKeyword(from)+"/%", likeEscapeChar).
-		Find(&rows).Error; err != nil {
-		return 0, err
-	}
-	if len(rows) == 0 {
-		return 0, nil
-	}
-
-	// Group by destination so each distinct rewrite is a single UPDATE.
-	byTarget := map[string][]string{}
-	for _, row := range rows {
-		suffix := strings.TrimPrefix(row.FolderPath, from)
-		byTarget[types.NormalizeKnowledgeFolderPath(to+suffix)] = append(
-			byTarget[types.NormalizeKnowledgeFolderPath(to+suffix)], row.ID)
-	}
-
-	var affected int64
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for target, targetIDs := range byTarget {
-			result := tx.Model(&types.Knowledge{}).
-				Where("tenant_id = ? AND knowledge_base_id = ? AND id IN (?)", tenantID, kbID, targetIDs).
-				Updates(map[string]interface{}{"folder_path": target, "updated_at": time.Now()})
-			if result.Error != nil {
-				return result.Error
-			}
-			affected += result.RowsAffected
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return affected, nil
-}
-
 // UpdateKnowledge updates knowledge
 func (r *knowledgeRepository) UpdateKnowledge(ctx context.Context, knowledge *types.Knowledge) error {
 	knowledge.ErrorMessage = common.CleanInvalidUTF8(knowledge.ErrorMessage)
@@ -335,14 +223,29 @@ func (r *knowledgeRepository) UpdateKnowledgeBatch(ctx context.Context, knowledg
 	return r.db.Debug().WithContext(ctx).Omit(omitFieldsOnUpdate...).Save(knowledgeList).Error
 }
 
-// DeleteKnowledge deletes knowledge
+// DeleteKnowledge deletes an article and its entity associations atomically.
 func (r *knowledgeRepository) DeleteKnowledge(ctx context.Context, tenantID uint64, id string) error {
-	return r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).Delete(&types.Knowledge{}).Error
+	return r.DeleteKnowledgeList(ctx, tenantID, []string{id})
 }
 
-// DeleteKnowledge deletes knowledge
+// DeleteKnowledgeList locks articles before deleting mentions, excluding concurrent resolution.
 func (r *knowledgeRepository) DeleteKnowledgeList(ctx context.Context, tenantID uint64, ids []string) error {
-	return r.db.WithContext(ctx).Where("tenant_id = ? AND id in ?", tenantID, ids).Delete(&types.Knowledge{}).Error
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var articles []types.Knowledge
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("tenant_id=? AND id IN ?", tenantID, ids).Order("id").Find(&articles).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Delete(&types.KnowledgeEntity{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Delete(&types.KnowledgeTopic{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("tenant_id=? AND id IN ?", tenantID, ids).Delete(&types.Knowledge{}).Error
+	})
 }
 
 // GetKnowledgeBatch gets knowledge in batch
@@ -575,13 +478,10 @@ func (r *knowledgeRepository) FinalizeSubtask(
 }
 
 // SetFinalizing atomically transitions a row from 'processing' to
-// 'finalizing' and seeds pending_subtasks_count. Used by
-// KnowledgePostProcess.Handle as the single durable handoff between
-// the synchronous parse stage and the asynchronous enrichment fan-out.
+// 'finalizing' and seeds the generic pending_subtasks_count field.
 //
 // The transition is conditional on parse_status='processing' so a row
-// that the user cancelled / deleted between ProcessDocument finishing
-// and post-process starting will NOT get hijacked into finalizing.
+// that the user cancelled or deleted cannot be moved into finalizing.
 // Returns whether the transition happened.
 func (r *knowledgeRepository) SetFinalizing(
 	ctx context.Context, id string, expectedSubtasks int,
@@ -846,7 +746,7 @@ func (r *knowledgeRepository) SearchKnowledge(
 	return knowledges, hasMore, nil
 }
 
-// SearchKnowledgeInScopes searches knowledge items by keyword within the given (tenant_id, kb_id) scopes (e.g. own + shared KBs).
+// SearchKnowledgeInScopes searches articles inside explicit tenant and knowledge base boundaries.
 func (r *knowledgeRepository) SearchKnowledgeInScopes(
 	ctx context.Context,
 	scopes []types.KnowledgeSearchScope,
@@ -965,25 +865,4 @@ func (r *knowledgeRepository) SearchKnowledgeInScopes(
 		knowledges[i] = &k
 	}
 	return knowledges, hasMore, total, nil
-}
-
-// ListIDsByTagIDs returns all knowledge IDs that have any of the specified tag IDs (OR semantics)
-func (r *knowledgeRepository) ListIDsByTagIDs(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	tagIDs []string,
-) ([]string, error) {
-	if len(tagIDs) == 0 {
-		return nil, nil
-	}
-	var ids []string
-	err := r.db.WithContext(ctx).Model(&types.Knowledge{}).
-		Joins("JOIN knowledge_tag_relations ktr ON knowledges.id = ktr.knowledge_id").
-		Where("knowledges.tenant_id = ? AND knowledges.knowledge_base_id = ? AND ktr.tag_id IN (?)",
-			tenantID, kbID, tagIDs).
-		Where("knowledges.parse_status IN ?", []string{types.ParseStatusFinalizing, types.ParseStatusCompleted}).
-		Distinct("knowledges.id").
-		Pluck("knowledges.id", &ids).Error
-	return ids, err
 }

@@ -42,7 +42,7 @@ type KnowledgeSpanRepository interface {
 	CancelAllOpenSpans(ctx context.Context, knowledgeID string, attempt int, errorCode, reason string) (int64, error)
 	// CancelOpenSpansByName flips pending/running rows with the given span
 	// name for (knowledgeID, attempt). Used before re-opening a subspan
-	// after asynq retry or server restart so the trace tree does not
+	// after queue retry or server restart so the trace tree does not
 	// accumulate duplicate postprocess.summary / question rows.
 	CancelOpenSpansByName(ctx context.Context, knowledgeID string, attempt int, name, errorCode, reason string) (int64, error)
 }

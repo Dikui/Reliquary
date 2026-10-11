@@ -31,6 +31,15 @@
       </div>
     </header>
 
+    <QueueConnectionNotice :status="queueConnection" />
+
+    <ChatGPTUsageStatus v-if="chatgptPolicy?.paused || chatgptAccounts.some(account => account.status === 'needs_login')" :policy="chatgptPolicy" :accounts="chatgptAccounts" :busy="chatgptResuming" :error="chatgptError" settings-link @resume="resumeChatGPTUsage" />
+
+    <div v-if="chatgptError && !chatgptPolicy" class="rq-state rq-state--error" role="alert">
+      <div class="rq-state-copy"><strong>{{ t('chatgpt.loadFailed') }}</strong><span>{{ chatgptError }}</span></div>
+      <t-button size="small" variant="outline" @click="loadChatGPTStatus">{{ t('system.globalSettings.runtime.retry') }}</t-button>
+    </div>
+
     <div v-if="loading && !loadedOnce" class="rq-loading" aria-live="polite">
       <div class="rq-loading-metrics">
         <t-skeleton
@@ -507,15 +516,20 @@
 </template>
 
 <script setup lang="ts">
+import QueueConnectionNotice from './QueueConnectionNotice.vue'
+import type { QueueConnectionStatus } from '@/api/system'
 import { formatCountCopy } from '@/i18n/countCopy'
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import ChatGPTUsageStatus from '@/components/ChatGPTUsageStatus.vue'
+import { getChatGPTAccounts, getChatGPTPolicy, resumeChatGPT, type ChatGPTAccount, type ChatGPTPolicy } from '@/api/chatgpt'
 import { mergeRuntimeTaskPage } from './runtimeTaskPagination'
 import {
   getRuntimeTasks,
   getRuntimeQueues,
+  getQueueConnectionStatus,
   mutateRuntimeTask,
   purgeArchivedRuntimeTasks,
   type ModelRuntimeStat,
@@ -528,12 +542,32 @@ import {
 
 const { t, te, locale } = useI18n()
 
+const chatgptPolicy = ref<ChatGPTPolicy | null>(null), chatgptAccounts = ref<ChatGPTAccount[]>([])
+const chatgptResuming = ref(false), chatgptError = ref('')
+let chatgptRequestVersion = 0
+async function loadChatGPTStatus() {
+  const version = ++chatgptRequestVersion
+  try {
+    const [accounts, policy] = await Promise.all([getChatGPTAccounts(), getChatGPTPolicy()])
+    if (version !== chatgptRequestVersion) return
+    chatgptAccounts.value = accounts.accounts; chatgptPolicy.value = policy; chatgptError.value = ''
+  } catch (err: any) { if (version === chatgptRequestVersion) chatgptError.value = err?.message || t('chatgpt.loadFailed') }
+}
+async function resumeChatGPTUsage() {
+  if (chatgptResuming.value) return
+  chatgptResuming.value = true; chatgptError.value = ''
+  try { chatgptPolicy.value = await resumeChatGPT() }
+  catch (err: any) { chatgptError.value = err?.message || t('chatgpt.resumeFailed') }
+  finally { chatgptResuming.value = false }
+}
+
 const POLL_INTERVAL_MS = 5000
 
 const queues = ref<QueueStat[]>([])
 const pools = ref<RuntimeWorkerPool[]>([])
 const models = ref<ModelRuntimeStat[]>([])
 const modelLimiterAvailable = ref(false)
+const queueConnection = ref<QueueConnectionStatus>()
 const available = ref(true)
 const loading = ref(false)
 const loadedOnce = ref(false)
@@ -559,18 +593,13 @@ const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry
 const runtimeTaskTypeKeys: Record<string, string> = {
   'document:process': 'documentProcess',
   'manual:process': 'manualProcess',
-	'temporary_document:process': 'temporaryDocumentProcess',
-  'knowledge:post_process': 'postProcess',
-  'summary:generation': 'summary',
-  'datatable:summary': 'tableSummary',
-  'question:generation': 'question',
-  'image:multimodal': 'multimodal',
   'datasource:sync': 'sync',
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',
-  'knowledge:move': 'move',
   'index:delete': 'indexDelete',
-  'kb:delete': 'kbDelete',
+  'entity:name_embedding_rebuild': 'entityNameEmbeddingRebuild',
+  'knowledge:embedding_rebuild': 'embeddingRebuild',
+  'topic:backfill': 'topicBackfill',
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -714,7 +743,7 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   if (task.last_failed_at) refs.push({ key: 'failed', label: t('system.globalSettings.runtime.tasks.lastFailedAt'), value: formatTaskTime(task.last_failed_at) })
   if (task.completed_at) refs.push({ key: 'completed', label: t('system.globalSettings.runtime.tasks.completedAt'), value: formatTaskTime(task.completed_at) })
   if (task.deadline) refs.push({ key: 'deadline', label: t('system.globalSettings.runtime.tasks.deadline'), value: formatTaskTime(task.deadline) })
-  if (task.worker) refs.push({ key: 'worker', label: t('system.globalSettings.runtime.tasks.worker'), value: task.worker })
+  if (task.worker) refs.push({ key: 'worker', label: t('system.globalSettings.runtime.tasks.worker'), value: poolLabel(task.worker) })
   if (task.is_orphaned) refs.push({ key: 'orphaned', label: t('system.globalSettings.runtime.tasks.health'), value: t('system.globalSettings.runtime.tasks.orphaned') })
   return refs
 }
@@ -894,7 +923,17 @@ async function purgeArchivedTasks() {
 async function load(showSpinner: boolean) {
   if (showSpinner) loading.value = true
   try {
+    const connection = await getQueueConnectionStatus()
+    queueConnection.value = connection
+    if (connection?.state === 'reconnecting') {
+      available.value = false
+      loadedOnce.value = true
+      error.value = ''
+      return
+    }
+    loadChatGPTStatus()
     const resp = await getRuntimeQueues()
+    queueConnection.value = resp.queue_connection
     available.value = resp.available
     pools.value = resp.pools || []
     queues.value = resp.queues || []
@@ -960,6 +999,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  chatgptRequestVersion++
   stopPolling()
   detachTasksScrollObserver()
 })

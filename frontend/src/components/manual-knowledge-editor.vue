@@ -8,9 +8,8 @@ import { marked } from 'marked'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useUIStore } from '@/stores/ui'
 import {
-  listKnowledgeBases,
   getKnowledgeDetails,
-  getKnowledgeBaseById,
+  getKnowledgeBase,
   previewKnowledgeFile,
   createManualKnowledge,
   updateManualKnowledge,
@@ -20,10 +19,6 @@ import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess'
 import { sanitizeHTML, safeMarkdownToHTML } from '@/utils/security'
 import { useI18n } from 'vue-i18n'
 
-interface KnowledgeBaseOption {
-  label: string
-  value: string
-}
 
 interface KnowledgeDetailResponse {
   id: string
@@ -32,7 +27,6 @@ interface KnowledgeDetailResponse {
   file_name?: string
   metadata?: any
   parse_status?: string
-  tags?: Array<{ id: string }>
 }
 
 type ManualStatus = 'draft' | 'publish'
@@ -72,7 +66,6 @@ const visible = computed({
 const mode = computed(() => uiStore.manualEditorMode)
 const knowledgeId = computed(() => uiStore.manualEditorKnowledgeId)
 const currentKnowledgeId = ref<string | null>(null)
-const manualTagIds = ref<string[]>([])
 const manualSourceInfo = ref<IntakeSourceInfo>({})
 
 const form = reactive({
@@ -88,8 +81,6 @@ const viewDuplicate = async (duplicate: DuplicateNotice) => {
 }
 
 const initialLoaded = ref(false)
-const kbOptions = ref<KnowledgeBaseOption[]>([])
-const kbLoading = ref(false)
 const contentLoading = ref(false)
 const saving = ref(false)
 const savingAction = ref<ManualStatus>('draft')
@@ -429,7 +420,6 @@ const previewHTML = computed(() => {
   return sanitizeHTML(html)
 })
 
-const kbDisabled = computed(() => mode.value === 'edit' && !!form.kbId)
 
 const dialogTitle = computed(() =>
   mode.value === 'edit' ? t('manualEditor.title.edit') : t('manualEditor.title.create'),
@@ -439,41 +429,9 @@ const lastUpdatedText = computed(() =>
   lastUpdatedAt.value ? t('manualEditor.status.lastUpdated', { time: lastUpdatedAt.value }) : '',
 )
 
-const loadKnowledgeBases = async () => {
-  kbLoading.value = true
-  try {
-    const ownRes: any = await listKnowledgeBases()
-
-    const isDocumentKb = (type?: string) => !type || type === 'document'
-
-    const ownKbs = Array.isArray(ownRes?.data) ? ownRes.data : []
-    const list: KnowledgeBaseOption[] = ownKbs
-      .filter((item: any) => isDocumentKb(item.type))
-      .map((item: any) => ({ label: item.name, value: item.id }))
-
-    kbOptions.value = list
-
-    if (mode.value === 'create') {
-      const presetKbId = uiStore.manualEditorKBId
-      if (presetKbId) {
-        const exists = list.find((item) => item.value === presetKbId)
-        if (!exists) {
-          kbOptions.value.unshift({
-            label: t('manualEditor.labels.currentKnowledgeBase'),
-            value: presetKbId,
-          })
-        }
-        form.kbId = presetKbId
-      } else {
-        form.kbId = list[0]?.value ?? ''
-      }
-    }
-  } catch (error) {
-    console.error('[ManualEditor] Failed to load knowledge base list:', error)
-    kbOptions.value = []
-  } finally {
-    kbLoading.value = false
-  }
+const loadKnowledgeBase = async () => {
+  try { const response: any = await getKnowledgeBase(); form.kbId = response?.data?.id || '' }
+  catch (error) { console.error('[ManualEditor] Failed to load knowledge base:', error) }
 }
 
 const parseManualMetadata = (
@@ -529,17 +487,11 @@ const loadKnowledgeContent = async () => {
       form.content = await (await previewKnowledgeFile(currentKnowledgeId.value)).text()
     }
     form.status = resolveManualKnowledgeStatus(meta?.status, data.parse_status)
-    manualTagIds.value = (data.tags || []).map(tag => String(tag.id))
     if (meta?.updatedAt) {
       lastUpdatedAt.value = meta.updatedAt
     }
 
-    if (form.kbId && !kbOptions.value.find((item) => item.value === form.kbId)) {
-      kbOptions.value.unshift({
-        label: t('manualEditor.labels.currentKnowledgeBase'),
-        value: form.kbId,
-      })
-    }
+
   } catch (error) {
     console.error('[ManualEditor] Failed to load manual knowledge:', error)
     MessagePlugin.error(t('manualEditor.error.fetchDetailFailed'))
@@ -558,7 +510,6 @@ const resetForm = () => {
   activeTab.value = 'edit'
   lastUpdatedAt.value = ''
   initialLoaded.value = false
-  manualTagIds.value = mode.value === 'create' ? [...uiStore.selectedTagIds] : []
   manualSourceInfo.value = {}
   selectionRange.start = 0
   selectionRange.end = 0
@@ -573,7 +524,7 @@ const generateDefaultTitle = () => {
 
 const initialize = async () => {
   resetForm()
-  await loadKnowledgeBases()
+  await loadKnowledgeBase()
 
   if (mode.value === 'edit') {
     await loadKnowledgeContent()
@@ -581,8 +532,6 @@ const initialize = async () => {
     const presetKbId = uiStore.manualEditorKBId
     if (presetKbId) {
       form.kbId = presetKbId
-    } else if (!form.kbId && kbOptions.value.length) {
-      form.kbId = kbOptions.value[0].value
     }
     form.title = form.title || generateDefaultTitle()
     form.content = form.content || ''
@@ -593,7 +542,7 @@ const initialize = async () => {
 
 const validateForm = (targetStatus: ManualStatus): boolean => {
   if (!form.kbId) {
-    MessagePlugin.warning(t('manualEditor.warning.selectKnowledgeBase'))
+    MessagePlugin.warning(t('manualEditor.warning.knowledgeUnavailable'))
     return false
   }
   if (!form.title || !form.title.trim()) {
@@ -622,7 +571,6 @@ const handleSave = async (targetStatus: ManualStatus) => {
       title: string
       content: string
       status: string
-      tag_ids?: string[]
       process_config?: KnowledgeProcessOverrides
       source_info?: IntakeSourceInfo
     } = {
@@ -631,12 +579,11 @@ const handleSave = async (targetStatus: ManualStatus) => {
       status: targetStatus,
       source_info: { ...manualSourceInfo.value },
     }
-    payload.tag_ids = [...manualTagIds.value]
 
     if (targetStatus === 'publish') {
       let kbInfo: any
       try {
-        const kbRes: any = await getKnowledgeBaseById(form.kbId)
+        const kbRes: any = await getKnowledgeBase()
         kbInfo = kbRes?.data
       } catch {
         MessagePlugin.error(t('manualEditor.error.fetchDetailFailed'))
@@ -655,13 +602,10 @@ const handleSave = async (targetStatus: ManualStatus) => {
             knowledgeId: currentKnowledgeId.value || undefined,
             title: payload.title,
             content: payload.content,
-            tagIds: [...manualTagIds.value],
             sourceInfo: { ...manualSourceInfo.value },
           },
         })
         payload.process_config = confirmResult.processConfig
-        manualTagIds.value = [...(confirmResult.tagIds || [])]
-        payload.tag_ids = [...manualTagIds.value]
         payload.source_info = confirmResult.manual?.sourceInfo
         manualSourceInfo.value = { ...(payload.source_info || {}) }
       } catch {
@@ -816,22 +760,9 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="form-item">
-          <label class="form-label required">{{ $t('manualEditor.form.knowledgeBaseLabel') }}</label>
+
           <div class="kb-row">
-            <t-select
-              v-model="form.kbId"
-              :disabled="kbDisabled"
-              :loading="kbLoading"
-              :options="kbOptions"
-              :placeholder="$t('manualEditor.form.knowledgeBasePlaceholder')"
-              :popup-props="{ attach: 'body', zIndex: 2600 }"
-            >
-              <template #empty>
-                <div style="padding: 20px; text-align: center; color: var(--td-text-color-placeholder);">
-                  {{ $t('manualEditor.noDocumentKnowledgeBases') }}
-                </div>
-              </template>
-            </t-select>
+
             <div class="status-row" v-if="mode === 'edit'">
               <t-tag size="small" theme="warning" variant="light" v-if="form.status === 'draft'">
                 {{ $t('manualEditor.status.draftTag') }}

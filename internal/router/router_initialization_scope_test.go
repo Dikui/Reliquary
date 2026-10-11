@@ -67,7 +67,7 @@ func tenantKBLookupFixture() *stubInitializationKBLookup {
 	}
 }
 
-func TestInitializationConfigRouteDenyCrossTenantKB(t *testing.T) {
+func TestRemovedInitializationConfigRouteReturns404(t *testing.T) {
 	kbLookup := &stubInitializationKBLookup{
 		kbs: map[string]*types.KnowledgeBase{
 			"kb-victim": {ID: "kb-victim", TenantID: 999},
@@ -78,5 +78,5 @@ func TestInitializationConfigRouteDenyCrossTenantKB(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/initialization/config/kb-victim", nil)
 	engine.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusForbidden, rec.Code, "body=%s", rec.Body.String())
+	require.Equal(t, http.StatusNotFound, rec.Code, "body=%s", rec.Body.String())
 }

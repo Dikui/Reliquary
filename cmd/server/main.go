@@ -49,7 +49,6 @@ func main() {
 		cfg *config.Config,
 		router *gin.Engine,
 		resourceCleaner interfaces.ResourceCleaner,
-		systemSettingSvc interfaces.SystemSettingService,
 	) error {
 		// Create HTTP server
 		server := &http.Server{
@@ -63,13 +62,6 @@ func main() {
 		}
 
 		ctx, done := context.WithCancel(context.Background())
-
-		// Start the system_settings pubsub subscriber. Runs in its own
-		// goroutine and exits when ctx is cancelled at shutdown. Best-
-		// effort: a subscription error is logged without blocking HTTP startup.
-		if err := systemSettingSvc.SubscribeRedis(ctx); err != nil {
-			logger.Warnf(ctx, "[system_settings] subscribe failed: %v", err)
-		}
 
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, shutdownSignals...)

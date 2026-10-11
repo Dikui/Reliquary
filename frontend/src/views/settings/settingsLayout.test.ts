@@ -31,7 +31,7 @@ test('settings shell names the usable content container and preserves wide deskt
 
 for (const [file, wideMinimum] of [
   ['GeneralSettings.vue', '280px'], ['UserProfile.vue', '280px'],
-  ['ChatHistorySettings.vue', '280px'], ['OllamaSettings.vue', '360px'],
+  ['OllamaSettings.vue', '360px'],
   ['SystemInfo.vue', '280px'], ['TenantInfo.vue', '0'],
 ] as const) {
   test(`${file}: narrow content stacks labels and allows controls to shrink`, async () => {
@@ -77,34 +77,23 @@ test('narrow font choices, information values and password popup preserve readab
     assert.equal(style['box-sizing'], 'border-box')
     assert.equal(styleDeclarationsAtWidth(profile, '.password-popup-footer', viewport)['flex-wrap'], 'wrap')
   }
-  const history = readFileSync(new URL('./ChatHistorySettings.vue', import.meta.url), 'utf8')
-  assert.doesNotMatch(history, /class="setting-control"\s+style="min-width:/)
 })
 
-test('narrow domain lists own table overflow while template and model tier forms keep their natural height', async () => {
-  const domain = await compiledSFCStyleRules(new URL('./DomainSettings.vue', import.meta.url))
-  const template = await compiledSFCStyleRules(new URL('./DomainTemplateEditor.vue', import.meta.url))
-  const field = await compiledSFCStyleRules(new URL('./DomainFieldEditor.vue', import.meta.url))
+test('narrow model tier forms keep their natural height', async () => {
   const tiers = await compiledSFCStyleRules(new URL('../../components/ModelTierEditor.vue', import.meta.url))
   for (const { viewport, inner } of scenarios.filter(item => item.stacked)) {
     const container = { 'settings-content': inner }
-    assert.equal(styleDeclarationsAtWidth(domain, '.t-table__content', viewport, container)['overflow-x'], 'auto')
-    assert.equal(styleDeclarationsAtWidth(domain, '.t-table__content > table', viewport, container)['min-width'], '640px')
-    for (const selector of ['.entry-grid', '.unit-entry']) {
-      assert.equal(styleDeclarationsAtWidth(template, selector, viewport, container)['grid-template-columns'], 'minmax(0, 1fr)')
-    }
-    assert.equal(styleDeclarationsAtWidth(field, '.domain-field-grid', viewport, container)['grid-template-columns'], 'minmax(0, 1fr)')
     assert.equal(styleDeclarationsAtWidth(tiers, '.model-tier-row', viewport, container)['grid-template-columns'], 'minmax(0, 1fr)')
   }
-  for (const rules of [domain, template, field, tiers]) {
+  for (const rules of [tiers]) {
     assert.ok(!rules.some(rule => rule.containers.length && ['height', 'max-height', 'overflow-y'].some(property => property in rule.declarations)))
   }
   assert.equal(styleDeclarationsAtWidth(tiers, '.model-tier-row', 1440)['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 3fr)')
 })
 
-test('model, parser and MCP grids can shrink below their preferred card width', async () => {
+test('model and parser grids can shrink below their preferred card width', async () => {
   for (const [file, selector] of [
-    ['ModelSettings.vue', '.model-grid'], ['ParserEngineSettings.vue', '.engine-cards'], ['McpSettings.vue', '.services-grid'],
+    ['ModelSettings.vue', '.model-grid'], ['ParserEngineSettings.vue', '.engine-cards'],
   ]) {
     const rules = await compiledSFCStyleRules(new URL(`./${file}`, import.meta.url))
     assert.equal(styleDeclarationsAtWidth(rules, selector, 1440)['grid-template-columns'], 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))')

@@ -1,66 +1,7 @@
-import { get, post, put } from '../../utils/request';
+import { get, post } from '../../utils/request';
 import i18n from '@/i18n'
 
 const t = (key: string) => i18n.global.t(key)
-
-// GET /initialization/config/:kbId exposes credential presence, not values.
-export interface ModelCredentialStatus {
-    apiKey?: boolean;
-}
-
-// 初始化配置数据类型
-export interface InitializationConfig {
-    llm: {
-        source: string;
-        modelName: string;
-        baseUrl?: string;
-        /** @deprecated Use credentials.apiKey from GET responses */
-        apiKey?: string;
-        credentials?: ModelCredentialStatus;
-    };
-    embedding: {
-        source: string;
-        modelName: string;
-        baseUrl?: string;
-        /** @deprecated Use credentials.apiKey from GET responses */
-        apiKey?: string;
-        dimension?: number; // 添加embedding维度字段
-        credentials?: ModelCredentialStatus;
-    };
-    rerank: {
-        modelName: string;
-        baseUrl: string;
-        /** @deprecated Use credentials.apiKey from GET responses */
-        apiKey?: string;
-        enabled: boolean;
-        credentials?: ModelCredentialStatus;
-    };
-    multimodal: {
-        enabled: boolean;
-        vlm?: {
-            modelName: string;
-            baseUrl: string;
-            /** @deprecated Use credentials.apiKey from GET responses */
-            apiKey?: string;
-            interfaceType?: string; // "ollama" or "openai"
-            credentials?: ModelCredentialStatus;
-        };
-    };
-    documentSplitting: {
-        chunkSize: number;
-        chunkOverlap: number;
-        separators: string[];
-        // Adaptive chunking strategy. Empty / "legacy" = classic recursive splitter.
-        // "auto" lets the backend profiler pick a tier; "heading" / "heuristic"
-        // pin the tier explicitly. See backend chunker package for details.
-        strategy?: string;
-        // Cap chunk size in approx tokens. 0 = char-based budget only.
-        tokenLimit?: number;
-        // Language hints for heuristic patterns ("de", "en", "zh"). Empty = auto-detect.
-        languages?: string[];
-    };
-    // Frontend-only hint for storage selection UI
-}
 
 // 下载任务状态类型
 export interface DownloadTask {
@@ -71,81 +12,6 @@ export interface DownloadTask {
     message: string;
     startTime: string;
     endTime?: string;
-}
-
-// 简化版知识库配置更新接口（只传模型ID）
-export interface KBModelConfigRequest {
-    llmModelId: string
-    embeddingModelId: string
-    vlm_config?: {
-        enabled: boolean
-        model_id?: string
-        description_language?: string
-        custom_instructions?: string
-    }
-    documentSplitting: {
-        chunkSize: number
-        chunkOverlap: number
-        separators: string[]
-        parserEngineRules?: {
-            file_types: string[]
-            engine: string
-        }[]
-        enableParentChild?: boolean
-        parentChunkSize?: number
-        childChunkSize?: number
-        // Adaptive chunking strategy ("auto" | "heading" | "heuristic" | "legacy").
-        // The backend uses pointer-based DTOs for these three fields:
-        // - undefined / not set in payload → no change on server
-        // - "" / 0 / [] explicitly sent     → clears the value
-        // Send the field whenever the user has opened the editor — even
-        // empty values — so the user can always reset back to defaults.
-        strategy?: string
-        // Approximate token budget per chunk; 0 = char-based.
-        tokenLimit?: number
-        // Language hints for heuristic patterns. Empty array = auto-detect.
-        languages?: string[]
-        tableMetadataInstructions?: string
-    }
-    multimodal: {
-        enabled: boolean
-    }
-    questionGeneration?: {
-        enabled: boolean
-        questionCount: number
-        customInstructions?: string
-    }
-}
-
-export function updateKBConfig(kbId: string, config: KBModelConfigRequest): Promise<any> {
-    return new Promise((resolve, reject) => {
-        console.log('Starting KB config update (simplified)...', kbId, config);
-        put(`/api/v1/initialization/config/${kbId}`, config)
-            .then((response: any) => {
-                console.log('KB config update completed', response);
-                resolve(response);
-            })
-            .catch((error: any) => {
-                console.error('Failed to update KB config:', error);
-                reject(error);
-            });
-    });
-}
-
-// 根据知识库ID执行配置更新（旧版，保留兼容性）
-export function initializeSystemByKB(kbId: string, config: InitializationConfig): Promise<any> {
-    return new Promise((resolve, reject) => {
-        console.log('Starting KB config update...', kbId, config);
-        post(`/api/v1/initialization/initialize/${kbId}`, config)
-            .then((response: any) => {
-                console.log('KB config update completed', response);
-                resolve(response);
-            })
-            .catch((error: any) => {
-                console.error('Failed to update KB config:', error);
-                reject(error);
-            });
-    });
 }
 
 // 检查Ollama服务状态
@@ -240,19 +106,6 @@ export function listDownloadTasks(): Promise<DownloadTask[]> {
     });
 }
 
-export function getCurrentConfigByKB(kbId: string): Promise<InitializationConfig & { hasFiles: boolean }> {
-    return new Promise((resolve, reject) => {
-        get(`/api/v1/initialization/config/${kbId}`)
-            .then((response: any) => {
-                resolve(response.data || {});
-            })
-            .catch((error: any) => {
-                console.error('Failed to get KB config:', error);
-                reject(error);
-            });
-    });
-}
-
 // 所有"测试连接"接口共用的通用可选参数。
 // customHeaders / extraConfig / interfaceType 对应后端 ModelTestRequest 里的同名字段，
 // 会被透传给真正的模型装配流程，保证测试连接与生产调用走完全相同的路径。
@@ -295,6 +148,8 @@ export function testEmbeddingModel(modelConfig: {
     apiKey?: string;
     dimension?: number;
     supportsDimensionOverride?: boolean;
+    supportsImages?: boolean;
+    multimodalFormat?: 'jina' | '';
     provider?: string;
     modelId?: string;
 } & BaseModelTestPayload): Promise<{ available: boolean; message?: string; dimension?: number }> {
@@ -332,66 +187,6 @@ export function checkRerankModel(modelConfig: {
     });
 }
 
-export function testMultimodalFunction(testData: {
-    image: File;
-    vlm_model: string;
-    vlm_base_url: string;
-    vlm_api_key?: string;
-    vlm_interface_type?: string;
-    chunk_size: number;
-    chunk_overlap: number;
-    separators: string[];
-}): Promise<{
-    success: boolean;
-    caption?: string;
-    ocr?: string;
-    processing_time?: number;
-    message?: string;
-}> {
-    return new Promise((resolve, reject) => {
-        const formData = new FormData();
-        formData.append('image', testData.image);
-        formData.append('vlm_model', testData.vlm_model);
-        formData.append('vlm_base_url', testData.vlm_base_url);
-        if (testData.vlm_api_key) {
-            formData.append('vlm_api_key', testData.vlm_api_key);
-        }
-        if (testData.vlm_interface_type) {
-            formData.append('vlm_interface_type', testData.vlm_interface_type);
-        }
-        formData.append('chunk_size', testData.chunk_size.toString());
-        formData.append('chunk_overlap', testData.chunk_overlap.toString());
-        formData.append('separators', JSON.stringify(testData.separators));
-
-        // 获取鉴权Token
-        const token = localStorage.getItem('reliquary_token');
-        const headers: Record<string, string> = {};
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
-
-        // 使用原生fetch因为需要发送FormData
-        fetch('/api/v1/initialization/multimodal/test', {
-            method: 'POST',
-            headers,
-            body: formData
-        })
-            .then(response => response.json())
-            .then((data: any) => {
-                if (data.success) {
-                    resolve(data.data || {});
-                } else {
-                    resolve({ success: false, message: data.message || t('error.initialization.testFailed') });
-                }
-            })
-            .catch((error: any) => {
-                console.error('Failed multimodal test:', error);
-                reject(error);
-            });
-    });
-}
-
 export interface FabriTextRequest {
     tags: string[];
     model_id: string;
@@ -410,27 +205,6 @@ export function fabriText(request: FabriTextRequest): Promise<FabriTextResponse>
             })
             .catch((error: any) => {
                 console.error('Failed to generate text:', error);
-                reject(error);
-            });
-    });
-}
-
-export interface FabriTagRequest {
-}
-
-export interface FabriTagResponse {
-    tags: string[];
-}
-
-// 标签生成
-export function fabriTag(request: FabriTagRequest): Promise<FabriTagResponse> {
-    return new Promise((resolve, reject) => {
-        post('/api/v1/initialization/extract/fabri-tag', request)
-            .then((response: any) => {
-                resolve(response.data || { tags: [] as string[] });
-            })
-            .catch((error: any) => {
-                console.error('Failed to generate tags:', error);
                 reject(error);
             });
     });

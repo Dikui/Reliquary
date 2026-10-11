@@ -94,7 +94,7 @@ build-anydoc: anydoc-lib
 
 # Run the application
 run: build
-	SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
+	VAULT_ROOT="$${VAULT_ROOT:-$(CURDIR)/.local-data/vault}" SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
 
 reset-password:
 	go run ./cmd/server reset-password
@@ -245,6 +245,8 @@ build-prod:
 	LDFLAGS="-X 'reliquary/internal/handler.Version=$$VERSION' -X 'reliquary/internal/handler.Edition=standard' -X 'reliquary/internal/handler.CommitID=$$COMMIT_ID' -X 'reliquary/internal/handler.BuildTime=$$BUILD_TIME' -X 'reliquary/internal/handler.GoVersion=$$GO_VERSION'"; \
 	go build -tags "$(GO_BUILD_TAGS)" -ldflags="-w -s $$LDFLAGS" -o $(BINARY_NAME) $(MAIN_PATH)
 
+
+# Fetch the spatial extension used to inspect Excel files during intake.
 download_spatial:
 	go run cmd/download/duckdb/duckdb.go
 
@@ -252,9 +254,6 @@ clean-db:
 	@echo "Cleaning database..."
 	@if [ $$(docker volume ls -q -f name=reliquary_postgres-data) ]; then \
 		docker volume rm reliquary_postgres-data; \
-	fi
-	@if [ $$(docker volume ls -q -f name=reliquary_redis_data) ]; then \
-		docker volume rm reliquary_redis_data; \
 	fi
 
 # Environment check

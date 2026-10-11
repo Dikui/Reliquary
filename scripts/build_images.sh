@@ -145,7 +145,8 @@ build_app_image() {
         --build-arg GO_VERSION_ARG="$GO_VERSION" \
         --build-arg WITH_ANYDOC=${WITH_ANYDOC:-1} \
         -f docker/Dockerfile.app \
-        -t reliquary-app:latest \
+        -t "reliquary-app:$VERSION" \
+        -t "reliquary-app:$COMMIT_ID" \
         .
     
     if [ $? -eq 0 ]; then
@@ -172,7 +173,8 @@ build_frontend_image() {
     docker build \
         --platform $PLATFORM \
         -f frontend/Dockerfile \
-        -t reliquary-ui:latest \
+        -t "reliquary-ui:$VERSION" \
+        -t "reliquary-ui:$COMMIT_ID" \
         frontend/
     
     if [ $? -eq 0 ]; then

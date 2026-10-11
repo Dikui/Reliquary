@@ -213,6 +213,10 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	accessToken, newRefreshToken, err := h.userService.RefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to refresh token: %v", err)
+		if appErr, ok := errors.IsAppError(err); ok && appErr.HTTPCode == http.StatusServiceUnavailable {
+			c.Error(appErr)
+			return
+		}
 		appErr := errors.NewUnauthorizedError("Token refresh failed").WithDetails(err.Error())
 		c.Error(appErr)
 		return
@@ -375,6 +379,10 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	user, _, err := h.userService.ValidateToken(ctx, token)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to validate token: %v", err)
+		if appErr, ok := errors.IsAppError(err); ok && appErr.HTTPCode == http.StatusServiceUnavailable {
+			c.Error(appErr)
+			return
+		}
 		appErr := errors.NewUnauthorizedError("Token validation failed").WithDetails(err.Error())
 		c.Error(appErr)
 		return

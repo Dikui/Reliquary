@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/models/embedding"
@@ -118,7 +118,7 @@ func (parentChildTenantRepo) AdjustStorageUsed(context.Context, uint64, int64) e
 
 type parentChildTaskEnqueuer struct{}
 
-func (parentChildTaskEnqueuer) Enqueue(*asynq.Task, ...asynq.Option) (*asynq.TaskInfo, error) {
+func (parentChildTaskEnqueuer) Enqueue(*taskqueue.Task, ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	return nil, nil
 }
 

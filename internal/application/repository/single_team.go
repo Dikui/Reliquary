@@ -29,6 +29,10 @@ func (r *userRepository) RegisterSingleUser(ctx context.Context, user *types.Use
 			return ErrRegistrationClosed
 		}
 		user.TenantID = types.SingleTenantID
-		return tx.Create(user).Error
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+		_, err := EnsureTenantKnowledgeBase(ctx, tx, user.TenantID, user.ID)
+		return err
 	})
 }

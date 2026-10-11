@@ -89,12 +89,22 @@ export default defineConfig({
     host: true,
     // 代理配置，用于开发环境
     proxy: {
+      '/health': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
       },
       '/files': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/mcp': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
@@ -108,12 +118,22 @@ export default defineConfig({
     port: 4173,
     host: true,
     proxy: {
+      '/health': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
       },
       '/files': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/mcp': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,

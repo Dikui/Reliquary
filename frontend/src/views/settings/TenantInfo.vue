@@ -44,7 +44,7 @@
             <!-- 只读态：显示名称 + 编辑按钮（登录后可编辑）。
                原地编辑取代弹窗：少一层视觉打断，与其它行的展示节奏一致。 -->
             <template v-if="!editing">
-              <span class="info-value">{{ tenantInfo?.name || '-' }}</span>
+              <span class="info-value">{{ displayName || '-' }}</span>
               <t-button theme="default" variant="text" shape="square" size="small"
                 class="edit-btn" :title="$t('tenant.details.editName')" :aria-label="$t('tenant.details.editName')"
                 @click="startEditName">
@@ -79,7 +79,7 @@
                与名称同款"原地编辑"模式，少一层弹窗打断。 -->
             <template v-if="!editingDescription">
               <span class="info-value description-value" :class="{ 'is-empty': !tenantInfo?.description }">
-                {{ tenantInfo?.description || $t('tenant.details.descriptionEmptyPlaceholder') }}
+                {{ displayDescription || $t('tenant.details.descriptionEmptyPlaceholder') }}
               </span>
               <t-button theme="default" variant="text" shape="square" size="small"
                 class="edit-btn" :title="$t('tenant.details.editDescription')"
@@ -156,15 +156,9 @@
           </div>
         </div>
 
-
       </div>
 
-
-
-
-
     </div>
-    <GlobalModelTierSettings ref="modelTierSettings" />
   </div>
 </template>
 
@@ -172,21 +166,21 @@
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import GlobalModelTierSettings from './GlobalModelTierSettings.vue'
 import { getTenantInfo, updateTenant as updateTenantApi, type TenantInfo } from '@/api/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
+import { workspaceName, workspaceDescription } from '@/utils/workspaceCopy'
 
-const modelTierSettings = ref<InstanceType<typeof GlobalModelTierSettings>>()
-defineExpose({ confirmLeave: () => modelTierSettings.value?.confirmLeave() ?? Promise.resolve(true) })
+defineExpose({ confirmLeave: () => Promise.resolve(true) })
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 
 // Reactive state
 const tenantInfo = ref<TenantInfo | null>(null)
+const displayName = computed(() => workspaceName(tenantInfo.value?.name, t))
+const displayDescription = computed(() => workspaceDescription(tenantInfo.value?.description, t))
 const loading = ref(true)
 const error = ref('')
-
 
 // 原地编辑空间名称：editing 控制行内只读 / 编辑两种形态切换。
 // 不沿用 dialog 是因为这里只有一个字段，弹窗反而打断了配置浏览节奏。
@@ -198,11 +192,11 @@ const editNameTrimmed = computed(() => editName.value.trim())
 // 后端 name 字段没有 uniqueIndex 也没有重名校验，所以这里不做"是否已存在"的判断；
 // 后端 service 也只在 create 时拒空，update 时不校验，保持前端兜底非空即可。
 const canSubmit = computed(
-  () => !saving.value && !!editNameTrimmed.value && editNameTrimmed.value !== tenantInfo.value?.name,
+  () => !saving.value && !!editNameTrimmed.value && editNameTrimmed.value !== displayName.value,
 )
 
 const startEditName = () => {
-  editName.value = tenantInfo.value?.name || ''
+  editName.value = displayName.value
   editing.value = true
 }
 
@@ -226,11 +220,11 @@ const editDescription = ref('')
 const savingDescription = ref(false)
 const editDescriptionTrimmed = computed(() => editDescription.value.trim())
 const canSubmitDescription = computed(
-  () => !savingDescription.value && editDescriptionTrimmed.value !== (tenantInfo.value?.description || ''),
+  () => !savingDescription.value && editDescriptionTrimmed.value !== displayDescription.value,
 )
 
 const startEditDescription = () => {
-  editDescription.value = tenantInfo.value?.description || ''
+  editDescription.value = displayDescription.value
   editingDescription.value = true
 }
 
@@ -257,7 +251,7 @@ const onEditDescriptionKeydown = (_value: any, ctx: { e: KeyboardEvent }) => {
 const saveTenantDescription = async () => {
   if (!tenantInfo.value?.id) return
   const newDesc = editDescriptionTrimmed.value
-  if (newDesc === (tenantInfo.value.description || '')) {
+  if (newDesc === displayDescription.value) {
     editingDescription.value = false
     return
   }
@@ -289,7 +283,7 @@ const saveTenantName = async () => {
     return
   }
   if (!tenantInfo.value?.id) return
-  if (newName === tenantInfo.value.name) {
+  if (newName === displayName.value) {
     editing.value = false
     return
   }
@@ -391,7 +385,6 @@ const formatBytes = (bytes: number) => {
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
-
 
 // Lifecycle
 onMounted(() => {

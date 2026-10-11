@@ -16,6 +16,8 @@ type capturingEmbedder struct {
 	batchTexts []string
 }
 
+func (e *capturingEmbedder) GetModelID() string { return "capturing-model" }
+
 func (e *capturingEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	e.text = text
 	return []float32{1}, nil

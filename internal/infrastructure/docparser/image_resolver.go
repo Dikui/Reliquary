@@ -634,12 +634,6 @@ func UnwrapLinkedImages(markdown string) string {
 	return reLinkedImage.ReplaceAllString(markdown, "![$1]($2)")
 }
 
-// imgMarkdownPattern matches Markdown image syntax: ![alt](url).
-// The alt-text group uses .*? (non-greedy) to allow literal ] in alt text.
-// The URL group supports one level of balanced parentheses so that URLs
-// like https://example.com/item_(abc)/123 are captured in full.
-var imgMarkdownPattern = regexp.MustCompile(`!\[(.*?)\]\(([^()\s]*(?:\([^)]*\)[^()\s]*)*)\)`)
-
 // imgMarkdownDataURI matches markdown images whose URL is a data:image/*;base64,...
 // payload. (?i) applies to the whole parenthesized data URI.
 // The alt-text group uses .*? (non-greedy) to allow literal ] inside alt text
@@ -811,6 +805,12 @@ type remotePassSpec struct {
 	SrcOf    func(string) string
 }
 
+type remoteImageTarget struct {
+	start int
+	end   int
+	url   string
+}
+
 // resolveRemoteImagePass rewrites every remote http(s) reference matched by
 // spec.Pattern, replacing the span of its URL capture group with the URL the
 // image will be served from: the storage URL, or the normalized original for a
@@ -825,34 +825,45 @@ func resolveRemoteImagePass(
 	tenantID uint64,
 ) (string, []StoredImage, error) {
 	matches := spec.Pattern.FindAllStringSubmatchIndex(markdown, -1)
-	if len(matches) == 0 {
-		return markdown, nil, nil
+	targets := make([]remoteImageTarget, 0, len(matches))
+	for _, match := range matches {
+		start, end := match[2*spec.URLGroup], match[2*spec.URLGroup+1]
+		if start >= 0 {
+			targets = append(targets, remoteImageTarget{start: start, end: end, url: spec.SrcOf(markdown[start:end])})
+		}
 	}
+	return resolveRemoteImageTargets(ctx, markdown, targets, spec.Syntax, client, fileSvc, tenantID)
+}
+
+func resolveRemoteImageTargets(
+	ctx context.Context,
+	markdown string,
+	targets []remoteImageTarget,
+	syntax string,
+	client func() *http.Client,
+	fileSvc interfaces.FileService,
+	tenantID uint64,
+) (string, []StoredImage, error) {
 
 	var (
 		images []StoredImage
 		err    error
 	)
 
-	for i := len(matches) - 1; i >= 0; i-- {
-		m := matches[i]
-		start, end := m[2*spec.URLGroup], m[2*spec.URLGroup+1]
-		if start < 0 {
-			continue
-		}
-		imgURL := spec.SrcOf(markdown[start:end])
+	for i := len(targets) - 1; i >= 0; i-- {
+		start, end, imgURL := targets[i].start, targets[i].end, targets[i].url
 		if !isRemoteHTTPURL(imgURL) {
 			continue
 		}
 
 		if ctx.Err() != nil {
-			err = errors.Join(err, fmt.Errorf("resolve %s remote images: %w", spec.Syntax, ctx.Err()))
+			err = errors.Join(err, fmt.Errorf("resolve %s remote images: %w", syntax, ctx.Err()))
 			break
 		}
 
 		res, fetchErr := fetchAndStoreRemoteImage(ctx, client(), fileSvc, tenantID, imgURL)
 		if fetchErr != nil {
-			err = errors.Join(err, fmt.Errorf("resolve %s image %q: %w", spec.Syntax, imgURL, fetchErr))
+			err = errors.Join(err, fmt.Errorf("resolve %s image %q: %w", syntax, imgURL, fetchErr))
 			continue
 		}
 		// A whitelisted host is served from where it already lives, so the
@@ -896,11 +907,6 @@ func htmlAttrSrc(raw string) string {
 	return src
 }
 
-// markdownSrc hands a Markdown image target through untouched. Markdown has no
-// attribute quoting or entity encoding to undo, and leaving it alone is what
-// keeps existing documents resolving exactly what they resolve today.
-func markdownSrc(raw string) string { return raw }
-
 // ResolveRemoteImages downloads remote http(s) images into storage and points
 // the document at the stored copies. Both Markdown image syntax and HTML <img>
 // tags with a quoted src are covered.
@@ -925,15 +931,16 @@ func (r *ImageResolver) ResolveRemoteImages(
 		return httpClient
 	}
 
-	// Scan Markdown and HTML references separately so each syntax keeps its
-	// existing URL normalization rules.
-	markdown, mdImages, markdownErr := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
-		Pattern: imgMarkdownPattern,
-		// Group 2 of imgMarkdownPattern is the target; group 1 is the alt text.
-		URLGroup: 2,
-		Syntax:   "markdown",
-		SrcOf:    markdownSrc,
-	}, client, fileSvc, tenantID)
+	// Replace only Markdown destinations, preserving titles and angle brackets.
+	// The HTML pass continues to apply its attribute normalization rules.
+	markdownTargets := []remoteImageTarget{}
+	for _, span := range scanMarkdownImageTargets(markdown) {
+		path, start, end, ok := splitMarkdownImageTarget(markdown[span.TargetStart:span.TargetEnd], nil)
+		if ok {
+			markdownTargets = append(markdownTargets, remoteImageTarget{start: span.TargetStart + start, end: span.TargetStart + end, url: path})
+		}
+	}
+	markdown, mdImages, markdownErr := resolveRemoteImageTargets(ctx, markdown, markdownTargets, "markdown", client, fileSvc, tenantID)
 
 	markdown, htmlImages, htmlErr := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
 		Pattern:  imgHTMLSrc,
@@ -951,19 +958,13 @@ func (r *ImageResolver) ResolveRemoteImages(
 // managed storage after resolution. It lets intake callers reject incomplete
 // content while legacy callers can retain their configured original URLs.
 func HasUnstoredImages(markdown string) bool {
-	for _, match := range scanMarkdownImageTargets(markdown) {
-		target := strings.TrimSpace(markdown[match.TargetStart:match.TargetEnd])
-		if strings.HasPrefix(target, "<") {
-			if end := strings.IndexByte(target, '>'); end > 0 {
-				target = target[1:end]
-			}
-		}
+	for _, ref := range MarkdownImageReferences(markdown) {
+		target := ref.URL
 		if target != "" && !isProviderScheme(target) && !strings.HasPrefix(target, "/files/") {
 			return true
 		}
 	}
 	for _, spec := range []remotePassSpec{
-		{Pattern: imgMarkdownPattern, URLGroup: 2, SrcOf: markdownSrc},
 		{Pattern: imgHTMLSrc, URLGroup: searchutil.HTMLImageSrcURLGroup, SrcOf: htmlAttrSrc},
 	} {
 		for _, m := range spec.Pattern.FindAllStringSubmatchIndex(markdown, -1) {

@@ -24,7 +24,7 @@ const THINKING_CONTROL_VALUES: ThinkingControlValue[] = [
 
 /**
  * Default thinking_control for provider+model.
- * Must stay aligned with chat.resolveProvider(...).Thinking() in provider.go.
+ * Must stay aligned with the model provider Thinking() in provider.go.
  */
 export function defaultThinkingControl(
   provider: string,

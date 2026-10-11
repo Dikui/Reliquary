@@ -23,38 +23,21 @@ type KnowledgeBase struct {
 	// Name of the knowledge base
 	Name string `yaml:"name"                    json:"name"`
 	Type string `yaml:"type"                    json:"type"                    gorm:"type:varchar(32);default:'document'"`
-	// Whether this knowledge base is temporary (ephemeral) and should be hidden from UI
-	IsTemporary bool `yaml:"is_temporary"            json:"is_temporary"            gorm:"default:false"`
 	// Description of the knowledge base
 	Description string `yaml:"description"             json:"description"`
 	// Workspace ID
 	TenantID uint64 `yaml:"tenant_id"               json:"tenant_id"`
-	// DomainID selects the editable template used for this knowledge base.
-	DomainID string `yaml:"domain_id" json:"domain_id" gorm:"type:varchar(36);not null"`
 	// CreatorID records the user who created this team knowledge base.
 	CreatorID string `yaml:"creator_id"              json:"creator_id"              gorm:"type:varchar(36);index"`
 	// Chunking configuration
 	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"         gorm:"type:json"`
-	// Image processing configuration
-	ImageProcessingConfig ImageProcessingConfig `yaml:"image_processing_config" json:"image_processing_config" gorm:"type:json"`
 	// ID of the embedding model
 	EmbeddingModelID string `yaml:"embedding_model_id"      json:"embedding_model_id"`
 	// Summary model ID
 	SummaryModelID string `yaml:"summary_model_id"        json:"summary_model_id"`
-	// VLM config
-	VLMConfig VLMConfig `yaml:"vlm_config"              json:"vlm_config"              gorm:"type:json"`
-	// Extract config
-	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
-	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
-	// AutoTagConfig controls asynchronous association of existing tags after parsing.
-	AutoTagConfig *AutoTagConfig `yaml:"auto_tag_config" json:"auto_tag_config" gorm:"type:json"`
 	// IndexingStrategy controls which indexing pipelines are active for this knowledge base.
 	// Pipelines: vector search and keyword search.
 	IndexingStrategy IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"       gorm:"column:indexing_strategy;type:json"`
-	// Pin state belongs to the personal space and is shared by all API callers.
-	IsPinned bool `yaml:"is_pinned" json:"is_pinned" gorm:"default:false"`
-	PinnedAt *time.Time `yaml:"pinned_at" json:"pinned_at"`
-
 	// Creation time of the knowledge base
 	CreatedAt time.Time `yaml:"created_at"              json:"created_at"`
 	// Last updated time of the knowledge base
@@ -68,92 +51,16 @@ type KnowledgeBase struct {
 	IsProcessing bool  `yaml:"is_processing"           json:"is_processing"           gorm:"-"`
 	// ProcessingCount indicates the number of knowledge items being processed (for document type knowledge bases)
 	ProcessingCount int64 `yaml:"processing_count"        json:"processing_count"        gorm:"-"`
-	// CreatorName 是 CreatorID 对应用户的展示名（username / email 等），
-	// 仅在列表场景由 handler 批量回填，不落库；为空表示创建者无法解析（用户已删除、
-	// CreatorID 为空的老数据等）。前端用它在卡片来源徽章上做 mine vs workspace 的二分。
-	CreatorName string `yaml:"-"                       json:"creator_name,omitempty"  gorm:"-"`
 }
 
 // KnowledgeBaseConfig represents the knowledge base configuration
 type KnowledgeBaseConfig struct {
 	ModelTiers *ModelTierConfig `json:"model_tiers,omitempty"`
 	// Chunking configuration
-	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"`
-	// Image processing configuration
-	ImageProcessingConfig ImageProcessingConfig `yaml:"image_processing_config" json:"image_processing_config"`
-	// AutoTagConfig controls optional automatic association of existing KB tags.
-	AutoTagConfig *AutoTagConfig `yaml:"auto_tag_config" json:"auto_tag_config"`
+	ChunkingConfig *ChunkingConfig `yaml:"chunking_config"         json:"chunking_config,omitempty"`
 	// IndexingStrategy controls which indexing pipelines are active.
 	// nil means "no change" when updating (preserves existing strategy).
 	IndexingStrategy *IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"`
-}
-
-const (
-	// DefaultAutoTagMaxTags is applied when max_tags is unset or non-positive.
-	DefaultAutoTagMaxTags = 3
-	// MaximumAutoTagMaxTags caps how many tags one document may auto-acquire.
-	MaximumAutoTagMaxTags = 10
-)
-
-// AutoTagConfig controls asynchronous document auto-tagging. It is deliberately
-// opt-in so upgrading an existing deployment does not add model calls or alter
-// document tags unexpectedly.
-type AutoTagConfig struct {
-	Enabled bool   `yaml:"enabled" json:"enabled"`
-	ModelID string `yaml:"model_id,omitempty" json:"model_id,omitempty"`
-	MaxTags int    `yaml:"max_tags,omitempty" json:"max_tags,omitempty"`
-	// Policy refines message classification while fixed tag kinds remain enforced by validation.
-	Policy string `yaml:"policy,omitempty" json:"policy,omitempty"`
-	// SkipIfTagged leaves documents that already carry tags untouched, so a
-	// deliberate manual classification is not diluted by model guesses. It is
-	// a pointer because the default is true: rows written before this field
-	// existed decode to nil and must not silently flip to "always append".
-	SkipIfTagged *bool `yaml:"skip_if_tagged,omitempty" json:"skip_if_tagged,omitempty"`
-}
-
-// ShouldSkipIfTagged reports whether documents with existing tags are left
-// alone. Defaults to true for nil receivers and unset values.
-func (c *AutoTagConfig) ShouldSkipIfTagged() bool {
-	if c == nil || c.SkipIfTagged == nil {
-		return true
-	}
-	return *c.SkipIfTagged
-}
-
-// Value serializes the automatic-tagging configuration for database storage.
-func (c AutoTagConfig) Value() (driver.Value, error) { return json.Marshal(c) }
-
-// Scan deserializes the automatic-tagging configuration from a database value.
-func (c *AutoTagConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		if s, ok := value.(string); ok {
-			b = []byte(s)
-		} else {
-			return nil
-		}
-	}
-	return json.Unmarshal(b, c)
-}
-
-// Normalize applies defaults and bounds to the automatic-tagging configuration.
-func (c *AutoTagConfig) Normalize() {
-	if c == nil {
-		return
-	}
-	if c.MaxTags <= 0 {
-		c.MaxTags = DefaultAutoTagMaxTags
-	}
-	if c.MaxTags > MaximumAutoTagMaxTags {
-		c.MaxTags = MaximumAutoTagMaxTags
-	}
-	if c.SkipIfTagged == nil {
-		skip := true
-		c.SkipIfTagged = &skip
-	}
 }
 
 // ParserEngineRule maps a set of file types to a specific parser engine.
@@ -205,7 +112,6 @@ type ChunkingConfig struct {
 	TableMetadataInstructions string `yaml:"table_metadata_instructions,omitempty" json:"table_metadata_instructions,omitempty"`
 }
 
-// DefaultParserEngine selects a retained parser independent of build tags.
 // Office documents and PDFs use anydoc so a missing binding reports an error.
 func DefaultParserEngine(fileType string) string {
 	switch normalizeParserFileType(fileType) {
@@ -252,12 +158,6 @@ func ParseProviderScheme(filePath string) string {
 		return "local"
 	}
 	return ""
-}
-
-// ImageProcessingConfig represents the image processing configuration
-type ImageProcessingConfig struct {
-	// Model ID
-	ModelID string `yaml:"model_id" json:"model_id"`
 }
 
 // Preserve explicit zero through API decoding and persisted JSON. Omitted
@@ -309,120 +209,20 @@ func (c *ChunkingConfig) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
-// Value implements the driver.Valuer interface, used to convert ImageProcessingConfig to database value
-func (c ImageProcessingConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database value to ImageProcessingConfig
-func (c *ImageProcessingConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// VLMConfig represents the VLM configuration
-type VLMConfig struct {
-	Enabled bool   `yaml:"enabled"  json:"enabled"`
-	ModelID string `yaml:"model_id" json:"model_id"`
-	// DescriptionLanguage controls the language used for generated image
-	// captions. Empty means follow the document/request language.
-	DescriptionLanguage string `yaml:"description_language,omitempty" json:"description_language,omitempty"`
-	// CustomInstructions adds KB-specific image interpretation guidance without
-	// replacing the system-owned OCR and Markdown output contract.
-	CustomInstructions string `yaml:"custom_instructions,omitempty" json:"custom_instructions,omitempty"`
-
-	// 兼容老版本
-	// Model Name
-	ModelName string `yaml:"model_name" json:"model_name"`
-	// Base URL
-	BaseURL string `yaml:"base_url" json:"base_url"`
-	// API Key
-	APIKey string `yaml:"api_key" json:"api_key"`
-	// Interface Type: "ollama" or "openai"
-	InterfaceType string `yaml:"interface_type" json:"interface_type"`
-}
-
-// IsEnabled 判断多模态是否启用（兼容新老版本）
-// 新版本：Enabled && ModelID != ""
-// 老版本：ModelName != "" && BaseURL != ""
-func (c VLMConfig) IsEnabled() bool {
-	// 新版本配置
-	if c.Enabled && c.ModelID != "" {
-		return true
-	}
-	// 兼容老版本配置
-	if c.ModelName != "" && c.BaseURL != "" {
-		return true
-	}
-	return false
-}
-
-// QuestionGenerationConfig represents the question generation configuration for document knowledge bases
-// When enabled, the system will use LLM to generate questions for each chunk during document parsing
-// These generated questions will be indexed separately to improve recall
-type QuestionGenerationConfig struct {
-	Enabled bool `yaml:"enabled"  json:"enabled"`
-	// Number of questions to generate per chunk (default: 3, max: 10)
-	QuestionCount int `yaml:"question_count" json:"question_count"`
-	// CustomInstructions describes the intended audience or question style.
-	// It is appended to the stable system question-generation template.
-	CustomInstructions string `yaml:"custom_instructions,omitempty" json:"custom_instructions,omitempty"`
-}
-
-// Value implements the driver.Valuer interface
-func (c QuestionGenerationConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface
-func (c *QuestionGenerationConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// Value implements the driver.Valuer interface, used to convert VLMConfig to database value
-func (c VLMConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database value to VLMConfig
-func (c *VLMConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
 // EnsureDefaults 确保类型与配置具备默认值
 func (kb *KnowledgeBase) EnsureDefaults() {
 	if kb == nil {
 		return
 	}
-	if kb.Type == "" {
-		kb.Type = KnowledgeBaseTypeDocument
+	kb.Type = KnowledgeBaseTypeDocument
+	if kb.ChunkingConfig.ChunkSize <= 0 {
+		kb.ChunkingConfig.ChunkSize = 512
 	}
-	// Clear type-specific configs that don't belong
-
-	if kb.Type != KnowledgeBaseTypeDocument {
-		kb.AutoTagConfig = nil
-	} else if kb.AutoTagConfig != nil {
-		kb.AutoTagConfig.Normalize()
+	if !kb.ChunkingConfig.ChunkOverlapSet && kb.ChunkingConfig.ChunkOverlap == 0 {
+		kb.ChunkingConfig.ChunkOverlap = min(50, kb.ChunkingConfig.ChunkSize/10)
+	}
+	if len(kb.ChunkingConfig.Separators) == 0 {
+		kb.ChunkingConfig.Separators = []string{"\n\n", "\n", "。"}
 	}
 
 	// Ensure IndexingStrategy has defaults.
@@ -438,14 +238,12 @@ func (kb *KnowledgeBase) EnsureDefaults() {
 // KBCapabilities describes the functional features a knowledge base exposes.
 // It is computed from the KB's configuration (IndexingStrategy and Type)
 // and surfaced in the JSON representation of a KnowledgeBase so that the frontend
-// can filter / enable / disable KB options based on what the selected agent type needs.
+// can identify which retrieval operations are available.
 type KBCapabilities struct {
 	// Vector means semantic (embedding) search is indexed.
 	Vector bool `json:"vector"`
 	// Keyword means BM25 / sparse keyword search is indexed.
 	Keyword bool `json:"keyword"`
-	// Context means structured knowledge context queries are supported.
-	Context bool `json:"context"`
 }
 
 // Capabilities returns the computed capability flags for this KB.
@@ -457,12 +255,11 @@ func (kb *KnowledgeBase) Capabilities() KBCapabilities {
 	return KBCapabilities{
 		Vector:  kb.IsVectorEnabled(),
 		Keyword: kb.IsKeywordEnabled(),
-		Context: true,
 	}
 }
 
 // MarshalJSON augments the default JSON encoding of KnowledgeBase with a computed
-// `capabilities` field so clients (agent editor) can filter KBs by feature.
+// `capabilities` field so clients can inspect indexing support.
 // It preserves all existing fields verbatim.
 func (kb *KnowledgeBase) MarshalJSON() ([]byte, error) {
 	type alias KnowledgeBase
@@ -490,12 +287,4 @@ func (kb *KnowledgeBase) IsKeywordEnabled() bool {
 // Currently only vector and keyword search need embeddings.
 func (kb *KnowledgeBase) NeedsEmbeddingModel() bool {
 	return kb != nil && kb.IndexingStrategy.NeedsEmbedding()
-}
-
-// IsMultimodalEnabled 判断多模态是否启用，由 VLMConfig.IsEnabled() 决定。
-func (kb *KnowledgeBase) IsMultimodalEnabled() bool {
-	if kb == nil {
-		return false
-	}
-	return kb.VLMConfig.IsEnabled()
 }

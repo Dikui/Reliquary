@@ -27,6 +27,7 @@ import (
 type personalAuthFixture struct {
 	db     *gorm.DB
 	router *gin.Engine
+	params RouterParams
 	token  string
 	key    string
 	userID string
@@ -56,33 +57,43 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	gin.SetMode(gin.TestMode)
 	db := pgtest.Open(t)
 	require.NoError(t, service.EnsureSingleTeamSpace(context.Background(), db))
-	cfg := &config.Config{Conversation: &config.ConversationConfig{}, Tenant: &config.TenantConfig{}}
+	cfg := &config.Config{}
 	tenantRepo := apprepo.NewTenantRepository(db)
 	tenantSvc := service.NewTenantService(tenantRepo)
 	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), apprepo.NewAuthTokenRepository(db), tenantSvc)
 	keys := service.NewTenantAPIKeyService(apprepo.NewTenantAPIKeyRepository(db))
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
-	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, tenantRepo, nil, nil, nil, nil, nil, nil, nil)
-	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, nil, tenantSvc)
+	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil)
+	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, tenantSvc)
 	knowledge, err := service.NewKnowledgeService(db, cfg, knowledgeRepo, kb, tenantRepo, tenantSvc,
-		nil, nil, nil, nil, nil, nil, models, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, models, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
-	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), nil, cfg)
+	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), cfg)
 	system := handler.NewSystemHandler(cfg, tenantSvc, users, settings, keys, nil, nil)
+	params := RouterParams{
+		Config: cfg, UserService: users, TenantService: tenantSvc,
+		TenantAPIKeyService: keys, KBService: kb, KnowledgeService: knowledge,
+		KBHandler:              handler.NewKnowledgeBaseHandler(kb),
+		KnowledgeHandler:       handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil),
+		KnowledgeSearchHandler: &handler.KnowledgeSearchHandler{},
+		ModelHandler:           handler.NewModelHandler(models),
+		EntityHandler:          handler.NewEntityHandler(service.NewEntityService(db, nil)),
+		TenantHandler:          handler.NewTenantHandler(tenantSvc, keys, users, kb, cfg, settings),
+		AuthHandler:            handler.NewAuthHandler(users, tenantSvc), SystemHandler: system,
+	}
 	guards := newAccessGuards(kb, knowledge, nil)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), middleware.Auth(tenantSvc, users, keys))
 	v1 := r.Group("/api/v1")
-	RegisterAuthRoutes(v1, handler.NewAuthHandler(users, tenantSvc), guards)
-	RegisterTenantRoutes(v1, handler.NewTenantHandler(tenantSvc, keys, users, kb, cfg, settings), guards)
+	RegisterAuthRoutes(v1, params.AuthHandler, guards)
+	RegisterTenantRoutes(v1, params.TenantHandler, guards)
 	RegisterSystemRoutes(v1, system, guards)
-	RegisterModelRoutes(v1, handler.NewModelHandler(models), nil, guards)
-	RegisterModelRoutingRoutes(v1, handler.NewModelRoutingHandler(db, models), guards)
-	RegisterKnowledgeDomainRoutes(v1, handler.NewKnowledgeDomainHandler(service.NewKnowledgeDomainService(db)), guards)
-	RegisterKnowledgeContextRoutes(v1, handler.NewKnowledgeContextHandler(service.NewKnowledgeContextService(db, nil), nil), guards)
-	v1.GET("/knowledge/search", handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil).SearchKnowledge)
-	f := &personalAuthFixture{db: db, router: r}
+	RegisterModelRoutes(v1, params.ModelHandler, nil, guards)
+	RegisterEntityRoutes(v1, params.EntityHandler)
+	RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, guards)
+	RegisterKnowledgeBaseRoutes(v1, params.KBHandler, guards)
+	f := &personalAuthFixture{db: db, router: r, params: params}
 	register := personalRequest(t, r, http.MethodPost, "/api/v1/auth/register", `{"username":"personal","email":"personal@example.test","password":"initial-password"}`, "", false)
 	require.Equal(t, http.StatusCreated, register.Code, register.Body.String())
 	var registration types.RegisterResponse
@@ -118,7 +129,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 
 func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	for _, path := range []string{"/api/v1/system/settings", "/api/v1/system/runtime/queues", "/api/v1/models", "/api/v1/knowledge-domains", "/api/v1/space/api-keys"} {
+	for _, path := range []string{"/api/v1/system/settings", "/api/v1/system/runtime/queues", "/api/v1/models", "/api/v1/space/api-keys"} {
 		for _, credential := range []string{"", "invalid-key"} {
 			rec := personalRequest(t, f.router, http.MethodGet, path, "", credential, true)
 			require.Equal(t, http.StatusUnauthorized, rec.Code, path+" "+rec.Body.String())
@@ -137,57 +148,37 @@ func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 		if apiKey {
 			credential = f.key
 		}
-		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/settings/asynq.core_concurrency", `{"value":4}`, credential, apiKey)
+		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/settings/queue.core_concurrency", `{"value":4}`, credential, apiKey)
 		require.Equal(t, http.StatusOK, settings.Code, settings.Body.String())
 		model := personalRequest(t, f.router, http.MethodPost, "/api/v1/models", fmt.Sprintf(`{"name":"test-model-%d","type":"KnowledgeQA","source":"remote","parameters":{}}`, i), credential, apiKey)
 		require.Equal(t, http.StatusCreated, model.Code, model.Body.String())
-		domain := personalRequest(t, f.router, http.MethodPost, "/api/v1/knowledge-domains", fmt.Sprintf(`{"name":"Personal domain %d","entity_types":["company"],"fields":[],"relations":[],"unit_families":[]}`, i), credential, apiKey)
-		require.Equal(t, http.StatusCreated, domain.Code, domain.Body.String())
-		var response struct {
-			Data types.KnowledgeDomain `json:"data"`
-		}
-		require.NoError(t, json.Unmarshal(domain.Body.Bytes(), &response))
-		edited := personalRequest(t, f.router, http.MethodPut, "/api/v1/knowledge-domains/"+response.Data.ID, fmt.Sprintf(`{"name":"Edited domain %d","entity_types":["company"],"fields":[{"key":"staff","label":"Staff","value_type":"number"}],"relations":[],"unit_families":[]}`, i), credential, apiKey)
-		require.Equal(t, http.StatusOK, edited.Code, edited.Body.String())
+
 	}
 }
 
-func seedPersonalContext(t *testing.T, f *personalAuthFixture) {
+func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 	t.Helper()
 	now := time.Now().UTC()
-	domain := service.BuiltinAIKnowledgeDomain()
-	require.NoError(t, f.db.Create(domain).Error)
+	kb, err := f.params.KBService.GetKnowledgeBase(context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID))
+	require.NoError(t, err)
 	for i := 1; i <= 2; i++ {
-		kbID := fmt.Sprintf("personal-kb-%d", i)
+		kbID := kb.ID
 		knowledgeID := fmt.Sprintf("personal-message-%d", i)
-		evidenceID := fmt.Sprintf("personal-evidence-%d", i)
 		entityID := fmt.Sprintf("personal-entity-%d", i)
-		eventID := fmt.Sprintf("personal-event-%d", i)
-		body := fmt.Sprintf("Acme %d released a product with %d staff.", i, i*10)
-		kb := &types.KnowledgeBase{ID: kbID, TenantID: 1, Name: kbID, DomainID: domain.ID, CreatorID: f.userID, Type: types.KnowledgeBaseTypeDocument}
-		kb.EnsureDefaults()
-		require.NoError(t, f.db.Create(kb).Error)
 		require.NoError(t, f.db.Create(&types.Knowledge{ID: knowledgeID, TenantID: 1, KnowledgeBaseID: kbID, Type: types.KnowledgeTypeManual, Title: "Acme source", FileName: knowledgeID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeEntity{ID: entityID, TenantID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeEvidence{ID: evidenceID, TenantID: 1, KnowledgeBaseID: kbID, KnowledgeID: knowledgeID, Version: 1, BodyHash: strings.Repeat(fmt.Sprint(i), 64), Title: "Acme source", Body: body, Publisher: "News", OriginalURL: fmt.Sprintf("https://example.com/%d", i), PublishedAt: "2026-10-01T00:00:00Z", Status: types.KnowledgeEvidenceCurrent, ExtractionStatus: "completed", CreatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeEvidenceEntity{TenantID: 1, EvidenceID: evidenceID, EntityID: entityID}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeFact{ID: fmt.Sprintf("personal-fact-%d", i), TenantID: 1, KnowledgeBaseID: kbID, SubjectEntityID: entityID, Kind: types.KnowledgeFactAttribute, Predicate: "staff", OriginalPredicate: "staff", Value: types.JSON(fmt.Sprint(i * 10)), ValueType: "number", EvidenceID: evidenceID, Quote: body, Status: types.KnowledgeFactCurrent, CreatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeEvent{ID: eventID, TenantID: 1, KnowledgeBaseID: kbID, Title: fmt.Sprintf("Acme %d product release", i), EventType: "release", Description: body, EvidenceIDs: types.StringArray{evidenceID}, SourceCount: 1, CreatedAt: now, UpdatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeEventEvidence{ID: fmt.Sprintf("personal-link-%d", i), TenantID: 1, KnowledgeBaseID: kbID, EventID: eventID, EvidenceID: evidenceID, SourceTitle: "Acme source", SourceEventType: "release", SourceDescription: body, SourceKey: fmt.Sprint(i), CreatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeEventEntity{TenantID: 1, EventID: eventID, EntityID: entityID}).Error)
-		require.NoError(t, f.db.Create(&types.KnowledgeEventEvidenceEntity{TenantID: 1, EventID: eventID, EvidenceID: evidenceID, EntityID: entityID}).Error)
+		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, TenantID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
+
+		require.NoError(t, f.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: knowledgeID, EntityID: entityID, CreatedAt: now}).Error)
 	}
 }
 
-func TestPersonalAPIKeyAndLoginReturnAllKnowledgeContext(t *testing.T) {
+func TestPersonalAPIKeyAndLoginReturnAllEntities(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	seedPersonalContext(t, f)
+	seedPersonalEntities(t, f)
 	cases := []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/knowledge/search?keyword=Acme", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/entities?scope=all", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/entities/personal-entity-2", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/events?scope=all", ""},
-		{http.MethodPost, "/api/v1/knowledge-context/query", `{"scope":"all","include_history":true,"limit":50}`},
+		{http.MethodGet, "/api/v1/entities", ""},
+		{http.MethodGet, "/api/v1/entities/personal-entity-2", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
@@ -201,37 +192,19 @@ func TestPersonalAPIKeyAndLoginReturnAllKnowledgeContext(t *testing.T) {
 			require.Equal(t, http.StatusOK, key.Code, key.Body.String())
 			require.JSONEq(t, login.Body.String(), key.Body.String())
 			require.True(t, bytes.Contains(key.Body.Bytes(), []byte("personal-entity-2")) || bytes.Contains(key.Body.Bytes(), []byte("personal-message-2")))
-			if tc.method == http.MethodPost {
-				require.Contains(t, key.Body.String(), "personal-fact-2")
-				require.Contains(t, key.Body.String(), "personal-event-2")
-				require.Contains(t, key.Body.String(), "personal-evidence-2")
-			}
 		})
 	}
 }
 
-func TestKnowledgeContextRoutesRejectLegacyTeamScope(t *testing.T) {
+func TestEntityRoutesIgnoreRemovedScopeParameter(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	seedPersonalContext(t, f)
-	cases := []struct{ method, path, body string }{
-		{http.MethodGet, "/api/v1/knowledge-context/entities?scope=team", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/events?scope=team", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/evidence?scope=team", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/focus?scope=team", ""},
-		{http.MethodPost, "/api/v1/knowledge-context/query", `{"scope":"team"}`},
-		{http.MethodPost, "/api/v1/knowledge-bases/personal-kb-1/context/query", `{"scope":"team"}`},
-	}
-	for _, tc := range cases {
-		t.Run(tc.path, func(t *testing.T) {
-			for _, credential := range []struct {
-				value  string
-				apiKey bool
-			}{{f.token, false}, {f.key, true}} {
-				response := personalRequest(t, f.router, tc.method, tc.path, tc.body, credential.value, credential.apiKey)
-				require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
-				require.Contains(t, response.Body.String(), "scope must be knowledge_base, domain or all")
-			}
-		})
+	seedPersonalEntities(t, f)
+	expected := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", f.token, false)
+	require.Equal(t, http.StatusOK, expected.Code, expected.Body.String())
+	for _, query := range []string{"scope=team", "scope=knowledge_base&knowledge_base_id=missing", "scope=all"} {
+		got := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?"+query, "", f.key, true)
+		require.Equal(t, http.StatusOK, got.Code, got.Body.String())
+		require.JSONEq(t, expected.Body.String(), got.Body.String())
 	}
 }
 
@@ -252,7 +225,7 @@ func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 		var stored types.TenantAPIKey
 		require.NoError(t, f.db.First(&stored, response.Data.ID).Error)
 		require.Nil(t, stored.ExpiresAt)
-		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-context/entities?scope=all", "", response.Data.Token, true)
+		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", response.Data.Token, true)
 		require.Equal(t, http.StatusOK, queried.Code, queried.Body.String())
 	}
 }

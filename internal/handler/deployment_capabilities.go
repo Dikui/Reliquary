@@ -9,9 +9,7 @@ import (
 // DeploymentCapabilityKeys is the canonical capability key list shared with
 // frontend/src/config/deploymentCapabilities.ts — keep both in sync.
 var DeploymentCapabilityKeys = []string{
-	"agents",
 	"integrations.api",
-	"settings.mcp",
 }
 
 // DeploymentCapability describes whether a deployment exposes a feature route.
@@ -28,9 +26,7 @@ type DeploymentCapabilitiesData struct {
 
 // DeploymentFeatureAvailability mirrors injected backend handlers/services.
 type DeploymentFeatureAvailability struct {
-	Agents bool
-	API    bool
-	MCP    bool
+	API bool
 }
 
 func supportedDeploymentCapability(supported bool) DeploymentCapability {
@@ -49,9 +45,7 @@ func BuildDeploymentCapabilities(
 	return DeploymentCapabilitiesData{
 		Edition: edition,
 		Capabilities: map[string]DeploymentCapability{
-			"agents":           supportedDeploymentCapability(available.Agents),
 			"integrations.api": supportedDeploymentCapability(available.API),
-			"settings.mcp":     supportedDeploymentCapability(available.MCP),
 		},
 	}
 }

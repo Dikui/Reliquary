@@ -31,19 +31,12 @@ const (
 	ErrTenantInvalidStatus    ErrorCode = 2004
 	ErrTenantCreationDisabled ErrorCode = 2005
 
-	// Agent related error codes (2100-2199)
-	ErrAgentMissingThinkingModel ErrorCode = 2100
-	ErrAgentMissingAllowedTools  ErrorCode = 2101
-	ErrAgentInvalidMaxIterations ErrorCode = 2102
-	ErrAgentInvalidTemperature   ErrorCode = 2103
-
 	// Model lifecycle errors (2300-2399).
 	// The dedicated code lets clients render structured usage details without
 	// parsing the backwards-compatible English error message.
-	ErrModelInUse                      ErrorCode = 2300
-	ErrImageProcessingModelUnsupported ErrorCode = 2301
-	ErrImageProcessingModelNotFound    ErrorCode = 2302
-	ErrImageProcessingModelUnavailable ErrorCode = 2303
+	ErrModelInUse ErrorCode = 2300
+
+	ErrKnowledgeSearchUnavailable ErrorCode = 2400
 
 	// Add more error codes here
 )
@@ -207,41 +200,13 @@ func NewTenantCreationDisabledError() *AppError {
 	}
 }
 
-// Agent related errors
-func NewAgentMissingThinkingModelError() *AppError {
-	return &AppError{
-		Code:     ErrAgentMissingThinkingModel,
-		Message:  "启用Agent模式前，请先选择思考模型",
-		HTTPCode: http.StatusBadRequest,
-	}
-}
-
-func NewAgentMissingAllowedToolsError() *AppError {
-	return &AppError{
-		Code:     ErrAgentMissingAllowedTools,
-		Message:  "至少需要选择一个允许的工具",
-		HTTPCode: http.StatusBadRequest,
-	}
-}
-
-func NewAgentInvalidMaxIterationsError() *AppError {
-	return &AppError{
-		Code:     ErrAgentInvalidMaxIterations,
-		Message:  "最大迭代次数须为正整数，或 -1 表示不限制",
-		HTTPCode: http.StatusBadRequest,
-	}
-}
-
-func NewAgentInvalidTemperatureError() *AppError {
-	return &AppError{
-		Code:     ErrAgentInvalidTemperature,
-		Message:  "温度参数必须在0-2之间",
-		HTTPCode: http.StatusBadRequest,
-	}
-}
-
 // IsAppError checks if the error is an AppError type
 func IsAppError(err error) (*AppError, bool) {
 	appErr, ok := err.(*AppError)
 	return appErr, ok
+}
+
+// NewKnowledgeSearchUnavailableError hides dependency details from search clients.
+func NewKnowledgeSearchUnavailableError() *AppError {
+	return &AppError{Code: ErrKnowledgeSearchUnavailable, Message: "Knowledge search is temporarily unavailable. Please retry.", HTTPCode: http.StatusServiceUnavailable}
 }

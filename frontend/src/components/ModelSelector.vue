@@ -32,6 +32,7 @@
         <div class="model-option">
           <t-icon name="check-circle-filled" class="model-icon" />
           <span class="model-name">{{ modelDisplayName(model) }}</span>
+          <t-tag v-if="model.source === 'chatgpt'" size="small">{{ $t('chatgpt.usingPlan') }}</t-tag>
           <span v-if="model.display_name" class="model-raw-name">{{ model.name }}</span>
           <t-tag v-if="model.is_builtin" size="small" theme="primary">{{ $t('model.builtinTag') }}</t-tag>
           <t-tag v-if="model.is_default" size="small" theme="success">{{ $t('model.defaultTag') }}</t-tag>
@@ -56,13 +57,14 @@
         </div>
       </t-option>
     </t-select>
+    <p v-if="selectedModel?.source === 'chatgpt'" class="model-plan-usage">{{ $t('chatgpt.usingPlan') }} · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">{{ $t('chatgpt.manageUsage') }}</a></p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { type ModelConfig } from '@/api/model'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { filterModelsByType } from './modelSelectorFilter'
@@ -75,7 +77,7 @@ import {
 
 interface Props {
   ariaLabel?: string
-  modelType: 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM'
+  modelType: 'KnowledgeQA' | 'Embedding' | 'Rerank'
   selectedModelId?: string
   disabled?: boolean
   placeholder?: string
@@ -100,14 +102,14 @@ const emit = defineEmits<{
 const models = ref<ModelConfig[]>([])
 const loading = ref(false)
 const { t } = useI18n()
-const chatResources = useChatResourcesStore()
+const resources = useResourcesStore()
 
 const placeholderText = computed(() => {
   return props.placeholder || t('model.selectModelPlaceholder')
 })
 
 const modelDisplayName = (model: ModelConfig) => {
-  const displayName = model.display_name?.trim()
+  const displayName = model.display_name?.trim() || model.parameters.extra_config?.chatgpt_display_name?.trim()
   return displayName || model.name
 }
 
@@ -122,9 +124,9 @@ const contextWindowTitle = (tokens?: number) => {
 
 // 外部传入 allModels 时跟着 prop 走；否则用空间级缓存，设置页改完窗口立刻能看见。
 watch(
-  () => [props.allModels, props.modelType, chatResources.allModels] as const,
+  () => [props.allModels, props.modelType, resources.allModels] as const,
   ([newModels]) => {
-    const source = Array.isArray(newModels) ? newModels : chatResources.allModels
+    const source = Array.isArray(newModels) ? newModels : resources.allModels
     models.value = filterModelsByType(source, props.modelType)
   },
   { immediate: true },
@@ -143,8 +145,8 @@ const loadModels = async () => {
 
   loading.value = true
   try {
-    await chatResources.ensureModels()
-    models.value = filterModelsByType(chatResources.allModels, props.modelType)
+    await resources.ensureModels()
+    models.value = filterModelsByType(resources.allModels, props.modelType)
   } catch (error) {
     console.error(t('model.loadFailed'), error)
     MessagePlugin.error(t('model.loadFailed'))
@@ -257,4 +259,11 @@ onMounted(() => {
     white-space: nowrap;
   }
 }
+</style>
+
+<style scoped>
+.model-plan-usage { margin: 6px 0 0; font-size: 12px; color: var(--td-text-color-secondary); line-height: 1.5; }
+.model-plan-usage a { color: var(--td-brand-color); text-decoration: none; }
+.model-plan-usage a:hover { text-decoration: underline; }
+.model-plan-usage a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
 </style>

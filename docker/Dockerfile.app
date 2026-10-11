@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ RUN if [ -n "$APK_MIRROR_ARG" ]; then \
     apt-get install -y git build-essential curl
 
 # Install migrate tool
-RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3
 
 # Copy go mod files. go.mod replace-points anydoc at ./third_party/anydoc-go,
 # so that module's go.mod must exist before `go mod download`.
@@ -70,7 +70,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod cp -r /go/pkg/mod/github.com/yanyiwu/ /app/yanyiwu/
 
 # Final stage
-FROM debian:12.12-slim
+FROM debian:12.12-slim@sha256:d5d3f9c23164ea16f31852f95bd5959aad1c5e854332fe00f7b3a20fcc9f635c
+
+ARG VERSION_ARG
+ARG COMMIT_ID_ARG
+LABEL org.opencontainers.image.version=$VERSION_ARG
+LABEL org.opencontainers.image.revision=$COMMIT_ID_ARG
+LABEL org.reliquary.maintenance.version="1"
 
 WORKDIR /app
 
@@ -90,7 +96,7 @@ RUN if [ -n "$APK_MIRROR_ARG" ]; then \
     fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        libstdc++6 postgresql-client tzdata sed curl bash python3 gosu && \
+        libstdc++6 postgresql-client tzdata sed curl bash python3 gosu git && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

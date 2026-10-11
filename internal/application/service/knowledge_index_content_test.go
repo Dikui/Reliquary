@@ -2,12 +2,11 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -78,13 +77,13 @@ func (metadataUpdateKBService) GetKnowledgeBaseByID(
 }
 
 type metadataUpdateTaskEnqueuer struct {
-	tasks []*asynq.Task
+	tasks []*taskqueue.Task
 	err   error
 }
 
 func (e *metadataUpdateTaskEnqueuer) Enqueue(
-	task *asynq.Task, _ ...asynq.Option,
-) (*asynq.TaskInfo, error) {
+	task *taskqueue.Task, _ ...taskqueue.Option,
+) (*taskqueue.TaskInfo, error) {
 	if e.err != nil {
 		return nil, e.err
 	}
@@ -123,13 +122,8 @@ func TestUpdateKnowledgeMetadataDoesNotReindexChunks(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"region":"Shanghai"}`, string(repo.knowledge.CustomMetadata))
 	require.Zero(t, chunkRepo.listCalls)
-	require.Equal(t, types.SummaryStatusPending, repo.summaryStatusUpdate)
-	require.Len(t, taskEnqueuer.tasks, 1)
-	require.Equal(t, types.TypeSummaryGeneration, taskEnqueuer.tasks[0].Type())
-	var payload types.SummaryGenerationPayload
-	require.NoError(t, json.Unmarshal(taskEnqueuer.tasks[0].Payload(), &payload))
-	require.True(t, payload.Refresh)
-	require.Equal(t, "knowledge-1", payload.KnowledgeID)
+	require.Nil(t, repo.summaryStatusUpdate)
+	require.Empty(t, taskEnqueuer.tasks, "metadata edits do not create a separate summary task")
 }
 
 func TestUpdateKnowledgeMetadataDoesNotLeaveTasklessPendingStatus(t *testing.T) {
@@ -147,7 +141,7 @@ func TestUpdateKnowledgeMetadataDoesNotLeaveTasklessPendingStatus(t *testing.T) 
 	require.NoError(t, service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID: "knowledge-1", CustomMetadata: types.JSON(`{"region":"Shanghai"}`),
 	}))
-	require.Equal(t, types.SummaryStatusFailed, repo.summaryStatusUpdate)
+	require.Nil(t, repo.summaryStatusUpdate)
 }
 
 func TestUpdateKnowledgeUnchangedMetadataDoesNotRefreshSummary(t *testing.T) {

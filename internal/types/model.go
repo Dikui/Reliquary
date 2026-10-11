@@ -1,7 +1,9 @@
 package types
 
 import (
+	"crypto/sha256"
 	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"time"
@@ -15,23 +17,21 @@ import (
 // ModelType represents the type of AI model
 type ModelType string
 
-// SupportsImageProcessing reports whether a model can extract image text and captions.
+// SupportsImageProcessing reports whether a model can view article images.
 func (m *Model) SupportsImageProcessing() bool {
-	return m != nil && (m.Type == ModelTypeVLLM ||
-		(m.Type == ModelTypeKnowledgeQA && m.Parameters.SupportsVision))
+	return m != nil && (m.Type == ModelTypeKnowledgeQA && m.Parameters.SupportsVision)
 }
 
 const (
 	ModelTypeEmbedding   ModelType = "Embedding"   // Embedding model
 	ModelTypeRerank      ModelType = "Rerank"      // Rerank model
 	ModelTypeKnowledgeQA ModelType = "KnowledgeQA" // KnowledgeQA model
-	ModelTypeVLLM        ModelType = "VLLM"        // VLLM model
 )
 
 // IsSupported reports whether this model type is available in this deployment.
 func (t ModelType) IsSupported() bool {
 	switch t {
-	case ModelTypeKnowledgeQA, ModelTypeEmbedding, ModelTypeRerank, ModelTypeVLLM:
+	case ModelTypeKnowledgeQA, ModelTypeEmbedding, ModelTypeRerank:
 		return true
 	default:
 		return false
@@ -42,9 +42,10 @@ func (t ModelType) IsSupported() bool {
 type ModelStatus string
 
 const (
-	ModelStatusActive         ModelStatus = "active"          // Model is active
-	ModelStatusDownloading    ModelStatus = "downloading"     // Model is downloading
-	ModelStatusDownloadFailed ModelStatus = "download_failed" // Model download failed
+	ModelStatusActive             ModelStatus = "active"              // Model is active
+	ModelStatusDownloading        ModelStatus = "downloading"         // Model is downloading
+	ModelStatusDownloadFailed     ModelStatus = "download_failed"     // Model download failed
+	ModelStatusNeedsConfiguration ModelStatus = "needs_configuration" // Migration removed required credentials.
 )
 
 // ModelUsageBinding is a stable API identifier for one configuration field
@@ -54,54 +55,35 @@ type ModelUsageBinding string
 
 // Model usage binding constants identify supported model-reference roles.
 const (
-	ModelUsageBindingEmbeddingModel       ModelUsageBinding = "embedding_model"
-	ModelUsageBindingSummaryModel         ModelUsageBinding = "summary_model"
-	ModelUsageBindingImageProcessingModel ModelUsageBinding = "image_processing_model"
-	ModelUsageBindingVLMModel             ModelUsageBinding = "vlm_model"
-	ModelUsageBindingChatModel            ModelUsageBinding = "chat_model"
-	ModelUsageBindingRerankModel          ModelUsageBinding = "rerank_model"
-	ModelUsageBindingQueryUnderstandModel ModelUsageBinding = "query_understand_model"
+	ModelUsageBindingEmbeddingModel ModelUsageBinding = "embedding_model"
+	ModelUsageBindingSummaryModel   ModelUsageBinding = "summary_model"
 )
 
 // ModelUsageResource is the minimal, non-sensitive projection returned when a
-// knowledge base or agent prevents model deletion.
+// knowledge base prevents model deletion.
 type ModelUsageResource struct {
 	ID       string              `json:"id"`
 	Name     string              `json:"name"`
 	Bindings []ModelUsageBinding `json:"bindings"`
 }
 
-// ModelUsageListLimit caps how many knowledge bases or agents are listed in a
+// ModelUsageListLimit caps how many knowledge bases are listed in a
 // model-in-use error. Totals are returned separately so the cap cannot
 // under-count the references that actually block deletion.
 const ModelUsageListLimit = 50
 
 // ModelUsageDetails explains every active tenant-scoped reference that blocks
-// model deletion. KnowledgeBases and Agents may be truncated to
-// ModelUsageListLimit entries; KnowledgeBaseTotal and AgentTotal are the
+// model deletion. KnowledgeBases may be truncated to
+// ModelUsageListLimit entries; KnowledgeBaseTotal is the
 // untruncated counts used by the deletion guard and UI headings.
 type ModelUsageDetails struct {
-	ModelTiers         []ModelTierUsageResource `json:"model_tiers"`
-	KnowledgeBases     []ModelUsageResource     `json:"knowledge_bases"`
-	Agents             []ModelUsageResource     `json:"agents"`
-	KnowledgeBaseTotal int64                    `json:"knowledge_base_total"`
-	AgentTotal         int64                    `json:"agent_total"`
+	KnowledgeBases     []ModelUsageResource `json:"knowledge_bases"`
+	KnowledgeBaseTotal int64                `json:"knowledge_base_total"`
 }
 
 // InUse reports whether at least one active object references the model.
 func (d ModelUsageDetails) InUse() bool {
-	if len(d.ModelTiers) > 0 {
-		return true
-	}
-	return d.KnowledgeBaseTotal > 0 || d.AgentTotal > 0 ||
-		len(d.KnowledgeBases) > 0 || len(d.Agents) > 0
-}
-
-type ModelTierUsageResource struct {
-	Scope    string              `json:"scope"`
-	ID       string              `json:"id"`
-	Name     string              `json:"name"`
-	Bindings []ModelUsageBinding `json:"bindings"`
+	return d.KnowledgeBaseTotal > 0 || len(d.KnowledgeBases) > 0
 }
 
 // ModelSource represents the source of the model
@@ -115,6 +97,7 @@ const (
 	ModelSourceVolcengine  ModelSource = "volcengine"  // Volcengine model
 	ModelSourceDeepseek    ModelSource = "deepseek"    // Deepseek model
 	ModelSourceOpenAI      ModelSource = "openai"      // OpenAI model
+	ModelSourceChatGPT     ModelSource = "chatgpt"     // ChatGPT subscription via the app's own OAuth grant
 	ModelSourceGemini      ModelSource = "gemini"      // Gemini model
 	ModelSourceSiliconFlow ModelSource = "siliconflow" // SiliconFlow model
 	ModelSourceOpenRouter  ModelSource = "openrouter"  // OpenRouter model
@@ -122,9 +105,27 @@ const (
 
 // EmbeddingParameters represents the embedding parameters for a model
 type EmbeddingParameters struct {
-	Dimension                 int  `yaml:"dimension"                   json:"dimension"`
-	TruncatePromptTokens      int  `yaml:"truncate_prompt_tokens"      json:"truncate_prompt_tokens"`
-	SupportsDimensionOverride bool `yaml:"supports_dimension_override" json:"supports_dimension_override"`
+	Dimension                 int    `yaml:"dimension"                   json:"dimension"`
+	TruncatePromptTokens      int    `yaml:"truncate_prompt_tokens"      json:"truncate_prompt_tokens"`
+	SupportsDimensionOverride bool   `yaml:"supports_dimension_override" json:"supports_dimension_override"`
+	SupportsImages            bool   `yaml:"supports_images" json:"supports_images"`
+	MultimodalFormat          string `yaml:"multimodal_format,omitempty" json:"multimodal_format,omitempty"`
+}
+
+// EmbeddingProfileHash identifies vector semantics while excluding credentials,
+// display labels and request limits. It is shared by indexing and rebuilds.
+func EmbeddingProfileHash(modelID string, dimension int, model *Model) string {
+	value := map[string]any{"model_id": modelID, "dimension": dimension}
+	if model != nil {
+		value["name"] = model.Name
+		value["source"] = model.Source
+		value["type"] = model.Type
+		value["parameters"] = map[string]any{"base_url": model.Parameters.BaseURL, "interface_type": model.Parameters.InterfaceType, "provider": model.Parameters.Provider, "embedding": model.Parameters.EmbeddingParameters, "extra_config": model.Parameters.ExtraConfig}
+		value["status"] = model.Status
+	}
+	encoded, _ := json.Marshal(value)
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
 }
 
 type ModelParameters struct {
@@ -142,19 +143,15 @@ type ModelParameters struct {
 	CustomHeaders  map[string]string `yaml:"custom_headers,omitempty" json:"custom_headers,omitempty"`
 	SupportsVision bool              `yaml:"supports_vision"      json:"supports_vision"` // Whether the model accepts image/multimodal input
 	// ContextWindow is the model's total context window in tokens and
-	// MaxOutputTokens the most it emits in one response. Both are provider
-	// facts the agent cannot discover but has to act on: the context window is
-	// what decides when conversation history gets compacted, and assuming a
-	// window larger than the real one means compaction never fires and the
-	// provider rejects the request mid-conversation instead. 0 means unknown,
-	// which falls back to DefaultMaxContextTokens.
+	// MaxOutputTokens the most it emits in one response. These provider limits
+	// remain configurable through model settings. 0 means unknown.
 	ContextWindow   int `yaml:"context_window,omitempty"    json:"context_window,omitempty"`
 	MaxOutputTokens int `yaml:"max_output_tokens,omitempty" json:"max_output_tokens,omitempty"`
 	// MaxConcurrency caps concurrent in-flight BACKGROUND (ingestion /
 	// enrichment) calls to THIS specific model, keyed by model ID and shared
 	// within this process. 0 (the default) means "fall back to the
 	// process-wide model.max_concurrency". Interactive user-facing calls are
-	// never gated. Only chat / vlm / embedding honour this (see limiter.Gate).
+	// never gated. Chat and embedding calls honor this (see limiter.Gate).
 	MaxConcurrency    int    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty"`
 	RequestsPerMinute int    `yaml:"requests_per_minute,omitempty" json:"requests_per_minute,omitempty"`
 	AppSecret         string `yaml:"app_secret,omitempty" json:"app_secret,omitempty"` // AES-256 加密存储，实际承载上游 API Key

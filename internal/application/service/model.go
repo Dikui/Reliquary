@@ -5,16 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
-	"strconv"
+	"gorm.io/gorm/clause"
+	"net/http"
+	"reliquary/internal/chatgpt"
 	"strings"
 
+	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
 	"reliquary/internal/models/utils/ollama"
-	"reliquary/internal/models/vlm"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -25,18 +28,20 @@ var ErrModelNotFound = errors.New("model not found")
 
 // modelService implements the model service interface
 type modelService struct {
+	chatGPT                *chatgpt.Manager
+	chatGPTPolicy          *ChatGPTPolicyService
+	chatGPTHTTPClient      *http.Client
 	db                     *gorm.DB
 	repo                   interfaces.ModelRepository
 	kbRepo                 interfaces.KnowledgeBaseRepository
-	agentRepo              interfaces.CustomAgentRepository
 	ollamaService          *ollama.OllamaService
 	pooler                 embedding.EmbedderPooler
 	tenantService          interfaces.TenantService
-	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
+	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
 }
 
-func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, agentRepo interfaces.CustomAgentRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB) interfaces.ModelService {
-	s := NewModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService).(*modelService)
+func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB) interfaces.ModelService {
+	s := NewModelService(repo, kbRepo, ollamaService, pooler, tenantService).(*modelService)
 	s.db = db
 	return s
 }
@@ -44,7 +49,6 @@ func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interf
 // NewModelService creates a new model service instance
 func NewModelService(repo interfaces.ModelRepository,
 	kbRepo interfaces.KnowledgeBaseRepository,
-	agentRepo interfaces.CustomAgentRepository,
 	ollamaService *ollama.OllamaService,
 	pooler embedding.EmbedderPooler,
 	tenantService interfaces.TenantService,
@@ -52,7 +56,6 @@ func NewModelService(repo interfaces.ModelRepository,
 	return &modelService{
 		repo:          repo,
 		kbRepo:        kbRepo,
-		agentRepo:     agentRepo,
 		ollamaService: ollamaService,
 		pooler:        pooler,
 		tenantService: tenantService,
@@ -79,10 +82,16 @@ func (s *modelService) CreateModel(ctx context.Context, model *types.Model) erro
 	if !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
 	}
+	if err := s.validateChatGPTModel(ctx, model); err != nil {
+		return err
+	}
+	if err := validateImageEmbeddingModel(model); err != nil {
+		return err
+	}
 	logger.Infof(ctx, "Creating model: %s, type: %s, source: %s", model.Name, model.Type, model.Source)
 
 	// Handle remote models (e.g., OpenAI)
-	if model.Source == types.ModelSourceRemote {
+	if model.Source == types.ModelSourceRemote || model.Source == types.ModelSourceChatGPT {
 		logger.Info(ctx, "Remote model detected, setting status to active")
 		model.Status = types.ModelStatusActive
 
@@ -165,6 +174,18 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 	}
 
 	logger.Infof(ctx, "Model found, name: %s, status: %s", model.Name, model.Status)
+	// A migration-paused model remains editable so the user can restore its
+	// credentials and custom headers. Runtime adapter getters reject it below.
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		if changed, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+			return nil, err
+		} else if changed {
+			if err := s.repo.Update(ctx, model); err != nil {
+				return nil, err
+			}
+		}
+		return model, nil
+	}
 
 	// Check model status
 	if model.Status == types.ModelStatusActive {
@@ -202,13 +223,54 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 	}
 
 	logger.Infof(ctx, "Retrieved %d models successfully", len(models))
+	for _, model := range models {
+		if model.Source == types.ModelSourceChatGPT {
+			if changed, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+				return nil, err
+			} else if changed {
+				if err := s.repo.Update(ctx, model); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	return models, nil
 }
 
 // UpdateModel updates an existing model in the repository
 func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) error {
+	if s.nameEmbeddingRebuilder != nil && s.db != nil && !entityDatabaseInTransaction(s.db) {
+		return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			copy := *s
+			copy.db = tx
+			copy.repo = repository.NewModelRepository(tx)
+			copy.kbRepo = repository.NewKnowledgeBaseRepository(tx)
+			bound, err := s.nameEmbeddingRebuilder.BindTransaction(ctx, tx)
+			if err != nil {
+				return err
+			}
+			copy.nameEmbeddingRebuilder = bound
+			return copy.UpdateModel(ctx, model)
+		})
+	}
+
 	if model.Type != "" && !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
+	}
+	if err := s.validateChatGPTModel(ctx, model); err != nil {
+		return err
+	}
+	if err := validateImageEmbeddingModel(model); err != nil {
+		return err
+	}
+	if model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+		inUse, err := s.chatGPTFallbackInUse(ctx, model.ID)
+		if err != nil {
+			return err
+		}
+		if inUse {
+			return apperrors.NewBadRequestError("remove the ChatGPT fallback selection before changing this model's source, type or active status")
+		}
 	}
 	logger.Info(ctx, "Start updating model")
 	logger.Infof(ctx, "Updating model ID: %s, name: %s", model.ID, model.Name)
@@ -233,9 +295,46 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 		model.IsBuiltin = true
 		model.ManagedBy = ""
 	}
+	preserveMaintenanceProvenance(model, existingModel)
+	if existingModel != nil && existingModel.Status == types.ModelStatusNeedsConfiguration {
+		model.Status = types.ModelStatusNeedsConfiguration
+		if model.Parameters.ExtraConfig == nil {
+			model.Parameters.ExtraConfig = map[string]string{}
+		}
+		model.Parameters.ExtraConfig[maintenanceRequiredFields] = existingModel.Parameters.ExtraConfig[maintenanceRequiredFields]
+		if _, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+			return err
+		}
+	}
 
-	// Update model in repository
-	err = s.repo.Update(ctx, model)
+	// Configuration and vector invalidation commit together. A model ID can
+	// retain its dimensions while pointing at completely different weights.
+	if s.db != nil {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var current types.Model
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", model.ID, model.TenantID).First(&current).Error; err != nil {
+				return err
+			}
+			changed := (current.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
+				entityEmbeddingProfileHash(current.ID, current.Parameters.EmbeddingParameters.Dimension, &current) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model)
+			if err := tx.Model(&types.Model{}).Where("id=? AND tenant_id=?", model.ID, model.TenantID).Select("*").Updates(model).Error; err != nil {
+				return err
+			}
+			if !changed {
+				return nil
+			}
+			paused, err := maintenanceops.SnapshotPaused(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if paused {
+				return nil
+			}
+			return types.RetireEmbeddingVectors(ctx, tx, model.ID)
+		})
+	} else {
+		err = s.repo.Update(ctx, model)
+	}
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,
@@ -247,22 +346,37 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	logger.Infof(ctx, "Model updated successfully: %s", model.ID)
 	if s.nameEmbeddingRebuilder != nil && existingModel != nil &&
 		(existingModel.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
-		contextEmbeddingProfileHash(existingModel.ID, existingModel.Parameters.EmbeddingParameters.Dimension, existingModel) != contextEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model) {
+		entityEmbeddingProfileHash(existingModel.ID, existingModel.Parameters.EmbeddingParameters.Dimension, existingModel) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model) {
 		profileModel, resolveErr := ResolveModelTier(ctx, s.db, nil, types.ModelTierEmbedding)
 		if resolveErr != nil {
-			return fmt.Errorf("model saved but name embedding profile could not be resolved: %w", resolveErr)
+			return fmt.Errorf("model update could not resolve name embedding profile: %w", resolveErr)
 		}
 		if profileModel == model.ID {
 			if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, types.SingleTenantID, "embedding_model_updated"); err != nil {
-				return fmt.Errorf("model saved but name embedding rebuild could not be queued: %w", err)
+				return fmt.Errorf("model update could not enqueue name embedding rebuild: %w", err)
 			}
 		}
 	}
 	return nil
 }
 
+func validateImageEmbeddingModel(model *types.Model) error {
+	parameters := model.Parameters.EmbeddingParameters
+	if !parameters.SupportsImages {
+		return nil
+	}
+	if model.Type != types.ModelTypeEmbedding || model.Source != types.ModelSourceRemote {
+		return apperrors.NewValidationError("image embedding requires a remote HTTP embedding model")
+	}
+	if format := strings.TrimSpace(parameters.MultimodalFormat); format != "" && format != "jina" {
+		return apperrors.NewValidationError("multimodal_format must be jina")
+	}
+	return nil
+}
+
 // UpdateModelCredentials writes one or more credential fields on the model's
-// Parameters jsonb. Models are not pooled per-instance the way MCP clients
+// Parameters jsonb. Model clients read credentials from current configuration.
+// Model clients
 // are (each call to GetEmbeddingModel/GetChatModel rebuilds the client from
 // the current Parameters), so no explicit cache invalidation is required —
 // the next call will pick up the new credential automatically.
@@ -276,6 +390,9 @@ func (s *modelService) UpdateModelCredentials(
 	}
 	if existing == nil {
 		return nil, ErrModelNotFound
+	}
+	if existing.Source == types.ModelSourceChatGPT {
+		return nil, apperrors.NewBadRequestError("Use ChatGPT sign-in to manage this model's credentials")
 	}
 	if existing.IsBuiltin && !types.IsAuthenticatedFromContext(ctx) {
 		return nil, apperrors.NewForbiddenError(
@@ -293,6 +410,9 @@ func (s *modelService) UpdateModelCredentials(
 	}
 	if !changed {
 		return existing, nil
+	}
+	if _, err := s.restoreMaintenanceModel(ctx, existing); err != nil {
+		return nil, err
 	}
 	if existing.IsBuiltin {
 		// Credential changes are also runtime overrides of YAML-managed data.
@@ -371,6 +491,11 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 		logger.Warnf(ctx, "Attempted to delete builtin model: %s", id)
 		return apperrors.NewBadRequestError("builtin models cannot be deleted")
 	}
+	if inUse, err := s.chatGPTFallbackInUse(ctx, id); err != nil {
+		return err
+	} else if inUse {
+		return apperrors.NewBadRequestError("remove the ChatGPT fallback selection before deleting this model")
+	}
 
 	usage, err := s.getModelUsageDetails(ctx, tenantID, id)
 	if err != nil {
@@ -384,13 +509,9 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 		if kbCount == 0 {
 			kbCount = int64(len(usage.KnowledgeBases))
 		}
-		agentCount := usage.AgentTotal
-		if agentCount == 0 {
-			agentCount = int64(len(usage.Agents))
-		}
-		logger.Warnf(ctx, "Model %s is in use: kb=%d agent=%d", id, kbCount, agentCount)
+		logger.Warnf(ctx, "Model %s is in use: kb=%d", id, kbCount)
 		return apperrors.NewModelInUseError(
-			formatModelInUseMessage(kbCount, agentCount),
+			formatModelInUseMessage(kbCount),
 			usage,
 		)
 	}
@@ -413,18 +534,7 @@ func (s *modelService) getModelUsageDetails(
 	ctx context.Context, tenantID uint64, modelID string,
 ) (types.ModelUsageDetails, error) {
 	details := types.ModelUsageDetails{
-		ModelTiers:     []types.ModelTierUsageResource{},
 		KnowledgeBases: make([]types.ModelUsageResource, 0),
-		Agents:         make([]types.ModelUsageResource, 0),
-	}
-	if s.db != nil {
-		var domains []types.KnowledgeDomain
-		if err := s.db.WithContext(ctx).Select("id", "name", "model_tiers").Where("tenant_id = ? AND (model_tiers->>'light' = ? OR model_tiers->>'extraction' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?)", tenantID, modelID, modelID, modelID, modelID, modelID).Find(&domains).Error; err != nil {
-			return details, err
-		}
-		for _, domain := range domains {
-			details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "domain", ID: domain.ID, Name: domain.Name, Bindings: domain.ModelTiers.UsageBindings(modelID)})
-		}
 	}
 
 	kbCount, err := s.kbRepo.CountByModelID(ctx, tenantID, modelID)
@@ -442,34 +552,6 @@ func (s *modelService) getModelUsageDetails(
 		}
 	}
 
-	agentCount, err := s.agentRepo.CountByModelID(ctx, tenantID, modelID)
-	if err != nil {
-		return details, err
-	}
-	details.AgentTotal = agentCount
-	if agentCount > 0 {
-		details.Agents, err = s.agentRepo.ListModelUsages(ctx, tenantID, modelID)
-		if err != nil {
-			return details, err
-		}
-		if details.Agents == nil {
-			details.Agents = make([]types.ModelUsageResource, 0)
-		}
-	}
-
-	if s.tenantService == nil {
-		return details, nil
-	}
-	tenant, err := s.tenantService.GetTenantByID(ctx, tenantID)
-	if err != nil {
-		return details, err
-	}
-	if tenant == nil {
-		return details, nil
-	}
-	if bindings := tenant.ModelTiers.UsageBindings(modelID); len(bindings) > 0 {
-		details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "global", ID: strconv.FormatUint(tenantID, 10), Name: tenant.Name, Bindings: bindings})
-	}
 	return details, nil
 }
 
@@ -486,6 +568,9 @@ func (s *modelService) GetEmbeddingModel(ctx context.Context, modelId string) (e
 	}
 
 	logger.Infof(ctx, "Getting embedding model: %s, source: %s", model.Name, model.Source)
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
+	}
 
 	embedder, err := embedding.NewEmbedder(embedding.ConfigFromModel(model), s.pooler, s.ollamaService)
 	if err != nil {
@@ -513,6 +598,9 @@ func (s *modelService) GetRerankModel(ctx context.Context, modelId string) (rera
 	}
 
 	logger.Infof(ctx, "Getting rerank model: %s, source: %s", model.Name, model.Source)
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
+	}
 
 	reranker, err := rerank.NewReranker(rerank.ConfigFromModel(model, s.decryptAppSecret(model.Parameters.AppSecret)))
 	if err != nil {
@@ -554,7 +642,22 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 	}
 
 	logger.Infof(ctx, "Getting chat model: %s, source: %s", model.Name, model.Source)
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		if changed, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+			return nil, err
+		} else if changed {
+			if err := s.repo.Update(ctx, model); err != nil {
+				return nil, err
+			}
+		}
+		if model.Status == types.ModelStatusNeedsConfiguration {
+			return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
+		}
+	}
 
+	if model.Source == types.ModelSourceChatGPT {
+		return s.chatGPTModel(ctx, model)
+	}
 	chatModel, err := chat.NewChat(chat.ConfigFromModel(model), s.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -567,52 +670,12 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 	return chatModel, nil
 }
 
-// GetVLMModel retrieves and initializes a vision language model instance.
-func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM, error) {
-	if modelId == "" {
-		return nil, errors.New("model ID cannot be empty")
-	}
-
-	tenantID := types.MustTenantIDFromContext(ctx)
-
-	model, err := s.repo.GetByID(ctx, tenantID, modelId)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":  modelId,
-			"tenant_id": tenantID,
-		})
-		return nil, err
-	}
-
-	if model == nil {
-		return nil, ErrModelNotFound
-	}
-
-	logger.Infof(ctx, "Getting VLM model: %s, source: %s", model.Name, model.Source)
-	if err := validateImageProcessingModel(model); err != nil {
-		return nil, err
-	}
-
-	vlmModel, err := vlm.NewVLM(vlm.ConfigFromModel(model), s.ollamaService)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":   model.ID,
-			"model_name": model.Name,
-		})
-		return nil, err
-	}
-
-	return vlmModel, nil
-}
-
-func formatModelInUseMessage(kbCount, agentCount int64) string {
+func formatModelInUseMessage(kbCount int64) string {
 	var parts []string
 	if kbCount > 0 {
 		parts = append(parts, fmt.Sprintf("%d knowledge base(s)", kbCount))
 	}
-	if agentCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d agent(s)", agentCount))
-	}
+
 	joined := strings.Join(parts, " and ")
 	return fmt.Sprintf(
 		"model is used by %s; reconfigure or remove those references before deleting",

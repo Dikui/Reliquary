@@ -161,9 +161,9 @@
             <span class="stats-sep">·</span>
             <span>σ {{ result.stats.stddev_chars }}</span>
             <span class="stats-sep">·</span>
-            <span>min {{ result.stats.min_chars }}</span>
+            <span>{{ $t('knowledgeEditor.chunking.debug.stats.min') }} {{ result.stats.min_chars }}</span>
             <span class="stats-sep">·</span>
-            <span>max {{ result.stats.max_chars }}</span>
+            <span>{{ $t('knowledgeEditor.chunking.debug.stats.max') }} {{ result.stats.max_chars }}</span>
             <span v-if="result.stats.truncated_to" class="truncation-hint">
               {{ $t('knowledgeEditor.chunking.debug.stats.truncated', { total: result.stats.truncated_to }) }}
             </span>

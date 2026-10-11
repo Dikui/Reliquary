@@ -26,7 +26,7 @@ func TestStartupCredentialEncryptionWarning(t *testing.T) {
 			log.SetOutput(&output)
 			ctx := context.WithValue(context.Background(), types.LoggerContextKey, logrus.NewEntry(log))
 			LogStartupEnv(ctx)
-			warning := "SYSTEM_AES_KEY is not set; MCP credentials and model API keys will be stored in plaintext"
+			warning := "SYSTEM_AES_KEY is not set; model API keys and data-source credentials will be stored in plaintext"
 			if got := strings.Count(output.String(), warning); got != map[bool]int{true: 1, false: 0}[tc.warn] {
 				t.Fatalf("plaintext warning count = %d, want warning=%v: %s", got, tc.warn, output.String())
 			}

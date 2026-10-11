@@ -1,20 +1,46 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { nextTick, reactive, ref, watch } from 'vue'
 
 const source = readFileSync(new URL('./KnowledgeBase.vue', import.meta.url), 'utf8')
 
-test('referenced documents navigate to their containing folder before opening details', () => {
-  const resolveFolder = source.indexOf('await getKnowledgeDetails(targetId)')
-  const selectFolder = source.indexOf('selectedFolderPath.value = detail.folder_path || ROOT_FOLDER_PATH')
-  const openDetails = source.indexOf('openCardDetails(target)', selectFolder)
-
-  assert.ok(resolveFolder >= 0, 'document details should be fetched to resolve folder_path')
-  assert.ok(selectFolder > resolveFolder, 'the containing folder should be selected after details load')
-  assert.ok(openDetails > selectFolder, 'the detail drawer should open after folder navigation')
+test('referenced articles fetch details before opening', () => {
+  const fetch = source.indexOf('await getKnowledgeDetails(targetId)')
+  assert.ok(fetch >= 0)
+  assert.ok(source.indexOf('openCardDetails(target)', fetch) > fetch)
 })
 
 test('a newer referenced-document navigation supersedes an older request', () => {
   assert.match(source, /const request = \+\+autoOpenRequest/)
   assert.match(source, /if \(request !== autoOpenRequest\) return;/)
+})
+
+test('sidebar navigation and article tabs remain synchronized without remounting the page', async () => {
+  const start = source.indexOf('watch(() => route.query.tab,')
+  const end = source.indexOf('watch(() => kbId.value,', start)
+  assert.ok(start >= 0 && end > start)
+  const route = reactive({ query: { knowledge_id: 'article-a' } as Record<string, string> })
+  const activeKbTab = ref('documents')
+  new Function('watch', 'route', 'activeKbTab', 'router', source.slice(start, end))(
+    watch, route, activeKbTab, { replace: ({ query }: { query: Record<string, string> }) => { route.query = query } },
+  )
+  route.query.tab = 'entities'
+  await nextTick()
+  assert.equal(activeKbTab.value, 'entities')
+  delete route.query.tab
+  await nextTick()
+  assert.equal(activeKbTab.value, 'documents')
+  activeKbTab.value = 'entities'
+  await nextTick()
+  assert.deepEqual(route.query, { tab: 'entities', knowledge_id: 'article-a' })
+  activeKbTab.value = 'documents'
+  await nextTick()
+  assert.deepEqual(route.query, { knowledge_id: 'article-a' })
+  activeKbTab.value = 'reviews'
+  await nextTick()
+  assert.deepEqual(route.query, { tab: 'reviews', knowledge_id: 'article-a' })
+  route.query.tab = 'entities'
+  await nextTick()
+  assert.equal(activeKbTab.value, 'entities')
 })

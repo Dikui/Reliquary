@@ -15,12 +15,6 @@ const (
 	SearchTargetTypeKnowledge SearchTargetType = "knowledge"
 )
 
-// TagScope represents a tag-constrained retrieval scope inside one knowledge base.
-type TagScope struct {
-	KnowledgeBaseID string   `json:"knowledge_base_id"`
-	TagIDs          []string `json:"tag_ids"`
-}
-
 // SearchTarget represents a unified search target
 // Either search an entire knowledge base, or specific knowledge files within a knowledge base
 type SearchTarget struct {
@@ -34,12 +28,6 @@ type SearchTarget struct {
 	// KnowledgeIDs is the list of specific knowledge IDs to search within the knowledge base
 	// Only used when Type is SearchTargetTypeKnowledge
 	KnowledgeIDs []string `json:"knowledge_ids,omitempty"`
-	// TagIDs limits retrieval to chunks/documents carrying any of these KB-local tags.
-	TagIDs []string `json:"tag_ids,omitempty"`
-	// ScopeTagIDs records the logical tag scope selected by the user. For
-	// document KBs this is kept for tracing after the relation-table lookup has
-	// been resolved to KnowledgeIDs; TagIDs remains the physical index filter.
-	ScopeTagIDs []string `json:"scope_tag_ids,omitempty"`
 	// DisableRecallThresholds keeps recall broad inside an already constrained,
 	// user-selected scope. The reranker still orders candidates, but vector and
 	// keyword thresholds cannot erase the whole explicit scope before reranking.
@@ -69,9 +57,7 @@ func (st SearchTargets) HasRecallThresholdOverride() bool {
 }
 
 // HasKnowledgeRetrievalScope reports whether a request has any effective
-// knowledge retrieval scope. SearchTargets are the unified runtime form and
-// must be considered alongside the legacy/raw KB and knowledge ID fields so
-// tag-only mentions are not mistaken for pure chat.
+// knowledge retrieval scope.
 func HasKnowledgeRetrievalScope(
 	searchTargets SearchTargets,
 	knowledgeBaseIDs []string,
@@ -91,8 +77,7 @@ func HasKnowledgeRetrievalScope(
 		if target == nil || target.KnowledgeBaseID == "" {
 			continue
 		}
-		if target.Type == SearchTargetTypeKnowledgeBase || len(target.KnowledgeIDs) > 0 ||
-			len(target.TagIDs) > 0 || len(target.ScopeTagIDs) > 0 {
+		if target.Type == SearchTargetTypeKnowledgeBase || len(target.KnowledgeIDs) > 0 {
 			return true
 		}
 	}
@@ -207,17 +192,6 @@ type SearchResult struct {
 	// KnowledgeBaseID is the ID of the knowledge base this result belongs to
 	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"`
 
-	// ContentRevision is the chunk edit revision at retrieval time.
-	// Internal only: used by the merge pipeline to decide whether source
-	// coordinates are still trustworthy.
-	//
-	// Zero means "never edited", so any construction path that forgets to carry
-	// it over fails open to the position path. Results rebuilt from JSON (stored
-	// message references) always land on zero because the field is not
-	// serialized; the length invariant in chunkTrusted is the remaining guard
-	// there. Keep the gorm column explicit so direct row scans populate it.
-	ContentRevision int `gorm:"column:content_revision" json:"-"`
-
 	// ContentRewritten reports that the merge pipeline replaced Content
 	// (parent or neighbor expansion) after retrieval, so StartAt/EndAt no
 	// longer describe the body. Internal only: used by the merge pipeline,
@@ -237,16 +211,10 @@ type SearchParams struct {
 	DisableKeywordsMatch bool      `json:"disable_keywords_match"`
 	DisableVectorMatch   bool      `json:"disable_vector_match"`
 	KnowledgeIDs         []string  `json:"knowledge_ids"`
-	TagIDs               []string  `json:"tag_ids"`
-	ScopeTagIDs          []string  `json:"scope_tag_ids,omitempty"`
-	OnlyRecommended      bool      `json:"only_recommended"`
-	// KnowledgeBaseIDs overrides the single KB ID passed to HybridSearch,
-	// allowing a single retrieval call to span multiple KBs that share the
-	// same embedding model. When empty, HybridSearch uses its own id parameter.
-	KnowledgeBaseIDs []string `json:"knowledge_base_ids,omitempty"`
+	// OnlyRecommended is accepted for compatibility and has no effect.
+	OnlyRecommended bool `json:"only_recommended"`
 	// SkipContextEnrichment skips fetching parent, nearby, and relation chunks
-	// in processSearchResults. Used by the chat pipeline where context assembly
-	// is handled separately in the merge stage.
+	// in processSearchResults when callers perform their own context assembly.
 	SkipContextEnrichment bool `json:"skip_context_enrichment,omitempty"`
 }
 

@@ -33,9 +33,6 @@ func RegisterModelRoutes(
 }
 
 func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.InitializationHandler, g *accessGuards) {
-	r.Handle(http.MethodGet, "/initialization/config/:kbId", g.KBExists("kbId"), handler.GetCurrentConfigByKB)
-	r.Handle(http.MethodPost, "/initialization/initialize/:kbId", g.KBExists("kbId"), handler.InitializeByKB)
-	r.Handle(http.MethodPut, "/initialization/config/:kbId", g.KBExists("kbId"), handler.UpdateKBConfig)
 
 	r.Handle(http.MethodGet, "/initialization/ollama/status", handler.CheckOllamaStatus)
 	r.Handle(http.MethodGet, "/initialization/ollama/models", handler.ListOllamaModels)
@@ -48,43 +45,7 @@ func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.Initializ
 	r.Handle(http.MethodPost, "/initialization/remote/check", handler.CheckRemoteModel)
 	r.Handle(http.MethodPost, "/initialization/embedding/test", handler.TestEmbeddingModel)
 	r.Handle(http.MethodPost, "/initialization/rerank/check", handler.CheckRerankModel)
-	r.Handle(http.MethodPost, "/initialization/multimodal/test", handler.TestMultimodalFunction)
 
-}
-
-func RegisterMCPServiceRoutes(
-	r *gin.RouterGroup,
-	handler *handler.MCPServiceHandler,
-	credHandler *handler.MCPCredentialsHandler,
-	g *accessGuards) {
-	mcpServices := r.Group("/mcp-services")
-	{
-		// Create MCP service
-		mcpServices.POST("", handler.CreateMCPService)
-		mcpServices.GET("", handler.ListMCPServices)
-		mcpServices.GET("/:id", handler.GetMCPService)
-		// Update MCP service
-		mcpServices.PUT("/:id", handler.UpdateMCPService)
-		// Delete MCP service
-		mcpServices.DELETE("/:id", handler.DeleteMCPService)
-		// Test MCP service connection (probes external infrastructure)
-		mcpServices.POST("/:id/test", handler.TestMCPService)
-		mcpServices.GET("/:id/tools", handler.GetMCPServiceTools)
-		mcpServices.GET("/:id/resources", handler.GetMCPServiceResources)
-		// Per-field credential subresource: secrets never travel via the main
-		// PUT body. See internal/handler/mcp_credentials.go for the contract.
-		mcpServices.PUT("/:id/credentials", credHandler.Put)
-		mcpServices.DELETE("/:id/credentials/:field", credHandler.DeleteField)
-		mcpServices.GET("/:id/tool-approvals", handler.ListMCPToolApprovals)
-		mcpServices.PUT("/:id/tool-approvals/:tool_name", handler.SetMCPToolApproval)
-	}
-
-	// /agent tool approval is an interactive human flow;
-	// not declared for API keys (default-deny).
-	agentTool := r.Group("/agent")
-	{
-		agentTool.POST("/tool-approvals/:pending_id", handler.ResolveToolApproval)
-	}
 }
 
 func RegisterDataSourceRoutes(
@@ -93,7 +54,7 @@ func RegisterDataSourceRoutes(
 	credHandler *handler.DataSourceCredentialsHandler,
 	g *accessGuards) {
 	// Data source routes
-	ds := r.Group("/datasource")
+	ds := r.Group("/data-sources")
 	{
 		ds.GET("/types", handler.GetAvailableConnectors)
 

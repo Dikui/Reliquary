@@ -39,6 +39,5 @@ for (const [locale, messages] of Object.entries({ 'zh-CN': zhCN, 'en-US': enUS }
     }
     assert.equal(label({ source: 'local', provider: 'azure_openai' }), 'Ollama')
     assert.equal(label({ source: 'remote', provider: '', _modelType: 'chat' }), messages.modelSettings.source.remote)
-    assert.equal(label({ source: 'remote', _modelType: 'vllm' }), messages.modelSettings.source.openaiCompatible)
   })
 }

@@ -25,3 +25,5 @@ Status: accepted
 - 默认部署少了多个容器，备份只需要处理 PostgreSQL 和文件存储。
 - 数据规模达到千万级向量时，需要重新评估独立向量库。个人信源采集的规模短期内达不到。
 - 不再提供无需数据库服务的试用方式；个人使用同样需要通过 Docker Compose 运行 PostgreSQL 与 Redis。
+
+2026-10-11 更新：部署已按 [0010](0010-postgres-task-queue.md) 删除 Redis，后台任务与数据共用 PostgreSQL。

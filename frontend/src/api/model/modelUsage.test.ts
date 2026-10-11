@@ -5,7 +5,6 @@ import {
   MODEL_IN_USE_ERROR_CODE,
   ModelInUseError,
   modelInUseErrorFromRequest,
-  modelUsageAgentSection,
   modelUsageBindingI18nKey,
   modelUsageKnowledgeBaseSection,
   modelUsageListTruncated,
@@ -16,14 +15,10 @@ import {
 
 const details = {
   knowledge_bases: [
-    { id: 'kb-1', name: 'Product docs', bindings: ['vlm_model'] },
-    { id: 'kb-2', name: 'Engineering', bindings: ['vlm_model'] },
-  ],
-  agents: [
-    { id: 'agent-1', name: 'Support', bindings: ['chat_model'] },
+    { id: 'kb-1', name: 'Product docs', bindings: ['generation_model_tier'] },
+    { id: 'kb-2', name: 'Engineering', bindings: ['generation_model_tier'] },
   ],
   knowledge_base_total: 2,
-  agent_total: 1,
 }
 
 test('parses grouped model usage details without dropping multiple bindings', () => {
@@ -31,23 +26,19 @@ test('parses grouped model usage details without dropping multiple bindings', ()
 })
 
 test('fills missing totals from the listed collections', () => {
-  const { knowledge_base_total, agent_total, ...withoutTotals } = details
+  const { knowledge_base_total, ...withoutTotals } = details
   assert.deepEqual(parseModelUsageDetails(withoutTotals), details)
   assert.equal(knowledge_base_total, 2)
-  assert.equal(agent_total, 1)
 })
 
 test('keeps untruncated totals when the listed collections are capped', () => {
   const parsed = parseModelUsageDetails({
     ...details,
     knowledge_base_total: 80,
-    agent_total: 12,
   })
   assert.equal(parsed?.knowledge_base_total, 80)
-  assert.equal(parsed?.agent_total, 12)
   assert.equal(modelUsageResourceCount(parsed!.knowledge_bases, parsed!.knowledge_base_total), 80)
   assert.equal(modelUsageListTruncated(parsed!.knowledge_bases, parsed!.knowledge_base_total), true)
-  assert.equal(modelUsageListTruncated(parsed!.agents, parsed!.agent_total), true)
 })
 
 test('recognizes only the dedicated model-in-use code with a valid payload', () => {
@@ -67,18 +58,15 @@ test('recognizes only the dedicated model-in-use code with a valid payload', () 
 })
 
 test('rejects malformed details instead of guessing from the server message', () => {
-  assert.equal(parseModelUsageDetails({ knowledge_bases: [], agents: [] }), null)
+  assert.equal(parseModelUsageDetails({ knowledge_bases: [] }), null)
   assert.equal(parseModelUsageDetails({
     knowledge_bases: [],
-    agents: [],
   }), null)
   assert.equal(parseModelUsageDetails({
     knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: [] }],
-    agents: [],
   }), null)
   assert.equal(parseModelUsageDetails({
-    knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: 'vlm_model' }],
-    agents: [],
+    knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: 'generation_model_tier' }],
   }), null)
   assert.equal(modelInUseErrorFromRequest({
     error: {
@@ -92,41 +80,24 @@ test('rejects malformed details instead of guessing from the server message', ()
 test('keeps navigation and localization stable for all resource kinds', () => {
   assert.deepEqual(
     modelUsageResourceRoute('knowledge_base', 'kb/with slash'),
-    { path: '/platform/knowledge-bases/kb%2Fwith%20slash' },
+    { path: '/platform/settings', query: { section: 'knowledge', subsection: 'models' } },
   )
-  assert.deepEqual(
-    modelUsageResourceRoute('agent', 'agent-1'),
-    { path: '/platform/agents', query: { edit: 'agent-1', section: 'model' } },
-  )
-  assert.deepEqual(
-    modelUsageResourceRoute('agent', 'agent-1', ['vlm_model']),
-    { path: '/platform/agents', query: { edit: 'agent-1', section: 'multimodal' } },
-  )
-  assert.equal(modelUsageBindingI18nKey('vlm_model'), 'modelSettings.usage.bindings.vlm_model')
+  assert.equal(modelUsageBindingI18nKey('generation_model_tier'), 'modelSettings.usage.bindings.generation_model_tier')
   assert.equal(modelUsageBindingI18nKey('future_binding'), 'modelSettings.usage.bindings.unknown')
 })
 
 test('maps knowledge-base bindings to the configuration section that owns them', () => {
   assert.equal(modelUsageKnowledgeBaseSection(['embedding_model']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['summary_model']), 'models')
-  assert.equal(modelUsageKnowledgeBaseSection(['image_processing_model']), 'multimodal')
-  assert.equal(modelUsageKnowledgeBaseSection(['vlm_model']), 'multimodal')
+  assert.equal(modelUsageKnowledgeBaseSection(['generation_model_tier']), 'models')
+  assert.equal(modelUsageKnowledgeBaseSection(['generation_model_tier']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['future_binding']), 'models')
-  assert.equal(modelUsageKnowledgeBaseSection(['summary_model', 'vlm_model']), 'models')
+  assert.equal(modelUsageKnowledgeBaseSection(['summary_model', 'generation_model_tier']), 'models')
 })
 
-test('maps agent bindings to the configuration section that owns them', () => {
-  assert.equal(modelUsageAgentSection(['chat_model']), 'model')
-  assert.equal(modelUsageAgentSection(['rerank_model']), 'model')
-  assert.equal(modelUsageAgentSection(['query_understand_model']), 'model')
-  assert.equal(modelUsageAgentSection(['vlm_model']), 'multimodal')
-  assert.equal(modelUsageAgentSection(['future_binding']), 'model')
-  assert.equal(modelUsageAgentSection(['chat_model', 'vlm_model']), 'model')
-})
-
-test('tier-only model usage prevents deletion and preserves global and domain references', () => {
-  const details = parseModelUsageDetails({ knowledge_bases: [], agents: [], model_tiers: [{ scope: 'global', id: '1', name: 'Global defaults', bindings: ['light_model_tier'] }, { scope: 'domain', id: 'domain-a', name: 'AI', bindings: ['extraction_model_tier'] }] })
-  assert.equal(details?.model_tiers?.length, 2)
-  assert.equal(details?.model_tiers?.[1]?.scope, 'domain')
+test('model tier bindings stay attached to the unique knowledge settings', () => {
+  const details = parseModelUsageDetails({ knowledge_bases: [{ id: 'kb-1', name: 'Knowledge Base', bindings: ['light_model_tier', 'entity_resolution_model_tier'] }] })
+  assert.equal(details?.knowledge_bases.length, 1)
+  assert.deepEqual(details?.knowledge_bases[0]?.bindings, ['light_model_tier', 'entity_resolution_model_tier'])
   assert.equal(modelUsageBindingI18nKey('light_model_tier'), 'modelSettings.usage.bindings.light_model_tier')
 })

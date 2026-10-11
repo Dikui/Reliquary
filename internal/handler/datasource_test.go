@@ -54,7 +54,7 @@ func newDataSourceTestRouter(h *DataSourceHandler) *gin.Engine {
 		}
 		c.Next()
 	})
-	r.GET("/datasource/:id/logs", h.GetSyncLogs)
+	r.GET("/data-sources/:id/logs", h.GetSyncLogs)
 	return r
 }
 
@@ -86,7 +86,7 @@ func TestDataSource_GetSyncLogs_ValidLimitWithinBounds(t *testing.T) {
 	h := NewDataSourceHandler(dsSvc, kbSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/datasource/ds1/logs?limit=50&offset=25", nil)
+	req := httptest.NewRequest(http.MethodGet, "/data-sources/ds1/logs?limit=50&offset=25", nil)
 	req = withDSCtx(req, 1)
 	newDataSourceTestRouter(h).ServeHTTP(w, req)
 
@@ -119,7 +119,7 @@ func TestDataSource_GetSyncLogs_LimitExceedingMaximum(t *testing.T) {
 	h := NewDataSourceHandler(dsSvc, kbSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/datasource/ds1/logs?limit=999", nil)
+	req := httptest.NewRequest(http.MethodGet, "/data-sources/ds1/logs?limit=999", nil)
 	req = withDSCtx(req, 1)
 	newDataSourceTestRouter(h).ServeHTTP(w, req)
 
@@ -159,7 +159,7 @@ func TestDataSource_GetSyncLogs_MissingLimitDefaultsCorrectly(t *testing.T) {
 	h := NewDataSourceHandler(dsSvc, kbSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/datasource/ds1/logs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/data-sources/ds1/logs", nil)
 	req = withDSCtx(req, 1)
 	newDataSourceTestRouter(h).ServeHTTP(w, req)
 
@@ -192,7 +192,7 @@ func TestDataSource_GetSyncLogs_NonNumericLimitRejected(t *testing.T) {
 	h := NewDataSourceHandler(dsSvc, kbSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/datasource/ds1/logs?limit=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/data-sources/ds1/logs?limit=abc", nil)
 	req = withDSCtx(req, 1)
 	newDataSourceTestRouter(h).ServeHTTP(w, req)
 
@@ -219,7 +219,7 @@ func TestDataSource_GetSyncLogs_ZeroLimitRejected(t *testing.T) {
 	h := NewDataSourceHandler(dsSvc, kbSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/datasource/ds1/logs?limit=0", nil)
+	req := httptest.NewRequest(http.MethodGet, "/data-sources/ds1/logs?limit=0", nil)
 	req = withDSCtx(req, 1)
 	newDataSourceTestRouter(h).ServeHTTP(w, req)
 
@@ -246,7 +246,7 @@ func TestDataSource_GetSyncLogs_NegativeLimitRejected(t *testing.T) {
 	h := NewDataSourceHandler(dsSvc, kbSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/datasource/ds1/logs?limit=-5", nil)
+	req := httptest.NewRequest(http.MethodGet, "/data-sources/ds1/logs?limit=-5", nil)
 	req = withDSCtx(req, 1)
 	newDataSourceTestRouter(h).ServeHTTP(w, req)
 

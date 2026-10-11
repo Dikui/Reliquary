@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/url"
@@ -11,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
@@ -23,24 +24,20 @@ import (
 
 // CreateKnowledgeFromFile creates a knowledge entry from an uploaded file
 func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
-	kbID string, file *multipart.FileHeader, metadata map[string]string, enableMultimodel *bool, customFileName string, tagIDs []string, channel string,
+	kbID string, file *multipart.FileHeader, metadata map[string]string, enableMultimodel *bool, customFileName string, channel string,
 	processOverrides *types.KnowledgeProcessOverrides,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.CreateKnowledgeFromFile(ctx, kbID, file, metadata, enableMultimodel, customFileName, channel, processOverrides)
+		})
+	}
+
 	logger.Info(ctx, "Start creating knowledge from file")
 
-	// Use custom filename if provided, otherwise use original filename. Folder
-	// uploads pass a path-qualified name ("docs/spec/design.md"): the directory
-	// part becomes the knowledge's folder_path and only the base name is kept as
-	// the display / storage file name.
-	fileName := file.Filename
-	folderPath := ""
+	fileName := path.Base(strings.ReplaceAll(file.Filename, "\\", "/"))
 	if customFileName != "" {
-		folderPath, fileName = types.SplitKnowledgeRelativePath(customFileName)
-		if fileName == "" {
-			fileName = file.Filename
-		}
-		logger.Infof(ctx, "Using custom filename: %s (original: %s, folder: %s)",
-			fileName, file.Filename, folderPath)
+		fileName = path.Base(strings.ReplaceAll(customFileName, "\\", "/"))
 	}
 
 	logger.Infof(ctx, "Knowledge base ID: %s, file: %s", kbID, fileName)
@@ -61,9 +58,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	// Early reject before the whole-file hash below. resolveFileImportProcessConfig
 	// gates the same extension set and provides a clear unsupported-type error.
 	if err := validateImportFileType(getFileType(fileName)); err != nil {
-		return nil, err
-	}
-	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
 		return nil, err
 	}
 
@@ -120,18 +114,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, werrors.NewValidationError("文件名包含非法字符")
 	}
 
-	// The folder path is rendered as sidebar tree labels, so it goes through the
-	// same input validation as the file name before it is stored.
-	if folderPath != "" {
-		safeFolderPath, folderValid := secutils.ValidateInput(folderPath)
-		if !folderValid {
-			logger.Errorf(ctx, "Invalid folder path: %s", folderPath)
-			return nil, werrors.NewValidationError("文件夹路径包含非法字符")
-		}
-		folderPath = types.NormalizeKnowledgeFolderPath(safeFolderPath)
-	}
-
-	eff, err := resolveFileImportProcessConfig(ctx, kb, getFileType(safeFilename), processOverrides, enableMultimodel)
+	_, err = resolveFileImportProcessConfig(ctx, kb, getFileType(safeFilename), processOverrides, enableMultimodel)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +129,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		Channel:          defaultChannel(channel),
 		Title:            safeFilename,
 		FileName:         safeFilename,
-		FolderPath:       folderPath,
 		FileType:         getFileType(safeFilename),
 		FileSize:         file.Size,
 		FileHash:         hash,
@@ -197,34 +179,19 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		logger.Errorf(ctx, "Failed to create knowledge record, ID: %s, error: %v", knowledge.ID, err)
 		return nil, err
 	}
-	// Set tag relations
-	if err := s.setAndAttachKnowledgeTags(ctx, tenantID, kbID, knowledge, tagIDs); err != nil {
-		logger.Errorf(ctx, "Failed to set knowledge tags, knowledge ID: %s, error: %v", knowledge.ID, err)
-		return nil, err
-	}
 
-	// Enqueue document processing task to Asynq
-	logger.Info(ctx, "Enqueuing document processing task to Asynq")
-	enableMultimodelValue := eff.EnableMultimodel
-
-	enableQuestionGeneration := eff.QuestionGenerationConfig.Enabled
-	questionCount := eff.QuestionGenerationConfig.QuestionCount
-	if questionCount <= 0 {
-		questionCount = 3
-	}
+	// Enqueue document processing task to PostgreSQL
+	logger.Info(ctx, "Enqueuing document processing task to PostgreSQL")
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:                 tenantID,
-		KnowledgeID:              knowledge.ID,
-		KnowledgeBaseID:          kbID,
-		FilePath:                 filePath,
-		FileName:                 safeFilename,
-		FileType:                 getFileType(safeFilename),
-		EnableMultimodel:         enableMultimodelValue,
-		EnableQuestionGeneration: enableQuestionGeneration,
-		QuestionCount:            questionCount,
-		Language:                 lang,
+		TenantID:        tenantID,
+		KnowledgeID:     knowledge.ID,
+		KnowledgeBaseID: kbID,
+		FilePath:        filePath,
+		FileName:        safeFilename,
+		FileType:        getFileType(safeFilename),
+		Language:        lang,
 	}
 
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -235,10 +202,10 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return knowledge, nil
 	}
 
-	task := asynq.NewTask(
+	task := taskqueue.NewTask(
 		types.TypeDocumentProcess,
 		payloadBytes,
-		documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+		documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 	)
 	info, err := s.task.Enqueue(task)
 	if err != nil {
@@ -255,16 +222,10 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		knowledge.ID,
 	)
 
-	if err := s.enqueueTierDataTableSummary(ctx, kb, knowledge.ID, safeFilename, getFileType(safeFilename)); err != nil {
-		return knowledge, err
-	}
-
 	logger.Infof(ctx, "Knowledge from file created successfully, ID: %s", knowledge.ID)
 	return knowledge, nil
 }
 
-// CreateKnowledgeFromURL creates a knowledge entry from a URL source
-// tagID is optional - when provided, the knowledge will be assigned to the specified tag/category.
 // isFileURL reports whether the given URL should be treated as a direct file download.
 // Priority: URL path has a known file extension first, then fall back to user-provided fileName/fileType hints.
 func isFileURL(rawURL, fileName, fileType string) bool {
@@ -280,17 +241,15 @@ func isFileURL(rawURL, fileName, fileType string) bool {
 }
 
 func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
-	kbID string, rawURL string, fileName string, fileType string, enableMultimodel *bool, title string, tagIDs []string, channel string,
+	kbID string, rawURL string, fileName string, fileType string, enableMultimodel *bool, title string, channel string,
 	processOverrides *types.KnowledgeProcessOverrides, sourceInfos ...types.SourceInfo,
 ) (*types.Knowledge, error) {
-	return s.createKnowledgeFromURL(ctx, kbID, rawURL, fileName, fileType, enableMultimodel, title, tagIDs, channel,
-		processOverrides, nil, false, sourceInfos...)
-}
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.CreateKnowledgeFromURL(ctx, kbID, rawURL, fileName, fileType, enableMultimodel, title, channel, processOverrides, sourceInfos...)
+		})
+	}
 
-func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
-	kbID string, rawURL string, fileName string, fileType string, enableMultimodel *bool, title string, tagIDs []string, channel string,
-	processOverrides *types.KnowledgeProcessOverrides, sourceMetadata map[string]string, skipDuplicate bool, sourceInfos ...types.SourceInfo,
-) (*types.Knowledge, error) {
 	if blockedIntakeURL(rawURL) {
 		return nil, werrors.NewBadRequestError("X/Twitter sources require Grok ingestion")
 	}
@@ -300,8 +259,8 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 	// Route to file_url logic when the URL points to a downloadable file
 	if isFileURL(rawURL, fileName, fileType) {
 		return s.createKnowledgeFromFileURL(
-			ctx, kbID, rawURL, fileName, fileType, enableMultimodel, title, tagIDs, channel, processOverrides,
-			sourceMetadata, skipDuplicate, sourceInfos...,
+			ctx, kbID, rawURL, fileName, fileType, enableMultimodel, title, channel, processOverrides,
+			sourceInfos...,
 		)
 	}
 
@@ -316,9 +275,6 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 	}
 
 	// Validate URL format and security
-	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
-		return nil, err
-	}
 	logger.Info(ctx, "Validating URL")
 	if !isValidURL(url) || !secutils.IsValidURL(url) {
 		logger.Error(ctx, "Invalid or unsafe URL format")
@@ -335,48 +291,47 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 	logger.Infof(ctx, "Checking if URL exists, tenant ID: %d", tenantID)
 	fileHash := calculateStr(url)
-	if !skipDuplicate {
-		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: url}
-		source := types.SourceInfo{OriginalURL: url}
-		if len(sourceInfos) > 0 {
-			source = sourceInfos[0]
-			if source.OriginalURL == "" {
-				source.OriginalURL = url
-			}
+
+	incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: url}
+	source := types.SourceInfo{OriginalURL: url}
+	if len(sourceInfos) > 0 {
+		source = sourceInfos[0]
+		if source.OriginalURL == "" {
+			source.OriginalURL = url
 		}
-		if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}); err != nil {
+	}
+	if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}); err != nil {
+		return nil, err
+	}
+	existing, err := s.checkMessageDuplicate(ctx, incoming, "")
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, types.NewDuplicateURLError(existing)
+	}
+	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+		Type:     "url",
+		URL:      url,
+		FileHash: fileHash,
+	})
+	if err != nil {
+		logger.Errorf(ctx, "Failed to check knowledge existence: %v", err)
+		return nil, err
+	}
+	if exists {
+		if err := s.recordKnownMessageRepost(ctx, existingKnowledge, kbID, source, "url"); err != nil {
 			return nil, err
 		}
-		existing, err := s.checkMessageDuplicate(ctx, incoming, "")
-		if err != nil {
+		logger.Infof(ctx, "URL already exists: %s", url)
+		// Update creation time for existing knowledge
+		existingKnowledge.CreatedAt = time.Now()
+		existingKnowledge.UpdatedAt = time.Now()
+		if err := s.repo.UpdateKnowledge(ctx, existingKnowledge); err != nil {
+			logger.Errorf(ctx, "Failed to update existing knowledge: %v", err)
 			return nil, err
 		}
-		if existing != nil {
-			return existing, types.NewDuplicateURLError(existing)
-		}
-		exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
-			Type:     "url",
-			URL:      url,
-			FileHash: fileHash,
-		})
-		if err != nil {
-			logger.Errorf(ctx, "Failed to check knowledge existence: %v", err)
-			return nil, err
-		}
-		if exists {
-			if err := s.recordKnownMessageRepost(ctx, existingKnowledge, kbID, source, "url"); err != nil {
-				return nil, err
-			}
-			logger.Infof(ctx, "URL already exists: %s", url)
-			// Update creation time for existing knowledge
-			existingKnowledge.CreatedAt = time.Now()
-			existingKnowledge.UpdatedAt = time.Now()
-			if err := s.repo.UpdateKnowledge(ctx, existingKnowledge); err != nil {
-				logger.Errorf(ctx, "Failed to update existing knowledge: %v", err)
-				return nil, err
-			}
-			return existingKnowledge, types.NewDuplicateURLError(existingKnowledge)
-		}
+		return existingKnowledge, types.NewDuplicateURLError(existingKnowledge)
 	}
 
 	// Create knowledge record
@@ -397,13 +352,7 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 		UpdatedAt:        time.Now(),
 		EmbeddingModelID: kb.EmbeddingModelID,
 	}
-	if len(sourceMetadata) > 0 {
-		encoded, err := json.Marshal(sourceMetadata)
-		if err != nil {
-			return nil, err
-		}
-		knowledge.Metadata = types.JSON(encoded)
-	}
+
 	{
 		source := types.SourceInfo{OriginalURL: rawURL}
 		if len(sourceInfos) > 0 {
@@ -419,50 +368,33 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 
 	// Save knowledge record
 	logger.Infof(ctx, "Saving knowledge record to database, ID: %s", knowledge.ID)
-	eff, err := ApplyKnowledgeProcessOverrides(ctx, kb, knowledge, processOverrides, []string{"html"}, enableMultimodel)
+	_, err = ApplyKnowledgeProcessOverrides(ctx, kb, knowledge, processOverrides, []string{"html"}, enableMultimodel)
 	if err != nil {
 		return nil, err
 	}
 
 	setMessageFingerprint(knowledge, "")
-	if skipDuplicate {
-		err = s.repo.CreateKnowledge(ctx, knowledge)
-	} else {
-		var existing *types.Knowledge
-		existing, err = s.createMessageWithDeduplication(ctx, knowledge, "")
-		if err == nil && existing != nil {
-			return existing, types.NewDuplicateURLError(existing)
-		}
+
+	existing, err = s.createMessageWithDeduplication(ctx, knowledge, "")
+	if err == nil && existing != nil {
+		return existing, types.NewDuplicateURLError(existing)
 	}
+
 	if err != nil {
 		logger.Errorf(ctx, "Failed to create knowledge record: %v", err)
 		return nil, err
 	}
-	// Set tag relations
-	if err := s.setAndAttachKnowledgeTags(ctx, tenantID, kbID, knowledge, tagIDs); err != nil {
-		logger.Errorf(ctx, "Failed to set knowledge tags, knowledge ID: %s, error: %v", knowledge.ID, err)
-		return nil, err
-	}
 
-	// Enqueue URL processing task to Asynq
-	logger.Info(ctx, "Enqueuing URL processing task to Asynq")
-	enableMultimodelValue := eff.EnableMultimodel
-	enableQuestionGeneration := eff.QuestionGenerationConfig.Enabled
-	questionCount := eff.QuestionGenerationConfig.QuestionCount
-	if questionCount <= 0 {
-		questionCount = 3
-	}
+	// Enqueue URL processing task to PostgreSQL
+	logger.Info(ctx, "Enqueuing URL processing task to PostgreSQL")
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:                 tenantID,
-		KnowledgeID:              knowledge.ID,
-		KnowledgeBaseID:          kbID,
-		URL:                      url,
-		EnableMultimodel:         enableMultimodelValue,
-		EnableQuestionGeneration: enableQuestionGeneration,
-		QuestionCount:            questionCount,
-		Language:                 lang,
+		TenantID:        tenantID,
+		KnowledgeID:     knowledge.ID,
+		KnowledgeBaseID: kbID,
+		URL:             url,
+		Language:        lang,
 	}
 
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -472,10 +404,10 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 		return knowledge, nil
 	}
 
-	task := asynq.NewTask(
+	task := taskqueue.NewTask(
 		types.TypeDocumentProcess,
 		payloadBytes,
-		documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+		documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 	)
 	info, err := s.task.Enqueue(task)
 	if err != nil {
@@ -532,9 +464,8 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	fileType string,
 	enableMultimodel *bool,
 	title string,
-	tagIDs []string,
 	channel string,
-	processOverrides *types.KnowledgeProcessOverrides, sourceMetadata map[string]string, skipDuplicate bool, sourceInfos ...types.SourceInfo,
+	processOverrides *types.KnowledgeProcessOverrides, sourceInfos ...types.SourceInfo,
 ) (*types.Knowledge, error) {
 	logger.Info(ctx, "Start creating knowledge from file URL")
 	logger.Infof(ctx, "Knowledge base ID: %s, file URL: %s", kbID, fileURL)
@@ -547,9 +478,6 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	}
 
 	// Validate URL format and security (static check only, no HEAD request)
-	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
-		return nil, err
-	}
 	if !isValidURL(fileURL) || !secutils.IsValidURL(fileURL) {
 		logger.Error(ctx, "Invalid or unsafe file URL format")
 		return nil, ErrInvalidURL
@@ -596,47 +524,46 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	// Check for duplicate (by URL hash)
 	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 	fileHash := calculateStr(fileURL)
-	if !skipDuplicate {
-		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: fileURL}
-		source := types.SourceInfo{OriginalURL: fileURL}
-		if len(sourceInfos) > 0 {
-			source = sourceInfos[0]
-			if source.OriginalURL == "" {
-				source.OriginalURL = fileURL
-			}
+
+	incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: fileURL}
+	source := types.SourceInfo{OriginalURL: fileURL}
+	if len(sourceInfos) > 0 {
+		source = sourceInfos[0]
+		if source.OriginalURL == "" {
+			source.OriginalURL = fileURL
 		}
-		if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}); err != nil {
+	}
+	if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}); err != nil {
+		return nil, err
+	}
+	existing, err := s.checkMessageDuplicate(ctx, incoming, "")
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, types.NewDuplicateURLError(existing)
+	}
+	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+		Type:     "file_url",
+		URL:      fileURL,
+		FileHash: fileHash,
+	})
+	if err != nil {
+		logger.Errorf(ctx, "Failed to check knowledge existence: %v", err)
+		return nil, err
+	}
+	if exists {
+		if err := s.recordKnownMessageRepost(ctx, existingKnowledge, kbID, source, "url"); err != nil {
 			return nil, err
 		}
-		existing, err := s.checkMessageDuplicate(ctx, incoming, "")
-		if err != nil {
+		logger.Infof(ctx, "File URL already exists: %s", fileURL)
+		existingKnowledge.CreatedAt = time.Now()
+		existingKnowledge.UpdatedAt = time.Now()
+		if err := s.repo.UpdateKnowledge(ctx, existingKnowledge); err != nil {
+			logger.Errorf(ctx, "Failed to update existing knowledge: %v", err)
 			return nil, err
 		}
-		if existing != nil {
-			return existing, types.NewDuplicateURLError(existing)
-		}
-		exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
-			Type:     "file_url",
-			URL:      fileURL,
-			FileHash: fileHash,
-		})
-		if err != nil {
-			logger.Errorf(ctx, "Failed to check knowledge existence: %v", err)
-			return nil, err
-		}
-		if exists {
-			if err := s.recordKnownMessageRepost(ctx, existingKnowledge, kbID, source, "url"); err != nil {
-				return nil, err
-			}
-			logger.Infof(ctx, "File URL already exists: %s", fileURL)
-			existingKnowledge.CreatedAt = time.Now()
-			existingKnowledge.UpdatedAt = time.Now()
-			if err := s.repo.UpdateKnowledge(ctx, existingKnowledge); err != nil {
-				logger.Errorf(ctx, "Failed to update existing knowledge: %v", err)
-				return nil, err
-			}
-			return existingKnowledge, types.NewDuplicateURLError(existingKnowledge)
-		}
+		return existingKnowledge, types.NewDuplicateURLError(existingKnowledge)
 	}
 
 	// Create knowledge record
@@ -657,13 +584,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		UpdatedAt:        time.Now(),
 		EmbeddingModelID: kb.EmbeddingModelID,
 	}
-	if len(sourceMetadata) > 0 {
-		encoded, err := json.Marshal(sourceMetadata)
-		if err != nil {
-			return nil, err
-		}
-		knowledge.Metadata = types.JSON(encoded)
-	}
+
 	{
 		source := types.SourceInfo{OriginalURL: fileURL}
 		if len(sourceInfos) > 0 {
@@ -680,7 +601,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		knowledge.Title = displayName
 	}
 
-	eff, err := resolveFileImportProcessConfig(ctx, kb, fileType, processOverrides, enableMultimodel)
+	_, err = resolveFileImportProcessConfig(ctx, kb, fileType, processOverrides, enableMultimodel)
 	if err != nil {
 		return nil, err
 	}
@@ -692,45 +613,28 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	}
 
 	setMessageFingerprint(knowledge, "")
-	if skipDuplicate {
-		err = s.repo.CreateKnowledge(ctx, knowledge)
-	} else {
-		var existing *types.Knowledge
-		existing, err = s.createMessageWithDeduplication(ctx, knowledge, "")
-		if err == nil && existing != nil {
-			return existing, types.NewDuplicateURLError(existing)
-		}
+
+	existing, err = s.createMessageWithDeduplication(ctx, knowledge, "")
+	if err == nil && existing != nil {
+		return existing, types.NewDuplicateURLError(existing)
 	}
+
 	if err != nil {
 		logger.Errorf(ctx, "Failed to create knowledge record: %v", err)
 		return nil, err
 	}
-	// Set tag relations
-	if err := s.setAndAttachKnowledgeTags(ctx, tenantID, kbID, knowledge, tagIDs); err != nil {
-		logger.Errorf(ctx, "Failed to set knowledge tags, knowledge ID: %s, error: %v", knowledge.ID, err)
-		return nil, err
-	}
 
 	// Build async task payload
-	enableMultimodelValue := eff.EnableMultimodel
-	enableQuestionGeneration := eff.QuestionGenerationConfig.Enabled
-	questionCount := eff.QuestionGenerationConfig.QuestionCount
-	if questionCount <= 0 {
-		questionCount = 3
-	}
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:                 tenantID,
-		KnowledgeID:              knowledge.ID,
-		KnowledgeBaseID:          kbID,
-		FileURL:                  fileURL,
-		FileName:                 fileName,
-		FileType:                 fileType,
-		EnableMultimodel:         enableMultimodelValue,
-		EnableQuestionGeneration: enableQuestionGeneration,
-		QuestionCount:            questionCount,
-		Language:                 lang,
+		TenantID:        tenantID,
+		KnowledgeID:     knowledge.ID,
+		KnowledgeBaseID: kbID,
+		FileURL:         fileURL,
+		FileName:        fileName,
+		FileType:        fileType,
+		Language:        lang,
 	}
 
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -740,7 +644,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		return knowledge, nil
 	}
 
-	task := asynq.NewTask(
+	task := taskqueue.NewTask(
 		types.TypeDocumentProcess,
 		payloadBytes,
 		documentProcessTaskOptions(s.config)...,
@@ -752,10 +656,6 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		return knowledge, nil
 	}
 	logger.Infof(ctx, "Enqueued file URL process task: id=%s queue=%s knowledge_id=%s", info.ID, info.Queue, knowledge.ID)
-
-	if err := s.enqueueTierDataTableSummary(ctx, kb, knowledge.ID, fileName, fileType); err != nil {
-		return knowledge, err
-	}
 
 	logger.Infof(ctx, "Knowledge from file URL created successfully, ID: %s", knowledge.ID)
 	return knowledge, nil
@@ -779,6 +679,12 @@ func (s *knowledgeService) CreateKnowledgeFromPassageSync(ctx context.Context,
 func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	kbID string, payload *types.ManualKnowledgePayload, channel string,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.CreateKnowledgeFromManual(ctx, kbID, payload, channel)
+		})
+	}
+
 	logger.Info(ctx, "Start creating manual knowledge entry")
 
 	if payload == nil {
@@ -820,9 +726,6 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	}
 
 	if status == types.ManualKnowledgeStatusPublish {
-		if err := s.validateProcessVLMConfig(ctx, kb, payload.ProcessConfig); err != nil {
-			return nil, err
-		}
 		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID}
 		if len(payload.SourceMetadata) > 0 {
 			metadata, err := json.Marshal(payload.SourceMetadata)
@@ -923,15 +826,8 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		}
 		return existing, &types.DuplicateKnowledgeError{Message: "Message already exists", Knowledge: existing}
 	}
-	// Set tag relations
-	if err := s.setAndAttachKnowledgeTags(ctx, tenantID, kbID, knowledge, payload.TagIDs); err != nil {
-		logger.Errorf(ctx, "Failed to set knowledge tags, knowledge ID: %s, error: %v", knowledge.ID, err)
-		return nil, err
-	}
 
-	// Claim the body's files immediately, before publishing. A draft saved from
-	// a chat answer must already own them: the message it came from could be
-	// deleted while the draft is still unpublished.
+	// Claim referenced files before publishing so a saved draft retains them.
 	s.bindContentResources(ctx, tenantID, knowledge.ID, cleanContent)
 
 	if status == types.ManualKnowledgeStatusPublish {
@@ -955,6 +851,12 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Context,
 	kbID string, passage []string, syncMode bool, channel string,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.createKnowledgeFromPassageInternal(ctx, kbID, passage, syncMode, channel)
+		})
+	}
+
 	if syncMode {
 		logger.Info(ctx, "Start creating knowledge from passage (sync)")
 	} else {
@@ -1012,30 +914,18 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 		s.processDocumentFromPassage(ctx, kb, knowledge, safePassages)
 		logger.Infof(ctx, "Knowledge from passage created successfully (sync), ID: %s", knowledge.ID)
 	} else {
-		// Enqueue passage processing task to Asynq
-		logger.Info(ctx, "Enqueuing passage processing task to Asynq")
+		// Enqueue passage processing task to PostgreSQL
+		logger.Info(ctx, "Enqueuing passage processing task to PostgreSQL")
 		tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 
 		// Check question generation config
-		enableQuestionGeneration := false
-		questionCount := 3 // default
-		if kb.QuestionGenerationConfig != nil && kb.QuestionGenerationConfig.Enabled {
-			enableQuestionGeneration = true
-			if kb.QuestionGenerationConfig.QuestionCount > 0 {
-				questionCount = kb.QuestionGenerationConfig.QuestionCount
-			}
-		}
-
 		lang := types.LanguageFromContextOrDefault(ctx)
 		taskPayload := types.DocumentProcessPayload{
-			TenantID:                 tenantID,
-			KnowledgeID:              knowledge.ID,
-			KnowledgeBaseID:          kbID,
-			Passages:                 safePassages,
-			EnableMultimodel:         false, // 文本段落不支持多模态
-			EnableQuestionGeneration: enableQuestionGeneration,
-			QuestionCount:            questionCount,
-			Language:                 lang,
+			TenantID:        tenantID,
+			KnowledgeID:     knowledge.ID,
+			KnowledgeBaseID: kbID,
+			Passages:        safePassages,
+			Language:        lang,
 		}
 
 		payloadBytes, err := json.Marshal(taskPayload)
@@ -1046,10 +936,10 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 			return knowledge, nil
 		}
 
-		task := asynq.NewTask(
+		task := taskqueue.NewTask(
 			types.TypeDocumentProcess,
 			payloadBytes,
-			documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+			documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 		)
 		info, err := s.task.Enqueue(task)
 		if err != nil {
@@ -1065,10 +955,16 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 
 // UpdateManualKnowledge updates manual Markdown knowledge content.
 // For publish status, the heavy operations (cleanup old indexes, re-chunking,
-// re-embedding) are offloaded to an Asynq task so the HTTP response returns quickly.
+// re-embedding) are offloaded to a PostgreSQL task so the HTTP response returns quickly.
 func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	knowledgeID string, payload *types.ManualKnowledgePayload,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.UpdateManualKnowledge(ctx, knowledgeID, payload)
+		})
+	}
+
 	logger.Info(ctx, "Start updating manual knowledge entry")
 	if payload == nil {
 		return nil, werrors.NewBadRequestError("请求内容不能为空")
@@ -1101,15 +997,14 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		logger.Errorf(ctx, "Failed to load knowledge: %v", err)
 		return nil, err
 	}
+	if existing.SourceKind != "" && existing.SourceKind != "article" {
+		return nil, werrors.NewBadRequestError("vault documents are edited directly in their files")
+	}
+	if existing.VaultPath != "" {
+		return nil, werrors.NewBadRequestError("an approved article body cannot be changed")
+	}
 	if !existing.IsManual() {
 		return nil, werrors.NewBadRequestError("仅支持手工知识的在线编辑")
-	}
-	if existing.IsArchivedSource() {
-		current := existing.GetMetadata()["superseded_by"]
-		if current != "" {
-			return nil, werrors.NewBadRequestError("该来源已归档，请编辑当前版本 " + current)
-		}
-		return nil, werrors.NewBadRequestError("该来源已归档，请编辑当前版本")
 	}
 	if existing.ParseStatus == types.ParseStatusPending || existing.ParseStatus == types.ParseStatusProcessing || existing.ParseStatus == types.ParseStatusFinalizing {
 		return nil, werrors.NewBadRequestError("来源仍在处理中，请等待处理完成后再编辑")
@@ -1121,9 +1016,6 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, err
 	}
 	if status == types.ManualKnowledgeStatusPublish {
-		if err := s.validateProcessVLMConfig(ctx, kb, payload.ProcessConfig); err != nil {
-			return nil, err
-		}
 	}
 	intake, err := existing.IntakeMetadata()
 	if err != nil {
@@ -1133,20 +1025,28 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	if intake == nil && existing.ParseStatus == types.ParseStatusCompleted {
 		reviewedOriginal = true
 	}
-	if reviewedOriginal && !existing.IsSourceUpdateCandidate() {
-		return s.createManualSourceUpdateCandidate(ctx, existing, kb, payload, status, cleanContent, safeTitle)
+	if reviewedOriginal {
+		return nil, werrors.NewBadRequestError("an approved article body cannot be changed")
 	}
 
-	if !existing.IsSourceUpdateCandidate() && (existing.ParseStatus == types.ParseStatusCompleted || existing.ParseStatus == types.ParseStatusFinalizing) {
-		if err := s.snapshotContextSource(ctx, existing); err != nil {
-			return nil, fmt.Errorf("preserve original evidence: %w", err)
+	if intake != nil && intake.Decision == "rejected" && !types.IsAuthenticatedFromContext(ctx) {
+		return nil, werrors.NewForbiddenError("an authenticated user is required to review intake")
+	}
+	if status == types.ManualKnowledgeStatusPublish {
+		if _, err := ApplyKnowledgeProcessOverrides(ctx, kb, existing, payload.ProcessConfig, nil, nil); err != nil {
+			return nil, err
 		}
 	}
-
+	processingQueued := false
+	if _, bound := s.task.(*transactionTaskEnqueuer); bound && status == types.ManualKnowledgeStatusPublish {
+		// Workers only see this task after commit. Enqueue before replacing
+		// the stored source so a queue failure leaves the old body intact.
+		if _, err := s.enqueueManualProcessing(ctx, existing, cleanContent, true); err != nil {
+			return existing, err
+		}
+		processingQueued = true
+	}
 	if intake != nil {
-		if intake.Decision == "rejected" && !types.IsAuthenticatedFromContext(ctx) {
-			return nil, werrors.NewForbiddenError("an authenticated user is required to review intake")
-		}
 		intake.SourceInfo = mergeSourceInfo(intake.SourceInfo, payload.SourceInfo)
 		intake.Decision, intake.Reason = "pending", ""
 		if err := existing.SetIntakeMetadata(intake); err != nil {
@@ -1204,17 +1104,15 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	existing.Description = ""
 	existing.ProcessedAt = nil
 
-	if _, err := ApplyKnowledgeProcessOverrides(ctx, kb, existing, payload.ProcessConfig, nil, nil); err != nil {
-		return nil, err
-	}
-
 	if err := s.repo.UpdateKnowledge(ctx, existing); err != nil {
 		logger.Errorf(ctx, "Failed to persist manual knowledge before indexing: %v", err)
 		return nil, err
 	}
 
 	logger.Infof(ctx, "Manual knowledge updated, enqueuing async processing task, ID: %s", existing.ID)
-	_, err = s.enqueueManualProcessing(ctx, existing, cleanContent, true)
+	if !processingQueued {
+		_, err = s.enqueueManualProcessing(ctx, existing, cleanContent, true)
+	}
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue manual processing task: %v", err)
 		// Non-fatal: mark as failed so user can retry
@@ -1226,64 +1124,6 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	return existing, nil
 }
 
-func (s *knowledgeService) createManualSourceUpdateCandidate(
-	ctx context.Context,
-	old *types.Knowledge,
-	kb *types.KnowledgeBase,
-	payload *types.ManualKnowledgePayload,
-	status, cleanContent, safeTitle string,
-) (*types.Knowledge, error) {
-	if err := s.snapshotContextSource(ctx, old); err != nil {
-		return nil, fmt.Errorf("preserve original evidence: %w", err)
-	}
-	metadata := stringMetadata(old.Metadata)
-	if externalID := metadata["external_id"]; externalID != "" {
-		metadata[sourceUpdateExternalIDKey] = externalID
-		delete(metadata, "external_id")
-	}
-	metadata[sourceUpdateCandidateKey] = "true"
-	metadata[sourceUpdateReplacesKey] = old.ID
-	metadata[sourceUpdateEnableStatusKey] = old.EnableStatus
-	if metadata["datasource_id"] != "" {
-		metadata["source_update_datasource_id"] = metadata["datasource_id"]
-	}
-	if old.Channel == types.ChannelRSS {
-		metadata["rss_update_candidate"] = "true"
-	}
-
-	sourceInfo := payload.SourceInfo
-	if oldIntake, _ := old.IntakeMetadata(); oldIntake != nil {
-		sourceInfo = mergeSourceInfo(oldIntake.SourceInfo, sourceInfo)
-	}
-	tags := payload.TagIDs
-	if tags == nil {
-		current, err := s.repo.GetKnowledgeTags(ctx, []string{old.ID})
-		if err != nil {
-			return nil, err
-		}
-		for _, tag := range current[old.ID] {
-			tags = append(tags, tag.ID)
-		}
-	}
-	processConfig := payload.ProcessConfig
-	if processConfig == nil {
-		processConfig, _ = old.ProcessOverrides()
-	}
-	title := safeTitle
-	if title == "" {
-		title = old.Title
-	}
-	candidatePayload := &types.ManualKnowledgePayload{
-		Title: title, Content: cleanContent, Status: status, TagIDs: tags,
-		ProcessConfig: processConfig, SourceInfo: sourceInfo, SourceMetadata: metadata,
-	}
-	candidate, err := s.CreateKnowledgeFromManual(ctx, old.KnowledgeBaseID, candidatePayload, old.Channel)
-	if err != nil {
-		return nil, err
-	}
-	return candidate, nil
-}
-
 func mergeSourceInfo(old, updated types.SourceInfo) types.SourceInfo {
 	if updated.Author == "" {
 		updated.Author = old.Author
@@ -1293,6 +1133,7 @@ func mergeSourceInfo(old, updated types.SourceInfo) types.SourceInfo {
 	}
 	if updated.OriginalURL == "" {
 		updated.OriginalURL = old.OriginalURL
+		updated.OriginalURLSource = old.OriginalURLSource
 	}
 	if updated.PublishedAt == "" {
 		updated.PublishedAt = old.PublishedAt
@@ -1300,9 +1141,9 @@ func mergeSourceInfo(old, updated types.SourceInfo) types.SourceInfo {
 	return updated
 }
 
-// enqueueManualProcessing enqueues a manual:process Asynq task for async cleanup + re-indexing.
+// enqueueManualProcessing enqueues a manual:process PostgreSQL task for async cleanup + re-indexing.
 func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
-	knowledge *types.Knowledge, content string, needCleanup bool,
+	knowledge *types.Knowledge, content string, needCleanup bool, extraOptions ...taskqueue.Option,
 ) (string, error) {
 	requestID, _ := types.RequestIDFromContext(ctx)
 	payload := types.ManualProcessPayload{
@@ -1319,13 +1160,13 @@ func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
 		return "", fmt.Errorf("failed to marshal manual process payload: %w", err)
 	}
 
-	task := asynq.NewTask(types.TypeManualProcess, payloadBytes,
-		asynq.Queue(types.QueueDefault), asynq.MaxRetry(3), asynq.Timeout(30*time.Minute))
+	options := append([]taskqueue.Option{taskqueue.Queue(types.QueueDefault), taskqueue.MaxRetry(3), taskqueue.Timeout(30 * time.Minute)}, extraOptions...)
+	task := taskqueue.NewTask(types.TypeManualProcess, payloadBytes, options...)
 	info, err := s.task.Enqueue(task)
 	if err != nil {
 		return "", fmt.Errorf("failed to enqueue manual process task: %w", err)
 	}
-	logger.Infof(ctx, "Enqueued manual process task: knowledge_id=%s, asynq_id=%s", knowledge.ID, info.ID)
+	logger.Infof(ctx, "Enqueued manual process task: knowledge_id=%s, task_id=%s", knowledge.ID, info.ID)
 	return info.ID, nil
 }
 
@@ -1375,12 +1216,9 @@ func sanitizeManualDownloadFilename(title string) string {
 // bindContentResources claims every stored file the body references on behalf
 // of a knowledge entry.
 //
-// A manual document routinely points at files it did not upload: an answer saved
-// from a chat carries the very `resource://` handles the assistant message still
-// shows. Claiming them is what makes that copy safe — no bytes are duplicated,
-// and neither the message nor the document can delete a file the other still
-// needs. Handles belonging to another workspace are skipped, so a pasted
-// reference cannot pull in a file the caller may not read.
+// A manual document may refer to previously stored resources. Claims keep
+// those files available while the document uses them. References from another
+// workspace are skipped.
 //
 // Best-effort by design: the document is already saved, and a missed claim
 // degrades to the old behaviour rather than failing the save.
@@ -1409,8 +1247,8 @@ func (s *knowledgeService) bindContentResources(
 }
 
 func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
-	kb *types.KnowledgeBase, knowledge *types.Knowledge, content string, doSync bool,
-) {
+	kb *types.KnowledgeBase, knowledge *types.Knowledge, content string, _ bool,
+) error {
 	defer func() {
 		if knowledge.ParseStatus == types.ParseStatusFailed {
 			s.failIntake(ctx, knowledge)
@@ -1418,24 +1256,24 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	}()
 	clean := strings.TrimSpace(content)
 	if clean == "" {
-		return
+		return errors.New("manual article body is empty")
 	}
 
 	// Resolve embedded data:base64 images and remote http(s) images → storage, replace URLs.
 	// Runs before chunking so chunks contain stable provider:// URLs.
 	var resolvedImages []docparser.StoredImage
-	if s.imageResolver != nil {
+	if s.imageResolver != nil && !(s.vault != nil && knowledge.VaultPath != "" && knowledge.ProcessingMode == types.ProcessingModeFull) {
 		fileSvc := s.resolveFileService(ctx, kb)
 		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, knowledge.TenantID)
 		if err := s.recordIntakeImages(ctx, knowledge, fromDataURI); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if dataErr != nil {
 			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 				knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
 				_ = s.repo.UpdateKnowledge(ctx, knowledge)
-				return
+				return errors.New("manual article processing failed")
 			}
 		}
 		if len(fromDataURI) > 0 {
@@ -1446,14 +1284,14 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		updatedContent, storedImages, resolveErr := s.imageResolver.ResolveRemoteImages(ctx, clean, fileSvc, knowledge.TenantID)
 		if err := s.recordIntakeImages(ctx, knowledge, storedImages); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if resolveErr != nil {
 			logger.Warnf(ctx, "Remote image resolution partially failed: %v", resolveErr)
 			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 				knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
 				_ = s.repo.UpdateKnowledge(ctx, knowledge)
-				return
+				return errors.New("manual article processing failed")
 			}
 		}
 		if updatedContent != "" {
@@ -1463,34 +1301,39 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 			logger.Infof(ctx, "Resolved %d remote images for manual knowledge %s", len(storedImages), knowledge.ID)
 			resolvedImages = append(resolvedImages, storedImages...)
 		}
-		if intake, _ := knowledge.IntakeMetadata(); intake != nil && docparser.HasUnstoredImages(clean) {
+		if intake, _ := knowledge.IntakeMetadata(); intake != nil && s.hasUnstoredArticleImages(knowledge, clean) {
 			knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "intake has unstored content images", time.Now()
 			_ = s.repo.UpdateKnowledge(ctx, knowledge)
-			return
+			return errors.New("manual article processing failed")
 		}
+	}
+	if err := extractIntakeOriginalLink(knowledge, clean, nil, knowledge.FileType, nil); err != nil {
+		knowledge.ParseStatus = types.ParseStatusFailed
+		return err
 	}
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
 		existing, err := s.checkMessageDuplicate(ctx, knowledge, clean)
 		if err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if existing != nil {
 			if err := s.stopDuplicateProcessing(ctx, knowledge); err != nil {
 				knowledge.ParseStatus = types.ParseStatusFailed
+				return err
 			}
-			return
+			return nil
 		}
 	}
 
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
-		if docparser.HasUnstoredImages(clean) {
+		if s.hasUnstoredArticleImages(knowledge, clean) {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if err := s.saveIntakeOriginal(ctx, kb, knowledge, clean, nil); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 	}
 
@@ -1506,70 +1349,19 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	processOverrides, _ := knowledge.ProcessOverrides()
 	eff := ResolveProcessConfig(kb, processOverrides)
 
-	// Manual content is markdown - chunk directly with Go chunker
-	chunkCfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
-
-	var parsed []types.ParsedChunk
-	opts := ProcessChunksOptions{
-		EnableMultimodel: eff.EnableMultimodel && len(resolvedImages) > 0,
-		StoredImages:     resolvedImages,
-	}
-	if eff.QuestionGenerationConfig.Enabled {
-		opts.EnableQuestionGeneration = true
-		opts.QuestionCount = eff.QuestionGenerationConfig.QuestionCount
-		if opts.QuestionCount <= 0 {
-			opts.QuestionCount = 3
-		}
-	}
-
-	if eff.ChunkingConfig.EnableParentChild {
-		parentCfg, childCfg := buildParentChildConfigs(eff.ChunkingConfig, chunkCfg)
-		pcResult := chunker.SplitParentChild(clean, parentCfg, childCfg)
-		parsed = make([]types.ParsedChunk, len(pcResult.Children))
-		for i, c := range pcResult.Children {
-			parsed[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-				ParentIndex:   c.ParentIndex,
-			}
-		}
-		parentChunks := make([]types.ParsedParentChunk, len(pcResult.Parents))
-		for i, p := range pcResult.Parents {
-			parentChunks[i] = types.ParsedParentChunk{Content: p.Content, Seq: p.Seq, Start: p.Start, End: p.End}
-		}
-		opts.ParentChunks = parentChunks
-	} else {
-		splitChunks := chunker.Split(clean, chunkCfg)
-		parsed = make([]types.ParsedChunk, len(splitChunks))
-		for i, c := range splitChunks {
-			parsed[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-			}
-		}
-	}
-
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 		rejected, err := s.reviewIntake(ctx, kb, knowledge, clean)
 		if err != nil {
-			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			s.markArticleProcessingFailed(ctx, knowledge, err)
+			return err
 		}
 		if rejected {
-			return
+			return nil
 		}
 	}
-	if doSync {
-		s.processChunks(ctx, kb, knowledge, parsed, opts)
-		return
+	if err := s.processArticleBody(ctx, kb, knowledge, clean, resolvedImages, eff); err != nil {
+		s.markArticleProcessingFailed(ctx, knowledge, err)
+		return err
 	}
-
-	newCtx := logger.CloneContext(ctx)
-	go s.processChunks(newCtx, kb, knowledge, parsed, opts)
+	return nil
 }

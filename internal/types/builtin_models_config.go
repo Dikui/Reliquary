@@ -167,16 +167,35 @@ func LoadBuiltinModelsConfig(ctx context.Context, db *gorm.DB, configDir string)
 			}
 		}
 
-		res := db.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "id"}},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"tenant_id", "name", "type", "source", "description",
-				"parameters", "is_default", "status", "is_builtin",
-				"managed_by", "deleted_at", "updated_at",
-			}),
-		}).Create(&m)
-		if res.Error != nil {
-			log.Printf("[builtin-models] WARN: upsert %s failed: %v; continuing", e.ID, res.Error)
+		upsertErr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var current Model
+			readErr := tx.Unscoped().Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=?", m.ID).First(&current).Error
+			if readErr != nil && readErr != gorm.ErrRecordNotFound {
+				return readErr
+			}
+			if readErr == nil && current.ManagedBy != BuiltinModelManagedBy {
+				return nil
+			}
+			changed := readErr == nil && (current.Type == ModelTypeEmbedding || m.Type == ModelTypeEmbedding) &&
+				EmbeddingProfileHash(current.ID, current.Parameters.EmbeddingParameters.Dimension, &current) != EmbeddingProfileHash(m.ID, m.Parameters.EmbeddingParameters.Dimension, &m)
+			res := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "id"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"tenant_id", "name", "type", "source", "description",
+					"parameters", "is_default", "status", "is_builtin",
+					"managed_by", "deleted_at", "updated_at",
+				}),
+			}).Create(&m)
+			if res.Error != nil {
+				return res.Error
+			}
+			if changed {
+				return RetireEmbeddingVectors(ctx, tx, m.ID)
+			}
+			return nil
+		})
+		if upsertErr != nil {
+			log.Printf("[builtin-models] WARN: upsert %s failed: %v; continuing", e.ID, upsertErr)
 			continue
 		}
 		applied++
@@ -229,7 +248,6 @@ var validBuiltinModelTypes = map[ModelType]struct{}{
 	ModelTypeKnowledgeQA: {},
 	ModelTypeEmbedding:   {},
 	ModelTypeRerank:      {},
-	ModelTypeVLLM:        {},
 }
 
 // validBuiltinModelStatuses is the set of statuses the loader accepts.

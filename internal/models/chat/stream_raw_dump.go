@@ -28,7 +28,7 @@ func streamRawDumpDir() string {
 	return ""
 }
 
-// streamPacketDumper writes one stream session to a dedicated JSONL file:
+// streamPacketDumper writes one provider response stream to a JSONL file:
 // line 1 = request wrapper; following lines = raw provider chunk JSON.
 type streamPacketDumper struct {
 	mu    sync.Mutex

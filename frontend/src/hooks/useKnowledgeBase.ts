@@ -10,18 +10,17 @@ import {
   getKnowledgeDetailsCon,
 } from "@/api/knowledge-base/index";
 import { knowledgeStore } from "@/stores/knowledge";
-import { useUIStore } from "@/stores/ui";
-import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import type { KnowledgeRepostSource } from '@/api/knowledge-context';
+import type { KnowledgeRepostSource } from '@/api/knowledge-base/index';
+import type { ClassifiedKnowledge, StructuredSummary, KnowledgeTopic } from '@/types/knowledgeClassification';
+import { useResourcesStore } from '@/stores/resources';
 import { useKnowledgeDuplicates } from './useKnowledgeDuplicates';
 
 export default function (knowledgeBaseId?: string) {
   const usemenuStore = knowledgeStore();
-  const route = useRoute();
   const { t } = useI18n();
   const { cardList, total } = storeToRefs(usemenuStore);
-  const duplicates = useKnowledgeDuplicates(() => (route.params as any)?.kbId || knowledgeBaseId);
+  const duplicates = useKnowledgeDuplicates(() => knowledgeBaseId || useResourcesStore().knowledgeBase?.id);
   let moreIndex = ref(-1);
   const details = reactive({
     title: "",
@@ -30,18 +29,30 @@ export default function (knowledgeBaseId?: string) {
     id: "",
     total: 0,
     type: "",
+    source_kind: '' as NonNullable<ClassifiedKnowledge['source_kind']> | '',
+    vault_path: '',
     source: "",
     channel: "",
     file_type: "",
     description: "",
-    summary_status: "",
+    collect_reason: "",
+    content_type: '',
+    starred: false,
+    source_unverified: false,
+    content_type_uncertain: false,
+    processing_review_status: '',
+    processing_review_content_type: '',
+    processing_review_reason: '',
+    processing_mode: 'full' as 'full' | 'summary_only',
+    structured_summary: null as StructuredSummary | null,
+    entities: [] as NonNullable<ClassifiedKnowledge['entities']>,
+    topics: [] as KnowledgeTopic[],
     parse_status: "",
     error_message: "",
 	metadata: {} as Record<string, any>,
 	custom_metadata: {} as Record<string, unknown>,
     chunkLoading: false,
     chunkLoadError: "",
-    tags: [] as Array<{ id: string; name: string; color?: string }>,
     repost_sources: [] as KnowledgeRepostSource[],
   });
   let knowledgeListGeneration = 0;
@@ -51,15 +62,14 @@ export default function (knowledgeBaseId?: string) {
     query: {
       page: number;
       page_size: number;
-      tag_ids?: string;
       keyword?: string;
       file_type?: string;
+      content_type?: string;
+      starred?: boolean;
       parse_status?: string;
       source?: string;
       start_time?: string;
       end_time?: string;
-      folder_path?: string;
-      folder_recursive?: boolean;
     } = { page: 1, page_size: 35 },
     kbId?: string,
   ): Promise<void> => {
@@ -71,21 +81,19 @@ export default function (knowledgeBaseId?: string) {
       .then((result: any) => {
         if (requestGeneration !== knowledgeListGeneration) return;
 
-        const currentRouteKbId = (route.params as any)?.kbId as string | undefined;
-        if (currentRouteKbId && currentRouteKbId !== targetKbId) return;
-
         const { data, total: totalResult } = result;
     const cardList_ = data.map((item: any) => {
-      const rawName = item.file_name || item.title || item.source || t('knowledgeBase.untitledDocument')
+      const isVaultDocument = item.source_kind === 'mine' || item.source_kind === 'report'
+      const rawName = (isVaultDocument ? item.title || item.file_name : item.file_name || item.title)
+        || item.source || t('knowledgeBase.untitledDocument')
       const dotIndex = rawName.lastIndexOf('.')
-      const displayName = dotIndex > 0 ? rawName.substring(0, dotIndex) : rawName
+      const displayName = !isVaultDocument && dotIndex > 0 ? rawName.substring(0, dotIndex) : rawName
       const fileTypeSource = item.file_type || (item.type === 'manual' ? 'MANUAL' : '')
       return {
         ...item,
         original_file_name: item.file_name,
         display_name: displayName,
         file_name: displayName,
-        folder_path: item.folder_path || '',
         updated_at: formatStringDate(new Date(item.updated_at)),
         isMore: false,
         file_type: fileTypeSource ? String(fileTypeSource).toLocaleUpperCase() : '',
@@ -151,25 +159,13 @@ export default function (knowledgeBaseId?: string) {
       return;
     }
 
-    // 获取当前知识库ID
-    let currentKbId: string | undefined = (route.params as any)?.kbId as string;
-    if (!currentKbId && typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/knowledge-bases\/([^/]+)/);
-      if (match?.[1]) currentKbId = match[1];
-    }
-    if (!currentKbId) {
-      currentKbId = knowledgeBaseId;
-    }
+    const currentKbId = knowledgeBaseId || useResourcesStore().knowledgeBase?.id;
     if (!currentKbId) {
       MessagePlugin.error(t('error.missingKbId'));
       return;
     }
 
-    // 获取当前选中的标签 ID
-    const uiStore = useUIStore();
-    const tagIdsToUpload = uiStore.selectedTagIds.length > 0 ? [...uiStore.selectedTagIds] : undefined;
-
-    return uploadKnowledgeFile(currentKbId, { file, tag_ids: tagIdsToUpload })
+    return uploadKnowledgeFile(currentKbId, { file })
       .then((result: any) => {
         if (duplicates.showDuplicate(result, file.name)) return;
         if (result.success) {
@@ -198,17 +194,29 @@ export default function (knowledgeBaseId?: string) {
       md: [],
       id: "",
       type: "",
+      source_kind: '',
+      vault_path: '',
       source: "",
       channel: "",
       file_type: "",
       description: "",
-      summary_status: "",
+      collect_reason: "",
+      content_type: '',
+      starred: false,
+      source_unverified: false,
+      content_type_uncertain: false,
+      processing_review_status: '',
+      processing_review_content_type: '',
+      processing_review_reason: '',
+      processing_mode: 'full',
+      structured_summary: null,
+      entities: [],
+      topics: [],
       parse_status: "",
       error_message: "",
 	  metadata: {},
 	  custom_metadata: {},
       chunkLoadError: "",
-      tags: item?.tags ? [...item.tags] : [],
       repost_sources: [],
     });
     getKnowledgeDetails(item.id)
@@ -217,20 +225,34 @@ export default function (knowledgeBaseId?: string) {
         if (result.success && result.data) {
           const { data } = result;
           Object.assign(details, {
-            title: data.file_name || data.title || data.source || t('knowledgeBase.untitledDocument'),
+            title: ((data.source_kind === 'mine' || data.source_kind === 'report')
+              ? data.title || data.file_name : data.file_name || data.title)
+              || data.source || t('knowledgeBase.untitledDocument'),
             time: formatStringDate(new Date(data.updated_at)),
             id: data.id,
             type: data.type || 'file',
+            source_kind: data.source_kind || '',
+            vault_path: data.vault_path || '',
             source: data.source || '',
             channel: data.channel || '',
             file_type: data.file_type || '',
             description: data.description || '',
-            summary_status: data.summary_status || '',
+            collect_reason: data.collect_reason || '',
+            content_type: data.content_type || '',
+            starred: Boolean(data.starred),
+            source_unverified: Boolean(data.source_unverified),
+            content_type_uncertain: Boolean(data.content_type_uncertain),
+            processing_review_status: data.processing_review_status || '',
+            processing_review_content_type: data.processing_review_content_type || '',
+            processing_review_reason: data.processing_review_reason || '',
+            processing_mode: data.processing_mode || 'full',
+            structured_summary: data.structured_summary || null,
+            entities: Array.isArray(data.entities) ? data.entities : [],
+            topics: Array.isArray(data.topics) ? data.topics : [],
             parse_status: data.parse_status || '',
             error_message: data.error_message || '',
 			metadata: data.metadata || {},
 			custom_metadata: data.custom_metadata || {},
-            tags: data.tags?.length ? data.tags : (item?.tags || []),
             repost_sources: Array.isArray(data.repost_sources) ? data.repost_sources : [],
           });
         }

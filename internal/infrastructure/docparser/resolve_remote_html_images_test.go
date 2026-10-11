@@ -91,6 +91,24 @@ func TestResolveRemoteImages_MarkdownAndHTMLBothResolved(t *testing.T) {
 	}
 }
 
+func TestResolveRemoteImages_MarkdownTitlesAndAnglesPreserveSyntax(t *testing.T) {
+	allowLocalhost(t)
+	ts, hits := remoteImageServer(t)
+	markdown := fmt.Sprintf(`![first](%s/figure(1).png "Launch image") ![second](<%s/other.png> 'Second image')`, ts.URL, ts.URL)
+	updated, images, _ := resolve(t, markdown)
+	if len(images) != 2 || atomic.LoadInt64(hits) != 2 {
+		t.Fatalf("expected two fetched images, got images=%d requests=%d", len(images), atomic.LoadInt64(hits))
+	}
+	for _, want := range []string{`"Launch image"`, `(<local://`, `'Second image'`} {
+		if !strings.Contains(updated, want) {
+			t.Errorf("original Markdown syntax %q was lost: %s", want, updated)
+		}
+	}
+	if strings.Contains(updated, ts.URL) || HasUnstoredImages(updated) {
+		t.Errorf("remote image was left unresolved: %s", updated)
+	}
+}
+
 func TestResolveRemoteImages_MoreThanThirtyHTMLImages(t *testing.T) {
 	allowLocalhost(t)
 	ts, hits := remoteImageServer(t)

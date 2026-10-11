@@ -1,6 +1,7 @@
 type Translate = (key: string) => string
 
-export function translatePersonalServerMessage(message: string | undefined, t: Translate, code?: number): string | undefined {
+export function translatePersonalServerMessage(message: string | undefined, t: Translate, code?: number | string): string | undefined {
+  if (code === 'chatgpt_generation_paused') return t('chatgpt.synchronousRetry')
   const imageModelKeys: Record<number, string> = {
     2301: 'model.imageProcessingUnsupported',
     2302: 'model.imageProcessingNotFound',

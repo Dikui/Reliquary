@@ -4,26 +4,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/config"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
-func parseDocumentProcessOpts(t *testing.T, opts []asynq.Option) (queue string, timeout time.Duration, maxRetry *int) {
+func parseDocumentProcessOpts(t *testing.T, opts []taskqueue.Option) (queue string, timeout time.Duration, maxRetry *int) {
 	t.Helper()
 	for _, opt := range opts {
 		switch opt.Type() {
-		case asynq.QueueOpt:
+		case taskqueue.QueueOpt:
 			queue, _ = opt.Value().(string)
-		case asynq.TimeoutOpt:
+		case taskqueue.TimeoutOpt:
 			timeout, _ = opt.Value().(time.Duration)
-		case asynq.MaxRetryOpt:
+		case taskqueue.MaxRetryOpt:
 			n, _ := opt.Value().(int)
 			maxRetry = &n
 		default:
-			t.Fatalf("unexpected asynq option type %v", opt.Type())
+			t.Fatalf("unexpected queue option type %v", opt.Type())
 		}
 	}
 	return queue, timeout, maxRetry
@@ -72,19 +72,10 @@ func TestDocumentProcessTaskOptions_configuredTimeout(t *testing.T) {
 
 func TestDocumentProcessTaskOptions_extraMaxRetry(t *testing.T) {
 	t.Parallel()
-	opts := documentProcessTaskOptions(nil, asynq.MaxRetry(3))
+	opts := documentProcessTaskOptions(nil, taskqueue.MaxRetry(3))
 	queue, timeout, maxRetry := parseDocumentProcessOpts(t, opts)
 	assert.Equal(t, types.QueueDefault, queue)
 	assert.Equal(t, config.DefaultDocumentProcessTimeout, timeout)
-	require.NotNil(t, maxRetry)
-	assert.Equal(t, 3, *maxRetry)
-}
-
-func TestKnowledgePostProcessTaskOptionsUseDedicatedQueue(t *testing.T) {
-	t.Parallel()
-	queue, timeout, maxRetry := parseDocumentProcessOpts(t, knowledgePostProcessTaskOptions())
-	assert.Equal(t, types.QueuePostProcess, queue)
-	assert.Equal(t, 30*time.Minute, timeout)
 	require.NotNil(t, maxRetry)
 	assert.Equal(t, 3, *maxRetry)
 }

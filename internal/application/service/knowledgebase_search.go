@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"gorm.io/gorm"
 
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
@@ -12,10 +13,7 @@ import (
 
 const maxRetrievalPoolSize = 500
 
-// GetQueryEmbedding computes the query embedding using the embedding model
-// associated with the given knowledge base. Callers can pre-compute and reuse
-// the result across multiple KBs that share the same embedding model to avoid
-// redundant embedding API calls.
+// GetQueryEmbedding computes the query vector with the sole knowledge base model.
 func (s *knowledgeBaseService) GetQueryEmbedding(ctx context.Context, kbID string, queryText string) ([]float32, error) {
 	kb, err := s.repo.GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {
@@ -31,7 +29,18 @@ func (s *knowledgeBaseService) GetQueryEmbedding(ctx context.Context, kbID strin
 		return nil, err
 	}
 
-	return embeddingModel.Embed(ctx, queryText)
+	vector, err := embeddingModel.Embed(ctx, queryText)
+	if err != nil {
+		return nil, err
+	}
+	if s.db != nil {
+		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return checkEmbeddingProfile(ctx, tx, embeddingModel, kb.TenantID)
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return vector, nil
 }
 
 // ResolveEmbeddingModelKeys resolves embedding model IDs to their actual model
@@ -85,11 +94,7 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 	// copy, so this stays local to the call.
 	params.MatchCount = normalizedMatchCount(params.MatchCount)
 
-	// Determine the set of KB IDs to search.
-	searchKBIDs := params.KnowledgeBaseIDs
-	if len(searchKBIDs) == 0 {
-		searchKBIDs = []string{id}
-	}
+	searchKBIDs := []string{id}
 
 	// QueryText is user-controlled; sanitize before logging to prevent
 	// CR/LF/tab log injection. Matches the handler-layer sanitization at
@@ -127,14 +132,6 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		kbs[i] = &copy
 	}
 
-	// Explicit embedding-model consistency check. Multi-KB searches that
-	// span different embedding spaces would otherwise silently produce
-	// meaningless cross-model scores. Same-model KBs with disabled indexing are
-	// tolerated — see validateSameEmbeddingModel for the carve-out.
-	if err := s.validateSameEmbeddingModel(ctx, kbs); err != nil {
-		return nil, err
-	}
-
 	kb := pickPrimary(kbs, id)
 	if kb == nil {
 		return nil, apperrors.NewNotFoundError("knowledge base not found")
@@ -150,9 +147,8 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 
 	// Compute the query embedding once for all selected knowledge bases.
 	//
-	// Skip when params already carries an embedding (e.g. the agent
-	// pre-computed it) or when the primary KB has no vector indexing
-	// configured.
+	// Skip when the caller already supplied an embedding or when the primary
+	// KB has no vector indexing configured.
 	if len(params.QueryEmbedding) == 0 &&
 		kb.IsVectorEnabled() && kb.EmbeddingModelID != "" &&
 		!params.DisableVectorMatch {
@@ -247,9 +243,8 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 	// vector indexing enabled (e.g. KBs with disabled indexing) has no
 	// embeddings to retrieve from, and typically has no EmbeddingModelID
 	// configured either; such KBs are skipped for vector retrieval to avoid
-	// spurious "model ID cannot be empty" errors when an agent's retrieval
-	// scope happens to include them (e.g. KBSelectionMode=all picking up a
-	// unindexed KB).
+	// spurious "model ID cannot be empty" errors when the retrieval scope
+	// includes an unindexed KB.
 	var docVectorKBIDs, docKeywordKBIDs []string
 	for _, kb := range groupKBs {
 		if kb.IsVectorEnabled() && kb.EmbeddingModelID != "" {
@@ -279,7 +274,6 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 				Threshold:        params.VectorThreshold,
 				RetrieverType:    types.VectorRetrieverType,
 				KnowledgeIDs:     params.KnowledgeIDs,
-				TagIDs:           params.TagIDs,
 				KnowledgeType:    knowledgeType,
 			})
 		}
@@ -302,7 +296,6 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 			Threshold:        params.KeywordThreshold,
 			RetrieverType:    types.KeywordsRetrieverType,
 			KnowledgeIDs:     params.KnowledgeIDs,
-			TagIDs:           params.TagIDs,
 		})
 		logger.Info(ctx, "Keyword retrieval parameters setup completed")
 	}
@@ -348,50 +341,6 @@ func (s *knowledgeBaseService) authorizeKBAccess(ctx context.Context, kbs []*typ
 	for _, kb := range kbs {
 		if kb == nil || kb.TenantID != tenantID {
 			return apperrors.NewForbiddenError("knowledge base is outside the space")
-		}
-	}
-	return nil
-}
-
-// validateSameEmbeddingModel rejects multi-KB searches that span more than
-// one resolved embedding-model identity key. Single-KB calls no-op.
-//
-// KBs with disabled indexing (empty resolved key) are tolerated: if every
-// KB lacks an embedding model, validation passes and HybridSearch returns
-// an empty result set when the retrieval parameter list is empty.
-//
-// Log fields are sanitized via secutils.SanitizeForLog because resolved
-// keys are derived from model.Parameters.BaseURL, which is tenant-
-// configured and can contain CR/LF or other control characters.
-func (s *knowledgeBaseService) validateSameEmbeddingModel(
-	ctx context.Context,
-	kbs []*types.KnowledgeBase,
-) error {
-	if len(kbs) <= 1 {
-		return nil
-	}
-	keys := s.ResolveEmbeddingModelKeys(ctx, kbs)
-	var seen string
-	for _, kb := range kbs {
-		k, ok := keys[kb.ID]
-		if !ok || k == "" {
-			// Disabled indexing: KB has no embedding model.
-			continue
-		}
-		if seen == "" {
-			seen = k
-			continue
-		}
-		if k != seen {
-			logger.WarnWithFields(ctx, logger.Fields{
-				"primary_key": secutils.SanitizeForLog(seen),
-				"diverging":   secutils.SanitizeForLog(k),
-				"kb_id":       kb.ID,
-				"kb_count":    len(kbs),
-			}, "multi-KB search rejected: embedding models differ")
-			return apperrors.NewBadRequestError(
-				"selected knowledge bases use different embedding models; " +
-					"multi-KB search requires every knowledge base to share a single embedding model")
 		}
 	}
 	return nil

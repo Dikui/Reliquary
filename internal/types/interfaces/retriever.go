@@ -34,31 +34,12 @@ type RetrieveEngineRepository interface {
 	DeleteByChunkIDList(ctx context.Context, indexIDList []string, dimension int, knowledgeType string) error
 	// DeleteBySourceIDList deletes the index info by source id list
 	DeleteBySourceIDList(ctx context.Context, sourceIDList []string, dimension int, knowledgeType string) error
-	// 复制索引数据
-	// sourceKnowledgeBaseID: 源知识库ID
-	// sourceToTargetChunkIDMap: 源分块ID到目标分块ID的映射关系
-	// targetKnowledgeBaseID: 目标知识库ID
-	// params: 额外参数，如向量表示等
-	CopyIndices(
-		ctx context.Context,
-		sourceKnowledgeBaseID string,
-		sourceToTargetKBIDMap map[string]string,
-		sourceToTargetChunkIDMap map[string]string,
-		targetKnowledgeBaseID string,
-		dimension int,
-		knowledgeType string,
-	) error
-
 	// DeleteByKnowledgeIDList deletes the index info by knowledge id list
 	DeleteByKnowledgeIDList(ctx context.Context, knowledgeIDList []string, dimension int, knowledgeType string) error
 
 	// BatchUpdateChunkEnabledStatus updates the enabled status of chunks in batch
 	// chunkStatusMap: map of chunk ID to enabled status (true = enabled, false = disabled)
 	BatchUpdateChunkEnabledStatus(ctx context.Context, chunkStatusMap map[string]bool) error
-
-	// BatchUpdateChunkTagID updates the tag ID of chunks in batch
-	// chunkTagMap: map of chunk ID to tag ID (empty string means no tag)
-	BatchUpdateChunkTagID(ctx context.Context, chunkTagMap map[string]string) error
 
 	// RetrieveEngine retrieves the engine
 	RetrieveEngine
@@ -86,20 +67,6 @@ type RetrieveEngineService interface {
 		indexInfoList []*types.IndexInfo,
 		retrieverTypes []types.RetrieverType,
 	) int64
-	// CopyIndices 从源知识库复制索引到目标知识库，免去重新计算嵌入向量的开销
-	// sourceKnowledgeBaseID: 源知识库ID
-	// sourceToTargetChunkIDMap: 源分块ID到目标分块ID的映射关系，key为源分块ID，value为目标分块ID
-	// targetKnowledgeBaseID: 目标知识库ID
-	CopyIndices(
-		ctx context.Context,
-		sourceKnowledgeBaseID string,
-		sourceToTargetKBIDMap map[string]string,
-		sourceToTargetChunkIDMap map[string]string,
-		targetKnowledgeBaseID string,
-		dimension int,
-		knowledgeType string,
-	) error
-
 	// DeleteByChunkIDList deletes the index info by chunk id list
 	DeleteByChunkIDList(ctx context.Context, indexIDList []string, dimension int, knowledgeType string) error
 
@@ -112,10 +79,6 @@ type RetrieveEngineService interface {
 	// BatchUpdateChunkEnabledStatus updates the enabled status of chunks in batch
 	// chunkStatusMap: map of chunk ID to enabled status (true = enabled, false = disabled)
 	BatchUpdateChunkEnabledStatus(ctx context.Context, chunkStatusMap map[string]bool) error
-
-	// BatchUpdateChunkTagID updates the tag ID of chunks in batch
-	// chunkTagMap: map of chunk ID to tag ID (empty string means no tag)
-	BatchUpdateChunkTagID(ctx context.Context, chunkTagMap map[string]string) error
 
 	// RetrieveEngine retrieves the engine
 	RetrieveEngine
@@ -132,6 +95,4 @@ type RetrievalService interface {
 	DeleteBySourceIDList(context.Context, []string, int, string) error
 	DeleteByKnowledgeIDList(context.Context, []string, int, string) error
 	BatchUpdateChunkEnabledStatus(context.Context, map[string]bool) error
-	BatchUpdateChunkTagID(context.Context, map[string]string) error
-	CopyIndices(context.Context, string, string, map[string]string, map[string]string, int, string) error
 }

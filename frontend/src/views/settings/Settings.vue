@@ -25,8 +25,6 @@
                       'has-submenu': item.children && item.children.length > 0,
                       'expanded': expandedMenus.includes(item.key)
                     }]" @click="handleNavClick(item)">
-                      <!-- 沙箱：隔离运行窗口，避免和 Ollama / 系统设置共用 server -->
-
                       <span v-if="item.emoji" class="nav-icon nav-icon-emoji">{{ item.emoji }}</span>
                       <t-icon v-else :name="item.icon" class="nav-icon" />
                       <span class="nav-label">{{ item.label }}</span>
@@ -59,7 +57,6 @@
             <!-- 右侧内容区域 -->
             <div class="settings-content">
               <div class="content-wrapper" :class="{
-                'content-wrapper--wide': currentSection === 'domains',
                 'content-wrapper--full': SYSTEM_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
               }">
                   <!-- 常规设置 -->
@@ -77,30 +74,14 @@
                     <ModelSettings />
                   </div>
 
-                  <!-- 消息管理 -->
-                  <div v-if="currentSection === 'chathistory'" class="section">
-                    <ChatHistorySettings />
-                  </div>
-
-
-                  <!-- 我的记忆（个人记忆管理） -->
-
-
-                  <!-- 沙箱密钥 -->
-
-
+                  <div v-if="currentSection === 'knowledge'" class="section"><KnowledgeSettings ref="knowledgeSettingsView" :initial-section="currentSubSection || undefined" /></div>
+                  <div v-if="currentSection === 'datasource'" class="section"><DataSourceSettings /></div>
+                  <div v-if="currentSection === 'vault'" class="section"><VaultStatus /></div>
+                  <div v-if="currentSection === 'operation-logs'" class="section"><OperationLogs /></div>
                   <!-- 解析引擎 -->
                   <div v-if="currentSection === 'parser'" class="section">
                     <ParserEngineSettings />
                   </div>
-
-                  <!-- 存储引擎 -->
-
-                  <!-- 沙箱 -->
-
-
-                  <!-- 技能目录：登记后可装到多份沙箱，智能体只从当前沙箱的就绪集合选用 -->
-
 
                   <!-- 系统信息 -->
                   <div v-if="currentSection === 'system'" class="section">
@@ -117,7 +98,6 @@
                     <RuntimeQueues />
                   </div>
 
-
                   <!-- 用户信息（账户基础信息：ID / 用户名 / 邮箱 / 注册时间）。
                      用户的基本信息不该跟 owner 权限绑定。 -->
                   <div v-if="currentSection === 'userprofile'" class="section">
@@ -129,17 +109,11 @@
                     <TenantInfo ref="tenantInfoView" />
                   </div>
 
-                  <div v-if="currentSection === 'domains'" class="section"><DomainSettings ref="domainSettingsView" /></div>
-
                   <!-- 发布集成 -->
                   <div v-if="isIntegrationSection(currentSection)" class="section">
                     <IntegrationSettingsSection :tab="integrationTabFromSection(currentSection)" />
                   </div>
 
-                  <!-- MCP 服务 -->
-                  <div v-if="currentSection === 'mcp'" class="section">
-                    <McpSettings />
-                  </div>
               </div>
             </div>
           </div>
@@ -163,10 +137,11 @@ import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
-import McpSettings from './McpSettings.vue'
-import ChatHistorySettings from './ChatHistorySettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
-import DomainSettings from './DomainSettings.vue'
+import KnowledgeSettings from './KnowledgeSettings.vue'
+import VaultStatus from './VaultStatus.vue'
+import OperationLogs from '@/views/knowledge/OperationLogs.vue'
+import DataSourceSettings from '@/views/knowledge/settings/DataSourceSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
@@ -193,11 +168,11 @@ const uiStore = useUIStore()
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
+const knowledgeSettingsView = ref<InstanceType<typeof KnowledgeSettings>>()
 const tenantInfoView = ref<InstanceType<typeof TenantInfo>>()
-const domainSettingsView = ref<InstanceType<typeof DomainSettings>>()
 const canLeaveCurrentSection = () => currentSection.value === 'tenant'
   ? tenantInfoView.value?.confirmLeave() ?? Promise.resolve(true)
-  : currentSection.value === 'domains' ? domainSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
+  : currentSection.value === 'knowledge' ? knowledgeSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
 const expandedMenus = ref<string[]>([])
@@ -241,7 +216,6 @@ const isSectionSupported = (key: string): boolean => {
   return deploymentCapabilities.isSupported(SETTINGS_SECTION_CAPABILITY[key])
 }
 
-
 const navItems = computed(() => {
   const integrationItems: NavItem[] = INTEGRATION_PREVIEW_ITEMS.map((item) => ({
     key: integrationSectionKey(item.key),
@@ -253,15 +227,16 @@ const navItems = computed(() => {
     { key: 'general', icon: 'setting', label: t('general.title') },
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
-    { key: 'chathistory', icon: 'chat', label: t('chatHistorySettings.title') },
+    { key: 'knowledge', icon: 'file', label: t('settings.knowledgeSettings') },
+    { key: 'datasource', icon: 'rss', label: t('settings.dataSources') },
+    { key: 'vault', icon: 'folder', label: t('settings.vault.title') },
+    { key: 'operation-logs', icon: 'history', label: t('operationLogs.title') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
-    { key: 'mcp', icon: 'tools', label: t('settings.mcpService') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
-    { key: 'domains', icon: 'layers', label: t('knowledgeDomains.title') },
     ...integrationItems,
   ]
   // 入口的策略一致。
@@ -274,7 +249,6 @@ const navGroups = computed<NavGroup[]>(() => {
   const pickItems = (keys: string[]) => keys.map((key) => itemMap.get(key)).filter(Boolean) as NavItem[]
   // 分组：账户 → 空间 → 模型 → 发布集成 → 数据与扩展 → 系统管理 → 平台
   // 关键调整：把个人偏好(general)和用户信息收进「账户」；
-  // 把空间内功能开关(chathistory)从「平台」挪到「空间」；
   // 把检索引擎和外部集成合并为「数据与扩展」，避免两个 2~3 项的窄分组。
   return [
     {
@@ -285,7 +259,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'domains', 'chathistory', ]),
+      items: pickItems(['tenant']),
     },
     {
       key: 'models_runtime',
@@ -303,14 +277,13 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'parser',
-        'mcp',
+        'knowledge', 'datasource', 'vault', 'parser',
       ]),
     },
     {
       key: 'system_administration',
       label: t('settings.navGroups.systemAdministration'),
-      items: pickItems(['system-global', 'runtime-queues']),
+      items: pickItems(['system-global', 'operation-logs', 'runtime-queues']),
     },
     {
       key: 'platform',
@@ -385,7 +358,7 @@ const handleClose = async () => {
   if (route.path === '/platform/settings') {
     const sec = route.query.section
     if (!router.options.history.state.back || sec === 'system-global' || sec === 'runtime-queues') {
-      router.push('/platform/knowledge-bases')
+      router.push('/platform/knowledge')
     } else {
       router.back()
     }
@@ -419,11 +392,10 @@ watch(() => uiStore.settingsInitialSection, (section) => {
         }, 300)
       }
     } else {
-      currentSubSection.value = ''
+      currentSubSection.value = uiStore.settingsInitialSubSection || ''
     }
   }
 }, { immediate: true })
-
 
 watch(
   () => [visible.value, route.path, route.query.section, deploymentCapabilities.loaded] as const,

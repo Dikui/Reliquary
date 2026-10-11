@@ -94,7 +94,10 @@ func (r *DataSourceRepository) Update(ctx context.Context, ds *types.DataSource)
 		// a user-selected sync_deletions=false impossible to persist.
 		return tx.Model(&types.DataSource{}).
 			Where("id = ?", ds.ID).
-			UpdateColumn("sync_deletions", ds.SyncDeletions).Error
+			Updates(map[string]interface{}{
+				"sync_deletions":       ds.SyncDeletions,
+				"default_content_type": ds.DefaultContentType,
+			}).Error
 	})
 }
 

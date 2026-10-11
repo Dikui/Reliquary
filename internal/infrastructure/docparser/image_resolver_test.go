@@ -125,7 +125,7 @@ func TestHasUnstoredImagesRejectsUnresolvedLocalAndRemoteReferences(t *testing.T
 	if !HasUnstoredImages("![](images/missing.png)") || !HasUnstoredImages(`<img src="https://example.com/image.png">`) {
 		t.Fatal("unresolved content image was not detected")
 	}
-	if HasUnstoredImages("![](resource://0123456789012345678901)\n![](local://images/saved.png)\n![](local://images/saved.png)\n<img src=\"/files/saved.png\">") {
+	if HasUnstoredImages("![](resource://0123456789012345678901)\n![](local://images/saved.png \"Image title\")\n![](<local://images/saved.png> 'Image title')\n<img src=\"/files/saved.png\">") {
 		t.Fatal("stored content image was reported as unresolved")
 	}
 }

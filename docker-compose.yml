@@ -1,11 +1,10 @@
 services:
   frontend:
-    image: reliquary-ui:${RELIQUARY_VERSION:-latest}
+    image: reliquary-ui:${RELIQUARY_VERSION:-0.8.0}
     pull_policy: build
     # Requires frontend/dist — run ./scripts/build_frontend_dist.sh before --build
     build:
       context: ./frontend
-    container_name: Reliquary-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"
     environment:
@@ -27,7 +26,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: reliquary-app:${RELIQUARY_VERSION:-latest}
+    image: reliquary-app:${RELIQUARY_VERSION:-0.8.0}
     pull_policy: build
     build:
       context: .
@@ -35,11 +34,13 @@ services:
       args:
         - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
         - WITH_ANYDOC=${WITH_ANYDOC:-1}
-    container_name: Reliquary-app
+        - VERSION_ARG=${RELIQUARY_VERSION:-0.8.0}
+        - COMMIT_ID_ARG=${RELIQUARY_COMMIT:-}
     ports:
       - "${APP_PORT:-8080}:8080"
     volumes:
       - data-files:/data/files
+      - vault-data:${VAULT_ROOT:-/data/vault}
       - ./config/config.yaml:/app/config/config.yaml
       # Optional: declarative built-in models. Copy config/builtin_models.yaml.example
       # to config/builtin_models.yaml, edit it for your deployment, then
@@ -79,7 +80,7 @@ services:
       - GIN_MODE=${GIN_MODE:-release}
       # 时区，默认为Asia/Shanghai
       - TZ=${TZ:-Asia/Shanghai}
-      # 文档处理语言（问题/摘要生成）。优先级：此环境变量（部署级覆盖，非空即生效）
+      # 文档解析语言。优先级：此环境变量（部署级覆盖，非空即生效）
       # > Accept-Language 请求头 > 内置默认值 (zh-CN)。留空则跟随请求方 Accept-Language。
       - RELIQUARY_LANGUAGE=${RELIQUARY_LANGUAGE:-}
       # 系统管理员也可在「设置 → 系统设置」打开（立即生效）。未落库时读本变量。
@@ -101,34 +102,29 @@ services:
       - DB_NAME=${DB_NAME:-}
       # ========== 文件存储 ==========
       - LOCAL_STORAGE_BASE_DIR=${LOCAL_STORAGE_BASE_DIR:-/data/files}
+      - VAULT_ROOT=${VAULT_ROOT:-/data/vault}
+      - VAULT_HEADER_DEBOUNCE=${VAULT_HEADER_DEBOUNCE:-5s}
+      - VAULT_STABLE_WAIT=${VAULT_STABLE_WAIT:-10m}
+      - VAULT_SCAN_INTERVAL=${VAULT_SCAN_INTERVAL:-1m}
       - AUTO_RECOVER_DIRTY=${AUTO_RECOVER_DIRTY:-true}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       # Ollama 不可用时仅告警不阻断（true 时生效）
       - OLLAMA_OPTIONAL=${OLLAMA_OPTIONAL:-true}
       # 批量 embedding 大小
       - BATCH_EMBED_SIZE=${BATCH_EMBED_SIZE:-}
-      # VLM 单次 HTTP 请求超时（秒，默认 180）
-      - VLM_HTTP_TIMEOUT_SECONDS=${VLM_HTTP_TIMEOUT_SECONDS:-}
       # LLM 流原始转储（排查上下文问题；1 启用，默认目录 ~/.reliquary/investigate/llm-stream）
       - RELIQUARY_LLM_STREAM_RAW_DUMP=${RELIQUARY_LLM_STREAM_RAW_DUMP:-}
       - RELIQUARY_LLM_STREAM_RAW_DUMP_DIR=${RELIQUARY_LLM_STREAM_RAW_DUMP_DIR:-}
-      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
-      - REDIS_USERNAME=${REDIS_USERNAME:-}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - REDIS_DB=${REDIS_DB:-}
-      # Redis TLS（托管 Redis 加密传输；REDIS_USE_TLS=true 时生效，详见 .env.example）
-      - REDIS_TLS_SERVER_NAME=${REDIS_TLS_SERVER_NAME:-}
-      - REDIS_TLS_INSECURE_SKIP_VERIFY=${REDIS_TLS_INSECURE_SKIP_VERIFY:-}
-      # Redis 频道命名空间后缀（多部署共享同一 Redis 时隔离用）
-      - RELIQUARY_REDIS_NAMESPACE=${RELIQUARY_REDIS_NAMESPACE:-}
-      # Asynq 客户端 Redis 读写超时（毫秒，默认 500）
-      - RELIQUARY_REDIS_OP_TIMEOUT_MS=${RELIQUARY_REDIS_OP_TIMEOUT_MS:-}
       # 数据库中 API Key 等敏感字段落盘加密的 AES-256 主密钥（必须为 32 字节）。
       # 加密范围：tenants.api_key、模型 API key 等敏感字段。
-      # 需重新填写）。生产环境必须显式设置且妥善保管，丢失则所有加密数据不可恢复。
+      # 密钥不随备份或迁移包保存；新环境生成新密钥并重新填写凭据。
+      # 生产环境必须显式设置且妥善保管。
       # （TENANT_AES_KEY / CRYPTO_MASTER_KEY / CRYPTO_SALT 已废弃：v0.4.0 起加密统一
       #   改用 SYSTEM_AES_KEY，Go 主应用不再读取这三个变量。）
       - SYSTEM_AES_KEY=${SYSTEM_AES_KEY:-}
+      # ChatGPT 授权回调使用宿主机映射的 API 端口，返回链接使用网页端口。
+      - CHATGPT_CALLBACK_URL=${CHATGPT_CALLBACK_URL:-http://127.0.0.1:8080/auth/callback}
+      - CHATGPT_SETTINGS_URL=${CHATGPT_SETTINGS_URL:-http://127.0.0.1/platform/settings?section=models}
       - SSRF_WHITELIST=${SSRF_WHITELIST:-}
       # 默认放行本机代理 fake-ip 使用的基准测试保留网段；显式设为空字符串即关闭。
       - SSRF_WHITELIST_EXTRA=${SSRF_WHITELIST_EXTRA-198.18.0.0/15}
@@ -144,25 +140,13 @@ services:
       - PARSER_CALL_TIMEOUT=${PARSER_CALL_TIMEOUT:-}
       # 知识库巡检回收（回收卡在 processing 的脏数据；false 禁用，不建议）
       - RELIQUARY_HOUSEKEEPING_ENABLED=${RELIQUARY_HOUSEKEEPING_ENABLED:-}
-      - RELIQUARY_CHAT_ATTACHMENT_TTL_HOURS=${RELIQUARY_CHAT_ATTACHMENT_TTL_HOURS:-24}
-      - RELIQUARY_CHAT_ATTACHMENT_WAIT_TIMEOUT_SEC=${RELIQUARY_CHAT_ATTACHMENT_WAIT_TIMEOUT_SEC:-60}
-      - RELIQUARY_CHAT_ATTACHMENT_OCR_CONCURRENCY=${RELIQUARY_CHAT_ATTACHMENT_OCR_CONCURRENCY:-8}
-      - RELIQUARY_CHAT_ATTACHMENT_OCR_MAX_PAGES=${RELIQUARY_CHAT_ATTACHMENT_OCR_MAX_PAGES:-8}
-      # Agent LLM call timeout
-      - RELIQUARY_AGENT_LLM_TIMEOUT=${RELIQUARY_AGENT_LLM_TIMEOUT:-}
-      - RELIQUARY_AGENT_TOOL_APPROVAL_TIMEOUT=${RELIQUARY_AGENT_TOOL_APPROVAL_TIMEOUT:-}
-      # MCP 工具人工审批失败时是否放行（true 放行 / 默认 fail-close 拒绝）
-      - RELIQUARY_AGENT_TOOL_APPROVAL_FAIL_OPEN=${RELIQUARY_AGENT_TOOL_APPROVAL_FAIL_OPEN:-}
-      - RELIQUARY_ASYNQ_CORE_CONCURRENCY=${RELIQUARY_ASYNQ_CORE_CONCURRENCY:-8}
-      - RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY=${RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY:-2}
-      - RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY=${RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY:-12}
-      - RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY=${RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY:-4}
-      - RELIQUARY_ASYNQ_SHARED_CONCURRENCY=${RELIQUARY_ASYNQ_SHARED_CONCURRENCY:-6}
+      - RELIQUARY_QUEUE_CORE_CONCURRENCY=${RELIQUARY_QUEUE_CORE_CONCURRENCY:-8}
+      - RELIQUARY_QUEUE_ENRICHMENT_CONCURRENCY=${RELIQUARY_QUEUE_ENRICHMENT_CONCURRENCY:-12}
+      - RELIQUARY_QUEUE_MAINTENANCE_CONCURRENCY=${RELIQUARY_QUEUE_MAINTENANCE_CONCURRENCY:-4}
+      - RELIQUARY_QUEUE_SHARED_CONCURRENCY=${RELIQUARY_QUEUE_SHARED_CONCURRENCY:-6}
       - RELIQUARY_MODEL_MAX_CONCURRENCY=${RELIQUARY_MODEL_MAX_CONCURRENCY:-32}
       - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
     depends_on:
-      redis:
-        condition: service_started
       postgres:
         condition: service_healthy
     networks:
@@ -173,8 +157,7 @@ services:
 
 
   postgres:
-    image: paradedb/paradedb:v0.22.2-pg17
-    container_name: Reliquary-postgres
+    image: paradedb/paradedb:v0.22.2-pg17@sha256:af585013f97f622715de01e48d00558f7edf17055d7b40deafc9f98ca8d99a56
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
@@ -184,7 +167,7 @@ services:
     networks:
       - Reliquary-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s # 增加时间间隔
       timeout: 10s # 增加超时时间
       retries: 3 # 减少重试次数，让失败更快反馈
@@ -193,19 +176,12 @@ services:
     # 添加停机时的优雅退出时间
     stop_grace_period: 1m
 
-  redis:
-    image: redis:7.0-alpine
-    container_name: Reliquary-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    restart: always
-    networks:
-      - Reliquary-network
-
 
 networks:
   Reliquary-network:
     driver: bridge
 
 volumes:
+  vault-data:
   postgres-data:
   data-files:

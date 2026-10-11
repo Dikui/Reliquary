@@ -1,33 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
-  getPromptTemplates,
   getParserEngines,
   getSystemInfo,
-  type PromptTemplatesConfig,
   type ParserEngineInfo,
   type SystemInfo,
 } from '@/api/system'
-import { listMCPServices, type MCPService } from '@/api/mcp-service'
-import { getAgentTypePresets, getPlaceholders, type AgentTypePreset, type PlaceholdersResponse } from '@/api/agent'
 import { getTenantRetrievalConfig } from '@/api/retrieval'
 
 const CACHE_TTL_MS = 60_000
 
 type EditorResourceKey =
-  | 'mcpServices'
-  | 'agentTypePresets'
-  | 'promptTemplates'
-  | 'placeholders'
   | 'tenantRetrievalConfig'
   | 'parserEngines'
   | 'systemInfo'
 
 export const useEditorResourcesStore = defineStore('editorResources', () => {
-  const mcpServices = ref<MCPService[]>([])
-  const agentTypePresets = ref<AgentTypePreset[]>([])
-  const promptTemplates = ref<PromptTemplatesConfig | null>(null)
-  const placeholders = ref<PlaceholdersResponse | null>(null)
   const tenantRetrievalConfig = ref<Record<string, unknown> | null>(null)
   const parserEngines = ref<ParserEngineInfo[]>([])
   const systemInfo = ref<SystemInfo | null>(null)
@@ -47,38 +35,6 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
     const p = loader().finally(() => inflight.delete(key))
     inflight.set(key, p)
     return p
-  }
-
-  async function ensureMcpServices(force = false): Promise<void> {
-    return runOnce('mcpServices', force, async () => {
-      const list = await listMCPServices()
-      mcpServices.value = Array.isArray(list) ? list : []
-      loadedAt.value.mcpServices = Date.now()
-    })
-  }
-
-  async function ensureAgentTypePresets(force = false): Promise<void> {
-    return runOnce('agentTypePresets', force, async () => {
-      const presetsRes: any = await getAgentTypePresets()
-      agentTypePresets.value = presetsRes?.data && Array.isArray(presetsRes.data) ? presetsRes.data : []
-      loadedAt.value.agentTypePresets = Date.now()
-    })
-  }
-
-  async function ensurePromptTemplates(force = false): Promise<void> {
-    return runOnce('promptTemplates', force, async () => {
-      const tmplRes = await getPromptTemplates()
-      promptTemplates.value = tmplRes?.data ?? null
-      loadedAt.value.promptTemplates = Date.now()
-    })
-  }
-
-  async function ensurePlaceholders(force = false): Promise<void> {
-    return runOnce('placeholders', force, async () => {
-      const placeholdersRes = await getPlaceholders()
-      placeholders.value = placeholdersRes?.data ?? null
-      loadedAt.value.placeholders = Date.now()
-    })
   }
 
   async function ensureTenantRetrievalConfig(force = false): Promise<void> {
@@ -105,23 +61,9 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
     })
   }
 
-  async function prefetchAgentEditorDeps(force = false): Promise<void> {
-    await Promise.all([
-      ensureMcpServices(force),
-      ensureAgentTypePresets(force),
-      ensurePromptTemplates(force),
-      ensurePlaceholders(force),
-      ensureTenantRetrievalConfig(force),
-    ])
-  }
-
   function invalidate(...keys: EditorResourceKey[]) {
     if (keys.length === 0) {
       loadedAt.value = {}
-      mcpServices.value = []
-      agentTypePresets.value = []
-      promptTemplates.value = null
-      placeholders.value = null
       tenantRetrievalConfig.value = null
       parserEngines.value = []
       systemInfo.value = null
@@ -135,21 +77,12 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
   }
 
   return {
-    mcpServices,
-    agentTypePresets,
-    promptTemplates,
-    placeholders,
     tenantRetrievalConfig,
     parserEngines,
     systemInfo,
-    ensureMcpServices,
-    ensureAgentTypePresets,
-    ensurePromptTemplates,
-    ensurePlaceholders,
     ensureTenantRetrievalConfig,
     ensureParserEngines,
     ensureSystemInfo,
-    prefetchAgentEditorDeps,
     invalidate,
   }
 })

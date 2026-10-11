@@ -34,3 +34,18 @@ func EnsureSingleTeamSpace(ctx context.Context, db *gorm.DB) error {
 		return err
 	})
 }
+
+// EnsureSingleKnowledgeBase repairs a missing knowledge base before serving requests.
+func EnsureSingleKnowledgeBase(ctx context.Context, db *gorm.DB) error {
+	var user types.User
+	err := db.WithContext(ctx).Where("tenant_id = ?", types.SingleTenantID).First(&user).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	// Registration creates the first knowledge base together with its owner.
+	if err == gorm.ErrRecordNotFound {
+		return nil
+	}
+	_, err = repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, user.ID)
+	return err
+}

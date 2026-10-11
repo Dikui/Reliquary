@@ -3,37 +3,18 @@ server:
   port: 8080
   host: "0.0.0.0"
 
-# Conversation service configuration
-# NOTE: Prompt content is resolved from prompt_templates/ YAML files via xxx_id fields.
-# Set the _id to the template ID you want; the system will load its content at startup.
-conversation:
-  max_rounds: 5
-  keyword_threshold: 0.3
-  embedding_top_k: 30
-  vector_threshold: 0.2
-  rerank_threshold: 0.3
-  rerank_top_k: 30
-  fallback_strategy: "model"
-  fallback_response: "Sorry, I am unable to answer this question."
-  fallback_prompt_id: "default_fallback_prompt"  # from prompt_templates/fallback.yaml (mode: "model")
-  enable_rewrite: true
-  enable_query_expansion: true
-  enable_rerank: true
-  rewrite_prompt_id: "default_rewrite"  # from prompt_templates/rewrite.yaml (content + user fields)
-  generate_summary_prompt_id: "default_summary"  # from prompt_templates/generate_summary.yaml
-  generate_session_title_prompt_id: "default_session_title"  # from prompt_templates/generate_session_title.yaml
-  summary:
-    max_input_chars: 16384
-    repeat_penalty: 1.0
-    temperature: 0.3
-    max_completion_tokens: 2048
-    no_match_prefix: |-
-      <think>
-      </think>
-      NO_MATCH
-    prompt_id: "default_kb"  # from prompt_templates/system_prompt.yaml
-    context_template_id: "default_context"  # from prompt_templates/context_template.yaml
-  generate_questions_prompt_id: "default_generate_questions"        # from prompt_templates/generate_questions.yaml
+# Zero body limit derives a safe input budget from the generation model context.
+article_processing:
+  max_body_chars: 0
+  max_images: 8
+  # Zero chooses up to 4096 output tokens within the model context and output limits.
+  max_completion_tokens: 0
+
+# Server-local Markdown library. VAULT_ROOT is required.
+vault:
+  header_debounce: 5s
+  stable_wait: 10m
+  scan_interval: 1m
 
 # Knowledge base configuration
 knowledge_base:
@@ -41,8 +22,3 @@ knowledge_base:
   chunk_overlap: 50
   split_markers: ["\n\n", "\n", "。"]
   document_process_timeout: 2h
-  image_processing:
-    enable_multimodal: true
-
-tenant:
-  # Enable cross-tenant access (can be enabled for intranet environments)

@@ -14,8 +14,8 @@ import (
 )
 
 // ModelCredentialsHandler handles secret credentials for models via the
-// dedicated /models/:id/credentials subresource. See mcp_credentials.go for
-// the rationale; this handler mirrors that contract for Model resources.
+// dedicated /models/:id/credentials subresource. Credential values are written
+// separately from model configuration and responses expose only presence.
 //
 // Recognized fields: "api_key" (every provider), "app_secret" (providers that require a signing secret).
 type ModelCredentialsHandler struct {

@@ -15,7 +15,7 @@
 //	tracker.FailSpan(ctx, stage, code, msg, err) // error
 //	tracker.SkipSpan(ctx, stage, reason)        // intentionally not run
 //
-//	sub := tracker.BeginSubSpan(ctx, parentSpan, "multimodal.image[0]", types.SpanKindGeneration, input)
+//	sub := tracker.BeginSubSpan(ctx, parentSpan, "processing.call", types.SpanKindGeneration, input)
 //	  // ...
 //
 // All operations are best-effort: a DB error is logged and swallowed so a
@@ -98,7 +98,7 @@ type SpanTracker interface {
 	BeginStage(ctx context.Context, knowledgeID string, attempt int, stage string, input types.JSONMap) *Span
 
 	// BeginSubSpan creates a child span under parent. parent may be a
-	// stage span (for multimodal.image[i] / embedding.batch[i]) or
+	// stage span (for processing.call / embedding.batch[i]) or
 	// another subspan. kind is "subspan" or "generation".
 	BeginSubSpan(ctx context.Context, parent *Span, name, kind string, input types.JSONMap) *Span
 
@@ -110,20 +110,17 @@ type SpanTracker interface {
 	// error_detail (truncated to 8 KB) for admin views.
 	FailSpan(ctx context.Context, span *Span, errorCode, errorMessage string, errorDetail error)
 
-	// SkipSpan marks an intentionally not-run span (e.g. multimodal
-	// on a text-only document). Distinct from cancelled — skipped is
+	// SkipSpan marks an intentionally not-run span (e.g. embeddings
+	// for a summary-only article). Distinct from cancelled: skipped is
 	// "we chose not to" while cancelled is "an upstream broke".
 	SkipSpan(ctx context.Context, span *Span, reason string)
 
-	// LookupStage returns the stage's *Span for an in-flight attempt
-	// — the cross-process bridge that lets an asynq worker (e.g.
-	// image_multimodal) attach subspans to the parent stage span
-	// created by the upstream pipeline.
+	// LookupStage returns the stage's *Span for an attempt so workers
+	// can attach subspans to a stage recorded by another process.
 	LookupStage(ctx context.Context, knowledgeID string, attempt int, stage string) *Span
 
 	// LookupSpanByName returns the first span of any kind matching name
-	// for (knowledgeID, attempt) — the cross-process bridge that lets a
-	// fan-out worker (e.g. a question-generation batch) attach its subspan
+	// for (knowledgeID, attempt), letting a fan-out worker attach its subspan
 	// under a grouping span created earlier by the orchestrator. Returns
 	// nil when no such span exists (caller should fall back to the stage).
 	LookupSpanByName(ctx context.Context, knowledgeID string, attempt int, name string) *Span
@@ -140,7 +137,7 @@ type SpanTracker interface {
 	// AbortAttempt cascade-cancels every still-running descendant of the
 	// attempt's root span and then closes the root as cancelled. Used by
 	// the user-initiated cancel path so the trace viewer doesn't leave
-	// stranded subspans (multimodal images, postprocess subtasks)
+	// stranded subspans (model calls, embedding batches)
 	// looking like they're still in flight forever after the user
 	// stopped the parse. Idempotent.
 	AbortAttempt(ctx context.Context, knowledgeID string, attempt int, errorCode, errorMessage, reason string)
@@ -148,8 +145,8 @@ type SpanTracker interface {
 
 type spanTracker struct {
 	repo repository.KnowledgeSpanRepository
-	// db is held purely for the heartbeat side-channel: every span
-	// state transition pokes knowledge.updated_at so the housekeeping
+	// db is held purely for the heartbeat side-channel: root and stage
+	// state transitions poke knowledge.updated_at so the housekeeping
 	// sweep can tell "actively running long stage" from "abandoned".
 	// nil-safe — when missing (test harness) the heartbeat is skipped.
 	db *gorm.DB
@@ -179,23 +176,16 @@ func NewSpanTracker(repo repository.KnowledgeSpanRepository, db *gorm.DB) SpanTr
 
 // touchKnowledgeHeartbeat advances knowledge.updated_at to the current
 // wall-clock so the housekeeping sweep treats this row as actively
-// progressing. Called on every span Begin/End/Fail/Skip — the cost is
-// one indexed UPDATE per transition (≤ a few dozen per knowledge), which
-// is dwarfed by the work the stages themselves do.
-//
-// touchKnowledgeHeartbeat advances knowledge.updated_at to the current
-// wall-clock so the housekeeping sweep treats this row as actively
-// progressing. Called on root / stage span transitions only — subspan and
+// progressing. Called on root / stage span transitions only. Subspan and
 // generation transitions skip this side-channel because:
 //
 //   - The spans table itself is updated on every transition, and the
 //     housekeeping sweep already reads MAX(spans.updated_at) per
 //     knowledge, so subspan progress is observable without poking the
 //     parent row.
-//   - A multimodal stage with N images would produce 2*N+ extra UPDATEs
-//     on the same hot row (Begin+End per image plus retries), which we
-//     observed contributing to row-level contention under bursty
-//     uploads.
+//   - Embedding batches would produce extra UPDATEs on the same parent
+//     row for every Begin/End and retry, increasing row contention
+//     during concurrent uploads.
 //
 // Best-effort. We deliberately do NOT bump status here: the parse_status
 // column remains under the pipeline's control. Only the timestamp gets
@@ -291,7 +281,7 @@ func (t *spanTracker) BeginStage(ctx context.Context, knowledgeID string, attemp
 	}
 	// Find root span — we need its span_id as parent for stage rows. We
 	// also reuse this scan to detect an existing row for the same stage
-	// name in this attempt: re-entry (asynq retry, double-call from
+	// name in this attempt: re-entry (queue retry, double-call from
 	// adjacent code paths) MUST NOT create a second row, otherwise the
 	// timeline shows two segments for the same stage and LookupStage
 	// becomes ambiguous.
@@ -401,7 +391,7 @@ func (t *spanTracker) BeginSubSpan(ctx context.Context, parent *Span, name, kind
 	if kind != types.SpanKindGeneration && kind != types.SpanKindSubSpan {
 		kind = types.SpanKindSubSpan
 	}
-	// Asynq retry / server restart can re-run the same handler while the
+	// PostgreSQL queue retry / server restart can re-run the same handler while the
 	// previous invocation's span is still status=running (worker died
 	// without EndSpan). Cancel same-name open rows so the UI shows one
 	// logical subspan per (attempt, name) instead of duplicate stripes.
@@ -526,9 +516,6 @@ func (t *spanTracker) FailSpan(ctx context.Context, span *Span, errorCode, error
 		// Any failure in a MAIN pipeline stage means the attempt is
 		// done — the parse cannot succeed past this point. Close the
 		// root span as failed so the UI doesn't show "进行中" forever.
-		// Optional downstream stages (summary/question/context) do
-		// not poison the attempt: they can fail without invalidating
-		// the parsed document.
 		if isMainPipelineStage(span.Name) {
 			t.FinalizeAttempt(ctx, span.KnowledgeID, span.Attempt,
 				types.SpanStatusFailed, nil, errorCode, errorMessage)
@@ -626,7 +613,7 @@ func (t *spanTracker) LookupSpanByName(ctx context.Context, knowledgeID string, 
 
 // cascadeDependentStages flips downstream STAGE rows to "cancelled" using
 // types.StageDependencies. Without this, a Chunking failure leaves
-// Embedding / Multimodal as "pending" forever, even though they cannot
+// Embedding as "pending" forever, even though it cannot
 // possibly run. After flipping a dependent stage we ALSO cascade-cancel
 // any subspan/generation that already attached to it (e.g. an embedding
 // batch that started before the chunking failure was observed) — without
@@ -672,8 +659,8 @@ func (t *spanTracker) cascadeDependentStages(ctx context.Context, failedStage *S
 
 // stagesDependingOn returns the transitive closure of stages that have
 // `stage` as an upstream dependency (direct or indirect). Computed by
-// reverse-walking StageDependencies; the result is bounded to 5 since
-// AllStages has five members, so a naive O(N²) walk is fine.
+// reverse-walking StageDependencies; the result is bounded to four since
+// AllStages has four members, so a naive O(N²) walk is fine.
 func stagesDependingOn(stage string) []string {
 	var out []string
 	seen := map[string]bool{}
@@ -708,12 +695,9 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
-// isMainPipelineStage reports whether stage is one of the 5 mandatory
-// pipeline stages (docreader / chunking / embedding / multimodal /
-// postprocess). A failure in any of these terminally invalidates the
-// attempt and must close the root as failed. Optional downstream stages
-// added later (summary, question, context) do NOT match — those
-// can fail individually without poisoning the parse result.
+// isMainPipelineStage reports whether stage is one of the four pipeline
+// stages (docreader / processing / chunking / embedding). A failure in
+// any of these invalidates the attempt and must close the root as failed.
 func isMainPipelineStage(name string) bool {
 	for _, s := range types.AllStages {
 		if s == name {
@@ -737,7 +721,7 @@ func durationSince(t *spanTracker, span *Span, now time.Time) int64 {
 
 // FinalizeAttempt closes the root span for (knowledgeID, attempt). The
 // pipeline calls this from two places: the success orchestrator
-// (PostProcess) when the parse reaches Completed, and FailSpan when a
+// when the parse reaches Completed, and FailSpan when a
 // MAIN stage fails terminally. Without this, the root row created by
 // OpenAttempt would stay in "running" forever even after parse_status
 // flips to completed/failed — operators would see a perpetually

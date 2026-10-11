@@ -32,7 +32,6 @@ const (
 	// ParseStatusPending indicates the knowledge is waiting to be processed
 	ParseStatusPending = "pending"
 	// ParseStatusProcessing indicates the knowledge is being processed
-	// (DocReader / chunking / embedding stage).
 	ParseStatusProcessing = "processing"
 	// ParseStatusFinalizing indicates the primary parse has finished but
 	// enrichment subtasks (summary, question generation, context extract)
@@ -87,8 +86,10 @@ const (
 // KnowledgeListFilter aggregates optional filters for listing knowledge entries
 // under a knowledge base. Empty / zero fields mean "no filter on that dimension".
 type KnowledgeListFilter struct {
-	// TagIDs filters by multiple tags (OR semantics: match any of the given tags).
-	TagIDs []string
+	// ContentType filters the article purpose; unclassified matches an empty classification.
+	ContentType string
+	// Starred filters the user's article marker when supplied.
+	Starred *bool
 	// Keyword performs a LIKE match on file_name / title when non-empty.
 	Keyword string
 	// FileType filters by file_type, or by type for the special values "manual" / "url".
@@ -103,13 +104,6 @@ type KnowledgeListFilter struct {
 	UpdatedFrom time.Time
 	// UpdatedTo, when non-zero, keeps rows with updated_at <= UpdatedTo.
 	UpdatedTo time.Time
-	// FolderPath is the folder navigated to in the sidebar tree. It is only
-	// applied when FolderScope is not FolderScopeAny, so the empty string can
-	// unambiguously mean "the knowledge base root".
-	FolderPath string
-	// FolderScope selects whether FolderPath matches exactly or includes
-	// descendant folders. FolderScopeAny (the default) ignores folders.
-	FolderScope KnowledgeFolderScope
 }
 
 // Knowledge represents a knowledge entity in the system.
@@ -122,14 +116,33 @@ type Knowledge struct {
 	TenantID uint64 `json:"tenant_id"`
 	// ID of the knowledge base
 	KnowledgeBaseID string `json:"knowledge_base_id"`
-	// Tags holds the tags associated with this knowledge (populated on query, not persisted directly).
-	Tags []*KnowledgeTag `json:"tags"               gorm:"-"`
 	// Type of the knowledge
 	Type string `json:"type"`
 	// Title of the knowledge
 	Title string `json:"title"`
 	// Description of the knowledge
-	Description string `json:"description"`
+	Description                 string            `json:"description"`
+	ContentType                 string            `json:"content_type" gorm:"type:varchar(16)"`
+	ContentTypeCorrected        bool              `json:"content_type_corrected" gorm:"not null;default:false"`
+	ContentTypeUncertain        bool              `json:"content_type_uncertain" gorm:"not null;default:false"`
+	ProcessingReviewStatus      string            `json:"processing_review_status" gorm:"type:varchar(16);not null;default:''"`
+	ProcessingReviewContentType string            `json:"processing_review_content_type" gorm:"type:varchar(16);not null;default:''"`
+	ProcessingReviewReason      string            `json:"processing_review_reason" gorm:"type:text;not null;default:''"`
+	SourceUnverified            bool              `json:"source_unverified" gorm:"not null;default:false"`
+	ReviewKind                  string            `json:"review_kind,omitempty" gorm:"-"`
+	ProcessingMode              string            `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
+	SourceKind                  string            `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
+	VaultPath                   string            `json:"vault_path" gorm:"type:text;not null;default:''"`
+	VaultBody                   string            `json:"-" gorm:"type:text;not null;default:''"`
+	VaultOriginalPath           string            `json:"-" gorm:"type:text;not null;default:''"`
+	Starred                     bool              `json:"starred" gorm:"not null;default:false"`
+	CollectReason               string            `json:"collect_reason" gorm:"type:text;not null;default:''"`
+	AgentSummary                string            `json:"agent_summary" gorm:"type:text;not null;default:''"`
+	AgentTags                   JSON              `json:"agent_tags" gorm:"type:jsonb;not null"`
+	SourceName                  string            `json:"source_name" gorm:"type:text;not null;default:''"`
+	StructuredSummary           *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
+	Entities                    []Entity          `json:"entities" gorm:"-"`
+	Topics                      []Topic           `json:"topics" gorm:"-"`
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`
@@ -151,12 +164,6 @@ type Knowledge struct {
 	EmbeddingModelID string `json:"embedding_model_id"`
 	// File name of the knowledge
 	FileName string `json:"file_name"`
-	// FolderPath is the canonical relative directory this entry belongs to
-	// inside the knowledge base, e.g. "docs/spec" for a folder upload of
-	// "docs/spec/design.md". Empty means the knowledge base root. It is a
-	// display/navigation concern only: it never affects where the file is
-	// physically stored (see FilePath).
-	FolderPath string `json:"folder_path"        gorm:"type:varchar(1024);not null;default:''"`
 	// File type of the knowledge
 	FileType string `json:"file_type"`
 	// File size of the knowledge
@@ -250,6 +257,9 @@ func (k *Knowledge) BeforeCreate(tx *gorm.DB) (err error) {
 	if len(k.CustomMetadata) == 0 {
 		k.CustomMetadata = JSON(`{}`)
 	}
+	if len(k.AgentTags) == 0 {
+		k.AgentTags = JSON(`[]`)
+	}
 	return nil
 }
 
@@ -265,28 +275,25 @@ type ManualKnowledgeMetadata struct {
 // SourceInfo is supplied or extracted source evidence. Values remain strings so
 // a publisher's original date precision is never invented by this service.
 type SourceInfo struct {
-	Author      string `json:"author,omitempty"`
-	Publisher   string `json:"publisher,omitempty"`
-	OriginalURL string `json:"original_url,omitempty"`
-	PublishedAt string `json:"published_at,omitempty"`
+	Author            string `json:"author,omitempty"`
+	Publisher         string `json:"publisher,omitempty"`
+	OriginalURL       string `json:"original_url,omitempty"`
+	PublishedAt       string `json:"published_at,omitempty"`
+	OriginalURLSource string `json:"original_url_source,omitempty"`
+	Confirmed         bool   `json:"-"`
 }
 
 // KnowledgeIntakeMetadata records the single-message intake decision. Original
 // bodies stay in object storage; this only contains the audit/display fields.
-type KnowledgeIntakeTag struct {
-	Kind string `json:"kind"`
-	Name string `json:"name"`
-}
 
 type KnowledgeIntakeMetadata struct {
-	Classification []KnowledgeIntakeTag `json:"classification,omitempty"`
-	ModelCalls     []ModelCallCount     `json:"model_calls,omitempty"`
-	Source         string               `json:"source"`
-	OriginalPath   string               `json:"original_path,omitempty"`
-	Images         []string             `json:"images,omitempty"`
-	Reason         string               `json:"reason,omitempty"`
-	Decision       string               `json:"decision"`
-	SourceInfo     SourceInfo           `json:"source_info,omitempty"`
+	ModelCalls   []ModelCallCount `json:"model_calls,omitempty"`
+	Source       string           `json:"source"`
+	OriginalPath string           `json:"original_path,omitempty"`
+	Images       []string         `json:"images,omitempty"`
+	Reason       string           `json:"reason,omitempty"`
+	Decision     string           `json:"decision"`
+	SourceInfo   SourceInfo       `json:"source_info,omitempty"`
 }
 
 func (k *Knowledge) IntakeMetadata() (*KnowledgeIntakeMetadata, error) {
@@ -300,37 +307,6 @@ func (k *Knowledge) IntakeMetadata() (*KnowledgeIntakeMetadata, error) {
 		return nil, err
 	}
 	return raw.Intake, nil
-}
-
-// IsArchivedSource identifies a retained historical source, not current knowledge.
-func (k *Knowledge) IsArchivedSource() bool {
-	if k == nil {
-		return false
-	}
-	var meta struct {
-		SourceArchived bool `json:"source_archived"`
-	}
-	return json.Unmarshal(k.Metadata, &meta) == nil && meta.SourceArchived
-}
-
-// IsSourceUpdateCandidate keeps an unpromoted replacement out of current knowledge.
-func (k *Knowledge) IsSourceUpdateCandidate() bool {
-	if k == nil {
-		return false
-	}
-	var meta map[string]json.RawMessage
-	if json.Unmarshal(k.Metadata, &meta) != nil {
-		return false
-	}
-	for _, key := range []string{"source_update_candidate", "rss_update_candidate"} {
-		var flag bool
-		var text string
-		if (json.Unmarshal(meta[key], &flag) == nil && flag) ||
-			(json.Unmarshal(meta[key], &text) == nil && strings.EqualFold(text, "true")) {
-			return true
-		}
-	}
-	return false
 }
 
 func (k *Knowledge) SetIntakeMetadata(intake *KnowledgeIntakeMetadata) error {
@@ -363,14 +339,13 @@ type ManualKnowledgePayload struct {
 	Title          string                     `json:"title"`
 	Content        string                     `json:"content"`
 	Status         string                     `json:"status"`
-	TagIDs         []string                   `json:"tag_ids"`
 	Channel        string                     `json:"channel"`
 	ProcessConfig  *KnowledgeProcessOverrides `json:"process_config,omitempty"`
 	SourceInfo     SourceInfo                 `json:"source_info,omitempty"`
 	SourceMetadata map[string]string          `json:"-"`
 }
 
-// KnowledgeSearchScope defines a (tenant_id, knowledge_base_id) scope for knowledge search (e.g. own KBs + shared KBs).
+// KnowledgeSearchScope keeps tenant and knowledge base boundaries explicit for repository queries.
 type KnowledgeSearchScope struct {
 	TenantID uint64
 	KBID     string

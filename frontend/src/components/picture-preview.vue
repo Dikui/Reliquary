@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue"
+import ImagePreview from './ImagePreview.vue'
 
 const props = defineProps(['reviewImg', 'reviewUrl'])
 const emit = defineEmits(['closePreImg'])
@@ -8,8 +8,8 @@ const close = () => {
 }
 </script>
 <template>
-    <t-image-viewer :visible="reviewImg" closeOnOverlay closeOnEscKeydown @close="close"
+    <ImagePreview :visible="!!reviewImg" @close="close"
         :images="reviewUrl ? [reviewUrl] : []">
-    </t-image-viewer>
+    </ImagePreview>
 </template>
 <style scoped lang="less"></style>

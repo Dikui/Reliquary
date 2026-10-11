@@ -1,8 +1,12 @@
+import { PROVIDER_SCHEME_PATTERN } from './protectedFileAccess'
+
 export const domPurifyForbidTags = ['script', 'style', 'object', 'embed', 'form', 'input'] as const;
 export const domPurifyForbidAttr = ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'] as const;
 
-export const domPurifyAllowedUriRegexp =
-  /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|blob):|data:image\/|(?:resource|local):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
+export const domPurifyAllowedUriRegexp = new RegExp(
+  `^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|blob):|data:image\\/|(?:${PROVIDER_SCHEME_PATTERN}):|[^a-z]|[a-z+.\\-]+(?:[^a-z+.\\-:]|$))`,
+  'i',
+);
 
 /** Shared DOMPurify security options (FORBID_*, URI scheme, DOM flags). */
 export const domPurifySecurityOptions = {
@@ -49,7 +53,7 @@ export const domPurifySecurityHooks = {
   },
 };
 
-/** Chat markdown links must never replace the conversation page. */
+/** Markdown links open without replacing the current page. */
 export const markdownDomPurifySecurityHooks = {
   ...domPurifySecurityHooks,
   afterSanitizeElements: (currentNode: Node) => {
@@ -63,7 +67,7 @@ export const markdownDomPurifySecurityHooks = {
   },
 };
 
-/** Shared DOMPurify config for chat / dev markdown (KaTeX + Mermaid SVG). */
+/** Shared DOMPurify config for rendered Markdown (KaTeX + Mermaid SVG). */
 export const markdownDomPurifyConfig = {
   ALLOWED_TAGS: [
     'p', 'br', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote',

@@ -17,7 +17,7 @@ import (
 func setupChunkTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db := pgtest.OpenFixture(t)
-	require.NoError(t, db.AutoMigrate(&types.Chunk{}, &types.KnowledgeTag{}))
+	require.NoError(t, db.AutoMigrate(&types.Chunk{}))
 	require.NoError(t, db.Exec(`ALTER TABLE chunks ALTER COLUMN metadata TYPE JSONB USING metadata::jsonb`).Error)
 	return db
 }
@@ -71,7 +71,6 @@ func TestListPagedChunksByKnowledgeID_FiltersEnabledState(t *testing.T) {
 		"document-knowledge",
 		&types.Pagination{Page: 1, PageSize: 20},
 		[]types.ChunkType{types.ChunkTypeText},
-		nil,
 		"",
 		"",
 		&enabled)
@@ -85,55 +84,12 @@ func TestListPagedChunksByKnowledgeID_FiltersEnabledState(t *testing.T) {
 		"document-knowledge",
 		&types.Pagination{Page: 1, PageSize: 20},
 		[]types.ChunkType{types.ChunkTypeText},
-		nil,
 		"",
 		"",
 		nil)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), allTotal)
 	assert.Len(t, allChunks, 2)
-}
-
-func makeSuggestedDocumentChunk(t *testing.T, kbID, knowledgeID, question string) *types.Chunk {
-	t.Helper()
-	chunk := makeChunk(kbID, knowledgeID, types.ChunkTypeText)
-	require.NoError(t, chunk.SetDocumentMetadata(&types.DocumentChunkMetadata{
-		GeneratedQuestions: []types.GeneratedQuestion{{ID: uuid.NewString(), Question: question}},
-	}))
-	return chunk
-}
-
-func TestListRecentDocumentChunksWithQuestions_KnowledgeScopeDoesNotIncludeSiblingDocuments(t *testing.T) {
-	db := setupChunkTestDB(t)
-	repo := NewChunkRepository(db)
-	ctx := context.Background()
-
-	selected := makeSuggestedDocumentChunk(t, "kb-1", "doc-selected", "selected document question")
-	sibling := makeSuggestedDocumentChunk(t, "kb-1", "doc-sibling", "sibling document question")
-	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{selected, sibling}))
-
-	got, err := repo.ListRecentDocumentChunksWithQuestions(ctx, 1, nil, []string{"doc-selected"}, 10)
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, selected.ID, got[0].ID)
-}
-
-func TestListRecentDocumentChunksWithQuestions_UnionsExplicitKBAndKnowledge(t *testing.T) {
-	db := setupChunkTestDB(t)
-	repo := NewChunkRepository(db)
-	ctx := context.Background()
-
-	fromExplicitKB := makeSuggestedDocumentChunk(t, "kb-explicit", "doc-1", "explicit KB question")
-	fromExplicitDocument := makeSuggestedDocumentChunk(t, "kb-other", "doc-selected", "selected document question")
-	unselected := makeSuggestedDocumentChunk(t, "kb-other", "doc-other", "unselected question")
-	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{fromExplicitKB, fromExplicitDocument, unselected}))
-
-	got, err := repo.ListRecentDocumentChunksWithQuestions(
-		ctx, 1, []string{"kb-explicit"}, []string{"doc-selected"}, 10,
-	)
-	require.NoError(t, err)
-	require.Len(t, got, 2)
-	assert.ElementsMatch(t, []string{fromExplicitKB.ID, fromExplicitDocument.ID}, []string{got[0].ID, got[1].ID})
 }
 
 func TestUpdateChunkPersistsContent(t *testing.T) {

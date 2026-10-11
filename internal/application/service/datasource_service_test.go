@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/datasource"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -48,7 +48,7 @@ func TestProcessSyncCancelsWhenKnowledgeBaseDeleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload))
+	err = svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload))
 	require.NoError(t, err)
 
 	updated := syncLogRepo.logs[syncLog.ID]
@@ -72,7 +72,7 @@ func TestProcessSyncDailySourceFailureKeepsSourceActiveForNextRun(t *testing.T) 
 				logs.logs[id] = &types.SyncLog{ID: id, DataSourceID: ds.ID, TenantID: ds.TenantID, Status: types.SyncLogStatusRunning}
 				payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: id})
 				require.NoError(t, err)
-				require.Error(t, svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload)))
+				require.Error(t, svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 				assert.Equal(t, types.SyncLogStatusFailed, logs.logs[id].Status)
 				assert.Equal(t, types.DataSourceStatusActive, ds.Status)
 			}
@@ -102,11 +102,11 @@ func TestProcessSyncRSSPartialFailureKeepsCursorForRetry(t *testing.T) {
 	svc := &DataSourceService{dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
 		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: 1}},
 		connectorRegistry: registry, tenantRepo: &processSyncTenantRepo{tenant: &types.Tenant{ID: 1}},
-		tagService: &processSyncTagService{}, knowledgeService: &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}},
+		knowledgeService: &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}},
 	}
 	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: 1, SyncLogID: log.ID})
 	require.NoError(t, err)
-	require.NoError(t, svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload)))
+	require.NoError(t, svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 	require.Equal(t, types.SyncLogStatusPartial, log.Status)
 	require.Equal(t, types.JSON(`{"revision":"old"}`), ds.LastSyncCursor)
 }
@@ -116,8 +116,8 @@ type processSyncKBService struct {
 	kb     *types.KnowledgeBase
 }
 
-func (s *processSyncKBService) CreateKnowledgeBase(context.Context, *types.KnowledgeBase) (*types.KnowledgeBase, error) {
-	return nil, nil
+func (s *processSyncKBService) GetKnowledgeBase(context.Context) (*types.KnowledgeBase, error) {
+	return s.kb, nil
 }
 
 func (s *processSyncKBService) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
@@ -136,24 +136,11 @@ func (s *processSyncKBService) FillKnowledgeBaseCounts(context.Context, *types.K
 	return nil
 }
 
-func (s *processSyncKBService) ListKnowledgeBases(context.Context) ([]*types.KnowledgeBase, error) {
-	return nil, nil
-}
-
-func (s *processSyncKBService) ListKnowledgeBasesByTenantID(context.Context, uint64) ([]*types.KnowledgeBase, error) {
-	return nil, nil
-}
-
 func (s *processSyncKBService) UpdateKnowledgeBase(
-	context.Context, string, string, string, *types.KnowledgeBaseConfig, ...string,
+	context.Context, string, string, string, *types.KnowledgeBaseConfig,
 ) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
-func (s *processSyncKBService) DeleteKnowledgeBase(context.Context, string) error { return nil }
-func (s *processSyncKBService) TogglePinKnowledgeBase(context.Context, string) (*types.KnowledgeBase, error) {
-	return nil, nil
-}
-
 func (s *processSyncKBService) HybridSearch(context.Context, string, types.SearchParams) ([]*types.SearchResult, error) {
 	return nil, nil
 }
@@ -165,16 +152,6 @@ func (s *processSyncKBService) GetQueryEmbedding(context.Context, string, string
 func (s *processSyncKBService) ResolveEmbeddingModelKeys(context.Context, []*types.KnowledgeBase) map[string]string {
 	return nil
 }
-
-func (s *processSyncKBService) DuplicateKnowledgeBase(context.Context, string) (*types.KnowledgeBase, error) {
-	return nil, nil
-}
-func (s *processSyncKBService) GetRepository() interfaces.KnowledgeBaseRepository { return nil }
-func (s *processSyncKBService) ProcessKBDelete(context.Context, *asynq.Task) error {
-	return nil
-}
-
-var _ interfaces.KnowledgeBaseService = (*processSyncKBService)(nil)
 
 type processSyncSyncLogRepo struct {
 	logs map[string]*types.SyncLog
@@ -299,28 +276,6 @@ type processSyncTenantRepo struct {
 
 func (r *processSyncTenantRepo) GetTenantByID(context.Context, uint64) (*types.Tenant, error) {
 	return r.tenant, nil
-}
-
-type processSyncTagService struct {
-	interfaces.KnowledgeTagService
-}
-
-func (*processSyncTagService) FindOrCreateTagByName(context.Context, string, string) (*types.KnowledgeTag, error) {
-	return nil, nil
-}
-
-type deletionLookupKnowledgeRepo struct {
-	interfaces.KnowledgeRepository
-	knowledge         *types.Knowledge
-	lookupErr         error
-	metadataUpdates   []map[string]string // metadata persisted via UpdateKnowledge
-	metadataUpdateErr error
-	hardDeleted       []string
-	hardDeleteErr     error
-	tenantID          uint64
-	knowledgeBaseID   string
-	dataSourceID      string
-	externalID        string
 }
 
 func (r *deletionLookupKnowledgeRepo) UpdateKnowledge(_ context.Context, knowledge *types.Knowledge) error {
@@ -490,7 +445,6 @@ func newSyncDeletionHarness(
 			kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
 			connectorRegistry: registry,
 			tenantRepo:        &processSyncTenantRepo{tenant: &types.Tenant{ID: ds.TenantID}},
-			tagService:        &processSyncTagService{},
 		},
 	}
 }
@@ -506,7 +460,7 @@ func (h *syncDeletionHarness) run(t *testing.T) (*types.SyncLog, error) {
 		ForceFull:    true,
 	})
 	require.NoError(t, err)
-	err = h.svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload))
+	err = h.svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload))
 
 	updated := h.syncLogRepo.logs[h.syncLogID]
 	require.NotNil(t, updated)
@@ -542,7 +496,7 @@ func TestIngestItem_URLCreationAttachesDataSourceMetadata(t *testing.T) {
 	isUpdate, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "url:1",
 		URL:        "https://example.com/doc",
-	}, nil)
+	})
 	require.NoError(t, err)
 	assert.False(t, isUpdate)
 	require.Len(t, repo.metadataUpdates, 1)
@@ -565,10 +519,6 @@ func (s *rssIntakeKnowledgeService) CreateKnowledgeFromManual(_ context.Context,
 	s.payload, s.channel = payload, channel
 	return &types.Knowledge{ID: "received"}, nil
 }
-func (s *rssIntakeKnowledgeService) ReviewRSSUpdate(_ context.Context, oldID string, payload *types.ManualKnowledgePayload) (bool, error) {
-	s.updatedID, s.payload = oldID, payload
-	return s.rejected, s.updateErr
-}
 
 func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	repo := &deletionLookupKnowledgeRepo{}
@@ -578,7 +528,7 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	updated, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
 		Metadata: map[string]string{"author": "Original Author", "publisher": "Publishing Institution", "published_at": "2026-09-23T08:30:00Z", "channel": types.ChannelRSS},
-	}, []string{"source-tag"})
+	})
 	require.NoError(t, err)
 	require.False(t, updated)
 	require.Equal(t, types.ManualKnowledgeStatusPublish, ks.payload.Status)
@@ -586,7 +536,6 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	require.Equal(t, types.SourceInfo{Author: "Original Author", Publisher: "Publishing Institution", OriginalURL: "https://example.com/article", PublishedAt: "2026-09-23T08:30:00Z"}, ks.payload.SourceInfo)
 	require.Equal(t, "rss-source", ks.payload.SourceMetadata["datasource_id"])
 	require.NotEmpty(t, ks.payload.SourceMetadata["content_sha256"])
-	require.Equal(t, []string{"source-tag"}, ks.payload.TagIDs)
 	oldMetadata, err := json.Marshal(ks.payload.SourceMetadata)
 	require.NoError(t, err)
 	var stored map[string]json.RawMessage
@@ -597,39 +546,30 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	repo.knowledge = &types.Knowledge{ID: "old", Metadata: types.JSON(oldMetadata)}
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
-	}, nil)
+	})
 	var duplicate *types.DuplicateKnowledgeError
 	require.ErrorAs(t, err, &duplicate)
 	updated, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil)
-	require.NoError(t, err)
-	require.True(t, updated)
-	require.Equal(t, "old", ks.updatedID)
-	require.Equal(t, "Changed original text", ks.payload.Content)
-	ks.rejected = true
-	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
-		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil)
-	require.ErrorIs(t, err, errRSSUpdateRejected)
+	})
+	require.ErrorAs(t, err, &duplicate)
+	require.False(t, updated)
+	require.Equal(t, "Full original text", ks.payload.Content)
 	result := &types.SyncResult{}
 	svc.applyFetchedItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil, result)
-	require.Equal(t, 1, result.Deleted)
-	require.Len(t, result.Errors, 1)
-	require.Equal(t, "rss_update_rejected", result.Errors[0].Code)
-	ks.rejected, ks.updateErr = false, errors.New("model unavailable")
-	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
-		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil)
-	require.ErrorContains(t, err, "model unavailable")
+	}, result)
+	require.Equal(t, 1, result.Skipped)
+	require.Zero(t, result.Created)
+	require.Zero(t, result.Updated)
+	require.Zero(t, result.Deleted)
+	require.Empty(t, result.Errors)
 	require.Equal(t, types.ChannelRSS, ks.channel)
 	repo.knowledge = nil
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "qwen:undated", Title: "Undated", Content: []byte("Original body"),
 		Metadata: map[string]string{"publisher": "Qwen", "intake_reject_reason": "Qwen article missing publication date"},
-	}, nil)
+	})
 	require.NoError(t, err)
 	require.Equal(t, "Qwen article missing publication date", ks.payload.SourceMetadata["intake_reject_reason"])
 	require.Empty(t, ks.payload.SourceInfo.OriginalURL)
@@ -739,7 +679,7 @@ func TestApplyFetchedItem_SyncDeletionScopedPerDataSource(t *testing.T) {
 	svc.applyFetchedItem(context.Background(), dsA, &types.FetchedItem{
 		ExternalID: "file:shared",
 		IsDeleted:  true,
-	}, nil, result)
+	}, result)
 
 	assert.Equal(t, 1, result.Deleted)
 	assert.Equal(t, []string{"knowledge-a"}, ks.deleted)
@@ -808,14 +748,13 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
 		connectorRegistry: registry,
 		tenantRepo:        &processSyncTenantRepo{tenant: &types.Tenant{ID: ds.TenantID}},
-		tagService:        &processSyncTagService{},
 	}
 
 	payload, err := json.Marshal(types.DataSourceSyncPayload{
 		DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: syncLog.ID, ForceFull: true,
 	})
 	require.NoError(t, err)
-	err = svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload))
+	err = svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload))
 	require.NoError(t, err, "partial failure must not fail the whole sync")
 
 	updated := syncLogRepo.logs[syncLog.ID]
@@ -835,7 +774,21 @@ func TestIngestItem_URLCreationMetadataAttachFailure(t *testing.T) {
 	_, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "url:1",
 		URL:        "https://example.com/doc",
-	}, nil)
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "attach datasource metadata")
+}
+
+type deletionLookupKnowledgeRepo struct {
+	interfaces.KnowledgeRepository
+	knowledge         *types.Knowledge
+	lookupErr         error
+	metadataUpdates   []map[string]string // metadata persisted via UpdateKnowledge
+	metadataUpdateErr error
+	hardDeleted       []string
+	hardDeleteErr     error
+	tenantID          uint64
+	knowledgeBaseID   string
+	dataSourceID      string
+	externalID        string
 }

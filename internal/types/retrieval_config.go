@@ -6,8 +6,7 @@ import (
 )
 
 // RetrievalConfig holds the global retrieval/search configuration for a tenant.
-// This replaces the retrieval-related fields previously scattered in ConversationConfig
-// and ChatHistoryConfig. Both knowledge search and message search share these parameters.
+// Knowledge retrieval uses these parameters before optional reranking.
 //
 // Stored as a JSONB column on the tenants table, managed via the settings UI
 // at /space/kv/retrieval-config.
@@ -22,8 +21,6 @@ type RetrievalConfig struct {
 	RerankTopK int `json:"rerank_top_k"`
 	// RerankThreshold is the minimum rerank score (-10 to 10, default: 0.2)
 	RerankThreshold float64 `json:"rerank_threshold"`
-	// RerankModelID is the ID of the rerank model to use (required for search)
-	RerankModelID string `json:"rerank_model_id"`
 
 	// RRFK is the smoothing constant of Reciprocal Rank Fusion. Larger values
 	// flatten the curve, reducing the bias towards top-1 results.
@@ -35,6 +32,34 @@ type RetrievalConfig struct {
 	RRFVectorWeight float64 `json:"rrf_vector_weight,omitempty"`
 	// RRFKeywordWeight is the keyword counterpart. Default: 0.3.
 	RRFKeywordWeight float64 `json:"rrf_keyword_weight,omitempty"`
+	RRFImageWeight   float64 `json:"rrf_image_weight,omitempty"`
+	// Similarity and publication distance are evaluated during each search.
+	SimilarReportsThreshold  float64 `json:"similar_reports_threshold,omitempty"`
+	SimilarReportsWindowDays int     `json:"similar_reports_window_days,omitempty"`
+}
+
+// GetEffectiveRRFImageWeight gives the image channel a modest recall boost.
+// Its default is lower than either text vector channel because image similarity
+// is often broader than a matching passage or article summary.
+func (c *RetrievalConfig) GetEffectiveRRFImageWeight() float64 {
+	if c == nil || c.RRFImageWeight <= 0 {
+		return 0.2
+	}
+	return c.RRFImageWeight
+}
+
+func (c *RetrievalConfig) GetEffectiveSimilarReportsThreshold() float64 {
+	if c == nil || c.SimilarReportsThreshold <= 0 || c.SimilarReportsThreshold > 1 {
+		return 0.85
+	}
+	return c.SimilarReportsThreshold
+}
+
+func (c *RetrievalConfig) GetEffectiveSimilarReportsWindowDays() int {
+	if c == nil || c.SimilarReportsWindowDays <= 0 {
+		return 3
+	}
+	return c.SimilarReportsWindowDays
 }
 
 // DefaultRetrievalTopK is the retrieval depth used when a caller supplies no

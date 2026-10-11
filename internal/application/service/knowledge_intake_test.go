@@ -8,8 +8,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/models/chat"
@@ -146,8 +146,8 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 		source     types.SourceInfo
 		channel    string
 	}{
-		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis","natures":["描述"],"referents":[{"kind":"topic","name":"行业"}]}`}, "", true, true, false, types.SourceInfo{}, ""},
-		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts","natures":["描述"],"referents":[{"kind":"topic","name":"行业"}]}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
+		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis"}`}, "", true, true, false, types.SourceInfo{}, ""},
+		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts"}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
 
 		{"rejected", intakeChat{response: `{"approved":false,"reason":"opinion only"}`}, types.ParseStatusRejected, true, false, false, types.SourceInfo{}, ""},
 		{"model error", intakeChat{err: errors.New("model unavailable")}, types.ParseStatusFailed, false, false, true, types.SourceInfo{}, ""},
@@ -176,7 +176,7 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 			files.saved = map[string][]byte{"input": []byte("Full source body with analysis.")}
 			payload, err := json.Marshal(types.DocumentProcessPayload{TenantID: 1, KnowledgeID: knowledge.ID, KnowledgeBaseID: "kb", FilePath: "input", FileName: "message.txt", FileType: "txt"})
 			require.NoError(t, err)
-			err = svc.ProcessDocument(context.Background(), asynq.NewTask(types.TypeDocumentProcess, payload, asynq.MaxRetry(0)))
+			err = svc.ProcessDocument(context.Background(), taskqueue.NewTask(types.TypeDocumentProcess, payload, taskqueue.MaxRetry(0)))
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -245,7 +245,7 @@ func TestReviewKnowledgeIntakeCorrectionClearsQwenRejection(t *testing.T) {
 	task := &intakeTask{}
 	svc := &knowledgeService{repo: repo, kbService: intakeKBService{creatorID: "owner"},
 		fileSvc:      &intakeFileService{saved: map[string][]byte{"original": []byte("Complete original body")}},
-		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article","natures":["描述"],"referents":[{"kind":"topic","name":"行业"}]}`}}, task: task}
+		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article"}`}}, task: task}
 	ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	updated, err := svc.ReviewKnowledgeIntake(ctx, knowledge.ID, "retry", types.SourceInfo{PublishedAt: "2026-09-20"})
@@ -285,9 +285,9 @@ type intakeFileService struct {
 
 type intakeTask struct{ calls int }
 
-func (t *intakeTask) Enqueue(*asynq.Task, ...asynq.Option) (*asynq.TaskInfo, error) {
+func (t *intakeTask) Enqueue(*taskqueue.Task, ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	t.calls++
-	return &asynq.TaskInfo{}, nil
+	return &taskqueue.TaskInfo{}, nil
 }
 
 func (s *intakeFileService) GetFile(_ context.Context, path string) (io.ReadCloser, error) {
@@ -308,9 +308,17 @@ type intakeChat struct {
 	err      error
 }
 
-func (m intakeChat) Chat(context.Context, []chat.Message, *chat.ChatOptions) (*types.ChatResponse, error) {
+func (m intakeChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
+	stage, _ := types.LLMCallMetadataFromContext(ctx)
+	if stage == "article_processing" {
+		return &types.ChatResponse{Content: validProcessingFixture("event")}, nil
+	}
 	return &types.ChatResponse{Content: m.response}, nil
+}
+
+func (intakeModelService) GetModelByID(_ context.Context, id string) (*types.Model, error) {
+	return &types.Model{ID: id, Type: types.ModelTypeKnowledgeQA}, nil
 }

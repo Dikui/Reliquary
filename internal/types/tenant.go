@@ -15,7 +15,6 @@ import (
 
 // Tenant represents the tenant
 type Tenant struct {
-	ModelTiers ModelTierConfig `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	// ID
 	ID uint64 `yaml:"id"                  json:"id"                  gorm:"primaryKey"`
 	// Name
@@ -28,15 +27,11 @@ type Tenant struct {
 	Business string `yaml:"business"            json:"business"`
 	// Storage used (Bytes)
 	StorageUsed int64 `yaml:"storage_used"        json:"storage_used"        gorm:"default:0"`
-	// Global Context configuration for this workspace (default for all sessions)
-	ContextConfig *ContextConfig `yaml:"context_config"      json:"context_config"      gorm:"type:jsonb"`
 	// Parser engine config overrides (MinerU endpoint, API key, etc.). Used when parsing documents; overrides env.
 	ParserEngineConfig *ParserEngineConfig `yaml:"parser_engine_config" json:"parser_engine_config" gorm:"type:jsonb"`
 	// Credentials retains encrypted metadata from existing deployments.
 	Credentials *CredentialsConfig `yaml:"credentials" json:"credentials" gorm:"type:jsonb"`
-	// Chat history config: knowledge base configuration for indexing and searching chat messages via vector search
-	ChatHistoryConfig *ChatHistoryConfig `yaml:"chat_history_config" json:"chat_history_config" gorm:"type:jsonb"`
-	// Retrieval config: global search/retrieval parameters shared by knowledge search and message search
+	// Retrieval config: global search/retrieval parameters used by knowledge search
 	RetrievalConfig *RetrievalConfig `yaml:"retrieval_config" json:"retrieval_config" gorm:"type:jsonb"`
 	// Creation time
 	CreatedAt time.Time `yaml:"created_at"          json:"created_at"`
@@ -102,11 +97,8 @@ func (c *CredentialsConfig) Scan(value interface{}) error {
 // ParserEngineConfig holds tenant-level overrides for document parser engines (e.g. MinerU endpoint, API key).
 // These values take precedence over environment variables when parsing documents.
 type ParserEngineConfig struct {
-	// ChatParserEngineRules selects parser engines for session-scoped chat
-	// documents. Knowledge bases keep their own rules in ChunkingConfig.
-	ChatParserEngineRules []ParserEngineRule `json:"chat_parser_engine_rules,omitempty"`
-	MinerUEndpoint        string             `json:"mineru_endpoint"` // MinerU 自建服务端点
-	MinerUAPIKey          string             `json:"mineru_api_key"`  // MinerU 云 API Key
+	MinerUEndpoint string `json:"mineru_endpoint"` // MinerU 自建服务端点
+	MinerUAPIKey   string `json:"mineru_api_key"`  // MinerU 云 API Key
 
 	// MinerU 自建解析参数
 	MinerUModel         string `json:"mineru_model,omitempty"`          // backend: pipeline, vlm-*, hybrid-*
@@ -151,20 +143,6 @@ func ResolveMinerUParseMethod(method string, legacyOCREnabled *bool) string {
 		return MinerUParseMethodText
 	}
 	return MinerUParseMethodAuto
-}
-
-func (c *ParserEngineConfig) ResolveChatParserEngine(fileType string) string {
-	if c != nil {
-		normalized := normalizeParserFileType(fileType)
-		for _, rule := range c.ChatParserEngineRules {
-			for _, candidate := range rule.FileTypes {
-				if normalizeParserFileType(candidate) == normalized {
-					return strings.TrimSpace(rule.Engine)
-				}
-			}
-		}
-	}
-	return DefaultParserEngine(fileType)
 }
 
 // ToOverridesMap returns a map suitable for ParserEngineOverrides in parse requests.

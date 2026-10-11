@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"reliquary/internal/models/provider"
@@ -39,7 +40,7 @@ type ChatOptions struct {
 	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"` // 是否允许并行工具调用（默认 nil 表示由模型决定）
 	Format              json.RawMessage `json:"format,omitempty"`              // 响应格式定义
 	// PromptCacheKey is the provider routing key (OpenAI prompt_cache_key).
-	// Empty falls back to the session ID on the call context.
+	// Empty omits the explicit cache key.
 	PromptCacheKey string `json:"-"`
 	// CacheRetention controls provider prompt-cache TTL. none disables cache
 	// markers; empty/short is the default 5-minute cache; long requests 1h/24h
@@ -60,17 +61,6 @@ type ImageURL struct {
 	Detail string `json:"detail,omitempty"` // "auto", "low", "high"
 }
 
-// MessageKind marks messages the engine synthesized rather than received from
-// the user or the model. Compaction needs to tell its own summary apart from a
-// real user turn: a summary that looks like ordinary history gets fed back into
-// the next summarization pass and degrades into a summary of a summary.
-type MessageKind string
-
-// MessageKindCompactionSummary marks the message that replaces compacted
-// history. It carries the `user` role because that is where providers expect
-// conversation history, so the role alone cannot identify it.
-const MessageKindCompactionSummary MessageKind = "compaction_summary"
-
 // Message 表示聊天消息
 type Message struct {
 	Role         string               `json:"role"`                    // 角色：system, user, assistant, tool
@@ -85,10 +75,6 @@ type Message struct {
 	// 把 assistant 的 reasoning_content 原样回传，否则会以 400 拒绝请求；其他不要求的供应商
 	// 会忽略未知字段，无副作用。
 	ReasoningContent string `json:"reasoning_content,omitempty"`
-	// Kind is engine-internal bookkeeping. `json:"-"` keeps it off the wire:
-	// providers reject unknown message fields on some endpoints, and this one
-	// means nothing to them anyway.
-	Kind MessageKind `json:"-"`
 }
 
 // ToolCall represents a tool call in a message
@@ -134,6 +120,12 @@ type ChatConfig struct {
 	ExtraConfig       map[string]string
 	// CustomHeaders 允许在调用远程 OpenAI 兼容 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string
+	// ChatGPTToken obtains the current credential from the app's OAuth session.
+	// Credentials are never copied into persistent model parameters.
+	ChatGPTToken func(context.Context) (string, error)
+	// ChatGPTHTTPClient is injected by the credential service. Nil uses the
+	// existing SSRF-safe client; tests can supply a local httptest transport.
+	ChatGPTHTTPClient *http.Client
 }
 
 // ConfigFromModel 根据 types.Model 构造 ChatConfig。
@@ -166,6 +158,8 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 		c, err = NewOllamaChat(config, ollamaService)
 	case string(types.ModelSourceRemote):
 		c, err = NewRemoteChat(config)
+	case string(types.ModelSourceChatGPT):
+		c, err = NewChatGPTChat(config)
 	default:
 		return nil, fmt.Errorf("unsupported chat model source: %s", config.Source)
 	}

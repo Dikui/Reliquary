@@ -101,7 +101,7 @@ func TestResolveRemoteImages_NormalDownload(t *testing.T) {
 
 func TestResolveRemoteImages_SSRFBlocked(t *testing.T) {
 	// URLs pointing to private IPs should be blocked by SSRF check.
-	markdown := "![evil](http://127.0.0.1:8080/secret.png)\n\n![also-evil](http://169.254.169.254/metadata)"
+	markdown := "![evil](http://127.0.0.1:8080/secret.png \"Screenshot\")\n\n![also-evil](<http://169.254.169.254/metadata> 'Screenshot')"
 
 	resolver := NewImageResolver()
 	fSvc := &mockFileService{}

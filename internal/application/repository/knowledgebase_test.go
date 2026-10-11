@@ -18,20 +18,11 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     tenant_id INTEGER NOT NULL,
-    domain_id VARCHAR(36) NOT NULL,
     type VARCHAR(32) NOT NULL DEFAULT 'document',
     chunking_config JSONB NOT NULL DEFAULT '{}',
-    image_processing_config JSONB NOT NULL DEFAULT '{}',
     embedding_model_id VARCHAR(64) NOT NULL,
     summary_model_id VARCHAR(64) NOT NULL,
     model_tiers JSONB NOT NULL DEFAULT '{}',
-    vlm_config JSONB NOT NULL DEFAULT '{}',
-    extract_config JSONB NULL DEFAULT NULL,
-    question_generation_config JSONB NULL,
-    auto_tag_config JSONB NULL,
-    is_temporary BOOLEAN NOT NULL DEFAULT false,
-    is_pinned BOOLEAN NOT NULL DEFAULT false,
-    pinned_at TIMESTAMPTZ NULL,
     indexing_strategy JSONB,
     creator_id VARCHAR(36),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -54,7 +45,6 @@ func setupKBTestDB(t *testing.T) *gorm.DB {
 // custom JSON valuers.
 func makeKB() *types.KnowledgeBase {
 	return &types.KnowledgeBase{
-		DomainID:         "test-domain",
 		ID:               uuid.New().String(),
 		Name:             "test-kb",
 		TenantID:         1,

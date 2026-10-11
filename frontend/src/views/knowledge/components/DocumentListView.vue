@@ -1,29 +1,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { tagLabel, isConcreteTag } from '../tagLabel';
 import { formatFileSize, getFileIcon } from '@/utils/files';
-import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
 import DocumentActionMenu from './DocumentActionMenu.vue';
-import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue';
+import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
+import KnowledgeStarToggle from '@/components/KnowledgeStarToggle.vue';
+import type { ArticleJudgment } from '@/api/knowledge-judgments';
+import type { ClassifiedKnowledge } from '@/types/knowledgeClassification';
 
-interface Tag {
-  id: string;
-  name: string;
-  kind?: string;
-  color?: string;
-}
-
-interface KnowledgeItem {
+interface KnowledgeItem extends ClassifiedKnowledge {
   id: string;
   file_name: string;
-  folder_path?: string;
   file_type?: string;
   file_size?: number | string;
   type?: string;
-  tags?: Tag[];
   parse_status?: string;
-  summary_status?: string;
   updated_at?: string;
   source?: string;
   description?: string;
@@ -35,65 +26,20 @@ const props = defineProps<{
   items: KnowledgeItem[];
   selectedIds: Set<string>;
   traceVisibleIds: Record<string, boolean>;
-  tagList: Tag[];
-  starredTagIds: Set<string>;
   loading?: boolean;
-  /** Sub-folders of the folder currently being browsed. */
-  folders?: Array<{ path: string; name: string; total_count: number }>;
-  /** Every folder of the knowledge base, for the "move to folder" picker. */
-  folderOptions?: FolderOption[];
-  /**
-   * Show each row's folder under its name. Only useful when the list spans
-   * several folders, i.e. while filtering; inside one folder the path would be
-   * identical on every row.
-   */
-  showFolderPath?: boolean;
-  // Move sub-flow state
-  moveMenuMode: 'normal' | 'targets' | 'confirm';
-  moveTargetKbs: any[];
-  moveTargetsLoading: boolean;
-  moveSelectedTargetName: string;
-  moveMode: 'reuse_vectors' | 'reparse';
-  moveSubmitting: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'open', item: KnowledgeItem): void;
+  (e: 'open-entity', id: string): void;
+  (e: 'judgment-updated', value: ArticleJudgment): void;
   (e: 'toggle-row', id: string, checked: boolean, shiftKey: boolean): void;
   (e: 'toggle-all', checked: boolean): void;
-  (e: 'action', action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem): void;
+  (e: 'action', action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem): void;
   (e: 'probe-trace', item: KnowledgeItem): void;
-  (e: 'tag-edit', item: KnowledgeItem): void;
-  (e: 'open-folder', path: string): void;
-  (e: 'move-to-folder', item: KnowledgeItem, folderPath: string): void;
-  // Move sub-flow emits
-  (e: 'move-select-target', kb: any): void;
-  (e: 'move-back'): void;
-  (e: 'move-confirm'): void;
-  (e: 'update:moveMode', mode: 'reuse_vectors' | 'reparse'): void;
-  (e: 'reset-move-state'): void;
 }>();
 
 const { t } = useI18n();
-const isStarredTag = (tag: Tag) => isConcreteTag(tag) && props.starredTagIds.has(tag.id);
-const displayTags = (tags?: Tag[]) => [...(tags || [])].sort((a, b) => Number(isStarredTag(b)) - Number(isStarredTag(a)));
-
-const {
-  setupTagChipsObserver,
-  getTagLimit,
-  hasTagOverflow,
-  getOverflowCount,
-} = useTagChipsOverflow('listTagItemId');
-
-const tagMap = computed(() => {
-  const map: Record<string, Tag> = {};
-  for (const tag of props.tagList) map[String(tag.id)] = tag;
-  return map;
-});
-const getTagName = (tagId?: string | number) => {
-  if (!tagId && tagId !== 0) return '';
-  return tagMap.value[String(tagId)]?.name || '';
-};
 
 const formatTime = (time?: string) => {
   if (!time) return '--';
@@ -108,6 +54,7 @@ const formatTime = (time?: string) => {
 };
 
 const getSourceInfo = (item: KnowledgeItem): { icon: string; label: string } => {
+  if (item.source_kind === 'mine' || item.source_kind === 'report') return { icon: 'file', label: t(`knowledgeBase.sourceKinds.${item.source_kind}`) };
   const ch = item.channel;
   if (ch === 'rss') return { icon: 'cloud-download', label: t(`datasource.connector.${ch}`) };
   if (item.type === 'url') return { icon: 'link', label: t('knowledgeBase.channelUrl') };
@@ -125,18 +72,7 @@ const computeStatus = (item: KnowledgeItem): StatusInfo => {
   if (item.parse_status === 'pending' || item.parse_status === 'processing') {
     return { label: t('knowledgeBase.statusProcessing'), theme: 'primary', icon: 'loading', spin: true };
   }
-  // finalizing = primary parse done, enrichment subtasks still running.
-  // While in this phase, prefer the specific "summary generating" copy
-  // when summary is what's actually outstanding (preserves the old UX
-  // where this label was tied to completed+summary_pending). Otherwise
-  // fall back to the generic "finalizing" label — covers question gen
-  // and context extract, which the user historically had no visibility on.
-  if (item.parse_status === 'finalizing') {
-    if (item.summary_status === 'pending' || item.summary_status === 'processing') {
-      return { label: t('knowledgeBase.generatingSummary'), theme: 'primary', icon: 'loading', spin: true };
-    }
-    return { label: t('knowledgeBase.statusFinalizing'), theme: 'primary', icon: 'loading', spin: true };
-  }
+  if (item.parse_status === 'finalizing') return { label: t('knowledgeBase.statusFinalizing'), theme: 'primary', icon: 'loading', spin: true };
   if (item.parse_status === 'failed') {
     return { label: t('knowledgeBase.statusFailed'), theme: 'danger', icon: 'close-circle' };
   }
@@ -148,15 +84,6 @@ const computeStatus = (item: KnowledgeItem): StatusInfo => {
   }
   if (item.parse_status === 'rejected') {
     return { label: t('knowledgeBase.intakeWaiting'), theme: 'warning' };
-  }
-  // Legacy completed+summary_pending path: kept as a defensive fallback
-  // for rows that bypassed finalizing (no enrichment configured, or
-  // upgraded mid-flight from a pre-finalizing build).
-  if (
-    item.parse_status === 'completed' &&
-    (item.summary_status === 'pending' || item.summary_status === 'processing')
-  ) {
-    return { label: t('knowledgeBase.generatingSummary'), theme: 'primary', icon: 'loading', spin: true };
   }
   if (item.parse_status === 'completed') {
     return { label: t('knowledgeBase.statusCompleted'), theme: 'success' };
@@ -193,9 +120,6 @@ const onMoreVisible = (id: string, visible: boolean) => {
     const it = props.items.find(i => i.id === id);
     if (it) emit('probe-trace', it);
   } else {
-    folderPickerItemId.value = null;
-    // Reset move state when popup closes naturally
-    emit('reset-move-state');
   }
 };
 
@@ -218,26 +142,8 @@ onBeforeUnmount(() => {
   stickyObserver = null;
 });
 
-// Which row's action popup is currently showing the folder picker. Kept local so
-// picking a folder stays inside the menu the user already opened, exactly like
-// the "move to knowledge base" sub-menu next to it.
-const folderPickerItemId = ref<string | null>(null);
-
-const onFolderPicked = (item: KnowledgeItem, path: string) => {
-  folderPickerItemId.value = null;
-  moreOpen.value = null;
-  item.isMore = false;
-  emit('move-to-folder', item, path);
-};
-
-const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem) => {
-  // The folder picker opens inside this same popup, so keep the menu open.
-  if (action === 'move-folder') {
-    folderPickerItemId.value = item.id;
-    return;
-  }
-  // Don't close popup for move — it triggers the move sub-flow
-  if (action !== 'move') {
+const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem) => {
+  {
     moreOpen.value = null;
   }
   item.isMore = false;
@@ -255,7 +161,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
           :disabled="!items.length" :title="t('knowledgeBase.selectAll')" @change="onHeaderCheckboxChange" />
       </div>
       <div class="cell cell-name" role="columnheader">{{ t('knowledgeBase.columnName') }}</div>
-      <div class="cell cell-tag" role="columnheader">{{ t('knowledgeBase.columnTag') }}</div>
+
       <div class="cell cell-source" role="columnheader">{{ t('knowledgeBase.columnSource') }}</div>
       <div class="cell cell-size" role="columnheader">{{ t('knowledgeBase.columnSize') }}</div>
       <div class="cell cell-status" role="columnheader">{{ t('knowledgeBase.columnStatus') }}</div>
@@ -264,34 +170,6 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
     </div>
 
     <div class="doc-list-body">
-      <div
-        v-for="folder in folders"
-        :key="'folder-' + folder.path"
-        class="doc-list-row doc-list-row--folder"
-        :title="folder.path"
-        role="row"
-        @click="emit('open-folder', folder.path)"
-      >
-        <div class="cell cell-check" aria-hidden="true"></div>
-        <div class="cell cell-name">
-          <span class="row-file-icon-wrap">
-            <t-icon name="folder" class="row-folder-icon" />
-          </span>
-          <div class="row-file-text">
-            <span class="row-file-name">{{ folder.name }}</span>
-          </div>
-        </div>
-        <div class="cell cell-tag"></div>
-        <div class="cell cell-source">
-          <span class="row-folder-meta">
-            {{ t('knowledgeBase.folderTree.folderCardCount', { count: folder.total_count }) }}
-          </span>
-        </div>
-        <div class="cell cell-size"></div>
-        <div class="cell cell-status"></div>
-        <div class="cell cell-time"></div>
-        <div class="cell cell-actions" aria-hidden="true"></div>
-      </div>
 
       <div v-for="item in items" :key="item.id" class="doc-list-row"
         :class="{ selected: selectedIds.has(item.id), 'menu-open': moreOpen === item.id }" :data-select-id="item.id"
@@ -307,41 +185,9 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
           </span>
           <div class="row-file-text">
             <span class="row-file-name" :title="item.file_name">{{ item.file_name }}</span>
-            <button v-if="showFolderPath && item.folder_path" type="button" class="row-file-folder"
-              :title="item.folder_path" @click.stop="emit('open-folder', item.folder_path)">
-              <t-icon name="folder" />
-              <span>{{ item.folder_path }}</span>
-            </button>
-            <span v-if="item.description" class="row-file-desc" :title="item.description">{{ item.description }}</span>
-            <span v-else-if="item.summary_status === 'skipped'" class="row-file-desc">{{ $t('knowledgeBase.summarySkippedNoText') }}</span>
+
+            <KnowledgeClassification :knowledge="item" compact @open-entity="emit('open-entity', $event)" />
           </div>
-        </div>
-
-
-        <div class="cell cell-tag">
-          <template v-if="item.tags && item.tags.length > 0">
-            <t-tooltip v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-              :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')" placement="top">
-              <div class="row-tag-chips is-clickable" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-                @click.stop="emit('tag-edit', item)">
-                <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
-                  variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
-                  {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
-                </t-tag>
-                <span class="row-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
-              </div>
-            </t-tooltip>
-            <div v-else class="row-tag-chips is-clickable" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-              @click.stop="emit('tag-edit', item)">
-              <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
-                variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
-                {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
-              </t-tag>
-            </div>
-          </template>
-          <span v-else class="row-tag-chips is-clickable" @click.stop="emit('tag-edit', item)">
-            <span class="row-tag-add">+ {{ t('knowledgeBase.tagLabel') }}</span>
-          </span>
         </div>
 
         <div class="cell cell-source">
@@ -372,6 +218,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         </div>
 
         <div class="cell cell-actions" @click.stop>
+          <KnowledgeStarToggle v-if="!['mine', 'report'].includes(item.source_kind || '') && item.parse_status === 'completed'" :knowledge="item" @updated="emit('judgment-updated', $event)" />
           <t-popup placement="bottom-right" trigger="click" destroy-on-close overlay-class-name="card-more"
             :on-visible-change="(v: boolean) => onMoreVisible(item.id, v)">
             <button class="row-more-btn" :class="{ active: moreOpen === item.id }" type="button"
@@ -379,22 +226,10 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
               <t-icon name="more" size="16px" />
             </button>
             <template #content>
-              <!-- Move: folder picker (must win over the normal menu while open) -->
-              <div v-if="folderPickerItemId === item.id" class="card-menu move-menu">
-                <FolderPickerMenu
-                  :options="folderOptions || []"
-                  :current-path="item.folder_path || ''"
-                  show-back
-                  @back="folderPickerItemId = null"
-                  @confirm="(path: string) => onFolderPicked(item, path)"
-                />
-              </div>
-
               <!-- Normal menu -->
-              <div v-else-if="moveMenuMode === 'normal'" class="card-menu">
+              <div  class="card-menu">
                 <DocumentActionMenu
                   :item="item"
-
 
                   :trace-visible="!!traceVisibleIds[item.id] || (item.parse_status === 'pending' || item.parse_status === 'processing' || item.parse_status === 'finalizing')"
                   @download="handleAction('download', item)"
@@ -402,71 +237,11 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"
-                  @move="handleAction('move', item)"
-                  @move-folder="handleAction('move-folder', item)"
                   @batch-manage="handleAction('batch-manage', item)"
                   @delete="handleAction('delete', item)"
                 />
               </div>
 
-              <!-- Move: target KB list -->
-              <div v-else-if="moveMenuMode === 'targets'" class="card-menu move-menu">
-                <div class="move-menu-header" @click.stop="emit('move-back')">
-                  <t-icon name="chevron-left" size="16px" />
-                  <span>{{ $t('knowledgeBase.moveToKnowledgeBase') }}</span>
-                </div>
-                <div v-if="moveTargetsLoading" class="move-menu-loading">
-                  <t-loading size="small" />
-                </div>
-                <div v-else-if="moveTargetKbs.length === 0" class="move-menu-empty">
-                  {{ $t('knowledgeBase.moveNoTargets') }}
-                </div>
-                <template v-else>
-                  <div v-for="kb in moveTargetKbs" :key="kb.id" class="card-menu-item"
-                    @click.stop="emit('move-select-target', kb)">
-                    <t-icon class="icon" name="root-list" />
-                    <span class="move-target-name">{{ kb.name }}</span>
-                    <span v-if="kb.knowledge_count !== undefined" class="move-target-count">{{ kb.knowledge_count }}</span>
-                  </div>
-                </template>
-              </div>
-
-              <!-- Move: confirm with mode selection -->
-              <div v-else-if="moveMenuMode === 'confirm'" class="card-menu move-menu">
-                <div class="move-menu-header" @click.stop="emit('move-back')">
-                  <t-icon name="chevron-left" size="16px" />
-                  <span>{{ $t('knowledgeBase.moveConfirmTitle') }}</span>
-                </div>
-                <div class="move-confirm-body">
-                  <div class="move-target-info">
-                    <t-icon name="arrow-right" size="14px" />
-                    <span>{{ moveSelectedTargetName }}</span>
-                  </div>
-                  <div class="move-mode-item" :class="{ active: moveMode === 'reuse_vectors' }"
-                    @click.stop="emit('update:moveMode', 'reuse_vectors')">
-                    <t-radio :checked="moveMode === 'reuse_vectors'" />
-                    <div class="move-mode-text">
-                      <span class="move-mode-label">{{ $t('knowledgeBase.moveModeReuseVectors') }}</span>
-                      <span class="move-mode-desc">{{ $t('knowledgeBase.moveModeReuseVectorsDesc') }}</span>
-                    </div>
-                  </div>
-                  <div class="move-mode-item" :class="{ active: moveMode === 'reparse' }"
-                    @click.stop="emit('update:moveMode', 'reparse')">
-                    <t-radio :checked="moveMode === 'reparse'" />
-                    <div class="move-mode-text">
-                      <span class="move-mode-label">{{ $t('knowledgeBase.moveModeReparse') }}</span>
-                      <span class="move-mode-desc">{{ $t('knowledgeBase.moveModeReparseDesc') }}</span>
-                    </div>
-                  </div>
-                  <div class="move-confirm-actions">
-                    <t-button size="small" variant="outline" @click.stop="emit('move-back')">{{
-                      $t('common.cancel') }}</t-button>
-                    <t-button size="small" theme="primary" :loading="moveSubmitting"
-                      @click.stop="emit('move-confirm')">{{
-                        $t('knowledgeBase.moveConfirm') }}</t-button>
-                  </div>
-                </div>
-              </div>
             </template>
           </t-popup>
         </div>
@@ -507,12 +282,11 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   grid-template-columns:
     44px // checkbox
     minmax(260px, 2.6fr) // name
-    minmax(100px, 0.9fr) // tag
     minmax(96px, 0.8fr) // source
     96px // size
     minmax(96px, 0.7fr) // status
     140px // updated_at
-    48px; // actions
+    80px; // actions
   align-items: center;
   column-gap: 0;
   padding: 0 16px;
@@ -611,6 +385,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
 .cell-actions {
   justify-content: flex-end;
+  gap: 4px;
 }
 
 /* TDesign 勾选框：去掉空白 label、与表格行对齐 */
@@ -679,57 +454,6 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   color: var(--td-text-color-placeholder);
 }
 
-.doc-list-row--folder {
-  cursor: pointer;
-
-  .row-file-name {
-    font-weight: 500;
-  }
-}
-
-.row-folder-icon {
-  color: var(--td-brand-color);
-}
-
-.row-folder-meta,
-.row-folder-chevron {
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-  transition: color 0.15s ease;
-}
-
-.row-file-folder {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: 4px;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--td-text-color-placeholder);
-  font-family: var(--app-font-family);
-  font-size: 12px;
-  cursor: pointer;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: var(--td-brand-color);
-  }
-
-  span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .t-icon {
-    flex: 0 0 auto;
-    font-size: 13px;
-  }
-}
-
 .cell-source {
   gap: 6px;
   min-width: 0;
@@ -748,75 +472,6 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   text-overflow: ellipsis;
   font-size: 12px;
   color: var(--td-text-color-secondary);
-}
-
-.row-tag {
-  max-width: 100%;
-
-  :deep(.t-tag__text) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 120px;
-    display: inline-block;
-  }
-}
-
-.row-tag.is-starred {
-  color: var(--td-warning-color);
-  border-color: var(--td-warning-color);
-  font-weight: 600;
-}
-
-.row-tag-chips {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-
-  &.is-clickable {
-    cursor: pointer;
-  }
-}
-
-.row-tag-overflow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  min-width: 20px;
-  padding: 0 4px;
-  border-radius: 999px;
-  border: 1px solid var(--td-component-stroke);
-  color: var(--td-text-color-placeholder);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    border-color: var(--td-brand-color);
-    color: var(--td-brand-color);
-    background: var(--td-bg-color-secondarycontainer);
-  }
-}
-
-.row-tag-add {
-  font-size: 11px;
-  color: var(--td-text-color-placeholder);
-  border: 1px dashed var(--td-component-stroke);
-  border-radius: 999px;
-  padding: 0 6px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-
-  &:hover {
-    border-color: var(--td-brand-color);
-    color: var(--td-brand-color);
-    background: var(--td-bg-color-secondarycontainer);
-    border-style: solid;
-  }
 }
 
 .row-muted {

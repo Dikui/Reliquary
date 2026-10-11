@@ -49,13 +49,6 @@ type ParserEngineInfo struct {
 
 // --- Internal types used by chunking pipeline ---
 
-type DocParserVLMConfig struct {
-	ModelName     string
-	BaseURL       string
-	APIKey        string
-	InterfaceType string
-}
-
 type ParsedChunk struct {
 	Content string
 	// ContextHeader is an optional context string (e.g. a Markdown heading

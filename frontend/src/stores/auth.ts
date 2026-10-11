@@ -1,18 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { UserInfo, TenantInfo, KnowledgeBaseInfo } from '@/api/auth'
+import type { UserInfo, TenantInfo } from '@/api/auth'
 import { userInfoFromApi } from '@/api/auth'
 import i18n from '@/i18n'
 import { reloadFontFromStorage } from '@/composables/useFont'
 import { reloadThemeFromStorage } from '@/composables/useTheme'
 import { resetMigrationLatch } from '@/composables/preferenceStorage'
-import { BUILTIN_QUICK_ANSWER_ID } from '@/api/agent'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { useEditorResourcesStore } from '@/stores/editorResources'
 
 /** 登出时丢弃 Pinia 内的空间级资源缓存，避免 SPA 重登复用上一账号数据。 */
 function clearSessionResourceCaches() {
-  useChatResourcesStore().invalidate()
+  useResourcesStore().invalidate()
   useEditorResourcesStore().invalidate()
 }
 
@@ -31,8 +30,6 @@ export const useAuthStore = defineStore('auth', () => {
   const tenant = ref<TenantInfo | null>(null)
   const token = ref<string>('')
   const refreshToken = ref<string>('')
-  const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
-  const currentKnowledgeBase = ref<KnowledgeBaseInfo | null>(null)
   // 计算属性
   const isLoggedIn = computed(() => {
     return !!token.value && !!user.value
@@ -85,21 +82,6 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('reliquary_refresh_token', refreshTokenValue)
   }
 
-  const setKnowledgeBases = (kbList: KnowledgeBaseInfo[]) => {
-    // 确保输入是数组
-    knowledgeBases.value = Array.isArray(kbList) ? kbList : []
-    localStorage.setItem('reliquary_knowledge_bases', JSON.stringify(knowledgeBases.value))
-  }
-
-  const setCurrentKnowledgeBase = (kb: KnowledgeBaseInfo | null) => {
-    currentKnowledgeBase.value = kb
-    if (kb) {
-      localStorage.setItem('reliquary_current_kb', JSON.stringify(kb))
-    } else {
-      localStorage.removeItem('reliquary_current_kb')
-    }
-  }
-
   // Refresh the current user and workspace.
   const refreshFromAuthMe = async (): Promise<boolean> => {
     try {
@@ -139,8 +121,6 @@ export const useAuthStore = defineStore('auth', () => {
     tenant.value = null
     token.value = ''
     refreshToken.value = ''
-    knowledgeBases.value = []
-    currentKnowledgeBase.value = null
     clearSessionResourceCaches()
 
     // 清空localStorage
@@ -159,8 +139,6 @@ export const useAuthStore = defineStore('auth', () => {
     const storedTenant = localStorage.getItem('reliquary_tenant')
     const storedToken = localStorage.getItem('reliquary_token')
     const storedRefreshToken = localStorage.getItem('reliquary_refresh_token')
-    const storedKnowledgeBases = localStorage.getItem('reliquary_knowledge_bases')
-    const storedCurrentKb = localStorage.getItem('reliquary_current_kb')
 
     if (storedUser) {
       try {
@@ -186,23 +164,7 @@ export const useAuthStore = defineStore('auth', () => {
       refreshToken.value = storedRefreshToken
     }
 
-    if (storedKnowledgeBases) {
-      try {
-        const parsed = JSON.parse(storedKnowledgeBases)
-        knowledgeBases.value = Array.isArray(parsed) ? parsed : []
-      } catch (e) {
-        console.error(i18n.global.t('authStore.errors.parseKnowledgeBasesFailed'), e)
-        knowledgeBases.value = []
-      }
-    }
 
-    if (storedCurrentKb) {
-      try {
-        currentKnowledgeBase.value = JSON.parse(storedCurrentKb)
-      } catch (e) {
-        console.error(i18n.global.t('authStore.errors.parseCurrentKnowledgeBaseFailed'), e)
-      }
-    }
 
 
   }
@@ -216,8 +178,6 @@ export const useAuthStore = defineStore('auth', () => {
     tenant,
     token,
     refreshToken,
-    knowledgeBases,
-    currentKnowledgeBase,
 
     // 计算属性
     isLoggedIn,
@@ -232,8 +192,6 @@ export const useAuthStore = defineStore('auth', () => {
     setTenant,
     setToken,
     setRefreshToken,
-    setKnowledgeBases,
-    setCurrentKnowledgeBase,
     refreshFromAuthMe,
     logout,
     initFromStorage

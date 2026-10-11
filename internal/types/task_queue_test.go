@@ -10,7 +10,6 @@ func TestQueueDefinitionsAreUniqueAndConsumable(t *testing.T) {
 
 	validPools := map[string]bool{
 		WorkerPoolCore:        true,
-		WorkerPoolPostProcess: true,
 		WorkerPoolEnrichment:  true,
 		WorkerPoolMaintenance: true,
 	}
@@ -48,42 +47,25 @@ func TestQueueDefinitionsAreUniqueAndConsumable(t *testing.T) {
 		}
 	}
 	shared := QueueWeightsForSharedPool()
-	if len(shared) == 0 || shared[QueueDefault] <= 0 || shared[QueueSummary] <= 0 {
+	if len(shared) == 0 || shared[QueueDefault] <= 0 || shared[QueueEntity] <= 0 {
 		t.Fatalf("shared pool must cover core and enrichment queues: %+v", shared)
 	}
-	if shared[QueuePostProcess] != 0 || shared[QueueMaintenance] != 0 {
-		t.Fatalf("shared pool must not consume post-process or maintenance: %+v", shared)
+	if shared[QueueMaintenance] != 0 {
+		t.Fatalf("shared pool must not consume maintenance: %+v", shared)
 	}
 }
 
-func TestChatAttachmentQueueIsIsolatedAndPrioritized(t *testing.T) {
-	queue, ok := QueueForTaskType(TypeTemporaryDocumentProcess)
-	if !ok || queue != QueueChatAttachment {
-		t.Fatalf("temporary document parsing must use %q, got %q", QueueChatAttachment, queue)
-	}
-	coreWeights := QueueWeightsForPool(WorkerPoolCore)
-	if coreWeights[QueueChatAttachment] <= coreWeights[QueueDefault] {
-		t.Fatalf("chat attachment queue must outweigh default queue in core pool: %+v", coreWeights)
-	}
-	if QueueWeightsForSharedPool()[QueueChatAttachment] <= 0 {
-		t.Fatalf("chat attachment queue must be eligible for shared burst capacity")
-	}
-}
-
-func TestQueueMaintenanceKeepsLegacyPhysicalName(t *testing.T) {
+func TestQueueMaintenanceKeepsRuntimeName(t *testing.T) {
 	if QueueMaintenance != "low" {
-		t.Fatalf("maintenance queue must keep legacy Redis name during rolling upgrades, got %q", QueueMaintenance)
+		t.Fatalf("maintenance queue must keep established runtime name, got %q", QueueMaintenance)
 	}
 }
 
-func TestEveryAsynqTaskTypeHasADeclaredQueue(t *testing.T) {
+func TestEveryTaskTypeHasADeclaredQueue(t *testing.T) {
 	taskTypes := []string{
 		TypeDocumentProcess,
-		TypeQuestionGeneration, TypeSummaryGeneration,
-		TypeKBDelete, TypeKnowledgeListDelete,
-		TypeKnowledgeListReparse, TypeKnowledgeMove, TypeDataTableSummary,
-		TypeImageMultimodal, TypeKnowledgePostProcess, TypeKnowledgeAutoTag, TypeManualProcess,
-		TypeDataSourceSync, TypeTemporaryDocumentProcess,
+		TypeKnowledgeListReparse, TypeKnowledgeListDelete,
+		TypeManualProcess, TypeDataSourceSync, TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill,
 	}
 	for _, taskType := range taskTypes {
 		if _, ok := QueueForTaskType(taskType); !ok {
@@ -92,25 +74,12 @@ func TestEveryAsynqTaskTypeHasADeclaredQueue(t *testing.T) {
 	}
 }
 
-func TestKnowledgeAutoTagUsesEnrichmentPool(t *testing.T) {
-	queue, ok := QueueForTaskType(TypeKnowledgeAutoTag)
-	if !ok || queue != QueueSummary {
-		t.Fatalf("automatic tagging must use %q, got %q", QueueSummary, queue)
-	}
-	if QueueWeightsForPool(WorkerPoolPostProcess)[queue] != 0 {
-		t.Fatalf("automatic tagging must not consume post-process orchestration capacity")
-	}
-	if QueueWeightsForPool(WorkerPoolEnrichment)[queue] <= 0 {
-		t.Fatalf("automatic tagging queue must be consumed by the enrichment pool")
-	}
-}
-
 func TestDefaultWorkerPoolConcurrencyIsExplicitBudget(t *testing.T) {
 	allocation := DefaultWorkerPoolConcurrency()
 	if allocation.UpstreamTotal() != DefaultUpstreamWorkerConcurrency {
 		t.Fatalf("upstream total = %d, want %d", allocation.UpstreamTotal(), DefaultUpstreamWorkerConcurrency)
 	}
-	if allocation.Core < 1 || allocation.PostProcess < 1 || allocation.Enrichment < 1 ||
+	if allocation.Core < 1 || allocation.Enrichment < 1 ||
 		allocation.Maintenance < 1 || allocation.Shared < 1 {
 		t.Fatalf("every pool must have positive explicit capacity: %+v", allocation)
 	}
@@ -118,10 +87,10 @@ func TestDefaultWorkerPoolConcurrencyIsExplicitBudget(t *testing.T) {
 
 func TestResolveWorkerPoolConcurrencyFallsBackPerPool(t *testing.T) {
 	allocation := ResolveWorkerPoolConcurrency(func(key, _ string, fallback int) int {
-		if key == "asynq.core_concurrency" {
+		if key == "queue.core_concurrency" {
 			return 15
 		}
-		if key == "asynq.shared_concurrency" {
+		if key == "queue.shared_concurrency" {
 			return 0
 		}
 		return fallback
@@ -131,5 +100,13 @@ func TestResolveWorkerPoolConcurrencyFallsBackPerPool(t *testing.T) {
 	}
 	if allocation.Shared != DefaultSharedWorkerConcurrency {
 		t.Fatalf("shared = %d, want fallback %d", allocation.Shared, DefaultSharedWorkerConcurrency)
+	}
+}
+
+func TestReplacedProcessingTasksHaveNoQueue(t *testing.T) {
+	for _, taskType := range []string{"summary:generation", "question:generation", "image:multimodal", "knowledge:post_process", "datatable:summary"} {
+		if queue, ok := QueueForTaskType(taskType); ok {
+			t.Fatalf("removed task %q still routes to %q", taskType, queue)
+		}
 	}
 }

@@ -62,7 +62,6 @@ func (r chunkSearchKBReader) GetKnowledgeBaseByID(ctx context.Context, id string
 type chunkSearchFixture struct {
 	db        *gorm.DB
 	ctx       context.Context
-	domainID  string
 	chunks    interfaces.ChunkRepository
 	knowledge interfaces.KnowledgeRepository
 	kbs       interfaces.KnowledgeBaseRepository
@@ -78,13 +77,11 @@ func newChunkSearchFixture(t *testing.T, vectorEnabled bool) *chunkSearchFixture
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
 	f := &chunkSearchFixture{
-		db: db, ctx: ctx, domainID: uuid.NewString(),
+		db: db, ctx: ctx,
 		chunks: repository.NewChunkRepository(db), knowledge: repository.NewKnowledgeRepository(db),
 		kbs:     repository.NewKnowledgeBaseRepository(db),
 		indices: pgretriever.NewPostgresRetrieveEngineRepository(db),
 	}
-	require.NoError(t, db.Exec("INSERT INTO knowledge_domains (id, tenant_id, name) VALUES (?, ?, ?)",
-		f.domainID, types.SingleTenantID, "Chunk search domain").Error)
 	f.retrieval = retriever.NewPostgresRetrievalService(f.indices)
 	f.service = &chunkService{
 		chunkRepository: f.chunks, knowledgeRepo: f.knowledge, kbRepository: f.kbs,
@@ -99,8 +96,8 @@ func (f *chunkSearchFixture) createKB(t *testing.T, vectorEnabled, keywordEnable
 	strategy, err := json.Marshal(types.IndexingStrategy{VectorEnabled: vectorEnabled, KeywordEnabled: keywordEnabled})
 	require.NoError(t, err)
 	require.NoError(t, f.db.Exec(`INSERT INTO knowledge_bases
-		(id, tenant_id, domain_id, name, embedding_model_id, summary_model_id, indexing_strategy)
-		VALUES (?, ?, ?, ?, ?, '', ?::jsonb)`, id, types.SingleTenantID, f.domainID,
+		(id, tenant_id, name, embedding_model_id, summary_model_id, indexing_strategy)
+		VALUES (?, ?, ?, ?, '', ?::jsonb)`, id, types.SingleTenantID,
 		"Chunk search knowledge base", "chunk-search-fixed", string(strategy)).Error)
 	kb, err := f.kbs.GetKnowledgeBaseByID(f.ctx, id)
 	require.NoError(t, err)
@@ -124,8 +121,8 @@ func (f *chunkSearchFixture) createChunk(t *testing.T, knowledge *types.Knowledg
 	chunk := &types.Chunk{
 		ID: uuid.NewString(), TenantID: types.SingleTenantID,
 		KnowledgeID: knowledge.ID, KnowledgeBaseID: knowledge.KnowledgeBaseID,
-		Content: body, SourceContent: body, ContextHeader: header, ChunkType: chunkType,
-		IsEnabled: true, IndexStatus: "ready", Status: int(types.ChunkStatusIndexed),
+		Content: body, ContextHeader: header, ChunkType: chunkType,
+		IsEnabled: true, Status: int(types.ChunkStatusIndexed),
 	}
 	require.NoError(t, f.chunks.CreateChunks(f.ctx, []*types.Chunk{chunk}))
 	return chunk
@@ -165,14 +162,13 @@ func TestChunkKeywordSearchPreservesFieldsWithoutEmbeddings(t *testing.T) {
 	kb := f.createKB(t, false, true)
 	knowledge := f.createKnowledge(t, kb, "Oriontitlemarker 量子计算消息")
 	chunk := f.createChunk(t, knowledge, "Nebulabodymarker 正文介绍向量检索。", "## Pulsarsectionmarker / 章节路径", types.ChunkTypeText)
-	chunk.Metadata = types.JSON(`{"generated_questions":[{"id":"opaqueidentitymarker","question":"Quasarquestionmarker 生成问题如何工作？"}],"private_notes":"privatenotemarker"}`)
+	chunk.Metadata = types.JSON(`{"private_notes":"privatenotemarker"}`)
 	require.NoError(t, f.chunks.UpdateChunk(f.ctx, chunk))
 	for _, query := range []string{
-		"Oriontitlemarker", "量子计算", "Pulsarsectionmarker", "章节", "Quasarquestionmarker", "生成问题", "Nebulabodymarker", "向量检索",
+		"Oriontitlemarker", "量子计算", "Pulsarsectionmarker", "章节", "Nebulabodymarker", "向量检索",
 	} {
 		f.assertKeywordHits(t, kb.ID, query, chunk.ID)
 	}
-	f.assertKeywordHits(t, kb.ID, "opaqueidentitymarker")
 	f.assertKeywordHits(t, kb.ID, "privatenotemarker")
 	index := &types.IndexInfo{
 		Content: chunk.Content, SourceID: chunk.ID, ChunkID: chunk.ID,
@@ -197,30 +193,11 @@ func TestChunkKeywordSearchUpdatesThroughChunkService(t *testing.T) {
 	chunk := f.createChunk(t, knowledge, "Beforebodymarker immutable source", "## Chaptermarker", types.ChunkTypeText)
 	f.assertKeywordHits(t, kb.ID, "Beforebodymarker", chunk.ID)
 
-	question, err := f.service.UpsertGeneratedQuestion(f.ctx, chunk.ID, "", "Beforequestionmarker 为什么需要生成问题？")
-	require.NoError(t, err)
-	f.assertKeywordHits(t, kb.ID, "Beforequestionmarker", chunk.ID)
-	_, err = f.service.UpsertGeneratedQuestion(f.ctx, chunk.ID, question.ID, "Afterquestionmarker 如何更新问题？")
-	require.NoError(t, err)
-	f.assertKeywordHits(t, kb.ID, "Beforequestionmarker")
-	f.assertKeywordHits(t, kb.ID, "Afterquestionmarker", chunk.ID)
-
-	newBody := "Afterbodymarker 当前正文已编辑"
-	updated, err := f.service.UpdateDocumentChunk(f.ctx, chunk.ID, &newBody, nil, nil)
-	require.NoError(t, err)
-	require.Equal(t, "ready", updated.IndexStatus)
-	require.Equal(t, chunk.SourceContent, updated.SourceContent)
-	require.Equal(t, 1, updated.ContentRevision)
+	chunk.Content = "Afterbodymarker stored source"
+	require.NoError(t, f.service.UpdateChunk(f.ctx, chunk))
 	f.assertKeywordHits(t, kb.ID, "Beforebodymarker")
 	f.assertKeywordHits(t, kb.ID, "Afterbodymarker", chunk.ID)
 	f.assertKeywordHits(t, kb.ID, "Chaptermarker", chunk.ID)
-	f.assertKeywordHits(t, kb.ID, "Afterquestionmarker", chunk.ID)
-	require.NoError(t, f.service.DeleteGeneratedQuestion(f.ctx, chunk.ID, question.ID))
-	f.assertKeywordHits(t, kb.ID, "Afterquestionmarker")
-	revisions, err := f.chunks.ListChunkRevisions(f.ctx, types.SingleTenantID, chunk.ID)
-	require.NoError(t, err)
-	require.Len(t, revisions, 1)
-	require.Equal(t, chunk.Content, revisions[0].Content)
 	var count int64
 	require.NoError(t, f.db.Table("embeddings").Count(&count).Error)
 	require.Zero(t, count, "keyword indexing does not need vector placeholder rows")
@@ -232,8 +209,8 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	knowledge := f.createKnowledge(t, kb, "Filter document")
 	var expected []string
 	for _, chunkType := range []string{
-		types.ChunkTypeText, types.ChunkTypeSummary, types.ChunkTypeImageOCR,
-		types.ChunkTypeImageCaption, types.ChunkTypeTableSummary, types.ChunkTypeTableColumn,
+		types.ChunkTypeText, types.ChunkTypeSummary,
+		types.ChunkTypeTableSummary, types.ChunkTypeTableColumn,
 	} {
 		chunk := f.createChunk(t, knowledge, "Filterbodymarker searchable content", "", chunkType)
 		expected = append(expected, chunk.ID)
@@ -243,43 +220,27 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	} {
 		f.createChunk(t, knowledge, "Filterbodymarker excluded content", "", chunkType)
 	}
-	for _, status := range []string{"processing", "failed"} {
-		chunk := f.createChunk(t, knowledge, "Filterbodymarker stale content", "", types.ChunkTypeText)
-		chunk.IndexStatus = status
-		require.NoError(t, f.chunks.UpdateChunk(f.ctx, chunk))
-	}
 	disabled := f.createChunk(t, knowledge, "Filterbodymarker disabled content", "", types.ChunkTypeText)
 	require.NoError(t, f.db.Model(&types.Chunk{}).Where("id = ?", disabled.ID).Update("is_enabled", false).Error)
 	deleted := f.createChunk(t, knowledge, "Filterbodymarker deleted content", "", types.ChunkTypeText)
 	require.NoError(t, f.db.Delete(deleted).Error)
-	otherKB := f.createKB(t, false, true)
-	otherKnowledge := f.createKnowledge(t, otherKB, "Other document")
-	f.createChunk(t, otherKnowledge, "Filterbodymarker other knowledge base", "", types.ChunkTypeText)
-	noKeywordKB := f.createKB(t, true, false)
-	noKeywordKnowledge := f.createKnowledge(t, noKeywordKB, "Vector only document")
-	f.createChunk(t, noKeywordKnowledge, "Filterbodymarker keywords disabled", "", types.ChunkTypeText)
 	f.assertKeywordHits(t, kb.ID, "Filterbodymarker", expected...)
-	f.assertKeywordHits(t, noKeywordKB.ID, "Filterbodymarker")
-
-	tagID := uuid.NewString()
-	require.NoError(t, f.db.Model(&types.Chunk{}).Where("id = ?", expected[0]).Update("tag_id", tagID).Error)
-	hits := f.retrieve(t, types.RetrieveParams{
-		Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, KnowledgeIDs: []string{knowledge.ID}, TagIDs: []string{tagID},
-	})
-	require.Len(t, hits, 1)
-	require.Equal(t, expected[0], hits[0].ChunkID)
-	hits = f.retrieve(t, types.RetrieveParams{
-		Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, KnowledgeIDs: []string{otherKnowledge.ID},
-	})
+	hits := f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, KnowledgeIDs: []string{"missing-article"}})
+	require.Empty(t, hits, "article restrictions are applied within the knowledge base")
+	hits = f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", KnowledgeBaseIDs: []string{"missing-kb"}, KnowledgeIDs: []string{knowledge.ID}})
 	require.Empty(t, hits, "knowledge and knowledge base restrictions combine with AND")
-	f.assertKeywordHits(t, otherKB.ID, "Filterbodymarker", hitsForKnowledge(t, f, otherKnowledge.ID)...)
+	strategy, err := json.Marshal(types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: false})
+	require.NoError(t, err)
+	require.NoError(t, f.db.Model(&types.KnowledgeBase{}).Where("id = ?", kb.ID).Update("indexing_strategy", string(strategy)).Error)
+	f.assertKeywordHits(t, kb.ID, "Filterbodymarker")
+
 }
 
 func hitsForKnowledge(t *testing.T, f *chunkSearchFixture, knowledgeID string) []string {
 	t.Helper()
 	chunks, err := f.chunks.ListChunksByKnowledgeIDAndTypes(f.ctx, types.SingleTenantID, knowledgeID,
-		[]string{types.ChunkTypeText, types.ChunkTypeSummary, types.ChunkTypeImageOCR,
-			types.ChunkTypeImageCaption, types.ChunkTypeTableSummary, types.ChunkTypeTableColumn})
+		[]string{types.ChunkTypeText, types.ChunkTypeSummary,
+			types.ChunkTypeTableSummary, types.ChunkTypeTableColumn})
 	require.NoError(t, err)
 	var ids []string
 	for _, chunk := range chunks {
@@ -288,98 +249,6 @@ func hitsForKnowledge(t *testing.T, f *chunkSearchFixture, knowledgeID string) [
 		}
 	}
 	return ids
-}
-
-func TestChunkVectorSearchRestoresGeneratedQuestionMatchedContent(t *testing.T) {
-	f := newChunkSearchFixture(t, true)
-	kb := f.createKB(t, true, true)
-	knowledge := f.createKnowledge(t, kb, "Vector message title")
-	chunk := f.createChunk(t, knowledge, "Current canonical body", "## Section context", types.ChunkTypeText)
-	questionID := uuid.NewString()
-	questionText := "Questionvectormarker 为什么使用多向量？"
-	require.NoError(t, chunk.SetDocumentMetadata(&types.DocumentChunkMetadata{
-		GeneratedQuestions: []types.GeneratedQuestion{{ID: questionID, Question: questionText}},
-	}))
-	require.NoError(t, f.chunks.UpdateChunk(f.ctx, chunk))
-	questionSourceID := types.GeneratedQuestionSourceID(chunk.ID, questionID)
-	indices := []*types.IndexInfo{
-		{Content: "Obsolete duplicated body", SourceID: chunk.ID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID, KnowledgeID: knowledge.ID, KnowledgeBaseID: kb.ID, IsEnabled: true},
-		{Content: "Obsolete duplicated question", SourceID: questionSourceID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID, KnowledgeID: knowledge.ID, KnowledgeBaseID: kb.ID, IsEnabled: true},
-	}
-	require.NoError(t, f.indices.BatchSave(f.ctx, indices, map[string]any{"embedding": map[string][]float32{
-		chunk.ID: {0, 1, 0}, questionSourceID: {1, 0, 0},
-	}}))
-	hits := f.retrieve(t, types.RetrieveParams{
-		RetrieverType: types.VectorRetrieverType, KnowledgeBaseIDs: []string{kb.ID},
-		Embedding: []float32{1, 0, 0}, TopK: 1, Threshold: 0.99,
-	})
-	require.Len(t, hits, 1)
-	require.Equal(t, questionSourceID, hits[0].SourceID)
-	require.Equal(t, chunk.ID, hits[0].ChunkID)
-	require.Equal(t, buildKnowledgeIndexContent(knowledge, questionText), hits[0].Content)
-	searchService := &knowledgeBaseService{}
-	index := searchService.buildChunkIndex(hits)
-	result := searchService.buildSearchResult(chunk, knowledge, hits[0].Score, hits[0].MatchType, index.matchedContents[chunk.ID])
-	require.Equal(t, chunk.Content, result.Content)
-	require.Equal(t, buildKnowledgeIndexContent(knowledge, questionText), result.MatchedContent)
-
-	hits = f.retrieve(t, types.RetrieveParams{
-		RetrieverType: types.VectorRetrieverType, KnowledgeBaseIDs: []string{kb.ID},
-		Embedding: []float32{0, 1, 0}, TopK: 1, Threshold: 0.99,
-	})
-	require.Len(t, hits, 1)
-	require.Equal(t, buildKnowledgeIndexContent(knowledge, chunk.EmbeddingContent()), hits[0].Content)
-}
-
-func TestChunkKeywordSearchMoveKnowledge(t *testing.T) {
-	f := newChunkSearchFixture(t, true)
-	sourceKB := f.createKB(t, true, true)
-	movedKB := f.createKB(t, true, true)
-	source := f.createKnowledge(t, sourceKB, "Source title sourcetitlemarker")
-	var sourceChunks []*types.Chunk
-	for _, chunkType := range []string{
-		types.ChunkTypeText, types.ChunkTypeSummary, types.ChunkTypeImageOCR,
-		types.ChunkTypeImageCaption, types.ChunkTypeTableSummary, types.ChunkTypeTableColumn,
-	} {
-		sourceChunks = append(sourceChunks, f.createChunk(t, source, "Copybodymarker original body", "## Copysectionmarker", chunkType))
-	}
-	questionID := uuid.NewString()
-	require.NoError(t, sourceChunks[0].SetDocumentMetadata(&types.DocumentChunkMetadata{
-		GeneratedQuestions: []types.GeneratedQuestion{{ID: questionID, Question: "Copyquestionmarker generated question"}},
-	}))
-	require.NoError(t, f.chunks.UpdateChunk(f.ctx, sourceChunks[0]))
-	for _, chunk := range sourceChunks {
-		require.NoError(t, f.service.syncChunkIndex(f.ctx, chunk))
-	}
-	disabled := f.createChunk(t, source, "Copydisabledmarker unavailable body", "", types.ChunkTypeText)
-	disabled.IsEnabled = false
-	require.NoError(t, f.chunks.UpdateChunk(f.ctx, disabled))
-	require.NoError(t, f.indices.Save(f.ctx, &types.IndexInfo{
-		Content: disabled.Content, SourceID: disabled.ID, ChunkID: disabled.ID,
-		KnowledgeID: source.ID, KnowledgeBaseID: sourceKB.ID,
-	}, map[string]any{
-		"embedding":     map[string][]float32{disabled.ID: {1, 0, 0}},
-		"chunk_enabled": map[string]bool{disabled.ID: false},
-	}))
-	service := &knowledgeService{
-		db: f.db, repo: f.knowledge, chunkRepo: f.chunks,
-		kbService: chunkSearchKBReader{repo: f.kbs}, modelService: chunkSearchModels{}, retrieveEngine: f.retrieval,
-	}
-	require.NoError(t, service.moveOneKnowledge(f.ctx, source.ID, sourceKB, movedKB, "reuse_vectors"))
-	f.assertKeywordHits(t, sourceKB.ID, "Copybodymarker")
-	sourceIDs := make([]string, len(sourceChunks))
-	for i, chunk := range sourceChunks {
-		sourceIDs[i] = chunk.ID
-	}
-	f.assertKeywordHits(t, movedKB.ID, "Copybodymarker", sourceIDs...)
-	f.assertKeywordHits(t, movedKB.ID, "Copysectionmarker", sourceIDs...)
-	f.assertKeywordHits(t, movedKB.ID, "sourcetitlemarker", sourceIDs...)
-	f.assertKeywordHits(t, movedKB.ID, "Copyquestionmarker", sourceChunks[0].ID)
-	var movedVectorCount int64
-	require.NoError(t, f.db.Table("embeddings").Where("knowledge_base_id = ? AND knowledge_id = ?", movedKB.ID, source.ID).Count(&movedVectorCount).Error)
-	require.Equal(t, int64(len(sourceChunks)+2), movedVectorCount)
-	require.NoError(t, f.db.Table("embeddings").Where("knowledge_base_id = ?", sourceKB.ID).Count(&movedVectorCount).Error)
-	require.Zero(t, movedVectorCount)
 }
 
 type chunkSearchSQLTrace struct {

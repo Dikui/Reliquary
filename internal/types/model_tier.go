@@ -14,30 +14,30 @@ import (
 type ModelTier string
 
 const (
-	ModelTierLight      ModelTier = "light"
-	ModelTierExtraction ModelTier = "extraction"
-	ModelTierGeneration ModelTier = "generation"
-	ModelTierEmbedding  ModelTier = "embedding"
-	ModelTierRerank     ModelTier = "rerank"
+	ModelTierLight            ModelTier = "light"
+	ModelTierEntityResolution ModelTier = "entity_resolution"
+	ModelTierGeneration       ModelTier = "generation"
+	ModelTierEmbedding        ModelTier = "embedding"
+	ModelTierRerank           ModelTier = "rerank"
 )
 
-var ModelTiers = []ModelTier{ModelTierLight, ModelTierExtraction, ModelTierGeneration, ModelTierEmbedding, ModelTierRerank}
+var ModelTiers = []ModelTier{ModelTierLight, ModelTierEntityResolution, ModelTierGeneration, ModelTierEmbedding, ModelTierRerank}
 
-// ModelTierConfig uses an empty ID to inherit the parent scope's choice.
+// ModelTierConfig stores the model choices for the knowledge base.
 type ModelTierConfig struct {
-	Light      string `json:"light"`
-	Extraction string `json:"extraction"`
-	Generation string `json:"generation"`
-	Embedding  string `json:"embedding"`
-	Rerank     string `json:"rerank"`
+	Light            string `json:"light"`
+	EntityResolution string `json:"entity_resolution"`
+	Generation       string `json:"generation"`
+	Embedding        string `json:"embedding"`
+	Rerank           string `json:"rerank"`
 }
 
 func (c ModelTierConfig) ModelID(tier ModelTier) string {
 	switch tier {
 	case ModelTierLight:
 		return strings.TrimSpace(c.Light)
-	case ModelTierExtraction:
-		return strings.TrimSpace(c.Extraction)
+	case ModelTierEntityResolution:
+		return strings.TrimSpace(c.EntityResolution)
 	case ModelTierGeneration:
 		return strings.TrimSpace(c.Generation)
 	case ModelTierEmbedding:

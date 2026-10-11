@@ -70,7 +70,7 @@ func runeSlicesEqual(left, right []rune) bool {
 }
 
 // 这里实现 chunk 内容的「重叠拼接」公共逻辑，供文档重建（reconstructContent）、
-// 知识上下文内容合并（mergeChunkContents）等路径复用。聊天检索链路允许
+// 检索上下文内容合并（mergeChunkContents）等路径复用。聊天检索链路允许
 // 用户编辑 Chunk，使用上面的 JoinChunkContent，避免依赖原文位置坐标。
 //
 // 历史上各处都用「按位置」的公式裁剪重叠（offset = len(content) - (EndAt -

@@ -13,47 +13,25 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func TestModelTierFallbackAndExplicitGeneration(t *testing.T) {
+func TestModelTiersUseOnlyKnowledgeBaseSettings(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext()
-	global := types.Tenant{ID: 1, Name: "Space", ModelTiers: types.ModelTierConfig{Light: "global-light", Extraction: "global-extract", Generation: "global-generate", Embedding: "global-embedding", Rerank: "global-rerank"}}
-	require.NoError(t, db.Create(&global).Error)
-	domain, err := NewKnowledgeDomainService(db).Create(ctx, types.KnowledgeDomain{Name: "Research"})
-	require.NoError(t, err)
-	require.NoError(t, db.Model(domain).Update("model_tiers", types.ModelTierConfig{Light: "domain-light", Extraction: "domain-extract"}).Error)
-	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: domain.ID, SummaryModelID: "legacy", EmbeddingModelID: "legacy-embedding", ModelTiers: types.ModelTierConfig{Light: "kb-light"}}
-	for _, test := range []struct {
-		tier             types.ModelTier
-		expected, source string
-	}{
-		{types.ModelTierLight, "kb-light", "knowledge_base"}, {types.ModelTierExtraction, "domain-extract", "domain"}, {types.ModelTierGeneration, "global-generate", "global"}, {types.ModelTierEmbedding, "global-embedding", "global"}, {types.ModelTierRerank, "global-rerank", "global"},
-	} {
-		resolved, err := resolveModelTier(ctx, db, kb, test.tier)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, Name: "Knowledge Base", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
+	require.NoError(t, db.Create(kb).Error)
+	for _, tier := range types.ModelTiers {
+		resolved, err := resolveModelTier(ctx, db, nil, tier)
 		require.NoError(t, err)
-		require.Equal(t, test.expected, resolved.ModelID)
-		require.Equal(t, test.source, resolved.Source)
+		require.Equal(t, kb.ModelTiers.ModelID(tier), resolved.ModelID)
+		require.Equal(t, "knowledge_base", resolved.Source)
 	}
-	id, err := ResolveGenerationModel(ctx, db, kb, "session-choice")
+	kb.ModelTiers = types.ModelTierConfig{}
+	require.NoError(t, db.Save(kb).Error)
+	id, err := ResolveModelTier(ctx, db, nil, types.ModelTierLight)
 	require.NoError(t, err)
-	require.Equal(t, "session-choice", id)
-	id, err = ResolveGenerationModel(ctx, db, kb, "")
-	require.NoError(t, err)
-	require.Equal(t, "global-generate", id)
-	kb.ModelTiers.Light = ""
-	id, err = ResolveModelTier(ctx, db, kb, types.ModelTierLight)
-	require.NoError(t, err)
-	require.Equal(t, "domain-light", id)
-	require.NoError(t, db.Model(domain).Update("model_tiers", types.ModelTierConfig{}).Error)
-	id, err = ResolveModelTier(ctx, db, kb, types.ModelTierLight)
-	require.NoError(t, err)
-	require.Equal(t, "global-light", id)
-	require.NoError(t, db.Model(&types.Tenant{}).Where("id = 1").Update("model_tiers", types.ModelTierConfig{}).Error)
-	id, err = ResolveModelTier(ctx, db, kb, types.ModelTierLight)
-	require.NoError(t, err)
-	require.Equal(t, "legacy", id)
-	kb.DomainID = "missing-domain"
-	_, err = ResolveModelTier(ctx, db, kb, types.ModelTierLight)
-	require.Error(t, err, "configuration read failures must be visible")
+	require.Equal(t, "summary", id)
+	require.NoError(t, db.Delete(kb).Error)
+	_, err = ResolveModelTier(ctx, db, nil, types.ModelTierLight)
+	require.Error(t, err, "missing knowledge base must remain visible")
 }
 
 type tierTestModels struct {
@@ -76,7 +54,7 @@ type tierTestChat struct {
 func (m *tierTestChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	m.calls++
 	m.tier = types.ModelTierFromContext(ctx)
-	return &types.ChatResponse{Content: `{"approved":true,"reason":"supported","natures":["描述"],"referents":[{"kind":"object","name":"Acme"}]}`}, m.err
+	return &types.ChatResponse{Content: `{"approved":true,"reason":"supported"}`}, m.err
 }
 func (m *tierTestChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	return nil, errors.New("unused")
@@ -97,7 +75,7 @@ func TestTierChatCountsAttemptAndAnnotatesCalls(t *testing.T) {
 	require.Equal(t, []types.ModelCallCount{{Stage: "entity_resolution", Tier: types.ModelTierLight, ModelID: "chosen-light", Calls: 1}}, calls.Snapshot())
 }
 
-func TestIntakeReviewClassifiesLabelsInOneCall(t *testing.T) {
+func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
 	model := &tierTestChat{}
 	models := &tierTestModels{chat: model}
 	message := &types.Knowledge{ID: "message", TenantID: 1, KnowledgeBaseID: "kb", Channel: "manual"}
@@ -111,29 +89,22 @@ func TestIntakeReviewClassifiesLabelsInOneCall(t *testing.T) {
 	intake, err := message.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
-	require.Equal(t, []types.KnowledgeIntakeTag{{Kind: "nature", Name: "描述"}, {Kind: "object", Name: "Acme"}}, intake.Classification)
 	require.Equal(t, 1, intake.ModelCalls[0].Calls)
 	require.Equal(t, types.ModelTierLight, intake.ModelCalls[0].Tier)
 }
 
 func TestModelTierReferencesProtectModelDeletion(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext()
-	global := &types.Tenant{ID: 1, Name: "Space", ModelTiers: types.ModelTierConfig{Light: "bound-model"}}
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	global := &types.Tenant{ID: 1, Name: "Space"}
 	require.NoError(t, db.Create(global).Error)
-	domain, err := NewKnowledgeDomainService(db).Create(ctx, types.KnowledgeDomain{Name: "Research"})
-	require.NoError(t, err)
-	require.NoError(t, db.Model(domain).Update("model_tiers", types.ModelTierConfig{Extraction: "bound-model"}).Error)
-	kb := &types.KnowledgeBase{ID: "tier-bound-kb", TenantID: 1, DomainID: domain.ID, Name: "Research KB", Type: types.KnowledgeBaseTypeDocument, ModelTiers: types.ModelTierConfig{Generation: "bound-model"}}
+	kb := &types.KnowledgeBase{ID: "tier-bound-kb", TenantID: 1, Name: "Research KB", Type: types.KnowledgeBaseTypeDocument, ModelTiers: types.ModelTierConfig{Generation: "bound-model"}}
 	kb.EnsureDefaults()
 	require.NoError(t, db.Create(kb).Error)
-	svc := &modelService{db: db, kbRepo: repository.NewKnowledgeBaseRepository(db), agentRepo: &stubAgentRepoForModelDelete{}, tenantService: &stubTenantServiceForModelDelete{tenant: global}}
+	svc := &modelService{db: db, kbRepo: repository.NewKnowledgeBaseRepository(db), tenantService: &stubTenantServiceForModelDelete{tenant: global}}
 	usage, err := svc.getModelUsageDetails(ctx, 1, "bound-model")
 	require.NoError(t, err)
 	require.True(t, usage.InUse())
 	require.Equal(t, int64(1), usage.KnowledgeBaseTotal)
 	require.Equal(t, []types.ModelUsageBinding{"generation_model_tier"}, usage.KnowledgeBases[0].Bindings)
-	require.Len(t, usage.ModelTiers, 2)
-	require.Equal(t, "domain", usage.ModelTiers[0].Scope)
-	require.Equal(t, "global", usage.ModelTiers[1].Scope)
 }

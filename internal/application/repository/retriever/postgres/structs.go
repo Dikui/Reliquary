@@ -21,7 +21,7 @@ type pgVector struct {
 	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
 	KnowledgeID     string              `json:"knowledge_id"      gorm:"column:knowledge_id"`
 	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
-	TagID           string              `json:"tag_id"            gorm:"column:tag_id;index"`
+	ModelID         string              `json:"model_id" gorm:"column:model_id"`
 	Dimension       int                 `json:"dimension"         gorm:"column:dimension;not null"`
 	Embedding       pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
 	IsEnabled       bool                `json:"is_enabled"        gorm:"column:is_enabled;index"`
@@ -37,7 +37,6 @@ type pgVectorWithScore struct {
 	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
 	KnowledgeID     string              `json:"knowledge_id"      gorm:"column:knowledge_id"`
 	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
-	TagID           string              `json:"tag_id"            gorm:"column:tag_id;index"`
 	Content         string              `json:"content"           gorm:"column:content;->"`
 	ContextHeader   string              `json:"-"                 gorm:"column:context_header;->"`
 	Title           string              `json:"-"                 gorm:"column:title;->"`
@@ -66,7 +65,6 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 		ChunkID:         indexInfo.ChunkID,
 		KnowledgeID:     indexInfo.KnowledgeID,
 		KnowledgeBaseID: indexInfo.KnowledgeBaseID,
-		TagID:           indexInfo.TagID,
 		// Preserve the historical default for callers that omit IsEnabled.
 		// Disabled chunks are filtered from chunks and explicit status maps win below.
 		IsEnabled: true,
@@ -80,6 +78,9 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 	}
 	// Get is_enabled from additionalParams if available
 	if additionalParams != nil {
+		if modelID, ok := additionalParams["model_id"].(string); ok {
+			pgVector.ModelID = modelID
+		}
 		if chunkEnabledMap, ok := additionalParams["chunk_enabled"].(map[string]bool); ok {
 			if enabled, exists := chunkEnabledMap[indexInfo.ChunkID]; exists {
 				pgVector.IsEnabled = enabled
@@ -93,23 +94,9 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 func fromDBVectorEmbeddingWithScore(embedding *pgVectorWithScore, matchType types.MatchType) *types.IndexWithScore {
 	content := strings.TrimSpace(embedding.Content)
 	if embedding.SourceID != embedding.ChunkID {
-		chunk := &types.Chunk{Metadata: embedding.Metadata}
-		metadata, err := chunk.DocumentMetadata()
-		if err != nil || metadata == nil {
-			return nil
-		}
-		found := false
-		for _, question := range metadata.GeneratedQuestions {
-			if types.GeneratedQuestionSourceID(embedding.ChunkID, question.ID) == embedding.SourceID {
-				content = question.Question
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil
-		}
-	} else if embedding.ContextHeader != "" {
+		return nil
+	}
+	if embedding.ContextHeader != "" {
 		content = embedding.ContextHeader + "\n\n" + content
 	}
 	if title := strings.TrimSpace(embedding.Title); title != "" {
@@ -122,7 +109,6 @@ func fromDBVectorEmbeddingWithScore(embedding *pgVectorWithScore, matchType type
 		ChunkID:         embedding.ChunkID,
 		KnowledgeID:     embedding.KnowledgeID,
 		KnowledgeBaseID: embedding.KnowledgeBaseID,
-		TagID:           embedding.TagID,
 		Content:         content,
 		Score:           embedding.Score,
 		MatchType:       matchType,

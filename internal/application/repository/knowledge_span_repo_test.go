@@ -156,7 +156,7 @@ func TestKnowledgeSpanRepo_CancelDescendants(t *testing.T) {
 		{KnowledgeID: kid, Attempt: 1, SpanID: "chunking", Name: types.StageChunking, Kind: types.SpanKindStage, Status: types.SpanStatusRunning, StartedAt: &now},
 		{KnowledgeID: kid, Attempt: 1, SpanID: "embedding", ParentSpanID: "chunking", Name: types.StageEmbedding, Kind: types.SpanKindStage, Status: types.SpanStatusRunning, StartedAt: &now},
 		{KnowledgeID: kid, Attempt: 1, SpanID: "batch0", ParentSpanID: "embedding", Name: "embedding.batch[0]", Kind: types.SpanKindGeneration, Status: types.SpanStatusRunning, StartedAt: &now},
-		{KnowledgeID: kid, Attempt: 1, SpanID: "multimodal", ParentSpanID: "chunking", Name: types.StageMultimodal, Kind: types.SpanKindStage, Status: types.SpanStatusRunning, StartedAt: &now},
+		{KnowledgeID: kid, Attempt: 1, SpanID: "multimodal", ParentSpanID: "chunking", Name: types.StageProcessing, Kind: types.SpanKindStage, Status: types.SpanStatusRunning, StartedAt: &now},
 		{KnowledgeID: kid, Attempt: 1, SpanID: "image0", ParentSpanID: "multimodal", Name: "multimodal.image[0]", Kind: types.SpanKindGeneration, Status: types.SpanStatusDone, StartedAt: &now},
 	} {
 		require.NoError(t, repo.Upsert(ctx, r))

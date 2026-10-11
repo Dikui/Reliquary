@@ -8,13 +8,14 @@ interface KnowledgeItem {
   title?: string;
   type?: string;
   parse_status?: string;
+  processing_mode?: string;
+  source_kind?: string;
+  vault_path?: string;
 }
 
 const props = defineProps<{
   item: KnowledgeItem;
   traceVisible: boolean;
-  /** Whether the knowledge base has a folder structure to file documents into. */
-  foldersAvailable?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -23,8 +24,6 @@ const emit = defineEmits<{
   (e: 'view-trace'): void;
   (e: 'reparse'): void;
   (e: 'cancel-parse'): void;
-  (e: 'move'): void;
-  (e: 'move-folder'): void;
   (e: 'batch-manage'): void;
   (e: 'delete'): void;
 }>();
@@ -38,12 +37,15 @@ const isParseInFlight = computed(() =>
 );
 
 const fileName = computed(() => props.item.file_name || props.item.title || props.item.id);
+const canReprocess = computed(() => !['mine', 'report'].includes(props.item.source_kind || ''));
+const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
+  && props.item.type === 'manual' && props.item.processing_mode !== 'summary_only');
 </script>
 
 <template>
   <!-- 下载原始文档 -->
   <div
-    v-if="(item.type === 'file' || item.type === 'manual')"
+    v-if="item.processing_mode !== 'summary_only' && (item.type === 'file' || item.type === 'manual')"
     class="doc-action-menu-item"
     @click.stop="emit('download')"
   >
@@ -52,7 +54,7 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
   </div>
 
   <!-- 编辑文档 -->
-  <div v-if="item.type === 'manual'" class="doc-action-menu-item" @click.stop="emit('edit')">
+  <div v-if="canEditBody" class="doc-action-menu-item" @click.stop="emit('edit')">
     <t-icon class="icon" name="edit" />
     <span>{{ $t('knowledgeBase.editDocument') }}</span>
   </div>
@@ -64,13 +66,13 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
   </div>
 
   <!-- 重建知识 (in-flight: no popconfirm, just emits) -->
-  <div v-if="isParseInFlight" class="doc-action-menu-item" @click.stop="emit('reparse')">
+  <div v-if="canReprocess && isParseInFlight" class="doc-action-menu-item" @click.stop="emit('reparse')">
     <t-icon class="icon" name="refresh" />
     <span>{{ $t('knowledgeBase.rebuildDocument') }}</span>
   </div>
 
   <!-- 重建知识 (normal: with popconfirm) -->
-  <t-popconfirm v-else theme="warning"
+  <t-popconfirm v-else-if="canReprocess" theme="warning"
     :content="$t('knowledgeBase.rebuildConfirm', { fileName })"
     :confirm-btn="{ content: $t('common.confirm'), theme: 'primary' }"
     :cancel-btn="{ content: $t('common.cancel') }" placement="left"
@@ -92,18 +94,6 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
       <span>{{ $t('knowledgeBase.cancelParse') }}</span>
     </div>
   </t-popconfirm>
-
-  <!-- 移动到目录 -->
-  <div class="doc-action-menu-item" @click.stop="emit('move-folder')">
-    <t-icon class="icon" name="folder" />
-    <span>{{ $t('knowledgeBase.moveToFolder.action') }}</span>
-  </div>
-
-  <!-- 移动到其他知识库 -->
-  <div class="doc-action-menu-item" @click.stop="emit('move')">
-    <t-icon class="icon" name="swap" />
-    <span>{{ $t('knowledgeBase.moveDocument') }}</span>
-  </div>
 
   <!-- 批量管理 -->
   <div class="doc-action-menu-item" @click.stop="emit('batch-manage')">

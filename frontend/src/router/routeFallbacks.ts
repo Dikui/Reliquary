@@ -2,7 +2,7 @@ import type { RouteLocationNormalizedLoaded, RouteRecordRaw } from 'vue-router'
 
 const removedRoute = (path: string): RouteRecordRaw => ({
   path,
-  redirect: { name: 'knowledgeBaseList', params: {}, query: {}, hash: '' },
+  redirect: { name: 'knowledge', params: {}, query: {}, hash: '' },
   meta: { removedFeature: true },
 })
 

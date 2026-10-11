@@ -33,13 +33,14 @@
       </div>
     </div>
 
+    <ChatGPTSettings :models="allModels" />
+
     <t-tabs v-model="activeTypeFilter" class="model-type-tabs">
       <t-tab-panel value="all" :label="`${$t('common.all')}(${allLegacyModels.length})`" />
       <t-tab-panel value="chat" :label="`${$t('modelSettings.typeShort.chat')}(${countByType('chat')})`" />
       <t-tab-panel value="embedding"
         :label="`${$t('modelSettings.typeShort.embedding')}(${countByType('embedding')})`" />
       <t-tab-panel value="rerank" :label="`${$t('modelSettings.typeShort.rerank')}(${countByType('rerank')})`" />
-      <t-tab-panel value="vllm" :label="`${$t('modelSettings.typeShort.vllm')}(${countByType('vllm')})`" />
     </t-tabs>
 
     <t-loading :loading="loading" size="small" class="model-list-loading">
@@ -101,7 +102,7 @@
                 <span class="model-card__sep">·</span>
                 <span>{{ $t('model.editor.dimensionLabel') }} {{ model.dimension }}</span>
               </template>
-              <template v-if="model._modelType === 'chat' || model._modelType === 'vllm'">
+              <template v-if="model._modelType === 'chat'">
                 <span class="model-card__sep">·</span>
                 <span
                   class="model-card__ctx"
@@ -109,14 +110,15 @@
                   :title="contextWindowTitle(model.contextWindow)"
                 >{{ formatContextWindow(model.contextWindow) }}</span>
               </template>
-              <template v-if="model._modelType === 'chat' && model.supportsVision">
+              <template v-if="(model._modelType === 'chat' && model.supportsVision) || (model._modelType === 'embedding' && model.supportsImages)">
                 <span class="model-card__sep">·</span>
-                <span class="model-card__vision" :title="$t('model.editor.supportsVisionLabel')"
-                  :aria-label="$t('model.editor.supportsVisionLabel')">
+                <span class="model-card__vision" :title="$t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel')"
+                  :aria-label="$t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel')">
                   <t-icon name="image" size="12px" />
                 </span>
               </template>
             </p>
+            <a v-if="model.source === 'chatgpt'" class="model-card__usage" href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" @click.stop @keydown.enter.stop>{{ $t('chatgpt.manageUsage') }}</a>
           </div>
         </div>
         <button
@@ -148,9 +150,7 @@
         <div class="model-usage-dialog__content">
           <section v-if="usageConflict.knowledge_bases.length" class="model-usage-group">
             <h3>
-              {{ $t('modelSettings.usage.knowledgeBases', {
-                count: modelUsageResourceCount(usageConflict.knowledge_bases, usageConflict.knowledge_base_total)
-              }) }}
+              {{ $t('modelSettings.usage.knowledgeSettings') }}
             </h3>
             <ul>
               <li v-for="resource in usageConflict.knowledge_bases" :key="resource.id">
@@ -188,50 +188,7 @@
             </p>
           </section>
 
-          <section v-if="usageConflict.agents.length" class="model-usage-group">
-            <h3>{{ $t('modelSettings.usage.agents', {
-              count: modelUsageResourceCount(usageConflict.agents, usageConflict.agent_total)
-            }) }}</h3>
-            <ul>
-              <li v-for="resource in usageConflict.agents" :key="resource.id">
-                <div class="model-usage-resource">
-                  <strong>{{ resource.name || resource.id }}</strong>
-                  <div class="model-usage-bindings">
-                    <t-tag
-                      v-for="(binding, index) in resource.bindings"
-                      :key="`${binding}-${index}`"
-                      size="small"
-                      variant="light"
-                    >
-                      {{ $t(modelUsageBindingI18nKey(binding)) }}
-                    </t-tag>
-                  </div>
-                </div>
-                <t-button
-                  theme="primary"
-                  variant="text"
-                  size="small"
-                  @click="openUsageResource('agent', resource.id, resource.bindings)"
-                >
-                  {{ $t('modelSettings.usage.openConfiguration') }}
-                </t-button>
-              </li>
-            </ul>
-            <p
-              v-if="modelUsageListTruncated(usageConflict.agents, usageConflict.agent_total)"
-              class="model-usage-truncated"
-            >
-              {{ $t('modelSettings.usage.truncated', {
-                shown: usageConflict.agents.length,
-                total: modelUsageResourceCount(usageConflict.agents, usageConflict.agent_total)
-              }) }}
-            </p>
-          </section>
 
-          <section v-if="usageConflict.model_tiers?.length" class="model-usage-group">
-            <h3>{{ $t('modelTiers.title') }}</h3>
-            <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t(resource.scope === 'global' ? 'modelTiers.configureGlobal' : 'modelTiers.configureDomains') }}</t-button></li></ul>
-          </section>
 
         </div>
 
@@ -257,6 +214,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import ModelEditorDialog from '@/components/ModelEditorDialog.vue'
 import ModelDebugDrawer from '@/components/ModelDebugDrawer.vue'
+import ChatGPTSettings from './ChatGPTSettings.vue'
 import {
   listModels,
   createModel,
@@ -273,8 +231,7 @@ import {
   type ModelUsageResourceKind,
 } from '@/api/model'
 import { useUIStore } from '@/stores/ui'
-import { focusKbEditorSection } from '@/config/editorNavigation'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import {
   formatContextWindow,
   isDefaultContextWindow,
@@ -283,9 +240,9 @@ import {
 
 const { t, te } = useI18n()
 const uiStore = useUIStore()
-const chatResources = useChatResourcesStore()
+const resources = useResourcesStore()
 const router = useRouter()
-type ModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
+type ModelType = 'chat' | 'embedding' | 'rerank'
 type FilterType = 'all' | ModelType
 
 const showDialog = ref(false)
@@ -293,20 +250,16 @@ const showDebugDrawer = ref(false)
 const showUsageDialog = ref(false)
 const usageConflict = ref<ModelUsageDetails | null>(null)
 const usageConflictModelName = ref('')
-function openTierUsageResource(scope: 'global' | 'domain') { showUsageDialog.value = false; uiStore.openSettings(scope === 'global' ? 'tenant' : 'domains') }
 const currentModelType = ref<ModelType>('chat')
 const editingModel = ref<any>(null)
 const loading = ref(true)
 const activeTypeFilter = ref<FilterType>('all')
 
-const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank', 'vllm']
+const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank']
 const KNOWLEDGE_BASE_EDITOR_HOST_ROUTES = new Set([
   'home',
   'knowledgeBaseList',
   'knowledgeBaseDetail',
-  'globalCreatChat',
-  'kbCreatChat',
-  'chat',
 ])
 watch(
   () => uiStore.settingsInitialSubSection,
@@ -326,7 +279,6 @@ const backendTypeToModelType: Record<string, ModelType> = {
   KnowledgeQA: 'chat',
   Embedding: 'embedding',
   Rerank: 'rerank',
-  VLLM: 'vllm',
 }
 
 // 将后端模型格式转换为旧的前端格式（附带 _modelType 便于渲染）
@@ -338,7 +290,8 @@ function convertToLegacyFormat(model: ModelConfig) {
   return {
     id: model.id!,
     name: model.name,
-    displayName: model.display_name || '',
+    displayName: model.display_name || model.parameters.extra_config?.chatgpt_display_name || '',
+    chatgptAccountID: model.parameters.extra_config?.chatgpt_account_id || '',
     source: model.source,
     modelName: model.name,
     baseUrl: model.parameters.base_url || '',
@@ -346,6 +299,8 @@ function convertToLegacyFormat(model: ModelConfig) {
     provider: model.parameters.provider || '',
     dimension: model.parameters.embedding_parameters?.dimension,
     supportsDimensionOverride: model.parameters.embedding_parameters?.supports_dimension_override || false,
+    supportsImages: model.parameters.embedding_parameters?.supports_images || false,
+    multimodalFormat: model.parameters.embedding_parameters?.multimodal_format || 'jina',
     isBuiltin: model.is_builtin || false,
     supportsVision: model.parameters.supports_vision || false,
     contextWindow: model.parameters.context_window || undefined,
@@ -377,7 +332,6 @@ const typeIcon = (type: ModelType): string => {
     chat: 'chat',
     embedding: 'chart-bubble',
     rerank: 'filter-sort',
-    vllm: 'image',
   }
   return map[type]
 }
@@ -387,16 +341,11 @@ const typeLabel = (type: ModelType) => {
     chat: t('modelSettings.typeShort.chat'),
     embedding: t('modelSettings.typeShort.embedding'),
     rerank: t('modelSettings.typeShort.rerank'),
-    vllm: t('modelSettings.typeShort.vllm'),
   }
   return map[type]
 }
 
 const sourceLabel = (type: ModelType) => {
-  // vllm 的 remote 文案特殊，其余走通用 remote 文案
-  if (type === 'vllm') {
-    return t('modelSettings.source.openaiCompatible')
-  }
   return t('modelSettings.source.remote')
 }
 
@@ -425,6 +374,7 @@ const providerLabel = (model: any): string => {
 //            want OpenAI compatibility", they just pasted a base URL).
 const vendorLabel = (model: any): string => {
   if (model.source === 'local') return 'Ollama'
+  if (model.source === 'chatgpt') return t('chatgpt.usingPlan')
   if (model.provider === 'generic') {
     return t('modelSettings.source.custom')
   }
@@ -449,7 +399,6 @@ const emptyHint = computed(() => {
     chat: t('modelSettings.chat.empty'),
     embedding: t('modelSettings.embedding.empty'),
     rerank: t('modelSettings.rerank.empty'),
-    vllm: t('modelSettings.vllm.empty'),
   }
   return map[activeTypeFilter.value as ModelType]
 })
@@ -460,9 +409,8 @@ const loadModels = async () => {
   try {
     const models = await listModels()
     allModels.value = models
-    // 设置页自己 listModels 之后立刻写回空间级缓存。否则对话输入栏 /
-    // 智能体编辑器会继续拿 60s TTL 里的旧 context_window，刷新页面才对。
-    chatResources.replaceModels(models)
+    // 加载后立即更新空间级模型缓存，让知识库编辑器和模型选择器读取最新配置。
+    resources.replaceModels(models)
   } catch (error: any) {
     console.error('加载模型列表失败:', error)
     MessagePlugin.error(error.message)
@@ -567,6 +515,14 @@ const handleModelSave = async (modelData: any) => {
     ) {
       extraConfig.thinking_control = modelData.thinkingControl
     }
+    if (modelData.source === 'chatgpt') {
+      if (saveType !== 'chat' || !modelData.chatgptAccountID) {
+        MessagePlugin.warning(t('chatgpt.accountRequired'))
+        return
+      }
+      extraConfig.chatgpt_account_id = modelData.chatgptAccountID
+      extraConfig.chatgpt_display_name = modelData.displayName || modelData.modelName
+    }
     const extraConfigFields = Object.keys(extraConfig).length > 0
       ? { extra_config: extraConfig }
       : {}
@@ -578,29 +534,31 @@ const handleModelSave = async (modelData: any) => {
       source: modelData.source,
       description: '',
       parameters: {
-        base_url: modelData.baseUrl?.trim() || '',
-        ...apiKeyFields,
-        provider: modelData.provider || '',
+        ...(modelData.source === 'chatgpt' ? {} : {
+          base_url: modelData.baseUrl?.trim() || '',
+          ...apiKeyFields,
+          provider: modelData.provider || '',
+        }),
         ...extraConfigFields,
-        ...(Object.keys(customHeadersMap).length > 0 ? { custom_headers: customHeadersMap } : {}),
+        ...(modelData.source !== 'chatgpt' && Object.keys(customHeadersMap).length > 0 ? { custom_headers: customHeadersMap } : {}),
         ...(saveType === 'embedding' && modelData.dimension ? {
           embedding_parameters: {
             dimension: modelData.dimension,
             truncate_prompt_tokens: 0,
-            supports_dimension_override: modelData.supportsDimensionOverride ?? false
+            supports_dimension_override: modelData.supportsDimensionOverride ?? false,
+            supports_images: modelData.source === 'remote' && !!modelData.supportsImages,
+            multimodal_format: modelData.source === 'remote' && modelData.supportsImages ? (modelData.multimodalFormat || 'jina') : '',
           }
         } : {}),
-        ...(saveType === 'vllm' ? {
-          supports_vision: true
-        } : saveType === 'chat' ? {
+        ...(saveType === 'chat' ? {
           supports_vision: modelData.supportsVision ?? false
         } : {}),
-        ...((saveType === 'chat' || saveType === 'vllm')
+        ...((saveType === 'chat')
           && Number(modelData.contextWindow) >= 1024
           ? { context_window: Math.round(Number(modelData.contextWindow)) }
           : {}),
-        // 后台并发上限：仅 chat/embedding/vllm 受治理，>0 才写入（0/空沿用全局默认）。
-        ...(['chat', 'embedding', 'vllm'].includes(saveType)
+        // 后台并发上限：仅 chat/embedding 受治理，>0 才写入（0/空沿用全局默认）。
+        ...(['chat', 'embedding'].includes(saveType)
           && Number(modelData.maxConcurrency) > 0
           ? { max_concurrency: Number(modelData.maxConcurrency) }
           : {})
@@ -654,37 +612,7 @@ const openUsageResource = async (
 ) => {
   showUsageDialog.value = false
   const knowledgeBaseSection = modelUsageKnowledgeBaseSection(bindings)
-  // The UI store can outlive the route component that owns the KB editor.
-  // Only focus an existing editor when the current route still mounts one;
-  // otherwise a stale visible/id pair would make a direct Settings page no-op.
-  const routeName = router.currentRoute.value.name
-  const canFocusExistingKnowledgeBase = kind === 'knowledge_base'
-    && uiStore.showKBEditorModal
-    && uiStore.currentKBId === id
-    && typeof routeName === 'string'
-    && KNOWLEDGE_BASE_EDITOR_HOST_ROUTES.has(routeName)
-
-  uiStore.closeSettings()
-  await nextTick()
-
-  if (canFocusExistingKnowledgeBase) {
-    // Keep unsaved edits when the referenced KB is already open underneath
-    // global Settings; only move the existing editor to the relevant section.
-    focusKbEditorSection(knowledgeBaseSection)
-    return
-  }
-
-  if (kind === 'knowledge_base') {
-    uiStore.closeKBEditor()
-    await nextTick()
-  }
-  // Both the KB editor and global Settings can already be open underneath the
-  // usage dialog. Flush their false state before reusing either component so
-  // its visible watcher reloads the target object instead of keeping stale data.
-  await router.push(modelUsageResourceRoute(kind, id, bindings))
-  if (kind === 'knowledge_base') {
-    uiStore.openKBSettings(id, knowledgeBaseSection)
-  }
+  uiStore.openSettings('knowledge', knowledgeBaseSection)
 }
 
 // 获取模型操作菜单选项
@@ -767,12 +695,11 @@ const copyModel = async (_type: ModelType, modelId: string) => {
 }
 
 // 获取后端模型类型
-function getModelType(type: ModelType): 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM' {
+function getModelType(type: ModelType): 'KnowledgeQA' | 'Embedding' | 'Rerank' {
   const typeMap = {
     chat: 'KnowledgeQA' as const,
     embedding: 'Embedding' as const,
     rerank: 'Rerank' as const,
-    vllm: 'VLLM' as const,
   }
   return typeMap[type]
 }
@@ -1023,11 +950,6 @@ onMounted(() => {
   color: #B85C00;
 }
 
-.model-card--vllm .model-card__badge {
-  background: rgba(201, 62, 62, 0.1);
-  color: #C93E3E;
-}
-
 
 .model-card__body {
   flex: 1;
@@ -1099,6 +1021,13 @@ onMounted(() => {
 .model-card__sep {
   margin: 0 4px;
   color: var(--td-text-color-placeholder);
+}
+
+.model-card__usage {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--td-brand-color);
 }
 
 .model-card__vision {

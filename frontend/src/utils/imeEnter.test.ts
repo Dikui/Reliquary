@@ -6,40 +6,6 @@ import { createImeEnterGuard, installImeEnterGuard } from './imeEnter'
 
 const keyboard = (extra: object = {}) => ({ key: 'Enter', keyCode: 13, isComposing: false, shiftKey: false, ctrlKey: false, ...extra }) as KeyboardEvent
 
-function chatHandler(guard: ReturnType<typeof createImeEnterGuard>, sent: string[], prevented: string[]) {
-  const source = readFileSync(process.env.RELIQUARY_INPUT_FIELD_SOURCE || new URL('../components/Input-field.vue', import.meta.url), 'utf8')
-  const script = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]!
-  const ast = ts.createSourceFile('input.ts', script, ts.ScriptTarget.Latest, true)
-  let handler = ''
-  for (const statement of ast.statements) {
-    if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) {
-      if (declaration.name.getText(ast) === 'onKeydown') handler = declaration.initializer!.getText(ast)
-    }
-  }
-  assert.ok(handler)
-  const code = ts.transpileModule(`const handler = ${handler};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-  const fn = new Function('imeEnterGuard', 'showMention', 'createSession', `${code};return handler`)(guard, { value: false }, (value: string) => sent.push(value))
-  return (event: KeyboardEvent) => fn('old text', { e: { ...event, preventDefault: () => prevented.push('prevented') } })
-}
-
-test('chat composition Enter preserves text and the browser confirmation; ordinary Enter sends and Shift+Enter inserts a line', () => {
-  let time = 100
-  const guard = createImeEnterGuard(() => time)
-  const sent: string[] = [], prevented: string[] = []
-  const input = chatHandler(guard, sent, prevented)
-  input(keyboard({ isComposing: true }))
-  input(keyboard({ keyCode: 229 }))
-  guard.start(); input(keyboard()); guard.end(); input(keyboard())
-  assert.deepEqual(sent, [])
-  assert.deepEqual(prevented, [])
-  time += 60
-  input(keyboard({ shiftKey: true }))
-  assert.deepEqual(sent, [])
-  input(keyboard())
-  assert.deepEqual(sent, ['old text'])
-  assert.deepEqual(prevented, ['prevented'])
-})
-
 // The document capture listener protects TDesign's @enter and native key modifiers,
 // including inputs rendered in dialogs through Teleport.
 for (const name of ['all native and TDesign text fields']) {
@@ -100,8 +66,8 @@ for (const component of ['palette', 'workbench']) {
   test(`${component}: the actual submit handler behind capture ignores IME Enter and retains ordinary Enter behavior`, () => {
     let time = 100, actions = 0
     const handler = component === 'palette'
-      ? sourceHandler('../components/GlobalCommandPalette.vue', 'onKeyDown', { primaryActionForSelected: () => actions++ })
-      : sourceHandler('../views/knowledge/components/KnowledgeWorkbench.vue', 'onQueryEnter', { runQuery: () => actions++ })
+      ? sourceHandler('../components/GlobalCommandPalette.vue', 'onKeyDown', { composing: { value: false }, primaryActionForSelected: () => actions++ })
+      : sourceHandler('../views/knowledge/components/KnowledgeWorkbench.vue', 'onEntityEnter', { entityComposing: { value: false }, entitySearchTimer: null, resetEntityList: () => actions++ })
     const root = new EventTarget()
     const remove = installImeEnterGuard(root as unknown as Document, () => time)
     root.addEventListener('keydown', event => component === 'palette' ? handler(event) : handler('', { e: event }))

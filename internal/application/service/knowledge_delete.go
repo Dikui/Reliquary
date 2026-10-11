@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
+	taskqueue "reliquary/internal/queue"
 
+	"reliquary/internal/application/repository"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -54,9 +56,8 @@ func knowledgeResourceOwners(catalog interfaces.ResourceCatalog, knowledgeIDs ..
 // resourceReleaser decides whether a stored file's bytes may be deleted along
 // with the domain object that referenced them.
 //
-// A file can be claimed by more than one owner — an answer saved into the
-// knowledge base shares the very blob the chat message still shows, and two
-// knowledge entries can share an image. Deleting one owner must drop only that
+// A file can be claimed by more than one owner. Two knowledge entries can
+// share an image. Deleting one owner must drop only that
 // owner's claim; the bytes go away when the last claim does.
 type resourceReleaser struct {
 	catalog   interfaces.ResourceCatalog
@@ -69,7 +70,7 @@ type resourceReleaser struct {
 //
 // An unreadable binding count keeps the file. The cost of keeping it is an
 // orphaned blob that a later delete can still reclaim; the cost of guessing
-// wrong the other way is an image vanishing from a conversation or document
+// wrong the other way is an image vanishing from another article
 // that nobody deleted.
 func (r *resourceReleaser) deletable(ctx context.Context, ref string) bool {
 	if r == nil || r.catalog == nil {
@@ -144,7 +145,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	}
 
 	// Best-effort: purge any queued downstream tasks for this knowledge
-	// (multimodal / post-process / question / summary / context extract).
+	// associated with the active document or manual processing attempt.
 	// Worker checkpoints already drop them on the floor, but dequeuing
 	// here avoids waking workers just to no-op when the parse was still
 	// in flight at delete time. No-op in in-memory fixtures and on completed rows
@@ -169,11 +170,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 	}
 	imageURLs := collectImageURLs(ctx, imageInfoStrs)
-	historicalImages, err := evidenceImageReferences(ctx, s.db, tenantID, []string{id})
-	if err != nil {
-		return err
-	}
-	imageURLs = append(imageURLs, historicalImages...)
+	imageURLs = append(imageURLs, processedKnowledgeResources(knowledge)...)
 
 	wg := errgroup.Group{}
 	// Delete knowledge embeddings from PostgreSQL index.
@@ -210,21 +207,16 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	if err = wg.Wait(); err != nil {
 		return err
 	}
-	if err := s.repo.DeleteKnowledgeTagRelations(ctx, id); err != nil {
-		logger.Warnf(ctx, "Failed to delete tag relations for knowledge %s: %v", id, err)
-	}
 	// Delete the knowledge row FIRST, then drop its physical file. Physical
 	// cleanup is deliberately deferred until the row is gone: if any of the
-	// index/chunk/context cleanups above failed we already returned early with the
+	// index/chunk cleanups above failed we already returned early with the
 	// row (and its file) intact, so the queued retry — or a user-triggered
 	// reparse — can still read the original file. Deleting the file before the
 	// row could leave a "file missing but row present" zombie that can neither be
 	// reparsed nor cleanly re-deleted (issue #2192). Orphaning a file after the
 	// row is gone is the tolerable failure mode instead.
-	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
-		if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, knowledge.KnowledgeBaseID, []string{id}); err != nil {
-			return err
-		}
+	if err := deleteArticleEntityAssociations(ctx, s.db, tenantID, []string{id}); err != nil {
+		return err
 	}
 	if err := s.repo.DeleteKnowledge(ctx, tenantID, id); err != nil {
 		return err
@@ -232,6 +224,11 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 
 	// Best-effort physical cleanup. Errors here only leak storage; they must not
 	// fail the delete now that the row is already gone.
+	if s.vault != nil {
+		if err := s.vault.DeleteArticle(ctx, knowledge); err != nil {
+			logger.Errorf(ctx, "DeleteKnowledge vault cleanup failed: %v", err)
+		}
+	}
 	if knowledge.FilePath != "" {
 		if err := kbFileSvc.DeleteFile(ctx, knowledge.FilePath); err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete file failed")
@@ -305,7 +302,6 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	// Rejected intake rows retain their source specifically for the KB creator's
 	// decision. The async worker restores the submitting user in its context,
 	// so enforce the same boundary here rather than trusting enqueue callers.
-	userID, _ := types.UserIDFromContext(ctx)
 	for _, knowledge := range knowledgeList {
 		intake, intakeErr := knowledge.IntakeMetadata()
 		if intakeErr != nil {
@@ -318,7 +314,7 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		if kbErr != nil {
 			return kbErr
 		}
-		if userID == "" || !types.IsAuthenticatedFromContext(ctx) {
+		if _, ok := types.PrincipalFromContext(ctx); !ok {
 			return errors.New("an authenticated user is required to delete rejected intake")
 		}
 	}
@@ -369,11 +365,7 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	kbImageURLs := make(map[string][]string) // kbID → []imageURL
 	for _, k := range knowledgeList {
 		knowledgeToKB[k.ID] = k.KnowledgeBaseID
-		historicalImages, err := evidenceImageReferences(ctx, s.db, tenantInfo.ID, []string{k.ID})
-		if err != nil {
-			return err
-		}
-		kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], historicalImages...)
+		kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], processedKnowledgeResources(k)...)
 		if intake, _ := k.IntakeMetadata(); intake != nil {
 			kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], intake.Images...)
 		}
@@ -431,29 +423,47 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	if err = wg.Wait(); err != nil {
 		return err
 	}
-	for _, knowledgeID := range ids {
-		if err := s.repo.DeleteKnowledgeTagRelations(ctx, knowledgeID); err != nil {
-			logger.Warnf(ctx, "Failed to delete tag relations for knowledge %s: %v", knowledgeID, err)
-		}
-	}
 	// 6. Delete the knowledge rows FIRST, then drop their physical files. See
 	// DeleteKnowledge for the rationale: deferring file removal until the rows are
 	// gone avoids "file missing but row present" zombies that break reparse /
 	// re-delete when an earlier cleanup step failed (issue #2192). A failure below
 	// only orphans storage.
-	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
-		for kbID, sourceIDs := range kbKnowledgeIDs {
-			if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, kbID, sourceIDs); err != nil {
-				return err
+	deleteRows := func(svc *knowledgeService) error {
+		for _, knowledge := range knowledgeList {
+			if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
+				if svc.db == nil {
+					continue
+				}
+				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", knowledge.ID, intake, nil); err != nil {
+					return err
+				}
 			}
 		}
+		if err := deleteArticleEntityAssociations(ctx, svc.db, tenantInfo.ID, ids); err != nil {
+			return err
+		}
+		return svc.repo.DeleteKnowledgeList(ctx, tenantInfo.ID, ids)
 	}
-	if err := s.repo.DeleteKnowledgeList(ctx, tenantInfo.ID, ids); err != nil {
+	if s.db == nil {
+		if err := deleteRows(s); err != nil {
+			return err
+		}
+	} else if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		copy := *s
+		copy.db = tx
+		copy.repo = repository.NewKnowledgeRepository(tx)
+		return deleteRows(&copy)
+	}); err != nil {
 		return err
 	}
 
 	storageAdjust := int64(0)
 	for _, knowledge := range knowledgeList {
+		if s.vault != nil {
+			if err := s.vault.DeleteArticle(ctx, knowledge); err != nil {
+				logger.Errorf(ctx, "DeleteKnowledgeList vault cleanup failed: %v", err)
+			}
+		}
 		if knowledge.FilePath != "" {
 			fSvc := kbFileServices[knowledge.KnowledgeBaseID]
 			if err := fSvc.DeleteFile(ctx, knowledge.FilePath); err != nil {
@@ -522,12 +532,13 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 		imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 	}
 	imageURLs := collectImageURLs(ctx, imageInfoStrs)
-	historicalImages, err := evidenceImageReferences(ctx, s.db, tenantInfo.ID, []string{knowledge.ID})
-	if err != nil {
-		return errors.Join(cleanupErr, err)
-	}
 	retained := map[string]bool{}
-	for _, ref := range historicalImages {
+	intake, _ := knowledge.IntakeMetadata()
+	var originalImages []string
+	if intake != nil {
+		originalImages = intake.Images
+	}
+	for _, ref := range originalImages {
 		retained[ref] = true
 	}
 	deletableImages := imageURLs[:0]
@@ -563,8 +574,8 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 	return cleanupErr
 }
 
-// ProcessKnowledgeListDelete handles Asynq knowledge list delete tasks
-func (s *knowledgeService) ProcessKnowledgeListDelete(ctx context.Context, t *asynq.Task) error {
+// ProcessKnowledgeListDelete handles PostgreSQL queue knowledge list delete tasks
+func (s *knowledgeService) ProcessKnowledgeListDelete(ctx context.Context, t *taskqueue.Task) error {
 	var payload types.KnowledgeListDeletePayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "Failed to unmarshal knowledge list delete payload: %v", err)
@@ -593,4 +604,20 @@ func (s *knowledgeService) ProcessKnowledgeListDelete(ctx context.Context, t *as
 
 	logger.Infof(ctx, "Successfully deleted %d knowledge items", len(payload.KnowledgeIDs))
 	return nil
+}
+
+// processedKnowledgeResources includes body files and their images in normal deletion.
+func processedKnowledgeResources(k *types.Knowledge) []string {
+	var metadata struct {
+		Body   string   `json:"processed_body_path"`
+		Images []string `json:"processed_images"`
+	}
+	if len(k.Metadata) > 0 {
+		_ = json.Unmarshal(k.Metadata, &metadata)
+	}
+	refs := metadata.Images
+	if metadata.Body != "" {
+		refs = append(refs, metadata.Body)
+	}
+	return refs
 }

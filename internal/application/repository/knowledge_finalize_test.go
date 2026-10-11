@@ -29,12 +29,28 @@ CREATE TABLE IF NOT EXISTS knowledges (
     type VARCHAR(50) NOT NULL DEFAULT '',
     title VARCHAR(255) NOT NULL DEFAULT '',
     description TEXT,
+    content_type VARCHAR(16),
+    content_type_uncertain BOOLEAN NOT NULL DEFAULT false,
+    processing_review_status VARCHAR(16) NOT NULL DEFAULT '',
+    processing_review_content_type VARCHAR(16) NOT NULL DEFAULT '',
+    processing_review_reason TEXT NOT NULL DEFAULT '',
+    source_unverified BOOLEAN NOT NULL DEFAULT false,
+    processing_mode VARCHAR(16) NOT NULL DEFAULT 'full',
+    source_kind VARCHAR(16) NOT NULL DEFAULT 'article',
+    vault_path TEXT NOT NULL DEFAULT '',
+    vault_body TEXT NOT NULL DEFAULT '',
+    vault_original_path TEXT NOT NULL DEFAULT '',
+    starred BOOLEAN NOT NULL DEFAULT false,
+    collect_reason TEXT NOT NULL DEFAULT '',
+    agent_summary TEXT NOT NULL DEFAULT '',
+    agent_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source_name TEXT NOT NULL DEFAULT '',
+    structured_summary JSONB,
     source VARCHAR(2048) NOT NULL DEFAULT '',
     parse_status VARCHAR(50) NOT NULL DEFAULT 'unprocessed',
     enable_status VARCHAR(50) NOT NULL DEFAULT 'enabled',
     embedding_model_id VARCHAR(64),
     file_name VARCHAR(255),
-    folder_path VARCHAR(1024) NOT NULL DEFAULT '',
     file_type VARCHAR(50),
     file_size BIGINT,
     file_path TEXT,
@@ -45,7 +61,6 @@ CREATE TABLE IF NOT EXISTS knowledges (
     content_rune_count INTEGER NOT NULL DEFAULT 0,
     storage_size BIGINT NOT NULL DEFAULT 0,
     metadata JSONB,
-    tag_id VARCHAR(36),
     summary_status VARCHAR(32) DEFAULT 'none',
     channel VARCHAR(50) NOT NULL DEFAULT 'web',
     pending_subtasks_count INT NOT NULL DEFAULT 0,
@@ -335,6 +350,61 @@ func TestUpdateKnowledge_PendingCounterOmittedOnReset(t *testing.T) {
 	require.NoError(t, repo.UpdateKnowledgeColumn(ctx, id, "pending_subtasks_count", 0))
 	_, count = reloadKnowledgeRow(t, db, id)
 	assert.Equal(t, 0, count)
+}
+
+func TestUpdateKnowledgePreservesCollectionReasonFromConcurrentIntake(t *testing.T) {
+	db := pgtest.Open(t)
+	repo := NewKnowledgeRepository(db)
+	ctx := context.Background()
+	id := insertProcessingKnowledge(t, db)
+	stale, err := repo.GetKnowledgeByID(ctx, 1, id)
+	require.NoError(t, err)
+	require.Empty(t, stale.CollectReason)
+	require.NoError(t, repo.UpdateKnowledgeColumn(ctx, id, "collect_reason", "Preserve the measured result"))
+	stale.Description = "Processing finished after the user supplied a collection reason."
+	require.NoError(t, repo.UpdateKnowledge(ctx, stale))
+	current, err := repo.GetKnowledgeByID(ctx, 1, id)
+	require.NoError(t, err)
+	require.Equal(t, "Preserve the measured result", current.CollectReason)
+	require.Equal(t, stale.Description, current.Description)
+	stale.Description = "A later batch update also preserves the user judgment."
+	require.NoError(t, repo.UpdateKnowledgeBatch(ctx, []*types.Knowledge{stale}))
+	current, err = repo.GetKnowledgeByID(ctx, 1, id)
+	require.NoError(t, err)
+	require.Equal(t, "Preserve the measured result", current.CollectReason)
+	require.Equal(t, stale.Description, current.Description)
+}
+
+func TestUpdateKnowledgePreservesProcessingReviewDecisionAndUnverifiedSource(t *testing.T) {
+	db := pgtest.Open(t)
+	repo := NewKnowledgeRepository(db)
+	ctx := context.Background()
+	id := insertProcessingKnowledge(t, db)
+	stale, err := repo.GetKnowledgeByID(ctx, 1, id)
+	require.NoError(t, err)
+	require.NoError(t, repo.UpdateKnowledgeColumns(ctx, id, map[string]any{
+		"source_unverified":              true,
+		"content_type_uncertain":         true,
+		"processing_review_status":       types.ProcessingReviewIgnored,
+		"processing_review_content_type": types.ContentTypeTutorial,
+		"processing_review_reason":       "User retained the original source despite the uncertain type.",
+	}))
+	for _, batch := range []bool{false, true} {
+		stale.Description = "An unrelated background update completed."
+		if batch {
+			require.NoError(t, repo.UpdateKnowledgeBatch(ctx, []*types.Knowledge{stale}))
+		} else {
+			require.NoError(t, repo.UpdateKnowledge(ctx, stale))
+		}
+		current, err := repo.GetKnowledgeByID(ctx, 1, id)
+		require.NoError(t, err)
+		require.True(t, current.SourceUnverified)
+		require.True(t, current.ContentTypeUncertain)
+		require.Equal(t, types.ProcessingReviewIgnored, current.ProcessingReviewStatus)
+		require.Equal(t, types.ContentTypeTutorial, current.ProcessingReviewContentType)
+		require.Contains(t, current.ProcessingReviewReason, "User retained")
+		require.Equal(t, stale.Description, current.Description)
+	}
 }
 
 func TestUpdateActiveDeletingKnowledgeColumns_GuardsStateAndSoftDelete(t *testing.T) {

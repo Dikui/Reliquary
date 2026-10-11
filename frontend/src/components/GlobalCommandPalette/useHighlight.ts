@@ -4,7 +4,7 @@
  * is safe to bind with v-html.
  *
  * Extracted from the legacy KnowledgeSearch.vue so it can be reused by the
- * global command palette and KB-scoped search bar.
+ * command palette and the knowledge search bar.
  */
 export function escapeHtml(str: string): string {
   return (str || '')

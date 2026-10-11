@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ManualKnowledgeEditor from '@/components/manual-knowledge-editor.vue'
 import UploadConfirmHost from '@/components/UploadConfirmHost.vue'
+import ServiceAvailabilityNotice from '@/components/ServiceAvailabilityNotice.vue'
 
 // TDesign locale configs
 import enUSConfig from 'tdesign-vue-next/esm/locale/en_US'
@@ -21,6 +22,7 @@ const tdGlobalConfig = computed(() => tdLocaleMap[locale.value] || enUSConfig)
 <template>
   <t-config-provider :globalConfig="tdGlobalConfig">
     <div id="app">
+      <ServiceAvailabilityNotice />
       <RouterView />
       <ManualKnowledgeEditor />
       <UploadConfirmHost />

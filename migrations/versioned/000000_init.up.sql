@@ -67,70 +67,6 @@ COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access met
 
 
 --
--- Name: unify_prompt_placeholder(text); Type: FUNCTION; Schema: public
---
-
-CREATE FUNCTION public.unify_prompt_placeholder(input text) RETURNS text
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    result TEXT := COALESCE(input, '');
-    replacements TEXT[][] := ARRAY[
-        -- Go template variables -> simple placeholders
-        ['{{.Query}}', '{{query}}'],
-        ['{{.Answer}}', '{{answer}}'],
-        ['{{.CurrentTime}}', '{{current_time}}'],
-        ['{{.CurrentWeek}}', '{{current_week}}'],
-        ['{{.Yesterday}}', '{{yesterday}}'],
-        ['{{.Contexts}}', '{{contexts}}'],
-        -- Go template control structures -> simple placeholders or remove
-        ['{{range .Contexts}}', '{{contexts}}'],
-        -- Remove Go template syntax
-        ['{{if .Contexts}}', ''],
-        ['{{else}}', ''],
-        ['{{.}}', '']
-    ];
-    r TEXT[];
-BEGIN
-    FOREACH r SLICE 1 IN ARRAY replacements LOOP
-        result := REPLACE(result, r[1], r[2]);
-    END LOOP;
-
-    -- Handle {{range .Conversation}}...{{end}} block specially
-    -- Replace the entire block with just {{conversation}}
-    -- The pattern matches: {{range .Conversation}} followed by any content until {{end}}
-    result := regexp_replace(
-        result,
-        '\{\{range \.Conversation\}\}[\s\S]*?\{\{end\}\}',
-        '{{conversation}}',
-        'g'
-    );
-
-    -- Clean up any remaining {{end}} tags
-    result := REPLACE(result, '{{end}}', '');
-
-    RETURN result;
-END;
-$$;
-
-
---
--- Name: update_mcp_services_updated_at(); Type: FUNCTION; Schema: public
---
-
-CREATE FUNCTION public.update_mcp_services_updated_at() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$;
-
-
-
-
---
 -- Name: auth_tokens; Type: TABLE; Schema: public
 --
 
@@ -196,26 +132,6 @@ COMMENT ON COLUMN public.auth_tokens.is_revoked IS 'Whether the token is revoked
 
 
 --
--- Name: chunk_revisions; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.chunk_revisions (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    knowledge_id character varying(36) NOT NULL,
-    chunk_id character varying(36) NOT NULL,
-    revision integer NOT NULL,
-    content text DEFAULT ''::text NOT NULL,
-    is_enabled boolean DEFAULT true NOT NULL,
-    editor_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    edit_source character varying(16) DEFAULT 'user'::character varying NOT NULL,
-    edited_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
 -- Name: chunks_seq_id_seq; Type: SEQUENCE; Schema: public
 --
 
@@ -252,16 +168,11 @@ CREATE TABLE public.chunks (
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp with time zone,
     metadata jsonb,
-    tag_id character varying(36),
     status integer DEFAULT 0 NOT NULL,
     content_hash character varying(64),
     flags integer DEFAULT 1 NOT NULL,
     seq_id bigint DEFAULT nextval('public.chunks_seq_id_seq'::regclass) NOT NULL,
     video_info text,
-    source_content text DEFAULT ''::text NOT NULL,
-    content_revision integer DEFAULT 0 NOT NULL,
-    index_status character varying(16) DEFAULT 'ready'::character varying NOT NULL,
-    last_editor_id character varying(64) DEFAULT ''::character varying NOT NULL,
     context_header text DEFAULT ''::text NOT NULL,
     search_title text DEFAULT ''::text NOT NULL
 );
@@ -275,25 +186,6 @@ COMMENT ON COLUMN public.chunks.video_info IS 'Video information in JSON format:
 
 
 --
--- Name: custom_agents; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.custom_agents (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    avatar character varying(64),
-    is_builtin boolean DEFAULT false NOT NULL,
-    tenant_id integer NOT NULL,
-    created_by character varying(36),
-    config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone
-);
-
-
---
 -- Name: data_sources; Type: TABLE; Schema: public
 --
 
@@ -303,11 +195,11 @@ CREATE TABLE public.data_sources (
     knowledge_base_id character varying(36) NOT NULL,
     name character varying(255) NOT NULL,
     type character varying(50) NOT NULL,
+    default_content_type character varying(16) CHECK (default_content_type IS NULL OR default_content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
     config jsonb,
     sync_schedule character varying(100),
     sync_mode character varying(20) DEFAULT 'incremental'::character varying,
     status character varying(32) DEFAULT 'active'::character varying,
-    conflict_strategy character varying(32) DEFAULT 'overwrite'::character varying,
     sync_deletions boolean DEFAULT true,
     last_sync_at timestamp without time zone,
     last_sync_cursor jsonb,
@@ -333,10 +225,10 @@ CREATE TABLE public.embeddings (
     chunk_id character varying(64),
     knowledge_id character varying(64),
     knowledge_base_id character varying(64),
+	model_id character varying(64) DEFAULT '' NOT NULL,
     dimension integer NOT NULL,
     embedding public.halfvec,
-    is_enabled boolean DEFAULT true,
-    tag_id character varying(36)
+    is_enabled boolean DEFAULT true
 );
 
 
@@ -361,61 +253,9 @@ ALTER SEQUENCE public.embeddings_id_seq OWNED BY public.embeddings.id;
 
 
 --
--- Name: knowledge_anomalies; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_anomalies (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    knowledge_ids text NOT NULL,
-    kind character varying(32) NOT NULL,
-    description text NOT NULL,
-    proposal_type character varying(16) DEFAULT 'none'::character varying NOT NULL,
-    proposed_tag_ids text DEFAULT '[]'::text NOT NULL,
-    proposed_delete_tag_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
-    reported_by character varying(36) NOT NULL,
-    decided_by character varying(36) DEFAULT ''::character varying NOT NULL,
-    decision_note text DEFAULT ''::text NOT NULL,
-    result character varying(500) DEFAULT ''::character varying NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    decided_at timestamp with time zone,
-    proposed_remove_tag_ids text DEFAULT '[]'::text NOT NULL,
-    site text DEFAULT '' NOT NULL,
-    source_url text DEFAULT '' NOT NULL,
-    reason text DEFAULT '' NOT NULL,
-    adapter text DEFAULT '' NOT NULL,
-    applied_changes text DEFAULT '{}'::text NOT NULL
-);
-
-
---
 -- Name: knowledge_bases; Type: TABLE; Schema: public
 --
 
-CREATE TABLE public.knowledge_domains (
-    model_tiers jsonb DEFAULT '{}'::jsonb NOT NULL,
-    id character varying(36) NOT NULL PRIMARY KEY,
-    tenant_id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    description text DEFAULT '' NOT NULL,
-    entity_types jsonb DEFAULT '[]'::jsonb NOT NULL,
-    fields jsonb DEFAULT '[]'::jsonb NOT NULL,
-    relations jsonb DEFAULT '[]'::jsonb NOT NULL,
-    unit_families jsonb DEFAULT '[]'::jsonb NOT NULL,
-    extraction_hints text DEFAULT '' NOT NULL,
-    is_builtin boolean DEFAULT false NOT NULL,
-    created_by character varying(36) DEFAULT '' NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone
-);
-
-CREATE UNIQUE INDEX idx_knowledge_domains_team_name ON public.knowledge_domains (tenant_id, name) WHERE deleted_at IS NULL;
-CREATE UNIQUE INDEX idx_knowledge_domains_builtin ON public.knowledge_domains (tenant_id) WHERE is_builtin AND deleted_at IS NULL;
-CREATE INDEX idx_knowledge_domains_deleted_at ON public.knowledge_domains (deleted_at);
 
 CREATE TABLE public.knowledge_bases (
     model_tiers jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -423,35 +263,16 @@ CREATE TABLE public.knowledge_bases (
     name character varying(255) NOT NULL,
     description text,
     tenant_id integer NOT NULL,
-    domain_id character varying(36) NOT NULL REFERENCES public.knowledge_domains(id),
     chunking_config jsonb DEFAULT '{"chunk_size": 512, "chunk_overlap": 50, "split_markers": ["\n\n", "\n", "。"], "keep_separator": true}'::jsonb NOT NULL,
-    image_processing_config jsonb DEFAULT '{"model_id": "", "enable_multimodal": false}'::jsonb NOT NULL,
     embedding_model_id character varying(64) NOT NULL,
     summary_model_id character varying(64) NOT NULL,
-    vlm_config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    extract_config jsonb,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp with time zone,
-    is_temporary boolean DEFAULT false NOT NULL,
-    type character varying(32) DEFAULT 'document'::character varying NOT NULL,
-    question_generation_config jsonb,
-    is_pinned boolean DEFAULT false NOT NULL,
-    pinned_at timestamp with time zone,
+    type character varying(32) DEFAULT 'document'::character varying NOT NULL CHECK (type = 'document'),
     indexing_strategy jsonb,
-    creator_id character varying(36),
-    auto_tag_config jsonb
+    creator_id character varying(36)
 );
-
-CREATE INDEX idx_knowledge_bases_domain ON public.knowledge_bases (tenant_id, domain_id) WHERE deleted_at IS NULL;
-
-
---
--- Name: COLUMN knowledge_bases.is_temporary; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.knowledge_bases.is_temporary IS 'Whether this knowledge base is temporary (ephemeral) and should be hidden from UI';
-
 
 
 --
@@ -462,37 +283,15 @@ COMMENT ON COLUMN public.knowledge_bases.indexing_strategy IS 'Indexing pipeline
 
 
 --
--- Name: knowledge_context_attention; Type: TABLE; Schema: public
+-- Name: entities; Type: TABLE; Schema: public
 --
 
-CREATE TABLE public.knowledge_context_attention (
+CREATE TABLE public.entities (
     id character varying(36) NOT NULL,
     tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    evidence_id character varying(36) NOT NULL,
-    event_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    novelty double precision DEFAULT 0 NOT NULL,
-    impact double precision DEFAULT 0 NOT NULL,
-    credibility double precision DEFAULT 0 NOT NULL,
-    relevance double precision DEFAULT 0 NOT NULL,
-    actionability double precision DEFAULT 0 NOT NULL,
-    score double precision DEFAULT 0 NOT NULL,
-    reason text DEFAULT ''::text NOT NULL,
-    created_at timestamp with time zone NOT NULL
-);
-
-
---
--- Name: knowledge_context_entities; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_context_entities (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36),
     canonical_name character varying(512) NOT NULL,
     normalized_name character varying(512) NOT NULL,
-    entity_type character varying(128) DEFAULT ''::character varying NOT NULL,
+    entity_type character varying(128) DEFAULT 'other' NOT NULL CHECK (entity_type IN ('company', 'person', 'product', 'project', 'organization', 'other')),
     description text DEFAULT ''::text NOT NULL,
     name_embedding public.vector,
     embedding_model_id character varying(64) DEFAULT '' NOT NULL,
@@ -505,44 +304,50 @@ CREATE TABLE public.knowledge_context_entities (
 
 
 --
--- Name: knowledge_context_entity_aliases; Type: TABLE; Schema: public
+-- Name: entity_aliases; Type: TABLE; Schema: public
 --
 
-CREATE TABLE public.knowledge_context_entity_aliases (
+CREATE TABLE public.entity_aliases (
     id character varying(36) NOT NULL,
     tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36),
     entity_type character varying(128) DEFAULT ''::character varying NOT NULL,
     entity_id character varying(36) NOT NULL,
     alias character varying(512) NOT NULL,
     normalized_alias character varying(512) NOT NULL,
-    evidence_id character varying(36) DEFAULT '' NOT NULL,
-    quote text DEFAULT '' NOT NULL,
     resolution_method character varying(16) DEFAULT 'exact' NOT NULL,
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.knowledge_context_merge_suggestions (
+CREATE TABLE public.entity_merge_suggestions (
     id character varying(36) PRIMARY KEY,
     tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
     new_entity_id character varying(36) NOT NULL,
     candidate_entity_id character varying(36) NOT NULL,
-    evidence_id character varying(36) NOT NULL,
+    knowledge_id character varying(36) NOT NULL,
     reason text NOT NULL,
-    quote text NOT NULL,
     status character varying(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'accepted', 'rejected')),
     created_at timestamp with time zone NOT NULL,
     decided_at timestamp with time zone,
-    CONSTRAINT idx_kcems_pair UNIQUE (tenant_id, new_entity_id, candidate_entity_id, evidence_id)
+    CONSTRAINT uq_entity_merge_suggestions_pair UNIQUE (tenant_id, new_entity_id, candidate_entity_id, knowledge_id)
 );
-CREATE INDEX idx_kcems_scope_status ON public.knowledge_context_merge_suggestions (tenant_id, knowledge_base_id, status);
-CREATE INDEX idx_kce_name_trgm ON public.knowledge_context_entities USING gin (normalized_name public.gin_trgm_ops);
-CREATE INDEX idx_kcea_alias_trgm ON public.knowledge_context_entity_aliases USING gin (normalized_alias public.gin_trgm_ops);
-CREATE INDEX idx_kce_embedding_profile ON public.knowledge_context_entities (tenant_id, embedding_model_id, embedding_dimension) WHERE name_embedding IS NOT NULL;
-CREATE INDEX idx_kce_embedding_pending ON public.knowledge_context_entities (tenant_id, id) WHERE embedding_needs_rebuild AND merged_into_id = '';
+CREATE INDEX idx_entity_merge_suggestions_status ON public.entity_merge_suggestions (tenant_id, status);
+CREATE INDEX idx_entities_name_trgm ON public.entities USING gin (normalized_name public.gin_trgm_ops);
+CREATE INDEX idx_entity_aliases_alias_trgm ON public.entity_aliases USING gin (normalized_alias public.gin_trgm_ops);
+CREATE INDEX idx_entities_embedding_profile ON public.entities (tenant_id, embedding_model_id, embedding_dimension) WHERE name_embedding IS NOT NULL;
+CREATE INDEX idx_entities_embedding_pending ON public.entities (tenant_id, id) WHERE embedding_needs_rebuild AND merged_into_id = '';
 
-CREATE TABLE public.knowledge_context_embedding_rebuild_runs (
+CREATE TABLE public.entity_merge_records (
+    id character varying(36) PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    keep_entity_id character varying(36) NOT NULL,
+    merge_entity_id character varying(36) NOT NULL,
+    actor character varying(255) DEFAULT '' NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+CREATE INDEX idx_entity_merge_records_keep ON public.entity_merge_records (tenant_id, keep_entity_id);
+CREATE INDEX idx_entity_merge_records_merged ON public.entity_merge_records (tenant_id, merge_entity_id);
+
+CREATE TABLE public.entity_embedding_rebuild_runs (
     id character varying(36) PRIMARY KEY,
     tenant_id bigint NOT NULL,
     status character varying(16) NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
@@ -561,113 +366,7 @@ CREATE TABLE public.knowledge_context_embedding_rebuild_runs (
     started_at timestamp with time zone,
     finished_at timestamp with time zone
 );
-CREATE INDEX idx_kc_embedding_run_latest ON public.knowledge_context_embedding_rebuild_runs (tenant_id, created_at DESC, id DESC);
-
-
---
--- Name: knowledge_context_event_evidence; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_context_event_evidence (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    event_id character varying(36) NOT NULL,
-    evidence_id character varying(36) NOT NULL,
-    source_title character varying(512) DEFAULT ''::character varying NOT NULL,
-    source_event_type character varying(128) DEFAULT ''::character varying NOT NULL,
-    source_description text DEFAULT ''::text NOT NULL,
-    source_occurred_at timestamp with time zone,
-    source_key character varying(512) DEFAULT ''::character varying NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    relation character varying(32) DEFAULT ''::character varying NOT NULL,
-    related_event_id character varying(36) DEFAULT ''::character varying NOT NULL
-);
-
-
---
--- Name: knowledge_context_events; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_context_events (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    title character varying(512) NOT NULL,
-    event_type character varying(128) DEFAULT ''::character varying NOT NULL,
-    description text DEFAULT ''::text NOT NULL,
-    occurred_at timestamp with time zone,
-    evidence_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
-    source_count integer DEFAULT 0 NOT NULL,
-    heat double precision DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
-
---
--- Name: knowledge_context_evidence; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_context_evidence (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    knowledge_id character varying(36) NOT NULL,
-    version integer NOT NULL,
-    body_hash character(64) NOT NULL,
-    superseded_by_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    title text DEFAULT ''::text NOT NULL,
-    body text NOT NULL,
-    author text DEFAULT ''::text NOT NULL,
-    publisher text DEFAULT ''::text NOT NULL,
-    original_url text DEFAULT ''::text NOT NULL,
-    published_at text DEFAULT ''::text NOT NULL,
-    published_at_missing boolean DEFAULT false NOT NULL,
-    image_refs jsonb DEFAULT '[]'::jsonb NOT NULL,
-    status character varying(16) DEFAULT 'current'::character varying NOT NULL,
-    extraction_status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
-    extraction_mode character varying(16) DEFAULT 'full' NOT NULL CHECK (extraction_mode IN ('template_only', 'full')),
-    extraction_path character varying(32) DEFAULT '' NOT NULL,
-    backfilled_at timestamp with time zone,
-    backfill_template_updated_at timestamp with time zone,
-    extraction_coverage character varying(16) DEFAULT 'complete' NOT NULL CHECK (extraction_coverage IN ('complete', 'partial')),
-    processed_segments integer DEFAULT 0 NOT NULL,
-    total_segments integer DEFAULT 0 NOT NULL,
-    model_calls jsonb DEFAULT '[]'::jsonb NOT NULL,
-    extraction_error text DEFAULT ''::text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    source_kind character varying(32) DEFAULT ''::character varying NOT NULL
-);
-
-
---
--- Name: knowledge_context_facts; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_context_facts (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    subject_entity_id character varying(36) NOT NULL,
-    kind character varying(16) DEFAULT 'attribute'::character varying NOT NULL,
-    predicate character varying(512) NOT NULL,
-    value jsonb,
-    value_type character varying(32) DEFAULT ''::character varying NOT NULL,
-    unit character varying(128) DEFAULT ''::character varying NOT NULL,
-    object_entity_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    effective_from timestamp with time zone,
-    effective_to timestamp with time zone,
-    evidence_id character varying(36) NOT NULL,
-    quote text NOT NULL,
-    status character varying(16) DEFAULT 'current'::character varying NOT NULL,
-    supersedes_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    corrected_by character varying(36) DEFAULT ''::character varying NOT NULL,
-    correction_note text DEFAULT ''::text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    original_predicate character varying(512) DEFAULT ''::character varying NOT NULL,
-    correction_actor character varying(255) DEFAULT ''::character varying NOT NULL
-);
+CREATE INDEX idx_entity_embedding_run_latest ON public.entity_embedding_rebuild_runs (tenant_id, created_at DESC, id DESC);
 
 
 --
@@ -717,179 +416,36 @@ ALTER SEQUENCE public.knowledge_processing_spans_id_seq OWNED BY public.knowledg
 
 
 --
--- Name: knowledge_strategy_versions; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_strategy_versions (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    status character varying(16) NOT NULL,
-    rules jsonb NOT NULL,
-    previous_rules jsonb NOT NULL,
-    reason text NOT NULL,
-    sample_results jsonb NOT NULL,
-    created_by character varying(36) NOT NULL,
-    activated_by character varying(36) DEFAULT ''::character varying NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    activated_at timestamp with time zone
-);
-
-
---
--- Name: knowledge_tag_manual_decisions; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_tag_manual_decisions (
-    knowledge_id character varying(36) NOT NULL,
-    tag_id character varying(36) NOT NULL,
-    selected boolean NOT NULL,
-    actor_id character varying(36) NOT NULL,
-    reason text DEFAULT ''::text NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
-
---
--- Name: knowledge_tag_relations; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_tag_relations (
-    knowledge_id character varying(36) NOT NULL,
-    tag_id character varying(36) NOT NULL,
-    created_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: knowledge_tags_seq_id_seq; Type: SEQUENCE; Schema: public
---
-
-CREATE SEQUENCE public.knowledge_tags_seq_id_seq
-    START WITH 10000000
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: knowledge_tags; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_tags (
-    id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    name character varying(128) NOT NULL,
-    color character varying(32),
-    sort_order integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone,
-    seq_id bigint DEFAULT nextval('public.knowledge_tags_seq_id_seq'::regclass) NOT NULL,
-    kind character varying(16) DEFAULT ''::character varying NOT NULL
-);
-
-
---
--- Name: knowledge_workflow_reports; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_workflow_reports (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    workflow_id character varying(36) NOT NULL,
-    run_id character varying(36) NOT NULL,
-    step_id character varying(128) NOT NULL,
-    title character varying(512) NOT NULL,
-    markdown text NOT NULL,
-    citations jsonb NOT NULL,
-    time_from timestamp with time zone,
-    time_to timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    excluded_missing_published_at_count integer DEFAULT 0 NOT NULL
-);
-
-
---
--- Name: knowledge_workflow_runs; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_workflow_runs (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    workflow_id character varying(36) NOT NULL,
-    workflow_snapshot jsonb NOT NULL,
-    owner_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    trigger character varying(32) NOT NULL,
-    idempotency_key character varying(160) NOT NULL,
-    status character varying(24) NOT NULL,
-    current_step_id character varying(128) DEFAULT ''::character varying NOT NULL,
-    error text DEFAULT ''::text NOT NULL,
-    started_at timestamp with time zone,
-    finished_at timestamp with time zone,
-    lease_token character varying(36) DEFAULT ''::character varying NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
-
---
--- Name: knowledge_workflow_step_runs; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_workflow_step_runs (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    run_id character varying(36) NOT NULL,
-    step_id character varying(128) NOT NULL,
-    step_type character varying(32) NOT NULL,
-    status character varying(24) NOT NULL,
-    attempt integer DEFAULT 0 NOT NULL,
-    input jsonb,
-    output jsonb,
-    error text DEFAULT ''::text NOT NULL,
-    started_at timestamp with time zone,
-    finished_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
-
---
--- Name: knowledge_workflows; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.knowledge_workflows (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    owner_id character varying(64) NOT NULL,
-    name character varying(255) NOT NULL,
-    description text DEFAULT ''::text NOT NULL,
-    enabled boolean DEFAULT false NOT NULL,
-    schedule jsonb NOT NULL,
-    steps jsonb NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
-
---
 -- Name: knowledges; Type: TABLE; Schema: public
 --
 
 CREATE TABLE public.knowledges (
     id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
+    search_seq_id bigserial NOT NULL,
     tenant_id integer NOT NULL,
     knowledge_base_id character varying(36) NOT NULL,
     type character varying(50) NOT NULL,
     title character varying(255) NOT NULL,
     description text,
+    content_type character varying(16) CHECK (content_type IS NULL OR content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
+    content_type_uncertain boolean DEFAULT false NOT NULL,
+    processing_review_status character varying(16) DEFAULT '' NOT NULL CHECK (processing_review_status IN ('', 'pending', 'confirmed', 'corrected', 'ignored')),
+    processing_review_content_type character varying(16) DEFAULT '' NOT NULL CHECK (processing_review_content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
+    processing_review_reason text DEFAULT '' NOT NULL,
+    source_unverified boolean DEFAULT false NOT NULL,
+    processing_mode character varying(16) DEFAULT 'full' NOT NULL CHECK (processing_mode IN ('full', 'summary_only')),
+	 source_kind character varying(16) DEFAULT 'article' NOT NULL CHECK (source_kind IN ('article', 'mine', 'report')),
+	 vault_path text DEFAULT '' NOT NULL,
+	 vault_body text DEFAULT '' NOT NULL,
+	 vault_original_path text DEFAULT '' NOT NULL,
+	 starred boolean DEFAULT false NOT NULL,
+	 collect_reason text DEFAULT '' NOT NULL,
+	 agent_summary text DEFAULT '' NOT NULL,
+	 agent_tags jsonb DEFAULT '[]'::jsonb NOT NULL CHECK (jsonb_typeof(agent_tags) = 'array'),
+	 source_name text DEFAULT '' NOT NULL,
+    structured_summary jsonb,
+    search_text text DEFAULT '' NOT NULL,
+    search_published_at timestamp with time zone,
     source character varying(2048) NOT NULL,
     parse_status character varying(50) DEFAULT 'unprocessed'::character varying NOT NULL,
     enable_status character varying(50) DEFAULT 'enabled'::character varying NOT NULL,
@@ -913,8 +469,7 @@ CREATE TABLE public.knowledges (
     summary_status character varying(32) DEFAULT 'none'::character varying,
     channel character varying(50) DEFAULT 'web'::character varying NOT NULL,
     pending_subtasks_count integer DEFAULT 0 NOT NULL,
-    custom_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    folder_path character varying(1024) DEFAULT ''::character varying NOT NULL
+    custom_metadata jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 
@@ -923,6 +478,9 @@ CREATE TABLE public.knowledges (
 --
 
 COMMENT ON COLUMN public.knowledges.channel IS 'Source channel of the knowledge: web, api, rss';
+
+CREATE UNIQUE INDEX knowledges_vault_path_unique ON public.knowledges (tenant_id, vault_path)
+WHERE vault_path <> '' AND deleted_at IS NULL;
 
 
 CREATE TABLE public.knowledge_repost_sources (
@@ -947,112 +505,6 @@ CREATE INDEX idx_repost_url ON public.knowledge_repost_sources (tenant_id, knowl
 CREATE INDEX idx_knowledge_normalized_url ON public.knowledges (tenant_id, knowledge_base_id, normalized_url) WHERE deleted_at IS NULL AND normalized_url <> '';
 CREATE INDEX idx_knowledge_content_hash ON public.knowledges (tenant_id, knowledge_base_id, content_hash) WHERE deleted_at IS NULL AND content_hash <> '';
 CREATE INDEX idx_knowledge_simhash_candidates ON public.knowledges (tenant_id, knowledge_base_id, content_rune_count) WHERE deleted_at IS NULL AND content_rune_count >= 100;
-
-
---
--- Name: mcp_services; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.mcp_services (
-    id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    enabled boolean DEFAULT true,
-    transport_type character varying(50) NOT NULL,
-    url character varying(512),
-    headers jsonb,
-    auth_config jsonb,
-    advanced_config jsonb,
-    stdio_config jsonb,
-    env_vars jsonb,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp without time zone,
-    is_builtin boolean DEFAULT false NOT NULL
-);
-
-
---
--- Name: TABLE mcp_services; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.mcp_services IS 'MCP service configurations';
-
-
---
--- Name: mcp_tool_approvals; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.mcp_tool_approvals (
-    id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    service_id character varying(36) NOT NULL,
-    tool_name character varying(512) NOT NULL,
-    require_approval boolean DEFAULT false NOT NULL,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-
---
--- Name: messages; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.messages (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    request_id character varying(36) NOT NULL,
-    session_id character varying(36) NOT NULL,
-    role character varying(50) NOT NULL,
-    content text NOT NULL,
-    knowledge_references jsonb DEFAULT '[]'::jsonb NOT NULL,
-    agent_steps jsonb,
-    is_completed boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone,
-    mentioned_items jsonb DEFAULT '[]'::jsonb,
-    is_fallback boolean DEFAULT false,
-    agent_duration_ms bigint DEFAULT 0,
-    knowledge_id character varying(36),
-    images jsonb DEFAULT '[]'::jsonb,
-    channel character varying(50) DEFAULT ''::character varying NOT NULL,
-    rendered_content text DEFAULT ''::text NOT NULL,
-    attachments jsonb DEFAULT '[]'::jsonb,
-    agent_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    model_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    artifacts jsonb DEFAULT '[]'::jsonb,
-    used_memories jsonb,
-    usage jsonb
-);
-
-
---
--- Name: COLUMN messages.agent_steps; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.messages.agent_steps IS 'Agent execution steps (reasoning process and tool calls)';
-
-
---
--- Name: COLUMN messages.mentioned_items; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.messages.mentioned_items IS 'Stores @mentioned knowledge bases and files (id, name, type) when user sends a message';
-
-
---
--- Name: COLUMN messages.channel; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.messages.channel IS 'Source channel of the message: web, api, im, etc.';
-
-
---
--- Name: COLUMN messages.rendered_content; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.messages.rendered_content IS 'Full RAG-augmented user message sent to LLM, preserving retrieval context across turns';
 
 
 --
@@ -1131,54 +583,6 @@ CREATE TABLE public.resources (
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone
 );
-
-
---
--- Name: sessions; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.sessions (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id integer NOT NULL,
-    title character varying(255),
-    description text,
-    knowledge_base_id character varying(36),
-    max_rounds integer DEFAULT 5 NOT NULL,
-    enable_rewrite boolean DEFAULT true NOT NULL,
-    fallback_strategy character varying(255) DEFAULT 'fixed'::character varying NOT NULL,
-    fallback_response text DEFAULT '很抱歉，我暂时无法回答这个问题。'::text NOT NULL,
-    keyword_threshold double precision DEFAULT 0.5 NOT NULL,
-    vector_threshold double precision DEFAULT 0.5 NOT NULL,
-    rerank_model_id character varying(64),
-    embedding_top_k integer DEFAULT 10 NOT NULL,
-    rerank_top_k integer DEFAULT 10 NOT NULL,
-    rerank_threshold double precision DEFAULT 0.65 NOT NULL,
-    summary_model_id character varying(64),
-    summary_parameters jsonb DEFAULT '{}'::jsonb NOT NULL,
-    agent_config jsonb,
-    context_config jsonb,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone,
-    agent_id character varying(36),
-    user_id character varying(512),
-    is_pinned boolean DEFAULT false NOT NULL,
-    pinned_at timestamp with time zone
-);
-
-
---
--- Name: COLUMN sessions.agent_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.sessions.agent_config IS 'Session-level agent configuration in JSON format';
-
-
---
--- Name: COLUMN sessions.context_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.sessions.context_config IS 'LLM context management configuration (separate from message storage)';
 
 
 --
@@ -1265,7 +669,7 @@ CREATE TABLE public.task_dead_letters (
 -- Name: TABLE task_dead_letters; Type: COMMENT; Schema: public
 --
 
-COMMENT ON TABLE public.task_dead_letters IS 'Permanent archive of tasks that exhausted retries. Written by the asynq dead-letter middleware and service-level retry handlers.';
+COMMENT ON TABLE public.task_dead_letters IS 'Permanent archive of tasks that exhausted retries. Written transactionally by PostgreSQL task workers and service-level retry handlers.';
 
 
 --
@@ -1279,7 +683,7 @@ COMMENT ON COLUMN public.task_dead_letters.related_id IS 'Optional secondary ide
 -- Name: COLUMN task_dead_letters.payload; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.task_dead_letters.payload IS 'Raw task payload (asynq.Task.Payload) at the time of failure. Allows manual requeue via SQL + asynq.Client.Enqueue.';
+COMMENT ON COLUMN public.task_dead_letters.payload IS 'Task payload at the time of failure. Allows manual requeue through the runtime queue API.';
 
 
 --
@@ -1318,37 +722,6 @@ CREATE SEQUENCE public.task_pending_ops_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
---
--- Name: temporary_documents; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.temporary_documents (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    session_id character varying(36) NOT NULL,
-    resource_ref text NOT NULL,
-    file_name character varying(1024) NOT NULL,
-    file_type character varying(32) NOT NULL,
-    mime_type character varying(255) DEFAULT ''::character varying NOT NULL,
-    file_size bigint NOT NULL,
-    status character varying(16) DEFAULT 'uploaded'::character varying NOT NULL,
-    content text DEFAULT ''::text NOT NULL,
-    chunks jsonb DEFAULT '[]'::jsonb NOT NULL,
-    image_refs jsonb DEFAULT '[]'::jsonb NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    processing_options jsonb DEFAULT '{}'::jsonb NOT NULL,
-    token_count integer DEFAULT 0 NOT NULL,
-    chunk_count integer DEFAULT 0 NOT NULL,
-    error_message text DEFAULT ''::text NOT NULL,
-    expires_at timestamp without time zone NOT NULL,
-    started_at timestamp without time zone,
-    ready_at timestamp without time zone,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp without time zone
-);
 
 
 --
@@ -1393,45 +766,19 @@ ALTER SEQUENCE public.tenant_api_keys_id_seq OWNED BY public.tenant_api_keys.id;
 --
 
 CREATE TABLE public.tenants (
-    model_tiers jsonb DEFAULT '{}'::jsonb NOT NULL,
     id integer NOT NULL CHECK (id = 1),
     name character varying(255) NOT NULL,
     description text,
     status character varying(50) DEFAULT 'active'::character varying,
     business character varying(255) NOT NULL,
     storage_used bigint DEFAULT 0 NOT NULL,
-    agent_config jsonb,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp with time zone,
-    context_config jsonb,
-    conversation_config jsonb,
     parser_engine_config jsonb,
-    chat_history_config jsonb,
     retrieval_config jsonb,
     credentials jsonb
 );
-
-
---
--- Name: COLUMN tenants.agent_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenants.agent_config IS 'Tenant-level agent configuration in JSON format';
-
-
---
--- Name: COLUMN tenants.context_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenants.context_config IS 'Global Context configuration for this tenant (default for all sessions)';
-
-
---
--- Name: COLUMN tenants.conversation_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenants.conversation_config IS 'Global Conversation configuration for this tenant (default for normal mode sessions)';
 
 
 --
@@ -1468,16 +815,6 @@ CREATE SEQUENCE public.tenants_id_seq
 ALTER SEQUENCE public.tenants_id_seq OWNED BY public.tenants.id;
 
 
---
--- Name: resource_favorites; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.resource_favorites (
-    tenant_id bigint NOT NULL,
-    resource_type character varying(16) NOT NULL,
-    resource_id character varying(64) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
 
 
 --
@@ -1554,7 +891,6 @@ COMMENT ON COLUMN public.users.tenant_id IS 'Tenant ID that the user belongs to'
 COMMENT ON COLUMN public.users.is_active IS 'Whether the user is active';
 
 
-
 --
 -- Name: embeddings id; Type: DEFAULT; Schema: public
 --
@@ -1606,27 +942,11 @@ ALTER TABLE ONLY public.auth_tokens
 
 
 --
--- Name: chunk_revisions chunk_revisions_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.chunk_revisions
-    ADD CONSTRAINT chunk_revisions_pkey PRIMARY KEY (id);
-
-
---
 -- Name: chunks chunks_pkey; Type: CONSTRAINT; Schema: public
 --
 
 ALTER TABLE ONLY public.chunks
     ADD CONSTRAINT chunks_pkey PRIMARY KEY (id);
-
-
---
--- Name: custom_agents custom_agents_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.custom_agents
-    ADD CONSTRAINT custom_agents_pkey PRIMARY KEY (id, tenant_id);
 
 
 --
@@ -1646,14 +966,6 @@ ALTER TABLE ONLY public.embeddings
 
 
 --
--- Name: knowledge_anomalies knowledge_anomalies_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_anomalies
-    ADD CONSTRAINT knowledge_anomalies_pkey PRIMARY KEY (id);
-
-
---
 -- Name: knowledge_bases knowledge_bases_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -1662,59 +974,19 @@ ALTER TABLE ONLY public.knowledge_bases
 
 
 --
--- Name: knowledge_context_attention knowledge_context_attention_pkey; Type: CONSTRAINT; Schema: public
+-- Name: entities entities_pkey; Type: CONSTRAINT; Schema: public
 --
 
-ALTER TABLE ONLY public.knowledge_context_attention
-    ADD CONSTRAINT knowledge_context_attention_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_context_entities knowledge_context_entities_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_context_entities
-    ADD CONSTRAINT knowledge_context_entities_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.entities
+    ADD CONSTRAINT entities_pkey PRIMARY KEY (id);
 
 
 --
--- Name: knowledge_context_entity_aliases knowledge_context_entity_aliases_pkey; Type: CONSTRAINT; Schema: public
+-- Name: entity_aliases entity_aliases_pkey; Type: CONSTRAINT; Schema: public
 --
 
-ALTER TABLE ONLY public.knowledge_context_entity_aliases
-    ADD CONSTRAINT knowledge_context_entity_aliases_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_context_event_evidence knowledge_context_event_evidence_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_context_event_evidence
-    ADD CONSTRAINT knowledge_context_event_evidence_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_context_events knowledge_context_events_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_context_events
-    ADD CONSTRAINT knowledge_context_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_context_evidence knowledge_context_evidence_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_context_evidence
-    ADD CONSTRAINT knowledge_context_evidence_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_context_facts knowledge_context_facts_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_context_facts
-    ADD CONSTRAINT knowledge_context_facts_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.entity_aliases
+    ADD CONSTRAINT entity_aliases_pkey PRIMARY KEY (id);
 
 
 --
@@ -1726,131 +998,11 @@ ALTER TABLE ONLY public.knowledge_processing_spans
 
 
 --
--- Name: knowledge_strategy_versions knowledge_strategy_versions_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_strategy_versions
-    ADD CONSTRAINT knowledge_strategy_versions_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_tag_manual_decisions knowledge_tag_manual_decisions_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_tag_manual_decisions
-    ADD CONSTRAINT knowledge_tag_manual_decisions_pkey PRIMARY KEY (knowledge_id, tag_id);
-
-
---
--- Name: knowledge_tag_relations knowledge_tag_relations_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_tag_relations
-    ADD CONSTRAINT knowledge_tag_relations_pkey PRIMARY KEY (knowledge_id, tag_id);
-
-
---
--- Name: knowledge_tags knowledge_tags_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_tags
-    ADD CONSTRAINT knowledge_tags_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_workflow_reports knowledge_workflow_reports_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflow_reports
-    ADD CONSTRAINT knowledge_workflow_reports_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_workflow_reports knowledge_workflow_reports_run_id_step_id_key; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflow_reports
-    ADD CONSTRAINT knowledge_workflow_reports_run_id_step_id_key UNIQUE (run_id, step_id);
-
-
---
--- Name: knowledge_workflow_runs knowledge_workflow_runs_idempotency_key_key; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflow_runs
-    ADD CONSTRAINT knowledge_workflow_runs_idempotency_key_key UNIQUE (idempotency_key);
-
-
---
--- Name: knowledge_workflow_runs knowledge_workflow_runs_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflow_runs
-    ADD CONSTRAINT knowledge_workflow_runs_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_workflow_step_runs knowledge_workflow_step_runs_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflow_step_runs
-    ADD CONSTRAINT knowledge_workflow_step_runs_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_workflow_step_runs knowledge_workflow_step_runs_run_id_step_id_key; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflow_step_runs
-    ADD CONSTRAINT knowledge_workflow_step_runs_run_id_step_id_key UNIQUE (run_id, step_id);
-
-
---
--- Name: knowledge_workflows knowledge_workflows_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflows
-    ADD CONSTRAINT knowledge_workflows_pkey PRIMARY KEY (id);
-
-
---
--- Name: knowledge_workflows knowledge_workflows_tenant_id_knowledge_base_id_name_key; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.knowledge_workflows
-    ADD CONSTRAINT knowledge_workflows_tenant_id_knowledge_base_id_name_key UNIQUE (tenant_id, knowledge_base_id, name);
-
-
---
 -- Name: knowledges knowledges_pkey; Type: CONSTRAINT; Schema: public
 --
 
 ALTER TABLE ONLY public.knowledges
     ADD CONSTRAINT knowledges_pkey PRIMARY KEY (id);
-
-
---
--- Name: mcp_services mcp_services_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.mcp_services
-    ADD CONSTRAINT mcp_services_pkey PRIMARY KEY (id);
-
-
---
--- Name: mcp_tool_approvals mcp_tool_approvals_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.mcp_tool_approvals
-    ADD CONSTRAINT mcp_tool_approvals_pkey PRIMARY KEY (id);
-
-
---
--- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.messages
-    ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
 
 
 --
@@ -1902,14 +1054,6 @@ ALTER TABLE ONLY public.resources
 
 
 --
--- Name: sessions sessions_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_pkey PRIMARY KEY (id);
-
-
---
 -- Name: sync_logs sync_logs_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -1939,14 +1083,6 @@ ALTER TABLE ONLY public.system_settings
 
 ALTER TABLE ONLY public.task_dead_letters
     ADD CONSTRAINT task_dead_letters_pkey PRIMARY KEY (id);
-
-
---
--- Name: temporary_documents temporary_documents_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.temporary_documents
-    ADD CONSTRAINT temporary_documents_pkey PRIMARY KEY (id);
 
 
 --
@@ -1981,12 +1117,6 @@ ALTER TABLE ONLY public.knowledge_processing_spans
     ADD CONSTRAINT uq_kpspan_attempt_span UNIQUE (knowledge_id, attempt, span_id);
 
 
---
--- Name: resource_favorites resource_favorites_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.resource_favorites
-    ADD CONSTRAINT resource_favorites_pkey PRIMARY KEY (tenant_id, resource_type, resource_id);
 
 
 --
@@ -2070,20 +1200,6 @@ CREATE INDEX idx_auth_tokens_user_id ON public.auth_tokens USING btree (user_id)
 
 
 --
--- Name: idx_chunk_revisions_chunk_revision; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_chunk_revisions_chunk_revision ON public.chunk_revisions USING btree (chunk_id, revision);
-
-
---
--- Name: idx_chunk_revisions_tenant_chunk; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_chunk_revisions_tenant_chunk ON public.chunk_revisions USING btree (tenant_id, chunk_id);
-
-
---
 -- Name: idx_chunks_chunk_type; Type: INDEX; Schema: public
 --
 
@@ -2124,10 +1240,10 @@ CREATE INDEX idx_chunks_parent_id ON public.chunks USING btree (parent_chunk_id)
 
 CREATE UNIQUE INDEX idx_chunks_seq_id ON public.chunks USING btree (seq_id);
 
--- Search the editable body and its short retrieval aliases without a body copy.
+-- Search the article body and its short retrieval aliases.
 CREATE INDEX chunks_search_idx ON public.chunks USING bm25
-    (seq_id, knowledge_base_id, knowledge_id, tag_id, is_enabled, chunk_type,
-     index_status, deleted_at, content, context_header, search_title, metadata)
+    (seq_id, knowledge_base_id, knowledge_id, is_enabled, chunk_type,
+     deleted_at, content, context_header, search_title, metadata)
     WITH (key_field=seq_id, text_fields='{
         "content": {"tokenizer": {"type": "chinese_lindera"}},
         "context_header": {"tokenizer": {"type": "chinese_lindera"}},
@@ -2136,12 +1252,15 @@ CREATE INDEX chunks_search_idx ON public.chunks USING bm25
         "metadata": {"tokenizer": {"type": "chinese_lindera"}}
     }');
 
-
---
--- Name: idx_chunks_tag; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_chunks_tag ON public.chunks USING btree (tag_id);
+-- Article headers remain searchable without a stored body chunk.
+CREATE UNIQUE INDEX idx_knowledges_search_seq_id ON public.knowledges (search_seq_id);
+CREATE INDEX knowledges_summary_search_idx ON public.knowledges USING bm25
+    (search_seq_id, tenant_id, knowledge_base_id, id, deleted_at, parse_status, enable_status, title, description, search_text)
+    WITH (key_field=search_seq_id, text_fields='{
+        "title": {"tokenizer": {"type": "chinese_lindera"}},
+        "description": {"tokenizer": {"type": "chinese_lindera"}},
+        "search_text": {"tokenizer": {"type": "chinese_lindera"}}
+    }');
 
 
 --
@@ -2149,27 +1268,6 @@ CREATE INDEX idx_chunks_tag ON public.chunks USING btree (tag_id);
 --
 
 CREATE INDEX idx_chunks_tenant_kg ON public.chunks USING btree (tenant_id, knowledge_id);
-
-
---
--- Name: idx_custom_agents_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_custom_agents_deleted_at ON public.custom_agents USING btree (deleted_at);
-
-
---
--- Name: idx_custom_agents_is_builtin; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_custom_agents_is_builtin ON public.custom_agents USING btree (is_builtin);
-
-
---
--- Name: idx_custom_agents_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_custom_agents_tenant_id ON public.custom_agents USING btree (tenant_id);
 
 
 --
@@ -2222,222 +1320,24 @@ CREATE INDEX idx_embeddings_knowledge_base_id ON public.embeddings USING btree (
 
 
 --
--- Name: idx_embeddings_tag_id; Type: INDEX; Schema: public
+-- Name: idx_entities_canonical; Type: INDEX; Schema: public
 --
 
-CREATE INDEX idx_embeddings_tag_id ON public.embeddings USING btree (tag_id);
-
-
---
--- Name: idx_kca_evidence; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_kca_evidence ON public.knowledge_context_attention USING btree (tenant_id, knowledge_base_id, evidence_id);
+CREATE UNIQUE INDEX idx_entities_canonical ON public.entities USING btree (tenant_id, entity_type, normalized_name);
 
 
 --
--- Name: idx_kca_scope_score; Type: INDEX; Schema: public
+-- Name: idx_entities_scope_name; Type: INDEX; Schema: public
 --
 
-CREATE INDEX idx_kca_scope_score ON public.knowledge_context_attention USING btree (tenant_id, knowledge_base_id, score DESC);
-
-
---
--- Name: idx_kce_canonical; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_kce_canonical ON public.knowledge_context_entities USING btree (tenant_id, entity_type, normalized_name);
+CREATE INDEX idx_entities_scope_name ON public.entities USING btree (tenant_id, entity_type, canonical_name);
 
 
 --
--- Name: idx_kce_scope_name; Type: INDEX; Schema: public
+-- Name: idx_entity_aliases_alias; Type: INDEX; Schema: public
 --
 
-CREATE INDEX idx_kce_scope_name ON public.knowledge_context_entities USING btree (tenant_id, entity_type, canonical_name);
-
-
---
--- Name: idx_kcea_alias; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_kcea_alias ON public.knowledge_context_entity_aliases USING btree (tenant_id, entity_type, normalized_alias);
-
-
---
--- Name: idx_kcea_entity; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcea_entity ON public.knowledge_context_entity_aliases USING btree (tenant_id, entity_id);
-
-
---
--- Name: idx_kcee_evidence; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcee_evidence ON public.knowledge_context_event_evidence USING btree (tenant_id, knowledge_base_id, evidence_id);
-
-
---
--- Name: idx_kcee_pair; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_kcee_pair ON public.knowledge_context_event_evidence USING btree (tenant_id, event_id, evidence_id);
-
--- Event objects have one identity per event and retain source-level support.
-ALTER TABLE public.knowledge_context_events ADD CONSTRAINT uq_kcevent_team_id UNIQUE (tenant_id, id);
-ALTER TABLE public.knowledge_context_entities ADD CONSTRAINT uq_kcentity_team_id UNIQUE (tenant_id, id);
-ALTER TABLE public.knowledge_context_evidence ADD CONSTRAINT uq_kcevidence_team_id UNIQUE (tenant_id, id);
-ALTER TABLE public.knowledge_tags ADD CONSTRAINT uq_knowledge_tags_team_id UNIQUE (tenant_id, id);
-
-CREATE TABLE public.knowledge_context_evidence_entities (
-    tenant_id bigint NOT NULL,
-    evidence_id character varying(36) NOT NULL,
-    entity_id character varying(36) NOT NULL,
-    PRIMARY KEY (tenant_id, evidence_id, entity_id),
-    FOREIGN KEY (tenant_id, evidence_id) REFERENCES public.knowledge_context_evidence (tenant_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.knowledge_context_entities (tenant_id, id) ON DELETE CASCADE
-);
-CREATE INDEX idx_kcevidence_entity ON public.knowledge_context_evidence_entities (tenant_id, entity_id, evidence_id);
-
-CREATE TABLE public.knowledge_context_backfill_batches (
-    id character varying(36) PRIMARY KEY,
-    tenant_id bigint NOT NULL,
-    entity_id character varying(36) DEFAULT '' NOT NULL,
-    topic_id character varying(36) DEFAULT '' NOT NULL,
-    message_count integer DEFAULT 0 NOT NULL,
-    success_count integer DEFAULT 0 NOT NULL,
-    failure_count integer DEFAULT 0 NOT NULL,
-    status character varying(32) DEFAULT 'pending' NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    completed_at timestamp with time zone,
-    CHECK ((entity_id <> '') <> (topic_id <> ''))
-);
-CREATE INDEX idx_kcbb_scope ON public.knowledge_context_backfill_batches (tenant_id, entity_id, topic_id, created_at DESC);
-
-CREATE TABLE public.knowledge_context_backfill_items (
-    id character varying(36) PRIMARY KEY,
-    tenant_id bigint NOT NULL,
-    batch_id character varying(36) NOT NULL REFERENCES public.knowledge_context_backfill_batches(id) ON DELETE CASCADE,
-    knowledge_id character varying(36) NOT NULL,
-    evidence_id character varying(36) NOT NULL,
-    status character varying(16) DEFAULT 'pending' NOT NULL,
-    error text DEFAULT '' NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    UNIQUE (batch_id, evidence_id)
-);
-CREATE INDEX idx_kcbi_batch ON public.knowledge_context_backfill_items (tenant_id, batch_id);
-CREATE INDEX idx_kcbi_evidence_active ON public.knowledge_context_backfill_items (tenant_id, evidence_id) WHERE status IN ('pending','processing');
-
-CREATE TABLE public.knowledge_context_entity_stars (
-    tenant_id bigint NOT NULL,
-    entity_id character varying(36) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    PRIMARY KEY (tenant_id, entity_id),
-    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.knowledge_context_entities (tenant_id, id) ON DELETE CASCADE
-);
-
-CREATE TABLE public.knowledge_context_topic_stars (
-    tenant_id bigint NOT NULL,
-    tag_id character varying(36) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    PRIMARY KEY (tenant_id, tag_id),
-    FOREIGN KEY (tenant_id, tag_id) REFERENCES public.knowledge_tags (tenant_id, id) ON DELETE CASCADE
-);
-
-CREATE TABLE public.knowledge_context_event_entities (
-    tenant_id bigint NOT NULL,
-    event_id character varying(36) NOT NULL,
-    entity_id character varying(36) NOT NULL,
-    PRIMARY KEY (tenant_id, event_id, entity_id),
-    FOREIGN KEY (tenant_id, event_id) REFERENCES public.knowledge_context_events (tenant_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.knowledge_context_entities (tenant_id, id) ON DELETE CASCADE
-);
-CREATE INDEX idx_kceentity_object ON public.knowledge_context_event_entities (tenant_id, entity_id, event_id);
-
-CREATE TABLE public.knowledge_context_event_evidence_entities (
-    tenant_id bigint NOT NULL,
-    event_id character varying(36) NOT NULL,
-    evidence_id character varying(36) NOT NULL,
-    entity_id character varying(36) NOT NULL,
-    PRIMARY KEY (tenant_id, event_id, evidence_id, entity_id),
-    FOREIGN KEY (tenant_id, event_id, entity_id) REFERENCES public.knowledge_context_event_entities (tenant_id, event_id, entity_id) ON DELETE CASCADE,
-    FOREIGN KEY (tenant_id, event_id, evidence_id) REFERENCES public.knowledge_context_event_evidence (tenant_id, event_id, evidence_id) ON DELETE CASCADE
-);
-CREATE INDEX idx_kceee_evidence ON public.knowledge_context_event_evidence_entities (tenant_id, evidence_id, event_id, entity_id);
-CREATE INDEX idx_kceee_object ON public.knowledge_context_event_evidence_entities (tenant_id, entity_id, evidence_id, event_id);
-
-
-
---
--- Name: idx_kcee_related_event; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcee_related_event ON public.knowledge_context_event_evidence USING btree (tenant_id, knowledge_base_id, related_event_id);
-
-
---
--- Name: idx_kcee_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcee_scope ON public.knowledge_context_event_evidence USING btree (tenant_id, knowledge_base_id, event_id);
-
-
---
--- Name: idx_kcevent_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcevent_scope ON public.knowledge_context_events USING btree (tenant_id, knowledge_base_id, occurred_at DESC);
-
-
---
--- Name: idx_kcevid_hash; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcevid_hash ON public.knowledge_context_evidence USING btree (tenant_id, knowledge_base_id, knowledge_id, body_hash);
-
-
---
--- Name: idx_kcevid_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcevid_scope ON public.knowledge_context_evidence USING btree (tenant_id, knowledge_base_id, status, created_at);
-
-
---
--- Name: idx_kcevid_version; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_kcevid_version ON public.knowledge_context_evidence USING btree (tenant_id, knowledge_base_id, knowledge_id, version);
-
-
---
--- Name: idx_kcf_evidence; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcf_evidence ON public.knowledge_context_facts USING btree (tenant_id, knowledge_base_id, evidence_id);
-
-
---
--- Name: idx_kcf_object; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcf_object ON public.knowledge_context_facts USING btree (tenant_id, knowledge_base_id, object_entity_id);
-
-
---
--- Name: idx_kcf_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kcf_scope ON public.knowledge_context_facts USING btree (tenant_id, knowledge_base_id, subject_entity_id, predicate, status);
-
-
---
--- Name: idx_knowledge_anomalies_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_knowledge_anomalies_scope ON public.knowledge_anomalies USING btree (tenant_id, knowledge_base_id, status, created_at);
+CREATE UNIQUE INDEX idx_entity_aliases_alias ON public.entity_aliases USING btree (tenant_id, entity_type, normalized_alias);
 
 
 --
@@ -2455,41 +1355,6 @@ CREATE INDEX idx_knowledge_bases_tenant_id ON public.knowledge_bases USING btree
 
 
 --
--- Name: idx_knowledge_strategy_one_active; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_knowledge_strategy_one_active ON public.knowledge_strategy_versions USING btree (tenant_id, knowledge_base_id) WHERE ((status)::text = 'active'::text);
-
-
---
--- Name: idx_knowledge_strategy_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_knowledge_strategy_scope ON public.knowledge_strategy_versions USING btree (tenant_id, knowledge_base_id, status, created_at);
-
-
---
--- Name: idx_knowledge_tags_kb; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_knowledge_tags_kb ON public.knowledge_tags USING btree (tenant_id, knowledge_base_id);
-
-
---
--- Name: idx_knowledge_tags_kb_kind_name; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_knowledge_tags_kb_kind_name ON public.knowledge_tags USING btree (tenant_id, knowledge_base_id, kind, name);
-
-
---
--- Name: idx_knowledge_tags_seq_id; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_knowledge_tags_seq_id ON public.knowledge_tags USING btree (seq_id);
-
-
---
 -- Name: idx_knowledges_base_id; Type: INDEX; Schema: public
 --
 
@@ -2503,11 +1368,6 @@ CREATE INDEX idx_knowledges_base_id ON public.knowledges USING btree (knowledge_
 CREATE INDEX idx_knowledges_enable_status ON public.knowledges USING btree (enable_status);
 
 
---
--- Name: idx_knowledges_folder_path; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_knowledges_folder_path ON public.knowledges USING btree (tenant_id, knowledge_base_id, folder_path);
 
 
 --
@@ -2522,6 +1382,7 @@ CREATE INDEX idx_knowledges_kb_metadata_external_id ON public.knowledges USING b
 --
 
 CREATE INDEX idx_knowledges_parse_status ON public.knowledges USING btree (parse_status);
+CREATE INDEX idx_knowledges_processing_review ON public.knowledges (tenant_id, created_at DESC) WHERE processing_review_status = 'pending' AND deleted_at IS NULL;
 
 
 --
@@ -2557,139 +1418,6 @@ CREATE INDEX idx_kpspan_parent ON public.knowledge_processing_spans USING btree 
 --
 
 CREATE INDEX idx_kpspan_status_started ON public.knowledge_processing_spans USING btree (status, started_at);
-
-
---
--- Name: idx_ktr_knowledge; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_ktr_knowledge ON public.knowledge_tag_relations USING btree (knowledge_id);
-
-
---
--- Name: idx_ktr_tag; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_ktr_tag ON public.knowledge_tag_relations USING btree (tag_id);
-
-
---
--- Name: idx_kworkflow_owner; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kworkflow_owner ON public.knowledge_workflows USING btree (owner_id);
-
-
---
--- Name: idx_kworkflow_schedule; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kworkflow_schedule ON public.knowledge_workflows USING btree (enabled, tenant_id);
-
-
---
--- Name: idx_kwreport_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kwreport_scope ON public.knowledge_workflow_reports USING btree (tenant_id, knowledge_base_id, created_at DESC);
-
-
---
--- Name: idx_kwrun_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kwrun_scope ON public.knowledge_workflow_runs USING btree (tenant_id, knowledge_base_id, workflow_id, created_at DESC);
-
-
---
--- Name: idx_kwrun_status; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kwrun_status ON public.knowledge_workflow_runs USING btree (status, updated_at);
-
-
---
--- Name: idx_kwstep_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kwstep_scope ON public.knowledge_workflow_step_runs USING btree (tenant_id, knowledge_base_id, run_id);
-
-
---
--- Name: idx_kwstep_status; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kwstep_status ON public.knowledge_workflow_step_runs USING btree (status, updated_at);
-
-
---
--- Name: idx_mcp_services_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_services_deleted_at ON public.mcp_services USING btree (deleted_at);
-
-
---
--- Name: idx_mcp_services_enabled; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_services_enabled ON public.mcp_services USING btree (enabled);
-
-
---
--- Name: idx_mcp_services_is_builtin; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_services_is_builtin ON public.mcp_services USING btree (is_builtin);
-
-
---
--- Name: idx_mcp_services_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_services_tenant_id ON public.mcp_services USING btree (tenant_id);
-
-
---
--- Name: idx_mcp_tool_approvals_service_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_tool_approvals_service_id ON public.mcp_tool_approvals USING btree (service_id);
-
-
---
--- Name: idx_mcp_tool_approvals_tenant_svc_tool; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_mcp_tool_approvals_tenant_svc_tool ON public.mcp_tool_approvals USING btree (tenant_id, service_id, tool_name);
-
-
---
--- Name: idx_messages_agent_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_messages_agent_id ON public.messages USING btree (agent_id);
-
-
---
--- Name: idx_messages_agent_steps; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_messages_agent_steps ON public.messages USING gin (agent_steps);
-
-
---
--- Name: idx_messages_knowledge_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_messages_knowledge_id ON public.messages USING btree (knowledge_id);
-
-
---
--- Name: idx_messages_session_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_messages_session_id ON public.messages USING btree (session_id);
 
 
 --
@@ -2763,41 +1491,6 @@ CREATE UNIQUE INDEX idx_resources_tenant_location ON public.resources USING btre
 
 
 --
--- Name: idx_sessions_agent_config; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_sessions_agent_config ON public.sessions USING gin (agent_config);
-
-
---
--- Name: idx_sessions_agent_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_sessions_agent_id ON public.sessions USING btree (agent_id);
-
-
---
--- Name: idx_sessions_context_config; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_sessions_context_config ON public.sessions USING gin (context_config);
-
-
---
--- Name: idx_sessions_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_sessions_tenant_id ON public.sessions USING btree (tenant_id);
-
-
---
--- Name: idx_sessions_tenant_user_pin; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_sessions_tenant_user_pin ON public.sessions USING btree (tenant_id, user_id, is_pinned DESC, pinned_at DESC, updated_at DESC) WHERE (deleted_at IS NULL);
-
-
---
 -- Name: idx_sync_logs_data_source_id; Type: INDEX; Schema: public
 --
 
@@ -2833,13 +1526,6 @@ CREATE INDEX idx_system_settings_category ON public.system_settings USING btree 
 
 
 --
--- Name: idx_tag_manual_decisions_tag; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tag_manual_decisions_tag ON public.knowledge_tag_manual_decisions USING btree (tag_id);
-
-
---
 -- Name: idx_task_dead_letters_scope; Type: INDEX; Schema: public
 --
 
@@ -2861,27 +1547,6 @@ CREATE INDEX idx_task_dead_letters_tenant ON public.task_dead_letters USING btre
 
 
 --
--- Name: idx_temporary_documents_expires; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_temporary_documents_expires ON public.temporary_documents USING btree (expires_at);
-
-
---
--- Name: idx_temporary_documents_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_temporary_documents_scope ON public.temporary_documents USING btree (tenant_id, session_id);
-
-
---
--- Name: idx_temporary_documents_status; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_temporary_documents_status ON public.temporary_documents USING btree (status);
-
-
---
 -- Name: idx_tenant_api_keys_revoked_at; Type: INDEX; Schema: public
 --
 
@@ -2896,31 +1561,14 @@ CREATE INDEX idx_tenant_api_keys_tenant ON public.tenant_api_keys USING btree (t
 
 
 --
--- Name: idx_tenants_agent_config; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenants_agent_config ON public.tenants USING gin (agent_config);
-
-
---
 -- Name: idx_tenants_status; Type: INDEX; Schema: public
 --
 
 CREATE INDEX idx_tenants_status ON public.tenants USING btree (status);
 
 
---
--- Name: idx_resource_favorites_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_resource_favorites_tenant_id ON public.resource_favorites USING btree (tenant_id);
 
 
---
--- Name: idx_resource_favorites_tenant_type_created_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_resource_favorites_tenant_type_created_at ON public.resource_favorites USING btree (tenant_id, resource_type, created_at DESC);
 
 
 --
@@ -2952,10 +1600,45 @@ CREATE INDEX idx_users_username ON public.users USING btree (username);
 
 
 --
--- Name: mcp_services trigger_mcp_services_updated_at; Type: TRIGGER; Schema: public
+-- Name: auth_tokens fk_auth_tokens_user; Type: FK CONSTRAINT; Schema: public
 --
 
-CREATE TRIGGER trigger_mcp_services_updated_at BEFORE UPDATE ON public.mcp_services FOR EACH ROW EXECUTE FUNCTION public.update_mcp_services_updated_at();
+ALTER TABLE ONLY public.auth_tokens
+    ADD CONSTRAINT fk_auth_tokens_user FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: users fk_users_tenant; Type: FK CONSTRAINT; Schema: public
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
+-- Name: resource_access_grants resource_access_grants_resource_id_fkey; Type: FK CONSTRAINT; Schema: public
+--
+
+ALTER TABLE ONLY public.resource_access_grants
+    ADD CONSTRAINT resource_access_grants_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE CASCADE;
+
+
+--
+-- Name: resource_bindings resource_bindings_resource_id_fkey; Type: FK CONSTRAINT; Schema: public
+--
+
+ALTER TABLE ONLY public.resource_bindings
+    ADD CONSTRAINT resource_bindings_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sync_logs sync_logs_data_source_id_fkey; Type: FK CONSTRAINT; Schema: public
+--
+
+ALTER TABLE ONLY public.sync_logs
+    ADD CONSTRAINT sync_logs_data_source_id_fkey FOREIGN KEY (data_source_id) REFERENCES public.data_sources(id) ON DELETE CASCADE;
+
+
 
 CREATE FUNCTION public.set_chunk_search_title() RETURNS trigger
     LANGUAGE plpgsql AS $$
@@ -2988,54 +1671,6 @@ CREATE TRIGGER sync_knowledge_search_title
 
 
 --
--- Name: auth_tokens fk_auth_tokens_user; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.auth_tokens
-    ADD CONSTRAINT fk_auth_tokens_user FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-
---
--- Name: users fk_users_tenant; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: mcp_tool_approvals mcp_tool_approvals_service_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.mcp_tool_approvals
-    ADD CONSTRAINT mcp_tool_approvals_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.mcp_services(id) ON DELETE CASCADE;
-
-
---
--- Name: resource_access_grants resource_access_grants_resource_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.resource_access_grants
-    ADD CONSTRAINT resource_access_grants_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE CASCADE;
-
-
---
--- Name: resource_bindings resource_bindings_resource_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.resource_bindings
-    ADD CONSTRAINT resource_bindings_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE CASCADE;
-
-
---
--- Name: sync_logs sync_logs_data_source_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.sync_logs
-    ADD CONSTRAINT sync_logs_data_source_id_fkey FOREIGN KEY (data_source_id) REFERENCES public.data_sources(id) ON DELETE CASCADE;
-
-
---
 -- Name: tenant_api_keys tenant_api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public
 --
 
@@ -3047,13 +1682,418 @@ ALTER TABLE ONLY public.tenant_api_keys
 SELECT pg_catalog.setval('public.chunks_seq_id_seq', 100000000, false);
 SELECT pg_catalog.setval('public.embeddings_id_seq', 1, false);
 SELECT pg_catalog.setval('public.knowledge_processing_spans_id_seq', 1, false);
-SELECT pg_catalog.setval('public.knowledge_tags_seq_id_seq', 10000000, false);
 SELECT pg_catalog.setval('public.system_settings_id_seq', 1, false);
 SELECT pg_catalog.setval('public.task_dead_letters_id_seq', 1, false);
 SELECT pg_catalog.setval('public.task_pending_ops_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenant_api_keys_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenants_id_seq', 10000, false);
 
-CREATE INDEX idx_knowledge_bases_pinned ON public.knowledge_bases (tenant_id, is_pinned DESC, pinned_at DESC, created_at DESC);
+
+CREATE INDEX idx_entity_aliases_entity ON public.entity_aliases USING btree (tenant_id, entity_id);
+
+
+-- Entities retain one identity within the personal space.
+ALTER TABLE public.entities ADD CONSTRAINT uq_entities_tenant_id UNIQUE (tenant_id, id);
+ALTER TABLE public.knowledges ADD CONSTRAINT uq_knowledges_tenant_id UNIQUE (tenant_id, id);
+CREATE TABLE public.knowledge_entities (
+    tenant_id bigint NOT NULL,
+    knowledge_id character varying(36) NOT NULL,
+    entity_id character varying(36) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_knowledge_entities_pair UNIQUE (knowledge_id, entity_id),
+    FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.entities (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_knowledge_entities_entity ON public.knowledge_entities (tenant_id, entity_id, knowledge_id);
+
+CREATE TABLE public.topics (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    name character varying(255) NOT NULL,
+    description text DEFAULT '' NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_topics_tenant_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_topics_tenant_name UNIQUE (tenant_id, name)
+);
+CREATE TABLE public.knowledge_topics (
+    tenant_id bigint NOT NULL,
+    knowledge_id character varying(36) NOT NULL,
+    topic_id character varying(36) NOT NULL,
+    source character varying(8) DEFAULT 'model' NOT NULL CHECK (source IN ('model','user')),
+    is_historical boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_knowledge_topics_pair UNIQUE (knowledge_id, topic_id),
+    FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, topic_id) REFERENCES public.topics (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_knowledge_topics_topic ON public.knowledge_topics (tenant_id, topic_id, knowledge_id);
+
+ALTER TABLE public.knowledges ADD COLUMN follow_ready_at timestamp with time zone;
+
+-- Capture qualification transitions in every processing and review write path.
+CREATE FUNCTION public.set_follow_ready_at() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE eligible boolean; was_eligible boolean := false;
+BEGIN
+    eligible := NEW.deleted_at IS NULL AND NEW.source_kind='article'
+        AND NEW.parse_status='completed' AND NEW.enable_status='enabled'
+        AND NEW.processing_review_status<>'pending'
+        AND COALESCE(NEW.metadata #>> '{intake,decision}','approved')='approved';
+    IF TG_OP='UPDATE' THEN
+        was_eligible := OLD.deleted_at IS NULL AND OLD.source_kind='article'
+            AND OLD.parse_status='completed' AND OLD.enable_status='enabled'
+            AND OLD.processing_review_status<>'pending'
+            AND COALESCE(OLD.metadata #>> '{intake,decision}','approved')='approved';
+        NEW.follow_ready_at := OLD.follow_ready_at;
+    END IF;
+    IF eligible AND NOT was_eligible THEN
+        NEW.follow_ready_at := clock_timestamp();
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER set_follow_ready_at BEFORE INSERT OR UPDATE OF
+    parse_status,enable_status,processing_review_status,metadata,source_kind,deleted_at
+    ON public.knowledges FOR EACH ROW EXECUTE FUNCTION public.set_follow_ready_at();
+
+CREATE TABLE public.follows (
+    tenant_id bigint NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    target_type character varying(8) NOT NULL CHECK (target_type IN ('entity', 'topic')),
+    target_id character varying(36) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    entity_id character varying(36) GENERATED ALWAYS AS (CASE WHEN target_type = 'entity' THEN target_id END) STORED,
+    topic_id character varying(36) GENERATED ALWAYS AS (CASE WHEN target_type = 'topic' THEN target_id END) STORED,
+    PRIMARY KEY (tenant_id, target_type, target_id),
+    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.entities(tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, topic_id) REFERENCES public.topics(tenant_id, id) ON DELETE CASCADE
+);
+CREATE TABLE public.follow_feed_states (
+    tenant_id bigint PRIMARY KEY REFERENCES public.tenants(id) ON DELETE CASCADE,
+    last_viewed_at timestamp with time zone NOT NULL
+);
+CREATE INDEX idx_knowledges_follow_feed ON public.knowledges (tenant_id, created_at DESC, id)
+WHERE deleted_at IS NULL AND source_kind = 'article' AND parse_status = 'completed'
+    AND enable_status = 'enabled' AND processing_review_status <> 'pending'
+    AND COALESCE(metadata #>> '{intake,decision}', 'approved') = 'approved';
+
+ALTER TABLE public.knowledges ADD COLUMN content_type_corrected boolean DEFAULT false NOT NULL;
+CREATE TABLE public.operation_logs (
+    id character varying(36) PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    actor text NOT NULL,
+    operation_type character varying(32) NOT NULL,
+    object_id text NOT NULL,
+    before_value jsonb NOT NULL,
+    after_value jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_operation_logs_time ON public.operation_logs (tenant_id, created_at DESC, id DESC);
+CREATE INDEX idx_operation_logs_type ON public.operation_logs (tenant_id, operation_type, created_at DESC, id DESC);
+
+CREATE TABLE public.topic_backfill_jobs (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    topic_id character varying(36) NOT NULL,
+    topic_name character varying(255) NOT NULL,
+    topic_description text DEFAULT '' NOT NULL,
+    status character varying(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending','running','completed','failed','cancelled')),
+    total integer DEFAULT 0 NOT NULL CHECK (total >= 0),
+    processed integer DEFAULT 0 NOT NULL CHECK (processed >= 0),
+    failed_articles integer DEFAULT 0 NOT NULL CHECK (failed_articles >= 0),
+    failed_batches integer DEFAULT 0 NOT NULL CHECK (failed_batches >= 0),
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    FOREIGN KEY (tenant_id,topic_id) REFERENCES public.topics(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX idx_topic_backfill_jobs_topic ON public.topic_backfill_jobs(tenant_id,topic_id,created_at DESC);
+CREATE INDEX idx_topic_backfill_jobs_pending ON public.topic_backfill_jobs(status,created_at) WHERE status IN ('pending','running');
+
+CREATE TABLE public.topic_backfill_batches (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    job_id character varying(36) NOT NULL REFERENCES public.topic_backfill_jobs(id) ON DELETE CASCADE,
+    ordinal integer NOT NULL CHECK (ordinal > 0),
+    knowledge_ids jsonb NOT NULL CHECK (jsonb_typeof(knowledge_ids) = 'array'),
+    article_count integer NOT NULL CHECK (article_count > 0),
+    status character varying(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending','running','completed','failed')),
+    attempts integer DEFAULT 0 NOT NULL CHECK (attempts >= 0),
+    error text DEFAULT '' NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE (job_id,ordinal)
+);
+CREATE INDEX idx_topic_backfill_batches_pending ON public.topic_backfill_batches(job_id,status,ordinal);
+
+CREATE TABLE public.article_embeddings (
+    knowledge_id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    knowledge_base_id character varying(36) NOT NULL,
+    model_id character varying(64) NOT NULL,
+    dimension integer NOT NULL CHECK (dimension > 0),
+    embedding public.halfvec NOT NULL,
+    content_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CHECK (public.vector_dims(embedding) = dimension),
+    FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX article_embeddings_tenant_model ON public.article_embeddings (tenant_id, model_id, dimension);
+CREATE INDEX article_embeddings_embedding_idx_798 ON public.article_embeddings USING hnsw
+    (((embedding)::public.halfvec(798)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 798;
+CREATE INDEX article_embeddings_embedding_idx_1024 ON public.article_embeddings USING hnsw
+    (((embedding)::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 1024;
+CREATE INDEX article_embeddings_embedding_idx_3584 ON public.article_embeddings USING hnsw
+    (((embedding)::public.halfvec(3584)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 3584;
+
+CREATE TABLE public.image_embeddings (
+    knowledge_id character varying(36) NOT NULL,
+    tenant_id bigint NOT NULL,
+    knowledge_base_id character varying(36) NOT NULL,
+    attachment_path text NOT NULL,
+    model_id character varying(64) NOT NULL,
+    dimension integer NOT NULL CHECK (dimension > 0),
+    embedding public.halfvec NOT NULL,
+    content_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (knowledge_id, attachment_path),
+    CHECK (public.vector_dims(embedding) = dimension),
+    FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX image_embeddings_tenant_model ON public.image_embeddings (tenant_id, model_id, dimension);
+CREATE INDEX image_embeddings_embedding_idx_512 ON public.image_embeddings USING hnsw
+    (((embedding)::public.halfvec(512)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 512;
+CREATE INDEX image_embeddings_embedding_idx_768 ON public.image_embeddings USING hnsw
+    (((embedding)::public.halfvec(768)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 768;
+CREATE INDEX image_embeddings_embedding_idx_1024 ON public.image_embeddings USING hnsw
+    (((embedding)::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 1024;
+CREATE TABLE public.embedding_rebuild_runs (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    status character varying(32) NOT NULL CHECK (status IN ('pending','running','paused','completed','completed_with_errors','failed')),
+    model_id character varying(64) NOT NULL,
+    model_name text NOT NULL DEFAULT '',
+    dimension integer NOT NULL CHECK (dimension > 0),
+    profile_hash character varying(64) NOT NULL,
+    total_count bigint NOT NULL DEFAULT 0 CHECK (total_count >= 0),
+    completed_count bigint NOT NULL DEFAULT 0 CHECK (completed_count >= 0),
+    failed_count bigint NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+    error text NOT NULL DEFAULT '',
+    attempt_id character varying(36) NOT NULL DEFAULT '',
+    lease_until timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    CHECK (completed_count + failed_count <= total_count)
+);
+CREATE INDEX idx_embedding_rebuild_runs_latest ON public.embedding_rebuild_runs(tenant_id,created_at DESC);
+CREATE UNIQUE INDEX idx_embedding_rebuild_runs_active ON public.embedding_rebuild_runs(tenant_id) WHERE status IN ('pending','running','paused');
+
+CREATE TABLE public.embedding_rebuild_items (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    run_id character varying(36) NOT NULL REFERENCES public.embedding_rebuild_runs(id) ON DELETE CASCADE,
+    kind character varying(16) NOT NULL CHECK (kind IN ('article_chunk','article','image','mine_chunk','report_chunk','entity')),
+    source_id character varying(36) NOT NULL,
+    attachment_path text NOT NULL DEFAULT '',
+    status character varying(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','completed','failed')),
+    attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    error text NOT NULL DEFAULT '',
+    created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (run_id,kind,source_id,attachment_path)
+);
+CREATE INDEX idx_embedding_rebuild_items_pending ON public.embedding_rebuild_items(run_id,status,kind,source_id);
+
+
+CREATE INDEX idx_knowledges_search_published_at ON public.knowledges (tenant_id, search_published_at);
+
+-- Only explicit source dates enter the search range. Never use collected_at.
+CREATE FUNCTION public.search_published_at(value text) RETURNS timestamp with time zone
+    LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN
+    IF value IS NULL OR value !~ '^\d{4}-\d{2}-\d{2}($|T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$)' THEN
+        RETURN NULL;
+    END IF;
+    IF length(value) = 10 THEN
+        RETURN (value::date)::timestamp AT TIME ZONE 'UTC';
+    END IF;
+    RETURN value::timestamp with time zone;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.build_knowledge_search_text(article_id text, owner_id bigint,
+    article_title text, article_description text, summary jsonb, meta jsonb) RETURNS text
+    LANGUAGE sql STABLE AS $$
+    SELECT concat_ws(E'\n', article_title,
+        CASE WHEN jsonb_typeof(meta -> 'intake') = 'object' THEN meta #>> '{intake,source_info,publisher}' ELSE meta ->> 'publisher' END,
+        CASE WHEN jsonb_typeof(meta -> 'intake') = 'object' THEN meta #>> '{intake,source_info,author}' ELSE meta ->> 'author' END,
+        article_description, summary ->> 'overview', summary ->> 'points', summary ->> 'key_terms',
+        (SELECT string_agg(DISTINCT names.name, E'\n' ORDER BY names.name) FROM (
+            SELECT e.canonical_name AS name
+            FROM public.knowledge_entities ke JOIN public.entities e
+                ON e.id=ke.entity_id AND e.tenant_id=ke.tenant_id
+            WHERE ke.knowledge_id=article_id AND ke.tenant_id=owner_id
+            UNION ALL
+            SELECT ea.alias AS name
+            FROM public.knowledge_entities ke JOIN public.entity_aliases ea
+                ON ea.entity_id=ke.entity_id AND ea.tenant_id=ke.tenant_id
+            WHERE ke.knowledge_id=article_id AND ke.tenant_id=owner_id
+        ) names),
+        (SELECT string_agg(DISTINCT t.name, E'\n' ORDER BY t.name)
+            FROM public.knowledge_topics kt JOIN public.topics t ON t.id=kt.topic_id AND t.tenant_id=kt.tenant_id
+            WHERE kt.knowledge_id=article_id AND kt.tenant_id=owner_id));
+$$;
+
+CREATE FUNCTION public.set_knowledge_search_header() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.search_text := public.build_knowledge_search_text(NEW.id, NEW.tenant_id,
+        NEW.title, NEW.description, NEW.structured_summary, NEW.metadata);
+    NEW.search_published_at := CASE WHEN NEW.source_kind = 'article'
+        THEN public.search_published_at(CASE WHEN jsonb_typeof(NEW.metadata -> 'intake') = 'object'
+            THEN NEW.metadata #>> '{intake,source_info,published_at}' ELSE NEW.metadata ->> 'published_at' END)
+        ELSE NULL END;
+    IF TG_OP = 'UPDATE' AND (NEW.deleted_at IS NOT NULL OR NEW.source_kind <> 'article'
+        OR NEW.title IS DISTINCT FROM OLD.title OR NEW.structured_summary IS DISTINCT FROM OLD.structured_summary) THEN
+        DELETE FROM public.article_embeddings WHERE tenant_id=NEW.tenant_id AND knowledge_id=NEW.id;
+    END IF;
+	IF TG_OP = 'UPDATE' AND (NEW.deleted_at IS NOT NULL OR NEW.source_kind <> 'article' OR NEW.processing_mode <> 'full') THEN
+		DELETE FROM public.image_embeddings WHERE tenant_id=NEW.tenant_id AND knowledge_id=NEW.id;
+	END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION public.refresh_knowledge_search_text(owner_id bigint, article_id text) RETURNS void
+    LANGUAGE sql AS $$
+    UPDATE public.knowledges k
+    SET search_text=public.build_knowledge_search_text(k.id, k.tenant_id, k.title, k.description, k.structured_summary, k.metadata)
+    WHERE k.id=article_id AND k.tenant_id=owner_id;
+$$;
+
+CREATE FUNCTION public.sync_article_search_links() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        PERFORM public.refresh_knowledge_search_text(OLD.tenant_id, OLD.knowledge_id);
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+        PERFORM public.refresh_knowledge_search_text(NEW.tenant_id, NEW.knowledge_id);
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.sync_article_search_entity() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE link record;
+BEGIN
+    FOR link IN SELECT DISTINCT ke.tenant_id, ke.knowledge_id FROM public.knowledge_entities ke
+        WHERE (TG_OP <> 'INSERT' AND ke.tenant_id=OLD.tenant_id AND ke.entity_id=OLD.id)
+           OR (TG_OP <> 'DELETE' AND ke.tenant_id=NEW.tenant_id AND ke.entity_id=NEW.id)
+    LOOP
+        PERFORM public.refresh_knowledge_search_text(link.tenant_id, link.knowledge_id);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.sync_article_search_alias() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE link record;
+BEGIN
+    FOR link IN SELECT DISTINCT ke.tenant_id, ke.knowledge_id FROM public.knowledge_entities ke
+        WHERE (TG_OP <> 'INSERT' AND ke.tenant_id=OLD.tenant_id AND ke.entity_id=OLD.entity_id)
+           OR (TG_OP <> 'DELETE' AND ke.tenant_id=NEW.tenant_id AND ke.entity_id=NEW.entity_id)
+    LOOP
+        PERFORM public.refresh_knowledge_search_text(link.tenant_id, link.knowledge_id);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.sync_article_search_topic() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE link record;
+BEGIN
+    FOR link IN SELECT DISTINCT kt.tenant_id, kt.knowledge_id FROM public.knowledge_topics kt
+        WHERE (TG_OP <> 'INSERT' AND kt.tenant_id=OLD.tenant_id AND kt.topic_id=OLD.id)
+           OR (TG_OP <> 'DELETE' AND kt.tenant_id=NEW.tenant_id AND kt.topic_id=NEW.id)
+    LOOP
+        PERFORM public.refresh_knowledge_search_text(link.tenant_id, link.knowledge_id);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER set_knowledge_search_header BEFORE INSERT OR UPDATE OF
+    title, description, structured_summary, metadata, source_kind, processing_mode, deleted_at ON public.knowledges
+    FOR EACH ROW EXECUTE FUNCTION public.set_knowledge_search_header();
+CREATE TRIGGER sync_article_search_entities AFTER INSERT OR UPDATE OR DELETE ON public.knowledge_entities
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_links();
+CREATE TRIGGER sync_article_search_topics AFTER INSERT OR UPDATE OR DELETE ON public.knowledge_topics
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_links();
+CREATE TRIGGER sync_article_search_entity AFTER INSERT OR UPDATE OR DELETE ON public.entities
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_entity();
+CREATE TRIGGER sync_article_search_alias AFTER INSERT OR UPDATE OR DELETE ON public.entity_aliases
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_alias();
+CREATE TRIGGER sync_article_search_topic AFTER INSERT OR UPDATE OR DELETE ON public.topics
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_topic();
+
+
+CREATE UNIQUE INDEX idx_knowledge_bases_active_tenant ON public.knowledge_bases (tenant_id) WHERE deleted_at IS NULL;
 
 COMMIT;
+
+CREATE TABLE public.chatgpt_hosts (
+ id integer PRIMARY KEY CHECK (id = 1), ext_agent_host_id text NOT NULL UNIQUE,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.chatgpt_accounts (
+ id uuid PRIMARY KEY, client_id text NOT NULL UNIQUE, issuer text NOT NULL, subject text NOT NULL,
+ email text NOT NULL DEFAULT '', credentials text NOT NULL DEFAULT '', scopes text NOT NULL DEFAULT '',
+ expires_at timestamptz, earliest_refresh_at timestamptz,
+ status text NOT NULL DEFAULT 'signed_out' CHECK (status IN ('connected','signed_out','needs_login')),
+ last_error text NOT NULL DEFAULT '', welcome_acknowledged boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.chatgpt_login_attempts (
+ state text PRIMARY KEY, nonce text NOT NULL, verifier text NOT NULL,
+ callback_url text NOT NULL, client_id text NOT NULL,
+ account_id uuid REFERENCES public.chatgpt_accounts(id), expires_at timestamptz NOT NULL
+);
+CREATE TABLE public.chatgpt_policy (
+ id integer PRIMARY KEY CHECK (id = 1), daily_limit integer CHECK (daily_limit > 0),
+ daily_used integer NOT NULL DEFAULT 0 CHECK (daily_used >= 0), day text NOT NULL,
+ paused boolean NOT NULL DEFAULT false, reason text NOT NULL DEFAULT '', retry_at timestamptz,
+ fallback_model_id varchar(64) NOT NULL DEFAULT '', updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.topic_backfill_batches ADD COLUMN retry_at timestamptz;
+
+-- Background jobs share PostgreSQL transactions with their business records.
+CREATE TABLE public.task_jobs (
+ id text PRIMARY KEY, task_type text NOT NULL, queue text NOT NULL,
+ payload jsonb NOT NULL DEFAULT '{}'::jsonb, headers jsonb NOT NULL DEFAULT '{}'::jsonb,
+ state text NOT NULL CHECK (state IN ('pending','active','scheduled','retry','archived','completed')),
+ max_retry integer NOT NULL DEFAULT 25 CHECK (max_retry >= 0),
+ retried integer NOT NULL DEFAULT 0 CHECK (retried >= 0), fail_count integer NOT NULL DEFAULT 0,
+ timeout_ns bigint NOT NULL DEFAULT 1800000000000 CHECK (timeout_ns >= 0),
+ retention_ns bigint NOT NULL DEFAULT 0 CHECK (retention_ns >= 0), deadline timestamptz,
+ group_name text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(), process_at timestamptz NOT NULL DEFAULT now(),
+ started_at timestamptz, completed_at timestamptz, last_failed_at timestamptz,
+ last_error text NOT NULL DEFAULT '', lease_until timestamptz,
+ claim_token text NOT NULL DEFAULT '', worker_pool text NOT NULL DEFAULT '',
+ cancel_requested boolean NOT NULL DEFAULT false
+);
+CREATE INDEX task_jobs_claim ON public.task_jobs(queue,process_at,created_at,id)
+ WHERE state IN ('pending','scheduled','retry');
+CREATE INDEX task_jobs_runtime ON public.task_jobs(queue,state,created_at,id);
+CREATE INDEX task_jobs_knowledge ON public.task_jobs((payload->>'knowledge_id'))
+ WHERE state IN ('pending','active','scheduled','retry');
+CREATE INDEX task_jobs_leases ON public.task_jobs(lease_until) WHERE state='active';
+CREATE TABLE public.task_queue_counters (
+ queue text NOT NULL, day date NOT NULL, processed bigint NOT NULL DEFAULT 0,
+ failed bigint NOT NULL DEFAULT 0, PRIMARY KEY(queue,day)
+);

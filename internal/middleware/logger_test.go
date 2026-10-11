@@ -77,3 +77,11 @@ func TestSanitizeQuery(t *testing.T) {
 		t.Fatalf("sanitizeQuery() = %q, want %q", got, want)
 	}
 }
+
+func TestSanitizeQueryOmitsOAuthNonceVerifierAndIDTokenHint(t *testing.T) {
+	got := sanitizeQuery("nonce=secret-nonce&code_verifier=secret-verifier&id_token_hint=secret-id&state=secret-state&account_id=safe-account")
+	want := "account_id=safe-account&code_verifier=%2A%2A%2A&id_token_hint=%2A%2A%2A&nonce=%2A%2A%2A&state=%2A%2A%2A"
+	if got != want {
+		t.Fatalf("sanitizeQuery() = %q, want %q", got, want)
+	}
+}

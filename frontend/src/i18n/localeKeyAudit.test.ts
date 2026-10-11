@@ -93,7 +93,6 @@ const PARSER_ENGINE_NAMES = [
 /** Worker pools / queues use dynamic te() paths in RuntimeQueues.vue; keep in sync with internal/types/task.go. */
 const RUNTIME_WORKER_POOL_NAMES = [
   'core',
-  'postprocess',
   'enrichment',
   'maintenance',
   'shared',
@@ -101,31 +100,21 @@ const RUNTIME_WORKER_POOL_NAMES = [
 
 const RUNTIME_QUEUE_NAMES = [
   'default',
-  'chat_attachment',
-  'postprocess',
-  'summary',
   'sync',
   'low',
-  'multimodal',
-  'context',
-  'question',
+  'entity',
 ] as const
 
 const RUNTIME_TASK_TYPE_KEYS = [
   'documentProcess',
   'manualProcess',
-  'temporaryDocumentProcess',
-  'postProcess',
-  'summary',
-  'tableSummary',
-  'question',
-  'multimodal',
   'sync',
   'batchReparse',
   'batchDelete',
-  'move',
   'indexDelete',
-  'kbDelete',
+  'entityNameEmbeddingRebuild',
+  'embeddingRebuild',
+  'topicBackfill',
 ] as const
 
 test('runtime queue worker pool and queue labels exist in every locale', () => {

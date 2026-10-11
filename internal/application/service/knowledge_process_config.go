@@ -15,10 +15,7 @@ func normalizeParserFileType(fileType string) string {
 // ResolveProcessConfig merges KB defaults with per-upload overrides for the parse pipeline.
 func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgeProcessOverrides) types.EffectiveProcessConfig {
 	eff := types.EffectiveProcessConfig{
-		ChunkingConfig:           kb.ChunkingConfig,
-		EnableMultimodel:         kb.IsMultimodalEnabled(),
-		VLMConfig:                kb.VLMConfig,
-		QuestionGenerationConfig: defaultQuestionGenerationConfig(kb),
+		ChunkingConfig: kb.ChunkingConfig,
 	}
 	if overrides == nil {
 		return eff
@@ -29,26 +26,6 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgePro
 	}
 	if len(overrides.ParserEngineRules) > 0 {
 		eff.ChunkingConfig.ParserEngineRules = overrides.ParserEngineRules
-	}
-	if overrides.EnableMultimodel != nil {
-		eff.EnableMultimodel = *overrides.EnableMultimodel
-	}
-	if overrides.VLMConfig != nil {
-		base := eff.VLMConfig
-		eff.VLMConfig = *overrides.VLMConfig
-		if eff.VLMConfig.DescriptionLanguage == "" {
-			eff.VLMConfig.DescriptionLanguage = base.DescriptionLanguage
-		}
-		if eff.VLMConfig.CustomInstructions == "" {
-			eff.VLMConfig.CustomInstructions = base.CustomInstructions
-		}
-	}
-	if overrides.QuestionGenerationConfig != nil {
-		base := eff.QuestionGenerationConfig
-		eff.QuestionGenerationConfig = *overrides.QuestionGenerationConfig
-		if eff.QuestionGenerationConfig.CustomInstructions == "" {
-			eff.QuestionGenerationConfig.CustomInstructions = base.CustomInstructions
-		}
 	}
 	return eff
 }
@@ -69,9 +46,6 @@ func resolveFileImportProcessConfig(
 	}
 
 	eff := ResolveProcessConfig(kb, processOverrides)
-	if enableMultimodel != nil && (processOverrides == nil || processOverrides.EnableMultimodel == nil) {
-		eff.EnableMultimodel = *enableMultimodel
-	}
 
 	if processOverrides != nil {
 		if err := ValidateProcessOverrides(ctx, kb, processOverrides, []string{fileType}); err != nil {
@@ -79,9 +53,6 @@ func resolveFileImportProcessConfig(
 		}
 	}
 
-	if IsImageType(fileType) && !eff.VLMConfig.IsEnabled() {
-		eff.EnableMultimodel = false
-	}
 	return eff, nil
 }
 
@@ -115,9 +86,6 @@ func ApplyKnowledgeProcessOverrides(
 	enableMultimodel *bool,
 ) (types.EffectiveProcessConfig, error) {
 	eff := ResolveProcessConfig(kb, processOverrides)
-	if enableMultimodel != nil && (processOverrides == nil || processOverrides.EnableMultimodel == nil) {
-		eff.EnableMultimodel = *enableMultimodel
-	}
 	if processOverrides == nil {
 		return eff, nil
 	}
@@ -147,13 +115,6 @@ func reparseFileTypes(k *types.Knowledge) []string {
 		return nil
 	}
 	return []string{ft}
-}
-
-func defaultQuestionGenerationConfig(kb *types.KnowledgeBase) types.QuestionGenerationConfig {
-	if kb == nil || kb.QuestionGenerationConfig == nil {
-		return types.QuestionGenerationConfig{}
-	}
-	return *kb.QuestionGenerationConfig
 }
 
 func mergeChunkingConfig(base types.ChunkingConfig, override *types.ChunkingConfig) types.ChunkingConfig {

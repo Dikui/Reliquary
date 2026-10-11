@@ -118,25 +118,6 @@ export interface TenantInfo {
   storage_used?: number
   created_at: string
   updated_at: string
-  knowledge_bases?: KnowledgeBaseInfo[]
-}
-
-// 知识库信息接口
-export interface KnowledgeBaseInfo {
-  id: string
-  name: string
-  description: string
-  tenant_id: string
-  // creator_id is the user id of whoever originally created the KB.
-  // KBs created before that migration backfilled the column.
-  creator_id?: string
-  // creator_name 由后端 list 接口批量回填（username 优先，退化到 email），
-  // 仅用于列表卡片来源徽章；缺失代表无法解析（已删除 / 老数据）。
-  creator_name?: string
-  created_at: string
-  updated_at: string
-  document_count?: number
-  chunk_count?: number
 }
 
 // 模型信息接口
@@ -227,7 +208,7 @@ export async function getCurrentTenant(): Promise<{ success: boolean; data?: Ten
 /**
  * 刷新Token
  */
-export async function refreshToken(refreshToken: string): Promise<{ success: boolean; data?: { token: string; refreshToken: string }; message?: string }> {
+export async function refreshToken(refreshToken: string): Promise<{ success: boolean; data?: { token: string; refreshToken: string }; message?: string; status?: number }> {
   try {
     const response: any = await post('/api/v1/auth/refresh', { refreshToken })
     if (response && response.success) {
@@ -250,6 +231,7 @@ export async function refreshToken(refreshToken: string): Promise<{ success: boo
   } catch (error: any) {
     return {
       success: false,
+      status: error.status,
       message: error.message || t('error.auth.refreshTokenFailed')
     }
   }

@@ -20,7 +20,7 @@ test('counts skipped stages when determining the current stage', () => {
 test('counts skipped stages in the completed stage total', () => {
   const stagesStatDisplay = source.slice(
     source.indexOf('const stagesStatDisplay'),
-    source.indexOf('const postprocessTaskStats'),
+    source.indexOf('const headMetaParts'),
   )
 
   assert.match(stagesStatDisplay, /status === 'done' \|\| s\.status === 'skipped'/)

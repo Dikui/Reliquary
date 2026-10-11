@@ -149,7 +149,7 @@ const drawerVisible = computed({
 
 // ---------- width state ----------
 // Storage key derives from the drawer title so different drawers (model
-// model editor vs MCP service vs parser provider) get independent widths.
+// model editor and parser provider) get independent widths.
 // Callers can override via the `storageKey` prop when titles collide.
 const resolvedStorageKey = computed(
   () => props.storageKey || `setting-drawer:width:${props.title || 'default'}`

@@ -9,11 +9,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"reliquary/internal/application/service"
 	"reliquary/internal/errors"
 	"reliquary/internal/handler/dto"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenance"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/provider"
 	"reliquary/internal/types"
@@ -25,6 +28,7 @@ import (
 // It implements the necessary methods to create, retrieve, update, and delete models
 type ModelHandler struct {
 	service interfaces.ModelService
+	db      *gorm.DB
 }
 
 // NewModelHandler creates a new instance of ModelHandler
@@ -35,6 +39,10 @@ type ModelHandler struct {
 // Returns a pointer to the newly created ModelHandler
 func NewModelHandler(service interfaces.ModelService) *ModelHandler {
 	return &ModelHandler{service: service}
+}
+
+func NewModelHandlerWithMaintenance(service interfaces.ModelService, db *gorm.DB) *ModelHandler {
+	return &ModelHandler{service: service, db: db}
 }
 
 // Per-response redaction/stripping for Model now lives in
@@ -434,12 +442,28 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 		observations["thinking_control"] = thinkingControl
 		observations["thinking_parameter_sent"] = opts.Thinking != nil && thinkingControl != "none"
 
-		stream, callErr := instance.ChatStream(ctx, messages, chatOpts)
-		if callErr != nil {
-			writeModelDebugResult(c, started, requestPreview, nil, callErr, observations)
-			return
+		var resp *modelDebugChatStreamResponse
+		probe := func() error {
+			stream, err := instance.ChatStream(ctx, messages, chatOpts)
+			if err != nil {
+				return err
+			}
+			resp, err = consumeModelDebugChatStream(stream)
+			return err
 		}
-		resp, callErr := consumeModelDebugChatStream(stream)
+		audit := false
+		if model.Source == types.ModelSourceChatGPT && h.db != nil && h.db.Migrator().HasTable("maintenance_state") {
+			audit, callErr = maintenanceops.SnapshotPaused(ctx, h.db)
+			if callErr != nil {
+				writeModelDebugResult(c, started, requestPreview, nil, callErr, observations)
+				return
+			}
+		}
+		if audit {
+			callErr = maintenance.WithChatGPTPolicyProbeAudit(ctx, h.db, model.ID, probe)
+		} else {
+			callErr = probe()
+		}
 		if resp != nil {
 			observations["reasoning_returned"] = strings.TrimSpace(resp.ReasoningContent) != ""
 			observations["reasoning_characters"] = len([]rune(resp.ReasoningContent))
@@ -472,19 +496,6 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 		results, callErr := instance.Rerank(ctx, input, documents)
 		observations["result_count"] = len(results)
 		writeModelDebugResult(c, started, requestPreview, results, callErr, observations)
-	case types.ModelTypeVLLM:
-		if len(fileBytes) == 0 {
-			c.Error(errors.NewBadRequestError("image file is required"))
-			return
-		}
-		instance, callErr := h.service.GetVLMModel(ctx, id)
-		if callErr != nil {
-			writeModelDebugResult(c, started, requestPreview, nil, callErr, observations)
-			return
-		}
-		result, callErr := instance.Predict(ctx, [][]byte{fileBytes}, input)
-		observations["answer_characters"] = len([]rune(result))
-		writeModelDebugResult(c, started, requestPreview, result, callErr, observations)
 	default:
 		c.Error(errors.NewBadRequestError("unsupported model type"))
 	}
@@ -663,8 +674,6 @@ func modelTypeToFrontend(mt types.ModelType) string {
 		return "embedding"
 	case types.ModelTypeRerank:
 		return "rerank"
-	case types.ModelTypeVLLM:
-		return "vllm"
 	default:
 		return string(mt)
 	}
@@ -688,8 +697,6 @@ func (h *ModelHandler) ListModelProviders(c *gin.Context) {
 		backendModelType = types.ModelTypeEmbedding
 	case "rerank":
 		backendModelType = types.ModelTypeRerank
-	case "vllm":
-		backendModelType = types.ModelTypeVLLM
 	default:
 		backendModelType = types.ModelType(modelType)
 	}

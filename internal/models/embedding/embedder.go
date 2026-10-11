@@ -31,6 +31,16 @@ type Embedder interface {
 	EmbedderPooler
 }
 
+// ImageEmbedder embeds image bytes represented by a data URI in the same space
+// as Embed and BatchEmbed. Callers must check SupportsImages before using it.
+type ImageEmbedder interface {
+	EmbedImage(context.Context, string) ([]float32, error)
+	SupportsImages() bool
+}
+
+// ProfiledEmbedder identifies the model configuration used to create a client.
+type ProfiledEmbedder interface{ GetProfileHash() string }
+
 type EmbedderPooler interface {
 	BatchEmbedWithPool(ctx context.Context, model Embedder, texts []string) ([][]float32, error)
 }
@@ -47,6 +57,9 @@ type Config struct {
 	TruncatePromptTokens      int               `json:"truncate_prompt_tokens"`
 	Dimensions                int               `json:"dimensions"`
 	SupportsDimensionOverride bool              `json:"supports_dimension_override"`
+	SupportsImages            bool              `json:"supports_images"`
+	MultimodalFormat          string            `json:"multimodal_format"`
+	ProfileHash               string            `json:"-"`
 	ModelID                   string            `json:"model_id"`
 	Provider                  string            `json:"provider"`
 	// MaxConcurrency caps concurrent background calls to this model; 0 falls
@@ -72,6 +85,9 @@ func ConfigFromModel(m *types.Model) Config {
 		ModelName:                 m.Name,
 		Dimensions:                m.Parameters.EmbeddingParameters.Dimension,
 		SupportsDimensionOverride: m.Parameters.EmbeddingParameters.SupportsDimensionOverride,
+		SupportsImages:            m.Parameters.EmbeddingParameters.SupportsImages,
+		MultimodalFormat:          m.Parameters.EmbeddingParameters.MultimodalFormat,
+		ProfileHash:               types.EmbeddingProfileHash(m.ID, m.Parameters.EmbeddingParameters.Dimension, m),
 		TruncatePromptTokens:      m.Parameters.EmbeddingParameters.TruncatePromptTokens,
 		Provider:                  m.Parameters.Provider,
 		MaxConcurrency:            m.Parameters.MaxConcurrency,
@@ -95,6 +111,7 @@ func NewEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 	e = wrapEmbeddingConcurrency(e, config.MaxConcurrency)
 	if w, ok := e.(*concurrencyEmbedder); ok {
 		w.requestsPerMinute = config.RequestsPerMinute
+		w.profileHash = config.ProfileHash
 	}
 	if logger.LLMDebugEnabled() {
 		e = &debugEmbedder{inner: e}
@@ -104,6 +121,14 @@ func NewEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 }
 
 func newEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.OllamaService) (Embedder, error) {
+	if config.SupportsImages {
+		if config.Source != types.ModelSourceRemote {
+			return nil, fmt.Errorf("image embedding requires a remote HTTP model")
+		}
+		if format := strings.TrimSpace(config.MultimodalFormat); format != "" && format != "jina" {
+			return nil, fmt.Errorf("unsupported multimodal embedding format: %s", format)
+		}
+	}
 	switch strings.ToLower(string(config.Source)) {
 	case string(types.ModelSourceLocal):
 		return NewOllamaEmbedder(config.BaseURL,
@@ -125,6 +150,7 @@ func newEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 			return nil, err
 		}
 		embedder.SetCustomHeaders(config.CustomHeaders)
+		embedder.supportsImages = config.SupportsImages
 		return embedder, nil
 	default:
 		return nil, fmt.Errorf("unsupported embedder source: %s", config.Source)

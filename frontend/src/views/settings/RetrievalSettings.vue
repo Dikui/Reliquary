@@ -6,25 +6,6 @@
     </div>
 
     <div class="settings-group">
-      <!-- Rerank Model -->
-      <div class="setting-item">
-        <div class="setting-label">
-          <span>{{ t('retrievalSettings.rerankModelLabel') }} <span class="required-mark">*</span></span>
-        </div>
-        <p class="setting-desc">{{ t('retrievalSettings.rerankModelDescription') }}</p>
-        <p v-if="!localConfig.rerank_model_id" class="setting-desc warning-text">
-          {{ t('retrievalSettings.rerankModelRequired') }}
-        </p>
-        <div class="setting-control-full">
-          <ModelSelector
-            model-type="Rerank"
-            :selected-model-id="localConfig.rerank_model_id"
-
-            @update:selected-model-id="handleModelChange"
-          />
-        </div>
-      </div>
-
       <!-- Embedding Top K -->
       <div class="setting-item">
         <div class="setting-label-row">
@@ -104,6 +85,20 @@
           @change="handleParamChange"
         />
       </div>
+      <div class="setting-item">
+        <div class="setting-label-row"><span>{{ t('retrievalSettings.imageWeightLabel') }}</span></div>
+        <t-input-number v-model="localConfig.rrf_image_weight" :min="0" :max="1" :step="0.05" :decimal-places="2" :aria-label="t('retrievalSettings.imageWeightLabel')" @change="handleParamChange" />
+        <p class="setting-desc">{{ t('retrievalSettings.imageWeightHint') }}</p>
+      </div>
+      <div class="setting-item">
+        <div class="setting-label-row"><span>{{ t('retrievalSettings.similarReportsThresholdLabel') }}</span></div>
+        <t-input-number v-model="localConfig.similar_reports_threshold" :min="0.01" :max="1" :step="0.01" :decimal-places="2" :aria-label="t('retrievalSettings.similarReportsThresholdLabel')" @change="handleParamChange" />
+      </div>
+      <div class="setting-item">
+        <div class="setting-label-row"><span>{{ t('retrievalSettings.similarReportsWindowDaysLabel') }}</span></div>
+        <t-input-number v-model="localConfig.similar_reports_window_days" :min="1" :step="1" :decimal-places="0" :aria-label="t('retrievalSettings.similarReportsWindowDaysLabel')" @change="handleParamChange" />
+        <p class="setting-desc">{{ t('retrievalSettings.similarReportsHint') }}</p>
+      </div>
     </div>
   </div>
 </template>
@@ -112,7 +107,6 @@
 import { reactive, computed, onMounted, nextTick } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import ModelSelector from '@/components/ModelSelector.vue'
 import {
   getTenantRetrievalConfig,
   updateTenantRetrievalConfig,
@@ -126,7 +120,9 @@ const defaultConfig: RetrievalConfig = {
   keyword_threshold: 0.3,
   rerank_top_k: 10,
   rerank_threshold: 0.2,
-  rerank_model_id: '',
+  similar_reports_threshold: 0.85,
+  similar_reports_window_days: 3,
+  rrf_image_weight: 0.2,
 }
 
 const localConfig = reactive<RetrievalConfig>({ ...defaultConfig })
@@ -139,12 +135,17 @@ const loadConfig = async () => {
     if (response.data) {
       const cfg = response.data
       Object.assign(localConfig, {
+        ...(cfg.rrf_k !== undefined ? { rrf_k: cfg.rrf_k } : {}),
+        ...(cfg.rrf_vector_weight !== undefined ? { rrf_vector_weight: cfg.rrf_vector_weight } : {}),
+        ...(cfg.rrf_keyword_weight !== undefined ? { rrf_keyword_weight: cfg.rrf_keyword_weight } : {}),
+        rrf_image_weight: cfg.rrf_image_weight ?? defaultConfig.rrf_image_weight,
         embedding_top_k: cfg.embedding_top_k || defaultConfig.embedding_top_k,
         vector_threshold: cfg.vector_threshold || defaultConfig.vector_threshold,
         keyword_threshold: cfg.keyword_threshold || defaultConfig.keyword_threshold,
         rerank_top_k: cfg.rerank_top_k || defaultConfig.rerank_top_k,
         rerank_threshold: cfg.rerank_threshold ?? defaultConfig.rerank_threshold,
-        rerank_model_id: cfg.rerank_model_id || '',
+        similar_reports_threshold: cfg.similar_reports_threshold > 0 && cfg.similar_reports_threshold <= 1 ? cfg.similar_reports_threshold : defaultConfig.similar_reports_threshold,
+        similar_reports_window_days: cfg.similar_reports_window_days > 0 ? cfg.similar_reports_window_days : defaultConfig.similar_reports_window_days,
       })
       initialConfig = { ...localConfig }
     }
@@ -186,11 +187,6 @@ const debouncedSave = () => {
 }
 
 const handleParamChange = () => debouncedSave()
-const handleModelChange = (modelId: string) => {
-  localConfig.rerank_model_id = modelId
-  debouncedSave()
-}
-
 onMounted(async () => {
   isInitializing = true
   await loadConfig()

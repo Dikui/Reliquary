@@ -1,241 +1,87 @@
-<p align="center">
-  <picture>
-    <img src="./frontend/src/assets/img/reliquary.svg" alt="Reliquary Logo" height="120"/>
-  </picture>
-</p>
+# Reliquary
 
-<p align="center">
-  <picture>
-  </picture>
-</p>
-<p align="center">
-    <a href="https://weknora.weixin.qq.com" target="_blank">
-        <img alt="官方网站" src="https://img.shields.io/badge/官方网站-WeKnora-4e6b99">
-    </a>
-    <a href="https://chatbot.weixin.qq.com" target="_blank">
-        <img alt="微信对话开放平台" src="https://img.shields.io/badge/微信对话开放平台-5ac725">
-    </a>
-    <a href="https://chromewebstore.google.com/detail/jpemjbopikggjlmikmclgbmkhhopjdgd" target="_blank">
-        <img alt="Chrome 插件" src="https://img.shields.io/badge/Chrome 插件-Reliquary-4285F4">
-    </a>
-    <a href="https://github.com/Tencent/WeKnora/blob/main/LICENSE">
-        <img src="https://img.shields.io/badge/License-MIT-ffffff?labelColor=d4eaf7&color=2e6cc4" alt="License">
-    </a>
-</p>
+后台任务与业务数据同存 PostgreSQL，支持事务内入队与崩溃恢复，部署不需要单独的队列服务。详见 [ADR 0010](docs/adr/0010-postgres-task-queue.md)。
 
-<p align="center">
-| <a href="./README.md"><b>English</b></a> | <b>简体中文</b> |
-</p>
+[English](README.md)
 
-<p align="center">
-  <h4 align="center">
+Reliquary 是个人信息组件，负责文章的收集、存储、去重与检索。一个个人空间只有一个知识库。外部 AI 通过收录接口与 MCP 进行综合分析、整理和写报告。
 
-  [项目介绍](#-项目介绍) • [架构设计](#-架构设计) • [核心特性](#-核心特性) • [快速开始](#-快速开始) • [文档](#-文档) • [开发指南](#-开发指南)
+源码底座来自 [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0)，上游提交为 `1edcd54b43606d9079bb36650efe3f68707a79ea`。来源、命名与许可说明见 [UPSTREAM.md](UPSTREAM.md)。
 
-  </h4>
-</p>
+## 功能
 
-# 💡 Reliquary：个人知识库、RAG 问答与 Agent 推理
+| 能力 | 当前行为 |
+| --- | --- |
+| 收集 | 全局 RSS 订阅、上传文件、按网址收录，以及供外部采集器调用的收录接口 |
+| 收录审核 | 订阅内容经过收录审核，未通过的内容保存在待审区，由用户审核通过或丢弃 |
+| 文章处理 | 一次处理调用生成内容类型、统一摘要、实体和用户定义的主题；支持视觉的处理模型可在同次调用中读取正文图片 |
+| 处理方式 | 事件、观点、研究全文保存，保留正文、图片与原始文件；教程、案例、参考保存摘要加链接 |
+| 文件库 | 审核通过的文章生成带表头的 Markdown 文件，`mine/` 保存用户文档，`reports/` 保存整理结果 |
+| 检索 | 全文与向量混合检索，按文章合并结果；可按内容类型、实体、主题、发布时间、星标与来源目录筛选，并折叠相似报道 |
+| 用户判断 | 星标、修正内容类型与主题、合并实体、查看操作日志；新建主题可批量归入历史文章摘要 |
+| 外部 AI | MCP 支持检索、读取文章、收录、待审区处理、星标、实体与主题查询、保存整理结果 |
+| 设置 | 知识库、订阅源、模型、文件库状态、操作日志、API 集成与运行队列 |
 
-## 📌 项目介绍
+正文首次写入后保持不变。PostgreSQL 保存索引、实体档案、主题、审核状态、用户判断与操作日志。文章表头由数据库单向生成，在 Obsidian 中手动修改表头可能被覆盖。用户文档只读并建立索引。
 
-**[Reliquary（维娜拉）](https://weknora.weixin.qq.com)** 是一款开源的、基于大语言模型（LLM）的知识管理框架，专为企业级文档理解、语义检索与智能推理场景打造。
+网页用于管理文章和简单阅读，日常阅读可用 Obsidian 打开文件库。综合分析与写报告由外部 AI 完成。统一术语与架构见 [CONTEXT.md](CONTEXT.md) 和 [ADR 0009](docs/adr/0009-kb-collect-store-retrieve.md)。
 
-框架提供 **RAG 快速问答**、编排知识检索与 MCP 工具的 **ReAct Agent 智能推理**、进程内数据分析以及定时知识报告。树形文件夹、分块编辑与版本历史、RSS 订阅、站点适配器、完整访问 API Key 和模型集成共同支持个人知识管理。数据统一保存在 PostgreSQL 与本地磁盘。
+## 从源码启动
 
-框架支持从 RSS 订阅和站点适配器自动同步知识，覆盖 PDF、Word、图片、Excel、EPUB 等十余种文档格式。对话模型使用 OpenAI 兼容接口、Anthropic 原生接口或本地 Ollama。服务商预设包括 OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama，其他服务可通过通用 OpenAI 兼容选项填写地址使用。Office 文档可由 **anydoc** 在 Go 进程内解析。全流程模块化设计，大模型可灵活配置，检索统一使用 PostgreSQL，存储支持本地磁盘，支持本地与私有云部署，数据完全自主可控。模型用量继续记录在 `model_usage` 表中。
-
-## 📱 功能展示
-
-<table>
-      <tr>
-    <td colspan="2" align="center"><b>💬 智能问答对话</b><br/><img src="./docs/images/qa.png" alt="智能问答对话" width="100%"></td>
-  </tr>
-    <tr>
-    <td width="50%" align="center"><b>✂️ 分块编辑与版本历史</b><br/><img src="./docs/images/kb-chunk-edit.png" alt="分块编辑与版本历史" width="100%"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><b>📁 文件夹树与批量操作</b><br/><img src="./docs/images/kb-document-list.png" alt="知识库文件夹树与批量操作" width="100%"></td>
-  </tr>
-</table>
-
-## 🏗️ 架构设计
-
-上游 v0.8.0 架构参考，当前支持范围见[个人使用说明](docs/personal-use.md)。
-
-![reliquary-architecture.png](./docs/images/architecture.png)
-
-从文档解析、向量化、检索到大模型推理，全流程模块化解耦，组件可灵活替换与扩展。支持本地 / 私有云部署，数据完全自主可控，零门槛 Web UI 快速上手。
-
-## 🧩 功能概览
-
-**智能对话**
-
-| 能力 | 详情 |
-|------|------|
-| 智能推理 | ReACT 渐进式多步推理，自主编排知识检索、MCP 工具与数据分析 |
-| 快速问答 | 基于知识库的 RAG 问答，快速准确地回答问题 |
-| 工具调用 | 内置工具、MCP 工具（无鉴权、API Key 或 Bearer）；支持 `@MCP` 提及以按轮次范围化 Agent 运行时 |
-| 对话策略 | 在线 Prompt 编辑、检索阈值调节、多轮上下文感知、按 Agent 引用输出开关 |
-| 推荐问题 | 对话开始前展示智能体配置的推荐问题，支持预设或自动生成 |
-| 临时附件 | 会话级临时上传图片 / 文档，异步解析后用于一次性问答，支持图片与附件合并限额 |
-| 引用与 RAG 进度 | 对话内引用浮层与引用抽屉、统一 Markdown 渲染、RAG 流水线分阶段进度展示 |
-| 会话管理 | 查看历史会话与消息，支持会话标题内联重命名 |
-
-**知识管理**
-
-| 能力 | 详情 |
-|------|------|
-| 知识库类型 | 文档，支持文件夹导入、URL 导入、多标签管理、在线录入 |
-| 文件夹树 | 文件夹上传保留原始目录结构，侧栏树形浏览、重命名文件夹、把文档重新归档到其他文件夹 |
-| 分块编辑与版本历史 | 在界面直接编辑检索分块，保留逐版本快照，支持 diff 与一键回滚，编辑后自动重建索引；生成问题可增删改与重新生成；支持文档自定义元数据 |
-| 按批次解析配置 | 上传确认对话框或 `process_config` API 覆盖解析引擎、分块、图片多模态（VLM）、问题生成；支持 reparse 时调整配置 |
-| 批量重新解析 | 一次为多篇文档重新排队解析，可携带批次级 `process_config` |
-| 数据源导入 | RSS、Atom、JSON Feed 和站点适配器，支持增量与全量同步 |
-| 文档格式 | PDF / Word / Txt / Markdown / EPUB / 图片 / CSV / Excel / PPT / JSON |
-| 自动打标签 | 解析完成后从知识库已有标签中选择匹配项增量关联，不创建新标签、不覆盖人工标签 |
-| 检索策略 | BM25 稀疏召回 / Dense 稠密召回 知识上下文增强 / 父子分块 / pgvector HNSW 加速（1024 维）/ 多维度索引 |
-| 批量选择与打标签 | 知识库文档列表支持框选（marquee）多选，可批量重新解析、批量打标签（自动预选公共标签） |
-
-**集成与扩展**
-
-| 能力 | 详情 |
-|------|------|
-| 模型预设 | 通用 OpenAI 兼容 / OpenAI / Anthropic / DeepSeek / 阿里云百炼 / 智谱 / 月之暗面 / 硅基流动 / 火山方舟 / OpenRouter / Google Gemini / Ollama |
-| 向量数据库 | PostgreSQL（ParadeDB：pgvector + pg_search）|
-| Embedding | OpenAI 兼容接口与 Ollama；阿里云文本嵌入、智谱、硅基流动使用兼容接口 |
-| 重排 | 通用 `/rerank` 接口与阿里云百炼 |
-| 对象存储 | 本地文件系统|
-| API 集成 | 完整访问 API Key 与 API 集成调试台；`resource_urls=public` 直接返回可加载的文件与图片直链 |
-
-
-**平台能力**
-
-| 能力 | 详情 |
-|------|------|
-| 部署 | Docker Compose，支持私有化离线部署 |
-| 界面 | Web UI / RESTful API |
-| 权限控制 | 唯一用户拥有全部权限，首次注册后关闭注册，API Key 完整访问，本地命令重置密码 |
-| 安全 | API Key 与 MCP / 数据源凭据 AES-256-GCM 静态加密、支持平滑密钥轮换；Redis TLS；防 SSRF HTTP 客户端（覆盖数据源、URL 导入、重定向链等）；密钥响应脱敏 |
-| 可观测性 | `model_usage` 模型用量、文档处理时间线、运行时任务队列与 Worker 池治理 |
-| 任务管理 | MQ 异步任务，分阶段独立 Worker 池治理（core / 后处理 / enrichment / maintenance + 弹性共享池）与按模型后台并发治理；版本升级自动数据库迁移 |
-| 模型管理 | 集中配置，YAML 声明式内置模型配置，知识库级别模型选择，按模型思考模式与 Embedding 维度覆盖，交互式模型调试器，WeKnora Cloud 托管模型与文档解析 |
-
-## 🧩 Chrome 插件
-
-[**Reliquary Chrome 插件**](https://chromewebstore.google.com/detail/jpemjbopikggjlmikmclgbmkhhopjdgd)支持在浏览器中直接将网页内容采集到 Reliquary 知识库。选中文本、图片或整个页面，一键保存为知识条目，无需复制粘贴或手动上传文件。
-
-
-## 🚀 快速开始
-
-### 🛠 环境要求
-
-- [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/)
-- [Git](https://git-scm.com/)
-
-### 📦 安装与启动
+需要 Git、Node.js/npm、Docker 与 Docker Compose。应用镜像从本仓库构建，尚未发布安装包或公共应用镜像。
 
 ```bash
-git clone http://192.168.1.146:3000/dikui/reliquary.git
+git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
-cp .env.example .env   # 按需编辑 .env，详见文件内注释
+cp .env.example .env
+# 配置数据库密码、JWT_SECRET、SYSTEM_AES_KEY 与模型服务地址。
 ./scripts/build_frontend_dist.sh
 docker compose up -d --build
 ```
 
-启动成功后访问 **http://localhost** 即可使用。
+前端构建脚本在正常安装时通过 `npm ci` 安装依赖。启动前需配置可直接阅读的文件库目录及写入权限，见[部署在 Mac mini](docs/personal-use.md#部署在-mac-mini)。
 
-> 如需使用本地 Ollama 模型，请先运行 `ollama serve > /dev/null 2>&1 &`
+默认网页地址为 `http://localhost`，后端 API 地址为 `http://localhost:8080`。首个用户注册后关闭注册，登录用户与有效 API Key 可访问个人空间全部内容。部署在内网使用。
 
-### 🌐 服务地址
+Apple Silicon 可在 macOS 原生运行 Ollama，通过 Metal 运行模型。生成模型支持 Ollama、OpenAI 兼容接口与 Anthropic 原生接口；嵌入与重排按对应支持的接口配置。设置方法与外部接入见[个人使用指南](docs/personal-use.md)。
 
-| 服务 | 地址 |
-|------|------|
-| Web UI | `http://localhost` |
-| 后端 API | `http://localhost:8080` |
+## 备份与迁移
 
-
-
-## 📘 文档
-
-使用说明见[个人使用指南](./docs/personal-use.md)与[知识工作流说明](./docs/知识库融合说明.md)。
-
-常见问题排查：[常见问题排查](./docs/QA.md)
-
-## 🧭 开发指南
-
-### ⚡ 快速开发模式（推荐）
-
-如果你需要频繁修改代码，**不需要每次重新构建 Docker 镜像**！使用快速开发模式：
+暂停应用写入与文件编辑后，一起备份 PostgreSQL、文件库和上传资源。部署配置与加密密钥需另行复制。[迁移指南](docs/personal-use.md#迁移到另一台-mac-mini)说明新 Mac mini 上的恢复步骤、文章与检索核对，以及没有数据库备份时从文件库重建的方法。
 
 ```bash
-# 启动基础设施
+docker compose stop app frontend
+./scripts/backup.sh /path/to/new-backup
+# 在目标机器先启动 PostgreSQL，并创建处于停止状态的 app 容器。
+./scripts/restore.sh /path/to/new-backup
+```
+
+两个脚本都接收备份目录，并使用 `COMPOSE_FILE` 与 `COMPOSE_PROJECT_NAME`。运行 `--help` 查看宿主机目录覆盖选项及目标为空的要求。
+
+旧 WeKnora 或旧 Reliquary 数据库需重新安装。本节迁移只用于当前结构在两台机器之间的搬迁，不升级旧结构。参见[数据库基线重建说明](docs/migration-troubleshooting.md#single-baseline-and-database-rebuild)。
+
+## 开发与验证
+
+```bash
 make dev-start
-
-# 启动后端（新终端）
-make dev-app
-
-# 启动前端（新终端）
-make dev-frontend
+make dev-app       # 在另一终端运行
+make dev-frontend  # 在另一终端运行
 ```
 
-**开发优势：**
-
-- ✅ 前端修改自动热重载（无需重启）
-- ✅ 后端修改快速重启（5-10秒，支持 Air 热重载）
-- ✅ 无需重新构建 Docker 镜像
-- ✅ 支持 IDE 断点调试
-
-**详细文档：** [开发环境快速入门](./docs/开发指南.md)
-
-
-## 🤝 贡献指南
-
-欢迎通过 [Issue](https://github.com/Tencent/WeKnora/issues) 反馈问题或提交 Pull Request。
-
-**流程：** Fork → 新建分支 → 提交更改 → 创建 PR
-
-**规范：** 使用 `gofmt` 格式化代码，遵循 [Conventional Commits](https://www.conventionalcommits.org/) 提交（`feat:` / `fix:` / `docs:` / `test:` / `refactor:`）
-
-### 验证方式
-
-对于范围集中的 PR，优先验证本次改动涉及的文件和包：
+详见[开发指南](docs/开发指南.md)。Issues 与 specs 使用 `.scratch/<feature-slug>/` 内的本地 Markdown，遵循[任务记录约定](docs/agents/issue-tracker.md)。
 
 ```bash
-git fetch origin main
-git diff --check origin/main...HEAD
-golangci-lint run --new-from-rev=origin/main ./...
-go test ./path/to/changed/package -count=1
+go build ./...
+go vet ./...
+go test -count=1 ./...
+cd frontend
+npm run type-check
+npm run build
+npm test
 ```
 
-提交前请对改动过的 Go 文件运行 `gofmt`。对于前端改动，请在 `frontend/` 目录运行相关测试；如果改动涉及 TypeScript 或 Vue 组件，还应运行 `npm run type-check`。
+数据库集成测试通过 `RELIQUARY_TEST_PG_DSN` 指定 PostgreSQL 测试库。修改的 Go 文件使用 `gofmt` 格式化；基线或环境失败需记录对应命令。
 
-维护者使用的全仓验证命令仍然是：
+## 许可证
 
-```bash
-make fmt
-make lint
-make test
-```
-
-`make fmt` 会格式化整个 Go 仓库，因此请仅在工作区干净时运行，并检查产生的 diff。部分全量测试依赖本地基础设施或服务配置。如果全仓检查因无关的基线问题或环境依赖失败，请在 PR 中写明具体命令和错误，同时提供本次改动范围内通过的定向测试。
-
-## 🔒 安全声明
-
-**重要提示：** 从 v0.1.3 版本开始，Reliquary 提供了登录鉴权功能，以增强系统安全性。在生产环境部署时，我们强烈建议：
-
-- 将 Reliquary 服务部署在内网/私有网络环境中，而非公网环境
-- 避免将服务直接暴露在公网上，以防止重要信息泄露风险
-- 为部署环境配置适当的防火墙规则和访问控制
-- 定期更新到最新版本以获取安全补丁和改进
-
-## 👥 贡献者
-
-感谢以下优秀的贡献者们：
-
-[![Contributors](https://contrib.rocks/image?repo=Tencent/WeKnora)](https://github.com/Tencent/WeKnora/graphs/contributors)
-
-## 📄 许可证
-
-本项目基于 [MIT](./LICENSE) 协议发布。
-你可以自由使用、修改和分发本项目代码，但需保留原始版权声明。
+[MIT](LICENSE)。保留仓库内的上游署名和第三方许可。

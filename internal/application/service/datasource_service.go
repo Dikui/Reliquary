@@ -14,10 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hibiken/asynq"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"reliquary/internal/application/repository"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/datasource"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -25,6 +29,7 @@ import (
 
 // DataSourceService implements the DataSourceService interface
 type DataSourceService struct {
+	db                *gorm.DB
 	dsRepo            interfaces.DataSourceRepository
 	syncLogRepo       interfaces.SyncLogRepository
 	knowledgeService  interfaces.KnowledgeService
@@ -33,11 +38,11 @@ type DataSourceService struct {
 	connectorRegistry *datasource.ConnectorRegistry
 	scheduler         *datasource.Scheduler
 	tenantRepo        interfaces.TenantRepository
-	tagService        interfaces.KnowledgeTagService
 }
 
 // NewDataSourceService creates a new data source service
 func NewDataSourceService(
+	db *gorm.DB,
 	dsRepo interfaces.DataSourceRepository,
 	syncLogRepo interfaces.SyncLogRepository,
 	knowledgeService interfaces.KnowledgeService,
@@ -46,10 +51,10 @@ func NewDataSourceService(
 	connectorRegistry *datasource.ConnectorRegistry,
 	scheduler *datasource.Scheduler,
 	tenantRepo interfaces.TenantRepository,
-	tagService interfaces.KnowledgeTagService,
 
 ) interfaces.DataSourceService {
 	return &DataSourceService{
+		db:                db,
 		dsRepo:            dsRepo,
 		syncLogRepo:       syncLogRepo,
 		knowledgeService:  knowledgeService,
@@ -58,7 +63,6 @@ func NewDataSourceService(
 		connectorRegistry: connectorRegistry,
 		scheduler:         scheduler,
 		tenantRepo:        tenantRepo,
-		tagService:        tagService,
 	}
 }
 
@@ -67,15 +71,16 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	if ds == nil {
 		return nil, datasource.ErrDataSourceInvalid
 	}
+	if ds.DefaultContentType != "" && types.NormalizeContentType(ds.DefaultContentType) == "" {
+		return nil, fmt.Errorf("default_content_type must be one of event, opinion, research, tutorial, case, reference")
+	}
+	ds.DefaultContentType = types.NormalizeContentType(ds.DefaultContentType)
 
-	// Validate knowledge base exists
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, ds.KnowledgeBaseID)
-	if err != nil || kb == nil {
+	kb, err := s.kbService.GetKnowledgeBase(ctx)
+	if err != nil || kb == nil || kb.TenantID != ds.TenantID {
 		return nil, datasource.ErrKnowledgeBaseNotFound
 	}
-	if kb.TenantID != ds.TenantID {
-		return nil, datasource.ErrKnowledgeBaseNotFound
-	}
+	ds.KnowledgeBaseID = kb.ID
 
 	// Validate connector type
 	_, err = s.connectorRegistry.Get(ds.Type)
@@ -144,6 +149,10 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	if ds == nil || ds.ID == "" {
 		return nil, datasource.ErrDataSourceInvalid
 	}
+	if ds.DefaultContentType != "" && types.NormalizeContentType(ds.DefaultContentType) == "" {
+		return nil, fmt.Errorf("default_content_type must be one of event, opinion, research, tutorial, case, reference")
+	}
+	ds.DefaultContentType = types.NormalizeContentType(ds.DefaultContentType)
 
 	// Verify data source exists
 	existing, err := s.dsRepo.FindByID(ctx, ds.ID)
@@ -164,6 +173,12 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	if ds.TenantID != existing.TenantID {
 		return nil, datasource.ErrDataSourceInvalid
 	}
+	if ds.Status == "" {
+		ds.Status = existing.Status
+	}
+	if len(ds.Config) == 0 && existing.MaintenanceOriginalStatus() != "" {
+		ds.Config = existing.Config
+	}
 
 	// Credentials NEVER flow through this endpoint — they live behind the
 	// /credentials subresource. Force-preserve the stored credentials map
@@ -174,6 +189,9 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	if len(ds.Config) > 0 {
 		incomingCfg, parseIncErr := ds.ParseConfig()
 		existingCfg, parseExErr := existing.ParseConfig()
+		if existing.MaintenanceOriginalStatus() != "" && (parseIncErr != nil || parseExErr != nil) {
+			return nil, datasource.ErrInvalidConfig
+		}
 		if parseIncErr == nil && parseExErr == nil && incomingCfg != nil {
 			if incomingCfg.HasCredentials() {
 				logger.Warnf(ctx,
@@ -187,7 +205,7 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 				merged.Credentials = nil
 			}
 			merged.StripNonSecretCredentials(ds.Type)
-			if blob, err := merged.ToJSON(); err == nil {
+			if blob, err := dataSourceConfigWithStoredFields(existing.Config, &merged); err == nil {
 				ds.Config = blob
 			}
 			mergedCfg = &merged
@@ -204,7 +222,14 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 		configActuallyChanged = !reflect.DeepEqual(*mergedCfg, *existingParsedCfg)
 	}
 	hasCreds := mergedCfg != nil && mergedCfg.HasConfiguredCredentials(ds.Type)
-	if hasCreds && (ds.Type != existing.Type || configActuallyChanged) {
+	maintenanceErr := checkDataSourceMaintenance(ds)
+	if maintenanceErr != nil && ds.Status == types.DataSourceStatusActive {
+		return nil, maintenanceErr
+	}
+	if existing.MaintenanceOriginalStatus() != "" {
+		maintenanceErr = reconcileDataSourceMaintenance(ds)
+	}
+	if maintenanceErr == nil && hasCreds && (ds.Type != existing.Type || configActuallyChanged) {
 		if err := s.validateDataSourceConfig(ctx, ds); err != nil {
 			return nil, err
 		}
@@ -221,7 +246,7 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	}
 
 	logger.Infof(ctx, "data source updated: id=%s", ds.ID)
-	return ds, nil
+	return ds, maintenanceErr
 }
 
 // UpdateDataSourceCredentials replaces the connector credential map. This is
@@ -248,23 +273,31 @@ func (s *DataSourceService) UpdateDataSourceCredentials(
 	}
 	parsed.Credentials = credentials
 	parsed.StripNonSecretCredentials(existing.Type)
-	blob, err := parsed.ToJSON()
+	blob, err := dataSourceConfigWithStoredFields(existing.Config, parsed)
 	if err != nil {
 		return nil, err
 	}
 	existing.Config = blob
+	maintenanceErr := reconcileDataSourceMaintenance(existing)
 
 	// Run live validation now that the credentials are in place — surfaces
 	// "wrong token" feedback immediately to the user instead of waiting for
 	// the next scheduled sync.
-	if err := s.validateDataSourceConfig(ctx, existing); err != nil {
-		return nil, err
+	if maintenanceErr == nil {
+		if err := s.validateDataSourceConfig(ctx, existing); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.dsRepo.Update(ctx, existing); err != nil {
 		return nil, err
 	}
+	if s.scheduler != nil {
+		if err := s.scheduler.AddOrUpdate(existing); err != nil {
+			logger.Warnf(ctx, "failed to update data source maintenance schedule: id=%s", secutils.SanitizeForLog(id))
+		}
+	}
 	logger.Infof(ctx, "DataSource credentials updated: id=%s", secutils.SanitizeForLog(id))
-	return existing, nil
+	return existing, maintenanceErr
 }
 
 // ClearDataSourceCredentials wipes the connector credential map without
@@ -286,19 +319,21 @@ func (s *DataSourceService) ClearDataSourceCredentials(ctx context.Context, id s
 	}
 	parsed.StripNonSecretCredentials(existing.Type)
 	if !parsed.HasConfiguredCredentials(existing.Type) {
-		blob, err := parsed.ToJSON()
+		blob, err := dataSourceConfigWithStoredFields(existing.Config, parsed)
 		if err != nil {
 			return err
 		}
 		existing.Config = blob
+		_ = reconcileDataSourceMaintenance(existing)
 		return s.dsRepo.Update(ctx, existing)
 	}
 	parsed.Credentials = nil
-	blob, err := parsed.ToJSON()
+	blob, err := dataSourceConfigWithStoredFields(existing.Config, parsed)
 	if err != nil {
 		return err
 	}
 	existing.Config = blob
+	_ = reconcileDataSourceMaintenance(existing)
 	if err := s.dsRepo.Update(ctx, existing); err != nil {
 		return err
 	}
@@ -322,7 +357,7 @@ func (s *DataSourceService) DeleteDataSource(ctx context.Context, id string) err
 	// Remove cron schedule
 	s.scheduler.Remove(id)
 
-	// Cancel any pending/running sync logs so queued asynq tasks won't retry
+	// Cancel any pending/running sync logs so queued queued tasks won't retry
 	if err := s.syncLogRepo.CancelPendingByDataSource(ctx, id); err != nil {
 		logger.Warnf(ctx, "failed to cancel pending sync logs for ds=%s: %v", id, err)
 	}
@@ -379,7 +414,6 @@ func (s *DataSourceService) ListAvailableResources(
 	if err != nil {
 		return nil, err
 	}
-
 	// Get connector
 	connector, err := s.connectorRegistry.Get(ds.Type)
 	if err != nil {
@@ -437,8 +471,39 @@ func (s *DataSourceService) ResolveResourceAncestors(
 
 // ManualSync triggers an immediate sync for a data source
 func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types.SyncLog, error) {
+	if s.db != nil {
+		if _, bound := s.taskEnqueuer.(*transactionTaskEnqueuer); !bound {
+			queue, ok := s.taskEnqueuer.(interfaces.TransactionalTaskEnqueuer)
+			if !ok {
+				return nil, errors.New("task queue must support PostgreSQL transactions")
+			}
+			var result *types.SyncLog
+			err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+					return err
+				}
+				var source types.DataSource
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", dsID, types.SingleTenantID).First(&source).Error; err != nil {
+					return err
+				}
+				copy := *s
+				copy.db = tx
+				copy.dsRepo = repository.NewDataSourceRepository(tx)
+				copy.syncLogRepo = repository.NewSyncLogRepository(tx)
+				copy.taskEnqueuer = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
+				var err error
+				result, err = copy.ManualSync(ctx, dsID)
+				return err
+			})
+			return result, err
+		}
+	}
+
 	ds, err := s.GetDataSource(ctx, dsID)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkDataSourceMaintenance(ds); err != nil {
 		return nil, err
 	}
 
@@ -472,8 +537,8 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 	}
 
 	payloadJSON, _ := json.Marshal(payload)
-	task := asynq.NewTask(types.TypeDataSourceSync, payloadJSON,
-		asynq.Queue(types.QueueSync), asynq.MaxRetry(5), asynq.Timeout(2*time.Hour))
+	task := taskqueue.NewTask(types.TypeDataSourceSync, payloadJSON,
+		taskqueue.Queue(types.QueueSync), taskqueue.MaxRetry(5), taskqueue.Timeout(2*time.Hour))
 
 	_, err = s.taskEnqueuer.Enqueue(task)
 	if err != nil {
@@ -524,6 +589,9 @@ func (s *DataSourceService) ResumeDataSource(ctx context.Context, id string) err
 	if err != nil {
 		return err
 	}
+	if err := checkDataSourceMaintenance(ds); err != nil {
+		return err
+	}
 
 	ds.Status = types.DataSourceStatusActive
 	if err := s.dsRepo.Update(ctx, ds); err != nil {
@@ -559,8 +627,8 @@ func (s *DataSourceService) GetSyncLog(ctx context.Context, syncLogID string) (*
 	return log, nil
 }
 
-// ProcessSync handles the actual sync operation (called by asynq task)
-func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) error {
+// ProcessSync handles the actual sync operation (called by queued task)
+func (s *DataSourceService) ProcessSync(ctx context.Context, task *taskqueue.Task) error {
 	var payload types.DataSourceSyncPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "failed to unmarshal sync payload: %v", err)
@@ -581,6 +649,9 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 			_ = s.syncLogRepo.Update(ctx, syncLog)
 		}
 		return nil
+	}
+	if err := checkDataSourceMaintenance(ds); err != nil {
+		return &types.ChatGPTDeferredError{Reason: "maintenance_configuration", RetryAt: time.Now().Add(15 * time.Minute), Cause: err}
 	}
 	wasPaused := ds.Status == types.DataSourceStatusPaused
 	defer func() {
@@ -640,8 +711,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 		_ = s.dsRepo.Update(ctx, ds)
 		return err
 	}
-	// Surface the KB's multimodal/VLM state to the connector so it only extracts
-	// embedded images for OCR when the KB can actually ingest them (never persisted).
+	// Subscriptions collect articles published since the source was created.
 	if ds.Type == types.ConnectorTypeRSS {
 		config.IngestSince = ds.CreatedAt
 	}
@@ -727,12 +797,9 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	}
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
 
-	// Auto-tag: find or create a tag for this data source so synced items are easily identifiable
-	autoTagIDs := s.resolveAutoTagIDs(ctx, ds)
-
 	for _, item := range items {
 		item := item
-		s.applyFetchedItem(ctx, ds, &item, autoTagIDs, result)
+		s.applyFetchedItem(ctx, ds, &item, result)
 	}
 
 	resultJSON, _ := result.ToJSON()
@@ -783,28 +850,6 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	return nil
 }
 
-// resolveAutoTagIDs finds or creates the per-data-source tag applied to every
-// synced item so results are identifiable in the KB. A tag failure is
-// non-fatal: the sync proceeds untagged.
-func (s *DataSourceService) resolveAutoTagIDs(ctx context.Context, ds *types.DataSource) []string {
-	autoTagIDs := []string{}
-	if autoTag, tagErr := s.tagService.FindOrCreateTagByName(ctx, ds.KnowledgeBaseID, ds.Name); tagErr != nil {
-		logger.Warnf(ctx, "failed to find/create auto-tag %q: %v (proceeding without tag)", ds.Name, tagErr)
-	} else if autoTag != nil {
-		autoTagIDs = append(autoTagIDs, autoTag.ID)
-		logger.Infof(ctx, "using auto-tag %q (id=%s) for data source sync", ds.Name, autoTag.ID)
-	}
-	return autoTagIDs
-}
-
-// maxSyncResultErrors bounds the per-item error sample retained in
-// SyncResult.Errors. That slice is persisted as jsonb and returned in every
-// sync-log list response, so an unbounded list on a sync that fails thousands of
-// documents means multi-MB DB rows and payloads. The accurate failure count
-// lives in SyncResult.Failed (a bounded int); this list only keeps a sample for
-// display (Tencent/WeKnora#2136 / #1262).
-const maxSyncResultErrors = 100
-
 // recordSyncError appends an error sample to result.Errors, capped at
 // maxSyncResultErrors. Callers still increment result.Failed for the exact count.
 func recordSyncError(result *types.SyncResult, item types.SyncItemError) {
@@ -839,21 +884,10 @@ func fetchFailureSyncError(item *types.FetchedItem, rawMsg string) types.SyncIte
 // stays identical across both fetch paths.
 func (s *DataSourceService) applyFetchedItem(
 	ctx context.Context, ds *types.DataSource, item *types.FetchedItem,
-	tagIDs []string, result *types.SyncResult,
+	result *types.SyncResult,
 ) {
-	if len(item.AdapterFailures) > 0 {
-		knowledge, ok := s.knowledgeService.(*knowledgeService)
-		var err error
-		if !ok {
-			err = fmt.Errorf("source adapter anomaly recorder unavailable")
-		} else {
-			err = knowledge.recordSourceAdapterFailures(ctx, ds.TenantID, ds.KnowledgeBaseID, item.AdapterFailures)
-		}
-		if err != nil {
-			result.Failed++
-			recordSyncError(result, types.SyncItemError{Title: item.Title, Code: "source_adapter_anomaly_failed", Message: err.Error()})
-			return
-		}
+	for _, failure := range item.AdapterFailures {
+		recordSyncError(result, types.SyncItemError{Title: item.Title, Code: "source_adapter_failed", Message: failure.Reason})
 	}
 	if item.Metadata["adapter_failure_only"] == "true" {
 		result.Skipped++
@@ -937,7 +971,7 @@ func (s *DataSourceService) applyFetchedItem(
 		return
 	}
 
-	isUpdate, err := s.ingestItem(ctx, ds, item, tagIDs)
+	isUpdate, err := s.ingestItem(ctx, ds, item)
 	if err != nil {
 		var dupErr *types.DuplicateKnowledgeError
 		switch {
@@ -945,13 +979,10 @@ func (s *DataSourceService) applyFetchedItem(
 			// Duplicate file/URL is not a failure — count as skipped.
 			logger.Infof(ctx, "item %q (external_id=%s) already exists, skipping", item.Title, item.ExternalID)
 			result.Skipped++
-		case errors.Is(err, errRSSUpdateRejected):
-			result.Deleted++
-			recordSyncError(result, types.SyncItemError{Title: item.Title, Code: "rss_update_rejected", Message: err.Error()})
 		case item.Metadata["embedded_image"] == "true":
 			// An image extracted from a document for OCR is a best-effort
 			// enrichment, not the document itself. If the KB cannot ingest it
-			// (VLM/object-storage not configured for images, or a transient error),
+			// (local image storage failure or a transient error),
 			// skip it rather than failing the whole sync: the doc body already
 			// synced, and the image stays in SubtreeKeep for a later retry once the
 			// KB is configured.
@@ -992,7 +1023,6 @@ func streamStartCursor(ds *types.DataSource, forceFull bool, attempt int) (*type
 type streamSyncHandler struct {
 	svc     *DataSourceService
 	ds      *types.DataSource
-	tagIDs  []string
 	result  *types.SyncResult
 	syncLog *types.SyncLog
 }
@@ -1006,7 +1036,7 @@ func (h *streamSyncHandler) Emit(ctx context.Context, item types.FetchedItem) er
 		return err
 	}
 	h.result.Total++
-	h.svc.applyFetchedItem(ctx, h.ds, &item, h.tagIDs, h.result)
+	h.svc.applyFetchedItem(ctx, h.ds, &item, h.result)
 	return nil
 }
 
@@ -1047,7 +1077,7 @@ func (s *DataSourceService) processSyncStreaming(
 	ds *types.DataSource, syncLog *types.SyncLog,
 	config *types.DataSourceConfig, payload types.DataSourceSyncPayload, wasPaused bool,
 ) error {
-	// Tenant + auto-tag setup must precede fetching because the stream ingests
+	// Tenant context must precede fetching because the stream ingests
 	// each item on the fly.
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
 	tenant, err := s.tenantRepo.GetTenantByID(ctx, ds.TenantID)
@@ -1059,10 +1089,8 @@ func (s *DataSourceService) processSyncStreaming(
 	}
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
 
-	autoTagIDs := s.resolveAutoTagIDs(ctx, ds)
-
 	forceFull := payload.ForceFull || ds.SyncMode == types.SyncModeFull
-	attempt, _ := asynq.GetRetryCount(ctx)
+	attempt, _ := taskqueue.GetRetryCount(ctx)
 	startCursor, err := streamStartCursor(ds, forceFull, attempt)
 	if err != nil {
 		logger.Errorf(ctx, "failed to parse sync cursor: %v", err)
@@ -1072,12 +1100,12 @@ func (s *DataSourceService) processSyncStreaming(
 	}
 
 	result := &types.SyncResult{}
-	handler := &streamSyncHandler{svc: s, ds: ds, tagIDs: autoTagIDs, result: result, syncLog: syncLog}
+	handler := &streamSyncHandler{svc: s, ds: ds, result: result, syncLog: syncLog}
 
 	nextCursor, fetchErr := sc.FetchStream(ctx, config, startCursor, handler)
 	if fetchErr != nil {
 		// Progress so far is already checkpointed onto ds.LastSyncCursor; leave
-		// it in place so the Asynq retry resumes from there. Persist counts.
+		// it in place so the queue retry resumes from there. Persist counts.
 		logger.Errorf(ctx, "streaming fetch failed: %v", fetchErr)
 		resultJSON, _ := result.ToJSON()
 		s.updateSyncRunResult(ctx, ds, syncLog, result, resultJSON,
@@ -1219,15 +1247,15 @@ func (s *DataSourceService) validateDataSourceConfig(ctx context.Context, ds *ty
 	return connector.Validate(ctx, config)
 }
 
-// ingestItem writes a single FetchedItem into the knowledge base. Changed
-// connector content is staged under a new ID and promoted only after parsing.
+// ingestItem writes a fetched item into the knowledge base. Existing source
+// identities are skipped so a later source change cannot replace an original.
 //
 // Routing logic:
 //   - Has Content bytes → CreateKnowledgeFromFile (走完整的文档解析 pipeline)
 //   - Has URL only      → CreateKnowledgeFromURL  (让 Reliquary 下载并解析)
 //
 // Returns (isUpdate, error) — isUpdate is true when an existing item was replaced.
-func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource, item *types.FetchedItem, tagIDs []string) (bool, error) {
+func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource, item *types.FetchedItem) (bool, error) {
 	// Preserve the source label supplied by the RSS adapter.
 	channel := ds.Type
 	if item.Metadata != nil {
@@ -1256,19 +1284,11 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			return false, err
 		}
 		if existing != nil {
-			var previous map[string]json.RawMessage
-			if err := json.Unmarshal(existing.Metadata, &previous); err != nil {
-				return false, fmt.Errorf("read existing RSS article fingerprint: %w", err)
-			}
-			var previousHash string
-			_ = json.Unmarshal(previous["content_sha256"], &previousHash)
-			if previousHash == contentHash {
-				return false, types.NewDuplicateFileError(existing)
-			}
+			return false, types.NewDuplicateURLError(existing)
 		}
 		payload := &types.ManualKnowledgePayload{
 			Title: item.Title, Content: string(item.Content), Status: types.ManualKnowledgeStatusPublish,
-			TagIDs: tagIDs, SourceMetadata: map[string]string{
+			SourceMetadata: map[string]string{
 				"external_id": item.ExternalID, "datasource_id": ds.ID, "source_resource_id": item.SourceResourceID,
 				"content_sha256": contentHash,
 			},
@@ -1279,22 +1299,11 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		if reason := metadata["intake_reject_reason"]; reason != "" {
 			payload.SourceMetadata["intake_reject_reason"] = reason
 		}
-		if existing != nil {
-			rejected, err := s.knowledgeService.ReviewRSSUpdate(ctx, existing.ID, payload)
-			if rejected {
-				if err == nil {
-					err = errRSSUpdateRejected
-				}
-				return false, err
-			}
-			return true, err
-		}
 		_, err = s.knowledgeService.CreateKnowledgeFromManual(ctx, ds.KnowledgeBaseID, payload, channel)
 		return false, err
 	}
 
-	// Stage changed content under a new ID. The old source keeps its external
-	// identity and stays retrievable until the candidate is approved and parsed.
+	// Preserve previously collected originals when a connector sees them again.
 	isUpdate := false
 	var existing *types.Knowledge
 	if item.ExternalID != "" {
@@ -1311,38 +1320,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		}
 	}
 	if existing != nil {
-		contentHash := ""
-		if len(item.Content) > 0 {
-			contentHash = fmt.Sprintf("%x", sha256.Sum256(item.Content))
-			oldMetadata := stringMetadata(existing.Metadata)
-			if existing.FileHash == contentHash || oldMetadata["content_sha256"] == contentHash {
-				return true, types.NewDuplicateFileError(existing)
-			}
-		}
-		pending, err := s.findPendingSourceUpdateCandidate(ctx, ds, item.ExternalID, contentHash)
-		if err != nil {
-			return false, err
-		}
-		if pending != nil {
-			if pending.ParseStatus == types.ParseStatusCompleted {
-				if promoter, ok := s.knowledgeService.(interface {
-					PromoteSourceUpdateCandidate(context.Context, string) error
-				}); ok {
-					if err := promoter.PromoteSourceUpdateCandidate(ctx, pending.ID); err != nil {
-						return false, err
-					}
-				}
-			}
-			return true, nil
-		}
-		if existing.ParseStatus == types.ParseStatusPending || existing.ParseStatus == types.ParseStatusProcessing || existing.ParseStatus == types.ParseStatusFinalizing {
-			return false, fmt.Errorf("existing source %s is still processing; retry the sync after it completes", existing.ID)
-		}
-		metadata, err = s.markSourceUpdateCandidate(ctx, ds, existing, metadata, contentHash, item.SubtreeKeep, item.ReplacesSubtree)
-		if err != nil {
-			return false, err
-		}
-		isUpdate = true
+		return false, types.NewDuplicateFileError(existing)
 	}
 
 	// Case 1: content already fetched → build a FileHeader from bytes and call CreateKnowledgeFromFile
@@ -1356,9 +1334,8 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			ds.KnowledgeBaseID,
 			fh,
 			metadata,
-			nil,           // use KB default for multimodal
+			nil,           // unused compatibility parameter
 			item.FileName, // customFileName — must include extension for file-type validation
-			tagIDs,        // auto-tag from data source
 			channel,
 			nil,
 		); err != nil {
@@ -1381,14 +1358,9 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 	if item.URL != "" {
 		var created *types.Knowledge
 		var err error
-		concrete, isConcrete := s.knowledgeService.(*knowledgeService)
-		if isUpdate && isConcrete {
-			created, err = concrete.createKnowledgeFromURL(ctx, ds.KnowledgeBaseID, item.URL, item.FileName, "", nil,
-				item.Title, tagIDs, channel, nil, metadata, true)
-		} else {
-			created, err = s.knowledgeService.CreateKnowledgeFromURL(ctx, ds.KnowledgeBaseID, item.URL, item.FileName, "", nil,
-				item.Title, tagIDs, channel, nil)
-		}
+		created, err = s.knowledgeService.CreateKnowledgeFromURL(ctx, ds.KnowledgeBaseID, item.URL, item.FileName, "", nil,
+			item.Title, channel, nil)
+
 		if err != nil {
 			var dupErr *types.DuplicateKnowledgeError
 			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) && !isUpdate {
@@ -1401,8 +1373,8 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		}
 		// URL-created knowledge has no metadata, so a later deletion could
 		// never find it. Attach the datasource keys on fresh creation only;
-		// the duplicate path reuses an existing row that must not be re-tagged.
-		if created != nil && (!isConcrete || !isUpdate) {
+		// the duplicate path reuses an existing row without altering its source.
+		if created != nil {
 			if err := mergeStringMetadataIntoKnowledge(created, metadata); err != nil {
 				return isUpdate, err
 			}
@@ -1417,66 +1389,6 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 	}
 
 	return isUpdate, fmt.Errorf("item has neither content nor URL")
-}
-
-func (s *DataSourceService) markSourceUpdateCandidate(
-	ctx context.Context, ds *types.DataSource, old *types.Knowledge, metadata map[string]string,
-	contentHash string, subtreeKeep []string, replacesSubtree bool,
-) (map[string]string, error) {
-	if concrete, ok := s.knowledgeService.(*knowledgeService); ok {
-		if err := concrete.snapshotContextSource(ctx, old); err != nil {
-			return nil, fmt.Errorf("preserve replaced source evidence: %w", err)
-		}
-	}
-	result := make(map[string]string, len(metadata)+5)
-	for key, value := range metadata {
-		if key != "external_id" {
-			result[key] = value
-		}
-	}
-	result[sourceUpdateCandidateKey] = "true"
-	result[sourceUpdateReplacesKey] = old.ID
-	result[sourceUpdateExternalIDKey] = metadata["external_id"]
-	result[sourceUpdateDataSourceKey] = ds.ID
-	result[sourceUpdateEnableStatusKey] = old.EnableStatus
-	if contentHash != "" {
-		result["content_sha256"] = contentHash
-	}
-	if len(subtreeKeep) > 0 {
-		encoded, err := json.Marshal(subtreeKeep)
-		if err != nil {
-			return nil, err
-		}
-		result[sourceUpdateSubtreeKeepKey] = string(encoded)
-	}
-	result[sourceUpdateSubtreeReplaceKey] = fmt.Sprint(replacesSubtree)
-	return result, nil
-}
-
-func (s *DataSourceService) findPendingSourceUpdateCandidate(
-	ctx context.Context, ds *types.DataSource, externalID, contentHash string,
-) (*types.Knowledge, error) {
-	rows, err := s.knowledgeService.GetRepository().ListKnowledgeByKnowledgeBaseID(ctx, ds.TenantID, ds.KnowledgeBaseID)
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		if !row.IsSourceUpdateCandidate() {
-			continue
-		}
-		meta := stringMetadata(row.Metadata)
-		if meta[sourceUpdateExternalIDKey] != externalID || meta[sourceUpdateDataSourceKey] != ds.ID {
-			continue
-		}
-		if contentHash != "" && meta["content_sha256"] != "" && meta["content_sha256"] != contentHash {
-			continue
-		}
-		switch row.ParseStatus {
-		case types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFinalizing, types.ParseStatusCompleted:
-			return row, nil
-		}
-	}
-	return nil, nil
 }
 
 // dupIsSameNode reports whether a duplicate-content error means the parent still
@@ -1595,4 +1507,31 @@ func bytesToFileHeader(data []byte, filename string) (*multipart.FileHeader, err
 func timePtr(t time.Time) *time.Time {
 	utc := t.UTC()
 	return &utc
+}
+
+const maxSyncResultErrors = 100
+
+func mergeStringMetadataIntoKnowledge(knowledge *types.Knowledge, metadata map[string]string) error {
+	var raw map[string]json.RawMessage
+	if len(knowledge.Metadata) > 0 {
+		if err := json.Unmarshal(knowledge.Metadata, &raw); err != nil {
+			return err
+		}
+	}
+	if raw == nil {
+		raw = make(map[string]json.RawMessage)
+	}
+	for key, value := range metadata {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		raw[key] = encoded
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	knowledge.Metadata = types.JSON(encoded)
+	return nil
 }

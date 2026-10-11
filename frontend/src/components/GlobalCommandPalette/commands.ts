@@ -27,39 +27,19 @@ export interface CommandContext {
 
 /**
  * Build the flat command list. Commands are intentionally static — dynamic
- * entities (KBs / agents / sessions) live in their own result groups.
+ * article matches live in their own result group.
  */
 export function buildCommands(ctx: CommandContext): CmdkCommand[] {
   const { router, t, close } = ctx
   return [
     {
-      id: 'new-chat',
-      label: t('commandPalette.quick.newChat'),
-      icon: 'chat-add',
-      keywords: ['new', 'chat', 'conversation', '新建', '对话', 'создать'],
-      run: () => {
-        close()
-        router.push('/platform/creatChat')
-      },
-    },
-    {
-      id: 'open-kb-list',
-      label: t('commandPalette.quick.knowledgeBases'),
-      icon: 'folder',
+      id: 'open-knowledge',
+      label: t('commandPalette.quick.knowledge'),
+      icon: 'file',
       keywords: ['kb', 'knowledge', 'base', '知识库', '文档'],
       run: () => {
         close()
-        router.push('/platform/knowledge-bases')
-      },
-    },
-    {
-      id: 'open-agents',
-      label: t('commandPalette.quick.agents'),
-      icon: 'user-circle',
-      keywords: ['agent', 'bot', '智能体', '助手'],
-      run: () => {
-        close()
-        router.push('/platform/agents')
+        router.push('/platform/knowledge')
       },
     },
     {

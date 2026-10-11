@@ -52,76 +52,19 @@ func newHybridSearchTestRouter(svc interfaces.KnowledgeBaseService) *gin.Engine 
 	return router
 }
 
-func TestHybridSearchRejectsMissingQueryText(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{name: "missing field", body: `{}`},
-		{name: "empty field", body: `{"query_text":""}`},
-		{name: "whitespace field", body: `{"query_text":"   "}`},
-		{name: "wrong field name", body: `{"query":"MiniMax"}`},
-		{name: "embedding with keyword matching", body: `{"query_embedding":[0.1]}`},
-		{
-			name: "embedding with all matching disabled",
-			body: `{"query_embedding":[0.1],"disable_keywords_match":true,"disable_vector_match":true}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &hybridSearchTestService{}
-			response := performHybridSearchRequest(svc, tt.body)
-
-			if response.Code != http.StatusBadRequest {
-				t.Fatalf("expected 400, got %d body=%s", response.Code, response.Body.String())
-			}
-			if svc.searchCalls != 0 {
-				t.Fatalf("invalid request reached HybridSearch %d time(s)", svc.searchCalls)
-			}
-			if !strings.Contains(response.Body.String(), `"code":1000`) {
-				t.Fatalf("expected bad-request envelope, got %s", response.Body.String())
-			}
-		})
-	}
-}
-
-func TestHybridSearchAcceptsQueryText(t *testing.T) {
-	svc := &hybridSearchTestService{}
-	response := performHybridSearchRequest(svc, `{"query_text":"MiniMax","match_count":3}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", response.Code, response.Body.String())
-	}
-	if svc.searchCalls != 1 {
-		t.Fatalf("expected one HybridSearch call, got %d", svc.searchCalls)
-	}
-	if svc.searchParams.QueryText != "MiniMax" {
-		t.Fatalf("query text = %q, want MiniMax", svc.searchParams.QueryText)
-	}
-	if svc.searchParams.MatchCount != 3 {
-		t.Fatalf("match count = %d, want 3", svc.searchParams.MatchCount)
-	}
-}
-
-func TestHybridSearchAcceptsPrecomputedVectorWithoutQueryText(t *testing.T) {
-	svc := &hybridSearchTestService{}
-	response := performHybridSearchRequest(
-		svc,
-		`{"query_embedding":[0.1,0.2],"disable_keywords_match":true}`,
-	)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", response.Code, response.Body.String())
-	}
-	if svc.searchCalls != 1 {
-		t.Fatalf("expected one HybridSearch call, got %d", svc.searchCalls)
-	}
-	if len(svc.searchParams.QueryEmbedding) != 2 {
-		t.Fatalf("query embedding length = %d, want 2", len(svc.searchParams.QueryEmbedding))
-	}
-	if !svc.searchParams.DisableKeywordsMatch || svc.searchParams.DisableVectorMatch {
-		t.Fatalf("expected vector-only params, got %+v", svc.searchParams)
+func TestHybridSearchRequiresArticleSearchEndpoint(t *testing.T) {
+	for _, body := range []string{`{}`, `{"query_text":"query","match_count":3}`, `{"query":"query"}`, `{"knowledge_ids":["article"]}`, `{"query_embedding":[1,0,0],"disable_keywords_match":true}`} {
+		svc := &hybridSearchTestService{}
+		response := performHybridSearchRequest(svc, body)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d body=%s", response.Code, response.Body.String())
+		}
+		if svc.searchCalls != 0 {
+			t.Fatalf("old route reached HybridSearch %d time(s)", svc.searchCalls)
+		}
+		if !strings.Contains(response.Body.String(), "POST /api/v1/knowledge-search") {
+			t.Fatalf("expected new endpoint guidance, got %s", response.Body.String())
+		}
 	}
 }
 

@@ -103,21 +103,12 @@ func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
 
 	kb := &types.KnowledgeBase{
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50},
-		VLMConfig:      types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
-		QuestionGenerationConfig: &types.QuestionGenerationConfig{
-			Enabled:       true,
-			QuestionCount: 3,
-		},
 	}
 
 	eff := ResolveProcessConfig(kb, nil)
 
 	require.Equal(t, 512, eff.ChunkingConfig.ChunkSize)
 	require.Equal(t, 50, eff.ChunkingConfig.ChunkOverlap)
-	require.True(t, eff.EnableMultimodel)
-	require.Equal(t, "vlm-1", eff.VLMConfig.ModelID)
-	require.True(t, eff.QuestionGenerationConfig.Enabled)
-	require.Equal(t, 3, eff.QuestionGenerationConfig.QuestionCount)
 }
 
 func TestBuildSplitterConfigFromChunking_UsesEffectiveChunkingConfig(t *testing.T) {
@@ -184,53 +175,25 @@ func TestResolveProcessConfig_ParserEngineRulesReplaced(t *testing.T) {
 	require.Equal(t, "custom", eff.ChunkingConfig.ParserEngineRules[0].Engine)
 }
 
-func TestResolveProcessConfig_EnableMultimodelOverride(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		VLMConfig: types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
-	}
-	overrides := &types.KnowledgeProcessOverrides{
-		EnableMultimodel: processConfigBoolPtr(false),
-	}
-	eff := ResolveProcessConfig(kb, overrides)
-	require.False(t, eff.EnableMultimodel)
-}
-
 func TestResolveProcessConfig_PreservesKnowledgeBasePromptInstructions(t *testing.T) {
 	t.Parallel()
 
 	kb := &types.KnowledgeBase{
 		ChunkingConfig: types.ChunkingConfig{TableMetadataInstructions: "table context"},
-		VLMConfig: types.VLMConfig{
-			Enabled: true, ModelID: "vlm-1", DescriptionLanguage: "English", CustomInstructions: "read labels",
-		},
-		QuestionGenerationConfig: &types.QuestionGenerationConfig{
-			Enabled: true, QuestionCount: 3, CustomInstructions: "customer questions",
-		},
 	}
 	overrides := &types.KnowledgeProcessOverrides{
-		ChunkingConfig:           &types.ChunkingConfig{ChunkSize: 256},
-		VLMConfig:                &types.VLMConfig{Enabled: true, ModelID: "vlm-2"},
-		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 5},
+		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 256},
 	}
 
 	eff := ResolveProcessConfig(kb, overrides)
 	require.Equal(t, "table context", eff.ChunkingConfig.TableMetadataInstructions)
-	require.Equal(t, "English", eff.VLMConfig.DescriptionLanguage)
-	require.Equal(t, "read labels", eff.VLMConfig.CustomInstructions)
-	require.Equal(t, "customer questions", eff.QuestionGenerationConfig.CustomInstructions)
 }
 
 func TestValidateProcessOverrides_RejectsOversizedInstructions(t *testing.T) {
 	t.Parallel()
 
 	kb := &types.KnowledgeBase{}
-	overrides := &types.KnowledgeProcessOverrides{
-		VLMConfig: &types.VLMConfig{
-			CustomInstructions: strings.Repeat("x", types.MaxCustomPromptInstructionsLength+1),
-		},
-	}
+	overrides := &types.KnowledgeProcessOverrides{ChunkingConfig: &types.ChunkingConfig{TableMetadataInstructions: strings.Repeat("a", types.MaxCustomPromptInstructionsLength+1)}}
 	err := ValidateProcessOverrides(context.Background(), kb, overrides, []string{"txt"})
 	require.Error(t, err)
 	var badReq *werrors.AppError
@@ -244,29 +207,6 @@ func TestValidateProcessOverrides_NilOverrides(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidateProcessOverrides_ImageWithoutVLMAllowed(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		VLMConfig: types.VLMConfig{Enabled: false},
-	}
-	err := ValidateProcessOverrides(context.Background(), kb, &types.KnowledgeProcessOverrides{}, []string{"png"})
-	require.NoError(t, err)
-}
-
-func TestValidateProcessOverrides_ImageWithEffectiveVLM(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		VLMConfig: types.VLMConfig{Enabled: false},
-	}
-	overrides := &types.KnowledgeProcessOverrides{
-		VLMConfig: &types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
-	}
-	err := ValidateProcessOverrides(context.Background(), kb, overrides, []string{"jpg"})
-	require.NoError(t, err)
-}
-
 func TestValidateProcessOverrides_NonMediaFileTypes(t *testing.T) {
 	t.Parallel()
 
@@ -275,29 +215,6 @@ func TestValidateProcessOverrides_NonMediaFileTypes(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidateProcessOverrides_ImageAllowsStorageFallback(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		VLMConfig: types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
-	}
-
-	err := ValidateProcessOverrides(context.Background(), kb, &types.KnowledgeProcessOverrides{}, []string{"png"})
-	require.NoError(t, err)
-}
-
-func TestResolveFileImportProcessConfig_ImageWithoutVLMAllowed(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		VLMConfig: types.VLMConfig{Enabled: false},
-	}
-	_, err := resolveFileImportProcessConfig(context.Background(), kb, "png", nil, nil)
-	require.NoError(t, err)
-}
-
-// The regression behind #2447: spreadsheets must clear the shared import gate
-// even when the caller sends no per-import overrides.
 func TestResolveFileImportProcessConfig_SpreadsheetAllowedWithoutOverrides(t *testing.T) {
 	t.Parallel()
 
@@ -325,9 +242,7 @@ func TestResolveFileImportProcessConfig_RejectsUnsupportedAndUndeterminable(t *t
 func TestApplyKnowledgeProcessOverrides_NoOverridesSkipsImportGate(t *testing.T) {
 	t.Parallel()
 
-	kb := &types.KnowledgeBase{
-		VLMConfig: types.VLMConfig{Enabled: false},
-	}
+	kb := &types.KnowledgeBase{}
 	knowledge := &types.Knowledge{}
 	_, err := ApplyKnowledgeProcessOverrides(context.Background(), kb, knowledge, nil, []string{"png"}, nil)
 	require.NoError(t, err)
@@ -386,13 +301,4 @@ func TestBuildParentChildConfigs_PropagatesStrategy(t *testing.T) {
 	require.Equal(t, 512/5, child.ChunkOverlap)
 	require.Equal(t, base.Separators, parent.Separators)
 	require.Equal(t, base.Separators, child.Separators)
-}
-
-func TestImageWithoutVisionIgnoresMultimodalRequest(t *testing.T) {
-	enabled := true
-	for _, overrides := range []*types.KnowledgeProcessOverrides{nil, {EnableMultimodel: &enabled}} {
-		eff, err := resolveFileImportProcessConfig(context.Background(), &types.KnowledgeBase{}, "png", overrides, &enabled)
-		require.NoError(t, err)
-		require.False(t, eff.EnableMultimodel)
-	}
 }

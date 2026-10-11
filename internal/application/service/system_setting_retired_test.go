@@ -47,7 +47,7 @@ func TestSystemSettingsRetireTenantCreationOptions(t *testing.T) {
 				repo.rows = []*types.SystemSetting{
 					{Key: retiredKeys[0], Value: types.JSON(`true`), ValueType: "bool", Category: "tenant"},
 					{Key: retiredKeys[1], Value: types.JSON(`100`), ValueType: "int", Category: "tenant"},
-					{Key: "asynq.core_concurrency", Value: types.JSON(`4`), ValueType: "int", Category: "worker"},
+					{Key: "queue.core_concurrency", Value: types.JSON(`4`), ValueType: "int", Category: "worker"},
 				}
 			}
 			svc := &systemSettingService{repo: repo}
@@ -62,7 +62,7 @@ func TestSystemSettingsRetireTenantCreationOptions(t *testing.T) {
 						t.Fatalf("retired key %q remains visible in settings", key)
 					}
 				}
-				activeSettingPresent = activeSettingPresent || row.Key == "asynq.core_concurrency"
+				activeSettingPresent = activeSettingPresent || row.Key == "queue.core_concurrency"
 			}
 			if !activeSettingPresent {
 				t.Fatal("active worker configuration missing")

@@ -6,16 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	redis "github.com/redis/go-redis/v9"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
-
-	"github.com/google/uuid"
 
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
@@ -24,31 +20,6 @@ import (
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
 )
-
-// pubsubChannelBase is the Redis channel base for system_settings change
-// notifications. Mirrors the convention from approval/gate.go: optional
-// suffix RELIQUARY_REDIS_NAMESPACE so two deployments sharing one Redis
-// instance don't cross-talk.
-const pubsubChannelBase = "reliquary:system_settings:changed"
-
-// pubsubChannel resolves the effective channel name (with optional
-// namespace suffix). Called both at publish time and inside the
-// subscriber loop — keep it pure.
-func pubsubChannel() string {
-	if ns := strings.TrimSpace(os.Getenv("RELIQUARY_REDIS_NAMESPACE")); ns != "" {
-		return pubsubChannelBase + ":" + ns
-	}
-	return pubsubChannelBase
-}
-
-// changeMessage is the JSON payload published whenever a setting is
-// updated. OriginID lets the publishing replica skip its own message
-// (it already updated its local cache inline) — without it every
-// publish would trigger a redundant DB roundtrip per replica.
-type changeMessage struct {
-	Key      string `json:"key"`
-	OriginID string `json:"origin_id"`
-}
 
 // settingSpec is the in-code registry entry for a known system setting.
 // The registry serves as the **only** authority on which keys are legal
@@ -89,7 +60,7 @@ type settingSpec struct {
 	// at first write (mirrors Category).
 	Description string
 	// RequiresRestart marks keys whose value is bound at process startup
-	// (e.g. asynq worker pool size). The UI shows a restart badge; the
+	// (e.g. task worker pool size). The UI shows a restart badge; the
 	// service persists the flag on first write.
 	RequiresRestart bool
 }
@@ -127,41 +98,33 @@ var registry = map[string]settingSpec{
 			"修改后立即生效。SSRF_WHITELIST_EXTRA 环境变量仍由部署方维护，不在此处覆盖。",
 	},
 
-	"asynq.core_concurrency": {
+	"queue.core_concurrency": {
 		Type:            "int",
-		EnvName:         "RELIQUARY_ASYNQ_CORE_CONCURRENCY",
+		EnvName:         "RELIQUARY_QUEUE_CORE_CONCURRENCY",
 		Default:         int64(types.DefaultCoreWorkerConcurrency),
 		Category:        "worker",
 		RequiresRestart: true,
 		Description:     "文档解析、手工重解析等核心任务的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
 	},
-	"asynq.postprocess_concurrency": {
+	"queue.enrichment_concurrency": {
 		Type:            "int",
-		EnvName:         "RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY",
-		Default:         int64(types.DefaultPostProcessWorkerConcurrency),
-		Category:        "worker",
-		RequiresRestart: true,
-		Description:     "解析完成后的轻量编排与富化扇出专用并发，避免被长时间文档解析阻塞；修改后需重启。",
-	},
-	"asynq.enrichment_concurrency": {
-		Type:            "int",
-		EnvName:         "RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY",
+		EnvName:         "RELIQUARY_QUEUE_ENRICHMENT_CONCURRENCY",
 		Default:         int64(types.DefaultEnrichmentWorkerConcurrency),
 		Category:        "worker",
 		RequiresRestart: true,
-		Description:     "摘要、图片、知识上下文和问题生成的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
+		Description:     "实体名称向量重建的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
 	},
-	"asynq.maintenance_concurrency": {
+	"queue.maintenance_concurrency": {
 		Type:            "int",
-		EnvName:         "RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY",
+		EnvName:         "RELIQUARY_QUEUE_MAINTENANCE_CONCURRENCY",
 		Default:         int64(types.DefaultMaintenanceWorkerConcurrency),
 		Category:        "worker",
 		RequiresRestart: true,
 		Description:     "数据源同步、批处理、移动和删除清理的每实例保底并发，与用户面流水线硬隔离；修改后需重启。",
 	},
-	"asynq.shared_concurrency": {
+	"queue.shared_concurrency": {
 		Type:            "int",
-		EnvName:         "RELIQUARY_ASYNQ_SHARED_CONCURRENCY",
+		EnvName:         "RELIQUARY_QUEUE_SHARED_CONCURRENCY",
 		Default:         int64(types.DefaultSharedWorkerConcurrency),
 		Category:        "worker",
 		RequiresRestart: true,
@@ -169,7 +132,7 @@ var registry = map[string]settingSpec{
 	},
 
 	// model.max_concurrency is the DEFAULT per-model cap on concurrent
-	// background (ingestion/enrichment) LLM/embedding/VLM calls, keyed by
+	// background (ingestion/enrichment) generation and embedding calls, keyed by
 	// model ID within this process. Read at every gated call via the
 	// limiter governor; a runtime bridge (applyModelMaxConcurrency) pushes UI
 	// edits into limiter.SetGlobalLimit so no restart is needed. Individual
@@ -183,42 +146,19 @@ var registry = map[string]settingSpec{
 		Category: "worker",
 		Description: "后台任务（文档入库/富化）对单个模型的默认并发上限，按模型 ID 在本进程内共享。" +
 			"每次调用实时读取，修改后立即生效、无需重启。0 或负数表示关闭默认限制" +
-			"（各模型仍会尊重自身在模型管理里配置的上限）。仅影响后台任务，不影响交互式对话。",
+			"（各模型仍会尊重自身在模型管理里配置的上限）。仅影响后台任务，不影响模型测试调用。",
 	},
 }
 
-// systemSettingService wires the repository and
-// the Redis client + an in-memory cache. Cache strategy is "preload
-// at boot, invalidate via pubsub":
-//
-//   - On startup we async-load every row into `cache` (best-effort —
-//     a DB hiccup just means a slower warmup, not a fatal error).
-//   - GetXxx reads from cache (microsecond latency).
-//   - Update writes DB → updates local cache → publishes a change
-//     notification to Redis.
-//   - Subscribers on every replica read the notification and re-fetch
-//     the row from DB (NOT from the message payload — the message only
-//     carries the key, never the value, so we never trust pubsub-as-
-//     transport with config bytes).
-//   - The publishing replica skips its own messages by matching
-//     OriginID against its instanceID.
-//
-// When Redis is nil (in-memory fixtures / REDIS_ADDR unset), every code path
-// degrades back to P1 behaviour: no cache invalidation, but local
-// edits still take effect (since Update does write the local cache
-// inline). This is the right behaviour for single-replica deployments.
+// systemSettingService caches settings for the single backend process.
+// Writes refresh the cache and dependent in-process controls before returning.
 type systemSettingService struct {
 	repo interfaces.SystemSettingRepository
 
-	rdb *redis.Client // may be nil in test fixtures
 	cfg *config.Config
 
-	// instanceID disambiguates this replica from its peers in the
-	// pubsub stream. Generated once at construction; never changes.
-	instanceID string
-
 	// cache holds every known setting indexed by key. Populated by
-	// loadCache (preload + after every pubsub message). All access
+	// preload and local writes. All access
 	// goes through `mu`. A nil entry means "we know there's no row
 	// and the resolver should fall through to ENV/default".
 	mu    sync.RWMutex
@@ -228,36 +168,12 @@ type systemSettingService struct {
 	// before this point fall through to the DB so the very first
 	// hot request after boot doesn't get a default-valued surprise.
 	loaded atomic.Bool
-
-	// subOnce guarantees SubscribeRedis can be called multiple times
-	// without spawning duplicate goroutines (defensive — main only
-	// calls it once).
-	subOnce sync.Once
 }
 
-// NewSystemSettingService constructs the settings service.
-// The Redis client may be nil.
-// when REDIS_ADDR is unset — the service still uses its local cache,
-// but skips cross-replica pubsub invalidation.
-func NewSystemSettingService(
-	repo interfaces.SystemSettingRepository,
-
-	rdb *redis.Client,
-	cfg *config.Config,
-) interfaces.SystemSettingService {
-	s := &systemSettingService{
-		repo: repo,
-
-		rdb:        rdb,
-		cfg:        cfg,
-		instanceID: uuid.NewString(),
-		cache:      make(map[string]*types.SystemSetting),
-	}
-	// Async preload — don't block container build / handler readiness
-	// on a slow DB. The first few requests may miss cache and hit the
-	// DB directly via the resolver fallback; that's a few ms each and
-	// completes long before the cache is full.
-	go s.preload(context.Background())
+// NewSystemSettingService constructs and preloads the process-local cache.
+func NewSystemSettingService(repo interfaces.SystemSettingRepository, cfg *config.Config) interfaces.SystemSettingService {
+	s := &systemSettingService{repo: repo, cfg: cfg, cache: make(map[string]*types.SystemSetting)}
+	s.preload(context.Background())
 	return s
 }
 
@@ -282,7 +198,7 @@ func (s *systemSettingService) preload(ctx context.Context) {
 	s.mu.RLock()
 	loadedCount := len(s.cache)
 	s.mu.RUnlock()
-	logger.Infof(ctx, "[system_settings] cache loaded %d keys (instance=%s)", loadedCount, s.instanceID[:8])
+	logger.Infof(ctx, "[system_settings] cache loaded %d keys", loadedCount)
 
 	// Side-effect bridges: any setting whose live value affects an
 	// in-process subsystem needs to be pushed there after preload, so
@@ -347,36 +263,7 @@ func encodeDefault(spec settingSpec) (types.JSON, error) {
 	}
 }
 
-// reload re-fetches a single key from DB and updates the cache. Called
-// from the pubsub subscriber loop after another replica publishes a
-// change. A repo.Get(nil) result removes the entry — the row must have
-// been deleted by an out-of-band tool (P1 has no Delete endpoint, but
-// hand-edits still work).
-func (s *systemSettingService) reload(ctx context.Context, key string) {
-	row, err := s.repo.Get(ctx, key)
-	if err != nil {
-		logger.Warnf(ctx, "[system_settings] reload %q failed: %v", key, err)
-		return
-	}
-	s.mu.Lock()
-	if row == nil {
-		delete(s.cache, key)
-	} else {
-		s.cache[key] = row
-	}
-	s.mu.Unlock()
-
-	// Push any side-effect bridges for the changed key. Bridges are
-	// idempotent — calling them on every reload (even when the change
-	// is to a different key) is fine and lets us avoid plumbing a
-	// per-key dispatch table.
-	s.dispatchSideEffects(ctx, key)
-}
-
-// dispatchSideEffects fans out post-Update / post-reload work to
-// subsystems whose state depends on a system_setting. Each bridge
-// looks up its own keys and decides whether to act — this keeps the
-// dispatcher trivial as we add more.
+// dispatchSideEffects applies changed settings to process-local controls.
 func (s *systemSettingService) dispatchSideEffects(ctx context.Context, changedKey string) {
 	switch changedKey {
 	case "ssrf.whitelist":
@@ -393,7 +280,7 @@ func (s *systemSettingService) dispatchSideEffects(ctx context.Context, changedK
 // and shouldn't be subject to UI accidents.
 //
 // Called at preload (initial sync), after Update (this replica's edit),
-// and after reload (peer's edit via pubsub).
+// and after local edits.
 func (s *systemSettingService) applySSRFWhitelist(ctx context.Context) {
 	list := s.GetStringList(ctx, "ssrf.whitelist", "SSRF_WHITELIST", []string{})
 	primary := strings.Join(list, ",")
@@ -419,32 +306,11 @@ func (s *systemSettingService) applySSRFWhitelist(ctx context.Context) {
 // matches what the container installs at boot.
 //
 // Called at preload (initial sync), after Update (this replica's edit), and
-// after reload (peer's edit via pubsub).
+// after local edits.
 func (s *systemSettingService) applyModelMaxConcurrency(ctx context.Context) {
 	limit := int(s.GetInt(ctx, "model.max_concurrency", "RELIQUARY_MODEL_MAX_CONCURRENCY", 32))
 	limiter.SetGlobalLimit(limit)
 	logger.Infof(ctx, "[system_settings] model.max_concurrency applied (limit=%d)", limit)
-}
-
-// publishChange fans the change out to peers. Best-effort: a Redis
-// outage logs a warning but does not fail the Update — the DB write
-// already succeeded and our local cache is up-to-date. Other replicas
-// will pick up the new value on their next preload (e.g. restart) or
-// when their own resolver detects a stale cache via fallback.
-func (s *systemSettingService) publishChange(ctx context.Context, key string) {
-	if s.rdb == nil {
-		return
-	}
-	payload, err := json.Marshal(changeMessage{Key: key, OriginID: s.instanceID})
-	if err != nil {
-		logger.Warnf(ctx, "[system_settings] marshal change for %q: %v", key, err)
-		return
-	}
-	pubCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	if err := s.rdb.Publish(pubCtx, pubsubChannel(), payload).Err(); err != nil {
-		logger.Warnf(ctx, "[system_settings] publish %q: %v", key, err)
-	}
 }
 
 // resolveRaw runs the 3-tier fallback ladder for an arbitrary key and
@@ -618,7 +484,7 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 	// Retired aggregate concurrency and tenant-creation settings have no
 	// consumers. Hide their persisted rows so the UI cannot offer obsolete
 	// configuration, while preserving other unknown rows for diagnostics.
-	for _, key := range []string{"asynq.concurrency", "tenant.auto_create_api_key", "tenant.default_storage_quota_gb"} {
+	for _, key := range []string{"queue.concurrency", "tenant.auto_create_api_key", "tenant.default_storage_quota_gb"} {
 		delete(byKey, key)
 	}
 
@@ -872,9 +738,7 @@ func (s *systemSettingService) Update(ctx context.Context, key string, rawValue 
 	// need the same fix-up because they're stored on the row itself.
 	persisted.Enum = spec.Enum
 
-	// Update local cache inline so this replica's next read sees the
-	// new value without waiting for the pubsub roundtrip. Other replicas
-	// pick it up via publishChange below.
+	// Refresh the cache before the next request can read the setting.
 	s.mu.Lock()
 	s.cache[key] = persisted
 	s.mu.Unlock()
@@ -882,7 +746,6 @@ func (s *systemSettingService) Update(ctx context.Context, key string, rawValue 
 	// Push to side-effect bridges (e.g. utils.SetSSRFWhitelistFromRaw).
 	s.dispatchSideEffects(ctx, key)
 
-	s.publishChange(ctx, key)
 	return persisted, nil
 }
 
@@ -905,105 +768,10 @@ func (s *systemSettingService) Reset(ctx context.Context, key string) error {
 	delete(s.cache, key)
 	s.mu.Unlock()
 
-	// Side-effect bridges and pubsub fire even for no-op resets so
-	// peers that may have a stale cached row converge. publishChange
-	// is best-effort; reload() on the peer side handles "row absent"
-	// by deleting the cache entry, which is what we want here.
+	// Refresh dependent controls even for an idempotent reset.
 	s.dispatchSideEffects(ctx, key)
-	s.publishChange(ctx, key)
 
 	return nil
-}
-
-// SubscribeRedis starts a single goroutine that subscribes to the
-// pubsub channel and refreshes the local cache when peers publish
-// changes. Idempotent (subOnce). When Redis is nil (in-memory fixtures) returns
-// nil immediately — single-replica deployments don't need pubsub
-// because Update already writes the local cache inline.
-//
-// The subscriber loop runs until ctx is cancelled (server shutdown).
-// On Redis disconnection we reconnect with exponential backoff up to
-// 30s, mirroring the approval/gate.go convention so operators see the
-// same recovery behaviour across pubsub-using subsystems.
-func (s *systemSettingService) SubscribeRedis(ctx context.Context) error {
-	if s.rdb == nil {
-		logger.Infof(ctx, "[system_settings] Redis not configured, skipping pubsub (single-replica mode)")
-		return nil
-	}
-	s.subOnce.Do(func() {
-		go s.runSubscribeLoop(ctx)
-	})
-	return nil
-}
-
-// runSubscribeLoop is the long-running goroutine spawned by
-// SubscribeRedis. Reconnects on transient errors; exits on ctx.Done().
-func (s *systemSettingService) runSubscribeLoop(ctx context.Context) {
-	channel := pubsubChannel()
-	logger.Infof(ctx, "[system_settings] subscribed to %s (instance=%s)", channel, s.instanceID[:8])
-
-	const maxBackoff = 30 * time.Second
-	backoff := time.Second
-	for {
-		// ctx may already be cancelled (server shutting down before
-		// pubsub became active).
-		if ctx.Err() != nil {
-			return
-		}
-		sub := s.rdb.Subscribe(ctx, channel)
-		// Verify the subscription is active so a publish-and-disconnect
-		// race doesn't silently drop the first message.
-		if _, err := sub.Receive(ctx); err != nil {
-			logger.Warnf(ctx, "[system_settings] subscribe %s: %v (retry in %s)", channel, err, backoff)
-			_ = sub.Close()
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return
-			}
-			if backoff < maxBackoff {
-				backoff *= 2
-				if backoff > maxBackoff {
-					backoff = maxBackoff
-				}
-			}
-			continue
-		}
-		backoff = time.Second // reset after a healthy connection
-		ch := sub.Channel()
-		s.consumeMessages(ctx, ch)
-		_ = sub.Close()
-		// consumeMessages returns either because ctx is done or the
-		// subscription was torn down; loop back and try again.
-	}
-}
-
-// consumeMessages drains the pubsub channel, dispatching to reload()
-// for every key the peer says changed. Returns when the channel
-// closes (Redis disconnect) or ctx is done.
-func (s *systemSettingService) consumeMessages(ctx context.Context, ch <-chan *redis.Message) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			var m changeMessage
-			if err := json.Unmarshal([]byte(msg.Payload), &m); err != nil {
-				logger.Warnf(ctx, "[system_settings] bad pubsub payload: %v", err)
-				continue
-			}
-			// Skip our own publish — the local cache is already fresh
-			// (Update wrote it inline). Without this every Update would
-			// trigger a redundant DB roundtrip on the publishing replica.
-			if m.OriginID == s.instanceID {
-				continue
-			}
-			s.reload(ctx, m.Key)
-		}
-	}
 }
 
 // encodeForType validates rawValue against the declared type and
@@ -1115,9 +883,9 @@ func encodeForType(declared string, rawValue any) (types.JSON, error) {
 //     400 body verbatim).
 func validateRegistryEntry(key string, rawValue any) error {
 	switch key {
-	case "asynq.core_concurrency", "asynq.postprocess_concurrency",
-		"asynq.enrichment_concurrency", "asynq.maintenance_concurrency",
-		"asynq.shared_concurrency":
+	case "queue.core_concurrency",
+		"queue.enrichment_concurrency", "queue.maintenance_concurrency",
+		"queue.shared_concurrency":
 		n, err := coerceToPositiveInt64(rawValue)
 		if err != nil {
 			return err

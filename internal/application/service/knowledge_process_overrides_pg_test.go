@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
@@ -36,13 +36,13 @@ func (s processOverridesPGKB) GetKnowledgeBaseByID(context.Context, string) (*ty
 }
 
 type processOverridesPGQueue struct {
-	task *asynq.Task
+	task *taskqueue.Task
 	err  error
 }
 
-func (q *processOverridesPGQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (q *processOverridesPGQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.task = task
-	return &asynq.TaskInfo{}, q.err
+	return &taskqueue.TaskInfo{}, q.err
 }
 
 type processOverridesPGFiles struct {
@@ -123,7 +123,7 @@ func newProcessOverridesPGHarness(t *testing.T) *processOverridesPGHarness {
 	queue := &processOverridesPGQueue{}
 	svc, err := service.NewKnowledgeService(db, nil, repo, kbs,
 		repository.NewTenantRepository(db), nil, processOverridesPGChunks{repo: chunks}, chunks,
-		nil, nil, files, nil, nil, queue, nil, nil, nil, nil, service.NewSpanTracker(spans, db))
+		files, nil, nil, queue, nil, nil, nil, service.NewSpanTracker(spans, db))
 	require.NoError(t, err)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, &types.Tenant{ID: 1})
@@ -133,14 +133,10 @@ func newProcessOverridesPGHarness(t *testing.T) *processOverridesPGHarness {
 }
 
 func processOverridesPGConfig() *types.KnowledgeProcessOverrides {
-	disabled := false
 	return &types.KnowledgeProcessOverrides{
 		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 1240, ChunkOverlap: 120,
 			EnableParentChild: true, ParentChunkSize: 2480, ChildChunkSize: 400},
-		EnableMultimodel:         &disabled,
-		VLMConfig:                &types.VLMConfig{Enabled: false, DescriptionLanguage: "English", CustomInstructions: "Read image labels"},
-		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 7},
-		ParserEngineOverrides:    map[string]string{"mineru_parse_method": "ocr"},
+		ParserEngineOverrides: map[string]string{"mineru_parse_method": "ocr"},
 	}
 }
 
@@ -225,7 +221,7 @@ func TestProcessOverridesPGURLFetchFailure(t *testing.T) {
 	h := newProcessOverridesPGHarness(t)
 	overrides := processOverridesPGConfig()
 	k, err := h.svc.CreateKnowledgeFromURL(h.ctx, "kb", server.URL+"/article", "", "", nil,
-		"Source article", nil, types.ChannelWeb, overrides)
+		"Source article", types.ChannelWeb, overrides)
 	require.NoError(t, err)
 	want := processOverridesPGStoredConfig(t, k)
 	require.JSONEq(t, mustProcessOverridesPGJSON(t, overrides), want)
@@ -264,7 +260,16 @@ func TestProcessOverridesPGFileFailures(t *testing.T) {
 				h.queue.err = errors.New("queue unavailable")
 			}
 			k, err := h.svc.CreateKnowledgeFromFile(h.ctx, "kb", form.File["file"][0],
-				map[string]string{"discard_on_cleanup": "source metadata"}, nil, "", nil, types.ChannelWeb, processOverridesPGConfig())
+				map[string]string{"discard_on_cleanup": "source metadata"}, nil, "", types.ChannelWeb, processOverridesPGConfig())
+			if failure == "upload enqueue" {
+				require.ErrorContains(t, err, "queue unavailable")
+				require.Nil(t, k)
+				var count int64
+				require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&count).Error)
+				require.Zero(t, count, "failed enqueue rolls back the uploaded article")
+				require.Empty(t, h.files.stored, "the rolled back upload must release its source file")
+				return
+			}
 			require.NoError(t, err)
 			if failure == "approved parser error" {
 				intake, err := k.IntakeMetadata()
@@ -316,9 +321,15 @@ func TestProcessOverridesPGReparseEnqueueFailure(t *testing.T) {
 			_, err := h.svc.ReparseKnowledge(h.ctx, k.ID, nil)
 			require.Error(t, err)
 			stored := h.assertTimelineConfig(t, k.ID, want)
-			require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)
-			require.NotContains(t, string(stored.Metadata), "discard_on_cleanup")
-			require.Empty(t, h.files.stored)
+			require.Equal(t, k.ParseStatus, stored.ParseStatus, "failed enqueue rolls back the new processing state")
+			require.JSONEq(t, string(k.Metadata), string(stored.Metadata), "processing overrides and source metadata survive rollback")
+			require.Equal(t, k.FilePath, stored.FilePath)
+			intake, err := stored.IntakeMetadata()
+			require.NoError(t, err)
+			require.Contains(t, h.files.stored, intake.OriginalPath, "the original source remains available for a later retry")
+			if kind == "file" {
+				require.Contains(t, h.files.stored, k.FilePath)
+			}
 		})
 	}
 }
@@ -348,7 +359,7 @@ func TestProcessOverridesPGFileURLDownloadFailure(t *testing.T) {
 	t.Cleanup(server.Close)
 	h := newProcessOverridesPGHarness(t)
 	k, err := h.svc.CreateKnowledgeFromURL(h.ctx, "kb", server.URL+"/source.json", "", "", nil,
-		"Source file", nil, types.ChannelWeb, processOverridesPGConfig())
+		"Source file", types.ChannelWeb, processOverridesPGConfig())
 	require.NoError(t, err)
 	require.Equal(t, "file_url", k.Type)
 	want := processOverridesPGStoredConfig(t, k)
@@ -364,7 +375,7 @@ func TestProcessOverridesPGManualProcessingFailure(t *testing.T) {
 	want := processOverridesPGStoredConfig(t, k)
 	payload := types.ManualProcessPayload{TenantID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb",
 		Content: "![unresolved image](https://example.org/image.png)"}
-	require.NoError(t, h.svc.ProcessManualUpdate(h.ctx, asynq.NewTask(types.TypeManualProcess,
+	require.Error(t, h.svc.ProcessManualUpdate(h.ctx, taskqueue.NewTask(types.TypeManualProcess,
 		[]byte(mustProcessOverridesPGJSON(t, payload)))))
 	stored := h.assertTimelineConfig(t, k.ID, want)
 	require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)
@@ -381,7 +392,7 @@ func TestProcessOverridesPGCleanupWithoutOverrides(t *testing.T) {
 	require.NoError(t, h.repo.UpdateKnowledge(h.ctx, k))
 	payload := types.DocumentProcessPayload{TenantID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb",
 		FilePath: k.FilePath, FileType: k.FileType, FileName: k.FileName}
-	require.Error(t, h.svc.ProcessDocument(h.ctx, asynq.NewTask(types.TypeDocumentProcess,
+	require.Error(t, h.svc.ProcessDocument(h.ctx, taskqueue.NewTask(types.TypeDocumentProcess,
 		[]byte(mustProcessOverridesPGJSON(t, payload)))))
 	stored, err := h.repo.GetKnowledgeByID(h.ctx, 1, k.ID)
 	require.NoError(t, err)
@@ -413,4 +424,8 @@ func TestProcessOverridesPGCancelAndReparse(t *testing.T) {
 	_, err = h.svc.ReparseKnowledge(h.ctx, k.ID, nil)
 	require.NoError(t, err)
 	h.assertTimelineConfig(t, k.ID, want)
+}
+
+func (q *processOverridesPGQueue) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+	return q.Enqueue(task, opts...)
 }

@@ -27,13 +27,13 @@ export function useKnowledgeDuplicates(currentKnowledgeBaseId: () => string | un
 
   async function openDuplicate(duplicate: KnowledgeDuplicateNotice): Promise<boolean> {
     if (!duplicate.id || !duplicate.knowledgeBaseId) return false;
-    if (route.params.kbId === duplicate.knowledgeBaseId) {
+    if (route.name === 'knowledge') {
       window.dispatchEvent(new CustomEvent('reliquary:open-knowledge', {
         detail: { kbId: duplicate.knowledgeBaseId, knowledgeId: duplicate.id },
       }));
     } else {
       await router.push({
-        path: `/platform/knowledge-bases/${encodeURIComponent(duplicate.knowledgeBaseId)}`,
+        path: '/platform/knowledge',
         query: { knowledge_id: duplicate.id },
       });
     }

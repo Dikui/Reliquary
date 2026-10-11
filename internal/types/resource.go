@@ -22,19 +22,15 @@ const (
 
 // Resource binding owner types. A binding is a claim on a stored object: the
 // bytes live as long as at least one owner still claims them, which is what
-// lets a chat answer be saved into the knowledge base without copying its
-// files, and lets either copy be deleted without breaking the other.
+// permits multiple articles to reference one file until the last claim is released.
 const (
-	ResourceOwnerKnowledge         = "knowledge"
-	ResourceOwnerMessage           = "message"
-	ResourceOwnerTemporaryDocument = "temporary_document"
+	ResourceOwnerKnowledge = "knowledge"
 )
 
 // Resource binding relations describe why an owner claims a resource.
 const (
 	ResourceRelationSourceFile     = "source_file"
 	ResourceRelationExtractedImage = "extracted_image"
-	ResourceRelationArtifact       = "artifact"
 	ResourceRelationAttachment     = "attachment"
 )
 
@@ -160,10 +156,8 @@ var resourceReferenceRE = regexp.MustCompile(
 // ScanResourceReferences returns every distinct resource:// reference embedded
 // in text, in order of first appearance.
 //
-// Rich text (a chat answer, a manual knowledge document) is the only place a
-// reference's owner can be discovered after the fact: the body is what gets
-// copied between a message and a knowledge entry, so re-binding on copy starts
-// by reading the handles back out of it.
+// Article rich text stores image references. Copying an article starts by
+// reading its handles so the copy can retain the same files.
 func ScanResourceReferences(text string) []string {
 	if !strings.Contains(text, ResourceScheme) {
 		return nil

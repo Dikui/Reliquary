@@ -34,8 +34,6 @@ const (
 	SyncLogStatusCanceled = "canceled"
 
 	// Conflict resolution strategies
-	ConflictStrategyOverwrite = "overwrite"
-	ConflictStrategySkip      = "skip"
 )
 
 // DataSource represents a configured external data source for synchronization
@@ -53,7 +51,8 @@ type DataSource struct {
 	Name string `json:"name"`
 
 	// Connector type (rss).
-	Type string `json:"type" gorm:"type:varchar(50);index"`
+	Type               string `json:"type" gorm:"type:varchar(50);index"`
+	DefaultContentType string `json:"default_content_type" gorm:"type:varchar(16)"`
 
 	// Encrypted configuration (API credentials, tokens, etc.)
 	// Stored as JSON with AES-256-GCM encryption
@@ -67,9 +66,6 @@ type DataSource struct {
 
 	// Current status: active, paused, error
 	Status string `json:"status" gorm:"type:varchar(32);default:'active'"`
-
-	// Conflict resolution strategy: overwrite or skip
-	ConflictStrategy string `json:"conflict_strategy" gorm:"type:varchar(32);default:'overwrite'"`
 
 	// Whether to sync deletions from source
 	SyncDeletions bool `json:"sync_deletions" gorm:"default:true"`
@@ -474,7 +470,7 @@ func (e *SyncItemError) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// DataSourceSyncPayload represents the asynq task payload for data source sync
+// DataSourceSyncPayload represents the queue task payload for data source sync
 type DataSourceSyncPayload struct {
 	Initiator TaskInitiator `json:"initiator,omitempty"`
 	// Trigger distinguishes a user-requested run from a scheduler-created run.

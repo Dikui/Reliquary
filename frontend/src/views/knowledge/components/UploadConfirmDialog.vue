@@ -27,43 +27,10 @@
                   </div>
                 </div>
 
-                <div v-if="mode === 'file'" class="destination-row">
-                  <t-popup
-                    v-model:visible="destinationPickerVisible"
-                    trigger="click"
-                    placement="bottom-left"
-                    attach="body"
-                    :z-index="3100"
-                    overlay-class-name="upload-destination-popup"
-                    destroy-on-close
-                  >
-                    <button
-                      type="button"
-                      class="destination-crumb"
-                      :title="destinationFullLabel"
-                      :aria-label="t('uploadConfirm.destinationChange')"
-                      :aria-expanded="destinationPickerVisible"
-                    >
-                      <span class="destination-crumb__label">{{ t('uploadConfirm.destinationLabel') }}</span>
-                      <span class="destination-crumb__path">{{ destinationBreadcrumb }}</span>
-                      <t-icon name="chevron-down" class="destination-crumb__caret" />
-                    </button>
-                    <template #content>
-                      <div class="card-menu" @click.stop>
-                        <FolderPickerMenu
-                          :options="pickerFolderOptions"
-                          :current-path="localTargetFolder"
-                          allow-reselect
-                          @create="onDestinationCreated"
-                          @confirm="onDestinationPicked"
-                        />
-                      </div>
-                    </template>
-                  </t-popup>
-                </div>
               </div>
 
               <div class="files-list-wrap">
+                <p v-if="mode === 'manual' || mode === 'file'" class="manual-source-meta">{{ t('knowledgeReview.uploadLinkHint') }}</p>
                 <div v-if="mode === 'manual' && manualPreview" class="manual-source-panel">
                   <p class="manual-source-title" :title="manualPreview.title">{{ manualPreview.title }}</p>
                   <p class="manual-source-meta">
@@ -176,40 +143,8 @@
 
             <div class="config-panel">
               <div class="content-wrapper upload-confirm-content">
-                  <div v-show="activeSection === 'tags'" class="section">
-                    <div class="section-content">
-                      <div class="section-header">
-                        <h2 class="section-title">{{ t('uploadConfirm.tabTags') }}</h2>
-                        <p class="section-desc">{{ t('uploadConfirm.tagsDescription') }}</p>
-                      </div>
-                      <div class="settings-group">
-                        <div class="setting-row setting-row-vertical">
-                          <div class="setting-info">
-                            <label>{{ t('uploadConfirm.tagsPlaceholder') }}</label>
-                          </div>
-                          <div class="setting-control setting-control-full">
-                            <t-select
-                              v-model="selectedTagIds"
-                              :options="tagOptions"
-                              :loading="tagsLoading"
-                              multiple
-                              filterable
-                              clearable
-                              :placeholder="t('uploadConfirm.tagsPlaceholder')"
-                            />
-                            <p v-if="tagsLoadFailed" class="field-hint field-hint--error">
-                              {{ t('uploadConfirm.tagsLoadFailed') }}
-                            </p>
-                            <p v-else-if="!tagsLoading && tagOptions.length === 0" class="field-hint">
-                              {{ t('uploadConfirm.tagsEmpty') }}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div v-show="activeSection === 'parser'" class="section">
+                  <div v-show="activeSection === 'parser'" class="section" data-section="parser">
                     <KBParserSettings
                       :relevant-extensions="batchFileExts"
                       :parser-engine-rules="uiState.chunkingConfig.parserEngineRules"
@@ -230,7 +165,7 @@
                     </div>
                   </div>
 
-                  <div v-show="activeSection === 'chunking'" class="section">
+                  <div v-show="activeSection === 'chunking'" class="section" data-section="chunking">
                     <div class="section-content">
                       <div class="section-header">
                         <h2 class="section-title">{{ t('knowledgeEditor.chunking.title') }}</h2>
@@ -369,123 +304,6 @@
                     </div>
                   </div>
 
-                  <div v-show="activeSection === 'multimodal'" class="section" data-section="multimodal">
-                    <div class="kb-settings-block">
-                      <div class="section-header">
-                        <h2 class="section-title">{{ t('knowledgeEditor.multimodal.title') }}</h2>
-                        <p class="section-desc">{{ t('knowledgeEditor.multimodal.description') }}</p>
-                      </div>
-                      <div v-if="issueSectionKeys.has('multimodal')" class="section-notice">
-                        <t-icon name="info-circle-filled" />
-                        <span>{{ t('uploadConfirm.multimodalSetupHint') }}</span>
-                      </div>
-                      <div class="settings-group">
-                        <div class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.label') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.description') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <t-switch v-model="uiState.multimodalConfig.enabled" size="medium" />
-                          </div>
-                        </div>
-                        <div v-if="uiState.multimodalConfig.enabled" class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.vllmLabel') }} <span class="required">*</span></label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.vllmDescription') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <ModelSelector
-                              model-type="VLLM"
-                              :selected-model-id="uiState.multimodalConfig.vllmModelId"
-                              :all-models="allModels"
-                              :status="showMultimodalModelError ? 'error' : 'default'"
-                              :placeholder="t('knowledgeEditor.advanced.multimodal.vllmPlaceholder')"
-                              @update:selected-model-id="handleMultimodalVLLMChange"
-                              @add-model="handleAddVLLMModel"
-                            />
-                          </div>
-                        </div>
-                        <div v-if="uiState.multimodalConfig.enabled" class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.descriptionLanguageLabel') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.descriptionLanguageDescription') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <t-select
-                              v-model="uiState.multimodalConfig.descriptionLanguage"
-                              clearable
-                              :placeholder="t('knowledgeEditor.advanced.multimodal.descriptionLanguageAuto')"
-                              :style="{ width: '280px' }"
-                            >
-                              <t-option value="Chinese" :label="t('language.zhCN')" />
-                              <t-option value="English" :label="t('language.enUS')" />
-                              <t-option value="Korean" :label="t('language.koKR')" />
-                              <t-option value="Russian" :label="t('language.ruRU')" />
-                            </t-select>
-                          </div>
-                        </div>
-                        <div v-if="uiState.multimodalConfig.enabled" class="setting-row setting-row-vertical">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.customInstructionsLabel') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.customInstructionsDescription') }}</p>
-                          </div>
-                          <div class="setting-control setting-control-full">
-                            <SafeTextarea
-                              v-model="uiState.multimodalConfig.customInstructions"
-                              :placeholder="t('knowledgeEditor.advanced.multimodal.customInstructionsPlaceholder')"
-                              :maxlength="4000"
-                              :autosize="{ minRows: 3, maxRows: 8 }"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-show="activeSection === 'question'" class="section">
-                    <div class="kb-settings-block">
-                      <div class="section-header">
-                        <h2 class="section-title">{{ t('knowledgeEditor.advanced.questionGeneration.label') }}</h2>
-                        <p class="section-desc">{{ t('knowledgeEditor.advanced.questionGeneration.description') }}</p>
-                      </div>
-                      <div class="settings-group">
-                        <div class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.questionGeneration.label') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.questionGeneration.countDescription') }}</p>
-                          </div>
-                          <div class="setting-control setting-control-inline">
-                            <t-input-number
-                              v-if="uiState.questionGenerationConfig.enabled"
-                              v-model="uiState.questionGenerationConfig.questionCount"
-                              :min="1"
-                              :max="10"
-                              :step="1"
-                              theme="normal"
-                              :style="{ width: '88px' }"
-                            />
-                            <t-switch v-model="uiState.questionGenerationConfig.enabled" size="medium" />
-                          </div>
-                        </div>
-                        <div v-if="uiState.questionGenerationConfig.enabled" class="setting-row setting-row-vertical">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.questionGeneration.instructionsLabel') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.questionGeneration.instructionsDescription') }}</p>
-                          </div>
-                          <div class="setting-control setting-control-full">
-                            <SafeTextarea
-                              v-model="uiState.questionGenerationConfig.customInstructions"
-                              :placeholder="t('knowledgeEditor.advanced.questionGeneration.instructionsPlaceholder')"
-                              :maxlength="4000"
-                              :autosize="{ minRows: 3, maxRows: 8 }"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
 
               <footer class="modal-footer">
@@ -509,17 +327,11 @@ import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import ModelSelector from '@/components/ModelSelector.vue'
 import KBParserSettings from '../settings/KBParserSettings.vue'
-import { useChatResourcesStore } from '@/stores/chatResources'
 import { useEditorResourcesStore } from '@/stores/editorResources'
-import { useUIStore } from '@/stores/ui'
 import { formatFileSize, getFileIcon } from '@/utils/files'
 import { getUploadFileKey } from '../utils/uploadSources'
-import { listKnowledgeTags } from '@/api/knowledge-base'
 import KbUploadSourceDropdown from './KbUploadSourceDropdown.vue'
-import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue'
-import { folderOptionFromPath, sortFolderOptions } from '../folderTree'
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess'
 import type {
   IntakeSourceInfo,
@@ -529,10 +341,8 @@ import type {
   UploadConfirmResult,
 } from '@/stores/uploadConfirm'
 
-const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
 
-type ConfigSectionKey = 'tags' | 'parser' | 'chunking' | 'multimodal' | 'question'
-type IssueSectionKey = 'multimodal'
+type ConfigSectionKey = 'parser' | 'chunking'
 
 interface ChunkingUIConfig {
   chunkSize: number
@@ -553,8 +363,6 @@ interface ChunkingUIConfig {
 
 interface UploadUIState {
   chunkingConfig: ChunkingUIConfig
-  multimodalConfig: { enabled: boolean; vllmModelId: string; descriptionLanguage?: string; customInstructions?: string }
-  questionGenerationConfig: { enabled: boolean; questionCount: number; customInstructions?: string }
   pdfForceScanned: boolean
 }
 
@@ -564,27 +372,18 @@ const props = withDefaults(defineProps<{
   mode?: UploadConfirmMode
   files?: File[]
   urls?: string[]
-  tagIds?: string[]
   manualPreview?: UploadConfirmManualSource | null
   reparsePreview?: UploadConfirmReparseSource | null
-  tagId?: string
   acceptFileTypes?: string
   supportedFileTypes?: string[]
-  /** Folder the batch will be uploaded into; '' means the knowledge base root. */
-  targetFolder?: string
-  /** Existing folders offered as upload destinations. */
-  folderOptions?: FolderOption[]
 }>(), {
   mode: 'file',
   files: () => [],
   urls: () => [],
-  tagIds: () => [],
   manualPreview: null,
   reparsePreview: null,
   acceptFileTypes: '',
   supportedFileTypes: () => [],
-  targetFolder: '',
-  folderOptions: () => [],
 })
 
 const emit = defineEmits<{
@@ -594,56 +393,21 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const chatResources = useChatResourcesStore()
 const editorResources = useEditorResourcesStore()
-const uiStore = useUIStore()
 
-const allModels = ref<any[]>([])
 const localFiles = ref<File[]>([])
 const localUrls = ref<string[]>([])
 const sourceInfoByItem = ref<Record<string, IntakeSourceInfo>>({})
 const sourceInfo = (key: string) => sourceInfoByItem.value[key] ||= {}
 const fileSourceKey = (file: File) => `file:${getUploadFileKey(file)}`
 const urlSourceKey = (url: string) => `url:${url}`
-const availableTags = ref<Array<{ id: string; name: string }>>([])
-const selectedTagIds = ref<string[]>([])
-const tagsLoading = ref(false)
-const tagsLoadFailed = ref(false)
 const chunkingMoreOpen = ref(false)
-const activeSection = ref<ConfigSectionKey>('tags')
+const activeSection = ref<ConfigSectionKey>('parser')
 const uiState = ref<UploadUIState>(createDefaultUIState())
-// Destination folder for this batch. Pre-filled from the sidebar tree, but
-// editable here so browsing a folder never silently decides where files land.
-const localTargetFolder = ref('')
-const destinationPickerVisible = ref(false)
-// Folders created in this dialog before upload; the server tree only gains them
-// once files land, so keep them here across picker open/close cycles.
-const pendingFolderPaths = ref<string[]>([])
-
-const pickerFolderOptions = computed(() => {
-  const byPath = new Map<string, FolderOption>()
-  ;(props.folderOptions || []).forEach((option) => byPath.set(option.path, option))
-  pendingFolderPaths.value.forEach((path) => {
-    if (!byPath.has(path)) byPath.set(path, folderOptionFromPath(path))
-  })
-  return sortFolderOptions([...byPath.values()])
-})
-
 const dialogVisible = computed({
   get: () => props.visible,
   set: (value: boolean) => emit('update:visible', value),
 })
-
-// Deep paths are shown as root / segment / segment in the picker row.
-const destinationBreadcrumb = computed(() => {
-  if (!localTargetFolder.value) return t('knowledgeBase.folderTree.rootRow')
-  const parts = localTargetFolder.value.split('/').filter(Boolean)
-  return [t('knowledgeBase.folderTree.rootRow'), ...parts].join(' / ')
-})
-
-const destinationFullLabel = computed(() =>
-  localTargetFolder.value || t('knowledgeBase.folderTree.rootRow'),
-)
 
 /**
  * Directory a folder-upload file came from, shown under its name so a batch of
@@ -659,22 +423,6 @@ function fileRelativeDir(file: File): string {
 function fileDisplayTitle(file: File): string {
   const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath
   return relativePath || file.name
-}
-
-function onDestinationCreated(path: string) {
-  if (!path || pendingFolderPaths.value.includes(path)) return
-  pendingFolderPaths.value = [...pendingFolderPaths.value, path]
-}
-
-function onDestinationPicked(path: string) {
-  localTargetFolder.value = path
-  destinationPickerVisible.value = false
-}
-
-function getModelName(modelId: string): string {
-  if (!modelId) return t('uploadConfirm.notSet')
-  const model = allModels.value.find((m: any) => m.id === modelId)
-  return model?.name || modelId
 }
 
 function truncateNavText(text: string, max = 18): string {
@@ -786,35 +534,6 @@ const languageOptions = computed(() => [
   { label: t('knowledgeEditor.chunking.languageOptions.zh'), value: 'zh' },
 ])
 
-const tagOptions = computed(() => availableTags.value.map(tag => ({
-  label: tag.name,
-  value: tag.id,
-})))
-
-const hasImages = computed(() => {
-  if (props.mode === 'manual' && props.manualPreview?.content) {
-    const content = props.manualPreview.content
-    if (/data:image\/|!\[[^\]]*\]\([^)]+\)/i.test(content)) return true
-  }
-  return batchFileExts.value.some(ext => IMAGE_EXTENSIONS.includes(ext))
-})
-
-const showMultimodalModelError = computed(() => {
-  return !hasImages.value && uiState.value.multimodalConfig.enabled && !uiState.value.multimodalConfig.vllmModelId
-})
-
-const issueSectionKeys = computed(() => {
-  const keys = new Set<IssueSectionKey>()
-  if (hasImages.value) {
-    if (!uiState.value.multimodalConfig.enabled || !uiState.value.multimodalConfig.vllmModelId) {
-      keys.add('multimodal')
-    }
-  } else if (showMultimodalModelError.value) {
-    keys.add('multimodal')
-  }
-  return keys
-})
-
 const navItems = computed(() => {
   const items: Array<{
     key: ConfigSectionKey
@@ -840,18 +559,8 @@ const navItems = computed(() => {
     })
   }
 
-  if (props.mode !== 'reparse') {
-    push('tags', 'tag', t('uploadConfirm.tabTags'))
-  }
   push('parser', 'file-search', t('settings.parserEngine'))
   push('chunking', 'file-copy', t('knowledgeEditor.sidebar.chunking'))
-  push(
-    'multimodal',
-    'image',
-    t('knowledgeEditor.sidebar.multimodal'),
-    issueSectionKeys.value.has('multimodal'),
-  )
-  push('question', 'chat', t('knowledgeEditor.advanced.questionGeneration.label'))
   return items
 })
 
@@ -860,13 +569,6 @@ function getSectionNavStatus(
   issue?: boolean,
 ): { status: string; statusTone?: 'warning' | 'error' | 'muted' } {
   switch (key) {
-    case 'tags':
-      if (selectedTagIds.value.length === 0) {
-        return { status: t('uploadConfirm.summaryNoTags'), statusTone: 'muted' }
-      }
-      return {
-        status: t('uploadConfirm.summaryTagsCount', { count: selectedTagIds.value.length }),
-      }
     case 'parser':
       if (uiState.value.pdfForceScanned && hasPdf.value) {
         return { status: t('uploadConfirm.summaryParserForceScanned') }
@@ -883,28 +585,6 @@ function getSectionNavStatus(
       }
       return { status: parts.join(' · ') }
     }
-    case 'multimodal': {
-      if (issue) {
-        return { status: t('uploadConfirm.statusNeedsSetup'), statusTone: 'error' }
-      }
-      const mm = uiState.value.multimodalConfig
-      if (!mm.enabled) {
-        return { status: t('uploadConfirm.statusOff'), statusTone: 'muted' }
-      }
-      return {
-        status: mm.vllmModelId ? getModelName(mm.vllmModelId) : t('uploadConfirm.notSet'),
-        statusTone: mm.vllmModelId ? undefined : 'warning',
-      }
-    }
-    case 'question': {
-      const question = uiState.value.questionGenerationConfig
-      if (!question.enabled) {
-        return { status: t('uploadConfirm.statusOff'), statusTone: 'muted' }
-      }
-      return {
-        status: t('uploadConfirm.summaryQuestionCountValue', { count: question.questionCount }),
-      }
-    }
     default:
       return { status: '' }
   }
@@ -913,16 +593,12 @@ function getSectionNavStatus(
 const canConfirm = computed(() => {
   if (props.mode === 'file' && batchItemCount.value === 0) return false
   if (props.mode === 'manual' && !props.manualPreview?.content?.trim()) return false
-  if (showMultimodalModelError.value) {
-    return false
-  }
   return true
 })
 
 function getDefaultSection(): ConfigSectionKey {
   if (props.mode === 'reparse') return 'parser'
-  if (issueSectionKeys.value.has('multimodal')) return 'multimodal'
-  return 'tags'
+  return 'parser'
 }
 
 function goToSection(key: ConfigSectionKey) {
@@ -947,9 +623,7 @@ function createDefaultUIState(): UploadUIState {
       languages: [],
       tableMetadataInstructions: '',
     },
-    multimodalConfig: { enabled: false, vllmModelId: '', descriptionLanguage: '', customInstructions: '' },
-    questionGenerationConfig: { enabled: true, questionCount: 3, customInstructions: '' },
-    pdfForceScanned: false,
+        pdfForceScanned: false,
   }
 }
 
@@ -973,17 +647,6 @@ function initFromKbInfo(kb: any) {
       languages: kb.chunking_config?.languages || [],
       tableMetadataInstructions: kb.chunking_config?.table_metadata_instructions || '',
     },
-    multimodalConfig: {
-      enabled: !!kb.vlm_config?.enabled,
-      vllmModelId: kb.vlm_config?.model_id || '',
-      descriptionLanguage: kb.vlm_config?.description_language || '',
-      customInstructions: kb.vlm_config?.custom_instructions || '',
-    },
-    questionGenerationConfig: {
-      enabled: kb.question_generation_config?.enabled ?? true,
-      questionCount: kb.question_generation_config?.question_count || 3,
-      customInstructions: kb.question_generation_config?.custom_instructions || '',
-    },
     pdfForceScanned: false,
   }
 }
@@ -1005,18 +668,6 @@ function buildProcessOverrides(): KnowledgeProcessOverrides {
       token_limit: chunking.tokenLimit,
       languages: chunking.languages,
       table_metadata_instructions: chunking.tableMetadataInstructions,
-    },
-    enable_multimodel: state.multimodalConfig.enabled && !!state.multimodalConfig.vllmModelId,
-    vlm_config: {
-      enabled: state.multimodalConfig.enabled && !!state.multimodalConfig.vllmModelId,
-      model_id: state.multimodalConfig.vllmModelId,
-      description_language: state.multimodalConfig.descriptionLanguage,
-      custom_instructions: state.multimodalConfig.customInstructions,
-    },
-    question_generation_config: {
-      enabled: state.questionGenerationConfig.enabled,
-      question_count: state.questionGenerationConfig.questionCount,
-      custom_instructions: state.questionGenerationConfig.customInstructions,
     },
   }
 
@@ -1047,53 +698,10 @@ function applyOverridesToState(o?: KnowledgeProcessOverrides | null) {
     if (cc.parser_engine_rules) s.chunkingConfig.parserEngineRules = cc.parser_engine_rules
   }
   if (o.parser_engine_rules) s.chunkingConfig.parserEngineRules = o.parser_engine_rules
-  if (o.enable_multimodel != null) s.multimodalConfig.enabled = o.enable_multimodel
-  if (o.vlm_config) {
-    if (o.vlm_config.enabled != null) s.multimodalConfig.enabled = o.vlm_config.enabled
-    if (o.vlm_config.model_id != null) s.multimodalConfig.vllmModelId = o.vlm_config.model_id
-    if (o.vlm_config.description_language != null) s.multimodalConfig.descriptionLanguage = o.vlm_config.description_language
-    if (o.vlm_config.custom_instructions != null) s.multimodalConfig.customInstructions = o.vlm_config.custom_instructions
-  }
-  const qg = o.question_generation_config
-  if (qg) {
-    if (qg.enabled != null) s.questionGenerationConfig.enabled = qg.enabled
-    if (qg.question_count != null) s.questionGenerationConfig.questionCount = qg.question_count
-    if (qg.custom_instructions != null) s.questionGenerationConfig.customInstructions = qg.custom_instructions
-  }
   if (o.parser_engine_overrides && o.parser_engine_overrides.pdf_force_scanned === 'true') {
     s.pdfForceScanned = true
   } else {
     s.pdfForceScanned = false
-  }
-}
-
-async function loadModels() {
-  try {
-    await chatResources.ensureModels()
-    allModels.value = chatResources.allModels || []
-  } catch {
-    allModels.value = []
-  }
-}
-
-async function loadTags() {
-  const kbId = props.kbInfo?.id
-  availableTags.value = []
-  tagsLoadFailed.value = false
-  if (!kbId || props.mode === 'reparse') return
-
-  tagsLoading.value = true
-  try {
-    const response: any = await listKnowledgeTags(kbId, { page: 1, page_size: 1000 })
-    const tags = response?.data?.data || []
-    availableTags.value = tags.map((tag: any) => ({
-      id: String(tag.id),
-      name: String(tag.name || ''),
-    }))
-  } catch {
-    tagsLoadFailed.value = true
-  } finally {
-    tagsLoading.value = false
   }
 }
 
@@ -1107,18 +715,12 @@ watch(
     if (props.mode === 'manual' && props.manualPreview?.sourceInfo) {
       sourceInfoByItem.value.manual = { ...props.manualPreview.sourceInfo }
     }
-    selectedTagIds.value = props.mode === 'reparse' ? [] : [...(props.tagIds || [])]
-    localTargetFolder.value = props.mode === 'file' ? (props.targetFolder || '') : ''
-    pendingFolderPaths.value = []
-    destinationPickerVisible.value = false
     initFromKbInfo(props.kbInfo)
     if (props.mode === 'reparse') {
       applyOverridesToState(props.reparsePreview?.processOverrides)
     }
     activeSection.value = getDefaultSection()
     chunkingMoreOpen.value = false
-    loadModels()
-    loadTags()
   },
 )
 
@@ -1169,24 +771,6 @@ const handleParserEngineRulesUpdate = (rules: Array<{
   uiState.value.chunkingConfig.parserEngineRules = rules
 }
 
-const handleMultimodalVLLMChange = (modelId: string) => {
-  uiState.value.multimodalConfig.vllmModelId = modelId
-}
-
-const handleAddVLLMModel = () => {
-  uiStore.openSettings('models', 'vllm')
-}
-
-const validateBeforeConfirm = (): boolean => {
-  if (showMultimodalModelError.value) {
-    MessagePlugin.warning(t('uploadConfirm.vlmModelSelectRequired'))
-    goToSection('multimodal')
-    return false
-  }
-
-  return true
-}
-
 const handleCancel = () => {
   emit('cancel')
   emit('update:visible', false)
@@ -1197,15 +781,13 @@ const handleConfirm = () => {
     MessagePlugin.warning(t('uploadConfirm.noItems'))
     return
   }
-  if (!validateBeforeConfirm()) return
 
   const processConfig = buildProcessOverrides()
   if (props.mode === 'manual' && props.manualPreview) {
     emit('confirm', {
       processConfig,
       mode: 'manual',
-      tagIds: [...selectedTagIds.value],
-      manual: { ...props.manualPreview, tagIds: [...selectedTagIds.value], sourceInfo: sourceInfo('manual') },
+      manual: { ...props.manualPreview, sourceInfo: sourceInfo('manual') },
     })
   } else if (props.mode === 'reparse' && props.reparsePreview) {
     emit('confirm', { processConfig, mode: 'reparse', reparse: { ...props.reparsePreview } })
@@ -1213,10 +795,8 @@ const handleConfirm = () => {
     emit('confirm', {
       processConfig,
       mode: 'file',
-      tagIds: [...selectedTagIds.value],
       files: [...localFiles.value],
       urls: [...localUrls.value],
-      targetFolder: localTargetFolder.value,
       sourceInfoByItem: sourceInfoByItem.value,
     })
   }
@@ -1346,60 +926,6 @@ const handleConfirm = () => {
 }
 
 // Destination sits under the title inside the header block.
-.destination-row {
-  flex-shrink: 0;
-  padding: 0;
-}
-
-.destination-row :deep(.t-popup__reference) {
-  display: block;
-  max-width: 100%;
-}
-
-.destination-crumb {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-family: var(--app-font-family);
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: var(--td-brand-color);
-
-    .destination-crumb__path,
-    .destination-crumb__caret {
-      color: var(--td-brand-color);
-    }
-  }
-}
-
-.destination-crumb__label {
-  flex-shrink: 0;
-}
-
-.destination-crumb__path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--td-text-color-primary);
-  font-weight: 500;
-}
-
-.destination-crumb__caret {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
 
 .files-list-wrap {
   display: flex;
@@ -2019,20 +1545,5 @@ const handleConfirm = () => {
 <style lang="less">
 // Must sit above the upload modal (z-index 3000). Do not reuse card-more-popup here —
 // its global z-index: 99 !important would hide the menu behind the modal overlay.
-.upload-destination-popup {
-  z-index: 3100 !important;
 
-  .t-popup__content {
-    padding: 4px !important;
-    margin-top: 6px !important;
-    min-width: 208px;
-    border-radius: 10px !important;
-    background: var(--td-bg-color-container) !important;
-    border: 0.5px solid var(--td-component-stroke) !important;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.1) !important;
-  }
-}
 </style>

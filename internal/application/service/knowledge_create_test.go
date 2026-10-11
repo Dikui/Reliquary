@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -38,21 +38,6 @@ func (r *createKnowledgeFileRepoStub) CreateKnowledge(ctx context.Context, knowl
 	copied := *knowledge
 	r.createdKnowledge = &copied
 	return r.createErr
-}
-
-// GetKnowledgeTags is invoked by setAndAttachKnowledgeTags after create even
-// when no tags were supplied; a fresh knowledge has none, so return empty.
-func (r *createKnowledgeFileRepoStub) GetKnowledgeTags(
-	ctx context.Context,
-	knowledgeIDs []string,
-) (map[string][]*types.KnowledgeTag, error) {
-	return map[string][]*types.KnowledgeTag{}, nil
-}
-
-type createKnowledgeFileKBServiceStub struct {
-	interfaces.KnowledgeBaseService
-
-	kb *types.KnowledgeBase
 }
 
 func (s *createKnowledgeFileKBServiceStub) GetKnowledgeBaseByID(
@@ -121,11 +106,11 @@ type createKnowledgeTaskEnqueuerStub struct {
 }
 
 func (s *createKnowledgeTaskEnqueuerStub) Enqueue(
-	task *asynq.Task,
-	opts ...asynq.Option,
-) (*asynq.TaskInfo, error) {
+	task *taskqueue.Task,
+	opts ...taskqueue.Option,
+) (*taskqueue.TaskInfo, error) {
 	s.calls++
-	return &asynq.TaskInfo{ID: "task-1", Queue: "default"}, nil
+	return &taskqueue.TaskInfo{ID: "task-1", Queue: "default"}, nil
 }
 
 func TestCreateKnowledgeFromFileDoesNotPersistWhenStorageSaveFails(t *testing.T) {
@@ -146,7 +131,6 @@ func TestCreateKnowledgeFromFileDoesNotPersistWhenStorageSaveFails(t *testing.T)
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -177,7 +161,6 @@ func TestCreateKnowledgeFromFilePersistsStoredFilePathOnCreate(t *testing.T) {
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -200,15 +183,13 @@ func TestCreateKnowledgeFromImageUsesLocalStorage(t *testing.T) {
 	fileSvc := &createKnowledgeFileServiceStub{}
 	task := &createKnowledgeTaskEnqueuerStub{}
 	kb := &types.KnowledgeBase{
-		ID:        "kb-1",
-		VLMConfig: types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
+		ID: "kb-1",
 	}
 	svc := &knowledgeService{
-		repo:         repo,
-		kbService:    &createKnowledgeFileKBServiceStub{kb: kb},
-		fileSvc:      fileSvc,
-		task:         task,
-		modelService: visionModelServiceStub{model: &types.Model{Type: types.ModelTypeVLLM}},
+		repo:      repo,
+		kbService: &createKnowledgeFileKBServiceStub{kb: kb},
+		fileSvc:   fileSvc,
+		task:      task,
 	}
 
 	knowledge, err := svc.CreateKnowledgeFromFile(
@@ -218,7 +199,6 @@ func TestCreateKnowledgeFromImageUsesLocalStorage(t *testing.T) {
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -248,7 +228,6 @@ func TestCreateKnowledgeFromFileDeletesStoredFileWhenCreateFails(t *testing.T) {
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -286,7 +265,6 @@ func TestCreateKnowledgeFromFile_PersistsProcessOverrides(t *testing.T) {
 		map[string]string{"source": "test"},
 		nil,
 		"",
-		nil,
 		"",
 		overrides,
 	)
@@ -328,4 +306,10 @@ func newMultipartFileHeader(t *testing.T, filename string, content string) *mult
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	require.NoError(t, req.ParseMultipartForm(1024))
 	return req.MultipartForm.File["file"][0]
+}
+
+type createKnowledgeFileKBServiceStub struct {
+	interfaces.KnowledgeBaseService
+
+	kb *types.KnowledgeBase
 }

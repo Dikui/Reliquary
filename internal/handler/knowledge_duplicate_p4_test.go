@@ -30,7 +30,7 @@ func TestP4DuplicateManualKnowledgeHTTPReturnsExistingMessage(t *testing.T) {
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.UserIDContextKey, "personal-user"))
 		c.Next()
 	})
-	handler := &KnowledgeHandler{kbService: &stubFolderKBService{}, kgService: duplicateManualKnowledgeService{}}
+	handler := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: duplicateManualKnowledgeService{}}
 	router.POST("/knowledge-bases/:id/knowledge/manual", handler.CreateManualKnowledge)
 	request := httptest.NewRequest(http.MethodPost, "/knowledge-bases/kb-1/knowledge/manual", strings.NewReader(`{"title":"Reprint","content":"body","status":"publish"}`))
 	request.Header.Set("Content-Type", "application/json")

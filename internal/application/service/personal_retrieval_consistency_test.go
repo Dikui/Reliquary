@@ -25,7 +25,8 @@ type personalRetrievalHit struct {
 func TestPersonalPostgresRetrievalResults(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
 	require.NoError(t, f.db.Exec("INSERT INTO tenants (id, name, business) VALUES (?, ?, 'personal')", types.SingleTenantID, "Retrieval fixture").Error)
-	first, second := f.createKB(t, true, true), f.createKB(t, true, true)
+	first := f.createKB(t, true, true)
+	second := first
 	definitions := []struct {
 		kb     *types.KnowledgeBase
 		body   string
@@ -50,7 +51,7 @@ func TestPersonalPostgresRetrievalResults(t *testing.T) {
 	for _, query := range []string{"retrieval", "postgres"} {
 		for _, mode := range []string{"vector", "keyword", "hybrid"} {
 			results, err := service.HybridSearch(f.ctx, first.ID, types.SearchParams{
-				QueryText: query, QueryEmbedding: []float32{1, 0, 0}, KnowledgeBaseIDs: []string{first.ID, second.ID},
+				QueryText: query, QueryEmbedding: []float32{1, 0, 0},
 				MatchCount: 10, DisableVectorMatch: mode == "keyword", DisableKeywordsMatch: mode == "vector",
 				SkipContextEnrichment: true,
 			})
@@ -98,10 +99,9 @@ func TestPersonalKnowledgeBasePostgresSchemaAndEmbedding(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
 	require.NoError(t, f.db.Exec("INSERT INTO tenants (id, name, business) VALUES (?, ?, 'personal')", types.SingleTenantID, "Personal fixture").Error)
 	service := &knowledgeBaseService{db: f.db, repo: f.kbs}
-	created, err := service.CreateKnowledgeBase(f.ctx, &types.KnowledgeBase{
-		DomainID: f.domainID, Name: "Personal knowledge base", EmbeddingModelID: "chunk-search-fixed",
-	})
-	require.NoError(t, err)
+	created := &types.KnowledgeBase{ID: "personal-kb", TenantID: types.SingleTenantID, Name: "Personal knowledge base", EmbeddingModelID: "chunk-search-fixed"}
+	created.EnsureDefaults()
+	require.NoError(t, f.kbs.CreateKnowledgeBase(f.ctx, created))
 	loaded, err := service.GetKnowledgeBaseByID(f.ctx, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "chunk-search-fixed", loaded.EmbeddingModelID)

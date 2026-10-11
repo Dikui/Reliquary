@@ -41,7 +41,6 @@ type ChunkRepository interface {
 		knowledgeID string,
 		page *types.Pagination,
 		chunkType []types.ChunkType,
-		tagIDs []string,
 		keyword string,
 		sortOrder string,
 		isEnabled *bool) ([]*types.Chunk, int64, error)
@@ -50,15 +49,6 @@ type ChunkRepository interface {
 	ListChunksByParentIDs(ctx context.Context, tenantID uint64, parentIDs []string) ([]*types.Chunk, error)
 	// UpdateChunk updates a chunk
 	UpdateChunk(ctx context.Context, chunk *types.Chunk) error
-	// CreateChunkRevision stores an immutable snapshot of a superseded revision.
-	CreateChunkRevision(ctx context.Context, revision *types.ChunkRevision) error
-	// SaveChunkRevision atomically snapshots the old row and applies the new
-	// row only when its revision still matches expectedRevision.
-	SaveChunkRevision(ctx context.Context, chunk *types.Chunk, revision *types.ChunkRevision, expectedRevision int) error
-	// ListChunkRevisions returns snapshots ordered newest first.
-	ListChunkRevisions(ctx context.Context, tenantID uint64, chunkID string) ([]*types.ChunkRevision, error)
-	// GetChunkRevision returns one historical snapshot.
-	GetChunkRevision(ctx context.Context, tenantID uint64, chunkID string, revision int) (*types.ChunkRevision, error)
 	// UpdateChunks updates chunks in batch
 	UpdateChunks(ctx context.Context, chunks []*types.Chunk) error
 	// SaveChunks persists full chunk objects in a single transaction using GORM Save (UPDATE).
@@ -73,26 +63,10 @@ type ChunkRepository interface {
 	DeleteByKnowledgeList(ctx context.Context, tenantID uint64, knowledgeIDs []string) error
 	// ListImageInfoByKnowledgeIDs returns non-empty (knowledge_id, image_info) pairs for image cleanup.
 	ListImageInfoByKnowledgeIDs(ctx context.Context, tenantID uint64, knowledgeIDs []string) ([]ChunkImageInfo, error)
-	// MoveChunksByKnowledgeID updates knowledge_base_id for all chunks of a knowledge item
-	MoveChunksByKnowledgeID(ctx context.Context, tenantID uint64, knowledgeID string, targetKBID string) error
-	// DeleteChunksByTagID deletes all chunks with the specified tag ID
-	// Returns the IDs of deleted chunks for index cleanup
-	DeleteChunksByTagID(ctx context.Context, tenantID uint64, kbID string, tagID string, excludeIDs []string) ([]string, error)
 	// CountChunksByKnowledgeBaseID counts the number of chunks in a knowledge base.
 	CountChunksByKnowledgeBaseID(ctx context.Context, tenantID uint64, kbID string) (int64, error)
 	// DeleteUnindexedChunks deletes unindexed chunks by knowledge id and chunk index range
 	DeleteUnindexedChunks(ctx context.Context, tenantID uint64, knowledgeID string) ([]*types.Chunk, error)
-	// UpdateChunkFlagsBatch updates flags for multiple chunks in batch using a single SQL statement.
-	// setFlags: map of chunk ID to flags to set (OR operation)
-	// clearFlags: map of chunk ID to flags to clear (AND NOT operation)
-	UpdateChunkFlagsBatch(ctx context.Context, tenantID uint64, kbID string, setFlags map[string]types.ChunkFlags, clearFlags map[string]types.ChunkFlags) error
-	// Supports updating is_enabled, flags, and tag_id fields.
-	// newTagID: if not nil, updates tag_id to this value (empty string means uncategorized)
-
-	// ListRecentDocumentChunksWithQuestions lists recent document chunks that have generated questions.
-	// Filter by kbIDs and/or knowledgeIDs. At least one of them must be non-empty.
-	// Returns up to `limit` chunks sorted by updated_at descending.
-	ListRecentDocumentChunksWithQuestions(ctx context.Context, tenantID uint64, kbIDs []string, knowledgeIDs []string, limit int) ([]*types.Chunk, error)
 }
 
 // ChunkService defines the interface for chunk service operations
@@ -128,15 +102,4 @@ type ChunkService interface {
 	ListChunkByParentID(ctx context.Context, tenantID uint64, parentID string) ([]*types.Chunk, error)
 	// GetRepository gets the chunk repository
 	GetRepository() ChunkRepository
-	// DeleteGeneratedQuestion deletes a single generated question from a chunk by question ID
-	// This updates the chunk metadata and removes the corresponding vector index
-	DeleteGeneratedQuestion(ctx context.Context, chunkID string, questionID string) error
-	// UpdateDocumentChunk applies a revision-checked edit and synchronizes retrieval indices.
-	UpdateDocumentChunk(ctx context.Context, chunkID string, content *string, isEnabled *bool, expectedRevision *int) (*types.Chunk, error)
-	// ListChunkRevisions lists immutable snapshots for a chunk.
-	ListChunkRevisions(ctx context.Context, chunkID string) ([]*types.ChunkRevision, error)
-	// RevertDocumentChunk restores a historical revision as a new current revision.
-	RevertDocumentChunk(ctx context.Context, chunkID string, revision int, expectedRevision *int) (*types.Chunk, error)
-	// UpsertGeneratedQuestion creates or updates a generated retrieval question.
-	UpsertGeneratedQuestion(ctx context.Context, chunkID string, questionID string, question string) (*types.GeneratedQuestion, error)
 }

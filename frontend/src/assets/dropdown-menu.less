@@ -2,9 +2,8 @@
  * 全局统一下拉菜单样式
  *
  * 适用于所有场景的 popup/dropdown 菜单，包括：
- * - 卡片操作菜单（知识库、智能体、组织）
+ * - 卡片操作菜单（知识库）
  * - 文档操作菜单
- * - 对话会话菜单
  * - 上传操作菜单
  *
  * 使用方式：
@@ -169,14 +168,7 @@
     min-width: 140px;
     gap: 1px;
 
-    &.move-menu {
-      min-width: 220px;
-      max-width: 280px;
-      max-height: 360px;
-      overflow-y: auto;
-      padding: 0;
-      gap: 0;
-    }
+
   }
 
   .card-menu-item {
@@ -244,107 +236,17 @@
     }
   }
 
-  .move-menu-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--td-text-color-primary);
-    border-bottom: 1px solid var(--td-component-stroke);
-    cursor: pointer;
 
-    &:hover {
-      background: var(--td-bg-color-container-hover);
-    }
-  }
 
-  .move-menu-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px 0;
-  }
 
-  .move-menu-empty {
-    padding: 12px 16px;
-    font-size: 12px;
-    color: var(--td-text-color-placeholder);
-    text-align: center;
-    line-height: 1.5;
-  }
 
-  .move-target-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
-  .move-target-count {
-    font-size: 12px;
-    color: var(--td-text-color-placeholder);
-  }
 
-  .move-confirm-body {
-    padding: 8px;
 
-    .move-target-info {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 8px;
-      background: var(--td-bg-color-container-hover);
-      border-radius: 6px;
-      font-size: 13px;
-      color: var(--td-text-color-secondary);
-      margin-bottom: 8px;
-    }
 
-    .move-mode-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 6px;
-      padding: 6px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      margin-bottom: 4px;
 
-      &:hover {
-        background: var(--td-bg-color-container-hover);
-      }
 
-      &.active {
-        background: var(--td-brand-color-light);
-      }
 
-      .move-mode-text {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-
-        .move-mode-label {
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--td-text-color-primary);
-        }
-
-        .move-mode-desc {
-          font-size: 11px;
-          color: var(--td-text-color-placeholder);
-          line-height: 1.4;
-        }
-      }
-    }
-
-    .move-confirm-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 8px;
-    }
-  }
 }
 
 /* ============================================
@@ -488,127 +390,6 @@
   }
 }
 
-/* tag 更多弹窗 */
-.tag-more-popup {
-  z-index: 99 !important;
-
-  .t-popup__content {
-    padding: 4px !important;
-    margin-top: 4px !important;
-    min-width: 120px;
-    border-radius: 10px !important;
-    background: var(--td-bg-color-container) !important;
-    border: 0.5px solid var(--td-component-stroke) !important;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.1) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    animation: dropdownSlideIn 0.18s cubic-bezier(0.2, 0, 0, 1) both;
-    overflow: hidden;
-  }
-}
-
-/* 文档卡片标签选择弹窗 */
-.card-tag-popup {
-  z-index: 99 !important;
-
-  .t-popup__content {
-    padding: 4px !important;
-    margin-top: 4px !important;
-    border-radius: 10px !important;
-    background: var(--td-bg-color-container) !important;
-    border: 0.5px solid var(--td-component-stroke) !important;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.1) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    animation: dropdownSlideIn 0.18s cubic-bezier(0.2, 0, 0, 1) both;
-    overflow: hidden;
-  }
-
-  .tag-popup-list {
-    min-width: 160px;
-    max-width: 240px;
-    max-height: 280px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .tag-popup-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--td-text-color-primary);
-    cursor: pointer;
-    line-height: 1.2;
-    transition: background-color 0.15s ease;
-
-    &:hover {
-      background: var(--td-bg-color-container-hover);
-    }
-
-    &.is-selected {
-      color: var(--td-brand-color);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  .tag-popup-check {
-    font-size: 14px;
-    color: var(--td-brand-color);
-    visibility: hidden;
-    flex-shrink: 0;
-
-    &.visible {
-      visibility: visible;
-    }
-  }
-
-  .tag-popup-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    &.muted {
-      color: var(--td-text-color-secondary);
-    }
-  }
-
-  .tag-popup-item.is-action {
-    color: var(--td-text-color-secondary);
-
-    .tag-popup-check {
-      visibility: visible;
-      color: var(--td-text-color-secondary);
-    }
-
-    &:hover {
-      color: var(--td-error-color);
-      background: var(--td-error-color-1);
-
-      .tag-popup-check {
-        color: var(--td-error-color);
-      }
-    }
-  }
-
-  .tag-popup-divider {
-    height: 1px;
-    margin: 4px 4px;
-    background: var(--td-component-stroke);
-  }
-}
-
 /* ============================================
    五、锚定表单/确认弹层（设置表单等）
    ============================================ */
@@ -680,8 +461,6 @@
 :root[theme-mode="dark"] {
   .card-more-popup .t-popup__content,
   .card-more .t-popup__content,
-  .tag-more-popup .t-popup__content,
-  .card-tag-popup .t-popup__content,
   .anchored-form-popup-overlay .t-popup__content {
     background: rgba(36, 36, 36, 0.92) !important;
     border-color: rgba(255, 255, 255, 0.08) !important;

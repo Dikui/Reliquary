@@ -85,11 +85,6 @@ var startupEnvVars = []envVarSpec{
 	{name: "DB_USER"},
 	{name: "DB_NAME"},
 	{name: "DB_PASSWORD", sensitive: true},
-	// Cache / queue
-	{name: "REDIS_ADDR"},
-	{name: "REDIS_PASSWORD", sensitive: true},
-	{name: "REDIS_USE_TLS"},
-	{name: "REDIS_TLS_SERVER_NAME"},
 }
 
 // LogStartupEnv prints a single banner block summarising the curated set
@@ -123,15 +118,11 @@ func LogStartupEnv(ctx context.Context) {
 	// is the most common one — utils.GetAESKey() silently falls back to
 	// nil (== "no encryption") when len != 32.
 	if k := os.Getenv("SYSTEM_AES_KEY"); k == "" {
-		logger.Warn(ctx, "[startup-env] SYSTEM_AES_KEY is not set; MCP credentials and model API keys will be stored in plaintext")
+		logger.Warn(ctx, "[startup-env] SYSTEM_AES_KEY is not set; model API keys and data-source credentials will be stored in plaintext")
 	} else if len(k) != 32 {
 		logger.Warnf(ctx,
 			"[startup-env] SYSTEM_AES_KEY is set but %d bytes long; AES-256 requires exactly 32 bytes — encryption is DISABLED",
 			len(k))
-	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("REDIS_TLS_INSECURE_SKIP_VERIFY")), "true") {
-		logger.Warn(ctx,
-			"[startup-env] REDIS_TLS_INSECURE_SKIP_VERIFY=true — Redis TLS certificate verification is DISABLED; do not use in production")
 	}
 }
 

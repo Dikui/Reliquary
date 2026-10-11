@@ -38,7 +38,7 @@ type SystemHandler struct {
 	taskInspector    interfaces.TaskInspector
 	// knowledgeSvc supplies the domain-level cancellation path used by the
 	// runtime task console. It updates business state and tracing before queue
-	// records are removed, unlike a raw Redis deletion.
+	// records are removed, unlike a raw queue-record deletion.
 	knowledgeSvc runtimeKnowledgeCanceller
 	// startup snapshot for GET /system/capabilities; bound in router.NewRouter.
 	deploymentCapabilities DeploymentCapabilitiesData
@@ -191,7 +191,6 @@ func (h *SystemHandler) getKeywordIndexEngine() string {
 func aggregateRuntimeWorkerPools(pools []RuntimeWorkerPool, servers []types.WorkerServerStat) {
 	queueConfigs := map[string]map[string]int{
 		types.WorkerPoolCore:        types.QueueWeightsForPool(types.WorkerPoolCore),
-		types.WorkerPoolPostProcess: types.QueueWeightsForPool(types.WorkerPoolPostProcess),
 		types.WorkerPoolEnrichment:  types.QueueWeightsForPool(types.WorkerPoolEnrichment),
 		types.WorkerPoolMaintenance: types.QueueWeightsForPool(types.WorkerPoolMaintenance),
 		types.WorkerPoolShared:      types.QueueWeightsForSharedPool(),
@@ -258,7 +257,6 @@ func (h *SystemHandler) GetRuntimeQueues(c *gin.Context) {
 		ParseConcurrency:    allocation.UpstreamTotal(),
 		Pools: []RuntimeWorkerPool{
 			{Name: types.WorkerPoolCore, Concurrency: allocation.Core, QueueCount: queueCounts[types.WorkerPoolCore]},
-			{Name: types.WorkerPoolPostProcess, Concurrency: allocation.PostProcess, QueueCount: queueCounts[types.WorkerPoolPostProcess]},
 			{Name: types.WorkerPoolEnrichment, Concurrency: allocation.Enrichment, QueueCount: queueCounts[types.WorkerPoolEnrichment]},
 			{Name: types.WorkerPoolMaintenance, Concurrency: allocation.Maintenance, QueueCount: queueCounts[types.WorkerPoolMaintenance]},
 			{Name: types.WorkerPoolShared, Concurrency: allocation.Shared, QueueCount: len(types.QueueWeightsForSharedPool())},
@@ -266,7 +264,13 @@ func (h *SystemHandler) GetRuntimeQueues(c *gin.Context) {
 		Timestamp: time.Now().Unix(),
 	}
 
-	if h.taskInspector != nil {
+	if provider, ok := h.taskInspector.(interface {
+		QueueConnectionStatus() types.QueueConnectionStatus
+	}); ok {
+		status := provider.QueueConnectionStatus()
+		resp.QueueConnection = &status
+	}
+	if h.taskInspector != nil && (resp.QueueConnection == nil || resp.QueueConnection.State != "reconnecting") {
 		stats, supported, err := h.taskInspector.QueueStats(ctx)
 		if err != nil {
 			logger.Errorf(ctx, "get queue stats failed: %v", err)
@@ -670,21 +674,22 @@ type RuntimeTasksResponse struct {
 }
 
 type RuntimeQueuesResponse struct {
-	Available             bool                       `json:"available"`
-	UpstreamConcurrency   int                        `json:"upstream_concurrency"`
-	ParseConcurrency      int                        `json:"parse_concurrency"` // compatibility alias for upstream_concurrency
-	Pools                 []RuntimeWorkerPool        `json:"pools"`
-	Queues                []types.QueueStat          `json:"queues"`
-	ModelLimiterAvailable bool                       `json:"model_limiter_available"`
-	Models                []modellimiter.RuntimeStat `json:"models"`
-	Timestamp             int64                      `json:"timestamp"`
+	QueueConnection       *types.QueueConnectionStatus `json:"queue_connection,omitempty"`
+	Available             bool                         `json:"available"`
+	UpstreamConcurrency   int                          `json:"upstream_concurrency"`
+	ParseConcurrency      int                          `json:"parse_concurrency"` // compatibility alias for upstream_concurrency
+	Pools                 []RuntimeWorkerPool          `json:"pools"`
+	Queues                []types.QueueStat            `json:"queues"`
+	ModelLimiterAvailable bool                         `json:"model_limiter_available"`
+	Models                []modellimiter.RuntimeStat   `json:"models"`
+	Timestamp             int64                        `json:"timestamp"`
 }
 
 type RuntimeWorkerPool struct {
 	Name            string  `json:"name"`
 	Concurrency     int     `json:"concurrency"` // configured per instance
 	QueueCount      int     `json:"queue_count"`
-	Instances       int     `json:"instances"`        // live asynq server heartbeats
+	Instances       int     `json:"instances"`        // live queue server heartbeats
 	ClusterCapacity int     `json:"cluster_capacity"` // sum of live server concurrency
 	Active          int     `json:"active"`           // live workers assigned to this pool
 	Utilization     float64 `json:"utilization"`      // Active / ClusterCapacity
@@ -699,4 +704,23 @@ type UpdateSystemSettingRequest struct {
 	// etc. by the JSON unmarshaller). Service.encodeForType normalises
 	// these against the registry's declared type and rejects mismatches.
 	Value any `json:"value"`
+}
+
+// QueueConnectionHealth exposes no credentials, task payloads or raw driver errors.
+func (h *SystemHandler) QueueConnectionHealth() *types.QueueConnectionStatus {
+	provider, ok := h.taskInspector.(interface {
+		QueueConnectionStatus() types.QueueConnectionStatus
+	})
+	if !ok {
+		return nil
+	}
+	status := provider.QueueConnectionStatus()
+	raw := status.LastError
+	if raw != "" {
+		status.LastError = "PostgreSQL queue connection is unavailable"
+		if strings.Contains(raw, "another task worker") {
+			status.LastError = "Another session holds the queue advisory lock"
+		}
+	}
+	return &status
 }

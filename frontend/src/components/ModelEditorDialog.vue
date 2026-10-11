@@ -26,7 +26,7 @@
       </span>
     </template>
 
-    <t-form ref="formRef" :data="formData" :rules="rules" layout="vertical">
+    <t-form ref="formRef" :data="formData" :rules="rules" layout="vertical" novalidate>
 
       <section v-if="!isEdit" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionType') }}</h4>
@@ -82,6 +82,9 @@
               <t-icon name="server" class="source-option__icon" />
               <span class="source-option__label">{{ $t('model.editor.sourceLocal') }}</span>
             </button>
+            <button v-if="activeModelType === 'chat'" type="button" class="source-option" :class="{ 'is-active': formData.source === 'chatgpt' }" role="radio" :aria-checked="formData.source === 'chatgpt'" @click="handleSourceChange('chatgpt')">
+              <span class="source-option__label">{{ $t('chatgpt.source') }}</span>
+            </button>
           </div>
 
           <!-- ReRank模型不支持Ollama的提示信息 -->
@@ -101,6 +104,28 @@
             </t-button>
           </div>
         </div>
+
+        <template v-if="formData.source === 'chatgpt'">
+          <p class="form-desc">{{ $t('chatgpt.usingPlan') }} · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">{{ $t('chatgpt.manageUsage') }}</a></p>
+          <div class="form-item">
+            <label for="chatgpt-model-account" class="form-label required">{{ $t('chatgpt.account') }}</label>
+            <t-select id="chatgpt-model-account" v-model="formData.chatgptAccountID" :loading="loadingChatGPT" :placeholder="$t('chatgpt.selectAccount')" :aria-label="$t('chatgpt.account')" @change="loadChatGPTModels">
+              <t-option v-for="account in chatgptAccounts" :key="account.id" :value="account.id" :label="chatGPTAccountLabel(account)" :disabled="account.status !== 'connected'" />
+            </t-select>
+          </div>
+          <div class="form-item">
+            <label for="chatgpt-model-slug" class="form-label required">{{ $t('model.modelName') }}</label>
+            <t-select id="chatgpt-model-slug" v-model="formData.modelName" :loading="loadingChatGPT" :placeholder="$t('chatgpt.selectModel')" :aria-label="$t('model.modelName')" @change="selectChatGPTModel">
+              <t-option v-for="model in chatgptModels" :key="model.slug" :value="model.slug" :label="model.display_name" />
+            </t-select>
+            <t-button variant="text" size="small" class="refresh-btn" :loading="loadingChatGPT" :disabled="loadingChatGPT || !formData.chatgptAccountID" @click="loadChatGPTModels">
+              <t-icon name="refresh" />
+              {{ loadingChatGPT ? $t('common.loading') : $t('chatgpt.refreshModels') }}
+            </t-button>
+          </div>
+          <p v-if="chatgptError" class="form-desc form-desc--warn" role="alert">{{ chatgptError }}</p>
+          <t-button variant="text" size="small" @click="goToChatGPTSettings">{{ $t('chatgpt.openSettings') }}</t-button>
+        </template>
 
         <!-- Ollama 本地模型选择器 -->
         <div v-if="formData.source === 'local'" class="form-item">
@@ -251,7 +276,7 @@
       </template>
 
       <!-- Section 3 — 高级选项（仅在有内容时渲染，避免空 section 出现底部分隔线） -->
-      <section v-if="['embedding', 'chat', 'vllm'].includes(activeModelType)" class="setting-drawer__section">
+      <section v-if="['embedding', 'chat'].includes(activeModelType)" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionAdvanced') }}</h4>
 
         <!-- Embedding 专用：维度 -->
@@ -281,15 +306,30 @@
           </div>
         </div>
 
-        <!-- Chat / VLM: context window. Agent compaction sizes itself from this. -->
-        <div v-if="activeModelType === 'chat' || activeModelType === 'vllm'" class="form-item">
+        <div v-if="activeModelType === 'embedding'" class="form-item">
+          <label class="form-label">{{ $t('model.editor.supportsImagesLabel') }}</label>
+          <div class="vision-toggle">
+            <t-switch v-model="formData.supportsImages" :disabled="formData.source === 'local'" :aria-label="$t('model.editor.supportsImagesLabel')" />
+            <span class="form-desc form-desc--inline">{{ $t(formData.source === 'local' ? 'model.editor.supportsImagesLocalHint' : 'model.editor.supportsImagesDesc') }}</span>
+          </div>
+        </div>
+        <div v-if="activeModelType === 'embedding' && formData.supportsImages && formData.source === 'remote'" class="form-item">
+          <label class="form-label">{{ $t('model.editor.multimodalFormatLabel') }}</label>
+          <t-select v-model="formData.multimodalFormat" :aria-label="$t('model.editor.multimodalFormatLabel')">
+            <t-option value="jina" :label="$t('model.editor.multimodalFormatJina')" />
+          </t-select>
+          <p class="form-desc">{{ $t('model.editor.multimodalFormatHint') }}</p>
+        </div>
+
+        <!-- Text and vision model context window. -->
+        <div v-if="activeModelType === 'chat'" class="form-item">
           <label class="form-label">{{ $t('model.editor.contextWindowLabel') }}</label>
           <t-input v-model.number="formData.contextWindow" type="number" :min="1024" :max="10000000"
             :placeholder="$t('model.editor.contextWindowPlaceholder', { value: DEFAULT_MODEL_CONTEXT_WINDOW })" />
           <p class="form-desc">{{ $t('model.editor.contextWindowDesc') }}</p>
         </div>
 
-        <!-- Chat: supports vision toggle (VLLM models are inherently multimodal) -->
+        <!-- Chat: supports vision toggle -->
         <div v-if="activeModelType === 'chat'" class="form-item">
           <label class="form-label">{{ $t('model.editor.supportsVisionLabel') }}</label>
           <div class="vision-toggle">
@@ -324,7 +364,7 @@
         </div>
 
         <!--
-          Background concurrency cap for this model. Only chat / embedding / vllm
+          Background concurrency cap for this model. Only chat / embedding
           are gated by the governor (see internal/models/limiter), so we surface
           it just for those three. 0 = fall back to the global default.
         -->
@@ -363,6 +403,7 @@ import CredentialResource, {
   type CredentialResourceApi,
 } from '@/components/credentials/CredentialResource.vue'
 import { shouldShowOllamaUnavailableTip } from '@/components/modelEditorSourceState'
+import { getChatGPTAccounts, listChatGPTModels, chatGPTAccountLabel, type ChatGPTAccount, type ChatGPTModel } from '@/api/chatgpt'
 
 interface CustomHeaderItem {
   key: string
@@ -372,7 +413,8 @@ interface CustomHeaderItem {
 interface ModelFormData {
   id: string
   name: string
-  source: 'local' | 'remote'
+  source: 'local' | 'remote' | 'chatgpt'
+  chatgptAccountID?: string
   provider?: string // Provider identifier: openai, aliyun, zhipu, generic, etc.
   modelName: string
   displayName?: string
@@ -380,20 +422,22 @@ interface ModelFormData {
   apiKey?: string
   dimension?: number
   supportsDimensionOverride?: boolean
+  supportsImages?: boolean
+  multimodalFormat?: 'jina' | ''
   interfaceType?: 'ollama' | 'openai'
   isDefault: boolean
   supportsVision?: boolean
-  /** 对话/VLM 上下文窗口（token）。空/0 表示使用默认 200000。 */
+  /** 生成 上下文窗口（token）。空/0 表示使用默认 200000。 */
   contextWindow?: number
-  /** 后台任务对该模型的并发上限；0/undefined 表示沿用全局默认。仅 chat/embedding/vllm 生效。 */
+  /** 后台任务对该模型的并发上限；0/undefined 表示沿用全局默认。仅 chat/embedding 生效。 */
   maxConcurrency?: number
-  /** extra_config.thinking_control — how agent thinking on/off maps to API fields. */
+  /** extra_config.thinking_control maps model thinking parameters to API fields. */
   thinkingControl?: string
   // 自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）
   customHeaders?: CustomHeaderItem[]
 }
 
-type EditorModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
+type EditorModelType = 'chat' | 'embedding' | 'rerank'
 
 interface Props {
   visible: boolean
@@ -426,7 +470,6 @@ const modelTypeChoices = computed(() => ([
   { value: 'chat' as const, label: t('modelSettings.typeShort.chat'), icon: 'chat' },
   { value: 'embedding' as const, label: t('modelSettings.typeShort.embedding'), icon: 'chart-bubble' },
   { value: 'rerank' as const, label: t('modelSettings.typeShort.rerank'), icon: 'filter-sort' },
-  { value: 'vllm' as const, label: t('modelSettings.typeShort.vllm'), icon: 'image' },
 ]))
 
 // API 返回的 Provider 列表
@@ -533,7 +576,6 @@ const modelTypeIcon = computed(() => {
     chat: 'chat',
     embedding: 'chart-bubble',
     rerank: 'filter-sort',
-    vllm: 'image',
   }
   return map[activeModelType.value] || 'setting'
 })
@@ -609,6 +651,8 @@ const formData = ref<ModelFormData>({
   apiKey: '',
   dimension: undefined,
   supportsDimensionOverride: false,
+  supportsImages: false,
+  multimodalFormat: 'jina',
   interfaceType: 'ollama',
   isDefault: false,
   supportsVision: false,
@@ -636,12 +680,13 @@ const rules = computed(() => ({
   ],
   baseUrl: [
     {
-      required: true,
+      required: formData.value.source === 'remote',
       message: t('model.editor.validation.baseUrlRequired'),
       trigger: 'blur'
     },
     {
       validator: (val: string) => {
+        if (formData.value.source !== 'remote') return { result: true }
         if (!val || !val.trim()) {
           return { result: false, message: t('model.editor.validation.baseUrlEmpty') }
         }
@@ -666,20 +711,12 @@ const getModalDescription = () => {
 
 // 获取模型名称占位符
 const getModelNamePlaceholder = () => {
-  if (activeModelType.value === 'vllm') {
-    return formData.value.source === 'local'
-      ? t('model.editor.modelNamePlaceholder.localVllm')
-      : t('model.editor.modelNamePlaceholder.remoteVllm')
-  }
   return formData.value.source === 'local'
     ? t('model.editor.modelNamePlaceholder.local')
     : t('model.editor.modelNamePlaceholder.remote')
 }
 
 const getBaseUrlPlaceholder = () => {
-  if (activeModelType.value === 'vllm') {
-    return t('model.editor.baseUrlPlaceholderVllm')
-  }
   return t('model.editor.baseUrlPlaceholder')
 }
 
@@ -730,12 +767,14 @@ const selectModelType = async (type: EditorModelType) => {
   if (isEdit.value || draftModelType.value === type) return
   draftModelType.value = type
 
-  if (type === 'rerank') {
+  if (type === 'rerank' || (type !== 'chat' && formData.value.source === 'chatgpt')) {
     await handleSourceChange('remote')
   }
   if (type !== 'embedding') {
     formData.value.dimension = undefined
     formData.value.supportsDimensionOverride = false
+    formData.value.supportsImages = false
+    formData.value.multimodalFormat = 'jina'
     dimensionChecked.value = false
     dimensionSuccess.value = false
     dimensionMessage.value = ''
@@ -763,6 +802,8 @@ const selectModelType = async (type: EditorModelType) => {
 }
 
 // 监听 visible 变化，初始化表单
+const loadedConfiguration = ref('')
+const configurationState = () => JSON.stringify({ ...formData.value, apiKey: undefined, credentials: undefined })
 watch(() => props.visible, (val) => {
   if (val) {
     // 检查Ollama服务状态
@@ -792,6 +833,8 @@ watch(() => props.visible, (val) => {
         // not by this form's apiKey field.
         formData.value = {
           ...props.modelData,
+          supportsImages: props.modelData.supportsImages ?? false,
+          multimodalFormat: props.modelData.multimodalFormat || 'jina',
           apiKey: '',
           customHeaders: Array.isArray(props.modelData.customHeaders)
             ? props.modelData.customHeaders.map(h => ({ key: h.key, value: h.value }))
@@ -804,6 +847,7 @@ watch(() => props.visible, (val) => {
       }
       // 否则：连续两次"新增"打开（中间是点遮罩/ESC 关闭的）→ 保留上次填写
 
+      if (formData.value.source === 'chatgpt') loadChatGPTAccounts()
       lastOpenedModelId.value = currentId
 
       // ReRank 模型强制使用 remote 来源（Ollama 不支持 ReRank）
@@ -817,6 +861,7 @@ watch(() => props.visible, (val) => {
       }
     } finally {
       nextTick(() => {
+        loadedConfiguration.value = configurationState()
         hydratingForm.value = false
       })
     }
@@ -837,6 +882,8 @@ const resetForm = () => {
     apiKey: '',
     dimension: undefined, // 默认不填，让用户手动输入或通过检测按钮获取
     supportsDimensionOverride: false,
+    supportsImages: false,
+    multimodalFormat: 'jina',
     interfaceType: undefined,
     isDefault: false,
     supportsVision: false,
@@ -972,18 +1019,64 @@ const loadOllamaModels = async () => {
   }
 }
 
-const handleSourceChange = async (source: 'local' | 'remote') => {
+const handleSourceChange = async (source: 'local' | 'remote' | 'chatgpt') => {
+  if (source === 'chatgpt' && activeModelType.value !== 'chat') return
+  if (formData.value.source !== source && source === 'chatgpt') {
+    formData.value.modelName = ''
+    formData.value.displayName = ''
+    formData.value.baseUrl = ''
+    formData.value.apiKey = ''
+    formData.value.customHeaders = []
+    formData.value.thinkingControl = undefined
+  }
   if (source === 'remote' && formData.value.provider === 'ollama') {
     formData.value.provider = 'generic'
     formData.value.interfaceType = undefined
     formData.value.baseUrl = ''
   }
   formData.value.source = source
+  if (source === 'chatgpt') await loadChatGPTAccounts()
   if (source === 'local') {
+    formData.value.supportsImages = false
     formData.value.interfaceType = 'ollama'
     await loadOllamaModels()
   }
 }
+
+const chatgptAccounts = ref<ChatGPTAccount[]>([])
+const chatgptModels = ref<ChatGPTModel[]>([])
+const loadingChatGPT = ref(false), chatgptError = ref('')
+let chatgptRequestVersion = 0
+async function loadChatGPTAccounts() {
+  const version = ++chatgptRequestVersion
+  loadingChatGPT.value = true; chatgptError.value = ''
+  try {
+    const result = await getChatGPTAccounts()
+    if (version !== chatgptRequestVersion || formData.value.source !== 'chatgpt') return
+    chatgptAccounts.value = result.accounts
+    if (!formData.value.chatgptAccountID) formData.value.chatgptAccountID = result.accounts.find(account => account.status === 'connected')?.id
+    await loadChatGPTModels()
+  } catch (err: any) { if (version === chatgptRequestVersion) chatgptError.value = err?.message || t('chatgpt.loadFailed') }
+  finally { if (version === chatgptRequestVersion) loadingChatGPT.value = false }
+}
+async function loadChatGPTModels() {
+  const version = ++chatgptRequestVersion, accountID = formData.value.chatgptAccountID
+  chatgptModels.value = []; chatgptError.value = ''
+  if (!accountID) { loadingChatGPT.value = false; return }
+  loadingChatGPT.value = true
+  try {
+    const models = await listChatGPTModels(accountID)
+    if (version !== chatgptRequestVersion || formData.value.source !== 'chatgpt') return
+    chatgptModels.value = models
+    if (!models.some(model => model.slug === formData.value.modelName)) formData.value.modelName = ''
+    if (!models.length) chatgptError.value = t('chatgpt.noModels')
+  } catch (err: any) { if (version === chatgptRequestVersion) chatgptError.value = err?.message || t('chatgpt.loadFailed') }
+  finally { if (version === chatgptRequestVersion) loadingChatGPT.value = false }
+}
+function selectChatGPTModel() {
+  formData.value.displayName = chatgptModels.value.find(model => model.slug === formData.value.modelName)?.display_name || ''
+}
+function goToChatGPTSettings() { dialogVisible.value = false; uiStore.openSettings('models') }
 
 // 刷新模型列表
 const refreshOllamaModels = async () => {
@@ -1107,7 +1200,7 @@ const checkRemoteAPI = async () => {
 
     switch (activeModelType.value) {
       case 'chat':
-        // 对话模型（KnowledgeQA）
+        // 生成模型（KnowledgeQA）
         result = await checkRemoteModel({
           modelName: formData.value.modelName,
           baseUrl: formData.value.baseUrl || '',
@@ -1127,6 +1220,8 @@ const checkRemoteAPI = async () => {
           apiKey: formData.value.apiKey || '',
           dimension: formData.value.dimension,
           supportsDimensionOverride: formData.value.supportsDimensionOverride ?? false,
+          supportsImages: formData.value.supportsImages ?? false,
+          multimodalFormat: formData.value.supportsImages ? (formData.value.multimodalFormat || 'jina') : '',
           provider: formData.value.provider,
           ...idPayload,
           ...headerPayload,
@@ -1149,19 +1244,6 @@ const checkRemoteAPI = async () => {
         })
         break
       }
-
-      case 'vllm':
-        // VLLM 模型（多模态）
-        // VLLM 使用 checkRemoteModel 进行基础连接测试
-        result = await checkRemoteModel({
-          modelName: formData.value.modelName,
-          baseUrl: formData.value.baseUrl || '',
-          apiKey: formData.value.apiKey || '',
-          provider: formData.value.provider,
-          ...idPayload,
-          ...headerPayload,
-        })
-        break
 
       default:
         MessagePlugin.error(t('model.editor.unsupportedModelType'))
@@ -1199,6 +1281,10 @@ const checkRemoteAPI = async () => {
 
 // 确认保存
 const handleConfirm = async () => {
+  if (isEdit.value && loadedConfiguration.value && configurationState() === loadedConfiguration.value) {
+    emit('update:visible', false)
+    return
+  }
   try {
     // 手动校验必填字段
     if (!formData.value.modelName || !formData.value.modelName.trim()) {
@@ -1226,6 +1312,10 @@ const handleConfirm = async () => {
       }
     }
 
+    if (formData.value.source === 'chatgpt' && (!formData.value.chatgptAccountID || !chatgptModels.value.some(model => model.slug === formData.value.modelName))) {
+      MessagePlugin.warning(t('chatgpt.accountRequired'))
+      return
+    }
     // 执行表单验证
     await formRef.value?.validate()
 
@@ -1345,6 +1435,7 @@ const startDownload = async (modelName: string) => {
 
 // 组件卸载时清理定时器
 onUnmounted(() => {
+  chatgptRequestVersion++
   if (downloadInterval) {
     clearInterval(downloadInterval)
   }
@@ -1352,6 +1443,7 @@ onUnmounted(() => {
 
 // 监听来源变化，清理所有状态
 watch(() => formData.value.source, () => {
+  if (formData.value.source !== 'chatgpt') chatgptRequestVersion++
   // 重置校验状态
   modelChecked.value = false
   modelAvailable.value = false
@@ -1485,6 +1577,7 @@ const handleCancel = () => {
 // 选中按钮通过实色背景 + 主题色描边浮出，未选中态接近透明，节省纵向空间。
 .source-options {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 3px;
@@ -1961,7 +2054,7 @@ const handleCancel = () => {
 }
 
 // Destructive-action checkbox for "Remove this credential". Styled to match
-// the pattern used in McpServiceDialog so the two dialogs read identically.
+// the shared setting drawer style.
 .clear-credential {
   display: inline-flex;
   margin-top: 8px;

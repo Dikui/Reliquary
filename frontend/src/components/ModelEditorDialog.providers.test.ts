@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
@@ -33,13 +33,17 @@ const presets: ModelProviderOption[] = presetIds.map(value => ({
 }))
 presets.find(preset => preset.value === 'aliyun')!.defaultUrls.embedding = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
-async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProviders = async (type: string) => presets.filter(preset => preset.modelTypes.includes(type)), scenario = async () => {} }: {
+async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = null, testEmbedding = async () => ({ available: true, dimension: 512 }), listProviders = async (type: string) => presets.filter(preset => preset.modelTypes.includes(type)), scenario = async () => {} }: {
   locale?: 'zh-CN' | 'en-US'
-  modelType?: 'chat' | 'embedding' | 'rerank' | 'vllm'
+  modelType?: 'chat' | 'embedding' | 'rerank'
+  modelData?: any
+  testEmbedding?: (payload: any) => Promise<{ available: boolean; dimension?: number }>
   listProviders?: (type: string) => Promise<ModelProviderOption[]>
   scenario?: (state: any) => Promise<void>
 } = {}) {
   const requests: string[] = []
+  const confirmed: any[] = []
+  const chatgptRequests: string[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const stub = defineComponent({ setup: (_, { attrs, slots }) => () => h('div', attrs, slots.default?.()) })
   const modules: Record<string, unknown> = {
@@ -48,8 +52,13 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProvider
     '@/api/initialization': {
       listModelProviders: (type: string) => { requests.push(type); return listProviders(type) },
       listOllamaModels: async () => [{ name: 'qwen3:8b', size: 5 * 1024 * 1024 * 1024, digest: 'local-model', modified_at: '2026-10-10T00:00:00Z' }],
+      testEmbeddingModel: testEmbedding,
     },
     '@/api/model': {},
+    '@/utils/request': { get: async (path: string) => {
+      chatgptRequests.push(path)
+      return { success: true, data: path.endsWith('/accounts') ? { accounts: [{ id: 'chatgpt-account', email: 'user@example.com', subject: 'subject', client_id: 'oaiapp_workspace_a', status: 'connected', scopes: [], expires_at: '', welcome_acknowledged: true }], encryption_ready: true, callback_url: 'http://127.0.0.1:8080/auth/chatgpt/callback' } : [{ slug: 'chatgpt-model-slug', display_name: 'Account model' }] }
+    } },
     '@/stores/ui': { useUIStore: () => ({}) },
     '@/utils/thinkingControl': { defaultThinkingControl, resolveThinkingControl },
     '@/utils/contextWindow': { DEFAULT_MODEL_CONTEXT_WINDOW },
@@ -63,6 +72,12 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProvider
     new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
     return module.exports
   }
+  modules['@i18n'] = i18n
+  modules['@/i18n'] = { __esModule:true,default:i18n }
+  modules['./modelUsage'] = evaluate(readFileSync(new URL('../api/model/modelUsage.ts',import.meta.url),'utf8'))
+  modules['../../utils/request'] = { put: async(path:string,body:any)=>{ if(process.env.RELIQUARY_RECOVERY_REQUESTS)appendFileSync(process.env.RELIQUARY_RECOVERY_REQUESTS,JSON.stringify({kind:'model_credentials',method:'PUT',path,body})+'\n');return {data:{fields:{api_key:{configured:true}}}} } }
+  modules['@/api/model'] = evaluate(readFileSync(new URL('../api/model/index.ts',import.meta.url),'utf8'))
+  modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../api/chatgpt.ts', import.meta.url), 'utf8'))
   const component = evaluate(script.content).default
   component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup
@@ -72,7 +87,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProvider
     onServerPrefetch(async () => { await state.loadProviders(); await scenario(state); await nextTick() })
     return state
   }
-  const app = createSSRApp(component, { visible: true, modelType })
+  const app = createSSRApp(component, { visible: true, modelType, modelData, onConfirm: (value: unknown) => confirmed.push(value) })
   app.use(i18n)
   for (const name of new Set(descriptor.template!.content.match(/t-[a-z-]+(?=[\s>])/g))) {
     if (name !== 't-select' && name !== 't-option') app.component(name, stub)
@@ -82,13 +97,32 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProvider
     setup: (props, { slots }) => () => h('div', { 'data-provider-select': props.popupProps?.overlayClassName === 'provider-select-popup' || undefined }, slots.default?.()),
   }))
   app.component('t-option', defineComponent({
-    props: ['value'],
-    setup: (props, { slots }) => () => h('div', { 'data-option-value': props.value }, slots.default?.()),
+    props: ['value', 'label'],
+    setup: (props, { slots }) => () => h('div', { 'data-option-value': props.value }, [props.label, slots.default?.()]),
   }))
-  return { html: await renderToString(app), state, requests }
+  return { html: await renderToString(app), state, requests, confirmed, chatgptRequests }
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: image embedding fields render and send the multimodal connection format`, async () => {
+    const payloads: any[] = []
+    const modelData = { id: 'image-model', modelName: 'siglip-local', source: 'remote', provider: 'generic', baseUrl: 'http://localhost:18092/v1', supportsImages: true, multimodalFormat: 'jina', dimension: 512 }
+    const { html, state } = await renderEditor({ locale, modelType: 'embedding', modelData, testEmbedding: async payload => { payloads.push(payload); return { available: true, dimension: 512 } }, scenario: async state => { state.formData.value = { ...state.formData.value, ...modelData }; await state.checkRemoteAPI() } })
+    assert.ok(html.includes((locale === 'zh-CN' ? zhCN : enUS).model.editor.supportsImagesLabel))
+    assert.ok(html.includes((locale === 'zh-CN' ? zhCN : enUS).model.editor.multimodalFormatJina))
+    assert.equal(state.formData.value.supportsImages, true)
+    assert.equal(payloads[0].supportsImages, true)
+    assert.equal(payloads[0].multimodalFormat, 'jina')
+    assert.equal(payloads[0].modelId, 'image-model')
+  })
+  test(`${locale}: switching an image embedding model to Ollama clears unsupported image capability`, async () => {
+    const { html, state } = await renderEditor({ locale, modelType: 'embedding', scenario: async state => {
+      state.formData.value.supportsImages = true
+      await state.handleSourceChange('local')
+    } })
+    assert.equal(state.formData.value.supportsImages, false)
+    assert.ok(html.includes((locale === 'zh-CN' ? zhCN : enUS).model.editor.supportsImagesLocalHint))
+  })
   test(`${locale}: the provider dropdown renders exactly the twelve server presets`, async () => {
     const { html, state, requests } = await renderEditor({ locale })
     assert.deepEqual(requests, ['chat'])
@@ -175,4 +209,40 @@ test('a response from a previous model type cannot overwrite the active preset l
   })
   assert.deepEqual(state.providerOptions.value.map((preset: ModelProviderOption) => preset.value), rerankIds)
   assert.equal(state.loadingProviders.value, false)
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: ChatGPT source loads account-specific model names through the real API and validates the selected slug`, async () => {
+    const { state, html, confirmed, chatgptRequests } = await renderEditor({ locale, scenario: async state => {
+      state.formData.value.apiKey = 'old-secret'; state.formData.value.baseUrl = 'https://old.example'; state.formData.value.customHeaders = [{ key: 'Secret', value: 'old-header' }]
+      await state.handleSourceChange('chatgpt')
+      state.formData.value.modelName = 'chatgpt-model-slug'; state.selectChatGPTModel()
+      await state.handleConfirm()
+      await state.handleSourceChange('chatgpt')
+    } })
+    assert.deepEqual(chatgptRequests.slice(0, 2), ['/api/v1/chatgpt/accounts', '/api/v1/chatgpt/accounts/chatgpt-account/models'])
+    assert.equal(confirmed[0].source, 'chatgpt'); assert.equal(confirmed[0].chatgptAccountID, 'chatgpt-account')
+    assert.equal(confirmed[0].modelName, 'chatgpt-model-slug'); assert.equal(confirmed[0].displayName, 'Account model')
+    assert.equal(confirmed[0].apiKey, ''); assert.equal(confirmed[0].baseUrl, ''); assert.deepEqual(confirmed[0].customHeaders, [])
+    assert.match(html, /Account model/); assert.match(html, /Using ChatGPT plan/)
+    assert.equal(state.showThinkingControlField.value, false)
+  })
+}
+test('ChatGPT is unavailable to embedding and rerank model sources', async () => {
+  for (const modelType of ['embedding', 'rerank'] as const) {
+    const { state, html, chatgptRequests } = await renderEditor({ modelType, scenario: async state => { await state.handleSourceChange('chatgpt') } })
+    assert.notEqual(state.formData.value.source, 'chatgpt'); assert.deepEqual(chatgptRequests, [])
+    assert.doesNotMatch(html, /chatgpt-model-account/)
+  }
+})
+
+test('restored model credential save uses only its subresource and unchanged editor confirm does not rewrite configuration', async()=>{
+ const modelData={id:'restored-model',modelName:'fixture-generation',source:'remote',provider:'generic',baseUrl:'http://localhost/v1',credentials:{api_key:{configured:false}}}
+ const {confirmed}=await renderEditor({modelData,scenario:async state=>{
+  state.formData.value={...state.formData.value,...modelData}
+  state.loadedConfiguration.value=state.configurationState()
+  assert.deepEqual(await state.credentialApi.value.save({api_key:'replacement'}),{api_key:{configured:true}})
+  await state.handleConfirm()
+ }})
+ assert.deepEqual(confirmed,[])
 })

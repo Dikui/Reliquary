@@ -246,6 +246,7 @@
 </template>
 
 <script setup lang="ts">
+import { changedSettings } from '@/utils/settingsPatch'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -376,10 +377,13 @@ async function loadEngines() {
   }
 }
 
+const loadedConfig = ref<ParserEngineConfig>({})
+const loadedConfigForm = ref<ParserEngineConfig>({})
 async function loadConfig() {
   try {
     const res = await getParserEngineConfig()
     const data = res?.data
+    loadedConfig.value = { ...data }
     config.value = {
       mineru_endpoint: data?.mineru_endpoint ?? DEFAULT_PARSER_CONFIG.mineru_endpoint ?? '',
       mineru_api_key: data?.mineru_api_key ?? DEFAULT_PARSER_CONFIG.mineru_api_key ?? '',
@@ -396,6 +400,7 @@ async function loadConfig() {
       mineru_cloud_enable_ocr: data?.mineru_cloud_enable_ocr ?? DEFAULT_PARSER_CONFIG.mineru_cloud_enable_ocr ?? true,
       mineru_cloud_language: data?.mineru_cloud_language ?? DEFAULT_PARSER_CONFIG.mineru_cloud_language ?? 'ch',
     }
+    loadedConfigForm.value = buildConfigPayload()
   } catch {
     config.value = { ...DEFAULT_PARSER_CONFIG }
   }
@@ -467,7 +472,10 @@ async function onSave() {
   saving.value = true
   saveMessage.value = ''
   try {
-    await updateParserEngineConfig(buildConfigPayload())
+    const payload = { ...loadedConfig.value, ...changedSettings(loadedConfigForm.value, buildConfigPayload()) }
+    await updateParserEngineConfig(payload)
+    loadedConfig.value = payload
+    loadedConfigForm.value = buildConfigPayload()
     saveSuccess.value = true
     saveMessage.value = t('settings.parser.saveSuccess')
     drawerVisible.value = false
@@ -539,7 +547,7 @@ onMounted(loadAll)
   margin-top: 24px;
 }
 
-// 与 ModelSettings / ModelSettings / McpSettings 同形的提供者卡片。
+// 与 ModelSettings 同形的提供者卡片。
 // 这里整张卡是一个 button —— 单击即打开配置抽屉；active 状态用品牌色描边。
 .engine-card {
   display: flex;
@@ -619,7 +627,7 @@ onMounted(loadAll)
   white-space: nowrap;
 }
 
-// 与 McpSettings 一致的 dot+文字状态徽章。on=绿、err=红、help 用 cursor:help 提示。
+// 提供的 dot+文字状态徽章。on=绿、err=红、help 用 cursor:help 提示。
 .engine-card__status {
   flex-shrink: 0;
   display: inline-flex;

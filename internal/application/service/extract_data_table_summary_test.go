@@ -4,18 +4,14 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"reliquary/internal/types"
 )
 
-func TestBuildSampleDataDescriptionIncludesDataAnalysisRows(t *testing.T) {
+func TestBuildSampleDataDescriptionIncludesTableRows(t *testing.T) {
 	service := &DataTableSummaryService{}
-	result := &types.ToolResult{Data: map[string]interface{}{
-		"rows": []map[string]string{
-			{"date": "20250101", "status": "approved"},
-			{"date": "20250102", "status": "pending"},
-		},
-	}}
+	result := []map[string]string{
+		{"date": "20250101", "status": "approved"},
+		{"date": "20250102", "status": "pending"},
+	}
 
 	got := service.buildSampleDataDescription(context.Background(), result, 10)
 	for _, want := range []string{
@@ -32,11 +28,9 @@ func TestBuildSampleDataDescriptionIncludesDataAnalysisRows(t *testing.T) {
 
 func TestBuildSampleDataDescriptionSupportsDecodedRows(t *testing.T) {
 	service := &DataTableSummaryService{}
-	result := &types.ToolResult{Data: map[string]interface{}{
-		"rows": []map[string]interface{}{
-			{"date": "20250101", "count": float64(3)},
-		},
-	}}
+	result := []map[string]interface{}{
+		{"date": "20250101", "count": float64(3)},
+	}
 
 	got := service.buildSampleDataDescription(context.Background(), result, 10)
 	for _, want := range []string{`"date":"20250101"`, `"count":3`} {
@@ -48,12 +42,10 @@ func TestBuildSampleDataDescriptionSupportsDecodedRows(t *testing.T) {
 
 func TestBuildSampleDataDescriptionLimitsRows(t *testing.T) {
 	service := &DataTableSummaryService{}
-	result := &types.ToolResult{Data: map[string]interface{}{
-		"rows": []map[string]string{
-			{"id": "first"},
-			{"id": "second"},
-		},
-	}}
+	result := []map[string]string{
+		{"id": "first"},
+		{"id": "second"},
+	}
 
 	got := service.buildSampleDataDescription(context.Background(), result, 1)
 	if !strings.Contains(got, `"id":"first"`) {

@@ -5,6 +5,14 @@
       <div class="setting-control"><code>{{ apiBaseUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copy')" @click="copy(apiBaseUrl)"><t-icon name="copy" /></t-button></div>
     </div>
     <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.ingestUrl') }}</label><p>{{ t('integrations.api.ingestUrlDesc') }}</p></div>
+      <div class="setting-control"><code>POST {{ ingestUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copyIngestUrl')" @click="copy(ingestUrl)"><t-icon name="copy" /></t-button></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.mcpUrl') }}</label><p>{{ t('integrations.api.mcpUrlDesc') }}</p></div>
+      <div class="setting-control"><code>{{ mcpUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copyMcpUrl')" @click="copy(mcpUrl)"><t-icon name="copy" /></t-button></div>
+    </div>
+    <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.apiKeys') }}</label><p>{{ t('integrations.api.apiKeysDesc') }}</p></div>
       <t-button theme="primary" @click="openCreate">{{ t('integrations.api.createApiKey') }}</t-button>
     </div>
@@ -13,9 +21,9 @@
     <t-empty v-else-if="!keys.length" :description="t('integrations.api.noApiKeys')" />
     <div v-else class="api-table-shell">
       <t-table row-key="id" :data="keys" :columns="columns" :pagination="pagination" @page-change="onPageChange">
-        <template #api_key="{ row }"><code>{{ row.api_key }}</code></template>
-        <template #expires_at="{ row }">{{ row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
-        <template #actions="{ row }"><t-button variant="text" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</t-button><t-button theme="danger" variant="text" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</t-button></template>
+        <template #api_key="{ row }"><span v-if="row.status === 'migration_invalidated'">{{ t('integrations.api.migrationInvalidated') }}</span><code v-else>{{ row.api_key }}</code></template>
+        <template #expires_at="{ row }">{{ row.status === 'migration_invalidated' ? t('integrations.api.migrationInvalidated') : row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
+        <template #actions="{ row }"><t-button v-if="row.status === 'migration_invalidated'" variant="text" @click="openCreate">{{ t('integrations.api.regenerateMigratedKey') }}</t-button><t-button variant="text" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</t-button><t-button theme="danger" variant="text" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</t-button></template>
       </t-table>
     </div>
     <div class="setting-row">
@@ -39,11 +47,15 @@
       <div class="token-value"><t-input :value="createdToken" type="password" readonly /><t-button variant="outline" @click="copy(createdToken)">{{ t('integrations.api.copy') }}</t-button></div>
     </SettingDrawer>
     <SettingDrawer v-model:visible="playgroundVisible" :title="t('integrations.api.playgroundTitle')" :confirm-text="t('integrations.api.playgroundRun')" :confirm-loading="running" storage-key="setting-drawer:width:api-playground" width="680px" @confirm="runQuery">
-      <t-form :data="playground" layout="vertical" label-align="top" @submit.prevent>
+      <t-form :data="playground" layout="vertical" label-align="top" novalidate @submit.prevent>
         <t-form-item :label="t('integrations.api.apiKeyValue')"><t-input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></t-form-item>
-        <t-form-item :label="t('integrations.api.playgroundKnowledgeBase')"><t-select v-model="playground.knowledgeBaseId" :options="knowledgeBaseOptions" :loading="knowledgeBasesLoading" :disabled="running || knowledgeBasesLoading" :placeholder="t('integrations.api.playgroundKnowledgeBasePlaceholder')" clearable /></t-form-item>
+
         <t-form-item :label="t('integrations.api.playgroundQuestion')"><SafeTextarea v-model="playground.query" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="running" /></t-form-item>
+        <KnowledgeSearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" />
       </t-form>
+      <t-alert v-if="searchOptionsError" theme="error" :message="searchOptionsError"><template #operation><t-button variant="text" @click="loadSearchOptions">{{ t('common.retry') }}</t-button></template></t-alert>
+      <strong class="request-preview-label">{{ t('knowledgeSearch.requestPreview') }}</strong>
+      <pre class="query-result request-preview">{{ playgroundRequestPreview }}</pre>
       <t-alert v-if="playgroundError" theme="error" :message="playgroundError" />
       <pre v-if="playgroundResult" class="query-result">{{ playgroundResult }}</pre>
     </SettingDrawer>
@@ -56,14 +68,20 @@ import { DialogPlugin, MessagePlugin, type DateValue, type DateMultipleValue } f
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import SafeTextarea from '@/components/SafeTextarea.vue'
+import KnowledgeSearchFilters from '@/components/KnowledgeSearchFilters.vue'
+import { getKnowledgeSearchOptions } from '@/api/knowledge-search'
+import type { KnowledgeSearchOptions } from '@/types/knowledgeSearch'
+import { buildKnowledgeSearchRequest, knowledgeSearchErrorMessage, knowledgeSearchErrorCode, defaultSearchFilters } from '@/utils/knowledgeSearch'
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
 import { copyWithToast } from '@/utils/clipboard'
-import { listKnowledgeBases } from '@/api/knowledge-base'
 import { listTenantAPIKeys, createTenantAPIKey, updateTenantAPIKey, deleteTenantAPIKey, type TenantAPIKey } from '@/api/tenant'
 
 const { t } = useI18n()
 const apiBaseUrl = computed(() => getApiBaseUrl().replace(/\/$/, '') || window.location.origin)
+const externalAgentBaseUrl = computed(() => apiBaseUrl.value.startsWith('/') ? `${window.location.origin}${apiBaseUrl.value}` : apiBaseUrl.value)
+const ingestUrl = computed(() => `${externalAgentBaseUrl.value}/api/v1/ingest`)
+const mcpUrl = computed(() => `${externalAgentBaseUrl.value}/mcp`)
 const keys = ref<TenantAPIKey[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -88,10 +106,11 @@ const rules = computed(() => ({ name: [{ required: true, message: t('integration
 const createdVisible = ref(false)
 const createdToken = ref('')
 const playgroundVisible = ref(false)
-const playground = reactive({ apiKey: '', query: '', knowledgeBaseId: '' })
-const knowledgeBaseOptions = ref<Array<{ label: string; value: string }>>([])
-const knowledgeBasesLoading = ref(false)
-const knowledgeBasesLoaded = ref(false)
+const playground = reactive({ apiKey: '', query: '' })
+const playgroundFilters = ref(defaultSearchFilters())
+const searchOptions = ref<KnowledgeSearchOptions>({ entities: [], topics: [] })
+const searchOptionsLoading = ref(false), searchOptionsError = ref('')
+const playgroundRequestPreview = computed(() => JSON.stringify(buildKnowledgeSearchRequest(playground.query, playgroundFilters.value), null, 2))
 const running = ref(false)
 const playgroundError = ref('')
 const playgroundResult = ref('')
@@ -145,41 +164,31 @@ function revoke(key: TenantAPIKey) {
     },
   })
 }
-async function openPlayground() {
-  playgroundVisible.value = true
-  knowledgeBasesLoading.value = true
-  playgroundError.value = ''
-  knowledgeBaseOptions.value = []
-  knowledgeBasesLoaded.value = false
+function openPlayground() { playgroundVisible.value = true; playgroundError.value = ''; void loadSearchOptions() }
+async function loadSearchOptions() {
+  searchOptionsLoading.value = true
+  searchOptionsError.value = ''
   try {
-    const response = await listKnowledgeBases()
+    const response = await getKnowledgeSearchOptions()
     if (!response.success) throw new Error(response.message)
-    knowledgeBasesLoaded.value = true
-    knowledgeBaseOptions.value = (response.data || []).map((kb: { id: string; name: string }) => ({ label: kb.name, value: kb.id }))
-    if (!knowledgeBaseOptions.value.some(option => option.value === playground.knowledgeBaseId)) {
-      playground.knowledgeBaseId = knowledgeBaseOptions.value.length === 1 ? knowledgeBaseOptions.value[0]!.value : ''
-    }
-    if (!knowledgeBaseOptions.value.length) playgroundError.value = t('integrations.api.playgroundNoKnowledgeBases')
-  } catch { playgroundError.value = t('integrations.api.playgroundLoadKnowledgeBasesFailed') }
-  finally { knowledgeBasesLoading.value = false }
+    searchOptions.value = response.data
+  } catch { searchOptionsError.value = t('knowledgeSearch.optionsFailed') }
+  finally { searchOptionsLoading.value = false }
 }
 async function runQuery() {
-  if (running.value || knowledgeBasesLoading.value) return
+  if (running.value) return
   if (!playground.apiKey.trim() || !playground.query.trim()) { playgroundError.value = t('integrations.api.playgroundNeedQuestionAndKey'); return }
-  if (!knowledgeBaseOptions.value.some(option => option.value === playground.knowledgeBaseId)) {
-    const hint = !knowledgeBasesLoaded.value ? 'playgroundLoadKnowledgeBasesFailed'
-      : knowledgeBaseOptions.value.length ? 'playgroundNeedKnowledgeBase' : 'playgroundNoKnowledgeBases'
-    playgroundError.value = t(`integrations.api.${hint}`)
-    return
-  }
+  if (playgroundFilters.value.published_from && playgroundFilters.value.published_to && playgroundFilters.value.published_from > playgroundFilters.value.published_to) { playgroundError.value = t('knowledgeSearch.invalidDateRange'); return }
+  if (!Number.isInteger(playgroundFilters.value.limit) || playgroundFilters.value.limit < 1 || playgroundFilters.value.limit > 100) { playgroundError.value = t('knowledgeSearch.invalidLimit'); return }
   running.value = true
   playgroundError.value = ''
   try {
-    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify({ query: playground.query.trim(), knowledge_base_ids: [playground.knowledgeBaseId] }) })
+    playgroundResult.value = ''
+    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify(buildKnowledgeSearchRequest(playground.query, playgroundFilters.value)) })
     const body = await response.json()
-    if (!response.ok) throw new Error(body.message || body.error?.message || t('integrations.api.playgroundRunFailed'))
+    if (!response.ok || body.success === false) throw body
     playgroundResult.value = JSON.stringify(body, null, 2)
-  } catch (e: any) { playgroundError.value = apiKeyErrorMessage(e, t, 'integrations.api.playgroundRunFailed') }
+  } catch (e: any) { const code = knowledgeSearchErrorCode(e); playgroundError.value = `${code === undefined ? '' : `${code}: `}${knowledgeSearchErrorMessage(e, t)}` }
   finally { running.value = false }
 }
 onMounted(load)
@@ -189,6 +198,7 @@ onMounted(load)
 @import '../../assets/settings-layout.less';
 
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.setting-info { min-width: 0; }
 .setting-info label { color: var(--td-text-color-primary); font-weight: 500; }
 .setting-info p { color: var(--td-text-color-secondary); margin: 6px 0 0; }
 .setting-control, .token-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -199,6 +209,7 @@ onMounted(load)
 .token-value { margin-top: 16px; }
 code { overflow-wrap: anywhere; }
 .query-result { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.request-preview-label { display: block; margin-top: 20px; font-weight: 500; }
 @media (max-width: 600px) { .setting-row { align-items: flex-start; flex-direction: column; } }
 
 .settings-responsive-rows();

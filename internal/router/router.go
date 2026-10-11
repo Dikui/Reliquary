@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	redis "github.com/redis/go-redis/v9"
 	"os"
 	"strings"
 	"time"
@@ -13,8 +12,8 @@ import (
 
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
-	"reliquary/internal/handler/session"
 	"reliquary/internal/logger"
+	"reliquary/internal/mcpserver"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types/interfaces"
 )
@@ -29,35 +28,30 @@ type RouterParams struct {
 	KBService                    interfaces.KnowledgeBaseService
 	KnowledgeService             interfaces.KnowledgeService
 	ChunkService                 interfaces.ChunkService
-	SessionService               interfaces.SessionService
-	MessageService               interfaces.MessageService
 	ModelService                 interfaces.ModelService
 	KBHandler                    *handler.KnowledgeBaseHandler
 	KnowledgeHandler             *handler.KnowledgeHandler
-	KnowledgeAnomalyHandler      *handler.KnowledgeAnomalyHandler
-	KnowledgeStrategyHandler     *handler.KnowledgeStrategyHandler
-	KnowledgeContextHandler      *handler.KnowledgeContextHandler
-	KnowledgeDomainHandler       *handler.KnowledgeDomainHandler
-	ModelRoutingHandler          *handler.ModelRoutingHandler
-	KnowledgeWorkflowHandler     *handler.KnowledgeWorkflowHandler
+	VaultHandler                 *handler.VaultHandler       `optional:"true"`
+	MaintenanceHandler           *handler.MaintenanceHandler `optional:"true"`
+	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
+	EntityHandler                *handler.EntityHandler
+	EmbeddingRebuildHandler      *handler.EmbeddingRebuildHandler `optional:"true"`
+	TopicHandler                 *handler.TopicHandler            `optional:"true"`
+	FollowHandler                *handler.FollowHandler           `optional:"true"`
+	OperationLogHandler          *handler.OperationLogHandler     `optional:"true"`
+	MCPHandler                   *mcpserver.Handler               `optional:"true"`
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
 	ChunkHandler                 *handler.ChunkHandler
-	SessionHandler               *session.Handler
-	MessageHandler               *handler.MessageHandler
+	ChatGPTHandler               *handler.ChatGPTHandler       `optional:"true"`
+	ChatGPTPolicyHandler         *handler.ChatGPTPolicyHandler `optional:"true"`
 	ModelHandler                 *handler.ModelHandler
 	ModelCredentialsHandler      *handler.ModelCredentialsHandler
 	AuthHandler                  *handler.AuthHandler
 	InitializationHandler        *handler.InitializationHandler
 	SystemHandler                *handler.SystemHandler
-	MCPServiceHandler            *handler.MCPServiceHandler
-	MCPCredentialsHandler        *handler.MCPCredentialsHandler
 	ResourceCatalog              interfaces.ResourceCatalog
-	TagHandler                   *handler.TagHandler
-	CustomAgentHandler           *handler.CustomAgentHandler
-	UserFavoriteHandler          *handler.ResourceFavoriteHandler
-	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
 }
@@ -101,13 +95,27 @@ func NewRouter(params RouterParams) *gin.Engine {
 
 	// 健康检查（不需要认证）
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		response := gin.H{"status": "ok"}
+		if params.SystemHandler != nil {
+			response["queue_connection"] = params.SystemHandler.QueueConnectionHealth()
+		}
+		c.JSON(200, response)
 	})
 
+	if params.ChatGPTHandler != nil {
+		r.GET("/auth/callback", params.ChatGPTHandler.Callback)
+		r.GET("/auth/chatgpt/continue", params.ChatGPTHandler.ContinueLogin)
+	}
 	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService)
 
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantAPIKeyService))
+	if params.MaintenanceHandler != nil {
+		r.Use(params.MaintenanceHandler.CollectionGate)
+	}
+	if params.MCPHandler != nil {
+		r.Any("/mcp", gin.WrapH(params.MCPHandler))
+	}
 
 	// 本地文件访问代理（需要认证）
 	serveFilesWithResources(r, params.FileService, params.ResourceCatalog)
@@ -132,34 +140,35 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.TenantService,
 			params.FileService,
 			params.ResourceCatalog)
-		serveMessageScopedFiles(
-			v1,
-			accessGuards,
-			params.MessageService,
-			params.TenantService,
-			params.FileService,
-			params.ResourceCatalog)
-		RegisterKnowledgeTagRoutes(v1, params.TagHandler, accessGuards)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
-		RegisterKnowledgeAnomalyRoutes(v1, params.KnowledgeAnomalyHandler, accessGuards)
-		RegisterKnowledgeStrategyRoutes(v1, params.KnowledgeStrategyHandler, accessGuards)
-		RegisterKnowledgeContextRoutes(v1, params.KnowledgeContextHandler, accessGuards)
-		RegisterKnowledgeDomainRoutes(v1, params.KnowledgeDomainHandler, accessGuards)
-		if params.ModelRoutingHandler != nil {
-			RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, accessGuards)
+		if params.VaultHandler != nil {
+			v1.GET("/vault/status", params.VaultHandler.Status)
+			v1.POST("/reports", params.VaultHandler.CreateReport)
+			v1.GET("/knowledge/:id/vault-attachment", accessGuards.KBExistsFromKnowledgeIDParam("id"), params.VaultHandler.Attachment)
 		}
-		RegisterKnowledgeWorkflowRoutes(v1, params.KnowledgeWorkflowHandler, accessGuards)
+		if params.MaintenanceHandler != nil {
+			v1.GET("/maintenance/status", params.MaintenanceHandler.Status)
+			v1.PUT("/maintenance/configure", params.MaintenanceHandler.Configure)
+		}
+		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
+		v1.GET("/knowledge-search/options", params.KnowledgeSearchHandler.Options)
+		RegisterEntityRoutes(v1, params.EntityHandler)
+		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)
+		if params.TopicHandler != nil {
+			RegisterTopicRoutes(v1, params.TopicHandler, accessGuards)
+		}
+		if params.FollowHandler != nil {
+			RegisterFollowRoutes(v1, params.FollowHandler)
+		}
+		if params.OperationLogHandler != nil {
+			v1.GET("/operation-logs", params.OperationLogHandler.List)
+		}
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
-		RegisterSessionRoutes(v1, params.SessionHandler, accessGuards)
-		RegisterChatRoutes(v1, params.SessionHandler, accessGuards)
-		RegisterMessageRoutes(v1, params.MessageHandler, accessGuards)
+		RegisterChatGPTRoutes(v1, params.ChatGPTHandler, params.ChatGPTPolicyHandler)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
-		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, accessGuards)
-		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
-		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, accessGuards)
 		RegisterChunkerDebugRoutes(v1, accessGuards)
 

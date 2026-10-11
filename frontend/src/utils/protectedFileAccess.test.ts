@@ -31,18 +31,6 @@ test('knowledge-base access routes through the KB-scoped proxy', () => {
   )
 })
 
-test('message access routes through the session-message-scoped proxy', () => {
-  const request = buildProtectedFileRequest(RESOURCE, {
-    mode: 'message',
-    sessionId: 'session 1',
-    messageId: 'message/1',
-  })
-
-  assert.equal(
-    request?.url,
-    `/api/v1/sessions/session%201/messages/message%2F1/files?file_path=${encodeURIComponent(RESOURCE)}`,
-  )
-})
 
 test('non-storage sources are not proxied', () => {
   assert.equal(buildProtectedFileRequest('https://example.com/a.png', { mode: 'tenant' }), null)
@@ -59,14 +47,36 @@ test('a component scope refines the default tenant plane', () => {
     resolveProtectedFileAccess({ mode: 'knowledgeBase', kbId: '  ' }),
     { mode: 'tenant' },
   )
-  assert.deepEqual(
-    resolveProtectedFileAccess({ mode: 'message', sessionId: 'session-1', messageId: '  ' }),
-    { mode: 'tenant' },
-  )
 })
 
 test('all file proxies are recognized as protected proxy paths', () => {
   assert.equal(isProtectedFileProxyPath('/files'), true)
   assert.equal(isProtectedFileProxyPath('/api/v1/knowledge-bases/kb-1/files'), true)
-  assert.equal(isProtectedFileProxyPath('/api/v1/sessions/session-1/messages/message-1/files'), true)
+  assert.equal(isProtectedFileProxyPath('/api/v1/knowledge/article-id/vault-attachment'), true)
+})
+
+test('vault attachments use the authenticated article proxy with their relative path', () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: () => 'vault-secret-token',
+  } })
+  try {
+    const relative = '../../attachments/article-id/图表.png'
+    const source = `vault://article-id/${encodeURIComponent(relative)}`
+    assert.equal(isProviderFileURL(source), true)
+    for (const access of [{ mode: 'tenant' }, { mode: 'knowledgeBase', kbId: 'kb-1' }] as ProtectedFileAccessContext[]) {
+      const request = buildProtectedFileRequest(source, access)!
+      const url = new URL(request.url, 'http://localhost')
+      assert.equal(url.pathname, '/api/v1/knowledge/article-id/vault-attachment')
+      assert.equal(url.searchParams.get('path'), relative)
+      assert.deepEqual(request.headers, { Authorization: 'Bearer vault-secret-token' })
+      assert.doesNotMatch(request.url, /vault-secret-token|token=/)
+    }
+    for (const invalid of ['vault://article-id/', 'vault://article-id/%E0%A4', 'vault://missing-id']) {
+      assert.equal(buildProtectedFileRequest(invalid, { mode: 'tenant' }), null, invalid)
+    }
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous)
+    else Reflect.deleteProperty(globalThis, 'localStorage')
+  }
 })
