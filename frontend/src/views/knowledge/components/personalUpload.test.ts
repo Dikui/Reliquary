@@ -104,7 +104,7 @@ for (const locale of ['zh-CN', 'en-US']) {
   }
 
   test(`${locale}: empty state and drag mask use available types and runtime size`, async()=>{
-    for(const name of ['empty-knowledge.vue','upload-mask.vue']){
+    for(const name of ['EmptyKnowledge.vue','UploadMask.vue']){
       const component=loadComponent(new URL(`../../../components/${name}`,import.meta.url),{'@/utils':{MAX_FILE_SIZE_MB:75},'@/assets/img/upload.svg':'upload.svg','@/assets/img/upload-mask.svg':'mask.svg'})
       const root=element('main');const app=renderer.createApp(component,{supportedFileTypes:['md','png']});app.use(i18n());app.mount(root)
       const text=visibleText(root)

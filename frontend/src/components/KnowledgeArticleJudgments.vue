@@ -5,7 +5,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { CONTENT_TYPES, type ContentType } from '@/types/knowledgeClassification'
 import { correctKnowledgeContentType, correctKnowledgeTopics, type ArticleJudgment } from '@/api/knowledge-judgments'
 import { listTopics, type Topic } from '@/api/topics'
-import { getKnowledgeDetails } from '@/api/knowledge-base/index'
+import { getKnowledgeDetails } from '@/api/knowledge-base'
 import KnowledgeStarToggle from './KnowledgeStarToggle.vue'
 
 const props = defineProps<{ knowledge: ArticleJudgment; disabled?: boolean }>()

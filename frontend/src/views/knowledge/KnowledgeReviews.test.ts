@@ -167,9 +167,9 @@ test('source unverified and review fields survive the API, actual Pinia store an
   const store = evaluate(source('../../stores/knowledge.ts'), {}).knowledgeStore
   const records = [{ ...processing, source_kind: 'article', source_unverified: true, updated_at: '2026-10-11T00:00:00Z', type: 'manual', file_name: 'source.md' }, { id: 'verified', source_kind: 'article', updated_at: '2026-10-11T00:00:00Z' }]
   const requests: string[] = []
-  const api = evaluate(source('../../api/knowledge-base/index.ts'), { '../../utils/request': { get: async (url: string) => { requests.push(url); if (url.includes('knowledge-bases/')) return { success: true, data: records, total: 2 }; if (url.includes('/chunks/')) return { success: true, data: [], total: 0 }; return { success: true, data: records.find(record => url.endsWith(record.id)) } } } })
-  const hook = evaluate(source('../../hooks/useKnowledgeBase.ts'), {
-    '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': { MessagePlugin: {} }, '@/api/knowledge-base/index': api,
+  const api = evaluate(source('../../api/knowledge-base.ts'), { '../utils/request': { get: async (url: string) => { requests.push(url); if (url.includes('knowledge-bases/')) return { success: true, data: records, total: 2 }; if (url.includes('/chunks/')) return { success: true, data: [], total: 0 }; return { success: true, data: records.find(record => url.endsWith(record.id)) } } } })
+  const hook = evaluate(source('../../composables/useKnowledgeBase.ts'), {
+    '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': { MessagePlugin: {} }, '@/api/knowledge-base': api,
     '@/stores/knowledge': { knowledgeStore: store }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, '@/stores/resources': { useResourcesStore: () => ({}) }, './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) },
   }).default('kb-reviews')
   await hook.getKnowled()
@@ -177,7 +177,7 @@ test('source unverified and review fields survive the API, actual Pinia store an
   hook.getCardDetails({ id: processing.id }); await settle()
   for (const field of ['source_unverified', 'content_type_uncertain', 'processing_review_status', 'processing_review_content_type', 'processing_review_reason']) assert.equal(hook.details[field], records[0][field as keyof typeof records[0]], field)
   const classification = component('../../components/KnowledgeClassification.vue', { './FollowToggle.vue': empty, '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': security })
-  const listModules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeClassification.vue': moduleOf(classification), '@/components/KnowledgeStarToggle.vue': empty }
+  const listModules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/KnowledgeProcessingTimeline.vue': empty, '@/components/KnowledgeClassification.vue': moduleOf(classification), '@/components/KnowledgeStarToggle.vue': empty }
   for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok((await render(classification, { knowledge: hook.details }, locale)).includes(messages[locale].knowledgeReview.sourceUnverified))
     for (const file of ['./components/DocumentListView.vue', './components/DocumentCardView.vue']) assert.ok((await render(component(file, listModules), { items: hook.cardList.value, selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }, locale)).includes(messages[locale].knowledgeReview.sourceUnverified))
@@ -196,13 +196,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const records = [converted, { ...document, id: 'direct-mine', title: 'Direct note', vault_path: 'mine/Direct.md', source: 'mine/Direct.md' }, { ...document, id: 'report', source_kind: 'report', vault_path: 'reports/Report.md', source: 'reports/Report.md' }, { ...document, id: 'article', source_kind: 'article', channel: 'web' }]
     const pinia = require('pinia'); pinia.setActivePinia(pinia.createPinia())
     const store = evaluate(source('../../stores/knowledge.ts'), {}).knowledgeStore
-    const api = evaluate(source('../../api/knowledge-base/index.ts'), { '../../utils/request': { get: async () => ({ success: true, data: records, total: records.length }) } })
-    const hook = evaluate(source('../../hooks/useKnowledgeBase.ts'), {
-      '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': { MessagePlugin: {} }, '@/api/knowledge-base/index': api,
+    const api = evaluate(source('../../api/knowledge-base.ts'), { '../utils/request': { get: async () => ({ success: true, data: records, total: records.length }) } })
+    const hook = evaluate(source('../../composables/useKnowledgeBase.ts'), {
+      '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': { MessagePlugin: {} }, '@/api/knowledge-base': api,
       '@/stores/knowledge': { knowledgeStore: store }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, '@/stores/resources': { useResourcesStore: () => ({}) }, './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) },
     }).default('kb-reviews')
     await hook.getKnowled()
-    const modules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeClassification.vue': empty, '@/components/KnowledgeStarToggle.vue': empty }
+    const modules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/KnowledgeProcessingTimeline.vue': empty, '@/components/KnowledgeClassification.vue': empty, '@/components/KnowledgeStarToggle.vue': empty }
     for (const file of ['./components/DocumentListView.vue', './components/DocumentCardView.vue']) {
       const view = component(file, modules)
       for (const record of hook.cardList.value) {

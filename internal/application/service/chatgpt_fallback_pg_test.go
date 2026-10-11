@@ -13,8 +13,8 @@ import (
 	ollamaapi "github.com/ollama/ollama/api"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/chat"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
+	"reliquary/internal/utils/ollama"
 )
 
 func TestChatGPTModelServiceUsesRealOllamaHTTPFallbackAndPreservesQuotaPause(t *testing.T) {

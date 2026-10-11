@@ -17,10 +17,10 @@ import (
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
+	"reliquary/internal/utils/ollama"
 )
 
 // ErrModelNotFound is returned when a model cannot be found in the repository

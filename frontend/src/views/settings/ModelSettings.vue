@@ -25,7 +25,7 @@
         <p class="builtin-hint-text">
           {{ $t('modelSettings.builtinModels.descriptionAdmin') }}
         </p>
-        <a class="doc-link" href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/BUILTIN_MODELS.md" target="_blank"
+        <a class="doc-link" href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/builtin-models.md" target="_blank"
           rel="noopener noreferrer">
           {{ $t('modelSettings.builtinModels.viewGuide') }}
           <t-icon name="link" class="link-icon" />

@@ -162,7 +162,7 @@ instance.interceptors.response.use(
       if (refreshToken) {
         try {
           // 动态导入refresh token API
-          const { refreshToken: refreshTokenAPI } = await import('../api/auth/index');
+          const { refreshToken: refreshTokenAPI } = await import('../api/auth');
           const response = await refreshTokenAPI(refreshToken);
 
           if (response.success && response.data) {

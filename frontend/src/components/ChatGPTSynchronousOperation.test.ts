@@ -65,7 +65,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         '@/types/knowledgeClassification': { CONTENT_TYPES }, 'tdesign-vue-next': { MessagePlugin: { success() { assert.fail('a paused correction cannot report success') } } },
         '@/utils/security': { isValidURL: () => true },
         '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
-        '@/api/knowledge-base/index': { getKnowledgeDetails: async () => ({ success: true, data: article }) },
+        '@/api/knowledge-base': { getKnowledgeDetails: async () => ({ success: true, data: article }) },
         './KnowledgeStarToggle.vue': moduleOf(defineComponent({ setup: () => () => null })),
         '@/api/knowledge-judgments': evaluate(source('../api/knowledge-judgments.ts'), { '@/utils/request': request }),
         '@/api/knowledge-review': evaluate(source('../api/knowledge-review.ts'), { '@/utils/request': request }),

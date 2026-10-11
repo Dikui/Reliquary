@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
 import { MessagePlugin } from "tdesign-vue-next";
-import DocContent from "@/components/doc-content.vue";
+import DocContent from "@/components/DocContent.vue";
 import KnowledgeDuplicateNotice from '@/components/KnowledgeDuplicateNotice.vue';
-import useKnowledgeBase from '@/hooks/useKnowledgeBase';
+import useKnowledgeBase from '@/composables/useKnowledgeBase';
 import { useRoute, useRouter } from 'vue-router';
-import EmptyKnowledge from '@/components/empty-knowledge.vue';
+import EmptyKnowledge from '@/components/EmptyKnowledge.vue';
 import KBInfoPopover from '@/components/KBInfoPopover.vue';
 import { useUIStore } from '@/stores/ui';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
@@ -27,7 +27,7 @@ import {
   getKnowledgeSpans,
   getKnowledgeDetails,
   downKnowledgeDetails,
-} from "@/api/knowledge-base/index";
+} from "@/api/knowledge-base";
 import { knowledgeSpansPayloadHasTrace } from '@/utils/knowledgeTrace';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
@@ -45,7 +45,7 @@ import {
 } from './knowledgeStatusPolling';
 import { resolveKnowledgeDownloadFileName } from './knowledgeDownloadFileName';
 import { useI18n } from 'vue-i18n';
-import { useMarqueeSelect } from '@/hooks/useMarqueeSelect';
+import { useMarqueeSelect } from '@/composables/useMarqueeSelect';
 import type { ParserEngineInfo } from '@/api/system';
 import { getUploadFileKey, filterUnsupportedAudioFiles } from './utils/uploadSources';
 const route = useRoute();

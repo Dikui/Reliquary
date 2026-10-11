@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"reliquary/internal/common"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/models/chat"
@@ -262,7 +261,7 @@ func (s *knowledgeService) callArticleProcessing(ctx context.Context, kb *types.
 		}
 		bodyLimit = min(bodyLimit, available)
 	}
-	runes := []rune(common.CleanInvalidUTF8(body))
+	runes := []rune(secutils.CleanInvalidUTF8(body))
 	input.BodyTruncated = len(runes) > bodyLimit
 	input.Body = string(runes[:min(len(runes), bodyLimit)])
 	encoded, err := json.Marshal(input)

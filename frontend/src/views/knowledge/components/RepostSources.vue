@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import type { KnowledgeRepostSource } from '@/api/knowledge-base/index'
+import type { KnowledgeRepostSource } from '@/api/knowledge-base'
 import { safeExternalUrl } from '@/utils/externalUrl'
 
 defineProps<{ sources?: KnowledgeRepostSource[] }>()

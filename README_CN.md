@@ -35,7 +35,7 @@ git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
 # 配置数据库密码、JWT_SECRET、SYSTEM_AES_KEY 与模型服务地址。
-./scripts/build_frontend_dist.sh
+./scripts/build-frontend-dist.sh
 docker compose up -d --build
 ```
 
@@ -68,7 +68,7 @@ make dev-app       # 在另一终端运行
 make dev-frontend  # 在另一终端运行
 ```
 
-详见[开发指南](docs/开发指南.md)。Issues 与 specs 使用 `.scratch/<feature-slug>/` 内的本地 Markdown，遵循[任务记录约定](docs/agents/issue-tracker.md)。
+详见[开发指南](./docs/development.md)。Issues 与 specs 使用 `.scratch/<feature-slug>/` 内的本地 Markdown，遵循[任务记录约定](docs/agents/issue-tracker.md)。
 
 ```bash
 go build ./...

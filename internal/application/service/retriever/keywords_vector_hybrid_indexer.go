@@ -11,9 +11,9 @@ import (
 	"golang.org/x/sync/errgroup"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
-	"reliquary/internal/models/utils"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 )
 
 // safetyMaxChars is an absolute upper bound for any single embedding input.

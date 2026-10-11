@@ -20,7 +20,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   for (const kind of ['embeddingRebuild', 'topicBackfill'] as const) {
   test(`${locale}: queue and task API loading shows localized ${kind} name and descriptions`, async () => {
     const calls: { url: string; options?: any }[] = []
-    const source = readFileSync(new URL('../../api/system/index.ts', import.meta.url), 'utf8')
+    const source = readFileSync(new URL('../../api/system.ts', import.meta.url), 'utf8')
     const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
     const api = { exports: {} as any }
     new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {
@@ -100,7 +100,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         last_error: 'fixture model unavailable', knowledge_id: 'article-14', worker: 'core',
         enqueued_at: '2026-10-11T04:00:00Z', last_failed_at: '2026-10-11T04:01:00Z',
       }
-      const source = readFileSync(new URL('../../api/system/index.ts', import.meta.url), 'utf8')
+      const source = readFileSync(new URL('../../api/system.ts', import.meta.url), 'utf8')
       const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
       const api = { exports: {} as any }
       new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {

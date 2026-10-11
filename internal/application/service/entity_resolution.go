@@ -16,10 +16,10 @@ import (
 	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/common"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
 func entityRecallLimit(variable string, fallback int) int {
@@ -320,7 +320,7 @@ func (s *EntityService) judgeEntity(ctx context.Context, model chat.Chat, item e
 		return entityMatch{}, err
 	}
 	var result entityMatch
-	if err := common.ParseLLMJsonResponse(response.Content, &result); err != nil {
+	if err := utils.ParseLLMJsonResponse(response.Content, &result); err != nil {
 		return result, fmt.Errorf("invalid entity resolution JSON: %w", err)
 	}
 	result.Decision = strings.ToLower(strings.TrimSpace(result.Decision))

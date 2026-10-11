@@ -1,5 +1,5 @@
 # Production image. Build static assets on the host first:
-#   ./scripts/build_frontend_dist.sh
+#   ./scripts/build-frontend-dist.sh
 #
 # Base image pinned by digest for reproducibility. Do NOT switch back to the
 # floating `nginx:stable-alpine` tag: it drifts with every stable release and a

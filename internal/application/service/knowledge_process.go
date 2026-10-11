@@ -13,11 +13,10 @@ import (
 	"github.com/google/uuid"
 	taskqueue "reliquary/internal/queue"
 
-	"reliquary/internal/common"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
-	webfetch "reliquary/internal/infrastructure/web_fetch"
+	webfetch "reliquary/internal/infrastructure/webfetch"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
@@ -118,17 +117,17 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	// sequences. Clean them before logging, chunk persistence, or embedding;
 	// the embedding provider and tracing/database drivers expect valid UTF-8.
 	for i := range chunks {
-		chunks[i].Content = common.CleanInvalidUTF8(chunks[i].Content)
-		chunks[i].ContextHeader = common.CleanInvalidUTF8(chunks[i].ContextHeader)
+		chunks[i].Content = secutils.CleanInvalidUTF8(chunks[i].Content)
+		chunks[i].ContextHeader = secutils.CleanInvalidUTF8(chunks[i].ContextHeader)
 		for j := range chunks[i].Images {
-			chunks[i].Images[j].URL = common.CleanInvalidUTF8(chunks[i].Images[j].URL)
-			chunks[i].Images[j].Caption = common.CleanInvalidUTF8(chunks[i].Images[j].Caption)
-			chunks[i].Images[j].OCRText = common.CleanInvalidUTF8(chunks[i].Images[j].OCRText)
-			chunks[i].Images[j].OriginalURL = common.CleanInvalidUTF8(chunks[i].Images[j].OriginalURL)
+			chunks[i].Images[j].URL = secutils.CleanInvalidUTF8(chunks[i].Images[j].URL)
+			chunks[i].Images[j].Caption = secutils.CleanInvalidUTF8(chunks[i].Images[j].Caption)
+			chunks[i].Images[j].OCRText = secutils.CleanInvalidUTF8(chunks[i].Images[j].OCRText)
+			chunks[i].Images[j].OriginalURL = secutils.CleanInvalidUTF8(chunks[i].Images[j].OriginalURL)
 		}
 	}
 	for i := range options.ParentChunks {
-		options.ParentChunks[i].Content = common.CleanInvalidUTF8(options.ParentChunks[i].Content)
+		options.ParentChunks[i].Content = secutils.CleanInvalidUTF8(options.ParentChunks[i].Content)
 	}
 
 	// Check if knowledge is being deleted/cancelled before processing.
@@ -1395,17 +1394,17 @@ func sanitizeReadResult(result *types.ReadResult) {
 	if result == nil {
 		return
 	}
-	result.MarkdownContent = common.CleanInvalidUTF8(result.MarkdownContent)
-	result.ImageDirPath = common.CleanInvalidUTF8(result.ImageDirPath)
-	result.Error = common.CleanInvalidUTF8(result.Error)
+	result.MarkdownContent = secutils.CleanInvalidUTF8(result.MarkdownContent)
+	result.ImageDirPath = secutils.CleanInvalidUTF8(result.ImageDirPath)
+	result.Error = secutils.CleanInvalidUTF8(result.Error)
 	for key, value := range result.Metadata {
-		result.Metadata[key] = common.CleanInvalidUTF8(value)
+		result.Metadata[key] = secutils.CleanInvalidUTF8(value)
 	}
 	for i := range result.ImageRefs {
-		result.ImageRefs[i].Filename = common.CleanInvalidUTF8(result.ImageRefs[i].Filename)
-		result.ImageRefs[i].OriginalRef = common.CleanInvalidUTF8(result.ImageRefs[i].OriginalRef)
-		result.ImageRefs[i].MimeType = common.CleanInvalidUTF8(result.ImageRefs[i].MimeType)
-		result.ImageRefs[i].StorageKey = common.CleanInvalidUTF8(result.ImageRefs[i].StorageKey)
+		result.ImageRefs[i].Filename = secutils.CleanInvalidUTF8(result.ImageRefs[i].Filename)
+		result.ImageRefs[i].OriginalRef = secutils.CleanInvalidUTF8(result.ImageRefs[i].OriginalRef)
+		result.ImageRefs[i].MimeType = secutils.CleanInvalidUTF8(result.ImageRefs[i].MimeType)
+		result.ImageRefs[i].StorageKey = secutils.CleanInvalidUTF8(result.ImageRefs[i].StorageKey)
 	}
 }
 

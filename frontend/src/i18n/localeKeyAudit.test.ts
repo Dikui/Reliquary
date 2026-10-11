@@ -176,14 +176,14 @@ test('parser engine display keys exist in every locale', () => {
 test('current backend parsing statuses and error codes are localized and retained', () => {
   const parsingSource = readFileSync(new URL('../../../internal/errors/parse_error_codes.go', import.meta.url), 'utf8')
   const parsingCodes = [...parsingSource.matchAll(/ErrCode\w+\s*=\s*"([A-Z_]+)"/g)].map(match => match[1])
-  const fetchDirectory = new URL('../../../internal/infrastructure/web_fetch/', import.meta.url)
+  const fetchDirectory = new URL('../../../internal/infrastructure/webfetch/', import.meta.url)
   const fetchSource = readdirSync(fetchDirectory)
     .filter(file => file.endsWith('.go') && !file.endsWith('_test.go'))
     .map(file => readFileSync(new URL(file, fetchDirectory), 'utf8'))
     .join('\n')
   const fetchCodes = [...new Set([...fetchSource.matchAll(/\bError\w+\s+ErrorCode\s*=\s*"([^"]+)"/g)].map(match => match[1]))]
   assert.ok(fetchCodes.length, 'Web fetch error code declarations must be scanned')
-  const syncSource = readFileSync(new URL('../../../internal/application/service/datasource_service.go', import.meta.url), 'utf8')
+  const syncSource = readFileSync(new URL('../../../internal/application/service/datasource.go', import.meta.url), 'utf8')
   const syncCodes = [...new Set([...syncSource.matchAll(/\bCode:\s*"([a-z_]+)"/g)].map(match => match[1]))]
   assert.ok(parsingCodes.length, 'Parser error code declarations must be scanned')
   assert.ok(syncCodes.length, 'Datasource error code declarations must be scanned')

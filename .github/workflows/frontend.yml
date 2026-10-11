@@ -5,12 +5,12 @@ on:
     branches: [main]
     paths:
       - "frontend/**"
-      - "scripts/build_frontend_dist.sh"
+      - "scripts/build-frontend-dist.sh"
       - ".github/workflows/frontend.yml"
   pull_request:
     paths:
       - "frontend/**"
-      - "scripts/build_frontend_dist.sh"
+      - "scripts/build-frontend-dist.sh"
       - ".github/workflows/frontend.yml"
   workflow_dispatch:
 

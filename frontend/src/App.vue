@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ManualKnowledgeEditor from '@/components/manual-knowledge-editor.vue'
+import ManualKnowledgeEditor from '@/components/ManualKnowledgeEditor.vue'
 import UploadConfirmHost from '@/components/UploadConfirmHost.vue'
 import ServiceAvailabilityNotice from '@/components/ServiceAvailabilityNotice.vue'
 

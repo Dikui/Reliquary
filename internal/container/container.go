@@ -34,10 +34,10 @@ import (
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/limiter"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/queue"
 	"reliquary/internal/router"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils/ollama"
 )
 
 // BuildContainer constructs the dependency injection container

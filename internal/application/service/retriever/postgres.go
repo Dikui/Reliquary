@@ -4,10 +4,10 @@ import (
 	"context"
 	"slices"
 
-	"reliquary/internal/common"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 )
 
 // PostgresRetrievalService reads and maintains the application's PostgreSQL indexes.
@@ -38,7 +38,7 @@ func (s *PostgresRetrievalService) Index(ctx context.Context, embedder embedding
 	return s.RetrieveEngineService.Index(ctx, embedder, index, s.Support())
 }
 func (s *PostgresRetrievalService) BatchIndex(ctx context.Context, embedder embedding.Embedder, indices []*types.IndexInfo) error {
-	indices = common.Deduplicate(func(index *types.IndexInfo) string { return index.SourceID }, indices...)
+	indices = utils.Deduplicate(func(index *types.IndexInfo) string { return index.SourceID }, indices...)
 	return s.RetrieveEngineService.BatchIndex(ctx, embedder, indices, s.Support())
 }
 func (s *PostgresRetrievalService) EstimateStorageSize(ctx context.Context, embedder embedding.Embedder, indices []*types.IndexInfo) int64 {

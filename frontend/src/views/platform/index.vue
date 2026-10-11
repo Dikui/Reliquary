@@ -25,11 +25,11 @@
     </div>
 </template>
 <script setup lang="ts">
-import Menu from '@/components/menu.vue'
+import Menu from '@/components/SideMenu.vue'
 import { ref, onMounted, onUnmounted, nextTick, provide, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router'
 import { useEditorResourcesStore } from '@/stores/editorResources'
-import UploadMask from '@/components/upload-mask.vue'
+import UploadMask from '@/components/UploadMask.vue'
 import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'

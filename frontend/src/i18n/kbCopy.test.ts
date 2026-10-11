@@ -19,8 +19,8 @@ const pages = [
   '../views/settings/KnowledgeSettings.vue',
   '../views/settings/TenantInfo.vue',
   '../views/knowledge/settings/DataSourceEditorDialog.vue',
-  '../components/doc-content.vue',
-  '../components/menu.vue',
+  '../components/DocContent.vue',
+  '../components/SideMenu.vue',
   '../components/UserMenu.vue',
   '../views/auth/Login.vue',
 ]

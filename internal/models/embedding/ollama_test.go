@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
+	"reliquary/internal/utils/ollama"
 )
 
 func TestOllamaEmbeddingPreservesLocalAPI(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 
 	ollamaapi "github.com/ollama/ollama/api"
 	"reliquary/internal/logger"
-	"reliquary/internal/models/utils/ollama"
+	"reliquary/internal/utils/ollama"
 )
 
 // OllamaEmbedder implements text vectorization functionality using Ollama

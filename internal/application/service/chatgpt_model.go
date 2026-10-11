@@ -10,9 +10,9 @@ import (
 	"reliquary/internal/chatgpt"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils/ollama"
 )
 
 // NewModelServiceWithChatGPT shares the authorization manager with settings.

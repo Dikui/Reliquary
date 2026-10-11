@@ -57,7 +57,7 @@ const article = {
 }
 const listModules = {
   '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': emptyModule,
-  '@/components/knowledge-processing-timeline.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/components/KnowledgeStarToggle.vue': emptyModule,
+  '@/components/KnowledgeProcessingTimeline.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/components/KnowledgeStarToggle.vue': emptyModule,
 }
 const props = { selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -81,12 +81,12 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const modules = {
       marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } }, 'marked-katex-extension': { __esModule: true, default: () => ({}) }, 'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
       'tdesign-vue-next': { MessagePlugin: { success: (text: string) => notifications.push(text), error: (text: string) => notifications.push(text) } },
-      '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 25, reprocessKnowledge: async (id: string) => { requests.push(id); return { success: true, data: { parse_status: 'pending' } } } },
-      '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/document-preview.vue': emptyModule,
+      '@/api/knowledge-base': { KNOWLEDGE_CHUNK_PAGE_SIZE: 25, reprocessKnowledge: async (id: string) => { requests.push(id); return { success: true, data: { parse_status: 'pending' } } } },
+      '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/DocumentPreview.vue': emptyModule,
       '@/utils/clipboard': { copyWithToast() {} },
-      '@/components/KnowledgeReviewActions.vue': reviewModule, '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/knowledge-processing-timeline.vue': emptyModule, '@/views/knowledge/components/RepostSources.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+      '@/components/KnowledgeReviewActions.vue': reviewModule, '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/KnowledgeProcessingTimeline.vue': emptyModule, '@/views/knowledge/components/RepostSources.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
     }
-    const detail = component('./doc-content.vue', modules)
+    const detail = component('./DocContent.vue', modules)
     const html = await render(detail, { visible: true, details: { ...article, processing_mode: 'summary_only', source: 'https://example.com/tutorial' } }, locale)
     assert.ok(html.includes(copy.reprocess)); assert.ok(html.includes(article.structured_summary.overview)); assert.ok(html.includes('https://example.com/tutorial'))
     assert.doesNotMatch(html, /class="[^\"]*doc-content-section/)
@@ -106,7 +106,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 }
 test('content type filters and RSS defaults use all six types and support unclassified and unspecified', () => {
   const page = readFileSync(new URL('../views/knowledge/KnowledgeBase.vue', import.meta.url), 'utf8')
-  const api = readFileSync(new URL('../api/knowledge-base/index.ts', import.meta.url), 'utf8')
+  const api = readFileSync(new URL('../api/knowledge-base.ts', import.meta.url), 'utf8')
   const datasource = readFileSync(new URL('../views/knowledge/settings/DataSourceEditorDialog.vue', import.meta.url), 'utf8')
   assert.match(page, /v-model="selectedContentType"/); assert.match(page, /content_type: selectedContentType\.value/); assert.match(page, /CONTENT_TYPES, 'unclassified'/)
   assert.match(api, /query\.append\('content_type', params\.content_type\)/)

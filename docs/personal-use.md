@@ -130,7 +130,7 @@ cp .env.example .env
 | `APP_PORT`、`FRONTEND_PORT` | 宿主机 API 与网页端口，默认 `8080` 和 `80` |
 | `APP_EXTERNAL_URL` | 需要外部调用方读取限时文件链接时填写内网访问地址并代理 `/r/` |
 
-模型服务的完整地址、模型名、API Key、嵌入维度在“设置 > 模型”配置，知识库页选择具体档位。也可通过 [内置模型配置](BUILTIN_MODELS.md) 声明。迁移后需要检查数据库中保存的模型地址是否仍可访问。
+模型服务的完整地址、模型名、API Key、嵌入维度在“设置 > 模型”配置，知识库页选择具体档位。也可通过 [内置模型配置](./builtin-models.md) 声明。迁移后需要检查数据库中保存的模型地址是否仍可访问。
 
 Compose 默认使用 `vault-data` 与 `data-files` 命名卷。为便于 Obsidian 阅读与直接复制，建议将两者换为宿主机目录。先创建目录，再在 `.env` 添加实际的绝对路径：
 
@@ -161,7 +161,7 @@ services:
 mkdir -p /Users/yourname/ReliquaryData/vault /Users/yourname/ReliquaryData/files
 export COMPOSE_FILE=docker-compose.yml:compose.mac.yml
 export COMPOSE_PROJECT_NAME=reliquary
-./scripts/build_frontend_dist.sh
+./scripts/build-frontend-dist.sh
 docker compose build
 docker compose run --rm --no-deps --user root --entrypoint sh app   -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
 docker compose up -d
@@ -460,7 +460,7 @@ JSON
 
 ### 图片 1
 
-![评测图示例](<图片存储地址>)
+![评测图示例](./<图片存储地址>)
 
 说明：评测图示例
 

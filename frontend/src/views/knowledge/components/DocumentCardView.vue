@@ -7,7 +7,7 @@ import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
 import KnowledgeStarToggle from '@/components/KnowledgeStarToggle.vue';
 import type { ArticleJudgment } from '@/api/knowledge-judgments';
 import type { ClassifiedKnowledge } from '@/types/knowledgeClassification';
-import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
+import KnowledgeProcessingTimeline from '@/components/KnowledgeProcessingTimeline.vue';
 
 interface KnowledgeCard extends ClassifiedKnowledge {
   id: string;
@@ -283,7 +283,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
               @click.stop="openMenu(index)"
               :class="[activeMenuIndex === index ? 'active-more' : '']"
             >
-              <img class="more-icon" src="@/assets/img/more.png" alt="" />
+              <img class="more-icon" src="@/assets/img/more-actions.png" alt="" />
             </div>
             <template #content>
               <!-- Normal menu -->

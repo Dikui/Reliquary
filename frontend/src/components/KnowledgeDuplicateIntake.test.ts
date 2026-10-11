@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const installedAlert = require('tdesign-vue-next').Alert;
 const componentFiles = {
   notice: new URL('./KnowledgeDuplicateNotice.vue', import.meta.url),
-  manual: new URL('./manual-knowledge-editor.vue', import.meta.url),
+  manual: new URL('./ManualKnowledgeEditor.vue', import.meta.url),
   knowledgeBase: new URL('../views/knowledge/KnowledgeBase.vue', import.meta.url),
 };
 
@@ -71,7 +71,6 @@ function createEnvironment(locale = 'zh-CN') {
     'tdesign-vue-next': { MessagePlugin: Object.fromEntries(['success', 'info', 'warning', 'error'].map(kind => [kind, (text: string) => toasts.push({ kind, text })])) },
     marked: { marked: { parse: (text: string) => text, use() {} } },
     '@/api/knowledge-base': api,
-    '@/api/knowledge-base/index': api,
     '@/stores/knowledge': { knowledgeStore: () => store },
     '@/stores/ui': { useUIStore: () => uiStore },
     '@/stores/menu': { useMenuStore: () => ({}) },
@@ -90,7 +89,7 @@ function createEnvironment(locale = 'zh-CN') {
     '@/utils/knowledgeTrace': {},
     './utils/uploadSources': { getUploadFileKey: (file: File) => `${file.name}\0${file.size}` },
     '@/api/user-favorites': {},
-    '@/hooks/useMarqueeSelect': { useMarqueeSelect: () => ({ marqueeVisible: vue.ref(false), marqueeMode: vue.ref('select'), boxStyle: vue.ref({}), shouldSuppressClick: () => false }) },
+    '@/composables/useMarqueeSelect': { useMarqueeSelect: () => ({ marqueeVisible: vue.ref(false), marqueeMode: vue.ref('select'), boxStyle: vue.ref({}), shouldSuppressClick: () => false }) },
   };
   function evaluate(code: string) {
     const module = { exports: {} as any };
@@ -101,9 +100,9 @@ function createEnvironment(locale = 'zh-CN') {
     }, module, module.exports);
     return module.exports;
   }
-  modules['./useKnowledgeDuplicates'] = modules['@/hooks/useKnowledgeDuplicates'] = evaluate(readFileSync(new URL('../hooks/useKnowledgeDuplicates.ts', import.meta.url), 'utf8'));
-  const knowledgeHook = evaluate(readFileSync(new URL('../hooks/useKnowledgeBase.ts', import.meta.url), 'utf8')).default;
-  modules['@/hooks/useKnowledgeBase'] = { __esModule: true, default: knowledgeHook };
+  modules['./useKnowledgeDuplicates'] = modules['@/composables/useKnowledgeDuplicates'] = evaluate(readFileSync(new URL('../composables/useKnowledgeDuplicates.ts', import.meta.url), 'utf8'));
+  const knowledgeHook = evaluate(readFileSync(new URL('../composables/useKnowledgeBase.ts', import.meta.url), 'utf8')).default;
+  modules['@/composables/useKnowledgeBase'] = { __esModule: true, default: knowledgeHook };
 
   function loadSFC(kind: keyof typeof componentFiles) {
     const filename = componentFiles[kind].pathname;

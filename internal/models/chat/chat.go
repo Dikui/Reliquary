@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"reliquary/internal/models/provider"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
+	"reliquary/internal/utils/ollama"
 )
 
 // Tool represents a function/tool definition

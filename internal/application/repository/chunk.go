@@ -8,9 +8,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"reliquary/internal/common"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 )
 
 // ErrChunkNotFound is returned when a chunk lookup finds no row. A typed
@@ -44,8 +44,8 @@ func (r *chunkRepository) CreateChunks(ctx context.Context, chunks []*types.Chun
 			disabledIDs = append(disabledIDs, chunk.ID)
 			disabledChunks = append(disabledChunks, chunk)
 		}
-		chunk.Content = common.CleanInvalidUTF8(chunk.Content)
-		chunk.ContextHeader = common.CleanInvalidUTF8(chunk.ContextHeader)
+		chunk.Content = utils.CleanInvalidUTF8(chunk.Content)
+		chunk.ContextHeader = utils.CleanInvalidUTF8(chunk.ContextHeader)
 	}
 
 	db := r.db.WithContext(ctx)
@@ -326,7 +326,7 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 
 	for _, chunk := range chunks {
 		ids = append(ids, chunk.ID)
-		content := common.CleanInvalidUTF8(chunk.Content)
+		content := utils.CleanInvalidUTF8(chunk.Content)
 
 		contentCases = append(contentCases, "WHEN id = ? THEN ?")
 		contentArgs = append(contentArgs, chunk.ID, content)

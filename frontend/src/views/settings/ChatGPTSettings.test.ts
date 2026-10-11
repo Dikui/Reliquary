@@ -175,7 +175,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/components/settings/SettingDrawer.vue': moduleOf(defineComponent({ setup: () => () => null })),
     }
     modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../../api/chatgpt.ts', import.meta.url), 'utf8'), modules)
-    modules['@/api/system'] = evaluate(readFileSync(new URL('../../api/system/index.ts', import.meta.url), 'utf8'), modules)
+    modules['@/api/system'] = evaluate(readFileSync(new URL('../../api/system.ts', import.meta.url), 'utf8'), modules)
     modules['@/components/ChatGPTUsageStatus.vue'] = moduleOf(component(new URL('../../components/ChatGPTUsageStatus.vue', import.meta.url), modules).result)
     modules['./QueueConnectionNotice.vue'] = moduleOf(component(new URL('../system/QueueConnectionNotice.vue', import.meta.url), modules).result)
     const view = component(new URL('../system/RuntimeQueues.vue', import.meta.url), modules)

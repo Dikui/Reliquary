@@ -63,7 +63,7 @@ function judgments(api: Record<string, unknown>, details?: unknown) {
   return component('../../components/KnowledgeArticleJudgments.vue', {
     '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/api/knowledge-judgments': api,
     '@/api/topics': { listTopics: async () => ({ success: true, data: [topic] }) },
-    '@/api/knowledge-base/index': { getKnowledgeDetails: async () => ({ success: true, data: details }) },
+    '@/api/knowledge-base': { getKnowledgeDetails: async () => ({ success: true, data: details }) },
     './KnowledgeStarToggle.vue': empty, 'tdesign-vue-next': notifications,
   })
 }

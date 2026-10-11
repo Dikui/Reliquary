@@ -2,7 +2,7 @@ import { installImeEnterGuard } from "./utils/imeEnter";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
-import router from "./router";
+import router from "./router/index";
 import "./assets/fonts.css";
 import TDesign from "tdesign-vue-next";
 // 引入组件库的少量全局样式变量
@@ -11,7 +11,7 @@ import "./assets/popup-word-wrapping.css";
 import "@/assets/theme/theme.css";
 import "@/assets/dropdown-menu.less";
 import "@/components/css/highlight.less";
-import i18n from "./i18n";
+import i18n from "./i18n/index";
 import { initTheme } from "@/composables/useTheme";
 import { initFont } from "@/composables/useFont";
 import { installTDesignIconOfflineGuard } from "@/utils/tdesign-icon-offline";

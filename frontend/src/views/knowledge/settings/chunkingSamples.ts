@@ -94,7 +94,7 @@ Reliquary 后端采用清晰的分层架构：
 ## 进一步阅读
 
 - 配置项清单：\`config/config.yaml\` 与 \`.env.example\`
-- 故障排查：\`docs/QA.md\`
+- 故障排查：\`docs/faq.md\`
 - 项目决策：\`docs/adr/\``
 
 const SUPPORT_SAMPLE = `# Reliquary 部署与使用 使用指南

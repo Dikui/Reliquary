@@ -16,13 +16,13 @@ for (const locale of ['zh-CN','en-US'] as const) for (const edit of ['credential
  test(`${locale}: loaded restored RSS saves only changed ${edit} fields`, async () => {
   const calls: any[] = []
   const i18n = createI18n({legacy:false,locale,messages:{'zh-CN':zh,'en-US':en}})
-  const modules: Record<string,any> = { 'vue-i18n':{useI18n:()=>i18n.global}, 'tdesign-vue-next':{MessagePlugin:{success(){},warning(){}}}, '@/types/knowledgeClassification':{CONTENT_TYPES:[]}, '../../utils/request':{
+  const modules: Record<string,any> = { 'vue-i18n':{useI18n:()=>i18n.global}, 'tdesign-vue-next':{MessagePlugin:{success(){},warning(){}}}, '@/types/knowledgeClassification':{CONTENT_TYPES:[]}, '../utils/request':{
    get: async (url:string)=>{calls.push(['GET',url]);return {data:[record]}},
    put: async (url:string,payload:any)=>{calls.push(['PUT',url,payload]);return {}}, post:async()=>({}),del:async()=>({})
   }}
   const evaluate=(code:string)=>{const module={exports:{} as any};const compiled=ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;new Function('require','module','exports',compiled)((name:string)=>name.endsWith('.vue')?{__esModule:true,default:stub}:modules[name]??require(name),module,module.exports);return module.exports}
   modules['@/utils/settingsPatch']=evaluate(readFileSync(new URL('../../../utils/settingsPatch.ts',import.meta.url),'utf8'))
-  modules['@/api/datasource']=evaluate(readFileSync(new URL('../../../api/datasource/index.ts',import.meta.url),'utf8'))
+  modules['@/api/datasource']=evaluate(readFileSync(new URL('../../../api/datasource.ts',import.meta.url),'utf8'))
   const response=await modules['@/api/datasource'].listDataSources()
   const source=readFileSync(new URL('./DataSourceEditorDialog.vue',import.meta.url),'utf8');const {descriptor}=parse(source);const script=compileScript(descriptor,{id:'rss-migration-test'});const template=compileTemplate({id:'rss-migration-test',filename:'DataSourceEditorDialog.vue',source:descriptor.template!.content,ssr:true,ssrCssVars:[],compilerOptions:{bindingMetadata:script.bindings}});assert.deepEqual(template.errors,[])
   const component=evaluate(script.content).default;component.ssrRender=evaluate(template.code).ssrRender;const setup=component.setup

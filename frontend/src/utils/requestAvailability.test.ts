@@ -40,8 +40,8 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = 
  Object.assign(modules, { pinia: { defineStore }, axios: network, '@/i18n': { __esModule: true, default: i18n }, './index': { generateRandomString: () => 'availability-test', MAX_FILE_SIZE_MB: 100 }, './api-base': { getApiBaseUrl: () => 'http://availability.test' }, './personalServerError': { translatePersonalServerMessage }, '@/composables/useFont': { reloadFontFromStorage() {} }, '@/composables/useTheme': { reloadThemeFromStorage() {} }, '@/composables/preferenceStorage': { resetMigrationLatch() {} }, '@/stores/resources': { useResourcesStore: () => ({ invalidate() {} }) }, '@/stores/editorResources': { useEditorResourcesStore: () => ({ invalidate() {} }) } })
  const request = evaluate('./request.ts', modules)
  modules['@/utils/request'] = request
- const api = evaluate('../api/auth/index.ts', modules)
- modules['@/api/auth'] = api; modules['../api/auth/index'] = api
+ const api = evaluate('../api/auth.ts', modules)
+ modules['@/api/auth'] = api; modules['../api/auth'] = api
  setActivePinia(createPinia())
  const authModule = evaluate('../stores/auth.ts', modules)
  modules['@/stores/auth'] = authModule

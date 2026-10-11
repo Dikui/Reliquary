@@ -2,18 +2,18 @@ package knowledgesearch
 
 import (
 	"context"
-	"reliquary/internal/common"
+	"reliquary/internal/logger"
 	"sync"
 )
 
 func pipelineInfo(ctx context.Context, stage, action string, fields map[string]interface{}) {
-	common.PipelineInfo(ctx, stage, action, fields)
+	logger.PipelineInfo(ctx, stage, action, fields)
 }
 func pipelineWarn(ctx context.Context, stage, action string, fields map[string]interface{}) {
-	common.PipelineWarn(ctx, stage, action, fields)
+	logger.PipelineWarn(ctx, stage, action, fields)
 }
 func pipelineError(ctx context.Context, stage, action string, fields map[string]interface{}) {
-	common.PipelineError(ctx, stage, action, fields)
+	logger.PipelineError(ctx, stage, action, fields)
 }
 func ParallelMap[T, R any](items []T, maxWorkers int, fn func(int, T) R) []R {
 	n := len(items)

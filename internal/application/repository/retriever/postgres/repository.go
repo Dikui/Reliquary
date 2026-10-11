@@ -10,10 +10,10 @@ import (
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/common"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 )
 
 // pgRepository implements PostgreSQL-based retrieval operations
@@ -202,14 +202,14 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by knowledge base IDs: %v", params.KnowledgeBaseIDs)
 		conds = append(conds, clause.IN{
 			Column: "c.knowledge_base_id",
-			Values: common.ToInterfaceSlice(params.KnowledgeBaseIDs),
+			Values: utils.ToInterfaceSlice(params.KnowledgeBaseIDs),
 		})
 	}
 	if len(params.KnowledgeIDs) > 0 {
 		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by knowledge IDs: %v", params.KnowledgeIDs)
 		conds = append(conds, clause.IN{
 			Column: "c.knowledge_id",
-			Values: common.ToInterfaceSlice(params.KnowledgeIDs),
+			Values: utils.ToInterfaceSlice(params.KnowledgeIDs),
 		})
 	}
 

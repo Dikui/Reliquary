@@ -83,7 +83,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const followsAPI = evaluateFile('../../api/follows.ts', { '@/utils/request': requestModule })
   const topicsAPI = evaluateFile('../../api/topics.ts', { '@/utils/request': requestModule })
   const entitiesAPI = evaluateFile('../../api/entities.ts', { '@/utils/request': requestModule, './entity-types': { ENTITY_TYPES } })
-  const knowledgeAPI = evaluateFile('../../api/knowledge-base/index.ts', { '../../utils/request': requestModule })
+  const knowledgeAPI = evaluateFile('../../api/knowledge-base.ts', { '../utils/request': requestModule })
   const storeModule = evaluateFile('../../stores/follows.ts', { '@/api/follows': followsAPI, '@/utils/rfc3339': precision })
   const pinia = createPinia(); setActivePinia(pinia)
   const store = storeModule.useFollowStore(pinia)
@@ -91,7 +91,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const urls: any[] = []
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
-  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/knowledge-base/index': knowledgeAPI, '@/stores/follows': storeModule, '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/knowledge-base': knowledgeAPI, '@/stores/follows': storeModule, '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
   modules['@/components/FollowToggle.vue'] = modules['./FollowToggle.vue'] = moduleOf(toggle)
   const classification = loadComponent(new URL('../../components/KnowledgeClassification.vue', import.meta.url), modules)
@@ -152,10 +152,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     globalThis.window = { innerWidth: 1200, addEventListener() {}, removeEventListener() {} } as any
     globalThis.document = { body: { style: {} }, addEventListener() {}, removeEventListener() {}, querySelector: () => null } as any
     Object.defineProperty(globalThis, 'localStorage', { value: { getItem: () => null, setItem() {} }, configurable: true })
-    Object.assign(env.modules, { marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } }, 'marked-katex-extension': moduleOf(() => ({})), 'katex/dist/katex.min.css': {}, 'highlight.js': moduleOf({}), 'highlight.js/styles/github.css': {}, mermaid: moduleOf({ initialize() {} }), '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/components/document-preview.vue': empty, '@/components/KnowledgeReviewActions.vue': empty, '@/components/KnowledgeArticleJudgments.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/views/knowledge/components/RepostSources.vue': empty, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {}, '@/utils/clipboard': {} })
-    const detail = env.component('../../components/doc-content.vue')
+    Object.assign(env.modules, { marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } }, 'marked-katex-extension': moduleOf(() => ({})), 'katex/dist/katex.min.css': {}, 'highlight.js': moduleOf({}), 'highlight.js/styles/github.css': {}, mermaid: moduleOf({ initialize() {} }), '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/components/DocumentPreview.vue': empty, '@/components/KnowledgeReviewActions.vue': empty, '@/components/KnowledgeArticleJudgments.vue': empty, '@/components/KnowledgeProcessingTimeline.vue': empty, '@/views/knowledge/components/RepostSources.vue': empty, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {}, '@/utils/clipboard': {} })
+    const detail = env.component('../../components/DocContent.vue')
     const knowledgeStoreModule = evaluateFile('../../stores/knowledge.ts', {})
-    const detailHook = evaluateFile('../../hooks/useKnowledgeBase.ts', { '../utils/index': { formatStringDate: () => '2026-10-11', kbFileTypeVerification: () => true }, 'tdesign-vue-next': env.modules['tdesign-vue-next'], '@/api/knowledge-base/index': env.modules['@/api/knowledge-base/index'], '@/stores/knowledge': knowledgeStoreModule, '@/stores/resources': { useResourcesStore: () => ({}) }, './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) } })
+    const detailHook = evaluateFile('../../composables/useKnowledgeBase.ts', { '../utils/index': { formatStringDate: () => '2026-10-11', kbFileTypeVerification: () => true }, 'tdesign-vue-next': env.modules['tdesign-vue-next'], '@/api/knowledge-base': env.modules['@/api/knowledge-base'], '@/stores/knowledge': knowledgeStoreModule, '@/stores/resources': { useResourcesStore: () => ({}) }, './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) } })
     const parent = defineComponent({ setup() { const hook = detailHook.default('kb-follows'); onMounted(async () => { await hook.getKnowled(); hook.getCardDetails(hook.cardList.value[0]) }); return () => hook.details.id ? h(detail, { visible: true, details: hook.details }) : null } })
     const mounted = env.mount(parent)
     try {
@@ -214,7 +214,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     env.modules['@/stores/ui'] = { useUIStore: () => reactive({ sidebarCollapsed: false, toggleSidebar() {}, openSettings() {} }) }
     env.modules['@/components/UserMenu.vue'] = empty
     env.modules['@/assets/img/reliquary.svg'] = moduleOf('/reliquary.svg')
-    const mounted = env.mount(env.component('../../components/menu.vue'))
+    const mounted = env.mount(env.component('../../components/SideMenu.vue'))
     try {
       await settle()
       const navigation = descendants(mounted.root).filter(node => node.tag === 'button' && hasClass(node, 'menu_item'))

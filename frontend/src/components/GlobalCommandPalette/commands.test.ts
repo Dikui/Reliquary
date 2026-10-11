@@ -13,7 +13,7 @@ test('commands and sidebar expose knowledge and settings navigation', () => {
   for (const command of commands) command.run()
   assert.deepEqual(paths, ['/platform/knowledge', '/platform/settings'])
   assert.equal(closes, 2)
-  const sidebar = readFileSync(new URL('../menu.vue', import.meta.url), 'utf8')
+  const sidebar = readFileSync(new URL('../SideMenu.vue', import.meta.url), 'utf8')
   const menu = readFileSync(new URL('../../stores/menu.ts', import.meta.url), 'utf8')
   const palette = readFileSync(new URL('../GlobalCommandPalette.vue', import.meta.url), 'utf8')
   for (const source of [sidebar, menu, palette]) assert.doesNotMatch(source, /menu\.(?:agents|newChat|newSession|myChats)|commandPalette\.(?:quick\.(?:newChat|agents)|group\.(?:agents|messages|sessionsByTitle))/)
