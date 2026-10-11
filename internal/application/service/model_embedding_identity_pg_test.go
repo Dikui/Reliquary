@@ -69,14 +69,14 @@ func TestBuiltinYAMLChangesRetireEmbeddingIdentity(t *testing.T) {
 	enableImageSearchFixture(t, h)
 	article := h.add(t, "yaml-article", "article", "2026-10-01", "research", "unrelated observations", 1)
 	addImageSearchVector(t, h, article, "../../attachments/yaml-article/chart.png", "fixture-model", []float32{0, 1, 0})
-	entity := &types.Entity{ID: "yaml-entity", TenantID: 1, CanonicalName: "YAML entity", NormalizedName: "yaml entity", EntityType: "company",
+	entity := &types.Entity{ID: "yaml-entity", SpaceID: 1, CanonicalName: "YAML entity", NormalizedName: "yaml entity", EntityType: "company",
 		NameEmbedding: types.EntityNameEmbedding{0, 1, 0}, EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, EmbeddingNeedsRebuild: false}
 	require.NoError(t, h.db.Create(entity).Error)
 	require.NoError(t, h.db.Model(&types.Model{}).Where("id='fixture-model'").Updates(map[string]any{"is_builtin": true, "managed_by": types.BuiltinModelManagedBy}).Error)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "builtin_models.yaml"), []byte(`builtin_models:
   - id: fixture-model
-    tenant_id: 1
+    space_id: 1
     name: Different YAML weights with the same dimensions
     type: Embedding
     source: remote

@@ -50,7 +50,7 @@ type intakeKBService struct {
 
 func (s intakeKBService) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
 	return &types.KnowledgeBase{
-		ID: "kb", TenantID: 1, CreatorID: s.creatorID, SummaryModelID: "summary", EmbeddingModelID: "embedding",
+		ID: "kb", SpaceID: 1, CreatorID: s.creatorID, SummaryModelID: "summary", EmbeddingModelID: "embedding",
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
 		ChunkingConfig: types.ChunkingConfig{ParserEngineRules: []types.ParserEngineRule{{
 			FileTypes: []string{"txt"}, Engine: "simple",
@@ -58,15 +58,15 @@ func (s intakeKBService) GetKnowledgeBaseByID(context.Context, string) (*types.K
 	}, nil
 }
 
-type intakeTenantRepo struct{ interfaces.TenantRepository }
+type intakeSpaceRepo struct{ interfaces.SpaceRepository }
 
-func (intakeTenantRepo) GetTenantByID(context.Context, uint64) (*types.Tenant, error) {
-	return &types.Tenant{ID: 1}, nil
+func (intakeSpaceRepo) GetSpaceByID(context.Context, uint64) (*types.Space, error) {
+	return &types.Space{ID: 1}, nil
 }
 
-func (intakeTenantRepo) AdjustStorageUsed(context.Context, uint64, int64) error { return nil }
+func (intakeSpaceRepo) AdjustStorageUsed(context.Context, uint64, int64) error { return nil }
 
-type intakeTenantService struct{ interfaces.TenantService }
+type intakeSpaceService struct{ interfaces.SpaceService }
 
 func (intakeChat) GetModelName() string { return "intake" }
 
@@ -76,7 +76,7 @@ func (intakeModelService) GetEmbeddingModel(context.Context, string) (embedding.
 
 func TestReviewIntakeKeepsSourcedBodyWithExplicitRejection(t *testing.T) {
 	const reason = "Qwen article missing publication date"
-	knowledge := &types.Knowledge{ID: "qwen-article", TenantID: 1, KnowledgeBaseID: "kb",
+	knowledge := &types.Knowledge{ID: "qwen-article", SpaceID: 1, KnowledgeBaseID: "kb",
 		Metadata: types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`)}
 	require.NoError(t, knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
 		Source: "manual", Decision: "pending", OriginalPath: "stored-original",
@@ -84,7 +84,7 @@ func TestReviewIntakeKeepsSourcedBodyWithExplicitRejection(t *testing.T) {
 	}))
 	repo := &intakeRepo{knowledge: knowledge}
 	svc := &knowledgeService{repo: repo}
-	rejected, err := svc.reviewIntake(context.Background(), &types.KnowledgeBase{ID: "kb", TenantID: 1}, knowledge, "Complete original body")
+	rejected, err := svc.reviewIntake(context.Background(), &types.KnowledgeBase{ID: "kb", SpaceID: 1}, knowledge, "Complete original body")
 	require.NoError(t, err)
 	require.True(t, rejected)
 	intake, err := repo.knowledge.IntakeMetadata()
@@ -105,7 +105,7 @@ func TestReviewKnowledgeIntakeSourceReadFailureCleansPendingMessage(t *testing.T
 		{name: "empty original", body: []byte(" \n")},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			knowledge := &types.Knowledge{ID: "knowledge", TenantID: 1, KnowledgeBaseID: "kb", Type: "file", FilePath: "input", ParseStatus: types.ParseStatusRejected}
+			knowledge := &types.Knowledge{ID: "knowledge", SpaceID: 1, KnowledgeBaseID: "kb", Type: "file", FilePath: "input", ParseStatus: types.ParseStatusRejected}
 			require.NoError(t, knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
 				Source: "manual", Decision: "rejected", OriginalPath: "original", Images: []string{"image"},
 				SourceInfo: types.SourceInfo{Author: "Ada", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"},
@@ -114,7 +114,7 @@ func TestReviewKnowledgeIntakeSourceReadFailureCleansPendingMessage(t *testing.T
 			files := &intakeFileService{getErr: tt.getErr, saved: map[string][]byte{"input": []byte("upload"), "original": tt.body, "image": []byte("image")}}
 			task := &intakeTask{}
 			svc := &knowledgeService{repo: repo, kbService: intakeKBService{creatorID: "owner"}, fileSvc: files, task: task}
-			ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
+			ctx := context.WithValue(context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
 			ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 
 			_, err := svc.ReviewKnowledgeIntake(ctx, knowledge.ID, "retry", types.SourceInfo{})
@@ -156,7 +156,7 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			knowledge := &types.Knowledge{ID: "knowledge", TenantID: 1, KnowledgeBaseID: "kb", Type: "file", FileName: "message", FilePath: "input", ParseStatus: types.ParseStatusPending, Channel: tt.channel}
+			knowledge := &types.Knowledge{ID: "knowledge", SpaceID: 1, KnowledgeBaseID: "kb", Type: "file", FileName: "message", FilePath: "input", ParseStatus: types.ParseStatusPending, Channel: tt.channel}
 			source := types.SourceInfo{
 				Author: "Ada", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01",
 			}
@@ -169,12 +169,12 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 			chunks := &parentChildChunkService{}
 			engine := &parentChildRetrieveEngine{}
 			svc := &knowledgeService{
-				repo: repo, kbService: intakeKBService{}, tenantRepo: intakeTenantRepo{}, tenantService: intakeTenantService{}, fileSvc: files,
+				repo: repo, kbService: intakeKBService{}, spaceRepo: intakeSpaceRepo{}, spaceService: intakeSpaceService{}, fileSvc: files,
 				modelService: intakeModelService{chat: tt.chat}, chunkService: chunks,
 				retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: engine}, task: parentChildTaskEnqueuer{},
 			}
 			files.saved = map[string][]byte{"input": []byte("Full source body with analysis.")}
-			payload, err := json.Marshal(types.DocumentProcessPayload{TenantID: 1, KnowledgeID: knowledge.ID, KnowledgeBaseID: "kb", FilePath: "input", FileName: "message.txt", FileType: "txt"})
+			payload, err := json.Marshal(types.DocumentProcessPayload{SpaceID: 1, KnowledgeID: knowledge.ID, KnowledgeBaseID: "kb", FilePath: "input", FileName: "message.txt", FileType: "txt"})
 			require.NoError(t, err)
 			err = svc.ProcessDocument(context.Background(), taskqueue.NewTask(types.TypeDocumentProcess, payload, taskqueue.MaxRetry(0)))
 			if tt.wantErr {
@@ -191,7 +191,7 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 				require.NotEmpty(t, intake.OriginalPath)
 				require.NotEmpty(t, files.written)
 				require.Equal(t, []byte("Full source body with analysis."), files.saved[intake.OriginalPath])
-				body, _, getErr := svc.GetKnowledgeFile(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), knowledge.ID)
+				body, _, getErr := svc.GetKnowledgeFile(context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1)), knowledge.ID)
 				require.NoError(t, getErr)
 				defer body.Close()
 				got, readErr := io.ReadAll(body)
@@ -234,7 +234,7 @@ func (s *intakeFileService) SaveBytes(_ context.Context, body []byte, _ uint64, 
 }
 
 func TestReviewKnowledgeIntakeCorrectionClearsQwenRejection(t *testing.T) {
-	knowledge := &types.Knowledge{ID: "qwen-article", TenantID: 1, KnowledgeBaseID: "kb", Type: "manual",
+	knowledge := &types.Knowledge{ID: "qwen-article", SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual",
 		ParseStatus: types.ParseStatusRejected,
 		Metadata:    types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`)}
 	require.NoError(t, knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
@@ -246,7 +246,7 @@ func TestReviewKnowledgeIntakeCorrectionClearsQwenRejection(t *testing.T) {
 	svc := &knowledgeService{repo: repo, kbService: intakeKBService{creatorID: "owner"},
 		fileSvc:      &intakeFileService{saved: map[string][]byte{"original": []byte("Complete original body")}},
 		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article"}`}}, task: task}
-	ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
+	ctx := context.WithValue(context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	updated, err := svc.ReviewKnowledgeIntake(ctx, knowledge.ID, "retry", types.SourceInfo{PublishedAt: "2026-09-20"})
 	require.NoError(t, err)

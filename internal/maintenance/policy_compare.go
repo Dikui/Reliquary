@@ -105,7 +105,7 @@ func verifyPolicyProbeChain(expected, actual *Manifest) bool {
 		when, err := time.Parse(time.RFC3339Nano, fmt.Sprint(row["created_at"]))
 		before, beforeValid := policyAuditRows(row["before_value"])
 		after, afterValid := policyAuditRows(row["after_value"])
-		if err != nil || row["actor"] != "maintenance" || fmt.Sprint(row["tenant_id"]) != "1" || !chatGPTModels[fmt.Sprint(row["object_id"])] || !beforeValid || !afterValid || samePolicyRows(before, after) || !policyConfigurationMatches(original, after) {
+		if err != nil || row["actor"] != "maintenance" || fmt.Sprint(row["space_id"]) != "1" || !chatGPTModels[fmt.Sprint(row["object_id"])] || !beforeValid || !afterValid || samePolicyRows(before, after) || !policyConfigurationMatches(original, after) {
 			return false
 		}
 		transitions = append(transitions, transition{when: when, before: before, after: after})

@@ -10,10 +10,10 @@ import (
 )
 
 type fakeFileService struct {
-	saved     map[string][]byte
-	saveErr   error
-	seq       int
-	tenantIDs []uint64
+	saved    map[string][]byte
+	saveErr  error
+	seq      int
+	spaceIDs []uint64
 }
 
 func (f *fakeFileService) CheckConnectivity(_ context.Context) error { return nil }
@@ -22,7 +22,7 @@ func (f *fakeFileService) SaveFile(_ context.Context, _ *multipart.FileHeader, _
 	panic("SaveFile unexpected file operation")
 }
 
-func (f *fakeFileService) SaveBytes(_ context.Context, data []byte, tenantID uint64, fileName string, _ bool) (string, error) {
+func (f *fakeFileService) SaveBytes(_ context.Context, data []byte, spaceID uint64, fileName string, _ bool) (string, error) {
 	if f.saveErr != nil {
 		return "", f.saveErr
 	}
@@ -30,9 +30,9 @@ func (f *fakeFileService) SaveBytes(_ context.Context, data []byte, tenantID uin
 		f.saved = map[string][]byte{}
 	}
 	f.seq++
-	key := "fake://tenant-" + fileName
+	key := "fake://space-" + fileName
 	f.saved[key] = append([]byte(nil), data...)
-	f.tenantIDs = append(f.tenantIDs, tenantID)
+	f.spaceIDs = append(f.spaceIDs, spaceID)
 	return key, nil
 }
 

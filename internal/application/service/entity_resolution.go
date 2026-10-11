@@ -44,9 +44,9 @@ func entityIdentityVersionsCompatible(left, right string) bool {
 	return len(a) == 0 || len(b) == 0 || strings.Join(a, ":") == strings.Join(b, ":")
 }
 
-func (s *EntityService) exactEntity(ctx context.Context, tenantID uint64, item entityResolutionInput) (types.Entity, error) {
+func (s *EntityService) exactEntity(ctx context.Context, spaceID uint64, item entityResolutionInput) (types.Entity, error) {
 	var entity types.Entity
-	err := s.db.WithContext(ctx).Where("tenant_id = ? AND merged_into_id = '' AND lower(entity_type) IN ? AND normalized_name = ?", tenantID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).Order("id").First(&entity).Error
+	err := s.db.WithContext(ctx).Where("space_id = ? AND merged_into_id = '' AND lower(entity_type) IN ? AND normalized_name = ?", spaceID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).Order("id").First(&entity).Error
 	if err == nil {
 		return entity, nil
 	}
@@ -54,8 +54,8 @@ func (s *EntityService) exactEntity(ctx context.Context, tenantID uint64, item e
 		return entity, err
 	}
 	err = s.db.WithContext(ctx).Model(&types.Entity{}).
-		Joins("JOIN entity_aliases a ON a.tenant_id = entities.tenant_id AND a.entity_id = entities.id").
-		Where("entities.tenant_id = ? AND entities.merged_into_id = '' AND lower(a.entity_type) IN ? AND a.normalized_alias = ?", tenantID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).
+		Joins("JOIN entity_aliases a ON a.space_id = entities.space_id AND a.entity_id = entities.id").
+		Where("entities.space_id = ? AND entities.merged_into_id = '' AND lower(a.entity_type) IN ? AND a.normalized_alias = ?", spaceID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).
 		Order("entities.id").First(&entity).Error
 	return entity, err
 }
@@ -65,18 +65,18 @@ type entityScored struct {
 	RecallScore float64 `gorm:"column:recall_score"`
 }
 
-func (s *EntityService) recallEntities(ctx context.Context, tenantID uint64, item entityResolutionInput, vector types.EntityNameEmbedding, modelID string, limit int) ([]types.Entity, error) {
+func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, item entityResolutionInput, vector types.EntityNameEmbedding, modelID string, limit int) ([]types.Entity, error) {
 	names := []string{normalizeEntityName(item.Mention), normalizeEntityName(item.Canonical)}
 	var namesResult []entityScored
 	err := s.db.WithContext(ctx).Raw(`WITH scores AS (
  SELECT id AS entity_id, GREATEST(similarity(normalized_name, ?), similarity(normalized_name, ?)) AS score
- FROM entities WHERE tenant_id=? AND merged_into_id='' AND lower(entity_type) IN ? AND (normalized_name % ? OR normalized_name % ?)
+ FROM entities WHERE space_id=? AND merged_into_id='' AND lower(entity_type) IN ? AND (normalized_name % ? OR normalized_name % ?)
  UNION ALL
  SELECT a.entity_id, GREATEST(similarity(a.normalized_alias, ?), similarity(a.normalized_alias, ?)) AS score
- FROM entity_aliases a JOIN entities matched ON matched.tenant_id=a.tenant_id AND matched.id=a.entity_id
- WHERE a.tenant_id=? AND matched.merged_into_id='' AND lower(matched.entity_type) IN ? AND (a.normalized_alias % ? OR a.normalized_alias % ?))
- SELECT e.*, MAX(scores.score) AS recall_score FROM scores JOIN entities e ON e.id=scores.entity_id AND e.tenant_id=?
- GROUP BY e.id ORDER BY recall_score DESC,e.id LIMIT ?`, names[0], names[1], tenantID, compatibleEntityTypes(item.EntityType), names[0], names[1], names[0], names[1], tenantID, compatibleEntityTypes(item.EntityType), names[0], names[1], tenantID, limit).Scan(&namesResult).Error
+ FROM entity_aliases a JOIN entities matched ON matched.space_id=a.space_id AND matched.id=a.entity_id
+ WHERE a.space_id=? AND matched.merged_into_id='' AND lower(matched.entity_type) IN ? AND (a.normalized_alias % ? OR a.normalized_alias % ?))
+ SELECT e.*, MAX(scores.score) AS recall_score FROM scores JOIN entities e ON e.id=scores.entity_id AND e.space_id=?
+ GROUP BY e.id ORDER BY recall_score DESC,e.id LIMIT ?`, names[0], names[1], spaceID, compatibleEntityTypes(item.EntityType), names[0], names[1], names[0], names[1], spaceID, compatibleEntityTypes(item.EntityType), names[0], names[1], spaceID, limit).Scan(&namesResult).Error
 	if err != nil {
 		return nil, err
 	}
@@ -89,10 +89,10 @@ func (s *EntityService) recallEntities(ctx context.Context, tenantID uint64, ite
 		encoded, _ := json.Marshal(vector)
 		// MATERIALIZED isolates valid dimensions before evaluating pgvector distance.
 		err = s.db.WithContext(ctx).Raw(`WITH compatible AS MATERIALIZED (
-   SELECT * FROM entities WHERE tenant_id=? AND merged_into_id='' AND lower(entity_type) IN ?
+   SELECT * FROM entities WHERE space_id=? AND merged_into_id='' AND lower(entity_type) IN ?
     AND embedding_model_id=? AND embedding_dimension=? AND vector_dims(name_embedding)=? AND NOT embedding_needs_rebuild)
    SELECT compatible.*, 1 - (name_embedding <=> ?::vector) AS recall_score FROM compatible
-   ORDER BY name_embedding <=> ?::vector,id LIMIT ?`, tenantID, compatibleEntityTypes(item.EntityType), modelID, len(vector), len(vector), string(encoded), string(encoded), limit).Scan(&vectorResult).Error
+   ORDER BY name_embedding <=> ?::vector,id LIMIT ?`, spaceID, compatibleEntityTypes(item.EntityType), modelID, len(vector), len(vector), string(encoded), string(encoded), limit).Scan(&vectorResult).Error
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +123,7 @@ func (s *EntityService) recallEntities(ctx context.Context, tenantID uint64, ite
 	}
 	if len(ids) > 0 {
 		var aliases []types.EntityAlias
-		if err := s.db.WithContext(ctx).Where("tenant_id=? AND entity_id IN ?", tenantID, ids).Find(&aliases).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("space_id=? AND entity_id IN ?", spaceID, ids).Find(&aliases).Error; err != nil {
 			return nil, err
 		}
 		for i := range candidates {
@@ -141,19 +141,19 @@ func entityNameEmbeddingText(canonical, entityType, description string) string {
 	return strings.Join([]string{strings.TrimSpace(canonical), normalizeEntityName(entityType), strings.TrimSpace(description)}, "\n")
 }
 
-func (s *EntityService) entityNameEmbedder(ctx context.Context, tenantID uint64) (embedding.Embedder, string, string, error) {
+func (s *EntityService) entityNameEmbedder(ctx context.Context, spaceID uint64) (embedding.Embedder, string, string, error) {
 	if s.models == nil {
 		return nil, "", "", nil
 	}
-	profile, err := NewEntityNameEmbeddingRebuilder(s.db, s.models, nil).profile(ctx, tenantID)
+	profile, err := NewEntityNameEmbeddingRebuilder(s.db, s.models, nil).profile(ctx, spaceID)
 	if err != nil {
 		return nil, "", "", nil
 	}
 	return profile.embedder, profile.modelID, profile.hash, nil
 }
 
-func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, tenantID uint64, knowledgeID string, input []entityResolutionInput) ([]types.Entity, map[string]types.Entity, error) {
-	embedder, embeddingModelID, embeddingHash, err := s.entityNameEmbedder(ctx, tenantID)
+func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, spaceID uint64, knowledgeID string, input []entityResolutionInput) ([]types.Entity, map[string]types.Entity, error) {
+	embedder, embeddingModelID, embeddingHash, err := s.entityNameEmbedder(ctx, spaceID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -179,7 +179,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, te
 			entity = touched[id]
 		}
 		if entity.ID == "" {
-			entity, err = s.exactEntity(ctx, tenantID, item)
+			entity, err = s.exactEntity(ctx, spaceID, item)
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, nil, err
 			}
@@ -194,7 +194,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, te
 					vector = value
 				}
 			}
-			candidates, recallErr := s.recallEntities(ctx, tenantID, item, vector, embeddingModelID, limit)
+			candidates, recallErr := s.recallEntities(ctx, spaceID, item, vector, embeddingModelID, limit)
 			if recallErr != nil {
 				return nil, nil, recallErr
 			}
@@ -231,7 +231,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, te
 						vector = value
 					}
 				}
-				entity = types.Entity{ID: uuid.NewString(), TenantID: tenantID, CanonicalName: canonical, NormalizedName: normalizeEntityName(canonical), EntityType: normalizeEntityName(item.EntityType), Description: strings.TrimSpace(item.Description), CreatedAt: time.Now(), UpdatedAt: time.Now(), NameEmbedding: vector, NameEmbeddingProfileHash: embeddingHash, EmbeddingModelID: embeddingModelID, EmbeddingDimension: len(vector), EmbeddingNeedsRebuild: len(vector) == 0}
+				entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: canonical, NormalizedName: normalizeEntityName(canonical), EntityType: normalizeEntityName(item.EntityType), Description: strings.TrimSpace(item.Description), CreatedAt: time.Now(), UpdatedAt: time.Now(), NameEmbedding: vector, NameEmbeddingProfileHash: embeddingHash, EmbeddingModelID: embeddingModelID, EmbeddingDimension: len(vector), EmbeddingNeedsRebuild: len(vector) == 0}
 				// A distinct source spelling still receives its own judgment. Equal
 				// canonical identities in this message share one creation plan afterward.
 				if id, ok := localNames[entityNameKey(item.EntityType, canonical)]; ok && decision.Decision == "new" && entityIdentityVersionsCompatible(item.Mention, canonical) {
@@ -251,7 +251,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, te
 						if !containsString(candidateIDs, candidate.ID) {
 							continue
 						}
-						suggestion := types.EntityMergeSuggestion{ID: uuid.NewString(), TenantID: tenantID, KnowledgeID: knowledgeID, NewEntityID: entity.ID, CandidateEntityID: candidate.ID, Reason: decision.Reason, Status: "pending", CreatedAt: time.Now()}
+						suggestion := types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: spaceID, KnowledgeID: knowledgeID, NewEntityID: entity.ID, CandidateEntityID: candidate.ID, Reason: decision.Reason, Status: "pending", CreatedAt: time.Now()}
 						if suggestion.Reason == "" {
 							suggestion.Reason = "Entity identity remains uncertain after candidate judgment."
 						}
@@ -350,7 +350,7 @@ func (s *EntityService) judgeEntity(ctx context.Context, model chat.Chat, item e
 }
 func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, error) {
 	if len(entities) > 0 {
-		if err := lockEntitySpaceShared(tx, entities[0].TenantID); err != nil {
+		if err := lockEntitySpaceShared(tx, entities[0].SpaceID); err != nil {
 			return nil, err
 		}
 		keys := []string{}
@@ -359,7 +359,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 				keys = append(keys, entityNameKey(entity.EntityType, name))
 			}
 		}
-		if err := lockEntityIdentities(tx, entities[0].TenantID, keys); err != nil {
+		if err := lockEntityIdentities(tx, entities[0].SpaceID, keys); err != nil {
 			return nil, err
 		}
 	}
@@ -367,9 +367,9 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 	for _, planned := range entities {
 		entity := planned
 		var existing types.Entity
-		err := tx.Where("id=? AND tenant_id=?", entity.ID, entity.TenantID).First(&existing).Error
+		err := tx.Where("id=? AND space_id=?", entity.ID, entity.SpaceID).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			err = tx.Where("tenant_id=? AND lower(entity_type) IN ? AND normalized_name=?", entity.TenantID, compatibleEntityTypes(entity.EntityType), entity.NormalizedName).Order("id").First(&existing).Error
+			err = tx.Where("space_id=? AND lower(entity_type) IN ? AND normalized_name=?", entity.SpaceID, compatibleEntityTypes(entity.EntityType), entity.NormalizedName).Order("id").First(&existing).Error
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			var alias types.EntityAlias
@@ -377,9 +377,9 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			for _, name := range entity.Aliases {
 				names = appendUniqueEntityString(names, normalizeEntityName(name))
 			}
-			aliasErr := tx.Where("tenant_id=? AND lower(entity_type) IN ? AND normalized_alias IN ?", entity.TenantID, compatibleEntityTypes(entity.EntityType), names).Order("id").First(&alias).Error
+			aliasErr := tx.Where("space_id=? AND lower(entity_type) IN ? AND normalized_alias IN ?", entity.SpaceID, compatibleEntityTypes(entity.EntityType), names).Order("id").First(&alias).Error
 			if aliasErr == nil {
-				err = tx.Where("tenant_id=? AND id=?", entity.TenantID, alias.EntityID).First(&existing).Error
+				err = tx.Where("space_id=? AND id=?", entity.SpaceID, alias.EntityID).First(&existing).Error
 			} else if !errors.Is(aliasErr, gorm.ErrRecordNotFound) {
 				return nil, aliasErr
 			}
@@ -388,7 +388,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			for existing.MergedIntoID != "" {
 				next := existing.MergedIntoID
 				existing = types.Entity{}
-				if err := tx.Where("tenant_id=? AND id=?", entity.TenantID, next).First(&existing).Error; err != nil {
+				if err := tx.Where("space_id=? AND id=?", entity.SpaceID, next).First(&existing).Error; err != nil {
 					return nil, err
 				}
 			}
@@ -399,14 +399,14 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			if len(entity.NameEmbedding) > 0 {
 				rebuilder := NewEntityNameEmbeddingRebuilder(tx, nil, nil)
 				profile := entityEmbeddingProfile{modelID: entity.EmbeddingModelID, dimension: entity.EmbeddingDimension, hash: entity.NameEmbeddingProfileHash}
-				if entity.NameEmbeddingProfileHash == "" || rebuilder.checkProfile(tx, entity.TenantID, profile) != nil {
+				if entity.NameEmbeddingProfileHash == "" || rebuilder.checkProfile(tx, entity.SpaceID, profile) != nil {
 					entity.EmbeddingNeedsRebuild = true
 				}
 			}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tenant_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, DoNothing: true}).Create(&entity).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, DoNothing: true}).Create(&entity).Error; err != nil {
 				return nil, err
 			}
-			if err := tx.Where("tenant_id=? AND entity_type=? AND normalized_name=?", entity.TenantID, entity.EntityType, entity.NormalizedName).First(&existing).Error; err != nil {
+			if err := tx.Where("space_id=? AND entity_type=? AND normalized_name=?", entity.SpaceID, entity.EntityType, entity.NormalizedName).First(&existing).Error; err != nil {
 				return nil, err
 			}
 			entity = existing
@@ -424,7 +424,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			}
 			seen[key] = true
 			var collision types.EntityAlias
-			found := tx.Where("tenant_id=? AND lower(entity_type) IN ? AND normalized_alias=?", entity.TenantID, compatibleEntityTypes(entity.EntityType), key).First(&collision).Error
+			found := tx.Where("space_id=? AND lower(entity_type) IN ? AND normalized_alias=?", entity.SpaceID, compatibleEntityTypes(entity.EntityType), key).First(&collision).Error
 			if found == nil {
 				continue
 			}
@@ -433,7 +433,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			}
 			alias := resolutions[key]
 			alias.ID = uuid.NewString()
-			alias.TenantID = entity.TenantID
+			alias.SpaceID = entity.SpaceID
 			alias.EntityType = entity.EntityType
 			alias.EntityID = entity.ID
 			alias.Alias = strings.TrimSpace(name)
@@ -442,7 +442,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			if alias.ResolutionMethod == "" {
 				alias.ResolutionMethod = "exact"
 			}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tenant_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error; err != nil {
 				return nil, err
 			}
 		}
@@ -459,14 +459,14 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 				continue
 			}
 			var candidate types.Entity
-			if err := tx.Where("tenant_id=? AND id=?", suggestion.TenantID, suggestion.CandidateEntityID).First(&candidate).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := tx.Where("space_id=? AND id=?", suggestion.SpaceID, suggestion.CandidateEntityID).First(&candidate).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 				continue
 			} else if err != nil {
 				return nil, err
 			}
 			for candidate.MergedIntoID != "" {
 				next := candidate.MergedIntoID
-				if err := tx.Where("tenant_id=? AND id=?", suggestion.TenantID, next).First(&candidate).Error; err != nil {
+				if err := tx.Where("space_id=? AND id=?", suggestion.SpaceID, next).First(&candidate).Error; err != nil {
 					return nil, err
 				}
 			}
@@ -474,7 +474,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			if suggestion.NewEntityID == suggestion.CandidateEntityID {
 				continue
 			}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tenant_id"}, {Name: "new_entity_id"}, {Name: "candidate_entity_id"}, {Name: "knowledge_id"}}, DoNothing: true}).Create(&suggestion).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "new_entity_id"}, {Name: "candidate_entity_id"}, {Name: "knowledge_id"}}, DoNothing: true}).Create(&suggestion).Error; err != nil {
 				return nil, err
 			}
 		}

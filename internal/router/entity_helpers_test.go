@@ -20,30 +20,30 @@ const entityOwnerID = "entity-owner"
 
 func TestMain(m *testing.M)                 { os.Exit(pgtest.Run(m)) }
 func entityFixtureDB(t *testing.T) *gorm.DB { t.Helper(); return pgtest.Open(t) }
-func entityContext(tenantID uint64, userID string) context.Context {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, tenantID)
+func entityContext(spaceID uint64, userID string) context.Context {
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, spaceID)
 	return context.WithValue(ctx, types.UserIDContextKey, userID)
 }
 func entityIdentityMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := uint64(1)
-		if raw := c.GetHeader("X-Test-Tenant"); raw != "" {
-			_, _ = fmt.Sscanf(raw, "%d", &tenantID)
+		spaceID := uint64(1)
+		if raw := c.GetHeader("X-Test-Space"); raw != "" {
+			_, _ = fmt.Sscanf(raw, "%d", &spaceID)
 		}
 		userID := c.GetHeader("X-Test-User")
 		if userID == "" {
 			userID = entityOwnerID
 		}
-		c.Set(types.TenantIDContextKey.String(), tenantID)
-		c.Request = c.Request.WithContext(entityContext(tenantID, userID))
+		c.Set(types.SpaceIDContextKey.String(), spaceID)
+		c.Request = c.Request.WithContext(entityContext(spaceID, userID))
 		c.Next()
 	}
 }
-func entityRequest(t *testing.T, engine *gin.Engine, method, target, body string, tenantID uint64, userID string) *httptest.ResponseRecorder {
+func entityRequest(t *testing.T, engine *gin.Engine, method, target, body string, spaceID uint64, userID string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, target, bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Test-Tenant", fmt.Sprint(tenantID))
+	req.Header.Set("X-Test-Space", fmt.Sprint(spaceID))
 	req.Header.Set("X-Test-User", userID)
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)

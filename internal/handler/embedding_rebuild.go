@@ -16,7 +16,7 @@ func NewEmbeddingRebuildHandler(rebuilder *service.EmbeddingRebuilder) *Embeddin
 }
 
 func (h *EmbeddingRebuildHandler) Status(c *gin.Context) {
-	status, err := h.rebuilder.Status(c.Request.Context(), types.MustTenantIDFromContext(c.Request.Context()))
+	status, err := h.rebuilder.Status(c.Request.Context(), types.MustSpaceIDFromContext(c.Request.Context()))
 	if err != nil {
 		c.Error(err)
 		return
@@ -34,19 +34,19 @@ func (h *EmbeddingRebuildHandler) Action(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	tenantID := types.MustTenantIDFromContext(ctx)
+	spaceID := types.MustSpaceIDFromContext(ctx)
 	var err error
 	switch input.Action {
 	case "start":
-		_, err = h.rebuilder.StartAndEnqueue(ctx, tenantID)
+		_, err = h.rebuilder.StartAndEnqueue(ctx, spaceID)
 	case "pause":
-		err = h.rebuilder.Pause(ctx, tenantID, input.RunID)
+		err = h.rebuilder.Pause(ctx, spaceID, input.RunID)
 	case "resume", "retry_failed":
 		if input.RunID == "" {
 			c.Error(apperrors.NewBadRequestError("embedding rebuild run_id is required"))
 			return
 		}
-		err = h.rebuilder.ContinueAndEnqueue(ctx, tenantID, input.RunID, input.Action == "retry_failed")
+		err = h.rebuilder.ContinueAndEnqueue(ctx, spaceID, input.RunID, input.Action == "retry_failed")
 	default:
 		c.Error(apperrors.NewBadRequestError("unsupported embedding rebuild action"))
 		return

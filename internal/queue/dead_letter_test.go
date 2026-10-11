@@ -14,7 +14,7 @@ func TestDeadLetterPreservesDiagnosticsAndPayload(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{"tenant_id": 42, "knowledge_base_id": "kb-abc", "knowledge_id": "k-1"})
 	row := BuildDeadLetter(NewTask("knowledge:process", payload), errors.New("boom"), 3)
 	require.Equal(t, "knowledge:process", row.TaskType)
-	require.Equal(t, types.SingleTenantID, row.TenantID)
+	require.Equal(t, types.SingleSpaceID, row.SpaceID)
 	require.Equal(t, payload, []byte(row.Payload))
 	require.Equal(t, types.TaskScopeKnowledgeBase, row.Scope)
 	require.Equal(t, "kb-abc", row.ScopeID)
@@ -49,7 +49,7 @@ func TestDeadLetterScopePriority(t *testing.T) {
 	tests := []struct{ name, payload, scope, id string }{
 		{"knowledge_base_id wins over knowledge_id", `{"knowledge_base_id":"kb1","knowledge_id":"k1"}`, types.TaskScopeKnowledgeBase, "kb1"},
 		{"knowledge_id only", `{"knowledge_id":"k-only"}`, types.TaskScopeKnowledge, "k-only"},
-		{"tenant_id fallback", `{"tenant_id":7}`, types.TaskScopeTenant, "7"},
+		{"space_id fallback", `{"tenant_id":7}`, types.TaskScopeSpace, "7"},
 		{"no identifiers", `{}`, types.TaskScopeUnknown, ""},
 	}
 	for _, tc := range tests {

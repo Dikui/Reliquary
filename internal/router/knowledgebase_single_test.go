@@ -69,12 +69,12 @@ func TestSingleKnowledgeBaseChildResourceMissingIDReturnsNotFound(t *testing.T) 
 
 func TestRetrievalAlgorithmSettingsDoNotCreateAnotherRerankModelBinding(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	require.NoError(t, f.db.Model(&types.KnowledgeBase{}).Where("tenant_id=?", types.SingleTenantID).Update("model_tiers", types.ModelTierConfig{Rerank: "configured-rerank"}).Error)
+	require.NoError(t, f.db.Model(&types.KnowledgeBase{}).Where("space_id=?", types.SingleSpaceID).Update("model_tiers", types.ModelTierConfig{Rerank: "configured-rerank"}).Error)
 	saved := personalRequest(t, f.router, http.MethodPut, "/api/v1/space/kv/retrieval-config", `{"rerank_model_id":"ignored-second-binding","rerank_top_k":7,"rerank_threshold":0.4}`, f.token, false)
 	require.Equal(t, http.StatusOK, saved.Code, saved.Body.String())
 	require.NotContains(t, saved.Body.String(), "rerank_model_id")
 	var stored string
-	require.NoError(t, f.db.Raw("SELECT retrieval_config::text FROM tenants WHERE id=?", types.SingleTenantID).Scan(&stored).Error)
+	require.NoError(t, f.db.Raw("SELECT retrieval_config::text FROM spaces WHERE id=?", types.SingleSpaceID).Scan(&stored).Error)
 	require.NotContains(t, stored, "rerank_model_id")
 	var settings types.RetrievalConfig
 	require.NoError(t, json.Unmarshal([]byte(stored), &settings))

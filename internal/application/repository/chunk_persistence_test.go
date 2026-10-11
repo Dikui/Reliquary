@@ -25,7 +25,7 @@ func setupChunkTestDB(t *testing.T) *gorm.DB {
 func makeChunk(kbID, knowledgeID string, chunkType string) *types.Chunk {
 	return &types.Chunk{
 		ID:              uuid.New().String(),
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: kbID,
 		KnowledgeID:     knowledgeID,
 		Content:         "test content",

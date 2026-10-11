@@ -107,14 +107,14 @@ type mcpFixture struct {
 func newMCPFixture(t *testing.T) *mcpFixture {
 	t.Helper()
 	f := newPersonalAuthFixture(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(types.SingleTenantID))
-	var key types.TenantAPIKey
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(types.SingleSpaceID))
+	var key types.APIKey
 	require.NoError(t, f.db.Where("name=?", "personal integration").First(&key).Error)
 	ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIKey, ID: fmt.Sprint(key.ID)})
 	require.NoError(t, service.EnsureSingleKnowledgeBase(ctx, f.db))
 	kbRepo, knowledgeRepo := apprepo.NewKnowledgeBaseRepository(f.db), apprepo.NewKnowledgeRepository(f.db)
 	chunkRepo := apprepo.NewChunkRepository(f.db)
-	models := mcpFixtureModels{service.NewModelService(apprepo.NewModelRepository(f.db), kbRepo, nil, nil, f.params.TenantService)}
+	models := mcpFixtureModels{service.NewModelService(apprepo.NewModelRepository(f.db), kbRepo, nil, nil, f.params.SpaceService)}
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(f.db))
 	bases := service.NewKnowledgeBaseService(f.db, kbRepo, knowledgeRepo, chunkRepo, models, engine, nil)
 	kb, err := bases.GetKnowledgeBase(ctx)
@@ -133,7 +133,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	queue := &mcpFixtureQueue{}
 	chunks := service.NewChunkService(chunkRepo, knowledgeRepo, kbRepo, models, engine)
 	knowledge, err := service.NewKnowledgeService(f.db, cfg, knowledgeRepo, bases,
-		apprepo.NewTenantRepository(f.db), f.params.TenantService, chunks, chunkRepo, files, nil, models, queue,
+		apprepo.NewSpaceRepository(f.db), f.params.SpaceService, chunks, chunkRepo, files, nil, models, queue,
 		nil, engine, nil, nil)
 	require.NoError(t, err)
 	knowledge.(interface{ SetVault(*service.VaultService) }).SetVault(vault)
@@ -142,7 +142,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
 	articles := knowledge.(mcpserver.ArticleService)
 	adapter := mcpserver.New(mcpserver.Services{Articles: articles,
-		Search: service.NewKnowledgeSearchService(bases, f.params.TenantService, models, f.db),
+		Search: service.NewKnowledgeSearchService(bases, f.params.SpaceService, models, f.db),
 		Topics: service.NewTopicService(f.db), Entities: service.NewEntityService(f.db, models), Reports: documents, Follows: service.NewFollowService(f.db)})
 	f.router.Any("/mcp", gin.WrapH(adapter))
 	server := httptest.NewServer(f.router)
@@ -153,7 +153,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 
 func (f *mcpFixture) seedArticle(t *testing.T, title, mode, body string) *types.Knowledge {
 	t.Helper()
-	article := &types.Knowledge{ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: f.kb.ID,
+	article := &types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
 		Type: "url", Title: title, SourceKind: "article", Source: "https://example.org/" + uuid.NewString(),
 		ContentType: "event", ProcessingMode: mode, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
 		StructuredSummary: &types.KnowledgeSummary{Overview: "MCP source summary", Points: []string{"one", "two", "three"}, KeyTerms: []string{"MCP"}},
@@ -170,9 +170,9 @@ func (f *mcpFixture) seedArticle(t *testing.T, title, mode, body string) *types.
 
 func (f *mcpFixture) seedPending(t *testing.T, title string) *types.Knowledge {
 	t.Helper()
-	bodyPath, err := f.files.SaveBytes(f.ctx, []byte("# "+title+"\n\nAwaiting a deliberate approval."), types.SingleTenantID, uuid.NewString()+".md", false)
+	bodyPath, err := f.files.SaveBytes(f.ctx, []byte("# "+title+"\n\nAwaiting a deliberate approval."), types.SingleSpaceID, uuid.NewString()+".md", false)
 	require.NoError(t, err)
-	article := &types.Knowledge{ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: f.kb.ID,
+	article := &types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
 		Type: "manual", Title: title, SourceKind: "article", ParseStatus: types.ParseStatusRejected, EnableStatus: "disabled"}
 	require.NoError(t, article.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "rejected", OriginalPath: bodyPath,
 		SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/" + article.ID, Publisher: "Pending publisher"}}))
@@ -226,13 +226,13 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	f := newMCPFixture(t)
 	article := f.seedArticle(t, "MCP searchfixture article", types.ProcessingModeFull, "# MCP searchfixture\n\n中文与 emoji 🙂 support complete segments.\n")
 	approve, discard := f.seedPending(t, "Approve fixture"), f.seedPending(t, "Discard fixture")
-	topic := types.Topic{ID: uuid.NewString(), TenantID: types.SingleTenantID, Name: "MCP topic", Description: "Fixture observations"}
+	topic := types.Topic{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "MCP topic", Description: "Fixture observations"}
 	require.NoError(t, f.db.Create(&topic).Error)
-	entity := types.Entity{ID: uuid.NewString(), TenantID: types.SingleTenantID, CanonicalName: "MCP Acme", NormalizedName: "mcp acme", EntityType: "company"}
+	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "MCP Acme", NormalizedName: "mcp acme", EntityType: "company"}
 	require.NoError(t, f.db.Create(&entity).Error)
-	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), TenantID: types.SingleTenantID, EntityID: entity.ID, Alias: "MCP alias", NormalizedAlias: "mcp alias", EntityType: "company"}).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeEntity{TenantID: types.SingleTenantID, KnowledgeID: article.ID, EntityID: entity.ID}).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeTopic{TenantID: types.SingleTenantID, KnowledgeID: article.ID, TopicID: topic.ID, Source: "user"}).Error)
+	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, EntityID: entity.ID, Alias: "MCP alias", NormalizedAlias: "mcp alias", EntityType: "company"}).Error)
+	require.NoError(t, f.db.Create(&types.KnowledgeEntity{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, EntityID: entity.ID}).Error)
+	require.NoError(t, f.db.Create(&types.KnowledgeTopic{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, TopicID: topic.ID, Source: "user"}).Error)
 	client := f.connect(t, "2025-11-25")
 	tools, err := client.ListTools(context.Background(), nil)
 	require.NoError(t, err)
@@ -389,7 +389,7 @@ func TestMCPRequiresValidBearerAPIKeyOnEveryRequest(t *testing.T) {
 	client := f.connect(t, "2025-11-25")
 	_, err := client.ListTools(context.Background(), nil)
 	require.NoError(t, err)
-	require.NoError(t, f.db.Model(&types.TenantAPIKey{}).Where("name=?", "personal integration").Update("revoked_at", time.Now()).Error)
+	require.NoError(t, f.db.Model(&types.APIKey{}).Where("name=?", "personal integration").Update("revoked_at", time.Now()).Error)
 	_, err = client.ListTools(context.Background(), nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Unauthorized")

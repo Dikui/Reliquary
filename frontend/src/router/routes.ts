@@ -27,7 +27,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       children: [
         ...removedPlatformRoutes,
         {
-          path: "tenant",
+          path: "space",
           redirect: "/platform/settings"
         },
         {

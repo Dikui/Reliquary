@@ -5,7 +5,7 @@ import "time"
 // EmbeddingRebuildRun is a durable snapshot of all vectors to rebuild.
 type EmbeddingRebuildRun struct {
 	ID             string     `json:"id" gorm:"primaryKey"`
-	TenantID       uint64     `json:"tenant_id"`
+	SpaceID        uint64     `json:"space_id"`
 	Status         string     `json:"status"`
 	ModelID        string     `json:"model_id"`
 	ModelName      string     `json:"model_name"`
@@ -47,6 +47,6 @@ type EmbeddingRebuildStatus struct {
 }
 
 type EmbeddingRebuildPayload struct {
-	TenantID uint64 `json:"tenant_id"`
-	RunID    string `json:"run_id"`
+	SpaceID uint64 `json:"tenant_id"`
+	RunID   string `json:"run_id"`
 }

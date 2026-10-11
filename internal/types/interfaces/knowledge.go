@@ -52,13 +52,13 @@ type KnowledgeService interface {
 		payload *types.ManualKnowledgePayload,
 		channel string,
 	) (*types.Knowledge, error)
-	// GetKnowledgeByID retrieves knowledge by ID (uses tenant from context).
+	// GetKnowledgeByID retrieves knowledge by ID (uses space from context).
 	GetKnowledgeByID(ctx context.Context, id string) (*types.Knowledge, error)
-	// GetKnowledgeByIDOnly retrieves knowledge by ID without tenant filter (for permission resolution).
+	// GetKnowledgeByIDOnly retrieves knowledge by ID without space filter (for permission resolution).
 	GetKnowledgeByIDOnly(ctx context.Context, id string) (*types.Knowledge, error)
 
 	// GetKnowledgeBatch retrieves a batch of knowledge by IDs.
-	GetKnowledgeBatch(ctx context.Context, tenantID uint64, ids []string) ([]*types.Knowledge, error)
+	GetKnowledgeBatch(ctx context.Context, spaceID uint64, ids []string) ([]*types.Knowledge, error)
 	// ListKnowledgeByKnowledgeBaseID lists all knowledge under a knowledge base.
 	ListKnowledgeByKnowledgeBaseID(ctx context.Context, kbID string) ([]*types.Knowledge, error)
 	// ListPagedKnowledgeByKnowledgeBaseID lists all knowledge under a knowledge base
@@ -114,38 +114,38 @@ type KnowledgeService interface {
 	ProcessKnowledgeListDelete(ctx context.Context, t *taskqueue.Task) error
 	// ProcessKnowledgeListReparse handles background knowledge list reparse tasks
 	ProcessKnowledgeListReparse(ctx context.Context, t *taskqueue.Task) error
-	// SearchKnowledge searches knowledge items by keyword across the tenant.
+	// SearchKnowledge searches knowledge items by keyword across the space.
 	// fileTypes: optional list of file extensions to filter by (e.g., ["csv", "xlsx"])
 	SearchKnowledge(ctx context.Context, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error)
 }
 
 // KnowledgeRepository defines the interface for knowledge repositories.
 type KnowledgeRepository interface {
-	GetKnowledgeBatch(ctx context.Context, tenantID uint64, ids []string) ([]*types.Knowledge, error)
+	GetKnowledgeBatch(ctx context.Context, spaceID uint64, ids []string) ([]*types.Knowledge, error)
 	CreateKnowledge(ctx context.Context, knowledge *types.Knowledge) error
-	GetKnowledgeByID(ctx context.Context, tenantID uint64, id string) (*types.Knowledge, error)
-	// GetKnowledgeByIDOnly returns knowledge by ID without tenant filter (for permission resolution).
+	GetKnowledgeByID(ctx context.Context, spaceID uint64, id string) (*types.Knowledge, error)
+	// GetKnowledgeByIDOnly returns knowledge by ID without space filter (for permission resolution).
 	GetKnowledgeByIDOnly(ctx context.Context, id string) (*types.Knowledge, error)
-	ListKnowledgeByKnowledgeBaseID(ctx context.Context, tenantID uint64, kbID string) ([]*types.Knowledge, error)
+	ListKnowledgeByKnowledgeBaseID(ctx context.Context, spaceID uint64, kbID string) ([]*types.Knowledge, error)
 	// ListPagedKnowledgeByKnowledgeBaseID lists all knowledge in a knowledge base
 	// with pagination and optional keyword, file type, parse status, source channel
 	// and updated time filters. Pass a zero
 	// struct to disable all filters.
 	ListPagedKnowledgeByKnowledgeBaseID(ctx context.Context,
-		tenantID uint64, kbID string, page *types.Pagination, filter types.KnowledgeListFilter,
+		spaceID uint64, kbID string, page *types.Pagination, filter types.KnowledgeListFilter,
 	) ([]*types.Knowledge, int64, error)
 	UpdateKnowledge(ctx context.Context, knowledge *types.Knowledge) error
 	// UpdateKnowledgeBatch updates knowledge items in batch
 	UpdateKnowledgeBatch(ctx context.Context, knowledgeList []*types.Knowledge) error
-	DeleteKnowledge(ctx context.Context, tenantID uint64, id string) error
-	DeleteKnowledgeList(ctx context.Context, tenantID uint64, ids []string) error
+	DeleteKnowledge(ctx context.Context, spaceID uint64, id string) error
+	DeleteKnowledgeList(ctx context.Context, spaceID uint64, ids []string) error
 	// CheckKnowledgeExists checks if knowledge already exists.
 	// For file types, check by fileHash or (fileName+fileSize).
 	// For URL types, check by URL.
 	// Returns whether it exists, the existing knowledge object (if any), and possible error.
 	CheckKnowledgeExists(
 		ctx context.Context,
-		tenantID uint64,
+		spaceID uint64,
 		kbID string,
 		params *types.KnowledgeCheckParams,
 	) (bool, *types.Knowledge, error)
@@ -169,29 +169,29 @@ type KnowledgeRepository interface {
 	// was no longer "processing", e.g. user cancelled / deleted in flight).
 	SetFinalizing(ctx context.Context, id string, expectedSubtasks int) (bool, error)
 	// CountKnowledgeByKnowledgeBaseID counts the number of knowledge items in a knowledge base.
-	CountKnowledgeByKnowledgeBaseID(ctx context.Context, tenantID uint64, kbID string) (int64, error)
+	CountKnowledgeByKnowledgeBaseID(ctx context.Context, spaceID uint64, kbID string) (int64, error)
 	// CountKnowledgeByStatus counts the number of knowledge items with the specified parse status.
-	CountKnowledgeByStatus(ctx context.Context, tenantID uint64, kbID string, parseStatuses []string) (int64, error)
-	// SearchKnowledge searches knowledge items by keyword across the tenant.
+	CountKnowledgeByStatus(ctx context.Context, spaceID uint64, kbID string, parseStatuses []string) (int64, error)
+	// SearchKnowledge searches knowledge items by keyword across the space.
 	// fileTypes: optional list of file extensions to filter by (e.g., ["csv", "xlsx"])
-	SearchKnowledge(ctx context.Context, tenantID uint64, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, error)
+	SearchKnowledge(ctx context.Context, spaceID uint64, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, error)
 
 	// FindByMetadataKey finds a knowledge item by a key-value pair in the metadata JSON column.
 	// Used by data source sync to locate existing items by external_id.
-	FindByMetadataKey(ctx context.Context, tenantID uint64, kbID string, key string, value string) (*types.Knowledge, error)
+	FindByMetadataKey(ctx context.Context, spaceID uint64, kbID string, key string, value string) (*types.Knowledge, error)
 	// FindByMetadataKeyPrefix finds knowledge items whose metadata[key] starts
 	// with the given prefix. Used to sweep an external node's attachment sub-items.
-	FindByMetadataKeyPrefix(ctx context.Context, tenantID uint64, kbID string, key string, prefix string) ([]*types.Knowledge, error)
+	FindByMetadataKeyPrefix(ctx context.Context, spaceID uint64, kbID string, key string, prefix string) ([]*types.Knowledge, error)
 	// FindByDataSourceExternalID finds a knowledge item owned by one data source
 	// and identified by the source's external item ID.
 	FindByDataSourceExternalID(
-		ctx context.Context, tenantID uint64, kbID, dataSourceID, externalID string,
+		ctx context.Context, spaceID uint64, kbID, dataSourceID, externalID string,
 	) (*types.Knowledge, error)
 	// HardDeleteKnowledge physically removes a row after DeleteKnowledge's soft-delete
 	// cascade. Sync-internal deletions use this so rows never become tombstones.
-	HardDeleteKnowledge(ctx context.Context, tenantID uint64, id string) error
+	HardDeleteKnowledge(ctx context.Context, spaceID uint64, id string) error
 	// HardDeleteKnowledgeList is the batch counterpart of HardDeleteKnowledge.
-	HardDeleteKnowledgeList(ctx context.Context, tenantID uint64, ids []string) error
-	// SearchKnowledgeInScopes searches articles inside explicit tenant and knowledge base boundaries.
+	HardDeleteKnowledgeList(ctx context.Context, spaceID uint64, ids []string) error
+	// SearchKnowledgeInScopes searches articles inside explicit space and knowledge base boundaries.
 	SearchKnowledgeInScopes(ctx context.Context, scopes []types.KnowledgeSearchScope, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error)
 }

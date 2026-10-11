@@ -22,13 +22,13 @@ func (p *MergeStage) expandShortContextWithNeighbors(
 		return results
 	}
 
-	tenantID, _ := types.TenantIDFromContext(ctx)
-	if tenantID == 0 && state != nil {
-		tenantID = state.TenantID
+	spaceID, _ := types.SpaceIDFromContext(ctx)
+	if spaceID == 0 && state != nil {
+		spaceID = state.SpaceID
 	}
-	if tenantID == 0 {
+	if spaceID == 0 {
 		pipelineWarn(ctx, "Merge", "expand_skip", map[string]interface{}{
-			"reason": "missing_tenant",
+			"reason": "missing_space",
 		})
 		return results
 	}
@@ -70,7 +70,7 @@ func (p *MergeStage) expandShortContextWithNeighbors(
 	}
 
 	chunkMap := make(map[string]*types.Chunk, len(baseIDs))
-	chunks, err := p.chunkRepo.ListChunksByID(ctx, tenantID, baseIDs)
+	chunks, err := p.chunkRepo.ListChunksByID(ctx, spaceID, baseIDs)
 	if err != nil {
 		pipelineWarn(ctx, "Merge", "expand_list_base_failed", map[string]interface{}{
 			"error": err.Error(),
@@ -103,7 +103,7 @@ func (p *MergeStage) expandShortContextWithNeighbors(
 		for id := range neighborIDsSet {
 			neighborIDs = append(neighborIDs, id)
 		}
-		neighbors, err := p.chunkRepo.ListChunksByID(ctx, tenantID, neighborIDs)
+		neighbors, err := p.chunkRepo.ListChunksByID(ctx, spaceID, neighborIDs)
 		if err != nil {
 			pipelineWarn(ctx, "Merge", "expand_list_neighbor_failed", map[string]interface{}{
 				"error": err.Error(),
@@ -123,7 +123,7 @@ func (p *MergeStage) expandShortContextWithNeighbors(
 
 	for _, target := range targets {
 		res := target.result
-		p.fetchChunksIfMissing(ctx, tenantID, chunkMap, res.ID)
+		p.fetchChunksIfMissing(ctx, spaceID, chunkMap, res.ID)
 		baseChunk := chunkMap[res.ID]
 		if baseChunk == nil || baseChunk.Content == "" || baseChunk.ChunkType != types.ChunkTypeText {
 			continue
@@ -137,7 +137,7 @@ func (p *MergeStage) expandShortContextWithNeighbors(
 		prevCursor := baseChunk.PreChunkID
 		nextCursor := baseChunk.NextChunkID
 
-		p.fetchChunksIfMissing(ctx, tenantID, chunkMap, prevCursor, nextCursor)
+		p.fetchChunksIfMissing(ctx, spaceID, chunkMap, prevCursor, nextCursor)
 
 		if prevCursor != "" {
 			if prevChunk := chunkMap[prevCursor]; prevChunk != nil && prevChunk.KnowledgeID == baseChunk.KnowledgeID {
@@ -174,7 +174,7 @@ func (p *MergeStage) expandShortContextWithNeighbors(
 
 			expanded := false
 			if prevCursor != "" {
-				p.fetchChunksIfMissing(ctx, tenantID, chunkMap, prevCursor)
+				p.fetchChunksIfMissing(ctx, spaceID, chunkMap, prevCursor)
 				if prevChunk := chunkMap[prevCursor]; prevChunk != nil &&
 					prevChunk.KnowledgeID == baseChunk.KnowledgeID {
 					prevContent = searchutil.JoinChunkContent(prevChunk.Content, prevContent, "\n\n")
@@ -192,7 +192,7 @@ func (p *MergeStage) expandShortContextWithNeighbors(
 			}
 
 			if nextCursor != "" {
-				p.fetchChunksIfMissing(ctx, tenantID, chunkMap, nextCursor)
+				p.fetchChunksIfMissing(ctx, spaceID, chunkMap, nextCursor)
 				if nextChunk := chunkMap[nextCursor]; nextChunk != nil &&
 					nextChunk.KnowledgeID == baseChunk.KnowledgeID {
 					nextContent = searchutil.JoinChunkContent(nextContent, nextChunk.Content, "\n\n")
@@ -277,7 +277,7 @@ func containsID(ids []string, target string) bool {
 
 func (p *MergeStage) fetchChunksIfMissing(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	chunkMap map[string]*types.Chunk,
 	chunkIDs ...string,
 ) {
@@ -294,7 +294,7 @@ func (p *MergeStage) fetchChunksIfMissing(
 		return
 	}
 
-	chunks, err := p.chunkRepo.ListChunksByID(ctx, tenantID, missing)
+	chunks, err := p.chunkRepo.ListChunksByID(ctx, spaceID, missing)
 	if err != nil {
 		pipelineWarn(ctx, "Merge", "expand_fetch_missing_failed", map[string]interface{}{
 			"missing_cnt": len(missing),

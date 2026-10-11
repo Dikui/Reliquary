@@ -178,13 +178,13 @@ func (p *MergeStage) resolveParentChunks(
 		return results
 	}
 
-	tenantID, _ := types.TenantIDFromContext(ctx)
-	if tenantID == 0 && state != nil {
-		tenantID = state.TenantID
+	spaceID, _ := types.SpaceIDFromContext(ctx)
+	if spaceID == 0 && state != nil {
+		spaceID = state.SpaceID
 	}
-	if tenantID == 0 {
+	if spaceID == 0 {
 		pipelineWarn(ctx, "Merge", "parent_resolve_skip", map[string]interface{}{
-			"reason": "missing_tenant",
+			"reason": "missing_space",
 		})
 		return results
 	}
@@ -206,7 +206,7 @@ func (p *MergeStage) resolveParentChunks(
 	for id := range parentIDs {
 		ids = append(ids, id)
 	}
-	parentChunks, err := p.chunkRepo.ListChunksByID(ctx, tenantID, ids)
+	parentChunks, err := p.chunkRepo.ListChunksByID(ctx, spaceID, ids)
 	if err != nil {
 		pipelineWarn(ctx, "Merge", "parent_resolve_failed", map[string]interface{}{
 			"error": err.Error(),
@@ -223,7 +223,7 @@ func (p *MergeStage) resolveParentChunks(
 	textChildIDs := collectScopedTextChildIDs(results, parentMap)
 	var scopedImageInfo map[string]string
 	if len(textChildIDs) > 0 {
-		scopedImageInfo = searchutil.CollectImageInfoByChunkIDs(ctx, p.chunkRepo, tenantID, textChildIDs)
+		scopedImageInfo = searchutil.CollectImageInfoByChunkIDs(ctx, p.chunkRepo, spaceID, textChildIDs)
 	}
 
 	for _, r := range results {

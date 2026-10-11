@@ -105,8 +105,8 @@
                   </div>
 
                   <!-- 空间信息 -->
-                  <div v-if="currentSection === 'tenant'" class="section">
-                    <TenantInfo ref="tenantInfoView" />
+                  <div v-if="currentSection === 'space'" class="section">
+                    <SpaceInfo ref="spaceInfoView" />
                   </div>
 
                   <!-- 发布集成 -->
@@ -132,7 +132,7 @@ import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SystemInfo from './SystemInfo.vue'
-import TenantInfo from './TenantInfo.vue'
+import SpaceInfo from './SpaceInfo.vue'
 import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
@@ -169,9 +169,9 @@ const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
 const knowledgeSettingsView = ref<InstanceType<typeof KnowledgeSettings>>()
-const tenantInfoView = ref<InstanceType<typeof TenantInfo>>()
-const canLeaveCurrentSection = () => currentSection.value === 'tenant'
-  ? tenantInfoView.value?.confirmLeave() ?? Promise.resolve(true)
+const spaceInfoView = ref<InstanceType<typeof SpaceInfo>>()
+const canLeaveCurrentSection = () => currentSection.value === 'space'
+  ? spaceInfoView.value?.confirmLeave() ?? Promise.resolve(true)
   : currentSection.value === 'knowledge' ? knowledgeSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
@@ -236,7 +236,7 @@ const navItems = computed(() => {
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
-    { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
+    { key: 'space', icon: 'user-circle', label: t('settings.spaceInfo') },
     ...integrationItems,
   ]
   // 入口的策略一致。
@@ -259,7 +259,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant']),
+      items: pickItems(['space']),
     },
     {
       key: 'models_runtime',
@@ -712,7 +712,7 @@ onUnmounted(() => {
   container-type: inline-size;
   // Bumped from 600 to 760 when the modal grew from 900→1080 (see
   // .settings-modal). Without this, single-column panes (General,
-  // Tenant, API key, …) leave a wide right-hand gutter inside the
+  // Space, API key, …) leave a wide right-hand gutter inside the
   // wider modal. 760 keeps comfortable reading-width on long
   // descriptions without the form fields stretching to the full
   // panel width — which would look stranger than a small gutter.

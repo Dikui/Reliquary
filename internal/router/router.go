@@ -40,9 +40,9 @@ type RouterParams struct {
 	FollowHandler                *handler.FollowHandler           `optional:"true"`
 	OperationLogHandler          *handler.OperationLogHandler     `optional:"true"`
 	MCPHandler                   *mcpserver.Handler               `optional:"true"`
-	TenantHandler                *handler.TenantHandler
-	TenantService                interfaces.TenantService
-	TenantAPIKeyService          interfaces.TenantAPIKeyService
+	SpaceHandler                 *handler.SpaceHandler
+	SpaceService                 interfaces.SpaceService
+	APIKeyService                interfaces.APIKeyService
 	ChunkHandler                 *handler.ChunkHandler
 	ChatGPTHandler               *handler.ChatGPTHandler       `optional:"true"`
 	ChatGPTPolicyHandler         *handler.ChatGPTPolicyHandler `optional:"true"`
@@ -106,10 +106,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 		r.GET("/auth/callback", params.ChatGPTHandler.Callback)
 		r.GET("/auth/chatgpt/continue", params.ChatGPTHandler.ContinueLogin)
 	}
-	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService)
+	serveResourceGrants(r, params.ResourceCatalog, params.SpaceService, params.FileService)
 
 	// 认证中间件
-	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantAPIKeyService))
+	r.Use(middleware.Auth(params.SpaceService, params.UserService, params.APIKeyService))
 	if params.MaintenanceHandler != nil {
 		r.Use(params.MaintenanceHandler.CollectionGate)
 	}
@@ -121,7 +121,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	serveFilesWithResources(r, params.FileService, params.ResourceCatalog)
 
 	// Presigned file access: no auth required, signature-verified.
-	servePresignedFiles(r, params.TenantService)
+	servePresignedFiles(r, params.SpaceService)
 
 	// Diagnostic preview of presigned URLs behind authentication middleware.
 	servePresignedPreview(r, params.Config, params.ResourceCatalog)
@@ -132,12 +132,12 @@ func NewRouter(params RouterParams) *gin.Engine {
 		accessGuards := newAccessGuards(params.KBService, params.KnowledgeService, params.ChunkService)
 
 		RegisterAuthRoutes(v1, params.AuthHandler, accessGuards)
-		RegisterTenantRoutes(v1, params.TenantHandler, accessGuards)
+		RegisterSpaceRoutes(v1, params.SpaceHandler, accessGuards)
 		RegisterKnowledgeBaseRoutes(v1, params.KBHandler, accessGuards)
 		serveKBScopedFiles(
 			v1,
 			accessGuards,
-			params.TenantService,
+			params.SpaceService,
 			params.FileService,
 			params.ResourceCatalog)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)

@@ -23,10 +23,10 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	var entity types.Entity
 	require.NoError(t, h.db.Where("canonical_name='Company'").First(&entity).Error)
 	require.NoError(t, h.db.Model(&entity).Update("description", "User entity description").Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "maintenance-topic", TenantID: 1, Name: "Maintenance", Description: "User authored description", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
-	require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
-	require.NoError(t, h.db.Exec("INSERT INTO follows(tenant_id,target_type,target_id) VALUES(1,'entity',?),(1,'topic','maintenance-topic')", entity.ID).Error)
-	require.NoError(t, h.db.Exec("INSERT INTO follow_feed_states(tenant_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error)
+	require.NoError(t, h.db.Create(&types.Topic{ID: "maintenance-topic", SpaceID: 1, Name: "Maintenance", Description: "User authored description", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
+	require.NoError(t, h.db.Create(&types.KnowledgeTopic{SpaceID: 1, KnowledgeID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
+	require.NoError(t, h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?),(1,'topic','maintenance-topic')", entity.ID).Error)
+	require.NoError(t, h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error)
 	for path, body := range map[string]string{"mine/note.md": "# User original\n\nOnly the file and backup can recover this text.", "reports/report.md": "# Report original\n\nThis report remains user owned."} {
 		require.NoError(t, os.WriteFile(filepath.Join(v.root, path), []byte(body), 0600))
 	}
@@ -108,8 +108,8 @@ func TestVaultVerifyRepairsArticlesAndReplicaButReportsUserFileLoss(t *testing.T
 
 func TestVaultVerifyMarksSameDimensionOldEntityModelPendingAndExcludesMergedEntities(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	require.NoError(t, h.db.Exec(`INSERT INTO models(id,tenant_id,name,type,source,parameters,status) VALUES('old-entity-model',1,'Old entity model','Embedding','remote','{"embedding_parameters":{"dimension":3}}','active')`).Error)
-	require.NoError(t, h.db.Exec(`INSERT INTO entities(id,tenant_id,canonical_name,normalized_name,entity_type,name_embedding,embedding_model_id,embedding_dimension,embedding_needs_rebuild,merged_into_id,created_at,updated_at) VALUES
+	require.NoError(t, h.db.Exec(`INSERT INTO models(id,space_id,name,type,source,parameters,status) VALUES('old-entity-model',1,'Old entity model','Embedding','remote','{"embedding_parameters":{"dimension":3}}','active')`).Error)
+	require.NoError(t, h.db.Exec(`INSERT INTO entities(id,space_id,canonical_name,normalized_name,entity_type,name_embedding,embedding_model_id,embedding_dimension,embedding_needs_rebuild,merged_into_id,created_at,updated_at) VALUES
  ('current-entity',1,'Current entity','current entity','company','[1,0,0]','embedding',3,false,'',now(),now()),
  ('stale-entity',1,'Stale entity','stale entity','company','[1,0,0]','old-entity-model',3,false,'',now(),now()),
  ('merged-entity',1,'Merged entity','merged entity','company','[1,0,0]','old-entity-model',3,true,'current-entity',now(),now())`).Error)

@@ -17,7 +17,7 @@ const (
 	maxSearchLimit      = 100
 )
 
-// parseListPagination parses ?page and ?page_size for tenant-scoped list
+// parseListPagination parses ?page and ?page_size for space-scoped list
 // endpoints. Omitted keys default to page=1 and page_size=20. A present but
 // malformed or out-of-range value yields a validation error on the context.
 func parseListPagination(c *gin.Context) (page, pageSize int, ok bool) {

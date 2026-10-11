@@ -15,7 +15,7 @@ import (
 
 func TestSettingsWriteRefreshesProcessCacheImmediately(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	t.Setenv("SSRF_WHITELIST", "")
 	t.Setenv("SSRF_WHITELIST_EXTRA", "")
 	t.Setenv("RELIQUARY_MODEL_MAX_CONCURRENCY", "32")

@@ -70,7 +70,7 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
 	h.add(t, "mine", "mine", "", "", "personal", 1)
 	h.add(t, "report", "report", "", "", "analysis", 1)
-	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", TenantID: 1, CanonicalName: "Rebuild Entity", NormalizedName: "rebuild entity", EntityType: "product", EmbeddingNeedsRebuild: true,
+	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Rebuild Entity", NormalizedName: "rebuild entity", EntityType: "product", EmbeddingNeedsRebuild: true,
 		EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, NameEmbedding: types.EntityNameEmbedding{0, 1, 0}}).Error)
 	root := t.TempDir()
 	vault, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: root}})
@@ -84,7 +84,7 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, "data:image/png;base64,"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "attachments", full.ID, "photo.png"), data, 0644))
-	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(tenant_id,knowledge_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
+	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,knowledge_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
 		VALUES(1,?, ?, ?, 'fixture-model',3,?,'old')`, full.ID, h.kb.ID, imagePath, pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
 	configureNameEmbedding(t, h.db, "replacement-model", 3)
 	h.kb.EmbeddingModelID, h.kb.ModelTiers.Embedding = "replacement-model", "replacement-model"

@@ -15,7 +15,7 @@ import (
 )
 
 func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEntityID string) error {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		return werrors.NewBadRequestError("two distinct entity IDs are required")
 	}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpace(tx, tenantID); err != nil {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
 		var keep, merged types.Entity
@@ -36,7 +36,7 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		}{{keepEntityID, &keep}, {mergeEntityID, &merged}}
 		sort.Slice(targets, func(i, j int) bool { return targets[i].id < targets[j].id })
 		for _, item := range targets {
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND tenant_id = ?", item.id, tenantID).First(item.target).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND space_id = ?", item.id, spaceID).First(item.target).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					return werrors.NewNotFoundError("entity not found")
 				}
@@ -50,12 +50,12 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 			return werrors.NewBadRequestError("entity was already merged into a different entity")
 		}
 		var aliases []types.EntityAlias
-		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, merged.ID).Find(&aliases).Error; err != nil {
+		if err := tx.Where("space_id = ? AND entity_id = ?", spaceID, merged.ID).Find(&aliases).Error; err != nil {
 			return err
 		}
 		for _, alias := range aliases {
 			var collision types.EntityAlias
-			err := tx.Where("tenant_id = ? AND entity_type = ? AND normalized_alias = ? AND entity_id <> ?", tenantID, keep.EntityType, alias.NormalizedAlias, merged.ID).First(&collision).Error
+			err := tx.Where("space_id = ? AND entity_type = ? AND normalized_alias = ? AND entity_id <> ?", spaceID, keep.EntityType, alias.NormalizedAlias, merged.ID).First(&collision).Error
 			if err == nil {
 				if collision.EntityID != keep.ID {
 					return werrors.NewBadRequestError("merge alias conflicts with another space entity")
@@ -72,28 +72,28 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 				return err
 			}
 		}
-		if err := tx.Exec(`INSERT INTO knowledge_entities (tenant_id, knowledge_id, entity_id, created_at)
-            SELECT tenant_id, knowledge_id, ?, created_at FROM knowledge_entities WHERE tenant_id=? AND entity_id=?
-            ON CONFLICT (knowledge_id, entity_id) DO NOTHING`, keep.ID, tenantID, merged.ID).Error; err != nil {
+		if err := tx.Exec(`INSERT INTO knowledge_entities (space_id, knowledge_id, entity_id, created_at)
+            SELECT space_id, knowledge_id, ?, created_at FROM knowledge_entities WHERE space_id=? AND entity_id=?
+            ON CONFLICT (knowledge_id, entity_id) DO NOTHING`, keep.ID, spaceID, merged.ID).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("tenant_id=? AND entity_id=?", tenantID, merged.ID).Delete(&types.KnowledgeEntity{}).Error; err != nil {
+		if err := tx.Where("space_id=? AND entity_id=?", spaceID, merged.ID).Delete(&types.KnowledgeEntity{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec(`INSERT INTO follows (tenant_id, target_type, target_id, created_at)
-            SELECT tenant_id, 'entity', ?, created_at FROM follows WHERE tenant_id=? AND target_type='entity' AND target_id=?
-            ON CONFLICT (tenant_id, target_type, target_id) DO UPDATE
-            SET created_at=LEAST(follows.created_at, EXCLUDED.created_at)`, keep.ID, tenantID, merged.ID).Error; err != nil {
+		if err := tx.Exec(`INSERT INTO follows (space_id, target_type, target_id, created_at)
+            SELECT space_id, 'entity', ?, created_at FROM follows WHERE space_id=? AND target_type='entity' AND target_id=?
+            ON CONFLICT (space_id, target_type, target_id) DO UPDATE
+            SET created_at=LEAST(follows.created_at, EXCLUDED.created_at)`, keep.ID, spaceID, merged.ID).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("tenant_id=? AND target_type='entity' AND target_id=?", tenantID, merged.ID).Delete(&types.Follow{}).Error; err != nil {
+		if err := tx.Where("space_id=? AND target_type='entity' AND target_id=?", spaceID, merged.ID).Delete(&types.Follow{}).Error; err != nil {
 			return err
 		}
 		if err := saveEntityAlias(tx, keep, merged.CanonicalName, "merge"); err != nil {
 			return err
 		}
 		actor, _ := types.PrincipalFromContext(ctx)
-		record := types.EntityMergeRecord{ID: uuid.NewString(), TenantID: tenantID, KeepEntityID: keep.ID, MergeEntityID: merged.ID, Actor: actor.StorageID(), CreatedAt: time.Now()}
+		record := types.EntityMergeRecord{ID: uuid.NewString(), SpaceID: spaceID, KeepEntityID: keep.ID, MergeEntityID: merged.ID, Actor: actor.StorageID(), CreatedAt: time.Now()}
 		if err := tx.Create(&record).Error; err != nil {
 			return err
 		}
@@ -109,26 +109,26 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 			return err
 		}
 		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, tenantID, "entity_merge")
+			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "entity_merge")
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	if err := s.refreshArticleHeadersForEntity(ctx, tenantID, keepEntityID); err != nil {
+	if err := s.refreshArticleHeadersForEntity(ctx, spaceID, keepEntityID); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *EntityService) refreshArticleHeadersForEntity(ctx context.Context, tenantID uint64, entityID string) error {
+func (s *EntityService) refreshArticleHeadersForEntity(ctx context.Context, spaceID uint64, entityID string) error {
 	if s.headerRefresher == nil || entityDatabaseInTransaction(s.db) {
 		return nil
 	}
 	var ids []string
 	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEntity{}).
-		Where("tenant_id=? AND entity_id=?", tenantID, entityID).Pluck("knowledge_id", &ids).Error; err != nil {
+		Where("space_id=? AND entity_id=?", spaceID, entityID).Pluck("knowledge_id", &ids).Error; err != nil {
 		return err
 	}
 	for _, id := range ids {
@@ -140,7 +140,7 @@ func (s *EntityService) refreshArticleHeadersForEntity(ctx context.Context, tena
 // RenameEntity preserves the old canonical spelling as an alias and schedules
 // a header refresh for every article linked to this identity.
 func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string) (*types.Entity, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -153,16 +153,16 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 	}
 	var entity types.Entity
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpace(tx, tenantID); err != nil {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=? AND merged_into_id=''", entityID, tenantID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=? AND merged_into_id=''", entityID, spaceID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return werrors.NewNotFoundError("entity not found")
 		} else if err != nil {
 			return err
 		}
 		var collisions int64
-		if err := tx.Model(&types.Entity{}).Where("tenant_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", tenantID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
+		if err := tx.Model(&types.Entity{}).Where("space_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", spaceID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
 			return err
 		}
 		if collisions > 0 {
@@ -179,14 +179,14 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 		}
 		entity.CanonicalName, entity.NormalizedName, entity.EmbeddingNeedsRebuild = name, normalizeEntityName(name), true
 		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, tenantID, "entity_renamed")
+			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "entity_renamed")
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if err = s.refreshArticleHeadersForEntity(ctx, tenantID, entityID); err != nil {
+	if err = s.refreshArticleHeadersForEntity(ctx, spaceID, entityID); err != nil {
 		return &entity, err
 	}
 	return &entity, nil
@@ -201,7 +201,7 @@ func entityDatabaseInTransaction(db *gorm.DB) bool {
 }
 
 func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, description string) (*types.Entity, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -214,10 +214,10 @@ func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, d
 	}
 	var entity types.Entity
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpace(tx, tenantID); err != nil {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=? AND merged_into_id=''", entityID, tenantID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=? AND merged_into_id=''", entityID, spaceID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return werrors.NewNotFoundError("entity not found")
 		} else if err != nil {
 			return err
@@ -228,7 +228,7 @@ func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, d
 		entity.Description = description
 		entity.EmbeddingNeedsRebuild = true
 		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, tenantID, "entity_description_updated")
+			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "entity_description_updated")
 		}
 		return nil
 	})
@@ -244,7 +244,7 @@ func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) erro
 		return nil
 	}
 	var collision types.EntityAlias
-	if err := tx.Where("tenant_id=? AND entity_type=? AND normalized_alias=?", entity.TenantID, entity.EntityType, normalizeEntityName(name)).First(&collision).Error; err == nil {
+	if err := tx.Where("space_id=? AND entity_type=? AND normalized_alias=?", entity.SpaceID, entity.EntityType, normalizeEntityName(name)).First(&collision).Error; err == nil {
 		if collision.EntityID != entity.ID {
 			return werrors.NewBadRequestError("merge alias conflicts with another entity")
 		}
@@ -252,6 +252,6 @@ func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) erro
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	alias := types.EntityAlias{ID: uuid.NewString(), TenantID: entity.TenantID, EntityType: entity.EntityType, EntityID: entity.ID, Alias: name, NormalizedAlias: normalizeEntityName(name), ResolutionMethod: method, CreatedAt: time.Now()}
-	return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tenant_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error
+	alias := types.EntityAlias{ID: uuid.NewString(), SpaceID: entity.SpaceID, EntityType: entity.EntityType, EntityID: entity.ID, Alias: name, NormalizedAlias: normalizeEntityName(name), ResolutionMethod: method, CreatedAt: time.Now()}
+	return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error
 }

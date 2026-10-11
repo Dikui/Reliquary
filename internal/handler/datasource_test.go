@@ -49,8 +49,8 @@ func newDataSourceTestRouter(h *DataSourceHandler) *gin.Engine {
 	r := gin.New()
 	r.Use(errorCapture())
 	r.Use(func(c *gin.Context) {
-		if tenantID, ok := c.Request.Context().Value(types.TenantIDContextKey).(uint64); ok {
-			c.Set(types.TenantIDContextKey.String(), tenantID)
+		if spaceID, ok := c.Request.Context().Value(types.SpaceIDContextKey).(uint64); ok {
+			c.Set(types.SpaceIDContextKey.String(), spaceID)
 		}
 		c.Next()
 	})
@@ -58,9 +58,9 @@ func newDataSourceTestRouter(h *DataSourceHandler) *gin.Engine {
 	return r
 }
 
-func withDSCtx(req *http.Request, tenantID uint64) *http.Request {
+func withDSCtx(req *http.Request, spaceID uint64) *http.Request {
 	ctx := req.Context()
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, tenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	return req.WithContext(ctx)
 }
 
@@ -80,7 +80,7 @@ func TestDataSource_GetSyncLogs_ValidLimitWithinBounds(t *testing.T) {
 	}
 	kbSvc := &stubKBServiceForDS{
 		getByID: func(_ context.Context, _ string) (*types.KnowledgeBase, error) {
-			return &types.KnowledgeBase{ID: "kb1", TenantID: 1}, nil
+			return &types.KnowledgeBase{ID: "kb1", SpaceID: 1}, nil
 		},
 	}
 	h := NewDataSourceHandler(dsSvc, kbSvc)
@@ -113,7 +113,7 @@ func TestDataSource_GetSyncLogs_LimitExceedingMaximum(t *testing.T) {
 	}
 	kbSvc := &stubKBServiceForDS{
 		getByID: func(_ context.Context, _ string) (*types.KnowledgeBase, error) {
-			return &types.KnowledgeBase{ID: "kb1", TenantID: 1}, nil
+			return &types.KnowledgeBase{ID: "kb1", SpaceID: 1}, nil
 		},
 	}
 	h := NewDataSourceHandler(dsSvc, kbSvc)
@@ -153,7 +153,7 @@ func TestDataSource_GetSyncLogs_MissingLimitDefaultsCorrectly(t *testing.T) {
 	}
 	kbSvc := &stubKBServiceForDS{
 		getByID: func(_ context.Context, _ string) (*types.KnowledgeBase, error) {
-			return &types.KnowledgeBase{ID: "kb1", TenantID: 1}, nil
+			return &types.KnowledgeBase{ID: "kb1", SpaceID: 1}, nil
 		},
 	}
 	h := NewDataSourceHandler(dsSvc, kbSvc)
@@ -186,7 +186,7 @@ func TestDataSource_GetSyncLogs_NonNumericLimitRejected(t *testing.T) {
 	}
 	kbSvc := &stubKBServiceForDS{
 		getByID: func(_ context.Context, _ string) (*types.KnowledgeBase, error) {
-			return &types.KnowledgeBase{ID: "kb1", TenantID: 1}, nil
+			return &types.KnowledgeBase{ID: "kb1", SpaceID: 1}, nil
 		},
 	}
 	h := NewDataSourceHandler(dsSvc, kbSvc)
@@ -213,7 +213,7 @@ func TestDataSource_GetSyncLogs_ZeroLimitRejected(t *testing.T) {
 	}
 	kbSvc := &stubKBServiceForDS{
 		getByID: func(_ context.Context, _ string) (*types.KnowledgeBase, error) {
-			return &types.KnowledgeBase{ID: "kb1", TenantID: 1}, nil
+			return &types.KnowledgeBase{ID: "kb1", SpaceID: 1}, nil
 		},
 	}
 	h := NewDataSourceHandler(dsSvc, kbSvc)
@@ -240,7 +240,7 @@ func TestDataSource_GetSyncLogs_NegativeLimitRejected(t *testing.T) {
 	}
 	kbSvc := &stubKBServiceForDS{
 		getByID: func(_ context.Context, _ string) (*types.KnowledgeBase, error) {
-			return &types.KnowledgeBase{ID: "kb1", TenantID: 1}, nil
+			return &types.KnowledgeBase{ID: "kb1", SpaceID: 1}, nil
 		},
 	}
 	h := NewDataSourceHandler(dsSvc, kbSvc)

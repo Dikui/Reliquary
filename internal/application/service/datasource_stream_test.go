@@ -72,7 +72,7 @@ func newStreamHandler(svc *DataSourceService, ds *types.DataSource, result *type
 // with a message — never silently lost.
 func TestStreamHandler_EmitClassifiesDeletedAndFailed(t *testing.T) {
 	ds := &types.DataSource{
-		ID: "ds-1", TenantID: 1, KnowledgeBaseID: "kb-1",
+		ID: "ds-1", SpaceID: 1, KnowledgeBaseID: "kb-1",
 		Type: types.ConnectorTypeRSS, SyncDeletions: true,
 	}
 	result := &types.SyncResult{}

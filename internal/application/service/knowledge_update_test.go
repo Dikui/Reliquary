@@ -12,7 +12,7 @@ func TestUpdateKnowledgeExplicitEmptyDescriptionClearsSummary(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateKnowledgeRepo{knowledge: &types.Knowledge{
 		ID:              "knowledge-1",
-		TenantID:        7,
+		SpaceID:         7,
 		KnowledgeBaseID: "kb-1",
 		Description:     "old summary",
 		SummaryStatus:   types.SummaryStatusCompleted,
@@ -20,7 +20,7 @@ func TestUpdateKnowledgeExplicitEmptyDescriptionClearsSummary(t *testing.T) {
 	service := &knowledgeService{
 		repo: repo, kbService: metadataUpdateKBService{},
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	err := service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID:                   "knowledge-1",
@@ -36,7 +36,7 @@ func TestUpdateKnowledgeOmittedDescriptionPreservesExisting(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateKnowledgeRepo{knowledge: &types.Knowledge{
 		ID:              "knowledge-1",
-		TenantID:        7,
+		SpaceID:         7,
 		KnowledgeBaseID: "kb-1",
 		Description:     "keep me",
 		SummaryStatus:   types.SummaryStatusCompleted,
@@ -44,7 +44,7 @@ func TestUpdateKnowledgeOmittedDescriptionPreservesExisting(t *testing.T) {
 	service := &knowledgeService{
 		repo: repo, kbService: metadataUpdateKBService{},
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	err := service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID:    "knowledge-1",
@@ -60,14 +60,14 @@ func TestUpdateKnowledgeManualDescriptionSetsCompletedStatus(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateKnowledgeRepo{knowledge: &types.Knowledge{
 		ID:              "knowledge-1",
-		TenantID:        7,
+		SpaceID:         7,
 		KnowledgeBaseID: "kb-1",
 		SummaryStatus:   types.SummaryStatusFailed,
 	}}
 	service := &knowledgeService{
 		repo: repo, kbService: metadataUpdateKBService{},
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	err := service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID:                   "knowledge-1",
@@ -83,7 +83,7 @@ func TestUpdateKnowledgeDescriptionOnlyDoesNotTouchMetadata(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateKnowledgeRepo{knowledge: &types.Knowledge{
 		ID:              "knowledge-1",
-		TenantID:        7,
+		SpaceID:         7,
 		KnowledgeBaseID: "kb-1",
 		Description:     "old summary",
 		SummaryStatus:   types.SummaryStatusCompleted,
@@ -92,7 +92,7 @@ func TestUpdateKnowledgeDescriptionOnlyDoesNotTouchMetadata(t *testing.T) {
 	service := &knowledgeService{
 		repo: repo, kbService: metadataUpdateKBService{},
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	err := service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID:                   "knowledge-1",

@@ -57,7 +57,7 @@ func knowledgeTaskTransaction[T any](ctx context.Context, s *knowledgeService, m
 		copy.db = tx
 		copy.repo = repository.NewKnowledgeRepository(tx)
 		copy.chunkRepo = repository.NewChunkRepository(tx)
-		copy.tenantRepo = repository.NewTenantRepository(tx)
+		copy.spaceRepo = repository.NewSpaceRepository(tx)
 		copy.retrieveEngine = s.contentTypeTransactionService(tx).retrieveEngine
 		copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewKnowledgeBaseRepository(tx), copy.modelService, copy.retrieveEngine)
 		if _, ok := s.resourceCatalog.(*resourceCatalog); ok {

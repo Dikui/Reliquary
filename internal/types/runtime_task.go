@@ -69,7 +69,7 @@ type RuntimeTaskInfo struct {
 	MaxRetry        int                 `json:"max_retry"`
 	IsOrphaned      bool                `json:"is_orphaned,omitempty"`
 	Worker          string              `json:"worker,omitempty"`
-	TenantID        uint64              `json:"tenant_id,omitempty"`
+	SpaceID         uint64              `json:"space_id,omitempty"`
 	KnowledgeBaseID string              `json:"knowledge_base_id,omitempty"`
 	KnowledgeID     string              `json:"knowledge_id,omitempty"`
 	TaskID          string              `json:"task_id,omitempty"`

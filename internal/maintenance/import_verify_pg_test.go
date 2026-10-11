@@ -17,7 +17,7 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 	seed(t, source)
 	require.NoError(t, source.Exec(`UPDATE knowledges SET vault_path='articles/materialized.md' WHERE id='article'`).Error)
 	require.NoError(t, source.Exec(`UPDATE knowledges SET structured_summary='null'::jsonb WHERE id='pending'`).Error)
-	require.NoError(t, source.Exec(`INSERT INTO operation_logs(id,tenant_id,actor,operation_type,object_id,before_value,after_value) VALUES('literal-null',1,'owner','create_topic','topic','null'::jsonb,'null'::jsonb)`).Error)
+	require.NoError(t, source.Exec(`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('literal-null',1,'owner','create_topic','topic','null'::jsonb,'null'::jsonb)`).Error)
 	root, uploads := t.TempDir(), t.TempDir()
 	article := filepath.Join(root, "articles/materialized.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(article), 0700))
@@ -64,7 +64,7 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 	}{
 		{"missing_row", `DELETE FROM knowledge_topics WHERE knowledge_id='article'`, `INSERT INTO knowledge_topics SELECT * FROM jsonb_populate_record(NULL::knowledge_topics,?::jsonb)`, "table knowledge_topics", []any{string(originalRelation)}},
 		{"changed_description", `UPDATE topics SET description='Changed user description' WHERE id='topic'`, `UPDATE topics SET description='User topic description' WHERE id='topic'`, "table topics", nil},
-		{"unexpected_row", `INSERT INTO topics(id,tenant_id,name,description) VALUES('unexpected',1,'Unexpected','Must not be absorbed into a fresh baseline')`, `DELETE FROM topics WHERE id='unexpected'`, "table topics", nil},
+		{"unexpected_row", `INSERT INTO topics(id,space_id,name,description) VALUES('unexpected',1,'Unexpected','Must not be absorbed into a fresh baseline')`, `DELETE FROM topics WHERE id='unexpected'`, "table topics", nil},
 		{"literal_null_changed_to_sql_null", `UPDATE knowledges SET structured_summary=NULL WHERE id='pending'`, `UPDATE knowledges SET structured_summary='null'::jsonb WHERE id='pending'`, "table JSONB null types knowledges", nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {

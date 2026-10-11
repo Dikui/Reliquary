@@ -63,11 +63,11 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	generationOnly.ModelTiers.Generation = modelID
 	require.NoError(t, db.Create(generationOnly).Error)
 
-	otherTenant := makeKB()
-	otherTenant.Name = "Other tenant"
-	otherTenant.TenantID = 2
-	otherTenant.EmbeddingModelID = modelID
-	require.NoError(t, db.Create(otherTenant).Error)
+	otherSpace := makeKB()
+	otherSpace.Name = "Other space"
+	otherSpace.SpaceID = 2
+	otherSpace.EmbeddingModelID = modelID
+	require.NoError(t, db.Create(otherSpace).Error)
 
 	deleted := makeKB()
 	deleted.Name = "Deleted KB"

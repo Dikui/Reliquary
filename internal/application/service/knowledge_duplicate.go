@@ -128,7 +128,7 @@ func hydrateMessageSource(k *types.Knowledge, metadata map[string]string) error 
 }
 
 func findMessageDuplicate(tx *gorm.DB, k *types.Knowledge, earlierPendingOnly ...bool) (*types.Knowledge, string, int, error) {
-	query := tx.Model(&types.Knowledge{}).Where("tenant_id = ? AND knowledge_base_id = ? AND id <> ?", k.TenantID, k.KnowledgeBaseID, k.ID).
+	query := tx.Model(&types.Knowledge{}).Where("space_id = ? AND knowledge_base_id = ? AND id <> ?", k.SpaceID, k.KnowledgeBaseID, k.ID).
 		Where("source_kind = ?", "article").
 		Where("parse_status NOT IN ?", []string{types.ParseStatusFailed, types.ParseStatusRejected, types.ManualKnowledgeStatusDraft, types.ParseStatusDeleting, types.ParseStatusCancelled})
 	// Parser workers can see several already-persisted pending messages. A
@@ -153,7 +153,7 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Knowledge, earlierPendingOnly ..
 			return item, "url", 0, err
 		}
 		// A previously recorded repost URL points at the same canonical message.
-		owners := tx.Model(&types.KnowledgeRepostSource{}).Select("knowledge_id").Where("tenant_id = ? AND knowledge_base_id = ? AND normalized_url = ?", k.TenantID, k.KnowledgeBaseID, k.NormalizedURL)
+		owners := tx.Model(&types.KnowledgeRepostSource{}).Select("knowledge_id").Where("space_id = ? AND knowledge_base_id = ? AND normalized_url = ?", k.SpaceID, k.KnowledgeBaseID, k.NormalizedURL)
 		item, err = find(base().Where("id IN (?)", owners))
 		if item != nil || err != nil {
 			return item, "url", 0, err
@@ -192,7 +192,7 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Knowledge, earlierPendingOnly ..
 }
 
 func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Knowledge, method string, distance int) error {
-	if err := lockEntitySpaceShared(tx, existing.TenantID); err != nil {
+	if err := lockEntitySpaceShared(tx, existing.SpaceID); err != nil {
 		return err
 	}
 	source := types.SourceInfo{OriginalURL: incoming.Source}
@@ -207,7 +207,7 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Knowledge, metho
 	}
 	hash := sha256.Sum256([]byte(origin))
 	repost := types.KnowledgeRepostSource{
-		ID: uuid.NewString(), TenantID: existing.TenantID, KnowledgeBaseID: incoming.KnowledgeBaseID, KnowledgeID: existing.ID,
+		ID: uuid.NewString(), SpaceID: existing.SpaceID, KnowledgeBaseID: incoming.KnowledgeBaseID, KnowledgeID: existing.ID,
 		OriginalURL: source.OriginalURL, NormalizedURL: normalizedURL, SourceFingerprint: hex.EncodeToString(hash[:]),
 		Author: source.Author, Publisher: source.Publisher, PublishedAt: source.PublishedAt, PublishedAtMissing: parsePublicationTime(source.PublishedAt) == nil,
 		MatchMethod: method, SimHashDistance: distance, CreatedAt: time.Now(),
@@ -220,22 +220,22 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Knowledge, metho
 		"published_at":         gorm.Expr("CASE WHEN EXCLUDED.published_at_missing AND NOT knowledge_repost_sources.published_at_missing THEN knowledge_repost_sources.published_at ELSE EXCLUDED.published_at END"),
 		"published_at_missing": gorm.Expr("knowledge_repost_sources.published_at_missing AND EXCLUDED.published_at_missing"),
 	})
-	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tenant_id"}, {Name: "knowledge_id"}, {Name: "source_fingerprint"}}, DoUpdates: updates}).Create(&repost).Error; err != nil {
+	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "knowledge_id"}, {Name: "source_fingerprint"}}, DoUpdates: updates}).Create(&repost).Error; err != nil {
 		return err
 	}
 	// A URL may have collected repost provenance before its parser discovered
 	// that the body belongs to another message. Keep those sources on the owner.
 	if incoming.ID != "" && incoming.ID != existing.ID {
 		var previous []types.KnowledgeRepostSource
-		if err := tx.Where("tenant_id = ? AND knowledge_id = ?", existing.TenantID, incoming.ID).Find(&previous).Error; err != nil {
+		if err := tx.Where("space_id = ? AND knowledge_id = ?", existing.SpaceID, incoming.ID).Find(&previous).Error; err != nil {
 			return err
 		}
 		for _, source := range previous {
-			if err := tx.Where("tenant_id = ? AND id = ?", existing.TenantID, source.ID).Delete(&types.KnowledgeRepostSource{}).Error; err != nil {
+			if err := tx.Where("space_id = ? AND id = ?", existing.SpaceID, source.ID).Delete(&types.KnowledgeRepostSource{}).Error; err != nil {
 				return err
 			}
 			source.KnowledgeID = existing.ID
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tenant_id"}, {Name: "knowledge_id"}, {Name: "source_fingerprint"}}, DoNothing: true}).Create(&source).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "knowledge_id"}, {Name: "source_fingerprint"}}, DoNothing: true}).Create(&source).Error; err != nil {
 				return err
 			}
 		}
@@ -249,7 +249,7 @@ func (s *knowledgeService) recordKnownMessageRepost(ctx context.Context, existin
 		existing.DuplicateMatchMethod = method
 		return nil
 	}
-	incoming := &types.Knowledge{TenantID: existing.TenantID, KnowledgeBaseID: kbID}
+	incoming := &types.Knowledge{SpaceID: existing.SpaceID, KnowledgeBaseID: kbID}
 	if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}); err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (s *knowledgeService) recordKnownMessageRepost(ctx context.Context, existin
 }
 
 func lockMessageDeduplication(tx *gorm.DB, k *types.Knowledge) error {
-	return tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", fmt.Sprintf("message-dedup:%d:%s", k.TenantID, k.KnowledgeBaseID)).Error
+	return tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", fmt.Sprintf("message-dedup:%d:%s", k.SpaceID, k.KnowledgeBaseID)).Error
 }
 
 // checkMessageDuplicate is also called before parser output reaches any model.
@@ -284,7 +284,7 @@ func (s *knowledgeService) checkMessageDuplicate(ctx context.Context, incoming *
 		if existing != nil {
 			return recordMessageRepost(tx, existing, incoming, method, distance)
 		}
-		return tx.Model(&types.Knowledge{}).Where("tenant_id = ? AND id = ?", incoming.TenantID, incoming.ID).Updates(map[string]any{
+		return tx.Model(&types.Knowledge{}).Where("space_id = ? AND id = ?", incoming.SpaceID, incoming.ID).Updates(map[string]any{
 			"normalized_url": incoming.NormalizedURL, "content_hash": incoming.ContentHash, "content_sim_hash": incoming.ContentSimHash, "content_rune_count": incoming.ContentRuneCount,
 		}).Error
 	})
@@ -316,12 +316,12 @@ func (s *knowledgeService) createMessageWithDeduplication(ctx context.Context, i
 	return existing, err
 }
 
-func loadKnowledgeRepostSources(db *gorm.DB, tenantID uint64, knowledgeIDs, kbIDs []string) ([]types.KnowledgeRepostSource, error) {
+func loadKnowledgeRepostSources(db *gorm.DB, spaceID uint64, knowledgeIDs, kbIDs []string) ([]types.KnowledgeRepostSource, error) {
 	items := []types.KnowledgeRepostSource{}
 	if db == nil || len(knowledgeIDs) == 0 {
 		return items, nil
 	}
-	query := db.Where("tenant_id = ? AND knowledge_id IN ?", tenantID, uniqueArticleIDs(knowledgeIDs))
+	query := db.Where("space_id = ? AND knowledge_id IN ?", spaceID, uniqueArticleIDs(knowledgeIDs))
 	if len(kbIDs) > 0 {
 		query = query.Where("knowledge_base_id IN ?", kbIDs)
 	}
@@ -334,7 +334,7 @@ func (s *knowledgeService) stopDuplicateProcessing(ctx context.Context, incoming
 		return err
 	}
 	s.tracker().FinalizeAttempt(ctx, incoming.ID, s.tracker().LatestAttempt(ctx, incoming.ID), "done", types.JSONMap{"duplicate": true}, "", "")
-	return s.repo.HardDeleteKnowledge(ctx, incoming.TenantID, incoming.ID)
+	return s.repo.HardDeleteKnowledge(ctx, incoming.SpaceID, incoming.ID)
 }
 
 func parsePublicationTime(value string) *time.Time {

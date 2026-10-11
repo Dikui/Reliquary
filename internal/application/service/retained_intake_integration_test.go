@@ -26,7 +26,7 @@ import (
 
 type retainedIntakeFiles struct{ intakeFileService }
 
-func (s *retainedIntakeFiles) SaveFile(ctx context.Context, header *multipart.FileHeader, tenant uint64, id string) (string, error) {
+func (s *retainedIntakeFiles) SaveFile(ctx context.Context, header *multipart.FileHeader, space uint64, id string) (string, error) {
 	file, err := header.Open()
 	if err != nil {
 		return "", err
@@ -36,7 +36,7 @@ func (s *retainedIntakeFiles) SaveFile(ctx context.Context, header *multipart.Fi
 	if err != nil {
 		return "", err
 	}
-	return s.SaveBytes(ctx, body, tenant, id, false)
+	return s.SaveBytes(ctx, body, space, id, false)
 }
 
 type retainedIntakeModel struct {
@@ -76,14 +76,14 @@ type retainedIntakeHarness struct {
 func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	t.Helper()
 	db := pgtest.Open(t)
-	tenant := &types.Tenant{ID: types.SingleTenantID, Name: "Personal space"}
-	require.NoError(t, db.Create(tenant).Error)
-	kb := &types.KnowledgeBase{ID: "kb", TenantID: tenant.ID, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
+	space := &types.Space{ID: types.SingleSpaceID, Name: "Personal space"}
+	require.NoError(t, db.Create(space).Error)
+	kb := &types.KnowledgeBase{ID: "kb", SpaceID: space.ID, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
 		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024,
 			ParserEngineRules: []types.ParserEngineRule{{FileTypes: []string{"md", "txt"}, Engine: "simple"}}}}
 	require.NoError(t, db.Create(kb).Error)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, tenant.ID)
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, space.ID)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	repo := repository.NewKnowledgeRepository(db)
 	chunkRepo := repository.NewChunkRepository(db)
@@ -93,7 +93,7 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	bases := retainedProcessingKB{kb: kb}
 	svc := &knowledgeService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		kbService: bases, modelService: &summaryStateModelService{model: model}, task: queue,
-		tenantRepo: repository.NewTenantRepository(db), fileSvc: &retainedIntakeFiles{},
+		spaceRepo: repository.NewSpaceRepository(db), fileSvc: &retainedIntakeFiles{},
 		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
 	return &retainedIntakeHarness{db: db, ctx: ctx, kb: kb, service: svc, queue: queue, model: model}
 }
@@ -117,7 +117,7 @@ func (h *retainedIntakeHarness) drain(t *testing.T) {
 
 func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Knowledge {
 	t.Helper()
-	article, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, id)
+	article, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, id)
 	require.NoError(t, err)
 	return article
 }
@@ -132,7 +132,7 @@ func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T
 	completed := h.article(t, article.ID)
 	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
 	require.Equal(t, types.SummaryStatusCompleted, completed.SummaryStatus)
-	chunks, err := h.service.chunkRepo.ListChunksByKnowledgeID(h.ctx, h.kb.TenantID, article.ID)
+	chunks, err := h.service.chunkRepo.ListChunksByKnowledgeID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, chunks)
 	require.Contains(t, chunks[0].Content, "Uploadfixture")
@@ -222,15 +222,15 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 	cfg := &types.DataSourceConfig{Type: types.ConnectorTypeRSS, Settings: map[string]interface{}{"feed_urls": server.URL + "/feed.xml", "publisher": "Fixture publisher"}}
 	encoded, err := cfg.ToJSON()
 	require.NoError(t, err)
-	ds := &types.DataSource{ID: "feed", TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID, Type: types.ConnectorTypeRSS, Name: "Fixture publisher", Config: encoded,
+	ds := &types.DataSource{ID: "feed", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.ConnectorTypeRSS, Name: "Fixture publisher", Config: encoded,
 		SyncMode: types.SyncModeFull, Status: types.DataSourceStatusActive, CreatedAt: time.Now().Add(-24 * time.Hour)}
 	require.NoError(t, dsRepo.Create(h.ctx, ds))
 	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, knowledgeService: h.service, kbService: h.service.kbService,
-		connectorRegistry: registry, tenantRepo: h.service.tenantRepo}
+		connectorRegistry: registry, spaceRepo: h.service.spaceRepo}
 	sync := func(id string) *types.SyncLog {
-		log := &types.SyncLog{ID: id, TenantID: h.kb.TenantID, DataSourceID: ds.ID, Status: types.SyncLogStatusRunning}
+		log := &types.SyncLog{ID: id, SpaceID: h.kb.SpaceID, DataSourceID: ds.ID, Status: types.SyncLogStatusRunning}
 		require.NoError(t, logs.Create(h.ctx, log))
-		payload, err := json.Marshal(types.DataSourceSyncPayload{TenantID: h.kb.TenantID, DataSourceID: ds.ID, SyncLogID: log.ID, ForceFull: true})
+		payload, err := json.Marshal(types.DataSourceSyncPayload{SpaceID: h.kb.SpaceID, DataSourceID: ds.ID, SyncLogID: log.ID, ForceFull: true})
 		require.NoError(t, err)
 		require.NoError(t, syncer.ProcessSync(h.ctx, taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 		h.drain(t)
@@ -287,7 +287,7 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, rejected.ID).ParseStatus)
 	_, err = h.service.ReviewKnowledgeIntake(h.ctx, discarded.ID, "discard", types.SourceInfo{})
 	require.NoError(t, err)
-	_, err = h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, discarded.ID)
+	_, err = h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, discarded.ID)
 	require.ErrorIs(t, err, repository.ErrKnowledgeNotFound)
 	waiting, err = h.service.ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.ID, &types.Pagination{Page: 1, PageSize: 10}, types.KnowledgeListFilter{ParseStatus: types.ParseStatusRejected})
 	require.NoError(t, err)

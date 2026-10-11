@@ -46,17 +46,17 @@ func NewLocalFileService(baseDir, externalURL string) interfaces.FileService {
 }
 
 // SaveFile stores an uploaded file to the local file system
-// The file is stored in a directory structure: baseDir/tenantID/knowledgeID/filename
+// The file is stored in a directory structure: baseDir/spaceID/knowledgeID/filename
 // Returns the full file path or an error if saving fails
 func (s *localFileService) SaveFile(ctx context.Context,
-	file *multipart.FileHeader, tenantID uint64, knowledgeID string,
+	file *multipart.FileHeader, spaceID uint64, knowledgeID string,
 ) (string, error) {
 	logger.Info(ctx, "Starting to save file locally")
-	logger.Infof(ctx, "File information: name=%s, size=%d, tenant ID=%d, knowledge ID=%s",
-		file.Filename, file.Size, tenantID, knowledgeID)
+	logger.Infof(ctx, "File information: name=%s, size=%d, space ID=%d, knowledge ID=%s",
+		file.Filename, file.Size, spaceID, knowledgeID)
 
-	// Create storage directory with tenant and knowledge ID
-	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", tenantID), knowledgeID)
+	// Create storage directory with space and knowledge ID
+	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", spaceID), knowledgeID)
 	if _, err := secutils.SafePathUnderBase(s.baseDir, dir); err != nil {
 		logger.Errorf(ctx, "Path traversal denied for SaveFile dir: %v", err)
 		return "", fmt.Errorf("invalid path: %w", err)
@@ -155,11 +155,11 @@ func (s *localFileService) DeleteFile(ctx context.Context, filePath string) erro
 }
 
 // CopyFile copies an existing local object to a new knowledge-owned object.
-// The destination uses the same layout as SaveFile (baseDir/{tenantID}/{knowledgeID}/{unique}{ext}),
+// The destination uses the same layout as SaveFile (baseDir/{spaceID}/{knowledgeID}/{unique}{ext}),
 // and the copy is a real byte-for-byte copy (no hardlink) so deleting the source
 // never affects it. Returns ErrCrossBackendCopy when srcPath is not a local path.
 func (s *localFileService) CopyFile(ctx context.Context,
-	srcPath string, tenantID uint64, knowledgeID string,
+	srcPath string, spaceID uint64, knowledgeID string,
 ) (string, error) {
 	// Only local paths are accepted. A provider scheme other than local://
 	// means an unsupported source location, which this service
@@ -177,7 +177,7 @@ func (s *localFileService) CopyFile(ctx context.Context,
 	}
 
 	// Build destination path with the knowledge-owned layout.
-	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", tenantID), knowledgeID)
+	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", spaceID), knowledgeID)
 	if _, err := secutils.SafePathUnderBase(s.baseDir, dir); err != nil {
 		logger.Errorf(ctx, "Path traversal denied for CopyFile dir: %v", err)
 		return "", fmt.Errorf("invalid path: %w", err)
@@ -215,8 +215,8 @@ func (s *localFileService) CopyFile(ctx context.Context,
 // SaveBytes saves bytes data to a file and returns the file path
 // temp parameter is ignored for local storage (no auto-expiration support)
 // fileName 仅允许安全文件名，禁止路径遍历（如 ../../）
-func (s *localFileService) SaveBytes(ctx context.Context, data []byte, tenantID uint64, fileName string, temp bool) (string, error) {
-	logger.Infof(ctx, "Saving bytes data: fileName=%s, size=%d, tenantID=%d, temp=%v", fileName, len(data), tenantID, temp)
+func (s *localFileService) SaveBytes(ctx context.Context, data []byte, spaceID uint64, fileName string, temp bool) (string, error) {
+	logger.Infof(ctx, "Saving bytes data: fileName=%s, size=%d, spaceID=%d, temp=%v", fileName, len(data), spaceID, temp)
 
 	safeName, err := secutils.SafeFileName(fileName)
 	if err != nil {
@@ -224,8 +224,8 @@ func (s *localFileService) SaveBytes(ctx context.Context, data []byte, tenantID 
 		return "", fmt.Errorf("invalid file name: %w", err)
 	}
 
-	// Create storage directory with tenant ID
-	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", tenantID), "exports")
+	// Create storage directory with space ID
+	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", spaceID), "exports")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		logger.Errorf(ctx, "Failed to create directory: %v", err)
 		return "", fmt.Errorf("failed to create directory: %w", err)
@@ -265,10 +265,10 @@ func (s *localFileService) GetFileURL(ctx context.Context, filePath string) (str
 
 	// If external URL is configured, generate a presigned HTTP URL.
 	if s.externalURL != "" {
-		// The signed URL includes the local path's owning tenant so the
+		// The signed URL includes the local path's owning space so the
 		// verifier can check its workspace before serving the bytes.
-		tenantID := secutils.ParseTenantIDFromStoragePath(normalized)
-		presignedURL, err := secutils.SignFileURL(s.externalURL, normalized, tenantID, 0)
+		spaceID := secutils.ParseSpaceIDFromStoragePath(normalized)
+		presignedURL, err := secutils.SignFileURL(s.externalURL, normalized, spaceID, 0)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to generate presigned URL for %s: %v, returning local:// path", normalized, err)
 			return normalized, nil
@@ -280,10 +280,10 @@ func (s *localFileService) GetFileURL(ctx context.Context, filePath string) (str
 }
 
 // normalizePathForBase keeps backward compatibility for legacy file paths:
-// - provider scheme: "local://tenant/.." → baseDir/tenant/..
-// - absolute path: "/data/files/tenant/.."
-// - path under base dir: "tenant/.."
-// - legacy relative with base prefix: "data/files/tenant/.."
+// - provider scheme: "local://space/.." → baseDir/space/..
+// - absolute path: "/data/files/space/.."
+// - path under base dir: "space/.."
+// - legacy relative with base prefix: "data/files/space/.."
 func (s *localFileService) normalizePathForBase(filePath string) string {
 	// Handle provider:// format: local://{relPath}
 	if strings.HasPrefix(filePath, localScheme) {

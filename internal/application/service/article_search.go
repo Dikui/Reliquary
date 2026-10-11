@@ -86,7 +86,7 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 	if err != nil {
 		return nil, err
 	}
-	tenantID, ok := types.TenantIDFromContext(ctx)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
 		return nil, apperrors.NewUnauthorizedError("workspace ID not found in context")
 	}
@@ -94,21 +94,21 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 	if err != nil {
 		return nil, err
 	}
-	if kb == nil || kb.TenantID != tenantID {
+	if kb == nil || kb.SpaceID != spaceID {
 		return nil, apperrors.NewForbiddenError("knowledge base is outside the space")
 	}
 	if s.db == nil {
 		return nil, fmt.Errorf("article search requires PostgreSQL")
 	}
 	var config *types.RetrievalConfig
-	if s.tenantService != nil {
-		if tenant, readErr := s.tenantService.GetTenantByID(ctx, tenantID); readErr == nil && tenant != nil {
-			config = tenant.RetrievalConfig
+	if s.spaceService != nil {
+		if space, readErr := s.spaceService.GetSpaceByID(ctx, spaceID); readErr == nil && space != nil {
+			config = space.RetrievalConfig
 		}
 	}
 	if config == nil {
-		if tenant, _ := types.TenantInfoFromContext(ctx); tenant != nil {
-			config = tenant.RetrievalConfig
+		if space, _ := types.SpaceInfoFromContext(ctx); space != nil {
+			config = space.RetrievalConfig
 		}
 	}
 	limit := f.request.Limit
@@ -126,7 +126,7 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 		}
 		if modelID != "" {
 			var metadata types.Model
-			read := s.db.WithContext(ctx).Where("id=? AND (tenant_id=? OR is_builtin=true)", modelID, tenantID).Find(&metadata)
+			read := s.db.WithContext(ctx).Where("id=? AND (space_id=? OR is_builtin=true)", modelID, spaceID).Find(&metadata)
 			if read.Error != nil {
 				return nil, read.Error
 			}
@@ -146,7 +146,7 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(queryVector) > 0 {
 			var currentKB types.KnowledgeBase
-			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND tenant_id=?", kb.ID, tenantID).First(&currentKB).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND space_id=?", kb.ID, spaceID).First(&currentKB).Error; err != nil {
 				return err
 			}
 			currentID, err := ResolveModelTier(ctx, tx, &currentKB, types.ModelTierEmbedding)
@@ -158,7 +158,7 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 			}
 			if queryProfileHash != "" {
 				var metadata types.Model
-				if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (tenant_id=? OR is_builtin=true)", modelID, tenantID).First(&metadata).Error; err != nil {
+				if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (space_id=? OR is_builtin=true)", modelID, spaceID).First(&metadata).Error; err != nil {
 					return err
 				}
 				if types.EmbeddingProfileHash(modelID, metadata.Parameters.EmbeddingParameters.Dimension, &metadata) != queryProfileHash {
@@ -170,16 +170,16 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 		reader.db = tx
 		if f.from != nil || f.to != nil {
 			var err error
-			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, tenantID, kb, f, queryVector, modelID, config)
+			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, spaceID, kb, f, queryVector, modelID, config)
 			if err != nil {
 				return err
 			}
 		}
-		lanes, err := reader.retrieveArticleLanes(ctx, tenantID, kb, f, queryVector, modelID, config, pool, true)
+		lanes, err := reader.retrieveArticleLanes(ctx, spaceID, kb, f, queryVector, modelID, config, pool, true)
 		if err != nil {
 			return err
 		}
-		merged, err = reader.mergeArticleHits(ctx, tenantID, lanes, config)
+		merged, err = reader.mergeArticleHits(ctx, spaceID, lanes, config)
 		return err
 	})
 	if err != nil {
@@ -190,7 +190,7 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 		return nil, err
 	}
 	if f.request.CollapseSimilar == nil || *f.request.CollapseSimilar {
-		merged, err = s.collapseArticleReports(ctx, tenantID, merged, config)
+		merged, err = s.collapseArticleReports(ctx, spaceID, merged, config)
 		if err != nil {
 			return nil, err
 		}
@@ -202,9 +202,9 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 	return response, nil
 }
 
-func (s *knowledgeSearchService) eligibleArticles(ctx context.Context, tenantID uint64, kbID string, f articleSearchFilters, dates bool) *gorm.DB {
-	query := s.db.WithContext(ctx).Table("knowledges AS k").Where(`k.tenant_id = ? AND k.knowledge_base_id = ?
-		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, tenantID, kbID)
+func (s *knowledgeSearchService) eligibleArticles(ctx context.Context, spaceID uint64, kbID string, f articleSearchFilters, dates bool) *gorm.DB {
+	query := s.db.WithContext(ctx).Table("knowledges AS k").Where(`k.space_id = ? AND k.knowledge_base_id = ?
+		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID, kbID)
 	if f.request.Starred != nil {
 		query = query.Where("k.source_kind='article' AND k.starred=?", *f.request.Starred)
 	}
@@ -215,11 +215,11 @@ func (s *knowledgeSearchService) eligibleArticles(ctx context.Context, tenantID 
 		query = query.Where("k.source_kind IN ?", f.request.Sources)
 	}
 	if len(f.request.EntityIDs) > 0 {
-		query = query.Where(`EXISTS (SELECT 1 FROM knowledge_entities ke WHERE ke.tenant_id=k.tenant_id
+		query = query.Where(`EXISTS (SELECT 1 FROM knowledge_entities ke WHERE ke.space_id=k.space_id
 			AND ke.knowledge_id=k.id AND ke.entity_id IN ?)`, f.request.EntityIDs)
 	}
 	if len(f.request.TopicIDs) > 0 {
-		query = query.Where(`EXISTS (SELECT 1 FROM knowledge_topics kt WHERE kt.tenant_id=k.tenant_id
+		query = query.Where(`EXISTS (SELECT 1 FROM knowledge_topics kt WHERE kt.space_id=k.space_id
 			AND kt.knowledge_id=k.id AND kt.topic_id IN ?)`, f.request.TopicIDs)
 	}
 	if dates {

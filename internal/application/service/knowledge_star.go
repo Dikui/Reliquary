@@ -12,7 +12,7 @@ import (
 )
 
 func (s *knowledgeService) SetStarred(ctx context.Context, id string, starred bool) (*types.Knowledge, error) {
-	tenantID, ok := types.TenantIDFromContext(ctx)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
 		return nil, werrors.NewUnauthorizedError("personal space is required")
 	}
@@ -21,7 +21,7 @@ func (s *knowledgeService) SetStarred(ctx context.Context, id string, starred bo
 	}
 	var article types.Knowledge
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND id=?", tenantID, id).First(&article).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, id).First(&article).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("article not found")
 			}

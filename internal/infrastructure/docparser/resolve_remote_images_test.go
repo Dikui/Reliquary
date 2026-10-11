@@ -32,16 +32,16 @@ type mockFileService struct {
 
 type savedEntry struct {
 	Data     []byte
-	TenantID uint64
+	SpaceID  uint64
 	FileName string
 }
 
 func (m *mockFileService) CheckConnectivity(ctx context.Context) error { return nil }
-func (m *mockFileService) SaveFile(ctx context.Context, file *multipart.FileHeader, tenantID uint64, knowledgeID string) (string, error) {
+func (m *mockFileService) SaveFile(ctx context.Context, file *multipart.FileHeader, spaceID uint64, knowledgeID string) (string, error) {
 	return "", nil
 }
-func (m *mockFileService) SaveBytes(ctx context.Context, data []byte, tenantID uint64, fileName string, temp bool) (string, error) {
-	m.saved = append(m.saved, savedEntry{Data: data, TenantID: tenantID, FileName: fileName})
+func (m *mockFileService) SaveBytes(ctx context.Context, data []byte, spaceID uint64, fileName string, temp bool) (string, error) {
+	m.saved = append(m.saved, savedEntry{Data: data, SpaceID: spaceID, FileName: fileName})
 	return fmt.Sprintf("local://images/%s", fileName), nil
 }
 func (m *mockFileService) GetFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
@@ -51,7 +51,7 @@ func (m *mockFileService) GetFileURL(ctx context.Context, filePath string) (stri
 	return filePath, nil
 }
 func (m *mockFileService) DeleteFile(ctx context.Context, filePath string) error { return nil }
-func (m *mockFileService) CopyFile(ctx context.Context, srcPath string, tenantID uint64, knowledgeID string) (string, error) {
+func (m *mockFileService) CopyFile(ctx context.Context, srcPath string, spaceID uint64, knowledgeID string) (string, error) {
 	return "", nil
 }
 
@@ -94,8 +94,8 @@ func TestResolveRemoteImages_NormalDownload(t *testing.T) {
 	if len(fSvc.saved) != 1 {
 		t.Fatalf("expected 1 saved entry, got %d", len(fSvc.saved))
 	}
-	if fSvc.saved[0].TenantID != 42 {
-		t.Errorf("expected tenantID 42, got %d", fSvc.saved[0].TenantID)
+	if fSvc.saved[0].SpaceID != 42 {
+		t.Errorf("expected spaceID 42, got %d", fSvc.saved[0].SpaceID)
 	}
 }
 

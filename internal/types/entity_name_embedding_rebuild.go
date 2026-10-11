@@ -3,13 +3,13 @@ package types
 import "time"
 
 type EntityNameEmbeddingRebuildPayload struct {
-	TenantID uint64 `json:"tenant_id"`
-	RunID    string `json:"run_id"`
+	SpaceID uint64 `json:"tenant_id"`
+	RunID   string `json:"run_id"`
 }
 
 type EntityNameEmbeddingRebuildRun struct {
 	ID             string     `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID       uint64     `json:"tenant_id" gorm:"not null;index"`
+	SpaceID        uint64     `json:"space_id" gorm:"not null;index"`
 	Status         string     `json:"status" gorm:"type:varchar(16);not null"`
 	Reason         string     `json:"reason" gorm:"type:text;not null"`
 	Error          string     `json:"error" gorm:"type:text;not null;default:''"`

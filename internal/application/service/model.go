@@ -36,12 +36,12 @@ type modelService struct {
 	kbRepo                 interfaces.KnowledgeBaseRepository
 	ollamaService          *ollama.OllamaService
 	pooler                 embedding.EmbedderPooler
-	tenantService          interfaces.TenantService
+	spaceService           interfaces.SpaceService
 	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
 }
 
-func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB) interfaces.ModelService {
-	s := NewModelService(repo, kbRepo, ollamaService, pooler, tenantService).(*modelService)
+func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB) interfaces.ModelService {
+	s := NewModelService(repo, kbRepo, ollamaService, pooler, spaceService).(*modelService)
 	s.db = db
 	return s
 }
@@ -51,14 +51,14 @@ func NewModelService(repo interfaces.ModelRepository,
 	kbRepo interfaces.KnowledgeBaseRepository,
 	ollamaService *ollama.OllamaService,
 	pooler embedding.EmbedderPooler,
-	tenantService interfaces.TenantService,
+	spaceService interfaces.SpaceService,
 ) interfaces.ModelService {
 	return &modelService{
 		repo:          repo,
 		kbRepo:        kbRepo,
 		ollamaService: ollamaService,
 		pooler:        pooler,
-		tenantService: tenantService,
+		spaceService:  spaceService,
 	}
 }
 
@@ -155,14 +155,14 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 		return nil, errors.New("model ID cannot be empty")
 	}
 
-	tenantID := types.MustTenantIDFromContext(ctx)
+	spaceID := types.MustSpaceIDFromContext(ctx)
 
 	// Fetch model from repository
-	model, err := s.repo.GetByID(ctx, tenantID, id)
+	model, err := s.repo.GetByID(ctx, spaceID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":  id,
-			"tenant_id": tenantID,
+			"model_id": id,
+			"space_id": spaceID,
 		})
 		return nil, err
 	}
@@ -206,18 +206,18 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 	return nil, errors.New("abnormal model status")
 }
 
-// ListModels returns all models belonging to the tenant
+// ListModels returns all models belonging to the space
 func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 	logger.Info(ctx, "Start listing models")
 
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(ctx, "Listing models for tenant ID: %d", tenantID)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	logger.Infof(ctx, "Listing models for space ID: %d", spaceID)
 
 	// List models from repository with no additional filters
-	models, err := s.repo.List(ctx, tenantID, "", "")
+	models, err := s.repo.List(ctx, spaceID, "", "")
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
+			"space_id": spaceID,
 		})
 		return nil, err
 	}
@@ -276,8 +276,8 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	logger.Infof(ctx, "Updating model ID: %s, name: %s", model.ID, model.Name)
 
 	// Built-in model configuration can be changed by the authenticated user.
-	tenantID := types.MustTenantIDFromContext(ctx)
-	existingModel, err := s.repo.GetByID(ctx, tenantID, model.ID)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	existingModel, err := s.repo.GetByID(ctx, spaceID, model.ID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id": model.ID,
@@ -291,7 +291,7 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 		}
 		// A UI edit is an explicit runtime override. Clear YAML ownership so
 		// the startup reconciler does not silently replace the saved values.
-		model.TenantID = existingModel.TenantID
+		model.SpaceID = existingModel.SpaceID
 		model.IsBuiltin = true
 		model.ManagedBy = ""
 	}
@@ -312,12 +312,12 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	if s.db != nil {
 		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			var current types.Model
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", model.ID, model.TenantID).First(&current).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", model.ID, model.SpaceID).First(&current).Error; err != nil {
 				return err
 			}
 			changed := (current.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
 				entityEmbeddingProfileHash(current.ID, current.Parameters.EmbeddingParameters.Dimension, &current) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model)
-			if err := tx.Model(&types.Model{}).Where("id=? AND tenant_id=?", model.ID, model.TenantID).Select("*").Updates(model).Error; err != nil {
+			if err := tx.Model(&types.Model{}).Where("id=? AND space_id=?", model.ID, model.SpaceID).Select("*").Updates(model).Error; err != nil {
 				return err
 			}
 			if !changed {
@@ -352,7 +352,7 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 			return fmt.Errorf("model update could not resolve name embedding profile: %w", resolveErr)
 		}
 		if profileModel == model.ID {
-			if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, types.SingleTenantID, "embedding_model_updated"); err != nil {
+			if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, types.SingleSpaceID, "embedding_model_updated"); err != nil {
 				return fmt.Errorf("model update could not enqueue name embedding rebuild: %w", err)
 			}
 		}
@@ -383,8 +383,8 @@ func validateImageEmbeddingModel(model *types.Model) error {
 func (s *modelService) UpdateModelCredentials(
 	ctx context.Context, id string, apiKey, appSecret *string,
 ) (*types.Model, error) {
-	tenantID := types.MustTenantIDFromContext(ctx)
-	existing, err := s.repo.GetByID(ctx, tenantID, id)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	existing, err := s.repo.GetByID(ctx, spaceID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -427,8 +427,8 @@ func (s *modelService) UpdateModelCredentials(
 
 // ClearModelCredential removes a single credential field. Idempotent.
 func (s *modelService) ClearModelCredential(ctx context.Context, id, field string) error {
-	tenantID := types.MustTenantIDFromContext(ctx)
-	existing, err := s.repo.GetByID(ctx, tenantID, id)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	existing, err := s.repo.GetByID(ctx, spaceID, id)
 	if err != nil {
 		return err
 	}
@@ -473,11 +473,11 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 	logger.Info(ctx, "Start deleting model")
 	logger.Infof(ctx, "Deleting model ID: %s", id)
 
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(ctx, "Tenant ID: %d", tenantID)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	logger.Infof(ctx, "Space ID: %d", spaceID)
 
 	// Check if the model is builtin - builtin models cannot be deleted
-	existingModel, err := s.repo.GetByID(ctx, tenantID, id)
+	existingModel, err := s.repo.GetByID(ctx, spaceID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id": id,
@@ -497,7 +497,7 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 		return apperrors.NewBadRequestError("remove the ChatGPT fallback selection before deleting this model")
 	}
 
-	usage, err := s.getModelUsageDetails(ctx, tenantID, id)
+	usage, err := s.getModelUsageDetails(ctx, spaceID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id": id,
@@ -517,11 +517,11 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 	}
 
 	// Delete model from repository
-	err = s.repo.Delete(ctx, tenantID, id)
+	err = s.repo.Delete(ctx, spaceID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":  id,
-			"tenant_id": tenantID,
+			"model_id": id,
+			"space_id": spaceID,
 		})
 		return err
 	}
@@ -531,19 +531,19 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 }
 
 func (s *modelService) getModelUsageDetails(
-	ctx context.Context, tenantID uint64, modelID string,
+	ctx context.Context, spaceID uint64, modelID string,
 ) (types.ModelUsageDetails, error) {
 	details := types.ModelUsageDetails{
 		KnowledgeBases: make([]types.ModelUsageResource, 0),
 	}
 
-	kbCount, err := s.kbRepo.CountByModelID(ctx, tenantID, modelID)
+	kbCount, err := s.kbRepo.CountByModelID(ctx, spaceID, modelID)
 	if err != nil {
 		return details, err
 	}
 	details.KnowledgeBaseTotal = kbCount
 	if kbCount > 0 {
-		details.KnowledgeBases, err = s.kbRepo.ListModelUsages(ctx, tenantID, modelID)
+		details.KnowledgeBases, err = s.kbRepo.ListModelUsages(ctx, spaceID, modelID)
 		if err != nil {
 			return details, err
 		}
@@ -624,14 +624,14 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 		return nil, errors.New("model ID cannot be empty")
 	}
 
-	tenantID := types.MustTenantIDFromContext(ctx)
+	spaceID := types.MustSpaceIDFromContext(ctx)
 
 	// Get the model directly from repository to avoid status checks
-	model, err := s.repo.GetByID(ctx, tenantID, modelId)
+	model, err := s.repo.GetByID(ctx, spaceID, modelId)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":  modelId,
-			"tenant_id": tenantID,
+			"model_id": modelId,
+			"space_id": spaceID,
 		})
 		return nil, err
 	}

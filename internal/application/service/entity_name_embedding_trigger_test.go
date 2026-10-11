@@ -16,9 +16,9 @@ import (
 )
 
 type nameEmbeddingTriggerCall struct {
-	mark     bool
-	tenantID uint64
-	reason   string
+	mark    bool
+	spaceID uint64
+	reason  string
 }
 
 type nameEmbeddingTriggerSpy struct {
@@ -28,18 +28,18 @@ type nameEmbeddingTriggerSpy struct {
 	db     *gorm.DB
 }
 
-func (s *nameEmbeddingTriggerSpy) call(mark bool, tenantID uint64, reason string) error {
+func (s *nameEmbeddingTriggerSpy) call(mark bool, spaceID uint64, reason string) error {
 	if s.onCall != nil {
 		s.onCall()
 	}
-	s.calls = append(s.calls, nameEmbeddingTriggerCall{mark: mark, tenantID: tenantID, reason: reason})
+	s.calls = append(s.calls, nameEmbeddingTriggerCall{mark: mark, spaceID: spaceID, reason: reason})
 	return s.err
 }
-func (s *nameEmbeddingTriggerSpy) MarkAndEnqueue(_ context.Context, tenantID uint64, reason string) error {
-	return s.call(true, tenantID, reason)
+func (s *nameEmbeddingTriggerSpy) MarkAndEnqueue(_ context.Context, spaceID uint64, reason string) error {
+	return s.call(true, spaceID, reason)
 }
-func (s *nameEmbeddingTriggerSpy) Enqueue(_ context.Context, tenantID uint64, reason string) error {
-	return s.call(false, tenantID, reason)
+func (s *nameEmbeddingTriggerSpy) Enqueue(_ context.Context, spaceID uint64, reason string) error {
+	return s.call(false, spaceID, reason)
 }
 
 func (s *nameEmbeddingTriggerSpy) BindTransaction(_ context.Context, tx *gorm.DB) (EntityNameEmbeddingRebuildTrigger, error) {
@@ -50,12 +50,12 @@ func (s *nameEmbeddingTriggerSpy) BindTransaction(_ context.Context, tx *gorm.DB
 func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 	t.Helper()
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	team := types.Tenant{ID: 1, Name: "Rebuild triggers"}
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	team := types.Space{ID: 1, Name: "Rebuild triggers"}
 	require.NoError(t, db.Create(&team).Error)
-	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "trigger-kb", TenantID: 1, Name: "Knowledge Base", EmbeddingModelID: "team-vector"}).Error)
+	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "trigger-kb", SpaceID: 1, Name: "Knowledge Base", EmbeddingModelID: "team-vector"}).Error)
 	for _, id := range []string{"team-vector", "override-vector"} {
-		require.NoError(t, db.Create(&types.Model{ID: id, TenantID: 1, Name: id, Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
+		require.NoError(t, db.Create(&types.Model{ID: id, SpaceID: 1, Name: id, Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 	}
 	return db, ctx
 }
@@ -63,7 +63,7 @@ func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 func TestKnowledgeBaseNameEmbeddingTriggersInTheSettingsTransaction(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
 	kb := &types.KnowledgeBase{}
-	require.NoError(t, db.Where("tenant_id=1").First(kb).Error)
+	require.NoError(t, db.Where("space_id=1").First(kb).Error)
 	spy := &nameEmbeddingTriggerSpy{}
 	svc := &knowledgeBaseService{db: db, repo: repository.NewKnowledgeBaseRepository(db)}
 	svc.SetNameEmbeddingRebuilder(spy)
@@ -162,13 +162,13 @@ func (e *nameEmbeddingTriggerEmbedder) BatchEmbed(_ context.Context, texts []str
 
 func TestNameEmbeddingConfigurationAndEmptyWorkbenchIntegrateWithDurableTask(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
-	entity := types.Entity{ID: "historical-name", TenantID: 1, CanonicalName: "Historical entity", NormalizedName: "historical entity", EntityType: "company", Description: "Existing entity", NameEmbedding: types.EntityNameEmbedding{0, 1, 0}, EmbeddingModelID: "retired-vector", EmbeddingDimension: 3, EmbeddingNeedsRebuild: false}
+	entity := types.Entity{ID: "historical-name", SpaceID: 1, CanonicalName: "Historical entity", NormalizedName: "historical entity", EntityType: "company", Description: "Existing entity", NameEmbedding: types.EntityNameEmbedding{0, 1, 0}, EmbeddingModelID: "retired-vector", EmbeddingDimension: 3, EmbeddingNeedsRebuild: false}
 	require.NoError(t, db.Create(&entity).Error)
 	queue := &nameEmbeddingTriggerQueue{}
 	models := &nameEmbeddingTriggerModels{embedder: &nameEmbeddingTriggerEmbedder{}}
 	rebuilder := NewEntityNameEmbeddingRebuilder(db, models, queue)
 	kb := &types.KnowledgeBase{}
-	require.NoError(t, db.Where("tenant_id=1").First(kb).Error)
+	require.NoError(t, db.Where("space_id=1").First(kb).Error)
 	bases := &knowledgeBaseService{db: db, repo: repository.NewKnowledgeBaseRepository(db)}
 	bases.SetNameEmbeddingRebuilder(rebuilder)
 	_, err := bases.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}})

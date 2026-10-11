@@ -150,7 +150,7 @@ func TestReconfigurationAppendPreservesOldAuthenticationMetadataAndDuplicateAtte
 		`INSERT INTO auth_tokens(id,user_id,token,token_type,expires_at) VALUES('new-auth','owner','new-access.secret.signature','access_token','2030-10-11T12:00:00Z')`,
 		`INSERT INTO resource_access_grants(id,token_hash,resource_id,access_scope,expires_at) VALUES('new-grant',repeat('c',64),'resource','read','2030-10-11T12:00:00Z')`,
 		`INSERT INTO chatgpt_login_attempts(state,nonce,verifier,callback_url,client_id,account_id,expires_at) VALUES('new-oauth-state','new-oauth-nonce','new-oauth-verifier','http://localhost:18080/callback','public-client-id','00000000-0000-0000-0000-000000000001','2030-10-11T12:00:00Z')`,
-		`INSERT INTO operation_logs(id,tenant_id,actor,operation_type,object_id,before_value,after_value) VALUES('new-login-log',1,'owner','login','owner','null'::jsonb,'{}')`,
+		`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('new-login-log',1,'owner','login','owner','null'::jsonb,'{}')`,
 	} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
@@ -254,7 +254,7 @@ func TestRestoredCredentialSentinelsAllowAnotherBackupWithoutWeakeningSecretScan
 		require.NoError(t, err)
 		// Decoded pg_restore COPY output contains the database's non-null
 		// placeholders. Inspect the same raw fields without emitting a dump.
-		for _, table := range []string{"auth_tokens", "resource_access_grants", "chatgpt_login_attempts", "tenant_api_keys"} {
+		for _, table := range []string{"auth_tokens", "resource_access_grants", "chatgpt_login_attempts", "api_keys"} {
 			var rows []string
 			require.NoError(t, db.Raw("SELECT to_jsonb(t)::text FROM "+quote(table)+" t").Scan(&rows).Error)
 			require.NoError(t, ScanCredentialReader(ctx, db, strings.NewReader(strings.Join(rows, "\n"))), table)
@@ -288,6 +288,6 @@ func TestRestoredCredentialSentinelsAllowAnotherBackupWithoutWeakeningSecretScan
 	malformed := state[:strings.LastIndex(state, "-")+1] + "999999"
 	require.NoError(t, db.Exec(`UPDATE chatgpt_login_attempts SET state=? WHERE state=?`, malformed, state).Error)
 	require.ErrorContains(t, ScanCredentialReader(ctx, db, strings.NewReader(malformed)), "operational credential detected")
-	require.NoError(t, db.Exec(`UPDATE tenant_api_keys SET api_key='still-live-tenant-api-key' WHERE id=1`).Error)
+	require.NoError(t, db.Exec(`UPDATE api_keys SET api_key='still-live-space-api-key' WHERE id=1`).Error)
 	require.ErrorContains(t, ScanCredentialReader(ctx, db, strings.NewReader("disabled-1")), "operational credential detected")
 }

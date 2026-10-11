@@ -13,13 +13,13 @@ import (
 
 // insertKnowledgeInKB seeds a knowledge row in the given KB with the given
 // parse_status so we can assert the list filter's visibility rules.
-func insertKnowledgeInKB(t *testing.T, db *gorm.DB, tenantID uint64, kbID, status string) string {
+func insertKnowledgeInKB(t *testing.T, db *gorm.DB, spaceID uint64, kbID, status string) string {
 	t.Helper()
 	id := uuid.New().String()
 	require.NoError(t, db.Exec(`
-		INSERT INTO knowledges (id, tenant_id, knowledge_base_id, type, title, source, parse_status)
+		INSERT INTO knowledges (id, space_id, knowledge_base_id, type, title, source, parse_status)
 		VALUES (?, ?, ?, 'file', 'list-filter-test', 'manual', ?)
-	`, id, tenantID, kbID, status).Error)
+	`, id, spaceID, kbID, status).Error)
 	return id
 }
 
@@ -34,18 +34,18 @@ func TestListPaged_ExcludesDeletingByDefault(t *testing.T) {
 	repo := NewKnowledgeRepository(db).(*knowledgeRepository)
 	ctx := context.Background()
 
-	const tenantID = uint64(1)
+	const spaceID = uint64(1)
 	kbID := uuid.New().String()
 
-	completedID := insertKnowledgeInKB(t, db, tenantID, kbID, "completed")
-	failedID := insertKnowledgeInKB(t, db, tenantID, kbID, "failed")
-	deletingID := insertKnowledgeInKB(t, db, tenantID, kbID, types.ParseStatusDeleting)
+	completedID := insertKnowledgeInKB(t, db, spaceID, kbID, "completed")
+	failedID := insertKnowledgeInKB(t, db, spaceID, kbID, "failed")
+	deletingID := insertKnowledgeInKB(t, db, spaceID, kbID, types.ParseStatusDeleting)
 
 	page := &types.Pagination{Page: 1, PageSize: 100}
 
 	// Default listing (no explicit parse_status): deleting rows are hidden.
 	rows, total, err := repo.ListPagedKnowledgeByKnowledgeBaseID(
-		ctx, tenantID, kbID, page, types.KnowledgeListFilter{},
+		ctx, spaceID, kbID, page, types.KnowledgeListFilter{},
 	)
 	require.NoError(t, err)
 	ids := make([]string, 0, len(rows))
@@ -59,7 +59,7 @@ func TestListPaged_ExcludesDeletingByDefault(t *testing.T) {
 	// Explicit parse_status=deleting still surfaces the in-flight row so
 	// operators / tooling can inspect stuck deletes.
 	rows, total, err = repo.ListPagedKnowledgeByKnowledgeBaseID(
-		ctx, tenantID, kbID, page,
+		ctx, spaceID, kbID, page,
 		types.KnowledgeListFilter{ParseStatus: types.ParseStatusDeleting},
 	)
 	require.NoError(t, err)

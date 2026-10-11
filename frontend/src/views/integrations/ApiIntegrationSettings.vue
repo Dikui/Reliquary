@@ -75,14 +75,14 @@ import { buildKnowledgeSearchRequest, knowledgeSearchErrorMessage, knowledgeSear
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
 import { copyWithToast } from '@/utils/clipboard'
-import { listTenantAPIKeys, createTenantAPIKey, updateTenantAPIKey, deleteTenantAPIKey, type TenantAPIKey } from '@/api/tenant'
+import { listAPIKeys, createAPIKey, updateAPIKey, deleteAPIKey, type APIKey } from '@/api/space'
 
 const { t } = useI18n()
 const apiBaseUrl = computed(() => getApiBaseUrl().replace(/\/$/, '') || window.location.origin)
 const externalAgentBaseUrl = computed(() => apiBaseUrl.value.startsWith('/') ? `${window.location.origin}${apiBaseUrl.value}` : apiBaseUrl.value)
 const ingestUrl = computed(() => `${externalAgentBaseUrl.value}/api/v1/ingest`)
 const mcpUrl = computed(() => `${externalAgentBaseUrl.value}/mcp`)
-const keys = ref<TenantAPIKey[]>([])
+const keys = ref<APIKey[]>([])
 const loading = ref(false)
 const error = ref('')
 const pagination = reactive({ current: 1, pageSize: 10, total: 0 })
@@ -121,7 +121,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await listTenantAPIKeys()
+    const response = await listAPIKeys()
     if (!response.success) throw new Error(response.message || t('integrations.api.loadApiKeysFailed'))
     keys.value = response.data || []
     pagination.total = keys.value.length
@@ -130,7 +130,7 @@ async function load() {
   finally { loading.value = false }
 }
 function openCreate() { editingId.value = null; form.name = ''; form.expiresAt = ''; formError.value = ''; editingVisible.value = true }
-function openEdit(key: TenantAPIKey) {
+function openEdit(key: APIKey) {
   editingId.value = key.id
   form.name = key.name
   form.expiresAt = key.expires_at ? new Date(new Date(key.expires_at).getTime() - new Date(key.expires_at).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''
@@ -145,7 +145,7 @@ async function save() {
   formError.value = ''
   try {
     const payload = { name: form.name.trim(), ...(expires ? { expires_at_unix: expires } : {}) }
-    const response = editingId.value ? await updateTenantAPIKey(editingId.value, payload) : await createTenantAPIKey(payload)
+    const response = editingId.value ? await updateAPIKey(editingId.value, payload) : await createAPIKey(payload)
     if (!response.success) throw new Error(response.message || t('integrations.api.createApiKeyFailed'))
     if (!editingId.value) { createdToken.value = (response.data as any)?.token || ''; createdVisible.value = true }
     editingVisible.value = false
@@ -154,12 +154,12 @@ async function save() {
   } catch (e: any) { formError.value = apiKeyErrorMessage(e, t, editingId.value ? 'integrations.api.updateApiKeyFailed' : 'integrations.api.createApiKeyFailed') }
   finally { saving.value = false }
 }
-function revoke(key: TenantAPIKey) {
+function revoke(key: APIKey) {
   const dialog = DialogPlugin.confirm({
     header: t('integrations.api.apiKeyRevoke'), body: t('integrations.api.apiKeyRevokeConfirm', { name: key.name }),
     confirmBtn: { content: t('integrations.api.apiKeyRevoke'), theme: 'danger' },
     onConfirm: async () => {
-      try { const response = await deleteTenantAPIKey(key.id); if (!response.success) throw new Error(response.message); dialog.hide(); await load(); MessagePlugin.success(t('integrations.api.apiKeyRevoked')) }
+      try { const response = await deleteAPIKey(key.id); if (!response.success) throw new Error(response.message); dialog.hide(); await load(); MessagePlugin.success(t('integrations.api.apiKeyRevoked')) }
       catch (e: any) { MessagePlugin.error(apiKeyErrorMessage(e, t, 'integrations.api.deleteApiKeyFailed')) }
     },
   })

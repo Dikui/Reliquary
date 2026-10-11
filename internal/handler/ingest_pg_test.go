@@ -64,12 +64,12 @@ func (ingestHandlerBases) GetKnowledgeBase(ctx context.Context) (*types.Knowledg
 
 func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	db := pgtest.Open(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Personal space"}).Error)
-	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "kb-1", TenantID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.KnowledgeBaseTypeDocument}).Error)
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Personal space"}).Error)
+	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "kb-1", SpaceID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.KnowledgeBaseTypeDocument}).Error)
 	queue := &ingestHandlerQueue{}
 	bases := &ingestHandlerBases{}
 	articles, err := service.NewKnowledgeService(db, &config.Config{}, repository.NewKnowledgeRepository(db), bases,
-		repository.NewTenantRepository(db), nil, nil, nil, file.NewLocalFileService(t.TempDir(), ""), nil, ingestHandlerModels{},
+		repository.NewSpaceRepository(db), nil, nil, nil, file.NewLocalFileService(t.TempDir(), ""), nil, ingestHandlerModels{},
 		queue, nil, nil, docparser.NewImageResolver(), nil)
 	require.NoError(t, err)
 	vault, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: t.TempDir()}})
@@ -80,7 +80,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
-		ctx := context.WithValue(c.Request.Context(), types.TenantIDContextKey, uint64(1))
+		ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, uint64(1))
 		ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "external-test"})
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()

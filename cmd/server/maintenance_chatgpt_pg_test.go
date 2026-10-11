@@ -116,7 +116,7 @@ func offlineChatGPTFixture(t *testing.T, legacy bool) (*gorm.DB, *chatgpt.Manage
 		require.NoError(t, err)
 		migration, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
 		require.NoError(t, err)
-		require.NoError(t, migration.Steps(-1))
+		require.NoError(t, db.Exec("DROP TABLE maintenance_state").Error)
 		t.Cleanup(func() {
 			sourceErr, databaseErr := migration.Close()
 			require.NoError(t, sourceErr)
@@ -126,11 +126,11 @@ func offlineChatGPTFixture(t *testing.T, legacy bool) (*gorm.DB, *chatgpt.Manage
 	f := newOfflineOpenAI(t)
 	manager := chatgpt.NewManager(db, chatgpt.WithHTTPClient(f.server.Client()), chatgpt.WithEndpoints(chatgpt.Endpoints{Issuer: f.server.URL, Authorization: f.server.URL + "/authorize", Token: f.server.URL + "/token", Discovery: f.server.URL + "/discovery"}))
 	id := uuid.NewString()
-	require.NoError(t, db.Exec(`INSERT INTO tenants(id,name,status,business) VALUES(1,'Offline owner','active','personal')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,status,business) VALUES(1,'Offline owner','active','personal')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,email,status,created_at,updated_at,welcome_acknowledged)
 	 VALUES(?, 'offline-client', ?, 'offline-subject','owner@example.test','needs_login','2026-01-01T01:00:00Z','2026-10-01T01:00:00Z',true)`, id, f.server.URL).Error)
 	for _, original := range []string{"active", "download_failed"} {
-		model := &types.Model{ID: "offline-chatgpt-" + original, TenantID: 1, Name: "offline-model", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusNeedsConfiguration,
+		model := &types.Model{ID: "offline-chatgpt-" + original, SpaceID: 1, Name: "offline-model", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusNeedsConfiguration,
 			Parameters: types.ModelParameters{Provider: "chatgpt", InterfaceType: "responses", ExtraConfig: map[string]string{"chatgpt_account_id": id, "maintenance_required_fields": `["chatgpt_login"]`, "maintenance_original_status": original, "maintenance_original_updated_at": "2026-10-01T01:00:00+00:00"}}}
 		require.NoError(t, db.Create(model).Error)
 	}
@@ -154,7 +154,7 @@ func invokeOfflineChatGPT(t *testing.T, db *gorm.DB, manager *chatgpt.Manager, a
 	return result, output.String(), err
 }
 
-func TestOfflineChatGPTSignInUsesRealOAuthAndPreservesArchivedHistoryOnSchemaZero(t *testing.T) {
+func TestOfflineChatGPTSignInUsesRealOAuthAndPreservesArchivedHistoryWithoutMaintenanceState(t *testing.T) {
 	db, manager, fake, id := offlineChatGPTFixture(t, true)
 	ctx := context.Background()
 	for _, suffix := range []string{"expired", "future"} {
@@ -218,7 +218,7 @@ func TestOfflineChatGPTSignInUsesRealOAuthAndPreservesArchivedHistoryOnSchemaZer
 	require.Empty(t, output)
 	var version int
 	require.NoError(t, db.WithContext(ctx).Table("schema_migrations").Select("version").Scan(&version).Error)
-	require.Equal(t, 0, version)
+	require.Equal(t, 2, version)
 	require.False(t, db.Migrator().HasTable("maintenance_state"))
 }
 

@@ -24,7 +24,7 @@ type personalRetrievalHit struct {
 
 func TestPersonalPostgresRetrievalResults(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
-	require.NoError(t, f.db.Exec("INSERT INTO tenants (id, name, business) VALUES (?, ?, 'personal')", types.SingleTenantID, "Retrieval fixture").Error)
+	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business) VALUES (?, ?, 'personal')", types.SingleSpaceID, "Retrieval fixture").Error)
 	first := f.createKB(t, true, true)
 	second := first
 	definitions := []struct {
@@ -97,9 +97,9 @@ func TestPersonalPostgresRetrievalResults(t *testing.T) {
 
 func TestPersonalKnowledgeBasePostgresSchemaAndEmbedding(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
-	require.NoError(t, f.db.Exec("INSERT INTO tenants (id, name, business) VALUES (?, ?, 'personal')", types.SingleTenantID, "Personal fixture").Error)
+	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business) VALUES (?, ?, 'personal')", types.SingleSpaceID, "Personal fixture").Error)
 	service := &knowledgeBaseService{db: f.db, repo: f.kbs}
-	created := &types.KnowledgeBase{ID: "personal-kb", TenantID: types.SingleTenantID, Name: "Personal knowledge base", EmbeddingModelID: "chunk-search-fixed"}
+	created := &types.KnowledgeBase{ID: "personal-kb", SpaceID: types.SingleSpaceID, Name: "Personal knowledge base", EmbeddingModelID: "chunk-search-fixed"}
 	created.EnsureDefaults()
 	require.NoError(t, f.kbs.CreateKnowledgeBase(f.ctx, created))
 	loaded, err := service.GetKnowledgeBaseByID(f.ctx, created.ID)
@@ -114,5 +114,5 @@ func TestPersonalKnowledgeBasePostgresSchemaAndEmbedding(t *testing.T) {
 	}
 	require.False(t, f.db.Migrator().HasTable("vector_stores"))
 	require.False(t, f.db.Migrator().HasColumn("knowledge_bases", "vector_store_id"))
-	require.False(t, f.db.Migrator().HasColumn("tenants", "retriever_engines"))
+	require.False(t, f.db.Migrator().HasColumn("spaces", "retriever_engines"))
 }

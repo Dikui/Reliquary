@@ -149,7 +149,7 @@ func (c *chatGPTFallbackFixture) ChatStream(context.Context, []chat.Message, *ch
 func TestChatGPTConfiguredFallbackAndPausePersists(t *testing.T) {
 	db := pgtest.Open(t)
 	s := NewChatGPTPolicyService(db)
-	local := &types.Model{ID: "fallback", TenantID: types.SingleTenantID, Name: "local-fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceLocal, Status: types.ModelStatusActive}
+	local := &types.Model{ID: "fallback", SpaceID: types.SingleSpaceID, Name: "local-fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceLocal, Status: types.ModelStatusActive}
 	require.NoError(t, db.Create(local).Error)
 	_, err := s.Update(context.Background(), nil, local.ID)
 	require.NoError(t, err)
@@ -193,9 +193,9 @@ func TestChatGPTConfiguredFallbackAndPausePersists(t *testing.T) {
 
 func TestChatGPTFallbackModelReferenceAndSeparateCredentials(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	models := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), nil, nil, nil, db)
-	local := &types.Model{ID: "fallback-reference", TenantID: types.SingleTenantID, Name: "local-fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceLocal, Status: types.ModelStatusActive}
+	local := &types.Model{ID: "fallback-reference", SpaceID: types.SingleSpaceID, Name: "local-fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceLocal, Status: types.ModelStatusActive}
 	require.NoError(t, db.Create(local).Error)
 	policy := NewChatGPTPolicyService(db)
 	_, err := policy.Update(ctx, nil, local.ID)
@@ -216,7 +216,7 @@ func TestChatGPTFallbackModelReferenceAndSeparateCredentials(t *testing.T) {
 	_, err = policy.Update(ctx, nil, "")
 	require.NoError(t, err)
 	require.NoError(t, models.DeleteModel(ctx, local.ID))
-	subscription := &types.Model{ID: "oauth-model", TenantID: types.SingleTenantID, Name: "fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive}
+	subscription := &types.Model{ID: "oauth-model", SpaceID: types.SingleSpaceID, Name: "fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive}
 	require.NoError(t, db.Create(subscription).Error)
 	key := "unrelated-api-key"
 	_, err = models.UpdateModelCredentials(ctx, subscription.ID, &key, nil)

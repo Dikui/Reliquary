@@ -2,7 +2,9 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -105,8 +107,51 @@ func addTool[Input any](server *mcp.Server, name, description string, schema map
 	mcp.AddTool(server, &mcp.Tool{Name: name, Description: description, InputSchema: schema},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, any, error) {
 			output, err := call(ctx, input)
+			if err != nil {
+				return nil, nil, err
+			}
+			output, err = contractOutput(output)
 			return nil, output, err
 		})
+}
+
+// MCP keeps its established field names while browser HTTP uses current names.
+// Opaque metadata and historical log values are never rewritten.
+func contractOutput(output any) (any, error) {
+	data, err := json.Marshal(output)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return contractFields(value), nil
+}
+
+func contractFields(value any) any {
+	switch item := value.(type) {
+	case []any:
+		for i := range item {
+			item[i] = contractFields(item[i])
+		}
+	case map[string]any:
+		for key, child := range item {
+			if key == "space_id" {
+				delete(item, key)
+				item["tenant_id"] = child
+				continue
+			}
+			switch key {
+			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers":
+				continue
+			}
+			item[key] = contractFields(child)
+		}
+	}
+	return value
 }
 
 func registerTools(server *mcp.Server, services Services) {

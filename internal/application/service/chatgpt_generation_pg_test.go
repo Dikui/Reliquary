@@ -166,7 +166,7 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 	parsed, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	h.models.SetChatGPTTransport(&http.Client{Transport: chatGPTGenerationTransport{parsed, server.Client().Transport}})
-	model := &types.Model{ID: "chatgpt-generation", TenantID: h.kb.TenantID, Name: "fixture-account-model", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT,
+	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.kb.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT,
 		Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 32768, ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, h.models.CreateModel(h.ctx, model))
 	// Embeddings retain their own supported billing route and httptest fixture.

@@ -264,7 +264,7 @@
             <div class="login-features">
               <div class="feature-item">
                 <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.independentTenant') }}</span>
+                <span class="feature-text">{{ $t('platform.independentSpace') }}</span>
               </div>
               <div class="feature-item">
                 <span class="feature-icon">✓</span>
@@ -415,24 +415,24 @@ onBeforeUnmount(() => {
 })
 
 const persistLoginResponse = async (response: any, skipRedirect = false) => {
-  const activeTenant = response.active_tenant || response.tenant
+  const activeSpace = response.active_space || response.space
   if (response.user && response.token) {
-    const homeTenantIdRaw = response.user.tenant_id ?? activeTenant?.id ?? ''
-    authStore.setUser(userInfoFromApi(response.user, homeTenantIdRaw))
+    const homeSpaceIdRaw = response.user.space_id ?? activeSpace?.id ?? ''
+    authStore.setUser(userInfoFromApi(response.user, homeSpaceIdRaw))
     authStore.setToken(response.token)
     if (response.refresh_token) {
       authStore.setRefreshToken(response.refresh_token)
     }
-    if (activeTenant) {
-      authStore.setTenant({
-        id: String(activeTenant.id) || '',
-        name: activeTenant.name || '',
+    if (activeSpace) {
+      authStore.setSpace({
+        id: String(activeSpace.id) || '',
+        name: activeSpace.name || '',
         owner_id: response.user.id || '',
-        created_at: activeTenant.created_at || new Date().toISOString(),
-        updated_at: activeTenant.updated_at || new Date().toISOString()
+        created_at: activeSpace.created_at || new Date().toISOString(),
+        updated_at: activeSpace.updated_at || new Date().toISOString()
       })
     } else {
-      authStore.setTenant(null)
+      authStore.setSpace(null)
     }
 
   }

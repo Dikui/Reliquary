@@ -113,7 +113,7 @@ type Knowledge struct {
 	// Unique identifier of the knowledge
 	ID string `json:"id"                 gorm:"type:varchar(36);primaryKey"`
 	// Workspace ID
-	TenantID uint64 `json:"tenant_id"`
+	SpaceID uint64 `json:"space_id"`
 	// ID of the knowledge base
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	// Type of the knowledge
@@ -345,10 +345,10 @@ type ManualKnowledgePayload struct {
 	SourceMetadata map[string]string          `json:"-"`
 }
 
-// KnowledgeSearchScope keeps tenant and knowledge base boundaries explicit for repository queries.
+// KnowledgeSearchScope keeps space and knowledge base boundaries explicit for repository queries.
 type KnowledgeSearchScope struct {
-	TenantID uint64
-	KBID     string
+	SpaceID uint64
+	KBID    string
 }
 
 // NewManualKnowledgeMetadata creates a new ManualKnowledgeMetadata instance.

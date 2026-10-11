@@ -9,7 +9,7 @@ const (
 
 // Follow is a subscription to a canonical entity or a user-defined topic.
 type Follow struct {
-	TenantID   uint64    `json:"-" gorm:"primaryKey"`
+	SpaceID    uint64    `json:"-" gorm:"primaryKey"`
 	TargetType string    `json:"target_type" gorm:"primaryKey"`
 	TargetID   string    `json:"target_id" gorm:"primaryKey"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -60,7 +60,7 @@ type FollowFeedState struct {
 
 // FollowFeedCheckpoint is space-wide because each space has one user.
 type FollowFeedCheckpoint struct {
-	TenantID     uint64 `gorm:"primaryKey"`
+	SpaceID      uint64 `gorm:"primaryKey"`
 	LastViewedAt *time.Time
 }
 

@@ -73,9 +73,9 @@ type chunkSearchFixture struct {
 func newChunkSearchFixture(t *testing.T, vectorEnabled bool) *chunkSearchFixture {
 	t.Helper()
 	db := pgtest.Open(t)
-	tenant := &types.Tenant{ID: types.SingleTenantID}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	space := &types.Space{ID: types.SingleSpaceID}
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	f := &chunkSearchFixture{
 		db: db, ctx: ctx,
 		chunks: repository.NewChunkRepository(db), knowledge: repository.NewKnowledgeRepository(db),
@@ -96,8 +96,8 @@ func (f *chunkSearchFixture) createKB(t *testing.T, vectorEnabled, keywordEnable
 	strategy, err := json.Marshal(types.IndexingStrategy{VectorEnabled: vectorEnabled, KeywordEnabled: keywordEnabled})
 	require.NoError(t, err)
 	require.NoError(t, f.db.Exec(`INSERT INTO knowledge_bases
-		(id, tenant_id, name, embedding_model_id, summary_model_id, indexing_strategy)
-		VALUES (?, ?, ?, ?, '', ?::jsonb)`, id, types.SingleTenantID,
+		(id, space_id, name, embedding_model_id, summary_model_id, indexing_strategy)
+		VALUES (?, ?, ?, ?, '', ?::jsonb)`, id, types.SingleSpaceID,
 		"Chunk search knowledge base", "chunk-search-fixed", string(strategy)).Error)
 	kb, err := f.kbs.GetKnowledgeBaseByID(f.ctx, id)
 	require.NoError(t, err)
@@ -108,10 +108,10 @@ func (f *chunkSearchFixture) createKnowledge(t *testing.T, kb *types.KnowledgeBa
 	t.Helper()
 	id := uuid.NewString()
 	require.NoError(t, f.db.Exec(`INSERT INTO knowledges
-		(id, tenant_id, knowledge_base_id, type, title, source, parse_status, embedding_model_id)
-		VALUES (?, ?, ?, 'manual', ?, '', ?, ?)`, id, types.SingleTenantID, kb.ID,
+		(id, space_id, knowledge_base_id, type, title, source, parse_status, embedding_model_id)
+		VALUES (?, ?, ?, 'manual', ?, '', ?, ?)`, id, types.SingleSpaceID, kb.ID,
 		title, types.ParseStatusCompleted, "chunk-search-fixed").Error)
-	knowledge, err := f.knowledge.GetKnowledgeByID(f.ctx, types.SingleTenantID, id)
+	knowledge, err := f.knowledge.GetKnowledgeByID(f.ctx, types.SingleSpaceID, id)
 	require.NoError(t, err)
 	return knowledge
 }
@@ -119,7 +119,7 @@ func (f *chunkSearchFixture) createKnowledge(t *testing.T, kb *types.KnowledgeBa
 func (f *chunkSearchFixture) createChunk(t *testing.T, knowledge *types.Knowledge, body, header, chunkType string) *types.Chunk {
 	t.Helper()
 	chunk := &types.Chunk{
-		ID: uuid.NewString(), TenantID: types.SingleTenantID,
+		ID: uuid.NewString(), SpaceID: types.SingleSpaceID,
 		KnowledgeID: knowledge.ID, KnowledgeBaseID: knowledge.KnowledgeBaseID,
 		Content: body, ContextHeader: header, ChunkType: chunkType,
 		IsEnabled: true, Status: int(types.ChunkStatusIndexed),
@@ -238,7 +238,7 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 
 func hitsForKnowledge(t *testing.T, f *chunkSearchFixture, knowledgeID string) []string {
 	t.Helper()
-	chunks, err := f.chunks.ListChunksByKnowledgeIDAndTypes(f.ctx, types.SingleTenantID, knowledgeID,
+	chunks, err := f.chunks.ListChunksByKnowledgeIDAndTypes(f.ctx, types.SingleSpaceID, knowledgeID,
 		[]string{types.ChunkTypeText, types.ChunkTypeSummary,
 			types.ChunkTypeTableSummary, types.ChunkTypeTableColumn})
 	require.NoError(t, err)

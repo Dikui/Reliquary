@@ -79,7 +79,7 @@ func (s *articleProcessingFiles) SaveBytes(_ context.Context, body []byte, _ uin
 	s.written[path] = bytes.Clone(body)
 	return path, nil
 }
-func (s *articleProcessingFiles) SaveFile(ctx context.Context, h *multipart.FileHeader, tenant uint64, id string) (string, error) {
+func (s *articleProcessingFiles) SaveFile(ctx context.Context, h *multipart.FileHeader, space uint64, id string) (string, error) {
 	f, err := h.Open()
 	if err != nil {
 		return "", err
@@ -89,7 +89,7 @@ func (s *articleProcessingFiles) SaveFile(ctx context.Context, h *multipart.File
 	if err != nil {
 		return "", err
 	}
-	return s.SaveBytes(ctx, body, tenant, id, false)
+	return s.SaveBytes(ctx, body, space, id, false)
 }
 
 type articleProcessingHarness struct {
@@ -101,9 +101,9 @@ func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHa
 	t.Helper()
 	h := newRetainedIntakeHarness(t)
 	model := &articleProcessingChat{output: validProcessingFixture("event")}
-	metadata := &types.Model{ID: "local-fixture", TenantID: h.kb.TenantID, Name: "Processing fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
+	metadata := &types.Model{ID: "local-fixture", SpaceID: h.kb.SpaceID, Name: "Processing fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
 	require.NoError(t, h.db.Create(metadata).Error)
-	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", TenantID: h.kb.TenantID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
+	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", SpaceID: h.kb.SpaceID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 	h.kb.ModelTiers = types.ModelTierConfig{Light: "local-fixture", Generation: "local-fixture", EntityResolution: "local-fixture", Embedding: "embedding"}
 	h.kb.EmbeddingModelID = "embedding"
 	h.kb.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
@@ -181,7 +181,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
 	retrieved := []*types.SearchResult{{ID: hits[0].Results[0].ChunkID}}
-	searchutil.EnrichSearchResultsImageInfo(h.ctx, h.service.chunkService.GetRepository(), article.TenantID, retrieved)
+	searchutil.EnrichSearchResultsImageInfo(h.ctx, h.service.chunkService.GetRepository(), article.SpaceID, retrieved)
 	var imageInfos []types.ImageInfo
 	require.NoError(t, json.Unmarshal([]byte(retrieved[0].ImageInfo), &imageInfos))
 	require.Len(t, imageInfos, 1, "retrieved body chunk keeps its image reference")
@@ -375,7 +375,7 @@ func TestArticleProcessingSourceDefaultAndRejectedGate(t *testing.T) {
 	for _, defaultType := range []string{"", "research"} {
 		t.Run("default="+defaultType, func(t *testing.T) {
 			h := newArticleProcessingHarness(t, false)
-			source := &types.DataSource{ID: "feed", TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID, Name: "RSS", Type: types.ConnectorTypeRSS, DefaultContentType: defaultType, Config: types.JSON(`{"type":"rss","settings":{"feed_urls":"https://example.org/feed"}}`)}
+			source := &types.DataSource{ID: "feed", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Name: "RSS", Type: types.ConnectorTypeRSS, DefaultContentType: defaultType, Config: types.JSON(`{"type":"rss","settings":{"feed_urls":"https://example.org/feed"}}`)}
 			require.NoError(t, h.db.Create(source).Error)
 			article, err := h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, &types.ManualKnowledgePayload{Title: "RSS fixture", Content: "An original research report with measured experimental results.", Status: "publish", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/default", PublishedAt: "2026-10-01"}, SourceMetadata: map[string]string{"datasource_id": source.ID}}, types.ChannelRSS)
 			require.NoError(t, err)

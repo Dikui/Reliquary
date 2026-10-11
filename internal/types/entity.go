@@ -8,7 +8,7 @@ import (
 // Entity is a canonical entity shared by the personal space.
 type Entity struct {
 	ID                       string                  `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID                 uint64                  `json:"tenant_id" gorm:"not null;uniqueIndex:idx_entity_canonical"`
+	SpaceID                  uint64                  `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_canonical"`
 	CanonicalName            string                  `json:"canonical_name" gorm:"type:varchar(512);not null"`
 	NormalizedName           string                  `json:"-" gorm:"type:varchar(512);not null;uniqueIndex:idx_entity_canonical"`
 	EntityType               string                  `json:"entity_type" gorm:"type:varchar(128);not null;default:'other';uniqueIndex:idx_entity_canonical"`
@@ -32,7 +32,7 @@ func (Entity) TableName() string { return "entities" }
 type EntityAlias struct {
 	EntityType       string    `json:"entity_type" gorm:"type:varchar(128);not null;default:'';uniqueIndex:idx_entity_alias"`
 	ID               string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID         uint64    `json:"tenant_id" gorm:"not null;uniqueIndex:idx_entity_alias"`
+	SpaceID          uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_alias"`
 	EntityID         string    `json:"entity_id" gorm:"type:varchar(36);not null;index"`
 	Alias            string    `json:"alias" gorm:"type:varchar(512);not null"`
 	NormalizedAlias  string    `json:"normalized_alias" gorm:"type:varchar(512);not null;uniqueIndex:idx_entity_alias"`
@@ -45,7 +45,7 @@ func (EntityAlias) TableName() string { return "entity_aliases" }
 type EntityMergeSuggestion struct {
 	KnowledgeID         string     `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
 	ID                  string     `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID            uint64     `json:"tenant_id" gorm:"not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
+	SpaceID             uint64     `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
 	NewEntityID         string     `json:"new_entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
 	CandidateEntityID   string     `json:"candidate_entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
 	Reason              string     `json:"reason" gorm:"type:text;not null"`
@@ -62,7 +62,7 @@ func (EntityMergeSuggestion) TableName() string {
 
 // KnowledgeEntity associates an article with a canonical entity.
 type KnowledgeEntity struct {
-	TenantID    uint64    `json:"tenant_id" gorm:"not null;index"`
+	SpaceID     uint64    `json:"space_id" gorm:"not null;index"`
 	KnowledgeID string    `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_entity"`
 	EntityID    string    `json:"entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_entity;index"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -72,7 +72,7 @@ func (KnowledgeEntity) TableName() string { return "knowledge_entities" }
 
 type EntityMergeRecord struct {
 	ID            string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID      uint64    `json:"tenant_id" gorm:"not null;index:idx_entity_merge_keep;index:idx_entity_merge_source"`
+	SpaceID       uint64    `json:"space_id" gorm:"not null;index:idx_entity_merge_keep;index:idx_entity_merge_source"`
 	KeepEntityID  string    `json:"keep_entity_id" gorm:"type:varchar(36);not null;index:idx_entity_merge_keep"`
 	MergeEntityID string    `json:"merge_entity_id" gorm:"type:varchar(36);not null;index:idx_entity_merge_source"`
 	Actor         string    `json:"actor" gorm:"type:varchar(255);not null"`

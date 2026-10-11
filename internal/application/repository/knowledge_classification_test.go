@@ -14,10 +14,10 @@ func TestKnowledgeContentTypeFilterIncludesUnclassifiedAndRespectsScope(t *testi
 	db := pgtest.Open(t)
 	kbID := uuid.NewString()
 	for _, value := range []string{types.ContentTypeEvent, types.ContentTypeTutorial, ""} {
-		require.NoError(t, db.Create(&types.Knowledge{TenantID: 1, KnowledgeBaseID: kbID, Type: "file", Title: "Article", Source: "manual", ParseStatus: types.ParseStatusCompleted, ContentType: value}).Error)
+		require.NoError(t, db.Create(&types.Knowledge{SpaceID: 1, KnowledgeBaseID: kbID, Type: "file", Title: "Article", Source: "manual", ParseStatus: types.ParseStatusCompleted, ContentType: value}).Error)
 	}
-	require.NoError(t, db.Exec(`INSERT INTO knowledges (tenant_id, knowledge_base_id, type, title, source, parse_status, content_type) VALUES (1,?, 'file','Unclassified','manual','completed',NULL)`, kbID).Error)
-	require.NoError(t, db.Create(&types.Knowledge{TenantID: 2, KnowledgeBaseID: kbID, Type: "file", Title: "Other space", Source: "manual", ParseStatus: types.ParseStatusCompleted, ContentType: types.ContentTypeEvent}).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledges (space_id, knowledge_base_id, type, title, source, parse_status, content_type) VALUES (1,?, 'file','Unclassified','manual','completed',NULL)`, kbID).Error)
+	require.NoError(t, db.Create(&types.Knowledge{SpaceID: 2, KnowledgeBaseID: kbID, Type: "file", Title: "Other space", Source: "manual", ParseStatus: types.ParseStatusCompleted, ContentType: types.ContentTypeEvent}).Error)
 	repo := NewKnowledgeRepository(db)
 	page := &types.Pagination{Page: 1, PageSize: 10}
 	rows, total, err := repo.ListPagedKnowledgeByKnowledgeBaseID(context.Background(), 1, kbID, page, types.KnowledgeListFilter{ContentType: types.ContentTypeEvent})
@@ -38,7 +38,7 @@ func TestDataSourceDefaultContentTypeCanBeCleared(t *testing.T) {
 	db := pgtest.Open(t)
 	repo := NewDataSourceRepository(db)
 	ctx := context.Background()
-	source := &types.DataSource{TenantID: types.SingleTenantID, KnowledgeBaseID: uuid.NewString(), Name: "RSS", Type: types.ConnectorTypeRSS, DefaultContentType: types.ContentTypeResearch}
+	source := &types.DataSource{SpaceID: types.SingleSpaceID, KnowledgeBaseID: uuid.NewString(), Name: "RSS", Type: types.ConnectorTypeRSS, DefaultContentType: types.ContentTypeResearch}
 	require.NoError(t, repo.Create(ctx, source))
 	loaded, err := repo.FindByID(ctx, source.ID)
 	require.NoError(t, err)

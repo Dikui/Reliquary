@@ -15,7 +15,7 @@ func (s *stubArticleKBService) GetKnowledgeBaseByID(_ context.Context, id string
 	if id != "kb-1" {
 		return nil, errors.New("knowledge base not found")
 	}
-	return &types.KnowledgeBase{ID: "kb-1", TenantID: 1, Type: types.KnowledgeBaseTypeDocument}, nil
+	return &types.KnowledgeBase{ID: "kb-1", SpaceID: 1, Type: types.KnowledgeBaseTypeDocument}, nil
 }
 
 func (s *stubArticleKBService) GetKnowledgeBase(ctx context.Context) (*types.KnowledgeBase, error) {

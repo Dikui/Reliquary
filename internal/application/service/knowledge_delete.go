@@ -122,7 +122,7 @@ func deleteExtractedImages(
 // DeleteKnowledge deletes a knowledge entry and all related resources
 func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error {
 	// Get the knowledge entry
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, ctx.Value(types.TenantIDContextKey).(uint64), id)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), id)
 	if err != nil {
 		return err
 	}
@@ -160,8 +160,8 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	kbFileSvc := s.resolveFileService(ctx, kb)
 
 	// Collect image URLs before chunks are deleted (ImageInfo references are lost after deletion)
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	chunkImageInfos, err := s.chunkService.GetRepository().ListImageInfoByKnowledgeIDs(ctx, tenantID, []string{id})
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	chunkImageInfos, err := s.chunkService.GetRepository().ListImageInfoByKnowledgeIDs(ctx, spaceID, []string{id})
 	if err != nil {
 		logger.Errorf(ctx, "Failed to collect image URLs for cleanup: %v", err)
 	}
@@ -215,10 +215,10 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	// row could leave a "file missing but row present" zombie that can neither be
 	// reparsed nor cleanly re-deleted (issue #2192). Orphaning a file after the
 	// row is gone is the tolerable failure mode instead.
-	if err := deleteArticleEntityAssociations(ctx, s.db, tenantID, []string{id}); err != nil {
+	if err := deleteArticleEntityAssociations(ctx, s.db, spaceID, []string{id}); err != nil {
 		return err
 	}
-	if err := s.repo.DeleteKnowledge(ctx, tenantID, id); err != nil {
+	if err := s.repo.DeleteKnowledge(ctx, spaceID, id); err != nil {
 		return err
 	}
 
@@ -243,10 +243,10 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		imageURLs = append(imageURLs, intake.Images...)
 	}
 	deleteExtractedImages(ctx, kbFileSvc, knowledgeResourceOwners(s.resourceCatalog, knowledge.ID), imageURLs)
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	tenantInfo.StorageUsed -= knowledge.StorageSize
-	if err := s.tenantRepo.AdjustStorageUsed(ctx, tenantInfo.ID, -knowledge.StorageSize); err != nil {
-		logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge update tenant storage used failed")
+	spaceInfo := ctx.Value(types.SpaceInfoContextKey).(*types.Space)
+	spaceInfo.StorageUsed -= knowledge.StorageSize
+	if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, -knowledge.StorageSize); err != nil {
+		logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge update space storage used failed")
 	}
 	return nil
 }
@@ -294,8 +294,8 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		return nil
 	}
 	// 1. Get the knowledge entry
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	knowledgeList, err := s.repo.GetKnowledgeBatch(ctx, tenantInfo.ID, ids)
+	spaceInfo := ctx.Value(types.SpaceInfoContextKey).(*types.Space)
+	knowledgeList, err := s.repo.GetKnowledgeBatch(ctx, spaceInfo.ID, ids)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	}
 
 	// Collect image URLs before chunks are deleted
-	chunkImageInfos, err := s.chunkService.GetRepository().ListImageInfoByKnowledgeIDs(ctx, tenantInfo.ID, ids)
+	chunkImageInfos, err := s.chunkService.GetRepository().ListImageInfoByKnowledgeIDs(ctx, spaceInfo.ID, ids)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to collect image URLs for batch cleanup: %v", err)
 	}
@@ -439,10 +439,10 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 				}
 			}
 		}
-		if err := deleteArticleEntityAssociations(ctx, svc.db, tenantInfo.ID, ids); err != nil {
+		if err := deleteArticleEntityAssociations(ctx, svc.db, spaceInfo.ID, ids); err != nil {
 			return err
 		}
-		return svc.repo.DeleteKnowledgeList(ctx, tenantInfo.ID, ids)
+		return svc.repo.DeleteKnowledgeList(ctx, spaceInfo.ID, ids)
 	}
 	if s.db == nil {
 		if err := deleteRows(s); err != nil {
@@ -486,9 +486,9 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		}
 		deleteExtractedImages(ctx, fSvc, knowledgeResourceOwners(s.resourceCatalog, kbKnowledgeIDs[kbID]...), urls)
 	}
-	tenantInfo.StorageUsed += storageAdjust
-	if err := s.tenantRepo.AdjustStorageUsed(ctx, tenantInfo.ID, storageAdjust); err != nil {
-		logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge update tenant storage used failed")
+	spaceInfo.StorageUsed += storageAdjust
+	if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, storageAdjust); err != nil {
+		logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge update space storage used failed")
 	}
 	return nil
 }
@@ -503,7 +503,7 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 		return nil
 	}
 
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
+	spaceInfo := ctx.Value(types.SpaceInfoContextKey).(*types.Space)
 	if knowledge.EmbeddingModelID != "" {
 		retrieveEngine := s.retrieveEngine
 		embeddingModel, modelErr := s.modelService.GetEmbeddingModel(ctx, knowledge.EmbeddingModelID)
@@ -522,7 +522,7 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 	// Collect image URLs before chunks are deleted
 	kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
 	fileSvc := s.resolveFileService(ctx, kb)
-	chunkImageInfos, imgErr := s.chunkService.GetRepository().ListImageInfoByKnowledgeIDs(ctx, tenantInfo.ID, []string{knowledge.ID})
+	chunkImageInfos, imgErr := s.chunkService.GetRepository().ListImageInfoByKnowledgeIDs(ctx, spaceInfo.ID, []string{knowledge.ID})
 	if imgErr != nil {
 		logger.GetLogger(ctx).WithField("error", imgErr).Error("Failed to collect image URLs for cleanup")
 		cleanupErr = errors.Join(cleanupErr, imgErr)
@@ -560,11 +560,11 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 	deleteExtractedImages(ctx, fileSvc, knowledgeResourceOwners(s.resourceCatalog, knowledge.ID), imageURLs)
 
 	if knowledge.StorageSize > 0 {
-		tenantInfo.StorageUsed -= knowledge.StorageSize
-		if tenantInfo.StorageUsed < 0 {
-			tenantInfo.StorageUsed = 0
+		spaceInfo.StorageUsed -= knowledge.StorageSize
+		if spaceInfo.StorageUsed < 0 {
+			spaceInfo.StorageUsed = 0
 		}
-		if err := s.tenantRepo.AdjustStorageUsed(ctx, tenantInfo.ID, -knowledge.StorageSize); err != nil {
+		if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, -knowledge.StorageSize); err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Error("Failed to adjust storage usage during manual cleanup")
 			cleanupErr = errors.Join(cleanupErr, err)
 		}
@@ -585,16 +585,16 @@ func (s *knowledgeService) ProcessKnowledgeListDelete(ctx context.Context, t *ta
 
 	logger.Infof(ctx, "Processing knowledge list delete task for %d knowledge items", len(payload.KnowledgeIDs))
 
-	// Get tenant info
-	tenant, err := s.tenantRepo.GetTenantByID(ctx, payload.TenantID)
+	// Get space info
+	space, err := s.spaceRepo.GetSpaceByID(ctx, payload.SpaceID)
 	if err != nil {
-		logger.Errorf(ctx, "Failed to get tenant %d: %v", payload.TenantID, err)
+		logger.Errorf(ctx, "Failed to get space %d: %v", payload.SpaceID, err)
 		return err
 	}
 
 	// Set context values
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, payload.TenantID)
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, payload.SpaceID)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 
 	// Delete knowledge list
 	if err := s.DeleteKnowledgeList(ctx, payload.KnowledgeIDs); err != nil {

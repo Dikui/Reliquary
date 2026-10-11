@@ -52,7 +52,7 @@ type processOverridesPGFiles struct {
 	readErr error
 }
 
-func (s *processOverridesPGFiles) SaveFile(ctx context.Context, header *multipart.FileHeader, tenantID uint64, id string) (string, error) {
+func (s *processOverridesPGFiles) SaveFile(ctx context.Context, header *multipart.FileHeader, spaceID uint64, id string) (string, error) {
 	file, err := header.Open()
 	if err != nil {
 		return "", err
@@ -62,7 +62,7 @@ func (s *processOverridesPGFiles) SaveFile(ctx context.Context, header *multipar
 	if err != nil {
 		return "", err
 	}
-	return s.SaveBytes(ctx, body, tenantID, id, false)
+	return s.SaveBytes(ctx, body, spaceID, id, false)
 }
 
 func (s *processOverridesPGFiles) SaveBytes(_ context.Context, body []byte, _ uint64, name string, _ bool) (string, error) {
@@ -113,20 +113,20 @@ type processOverridesPGHarness struct {
 func newProcessOverridesPGHarness(t *testing.T) *processOverridesPGHarness {
 	t.Helper()
 	db := pgtest.Open(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Process overrides regression"}).Error)
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Process overrides regression"}).Error)
 	repo := repository.NewKnowledgeRepository(db)
 	spans := repository.NewKnowledgeSpanRepository(db)
 	chunks := repository.NewChunkRepository(db)
-	kbs := processOverridesPGKB{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1,
+	kbs := processOverridesPGKB{kb: &types.KnowledgeBase{ID: "kb", SpaceID: 1,
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}}
 	files := &processOverridesPGFiles{stored: map[string][]byte{}}
 	queue := &processOverridesPGQueue{}
 	svc, err := service.NewKnowledgeService(db, nil, repo, kbs,
-		repository.NewTenantRepository(db), nil, processOverridesPGChunks{repo: chunks}, chunks,
+		repository.NewSpaceRepository(db), nil, processOverridesPGChunks{repo: chunks}, chunks,
 		files, nil, nil, queue, nil, nil, nil, service.NewSpanTracker(spans, db))
 	require.NoError(t, err)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, &types.Tenant{ID: 1})
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, &types.Space{ID: 1})
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	return &processOverridesPGHarness{db: db, svc: svc, repo: repo, files: files, queue: queue,
 		handler: handler.NewKnowledgeHandler(nil, svc, kbs, queue, spans), ctx: ctx}
@@ -161,7 +161,7 @@ func (h *processOverridesPGHarness) assertTimelineConfig(t *testing.T, id, want 
 	}{{"/api/v1/knowledge/:id", h.handler.GetKnowledge}, {"/api/v1/knowledge/:id/spans", h.handler.GetKnowledgeSpans}} {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
 		c.Request = httptest.NewRequest(http.MethodGet, endpoint.path, nil).WithContext(h.ctx)
 		c.Params = gin.Params{{Key: "id", Value: id}}
 		endpoint.handle(c)
@@ -189,7 +189,7 @@ func (h *processOverridesPGHarness) assertTimelineConfig(t *testing.T, id, want 
 
 func (h *processOverridesPGHarness) seed(t *testing.T, kind, decision string) *types.Knowledge {
 	t.Helper()
-	k := &types.Knowledge{ID: "message", TenantID: 1, KnowledgeBaseID: "kb", Type: kind,
+	k := &types.Knowledge{ID: "message", SpaceID: 1, KnowledgeBaseID: "kb", Type: kind,
 		Title: "Processing configuration", Source: "https://example.org/source", ParseStatus: types.ParseStatusPending,
 		Metadata: types.JSON(`{"discard_on_cleanup":"old source metadata"}`)}
 	require.NoError(t, k.SetProcessOverrides(processOverridesPGConfig()))
@@ -373,7 +373,7 @@ func TestProcessOverridesPGManualProcessingFailure(t *testing.T) {
 	h := newProcessOverridesPGHarness(t)
 	k := h.seed(t, types.KnowledgeTypeManual, "pending")
 	want := processOverridesPGStoredConfig(t, k)
-	payload := types.ManualProcessPayload{TenantID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb",
+	payload := types.ManualProcessPayload{SpaceID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb",
 		Content: "![unresolved image](https://example.org/image.png)"}
 	require.Error(t, h.svc.ProcessManualUpdate(h.ctx, taskqueue.NewTask(types.TypeManualProcess,
 		[]byte(mustProcessOverridesPGJSON(t, payload)))))
@@ -390,7 +390,7 @@ func TestProcessOverridesPGCleanupWithoutOverrides(t *testing.T) {
 	k.FilePath, k.FileType, k.FileName = "upload", "json", "source.json"
 	h.files.stored["upload"] = []byte("{invalid-json")
 	require.NoError(t, h.repo.UpdateKnowledge(h.ctx, k))
-	payload := types.DocumentProcessPayload{TenantID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb",
+	payload := types.DocumentProcessPayload{SpaceID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb",
 		FilePath: k.FilePath, FileType: k.FileType, FileName: k.FileName}
 	require.Error(t, h.svc.ProcessDocument(h.ctx, taskqueue.NewTask(types.TypeDocumentProcess,
 		[]byte(mustProcessOverridesPGJSON(t, payload)))))

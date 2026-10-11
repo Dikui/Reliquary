@@ -105,7 +105,7 @@ func (r *runtimeTaskTestInspector) CancelTasksForKnowledge(
 }
 
 type runtimeKnowledgeCancelTest struct {
-	tenantID    uint64
+	spaceID     uint64
 	knowledgeID string
 	err         error
 }
@@ -113,12 +113,12 @@ type runtimeKnowledgeCancelTest struct {
 func (r *runtimeKnowledgeCancelTest) CancelKnowledgeParse(
 	ctx context.Context, knowledgeID string,
 ) (*types.Knowledge, error) {
-	r.tenantID, _ = ctx.Value(types.TenantIDContextKey).(uint64)
+	r.spaceID, _ = ctx.Value(types.SpaceIDContextKey).(uint64)
 	r.knowledgeID = knowledgeID
 	if r.err != nil {
 		return nil, r.err
 	}
-	return &types.Knowledge{ID: knowledgeID, TenantID: r.tenantID}, nil
+	return &types.Knowledge{ID: knowledgeID, SpaceID: r.spaceID}, nil
 }
 
 func (r *runtimeTaskTestInspector) ListRuntimeTasks(
@@ -471,13 +471,13 @@ func TestListRuntimeTasksRejectsUnknownState(t *testing.T) {
 	}
 }
 
-func TestRuntimeTaskCancelUsesSingleTeamContext(t *testing.T) {
+func TestRuntimeTaskCancelUsesPersonalSpaceContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, tenantID := range []uint64{0, types.SingleTenantID} {
-		t.Run(strconv.FormatUint(tenantID, 10), func(t *testing.T) {
+	for _, spaceID := range []uint64{0, types.SingleSpaceID} {
+		t.Run(strconv.FormatUint(spaceID, 10), func(t *testing.T) {
 			inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
 				ID: "task-cancel", Queue: types.QueueDefault, Type: types.TypeDocumentProcess,
-				State: types.RuntimeTaskActive, TenantID: tenantID, KnowledgeID: "knowledge-1",
+				State: types.RuntimeTaskActive, SpaceID: spaceID, KnowledgeID: "knowledge-1",
 				AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 			}}}
 			canceller := &runtimeKnowledgeCancelTest{}
@@ -490,29 +490,29 @@ func TestRuntimeTaskCancelUsesSingleTeamContext(t *testing.T) {
 				{Key: "action", Value: string(types.RuntimeTaskActionCancel)},
 			}
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/cancel", nil)
-			ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), types.TenantIDContextKey, uint64(999)))
+			ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), types.SpaceIDContextKey, uint64(999)))
 
 			handler.MutateRuntimeTask(ctx)
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
 			}
-			if canceller.tenantID != types.SingleTenantID || canceller.knowledgeID != "knowledge-1" {
+			if canceller.spaceID != types.SingleSpaceID || canceller.knowledgeID != "knowledge-1" {
 				t.Fatalf("domain cancellation context mismatch: %+v", canceller)
 			}
 		})
 	}
 }
 
-func TestRuntimeTaskActionsRejectForeignTenantBeforeMutation(t *testing.T) {
+func TestRuntimeTaskActionsRejectForeignSpaceBeforeMutation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, tenantID := range []uint64{2, 42} {
+	for _, spaceID := range []uint64{2, 42} {
 		for _, action := range []types.RuntimeTaskAction{
 			types.RuntimeTaskActionCancel, types.RuntimeTaskActionRunNow, types.RuntimeTaskActionDelete,
 		} {
-			t.Run(strconv.FormatUint(tenantID, 10)+"/"+string(action), func(t *testing.T) {
+			t.Run(strconv.FormatUint(spaceID, 10)+"/"+string(action), func(t *testing.T) {
 				inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
 					ID: "task-foreign", Queue: types.QueueDefault, Type: types.TypeDocumentProcess,
-					State: types.RuntimeTaskArchived, TenantID: tenantID, KnowledgeID: "foreign-knowledge",
+					State: types.RuntimeTaskArchived, SpaceID: spaceID, KnowledgeID: "foreign-knowledge",
 					AllowedActions: []types.RuntimeTaskAction{
 						types.RuntimeTaskActionCancel, types.RuntimeTaskActionRunNow, types.RuntimeTaskActionDelete,
 					},
@@ -545,7 +545,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenKnowledgeGone(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
 		ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
-		State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
+		State: types.RuntimeTaskRetry, SpaceID: types.SingleSpaceID, KnowledgeID: "knowledge-gone",
 		AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 	}}}
 	canceller := &runtimeKnowledgeCancelTest{err: repository.ErrKnowledgeNotFound}
@@ -575,7 +575,7 @@ func TestRuntimeTaskCancelPurgesOrphanAfterSiblingSweep(t *testing.T) {
 		cancelDeleted: 2,
 		tasks: []types.RuntimeTaskInfo{{
 			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
-			State: types.RuntimeTaskArchived, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
+			State: types.RuntimeTaskArchived, SpaceID: types.SingleSpaceID, KnowledgeID: "knowledge-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
 	}
@@ -609,7 +609,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenSweepAlreadyRemovedTask(t *testing.T) 
 		getRuntimeErrFrom: 2,
 		tasks: []types.RuntimeTaskInfo{{
 			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
-			State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
+			State: types.RuntimeTaskRetry, SpaceID: types.SingleSpaceID, KnowledgeID: "knowledge-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
 	}

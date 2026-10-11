@@ -23,13 +23,13 @@ import "sort"
 var contextCloneAcrossDetach = map[ContextKey]bool{
 	// Caller identity and workspace scope. Background work runs as the same
 	// principal in the same workspace, so all of this has to survive; a
-	// detached goroutine that loses its tenant reads another tenant's rows or
+	// detached goroutine that loses its space reads another space's rows or
 	// none at all.
-	TenantIDContextKey:   true,
-	TenantInfoContextKey: true,
-	UserContextKey:       true,
-	UserIDContextKey:     true,
-	PrincipalContextKey:  true,
+	SpaceIDContextKey:   true,
+	SpaceInfoContextKey: true,
+	UserContextKey:      true,
+	UserIDContextKey:    true,
+	PrincipalContextKey: true,
 
 	// The visitor identity must remain distinct across background work.
 	EmbedQueryContextKey: true,

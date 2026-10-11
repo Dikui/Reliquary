@@ -11,13 +11,13 @@ import (
 // fields (APIKey, AppSecret) removed by construction. Credential presence
 // metadata lives behind the /credentials subresource, not inlined here.
 //
-// BaseURL is preserved for tenant-owned models (the frontend needs it to
+// BaseURL is preserved for space-owned models (the frontend needs it to
 // render which endpoint a custom model points at). For builtin models it is
 // stripped along with every other field that could leak how a particular
-// tenant configured the upstream provider.
+// space configured the upstream provider.
 type ModelResponse struct {
 	ID          string             `json:"id"`
-	TenantID    uint64             `json:"tenant_id"`
+	SpaceID     uint64             `json:"space_id"`
 	Name        string             `json:"name"`
 	DisplayName string             `json:"display_name"`
 	Type        types.ModelType    `json:"type"`
@@ -53,8 +53,8 @@ type ModelParametersDTO struct {
 
 // NewModelResponse converts a stored Model into its response shape.
 //
-// Builtin models are shared across tenants — strip BaseURL (which can leak
-// the tenant's private endpoint) and any non-shared parameters.
+// Builtin models are shared across spaces — strip BaseURL (which can leak
+// the space's private endpoint) and any non-shared parameters.
 func NewModelResponse(ctx context.Context, m *types.Model) *ModelResponse {
 	if m == nil {
 		return nil
@@ -80,7 +80,7 @@ func NewModelResponse(ctx context.Context, m *types.Model) *ModelResponse {
 		params.BaseURL = ""
 	}
 	if m.IsBuiltin && !canManageBuiltin {
-		// Builtin: strip everything that could reveal per-tenant config.
+		// Builtin: strip everything that could reveal per-space config.
 		// EmbeddingParameters and ParameterSize / Provider / InterfaceType /
 		// SupportsVision / ContextWindow / MaxOutputTokens are intentionally
 		// preserved (they describe the capability surface, not the configured
@@ -98,7 +98,7 @@ func NewModelResponse(ctx context.Context, m *types.Model) *ModelResponse {
 	}
 	return &ModelResponse{
 		ID:          m.ID,
-		TenantID:    m.TenantID,
+		SpaceID:     m.SpaceID,
 		Name:        m.Name,
 		DisplayName: m.DisplayName,
 		Type:        m.Type,

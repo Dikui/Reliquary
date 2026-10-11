@@ -29,10 +29,10 @@ func (r *teamKnowledgeBaseRepo) GetKnowledgeBaseByIDs(context.Context, []string)
 }
 
 func TestKnowledgeBaseLookupsRejectObjectsOutsideTeam(t *testing.T) {
-	teamKB := &types.KnowledgeBase{ID: "team-kb", TenantID: types.SingleTenantID, CreatorID: "another-member"}
-	foreignKB := &types.KnowledgeBase{ID: "foreign-kb", TenantID: 2}
+	teamKB := &types.KnowledgeBase{ID: "team-kb", SpaceID: types.SingleSpaceID, CreatorID: "another-member"}
+	foreignKB := &types.KnowledgeBase{ID: "foreign-kb", SpaceID: 2}
 	svc := &knowledgeBaseService{repo: &teamKnowledgeBaseRepo{rows: []*types.KnowledgeBase{teamKB, foreignKB}}}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	for _, get := range []func(context.Context, string) (*types.KnowledgeBase, error){svc.GetKnowledgeBaseByID, svc.GetKnowledgeBaseByIDOnly} {
 		got, err := get(ctx, teamKB.ID)
 		require.NoError(t, err)

@@ -35,7 +35,7 @@ func (s *knowledgeBaseService) GetQueryEmbedding(ctx context.Context, kbID strin
 	}
 	if s.db != nil {
 		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			return checkEmbeddingProfile(ctx, tx, embeddingModel, kb.TenantID)
+			return checkEmbeddingProfile(ctx, tx, embeddingModel, kb.SpaceID)
 		}); err != nil {
 			return nil, err
 		}
@@ -45,11 +45,11 @@ func (s *knowledgeBaseService) GetQueryEmbedding(ctx context.Context, kbID strin
 
 // ResolveEmbeddingModelKeys resolves embedding model IDs to their actual model
 // identity key (name + endpoint). KBs using the same underlying model across
-// different tenants will share the same key, enabling optimal grouping.
+// different spaces will share the same key, enabling optimal grouping.
 func (s *knowledgeBaseService) ResolveEmbeddingModelKeys(ctx context.Context, kbs []*types.KnowledgeBase) map[string]string {
 	type modelRef struct {
-		ModelID  string
-		TenantID uint64
+		ModelID string
+		SpaceID uint64
 	}
 
 	// Deduplicate model references
@@ -61,18 +61,18 @@ func (s *knowledgeBaseService) ResolveEmbeddingModelKeys(ctx context.Context, kb
 			logger.Warnf(ctx, "Cannot resolve embedding tier for %s: %v", kb.ID, err)
 			modelID = "unavailable:" + kb.ID
 		}
-		ref := modelRef{ModelID: modelID, TenantID: kb.TenantID}
+		ref := modelRef{ModelID: modelID, SpaceID: kb.SpaceID}
 		uniqueRefs[ref] = struct{}{}
 		kbRefs[kb.ID] = ref
 	}
 
-	// Resolve each unique (modelID, tenantID) to a model identity key
+	// Resolve each unique (modelID, spaceID) to a model identity key
 	resolvedKeys := make(map[modelRef]string, len(uniqueRefs))
 	for ref := range uniqueRefs {
-		tenantCtx := context.WithValue(ctx, types.TenantIDContextKey, ref.TenantID)
-		model, err := s.modelService.GetModelByID(tenantCtx, ref.ModelID)
+		spaceCtx := context.WithValue(ctx, types.SpaceIDContextKey, ref.SpaceID)
+		model, err := s.modelService.GetModelByID(spaceCtx, ref.ModelID)
 		if err != nil || model == nil {
-			logger.Warnf(ctx, "ResolveEmbeddingModelKeys: cannot resolve model %s for tenant %d: %v", ref.ModelID, ref.TenantID, err)
+			logger.Warnf(ctx, "ResolveEmbeddingModelKeys: cannot resolve model %s for space %d: %v", ref.ModelID, ref.SpaceID, err)
 			resolvedKeys[ref] = ref.ModelID
 			continue
 		}
@@ -102,8 +102,8 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 	logger.Infof(ctx, "Hybrid search parameters, knowledge base IDs: %v, query text: %s",
 		searchKBIDs, secutils.SanitizeForLog(params.QueryText))
 
-	tenantInfo, _ := types.TenantInfoFromContext(ctx)
-	requestTenantID := types.MustTenantIDFromContext(ctx)
+	spaceInfo, _ := types.SpaceInfoFromContext(ctx)
+	requestSpaceID := types.MustSpaceIDFromContext(ctx)
 
 	kbs, err := s.repo.GetKnowledgeBaseByIDs(ctx, searchKBIDs)
 	if err != nil {
@@ -116,7 +116,7 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		return nil, apperrors.NewNotFoundError("knowledge base not found")
 	}
 
-	if err := s.authorizeKBAccess(ctx, kbs, requestTenantID); err != nil {
+	if err := s.authorizeKBAccess(ctx, kbs, requestSpaceID); err != nil {
 		return nil, err
 	}
 	for i, kb := range kbs {
@@ -187,8 +187,8 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		len(vectorResults), len(keywordResults))
 
 	var retrievalCfg *types.RetrievalConfig
-	if tenantInfo != nil {
-		retrievalCfg = tenantInfo.RetrievalConfig
+	if spaceInfo != nil {
+		retrievalCfg = spaceInfo.RetrievalConfig
 	}
 	deduplicatedChunks := fuseOrDeduplicate(ctx, vectorResults, keywordResults, retrievalCfg)
 
@@ -260,7 +260,7 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 		len(docVectorKBIDs) > 0 {
 		logger.Info(ctx, "Vector retrieval supported, preparing vector retrieval parameters")
 
-		queryEmbedding, err := s.resolveQueryEmbedding(ctx, primary, params, types.MustTenantIDFromContext(ctx))
+		queryEmbedding, err := s.resolveQueryEmbedding(ctx, primary, params, types.MustSpaceIDFromContext(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +307,7 @@ func (s *knowledgeBaseService) resolveQueryEmbedding(
 	ctx context.Context,
 	kb *types.KnowledgeBase,
 	params types.SearchParams,
-	currentTenantID uint64,
+	currentSpaceID uint64,
 ) ([]float32, error) {
 	if len(params.QueryEmbedding) > 0 {
 		logger.Infof(ctx, "Using pre-computed query embedding, vector length: %d", len(params.QueryEmbedding))
@@ -337,9 +337,9 @@ func (s *knowledgeBaseService) resolveQueryEmbedding(
 	return queryEmbedding, nil
 }
 
-func (s *knowledgeBaseService) authorizeKBAccess(ctx context.Context, kbs []*types.KnowledgeBase, tenantID uint64) error {
+func (s *knowledgeBaseService) authorizeKBAccess(ctx context.Context, kbs []*types.KnowledgeBase, spaceID uint64) error {
 	for _, kb := range kbs {
-		if kb == nil || kb.TenantID != tenantID {
+		if kb == nil || kb.SpaceID != spaceID {
 			return apperrors.NewForbiddenError("knowledge base is outside the space")
 		}
 	}

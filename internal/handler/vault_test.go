@@ -24,9 +24,9 @@ import (
 
 func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
-	require.NoError(t, service.EnsureSingleTeamSpace(ctx, db))
-	kb, err := repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
+	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
+	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, db.Save(kb).Error)

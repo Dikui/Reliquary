@@ -6,7 +6,7 @@ import "time"
 // indexing or extracting another copy of its body.
 type KnowledgeRepostSource struct {
 	ID                 string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID           uint64    `json:"tenant_id" gorm:"not null;uniqueIndex:idx_repost_origin"`
+	SpaceID            uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_repost_origin"`
 	KnowledgeBaseID    string    `json:"knowledge_base_id" gorm:"type:varchar(36);not null"`
 	KnowledgeID        string    `json:"knowledge_id" gorm:"type:varchar(36);not null;index;uniqueIndex:idx_repost_origin"`
 	OriginalURL        string    `json:"original_url" gorm:"type:text;not null;default:''"`

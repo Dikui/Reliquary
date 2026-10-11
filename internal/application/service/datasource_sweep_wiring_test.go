@@ -20,7 +20,7 @@ type sweepFakeRepo struct {
 	prefixReturn []*types.Knowledge // children to return from FindByMetadataKeyPrefix
 }
 
-func (r *sweepFakeRepo) FindByMetadataKey(ctx context.Context, tenantID uint64, kbID, key, value string) (*types.Knowledge, error) {
+func (r *sweepFakeRepo) FindByMetadataKey(ctx context.Context, spaceID uint64, kbID, key, value string) (*types.Knowledge, error) {
 	return nil, nil // no existing main item → skip the case-1 update delete
 }
 
@@ -38,7 +38,7 @@ func (r *sweepFakeRepo) HardDeleteKnowledgeList(context.Context, uint64, []strin
 	return nil
 }
 
-func (r *sweepFakeRepo) FindByMetadataKeyPrefix(ctx context.Context, tenantID uint64, kbID, key, prefix string) ([]*types.Knowledge, error) {
+func (r *sweepFakeRepo) FindByMetadataKeyPrefix(ctx context.Context, spaceID uint64, kbID, key, prefix string) ([]*types.Knowledge, error) {
 	r.prefixCalls = append(r.prefixCalls, key+"|"+prefix)
 	return r.prefixReturn, nil
 }
@@ -112,7 +112,7 @@ func TestIngestItem_ReplacesSubtreeSweepsStaleChildrenAfterCreate(t *testing.T) 
 	ds := &types.DataSource{
 		ID:              "ds-1",
 		Type:            "test-subtree",
-		TenantID:        7,
+		SpaceID:         7,
 		KnowledgeBaseID: "kb-1",
 	}
 	item := &types.FetchedItem{
@@ -167,7 +167,7 @@ func TestIngestItem_ReplacesSubtreeSweepsOnDuplicateParent(t *testing.T) {
 	}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -203,7 +203,7 @@ func TestIngestItem_NoSweepWhenDuplicateIsDifferentNode(t *testing.T) {
 	}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -245,7 +245,7 @@ func TestIngestItem_SubtreeKeepPreservesPresentChild(t *testing.T) {
 	ks := &sweepFakeKS{repo: repo}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -272,7 +272,7 @@ func TestIngestItem_SubtreeSweepSkipsOtherDataSourceChildren(t *testing.T) {
 	ks := &sweepFakeKS{repo: repo}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -295,7 +295,7 @@ func TestIngestItem_NoSweepWhenFlagUnset(t *testing.T) {
 	ks := &sweepFakeKS{repo: repo}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID: "nt-plain",
 		Content:    []byte("data"),
@@ -321,7 +321,7 @@ func TestIngestItem_NoSweepWhenFlagUnset(t *testing.T) {
 // non-image item with the same error must still count as Failed.
 func TestApplyFetchedItem_EmbeddedImageIngestFailureCountsAsSkip(t *testing.T) {
 	ingestErr := errors.New("图片对象存储未配置")
-	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	newItem := func(extID string, meta map[string]string) *types.FetchedItem {
 		return &types.FetchedItem{
 			ExternalID:  extID,

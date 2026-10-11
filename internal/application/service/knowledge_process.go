@@ -133,7 +133,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	// Check if knowledge is being deleted/cancelled before processing.
 	// Both statuses short-circuit identically here — there's nothing to clean
 	// up yet so the branch is purely "stop early".
-	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.TenantID, knowledge.ID); aborted {
+	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.SpaceID, knowledge.ID); aborted {
 		logger.Infof(ctx, "Knowledge aborted (%s), skipping chunk processing: %s", status, knowledge.ID)
 		return
 	}
@@ -164,7 +164,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	}
 
 	// 删除旧的索引数据 — only when vector/keyword indexing is enabled
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
+	spaceInfo := ctx.Value(types.SpaceInfoContextKey).(*types.Space)
 	var err error
 	retrieveEngine := s.retrieveEngine
 	if embeddingModel != nil {
@@ -235,7 +235,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 		for i, pc := range options.ParentChunks {
 			parentDBChunks[i] = &types.Chunk{
 				ID:              uuid.New().String(),
-				TenantID:        knowledge.TenantID,
+				SpaceID:         knowledge.SpaceID,
 				KnowledgeID:     knowledge.ID,
 				KnowledgeBaseID: knowledge.KnowledgeBaseID,
 				Content:         pc.Content,
@@ -274,7 +274,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 		// 创建主文本Chunk
 		textChunk := &types.Chunk{
 			ID:              uuid.New().String(),
-			TenantID:        knowledge.TenantID,
+			SpaceID:         knowledge.SpaceID,
 			KnowledgeID:     knowledge.ID,
 			KnowledgeBaseID: knowledge.KnowledgeBaseID,
 			Content:         chunkData.Content,
@@ -333,7 +333,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 
 	// Check if knowledge is being deleted/cancelled before writing chunks.
 	// Nothing has been persisted yet, so both branches just bail.
-	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.TenantID, knowledge.ID); aborted {
+	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.SpaceID, knowledge.ID); aborted {
 		logger.Infof(ctx, "Knowledge aborted (%s), skipping chunk write: %s", status, knowledge.ID)
 		return
 	}
@@ -399,7 +399,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 		// Check again before batch indexing (heavy operation).
 		// deleting → row is going away anyway, drop the chunks we just wrote.
 		// cancelled → user wants to keep what was already persisted, just stop.
-		if aborted, status := s.isKnowledgeAborted(ctx, knowledge.TenantID, knowledge.ID); aborted {
+		if aborted, status := s.isKnowledgeAborted(ctx, knowledge.SpaceID, knowledge.ID); aborted {
 			logger.Infof(ctx, "Knowledge aborted (%s) before indexing: %s", status, knowledge.ID)
 			if status == types.ParseStatusDeleting {
 				if err := s.chunkService.DeleteChunksByKnowledgeID(ctx, knowledge.ID); err != nil {
@@ -447,7 +447,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 		// deleting → drop chunks+index we just wrote.
 		// cancelled → keep persisted data; the row stays in cancelled status
 		// and downstream stages skip via the entry guards.
-		if aborted, status := s.isKnowledgeAborted(ctx, knowledge.TenantID, knowledge.ID); aborted {
+		if aborted, status := s.isKnowledgeAborted(ctx, knowledge.SpaceID, knowledge.ID); aborted {
 			logger.Infof(ctx, "Knowledge aborted (%s) after indexing: %s", status, knowledge.ID)
 			if status == types.ParseStatusDeleting {
 				if err := s.chunkService.DeleteChunksByKnowledgeID(ctx, knowledge.ID); err != nil {
@@ -471,10 +471,10 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 		knowledge.ErrorMessage = err.Error()
 	}
 
-	// Update tenant's storage usage
-	tenantInfo.StorageUsed += totalStorageSize
-	if err := s.tenantRepo.AdjustStorageUsed(ctx, tenantInfo.ID, totalStorageSize); err != nil {
-		logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks update tenant storage used failed")
+	// Update space's storage usage
+	spaceInfo.StorageUsed += totalStorageSize
+	if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, totalStorageSize); err != nil {
+		logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks update space storage used failed")
 	}
 	logger.GetLogger(ctx).Infof("processChunks successfully")
 }
@@ -492,8 +492,8 @@ func (s *knowledgeService) ReparseKnowledge(
 
 	logger.Info(ctx, "Start re-parsing knowledge")
 
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	existing, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	existing, err := s.repo.GetKnowledgeByID(ctx, spaceID, knowledgeID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to load knowledge: %v", err)
 		return nil, err
@@ -584,7 +584,7 @@ func (s *knowledgeService) ReparseKnowledge(
 		if err := s.repo.UpdateKnowledge(ctx, existing); err != nil {
 			return nil, err
 		}
-		payload := types.DocumentProcessPayload{TenantID: tenantID, KnowledgeID: existing.ID, KnowledgeBaseID: existing.KnowledgeBaseID, URL: url, Language: types.LanguageFromContextOrDefault(ctx), Attempt: reparseAttempt}
+		payload := types.DocumentProcessPayload{SpaceID: spaceID, KnowledgeID: existing.ID, KnowledgeBaseID: existing.KnowledgeBaseID, URL: url, Language: types.LanguageFromContextOrDefault(ctx), Attempt: reparseAttempt}
 		if existing.Type == "file_url" || (existing.Type == "file" && isFileURL(url, "", "")) {
 			payload.URL = ""
 			payload.FileURL = url
@@ -670,11 +670,11 @@ func (s *knowledgeService) ReparseKnowledge(
 
 	// For file-based knowledge, enqueue document processing task
 	if existing.FilePath != "" {
-		tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+		spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 
 		lang := types.LanguageFromContextOrDefault(ctx)
 		taskPayload := types.DocumentProcessPayload{
-			TenantID:        tenantID,
+			SpaceID:         spaceID,
 			KnowledgeID:     existing.ID,
 			KnowledgeBaseID: existing.KnowledgeBaseID,
 			FilePath:        existing.FilePath,
@@ -710,11 +710,11 @@ func (s *knowledgeService) ReparseKnowledge(
 
 	// For file-URL-based knowledge, enqueue document processing task with FileURL field
 	if existing.Type == "file_url" && existing.Source != "" {
-		tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+		spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 
 		lang := types.LanguageFromContextOrDefault(ctx)
 		taskPayload := types.DocumentProcessPayload{
-			TenantID:        tenantID,
+			SpaceID:         spaceID,
 			KnowledgeID:     existing.ID,
 			KnowledgeBaseID: existing.KnowledgeBaseID,
 			FileURL:         existing.Source,
@@ -750,11 +750,11 @@ func (s *knowledgeService) ReparseKnowledge(
 
 	// For URL-based knowledge, enqueue URL processing task
 	if existing.Type == "url" && existing.Source != "" {
-		tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+		spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 
 		lang := types.LanguageFromContextOrDefault(ctx)
 		taskPayload := types.DocumentProcessPayload{
-			TenantID:        tenantID,
+			SpaceID:         spaceID,
 			KnowledgeID:     existing.ID,
 			KnowledgeBaseID: existing.KnowledgeBaseID,
 			URL:             existing.Source,
@@ -835,8 +835,8 @@ func resetKnowledgeForReparse(knowledge *types.Knowledge, kb *types.KnowledgeBas
 func (s *knowledgeService) CancelKnowledgeParse(
 	ctx context.Context, knowledgeID string,
 ) (*types.Knowledge, error) {
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	existing, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	existing, err := s.repo.GetKnowledgeByID(ctx, spaceID, knowledgeID)
 	if err != nil {
 		logger.Errorf(ctx, "CancelKnowledgeParse: failed to load knowledge: %v", err)
 		return nil, err
@@ -925,16 +925,16 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *taskqueue
 
 	ctx = logger.WithRequestID(ctx, payload.RequestId)
 	ctx = logger.WithField(ctx, "manual_process", payload.KnowledgeID)
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, payload.TenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, payload.SpaceID)
 
-	tenantInfo, err := s.tenantRepo.GetTenantByID(ctx, payload.TenantID)
+	spaceInfo, err := s.spaceRepo.GetSpaceByID(ctx, payload.SpaceID)
 	if err != nil {
-		logger.Errorf(ctx, "ProcessManualUpdate: failed to get tenant: %v", err)
+		logger.Errorf(ctx, "ProcessManualUpdate: failed to get space: %v", err)
 		return nil
 	}
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenantInfo)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, spaceInfo)
 
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, payload.TenantID, payload.KnowledgeID)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, payload.SpaceID, payload.KnowledgeID)
 	if err != nil {
 		logger.Errorf(ctx, "ProcessManualUpdate: failed to get knowledge: %v", err)
 		return nil
@@ -981,7 +981,7 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *taskqueue
 
 	// Re-check abort status right before marking processing — see the same
 	// note in ProcessDocument for the cancel race this guards.
-	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.TenantID, knowledge.ID); aborted {
+	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.SpaceID, knowledge.ID); aborted {
 		logger.Infof(ctx, "ProcessManualUpdate: knowledge aborted (%s), skipping: %s", status, knowledge.ID)
 		return nil
 	}
@@ -1030,7 +1030,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *taskqueue.Tas
 
 	ctx = logger.WithRequestID(ctx, payload.RequestId)
 	ctx = logger.WithField(ctx, "document_process", payload.KnowledgeID)
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, payload.TenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, payload.SpaceID)
 	if payload.Language != "" {
 		ctx = context.WithValue(ctx, types.LanguageContextKey, payload.Language)
 	}
@@ -1040,18 +1040,18 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *taskqueue.Tas
 	maxRetry, _ := taskqueue.GetMaxRetry(ctx)
 	isLastRetry := retryCount >= maxRetry
 
-	tenantInfo, err := s.tenantRepo.GetTenantByID(ctx, payload.TenantID)
+	spaceInfo, err := s.spaceRepo.GetSpaceByID(ctx, payload.SpaceID)
 	if err != nil {
-		logger.Errorf(ctx, "failed to get tenant: %v", err)
+		logger.Errorf(ctx, "failed to get space: %v", err)
 		return nil
 	}
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenantInfo)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, spaceInfo)
 
 	logger.Infof(ctx, "Processing document task: knowledge_id=%s, file_path=%s, retry=%d/%d",
 		payload.KnowledgeID, payload.FilePath, retryCount, maxRetry)
 
 	// 幂等性检查：获取knowledge记录
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, payload.TenantID, payload.KnowledgeID)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, payload.SpaceID, payload.KnowledgeID)
 	if err != nil {
 		logger.Errorf(ctx, "failed to get knowledge: %v", err)
 		return nil
@@ -1137,7 +1137,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *taskqueue.Tas
 	// the race where the user cancels between the entry guard above and
 	// this write (otherwise the worker would overwrite cancelled→processing
 	// and downstream checkpoints would treat the run as live).
-	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.TenantID, knowledge.ID); aborted {
+	if aborted, status := s.isKnowledgeAborted(ctx, knowledge.SpaceID, knowledge.ID); aborted {
 		logger.Infof(ctx, "Knowledge aborted (%s) before marking processing: %s", status, knowledge.ID)
 		return nil
 	}
@@ -1226,7 +1226,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *taskqueue.Tas
 		}
 
 		fileSvc := s.resolveFileService(ctx, kb)
-		filePath, err := fileSvc.SaveBytes(ctx, contentBytes, payload.TenantID, resolvedFileName, true)
+		filePath, err := fileSvc.SaveBytes(ctx, contentBytes, payload.SpaceID, resolvedFileName, true)
 		if err != nil {
 			if isLastRetry {
 				knowledge.ParseStatus = "failed"
@@ -1293,8 +1293,8 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *taskqueue.Tas
 
 	if s.imageResolver != nil && convertResult != nil {
 		fileSvc := s.resolveFileService(ctx, kb)
-		tenantID, _ := ctx.Value(types.TenantIDContextKey).(uint64)
-		updatedMarkdown, images, resolveErr := s.imageResolver.ResolveAndStore(ctx, convertResult, fileSvc, tenantID)
+		spaceID, _ := ctx.Value(types.SpaceIDContextKey).(uint64)
+		updatedMarkdown, images, resolveErr := s.imageResolver.ResolveAndStore(ctx, convertResult, fileSvc, spaceID)
 		if err := s.recordIntakeImages(ctx, knowledge, images); err != nil {
 			return err
 		}
@@ -1311,7 +1311,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *taskqueue.Tas
 
 		// Resolve remote http(s) images (e.g. markdown external URLs) → download + upload to storage.
 		// ResolveAndStore handles inline bytes and base64; ResolveRemoteImages handles http/https URLs.
-		updatedContent, remoteImages, remoteErr := s.imageResolver.ResolveRemoteImages(ctx, convertResult.MarkdownContent, fileSvc, tenantID)
+		updatedContent, remoteImages, remoteErr := s.imageResolver.ResolveRemoteImages(ctx, convertResult.MarkdownContent, fileSvc, spaceID)
 		if err := s.recordIntakeImages(ctx, knowledge, remoteImages); err != nil {
 			return err
 		}
@@ -1433,12 +1433,12 @@ func (s *knowledgeService) convert(
 	s.beginStage(ctx, knowledge.ID, types.StageDocReader, docInput)
 	isURL := payload.URL != ""
 	fileType := payload.FileType
-	tenantOverrides := s.getParserEngineOverridesFromContext(ctx)
+	spaceOverrides := s.getParserEngineOverridesFromContext(ctx)
 	var uploadOverrides map[string]string
 	if processOverrides, err := knowledge.ProcessOverrides(); err == nil && processOverrides != nil {
 		uploadOverrides = processOverrides.ParserEngineOverrides
 	}
-	mergedOverrides := MergeParserEngineOverrides(tenantOverrides, uploadOverrides)
+	mergedOverrides := MergeParserEngineOverrides(spaceOverrides, uploadOverrides)
 	if err := validateParserEngineOverrideURLs(mergedOverrides); err != nil {
 		logger.Errorf(ctx, "Parser endpoint rejected for SSRF protection: %v", err)
 		knowledge.ParseStatus = "failed"
@@ -1644,14 +1644,14 @@ func (s *knowledgeService) ProcessKnowledgeListReparse(ctx context.Context, t *t
 
 	logger.Infof(ctx, "Processing knowledge list reparse task for %d knowledge items", len(payload.KnowledgeIDs))
 
-	tenant, err := s.tenantRepo.GetTenantByID(ctx, payload.TenantID)
+	space, err := s.spaceRepo.GetSpaceByID(ctx, payload.SpaceID)
 	if err != nil {
-		logger.Errorf(ctx, "Failed to get tenant %d: %v", payload.TenantID, err)
+		logger.Errorf(ctx, "Failed to get space %d: %v", payload.SpaceID, err)
 		return err
 	}
 
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, payload.TenantID)
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, payload.SpaceID)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 
 	outcome, err := runKnowledgeListReparseSubmissions(payload.KnowledgeIDs, func(id string) error {
 		_, err := s.ReparseKnowledge(ctx, id, payload.ProcessConfig)

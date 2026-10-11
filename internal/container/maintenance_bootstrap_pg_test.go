@@ -22,12 +22,12 @@ func TestSnapshotPausePreservesBuiltinModelsAndSyncLogsAtStartup(t *testing.T) {
     parameters:
       provider: openai
 `), 0o644))
-	require.NoError(t, db.Create(&types.Model{ID: "waiting-builtin", TenantID: types.SingleTenantID, Name: "original model", Type: types.ModelTypeKnowledgeQA,
+	require.NoError(t, db.Create(&types.Model{ID: "waiting-builtin", SpaceID: types.SingleSpaceID, Name: "original model", Type: types.ModelTypeKnowledgeQA,
 		Source: types.ModelSourceRemote, Status: types.ModelStatusNeedsConfiguration, IsBuiltin: true, ManagedBy: types.BuiltinModelManagedBy,
 		Parameters: types.ModelParameters{Provider: "openai", ExtraConfig: map[string]string{"maintenance_required_fields": `["api_key"]`}},
 	}).Error)
-	require.NoError(t, db.Create(&types.DataSource{ID: "original-source", TenantID: types.SingleTenantID, KnowledgeBaseID: "original-kb", Name: "Original source", Type: "rss", Status: types.DataSourceStatusPaused}).Error)
-	require.NoError(t, db.Exec("INSERT INTO sync_logs (id,data_source_id,tenant_id,status,started_at) VALUES ('waiting-sync','original-source',?,'running',?)", types.SingleTenantID, time.Now().Add(-4*time.Hour)).Error)
+	require.NoError(t, db.Create(&types.DataSource{ID: "original-source", SpaceID: types.SingleSpaceID, KnowledgeBaseID: "original-kb", Name: "Original source", Type: "rss", Status: types.DataSourceStatusPaused}).Error)
+	require.NoError(t, db.Exec("INSERT INTO sync_logs (id,data_source_id,space_id,status,started_at) VALUES ('waiting-sync','original-source',?,'running',?)", types.SingleSpaceID, time.Now().Add(-4*time.Hour)).Error)
 	require.NoError(t, db.Exec("UPDATE maintenance_state SET paused=true,pause_mode='snapshot' WHERE id=true").Error)
 	var originalModel, originalSync, retainedModel, retainedSync string
 	require.NoError(t, db.Raw("SELECT to_jsonb(m)::text FROM models m WHERE id='waiting-builtin'").Scan(&originalModel).Error)

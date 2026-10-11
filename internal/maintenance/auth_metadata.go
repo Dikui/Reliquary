@@ -76,7 +76,7 @@ func omitInertAuthenticationCredentials(table string, row map[string]any, oauthS
 		if row["token_hash"] == excludedCredentialPrefix+id {
 			delete(row, "token_hash")
 		}
-	case "tenant_api_keys":
+	case "api_keys":
 		if row["api_key"] == "" && row["key_hash"] == "disabled-"+id {
 			delete(row, "key_hash")
 		}

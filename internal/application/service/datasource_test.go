@@ -20,7 +20,7 @@ import (
 func TestProcessSyncCancelsWhenKnowledgeBaseDeleted(t *testing.T) {
 	ds := &types.DataSource{
 		ID:              "ds-1",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-deleted",
 		Type:            types.ConnectorTypeRSS,
 		Status:          types.DataSourceStatusActive,
@@ -29,7 +29,7 @@ func TestProcessSyncCancelsWhenKnowledgeBaseDeleted(t *testing.T) {
 	syncLog := &types.SyncLog{
 		ID:           "log-1",
 		DataSourceID: ds.ID,
-		TenantID:     ds.TenantID,
+		SpaceID:      ds.SpaceID,
 		Status:       types.SyncLogStatusRunning,
 		StartedAt:    time.Now().UTC(),
 	}
@@ -43,7 +43,7 @@ func TestProcessSyncCancelsWhenKnowledgeBaseDeleted(t *testing.T) {
 
 	payload, err := json.Marshal(types.DataSourceSyncPayload{
 		DataSourceID: ds.ID,
-		TenantID:     ds.TenantID,
+		SpaceID:      ds.SpaceID,
 		SyncLogID:    syncLog.ID,
 	})
 	require.NoError(t, err)
@@ -61,16 +61,16 @@ func TestProcessSyncCancelsWhenKnowledgeBaseDeleted(t *testing.T) {
 func TestProcessSyncDailySourceFailureKeepsSourceActiveForNextRun(t *testing.T) {
 	for _, connectorType := range []string{types.ConnectorTypeRSS} {
 		t.Run(connectorType, func(t *testing.T) {
-			ds := &types.DataSource{ID: connectorType + "-1", TenantID: 1, KnowledgeBaseID: "kb-1", Type: connectorType, Status: types.DataSourceStatusActive}
+			ds := &types.DataSource{ID: connectorType + "-1", SpaceID: 1, KnowledgeBaseID: "kb-1", Type: connectorType, Status: types.DataSourceStatusActive}
 			logs := &processSyncSyncLogRepo{logs: map[string]*types.SyncLog{}}
 			svc := &DataSourceService{
 				dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
-				kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
+				kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, SpaceID: ds.SpaceID}},
 				connectorRegistry: datasource.NewConnectorRegistry(),
 			}
 			for _, id := range []string{"first", "second"} {
-				logs.logs[id] = &types.SyncLog{ID: id, DataSourceID: ds.ID, TenantID: ds.TenantID, Status: types.SyncLogStatusRunning}
-				payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: id})
+				logs.logs[id] = &types.SyncLog{ID: id, DataSourceID: ds.ID, SpaceID: ds.SpaceID, Status: types.SyncLogStatusRunning}
+				payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, SpaceID: ds.SpaceID, SyncLogID: id})
 				require.NoError(t, err)
 				require.Error(t, svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 				assert.Equal(t, types.SyncLogStatusFailed, logs.logs[id].Status)
@@ -93,18 +93,18 @@ func (partialRSSConnector) FetchIncremental(context.Context, *types.DataSourceCo
 func TestProcessSyncRSSPartialFailureKeepsCursorForRetry(t *testing.T) {
 	configJSON, err := (&types.DataSourceConfig{Type: types.ConnectorTypeRSS}).ToJSON()
 	require.NoError(t, err)
-	ds := &types.DataSource{ID: "rss-partial", TenantID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeRSS,
+	ds := &types.DataSource{ID: "rss-partial", SpaceID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeRSS,
 		Config: configJSON, Status: types.DataSourceStatusActive, LastSyncCursor: types.JSON(`{"revision":"old"}`)}
-	log := &types.SyncLog{ID: "rss-log", DataSourceID: ds.ID, TenantID: 1, Status: types.SyncLogStatusRunning}
+	log := &types.SyncLog{ID: "rss-log", DataSourceID: ds.ID, SpaceID: 1, Status: types.SyncLogStatusRunning}
 	logs := &processSyncSyncLogRepo{logs: map[string]*types.SyncLog{log.ID: log}}
 	registry := datasource.NewConnectorRegistry()
 	require.NoError(t, registry.Register(partialRSSConnector{}))
 	svc := &DataSourceService{dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
-		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: 1}},
-		connectorRegistry: registry, tenantRepo: &processSyncTenantRepo{tenant: &types.Tenant{ID: 1}},
+		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, SpaceID: 1}},
+		connectorRegistry: registry, spaceRepo: &processSyncSpaceRepo{space: &types.Space{ID: 1}},
 		knowledgeService: &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}},
 	}
-	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: 1, SyncLogID: log.ID})
+	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, SpaceID: 1, SyncLogID: log.ID})
 	require.NoError(t, err)
 	require.NoError(t, svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 	require.Equal(t, types.SyncLogStatusPartial, log.Status)
@@ -269,13 +269,13 @@ func (deletedItemConnector) FetchIncremental(
 	return items, nil, err
 }
 
-type processSyncTenantRepo struct {
-	interfaces.TenantRepository
-	tenant *types.Tenant
+type processSyncSpaceRepo struct {
+	interfaces.SpaceRepository
+	space *types.Space
 }
 
-func (r *processSyncTenantRepo) GetTenantByID(context.Context, uint64) (*types.Tenant, error) {
-	return r.tenant, nil
+func (r *processSyncSpaceRepo) GetSpaceByID(context.Context, uint64) (*types.Space, error) {
+	return r.space, nil
 }
 
 func (r *deletionLookupKnowledgeRepo) UpdateKnowledge(_ context.Context, knowledge *types.Knowledge) error {
@@ -293,12 +293,12 @@ func (r *deletionLookupKnowledgeRepo) UpdateKnowledge(_ context.Context, knowled
 }
 
 func (r *deletionLookupKnowledgeRepo) FindByDataSourceExternalID(
-	_ context.Context, tenantID uint64, knowledgeBaseID, dataSourceID, externalID string,
+	_ context.Context, spaceID uint64, knowledgeBaseID, dataSourceID, externalID string,
 ) (*types.Knowledge, error) {
 	if r.lookupErr != nil {
 		return nil, r.lookupErr
 	}
-	r.tenantID = tenantID
+	r.spaceID = spaceID
 	r.knowledgeBaseID = knowledgeBaseID
 	r.dataSourceID = dataSourceID
 	r.externalID = externalID
@@ -406,7 +406,7 @@ func newSyncDeletionHarness(
 
 	ds := &types.DataSource{
 		ID:              dsID,
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "Sync Deletion",
 		Type:            deletedItemConnectorType,
@@ -418,7 +418,7 @@ func newSyncDeletionHarness(
 	syncLog := &types.SyncLog{
 		ID:           logID,
 		DataSourceID: ds.ID,
-		TenantID:     ds.TenantID,
+		SpaceID:      ds.SpaceID,
 		Status:       types.SyncLogStatusRunning,
 		StartedAt:    time.Now().UTC(),
 	}
@@ -442,9 +442,9 @@ func newSyncDeletionHarness(
 			dsRepo:            newKBDeleteDSRepo(ds.KnowledgeBaseID, ds),
 			syncLogRepo:       syncLogRepo,
 			knowledgeService:  ks,
-			kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
+			kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, SpaceID: ds.SpaceID}},
 			connectorRegistry: registry,
-			tenantRepo:        &processSyncTenantRepo{tenant: &types.Tenant{ID: ds.TenantID}},
+			spaceRepo:         &processSyncSpaceRepo{space: &types.Space{ID: ds.SpaceID}},
 		},
 	}
 }
@@ -455,7 +455,7 @@ func (h *syncDeletionHarness) run(t *testing.T) (*types.SyncLog, error) {
 	t.Helper()
 	payload, err := json.Marshal(types.DataSourceSyncPayload{
 		DataSourceID: h.ds.ID,
-		TenantID:     h.ds.TenantID,
+		SpaceID:      h.ds.SpaceID,
 		SyncLogID:    h.syncLogID,
 		ForceFull:    true,
 	})
@@ -481,14 +481,14 @@ func deletionFailedCount(t *testing.T, log *types.SyncLog) int {
 
 // TestProcessSync_SyncDeletionsDeletesMatchingKnowledge verifies that a
 // deleted source item removes the matching KB knowledge (counted as Deleted),
-// and that the lookup is scoped to tenant, KB, data source and external ID.
+// and that the lookup is scoped to space, KB, data source and external ID.
 // TestIngestItem_URLCreationAttachesDataSourceMetadata verifies that a
 // URL-only item gets its datasource scoping keys attached right after
 // creation, so a later source-side deletion can find it via
 // FindByDataSourceExternalID (CreateKnowledgeFromURL itself persists no
 // metadata).
 func TestIngestItem_URLCreationAttachesDataSourceMetadata(t *testing.T) {
-	ds := &types.DataSource{ID: "ds-1", TenantID: 1, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", SpaceID: 1, KnowledgeBaseID: "kb-1"}
 	repo := &deletionLookupKnowledgeRepo{}
 	ks := &sweepFakeKS{repo: repo, createURLKnowledge: &types.Knowledge{ID: "url-knowledge-1"}}
 	svc := &DataSourceService{knowledgeService: ks}
@@ -524,7 +524,7 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	repo := &deletionLookupKnowledgeRepo{}
 	ks := &rssIntakeKnowledgeService{repo: repo}
 	svc := &DataSourceService{knowledgeService: ks}
-	ds := &types.DataSource{ID: "rss-source", TenantID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeRSS}
+	ds := &types.DataSource{ID: "rss-source", SpaceID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeRSS}
 	updated, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
 		Metadata: map[string]string{"author": "Original Author", "publisher": "Publishing Institution", "published_at": "2026-09-23T08:30:00Z", "channel": types.ChannelRSS},
@@ -582,7 +582,7 @@ func TestProcessSync_SyncDeletionsDeletesMatchingKnowledge(t *testing.T) {
 
 	assert.Equal(t, 1, updated.ItemsDeleted)
 	assert.Equal(t, []string{"knowledge-gone"}, h.knowledgeSvc.deleted)
-	assert.Equal(t, h.ds.TenantID, h.knowledgeRepo.tenantID)
+	assert.Equal(t, h.ds.SpaceID, h.knowledgeRepo.spaceID)
 	assert.Equal(t, h.ds.KnowledgeBaseID, h.knowledgeRepo.knowledgeBaseID)
 	assert.Equal(t, h.ds.ID, h.knowledgeRepo.dataSourceID)
 	assert.Equal(t, "file:gone", h.knowledgeRepo.externalID)
@@ -674,7 +674,7 @@ func TestApplyFetchedItem_SyncDeletionScopedPerDataSource(t *testing.T) {
 
 	result := &types.SyncResult{}
 	dsA := &types.DataSource{
-		ID: "ds-a", TenantID: 1, KnowledgeBaseID: "kb-1", SyncDeletions: true,
+		ID: "ds-a", SpaceID: 1, KnowledgeBaseID: "kb-1", SyncDeletions: true,
 	}
 	svc.applyFetchedItem(context.Background(), dsA, &types.FetchedItem{
 		ExternalID: "file:shared",
@@ -723,13 +723,13 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 	require.NoError(t, err)
 
 	ds := &types.DataSource{
-		ID: "ds-mixed", TenantID: 1, KnowledgeBaseID: "kb-1",
+		ID: "ds-mixed", SpaceID: 1, KnowledgeBaseID: "kb-1",
 		Type: "test-sync-mixed", Config: configJSON,
 		SyncMode: types.SyncModeFull, Status: types.DataSourceStatusActive,
 		SyncDeletions: true,
 	}
 	syncLog := &types.SyncLog{
-		ID: "log-mixed", DataSourceID: ds.ID, TenantID: ds.TenantID,
+		ID: "log-mixed", DataSourceID: ds.ID, SpaceID: ds.SpaceID,
 		Status: types.SyncLogStatusRunning, StartedAt: time.Now().UTC(),
 	}
 	repo := &keyedDeletionRepo{
@@ -745,13 +745,13 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 		dsRepo:            newKBDeleteDSRepo(ds.KnowledgeBaseID, ds),
 		syncLogRepo:       syncLogRepo,
 		knowledgeService:  ks,
-		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
+		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, SpaceID: ds.SpaceID}},
 		connectorRegistry: registry,
-		tenantRepo:        &processSyncTenantRepo{tenant: &types.Tenant{ID: ds.TenantID}},
+		spaceRepo:         &processSyncSpaceRepo{space: &types.Space{ID: ds.SpaceID}},
 	}
 
 	payload, err := json.Marshal(types.DataSourceSyncPayload{
-		DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: syncLog.ID, ForceFull: true,
+		DataSourceID: ds.ID, SpaceID: ds.SpaceID, SyncLogID: syncLog.ID, ForceFull: true,
 	})
 	require.NoError(t, err)
 	err = svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload))
@@ -766,7 +766,7 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 }
 
 func TestIngestItem_URLCreationMetadataAttachFailure(t *testing.T) {
-	ds := &types.DataSource{ID: "ds-1", TenantID: 1, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", SpaceID: 1, KnowledgeBaseID: "kb-1"}
 	repo := &deletionLookupKnowledgeRepo{metadataUpdateErr: errors.New("db unavailable")}
 	ks := &sweepFakeKS{repo: repo, createURLKnowledge: &types.Knowledge{ID: "url-knowledge-1"}}
 	svc := &DataSourceService{knowledgeService: ks}
@@ -787,7 +787,7 @@ type deletionLookupKnowledgeRepo struct {
 	metadataUpdateErr error
 	hardDeleted       []string
 	hardDeleteErr     error
-	tenantID          uint64
+	spaceID           uint64
 	knowledgeBaseID   string
 	dataSourceID      string
 	externalID        string

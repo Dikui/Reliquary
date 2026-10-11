@@ -70,7 +70,7 @@ func Scrub(ctx context.Context, db *gorm.DB) (*Requirements, error) {
 				if table == "chatgpt_accounts" {
 					removed = append(removed, "chatgpt_login")
 				}
-				if table == "tenant_api_keys" {
+				if table == "api_keys" {
 					removed = append(removed, "api_key")
 				}
 				if len(removed) == 0 && !redacted {
@@ -110,13 +110,13 @@ func Scrub(ctx context.Context, db *gorm.DB) (*Requirements, error) {
 						switch table {
 						case "auth_tokens", "resource_access_grants":
 							updates[column] = excludedCredentialPrefix + id
-						case "tenant_api_keys":
+						case "api_keys":
 							if column == "key_hash" {
 								updates[column] = "disabled-" + id
 							} else {
 								updates[column] = ""
 							}
-						case "tenants":
+						case "spaces":
 							updates[column] = gorm.Expr("'{}'::jsonb")
 						default:
 							updates[column] = ""
@@ -150,7 +150,7 @@ func Scrub(ctx context.Context, db *gorm.DB) (*Requirements, error) {
 					case "task_queue_counters":
 						query = query.Where("queue=? AND day=?", row["queue"], row["day"])
 					case "follow_feed_states":
-						query = query.Where("tenant_id=?", row["tenant_id"])
+						query = query.Where("space_id=?", row["space_id"])
 					default:
 						return fmt.Errorf("cannot sanitize credential-bearing row without identity in %s", table)
 					}

@@ -2,52 +2,56 @@
 
 所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、968 列，其中 public 44 张表、523 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。下表列出 public 的 44 张表。
 
+维护副本与核对清单的 `format_version` 为 2，表名使用 `spaces`、`api_keys`，行外层归属列使用 `space_id`。导入及核对也接受版本 1，将旧表 `tenants`、`tenant_api_keys` 和行外层 `tenant_id` 映射为新名字，先验证原文件校验和，再比较映射后的数据库行。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 继续使用旧外层归属键，以便保留已有记录的字节；SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 2，完成清单原子替换后才移除旧配置表文件。
+
+个人空间命名迁移仅改名和重建引用旧列的函数及 BM25 索引，分类数量不变。迁移后的真实 PostgreSQL 目录核对仍为上述 82 张表、968 列，见 [命名清理证据](tasks/naming-02/evidence/schema-statistics.json)。
+
 | 表 | 在表头 | 在 `.reliquary/` | 可重新生成 | 属于配置或密钥 |
 | --- | --- | --- | --- | --- |
-| `article_embeddings` | 无 | 无 | `knowledge_id`、`tenant_id`、`knowledge_base_id`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
+| `article_embeddings` | 无 | 无 | `knowledge_id`、`space_id`、`knowledge_base_id`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
 | `auth_tokens` | 无 | `id`、`user_id`、`token_type`、`expires_at`、`is_revoked`、`created_at`、`updated_at` | 无 | `token` |
 | `chatgpt_accounts` | 无 | 无 | 无 | `id`、`client_id`、`issuer`、`subject`、`email`、`credentials`、`scopes`、`expires_at`、`earliest_refresh_at`、`status`、`last_error`、`welcome_acknowledged`、`created_at`、`updated_at` |
 | `chatgpt_hosts` | 无 | 无 | 无 | `id`、`ext_agent_host_id`、`created_at` |
 | `chatgpt_login_attempts` | 无 | `callback_url`、`client_id`、`account_id`、`expires_at` | 无 | `state`、`nonce`、`verifier` |
 | `chatgpt_policy` | 无 | 无 | 无 | `id`、`daily_limit`、`daily_used`、`day`、`paused`、`reason`、`retry_at`、`fallback_model_id`、`updated_at` |
-| `chunks` | 无 | 无 | `id`、`tenant_id`、`knowledge_base_id`、`knowledge_id`、`content`、`chunk_index`、`is_enabled`、`start_at`、`end_at`、`pre_chunk_id`、`next_chunk_id`、`chunk_type`、`parent_chunk_id`、`image_info`、`relation_chunks`、`indirect_relation_chunks`、`created_at`、`updated_at`、`deleted_at`、`metadata`、`status`、`content_hash`、`flags`、`seq_id`、`video_info`、`context_header`、`search_title` | 无 |
-| `data_sources` | 无 | 无 | 无 | `id`、`tenant_id`、`knowledge_base_id`、`name`、`type`、`default_content_type`、`config`、`sync_schedule`、`sync_mode`、`status`、`sync_deletions`、`last_sync_at`、`last_sync_cursor`、`last_sync_result`、`error_message`、`sync_log_retention_days`、`created_at`、`updated_at`、`deleted_at` |
+| `chunks` | 无 | 无 | `id`、`space_id`、`knowledge_base_id`、`knowledge_id`、`content`、`chunk_index`、`is_enabled`、`start_at`、`end_at`、`pre_chunk_id`、`next_chunk_id`、`chunk_type`、`parent_chunk_id`、`image_info`、`relation_chunks`、`indirect_relation_chunks`、`created_at`、`updated_at`、`deleted_at`、`metadata`、`status`、`content_hash`、`flags`、`seq_id`、`video_info`、`context_header`、`search_title` | 无 |
+| `data_sources` | 无 | 无 | 无 | `id`、`space_id`、`knowledge_base_id`、`name`、`type`、`default_content_type`、`config`、`sync_schedule`、`sync_mode`、`status`、`sync_deletions`、`last_sync_at`、`last_sync_cursor`、`last_sync_result`、`error_message`、`sync_log_retention_days`、`created_at`、`updated_at`、`deleted_at` |
 | `embedding_rebuild_items` | 无 | `id`、`run_id`、`kind`、`source_id`、`attachment_path`、`status`、`attempts`、`error`、`created_at`、`updated_at` | 无 | 无 |
-| `embedding_rebuild_runs` | 无 | `id`、`tenant_id`、`status`、`model_id`、`model_name`、`dimension`、`profile_hash`、`total_count`、`completed_count`、`failed_count`、`error`、`attempt_id`、`lease_until`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
+| `embedding_rebuild_runs` | 无 | `id`、`space_id`、`status`、`model_id`、`model_name`、`dimension`、`profile_hash`、`total_count`、`completed_count`、`failed_count`、`error`、`attempt_id`、`lease_until`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
 | `embeddings` | 无 | 无 | `id`、`created_at`、`updated_at`、`source_id`、`source_type`、`chunk_id`、`knowledge_id`、`knowledge_base_id`、`model_id`、`dimension`、`embedding`、`is_enabled` | 无 |
-| `entities` | 无 | `id`、`tenant_id`、`canonical_name`、`normalized_name`、`entity_type`、`description`、`merged_into_id`、`created_at`、`updated_at` | `name_embedding`、`embedding_model_id`、`embedding_dimension`、`embedding_needs_rebuild` | 无 |
-| `entity_aliases` | 无 | `id`、`tenant_id`、`entity_type`、`entity_id`、`alias`、`normalized_alias`、`resolution_method`、`created_at` | 无 | 无 |
-| `entity_embedding_rebuild_runs` | 无 | `id`、`tenant_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
-| `entity_merge_records` | 无 | `id`、`tenant_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 |
-| `entity_merge_suggestions` | 无 | `id`、`tenant_id`、`new_entity_id`、`candidate_entity_id`、`knowledge_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 |
-| `follow_feed_states` | 无 | `tenant_id`、`last_viewed_at` | 无 | 无 |
-| `follows` | 无 | `tenant_id`、`target_type`、`target_id`、`created_at` | `entity_id`、`topic_id` | 无 |
-| `image_embeddings` | 无 | 无 | `knowledge_id`、`tenant_id`、`knowledge_base_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
-| `knowledge_bases` | 无 | 无 | 无 | `model_tiers`、`id`、`name`、`description`、`tenant_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id` |
-| `knowledge_entities` | 无 | `tenant_id`、`knowledge_id`、`entity_id`、`created_at` | 无 | 无 |
+| `entities` | 无 | `id`、`space_id`、`canonical_name`、`normalized_name`、`entity_type`、`description`、`merged_into_id`、`created_at`、`updated_at` | `name_embedding`、`embedding_model_id`、`embedding_dimension`、`embedding_needs_rebuild` | 无 |
+| `entity_aliases` | 无 | `id`、`space_id`、`entity_type`、`entity_id`、`alias`、`normalized_alias`、`resolution_method`、`created_at` | 无 | 无 |
+| `entity_embedding_rebuild_runs` | 无 | `id`、`space_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
+| `entity_merge_records` | 无 | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 |
+| `entity_merge_suggestions` | 无 | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`knowledge_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 |
+| `follow_feed_states` | 无 | `space_id`、`last_viewed_at` | 无 | 无 |
+| `follows` | 无 | `space_id`、`target_type`、`target_id`、`created_at` | `entity_id`、`topic_id` | 无 |
+| `image_embeddings` | 无 | 无 | `knowledge_id`、`space_id`、`knowledge_base_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
+| `knowledge_bases` | 无 | 无 | 无 | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id` |
+| `knowledge_entities` | 无 | `space_id`、`knowledge_id`、`entity_id`、`created_at` | 无 | 无 |
 | `knowledge_processing_spans` | 无 | `id`、`knowledge_id`、`attempt`、`span_id`、`parent_span_id`、`name`、`kind`、`status`、`input`、`output`、`metadata`、`error_code`、`error_message`、`error_detail`、`started_at`、`finished_at`、`duration_ms`、`created_at`、`updated_at` | 无 | 无 |
-| `knowledge_repost_sources` | 无 | `id`、`tenant_id`、`knowledge_base_id`、`knowledge_id`、`original_url`、`normalized_url`、`source_fingerprint`、`author`、`publisher`、`published_at`、`published_at_missing`、`match_method`、`sim_hash_distance`、`created_at` | 无 | 无 |
-| `knowledge_topics` | 无 | `tenant_id`、`knowledge_id`、`topic_id`、`source`、`is_historical`、`created_at` | 无 | 无 |
-| `knowledges` | `title`、`content_type`、`source_unverified`、`starred`、`collect_reason`、`structured_summary`、`created_at` | `id`、`tenant_id`、`knowledge_base_id`、`type`、`description`、`content_type_uncertain`、`processing_review_status`、`processing_review_content_type`、`processing_review_reason`、`processing_mode`、`source_kind`、`vault_path`、`vault_body`、`vault_original_path`、`agent_summary`、`agent_tags`、`source_name`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`storage_size`、`metadata`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count` | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
+| `knowledge_repost_sources` | 无 | `id`、`space_id`、`knowledge_base_id`、`knowledge_id`、`original_url`、`normalized_url`、`source_fingerprint`、`author`、`publisher`、`published_at`、`published_at_missing`、`match_method`、`sim_hash_distance`、`created_at` | 无 | 无 |
+| `knowledge_topics` | 无 | `space_id`、`knowledge_id`、`topic_id`、`source`、`is_historical`、`created_at` | 无 | 无 |
+| `knowledges` | `title`、`content_type`、`source_unverified`、`starred`、`collect_reason`、`structured_summary`、`created_at` | `id`、`space_id`、`knowledge_base_id`、`type`、`description`、`content_type_uncertain`、`processing_review_status`、`processing_review_content_type`、`processing_review_reason`、`processing_mode`、`source_kind`、`vault_path`、`vault_body`、`vault_original_path`、`agent_summary`、`agent_tags`、`source_name`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`storage_size`、`metadata`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count` | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
 | `maintenance_state` | 无 | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error` | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | `backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` |
-| `models` | 无 | 无 | 无 | `id`、`tenant_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` |
-| `operation_logs` | 无 | `id`、`tenant_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at` | 无 | 无 |
+| `models` | 无 | 无 | 无 | `id`、`space_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` |
+| `operation_logs` | 无 | `id`、`space_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at` | 无 | 无 |
 | `resource_access_grants` | 无 | `id`、`resource_id`、`access_scope`、`expires_at`、`revoked_at`、`created_at` | 无 | `token_hash` |
-| `resource_bindings` | 无 | `id`、`resource_id`、`tenant_id`、`owner_type`、`owner_id`、`relation`、`created_at` | 无 | 无 |
-| `resources` | 无 | `id`、`handle`、`tenant_id`、`provider`、`physical_path`、`location_hash`、`kind`、`mime_type`、`original_name`、`size`、`content_hash`、`lifecycle`、`expires_at`、`state`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 |
+| `resource_bindings` | 无 | `id`、`resource_id`、`space_id`、`owner_type`、`owner_id`、`relation`、`created_at` | 无 | 无 |
+| `resources` | 无 | `id`、`handle`、`space_id`、`provider`、`physical_path`、`location_hash`、`kind`、`mime_type`、`original_name`、`size`、`content_hash`、`lifecycle`、`expires_at`、`state`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 |
 | `schema_migrations` | 无 | 无 | `version`、`dirty` | 无 |
 | `spatial_ref_sys` | 无 | 无 | `srid`、`auth_name`、`auth_srid`、`srtext`、`proj4text` | 无 |
-| `sync_logs` | 无 | `id`、`data_source_id`、`tenant_id`、`status`、`started_at`、`finished_at`、`items_total`、`items_created`、`items_updated`、`items_deleted`、`items_skipped`、`items_failed`、`error_message`、`result`、`created_at`、`updated_at` | 无 | 无 |
+| `sync_logs` | 无 | `id`、`data_source_id`、`space_id`、`status`、`started_at`、`finished_at`、`items_total`、`items_created`、`items_updated`、`items_deleted`、`items_skipped`、`items_failed`、`error_message`、`result`、`created_at`、`updated_at` | 无 | 无 |
 | `system_settings` | 无 | 无 | 无 | `id`、`key`、`value`、`value_type`、`category`、`description`、`is_secret`、`requires_restart`、`last_modified_by`、`created_at`、`updated_at` |
-| `task_dead_letters` | 无 | `id`、`tenant_id`、`task_type`、`scope`、`scope_id`、`related_id`、`payload`、`last_error`、`fail_count`、`failed_at` | 无 | 无 |
+| `task_dead_letters` | 无 | `id`、`space_id`、`task_type`、`scope`、`scope_id`、`related_id`、`payload`、`last_error`、`fail_count`、`failed_at` | 无 | 无 |
 | `task_jobs` | 无 | `id`、`task_type`、`queue`、`payload`、`headers`、`state`、`max_retry`、`retried`、`fail_count`、`timeout_ns`、`retention_ns`、`deadline`、`group_name`、`created_at`、`updated_at`、`process_at`、`started_at`、`completed_at`、`last_failed_at`、`last_error`、`lease_until`、`claim_token`、`worker_pool`、`cancel_requested` | 无 | 无 |
 | `task_queue_counters` | 无 | `queue`、`day`、`processed`、`failed` | 无 | 无 |
-| `tenant_api_keys` | 无 | 无 | 无 | `id`、`tenant_id`、`name`、`key_hash`、`api_key`、`last_used_at`、`expires_at`、`revoked_at`、`created_at`、`updated_at` |
-| `tenants` | 无 | 无 | 无 | `id`、`name`、`description`、`status`、`business`、`storage_used`、`created_at`、`updated_at`、`deleted_at`、`parser_engine_config`、`retrieval_config`、`credentials` |
+| `api_keys` | 无 | 无 | 无 | `id`、`space_id`、`name`、`key_hash`、`api_key`、`last_used_at`、`expires_at`、`revoked_at`、`created_at`、`updated_at` |
+| `spaces` | 无 | 无 | 无 | `id`、`name`、`description`、`status`、`business`、`storage_used`、`created_at`、`updated_at`、`deleted_at`、`parser_engine_config`、`retrieval_config`、`credentials` |
 | `topic_backfill_batches` | 无 | `id`、`job_id`、`ordinal`、`knowledge_ids`、`article_count`、`status`、`attempts`、`error`、`created_at`、`updated_at`、`retry_at` | 无 | 无 |
-| `topic_backfill_jobs` | 无 | `id`、`tenant_id`、`topic_id`、`topic_name`、`topic_description`、`status`、`total`、`processed`、`failed_articles`、`failed_batches`、`created_at`、`updated_at` | 无 | 无 |
-| `topics` | 无 | `id`、`tenant_id`、`name`、`description`、`created_at`、`updated_at` | 无 | 无 |
-| `users` | 无 | 无 | 无 | `id`、`username`、`email`、`password_hash`、`avatar`、`tenant_id`、`is_active`、`created_at`、`updated_at`、`deleted_at` |
+| `topic_backfill_jobs` | 无 | `id`、`space_id`、`topic_id`、`topic_name`、`topic_description`、`status`、`total`、`processed`、`failed_articles`、`failed_batches`、`created_at`、`updated_at` | 无 | 无 |
+| `topics` | 无 | `id`、`space_id`、`name`、`description`、`created_at`、`updated_at` | 无 | 无 |
+| `users` | 无 | 无 | 无 | `id`、`username`、`email`、`password_hash`、`avatar`、`space_id`、`is_active`、`created_at`、`updated_at`、`deleted_at` |
 
 非 public 扩展表的逐列归属如下。表头、实时副本和配置均不另存这些行；可重新生成分类只在扩展拥有者、固定版本、关系类型、完整列集合、行数与默认内容 SHA256 全部一致时成立。扩展 SQL 安装脚本是默认内容的来源，不凭表名把自定义数据当作缓存。目录包含没有列的空表，新增其他 schema 下的表也不能绕过检查。
 
@@ -191,9 +195,9 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 订阅源 credentials 容器不留原值，待填清单逐个记录原先非空字段，包括 token、app_secret 及 auth_headers 中每个原头名称。加密 auth_headers 只在内存解密以取得字段名称；不会把原密文或解密值写进清单。未能解码的字段以原字段整体标记。填入一个字段不能代替其他原必填字段，未补全时订阅源继续暂停。
 
-恢复后的无效认证占位值不加入凭据核对集合，否则第二次备份会误判自身占位值为密钥。例外只接受 auth_tokens.token 与 resource_access_grants.token_hash 精确等于 reliquary-excluded- 加该行原 ID；OAuth 必须 nonce、verifier 都为空，state 与该行安全元信息规范哈希及完整重复序号一致。tenant_api_keys 只有 api_key 为空且 key_hash 精确等于 disabled- 加该行 ID 才视为无效占位。任何相似前缀、不同 ID、非空 verifier、错误重复序号或仍有 API Key 的记录都继续按真实凭据扫描，原凭据核对不放宽。
+恢复后的无效认证占位值不加入凭据核对集合，否则第二次备份会误判自身占位值为密钥。例外只接受 auth_tokens.token 与 resource_access_grants.token_hash 精确等于 reliquary-excluded- 加该行原 ID；OAuth 必须 nonce、verifier 都为空，state 与该行安全元信息规范哈希及完整重复序号一致。api_keys 只有 api_key 为空且 key_hash 精确等于 disabled- 加该行 ID 才视为无效占位。任何相似前缀、不同 ID、非空 verifier、错误重复序号或仍有 API Key 的记录都继续按真实凭据扫描，原凭据核对不放宽。
 
-解析服务重填仅在旧清单 Required 已列出该 tenant 的 parser_engine_config.* 凭据路径时允许该行 updated_at 改变。name、status、公共解析器地址与所有非凭据配置仍逐列精确比较，其他租户的提醒也不能放宽当前行。打包后的主副本清单保留原安全字段名；后续 flush 继续保留仍存在租户的解析器原字段提醒。当前数据库的 Required 另行反映实际非空凭据字段，提醒不代替真实填写，功能仍等全部原字段填写完成才恢复。
+解析服务重填仅在旧清单 Required 已列出该 space 的 parser_engine_config.* 凭据路径时允许该行 updated_at 改变。name、status、公共解析器地址与所有非凭据配置仍逐列精确比较，其他租户的提醒也不能放宽当前行。打包后的主副本清单保留原安全字段名；后续 flush 继续保留仍存在租户的解析器原字段提醒。当前数据库的 Required 另行反映实际非空凭据字段，提醒不代替真实填写，功能仍等全部原字段填写完成才恢复。
 
 待填字段名同时保存在 manifest.json 与 config/required_credentials.json，冗余文件内记录规范清单 SHA256，外层 manifest 也记录其文件哈希。主 manifest 损坏而冗余文件有效时，verify --repair 可恢复主清单并保留尚未填写的解析器字段名。两个副本都损坏、数据库又无法推断原缺失字段时，程序拒绝覆盖坏原件，要求从备份恢复清单。旧格式没有冗余文件且原数据库仍含解析器凭据时，可从当前数据库字段重新生成；清单始终只保存字段名，不保存任何凭据值。
 

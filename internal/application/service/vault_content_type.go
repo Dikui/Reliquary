@@ -102,7 +102,7 @@ func (v *VaultService) changeCorrectedArticleBody(ctx context.Context, tx *gorm.
 		}
 	}
 	k.VaultBody, k.VaultOriginalPath = body, original
-	if err := tx.Model(&types.Knowledge{}).Where("id=? AND tenant_id=?", k.ID, k.TenantID).
+	if err := tx.Model(&types.Knowledge{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).
 		Updates(map[string]any{"vault_body": body, "vault_original_path": original}).Error; err != nil {
 		return change, err
 	}

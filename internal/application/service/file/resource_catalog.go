@@ -75,7 +75,7 @@ func resourceKind(name string) (string, string) {
 func (s *resourceCatalogFileService) register(
 	ctx context.Context,
 	physical string,
-	tenantID uint64,
+	spaceID uint64,
 	name string,
 	size int64,
 	temporary bool,
@@ -85,7 +85,7 @@ func (s *resourceCatalogFileService) register(
 		s.onStored(physical)
 	}
 	kind, mimeType := resourceKind(name)
-	ref, err := s.catalog.Register(ctx, tenantID, physical, interfaces.ResourceRegistration{
+	ref, err := s.catalog.Register(ctx, spaceID, physical, interfaces.ResourceRegistration{
 		Kind:         kind,
 		MimeType:     mimeType,
 		OriginalName: filepath.Base(name),
@@ -103,14 +103,14 @@ func (s *resourceCatalogFileService) register(
 func (s *resourceCatalogFileService) SaveFile(
 	ctx context.Context,
 	file *multipart.FileHeader,
-	tenantID uint64,
+	spaceID uint64,
 	knowledgeID string,
 ) (string, error) {
-	physical, err := s.inner.SaveFile(ctx, file, tenantID, knowledgeID)
+	physical, err := s.inner.SaveFile(ctx, file, spaceID, knowledgeID)
 	if err != nil {
 		return "", err
 	}
-	ref, err := s.register(ctx, physical, tenantID, file.Filename, file.Size, false, "")
+	ref, err := s.register(ctx, physical, spaceID, file.Filename, file.Size, false, "")
 	if err != nil {
 		return "", err
 	}
@@ -126,16 +126,16 @@ func (s *resourceCatalogFileService) SaveFile(
 func (s *resourceCatalogFileService) SaveBytes(
 	ctx context.Context,
 	data []byte,
-	tenantID uint64,
+	spaceID uint64,
 	fileName string,
 	temp bool,
 ) (string, error) {
-	physical, err := s.inner.SaveBytes(ctx, data, tenantID, fileName, temp)
+	physical, err := s.inner.SaveBytes(ctx, data, spaceID, fileName, temp)
 	if err != nil {
 		return "", err
 	}
 	sum := sha256.Sum256(data)
-	return s.register(ctx, physical, tenantID, fileName, int64(len(data)), temp, hex.EncodeToString(sum[:]))
+	return s.register(ctx, physical, spaceID, fileName, int64(len(data)), temp, hex.EncodeToString(sum[:]))
 }
 
 func (s *resourceCatalogFileService) resolve(ctx context.Context, value string) (string, bool, error) {
@@ -183,18 +183,18 @@ func (s *resourceCatalogFileService) DeleteFile(ctx context.Context, filePath st
 func (s *resourceCatalogFileService) CopyFile(
 	ctx context.Context,
 	filePath string,
-	tenantID uint64,
+	spaceID uint64,
 	knowledgeID string,
 ) (string, error) {
 	physical, _, err := s.resolve(ctx, filePath)
 	if err != nil {
 		return "", err
 	}
-	copied, err := s.inner.CopyFile(ctx, physical, tenantID, knowledgeID)
+	copied, err := s.inner.CopyFile(ctx, physical, spaceID, knowledgeID)
 	if err != nil {
 		return "", err
 	}
-	ref, err := s.register(ctx, copied, tenantID, filepath.Base(physical), 0, false, "")
+	ref, err := s.register(ctx, copied, spaceID, filepath.Base(physical), 0, false, "")
 	if err != nil {
 		return "", err
 	}

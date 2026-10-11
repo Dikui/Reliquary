@@ -49,10 +49,10 @@ func (s *knowledgeService) ResolveProcessingReview(ctx context.Context, id, acti
 		lock.Lock()
 		defer lock.Unlock()
 	}
-	tenantID := types.MustTenantIDFromContext(ctx)
+	spaceID := types.MustSpaceIDFromContext(ctx)
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current types.Knowledge
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", id, tenantID).First(&current).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, spaceID).First(&current).Error; err != nil {
 			return err
 		}
 		if current.SourceKind != "article" || current.ParseStatus != types.ParseStatusCompleted || current.ProcessingReviewStatus != types.ProcessingReviewPending {

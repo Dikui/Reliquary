@@ -55,7 +55,7 @@ func AppendChatGPTPolicyProbe(ctx context.Context, db *gorm.DB, modelID string, 
 	if err := db.WithContext(ctx).Raw(`SELECT GREATEST(clock_timestamp(), COALESCE(MAX(created_at)+interval '1 microsecond',clock_timestamp())) FROM operation_logs WHERE operation_type='maintenance_model_probe'`).Scan(&when).Error; err != nil {
 		return err
 	}
-	return db.WithContext(ctx).Create(&types.OperationLog{ID: uuid.NewString(), TenantID: types.SingleTenantID, Actor: "maintenance",
+	return db.WithContext(ctx).Create(&types.OperationLog{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Actor: "maintenance",
 		OperationType: "maintenance_model_probe", ObjectID: modelID, Before: previous, After: next, CreatedAt: when}).Error
 }
 

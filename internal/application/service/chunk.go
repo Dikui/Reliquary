@@ -78,7 +78,7 @@ func (s *chunkService) CreateChunks(ctx context.Context, chunks []*types.Chunk) 
 }
 
 // GetChunkByID retrieves a chunk by its ID
-// This method fetches a specific chunk using its ID and validates tenant access
+// This method fetches a specific chunk using its ID and validates space access
 // Parameters:
 //   - ctx: Context with authentication and request information
 //   - knowledgeID: ID of the knowledge document containing the chunk
@@ -88,12 +88,12 @@ func (s *chunkService) CreateChunks(ctx context.Context, chunks []*types.Chunk) 
 //   - *types.Chunk: Retrieved chunk if found
 //   - error: Any error encountered during retrieval
 func (s *chunkService) GetChunkByID(ctx context.Context, id string) (*types.Chunk, error) {
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(ctx, "Getting chunk by ID, ID: %s, tenant ID: %d", id, tenantID)
-	chunk, err := s.chunkRepository.GetChunkByID(ctx, tenantID, id)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	logger.Infof(ctx, "Getting chunk by ID, ID: %s, space ID: %d", id, spaceID)
+	chunk, err := s.chunkRepository.GetChunkByID(ctx, spaceID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
+			"space_id": spaceID,
 		})
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (s *chunkService) GetChunkByID(ctx context.Context, id string) (*types.Chun
 	return chunk, nil
 }
 
-// GetChunkByIDOnly retrieves a chunk by ID without tenant filter (for permission resolution).
+// GetChunkByIDOnly retrieves a chunk by ID without space filter (for permission resolution).
 func (s *chunkService) GetChunkByIDOnly(ctx context.Context, id string) (*types.Chunk, error) {
 	chunk, err := s.chunkRepository.GetChunkByIDOnly(ctx, id)
 	if err != nil {
@@ -130,14 +130,14 @@ func (s *chunkService) ListChunksByKnowledgeID(ctx context.Context, knowledgeID 
 	logger.Info(ctx, "Start listing chunks by knowledge ID")
 	logger.Infof(ctx, "Knowledge ID: %s", knowledgeID)
 
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(ctx, "Tenant ID: %d", tenantID)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	logger.Infof(ctx, "Space ID: %d", spaceID)
 
-	chunks, err := s.chunkRepository.ListChunksByKnowledgeID(ctx, tenantID, knowledgeID)
+	chunks, err := s.chunkRepository.ListChunksByKnowledgeID(ctx, spaceID, knowledgeID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_id": knowledgeID,
-			"tenant_id":    tenantID,
+			"space_id":     spaceID,
 		})
 		return nil, err
 	}
@@ -159,9 +159,9 @@ func (s *chunkService) ListChunksByKnowledgeID(ctx context.Context, knowledgeID 
 func (s *chunkService) ListPagedChunksByKnowledgeID(ctx context.Context,
 	knowledgeID string, page *types.Pagination, chunkType []types.ChunkType,
 ) (*types.PageResult, error) {
-	tenantID := types.MustTenantIDFromContext(ctx)
+	spaceID := types.MustSpaceIDFromContext(ctx)
 	chunks, total, err := s.chunkRepository.ListPagedChunksByKnowledgeID(ctx,
-		tenantID,
+		spaceID,
 		knowledgeID,
 		page,
 		chunkType,
@@ -171,7 +171,7 @@ func (s *chunkService) ListPagedChunksByKnowledgeID(ctx context.Context,
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_id": knowledgeID,
-			"tenant_id":    tenantID,
+			"space_id":     spaceID,
 		})
 		return nil, err
 	}
@@ -236,11 +236,11 @@ func (s *chunkService) UpdateChunks(ctx context.Context, chunks []*types.Chunk) 
 // Returns:
 //   - error: Any error encountered during deletion
 func (s *chunkService) DeleteChunk(ctx context.Context, id string) error {
-	tenantID := types.MustTenantIDFromContext(ctx)
-	err := s.chunkRepository.DeleteChunk(ctx, tenantID, id)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	err := s.chunkRepository.DeleteChunk(ctx, spaceID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
+			"space_id": spaceID,
 		})
 		return err
 	}
@@ -263,14 +263,14 @@ func (s *chunkService) DeleteChunks(ctx context.Context, ids []string) error {
 	logger.Info(ctx, "Start deleting chunks in batch")
 	logger.Infof(ctx, "Deleting %d chunks", len(ids))
 
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(ctx, "Tenant ID: %d", tenantID)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	logger.Infof(ctx, "Space ID: %d", spaceID)
 
-	err := s.chunkRepository.DeleteChunks(ctx, tenantID, ids)
+	err := s.chunkRepository.DeleteChunks(ctx, spaceID, ids)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"chunk_ids": ids,
-			"tenant_id": tenantID,
+			"space_id":  spaceID,
 		})
 		return err
 	}
@@ -291,14 +291,14 @@ func (s *chunkService) DeleteChunksByKnowledgeID(ctx context.Context, knowledgeI
 	logger.Info(ctx, "Start deleting all chunks by knowledge ID")
 	logger.Infof(ctx, "Knowledge ID: %s", knowledgeID)
 
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(ctx, "Tenant ID: %d", tenantID)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	logger.Infof(ctx, "Space ID: %d", spaceID)
 
-	err := s.chunkRepository.DeleteChunksByKnowledgeID(ctx, tenantID, knowledgeID)
+	err := s.chunkRepository.DeleteChunksByKnowledgeID(ctx, spaceID, knowledgeID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_id": knowledgeID,
-			"tenant_id":    tenantID,
+			"space_id":     spaceID,
 		})
 		return err
 	}
@@ -311,14 +311,14 @@ func (s *chunkService) DeleteByKnowledgeList(ctx context.Context, ids []string) 
 	logger.Info(ctx, "Start deleting all chunks by knowledge IDs")
 	logger.Infof(ctx, "Knowledge IDs: %v", ids)
 
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(ctx, "Tenant ID: %d", tenantID)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	logger.Infof(ctx, "Space ID: %d", spaceID)
 
-	err := s.chunkRepository.DeleteByKnowledgeList(ctx, tenantID, ids)
+	err := s.chunkRepository.DeleteByKnowledgeList(ctx, spaceID, ids)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_id": ids,
-			"tenant_id":    tenantID,
+			"space_id":     spaceID,
 		})
 		return err
 	}
@@ -329,17 +329,17 @@ func (s *chunkService) DeleteByKnowledgeList(ctx context.Context, ids []string) 
 
 func (s *chunkService) ListChunkByParentID(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	parentID string,
 ) ([]*types.Chunk, error) {
 	logger.Info(ctx, "Start listing chunk by parent ID")
 	logger.Infof(ctx, "Parent ID: %s", parentID)
 
-	chunks, err := s.chunkRepository.ListChunkByParentID(ctx, tenantID, parentID)
+	chunks, err := s.chunkRepository.ListChunkByParentID(ctx, spaceID, parentID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"parent_id": parentID,
-			"tenant_id": tenantID,
+			"space_id":  spaceID,
 		})
 		return nil, err
 	}

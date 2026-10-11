@@ -97,13 +97,13 @@ func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrie
 }
 
 func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *types.KnowledgeBase, error) {
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
-		tenantID = types.SingleTenantID
-		ctx = context.WithValue(ctx, types.TenantIDContextKey, tenantID)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
+		spaceID = types.SingleSpaceID
+		ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	}
 	var kb types.KnowledgeBase
-	if err := s.db.WithContext(ctx).Where("tenant_id = ?", tenantID).First(&kb).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&kb).Error; err != nil {
 		return ctx, nil, fmt.Errorf("vault indexing requires an initialized knowledge base: %w", err)
 	}
 	return ctx, &kb, nil
@@ -339,7 +339,7 @@ func (s *VaultDocumentService) scanDirectory(ctx context.Context, kb *types.Know
 	} else {
 		// Only remove missing records after a complete traversal of the directory.
 		var existing []types.Knowledge
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND source_kind = ?", kb.TenantID, kind).Find(&existing).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("space_id = ? AND source_kind = ?", kb.SpaceID, kind).Find(&existing).Error; err != nil {
 			scanErrors = append(scanErrors, err)
 		} else {
 			for _, knowledge := range existing {
@@ -407,7 +407,7 @@ func vaultTrimTitle(title string) string {
 
 func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.KnowledgeBase, path, kind, body string, modified time.Time) (*types.Knowledge, error) {
 	var knowledge types.Knowledge
-	err := s.db.WithContext(ctx).Where("tenant_id = ? AND vault_path = ?", kb.TenantID, path).First(&knowledge).Error
+	err := s.db.WithContext(ctx).Where("space_id = ? AND vault_path = ?", kb.SpaceID, path).First(&knowledge).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
@@ -419,7 +419,7 @@ func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.Know
 		return &knowledge, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		knowledge = types.Knowledge{ID: uuid.NewString(), TenantID: kb.TenantID, KnowledgeBaseID: kb.ID,
+		knowledge = types.Knowledge{ID: uuid.NewString(), SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
 			Type: types.KnowledgeTypeManual, SourceKind: kind, VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
 			CreatedAt: modified.UTC(), ProcessingMode: types.ProcessingModeFull}
@@ -448,7 +448,7 @@ func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.Know
 		}
 	}
 	if err := s.indexVaultChunks(ctx, kb, &knowledge, indexBody); err != nil {
-		_ = s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND tenant_id=?", knowledge.ID, kb.TenantID).
+		_ = s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND space_id=?", knowledge.ID, kb.SpaceID).
 			Updates(map[string]interface{}{"parse_status": types.ParseStatusFailed, "error_message": err.Error()}).Error
 		return nil, err
 	}
@@ -473,7 +473,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 		knowledge.EmbeddingModelID = embedder.GetModelID()
 	}
 	var previous []*types.Chunk
-	if err := s.db.WithContext(ctx).Where("tenant_id=? AND knowledge_id=?", knowledge.TenantID, knowledge.ID).Order("chunk_index, id").Find(&previous).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND knowledge_id=?", knowledge.SpaceID, knowledge.ID).Order("chunk_index, id").Find(&previous).Error; err != nil {
 		return err
 	}
 	byHash := make(map[string][]*types.Chunk)
@@ -497,7 +497,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 			byHash[hash] = matches[1:]
 			used[chunk.ID] = true
 		} else {
-			chunk = &types.Chunk{ID: uuid.NewString(), TenantID: knowledge.TenantID, KnowledgeID: knowledge.ID,
+			chunk = &types.Chunk{ID: uuid.NewString(), SpaceID: knowledge.SpaceID, KnowledgeID: knowledge.ID,
 				KnowledgeBaseID: kb.ID, IsEnabled: true, ChunkType: types.ChunkTypeText,
 				ContentHash: hash, CreatedAt: now}
 			added = append(added, chunk)
@@ -545,7 +545,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 				ids = append(ids, chunk.ID)
 			}
 			_ = s.retrieval.DeleteByChunkIDList(ctx, ids, 0, knowledge.Type)
-			_ = s.db.WithContext(ctx).Unscoped().Where("tenant_id=? AND id IN ?", knowledge.TenantID, ids).Delete(&types.Chunk{}).Error
+			_ = s.db.WithContext(ctx).Unscoped().Where("space_id=? AND id IN ?", knowledge.SpaceID, ids).Delete(&types.Chunk{}).Error
 			return err
 		}
 	}
@@ -555,7 +555,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 				return err
 			}
 		}
-		if err := s.db.WithContext(ctx).Unscoped().Where("tenant_id=? AND id IN ?", knowledge.TenantID, removed).Delete(&types.Chunk{}).Error; err != nil {
+		if err := s.db.WithContext(ctx).Unscoped().Where("space_id=? AND id IN ?", knowledge.SpaceID, removed).Delete(&types.Chunk{}).Error; err != nil {
 			return err
 		}
 	}
@@ -569,10 +569,10 @@ func (s *VaultDocumentService) deleteDocument(ctx context.Context, knowledge *ty
 		}
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("tenant_id=? AND knowledge_id=?", knowledge.TenantID, knowledge.ID).Delete(&types.Chunk{}).Error; err != nil {
+		if err := tx.Unscoped().Where("space_id=? AND knowledge_id=?", knowledge.SpaceID, knowledge.ID).Delete(&types.Chunk{}).Error; err != nil {
 			return err
 		}
-		return tx.Unscoped().Where("tenant_id=? AND id=?", knowledge.TenantID, knowledge.ID).Delete(&types.Knowledge{}).Error
+		return tx.Unscoped().Where("space_id=? AND id=?", knowledge.SpaceID, knowledge.ID).Delete(&types.Knowledge{}).Error
 	})
 }
 
@@ -580,16 +580,16 @@ func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) 
 	s.statusMu.RLock()
 	result := s.status
 	s.statusMu.RUnlock()
-	tenantID, ok := types.TenantIDFromContext(ctx)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
-		tenantID = types.SingleTenantID
+		spaceID = types.SingleSpaceID
 	}
 	for _, target := range []struct {
 		kind  string
 		count *int64
 	}{{"mine", &result.Mine.IndexedFiles}, {"report", &result.Reports.IndexedFiles}} {
 		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).
-			Where("tenant_id=? AND source_kind=? AND parse_status=?", tenantID, target.kind, types.ParseStatusCompleted).
+			Where("space_id=? AND source_kind=? AND parse_status=?", spaceID, target.kind, types.ParseStatusCompleted).
 			Count(target.count).Error; err != nil {
 			return result, err
 		}
@@ -612,7 +612,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 	selected := []string{}
 	if len(relatedIDs) > 0 {
 		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).
-			Where("tenant_id=? AND source_kind='article' AND id IN ?", kb.TenantID, relatedIDs).
+			Where("space_id=? AND source_kind='article' AND id IN ?", kb.SpaceID, relatedIDs).
 			Order("id").Pluck("id", &selected).Error; err != nil {
 			return nil, err
 		}

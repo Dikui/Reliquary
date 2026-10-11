@@ -26,7 +26,7 @@ type createKnowledgeFileRepoStub struct {
 
 func (r *createKnowledgeFileRepoStub) CheckKnowledgeExists(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 	params *types.KnowledgeCheckParams,
 ) (bool, *types.Knowledge, error) {
@@ -62,7 +62,7 @@ func (s *createKnowledgeFileServiceStub) CheckConnectivity(ctx context.Context) 
 func (s *createKnowledgeFileServiceStub) SaveFile(
 	ctx context.Context,
 	file *multipart.FileHeader,
-	tenantID uint64,
+	spaceID uint64,
 	knowledgeID string,
 ) (string, error) {
 	s.saveCalls++
@@ -76,7 +76,7 @@ func (s *createKnowledgeFileServiceStub) SaveFile(
 func (s *createKnowledgeFileServiceStub) SaveBytes(
 	ctx context.Context,
 	data []byte,
-	tenantID uint64,
+	spaceID uint64,
 	fileName string,
 	temp bool,
 ) (string, error) {
@@ -97,7 +97,7 @@ func (s *createKnowledgeFileServiceStub) DeleteFile(ctx context.Context, filePat
 	return nil
 }
 
-func (s *createKnowledgeFileServiceStub) CopyFile(ctx context.Context, srcPath string, tenantID uint64, knowledgeID string) (string, error) {
+func (s *createKnowledgeFileServiceStub) CopyFile(ctx context.Context, srcPath string, spaceID uint64, knowledgeID string) (string, error) {
 	return "", errors.New("not implemented")
 }
 
@@ -286,8 +286,8 @@ func TestCreateKnowledgeFromFile_PersistsProcessOverrides(t *testing.T) {
 }
 
 func newCreateKnowledgeFileContext() context.Context {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, &types.Tenant{})
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, &types.Space{})
 	return ctx
 }
 

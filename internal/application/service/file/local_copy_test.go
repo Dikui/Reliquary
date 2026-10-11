@@ -14,8 +14,8 @@ import (
 )
 
 // seedLocalObject writes a file under baseDir at the SaveBytes-style layout
-// (tenant/exports) and returns its local:// path.
-func seedLocalObject(t *testing.T, baseDir string, tenantID uint64, name string, data []byte) string {
+// (space/exports) and returns its local:// path.
+func seedLocalObject(t *testing.T, baseDir string, spaceID uint64, name string, data []byte) string {
 	t.Helper()
 	dir := filepath.Join(baseDir, "0", "src-knowledge")
 	require.NoError(t, os.MkdirAll(dir, 0o755))

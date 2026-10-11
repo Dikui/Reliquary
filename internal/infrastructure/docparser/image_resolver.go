@@ -64,8 +64,8 @@ type StoredImage struct {
 // ImageResolver reads images from a parser ReadResult (inline bytes only)
 // and saves them via FileService, replacing markdown references with unified URLs.
 type ImageResolver struct {
-	// TenantID for storage path namespacing
-	TenantID uint64
+	// SpaceID for storage path namespacing
+	SpaceID uint64
 }
 
 // NewImageResolver creates a resolver.
@@ -80,18 +80,18 @@ func (r *ImageResolver) ResolveAndStore(
 	ctx context.Context,
 	result *types.ReadResult,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (updatedMarkdown string, images []StoredImage, err error) {
 	markdown := UnwrapLinkedImages(result.MarkdownContent)
-	md2, imgDataURIs, resolveErr := r.ResolveDataURIImages(ctx, markdown, fileSvc, tenantID)
+	md2, imgDataURIs, resolveErr := r.ResolveDataURIImages(ctx, markdown, fileSvc, spaceID)
 	markdown = md2
 	images = append(images, imgDataURIs...)
 
-	md3, imgHTML, htmlErr := r.ResolveHTMLDataURIImages(ctx, markdown, fileSvc, tenantID)
+	md3, imgHTML, htmlErr := r.ResolveHTMLDataURIImages(ctx, markdown, fileSvc, spaceID)
 	markdown = md3
 	images = append(images, imgHTML...)
 
-	md4, imgBare, bareErr := r.ResolveBareBase64Content(ctx, markdown, fileSvc, tenantID)
+	md4, imgBare, bareErr := r.ResolveBareBase64Content(ctx, markdown, fileSvc, spaceID)
 	markdown = md4
 	images = append(images, imgBare...)
 
@@ -124,7 +124,7 @@ func (r *ImageResolver) ResolveAndStore(
 		}
 
 		// Find inline image bytes from the result
-		stored, saveErr := r.saveReferencedImage(ctx, fileSvc, tenantID, refPath, refMap, savedRefs)
+		stored, saveErr := r.saveReferencedImage(ctx, fileSvc, spaceID, refPath, refMap, savedRefs)
 		if saveErr != nil {
 			resolveErr = errors.Join(resolveErr, saveErr)
 			continue
@@ -137,7 +137,7 @@ func (r *ImageResolver) ResolveAndStore(
 		markdown = markdown[:absolutePathStart] + stored.ServingURL + markdown[absolutePathEnd:]
 	}
 
-	md5, imgRelativeHTML, relativeErr := r.ResolveRelativeHTMLImages(ctx, markdown, fileSvc, tenantID, refMap, savedRefs)
+	md5, imgRelativeHTML, relativeErr := r.ResolveRelativeHTMLImages(ctx, markdown, fileSvc, spaceID, refMap, savedRefs)
 	markdown = md5
 	images = append(images, imgRelativeHTML...)
 
@@ -156,7 +156,7 @@ func appendStoredImage(images []StoredImage, stored StoredImage) []StoredImage {
 func (r *ImageResolver) saveReferencedImage(
 	ctx context.Context,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 	refPath string,
 	refMap map[string]types.ImageRef,
 	savedRefs map[string]StoredImage,
@@ -195,7 +195,7 @@ func (r *ImageResolver) saveReferencedImage(
 	}
 
 	fileName := uuid.New().String() + ext
-	servingURL, saveErr := fileSvc.SaveBytes(ctx, ref.ImageData, tenantID, fileName, false)
+	servingURL, saveErr := fileSvc.SaveBytes(ctx, ref.ImageData, spaceID, fileName, false)
 	if saveErr != nil {
 		return StoredImage{}, fmt.Errorf("save image %q: %w", refPath, saveErr)
 	}
@@ -344,7 +344,7 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 	ctx context.Context,
 	markdown string,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (updatedMarkdown string, images []StoredImage, err error) {
 	matches := imgHTMLDataURI.FindAllStringSubmatchIndex(markdown, -1)
 	if len(matches) == 0 {
@@ -381,7 +381,7 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 			ext = ".png"
 		}
 		fileName := uuid.New().String() + ext
-		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
+		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, spaceID, fileName, false)
 		if saveErr != nil {
 			err = errors.Join(err, fmt.Errorf("save HTML data URI image: %w", saveErr))
 			continue
@@ -404,7 +404,7 @@ func (r *ImageResolver) ResolveRelativeHTMLImages(
 	ctx context.Context,
 	markdown string,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 	refMap map[string]types.ImageRef,
 	savedRefs map[string]StoredImage,
 ) (updatedMarkdown string, images []StoredImage, err error) {
@@ -421,7 +421,7 @@ func (r *ImageResolver) ResolveRelativeHTMLImages(
 			continue
 		}
 
-		stored, saveErr := r.saveReferencedImage(ctx, fileSvc, tenantID, src, refMap, savedRefs)
+		stored, saveErr := r.saveReferencedImage(ctx, fileSvc, spaceID, src, refMap, savedRefs)
 		if saveErr != nil {
 			err = errors.Join(err, saveErr)
 			continue
@@ -454,13 +454,13 @@ func (r *ImageResolver) ResolveBareBase64Content(
 	ctx context.Context,
 	markdown string,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (updatedMarkdown string, images []StoredImage, err error) {
-	md, imgs1, dataErr := r.resolveBareDataURIs(ctx, markdown, fileSvc, tenantID)
+	md, imgs1, dataErr := r.resolveBareDataURIs(ctx, markdown, fileSvc, spaceID)
 	markdown = md
 	images = append(images, imgs1...)
 
-	md2, imgs2, base64Err := r.resolveBareBase64Prefix(ctx, markdown, fileSvc, tenantID)
+	md2, imgs2, base64Err := r.resolveBareBase64Prefix(ctx, markdown, fileSvc, spaceID)
 	markdown = md2
 	images = append(images, imgs2...)
 
@@ -471,7 +471,7 @@ func (r *ImageResolver) resolveBareDataURIs(
 	ctx context.Context,
 	markdown string,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (string, []StoredImage, error) {
 	matches := bareDataURIPattern.FindAllStringSubmatchIndex(markdown, -1)
 	if len(matches) == 0 {
@@ -520,7 +520,7 @@ func (r *ImageResolver) resolveBareDataURIs(
 			ext = ".png"
 		}
 		fileName := uuid.New().String() + ext
-		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
+		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, spaceID, fileName, false)
 		if saveErr != nil {
 			err = errors.Join(err, fmt.Errorf("save bare data URI image: %w", saveErr))
 			continue
@@ -545,7 +545,7 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 	ctx context.Context,
 	markdown string,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (string, []StoredImage, error) {
 	matches := bareBase64CommaPrefixed.FindAllStringSubmatchIndex(markdown, -1)
 	if len(matches) == 0 {
@@ -588,7 +588,7 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 			ext = ".png"
 		}
 		fileName := uuid.New().String() + ext
-		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
+		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, spaceID, fileName, false)
 		if saveErr != nil {
 			err = errors.Join(err, fmt.Errorf("save bare base64 image: %w", saveErr))
 			continue
@@ -670,7 +670,7 @@ func (r *ImageResolver) ResolveDataURIImages(
 	ctx context.Context,
 	markdown string,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (updatedMarkdown string, images []StoredImage, err error) {
 	markdown = UnwrapLinkedImages(markdown)
 	matches := imgMarkdownDataURI.FindAllStringSubmatchIndex(markdown, -1)
@@ -711,7 +711,7 @@ func (r *ImageResolver) ResolveDataURIImages(
 			ext = ".png"
 		}
 		fileName := uuid.New().String() + ext
-		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
+		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, spaceID, fileName, false)
 		if saveErr != nil {
 			err = errors.Join(err, fmt.Errorf("save data URI image: %w", saveErr))
 			continue
@@ -751,7 +751,7 @@ func fetchAndStoreRemoteImage(
 	ctx context.Context,
 	client *http.Client,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 	imgURL string,
 ) (*remoteImageResult, error) {
 	whitelisted := isWhitelistedImageHost(imgURL)
@@ -778,7 +778,7 @@ func fetchAndStoreRemoteImage(
 	if ext == "" {
 		ext = ".png" // safe default
 	}
-	servingURL, err := fileSvc.SaveBytes(ctx, data, tenantID, uuid.New().String()+ext, false)
+	servingURL, err := fileSvc.SaveBytes(ctx, data, spaceID, uuid.New().String()+ext, false)
 	if err != nil {
 		return nil, fmt.Errorf("save: %w", err)
 	}
@@ -822,7 +822,7 @@ func resolveRemoteImagePass(
 	spec remotePassSpec,
 	client func() *http.Client,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (string, []StoredImage, error) {
 	matches := spec.Pattern.FindAllStringSubmatchIndex(markdown, -1)
 	targets := make([]remoteImageTarget, 0, len(matches))
@@ -832,7 +832,7 @@ func resolveRemoteImagePass(
 			targets = append(targets, remoteImageTarget{start: start, end: end, url: spec.SrcOf(markdown[start:end])})
 		}
 	}
-	return resolveRemoteImageTargets(ctx, markdown, targets, spec.Syntax, client, fileSvc, tenantID)
+	return resolveRemoteImageTargets(ctx, markdown, targets, spec.Syntax, client, fileSvc, spaceID)
 }
 
 func resolveRemoteImageTargets(
@@ -842,7 +842,7 @@ func resolveRemoteImageTargets(
 	syntax string,
 	client func() *http.Client,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (string, []StoredImage, error) {
 
 	var (
@@ -861,7 +861,7 @@ func resolveRemoteImageTargets(
 			break
 		}
 
-		res, fetchErr := fetchAndStoreRemoteImage(ctx, client(), fileSvc, tenantID, imgURL)
+		res, fetchErr := fetchAndStoreRemoteImage(ctx, client(), fileSvc, spaceID, imgURL)
 		if fetchErr != nil {
 			err = errors.Join(err, fmt.Errorf("resolve %s image %q: %w", syntax, imgURL, fetchErr))
 			continue
@@ -914,7 +914,7 @@ func (r *ImageResolver) ResolveRemoteImages(
 	ctx context.Context,
 	markdown string,
 	fileSvc interfaces.FileService,
-	tenantID uint64,
+	spaceID uint64,
 ) (updatedMarkdown string, images []StoredImage, err error) {
 	markdown = UnwrapLinkedImages(markdown)
 
@@ -940,14 +940,14 @@ func (r *ImageResolver) ResolveRemoteImages(
 			markdownTargets = append(markdownTargets, remoteImageTarget{start: span.TargetStart + start, end: span.TargetStart + end, url: path})
 		}
 	}
-	markdown, mdImages, markdownErr := resolveRemoteImageTargets(ctx, markdown, markdownTargets, "markdown", client, fileSvc, tenantID)
+	markdown, mdImages, markdownErr := resolveRemoteImageTargets(ctx, markdown, markdownTargets, "markdown", client, fileSvc, spaceID)
 
 	markdown, htmlImages, htmlErr := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
 		Pattern:  imgHTMLSrc,
 		URLGroup: searchutil.HTMLImageSrcURLGroup,
 		Syntax:   "html",
 		SrcOf:    htmlAttrSrc,
-	}, client, fileSvc, tenantID)
+	}, client, fileSvc, spaceID)
 
 	images = append(images, mdImages...)
 	images = append(images, htmlImages...)

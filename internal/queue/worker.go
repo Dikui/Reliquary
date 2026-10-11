@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -407,25 +406,25 @@ func BuildDeadLetter(t *Task, taskErr error, attempts int) *types.TaskDeadLetter
 		return nil
 	}
 	var p struct {
-		TenantID        uint64 `json:"tenant_id"`
+		SpaceID         uint64 `json:"tenant_id"`
 		KnowledgeBaseID string `json:"knowledge_base_id"`
 		KnowledgeID     string `json:"knowledge_id"`
 	}
-	_ = json.Unmarshal(t.Payload(), &p)
+	_ = types.UnmarshalSpacePayload(t.Payload(), &p)
 	scope, id := types.TaskScopeUnknown, ""
 	if p.KnowledgeBaseID != "" {
 		scope, id = types.TaskScopeKnowledgeBase, p.KnowledgeBaseID
 	} else if p.KnowledgeID != "" {
 		scope, id = types.TaskScopeKnowledge, p.KnowledgeID
-	} else if p.TenantID != 0 {
-		scope, id = types.TaskScopeTenant, strconv.FormatUint(p.TenantID, 10)
+	} else if p.SpaceID != 0 {
+		scope, id = types.TaskScopeSpace, strconv.FormatUint(p.SpaceID, 10)
 	}
 	payload := t.Payload()
 	if len(payload) == 0 {
 		payload = []byte("{}")
 	}
 	message := NormalizeError(taskErr.Error())
-	return &types.TaskDeadLetter{TenantID: types.SingleTenantID, TaskType: t.Type(), Scope: scope, ScopeID: id, RelatedID: p.KnowledgeID, Payload: payload, LastError: message, FailCount: attempts, FailedAt: time.Now().UTC()}
+	return &types.TaskDeadLetter{SpaceID: types.SingleSpaceID, TaskType: t.Type(), Scope: scope, ScopeID: id, RelatedID: p.KnowledgeID, Payload: payload, LastError: message, FailCount: attempts, FailedAt: time.Now().UTC()}
 }
 
 // NormalizeError keeps diagnostic text within the archive's 8KB limit and

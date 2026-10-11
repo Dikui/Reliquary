@@ -119,7 +119,7 @@ export interface SystemSettingItem {
 }
 
 /**
- * List every system setting row (system-scope, not tenant-scope).
+ * List every system setting row (system-scope, not space-scope).
  * Backend returns the array directly; we cast through `unknown` to match
  * the project-wide axios contract (see utils/request.ts:97).
  */
@@ -255,7 +255,7 @@ export interface RuntimeTask {
   max_retry: number
   is_orphaned?: boolean
   worker?: string
-  tenant_id?: number
+  space_id?: number
   knowledge_base_id?: string
   knowledge_id?: string
   task_id?: string

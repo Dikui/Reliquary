@@ -13,7 +13,7 @@ import (
 	"reliquary/internal/types"
 )
 
-func (s *knowledgeSearchService) mergeArticleHits(ctx context.Context, tenantID uint64, lanes [][]articleSearchHit, config *types.RetrievalConfig) ([]*types.ArticleSearchResult, error) {
+func (s *knowledgeSearchService) mergeArticleHits(ctx context.Context, spaceID uint64, lanes [][]articleSearchHit, config *types.RetrievalConfig) ([]*types.ArticleSearchResult, error) {
 	vectorWeight, keywordWeight := config.GetEffectiveRRFWeights()
 	weights := []float64{vectorWeight / 2, vectorWeight / 2, keywordWeight, config.GetEffectiveRRFImageWeight()}
 	scores := map[string]float64{}
@@ -61,10 +61,10 @@ func (s *knowledgeSearchService) mergeArticleHits(ctx context.Context, tenantID 
 		SearchPublishedAt *time.Time
 	}
 	var articles []articleRow
-	if err := s.db.WithContext(ctx).Table("knowledges").Where("tenant_id=? AND id IN ? AND deleted_at IS NULL", tenantID, ids).Find(&articles).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table("knowledges").Where("space_id=? AND id IN ? AND deleted_at IS NULL", spaceID, ids).Find(&articles).Error; err != nil {
 		return nil, err
 	}
-	entities, topics, err := s.articleSearchAssociations(ctx, tenantID, ids)
+	entities, topics, err := s.articleSearchAssociations(ctx, spaceID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -146,15 +146,15 @@ func articleSearchMatchName(matchType types.MatchType) string {
 	return "vector"
 }
 
-func (s *knowledgeSearchService) articleSearchAssociations(ctx context.Context, tenantID uint64, ids []string) (map[string][]types.ArticleSearchEntity, map[string][]types.ArticleSearchTopic, error) {
+func (s *knowledgeSearchService) articleSearchAssociations(ctx context.Context, spaceID uint64, ids []string) (map[string][]types.ArticleSearchEntity, map[string][]types.ArticleSearchTopic, error) {
 	type entityRow struct {
 		KnowledgeID               string
 		types.ArticleSearchEntity `gorm:"embedded"`
 	}
 	var rows []entityRow
 	err := s.db.WithContext(ctx).Table("entities e").
-		Joins("JOIN knowledge_entities ke ON ke.entity_id=e.id AND ke.tenant_id=e.tenant_id").
-		Where("e.tenant_id=? AND ke.knowledge_id IN ?", tenantID, ids).
+		Joins("JOIN knowledge_entities ke ON ke.entity_id=e.id AND ke.space_id=e.space_id").
+		Where("e.space_id=? AND ke.knowledge_id IN ?", spaceID, ids).
 		Select("ke.knowledge_id,e.id,e.canonical_name,e.entity_type").
 		Order("e.canonical_name,e.id").Scan(&rows).Error
 	if err != nil {
@@ -164,7 +164,7 @@ func (s *knowledgeSearchService) articleSearchAssociations(ctx context.Context, 
 	for _, row := range rows {
 		entityIDs = append(entityIDs, row.ID)
 	}
-	aliases, err := s.articleEntityAliases(ctx, tenantID, entityIDs)
+	aliases, err := s.articleEntityAliases(ctx, spaceID, entityIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -182,8 +182,8 @@ func (s *knowledgeSearchService) articleSearchAssociations(ctx context.Context, 
 	}
 	var topicRows []topicRow
 	err = s.db.WithContext(ctx).Table("topics t").
-		Joins("JOIN knowledge_topics kt ON kt.topic_id=t.id AND kt.tenant_id=t.tenant_id").
-		Where("t.tenant_id=? AND kt.knowledge_id IN ?", tenantID, ids).
+		Joins("JOIN knowledge_topics kt ON kt.topic_id=t.id AND kt.space_id=t.space_id").
+		Where("t.space_id=? AND kt.knowledge_id IN ?", spaceID, ids).
 		Select("kt.knowledge_id,t.id,t.name").Order("t.name,t.id").Scan(&topicRows).Error
 	topics := map[string][]types.ArticleSearchTopic{}
 	for _, row := range topicRows {
@@ -192,13 +192,13 @@ func (s *knowledgeSearchService) articleSearchAssociations(ctx context.Context, 
 	return entities, topics, err
 }
 
-func (s *knowledgeSearchService) articleEntityAliases(ctx context.Context, tenantID uint64, ids []string) (map[string][]string, error) {
+func (s *knowledgeSearchService) articleEntityAliases(ctx context.Context, spaceID uint64, ids []string) (map[string][]string, error) {
 	aliases := map[string][]string{}
 	if len(ids) == 0 {
 		return aliases, nil
 	}
 	var rows []types.EntityAlias
-	err := s.db.WithContext(ctx).Where("tenant_id=? AND entity_id IN ?", tenantID, ids).Order("alias,id").Find(&rows).Error
+	err := s.db.WithContext(ctx).Where("space_id=? AND entity_id IN ?", spaceID, ids).Order("alias,id").Find(&rows).Error
 	for _, row := range rows {
 		aliases[row.EntityID] = append(aliases[row.EntityID], row.Alias)
 	}
@@ -206,7 +206,7 @@ func (s *knowledgeSearchService) articleEntityAliases(ctx context.Context, tenan
 }
 
 func (s *knowledgeSearchService) Options(ctx context.Context) (*types.ArticleSearchOptions, error) {
-	tenantID, ok := types.TenantIDFromContext(ctx)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
 		return nil, apperrors.NewUnauthorizedError("workspace ID not found in context")
 	}
@@ -214,7 +214,7 @@ func (s *knowledgeSearchService) Options(ctx context.Context) (*types.ArticleSea
 		return nil, fmt.Errorf("article search requires PostgreSQL")
 	}
 	options := &types.ArticleSearchOptions{Entities: []types.ArticleSearchEntity{}, Topics: []types.ArticleSearchTopic{}}
-	if err := s.db.WithContext(ctx).Table("entities").Where("tenant_id=? AND merged_into_id=''", tenantID).
+	if err := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID).
 		Select("id,canonical_name,entity_type").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (s *knowledgeSearchService) Options(ctx context.Context) (*types.ArticleSea
 	for _, entity := range options.Entities {
 		ids = append(ids, entity.ID)
 	}
-	aliases, err := s.articleEntityAliases(ctx, tenantID, ids)
+	aliases, err := s.articleEntityAliases(ctx, spaceID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -232,12 +232,12 @@ func (s *knowledgeSearchService) Options(ctx context.Context) (*types.ArticleSea
 			options.Entities[i].Aliases = []string{}
 		}
 	}
-	err = s.db.WithContext(ctx).Table("topics").Where("tenant_id=?", tenantID).
+	err = s.db.WithContext(ctx).Table("topics").Where("space_id=?", spaceID).
 		Select("id,name").Order("name,id").Scan(&options.Topics).Error
 	return options, err
 }
 
-func (s *knowledgeSearchService) collapseArticleReports(ctx context.Context, tenantID uint64, results []*types.ArticleSearchResult, config *types.RetrievalConfig) ([]*types.ArticleSearchResult, error) {
+func (s *knowledgeSearchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.ArticleSearchResult, config *types.RetrievalConfig) ([]*types.ArticleSearchResult, error) {
 	ids := []string{}
 	for _, result := range results {
 		if result.Source == "article" && result.PublishedAt != nil {
@@ -258,7 +258,7 @@ func (s *knowledgeSearchService) collapseArticleReports(ctx context.Context, ten
 	if err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Table("article_embeddings").Where("tenant_id=? AND knowledge_id IN ? AND model_id=?", tenantID, ids, modelID).Scan(&rows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table("article_embeddings").Where("space_id=? AND knowledge_id IN ? AND model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	vectors := map[string]vectorRow{}

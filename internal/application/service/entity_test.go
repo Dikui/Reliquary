@@ -22,21 +22,21 @@ import (
 func entityFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService) {
 	t.Helper()
 	db := pgtest.Open(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Entities"}).Error)
-	kb := types.KnowledgeBase{ID: "entity-kb", TenantID: 1, Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entities"}).Error)
+	kb := types.KnowledgeBase{ID: "entity-kb", SpaceID: 1, Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
 	require.NoError(t, db.Create(&kb).Error)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "entity-reviewer")
 	return db, ctx, NewEntityService(db, nil)
 }
 func entityArticle(t *testing.T, db *gorm.DB, id string) *types.Knowledge {
 	t.Helper()
-	article := &types.Knowledge{ID: id, TenantID: 1, KnowledgeBaseID: "entity-kb", Title: id, Type: types.KnowledgeTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	article := &types.Knowledge{ID: id, SpaceID: 1, KnowledgeBaseID: "entity-kb", Title: id, Type: types.KnowledgeTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	require.NoError(t, db.Create(article).Error)
 	return article
 }
 func entityRecord(id, name, kind string) types.Entity {
-	return types.Entity{ID: id, TenantID: 1, CanonicalName: name, NormalizedName: normalizeEntityName(name), EntityType: types.NormalizeEntityType(kind), CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	return types.Entity{ID: id, SpaceID: 1, CanonicalName: name, NormalizedName: normalizeEntityName(name), EntityType: types.NormalizeEntityType(kind), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 }
 
 type entityChatInterface interface{ chat.Chat }
@@ -97,7 +97,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	entities := []types.Entity{entityRecord("moonshot", "Moonshot AI", "company"), entityRecord("kimi-k2", "Kimi K2", "product"), entityRecord("different-type", "Same Name", "product")}
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistEntities(tx, entities); return err }))
-	require.NoError(t, db.Create(&types.EntityAlias{ID: "moonshot-cn", TenantID: 1, EntityType: "company", EntityID: "moonshot", Alias: "月之暗面", NormalizedAlias: "月之暗面", CreatedAt: time.Now()}).Error)
+	require.NoError(t, db.Create(&types.EntityAlias{ID: "moonshot-cn", SpaceID: 1, EntityType: "company", EntityID: "moonshot", Alias: "月之暗面", NormalizedAlias: "月之暗面", CreatedAt: time.Now()}).Error)
 	model := &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {
 		var payload struct {
 			Mention    string `json:"mention"`
@@ -249,7 +249,7 @@ func TestEntityResolutionUncertainIdentityCreatesDecidableSuggestions(t *testing
 	require.Equal(t, "acme", readNameEntity(t, db, entities[0].ID).MergedIntoID)
 	other := entityRecord("other-acme", "Acme Regional", "company")
 	require.NoError(t, db.Create(&other).Error)
-	rejected := types.EntityMergeSuggestion{ID: uuid.NewString(), TenantID: 1, NewEntityID: other.ID, CandidateEntityID: "acme", KnowledgeID: article.ID, Reason: "Unclear", Status: "pending", CreatedAt: time.Now()}
+	rejected := types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: 1, NewEntityID: other.ID, CandidateEntityID: "acme", KnowledgeID: article.ID, Reason: "Unclear", Status: "pending", CreatedAt: time.Now()}
 	require.NoError(t, db.Create(&rejected).Error)
 	decided, err := svc.DecideMergeSuggestion(ctx, rejected.ID, false)
 	require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestEntityMergeTransfersAliasesArticlesAndKeepsAudit(t *testing.T) {
 	require.NoError(t, db.Model(&types.EntityAlias{}).Where("entity_id=?", merged.ID).Update("entity_type", "organization").Error)
 	require.NoError(t, saveEntityAlias(db, merged, "Shared name", "exact"))
 	require.NoError(t, saveEntityAlias(db, merged, "艾克米", "exact"))
-	links := []types.KnowledgeEntity{{TenantID: 1, KnowledgeID: one.ID, EntityID: keep.ID, CreatedAt: time.Now()}, {TenantID: 1, KnowledgeID: one.ID, EntityID: merged.ID, CreatedAt: time.Now()}, {TenantID: 1, KnowledgeID: two.ID, EntityID: merged.ID, CreatedAt: time.Now()}}
+	links := []types.KnowledgeEntity{{SpaceID: 1, KnowledgeID: one.ID, EntityID: keep.ID, CreatedAt: time.Now()}, {SpaceID: 1, KnowledgeID: one.ID, EntityID: merged.ID, CreatedAt: time.Now()}, {SpaceID: 1, KnowledgeID: two.ID, EntityID: merged.ID, CreatedAt: time.Now()}}
 	require.NoError(t, db.Create(&links).Error)
 	require.NoError(t, svc.MergeEntities(ctx, keep.ID, merged.ID))
 	detail, err := svc.EntityDetail(ctx, keep.ID)
@@ -378,7 +378,7 @@ func TestEntityAliasesAndCanonicalNamesAreUniqueBySpaceAndType(t *testing.T) {
 	require.Len(t, aliases, 2)
 	duplicate := entityRecord("duplicate", "Acme", "company")
 	require.Error(t, db.Create(&duplicate).Error)
-	duplicateAlias := types.EntityAlias{ID: "duplicate-alias", TenantID: 1, EntityType: "company", EntityID: entities[0].ID, Alias: "Acme", NormalizedAlias: "acme", CreatedAt: time.Now()}
+	duplicateAlias := types.EntityAlias{ID: "duplicate-alias", SpaceID: 1, EntityType: "company", EntityID: entities[0].ID, Alias: "Acme", NormalizedAlias: "acme", CreatedAt: time.Now()}
 	require.Error(t, db.Create(&duplicateAlias).Error)
 }
 
@@ -386,7 +386,7 @@ func TestEntityMergeAliasCollisionRollsBackGlobalChanges(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	entities := []types.Entity{entityRecord("keep", "Keep", "company"), entityRecord("merge", "Merged", "product"), entityRecord("third", "Third", "company")}
 	require.NoError(t, db.Create(&entities).Error)
-	aliases := []types.EntityAlias{{ID: "source-alias", TenantID: 1, EntityType: "product", EntityID: "merge", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}, {ID: "third-alias", TenantID: 1, EntityType: "company", EntityID: "third", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}}
+	aliases := []types.EntityAlias{{ID: "source-alias", SpaceID: 1, EntityType: "product", EntityID: "merge", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}, {ID: "third-alias", SpaceID: 1, EntityType: "company", EntityID: "third", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}}
 	require.NoError(t, db.Create(&aliases).Error)
 	err := svc.MergeEntities(ctx, "keep", "merge")
 	require.ErrorContains(t, err, "conflicts")

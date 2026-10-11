@@ -35,9 +35,9 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 	require.Equal(t, http.StatusOK, kbResponse.Code, kbResponse.Body.String())
 	var kb struct{ Data types.KnowledgeBase }
 	require.NoError(t, json.Unmarshal(kbResponse.Body.Bytes(), &kb))
-	k := &types.Knowledge{ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: kb.Data.ID, Title: "API fixture", Type: "manual", ContentType: "event", ProcessingMode: "full", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+	k := &types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.Data.ID, Title: "API fixture", Type: "manual", ContentType: "event", ProcessingMode: "full", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, f.db.Create(k).Error)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, v.WriteArticle(ctx, k, "API original body.\n", nil))
 	r := personalRequest(t, f.router, http.MethodPut, "/api/v1/knowledge/"+k.ID+"/star", `{"starred":true}`, f.key, true)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
@@ -83,15 +83,15 @@ func TestOperationLogActorNames(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	logs := service.NewOperationLogService(f.db)
 	f.router.GET("/api/v1/operation-logs", handler.NewOperationLogHandler(logs).List)
-	tenantID := uint64(types.SingleTenantID)
+	spaceID := uint64(types.SingleSpaceID)
 	now := time.Now()
-	keys := []types.TenantAPIKey{
-		{ID: 101, TenantID: &tenantID, Name: "Collector", KeyHash: "actor-name-101", RevokedAt: &now},
-		{ID: 102, TenantID: &tenantID, Name: "", KeyHash: "actor-name-102"},
+	keys := []types.APIKey{
+		{ID: 101, SpaceID: &spaceID, Name: "Collector", KeyHash: "actor-name-101", RevokedAt: &now},
+		{ID: 102, SpaceID: &spaceID, Name: "", KeyHash: "actor-name-102"},
 	}
 	require.NoError(t, f.db.Create(&keys).Error)
 	for _, actor := range []string{"web_user:1", "api_key:101", "api_key:102", "api_key:103"} {
-		require.NoError(t, f.db.Create(&types.OperationLog{ID: uuid.NewString(), TenantID: tenantID, Actor: actor, OperationType: "star", ObjectID: "article-a", Before: types.JSON("false"), After: types.JSON("true"), CreatedAt: now}).Error)
+		require.NoError(t, f.db.Create(&types.OperationLog{ID: uuid.NewString(), SpaceID: spaceID, Actor: actor, OperationType: "star", ObjectID: "article-a", Before: types.JSON("false"), After: types.JSON("true"), CreatedAt: now}).Error)
 	}
 	r := personalRequest(t, f.router, http.MethodGet, "/api/v1/operation-logs?page=1&page_size=100", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())

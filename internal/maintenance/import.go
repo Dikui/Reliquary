@@ -29,7 +29,7 @@ func Load(root string) (*Snapshot, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, err
 	}
-	if manifest.FormatVersion != 1 {
+	if !supportedFormat(manifest.FormatVersion) {
 		return nil, fmt.Errorf("unsupported replica format %d", manifest.FormatVersion)
 	}
 	var fields map[string]json.RawMessage
@@ -42,7 +42,7 @@ func Load(root string) (*Snapshot, error) {
 	if err := validateActiveUploads(root, &manifest); err != nil {
 		return nil, err
 	}
-	snapshot := &Snapshot{FormatVersion: 1, Tables: map[string][]map[string]any{}, Required: manifest.Required, ActiveUploads: manifest.ActiveUploads, JSONNulls: manifest.JSONNulls}
+	snapshot := &Snapshot{FormatVersion: manifest.FormatVersion, storedFormat: manifest.FormatVersion, Tables: map[string][]map[string]any{}, Required: manifest.Required, ActiveUploads: manifest.ActiveUploads, JSONNulls: manifest.JSONNulls}
 	for _, file := range manifest.VaultFiles {
 		path, err := SafePath(root, file.Path)
 		if err != nil {
@@ -92,7 +92,7 @@ func Load(root string) (*Snapshot, error) {
 		if !strings.HasPrefix(file.Path, "data/") && !strings.HasPrefix(file.Path, "config/") {
 			continue
 		}
-		table := strings.TrimSuffix(filepath.Base(file.Path), ".json")
+		table := currentTable(strings.TrimSuffix(filepath.Base(file.Path), ".json"))
 		if _, ok := Rules[table]; !ok {
 			return nil, fmt.Errorf("unknown replica table %s", table)
 		}
@@ -102,7 +102,7 @@ func Load(root string) (*Snapshot, error) {
 		if err := decoder.Decode(&rows); err != nil {
 			return nil, err
 		}
-		for _, row := range rows {
+		for _, row := range namedRows(rows, false) {
 			for column := range row {
 				if _, ok := Rules[table].Columns()[column]; !ok {
 					return nil, fmt.Errorf("unclassified replica column %s.%s", table, column)
@@ -112,12 +112,15 @@ func Load(root string) (*Snapshot, error) {
 				}
 			}
 		}
-		snapshot.Tables[table] = rows
+		snapshot.Tables[strings.TrimSuffix(filepath.Base(file.Path), ".json")] = rows
 	}
 	for _, table := range manifest.Tables {
 		if _, found := snapshot.Tables[table]; !found {
 			return nil, fmt.Errorf("missing replica table %s", table)
 		}
+	}
+	if err := currentSnapshot(snapshot); err != nil {
+		return nil, err
 	}
 	return snapshot, nil
 }
@@ -150,7 +153,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if existing != 0 {
 		return nil, errors.New("replica import requires an empty knowledge database")
 	}
-	order := []string{"tenants", "users", "auth_tokens", "knowledge_bases", "models", "data_sources", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "knowledges", "knowledge_entities", "knowledge_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "sync_logs", "tenant_api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "knowledge_processing_spans", "knowledge_repost_sources", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
+	order := []string{"spaces", "users", "auth_tokens", "knowledge_bases", "models", "data_sources", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "knowledges", "knowledge_entities", "knowledge_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "sync_logs", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "knowledge_processing_spans", "knowledge_repost_sources", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
 	covered := map[string]bool{}
 	for _, table := range order {
 		covered[table] = true
@@ -192,7 +195,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 				if inactiveCredentialTable(table) {
 					restoreInactiveCredentials(table, row, occurrences)
 				}
-				if table == "tenant_api_keys" {
+				if table == "api_keys" {
 					row["key_hash"] = "disabled-" + fmt.Sprint(row["id"])
 					row["api_key"] = ""
 				}

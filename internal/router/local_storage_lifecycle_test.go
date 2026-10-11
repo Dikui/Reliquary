@@ -34,8 +34,8 @@ func TestLocalFileResourceLifecycle(t *testing.T) {
 	catalog := service.NewResourceCatalog(repository.NewResourceRepository(db))
 	raw := filesvc.NewLocalFileService(baseDir, "")
 	engine := gin.New()
-	serveResourceGrants(engine, catalog, &stubTenantService{get: func(context.Context, uint64) (*types.Tenant, error) {
-		return &types.Tenant{ID: 1}, nil
+	serveResourceGrants(engine, catalog, &stubSpaceService{get: func(context.Context, uint64) (*types.Space, error) {
+		return &types.Space{ID: 1}, nil
 	}}, raw)
 	server := httptest.NewServer(engine)
 	t.Cleanup(server.Close)
@@ -75,7 +75,7 @@ func TestLocalFileResourceLifecycle(t *testing.T) {
 			require.NoError(t, reader.Close())
 			require.Equal(t, sample.content, stored)
 			image := "![figure](" + ref + ")"
-			rewritten := storageurl.NewRewriter(storageurl.NewFileServiceResolver(&types.Tenant{ID: 1}, files), "TEST").String(ctx, image)
+			rewritten := storageurl.NewRewriter(storageurl.NewFileServiceResolver(&types.Space{ID: 1}, files), "TEST").String(ctx, image)
 			require.NotContains(t, rewritten, "resource://")
 			link := strings.TrimSuffix(strings.TrimPrefix(rewritten, "![figure]("), ")")
 			response, err := server.Client().Get(link)

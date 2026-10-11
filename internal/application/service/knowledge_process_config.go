@@ -159,10 +159,10 @@ func mergeChunkingConfig(base types.ChunkingConfig, override *types.ChunkingConf
 	return result
 }
 
-// MergeParserEngineOverrides merges upload overrides on top of tenant overrides safely.
-func MergeParserEngineOverrides(tenantOverrides map[string]string, uploadOverrides map[string]string) map[string]string {
+// MergeParserEngineOverrides merges upload overrides on top of space overrides safely.
+func MergeParserEngineOverrides(spaceOverrides map[string]string, uploadOverrides map[string]string) map[string]string {
 	merged := make(map[string]string)
-	for k, v := range tenantOverrides {
+	for k, v := range spaceOverrides {
 		merged[k] = v
 	}
 	for k, v := range uploadOverrides {

@@ -37,7 +37,7 @@ func TestResourceCatalogRegisterResolveAndDeduplicate(t *testing.T) {
 	resolvedPath, resource, err := catalog.ResolvePath(ctx, ref)
 	require.NoError(t, err)
 	require.Equal(t, physical, resolvedPath)
-	require.Equal(t, uint64(7), resource.TenantID)
+	require.Equal(t, uint64(7), resource.SpaceID)
 	require.Equal(t, "local", resource.Provider)
 }
 
@@ -62,7 +62,7 @@ func TestResourceCatalogBindingAndAccessGrant(t *testing.T) {
 	require.Len(t, storedGrant.TokenHash, 64)
 	resource, err := catalog.ResolveAccessGrant(ctx, token)
 	require.NoError(t, err)
-	require.Equal(t, uint64(9), resource.TenantID)
+	require.Equal(t, uint64(9), resource.SpaceID)
 }
 
 // Two articles may share one resource.
@@ -143,7 +143,7 @@ func TestResourceCatalogReusesLiveAccessGrant(t *testing.T) {
 
 	resource, err := catalog.ResolveAccessGrant(ctx, second)
 	require.NoError(t, err)
-	require.Equal(t, uint64(9), resource.TenantID)
+	require.Equal(t, uint64(9), resource.SpaceID)
 }
 
 // Two resources must never share a grant.
@@ -186,7 +186,7 @@ func TestResourceCatalogDoesNotReviveRevokedGrant(t *testing.T) {
 	require.Error(t, err, "the revoked token must stay unusable")
 	resource, err := catalog.ResolveAccessGrant(ctx, fresh)
 	require.NoError(t, err)
-	require.Equal(t, uint64(9), resource.TenantID)
+	require.Equal(t, uint64(9), resource.SpaceID)
 }
 
 // Without a signing key the deployment cannot derive tokens, so grants stay

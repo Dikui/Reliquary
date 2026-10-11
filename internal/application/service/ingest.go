@@ -38,8 +38,8 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	if err := validateIngestRequest(request); err != nil {
 		return nil, err
 	}
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
 		return nil, werrors.NewUnauthorizedError("personal space is required")
 	}
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
@@ -52,7 +52,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	if err != nil {
 		return nil, err
 	}
-	if kb.TenantID != tenantID {
+	if kb.SpaceID != spaceID {
 		return nil, werrors.NewForbiddenError("knowledge base belongs to another space")
 	}
 	now := time.Now()
@@ -72,7 +72,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	if err != nil {
 		return nil, err
 	}
-	article := &types.Knowledge{ID: uuid.NewString(), TenantID: tenantID, KnowledgeBaseID: kb.ID,
+	article := &types.Knowledge{ID: uuid.NewString(), SpaceID: spaceID, KnowledgeBaseID: kb.ID,
 		Type: types.KnowledgeTypeManual, SourceKind: "article", Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.KnowledgeTypeManual,
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
@@ -120,7 +120,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		return result, nil
 	}
 	fileSvc := s.resolveFileService(ctx, kb)
-	refs, stored, failures := s.resolveIngestImages(ctx, request.Images, fileSvc, tenantID)
+	refs, stored, failures := s.resolveIngestImages(ctx, request.Images, fileSvc, spaceID)
 	result.ImageFailures = failures
 	body := assembleIngestBody(request, refs)
 	// Failed images and their descriptions are absent from the immutable body,
@@ -145,7 +145,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		}
 		return nil
 	}
-	intake.OriginalPath, err = fileSvc.SaveBytes(ctx, []byte(body), tenantID, article.ID+".md", false)
+	intake.OriginalPath, err = fileSvc.SaveBytes(ctx, []byte(body), spaceID, article.ID+".md", false)
 	if err != nil {
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			return nil, fmt.Errorf("save ingest body: %v; cleanup: %w", err, cleanupErr)
@@ -199,7 +199,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		result.ArticleID, result.Status, result.Message = duplicate.ID, "exists", "已存在"
 		return result, nil
 	}
-	s.bindContentResources(ctx, tenantID, article.ID, body)
+	s.bindContentResources(ctx, spaceID, article.ID, body)
 	rejected, err := s.reviewIntake(ctx, kb, article, body)
 	var deferred *types.ChatGPTDeferredError
 	var processOptions []taskqueue.Option
@@ -236,7 +236,7 @@ func recordIngestDuplicate(ctx context.Context, tx *gorm.DB, existing, incoming 
 	}
 	// The deduplication lock serializes collection; the row lock also protects
 	// concurrent user edits and processing updates to this article.
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND id=?", existing.TenantID, existing.ID).First(existing).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", existing.SpaceID, existing.ID).First(existing).Error; err != nil {
 		return false, err
 	}
 	before := existing.CollectReason
@@ -296,7 +296,7 @@ func validIngestURL(raw string) bool {
 	return err == nil && u.Hostname() != "" && u.User == nil && (u.Scheme == "http" || u.Scheme == "https") && !strings.ContainsAny(raw, "\r\n\t")
 }
 
-func (s *knowledgeService) resolveIngestImages(ctx context.Context, input []types.IngestImage, files interfaces.FileService, tenantID uint64) ([]string, []docparser.StoredImage, []types.IngestImageFailure) {
+func (s *knowledgeService) resolveIngestImages(ctx context.Context, input []types.IngestImage, files interfaces.FileService, spaceID uint64) ([]string, []docparser.StoredImage, []types.IngestImageFailure) {
 	refs := make([]string, len(input))
 	stored := []docparser.StoredImage{}
 	failures := []types.IngestImageFailure{}
@@ -311,12 +311,12 @@ func (s *knowledgeService) resolveIngestImages(ctx context.Context, input []type
 		if image.Data != "" {
 			ref, err = ingestImageDataURI(image.Data)
 			if err == nil {
-				_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, tenantID)
+				_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, spaceID)
 			}
 		} else {
 			// URL.String escapes Markdown delimiters without changing the target.
 			u, _ := url.Parse(ref)
-			_, images, err = resolver.ResolveRemoteImages(ctx, "![image](<"+u.String()+">)", files, tenantID)
+			_, images, err = resolver.ResolveRemoteImages(ctx, "![image](<"+u.String()+">)", files, spaceID)
 		}
 		if err == nil && len(images) != 1 {
 			err = fmt.Errorf("image could not be stored")

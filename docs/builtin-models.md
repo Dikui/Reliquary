@@ -21,12 +21,14 @@ Reliquary 支持两种方式添加内置模型：**推荐**使用 YAML 声明式
 
 文件不存在时启动期会跳过、不报错；解析失败仅记录 Warning、不影响主流程。每次应用启动会重新读取并按 `id` 字段 UPSERT 到 `models` 表（保留 `created_at`，刷新其他字段）。如果同 ID 模型已经在界面保存并转为运行时托管，则保留运行时配置，不再由 YAML 覆盖。
 
+归属配置键使用 `space_id`。旧 `tenant_id` 仍可读取，日志打印弃用警告；同时提供两个键时，显式 `space_id` 优先，包括零值。省略归属键的默认值保持 `10000`。
+
 #### Schema
 
 ```yaml
 builtin_models:
   - id: <required, stable, UPSERT key>
-    tenant_id: <int, default 10000>
+    space_id: <int, default 10000>
     name: <string>
     type: KnowledgeQA | Embedding | Rerank
     source: <string, default "remote">       # local | remote | aliyun | ...
@@ -169,7 +171,7 @@ services:
 ```sql
 -- 示例：LLM 内置模型
 INSERT INTO models (
-    id, tenant_id, name, type, source, description,
+    id, space_id, name, type, source, description,
     parameters, is_default, status, is_builtin
 ) VALUES (
     'builtin-llm-001',
@@ -186,7 +188,7 @@ INSERT INTO models (
 
 -- Embedding
 INSERT INTO models (
-    id, tenant_id, name, type, source, description,
+    id, space_id, name, type, source, description,
     parameters, is_default, status, is_builtin
 ) VALUES (
     'builtin-embedding-001',
@@ -203,7 +205,7 @@ INSERT INTO models (
 
 -- Rerank
 INSERT INTO models (
-    id, tenant_id, name, type, source, description,
+    id, space_id, name, type, source, description,
     parameters, is_default, status, is_builtin
 ) VALUES (
     'builtin-rerank-001',
@@ -268,9 +270,9 @@ DELETE FROM models WHERE id = '模型ID';
 ## 注意事项
 
 1. **ID 命名规范**：建议使用 `builtin-{type}-{slug}` 的格式，例如 `builtin-openai-chat`、`builtin-rerank`
-2. **空间ID**：YAML 省略 `tenant_id` 时默认 `10000`
+2. **空间ID**：YAML 省略 `space_id` 时默认 `10000`
 3. **YAML 与 SQL 并存**：两种方式可以同时使用，loader 只动 `managed_by='yaml'` 的行；通过 SQL 插入的 builtin 行对 loader 完全不可见
-4. **`is_default` 单一保证**：YAML 中将某条 entry 标记 `is_default: true` 时，loader 会先把同 `(tenant_id, type)` 下的其它默认模型置为 `false`，避免 API 路径维护的"每类型一个默认模型"语义被破坏
+4. **`is_default` 单一保证**：YAML 中将某条 entry 标记 `is_default: true` 时，loader 会先把同 `(space_id, type)` 下的其它默认模型置为 `false`，避免 API 路径维护的"每类型一个默认模型"语义被破坏
 5. **重启即生效**：修改 YAML 后 `docker compose restart app` 即可让新配置生效
 6. **加密**：API Key 在 `parameters` JSONB 中以加密形式存储（若 `SYSTEM_AES_KEY` 已配置），未配置时降级为明文兼容路径
 7. **安全性**：前端会自动隐藏内置模型的 API Key，但数据库中的原始数据仍然存在，请妥善保管数据库访问权限

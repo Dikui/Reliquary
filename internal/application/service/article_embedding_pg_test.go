@@ -227,7 +227,7 @@ func TestArticleTitleVectorChangeRollsBackWhenEmbeddingFails(t *testing.T) {
 
 func TestUnprocessedArticleTitleUpdateDoesNotRequireEmbedding(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article := &types.Knowledge{ID: "pending-article", TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID,
+	article := &types.Knowledge{ID: "pending-article", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		Type: "url", SourceKind: "article", Title: "Pending title", Source: "https://example.org/pending",
 		ParseStatus: types.ParseStatusPending, EnableStatus: "enabled", ProcessingMode: types.ProcessingModeFull}
 	require.NoError(t, h.db.Create(article).Error)

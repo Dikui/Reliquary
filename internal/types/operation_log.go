@@ -5,7 +5,7 @@ import "time"
 // OperationLog records a deliberate user action, including API key callers.
 type OperationLog struct {
 	ID            string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID      uint64    `json:"tenant_id"`
+	SpaceID       uint64    `json:"space_id"`
 	Actor         string    `json:"actor"`
 	ActorName     string    `json:"actor_name,omitempty" gorm:"-"`
 	OperationType string    `json:"operation_type"`

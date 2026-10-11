@@ -7,7 +7,7 @@ import (
 )
 
 // loadKnowledgeAssociations batches entity and topic display data for article responses.
-func (s *knowledgeService) loadKnowledgeAssociations(ctx context.Context, tenantID uint64, articles []*types.Knowledge) error {
+func (s *knowledgeService) loadKnowledgeAssociations(ctx context.Context, spaceID uint64, articles []*types.Knowledge) error {
 	byID := make(map[string]*types.Knowledge, len(articles))
 	ids := make([]string, 0, len(articles))
 	for _, article := range articles {
@@ -27,8 +27,8 @@ func (s *knowledgeService) loadKnowledgeAssociations(ctx context.Context, tenant
 		Entity      types.Entity `gorm:"embedded"`
 	}
 	if err := s.db.WithContext(ctx).Table("knowledge_entities AS ke").
-		Select("ke.knowledge_id, e.*").Joins("JOIN entities AS e ON e.tenant_id=ke.tenant_id AND e.id=ke.entity_id").
-		Where("ke.tenant_id=? AND ke.knowledge_id IN ? AND e.merged_into_id=''", tenantID, ids).
+		Select("ke.knowledge_id, e.*").Joins("JOIN entities AS e ON e.space_id=ke.space_id AND e.id=ke.entity_id").
+		Where("ke.space_id=? AND ke.knowledge_id IN ? AND e.merged_into_id=''", spaceID, ids).
 		Order("e.canonical_name,e.id").Find(&entityRows).Error; err != nil {
 		return err
 	}
@@ -42,8 +42,8 @@ func (s *knowledgeService) loadKnowledgeAssociations(ctx context.Context, tenant
 		Topic       types.Topic `gorm:"embedded"`
 	}
 	if err := s.db.WithContext(ctx).Table("knowledge_topics AS kt").
-		Select("kt.knowledge_id, t.*").Joins("JOIN topics AS t ON t.tenant_id=kt.tenant_id AND t.id=kt.topic_id").
-		Where("kt.tenant_id=? AND kt.knowledge_id IN ?", tenantID, ids).
+		Select("kt.knowledge_id, t.*").Joins("JOIN topics AS t ON t.space_id=kt.space_id AND t.id=kt.topic_id").
+		Where("kt.space_id=? AND kt.knowledge_id IN ?", spaceID, ids).
 		Order("t.name,t.id").Find(&topicRows).Error; err != nil {
 		return err
 	}

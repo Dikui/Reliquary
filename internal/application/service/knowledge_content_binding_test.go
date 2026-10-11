@@ -11,20 +11,20 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// resolvingCatalog answers Resolve from a fixed handle → tenant map and records
+// resolvingCatalog answers Resolve from a fixed handle → space map and records
 // every Bind, which is all bindContentResources exercises.
 type resolvingCatalog struct {
-	tenantByRef map[string]uint64
-	binds       []bindCall
+	spaceByRef map[string]uint64
+	binds      []bindCall
 }
 
 func (c *resolvingCatalog) Resolve(_ context.Context, ref string) (*types.StoredResource, error) {
-	tenantID, ok := c.tenantByRef[ref]
+	spaceID, ok := c.spaceByRef[ref]
 	if !ok {
 		return nil, errors.New("resource not found")
 	}
 	handle, _ := types.ParseResourcePath(ref)
-	return &types.StoredResource{ID: handle, Handle: handle, TenantID: tenantID}, nil
+	return &types.StoredResource{ID: handle, Handle: handle, SpaceID: spaceID}, nil
 }
 
 func (c *resolvingCatalog) Bind(_ context.Context, ref, ownerType, ownerID, relation string) error {
@@ -71,7 +71,7 @@ func contentRef(char string) string {
 func TestBindContentResourcesClaimsEveryReferencedFile(t *testing.T) {
 	chart := contentRef("a")
 	table := contentRef("b")
-	catalog := &resolvingCatalog{tenantByRef: map[string]uint64{chart: 7, table: 7}}
+	catalog := &resolvingCatalog{spaceByRef: map[string]uint64{chart: 7, table: 7}}
 	svc := &knowledgeService{resourceCatalog: catalog}
 
 	content := "## 结论\n\n![评分](" + chart + ")\n\n数据见 [表格](" + table + ")"
@@ -102,7 +102,7 @@ func TestBindContentResourcesSkipsForeignAndUnknownHandles(t *testing.T) {
 	mine := contentRef("c")
 	theirs := contentRef("d")
 	unknown := contentRef("e")
-	catalog := &resolvingCatalog{tenantByRef: map[string]uint64{mine: 7, theirs: 9}}
+	catalog := &resolvingCatalog{spaceByRef: map[string]uint64{mine: 7, theirs: 9}}
 	svc := &knowledgeService{resourceCatalog: catalog}
 
 	content := "![a](" + mine + ") ![b](" + theirs + ") ![c](" + unknown + ")"

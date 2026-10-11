@@ -66,7 +66,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	var payload types.ManualProcessPayload
 	require.NoError(t, json.Unmarshal(jobs[0].Payload, &payload))
 	require.Equal(t, article.ID, payload.KnowledgeID)
-	stored, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	stored, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusPending, stored.ParseStatus)
 }
@@ -93,7 +93,7 @@ func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 		return rollback
 	}), rollback)
 	require.Empty(t, transactionJobs(t, h.db))
-	unchanged, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	unchanged, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusRejected, unchanged.ParseStatus)
 	unchangedIntake, err := unchanged.IntakeMetadata()
@@ -107,7 +107,7 @@ func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusPending, reviewed.ParseStatus)
 	require.Len(t, transactionJobs(t, h.db), 1)
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	savedIntake, err := saved.IntakeMetadata()
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 			var retainedRef string
 			if kind == "manual_attachment" {
 				var err error
-				retainedRef, err = h.service.fileSvc.SaveBytes(h.ctx, []byte("existing shared attachment"), types.SingleTenantID, "attachment.txt", false)
+				retainedRef, err = h.service.fileSvc.SaveBytes(h.ctx, []byte("existing shared attachment"), types.SingleSpaceID, "attachment.txt", false)
 				require.NoError(t, err)
 				payload.Content += "\n[Shared attachment](" + retainedRef + ")"
 			}
@@ -229,7 +229,7 @@ func TestTaskTransactionEnqueueFailureRollsBackApprovalAndRetainsOriginal(t *tes
 	_, err = h.service.ReviewKnowledgeIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
 	savedIntake, err := saved.IntakeMetadata()
@@ -276,7 +276,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	require.Len(t, jobs, 1)
 	require.Equal(t, taskqueue.TaskStatePending, jobs[0].State)
 	require.Zero(t, jobs[0].Retried, "process interruption does not consume ordinary retries")
-	stored, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	stored, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	preserved, err := stored.IntakeMetadata()
 	require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	require.NoError(t, restarted.Start(context.Background(), taskqueue.HandlerFunc(h.service.ProcessManualUpdate), config))
 	t.Cleanup(func() { require.NoError(t, restarted.Close()) })
 	require.Eventually(t, func() bool {
-		completed, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+		completed, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && len(transactionJobs(t, h.db)) == 0
 	}, 5*time.Second, 20*time.Millisecond)
 }
@@ -313,7 +313,7 @@ func TestTaskTransactionManualCorrectionQueueFailureRetainsRejectedBody(t *testi
 	_, err = h.service.UpdateManualKnowledge(h.ctx, article.ID, &types.ManualKnowledgePayload{Title: "Corrected title", Content: "Corrected original source body.", Status: types.ManualKnowledgeStatusPublish})
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, article.Title, saved.Title)
 	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
@@ -352,7 +352,7 @@ func TestTaskTransactionInvalidManualCorrectionPreservesResourceAndOriginal(t *t
 	})
 	require.ErrorContains(t, err, "table metadata instructions exceeds")
 	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.JSONEq(t, beforeMetadata, string(saved.Metadata))
 	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
@@ -374,7 +374,7 @@ func TestTaskTransactionEmbeddingStartAndResumeAreAtomic(t *testing.T) {
 	h := newAllRebuildFixture(t, false)
 	client := taskqueue.NewClient(h.db)
 	h.rebuilder.tasks = taskTransactionFailure{Client: client}
-	_, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleTenantID)
+	_, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleSpaceID)
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
 	var runs, items int64
@@ -383,18 +383,18 @@ func TestTaskTransactionEmbeddingStartAndResumeAreAtomic(t *testing.T) {
 	require.Zero(t, runs)
 	require.Zero(t, items, "snapshot checkpoints roll back with their task")
 	h.rebuilder.tasks = client
-	run, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleTenantID)
+	run, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleSpaceID)
 	require.NoError(t, err)
 	require.Len(t, transactionJobs(t, h.db), 1)
 	require.Equal(t, types.TypeEmbeddingRebuild, transactionJobs(t, h.db)[0].TaskType)
 	require.NoError(t, h.db.Where("1=1").Delete(&taskqueue.Job{}).Error)
-	require.NoError(t, h.rebuilder.Pause(h.ctx, types.SingleTenantID, run.ID))
+	require.NoError(t, h.rebuilder.Pause(h.ctx, types.SingleSpaceID, run.ID))
 	h.rebuilder.tasks = taskTransactionFailure{Client: client}
-	require.ErrorContains(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleTenantID, run.ID, false), "simulated failure")
+	require.ErrorContains(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleSpaceID, run.ID, false), "simulated failure")
 	require.Equal(t, "paused", h.state(t).Status)
 	require.Empty(t, transactionJobs(t, h.db))
 	h.rebuilder.tasks = client
-	require.NoError(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleTenantID, run.ID, false))
+	require.NoError(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleSpaceID, run.ID, false))
 	require.Equal(t, "pending", h.state(t).Status)
 	require.Len(t, transactionJobs(t, h.db), 1)
 }

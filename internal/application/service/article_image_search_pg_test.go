@@ -12,20 +12,20 @@ import (
 
 func enableImageSearchFixture(t *testing.T, h *articleSearchFixture) {
 	t.Helper()
-	require.NoError(t, h.db.Create(&types.Model{ID: "fixture-model", TenantID: 1, Name: "Shared image space",
+	require.NoError(t, h.db.Create(&types.Model{ID: "fixture-model", SpaceID: 1, Name: "Shared image space",
 		Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3, SupportsImages: true, MultimodalFormat: "jina"}}}).Error)
 	h.config.VectorThreshold = 0.9
-	var tenant types.Tenant
-	require.NoError(t, h.db.First(&tenant, "id=1").Error)
-	tenant.RetrievalConfig = h.config
-	require.NoError(t, h.db.Save(&tenant).Error)
+	var space types.Space
+	require.NoError(t, h.db.First(&space, "id=1").Error)
+	space.RetrievalConfig = h.config
+	require.NoError(t, h.db.Save(&space).Error)
 }
 
 func addImageSearchVector(t *testing.T, h *articleSearchFixture, article *types.Knowledge, path, modelID string, vector []float32) {
 	t.Helper()
 	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings
-		(knowledge_id,tenant_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
+		(knowledge_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
 		VALUES (?,1,?,?,?,?,?,'fixture')`, article.ID, h.kb.ID, path, modelID, len(vector), pgvector.NewHalfVector(vector)).Error)
 }
 

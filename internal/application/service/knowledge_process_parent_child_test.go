@@ -108,11 +108,11 @@ func (e *parentChildRetrieveEngine) BatchIndex(
 	return nil
 }
 
-type parentChildTenantRepo struct {
-	interfaces.TenantRepository
+type parentChildSpaceRepo struct {
+	interfaces.SpaceRepository
 }
 
-func (parentChildTenantRepo) AdjustStorageUsed(context.Context, uint64, int64) error {
+func (parentChildSpaceRepo) AdjustStorageUsed(context.Context, uint64, int64) error {
 	return nil
 }
 
@@ -125,25 +125,25 @@ func (parentChildTaskEnqueuer) Enqueue(*taskqueue.Task, ...taskqueue.Option) (*t
 func TestProcessChunksIndexesEveryTextChild(t *testing.T) {
 	knowledge := &types.Knowledge{
 		ID:              "knowledge-1",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		ParseStatus:     types.ParseStatusProcessing,
 	}
 	chunkService := &parentChildChunkService{}
 	retrieveEngine := &parentChildRetrieveEngine{}
-	tenant := &types.Tenant{ID: 1}
-	ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, tenant)
+	space := &types.Space{ID: 1}
+	ctx := context.WithValue(context.Background(), types.SpaceInfoContextKey, space)
 	svc := &knowledgeService{
 		repo:           &parentChildKnowledgeRepo{knowledge: knowledge},
 		chunkService:   chunkService,
 		modelService:   parentChildModelService{embedder: parentChildEmbedder{}},
 		retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: retrieveEngine},
-		tenantRepo:     parentChildTenantRepo{},
+		spaceRepo:      parentChildSpaceRepo{},
 		task:           parentChildTaskEnqueuer{},
 	}
 	kb := &types.KnowledgeBase{
 		ID:               "kb-1",
-		TenantID:         1,
+		SpaceID:          1,
 		EmbeddingModelID: "embedding-1",
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
 	}

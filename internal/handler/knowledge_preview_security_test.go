@@ -35,7 +35,7 @@ func (r *closeNotifyRecorder) CloseNotify() <-chan bool {
 }
 
 func (s *previewKnowledgeServiceStub) GetKnowledgeByIDOnly(context.Context, string) (*types.Knowledge, error) {
-	return &types.Knowledge{ID: "k1", TenantID: 42, KnowledgeBaseID: "kb1"}, nil
+	return &types.Knowledge{ID: "k1", SpaceID: 42, KnowledgeBaseID: "kb1"}, nil
 }
 
 func (s *previewKnowledgeServiceStub) GetKnowledgeFile(context.Context, string) (io.ReadCloser, string, error) {
@@ -50,7 +50,7 @@ func TestPreviewKnowledgeFileForcesActiveContentDownload(t *testing.T) {
 	router := gin.New()
 	router.Use(middleware.ErrorHandler())
 	router.Use(func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(42))
+		c.Set(types.SpaceIDContextKey.String(), uint64(42))
 		c.Next()
 	})
 
@@ -81,7 +81,7 @@ func TestPreviewRangeCleansOnlyTemporaryCopy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(42))
+		c.Set(types.SpaceIDContextKey.String(), uint64(42))
 		c.Next()
 	})
 	h := &KnowledgeHandler{kgService: &previewKnowledgeServiceStub{filename: "original.md"}}
@@ -113,7 +113,7 @@ func TestKnowledgeOriginalDownloadAndPreviewBytesAndMIME(t *testing.T) {
 	} {
 		t.Run(sample.name, func(t *testing.T) {
 			router := gin.New()
-			router.Use(middleware.ErrorHandler(), func(c *gin.Context) { c.Set(types.TenantIDContextKey.String(), uint64(42)); c.Next() })
+			router.Use(middleware.ErrorHandler(), func(c *gin.Context) { c.Set(types.SpaceIDContextKey.String(), uint64(42)); c.Next() })
 			h := &KnowledgeHandler{kgService: &previewKnowledgeServiceStub{filename: sample.name, content: sample.data}}
 			router.GET("/knowledge/:id/download", h.DownloadKnowledgeFile)
 			router.GET("/knowledge/:id/preview", h.PreviewKnowledgeFile)

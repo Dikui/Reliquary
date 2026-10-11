@@ -28,7 +28,7 @@ import (
 
 func TestMaintenanceModelProbeUsesLiveCredentialsAndBothModalities(t *testing.T) {
 	db := pgtest.Open(t)
-	_, err := repository.EnsureTenantKnowledgeBase(context.Background(), db, types.SingleTenantID, "")
+	_, err := repository.EnsureSpaceKnowledgeBase(context.Background(), db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	t.Setenv("OLLAMA_OPTIONAL", "true")
 	var calls atomic.Int32
@@ -44,7 +44,7 @@ func TestMaintenanceModelProbeUsesLiveCredentialsAndBothModalities(t *testing.T)
 		_, _ = w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0,0,0]}],"usage":{"total_tokens":1}}`))
 	}))
 	defer upstream.Close()
-	model := &types.Model{ID: "maintenance-probe", TenantID: types.SingleTenantID, Name: "fixture", Type: types.ModelTypeEmbedding,
+	model := &types.Model{ID: "maintenance-probe", SpaceID: types.SingleSpaceID, Name: "fixture", Type: types.ModelTypeEmbedding,
 		Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{APIKey: "model-probe-fixture", BaseURL: upstream.URL + "/v1", InterfaceType: "openai", Provider: "generic",
 			EmbeddingParameters: types.EmbeddingParameters{Dimension: 4, SupportsImages: true, MultimodalFormat: "jina"}}}
 	require.NoError(t, db.Create(model).Error)
@@ -89,13 +89,13 @@ func TestMaintenanceChatGPTProbePreservesRealQuotaAndAppendsExactAuditChain(t *t
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	_, err := repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	_, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	credential, err := utils.EncryptAESGCM(`{"access_token":"probe-access-token","refresh_token":"probe-refresh-token","id_token":"probe-id-token"}`, utils.GetAESKey())
 	require.NoError(t, err)
 	accountID := "00000000-0000-0000-0000-000000000015"
 	require.NoError(t, db.Exec(`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,credentials,status,expires_at) VALUES(?,?,?,?,?,'connected',?)`, accountID, "probe-client", "https://auth.openai.com", "probe-subject", credential, time.Now().Add(time.Hour)).Error)
-	model := &types.Model{ID: "maintenance-chatgpt-probe", TenantID: types.SingleTenantID, Name: "fixture", Type: types.ModelTypeKnowledgeQA,
+	model := &types.Model{ID: "maintenance-chatgpt-probe", SpaceID: types.SingleSpaceID, Name: "fixture", Type: types.ModelTypeKnowledgeQA,
 		Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive, Parameters: types.ModelParameters{Provider: "chatgpt", InterfaceType: "responses", ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, db.Create(model).Error)
 	limit := 10
@@ -203,7 +203,7 @@ func TestMaintenancePolicyProbeAuditsCreationAndCancellationWithoutReversingQuot
 	require.JSONEq(t, string(mustJSON(after)), string(logs[1].After))
 }
 
-func TestOfflineSchemaZeroChatGPTModelProbeAuditsRealQuotaWithoutMigration(t *testing.T) {
+func TestOfflineChatGPTModelProbeWithoutMaintenanceStateAuditsRealQuotaWithoutMigration(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", "01234567890123456789012345678901")
 	t.Setenv("OLLAMA_OPTIONAL", "true")
 	t.Setenv("SSRF_WHITELIST", "api.openai.com,127.0.0.1")
@@ -214,20 +214,20 @@ func TestOfflineSchemaZeroChatGPTModelProbeAuditsRealQuotaWithoutMigration(t *te
 	require.NoError(t, err)
 	migration, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
 	require.NoError(t, err)
-	require.NoError(t, migration.Steps(-1))
+	require.NoError(t, db.Exec("DROP TABLE maintenance_state").Error)
 	t.Cleanup(func() {
 		sourceErr, databaseErr := migration.Close()
 		require.NoError(t, sourceErr)
 		require.NoError(t, databaseErr)
 	})
 	ctx := context.Background()
-	_, err = repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	_, err = repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	credential, err := utils.EncryptAESGCM(`{"access_token":"offline-probe-access","refresh_token":"offline-probe-refresh","id_token":"offline-probe-id"}`, utils.GetAESKey())
 	require.NoError(t, err)
 	accountID := "00000000-0000-0000-0000-000000000016"
 	require.NoError(t, db.Exec(`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,credentials,status,expires_at) VALUES(?,?,?,?,?,'connected',?)`, accountID, "offline-probe-client", "https://auth.openai.com", "offline-probe-subject", credential, time.Now().Add(time.Hour)).Error)
-	model := &types.Model{ID: "offline-probe-model", TenantID: 1, Name: "fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
+	model := &types.Model{ID: "offline-probe-model", SpaceID: 1, Name: "fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{Provider: "chatgpt", InterfaceType: "responses", ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, db.Create(model).Error)
 	var calls atomic.Int32
@@ -252,7 +252,7 @@ func TestOfflineSchemaZeroChatGPTModelProbeAuditsRealQuotaWithoutMigration(t *te
 	}
 	version, dirty, err := migration.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 0, version)
+	require.EqualValues(t, 2, version)
 	require.False(t, dirty)
 	require.False(t, db.Migrator().HasTable("maintenance_state"))
 }

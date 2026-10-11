@@ -24,13 +24,13 @@ func (s *stubKBRepoForModelDelete) CreateKnowledgeBase(context.Context, *types.K
 func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
-func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByIDAndTenant(context.Context, string, uint64) (*types.KnowledgeBase, error) {
+func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByIDAndSpace(context.Context, string, uint64) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
 func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByIDs(context.Context, []string) ([]*types.KnowledgeBase, error) {
 	return nil, nil
 }
-func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByTenantID(context.Context, uint64) (*types.KnowledgeBase, error) {
+func (s *stubKBRepoForModelDelete) GetKnowledgeBaseBySpaceID(context.Context, uint64) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
 func (s *stubKBRepoForModelDelete) UpdateKnowledgeBase(context.Context, *types.KnowledgeBase) error {
@@ -82,11 +82,11 @@ func (s *stubModelRepoForDelete) ClearDefaultByType(context.Context, uint, types
 }
 
 func TestDeleteModel_RejectsWhenReferenced(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	modelID := "model-in-use"
 
 	svc := NewModelService(
-		&stubModelRepoForDelete{model: &types.Model{ID: modelID, TenantID: 1}},
+		&stubModelRepoForDelete{model: &types.Model{ID: modelID, SpaceID: 1}},
 		&stubKBRepoForModelDelete{usages: []types.ModelUsageResource{
 			{ID: "kb-1", Name: "Product docs", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
 			{ID: "kb-2", Name: "Engineering", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
@@ -111,13 +111,13 @@ func TestDeleteModel_RejectsWhenReferenced(t *testing.T) {
 }
 
 func TestDeleteModel_SucceedsWhenUnreferenced(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	modelID := "free-model"
 	deleted := false
 
 	svc := NewModelService(
 		&stubModelRepoForDelete{
-			model: &types.Model{ID: modelID, TenantID: 1},
+			model: &types.Model{ID: modelID, SpaceID: 1},
 			delete: func(id string) error {
 				assert.Equal(t, modelID, id)
 				deleted = true
@@ -146,14 +146,14 @@ func TestGetModelUsageDetails_NormalizesEmptyCollections(t *testing.T) {
 }
 
 func TestDeleteModel_DoesNotDeleteWhenUsageLookupFails(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	modelID := "lookup-failure"
 	wantErr := errors.New("usage lookup failed")
 	deleted := false
 
 	svc := NewModelService(
 		&stubModelRepoForDelete{
-			model: &types.Model{ID: modelID, TenantID: 1},
+			model: &types.Model{ID: modelID, SpaceID: 1},
 			delete: func(string) error {
 				deleted = true
 				return nil
@@ -169,12 +169,12 @@ func TestDeleteModel_DoesNotDeleteWhenUsageLookupFails(t *testing.T) {
 }
 
 func TestDeleteModel_ReportsUntruncatedTotalsWhenListsAreCapped(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	modelID := "popular-embedding"
 	kbTotal := int64(80)
 
 	svc := NewModelService(
-		&stubModelRepoForDelete{model: &types.Model{ID: modelID, TenantID: 1}},
+		&stubModelRepoForDelete{model: &types.Model{ID: modelID, SpaceID: 1}},
 		&stubKBRepoForModelDelete{
 			count: &kbTotal,
 			usages: []types.ModelUsageResource{
@@ -197,35 +197,35 @@ func TestDeleteModel_ReportsUntruncatedTotalsWhenListsAreCapped(t *testing.T) {
 	assert.Len(t, details.KnowledgeBases, 2)
 }
 
-type stubTenantServiceForModelDelete struct {
-	tenant *types.Tenant
+type stubSpaceServiceForModelDelete struct {
+	space *types.Space
 }
 
-func (s *stubTenantServiceForModelDelete) CreateTenant(context.Context, *types.Tenant) (*types.Tenant, error) {
+func (s *stubSpaceServiceForModelDelete) CreateSpace(context.Context, *types.Space) (*types.Space, error) {
 	return nil, nil
 }
-func (s *stubTenantServiceForModelDelete) GetTenantByID(context.Context, uint64) (*types.Tenant, error) {
-	return s.tenant, nil
+func (s *stubSpaceServiceForModelDelete) GetSpaceByID(context.Context, uint64) (*types.Space, error) {
+	return s.space, nil
 }
-func (s *stubTenantServiceForModelDelete) GetTenantsByIDs(context.Context, []uint64) (map[uint64]*types.Tenant, error) {
+func (s *stubSpaceServiceForModelDelete) GetSpacesByIDs(context.Context, []uint64) (map[uint64]*types.Space, error) {
 	return nil, nil
 }
-func (s *stubTenantServiceForModelDelete) ListTenants(context.Context) ([]*types.Tenant, error) {
+func (s *stubSpaceServiceForModelDelete) ListSpaces(context.Context) ([]*types.Space, error) {
 	return nil, nil
 }
-func (s *stubTenantServiceForModelDelete) UpdateTenant(context.Context, *types.Tenant) (*types.Tenant, error) {
+func (s *stubSpaceServiceForModelDelete) UpdateSpace(context.Context, *types.Space) (*types.Space, error) {
 	return nil, nil
 }
-func (s *stubTenantServiceForModelDelete) DeleteTenant(context.Context, uint64) error { return nil }
-func (s *stubTenantServiceForModelDelete) ListAllTenants(context.Context) ([]*types.Tenant, error) {
+func (s *stubSpaceServiceForModelDelete) DeleteSpace(context.Context, uint64) error { return nil }
+func (s *stubSpaceServiceForModelDelete) ListAllSpaces(context.Context) ([]*types.Space, error) {
 	return nil, nil
 }
 
-func (s *stubTenantServiceForModelDelete) SearchTenants(context.Context, string, uint64, int, int) ([]*types.Tenant, int64, error) {
+func (s *stubSpaceServiceForModelDelete) SearchSpaces(context.Context, string, uint64, int, int) ([]*types.Space, int64, error) {
 	return nil, 0, nil
 }
-func (s *stubTenantServiceForModelDelete) GetTenantByIDForUser(context.Context, uint64, string) (*types.Tenant, error) {
-	return s.tenant, nil
+func (s *stubSpaceServiceForModelDelete) GetSpaceByIDForUser(context.Context, uint64, string) (*types.Space, error) {
+	return s.space, nil
 }
 
 func TestFormatModelInUseMessage(t *testing.T) {

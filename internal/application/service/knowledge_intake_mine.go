@@ -111,10 +111,10 @@ func (s *knowledgeService) convertIntakeToMine(ctx context.Context, kb *types.Kn
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "review_convert_to_mine", k.ID, before, map[string]any{"vault_path": relative}); err != nil {
 			return err
 		}
-		if err := deleteArticleEntityAssociations(ctx, tx, k.TenantID, []string{k.ID}); err != nil {
+		if err := deleteArticleEntityAssociations(ctx, tx, k.SpaceID, []string{k.ID}); err != nil {
 			return err
 		}
-		return repository.NewKnowledgeRepository(tx).HardDeleteKnowledge(ctx, k.TenantID, k.ID)
+		return repository.NewKnowledgeRepository(tx).HardDeleteKnowledge(ctx, k.SpaceID, k.ID)
 	})
 	if err != nil {
 		return nil, err

@@ -30,7 +30,7 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 			continue
 		}
 		var model types.Model
-		if err := db.WithContext(ctx).Where("id = ? AND (tenant_id = ? OR is_builtin = true)", id, types.MustTenantIDFromContext(ctx)).First(&model).Error; err != nil {
+		if err := db.WithContext(ctx).Where("id = ? AND (space_id = ? OR is_builtin = true)", id, types.MustSpaceIDFromContext(ctx)).First(&model).Error; err != nil {
 			return fmt.Errorf("%s model is unavailable: %w", tier, err)
 		}
 		expected := types.ModelTypeKnowledgeQA
@@ -64,9 +64,9 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 		return ResolvedModelTier{}, fmt.Errorf("unknown model tier %q", tier)
 	}
 	if kb == nil && db != nil {
-		tenantID := types.MustTenantIDFromContext(ctx)
+		spaceID := types.MustSpaceIDFromContext(ctx)
 		kb = &types.KnowledgeBase{}
-		if err := db.WithContext(ctx).Where("tenant_id = ?", tenantID).First(kb).Error; err != nil {
+		if err := db.WithContext(ctx).Where("space_id = ?", spaceID).First(kb).Error; err != nil {
 			return ResolvedModelTier{}, fmt.Errorf("read knowledge base model tiers: %w", err)
 		}
 	}

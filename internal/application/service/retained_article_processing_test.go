@@ -55,13 +55,13 @@ func (*retainedProcessingChat) GetModelName() string { return "local-fixture" }
 
 func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	db := pgtest.Open(t)
-	tenant := &types.Tenant{ID: 1, Name: "Space"}
-	require.NoError(t, db.Create(tenant).Error)
-	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
+	space := &types.Space{ID: 1, Name: "Space"}
+	require.NoError(t, db.Create(space).Error)
+	kb := &types.KnowledgeBase{ID: "kb", SpaceID: 1, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
 		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512}}
 	require.NoError(t, db.Create(kb).Error)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	repo := repository.NewKnowledgeRepository(db)
 	chunkRepo := repository.NewChunkRepository(db)
@@ -71,7 +71,7 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	queue := &retainedProcessingQueue{}
 	bases := retainedProcessingKB{kb: kb}
 	svc := &knowledgeService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
-		kbService: bases, modelService: models, task: queue, tenantRepo: repository.NewTenantRepository(db),
+		kbService: bases, modelService: models, task: queue, spaceRepo: repository.NewSpaceRepository(db),
 		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
 	article, err := svc.CreateKnowledgeFromManual(ctx, kb.ID, &types.ManualKnowledgePayload{
 		Title: "Widget announcement", Content: "# Widget\n\nAcme released its new widget product. The original announcement describes deployment choices, supported platforms and the complete product capabilities.", Status: "publish",

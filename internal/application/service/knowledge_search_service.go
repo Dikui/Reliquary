@@ -8,15 +8,15 @@ import (
 
 type knowledgeSearchService struct {
 	knowledgeBaseService interfaces.KnowledgeBaseService
-	tenantService        interfaces.TenantService
+	spaceService         interfaces.SpaceService
 	modelService         interfaces.ModelService
 	rerank               *knowledgesearch.RerankStage
 	db                   *gorm.DB
 }
 
-func NewKnowledgeSearchService(kbService interfaces.KnowledgeBaseService, tenantService interfaces.TenantService, modelService interfaces.ModelService, db *gorm.DB) interfaces.KnowledgeSearchService {
+func NewKnowledgeSearchService(kbService interfaces.KnowledgeBaseService, spaceService interfaces.SpaceService, modelService interfaces.ModelService, db *gorm.DB) interfaces.KnowledgeSearchService {
 	return &knowledgeSearchService{
-		knowledgeBaseService: kbService, tenantService: tenantService,
+		knowledgeBaseService: kbService, spaceService: spaceService,
 		modelService: modelService, db: db,
 		rerank: knowledgesearch.NewRerankStage(modelService),
 	}

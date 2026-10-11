@@ -37,7 +37,7 @@ func CheckMaintenanceModels(ctx context.Context, db *gorm.DB, modelID string) (a
 }
 
 func checkMaintenanceModels(ctx context.Context, db *gorm.DB, modelID string, transport *http.Client) (any, error) {
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, types.SingleSpaceID)
 	pool, err := ants.NewPool(1)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func checkMaintenanceModels(ctx context.Context, db *gorm.DB, modelID string, tr
 		return nil, err
 	}
 	models := service.NewModelServiceWithChatGPT(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollama,
-		embedding.NewBatchEmbedder(pool), service.NewTenantService(repository.NewTenantRepository(db)), db,
+		embedding.NewBatchEmbedder(pool), service.NewSpaceService(repository.NewSpaceRepository(db)), db,
 		chatgpt.NewManager(db), service.NewChatGPTPolicyService(db))
 	if transport != nil {
 		models.(interface{ SetChatGPTTransport(*http.Client) }).SetChatGPTTransport(transport)

@@ -78,8 +78,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Data repositories layer
 	logger.Debugf(ctx, "[Container] Registering repositories...")
-	must(container.Provide(repository.NewTenantRepository))
-	must(container.Provide(repository.NewTenantAPIKeyRepository))
+	must(container.Provide(repository.NewSpaceRepository))
+	must(container.Provide(repository.NewAPIKeyRepository))
 	must(container.Provide(repository.NewKnowledgeBaseRepository))
 	must(container.Provide(repository.NewKnowledgeRepository))
 	must(container.Provide(repository.NewKnowledgeSpanRepository))
@@ -94,8 +94,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Business service layer
 	logger.Debugf(ctx, "[Container] Registering business services...")
-	must(container.Provide(service.NewTenantService))
-	must(container.Provide(service.NewTenantAPIKeyService))
+	must(container.Provide(service.NewSpaceService))
+	must(container.Provide(service.NewAPIKeyService))
 	must(container.Provide(service.NewKnowledgeBaseService))
 	must(container.Provide(service.NewKnowledgeService))
 	must(container.Provide(service.NewKnowledgeSearchService))
@@ -142,7 +142,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
-	must(container.Provide(handler.NewTenantHandler))
+	must(container.Provide(handler.NewSpaceHandler))
 	must(container.Provide(handler.NewKnowledgeBaseHandler))
 	must(container.Provide(handler.NewKnowledgeHandler))
 	must(container.Provide(handler.NewVaultHandler))
@@ -169,7 +169,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
 	// Wire the model package's local image resolver so image inputs can read
-	// local:// images that live under a tenant's configured storage PathPrefix
+	// local:// images that live under a space's configured storage PathPrefix
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerModelLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
@@ -315,7 +315,7 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	} else {
 		logger.Infof(context.Background(), "Auto-migration is disabled (AUTO_MIGRATE=false)")
 	}
-	if err := service.EnsureSingleTeamSpace(context.Background(), db); err != nil {
+	if err := service.EnsurePersonalSpace(context.Background(), db); err != nil {
 		return nil, err
 	}
 	if err := service.EnsureSingleKnowledgeBase(context.Background(), db); err != nil {

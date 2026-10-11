@@ -50,7 +50,7 @@ func (p *SearchStage) Run(ctx context.Context,
 	pipelineInfo(ctx, "Search", "input", map[string]interface{}{
 		"rewrite_query":  state.RewriteQuery,
 		"search_targets": len(state.SearchTargets),
-		"tenant_id":      state.TenantID,
+		"space_id":       state.SpaceID,
 	})
 
 	// Search the configured knowledge targets
@@ -288,7 +288,7 @@ func (p *SearchStage) searchByTargets(
 		})
 	}
 
-	// Resolve actual model identities (name + endpoint) so that cross-tenant
+	// Resolve actual model identities (name + endpoint) so that cross-space
 	// KBs backed by the same physical model share one embedding computation.
 	modelKeyMap := p.knowledgeBaseService.ResolveEmbeddingModelKeys(ctx, kbList)
 

@@ -40,7 +40,7 @@ const (
 type StoredResource struct {
 	ID           string         `json:"id" gorm:"type:varchar(36);primaryKey"`
 	Handle       string         `json:"handle" gorm:"type:varchar(22);not null;uniqueIndex"`
-	TenantID     uint64         `json:"tenant_id" gorm:"not null;index"`
+	SpaceID      uint64         `json:"space_id" gorm:"not null;index"`
 	Provider     string         `json:"provider" gorm:"type:varchar(32);not null"`
 	PhysicalPath string         `json:"-" gorm:"type:text;not null"`
 	LocationHash string         `json:"-" gorm:"type:varchar(64);not null"`
@@ -81,7 +81,7 @@ func (r *StoredResource) BeforeCreate(_ *gorm.DB) error {
 type ResourceBinding struct {
 	ID         string    `json:"id" gorm:"type:varchar(36);primaryKey"`
 	ResourceID string    `json:"resource_id" gorm:"type:varchar(36);not null;index"`
-	TenantID   uint64    `json:"tenant_id" gorm:"not null;index"`
+	SpaceID    uint64    `json:"space_id" gorm:"not null;index"`
 	OwnerType  string    `json:"owner_type" gorm:"type:varchar(32);not null"`
 	OwnerID    string    `json:"owner_id" gorm:"type:varchar(64);not null"`
 	Relation   string    `json:"relation" gorm:"type:varchar(32);not null;default:'attachment'"`

@@ -33,16 +33,16 @@ type topicBackfillInput struct {
 }
 
 func (s *TopicService) enqueueBackfill(tx *gorm.DB, topic *types.Topic) error {
-	if err := tx.Model(&types.TopicBackfillJob{}).Where("tenant_id=? AND topic_id=? AND status IN ?", topic.TenantID, topic.ID, []string{"pending", "running", "failed"}).
+	if err := tx.Model(&types.TopicBackfillJob{}).Where("space_id=? AND topic_id=? AND status IN ?", topic.SpaceID, topic.ID, []string{"pending", "running", "failed"}).
 		Updates(map[string]any{"status": "cancelled", "updated_at": time.Now()}).Error; err != nil {
 		return err
 	}
 	var ids []string
-	if err := tx.Model(&types.Knowledge{}).Where("tenant_id=? AND source_kind='article' AND parse_status=? AND (structured_summary IS NOT NULL OR description<>'')", topic.TenantID, types.ParseStatusCompleted).
+	if err := tx.Model(&types.Knowledge{}).Where("space_id=? AND source_kind='article' AND parse_status=? AND (structured_summary IS NOT NULL OR description<>'')", topic.SpaceID, types.ParseStatusCompleted).
 		Order("created_at,id").Pluck("id", &ids).Error; err != nil {
 		return err
 	}
-	job := types.TopicBackfillJob{ID: uuid.NewString(), TenantID: topic.TenantID, TopicID: topic.ID, TopicName: topic.Name, TopicDescription: topic.Description, Status: "pending", Total: len(ids)}
+	job := types.TopicBackfillJob{ID: uuid.NewString(), SpaceID: topic.SpaceID, TopicID: topic.ID, TopicName: topic.Name, TopicDescription: topic.Description, Status: "pending", Total: len(ids)}
 	if len(ids) == 0 {
 		job.Status = "completed"
 	}
@@ -67,19 +67,19 @@ func (s *TopicService) enqueueBackfill(tx *gorm.DB, topic *types.Topic) error {
 }
 
 func (s *TopicService) BackfillStatus(ctx context.Context, topicID string) (*types.TopicBackfillJob, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var topic types.Topic
-	if err := s.db.WithContext(ctx).Where("tenant_id=? AND id=?", tenantID, topicID).First(&topic).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, topicID).First(&topic).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, werrors.NewNotFoundError("topic not found")
 		}
 		return nil, err
 	}
 	result := &types.TopicBackfillJob{TopicID: topicID, Status: "completed", Batches: []types.TopicBackfillBatch{}}
-	err = s.db.WithContext(ctx).Where("tenant_id=? AND topic_id=?", tenantID, topicID).Order("created_at DESC,id DESC").First(result).Error
+	err = s.db.WithContext(ctx).Where("space_id=? AND topic_id=?", spaceID, topicID).Order("created_at DESC,id DESC").First(result).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return result, nil
 	}
@@ -94,20 +94,20 @@ func (s *TopicService) BackfillStatus(ctx context.Context, topicID string) (*typ
 }
 
 func (s *TopicService) RetryBackfill(ctx context.Context, topicID string) (*types.TopicBackfillJob, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var topic types.Topic
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND id=?", tenantID, topicID).First(&topic).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, topicID).First(&topic).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("topic not found")
 			}
 			return err
 		}
 		var job types.TopicBackfillJob
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND topic_id=?", tenantID, topicID).Order("created_at DESC,id DESC").First(&job).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND topic_id=?", spaceID, topicID).Order("created_at DESC,id DESC").First(&job).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewConflictError("there are no failed batches")
 			}
@@ -140,7 +140,7 @@ func (s *TopicService) enqueueBackfillTask(ctx context.Context, tx *gorm.DB, job
 	if !ok {
 		return errors.New("topic task queue must support PostgreSQL transactions")
 	}
-	payload, err := json.Marshal(types.TopicBackfillPayload{TenantID: job.TenantID, JobID: job.ID})
+	payload, err := json.Marshal(types.TopicBackfillPayload{SpaceID: job.SpaceID, JobID: job.ID})
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func (s *TopicService) enqueueBackfillTask(ctx context.Context, tx *gorm.DB, job
 
 func (s *TopicService) HandleBackfill(ctx context.Context, task *taskqueue.Task) error {
 	var payload types.TopicBackfillPayload
-	if task == nil || json.Unmarshal(task.Payload(), &payload) != nil || payload.TenantID != types.SingleTenantID || payload.JobID == "" {
+	if task == nil || json.Unmarshal(task.Payload(), &payload) != nil || payload.SpaceID != types.SingleSpaceID || payload.JobID == "" {
 		return fmt.Errorf("invalid topic historical classification payload: %w", taskqueue.SkipRetry)
 	}
 	// Manual retries can arrive while the preceding task is still finishing.
@@ -175,7 +175,7 @@ func (s *TopicService) HandleBackfill(ctx context.Context, task *taskqueue.Task)
 		_, _ = lease.ExecContext(unlockCtx, "SELECT pg_advisory_unlock(hashtextextended($1,0))", lockName)
 	}()
 	var job types.TopicBackfillJob
-	err = s.db.WithContext(ctx).Where("id=? AND tenant_id=?", payload.JobID, payload.TenantID).First(&job).Error
+	err = s.db.WithContext(ctx).Where("id=? AND space_id=?", payload.JobID, payload.SpaceID).First(&job).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil
 	}
@@ -203,7 +203,7 @@ func (s *TopicService) HandleBackfill(ctx context.Context, task *taskqueue.Task)
 	return nil
 }
 func (s *TopicService) runBackfillJob(ctx context.Context, job types.TopicBackfillJob) error {
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, job.TenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, job.SpaceID)
 	if err := s.db.WithContext(ctx).Model(&types.TopicBackfillJob{}).Where("id=? AND status IN ?", job.ID, []string{"pending", "running"}).Update("status", "running").Error; err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (s *TopicService) judgeBatch(ctx context.Context, job types.TopicBackfillJo
 		return nil, err
 	}
 	var articles []types.Knowledge
-	if err := s.db.WithContext(ctx).Where("tenant_id=? AND id IN ? AND source_kind='article' AND parse_status=?", job.TenantID, ids, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND id IN ? AND source_kind='article' AND parse_status=?", job.SpaceID, ids, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
 		return nil, err
 	}
 	if len(articles) == 0 {
@@ -316,7 +316,7 @@ func (s *TopicService) finishBatch(ctx context.Context, job types.TopicBackfillJ
 	applied := false
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var topic types.Topic
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND id=?", job.TenantID, job.TopicID).First(&topic).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", job.SpaceID, job.TopicID).First(&topic).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil
 			}
@@ -335,10 +335,10 @@ func (s *TopicService) finishBatch(ctx context.Context, job types.TopicBackfillJ
 		} else {
 			// INSERT SELECT also ignores articles deleted while the model was running.
 			if len(matched) > 0 {
-				if err := tx.Exec(`INSERT INTO knowledge_topics(tenant_id,knowledge_id,topic_id,source,created_at,is_historical)
-				SELECT tenant_id,id,?,'model',CURRENT_TIMESTAMP,true FROM knowledges
-				WHERE tenant_id=? AND id IN ? AND deleted_at IS NULL AND source_kind='article'
-				ON CONFLICT (knowledge_id,topic_id) DO NOTHING`, job.TopicID, job.TenantID, matched).Error; err != nil {
+				if err := tx.Exec(`INSERT INTO knowledge_topics(space_id,knowledge_id,topic_id,source,created_at,is_historical)
+				SELECT space_id,id,?,'model',CURRENT_TIMESTAMP,true FROM knowledges
+				WHERE space_id=? AND id IN ? AND deleted_at IS NULL AND source_kind='article'
+				ON CONFLICT (knowledge_id,topic_id) DO NOTHING`, job.TopicID, job.SpaceID, matched).Error; err != nil {
 					return err
 				}
 			}

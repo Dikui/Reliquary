@@ -37,7 +37,7 @@ type DataSourceService struct {
 	taskEnqueuer      interfaces.TaskEnqueuer
 	connectorRegistry *datasource.ConnectorRegistry
 	scheduler         *datasource.Scheduler
-	tenantRepo        interfaces.TenantRepository
+	spaceRepo         interfaces.SpaceRepository
 }
 
 // NewDataSourceService creates a new data source service
@@ -50,7 +50,7 @@ func NewDataSourceService(
 	taskEnqueuer interfaces.TaskEnqueuer,
 	connectorRegistry *datasource.ConnectorRegistry,
 	scheduler *datasource.Scheduler,
-	tenantRepo interfaces.TenantRepository,
+	spaceRepo interfaces.SpaceRepository,
 
 ) interfaces.DataSourceService {
 	return &DataSourceService{
@@ -62,7 +62,7 @@ func NewDataSourceService(
 		taskEnqueuer:      taskEnqueuer,
 		connectorRegistry: connectorRegistry,
 		scheduler:         scheduler,
-		tenantRepo:        tenantRepo,
+		spaceRepo:         spaceRepo,
 	}
 }
 
@@ -77,7 +77,7 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	ds.DefaultContentType = types.NormalizeContentType(ds.DefaultContentType)
 
 	kb, err := s.kbService.GetKnowledgeBase(ctx)
-	if err != nil || kb == nil || kb.TenantID != ds.TenantID {
+	if err != nil || kb == nil || kb.SpaceID != ds.SpaceID {
 		return nil, datasource.ErrKnowledgeBaseNotFound
 	}
 	ds.KnowledgeBaseID = kb.ID
@@ -167,10 +167,10 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 		return nil, fmt.Errorf("changing knowledge base is not allowed")
 	}
 
-	if ds.TenantID == 0 {
-		ds.TenantID = existing.TenantID
+	if ds.SpaceID == 0 {
+		ds.SpaceID = existing.SpaceID
 	}
-	if ds.TenantID != existing.TenantID {
+	if ds.SpaceID != existing.SpaceID {
 		return nil, datasource.ErrDataSourceInvalid
 	}
 	if ds.Status == "" {
@@ -483,7 +483,7 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 					return err
 				}
 				var source types.DataSource
-				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", dsID, types.SingleTenantID).First(&source).Error; err != nil {
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", dsID, types.SingleSpaceID).First(&source).Error; err != nil {
 					return err
 				}
 				copy := *s
@@ -516,7 +516,7 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 	// Create sync log
 	syncLog := &types.SyncLog{
 		DataSourceID: dsID,
-		TenantID:     ds.TenantID,
+		SpaceID:      ds.SpaceID,
 		Status:       types.SyncLogStatusRunning,
 		StartedAt:    time.Now().UTC(),
 	}
@@ -529,7 +529,7 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 	// Enqueue sync task
 	payload := &types.DataSourceSyncPayload{
 		DataSourceID: dsID,
-		TenantID:     ds.TenantID,
+		SpaceID:      ds.SpaceID,
 		SyncLogID:    syncLog.ID,
 		ForceFull:    false,
 		Initiator:    types.TaskInitiatorFromContext(ctx),
@@ -778,15 +778,15 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *taskqueue.Tas
 		Total: len(items), Metrics: config.FetchMetrics,
 	}
 
-	// Set tenant context so KnowledgeService can resolve tenant info correctly
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
+	// Set space context so KnowledgeService can resolve space info correctly
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, types.SingleSpaceID)
 
-	tenant, err := s.tenantRepo.GetTenantByID(ctx, ds.TenantID)
+	space, err := s.spaceRepo.GetSpaceByID(ctx, ds.SpaceID)
 	if err != nil {
-		logger.Errorf(ctx, "failed to get tenant info: %v", err)
+		logger.Errorf(ctx, "failed to get space info: %v", err)
 		syncLog.Status = types.SyncLogStatusFailed
 		syncLog.FinishedAt = timePtr(time.Now().UTC())
-		syncLog.ErrorMessage = fmt.Sprintf("Failed to get tenant info: %v", err)
+		syncLog.ErrorMessage = fmt.Sprintf("Failed to get space info: %v", err)
 		_ = s.syncLogRepo.Update(ctx, syncLog)
 		if !wasPaused {
 			ds.Status = types.DataSourceStatusError
@@ -795,7 +795,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *taskqueue.Tas
 		_ = s.dsRepo.Update(ctx, ds)
 		return err
 	}
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 
 	for _, item := range items {
 		item := item
@@ -907,7 +907,7 @@ func (s *DataSourceService) applyFetchedItem(
 		// so identical external IDs from different data sources cannot collide.
 		repo := s.knowledgeService.GetRepository()
 		existing, lookupErr := repo.FindByDataSourceExternalID(
-			ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID,
+			ctx, ds.SpaceID, ds.KnowledgeBaseID, ds.ID, item.ExternalID,
 		)
 		if lookupErr != nil {
 			logger.Errorf(ctx, "failed to find deleted knowledge for external_id=%s (ds=%s, kb=%s): %v",
@@ -942,7 +942,7 @@ func (s *DataSourceService) applyFetchedItem(
 			})
 			return
 		}
-		if herr := repo.HardDeleteKnowledge(ctx, ds.TenantID, existing.ID); herr != nil {
+		if herr := repo.HardDeleteKnowledge(ctx, ds.SpaceID, existing.ID); herr != nil {
 			result.Failed++
 			result.DeletionFailed++
 			logger.Errorf(ctx, "failed to hard-delete knowledge %s for external_id=%s (ds=%s): %v",
@@ -1077,17 +1077,17 @@ func (s *DataSourceService) processSyncStreaming(
 	ds *types.DataSource, syncLog *types.SyncLog,
 	config *types.DataSourceConfig, payload types.DataSourceSyncPayload, wasPaused bool,
 ) error {
-	// Tenant context must precede fetching because the stream ingests
+	// Space context must precede fetching because the stream ingests
 	// each item on the fly.
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
-	tenant, err := s.tenantRepo.GetTenantByID(ctx, ds.TenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, types.SingleSpaceID)
+	space, err := s.spaceRepo.GetSpaceByID(ctx, ds.SpaceID)
 	if err != nil {
-		logger.Errorf(ctx, "failed to get tenant info: %v", err)
+		logger.Errorf(ctx, "failed to get space info: %v", err)
 		s.updateSyncRunResult(ctx, ds, syncLog, &types.SyncResult{}, nil,
-			types.SyncLogStatusFailed, fmt.Sprintf("Failed to get tenant info: %v", err), wasPaused)
+			types.SyncLogStatusFailed, fmt.Sprintf("Failed to get space info: %v", err), wasPaused)
 		return err
 	}
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 
 	forceFull := payload.ForceFull || ds.SyncMode == types.SyncModeFull
 	attempt, _ := taskqueue.GetRetryCount(ctx)
@@ -1279,7 +1279,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		// ponytail: compare stored Markdown, not remote image bytes; add image fingerprints if in-place image edits matter.
 		contentHash := fmt.Sprintf("%x", sha256.Sum256(item.Content))
 		existing, err := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
-			ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
+			ctx, ds.SpaceID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
 		if err != nil {
 			return false, err
 		}
@@ -1311,7 +1311,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		// Scope the lookup to items owned by this data source so identical
 		// external IDs from two data sources cannot collide or overwrite each
 		// other during updates.
-		found, err := repo.FindByDataSourceExternalID(ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
+		found, err := repo.FindByDataSourceExternalID(ctx, ds.SpaceID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
 		if err != nil {
 			logger.Warnf(ctx, "failed to check existing knowledge for external_id=%s: %v", item.ExternalID, err)
 			// Non-fatal: proceed with creation (may produce duplicate)
@@ -1423,7 +1423,7 @@ func (s *DataSourceService) sweepStaleSubtree(ctx context.Context, ds *types.Dat
 		return
 	}
 	repo := s.knowledgeService.GetRepository()
-	children, err := repo.FindByMetadataKeyPrefix(ctx, ds.TenantID, ds.KnowledgeBaseID, "external_id", types.SubtreeChildPrefix(item.ExternalID))
+	children, err := repo.FindByMetadataKeyPrefix(ctx, ds.SpaceID, ds.KnowledgeBaseID, "external_id", types.SubtreeChildPrefix(item.ExternalID))
 	if err != nil {
 		logger.Warnf(ctx, "failed to list subtree of external_id=%s: %v", item.ExternalID, err)
 		return
@@ -1459,7 +1459,7 @@ func (s *DataSourceService) sweepStaleSubtree(ctx context.Context, ds *types.Dat
 	if derr := s.knowledgeService.DeleteKnowledgeList(ctx, ids); derr != nil {
 		logger.Warnf(ctx, "failed to delete %d stale sub-item(s) of external_id=%s: %v",
 			len(ids), item.ExternalID, derr)
-	} else if herr := repo.HardDeleteKnowledgeList(ctx, ds.TenantID, ids); herr != nil {
+	} else if herr := repo.HardDeleteKnowledgeList(ctx, ds.SpaceID, ids); herr != nil {
 		logger.Warnf(ctx, "failed to hard-delete %d stale sub-item(s) of external_id=%s: %v",
 			len(ids), item.ExternalID, herr)
 	}

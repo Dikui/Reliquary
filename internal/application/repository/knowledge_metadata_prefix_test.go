@@ -19,13 +19,13 @@ import (
 //   - "nodeB"          — a sibling document; must NOT be matched
 //
 // A fourth row in a different KB with a matching external_id is also inserted to
-// verify tenant/KB isolation.
+// verify space/KB isolation.
 func TestFindByMetadataKeyPrefix(t *testing.T) {
 	db := setupKnowledgeTestDB(t)
 	repo := NewKnowledgeRepository(db).(*knowledgeRepository)
 	ctx := context.Background()
 
-	const tenantID uint64 = 42
+	const spaceID uint64 = 42
 	kbID := uuid.New().String()
 	otherKBID := uuid.New().String()
 
@@ -34,18 +34,18 @@ func TestFindByMetadataKeyPrefix(t *testing.T) {
 		metadata := fmt.Sprintf(`{"external_id":%q}`, extID)
 		require.NoError(t, db.Exec(`
 			INSERT INTO knowledges
-			  (id, tenant_id, knowledge_base_id, type, title, source, parse_status, metadata)
+			  (id, space_id, knowledge_base_id, type, title, source, parse_status, metadata)
 			VALUES (?, ?, ?, 'document', ?, 'rss', 'completed', ?)
 		`, id, tid, kb, extID, metadata).Error)
 		return id
 	}
 
-	_ = insertRow(tenantID, kbID, "nodeA")               // parent — must NOT match
-	childID := insertRow(tenantID, kbID, "nodeA#file#x") // attachment child — MUST match
-	_ = insertRow(tenantID, kbID, "nodeB")               // sibling — must NOT match
-	_ = insertRow(tenantID, otherKBID, "nodeA#file#y")   // different KB — must be excluded
+	_ = insertRow(spaceID, kbID, "nodeA")               // parent — must NOT match
+	childID := insertRow(spaceID, kbID, "nodeA#file#x") // attachment child — MUST match
+	_ = insertRow(spaceID, kbID, "nodeB")               // sibling — must NOT match
+	_ = insertRow(spaceID, otherKBID, "nodeA#file#y")   // different KB — must be excluded
 
-	results, err := repo.FindByMetadataKeyPrefix(ctx, tenantID, kbID, "external_id", "nodeA#")
+	results, err := repo.FindByMetadataKeyPrefix(ctx, spaceID, kbID, "external_id", "nodeA#")
 	require.NoError(t, err)
 
 	require.Len(t, results, 1, "only the attachment child should match the prefix 'nodeA#'")
@@ -59,18 +59,18 @@ func TestFindByMetadataKeyPrefix_DeletedRowsExcluded(t *testing.T) {
 	repo := NewKnowledgeRepository(db).(*knowledgeRepository)
 	ctx := context.Background()
 
-	const tenantID uint64 = 43
+	const spaceID uint64 = 43
 	kbID := uuid.New().String()
 
 	id := uuid.New().String()
 	metadata := fmt.Sprintf(`{"external_id":%q}`, "nodeC#file#z")
 	require.NoError(t, db.Exec(`
 		INSERT INTO knowledges
-		  (id, tenant_id, knowledge_base_id, type, title, source, parse_status, metadata, deleted_at)
+		  (id, space_id, knowledge_base_id, type, title, source, parse_status, metadata, deleted_at)
 		VALUES (?, ?, ?, 'document', 'deleted-child', 'rss', 'completed', ?, '2026-01-01 00:00:00')
-	`, id, tenantID, kbID, metadata).Error)
+	`, id, spaceID, kbID, metadata).Error)
 
-	results, err := repo.FindByMetadataKeyPrefix(ctx, tenantID, kbID, "external_id", "nodeC#")
+	results, err := repo.FindByMetadataKeyPrefix(ctx, spaceID, kbID, "external_id", "nodeC#")
 	require.NoError(t, err)
 	assert.Empty(t, results, "soft-deleted rows must not appear in prefix results")
 }
@@ -84,7 +84,7 @@ func TestFindByMetadataKeyPrefix_UnderscoreIsLiteral(t *testing.T) {
 	repo := NewKnowledgeRepository(db).(*knowledgeRepository)
 	ctx := context.Background()
 
-	const tenantID uint64 = 44
+	const spaceID uint64 = 44
 	kbID := uuid.New().String()
 
 	insertRow := func(extID string) string {
@@ -92,9 +92,9 @@ func TestFindByMetadataKeyPrefix_UnderscoreIsLiteral(t *testing.T) {
 		metadata := fmt.Sprintf(`{"external_id":%q}`, extID)
 		require.NoError(t, db.Exec(`
 			INSERT INTO knowledges
-			  (id, tenant_id, knowledge_base_id, type, title, source, parse_status, metadata)
+			  (id, space_id, knowledge_base_id, type, title, source, parse_status, metadata)
 			VALUES (?, ?, ?, 'document', ?, 'rss', 'completed', ?)
-		`, id, tenantID, kbID, extID, metadata).Error)
+		`, id, spaceID, kbID, extID, metadata).Error)
 		return id
 	}
 
@@ -104,7 +104,7 @@ func TestFindByMetadataKeyPrefix_UnderscoreIsLiteral(t *testing.T) {
 	targetID := insertRow("ab_c#file#x") // literal underscore — MUST match
 	_ = insertRow("abXc#file#y")         // 'X' instead of '_' — must NOT match
 
-	results, err := repo.FindByMetadataKeyPrefix(ctx, tenantID, kbID, "external_id", "ab_c#")
+	results, err := repo.FindByMetadataKeyPrefix(ctx, spaceID, kbID, "external_id", "ab_c#")
 	require.NoError(t, err)
 
 	require.Len(t, results, 1, "underscore in prefix must be treated as literal: only 'ab_c#file#x' should match")

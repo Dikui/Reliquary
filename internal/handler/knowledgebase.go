@@ -55,10 +55,10 @@ func (h *KnowledgeBaseHandler) HybridSearch(c *gin.Context) {
 func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*types.KnowledgeBase, string, uint64, error) {
 	ctx := c.Request.Context()
 
-	// Get tenant ID from context
-	tenantID, exists := c.Get(types.TenantIDContextKey.String())
+	// Get space ID from context
+	spaceID, exists := c.Get(types.SpaceIDContextKey.String())
 	if !exists {
-		logger.Error(ctx, "Failed to get tenant ID")
+		logger.Error(ctx, "Failed to get space ID")
 		return nil, "", 0, apperrors.NewUnauthorizedError("Unauthorized")
 	}
 
@@ -80,17 +80,17 @@ func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*typ
 		return nil, id, 0, apperrors.NewInternalServerError(err.Error())
 	}
 
-	// Check 1: Verify tenant ownership (owner has full access)
-	if kb.TenantID == tenantID.(uint64) {
-		return kb, kb.ID, tenantID.(uint64), nil
+	// Check 1: Verify space ownership (owner has full access)
+	if kb.SpaceID == spaceID.(uint64) {
+		return kb, kb.ID, spaceID.(uint64), nil
 	}
 
 	// No permission: not owner and no shared access
 	logger.Warnf(
 		ctx,
-		"Tenant has no permission to access this knowledge base, knowledge base ID: %s, "+
-			"request tenant ID: %d, knowledge base tenant ID: %d",
-		id, tenantID.(uint64), kb.TenantID,
+		"Space has no permission to access this knowledge base, knowledge base ID: %s, "+
+			"request space ID: %d, knowledge base space ID: %d",
+		id, spaceID.(uint64), kb.SpaceID,
 	)
 	return nil, id, 0, apperrors.NewForbiddenError("No permission to operate")
 }

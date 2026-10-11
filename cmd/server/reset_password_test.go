@@ -20,11 +20,11 @@ func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
 func TestResetPasswordCommandChangesLoginAndRevokesSessions(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	if err := service.EnsureSingleTeamSpace(ctx, db); err != nil {
+	if err := service.EnsurePersonalSpace(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	tenantService := service.NewTenantService(repository.NewTenantRepository(db))
-	userService := service.NewUserService(&config.Config{}, repository.NewUserRepository(db), repository.NewAuthTokenRepository(db), tenantService)
+	spaceService := service.NewSpaceService(repository.NewSpaceRepository(db))
+	userService := service.NewUserService(&config.Config{}, repository.NewUserRepository(db), repository.NewAuthTokenRepository(db), spaceService)
 	user, err := userService.Register(ctx, &types.RegisterRequest{Username: "personal", Email: "personal@example.com", Password: "old-password"})
 	if err != nil {
 		t.Fatal(err)

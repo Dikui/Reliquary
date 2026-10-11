@@ -103,7 +103,7 @@ func TestLoadBuiltinModelsConfig_BasicUpsert(t *testing.T) {
 	assert.Equal(t, ModelTypeKnowledgeQA, m.Type)
 	assert.Equal(t, ModelSourceRemote, m.Source, "default source must be remote")
 	assert.Equal(t, ModelStatusActive, m.Status, "default status must be active")
-	assert.Equal(t, uint64(10000), m.TenantID, "default tenant_id must be 10000")
+	assert.Equal(t, uint64(10000), m.SpaceID, "default space_id must be 10000")
 	assert.True(t, m.IsBuiltin, "IsBuiltin must be forced to true")
 	assert.True(t, m.IsDefault)
 	assert.Equal(t, BuiltinModelManagedBy, m.ManagedBy)
@@ -255,7 +255,7 @@ func TestLoadBuiltinModelsConfig_ClearsExistingDefault(t *testing.T) {
 	// Seed an existing default (manual, e.g. user picked it via UI).
 	require.NoError(t, db.Create(&Model{
 		ID: "user-default", Name: "user", Type: ModelTypeKnowledgeQA,
-		TenantID: 10000, Source: ModelSourceRemote, Status: ModelStatusActive,
+		SpaceID: 10000, Source: ModelSourceRemote, Status: ModelStatusActive,
 		IsDefault: true, IsBuiltin: false, ManagedBy: "",
 	}).Error)
 
@@ -270,7 +270,7 @@ func TestLoadBuiltinModelsConfig_ClearsExistingDefault(t *testing.T) {
 	var prev Model
 	require.NoError(t, db.Where("id = ?", "user-default").First(&prev).Error)
 	assert.False(t, prev.IsDefault,
-		"YAML is_default=true must clear other defaults in same (tenant,type)")
+		"YAML is_default=true must clear other defaults in same (space,type)")
 
 	var newDefault Model
 	require.NoError(t, db.Where("id = ?", "builtin-llm").First(&newDefault).Error)

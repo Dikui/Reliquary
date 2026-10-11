@@ -54,7 +54,7 @@ func TestMaterializeKnowledgeFile_HandlesLocalScheme(t *testing.T) {
 
 	fs := &fakeFileService{
 		readers: map[string]func() (io.ReadCloser, error){
-			"tenants/42/data.csv": func() (io.ReadCloser, error) {
+			"spaces/42/data.csv": func() (io.ReadCloser, error) {
 				return io.NopCloser(bytes.NewReader(payload)), nil
 			},
 		},
@@ -68,7 +68,7 @@ func TestMaterializeKnowledgeFile_HandlesLocalScheme(t *testing.T) {
 	k := &types.Knowledge{
 		ID:       "k-abc",
 		FileType: "csv",
-		FilePath: "tenants/42/data.csv",
+		FilePath: "spaces/42/data.csv",
 	}
 
 	path, cleanup, err := tool.materializeKnowledgeFile(context.Background(), k)

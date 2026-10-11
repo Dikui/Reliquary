@@ -21,15 +21,15 @@ import (
 // Provides functionality for user registration, login, logout, and token management
 // through the REST API endpoints
 type AuthHandler struct {
-	userService   interfaces.UserService
-	tenantService interfaces.TenantService
+	userService  interfaces.UserService
+	spaceService interfaces.SpaceService
 }
 
-func NewAuthHandler(userService interfaces.UserService, tenantService interfaces.TenantService,
+func NewAuthHandler(userService interfaces.UserService, spaceService interfaces.SpaceService,
 ) *AuthHandler {
 	return &AuthHandler{
-		userService:   userService,
-		tenantService: tenantService,
+		userService:  userService,
+		spaceService: spaceService,
 	}
 }
 
@@ -245,24 +245,24 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	}
 
 	// Return metadata for the personal workspace.
-	var tenant *types.Tenant
-	activeTenantID, _ := types.TenantIDFromContext(ctx)
-	if activeTenantID == 0 {
-		activeTenantID = user.TenantID
+	var space *types.Space
+	activeSpaceID, _ := types.SpaceIDFromContext(ctx)
+	if activeSpaceID == 0 {
+		activeSpaceID = user.SpaceID
 	}
-	if activeTenantID > 0 {
-		tenant, err = h.tenantService.GetTenantByID(ctx, activeTenantID)
+	if activeSpaceID > 0 {
+		space, err = h.spaceService.GetSpaceByID(ctx, activeSpaceID)
 		if err != nil {
-			logger.Warnf(ctx, "Failed to get tenant info for user %s, tenant ID %d: %v", user.Email, activeTenantID, err)
-			// Don't fail the request if tenant info is not available
+			logger.Warnf(ctx, "Failed to get space info for user %s, space ID %d: %v", user.Email, activeSpaceID, err)
+			// Don't fail the request if space info is not available
 		}
 	}
 	userInfo := user.ToUserInfo()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"user":   userInfo,
-			"tenant": dto.NewTenantResponse(ctx, tenant),
+			"user":  userInfo,
+			"space": dto.NewSpaceResponse(ctx, space),
 		},
 	})
 }
@@ -341,8 +341,8 @@ func (h *AuthHandler) GetAuthConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "registration_enabled": err == nil && !hasUsers, "minimum_password_length": service.MinimumPasswordLength})
 }
 
-// tenantNameOrEmpty returns the tenant name when available.
-func tenantNameOrEmpty(t *types.Tenant) string {
+// spaceNameOrEmpty returns the space name when available.
+func spaceNameOrEmpty(t *types.Space) string {
 	if t == nil {
 		return ""
 	}

@@ -37,7 +37,7 @@ func CredentialsConfigForResponse(cfg *CredentialsConfig, maskSecrets bool) *Cre
 }
 
 // MergeParserEngineConfigForUpdate applies preserve semantics to secret fields
-// on tenant KV PUT.
+// on space KV PUT.
 func MergeParserEngineConfigForUpdate(incoming, existing *ParserEngineConfig) *ParserEngineConfig {
 	if incoming == nil {
 		return nil

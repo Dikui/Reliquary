@@ -56,7 +56,7 @@ func indexArticleImages(ctx context.Context, db *gorm.DB, models interfaces.Mode
 		return nil
 	}
 	paths := articleImagePaths(article)
-	query := db.WithContext(ctx).Table("image_embeddings").Where("tenant_id=? AND knowledge_id=?", article.TenantID, article.ID)
+	query := db.WithContext(ctx).Table("image_embeddings").Where("space_id=? AND knowledge_id=?", article.SpaceID, article.ID)
 	if len(paths) == 0 || kb == nil || !kb.IsVectorEnabled() || vault == nil {
 		return query.Delete(nil).Error
 	}
@@ -115,8 +115,8 @@ func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *Vault
 	hash := fmt.Sprintf("%x", sha256.Sum256(data))
 	if !force {
 		var count int64
-		if err := db.WithContext(ctx).Table("image_embeddings").Where("tenant_id=? AND knowledge_id=? AND attachment_path=? AND model_id=? AND dimension=? AND content_hash=?",
-			article.TenantID, article.ID, attachmentPath, embedder.GetModelID(), embedder.GetDimensions(), hash).Count(&count).Error; err != nil {
+		if err := db.WithContext(ctx).Table("image_embeddings").Where("space_id=? AND knowledge_id=? AND attachment_path=? AND model_id=? AND dimension=? AND content_hash=?",
+			article.SpaceID, article.ID, attachmentPath, embedder.GetModelID(), embedder.GetDimensions(), hash).Count(&count).Error; err != nil {
 			return nil, err
 		}
 		if count > 0 {
@@ -142,11 +142,11 @@ func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *Vault
 		return nil, fmt.Errorf("image embedding has zero length")
 	}
 	return func(tx *gorm.DB) error {
-		if err := checkEmbeddingProfile(ctx, tx, embedder, article.TenantID); err != nil {
+		if err := checkEmbeddingProfile(ctx, tx, embedder, article.SpaceID); err != nil {
 			return err
 		}
 		var current types.Knowledge
-		if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND tenant_id=?", article.ID, article.TenantID).First(&current).Error; err != nil {
+		if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND space_id=?", article.ID, article.SpaceID).First(&current).Error; err != nil {
 			return err
 		}
 		if current.VaultPath != article.VaultPath || current.VaultBody != article.VaultBody || !slices.Contains(articleImagePaths(&current), attachmentPath) {
@@ -165,11 +165,11 @@ func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *Vault
 			return fmt.Errorf("article image bytes changed during embedding")
 		}
 		return tx.WithContext(ctx).Exec(`INSERT INTO image_embeddings
-		(tenant_id,knowledge_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
+		(space_id,knowledge_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
 		VALUES (?,?,?,?,?,?,?::halfvec,?)
 		ON CONFLICT (knowledge_id,attachment_path) DO UPDATE SET
 		model_id=EXCLUDED.model_id,dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,
-		content_hash=EXCLUDED.content_hash,updated_at=NOW()`, article.TenantID, article.ID,
+		content_hash=EXCLUDED.content_hash,updated_at=NOW()`, article.SpaceID, article.ID,
 			article.KnowledgeBaseID, attachmentPath, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
 	}, nil
 }

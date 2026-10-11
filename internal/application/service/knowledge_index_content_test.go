@@ -102,7 +102,7 @@ func TestUpdateKnowledgeMetadataDoesNotReindexChunks(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateKnowledgeRepo{knowledge: &types.Knowledge{
 		ID:              "knowledge-1",
-		TenantID:        7,
+		SpaceID:         7,
 		KnowledgeBaseID: "kb-1",
 		SummaryStatus:   types.SummaryStatusCompleted,
 		CustomMetadata:  types.JSON(`{"region":"Beijing"}`),
@@ -112,7 +112,7 @@ func TestUpdateKnowledgeMetadataDoesNotReindexChunks(t *testing.T) {
 	service := &knowledgeService{
 		repo: repo, chunkRepo: chunkRepo, kbService: metadataUpdateKBService{}, task: taskEnqueuer,
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	err := service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID:             "knowledge-1",
@@ -129,14 +129,14 @@ func TestUpdateKnowledgeMetadataDoesNotReindexChunks(t *testing.T) {
 func TestUpdateKnowledgeMetadataDoesNotLeaveTasklessPendingStatus(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateKnowledgeRepo{knowledge: &types.Knowledge{
-		ID: "knowledge-1", TenantID: 7, KnowledgeBaseID: "kb-1",
+		ID: "knowledge-1", SpaceID: 7, KnowledgeBaseID: "kb-1",
 		SummaryStatus: types.SummaryStatusCompleted,
 	}}
 	service := &knowledgeService{
 		repo: repo, chunkRepo: &metadataUpdateChunkRepo{}, kbService: metadataUpdateKBService{},
 		task: &metadataUpdateTaskEnqueuer{err: errors.New("queue unavailable")},
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	require.NoError(t, service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID: "knowledge-1", CustomMetadata: types.JSON(`{"region":"Shanghai"}`),
@@ -147,7 +147,7 @@ func TestUpdateKnowledgeMetadataDoesNotLeaveTasklessPendingStatus(t *testing.T) 
 func TestUpdateKnowledgeUnchangedMetadataDoesNotRefreshSummary(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateKnowledgeRepo{knowledge: &types.Knowledge{
-		ID: "knowledge-1", TenantID: 7, KnowledgeBaseID: "kb-1",
+		ID: "knowledge-1", SpaceID: 7, KnowledgeBaseID: "kb-1",
 		SummaryStatus:  types.SummaryStatusCompleted,
 		CustomMetadata: types.JSON(`{"department":"R&D","region":"Shanghai"}`),
 	}}
@@ -155,7 +155,7 @@ func TestUpdateKnowledgeUnchangedMetadataDoesNotRefreshSummary(t *testing.T) {
 	service := &knowledgeService{
 		repo: repo, chunkRepo: &metadataUpdateChunkRepo{}, kbService: metadataUpdateKBService{}, task: taskEnqueuer,
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	require.NoError(t, service.UpdateKnowledge(ctx, &types.Knowledge{
 		ID:             "knowledge-1",

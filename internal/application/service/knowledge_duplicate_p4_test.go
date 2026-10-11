@@ -48,9 +48,9 @@ func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 	whitespaceHash, _, _ := messageBodyFingerprint(" \n" + strings.ReplaceAll(body, " ", "  \n") + "\n")
 	require.Equal(t, hash, whitespaceHash)
 	db := pgtest.Open(t)
-	k := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", ContentHash: hash, ContentSimHash: simhash, ContentRuneCount: count}
+	k := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", ContentHash: hash, ContentSimHash: simhash, ContentRuneCount: count}
 	require.NoError(t, db.Create(k).Error)
-	incoming := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", ContentHash: otherHash, ContentSimHash: otherSimhash, ContentRuneCount: otherCount}
+	incoming := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", ContentHash: otherHash, ContentSimHash: otherSimhash, ContentRuneCount: otherCount}
 	t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "0")
 	match, _, _, err := findMessageDuplicate(db, incoming)
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 func TestP4DuplicateIntakeReturnsCurrentMatchMethod(t *testing.T) {
 	db := pgtest.Open(t)
 	body := "Acme released the Orion model with improved reasoning, fast inference, multimodal input, and a context window of one million tokens. The report includes benchmark results, evaluation methodology, pricing, and deployment requirements."
-	owner := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
 	setMessageFingerprint(owner, body)
 	require.NoError(t, db.Create(owner).Error)
 	files := &createKnowledgeFileServiceStub{}
@@ -106,7 +106,7 @@ func TestP4DuplicateIntakeDoesNotSaveOrEnqueueAndPreservesReposts(t *testing.T) 
 	db := pgtest.Open(t)
 	body := "Acme released its new research report with a complete description of the methodology and findings."
 	source := types.SourceInfo{Publisher: "Acme", OriginalURL: "https://acme.example/report", PublishedAt: time.Now().UTC().Format(time.RFC3339)}
-	owner := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
 	require.NoError(t, owner.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved", SourceInfo: source}))
 	setMessageFingerprint(owner, body)
 	require.NoError(t, db.Create(owner).Error)
@@ -148,10 +148,10 @@ func TestP4DuplicateIntakeDoesNotSaveOrEnqueueAndPreservesReposts(t *testing.T) 
 func TestP4ParsedDuplicateStopsBeforeEnrichment(t *testing.T) {
 	db := pgtest.Open(t)
 	body := "The original article describes a sourced announcement."
-	owner := types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
 	setMessageFingerprint(&owner, body)
 	require.NoError(t, db.Create(&owner).Error)
-	incoming := types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", ParseStatus: "pending"}
+	incoming := types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", ParseStatus: "pending"}
 	require.NoError(t, incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Reprint", OriginalURL: "https://news.example/copy"}}))
 	require.NoError(t, db.Create(&incoming).Error)
 	svc := &knowledgeService{db: db, repo: repository.NewKnowledgeRepository(db)}
@@ -164,9 +164,9 @@ func TestP4ParsedDuplicateStopsBeforeEnrichment(t *testing.T) {
 func TestP4URLDuplicatesAndConcurrentIntakeHaveOneOwner(t *testing.T) {
 	db := pgtest.Open(t)
 	svc := &knowledgeService{db: db}
-	owner := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/article", CreatedAt: time.Now()}
+	owner := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/article", CreatedAt: time.Now()}
 	require.NoError(t, db.Create(owner).Error)
-	incoming := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "pending"}
+	incoming := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "pending"}
 	require.NoError(t, incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: types.SourceInfo{OriginalURL: "https://EXAMPLE.COM/ARTICLE/?utm_source=one", Publisher: "News"}}))
 	existing, err := svc.createMessageWithDeduplication(context.Background(), incoming, "A revised title in a duplicate URL delivery")
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestP4URLDuplicatesAndConcurrentIntakeHaveOneOwner(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			candidate := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "concurrent", Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
+			candidate := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "concurrent", Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
 			_, err := svc.createMessageWithDeduplication(context.Background(), candidate, "Identical content received concurrently")
 			results <- err
 		}()
@@ -202,7 +202,7 @@ func TestP4SameBodyInDifferentKnowledgeBasesKeepsSeparateOwners(t *testing.T) {
 	svc := &knowledgeService{db: db}
 	body := "The same original article remains a separate source in each knowledge base."
 	for _, kbID := range []string{"first-kb", "second-kb"} {
-		message := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: kbID, Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
+		message := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: kbID, Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
 		require.NoError(t, message.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://acme.example/report"}}))
 		existing, err := svc.createMessageWithDeduplication(context.Background(), message, body)
 		require.NoError(t, err)
@@ -220,8 +220,8 @@ func TestP4ConcurrentPendingParserDuplicatesKeepOneOwner(t *testing.T) {
 	svc := &knowledgeService{db: db, repo: repository.NewKnowledgeRepository(db)}
 	created := time.Now().UTC().Truncate(time.Microsecond)
 	messages := []types.Knowledge{
-		{ID: "pending-a", TenantID: 1, KnowledgeBaseID: "kb", Type: "file", ParseStatus: "pending", CreatedAt: created},
-		{ID: "pending-b", TenantID: 1, KnowledgeBaseID: "kb", Type: "file", ParseStatus: "pending", CreatedAt: created},
+		{ID: "pending-a", SpaceID: 1, KnowledgeBaseID: "kb", Type: "file", ParseStatus: "pending", CreatedAt: created},
+		{ID: "pending-b", SpaceID: 1, KnowledgeBaseID: "kb", Type: "file", ParseStatus: "pending", CreatedAt: created},
 	}
 	for i := range messages {
 		require.NoError(t, messages[i].SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{OriginalURL: "https://example.com/report", Publisher: messages[i].ID}}))
@@ -265,7 +265,7 @@ func TestP4ConcurrentPendingParserDuplicatesKeepOneOwner(t *testing.T) {
 
 func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {
 	db := pgtest.Open(t)
-	owner := &types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/report"}
+	owner := &types.Knowledge{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/report"}
 	require.NoError(t, db.Create(owner).Error)
 	files := &createKnowledgeFileServiceStub{}
 	queue := &createKnowledgeTaskEnqueuerStub{}
@@ -285,10 +285,10 @@ func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {
 func TestP4RepostMissingRedeliveryPreservesVerifiedPublication(t *testing.T) {
 	db := pgtest.Open(t)
 	publication := time.Now().UTC().Format(time.RFC3339)
-	owner := types.Knowledge{ID: "dated-owner", TenantID: 9, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := types.Knowledge{ID: "dated-owner", SpaceID: 9, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
 	require.NoError(t, db.Create(&owner).Error)
 	for _, date := range []string{publication, ""} {
-		incoming := types.Knowledge{TenantID: 9, KnowledgeBaseID: "kb"}
+		incoming := types.Knowledge{SpaceID: 9, KnowledgeBaseID: "kb"}
 		require.NoError(t, incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: types.SourceInfo{Publisher: "News", OriginalURL: "https://news.example/announcement", PublishedAt: date}}))
 		require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return recordMessageRepost(tx, &owner, &incoming, "content_hash", 0) }))
 	}

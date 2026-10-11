@@ -44,8 +44,8 @@ type knowledgeService struct {
 	retrieveEngine  interfaces.RetrievalService
 	repo            interfaces.KnowledgeRepository
 	kbService       interfaces.KnowledgeBaseService
-	tenantRepo      interfaces.TenantRepository
-	tenantService   interfaces.TenantService
+	spaceRepo       interfaces.SpaceRepository
+	spaceService    interfaces.SpaceService
 	chunkService    interfaces.ChunkService
 	chunkRepo       interfaces.ChunkRepository
 	fileSvc         interfaces.FileService
@@ -78,8 +78,8 @@ func NewKnowledgeService(
 	config *config.Config,
 	repo interfaces.KnowledgeRepository,
 	kbService interfaces.KnowledgeBaseService,
-	tenantRepo interfaces.TenantRepository,
-	tenantService interfaces.TenantService,
+	spaceRepo interfaces.SpaceRepository,
+	spaceService interfaces.SpaceService,
 	chunkService interfaces.ChunkService,
 	chunkRepo interfaces.ChunkRepository,
 	fileSvc interfaces.FileService,
@@ -97,8 +97,8 @@ func NewKnowledgeService(
 		config:          config,
 		repo:            repo,
 		kbService:       kbService,
-		tenantRepo:      tenantRepo,
-		tenantService:   tenantService,
+		spaceRepo:       spaceRepo,
+		spaceService:    spaceService,
 		chunkService:    chunkService,
 		chunkRepo:       chunkRepo,
 		fileSvc:         fileSvc,
@@ -195,9 +195,9 @@ func (s *knowledgeService) skipStage(ctx context.Context, kid, name, reason stri
 }
 
 func (s *knowledgeService) getParserEngineOverridesFromContext(ctx context.Context) map[string]string {
-	if v := ctx.Value(types.TenantInfoContextKey); v != nil {
-		if tenant, ok := v.(*types.Tenant); ok && tenant != nil {
-			return tenant.ParserEngineConfig.ToOverridesMap()
+	if v := ctx.Value(types.SpaceInfoContextKey); v != nil {
+		if space, ok := v.(*types.Space); ok && space != nil {
+			return space.ParserEngineConfig.ToOverridesMap()
 		}
 	}
 	return nil
@@ -215,8 +215,8 @@ func (s *knowledgeService) GetRepository() interfaces.KnowledgeRepository {
 
 // isKnowledgeDeleting checks if a knowledge entry is being deleted.
 // This is used to prevent async tasks from conflicting with deletion operations.
-func (s *knowledgeService) isKnowledgeDeleting(ctx context.Context, tenantID uint64, knowledgeID string) bool {
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
+func (s *knowledgeService) isKnowledgeDeleting(ctx context.Context, spaceID uint64, knowledgeID string) bool {
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, spaceID, knowledgeID)
 	if err != nil {
 		// If we can't find the knowledge, assume it's deleted
 		logger.Warnf(ctx, "Failed to check knowledge deletion status (assuming deleted): %v", err)
@@ -238,9 +238,9 @@ func (s *knowledgeService) isKnowledgeDeleting(ctx context.Context, tenantID uin
 // (true, ParseStatusDeleting): the existing deleting branch already
 // handles cleanup-or-no-op semantics safely.
 func (s *knowledgeService) isKnowledgeAborted(
-	ctx context.Context, tenantID uint64, knowledgeID string,
+	ctx context.Context, spaceID uint64, knowledgeID string,
 ) (bool, string) {
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, spaceID, knowledgeID)
 	if err != nil {
 		logger.Warnf(ctx, "Failed to check knowledge abort status (assuming deleted): %v", err)
 		return true, types.ParseStatusDeleting
@@ -271,23 +271,23 @@ func defaultChannel(ch string) string {
 
 // GetKnowledgeByID retrieves a knowledge entry by its ID
 func (s *knowledgeService) GetKnowledgeByID(ctx context.Context, id string) (*types.Knowledge, error) {
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, spaceID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_id": id,
-			"tenant_id":    tenantID,
+			"space_id":     spaceID,
 		})
 		return nil, err
 	}
 
-	reposts, err := loadKnowledgeRepostSources(s.db, tenantID, []string{knowledge.ID}, []string{knowledge.KnowledgeBaseID})
+	reposts, err := loadKnowledgeRepostSources(s.db, spaceID, []string{knowledge.ID}, []string{knowledge.KnowledgeBaseID})
 	if err != nil {
 		return nil, err
 	}
 	knowledge.RepostSources = reposts
-	if err := s.loadKnowledgeAssociations(ctx, tenantID, []*types.Knowledge{knowledge}); err != nil {
+	if err := s.loadKnowledgeAssociations(ctx, spaceID, []*types.Knowledge{knowledge}); err != nil {
 		return nil, err
 	}
 
@@ -295,7 +295,7 @@ func (s *knowledgeService) GetKnowledgeByID(ctx context.Context, id string) (*ty
 	return knowledge, nil
 }
 
-// GetKnowledgeByIDOnly retrieves knowledge by ID without tenant filter (for permission resolution).
+// GetKnowledgeByIDOnly retrieves knowledge by ID without space filter (for permission resolution).
 func (s *knowledgeService) GetKnowledgeByIDOnly(ctx context.Context, id string) (*types.Knowledge, error) {
 	return s.repo.GetKnowledgeByIDOnly(ctx, id)
 }
@@ -304,7 +304,7 @@ func (s *knowledgeService) GetKnowledgeByIDOnly(ctx context.Context, id string) 
 func (s *knowledgeService) ListKnowledgeByKnowledgeBaseID(ctx context.Context,
 	kbID string,
 ) ([]*types.Knowledge, error) {
-	return s.repo.ListKnowledgeByKnowledgeBaseID(ctx, ctx.Value(types.TenantIDContextKey).(uint64), kbID)
+	return s.repo.ListKnowledgeByKnowledgeBaseID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), kbID)
 }
 
 // ListPagedKnowledgeByKnowledgeBaseID returns paginated knowledge entries in a knowledge base
@@ -312,12 +312,12 @@ func (s *knowledgeService) ListPagedKnowledgeByKnowledgeBaseID(ctx context.Conte
 	kbID string, page *types.Pagination, filter types.KnowledgeListFilter,
 ) (*types.PageResult, error) {
 	knowledges, total, err := s.repo.ListPagedKnowledgeByKnowledgeBaseID(ctx,
-		ctx.Value(types.TenantIDContextKey).(uint64), kbID, page, filter)
+		ctx.Value(types.SpaceIDContextKey).(uint64), kbID, page, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.loadKnowledgeAssociations(ctx, types.MustTenantIDFromContext(ctx), knowledges); err != nil {
+	if err := s.loadKnowledgeAssociations(ctx, types.MustSpaceIDFromContext(ctx), knowledges); err != nil {
 		return nil, err
 	}
 	return types.NewPageResult(total, page, knowledges), nil
@@ -326,8 +326,8 @@ func (s *knowledgeService) ListPagedKnowledgeByKnowledgeBaseID(ctx context.Conte
 // GetKnowledgeFile retrieves the physical file associated with a knowledge entry
 func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.ReadCloser, string, error) {
 	// Get knowledge record
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, spaceID, id)
 	if err != nil {
 		return nil, "", err
 	}
@@ -348,8 +348,8 @@ func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.
 
 // GetKnowledgeBody reads the immutable parsed text rather than uploaded bytes.
 func (s *knowledgeService) GetKnowledgeBody(ctx context.Context, id string) (io.ReadCloser, string, error) {
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, spaceID, id)
 	if err != nil {
 		return nil, "", err
 	}
@@ -417,7 +417,7 @@ func (s *knowledgeService) getKnowledgeBody(ctx context.Context, knowledge *type
 }
 
 func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types.Knowledge) error {
-	record, err := s.repo.GetKnowledgeByID(ctx, ctx.Value(types.TenantIDContextKey).(uint64), knowledge.ID)
+	record, err := s.repo.GetKnowledgeByID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), knowledge.ID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get knowledge record: %v", err)
 		return err
@@ -490,16 +490,16 @@ func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types
 
 // GetKnowledgeBatch retrieves multiple knowledge entries by their IDs
 func (s *knowledgeService) GetKnowledgeBatch(ctx context.Context,
-	tenantID uint64, ids []string,
+	spaceID uint64, ids []string,
 ) ([]*types.Knowledge, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	articles, err := s.repo.GetKnowledgeBatch(ctx, tenantID, ids)
+	articles, err := s.repo.GetKnowledgeBatch(ctx, spaceID, ids)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.loadKnowledgeAssociations(ctx, tenantID, articles); err != nil {
+	if err := s.loadKnowledgeAssociations(ctx, spaceID, articles); err != nil {
 		return nil, err
 	}
 	return articles, nil
@@ -515,7 +515,7 @@ func findKnowledgeByID(list []*types.Knowledge, id string) *types.Knowledge {
 }
 
 func (s *knowledgeService) SearchKnowledge(ctx context.Context, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error) {
-	tenantID, ok := ctx.Value(types.TenantIDContextKey).(uint64)
+	spaceID, ok := ctx.Value(types.SpaceIDContextKey).(uint64)
 	if !ok {
 		return nil, false, 0, werrors.NewUnauthorizedError("Workspace ID not found in context")
 	}
@@ -524,5 +524,5 @@ func (s *knowledgeService) SearchKnowledge(ctx context.Context, keyword string, 
 	if err != nil {
 		return nil, false, 0, err
 	}
-	return s.repo.SearchKnowledgeInScopes(ctx, []types.KnowledgeSearchScope{{TenantID: tenantID, KBID: kb.ID}}, keyword, offset, limit, fileTypes)
+	return s.repo.SearchKnowledgeInScopes(ctx, []types.KnowledgeSearchScope{{SpaceID: spaceID, KBID: kb.ID}}, keyword, offset, limit, fileTypes)
 }

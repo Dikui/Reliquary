@@ -20,7 +20,7 @@ async function load() {
   loading.value = true; failed.value = false
   try {
     const source = `vault://${encodeURIComponent(props.articleId)}/${encodeURIComponent(props.path)}`
-    const target = buildProtectedFileRequest(source, { mode: 'tenant' })
+    const target = buildProtectedFileRequest(source, { mode: 'space' })
     if (!target) throw new Error('Invalid attachment')
     const response = await fetch(target.url, { method: 'GET', headers: target.headers, credentials: 'include', signal: controller.signal })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)

@@ -27,7 +27,7 @@ const resetPendingSyncLogDDL = `
 CREATE TABLE IF NOT EXISTS sync_logs (
     id              VARCHAR(64) PRIMARY KEY,
     data_source_id  VARCHAR(64) NOT NULL DEFAULT '',
-    tenant_id       INTEGER NOT NULL DEFAULT 0,
+    space_id       INTEGER NOT NULL DEFAULT 0,
     status          VARCHAR(32) NOT NULL,
     started_at      TIMESTAMPTZ,
     finished_at     TIMESTAMPTZ,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS knowledge_processing_spans (
 const resetPendingOpsDDL = `
 CREATE TABLE IF NOT EXISTS task_pending_ops (
     id          BIGSERIAL PRIMARY KEY,
-    tenant_id   INTEGER NOT NULL DEFAULT 0,
+    space_id   INTEGER NOT NULL DEFAULT 0,
     task_type   VARCHAR(64) NOT NULL,
     scope       VARCHAR(32) NOT NULL,
     scope_id    VARCHAR(64) NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS task_pending_ops (
 const resetPendingKnowledgeBasesDDL = `
 CREATE TABLE IF NOT EXISTS knowledge_bases (
     id          VARCHAR(64) PRIMARY KEY,
-    tenant_id   INTEGER NOT NULL DEFAULT 0,
+    space_id   INTEGER NOT NULL DEFAULT 0,
     deleted_at  TIMESTAMPTZ
 );
 `

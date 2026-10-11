@@ -21,10 +21,10 @@ func TestPersonalPDFParserUnavailableErrorPersistsForAPI(t *testing.T) {
 	}
 	db := pgtest.Open(t)
 	repo := repository.NewKnowledgeRepository(db)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	source := types.SourceInfo{Author: "Ada", OriginalURL: "https://example.com/sample.pdf", PublishedAt: "2026-01-01"}
 	knowledge := &types.Knowledge{
-		ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: "kb",
+		ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: "kb",
 		Type: "file", Title: "sample.pdf", FileName: "sample.pdf", FileType: "pdf", FilePath: "input",
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled",
 	}
@@ -34,10 +34,10 @@ func TestPersonalPDFParserUnavailableErrorPersistsForAPI(t *testing.T) {
 	require.NoError(t, repo.CreateKnowledge(ctx, knowledge))
 	files := &intakeFileService{saved: map[string][]byte{"input": []byte("%PDF-1.4\n")}}
 	svc := &knowledgeService{
-		db: db, repo: repo, kbService: intakeKBService{}, tenantRepo: intakeTenantRepo{}, fileSvc: files,
+		db: db, repo: repo, kbService: intakeKBService{}, spaceRepo: intakeSpaceRepo{}, fileSvc: files,
 	}
 	payload, err := json.Marshal(types.DocumentProcessPayload{
-		TenantID: types.SingleTenantID, KnowledgeID: knowledge.ID, KnowledgeBaseID: knowledge.KnowledgeBaseID,
+		SpaceID: types.SingleSpaceID, KnowledgeID: knowledge.ID, KnowledgeBaseID: knowledge.KnowledgeBaseID,
 		FilePath: knowledge.FilePath, FileName: knowledge.FileName, FileType: knowledge.FileType,
 	})
 	require.NoError(t, err)

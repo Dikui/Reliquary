@@ -7,7 +7,7 @@ export interface EntityEnvelope<T> { success: boolean; data: T; error?: string }
 export interface EntityActionEnvelope { success: boolean; error?: string }
 export interface Entity {
   id: string
-  tenant_id: number
+  space_id: number
   canonical_name: string
   entity_type: EntityType
   description?: string

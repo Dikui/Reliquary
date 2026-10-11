@@ -37,7 +37,7 @@ func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *knowledgeB
 	chunks.kbRepository = repository.NewKnowledgeBaseRepository(h.db)
 	chunks.modelService = models
 	chunks.retrieveEngine = h.service.retrieveEngine
-	require.NoError(t, h.db.Create(&types.Model{ID: "saved-embedding", TenantID: h.kb.TenantID, Name: "Fixture embedding", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
+	require.NoError(t, h.db.Create(&types.Model{ID: "saved-embedding", SpaceID: h.kb.SpaceID, Name: "Fixture embedding", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 	require.NoError(t, h.db.Model(h.kb).Update("embedding_model_id", "saved-embedding").Error)
 	bases := &knowledgeBaseService{db: h.db, repo: repository.NewKnowledgeBaseRepository(h.db), kgRepo: h.service.repo}
 	h.service.kbService = bases
@@ -47,7 +47,7 @@ func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *knowledgeB
 func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	bases := singletonIntakeSettings(t, h)
-	require.NoError(t, h.db.Create(&types.Model{ID: "saved-light", TenantID: h.kb.TenantID, Name: "Fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive}).Error)
+	require.NoError(t, h.db.Create(&types.Model{ID: "saved-light", SpaceID: h.kb.SpaceID, Name: "Fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive}).Error)
 	config := &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Light: "saved-light", Generation: "saved-light", Embedding: "saved-embedding"}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: "recursive", Separators: []string{"\n\n", "\n", " "}}}
 	_, err := bases.UpdateKnowledgeBase(h.ctx, h.kb.ID, h.kb.Name, "", config)
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testin
 		require.NoError(t, err)
 		h.drain(t)
 		require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
-		chunks, err := h.service.chunkRepo.ListChunksByKnowledgeIDAndTypes(h.ctx, h.kb.TenantID, article.ID, []types.ChunkType{types.ChunkTypeText})
+		chunks, err := h.service.chunkRepo.ListChunksByKnowledgeIDAndTypes(h.ctx, h.kb.SpaceID, article.ID, []types.ChunkType{types.ChunkTypeText})
 		require.NoError(t, err)
 		return chunks
 	}
@@ -130,10 +130,10 @@ func TestGlobalRSSSourceAutomaticallyWritesToKnowledgeBaseAndKeepsSyncLogs(t *te
 	syncQueue := &retainedProcessingQueue{}
 	scheduler := datasource.NewScheduler(dsRepo, logs, syncQueue)
 	t.Cleanup(scheduler.Stop)
-	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, knowledgeService: h.service, kbService: bases, taskEnqueuer: syncQueue, connectorRegistry: registry, scheduler: scheduler, tenantRepo: h.service.tenantRepo}
+	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, knowledgeService: h.service, kbService: bases, taskEnqueuer: syncQueue, connectorRegistry: registry, scheduler: scheduler, spaceRepo: h.service.spaceRepo}
 	cfg, err := (&types.DataSourceConfig{Type: types.ConnectorTypeRSS, Settings: map[string]interface{}{"feed_urls": server.URL + "/feed.xml", "publisher": "Fixture publisher"}}).ToJSON()
 	require.NoError(t, err)
-	created, err := syncer.CreateDataSource(h.ctx, &types.DataSource{ID: "global-feed", TenantID: h.kb.TenantID, Name: "Fixture publisher", Type: types.ConnectorTypeRSS, Config: cfg, Status: types.DataSourceStatusActive, CreatedAt: time.Now().Add(-24 * time.Hour)})
+	created, err := syncer.CreateDataSource(h.ctx, &types.DataSource{ID: "global-feed", SpaceID: h.kb.SpaceID, Name: "Fixture publisher", Type: types.ConnectorTypeRSS, Config: cfg, Status: types.DataSourceStatusActive, CreatedAt: time.Now().Add(-24 * time.Hour)})
 	require.NoError(t, err)
 	require.Equal(t, h.kb.ID, created.KnowledgeBaseID, "callers do not choose a destination knowledge base")
 	log, err := syncer.ManualSync(h.ctx, created.ID)

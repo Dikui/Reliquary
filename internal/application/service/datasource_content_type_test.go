@@ -35,18 +35,18 @@ func TestDataSourceNormalizesDefaultContentTypeBeforePersistence(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	repo := repository.NewDataSourceRepository(db)
 	registry := datasource.NewConnectorRegistry()
 	require.NoError(t, registry.Register(rss.NewConnector()))
 	scheduler := datasource.NewScheduler(repo, nil, nil)
 	t.Cleanup(scheduler.Stop)
 	svc := &DataSourceService{dsRepo: repo, connectorRegistry: registry, scheduler: scheduler,
-		kbService: &processSyncKBService{kb: &types.KnowledgeBase{ID: "kb-default-type", TenantID: 1}}}
+		kbService: &processSyncKBService{kb: &types.KnowledgeBase{ID: "kb-default-type", SpaceID: 1}}}
 	config, err := (&types.DataSourceConfig{Type: types.ConnectorTypeRSS,
 		Settings: map[string]interface{}{"feed_urls": server.URL + "/feed.xml", "publisher": "Publisher"}}).ToJSON()
 	require.NoError(t, err)
-	created, err := svc.CreateDataSource(ctx, &types.DataSource{TenantID: 1, Name: "RSS", Type: types.ConnectorTypeRSS,
+	created, err := svc.CreateDataSource(ctx, &types.DataSource{SpaceID: 1, Name: "RSS", Type: types.ConnectorTypeRSS,
 		Config: config, DefaultContentType: " research "})
 	require.NoError(t, err)
 	require.Equal(t, types.ContentTypeResearch, created.DefaultContentType)

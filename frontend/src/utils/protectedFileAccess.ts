@@ -14,7 +14,7 @@ const VAULT_ATTACHMENT_PROXY_PATH_RE = /^\/api\/v1\/knowledge\/[^/]+\/vault-atta
 
 export type ProtectedFileAccessContext =
   /** 登录用户通过 Bearer 访问文件。 */
-  | { mode: 'tenant' }
+  | { mode: 'space' }
   /** 知识库作用域。 */
   | { mode: 'knowledgeBase'; kbId: string };
 
@@ -23,7 +23,7 @@ export interface ProtectedFileRequest {
   headers: Record<string, string>;
 }
 
-const TENANT_ACCESS: ProtectedFileAccessContext = { mode: 'tenant' };
+const SPACE_ACCESS: ProtectedFileAccessContext = { mode: 'space' };
 
 interface ProtectedFileAccessState {
   current: ProtectedFileAccessContext;
@@ -32,7 +32,7 @@ interface ProtectedFileAccessState {
 // 与 blob 缓存同样挂在 window 上：Vite 热更新会替换模块但不会重建文档，
 // 保留应用启动时注册的上下文。
 const accessState: ProtectedFileAccessState = (() => {
-  const fresh = (): ProtectedFileAccessState => ({ current: TENANT_ACCESS });
+  const fresh = (): ProtectedFileAccessState => ({ current: SPACE_ACCESS });
   if (typeof window === 'undefined') return fresh();
   const scope = window as typeof window & {
     __reliquaryProtectedFileAccessV1__?: ProtectedFileAccessState;
@@ -47,7 +47,7 @@ const accessState: ProtectedFileAccessState = (() => {
 export function setDefaultProtectedFileAccess(
   access: ProtectedFileAccessContext | null,
 ): void {
-  accessState.current = access ?? TENANT_ACCESS;
+  accessState.current = access ?? SPACE_ACCESS;
 }
 
 export function getDefaultProtectedFileAccess(): ProtectedFileAccessContext {
@@ -82,7 +82,7 @@ export function isProtectedFileProxyPath(pathname: string): boolean {
   );
 }
 
-function tenantRequestHeaders(): Record<string, string> {
+function spaceRequestHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   try {
     const token = (localStorage.getItem('reliquary_token') || '').trim();
@@ -114,7 +114,7 @@ export function buildProtectedFileRequest(
       const query = new URLSearchParams({ path }).toString();
       return {
         url: `/api/v1/knowledge/${encodeURIComponent(knowledgeID)}/vault-attachment?${query}`,
-        headers: tenantRequestHeaders(),
+        headers: spaceRequestHeaders(),
       };
     } catch {
       return null;
@@ -127,9 +127,9 @@ export function buildProtectedFileRequest(
   if (access.mode === 'knowledgeBase') {
     return {
       url: `/api/v1/knowledge-bases/${encodeURIComponent(access.kbId.trim())}/files?${query}`,
-      headers: tenantRequestHeaders(),
+      headers: spaceRequestHeaders(),
     };
   }
 
-  return { url: `/files?${query}`, headers: tenantRequestHeaders() };
+  return { url: `/files?${query}`, headers: spaceRequestHeaders() };
 }

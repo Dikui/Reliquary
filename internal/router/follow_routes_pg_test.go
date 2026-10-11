@@ -24,8 +24,8 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	require.Equal(t, http.StatusOK, r.Code)
 	var kb struct{ Data types.KnowledgeBase }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &kb))
-	entity := types.Entity{ID: uuid.NewString(), TenantID: types.SingleTenantID, CanonicalName: "HTTP followed entity", NormalizedName: "http followed entity", EntityType: "company"}
-	topic := types.Topic{ID: uuid.NewString(), TenantID: types.SingleTenantID, Name: "HTTP followed topic"}
+	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "HTTP followed entity", NormalizedName: "http followed entity", EntityType: "company"}
+	topic := types.Topic{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "HTTP followed topic"}
 	require.NoError(t, f.db.Create(&entity).Error)
 	require.NoError(t, f.db.Create(&topic).Error)
 	for _, target := range [][2]string{{"entity", entity.ID}, {"topic", topic.ID}} {
@@ -39,10 +39,10 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	var targets struct{ Data []types.FollowTarget }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &targets))
 	require.Len(t, targets.Data, 2)
-	article := types.Knowledge{ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: kb.Data.ID, Type: "manual", Title: "HTTP feed article", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now().UTC().Add(-time.Hour)}
+	article := types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.Data.ID, Type: "manual", Title: "HTTP feed article", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now().UTC().Add(-time.Hour)}
 	require.NoError(t, f.db.Create(&article).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeEntity{TenantID: types.SingleTenantID, KnowledgeID: article.ID, EntityID: entity.ID}).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeTopic{TenantID: types.SingleTenantID, KnowledgeID: article.ID, TopicID: topic.ID}).Error)
+	require.NoError(t, f.db.Create(&types.KnowledgeEntity{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, EntityID: entity.ID}).Error)
+	require.NoError(t, f.db.Create(&types.KnowledgeTopic{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, TopicID: topic.ID}).Error)
 	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/follows/state", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code)
 	var state struct{ Data types.FollowFeedState }

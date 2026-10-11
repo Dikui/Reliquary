@@ -114,7 +114,7 @@ func TestVaultArticleSummaryOnlyWritesHeaderWithoutAttachments(t *testing.T) {
 
 func TestVaultArticleCopiesOriginalPDFAndPreservesImageDestinationSyntax(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	k := &types.Knowledge{ID: uuid.NewString(), TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID,
+	k := &types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		Title: "PDF 研究", SourceKind: "article", Type: "file", FileType: "pdf", FileName: "原始 文档.pdf", FilePath: "local://fixture/original.pdf",
 		ParseStatus: types.ParseStatusCompleted, ProcessingMode: "full", ContentType: "research", CreatedAt: time.Now().UTC()}
 	require.NoError(t, h.db.Create(k).Error)
@@ -143,7 +143,7 @@ func TestVaultArticleCopiesOriginalPDFAndPreservesImageDestinationSyntax(t *test
 
 func TestVaultArticleOriginalAttachmentPreservesLongUnicodeFilenameExtension(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	k := &types.Knowledge{ID: uuid.NewString(), TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID,
+	k := &types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		Title: "附件命名", SourceKind: "article", Type: "file", FileType: "pdf", FileName: strings.Repeat("中文文件", 30) + ".PDF", FilePath: "local://fixture/long-original.pdf",
 		ParseStatus: types.ParseStatusCompleted, ProcessingMode: "full", ContentType: "research", CreatedAt: time.Now().UTC()}
 	require.NoError(t, h.db.Create(k).Error)
@@ -173,7 +173,7 @@ func TestVaultArticleOriginalAttachmentPreservesLongUnicodeFilenameExtension(t *
 
 func TestVaultArticleNamingFallsBackToCollectedMonthAndSanitizesTitle(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	k := &types.Knowledge{ID: uuid.NewString(), TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID, Title: "中文 / 标题:*?\"<>|", SourceKind: "article", Type: "url", Source: "https://example.org/date-less", ParseStatus: types.ParseStatusCompleted, ProcessingMode: "full", ContentType: "event", CreatedAt: time.Date(2025, 9, 10, 0, 0, 0, 0, time.UTC)}
+	k := &types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Title: "中文 / 标题:*?\"<>|", SourceKind: "article", Type: "url", Source: "https://example.org/date-less", ParseStatus: types.ParseStatusCompleted, ProcessingMode: "full", ContentType: "event", CreatedAt: time.Date(2025, 9, 10, 0, 0, 0, 0, time.UTC)}
 	require.NoError(t, h.db.Create(k).Error)
 	require.NoError(t, v.WriteArticle(h.ctx, k, "正文", nil))
 	require.Equal(t, "articles/2025-09/中文-标题-"+k.ID[:8]+".md", k.VaultPath)
@@ -206,7 +206,7 @@ func TestVaultArticleHeaderDeterminismAndUnchangedModificationTime(t *testing.T)
 
 func TestVaultInitialHeaderUsesPersistedPostgresTimestampPrecision(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	k := &types.Knowledge{ID: uuid.NewString(), TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID,
+	k := &types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		Title: "日期精度", SourceKind: "article", Type: "url", ParseStatus: types.ParseStatusCompleted,
 		ProcessingMode: "full", ContentType: "event", CreatedAt: time.Date(2026, 10, 11, 1, 2, 3, 123456789, time.UTC)}
 	require.NoError(t, h.db.Create(k).Error)
@@ -334,7 +334,7 @@ func TestVaultAcceptedEntityMergeSuggestionRefreshesHeader(t *testing.T) {
 	require.NoError(t, h.db.Where("canonical_name=?", "待合并实体").First(&old).Error)
 	keep := entityRecord(uuid.NewString(), "规范实体", "company")
 	require.NoError(t, h.db.Create(&keep).Error)
-	suggestion := &types.EntityMergeSuggestion{ID: uuid.NewString(), TenantID: h.kb.TenantID, NewEntityID: old.ID, CandidateEntityID: keep.ID, KnowledgeID: k.ID, Reason: "同一主体", Status: "pending", CreatedAt: time.Now()}
+	suggestion := &types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, NewEntityID: old.ID, CandidateEntityID: keep.ID, KnowledgeID: k.ID, Reason: "同一主体", Status: "pending", CreatedAt: time.Now()}
 	require.NoError(t, h.db.Create(suggestion).Error)
 	entities := NewEntityService(h.db, h.service.modelService)
 	entities.SetHeaderRefresher(v)
@@ -392,7 +392,7 @@ func TestVaultReprocessingUpdatesHeaderAndReadsVaultBody(t *testing.T) {
 
 func TestVaultDocumentReadBodyIncludesUserFrontMatterAndDeleteKeepsFile(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	doc := &types.Knowledge{ID: uuid.NewString(), TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID,
+	doc := &types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		SourceKind: "mine", VaultPath: "mine/user.md", Title: "User", Type: types.KnowledgeTypeManual, ParseStatus: types.ParseStatusCompleted}
 	require.NoError(t, h.db.Create(doc).Error)
 	data := []byte("---\ntitle: User\n---\n# User\n\nBody")

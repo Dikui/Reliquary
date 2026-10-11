@@ -24,15 +24,15 @@ import (
 
 func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
-	require.NoError(t, service.EnsureSingleTeamSpace(ctx, db))
-	kb, err := repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
+	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
+	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	root := t.TempDir()
 	v, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, v.Close()) })
-	article := &types.Knowledge{ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: kb.ID, Title: "Attachment", SourceKind: "article", Type: "url", Source: "https://example.org/image", ParseStatus: types.ParseStatusCompleted, ContentType: "event", ProcessingMode: "full"}
+	article := &types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.ID, Title: "Attachment", SourceKind: "article", Type: "url", Source: "https://example.org/image", ParseStatus: types.ParseStatusCompleted, ContentType: "event", ProcessingMode: "full"}
 	require.NoError(t, db.Create(article).Error)
 	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="
 	body := "# Attachment\n\n![image](data:image/png;base64," + png + ")"

@@ -38,8 +38,8 @@ func (s *TopicService) SetBackfillBatchSize(n int) {
 	}
 }
 
-func (s *TopicService) requireTenant(ctx context.Context) (uint64, error) {
-	id, ok := types.TenantIDFromContext(ctx)
+func (s *TopicService) requireSpace(ctx context.Context) (uint64, error) {
+	id, ok := types.SpaceIDFromContext(ctx)
 	if !ok || id == 0 {
 		return 0, werrors.NewUnauthorizedError("personal space is required")
 	}
@@ -47,15 +47,15 @@ func (s *TopicService) requireTenant(ctx context.Context) (uint64, error) {
 }
 
 func (s *TopicService) ListTopics(ctx context.Context) ([]types.Topic, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
 	result := []types.Topic{}
 	err = s.db.WithContext(ctx).Table("topics t").Select(`t.*, (SELECT count(*) FROM knowledge_topics kt
-		JOIN knowledges k ON k.id=kt.knowledge_id AND k.tenant_id=kt.tenant_id
-		WHERE kt.tenant_id=t.tenant_id AND kt.topic_id=t.id AND k.deleted_at IS NULL AND k.source_kind='article') AS article_count`).
-		Where("t.tenant_id = ?", tenantID).Order("t.name, t.id").Find(&result).Error
+		JOIN knowledges k ON k.id=kt.knowledge_id AND k.space_id=kt.space_id
+		WHERE kt.space_id=t.space_id AND kt.topic_id=t.id AND k.deleted_at IS NULL AND k.source_kind='article') AS article_count`).
+		Where("t.space_id = ?", spaceID).Order("t.name, t.id").Find(&result).Error
 	return result, err
 }
 
@@ -94,7 +94,7 @@ func (s *TopicService) refresh(ctx context.Context, ids []string) {
 func (s *TopicService) SetTaskEnqueuer(queue interfaces.TaskEnqueuer) { s.tasks = queue }
 
 func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*types.Topic, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*ty
 		return nil, err
 	}
 	copy := *topic
-	copy.TenantID, copy.Name = tenantID, name
+	copy.SpaceID, copy.Name = spaceID, name
 	if copy.ID == "" {
 		copy.ID = uuid.NewString()
 	}
@@ -127,7 +127,7 @@ func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*ty
 
 // UpdateTopic reruns classification only when the explanation changes.
 func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, description *string) (*types.Topic, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, descrip
 	var affected []string
 	changed := false
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND id=?", tenantID, id).First(&result).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, id).First(&result).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("topic not found")
 			}
@@ -162,14 +162,14 @@ func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, descrip
 			return nil
 		}
 		changed = true
-		if err := tx.Model(&types.KnowledgeTopic{}).Where("tenant_id=? AND topic_id=?", tenantID, id).Pluck("knowledge_id", &affected).Error; err != nil {
+		if err := tx.Model(&types.KnowledgeTopic{}).Where("space_id=? AND topic_id=?", spaceID, id).Pluck("knowledge_id", &affected).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(&result).Updates(map[string]any{"name": result.Name, "description": result.Description, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
 		if before.Description != result.Description {
-			if err := tx.Where("tenant_id=? AND topic_id=? AND source=?", tenantID, id, types.TopicSourceModel).Delete(&types.KnowledgeTopic{}).Error; err != nil {
+			if err := tx.Where("space_id=? AND topic_id=? AND source=?", spaceID, id, types.TopicSourceModel).Delete(&types.KnowledgeTopic{}).Error; err != nil {
 				return err
 			}
 			if err := s.enqueueBackfill(tx, &result); err != nil {
@@ -188,20 +188,20 @@ func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, descrip
 }
 
 func (s *TopicService) DeleteTopic(ctx context.Context, id string) error {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
 	}
 	var affected []string
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var topic types.Topic
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND id=?", tenantID, id).First(&topic).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, id).First(&topic).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("topic not found")
 			}
 			return err
 		}
-		if err := tx.Model(&types.KnowledgeTopic{}).Where("tenant_id=? AND topic_id=?", tenantID, id).Pluck("knowledge_id", &affected).Error; err != nil {
+		if err := tx.Model(&types.KnowledgeTopic{}).Where("space_id=? AND topic_id=?", spaceID, id).Pluck("knowledge_id", &affected).Error; err != nil {
 			return err
 		}
 		if err := tx.Delete(&topic).Error; err != nil {
@@ -236,14 +236,14 @@ func uniqueTopicIDs(ids []string) []string {
 	return result
 }
 func (s *TopicService) replaceKnowledgeTopics(ctx context.Context, knowledgeID string, ids []string, source string) error {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
 	}
 	ids = uniqueTopicIDs(ids)
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var article types.Knowledge
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id,source_kind").Where("tenant_id=? AND id=?", tenantID, knowledgeID).First(&article).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id,source_kind").Where("space_id=? AND id=?", spaceID, knowledgeID).First(&article).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("article not found")
 			}
@@ -254,7 +254,7 @@ func (s *TopicService) replaceKnowledgeTopics(ctx context.Context, knowledgeID s
 		}
 		var selected []types.Topic
 		if len(ids) > 0 {
-			if err := tx.Where("tenant_id=? AND id IN ?", tenantID, ids).Order("id").Find(&selected).Error; err != nil {
+			if err := tx.Where("space_id=? AND id IN ?", spaceID, ids).Order("id").Find(&selected).Error; err != nil {
 				return err
 			}
 		}
@@ -262,10 +262,10 @@ func (s *TopicService) replaceKnowledgeTopics(ctx context.Context, knowledgeID s
 			return werrors.NewBadRequestError("topic is unavailable in this space")
 		}
 		var before []types.KnowledgeTopic
-		if err := tx.Where("tenant_id=? AND knowledge_id=?", tenantID, knowledgeID).Order("topic_id").Find(&before).Error; err != nil {
+		if err := tx.Where("space_id=? AND knowledge_id=?", spaceID, knowledgeID).Order("topic_id").Find(&before).Error; err != nil {
 			return err
 		}
-		query := tx.Where("tenant_id=? AND knowledge_id=?", tenantID, knowledgeID)
+		query := tx.Where("space_id=? AND knowledge_id=?", spaceID, knowledgeID)
 		if source == types.TopicSourceModel {
 			query = query.Where("source=?", types.TopicSourceModel)
 		}
@@ -274,7 +274,7 @@ func (s *TopicService) replaceKnowledgeTopics(ctx context.Context, knowledgeID s
 		}
 		links := make([]types.KnowledgeTopic, 0, len(selected))
 		for _, topic := range selected {
-			link := types.KnowledgeTopic{TenantID: tenantID, KnowledgeID: knowledgeID, TopicID: topic.ID, Source: source}
+			link := types.KnowledgeTopic{SpaceID: spaceID, KnowledgeID: knowledgeID, TopicID: topic.ID, Source: source}
 			for _, previous := range before {
 				if previous.TopicID == topic.ID {
 					link.CreatedAt, link.IsHistorical = previous.CreatedAt, previous.IsHistorical

@@ -14,7 +14,7 @@ import (
 const taskDeadLettersTestDDL = `
 CREATE TABLE IF NOT EXISTS task_dead_letters (
     id          BIGSERIAL PRIMARY KEY,
-    tenant_id   INTEGER NOT NULL,
+    space_id   INTEGER NOT NULL,
     task_type   VARCHAR(64) NOT NULL,
     scope       VARCHAR(32) NOT NULL,
     scope_id    VARCHAR(64) NOT NULL,
@@ -35,7 +35,7 @@ func setupTaskDeadLetterTestDB(t *testing.T) *gorm.DB {
 
 func makeDeadLetter(taskType, scope, scopeID, relatedID, lastErr string) *types.TaskDeadLetter {
 	return &types.TaskDeadLetter{
-		TenantID:  1,
+		SpaceID:   1,
 		TaskType:  taskType,
 		Scope:     scope,
 		ScopeID:   scopeID,
@@ -54,7 +54,7 @@ func TestTaskDeadLetter_Insert_DefaultsAndAssignsID(t *testing.T) {
 	ctx := context.Background()
 
 	dl := &types.TaskDeadLetter{
-		TenantID:  1,
+		SpaceID:   1,
 		TaskType:  "document:process",
 		ScopeID:   "kb",
 		FailCount: 3,

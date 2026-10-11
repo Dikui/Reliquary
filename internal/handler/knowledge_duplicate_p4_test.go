@@ -26,7 +26,7 @@ func TestP4DuplicateManualKnowledgeHTTPReturnsExistingMessage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.UserIDContextKey, "personal-user"))
 		c.Next()
 	})

@@ -41,10 +41,10 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     '@/utils/clipboard': { copyWithToast(value: string, successKey: string) { copies.push({ value, successKey }) } },
     '@/utils/knowledgeSearch': searchHelpers,
     '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
-    '@/api/tenant': {
-      listTenantAPIKeys: async () => ({ success: true, data: options.keys ?? [] }),
-      createTenantAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'token' } } },
-      updateTenantAPIKey: async (id: number, payload: object) => { requests.push({ id, payload }); return { success: true } },
+    '@/api/space': {
+      listAPIKeys: async () => ({ success: true, data: options.keys ?? [] }),
+      createAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'token' } } },
+      updateAPIKey: async (id: number, payload: object) => { requests.push({ id, payload }); return { success: true } },
     },
   }
   function evaluate(code: string) {

@@ -105,7 +105,7 @@ func TestTamperedActiveUploadInventoryFailsBeforeDatabaseImport(t *testing.T) {
 			_, err = Import(ctx, target, root, t.TempDir(), nil)
 			require.Error(t, err)
 			var rows int64
-			require.NoError(t, target.Table("tenants").Count(&rows).Error)
+			require.NoError(t, target.Table("spaces").Count(&rows).Error)
 			require.Zero(t, rows, "invalid inventory is rejected before any database transaction writes")
 		})
 	}

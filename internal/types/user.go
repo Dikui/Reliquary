@@ -19,7 +19,7 @@ type User struct {
 	// Avatar URL of the user
 	Avatar string `json:"avatar"     gorm:"type:varchar(500)"`
 	// Workspace ID that the user belongs to
-	TenantID uint64 `json:"tenant_id"  gorm:"index"`
+	SpaceID uint64 `json:"space_id"  gorm:"index"`
 	// Whether the user is active
 	IsActive bool `json:"is_active"  gorm:"default:true"`
 	// Creation time of the user
@@ -30,7 +30,7 @@ type User struct {
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 
 	// Association relationship, not stored in the database
-	Tenant *Tenant `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
+	Space *Space `json:"space,omitempty" gorm:"foreignKey:SpaceID"`
 }
 
 // AuthToken represents an authentication token
@@ -77,18 +77,18 @@ type LoginResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 	User    *User  `json:"user,omitempty"`
-	// ActiveTenant identifies the personal workspace encoded in the issued JWT.
-	ActiveTenant *Tenant `json:"active_tenant,omitempty"`
-	Token        string  `json:"token,omitempty"`
-	RefreshToken string  `json:"refresh_token,omitempty"`
+	// ActiveSpace identifies the personal workspace encoded in the issued JWT.
+	ActiveSpace  *Space `json:"active_space,omitempty"`
+	Token        string `json:"token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
 // RegisterResponse represents a registration response
 type RegisterResponse struct {
-	Success bool    `json:"success"`
-	Message string  `json:"message,omitempty"`
-	User    *User   `json:"user,omitempty"`
-	Tenant  *Tenant `json:"tenant,omitempty"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	User    *User  `json:"user,omitempty"`
+	Space   *Space `json:"space,omitempty"`
 }
 
 // UserInfo represents user information for API responses
@@ -97,7 +97,7 @@ type UserInfo struct {
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	Avatar    string    `json:"avatar"`
-	TenantID  uint64    `json:"tenant_id"`
+	SpaceID   uint64    `json:"space_id"`
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -110,7 +110,7 @@ func (u *User) ToUserInfo() *UserInfo {
 		Username:  u.Username,
 		Email:     u.Email,
 		Avatar:    u.Avatar,
-		TenantID:  u.TenantID,
+		SpaceID:   u.SpaceID,
 		IsActive:  u.IsActive,
 		CreatedAt: u.CreatedAt,
 		UpdatedAt: u.UpdatedAt,

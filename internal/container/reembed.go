@@ -40,7 +40,7 @@ func Reembed(ctx context.Context, action, runID string, progress func(*types.Emb
 		return nil, err
 	}
 	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollamaClient,
-		embedding.NewBatchEmbedder(workers), service.NewTenantService(repository.NewTenantRepository(db)), db)
+		embedding.NewBatchEmbedder(workers), service.NewSpaceService(repository.NewSpaceRepository(db)), db)
 	vault, err := service.NewVaultService(db, cfg)
 	if err != nil {
 		return nil, err
@@ -57,10 +57,10 @@ func Reembed(ctx context.Context, action, runID string, progress func(*types.Emb
 		rebuilder.PreserveEntityProfileTimestamps(true)
 		action = "start"
 	}
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, types.SingleSpaceID)
 	switch action {
 	case "start":
-		run, startErr := rebuilder.Start(ctx, types.SingleTenantID)
+		run, startErr := rebuilder.Start(ctx, types.SingleSpaceID)
 		if startErr != nil {
 			return nil, startErr
 		}
@@ -69,15 +69,15 @@ func Reembed(ctx context.Context, action, runID string, progress func(*types.Emb
 			progress(run)
 		}
 	case "resume", "retry_failed":
-		if err := rebuilder.Continue(ctx, types.SingleTenantID, runID, action == "retry_failed"); err != nil {
+		if err := rebuilder.Continue(ctx, types.SingleSpaceID, runID, action == "retry_failed"); err != nil {
 			return nil, err
 		}
 	default:
 		return nil, fmt.Errorf("unsupported reembed action %q", action)
 	}
-	runErr := rebuilder.Run(ctx, types.SingleTenantID, runID, progress)
+	runErr := rebuilder.Run(ctx, types.SingleSpaceID, runID, progress)
 	// Signal cancellation still returns the durable paused status to the CLI.
-	status, statusErr := rebuilder.StatusForRun(context.WithoutCancel(ctx), types.SingleTenantID, runID)
+	status, statusErr := rebuilder.StatusForRun(context.WithoutCancel(ctx), types.SingleSpaceID, runID)
 	if statusErr != nil {
 		return nil, statusErr
 	}

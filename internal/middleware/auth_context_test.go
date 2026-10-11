@@ -19,25 +19,25 @@ func TestApplyAuthSessionSetsBothSurfaces(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/knowledge-bases", nil)
 
 	user := &types.User{ID: "u1"}
-	tenant := &types.Tenant{ID: 1}
+	space := &types.Space{ID: 1}
 	principal := types.Principal{Type: types.PrincipalWebUser, ID: "u1"}
 
 	applyAuthSession(c, authSession{
 		User:      user,
 		Principal: principal,
-		TenantID:  1,
-		Tenant:    tenant,
+		SpaceID:   1,
+		Space:     space,
 	})
 
 	ctx := c.Request.Context()
-	if got, ok := types.TenantIDFromContext(ctx); !ok || got != 1 {
-		t.Fatalf("ctx tenant id = %d, ok=%v", got, ok)
+	if got, ok := types.SpaceIDFromContext(ctx); !ok || got != 1 {
+		t.Fatalf("ctx space id = %d, ok=%v", got, ok)
 	}
-	if got, ok := c.Get(types.TenantIDContextKey.String()); !ok || got.(uint64) != 1 {
-		t.Fatalf("keys tenant id = %v, ok=%v", got, ok)
+	if got, ok := c.Get(types.SpaceIDContextKey.String()); !ok || got.(uint64) != 1 {
+		t.Fatalf("keys space id = %v, ok=%v", got, ok)
 	}
-	if got, ok := types.TenantInfoFromContext(ctx); !ok || got.ID != 1 {
-		t.Fatalf("ctx tenant info = %#v, ok=%v", got, ok)
+	if got, ok := types.SpaceInfoFromContext(ctx); !ok || got.ID != 1 {
+		t.Fatalf("ctx space info = %#v, ok=%v", got, ok)
 	}
 	if got, ok := types.UserIDFromContext(ctx); !ok || got != "u1" {
 		t.Fatalf("ctx user id = %q, ok=%v", got, ok)

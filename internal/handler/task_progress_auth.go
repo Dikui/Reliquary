@@ -8,19 +8,19 @@ import (
 	"reliquary/internal/utils"
 )
 
-// requireTaskProgressTenant ensures async task progress endpoints only
-// return data for tasks created under the caller's tenant. Cross-tenant
+// requireTaskProgressSpace ensures async task progress endpoints only
+// return data for tasks created under the caller's space. Cross-space
 // probes are hidden as not-found to avoid confirming task existence.
-func requireTaskProgressTenant(ctx context.Context, taskID string) error {
-	taskTenantID, err := utils.TaskTenantID(taskID)
+func requireTaskProgressSpace(ctx context.Context, taskID string) error {
+	taskSpaceID, err := utils.TaskSpaceID(taskID)
 	if err != nil {
 		return apperrors.NewBadRequestError("invalid task ID")
 	}
-	callerTenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || callerTenantID == 0 {
+	callerSpaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || callerSpaceID == 0 {
 		return apperrors.NewUnauthorizedError("Unauthorized")
 	}
-	if taskTenantID != callerTenantID {
+	if taskSpaceID != callerSpaceID {
 		return apperrors.NewNotFoundError("task not found")
 	}
 	return nil

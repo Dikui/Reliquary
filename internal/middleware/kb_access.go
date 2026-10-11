@@ -20,8 +20,8 @@ var ErrResourceNotFound = stderrors.New("resource not found")
 // resource projection in the response) can pull it without re-running the
 // resolution.
 type KBAccess struct {
-	KnowledgeBase     *types.KnowledgeBase
-	EffectiveTenantID uint64
+	KnowledgeBase    *types.KnowledgeBase
+	EffectiveSpaceID uint64
 }
 
 // KBAccessContextKey is the gin.Context key under which a successful
@@ -30,7 +30,7 @@ const KBAccessContextKey = "access.kb_access"
 
 // KBAccessFromContext returns the KBAccess stashed by the guard, if
 // any. Handlers that don't care can just rely on the rewritten
-// c.Request.Context() for tenant scoping.
+// c.Request.Context() for space scoping.
 func KBAccessFromContext(c *gin.Context) (*KBAccess, bool) {
 	v, ok := c.Get(KBAccessContextKey)
 	if !ok {
@@ -191,8 +191,8 @@ func RequireKBExists(resolveKBID KBIDResolver, kbService KBLookup) gin.HandlerFu
 }
 
 func resolveKBAccessOnce(ctx context.Context, c *gin.Context, kbID string, kbService KBLookup) (*KBAccess, error) {
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
 		return nil, errKBAccessUnauthorized
 	}
 	kb, err := kbService.GetKnowledgeBaseByID(ctx, kbID)
@@ -205,10 +205,10 @@ func resolveKBAccessOnce(ctx context.Context, c *gin.Context, kbID string, kbSer
 	if kb == nil {
 		return nil, errKBAccessNotFound
 	}
-	if kb.TenantID != tenantID {
+	if kb.SpaceID != spaceID {
 		return nil, errKBAccessForbidden
 	}
-	return &KBAccess{KnowledgeBase: kb, EffectiveTenantID: tenantID}, nil
+	return &KBAccess{KnowledgeBase: kb, EffectiveSpaceID: spaceID}, nil
 }
 
 var (

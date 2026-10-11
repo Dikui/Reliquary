@@ -174,7 +174,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		"chunks":   `SELECT count(*) FROM chunks c JOIN knowledge_bases b ON b.id=c.knowledge_base_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
 		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
  SELECT 1 FROM knowledge_bases b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
- WHERE b.tenant_id=e.tenant_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
+ WHERE b.space_id=e.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
  e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
  OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
  OR (COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0)>0

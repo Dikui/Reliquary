@@ -38,9 +38,9 @@ const HTMLImageSrcURLGroup = 2
 
 // CollectImageInfoByChunkIDs reads image references stored on enabled body chunks.
 // Parent chunks inherit references from their enabled text children.
-func CollectImageInfoByChunkIDs(ctx context.Context, chunkRepo interfaces.ChunkRepository, tenantID uint64, chunkIDs []string) map[string]string {
+func CollectImageInfoByChunkIDs(ctx context.Context, chunkRepo interfaces.ChunkRepository, spaceID uint64, chunkIDs []string) map[string]string {
 	out := make(map[string]string)
-	chunks, err := chunkRepo.ListChunksByID(ctx, tenantID, chunkIDs)
+	chunks, err := chunkRepo.ListChunksByID(ctx, spaceID, chunkIDs)
 	if err != nil {
 		return out
 	}
@@ -57,7 +57,7 @@ func CollectImageInfoByChunkIDs(ctx context.Context, chunkRepo interfaces.ChunkR
 		}
 	}
 	if len(parentIDs) > 0 {
-		children, err := chunkRepo.ListChunksByParentIDs(ctx, tenantID, parentIDs)
+		children, err := chunkRepo.ListChunksByParentIDs(ctx, spaceID, parentIDs)
 		if err == nil {
 			groups := make(map[string]map[string]string)
 			for _, child := range children {
@@ -82,7 +82,7 @@ func CollectImageInfoByChunkIDs(ctx context.Context, chunkRepo interfaces.ChunkR
 func EnrichSearchResultsImageInfo(
 	ctx context.Context,
 	chunkRepo interfaces.ChunkRepository,
-	tenantID uint64,
+	spaceID uint64,
 	results []*types.SearchResult,
 ) {
 	var chunkIDs []string
@@ -100,7 +100,7 @@ func EnrichSearchResultsImageInfo(
 		return
 	}
 
-	infoMap := CollectImageInfoByChunkIDs(ctx, chunkRepo, tenantID, chunkIDs)
+	infoMap := CollectImageInfoByChunkIDs(ctx, chunkRepo, spaceID, chunkIDs)
 	if len(infoMap) == 0 {
 		return
 	}

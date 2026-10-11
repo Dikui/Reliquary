@@ -19,13 +19,13 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 		return nil, nil
 	}
 
-	tenantID := types.MustTenantIDFromContext(ctx)
+	spaceID := types.MustSpaceIDFromContext(ctx)
 
 	// Collect all knowledge and chunk IDs, track scores and match info
 	index := s.buildChunkIndex(chunks)
 
 	logger.Infof(ctx, "Fetching knowledge data for %d IDs", len(index.knowledgeIDs))
-	knowledgeMap, err := s.fetchKnowledgeData(ctx, tenantID, index.knowledgeIDs)
+	knowledgeMap, err := s.fetchKnowledgeData(ctx, spaceID, index.knowledgeIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -36,10 +36,10 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 	}
 
 	logger.Infof(ctx, "Fetching chunk data for %d IDs", len(index.chunkIDs))
-	allChunks, err := s.chunkRepo.ListChunksByID(ctx, tenantID, index.chunkIDs)
+	allChunks, err := s.chunkRepo.ListChunksByID(ctx, spaceID, index.chunkIDs)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
+			"space_id":  spaceID,
 			"chunk_ids": index.chunkIDs,
 		})
 		return nil, err
@@ -56,7 +56,7 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 		knowledge := knowledgeMap[input.KnowledgeID]
 		if knowledge != nil && input.ChunkID == types.KnowledgeSummarySearchID(knowledge.ID) {
 			chunkMap[input.ChunkID] = &types.Chunk{
-				ID: input.ChunkID, TenantID: tenantID, KnowledgeID: knowledge.ID,
+				ID: input.ChunkID, SpaceID: spaceID, KnowledgeID: knowledge.ID,
 				KnowledgeBaseID: knowledge.KnowledgeBaseID, Content: knowledge.Description,
 				ChunkType: types.ChunkTypeSummary, IsEnabled: true,
 			}
@@ -67,7 +67,7 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 		additionalChunkIDs := s.collectEnrichmentChunkIDs(ctx, allChunks, index)
 		if len(additionalChunkIDs) > 0 {
 			logger.Infof(ctx, "Fetching %d additional chunks", len(additionalChunkIDs))
-			additionalChunks, err := s.chunkRepo.ListChunksByID(ctx, tenantID, additionalChunkIDs)
+			additionalChunks, err := s.chunkRepo.ListChunksByID(ctx, spaceID, additionalChunkIDs)
 			if err != nil {
 				logger.Warnf(ctx, "Failed to fetch some additional chunks: %v", err)
 			} else {
@@ -82,7 +82,7 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 	// Build final search results
 	searchResults := s.assembleSearchResults(ctx, chunks, chunkMap, knowledgeMap, index, skipEnrichment)
 
-	searchutil.EnrichSearchResultsImageInfo(ctx, s.chunkRepo, tenantID, searchResults)
+	searchutil.EnrichSearchResultsImageInfo(ctx, s.chunkRepo, spaceID, searchResults)
 
 	logger.Infof(ctx, "Search results processed, total: %d", len(searchResults))
 	return searchResults, nil

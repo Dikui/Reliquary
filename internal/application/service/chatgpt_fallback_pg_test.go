@@ -101,7 +101,7 @@ func TestChatGPTModelServiceUsesRealOllamaHTTPFallbackAndPreservesQuotaPause(t *
 			require.Len(t, info.Capabilities, 1)
 			require.Equal(t, "completion", string(info.Capabilities[0]))
 			h.models.ollamaService = local
-			fallback := &types.Model{ID: "chatgpt-http-fallback", TenantID: types.SingleTenantID, Name: localModelName, Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceLocal, Status: types.ModelStatusActive}
+			fallback := &types.Model{ID: "chatgpt-http-fallback", SpaceID: types.SingleSpaceID, Name: localModelName, Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceLocal, Status: types.ModelStatusActive}
 			require.NoError(t, h.db.Create(fallback).Error)
 			var limit *int
 			if reason == "daily_limit" {

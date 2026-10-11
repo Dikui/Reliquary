@@ -13,7 +13,7 @@ type Request struct {
 	RerankModelID    string
 	RerankTopK       int
 	RerankThreshold  float64
-	TenantID         uint64
+	SpaceID          uint64
 }
 type Results struct {
 	RewriteQuery string

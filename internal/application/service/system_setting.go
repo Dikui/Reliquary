@@ -481,7 +481,7 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 	for _, row := range rows {
 		byKey[row.Key] = row
 	}
-	// Retired aggregate concurrency and tenant-creation settings have no
+	// Retired aggregate concurrency and space-creation settings have no
 	// consumers. Hide their persisted rows so the UI cannot offer obsolete
 	// configuration, while preserving other unknown rows for diagnostics.
 	for _, key := range []string{"queue.concurrency", "tenant.auto_create_api_key", "tenant.default_storage_quota_gb"} {

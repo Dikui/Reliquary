@@ -70,9 +70,9 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	}
 
 	// Check if file already exists
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	logger.Infof(ctx, "Checking if file exists, tenant ID: %d", tenantID)
-	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	logger.Infof(ctx, "Checking if file exists, space ID: %d", spaceID)
+	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, spaceID, kbID, &types.KnowledgeCheckParams{
 		Type:     "file",
 		FileName: fileName,
 		FileType: getFileType(fileName),
@@ -123,7 +123,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	logger.Info(ctx, "Preparing knowledge record")
 	knowledge := &types.Knowledge{
 		ID:               uuid.New().String(),
-		TenantID:         tenantID,
+		SpaceID:          spaceID,
 		KnowledgeBaseID:  kbID,
 		Type:             "file",
 		Channel:          defaultChannel(channel),
@@ -150,7 +150,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	// Save the file to storage (use KB-level storage engine if configured)
 	logger.Infof(ctx, "Saving file, knowledge ID: %s", knowledge.ID)
 	fileSvc := s.resolveFileService(ctx, kb)
-	filePath, err := fileSvc.SaveFile(ctx, file, knowledge.TenantID, knowledge.ID)
+	filePath, err := fileSvc.SaveFile(ctx, file, knowledge.SpaceID, knowledge.ID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to save file, knowledge ID: %s, error: %v", knowledge.ID, err)
 		return nil, err
@@ -185,7 +185,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:        tenantID,
+		SpaceID:         spaceID,
 		KnowledgeID:     knowledge.ID,
 		KnowledgeBaseID: kbID,
 		FilePath:        filePath,
@@ -288,11 +288,11 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 	}
 
 	// Check if URL already exists in the knowledge base
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	logger.Infof(ctx, "Checking if URL exists, tenant ID: %d", tenantID)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	logger.Infof(ctx, "Checking if URL exists, space ID: %d", spaceID)
 	fileHash := calculateStr(url)
 
-	incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: url}
+	incoming := &types.Knowledge{SpaceID: spaceID, KnowledgeBaseID: kbID, Source: url}
 	source := types.SourceInfo{OriginalURL: url}
 	if len(sourceInfos) > 0 {
 		source = sourceInfos[0]
@@ -310,7 +310,7 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 	if existing != nil {
 		return existing, types.NewDuplicateURLError(existing)
 	}
-	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, spaceID, kbID, &types.KnowledgeCheckParams{
 		Type:     "url",
 		URL:      url,
 		FileHash: fileHash,
@@ -338,7 +338,7 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 	logger.Info(ctx, "Creating knowledge record")
 	knowledge := &types.Knowledge{
 		ID:               uuid.New().String(),
-		TenantID:         tenantID,
+		SpaceID:          spaceID,
 		KnowledgeBaseID:  kbID,
 		Type:             "url",
 		Channel:          defaultChannel(channel),
@@ -390,7 +390,7 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:        tenantID,
+		SpaceID:         spaceID,
 		KnowledgeID:     knowledge.ID,
 		KnowledgeBaseID: kbID,
 		URL:             url,
@@ -522,10 +522,10 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	}
 
 	// Check for duplicate (by URL hash)
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 	fileHash := calculateStr(fileURL)
 
-	incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: fileURL}
+	incoming := &types.Knowledge{SpaceID: spaceID, KnowledgeBaseID: kbID, Source: fileURL}
 	source := types.SourceInfo{OriginalURL: fileURL}
 	if len(sourceInfos) > 0 {
 		source = sourceInfos[0]
@@ -543,7 +543,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	if existing != nil {
 		return existing, types.NewDuplicateURLError(existing)
 	}
-	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+	exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, spaceID, kbID, &types.KnowledgeCheckParams{
 		Type:     "file_url",
 		URL:      fileURL,
 		FileHash: fileHash,
@@ -569,7 +569,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	// Create knowledge record
 	knowledge := &types.Knowledge{
 		ID:               uuid.New().String(),
-		TenantID:         tenantID,
+		SpaceID:          spaceID,
 		KnowledgeBaseID:  kbID,
 		Type:             "file_url",
 		Channel:          defaultChannel(channel),
@@ -628,7 +628,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:        tenantID,
+		SpaceID:         spaceID,
 		KnowledgeID:     knowledge.ID,
 		KnowledgeBaseID: kbID,
 		FileURL:         fileURL,
@@ -718,7 +718,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		return nil, err
 	}
 
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 	now := time.Now()
 	title := safeTitle
 	if title == "" {
@@ -726,7 +726,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	}
 
 	if status == types.ManualKnowledgeStatusPublish {
-		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID}
+		incoming := &types.Knowledge{SpaceID: spaceID, KnowledgeBaseID: kbID}
 		if len(payload.SourceMetadata) > 0 {
 			metadata, err := json.Marshal(payload.SourceMetadata)
 			if err != nil {
@@ -751,7 +751,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 
 	knowledge := &types.Knowledge{
 		ID:               uuid.New().String(),
-		TenantID:         tenantID,
+		SpaceID:          spaceID,
 		KnowledgeBaseID:  kbID,
 		Type:             types.KnowledgeTypeManual,
 		Channel:          defaultChannel(channel),
@@ -782,7 +782,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	// turning the metadata column into an unbounded original archive.
 	{
 		fileSvc := s.resolveFileService(ctx, kb)
-		originalPath, err := fileSvc.SaveBytes(ctx, []byte(cleanContent), tenantID, fileName, false)
+		originalPath, err := fileSvc.SaveBytes(ctx, []byte(cleanContent), spaceID, fileName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -828,7 +828,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	}
 
 	// Claim referenced files before publishing so a saved draft retains them.
-	s.bindContentResources(ctx, tenantID, knowledge.ID, cleanContent)
+	s.bindContentResources(ctx, spaceID, knowledge.ID, cleanContent)
 
 	if status == types.ManualKnowledgeStatusPublish {
 		logger.Infof(ctx, "Manual knowledge created, enqueuing async processing task, ID: %s", knowledge.ID)
@@ -891,7 +891,7 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 	}
 	knowledge := &types.Knowledge{
 		ID:               uuid.New().String(),
-		TenantID:         ctx.Value(types.TenantIDContextKey).(uint64),
+		SpaceID:          ctx.Value(types.SpaceIDContextKey).(uint64),
 		KnowledgeBaseID:  kbID,
 		Type:             "passage",
 		Channel:          defaultChannel(channel),
@@ -916,12 +916,12 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 	} else {
 		// Enqueue passage processing task to PostgreSQL
 		logger.Info(ctx, "Enqueuing passage processing task to PostgreSQL")
-		tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+		spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 
 		// Check question generation config
 		lang := types.LanguageFromContextOrDefault(ctx)
 		taskPayload := types.DocumentProcessPayload{
-			TenantID:        tenantID,
+			SpaceID:         spaceID,
 			KnowledgeID:     knowledge.ID,
 			KnowledgeBaseID: kbID,
 			Passages:        safePassages,
@@ -991,8 +991,8 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, werrors.NewValidationError("状态仅支持 draft 或 publish")
 	}
 
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	existing, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	existing, err := s.repo.GetKnowledgeByID(ctx, spaceID, knowledgeID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to load knowledge: %v", err)
 		return nil, err
@@ -1095,7 +1095,7 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 			logger.Errorf(ctx, "Failed to persist manual draft: %v", err)
 			return nil, err
 		}
-		s.bindContentResources(ctx, tenantID, existing.ID, cleanContent)
+		s.bindContentResources(ctx, spaceID, existing.ID, cleanContent)
 		return existing, nil
 	}
 
@@ -1148,7 +1148,7 @@ func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
 	requestID, _ := types.RequestIDFromContext(ctx)
 	payload := types.ManualProcessPayload{
 		RequestId:       requestID,
-		TenantID:        knowledge.TenantID,
+		SpaceID:         knowledge.SpaceID,
 		KnowledgeID:     knowledge.ID,
 		KnowledgeBaseID: knowledge.KnowledgeBaseID,
 		Content:         content,
@@ -1223,7 +1223,7 @@ func sanitizeManualDownloadFilename(title string) string {
 // Best-effort by design: the document is already saved, and a missed claim
 // degrades to the old behaviour rather than failing the save.
 func (s *knowledgeService) bindContentResources(
-	ctx context.Context, tenantID uint64, knowledgeID, content string,
+	ctx context.Context, spaceID uint64, knowledgeID, content string,
 ) {
 	if s.resourceCatalog == nil || knowledgeID == "" {
 		return
@@ -1234,7 +1234,7 @@ func (s *knowledgeService) bindContentResources(
 			logger.Warnf(ctx, "Skip binding unknown resource %s to knowledge %s: %v", ref, knowledgeID, err)
 			continue
 		}
-		if resource.TenantID != tenantID {
+		if resource.SpaceID != spaceID {
 			logger.Warnf(ctx, "Skip binding cross-workspace resource %s to knowledge %s", ref, knowledgeID)
 			continue
 		}
@@ -1264,7 +1264,7 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	var resolvedImages []docparser.StoredImage
 	if s.imageResolver != nil && !(s.vault != nil && knowledge.VaultPath != "" && knowledge.ProcessingMode == types.ProcessingModeFull) {
 		fileSvc := s.resolveFileService(ctx, kb)
-		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, knowledge.TenantID)
+		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, knowledge.SpaceID)
 		if err := s.recordIntakeImages(ctx, knowledge, fromDataURI); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
 			return errors.New("manual article processing failed")
@@ -1281,7 +1281,7 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 			clean = afterDataURI
 			resolvedImages = append(resolvedImages, fromDataURI...)
 		}
-		updatedContent, storedImages, resolveErr := s.imageResolver.ResolveRemoteImages(ctx, clean, fileSvc, knowledge.TenantID)
+		updatedContent, storedImages, resolveErr := s.imageResolver.ResolveRemoteImages(ctx, clean, fileSvc, knowledge.SpaceID)
 		if err := s.recordIntakeImages(ctx, knowledge, storedImages); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
 			return errors.New("manual article processing failed")
@@ -1340,7 +1340,7 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	// Re-claim the body's stored files. This runs after cleanupKnowledgeResources
 	// released the previous run's claims, so a republished document keeps the
 	// files its new body still references.
-	s.bindContentResources(ctx, knowledge.TenantID, knowledge.ID, clean)
+	s.bindContentResources(ctx, knowledge.SpaceID, knowledge.ID, clean)
 
 	// Keep manually entered CRLF text aligned with the LF values sent by the
 	// chunking preview endpoint.

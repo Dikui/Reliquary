@@ -26,7 +26,7 @@ func TestMaintenanceHelperSnapshotsLegacySchemaWithoutUpgradingIt(t *testing.T) 
 		require.NoError(t, sourceErr)
 		require.NoError(t, databaseErr)
 	})
-	require.NoError(t, migrations.Steps(-1))
+	require.NoError(t, migrations.Migrate(0))
 	require.NoError(t, db.Exec(`
 INSERT INTO tenants(id,name,business) VALUES(1,'Legacy maintenance','personal');
 INSERT INTO users(id,username,email,password_hash) VALUES('legacy-user','Legacy owner','legacy@example.invalid','fixture-password-hash');

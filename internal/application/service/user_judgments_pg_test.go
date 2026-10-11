@@ -34,11 +34,11 @@ func TestArticleStarPersistsHeaderLogsAndListFilter(t *testing.T) {
 			header, got, err := ParseVaultArticle(data)
 			return err == nil && header.Starred == starred && string(got) == string(body)
 		}, time.Second, 10*time.Millisecond)
-		_, total, err := repository.NewKnowledgeRepository(h.db).ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.TenantID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.KnowledgeListFilter{Starred: &starred})
+		_, total, err := repository.NewKnowledgeRepository(h.db).ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.KnowledgeListFilter{Starred: &starred})
 		require.NoError(t, err)
 		require.EqualValues(t, 1, total)
 		opposite := !starred
-		_, total, err = repository.NewKnowledgeRepository(h.db).ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.TenantID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.KnowledgeListFilter{Starred: &opposite})
+		_, total, err = repository.NewKnowledgeRepository(h.db).ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.KnowledgeListFilter{Starred: &opposite})
 		require.NoError(t, err)
 		require.Zero(t, total)
 	}
@@ -111,8 +111,8 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			_, header, _ := readVaultArticle(t, v, a)
 			require.Contains(t, string(header), "published_at: null\n")
 			search := NewKnowledgeSearchService(articleSearchFixtureBases{kb: h.kb}, nil, nil, h.db)
-			tenant, _ := types.TenantInfoFromContext(h.ctx)
-			tenant.RetrievalConfig = &types.RetrievalConfig{KeywordThreshold: .00001, RerankTopK: 20}
+			space, _ := types.SpaceInfoFromContext(h.ctx)
+			space.RetrievalConfig = &types.RetrievalConfig{KeywordThreshold: .00001, RerankTopK: 20}
 			result, err := search.Search(h.ctx, types.ArticleSearchRequest{Query: "Undatedfixture", PublishedFrom: "2026-10-01", Limit: 20})
 			require.NoError(t, err)
 			require.Empty(t, result.Results)
@@ -125,8 +125,8 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		a := &types.Knowledge{ID: "review-" + action, TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
-		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.TenantID, a.ID+".md", false)
+		a := &types.Knowledge{ID: "review-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
+		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.SpaceID, a.ID+".md", false)
 		require.NoError(t, err)
 		require.NoError(t, a.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "rejected", Reason: "Needs human judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/" + action}}))
 		require.NoError(t, h.db.Create(a).Error)
@@ -153,7 +153,7 @@ func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, page.Total)
 	require.JSONEq(t, `{"keep_entity_id":"keep-log","merge_entity_id":"merge-log","merged_into_id":"keep-log"}`, string(page.Items[0].After))
-	noActor := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	noActor := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	require.NoError(t, NewOperationLogService(db).Record(noActor, "star", "automatic", false, true))
 	page, err = NewOperationLogService(db).List(ctx, "", 1, 100)
 	require.NoError(t, err)
@@ -163,8 +163,8 @@ func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 func TestIntakeReviewAuditFailurePreservesDecisionAndOriginal(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		a := &types.Knowledge{ID: "audit-failure-" + action, TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
-		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.TenantID, a.ID, false)
+		a := &types.Knowledge{ID: "audit-failure-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
+		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.SpaceID, a.ID, false)
 		require.NoError(t, err)
 		require.NoError(t, a.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "rejected", Reason: "Needs judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/" + action}}))
 		require.NoError(t, h.db.Create(a).Error)

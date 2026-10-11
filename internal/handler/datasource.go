@@ -30,17 +30,17 @@ func NewDataSourceHandler(
 	}
 }
 
-// getTenantID safely extracts and validates tenant ID from context
-// Returns 0 if tenant ID is not found (caller should return 401)
-func (h *DataSourceHandler) getTenantID(c *gin.Context) uint64 {
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	return tenantID
+// getSpaceID safely extracts and validates space ID from context
+// Returns 0 if space ID is not found (caller should return 401)
+func (h *DataSourceHandler) getSpaceID(c *gin.Context) uint64 {
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	return spaceID
 }
 
-// Data source settings contain connector credentials, so only the owning tenant can access them.
+// Data source settings contain connector credentials, so only the owning space can access them.
 func (h *DataSourceHandler) getOwnedKnowledgeBase(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 ) (*types.KnowledgeBase, int, string) {
 	if kbID == "" {
@@ -52,7 +52,7 @@ func (h *DataSourceHandler) getOwnedKnowledgeBase(
 		return nil, http.StatusNotFound, "knowledge base not found"
 	}
 
-	if kb.TenantID != tenantID {
+	if kb.SpaceID != spaceID {
 		return nil, http.StatusForbidden, "access denied"
 	}
 
@@ -61,7 +61,7 @@ func (h *DataSourceHandler) getOwnedKnowledgeBase(
 
 func (h *DataSourceHandler) getOwnedDataSource(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	id string,
 ) (*types.DataSource, int, string) {
 	ds, err := h.service.GetDataSource(ctx, id)
@@ -69,7 +69,7 @@ func (h *DataSourceHandler) getOwnedDataSource(
 		return nil, http.StatusNotFound, "data source not found"
 	}
 
-	if _, status, msg := h.getOwnedKnowledgeBase(ctx, tenantID, ds.KnowledgeBaseID); status != http.StatusOK {
+	if _, status, msg := h.getOwnedKnowledgeBase(ctx, spaceID, ds.KnowledgeBaseID); status != http.StatusOK {
 		return nil, status, msg
 	}
 
@@ -80,9 +80,9 @@ func (h *DataSourceHandler) getOwnedDataSource(
 func (h *DataSourceHandler) CreateDataSource(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	// Extract tenant ID from context (set by auth middleware)
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
+	// Extract space ID from context (set by auth middleware)
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
 		return
 	}
@@ -94,11 +94,11 @@ func (h *DataSourceHandler) CreateDataSource(c *gin.Context) {
 	}
 
 	kb, err := h.kbService.GetKnowledgeBase(ctx)
-	if err != nil || kb == nil || kb.TenantID != tenantID {
+	if err != nil || kb == nil || kb.SpaceID != spaceID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "knowledge base not found"})
 		return
 	}
-	req.TenantID = tenantID
+	req.SpaceID = spaceID
 	req.KnowledgeBaseID = kb.ID
 
 	ds, err := h.service.CreateDataSource(ctx, &req)
@@ -113,15 +113,15 @@ func (h *DataSourceHandler) CreateDataSource(c *gin.Context) {
 // GetDataSource godoc
 func (h *DataSourceHandler) GetDataSource(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	ds, status, msg := h.getOwnedDataSource(ctx, tenantID, id)
+	ds, status, msg := h.getOwnedDataSource(ctx, spaceID, id)
 	if status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
@@ -134,15 +134,15 @@ func (h *DataSourceHandler) GetDataSource(c *gin.Context) {
 func (h *DataSourceHandler) ListDataSources(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	// Extract tenant ID from context
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
+	// Extract space ID from context
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
 		return
 	}
 
 	kb, err := h.kbService.GetKnowledgeBase(ctx)
-	if err != nil || kb == nil || kb.TenantID != tenantID {
+	if err != nil || kb == nil || kb.SpaceID != spaceID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "knowledge base not found"})
 		return
 	}
@@ -161,8 +161,8 @@ func (h *DataSourceHandler) ListDataSources(c *gin.Context) {
 // UpdateDataSource godoc
 func (h *DataSourceHandler) UpdateDataSource(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
@@ -174,7 +174,7 @@ func (h *DataSourceHandler) UpdateDataSource(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	existing, status, msg := h.getOwnedDataSource(ctx, tenantID, id)
+	existing, status, msg := h.getOwnedDataSource(ctx, spaceID, id)
 	if status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
@@ -186,7 +186,7 @@ func (h *DataSourceHandler) UpdateDataSource(c *gin.Context) {
 	}
 
 	req.ID = id
-	req.TenantID = existing.TenantID
+	req.SpaceID = existing.SpaceID
 	req.KnowledgeBaseID = existing.KnowledgeBaseID
 	ds, err := h.service.UpdateDataSource(ctx, req)
 	if err != nil {
@@ -200,15 +200,15 @@ func (h *DataSourceHandler) UpdateDataSource(c *gin.Context) {
 // DeleteDataSource godoc
 func (h *DataSourceHandler) DeleteDataSource(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -224,15 +224,15 @@ func (h *DataSourceHandler) DeleteDataSource(c *gin.Context) {
 // ValidateConnection godoc
 func (h *DataSourceHandler) ValidateConnection(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -251,8 +251,8 @@ func (h *DataSourceHandler) ValidateConnection(c *gin.Context) {
 //	Used by the frontend "Test Connection" button during data source creation.
 func (h *DataSourceHandler) ValidateCredentials(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
@@ -276,8 +276,8 @@ func (h *DataSourceHandler) ValidateCredentials(c *gin.Context) {
 
 func (h *DataSourceHandler) ListAvailableResources(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
@@ -285,7 +285,7 @@ func (h *DataSourceHandler) ListAvailableResources(c *gin.Context) {
 	id := c.Param("id")
 	parentID := c.Query("parent_id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -304,15 +304,15 @@ func (h *DataSourceHandler) ListAvailableResources(c *gin.Context) {
 
 func (h *DataSourceHandler) ResolveResourceAncestors(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -343,15 +343,15 @@ type resolveAncestorsRequest struct {
 // ManualSync godoc
 func (h *DataSourceHandler) ManualSync(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -368,15 +368,15 @@ func (h *DataSourceHandler) ManualSync(c *gin.Context) {
 // PauseDataSource godoc
 func (h *DataSourceHandler) PauseDataSource(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -392,15 +392,15 @@ func (h *DataSourceHandler) PauseDataSource(c *gin.Context) {
 // ResumeDataSource godoc
 func (h *DataSourceHandler) ResumeDataSource(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -416,15 +416,15 @@ func (h *DataSourceHandler) ResumeDataSource(c *gin.Context) {
 // GetSyncLogs godoc
 func (h *DataSourceHandler) GetSyncLogs(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	id := c.Param("id")
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, id); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, id); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
@@ -462,8 +462,8 @@ func (h *DataSourceHandler) GetSyncLogs(c *gin.Context) {
 // GetSyncLog godoc
 func (h *DataSourceHandler) GetSyncLog(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID := h.getTenantID(c)
-	if tenantID == 0 {
+	spaceID := h.getSpaceID(c)
+	if spaceID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
@@ -476,7 +476,7 @@ func (h *DataSourceHandler) GetSyncLog(c *gin.Context) {
 		return
 	}
 
-	if _, status, msg := h.getOwnedDataSource(ctx, tenantID, log.DataSourceID); status != http.StatusOK {
+	if _, status, msg := h.getOwnedDataSource(ctx, spaceID, log.DataSourceID); status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}

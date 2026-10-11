@@ -33,23 +33,23 @@ async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore
       return false
     }
 
-    authStore.setUser(userInfoFromApi(user, response.data?.tenant?.id))
+    authStore.setUser(userInfoFromApi(user, response.data?.space?.id))
 
-    const tenant = response.data?.tenant
-    if (tenant) {
-      authStore.setTenant({
-        id: String(tenant.id) || '',
-        name: tenant.name || '',
-        owner_id: tenant.owner_id || user.id || '',
-        description: tenant.description,
-        status: tenant.status,
-        business: tenant.business,
-        storage_used: tenant.storage_used,
-        created_at: tenant.created_at || new Date().toISOString(),
-        updated_at: tenant.updated_at || new Date().toISOString(),
+    const space = response.data?.space
+    if (space) {
+      authStore.setSpace({
+        id: String(space.id) || '',
+        name: space.name || '',
+        owner_id: space.owner_id || user.id || '',
+        description: space.description,
+        status: space.status,
+        business: space.business,
+        storage_used: space.storage_used,
+        created_at: space.created_at || new Date().toISOString(),
+        updated_at: space.updated_at || new Date().toISOString(),
       })
     } else {
-      authStore.setTenant(null)
+      authStore.setSpace(null)
     }
 
     return true
@@ -84,7 +84,7 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  if (to.meta.requiresTenant !== false && !authStore.hasValidTenant) {
+  if (to.meta.requiresSpace !== false && !authStore.hasValidSpace) {
     next('/login')
     return
   }

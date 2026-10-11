@@ -42,33 +42,33 @@ func (r *EmbeddingRebuilder) PreserveEntityProfileTimestamps(preserve bool) {
 	r.preserveEntityProfileTimestamps = preserve
 }
 
-func (r *EmbeddingRebuilder) Status(ctx context.Context, tenantID uint64) (*types.EmbeddingRebuildStatus, error) {
+func (r *EmbeddingRebuilder) Status(ctx context.Context, spaceID uint64) (*types.EmbeddingRebuildStatus, error) {
 	var run types.EmbeddingRebuildRun
-	err := r.db.WithContext(ctx).Where("tenant_id=?", tenantID).Order("created_at DESC,id DESC").First(&run).Error
+	err := r.db.WithContext(ctx).Where("space_id=?", spaceID).Order("created_at DESC,id DESC").First(&run).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return &types.EmbeddingRebuildStatus{FailedItems: []types.EmbeddingRebuildItem{}}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return r.statusForRun(ctx, tenantID, &run)
+	return r.statusForRun(ctx, spaceID, &run)
 }
 
 // StatusForRun keeps CLI resumes tied to their requested run even when newer
 // completed rebuilds exist. The settings API continues using latest Status.
-func (r *EmbeddingRebuilder) StatusForRun(ctx context.Context, tenantID uint64, runID string) (*types.EmbeddingRebuildStatus, error) {
+func (r *EmbeddingRebuilder) StatusForRun(ctx context.Context, spaceID uint64, runID string) (*types.EmbeddingRebuildStatus, error) {
 	var run types.EmbeddingRebuildRun
-	if err := r.db.WithContext(ctx).Where("id=? AND tenant_id=?", runID, tenantID).First(&run).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id=? AND space_id=?", runID, spaceID).First(&run).Error; err != nil {
 		return nil, err
 	}
-	return r.statusForRun(ctx, tenantID, &run)
+	return r.statusForRun(ctx, spaceID, &run)
 }
 
-func (r *EmbeddingRebuilder) statusForRun(ctx context.Context, tenantID uint64, run *types.EmbeddingRebuildRun) (*types.EmbeddingRebuildStatus, error) {
+func (r *EmbeddingRebuilder) statusForRun(ctx context.Context, spaceID uint64, run *types.EmbeddingRebuildRun) (*types.EmbeddingRebuildStatus, error) {
 	status := &types.EmbeddingRebuildStatus{LatestRun: run, FailedItems: []types.EmbeddingRebuildItem{}}
-	currentID, profileErr := ResolveModelTier(context.WithValue(ctx, types.TenantIDContextKey, tenantID), r.db, nil, types.ModelTierEmbedding)
+	currentID, profileErr := ResolveModelTier(context.WithValue(ctx, types.SpaceIDContextKey, spaceID), r.db, nil, types.ModelTierEmbedding)
 	if profileErr == nil && currentID == run.ModelID {
-		metadata, metadataErr := r.profiles.profileMetadata(ctx, currentID, tenantID)
+		metadata, metadataErr := r.profiles.profileMetadata(ctx, currentID, spaceID)
 		status.CurrentModelMatches = metadataErr == nil && entityEmbeddingProfileHash(currentID, run.Dimension, metadata) == run.ProfileHash
 	}
 	err := r.db.WithContext(ctx).Where("run_id=? AND status='failed'", run.ID).Order("kind,source_id,attachment_path").Limit(100).Find(&status.FailedItems).Error
@@ -77,30 +77,30 @@ func (r *EmbeddingRebuilder) statusForRun(ctx context.Context, tenantID uint64, 
 
 // Start snapshots current articles, documents, entities, and body images. It
 // does not change source files or remove vectors before replacements exist.
-func (r *EmbeddingRebuilder) Start(ctx context.Context, tenantID uint64) (*types.EmbeddingRebuildRun, error) {
-	profile, err := r.profiles.profile(ctx, tenantID)
+func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.EmbeddingRebuildRun, error) {
+	profile, err := r.profiles.profile(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
-	run := &types.EmbeddingRebuildRun{ID: uuid.NewString(), TenantID: tenantID, Status: "pending", ModelID: profile.modelID,
+	run := &types.EmbeddingRebuildRun{ID: uuid.NewString(), SpaceID: spaceID, Status: "pending", ModelID: profile.modelID,
 		ModelName: profile.embedder.GetModelName(), Dimension: profile.dimension, ProfileHash: profile.hash, CreatedAt: now, UpdatedAt: now}
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Serialize creation in the personal knowledge base while retaining its
 		// normal keyword and vector queries throughout the rebuild.
 		var kb types.KnowledgeBase
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=?", tenantID).First(&kb).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=?", spaceID).First(&kb).Error; err != nil {
 			return err
 		}
-		if err := r.profiles.checkProfile(tx, tenantID, profile); err != nil {
+		if err := r.profiles.checkProfile(tx, spaceID, profile); err != nil {
 			return err
 		}
-		if err := tx.Model(&types.EmbeddingRebuildRun{}).Where("tenant_id=? AND profile_hash<>? AND (status IN ('pending','paused') OR (status='running' AND (lease_until IS NULL OR lease_until<=?)))", tenantID, profile.hash, time.Now()).
+		if err := tx.Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND profile_hash<>? AND (status IN ('pending','paused') OR (status='running' AND (lease_until IS NULL OR lease_until<=?)))", spaceID, profile.hash, time.Now()).
 			Updates(map[string]any{"status": "failed", "error": "embedding model changed; superseded by a new rebuild"}).Error; err != nil {
 			return err
 		}
 		var active int64
-		if err := tx.Model(&types.EmbeddingRebuildRun{}).Where("tenant_id=? AND status IN ('pending','running','paused')", tenantID).Count(&active).Error; err != nil {
+		if err := tx.Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND status IN ('pending','running','paused')", spaceID).Count(&active).Error; err != nil {
 			return err
 		}
 		if active > 0 {
@@ -110,8 +110,8 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, tenantID uint64) (*types
 			return err
 		}
 		var chunks []struct{ ID, SourceKind string }
-		if err := tx.Table("chunks c").Joins("JOIN knowledges k ON k.id=c.knowledge_id AND k.tenant_id=c.tenant_id").
-			Where("k.tenant_id=? AND k.deleted_at IS NULL AND k.parse_status=? AND k.processing_mode='full' AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column')", tenantID, types.ParseStatusCompleted).
+		if err := tx.Table("chunks c").Joins("JOIN knowledges k ON k.id=c.knowledge_id AND k.space_id=c.space_id").
+			Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status=? AND k.processing_mode='full' AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column')", spaceID, types.ParseStatusCompleted).
 			Select("c.id,k.source_kind").Order("c.id").Scan(&chunks).Error; err != nil {
 			return err
 		}
@@ -128,7 +128,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, tenantID uint64) (*types
 			add(kind, chunk.ID, "")
 		}
 		var articles []types.Knowledge
-		if err := tx.Where("tenant_id=? AND source_kind='article' AND parse_status=?", tenantID, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
+		if err := tx.Where("space_id=? AND source_kind='article' AND parse_status=?", spaceID, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
 			return err
 		}
 		imageModel, imagesSupported := profile.embedder.(embedding.ImageEmbedder)
@@ -144,7 +144,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, tenantID uint64) (*types
 			}
 		}
 		var entities []types.Entity
-		if err := tx.Select("id").Where("tenant_id=? AND merged_into_id=''", tenantID).Order("id").Find(&entities).Error; err != nil {
+		if err := tx.Select("id").Where("space_id=? AND merged_into_id=''", spaceID).Order("id").Find(&entities).Error; err != nil {
 			return err
 		}
 		for _, entity := range entities {
@@ -163,14 +163,14 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, tenantID uint64) (*types
 
 // Continue validates model identity before keeping successful checkpoints and
 // optionally making only failed items pending again.
-func (r *EmbeddingRebuilder) Continue(ctx context.Context, tenantID uint64, runID string, retryFailed bool) error {
-	profile, err := r.profiles.profile(ctx, tenantID)
+func (r *EmbeddingRebuilder) Continue(ctx context.Context, spaceID uint64, runID string, retryFailed bool) error {
+	profile, err := r.profiles.profile(ctx, spaceID)
 	if err != nil {
 		return err
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var run types.EmbeddingRebuildRun
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", runID, tenantID).First(&run).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", runID, spaceID).First(&run).Error; err != nil {
 			return err
 		}
 		if run.ModelID != profile.modelID || run.Dimension != profile.dimension || run.ProfileHash != profile.hash {
@@ -194,8 +194,8 @@ func (r *EmbeddingRebuilder) Continue(ctx context.Context, tenantID uint64, runI
 	})
 }
 
-func (r *EmbeddingRebuilder) Pause(ctx context.Context, tenantID uint64, runID string) error {
-	result := r.db.WithContext(ctx).Model(&types.EmbeddingRebuildRun{}).Where("tenant_id=? AND id=? AND status IN ('pending','running')", tenantID, runID).
+func (r *EmbeddingRebuilder) Pause(ctx context.Context, spaceID uint64, runID string) error {
+	result := r.db.WithContext(ctx).Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND id=? AND status IN ('pending','running')", spaceID, runID).
 		Updates(map[string]any{"status": "paused", "attempt_id": "", "lease_until": nil})
 	if result.Error != nil {
 		return result.Error
@@ -207,7 +207,7 @@ func (r *EmbeddingRebuilder) Pause(ctx context.Context, tenantID uint64, runID s
 }
 
 func (r *EmbeddingRebuilder) Enqueue(ctx context.Context, run *types.EmbeddingRebuildRun) error {
-	payload, _ := json.Marshal(types.EmbeddingRebuildPayload{TenantID: run.TenantID, RunID: run.ID})
+	payload, _ := json.Marshal(types.EmbeddingRebuildPayload{SpaceID: run.SpaceID, RunID: run.ID})
 	var err error
 	if r.tasks == nil {
 		err = errors.New("embedding rebuild task queue is unavailable")
@@ -224,18 +224,18 @@ func (r *EmbeddingRebuilder) Enqueue(ctx context.Context, run *types.EmbeddingRe
 
 func (r *EmbeddingRebuilder) Handle(ctx context.Context, task *taskqueue.Task) error {
 	var payload types.EmbeddingRebuildPayload
-	if task == nil || json.Unmarshal(task.Payload(), &payload) != nil || payload.TenantID != types.SingleTenantID || payload.RunID == "" {
+	if task == nil || json.Unmarshal(task.Payload(), &payload) != nil || payload.SpaceID != types.SingleSpaceID || payload.RunID == "" {
 		return fmt.Errorf("invalid embedding rebuild payload: %w", taskqueue.SkipRetry)
 	}
-	return r.Run(ctx, payload.TenantID, payload.RunID, nil)
+	return r.Run(ctx, payload.SpaceID, payload.RunID, nil)
 }
 
-func (r *EmbeddingRebuilder) Run(ctx context.Context, tenantID uint64, runID string, progress func(*types.EmbeddingRebuildRun)) (runErr error) {
-	ctx = types.WithLLMCallMetadata(types.WithModelTier(types.WithBackgroundTask(context.WithValue(ctx, types.TenantIDContextKey, tenantID)), types.ModelTierEmbedding), "embedding_rebuild", "")
+func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID string, progress func(*types.EmbeddingRebuildRun)) (runErr error) {
+	ctx = types.WithLLMCallMetadata(types.WithModelTier(types.WithBackgroundTask(context.WithValue(ctx, types.SpaceIDContextKey, spaceID)), types.ModelTierEmbedding), "embedding_rebuild", "")
 	var run types.EmbeddingRebuildRun
 	claimed := false
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", runID, tenantID).First(&run).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", runID, spaceID).First(&run).Error; err != nil {
 			return err
 		}
 		if run.Status == "paused" || run.Status == "completed" || run.Status == "completed_with_errors" ||
@@ -269,7 +269,7 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, tenantID uint64, runID str
 			status = "completed_with_errors"
 		}
 		now := time.Now().UTC()
-		result := r.db.WithContext(persistCtx).Model(&types.EmbeddingRebuildRun{}).Where("id=? AND tenant_id=? AND attempt_id=?", run.ID, tenantID, run.AttemptID).
+		result := r.db.WithContext(persistCtx).Model(&types.EmbeddingRebuildRun{}).Where("id=? AND space_id=? AND attempt_id=?", run.ID, spaceID, run.AttemptID).
 			Updates(map[string]any{"status": status, "error": detail, "lease_until": nil, "finished_at": now})
 		if result.Error != nil {
 			runErr = errors.Join(runErr, result.Error)
@@ -278,7 +278,7 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, tenantID uint64, runID str
 			runErr = nil
 		}
 	}()
-	profile, err := r.profiles.profile(ctx, tenantID)
+	profile, err := r.profiles.profile(ctx, spaceID)
 	if err != nil {
 		return err
 	}
@@ -353,13 +353,13 @@ func (r *EmbeddingRebuilder) checkRun(ctx context.Context, db *gorm.DB, run *typ
 		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
 	var current types.EmbeddingRebuildRun
-	if err := query.Where("id=? AND tenant_id=?", run.ID, run.TenantID).First(&current).Error; err != nil {
+	if err := query.Where("id=? AND space_id=?", run.ID, run.SpaceID).First(&current).Error; err != nil {
 		return err
 	}
 	if current.Status != "running" || current.AttemptID != run.AttemptID {
 		return errRebuildStopped
 	}
-	return r.profiles.checkProfile(db.WithContext(ctx), run.TenantID, profile)
+	return r.profiles.checkProfile(db.WithContext(ctx), run.SpaceID, profile)
 }
 
 type embeddingItemWrite func(*gorm.DB) error
@@ -367,7 +367,7 @@ type embeddingItemWrite func(*gorm.DB) error
 func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.EmbeddingRebuildRun, item types.EmbeddingRebuildItem, profile entityEmbeddingProfile) (embeddingItemWrite, error) {
 	if item.Kind == "entity" {
 		var entity types.Entity
-		if err := r.db.WithContext(ctx).Where("tenant_id=? AND id=? AND merged_into_id=''", run.TenantID, item.SourceID).First(&entity).Error; err != nil {
+		if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", run.SpaceID, item.SourceID).First(&entity).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, nil
 			}
@@ -378,10 +378,10 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			return nil, err
 		}
 		return func(tx *gorm.DB) error {
-			if err := lockEntitySpaceShared(tx, run.TenantID); err != nil {
+			if err := lockEntitySpaceShared(tx, run.SpaceID); err != nil {
 				return err
 			}
-			query := tx.Model(&types.Entity{}).Where("id=? AND tenant_id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=?", entity.ID, run.TenantID, entity.CanonicalName, entity.EntityType, entity.Description)
+			query := tx.Model(&types.Entity{}).Where("id=? AND space_id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=?", entity.ID, run.SpaceID, entity.CanonicalName, entity.EntityType, entity.Description)
 			updates := map[string]any{"name_embedding": types.EntityNameEmbedding(vector), "embedding_model_id": run.ModelID, "embedding_dimension": run.Dimension, "embedding_needs_rebuild": false}
 			if r.preserveEntityProfileTimestamps {
 				query = query.Where("updated_at=?", entity.UpdatedAt)
@@ -395,7 +395,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 	var chunk types.Chunk
 	knowledgeID := item.SourceID
 	if strings.HasSuffix(item.Kind, "_chunk") {
-		if err := r.db.WithContext(ctx).Where("tenant_id=? AND id=?", run.TenantID, item.SourceID).First(&chunk).Error; err != nil {
+		if err := r.db.WithContext(ctx).Where("space_id=? AND id=?", run.SpaceID, item.SourceID).First(&chunk).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, nil
 			}
@@ -403,7 +403,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		}
 		knowledgeID = chunk.KnowledgeID
 	}
-	if err := r.db.WithContext(ctx).Where("tenant_id=? AND id=? AND parse_status=?", run.TenantID, knowledgeID, types.ParseStatusCompleted).First(&article).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND parse_status=?", run.SpaceID, knowledgeID, types.ParseStatusCompleted).First(&article).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -431,20 +431,20 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 	hash := vaultContentHash(content)
 	return func(tx *gorm.DB) error {
 		var current types.Knowledge
-		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("tenant_id=? AND id=?", run.TenantID, article.ID).First(&current).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, article.ID).First(&current).Error; err != nil {
 			return err
 		}
 		if item.Kind == "article" {
 			if current.StructuredSummary == nil || vaultContentHash(strings.TrimSpace(current.Title)+"\n"+current.StructuredSummary.RenderText()) != hash {
 				return errors.New("article changed while embedding; retry this item")
 			}
-			return tx.Exec(`INSERT INTO article_embeddings (tenant_id,knowledge_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
+			return tx.Exec(`INSERT INTO article_embeddings (space_id,knowledge_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
 				VALUES (?,?,?,?,?,?::halfvec,?) ON CONFLICT (knowledge_id) DO UPDATE SET model_id=EXCLUDED.model_id,
 				dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,updated_at=NOW()`,
-				run.TenantID, article.ID, article.KnowledgeBaseID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), hash).Error
+				run.SpaceID, article.ID, article.KnowledgeBaseID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), hash).Error
 		}
 		var currentChunk types.Chunk
-		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("tenant_id=? AND id=?", run.TenantID, chunk.ID).First(&currentChunk).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, chunk.ID).First(&currentChunk).Error; err != nil {
 			return err
 		}
 		if current.ProcessingMode != types.ProcessingModeFull || vaultContentHash(buildKnowledgeIndexContent(&current, currentChunk.Content)) != hash {
@@ -458,11 +458,11 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		}
 		// The document marker becomes current only after all its chunk vectors
 		// have matching identities. Per-vector retrieval can use each earlier.
-		return tx.Exec(`UPDATE knowledges SET embedding_model_id=? WHERE tenant_id=? AND id=? AND NOT EXISTS (
+		return tx.Exec(`UPDATE knowledges SET embedding_model_id=? WHERE space_id=? AND id=? AND NOT EXISTS (
 			SELECT 1 FROM chunks c LEFT JOIN embeddings e ON e.chunk_id=c.id AND e.source_type=0
-			WHERE c.knowledge_id=knowledges.id AND c.tenant_id=knowledges.tenant_id AND c.deleted_at IS NULL
+			WHERE c.knowledge_id=knowledges.id AND c.space_id=knowledges.space_id AND c.deleted_at IS NULL
 			AND c.chunk_type IN ('text','summary','table_summary','table_column')
-			AND (e.id IS NULL OR e.model_id<>? OR e.dimension<>?))`, run.ModelID, run.TenantID, article.ID, run.ModelID, run.Dimension).Error
+			AND (e.id IS NULL OR e.model_id<>? OR e.dimension<>?))`, run.ModelID, run.SpaceID, article.ID, run.ModelID, run.Dimension).Error
 	}, nil
 }
 
@@ -507,7 +507,7 @@ func rebuildErrorText(err error) string {
 }
 
 // StartAndEnqueue commits the rebuild snapshot with its background task.
-func (r *EmbeddingRebuilder) StartAndEnqueue(ctx context.Context, tenantID uint64) (run *types.EmbeddingRebuildRun, err error) {
+func (r *EmbeddingRebuilder) StartAndEnqueue(ctx context.Context, spaceID uint64) (run *types.EmbeddingRebuildRun, err error) {
 	queue, ok := r.tasks.(interfaces.TransactionalTaskEnqueuer)
 	if !ok {
 		return nil, errors.New("embedding task queue must support PostgreSQL transactions")
@@ -519,7 +519,7 @@ func (r *EmbeddingRebuilder) StartAndEnqueue(ctx context.Context, tenantID uint6
 		copy.profiles = &profiles
 		copy.tasks = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
 		var err error
-		run, err = copy.Start(ctx, tenantID)
+		run, err = copy.Start(ctx, spaceID)
 		if err != nil {
 			return err
 		}
@@ -529,7 +529,7 @@ func (r *EmbeddingRebuilder) StartAndEnqueue(ctx context.Context, tenantID uint6
 }
 
 // ContinueAndEnqueue makes a resume checkpoint and its task visible together.
-func (r *EmbeddingRebuilder) ContinueAndEnqueue(ctx context.Context, tenantID uint64, runID string, retryFailed bool) error {
+func (r *EmbeddingRebuilder) ContinueAndEnqueue(ctx context.Context, spaceID uint64, runID string, retryFailed bool) error {
 	queue, ok := r.tasks.(interfaces.TransactionalTaskEnqueuer)
 	if !ok {
 		return errors.New("embedding task queue must support PostgreSQL transactions")
@@ -540,9 +540,9 @@ func (r *EmbeddingRebuilder) ContinueAndEnqueue(ctx context.Context, tenantID ui
 		copy.db, profiles.db = tx, tx
 		copy.profiles = &profiles
 		copy.tasks = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
-		if err := copy.Continue(ctx, tenantID, runID, retryFailed); err != nil {
+		if err := copy.Continue(ctx, spaceID, runID, retryFailed); err != nil {
 			return err
 		}
-		return copy.Enqueue(ctx, &types.EmbeddingRebuildRun{ID: runID, TenantID: tenantID})
+		return copy.Enqueue(ctx, &types.EmbeddingRebuildRun{ID: runID, SpaceID: spaceID})
 	})
 }

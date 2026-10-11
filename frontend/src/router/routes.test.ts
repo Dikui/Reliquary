@@ -85,7 +85,7 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   if ('component' in renderedPlatform) {
     renderedPlatform.component = defineComponent({ render: () => h('main', [h(RouterView), h(settingsStub)]) })
   }
-  for (const path of ['/platform/settings?section=tenant', '/platform/settings?section=runtime-queues', '/platform/system/queues']) {
+  for (const path of ['/platform/settings?section=space', '/platform/settings?section=runtime-queues', '/platform/system/queues']) {
     settingsMounts = 0
     const router = createRouter({ history: createMemoryHistory(), routes: renderedRoutes })
     await router.push(path)

@@ -51,8 +51,8 @@ func (s *knowledgeService) correctContentType(ctx context.Context, id, contentTy
 		lock.Lock()
 		defer lock.Unlock()
 	}
-	tenantID := types.MustTenantIDFromContext(ctx)
-	before, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	before, err := s.repo.GetKnowledgeByID(ctx, spaceID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (s *knowledgeService) correctContentType(ctx context.Context, id, contentTy
 	var fileChange *vaultContentTypeChange
 	var discardedRefs []string
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", id, tenantID).First(&updated).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, spaceID).First(&updated).Error; err != nil {
 			return err
 		}
 		if updated.ContentType != before.ContentType || updated.ProcessingMode != before.ProcessingMode || updated.ParseStatus != types.ParseStatusCompleted || updated.ProcessingReviewStatus != before.ProcessingReviewStatus || updated.SourceUnverified != before.SourceUnverified {
@@ -137,9 +137,9 @@ func (s *knowledgeService) correctContentType(ctx context.Context, id, contentTy
 		}
 		transactional := s.contentTypeTransactionService(tx)
 		transactionCtx := ctx
-		if tenant, ok := ctx.Value(types.TenantInfoContextKey).(*types.Tenant); ok && tenant != nil {
-			copy := *tenant
-			transactionCtx = context.WithValue(ctx, types.TenantInfoContextKey, &copy)
+		if space, ok := ctx.Value(types.SpaceInfoContextKey).(*types.Space); ok && space != nil {
+			copy := *space
+			transactionCtx = context.WithValue(ctx, types.SpaceInfoContextKey, &copy)
 		}
 		if result != nil {
 			if err := transactional.persistArticleProcessingResult(transactionCtx, kb, &updated, body, images, eff, result, false); err != nil {
@@ -188,7 +188,7 @@ func (s *knowledgeService) correctContentType(ctx context.Context, id, contentTy
 	}
 	committed = true
 	if result != nil {
-		s.bindContentResources(ctx, updated.TenantID, updated.ID, body+" "+updated.FilePath)
+		s.bindContentResources(ctx, updated.SpaceID, updated.ID, body+" "+updated.FilePath)
 	}
 	if fileChange != nil {
 		if err := fileChange.finish(); err != nil {
@@ -214,7 +214,7 @@ func (s *knowledgeService) contentTypeTransactionService(tx *gorm.DB) *knowledge
 	copy.db = tx
 	copy.repo = repository.NewKnowledgeRepository(tx)
 	copy.chunkRepo = repository.NewChunkRepository(tx)
-	copy.tenantRepo = repository.NewTenantRepository(tx)
+	copy.spaceRepo = repository.NewSpaceRepository(tx)
 	copy.retrieveEngine = retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))
 	copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewKnowledgeBaseRepository(tx), copy.modelService, copy.retrieveEngine)
 	copy.vault, copy.resourceCatalog = nil, nil
@@ -260,7 +260,7 @@ func (s *knowledgeService) fetchCorrectedArticle(ctx context.Context, kb *types.
 		if err := validateImportFileType(kind); err != nil {
 			return "", nil, nil, err
 		}
-		path, e := s.resolveFileService(ctx, kb).SaveBytes(ctx, data, k.TenantID, name, true)
+		path, e := s.resolveFileService(ctx, kb).SaveBytes(ctx, data, k.SpaceID, name, true)
 		if e != nil {
 			return "", nil, nil, e
 		}
@@ -293,7 +293,7 @@ func (s *knowledgeService) fetchCorrectedArticle(ctx context.Context, kb *types.
 	}
 	if s.imageResolver != nil {
 		fileSvc := s.resolveFileService(ctx, kb)
-		markdown, stored, e := s.imageResolver.ResolveAndStore(ctx, parsed, fileSvc, k.TenantID)
+		markdown, stored, e := s.imageResolver.ResolveAndStore(ctx, parsed, fileSvc, k.SpaceID)
 		images = append(images, stored...)
 		for _, image := range stored {
 			refs = append(refs, image.ServingURL)
@@ -304,7 +304,7 @@ func (s *knowledgeService) fetchCorrectedArticle(ctx context.Context, kb *types.
 		if markdown != "" {
 			parsed.MarkdownContent = markdown
 		}
-		markdown, stored, e = s.imageResolver.ResolveRemoteImages(ctx, parsed.MarkdownContent, fileSvc, k.TenantID)
+		markdown, stored, e = s.imageResolver.ResolveRemoteImages(ctx, parsed.MarkdownContent, fileSvc, k.SpaceID)
 		images = append(images, stored...)
 		for _, image := range stored {
 			refs = append(refs, image.ServingURL)
@@ -330,7 +330,7 @@ func (s *knowledgeService) clearCorrectedArticleBody(ctx context.Context, k *typ
 		return nil, err
 	}
 	if k.StorageSize > 0 {
-		if err := s.tenantRepo.AdjustStorageUsed(ctx, k.TenantID, -k.StorageSize); err != nil {
+		if err := s.spaceRepo.AdjustStorageUsed(ctx, k.SpaceID, -k.StorageSize); err != nil {
 			return nil, err
 		}
 	}

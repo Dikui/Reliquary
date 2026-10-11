@@ -18,14 +18,18 @@ function evaluate(path: string, modules: Record<string, any>) {
  new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? require(name), value, value.exports)
  return value.exports
 }
-function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = false) {
+function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = false, previousCache = false) {
  const priorStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage'), priorWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
- const storage = new Map([['reliquary_token', 'valid-session'], ['reliquary_user', JSON.stringify({ id: 'user-1', tenant_id: 1 })]])
+ const storage = new Map([['reliquary_token', 'valid-session'], ['reliquary_user', JSON.stringify({ id: 'user-1', space_id: 1 })]])
+ if (previousCache) {
+  storage.set('reliquary_user', JSON.stringify({ id: 'user-1', 'tenant_id': 1 }))
+  storage.set('reliquary_tenant', JSON.stringify({ id: '1', name: 'Original personal space' }))
+ }
  if (refresh) storage.set('reliquary_refresh_token', 'valid-refresh')
  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) } })
  const location = { pathname: '/platform/settings', href: '/platform/settings' }
  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location } })
- const transport = { mode: 'healthy', refreshMode: '503' }, calls: InternalAxiosRequestConfig[] = [], modules: Record<string, any> = {}
+ const transport = { mode: 'healthy', refreshMode: '503', spaceName: 'Personal' }, calls: InternalAxiosRequestConfig[] = [], modules: Record<string, any> = {}
  const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
  const network = { __esModule: true, default: { create: (config: object) => axios.create({ ...config, adapter: async (packet: InternalAxiosRequestConfig) => {
   calls.push(packet)
@@ -35,11 +39,16 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = 
    const status = Number(mode)
    throw new AxiosError('failed', AxiosError.ERR_BAD_RESPONSE, packet, undefined, { status, statusText: 'Unavailable', headers: {}, config: packet, data: { success: false, error: { code: status === 503 ? 1008 : 1001, message: 'Authentication temporarily unavailable' } } })
   }
-  return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: { user: { id: 'user-1', tenant_id: 1, username: 'owner' }, tenant: { id: 1, name: 'Personal' } } } }
+  if (packet.url === '/api/v1/space') {
+   if (packet.method === 'put') transport.spaceName = JSON.parse(packet.data).name
+   return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: { id: 1, space_id: 1, name: transport.spaceName } } }
+  }
+  return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: { user: { id: 'user-1', space_id: 1, username: 'owner' }, space: { id: 1, name: 'Personal' } } } }
  } }) } }
  Object.assign(modules, { pinia: { defineStore }, axios: network, '@/i18n': { __esModule: true, default: i18n }, './index': { generateRandomString: () => 'availability-test', MAX_FILE_SIZE_MB: 100 }, './api-base': { getApiBaseUrl: () => 'http://availability.test' }, './personalServerError': { translatePersonalServerMessage }, '@/composables/useFont': { reloadFontFromStorage() {} }, '@/composables/useTheme': { reloadThemeFromStorage() {} }, '@/composables/preferenceStorage': { resetMigrationLatch() {} }, '@/stores/resources': { useResourcesStore: () => ({ invalidate() {} }) }, '@/stores/editorResources': { useEditorResourcesStore: () => ({ invalidate() {} }) } })
  const request = evaluate('./request.ts', modules)
  modules['@/utils/request'] = request
+ const spaceApi = evaluate('../api/space.ts', modules)
  const api = evaluate('../api/auth.ts', modules)
  modules['@/api/auth'] = api; modules['../api/auth'] = api
  setActivePinia(createPinia())
@@ -55,7 +64,7 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = 
   if (priorStorage) Object.defineProperty(globalThis, 'localStorage', priorStorage); else delete (globalThis as any).localStorage
   if (priorWindow) Object.defineProperty(globalThis, 'window', priorWindow); else delete (globalThis as any).window
  })
- return { request, store, transport, storage, location, calls, root: noticeRoot }
+ return { request, store, spaceApi, transport, storage, location, calls, root: noticeRoot }
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
  for (const mode of ['503', 'network', 'timeout']) {
@@ -87,3 +96,29 @@ test('explicit protected 401 without refresh clears the real auth store and redi
  assert.equal(await f.store.refreshFromAuthMe(), false)
  assert.equal(f.store.isLoggedIn, false); assert.equal(f.storage.has('reliquary_token'), false); assert.equal(f.location.href, '/login')
 })
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+ test(`${locale}: persisted browser session upgrades before loading current HTTP data`, async t => {
+  const f = fixture(t, locale, false, true)
+  assert.equal(f.store.user.space_id, '1')
+  assert.equal(f.store.effectiveSpaceId, 1)
+  assert.equal(f.store.currentSpaceName, 'Original personal space')
+  assert.equal(await f.store.refreshFromAuthMe(), true)
+  assert.equal(f.store.user.space_id, '1')
+  assert.equal(JSON.parse(f.storage.get('reliquary_user')!).space_id, '1')
+  assert.equal(JSON.parse(f.storage.get('reliquary_tenant')!).name, 'Personal')
+ })
+ test(`${locale}: personal space data loads through Axios interceptors, API and the real auth store with space_id`, async t => {
+  const f = fixture(t, locale)
+  assert.equal(await f.store.refreshFromAuthMe(), true)
+  assert.equal(f.store.user.space_id, '1')
+  assert.equal(f.store.effectiveSpaceId, 1)
+  assert.equal(JSON.parse(f.storage.get('reliquary_user')!).space_id, '1')
+  const loaded = await f.spaceApi.getSpaceInfo()
+  assert.equal(loaded.data.space_id, 1)
+  await f.spaceApi.updateSpace({ name: 'Updated personal space' })
+  assert.equal((await f.spaceApi.getSpaceInfo()).data.name, 'Updated personal space')
+  assert.equal(f.calls.at(-1)?.headers.Authorization, 'Bearer valid-session')
+  assert.ok(f.calls.some(packet => packet.url === '/api/v1/space' && packet.method === 'put'))
+ })
+}

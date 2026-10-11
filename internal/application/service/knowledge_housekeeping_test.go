@@ -25,7 +25,7 @@ import (
 const knowledgeTestDDL = `
 CREATE TABLE IF NOT EXISTS knowledges (
     id              VARCHAR(64) PRIMARY KEY,
-    tenant_id       INTEGER NOT NULL DEFAULT 0,
+    space_id       INTEGER NOT NULL DEFAULT 0,
     knowledge_base_id VARCHAR(64),
     parse_status    VARCHAR(32) NOT NULL DEFAULT 'pending',
     summary_status  VARCHAR(32) NOT NULL DEFAULT 'none',

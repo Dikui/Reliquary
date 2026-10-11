@@ -21,11 +21,11 @@ type KnowledgeBaseService interface {
 // KnowledgeBaseRepository preserves the internal knowledge base identity and model bindings.
 type KnowledgeBaseRepository interface {
 	CreateKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase) error
-	GetKnowledgeBaseByTenantID(ctx context.Context, tenantID uint64) (*types.KnowledgeBase, error)
+	GetKnowledgeBaseBySpaceID(ctx context.Context, spaceID uint64) (*types.KnowledgeBase, error)
 	GetKnowledgeBaseByID(ctx context.Context, id string) (*types.KnowledgeBase, error)
-	GetKnowledgeBaseByIDAndTenant(ctx context.Context, id string, tenantID uint64) (*types.KnowledgeBase, error)
+	GetKnowledgeBaseByIDAndSpace(ctx context.Context, id string, spaceID uint64) (*types.KnowledgeBase, error)
 	GetKnowledgeBaseByIDs(ctx context.Context, ids []string) ([]*types.KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase) error
-	CountByModelID(ctx context.Context, tenantID uint64, modelID string) (int64, error)
-	ListModelUsages(ctx context.Context, tenantID uint64, modelID string) ([]types.ModelUsageResource, error)
+	CountByModelID(ctx context.Context, spaceID uint64, modelID string) (int64, error)
+	ListModelUsages(ctx context.Context, spaceID uint64, modelID string) ([]types.ModelUsageResource, error)
 }

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -28,32 +27,32 @@ func (s *OperationLogService) RecordTx(ctx context.Context, tx *gorm.DB, operati
 	if !ok {
 		return nil
 	}
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
 		return werrors.NewUnauthorizedError("personal space is required")
 	}
 	if !slices.Contains(types.OperationTypes, operationType) {
 		return werrors.NewBadRequestError("invalid operation type")
 	}
-	oldValue, err := json.Marshal(before)
+	oldValue, err := marshalOperationValue(before)
 	if err != nil {
 		return err
 	}
-	newValue, err := json.Marshal(after)
+	newValue, err := marshalOperationValue(after)
 	if err != nil {
 		return err
 	}
 	if tx == nil {
 		return werrors.NewInternalServerError("operation log database is unavailable")
 	}
-	return tx.WithContext(ctx).Create(&types.OperationLog{ID: uuid.NewString(), TenantID: tenantID,
+	return tx.WithContext(ctx).Create(&types.OperationLog{ID: uuid.NewString(), SpaceID: spaceID,
 		Actor: actor.StorageID(), OperationType: operationType, ObjectID: objectID,
 		Before: types.JSON(oldValue), After: types.JSON(newValue), CreatedAt: time.Now()}).Error
 }
 
 func (s *OperationLogService) List(ctx context.Context, operationType string, page, pageSize int) (*types.OperationLogPage, error) {
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
 		return nil, werrors.NewUnauthorizedError("personal space is required")
 	}
 	if operationType != "" && !slices.Contains(types.OperationTypes, operationType) {
@@ -62,7 +61,7 @@ func (s *OperationLogService) List(ctx context.Context, operationType string, pa
 	if page < 1 || pageSize < 1 || pageSize > 100 {
 		return nil, werrors.NewBadRequestError("invalid pagination")
 	}
-	query := s.db.WithContext(ctx).Model(&types.OperationLog{}).Where("tenant_id=?", tenantID)
+	query := s.db.WithContext(ctx).Model(&types.OperationLog{}).Where("space_id=?", spaceID)
 	if operationType != "" {
 		query = query.Where("operation_type=?", operationType)
 	}
@@ -83,9 +82,9 @@ func (s *OperationLogService) List(ctx context.Context, operationType string, pa
 	if len(actors) > 0 {
 		var keys []struct{ Actor, Name string }
 		// Read only names, including revoked keys, without loading credentials.
-		err = s.db.WithContext(ctx).Table("tenant_api_keys").
+		err = s.db.WithContext(ctx).Table("api_keys").
 			Select("'api_key:' || id::text AS actor, name").
-			Where("tenant_id = ? AND 'api_key:' || id::text IN ?", tenantID, actors).Scan(&keys).Error
+			Where("space_id = ? AND 'api_key:' || id::text IN ?", spaceID, actors).Scan(&keys).Error
 		if err != nil {
 			return nil, err
 		}

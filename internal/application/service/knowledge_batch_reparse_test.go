@@ -69,7 +69,7 @@ func TestReparseKnowledgeManualEnqueueFailureIsVisible(t *testing.T) {
 	enqueueErr := errors.New("queue unavailable")
 	knowledge := &types.Knowledge{
 		ID:              "knowledge-1",
-		TenantID:        7,
+		SpaceID:         7,
 		KnowledgeBaseID: "kb-1",
 		Type:            types.KnowledgeTypeManual,
 		ParseStatus:     types.ParseStatusCompleted,
@@ -84,7 +84,7 @@ func TestReparseKnowledgeManualEnqueueFailureIsVisible(t *testing.T) {
 		kbService: &reparseFailureKBService{kb: &types.KnowledgeBase{ID: "kb-1"}},
 		task:      failingReparseTaskEnqueuer{err: enqueueErr},
 	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
 	got, err := svc.ReparseKnowledge(ctx, knowledge.ID, nil)
 

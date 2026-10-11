@@ -13,7 +13,7 @@ import (
 )
 
 func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.EntityQuery, status string) ([]types.EntityMergeSuggestion, error) {
-	tenantID, kbID, err := s.resolveKnowledgeBase(ctx)
+	spaceID, kbID, err := s.resolveKnowledgeBase(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -27,11 +27,11 @@ func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.Entity
 	items := []types.EntityMergeSuggestion{}
 	query := s.db.WithContext(ctx).Model(&types.EntityMergeSuggestion{}).
 		Select("entity_merge_suggestions.*, fresh.canonical_name AS new_entity_name, candidate.canonical_name AS candidate_entity_name").
-		Joins("JOIN entities fresh ON fresh.tenant_id=entity_merge_suggestions.tenant_id AND fresh.id=entity_merge_suggestions.new_entity_id").
-		Joins("JOIN entities candidate ON candidate.tenant_id=entity_merge_suggestions.tenant_id AND candidate.id=entity_merge_suggestions.candidate_entity_id").
-		Where("entity_merge_suggestions.tenant_id=?", tenantID)
+		Joins("JOIN entities fresh ON fresh.space_id=entity_merge_suggestions.space_id AND fresh.id=entity_merge_suggestions.new_entity_id").
+		Joins("JOIN entities candidate ON candidate.space_id=entity_merge_suggestions.space_id AND candidate.id=entity_merge_suggestions.candidate_entity_id").
+		Where("entity_merge_suggestions.space_id=?", spaceID)
 	if kbID != "" {
-		query = query.Where("EXISTS (SELECT 1 FROM knowledges k WHERE k.id=entity_merge_suggestions.knowledge_id AND k.tenant_id=entity_merge_suggestions.tenant_id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)", kbID)
+		query = query.Where("EXISTS (SELECT 1 FROM knowledges k WHERE k.id=entity_merge_suggestions.knowledge_id AND k.space_id=entity_merge_suggestions.space_id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)", kbID)
 	}
 	if status != "all" {
 		query = query.Where("entity_merge_suggestions.status=?", status)
@@ -48,7 +48,7 @@ func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.Entity
 }
 
 func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID string, accept bool) (*types.EntityMergeSuggestion, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +57,10 @@ func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID 
 	}
 	var item types.EntityMergeSuggestion
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpace(tx, tenantID); err != nil {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", suggestionID, tenantID).First(&item).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", suggestionID, spaceID).First(&item).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return werrors.NewNotFoundError("merge suggestion not found")
 		} else if err != nil {
 			return err
@@ -89,7 +89,7 @@ func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID 
 		return tx.Model(&item).Updates(map[string]any{"status": target, "decided_at": now}).Error
 	})
 	if err == nil && accept {
-		err = s.refreshArticleHeadersForEntity(ctx, tenantID, item.CandidateEntityID)
+		err = s.refreshArticleHeadersForEntity(ctx, spaceID, item.CandidateEntityID)
 	}
 	return &item, err
 }

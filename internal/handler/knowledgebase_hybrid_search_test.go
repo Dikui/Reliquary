@@ -22,7 +22,7 @@ type hybridSearchTestService struct {
 }
 
 func (s *hybridSearchTestService) GetKnowledgeBaseByID(_ context.Context, id string) (*types.KnowledgeBase, error) {
-	return &types.KnowledgeBase{ID: id, TenantID: 1}, nil
+	return &types.KnowledgeBase{ID: id, SpaceID: 1}, nil
 }
 
 func (s *hybridSearchTestService) HybridSearch(
@@ -43,7 +43,7 @@ func newHybridSearchTestRouter(svc interfaces.KnowledgeBaseService) *gin.Engine 
 	router := gin.New()
 	router.Use(middleware.ErrorHandler())
 	router.Use(func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
 		c.Set(types.UserIDContextKey.String(), "u-test")
 		c.Next()
 	})

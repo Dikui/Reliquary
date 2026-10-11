@@ -97,16 +97,16 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Knowledge) (V
 	}
 	var names []string
 	if err = v.db.WithContext(ctx).Table("entities e").Select("e.canonical_name").
-		Joins("JOIN knowledge_entities links ON links.entity_id=e.id AND links.tenant_id=e.tenant_id").
-		Where("links.knowledge_id=? AND links.tenant_id=?", k.ID, k.TenantID).Pluck("e.canonical_name", &names).Error; err != nil {
+		Joins("JOIN knowledge_entities links ON links.entity_id=e.id AND links.space_id=e.space_id").
+		Where("links.knowledge_id=? AND links.space_id=?", k.ID, k.SpaceID).Pluck("e.canonical_name", &names).Error; err != nil {
 		return h, err
 	}
 	for _, name := range names {
 		h.Entities = append(h.Entities, "[["+name+"]]")
 	}
 	if err = v.db.WithContext(ctx).Table("topics t").Select("t.name").
-		Joins("JOIN knowledge_topics links ON links.topic_id=t.id AND links.tenant_id=t.tenant_id").
-		Where("links.knowledge_id=? AND links.tenant_id=?", k.ID, k.TenantID).Pluck("t.name", &h.Topics).Error; err != nil {
+		Joins("JOIN knowledge_topics links ON links.topic_id=t.id AND links.space_id=t.space_id").
+		Where("links.knowledge_id=? AND links.space_id=?", k.ID, k.SpaceID).Pluck("t.name", &h.Topics).Error; err != nil {
 		return h, err
 	}
 	return h, nil
@@ -147,7 +147,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Knowledge, bod
 	// Even the initial header comes from PostgreSQL. In-memory creation times
 	// may retain nanoseconds that were rounded to microseconds by PostgreSQL.
 	var persisted types.Knowledge
-	if err := v.db.WithContext(ctx).Where("id=? AND tenant_id=?", k.ID, k.TenantID).First(&persisted).Error; err != nil {
+	if err := v.db.WithContext(ctx).Where("id=? AND space_id=?", k.ID, k.SpaceID).First(&persisted).Error; err != nil {
 		return err
 	}
 	*k = persisted
@@ -209,7 +209,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Knowledge, bod
 		return err
 	}
 	values := map[string]any{"source_kind": "article", "vault_path": relative, "vault_body": body, "vault_original_path": original}
-	if err = v.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND tenant_id=?", k.ID, k.TenantID).Updates(values).Error; err != nil {
+	if err = v.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(values).Error; err != nil {
 		_ = os.Remove(abs)
 		return err
 	}
@@ -345,8 +345,8 @@ func (v *VaultService) RefreshHeader(ctx context.Context, knowledgeID string) (r
 	defer lock.Unlock()
 	var k types.Knowledge
 	query := v.db.WithContext(ctx).Where("id=?", knowledgeID)
-	if tenant, ok := types.TenantIDFromContext(ctx); ok {
-		query = query.Where("tenant_id=?", tenant)
+	if space, ok := types.SpaceIDFromContext(ctx); ok {
+		query = query.Where("space_id=?", space)
 	}
 	if err := query.First(&k).Error; err != nil {
 		return err
@@ -460,7 +460,7 @@ func (v *VaultService) ArticleError() string {
 }
 
 // ScheduleRefresh coalesces repeated changes per article using a trailing
-// timer. The context keeps tenant identity but outlives its HTTP request.
+// timer. The context keeps space identity but outlives its HTTP request.
 func (v *VaultService) ScheduleRefresh(ctx context.Context, knowledgeID string) {
 	v.articles.mu.Lock()
 	defer v.articles.mu.Unlock()

@@ -31,7 +31,7 @@ func TestDataSourceRepositoryUpdateSyncStateClearsErrorMessage(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:              "ds-1",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "RSS",
 		Type:            types.ConnectorTypeRSS,
@@ -61,7 +61,7 @@ func TestDataSourceRepositoryUpdatePersistsDisabledSyncDeletions(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:              "ds-sync-deletions",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "RSS",
 		Type:            types.ConnectorTypeRSS,
@@ -91,7 +91,7 @@ func TestDataSourceRepositoryCreatePersistsDisabledSyncDeletions(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:              "ds-create-sync-deletions",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "RSS",
 		Type:            types.ConnectorTypeRSS,
@@ -119,7 +119,7 @@ func TestDataSourceRepositoryCreatePersistsEnabledSyncDeletions(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:              "ds-create-sync-deletions-enabled",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "RSS",
 		Type:            types.ConnectorTypeRSS,
@@ -140,14 +140,14 @@ func TestDataSourceRepositoryDeleteSoftDeletes(t *testing.T) {
 
 	target := &types.DataSource{
 		ID:              "ds-delete-target",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "Delete target",
 		Type:            types.ConnectorTypeRSS,
 	}
 	other := &types.DataSource{
 		ID:              "ds-delete-other",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "Other data source",
 		Type:            types.ConnectorTypeRSS,
@@ -175,12 +175,12 @@ func TestDataSourceRepositoryOnlyLoadsTeamObjects(t *testing.T) {
 	repo := NewDataSourceRepository(db)
 	ctx := context.Background()
 	team := &types.DataSource{
-		ID: "ds-team", TenantID: types.SingleTenantID, KnowledgeBaseID: "kb-team",
+		ID: "ds-team", SpaceID: types.SingleSpaceID, KnowledgeBaseID: "kb-team",
 		Name: "Team source", Type: types.ConnectorTypeRSS,
 		Status: types.DataSourceStatusActive, SyncSchedule: "0 * * * *",
 	}
 	outside := &types.DataSource{
-		ID: "ds-other", TenantID: 2, KnowledgeBaseID: "kb-other",
+		ID: "ds-other", SpaceID: 2, KnowledgeBaseID: "kb-other",
 		Name: "Other source", Type: types.ConnectorTypeRSS,
 		Status: types.DataSourceStatusActive, SyncSchedule: "0 * * * *",
 	}
@@ -189,7 +189,7 @@ func TestDataSourceRepositoryOnlyLoadsTeamObjects(t *testing.T) {
 
 	loaded, err := repo.FindByID(ctx, team.ID)
 	require.NoError(t, err)
-	assert.Equal(t, types.SingleTenantID, loaded.TenantID)
+	assert.Equal(t, types.SingleSpaceID, loaded.SpaceID)
 	loaded, err = repo.FindByID(ctx, outside.ID)
 	require.Error(t, err)
 	assert.Nil(t, loaded)
@@ -209,7 +209,7 @@ func TestSyncLogRepositoryUpdateResultClearsErrorMessage(t *testing.T) {
 	log := &types.SyncLog{
 		ID:           "log-1",
 		DataSourceID: "ds-1",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.SyncLogStatusFailed,
 		ErrorMessage: "previous failure",
 		ItemsTotal:   1,

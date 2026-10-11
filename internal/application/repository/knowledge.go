@@ -66,11 +66,11 @@ func (r *knowledgeRepository) CreateKnowledge(ctx context.Context, knowledge *ty
 // GetKnowledgeByID gets knowledge
 func (r *knowledgeRepository) GetKnowledgeByID(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	id string,
 ) (*types.Knowledge, error) {
 	var knowledge types.Knowledge
-	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).First(&knowledge).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("space_id = ? AND id = ?", spaceID, id).First(&knowledge).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrKnowledgeNotFound
 		}
@@ -79,7 +79,7 @@ func (r *knowledgeRepository) GetKnowledgeByID(
 	return &knowledge, nil
 }
 
-// GetKnowledgeByIDOnly returns knowledge by ID without tenant filter (for permission resolution).
+// GetKnowledgeByIDOnly returns knowledge by ID without space filter (for permission resolution).
 func (r *knowledgeRepository) GetKnowledgeByIDOnly(ctx context.Context, id string) (*types.Knowledge, error) {
 	var knowledge types.Knowledge
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&knowledge).Error; err != nil {
@@ -93,10 +93,10 @@ func (r *knowledgeRepository) GetKnowledgeByIDOnly(ctx context.Context, id strin
 
 // ListKnowledgeByKnowledgeBaseID lists all knowledge in a knowledge base
 func (r *knowledgeRepository) ListKnowledgeByKnowledgeBaseID(
-	ctx context.Context, tenantID uint64, kbID string,
+	ctx context.Context, spaceID uint64, kbID string,
 ) ([]*types.Knowledge, error) {
 	var knowledges []*types.Knowledge
-	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).
+	if err := r.db.WithContext(ctx).Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
 		Order("created_at DESC").Find(&knowledges).Error; err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (r *knowledgeRepository) ListKnowledgeByKnowledgeBaseID(
 }
 
 // applyKnowledgeListFilter applies the optional filter dimensions of
-// KnowledgeListFilter to a GORM query. Tenant / knowledge base scoping must be
+// KnowledgeListFilter to a GORM query. Space / knowledge base scoping must be
 // applied by the caller before invoking this helper.
 func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) *gorm.DB {
 	if filter.Starred != nil {
@@ -167,7 +167,7 @@ func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) 
 // ListPagedKnowledgeByKnowledgeBaseID lists all knowledge in a knowledge base with pagination
 func (r *knowledgeRepository) ListPagedKnowledgeByKnowledgeBaseID(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 	page *types.Pagination,
 	filter types.KnowledgeListFilter,
@@ -177,7 +177,7 @@ func (r *knowledgeRepository) ListPagedKnowledgeByKnowledgeBaseID(
 
 	scope := func(q *gorm.DB) *gorm.DB {
 		return applyKnowledgeListFilter(
-			q.Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID),
+			q.Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID),
 			filter,
 		)
 	}
@@ -224,37 +224,37 @@ func (r *knowledgeRepository) UpdateKnowledgeBatch(ctx context.Context, knowledg
 }
 
 // DeleteKnowledge deletes an article and its entity associations atomically.
-func (r *knowledgeRepository) DeleteKnowledge(ctx context.Context, tenantID uint64, id string) error {
-	return r.DeleteKnowledgeList(ctx, tenantID, []string{id})
+func (r *knowledgeRepository) DeleteKnowledge(ctx context.Context, spaceID uint64, id string) error {
+	return r.DeleteKnowledgeList(ctx, spaceID, []string{id})
 }
 
 // DeleteKnowledgeList locks articles before deleting mentions, excluding concurrent resolution.
-func (r *knowledgeRepository) DeleteKnowledgeList(ctx context.Context, tenantID uint64, ids []string) error {
+func (r *knowledgeRepository) DeleteKnowledgeList(ctx context.Context, spaceID uint64, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var articles []types.Knowledge
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("tenant_id=? AND id IN ?", tenantID, ids).Order("id").Find(&articles).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("space_id=? AND id IN ?", spaceID, ids).Order("id").Find(&articles).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Delete(&types.KnowledgeEntity{}).Error; err != nil {
+		if err := tx.Where("space_id=? AND knowledge_id IN ?", spaceID, ids).Delete(&types.KnowledgeEntity{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Delete(&types.KnowledgeTopic{}).Error; err != nil {
+		if err := tx.Where("space_id=? AND knowledge_id IN ?", spaceID, ids).Delete(&types.KnowledgeTopic{}).Error; err != nil {
 			return err
 		}
-		return tx.Where("tenant_id=? AND id IN ?", tenantID, ids).Delete(&types.Knowledge{}).Error
+		return tx.Where("space_id=? AND id IN ?", spaceID, ids).Delete(&types.Knowledge{}).Error
 	})
 }
 
 // GetKnowledgeBatch gets knowledge in batch
 func (r *knowledgeRepository) GetKnowledgeBatch(
-	ctx context.Context, tenantID uint64, ids []string,
+	ctx context.Context, spaceID uint64, ids []string,
 ) ([]*types.Knowledge, error) {
 	var knowledge []*types.Knowledge
 	if err := r.db.WithContext(ctx).Debug().
-		Where("tenant_id = ? AND id IN ?", tenantID, ids).
+		Where("space_id = ? AND id IN ?", spaceID, ids).
 		Find(&knowledge).Error; err != nil {
 		return nil, err
 	}
@@ -264,12 +264,12 @@ func (r *knowledgeRepository) GetKnowledgeBatch(
 // CheckKnowledgeExists checks if knowledge already exists
 func (r *knowledgeRepository) CheckKnowledgeExists(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 	params *types.KnowledgeCheckParams,
 ) (bool, *types.Knowledge, error) {
 	query := r.db.WithContext(ctx).Model(&types.Knowledge{}).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND parse_status <> ?", tenantID, kbID, "failed")
+		Where("space_id = ? AND knowledge_base_id = ? AND parse_status <> ?", spaceID, kbID, "failed")
 
 	switch params.Type {
 	case "file":
@@ -507,12 +507,12 @@ func (r *knowledgeRepository) SetFinalizing(
 // CountKnowledgeByKnowledgeBaseID counts the number of knowledge items in a knowledge base
 func (r *knowledgeRepository) CountKnowledgeByKnowledgeBaseID(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 ) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&types.Knowledge{}).
-		Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).
+		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
 		Count(&count).Error
 	return count, err
 }
@@ -520,7 +520,7 @@ func (r *knowledgeRepository) CountKnowledgeByKnowledgeBaseID(
 // CountKnowledgeByStatus counts the number of knowledge items with the specified parse status
 func (r *knowledgeRepository) CountKnowledgeByStatus(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 	parseStatuses []string,
 ) (int64, error) {
@@ -530,7 +530,7 @@ func (r *knowledgeRepository) CountKnowledgeByStatus(
 
 	var count int64
 	query := r.db.WithContext(ctx).Model(&types.Knowledge{}).
-		Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).
+		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
 		Where("parse_status IN ?", parseStatuses)
 
 	if err := query.Count(&count).Error; err != nil {
@@ -542,14 +542,14 @@ func (r *knowledgeRepository) CountKnowledgeByStatus(
 
 func (r *knowledgeRepository) FindByMetadataKey(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 	key string,
 	value string,
 ) (*types.Knowledge, error) {
 	var knowledge types.Knowledge
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", tenantID, kbID).
+		Where("space_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", spaceID, kbID).
 		Where("metadata->>? = ?", key, value).
 		First(&knowledge).Error
 	if err != nil {
@@ -565,7 +565,7 @@ func (r *knowledgeRepository) FindByMetadataKey(
 // the given prefix. Used to sweep an external node's attachment sub-items on re-sync.
 func (r *knowledgeRepository) FindByMetadataKeyPrefix(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 	key string,
 	prefix string,
@@ -587,7 +587,7 @@ func (r *knowledgeRepository) FindByMetadataKeyPrefix(
 	// wildcards (e.g. \_) literal on both PostgreSQL.
 	keyExpr := "metadata->>'" + strings.ReplaceAll(key, "'", "''") + "'"
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", tenantID, kbID).
+		Where("space_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", spaceID, kbID).
 		Where(keyExpr+" LIKE ? ESCAPE ?", escaped+"%", `\`).
 		Find(&items).Error
 	if err != nil {
@@ -600,12 +600,12 @@ func (r *knowledgeRepository) FindByMetadataKeyPrefix(
 // identical external IDs from two data sources to collide in one knowledge base.
 func (r *knowledgeRepository) FindByDataSourceExternalID(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID, dataSourceID, externalID string,
 ) (*types.Knowledge, error) {
 	var knowledge types.Knowledge
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", tenantID, kbID).
+		Where("space_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", spaceID, kbID).
 		Where("metadata->>'datasource_id' = ? AND metadata->>'external_id' = ?", dataSourceID, externalID).
 		First(&knowledge).Error
 	if err != nil {
@@ -620,25 +620,25 @@ func (r *knowledgeRepository) FindByDataSourceExternalID(
 // HardDeleteKnowledge physically removes a knowledge row. Call it AFTER
 // DeleteKnowledge's soft-delete cascade so sync-internal deletions never
 // become tombstones that block a later re-sync of the same external item.
-func (r *knowledgeRepository) HardDeleteKnowledge(ctx context.Context, tenantID uint64, id string) error {
+func (r *knowledgeRepository) HardDeleteKnowledge(ctx context.Context, spaceID uint64, id string) error {
 	return r.db.Unscoped().WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Where("space_id = ? AND id = ?", spaceID, id).
 		Delete(&types.Knowledge{}).Error
 }
 
 // HardDeleteKnowledgeList is the batch counterpart of HardDeleteKnowledge.
-func (r *knowledgeRepository) HardDeleteKnowledgeList(ctx context.Context, tenantID uint64, ids []string) error {
+func (r *knowledgeRepository) HardDeleteKnowledgeList(ctx context.Context, spaceID uint64, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	return r.db.Unscoped().WithContext(ctx).
-		Where("tenant_id = ? AND id IN ?", tenantID, ids).
+		Where("space_id = ? AND id IN ?", spaceID, ids).
 		Delete(&types.Knowledge{}).Error
 }
 
 func (r *knowledgeRepository) SearchKnowledge(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	keyword string,
 	offset, limit int,
 	fileTypes []string,
@@ -654,7 +654,7 @@ func (r *knowledgeRepository) SearchKnowledge(
 		Table("knowledges").
 		Select("knowledges.*, knowledge_bases.name as knowledge_base_name").
 		Joins("JOIN knowledge_bases ON knowledge_bases.id = knowledges.knowledge_base_id").
-		Where("knowledges.tenant_id = ?", tenantID).
+		Where("knowledges.space_id = ?", spaceID).
 		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
 		Where("knowledges.deleted_at IS NULL").
 		Where("knowledges.parse_status <> ?", types.ParseStatusRejected)
@@ -746,7 +746,7 @@ func (r *knowledgeRepository) SearchKnowledge(
 	return knowledges, hasMore, nil
 }
 
-// SearchKnowledgeInScopes searches articles inside explicit tenant and knowledge base boundaries.
+// SearchKnowledgeInScopes searches articles inside explicit space and knowledge base boundaries.
 func (r *knowledgeRepository) SearchKnowledgeInScopes(
 	ctx context.Context,
 	scopes []types.KnowledgeSearchScope,
@@ -767,14 +767,14 @@ func (r *knowledgeRepository) SearchKnowledgeInScopes(
 	args := make([]interface{}, 0, len(scopes)*2)
 	for i, s := range scopes {
 		placeholders[i] = "(?,?)"
-		args = append(args, s.TenantID, s.KBID)
+		args = append(args, s.SpaceID, s.KBID)
 	}
-	scopeCondition := "(knowledges.tenant_id, knowledges.knowledge_base_id) IN (" + strings.Join(placeholders, ",") + ")"
+	scopeCondition := "(knowledges.space_id, knowledges.knowledge_base_id) IN (" + strings.Join(placeholders, ",") + ")"
 
 	query := r.db.WithContext(ctx).
 		Table("knowledges").
 		Select("knowledges.*, knowledge_bases.name as knowledge_base_name").
-		Joins("JOIN knowledge_bases ON knowledge_bases.id = knowledges.knowledge_base_id AND knowledge_bases.tenant_id = knowledges.tenant_id").
+		Joins("JOIN knowledge_bases ON knowledge_bases.id = knowledges.knowledge_base_id AND knowledge_bases.space_id = knowledges.space_id").
 		Where(scopeCondition, args...).
 		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
 		Where("knowledges.deleted_at IS NULL").

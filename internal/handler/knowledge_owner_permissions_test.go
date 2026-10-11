@@ -41,7 +41,7 @@ func (s *ownerKnowledgePermissionsService) CreateKnowledgeFromFile(context.Conte
 func (s *ownerKnowledgePermissionsService) GetKnowledgeBatch(_ context.Context, _ uint64, ids []string) ([]*types.Knowledge, error) {
 	items := make([]*types.Knowledge, 0, len(ids))
 	for _, id := range ids {
-		items = append(items, &types.Knowledge{ID: id, TenantID: 1, KnowledgeBaseID: "kb-1"})
+		items = append(items, &types.Knowledge{ID: id, SpaceID: 1, KnowledgeBaseID: "kb-1"})
 	}
 	return items, nil
 }
@@ -105,9 +105,9 @@ func ownerKnowledgePermissionsRouter(item ownerKnowledgePermissionsCase) (*gin.E
 	h := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: service, taskClient: queue}
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
 		c.Set(types.UserIDContextKey.String(), "owner-matrix-user")
-		ctx := context.WithValue(c.Request.Context(), types.TenantIDContextKey, uint64(1))
+		ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, uint64(1))
 		ctx = context.WithValue(ctx, types.UserIDContextKey, "owner-matrix-user")
 
 		c.Request = c.Request.WithContext(ctx)

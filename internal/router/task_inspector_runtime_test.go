@@ -65,7 +65,7 @@ func TestQueueStatsDoesNotWarnForQueuesThatDoNotExist(t *testing.T) {
 
 func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 	payload, err := json.Marshal(map[string]any{
-		"tenant_id":         types.SingleTenantID,
+		"space_id":          types.SingleSpaceID,
 		"knowledge_base_id": "kb-1",
 		"knowledge_id":      "knowledge-1",
 		"file_url":          "secret://signed-document-url",
@@ -82,7 +82,7 @@ func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("project task: %v", err)
 	}
-	if info.State != types.RuntimeTaskActive || info.TenantID != types.SingleTenantID ||
+	if info.State != types.RuntimeTaskActive || info.SpaceID != types.SingleSpaceID ||
 		info.KnowledgeBaseID != "kb-1" || info.KnowledgeID != "knowledge-1" {
 		t.Fatalf("safe routing metadata missing: %+v", info)
 	}
@@ -124,19 +124,19 @@ func TestProjectRuntimeTaskActionsFollowCurrentState(t *testing.T) {
 	}
 }
 
-func TestProjectRuntimeTaskActionsRespectSingleTeamBoundary(t *testing.T) {
+func TestProjectRuntimeTaskActionsRespectPersonalSpaceBoundary(t *testing.T) {
 	cases := []struct {
 		name    string
 		payload []byte
 		allowed bool
 	}{
-		{"single_team", []byte(`{"tenant_id":1,"knowledge_id":"knowledge-1"}`), true},
-		{"legacy_no_tenant", []byte(`{"knowledge_id":"knowledge-1"}`), true},
-		{"legacy_zero_tenant", []byte(`{"tenant_id":0,"knowledge_id":"knowledge-1"}`), true},
-		{"foreign_tenant", []byte(`{"tenant_id":2,"knowledge_id":"knowledge-2"}`), false},
-		{"retired_tenant", []byte(`{"tenant_id":42,"knowledge_id":"knowledge-42"}`), false},
+		{"personal_space", []byte(`{"tenant_id":1,"knowledge_id":"knowledge-1"}`), true},
+		{"legacy_no_space", []byte(`{"knowledge_id":"knowledge-1"}`), true},
+		{"legacy_zero_space", []byte(`{"tenant_id":0,"knowledge_id":"knowledge-1"}`), true},
+		{"foreign_space", []byte(`{"tenant_id":2,"knowledge_id":"knowledge-2"}`), false},
+		{"retired_space", []byte(`{"tenant_id":42,"knowledge_id":"knowledge-42"}`), false},
 		{"malformed_json", []byte(`{"tenant_id":1`), false},
-		{"invalid_tenant_type", []byte(`{"tenant_id":"1","knowledge_id":"knowledge-1"}`), false},
+		{"invalid_space_type", []byte(`{"tenant_id":"1","knowledge_id":"knowledge-1"}`), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -228,8 +228,8 @@ func TestPurgeArchivedRuntimeTasksOnlyDeletesTeamAndLegacyTasks(t *testing.T) {
 	// JSONB prevents invalid JSON from being stored. A JSON string preserves
 	// the invalid metadata guard while exercising a valid storage value.
 	insertRuntimeJob(t, inspector, "invalid-shape", `"invalid metadata"`, types.QueueDefault, types.RuntimeTaskArchived, now)
-	insertRuntimeJob(t, inspector, "invalid-tenant-type", `{"tenant_id":"1"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
-	retained = append(retained, "invalid-shape", "invalid-tenant-type")
+	insertRuntimeJob(t, inspector, "invalid-space-type", `{"tenant_id":"1"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
+	retained = append(retained, "invalid-shape", "invalid-space-type")
 	insertRuntimeJob(t, inspector, "other-queue", `{"tenant_id":1}`, types.QueueEntity, types.RuntimeTaskArchived, now)
 	liveStates := []types.RuntimeTaskState{types.RuntimeTaskPending, types.RuntimeTaskActive, types.RuntimeTaskScheduled, types.RuntimeTaskRetry}
 	for _, state := range liveStates {
@@ -469,7 +469,7 @@ func TestPostgresRuntimeQueueHTTPReadsAndMutatesRealRows(t *testing.T) {
 
 func TestPostgresRuntimeTopicTaskProjectsBusinessJobID(t *testing.T) {
 	inspector := newPostgresInspectorTest(t)
-	payload, err := json.Marshal(types.TopicBackfillPayload{TenantID: types.SingleTenantID, JobID: "topic-history-job"})
+	payload, err := json.Marshal(types.TopicBackfillPayload{SpaceID: types.SingleSpaceID, JobID: "topic-history-job"})
 	if err != nil {
 		t.Fatal(err)
 	}

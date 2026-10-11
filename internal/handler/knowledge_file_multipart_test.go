@@ -45,8 +45,8 @@ func TestKnowledgeFileMultipartAcceptsSourceAndProcessJSON(t *testing.T) {
 	h := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: service}
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
-		ctx := context.WithValue(c.Request.Context(), types.TenantIDContextKey, uint64(1))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
+		ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, uint64(1))
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})

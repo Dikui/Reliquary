@@ -28,6 +28,7 @@ type Snapshot struct {
 	ActiveUploads    *[]File                        `json:"active_uploads,omitempty"`
 	JSONNulls        map[string]map[string][]string `json:"json_nulls"`
 	credentialValues []string
+	storedFormat     int
 }
 type File struct {
 	Path   string `json:"path"`
@@ -48,7 +49,7 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 	if err := ValidateClassification(ctx, db); err != nil {
 		return nil, err
 	}
-	snapshot := &Snapshot{FormatVersion: 1, Tables: map[string][]map[string]any{}, Required: []Requirement{}, JSONNulls: map[string]map[string][]string{}}
+	snapshot := &Snapshot{FormatVersion: FormatVersion, Tables: map[string][]map[string]any{}, Required: []Requirement{}, JSONNulls: map[string]map[string][]string{}}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return nil, err
@@ -296,6 +297,10 @@ func appendLogs(path string, rows []map[string]any) error {
 }
 
 func replicaFiles(snapshot *Snapshot) (map[string][]byte, error) {
+	return replicaFilesForFormat(snapshot, FormatVersion)
+}
+
+func replicaFilesForFormat(snapshot *Snapshot, format int) (map[string][]byte, error) {
 	files := map[string][]byte{}
 	for table, rows := range snapshot.Tables {
 		if table == "operation_logs" {
@@ -304,6 +309,9 @@ func replicaFiles(snapshot *Snapshot) (map[string][]byte, error) {
 		dir := "data"
 		if configTable(table) {
 			dir = "config"
+		}
+		if format == 1 {
+			table, rows = legacyTable(table), namedRows(rows, true)
 		}
 		data, err := json.MarshalIndent(rows, "", "  ")
 		if err != nil {
@@ -345,7 +353,7 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 			return err
 		}
 	}
-	if err := appendLogs(filepath.Join(directory, "operation_logs.jsonl"), snapshot.Tables["operation_logs"]); err != nil {
+	if err := appendLogs(filepath.Join(directory, "operation_logs.jsonl"), namedRows(snapshot.Tables["operation_logs"], true)); err != nil {
 		return err
 	}
 	if uploads != "" {
@@ -357,7 +365,7 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	if err != nil {
 		return err
 	}
-	manifest := ReplicaManifest{FormatVersion: 1, Required: required, ActiveUploads: &activeUploads, JSONNulls: snapshot.JSONNulls, Files: []File{}, Tables: []string{}}
+	manifest := ReplicaManifest{FormatVersion: FormatVersion, Required: required, ActiveUploads: &activeUploads, JSONNulls: snapshot.JSONNulls, Files: []File{}, Tables: []string{}}
 	for table := range snapshot.Tables {
 		manifest.Tables = append(manifest.Tables, table)
 	}
@@ -389,7 +397,19 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	if err != nil {
 		return err
 	}
-	return AtomicWrite(filepath.Join(directory, "manifest.json"), append(data, '\n'))
+	if err := AtomicWrite(filepath.Join(directory, "manifest.json"), append(data, '\n')); err != nil {
+		return err
+	}
+	for _, table := range []string{"spaces", "api_keys"} {
+		if _, present := snapshot.Tables[table]; !present {
+			continue
+		}
+		oldPath := filepath.Join(directory, "config", legacyTable(table)+".json")
+		if err := os.Remove(oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 func checkResourceCredentials(root string, needles []string) error {

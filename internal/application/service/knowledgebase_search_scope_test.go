@@ -43,24 +43,24 @@ func TestTotalHits(t *testing.T) {
 	}
 }
 
-func TestAuthorizeKBAccess_SameTenantAllPass(t *testing.T) {
+func TestAuthorizeKBAccess_SameSpaceAllPass(t *testing.T) {
 	t.Parallel()
 	s := &knowledgeBaseService{}
 	kbs := []*types.KnowledgeBase{
-		{ID: "kb-1", TenantID: 7},
-		{ID: "kb-2", TenantID: 7},
+		{ID: "kb-1", SpaceID: 7},
+		{ID: "kb-2", SpaceID: 7},
 	}
-	err := s.authorizeKBAccess(ctxWithTenantForAuth(7), kbs, 7)
+	err := s.authorizeKBAccess(ctxWithSpaceForAuth(7), kbs, 7)
 	require.NoError(t, err)
 }
 
-func TestAuthorizeKBAccess_ForeignTenantForbidden(t *testing.T) {
+func TestAuthorizeKBAccess_ForeignSpaceForbidden(t *testing.T) {
 	t.Parallel()
 	s := &knowledgeBaseService{}
 	kbs := []*types.KnowledgeBase{
-		{ID: "kb-foreign", TenantID: 99},
+		{ID: "kb-foreign", SpaceID: 99},
 	}
-	err := s.authorizeKBAccess(ctxWithTenantForAuth(7), kbs, 7)
+	err := s.authorizeKBAccess(ctxWithSpaceForAuth(7), kbs, 7)
 	require.Error(t, err)
 	app, ok := apperrors.IsAppError(err)
 	require.True(t, ok, "expected typed AppError, got %T", err)
@@ -71,10 +71,10 @@ func TestAuthorizeKBAccess_ForeignTenantForbidden(t *testing.T) {
 func TestAuthorizeKBAccess_EmptyKBs_OK(t *testing.T) {
 	t.Parallel()
 	s := &knowledgeBaseService{}
-	err := s.authorizeKBAccess(ctxWithTenantForAuth(7), nil, 7)
+	err := s.authorizeKBAccess(ctxWithSpaceForAuth(7), nil, 7)
 	require.NoError(t, err)
 }
 
-func ctxWithTenantForAuth(tenantID uint64) context.Context {
-	return context.WithValue(context.Background(), types.TenantIDContextKey, tenantID)
+func ctxWithSpaceForAuth(spaceID uint64) context.Context {
+	return context.WithValue(context.Background(), types.SpaceIDContextKey, spaceID)
 }

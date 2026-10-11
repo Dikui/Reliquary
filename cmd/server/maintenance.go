@@ -65,6 +65,15 @@ func runMaintenance(args []string, input io.Reader, output io.Writer) error {
 		return err
 	}
 	defer pool.Close()
+	if args[0] == "migrate" {
+		return runMaintenanceDatabase(ctx, db, dsn, args, input, output)
+	}
+	return maintenance.WithCurrentNames(db, func(current *gorm.DB) error {
+		return runMaintenanceDatabase(ctx, current, dsn, args, input, output)
+	})
+}
+
+func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args []string, input io.Reader, output io.Writer) error {
 	emit := func(value any) error {
 		encoder := json.NewEncoder(output)
 		encoder.SetIndent("", "  ")

@@ -20,7 +20,7 @@ The baseline includes `uuid-ossp`, `vector`, `pg_trgm`, and `pg_search`,
 application tables, and their final indexes, constraints, functions,
 and trigger. Running the old migration history on an empty database leaves
 every application table empty, so the baseline has no seed table rows.
-The baseline is for a fresh installation with the personal tenant ID fixed at `1`.
+The baseline is for a fresh installation with the personal space ID fixed at `1`.
 
 Databases created with the old migration history **cannot be upgraded in
 place**, including old databases whose recorded version is already `0`.

@@ -43,16 +43,16 @@ func backgroundTaskMiddleware() queue.MiddlewareFunc {
 			var fields map[string]json.RawMessage
 			if json.Unmarshal(t.Payload(), &fields) == nil {
 				for name, raw := range fields {
-					if !strings.EqualFold(name, "tenant_id") {
+					if !strings.EqualFold(name, "tenant_id") && !strings.EqualFold(name, "space_id") {
 						continue
 					}
-					var tenantID uint64
-					if json.Unmarshal(raw, &tenantID) != nil || tenantID != types.SingleTenantID {
+					var spaceID uint64
+					if json.Unmarshal(raw, &spaceID) != nil || spaceID != types.SingleSpaceID {
 						return fmt.Errorf("task must belong to the space: %w", queue.SkipRetry)
 					}
 				}
 			}
-			ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
+			ctx = context.WithValue(ctx, types.SpaceIDContextKey, types.SingleSpaceID)
 			return next.ProcessTask(types.WithBackgroundTask(ctx), t)
 		})
 	}

@@ -730,11 +730,11 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   if (task.knowledge_count) {
     refs.push({ key: 'knowledge-count', label: t('system.globalSettings.runtime.tasks.knowledgeCountLabel'), value: String(task.knowledge_count) })
   }
-  if (task.tenant_id) {
+  if (task.space_id) {
     refs.push({
-      key: 'tenant',
-      label: t('system.globalSettings.runtime.tasks.tenantLabel'),
-      value: String(task.tenant_id),
+      key: 'space',
+      label: t('system.globalSettings.runtime.tasks.spaceLabel'),
+      value: String(task.space_id),
     })
   }
   if (task.enqueued_at) refs.push({ key: 'enqueued', label: t('system.globalSettings.runtime.tasks.enqueuedAt'), value: formatTaskTime(task.enqueued_at) })

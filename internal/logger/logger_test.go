@@ -214,12 +214,12 @@ func TestCloneContextKeepsBackgroundWorkThrottled(t *testing.T) {
 func TestCloneContextWithoutTraceDropsTheChatTrace(t *testing.T) {
 	t.Parallel()
 
-	const tenantID uint64 = 42
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, tenantID)
+	const spaceID uint64 = 42
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, spaceID)
 
 	detached := CloneContextWithoutTrace(ctx)
-	got, _ := detached.Value(types.TenantIDContextKey).(uint64)
-	if got != tenantID {
-		t.Fatalf("TenantID = %d, want %d (identity must survive the detach)", got, tenantID)
+	got, _ := detached.Value(types.SpaceIDContextKey).(uint64)
+	if got != spaceID {
+		t.Fatalf("SpaceID = %d, want %d (identity must survive the detach)", got, spaceID)
 	}
 }

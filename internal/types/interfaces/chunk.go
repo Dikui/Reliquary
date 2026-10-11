@@ -17,36 +17,36 @@ type ChunkRepository interface {
 	// CreateChunks creates chunks
 	CreateChunks(ctx context.Context, chunks []*types.Chunk) error
 	// GetChunkByID gets a chunk by id
-	GetChunkByID(ctx context.Context, tenantID uint64, id string) (*types.Chunk, error)
-	// GetChunkByIDOnly gets a chunk by id without tenant filter (for permission resolution)
+	GetChunkByID(ctx context.Context, spaceID uint64, id string) (*types.Chunk, error)
+	// GetChunkByIDOnly gets a chunk by id without space filter (for permission resolution)
 	GetChunkByIDOnly(ctx context.Context, id string) (*types.Chunk, error)
 	// GetChunkBySeqID gets a chunk by seq_id
-	GetChunkBySeqID(ctx context.Context, tenantID uint64, seqID int64) (*types.Chunk, error)
+	GetChunkBySeqID(ctx context.Context, spaceID uint64, seqID int64) (*types.Chunk, error)
 	// ListChunksByID lists chunks by ids
-	ListChunksByID(ctx context.Context, tenantID uint64, ids []string) ([]*types.Chunk, error)
+	ListChunksByID(ctx context.Context, spaceID uint64, ids []string) ([]*types.Chunk, error)
 	ListChunksByIDOnly(ctx context.Context, ids []string) ([]*types.Chunk, error)
 	// ListChunksBySeqID lists chunks by seq_ids
-	ListChunksBySeqID(ctx context.Context, tenantID uint64, seqIDs []int64) ([]*types.Chunk, error)
+	ListChunksBySeqID(ctx context.Context, spaceID uint64, seqIDs []int64) ([]*types.Chunk, error)
 	// ListChunksByKnowledgeID lists the knowledge's text chunks. Despite the name
 	// it filters to chunk_type = 'text'; reach for ListChunksByKnowledgeIDAndTypes
 	// when summary, parent_text or image chunks are needed too.
-	ListChunksByKnowledgeID(ctx context.Context, tenantID uint64, knowledgeID string) ([]*types.Chunk, error)
+	ListChunksByKnowledgeID(ctx context.Context, spaceID uint64, knowledgeID string) ([]*types.Chunk, error)
 	// ListChunksByKnowledgeIDAndTypes lists the knowledge's chunks restricted to
 	// the given chunk types, ordered by chunk_index.
 	ListChunksByKnowledgeIDAndTypes(
-		ctx context.Context, tenantID uint64, knowledgeID string, chunkTypes []types.ChunkType,
+		ctx context.Context, spaceID uint64, knowledgeID string, chunkTypes []types.ChunkType,
 	) ([]*types.Chunk, error)
 	ListPagedChunksByKnowledgeID(ctx context.Context,
-		tenantID uint64,
+		spaceID uint64,
 		knowledgeID string,
 		page *types.Pagination,
 		chunkType []types.ChunkType,
 		keyword string,
 		sortOrder string,
 		isEnabled *bool) ([]*types.Chunk, int64, error)
-	ListChunkByParentID(ctx context.Context, tenantID uint64, parentID string) ([]*types.Chunk, error)
+	ListChunkByParentID(ctx context.Context, spaceID uint64, parentID string) ([]*types.Chunk, error)
 	// ListChunksByParentIDs lists chunks whose parent_chunk_id is in the given list
-	ListChunksByParentIDs(ctx context.Context, tenantID uint64, parentIDs []string) ([]*types.Chunk, error)
+	ListChunksByParentIDs(ctx context.Context, spaceID uint64, parentIDs []string) ([]*types.Chunk, error)
 	// UpdateChunk updates a chunk
 	UpdateChunk(ctx context.Context, chunk *types.Chunk) error
 	// UpdateChunks updates chunks in batch
@@ -54,28 +54,28 @@ type ChunkRepository interface {
 	// SaveChunks persists full chunk objects in a single transaction using GORM Save (UPDATE).
 	SaveChunks(ctx context.Context, chunks []*types.Chunk) error
 	// DeleteChunk deletes a chunk
-	DeleteChunk(ctx context.Context, tenantID uint64, id string) error
+	DeleteChunk(ctx context.Context, spaceID uint64, id string) error
 	// DeleteChunks deletes chunks by IDs in batch
-	DeleteChunks(ctx context.Context, tenantID uint64, ids []string) error
+	DeleteChunks(ctx context.Context, spaceID uint64, ids []string) error
 	// DeleteChunksByKnowledgeID deletes chunks by knowledge id
-	DeleteChunksByKnowledgeID(ctx context.Context, tenantID uint64, knowledgeID string) error
+	DeleteChunksByKnowledgeID(ctx context.Context, spaceID uint64, knowledgeID string) error
 	// DeleteByKnowledgeList deletes all chunks for a knowledge list
-	DeleteByKnowledgeList(ctx context.Context, tenantID uint64, knowledgeIDs []string) error
+	DeleteByKnowledgeList(ctx context.Context, spaceID uint64, knowledgeIDs []string) error
 	// ListImageInfoByKnowledgeIDs returns non-empty (knowledge_id, image_info) pairs for image cleanup.
-	ListImageInfoByKnowledgeIDs(ctx context.Context, tenantID uint64, knowledgeIDs []string) ([]ChunkImageInfo, error)
+	ListImageInfoByKnowledgeIDs(ctx context.Context, spaceID uint64, knowledgeIDs []string) ([]ChunkImageInfo, error)
 	// CountChunksByKnowledgeBaseID counts the number of chunks in a knowledge base.
-	CountChunksByKnowledgeBaseID(ctx context.Context, tenantID uint64, kbID string) (int64, error)
+	CountChunksByKnowledgeBaseID(ctx context.Context, spaceID uint64, kbID string) (int64, error)
 	// DeleteUnindexedChunks deletes unindexed chunks by knowledge id and chunk index range
-	DeleteUnindexedChunks(ctx context.Context, tenantID uint64, knowledgeID string) ([]*types.Chunk, error)
+	DeleteUnindexedChunks(ctx context.Context, spaceID uint64, knowledgeID string) ([]*types.Chunk, error)
 }
 
 // ChunkService defines the interface for chunk service operations
 type ChunkService interface {
 	// CreateChunks creates chunks
 	CreateChunks(ctx context.Context, chunks []*types.Chunk) error
-	// GetChunkByID gets a chunk by id (uses tenant from context)
+	// GetChunkByID gets a chunk by id (uses space from context)
 	GetChunkByID(ctx context.Context, id string) (*types.Chunk, error)
-	// GetChunkByIDOnly gets a chunk by id without tenant filter (for permission resolution)
+	// GetChunkByIDOnly gets a chunk by id without space filter (for permission resolution)
 	GetChunkByIDOnly(ctx context.Context, id string) (*types.Chunk, error)
 	// ListChunksByKnowledgeID lists chunks by knowledge id
 	ListChunksByKnowledgeID(ctx context.Context, knowledgeID string) ([]*types.Chunk, error)
@@ -99,7 +99,7 @@ type ChunkService interface {
 	// DeleteByKnowledgeList deletes all chunks for a knowledge list
 	DeleteByKnowledgeList(ctx context.Context, ids []string) error
 	// ListChunkByParentID lists chunks by parent id
-	ListChunkByParentID(ctx context.Context, tenantID uint64, parentID string) ([]*types.Chunk, error)
+	ListChunkByParentID(ctx context.Context, spaceID uint64, parentID string) ([]*types.Chunk, error)
 	// GetRepository gets the chunk repository
 	GetRepository() ChunkRepository
 }

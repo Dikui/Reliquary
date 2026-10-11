@@ -26,7 +26,7 @@ type KnowledgeBase struct {
 	// Description of the knowledge base
 	Description string `yaml:"description"             json:"description"`
 	// Workspace ID
-	TenantID uint64 `yaml:"tenant_id"               json:"tenant_id"`
+	SpaceID uint64 `yaml:"space_id"               json:"space_id"`
 	// CreatorID records the user who created this team knowledge base.
 	CreatorID string `yaml:"creator_id"              json:"creator_id"              gorm:"type:varchar(36);index"`
 	// Chunking configuration

@@ -60,14 +60,14 @@ func requireFilePathQuery(c *gin.Context) (string, bool) {
 
 // resolveCatalogResource maps a logical resource path onto its physical path
 // when the catalog knows it, enforcing that the resource belongs to
-// ownerTenantID. isResource reports whether the path resolved to a registered
-// resource (whose tenant is then authoritative). On !ok the response has been
+// ownerSpaceID. isResource reports whether the path resolved to a registered
+// resource (whose space is then authoritative). On !ok the response has been
 // written.
 func resolveCatalogResource(
 	c *gin.Context,
 	catalog interfaces.ResourceCatalog,
 	filePath string,
-	ownerTenantID uint64) (resolved string, isResource, ok bool) {
+	ownerSpaceID uint64) (resolved string, isResource, ok bool) {
 	if catalog == nil {
 		return filePath, false, true
 	}
@@ -79,7 +79,7 @@ func resolveCatalogResource(
 	if resource == nil {
 		return filePath, false, true
 	}
-	if resource.TenantID != ownerTenantID {
+	if resource.SpaceID != ownerSpaceID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: resource not accessible"})
 		return "", false, false
 	}
@@ -135,24 +135,24 @@ func newFileServeHandler(
 			return
 		}
 
-		tenant, _ := c.Request.Context().Value(types.TenantInfoContextKey).(*types.Tenant)
-		if tenant == nil {
+		space, _ := c.Request.Context().Value(types.SpaceInfoContextKey).(*types.Space)
+		if space == nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
 			return
 		}
-		filePath, resourceResolved, ok := resolveCatalogResource(c, resourceCatalog, filePath, tenant.ID)
+		filePath, resourceResolved, ok := resolveCatalogResource(c, resourceCatalog, filePath, space.ID)
 		if !ok {
 			return
 		}
 
-		// A registered resource's tenant is authoritative. Physical provider
+		// A registered resource's space is authoritative. Physical provider
 		// paths remain an internal locator and are not required to encode access
 		// control metadata (some cloud layouts contain other numeric segments).
 		if !resourceResolved {
-			if err := secutils.ValidateStoragePathTenant(filePath, tenant.ID); err != nil {
+			if err := secutils.ValidateStoragePathSpace(filePath, space.ID); err != nil {
 				logger.Warnf(c.Request.Context(),
-					"[Router] /files denied cross-tenant or invalid path: tenant_id=%d file_path=%q err=%v",
-					tenant.ID, filePath, err)
+					"[Router] /files denied cross-space or invalid path: space_id=%d file_path=%q err=%v",
+					space.ID, filePath, err)
 				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
 				return
 			}
@@ -166,8 +166,8 @@ func newFileServeHandler(
 
 		reader, err := fileSvc.GetFile(c.Request.Context(), filePath)
 		if err != nil {
-			logger.Warnf(c.Request.Context(), "[Router] /files get file failed: tenant_id=%d provider=%s path=%q err=%v",
-				tenant.ID, "local", filePath, err)
+			logger.Warnf(c.Request.Context(), "[Router] /files get file failed: space_id=%d provider=%s path=%q err=%v",
+				space.ID, "local", filePath, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -181,8 +181,8 @@ func serveFiles(r getRouteRegistrar, globalFileService interfaces.FileService) {
 	serveFilesWithResources(r, globalFileService, nil)
 }
 
-// serveFilesWithResources registers the tenant-scoped storage proxy.
-// It is registered after auth middleware, so tenant context comes from
+// serveFilesWithResources registers the space-scoped storage proxy.
+// It is registered after auth middleware, so space context comes from
 // authentication.
 //
 // Route:
@@ -201,10 +201,10 @@ func serveFilesWithResources(
 func serveResourceGrants(
 	r *gin.Engine,
 	resourceCatalog interfaces.ResourceCatalog,
-	tenantService interfaces.TenantService,
+	spaceService interfaces.SpaceService,
 	globalFileService interfaces.FileService,
 ) {
-	if resourceCatalog == nil || tenantService == nil {
+	if resourceCatalog == nil || spaceService == nil {
 		return
 	}
 	handler := func(c *gin.Context) {
@@ -214,8 +214,8 @@ func serveResourceGrants(
 			c.Status(http.StatusNotFound)
 			return
 		}
-		tenant, err := tenantService.GetTenantByID(ctx, resource.TenantID)
-		if err != nil || tenant == nil {
+		space, err := spaceService.GetSpaceByID(ctx, resource.SpaceID)
+		if err != nil || space == nil {
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -250,21 +250,21 @@ func serveResourceGrants(
 func serveKBScopedFiles(
 	r *gin.RouterGroup,
 	g *accessGuards,
-	tenantService interfaces.TenantService,
+	spaceService interfaces.SpaceService,
 	globalFileService interfaces.FileService,
 	resourceCatalogs ...interfaces.ResourceCatalog) {
 	logger.Infof(context.Background(), "[Router] Serving KB-scoped files from /knowledge-bases/:id/files")
 	r.Handle(http.MethodGet, "/knowledge-bases/:id/files", g.KBExists("id"), newKBScopedFileServeHandlerWithResources(
-		tenantService,
+		spaceService,
 		globalFileService,
 		firstResourceCatalog(resourceCatalogs)))
 }
 
 func newKBScopedFileServeHandler(
-	tenantService interfaces.TenantService,
+	spaceService interfaces.SpaceService,
 	globalFileService interfaces.FileService,
 ) gin.HandlerFunc {
-	return newKBScopedFileServeHandlerWithResources(tenantService, globalFileService, nil)
+	return newKBScopedFileServeHandlerWithResources(spaceService, globalFileService, nil)
 }
 
 func firstResourceCatalog(catalogs []interfaces.ResourceCatalog) interfaces.ResourceCatalog {
@@ -275,7 +275,7 @@ func firstResourceCatalog(catalogs []interfaces.ResourceCatalog) interfaces.Reso
 }
 
 func newKBScopedFileServeHandlerWithResources(
-	tenantService interfaces.TenantService,
+	spaceService interfaces.SpaceService,
 	globalFileService interfaces.FileService,
 	resourceCatalog interfaces.ResourceCatalog) gin.HandlerFunc {
 	absDir := localStorageAbsDir()
@@ -288,27 +288,27 @@ func newKBScopedFileServeHandlerWithResources(
 			return
 		}
 
-		ownerTenantID, ok := types.TenantIDFromContext(ctx)
-		if !ok || ownerTenantID == 0 {
+		ownerSpaceID, ok := types.SpaceIDFromContext(ctx)
+		if !ok || ownerSpaceID == 0 {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
 			return
 		}
-		filePath, _, ok = resolveCatalogResource(c, resourceCatalog, filePath, ownerTenantID)
+		filePath, _, ok = resolveCatalogResource(c, resourceCatalog, filePath, ownerSpaceID)
 		if !ok {
 			return
 		}
 
-		if err := secutils.ValidateKBScopedStoragePath(filePath, ownerTenantID); err != nil {
-			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files denied path not allowed for KB proxy: owner_tenant_id=%d file_path=%q err=%v",
-				ownerTenantID, filePath, err)
+		if err := secutils.ValidateKBScopedStoragePath(filePath, ownerSpaceID); err != nil {
+			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files denied path not allowed for KB proxy: owner_space_id=%d file_path=%q err=%v",
+				ownerSpaceID, filePath, err)
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
 			return
 		}
 
-		tenant, err := tenantService.GetTenantByID(ctx, ownerTenantID)
-		if err != nil || tenant == nil {
-			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files owner tenant lookup failed: owner_tenant_id=%d err=%v",
-				ownerTenantID, err)
+		space, err := spaceService.GetSpaceByID(ctx, ownerSpaceID)
+		if err != nil || space == nil {
+			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files owner space lookup failed: owner_space_id=%d err=%v",
+				ownerSpaceID, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -321,39 +321,39 @@ func newKBScopedFileServeHandlerWithResources(
 
 		reader, err := fileSvc.GetFile(ctx, filePath)
 		if err != nil {
-			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files get file failed: owner_tenant_id=%d provider=%s path=%q err=%v",
-				ownerTenantID, "local", filePath, err)
+			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files get file failed: owner_space_id=%d provider=%s path=%q err=%v",
+				ownerSpaceID, "local", filePath, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
 
 		contentType, inline := secutils.SafeContentTypeByFilename(filePath)
-		// Cross-tenant shared content — keep it private so shared proxies /
-		// CDNs do not cache one tenant's view for another.
+		// Cross-space shared content — keep it private so shared proxies /
+		// CDNs do not cache one space's view for another.
 		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "/knowledge-bases/:id/files")
 	}
 }
 
-func servePresignedFiles(r *gin.Engine, tenantService interfaces.TenantService) {
-	handler := presignedFileHandler(tenantService, localStorageAbsDir())
+func servePresignedFiles(r *gin.Engine, spaceService interfaces.SpaceService) {
+	handler := presignedFileHandler(spaceService, localStorageAbsDir())
 	r.GET("/api/v1/files/presigned", handler)
 	r.HEAD("/api/v1/files/presigned", handler)
 }
 
-func presignedFileHandler(tenantService interfaces.TenantService, absDir string) gin.HandlerFunc {
+func presignedFileHandler(spaceService interfaces.SpaceService, absDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		clientIP := c.ClientIP()
 		userAgent := c.Request.UserAgent()
 
 		filePath := strings.TrimSpace(c.Query("file_path"))
-		tenantIDStr := strings.TrimSpace(c.Query("tenant_id"))
+		spaceIDStr := strings.TrimSpace(c.Query("space_id"))
 		expiresStr := strings.TrimSpace(c.Query("expires"))
 		sig := strings.TrimSpace(c.Query("sig"))
 
-		if filePath == "" || tenantIDStr == "" || expiresStr == "" || sig == "" {
-			logger.Warnf(ctx, "[Router] /files/presigned missing params: client_ip=%s ua=%q file_path=%q tenant_id=%q expires=%q has_sig=%v",
-				clientIP, userAgent, filePath, tenantIDStr, expiresStr, sig != "")
+		if filePath == "" || spaceIDStr == "" || expiresStr == "" || sig == "" {
+			logger.Warnf(ctx, "[Router] /files/presigned missing params: client_ip=%s ua=%q file_path=%q space_id=%q expires=%q has_sig=%v",
+				clientIP, userAgent, filePath, spaceIDStr, expiresStr, sig != "")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "missing required parameters"})
 			return
 		}
@@ -363,23 +363,23 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string)
 			return
 		}
 
-		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+		spaceID, err := strconv.ParseUint(spaceIDStr, 10, 64)
 		if err != nil {
-			logger.Warnf(ctx, "[Router] /files/presigned invalid tenant_id: client_ip=%s tenant_id=%q err=%v", clientIP, tenantIDStr, err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+			logger.Warnf(ctx, "[Router] /files/presigned invalid space_id: client_ip=%s space_id=%q err=%v", clientIP, spaceIDStr, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid space_id"})
 			return
 		}
 
-		if !secutils.VerifyFileURLSig(filePath, tenantID, expiresStr, sig) {
-			logger.Warnf(ctx, "[Router] /files/presigned sig invalid or expired: client_ip=%s ua=%q tenant_id=%d file_path=%q expires=%s",
-				clientIP, userAgent, tenantID, filePath, expiresStr)
+		if !secutils.VerifyFileURLSig(filePath, spaceID, expiresStr, sig) {
+			logger.Warnf(ctx, "[Router] /files/presigned sig invalid or expired: client_ip=%s ua=%q space_id=%d file_path=%q expires=%s",
+				clientIP, userAgent, spaceID, filePath, expiresStr)
 			c.JSON(http.StatusForbidden, gin.H{"error": "invalid or expired signature"})
 			return
 		}
 
-		_, err = tenantService.GetTenantByID(ctx, tenantID)
+		_, err = spaceService.GetSpaceByID(ctx, spaceID)
 		if err != nil {
-			logger.Warnf(ctx, "[Router] /files/presigned tenant lookup failed: client_ip=%s tenant_id=%d err=%v", clientIP, tenantID, err)
+			logger.Warnf(ctx, "[Router] /files/presigned space lookup failed: client_ip=%s space_id=%d err=%v", clientIP, spaceID, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -397,8 +397,8 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string)
 		// mysteriously fail.
 		reader, err := fileSvc.GetFile(ctx, filePath)
 		if err != nil {
-			logger.Warnf(ctx, "[Router] /files/presigned get file failed: client_ip=%s tenant_id=%d provider=%s path=%q err=%v",
-				clientIP, tenantID, "local", filePath, err)
+			logger.Warnf(ctx, "[Router] /files/presigned get file failed: client_ip=%s space_id=%d provider=%s path=%q err=%v",
+				clientIP, spaceID, "local", filePath, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -420,8 +420,8 @@ func servePresignedPreview(r *gin.Engine, cfg *config.Config, resourceCatalog in
 				return
 			}
 
-			tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-			if tenant == nil {
+			space, _ := ctx.Value(types.SpaceInfoContextKey).(*types.Space)
+			if space == nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
 				return
 			}
@@ -430,12 +430,12 @@ func servePresignedPreview(r *gin.Engine, cfg *config.Config, resourceCatalog in
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "resource catalog unavailable"})
 				return
 			}
-			resolvedPath, resourceResolved, ok := resolveCatalogResource(c, resourceCatalog, filePath, tenant.ID)
+			resolvedPath, resourceResolved, ok := resolveCatalogResource(c, resourceCatalog, filePath, space.ID)
 			if !ok {
 				return
 			}
 			if !resourceResolved {
-				if err := secutils.ValidateStoragePathTenant(resolvedPath, tenant.ID); err != nil {
+				if err := secutils.ValidateStoragePathSpace(resolvedPath, space.ID); err != nil {
 					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
 					return
 				}

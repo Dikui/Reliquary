@@ -61,21 +61,21 @@ func newArticleSearchFixture(t *testing.T) *articleSearchFixture {
 	t.Helper()
 	db := pgtest.Open(t)
 	config := &types.RetrievalConfig{RerankTopK: 100, KeywordThreshold: 0.00001}
-	tenant := &types.Tenant{ID: 1, Name: "Search fixture", RetrievalConfig: config}
-	require.NoError(t, db.Create(tenant).Error)
-	kb := &types.KnowledgeBase{ID: "search-kb", TenantID: 1, Name: "Search", Type: types.KnowledgeBaseTypeDocument,
+	space := &types.Space{ID: 1, Name: "Search fixture", RetrievalConfig: config}
+	require.NoError(t, db.Create(space).Error)
+	kb := &types.KnowledgeBase{ID: "search-kb", SpaceID: 1, Name: "Search", Type: types.KnowledgeBaseTypeDocument,
 		EmbeddingModelID: "fixture-model", ModelTiers: types.ModelTierConfig{Embedding: "fixture-model"},
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}}
 	require.NoError(t, db.Create(kb).Error)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	svc := NewKnowledgeSearchService(articleSearchFixtureBases{kb: kb}, nil, nil, db)
 	return &articleSearchFixture{db: db, ctx: ctx, kb: kb, config: config, svc: svc}
 }
 
 func (h *articleSearchFixture) add(t *testing.T, id, source, date, contentType, semantic string, count int) *types.Knowledge {
 	t.Helper()
-	article := &types.Knowledge{ID: id, TenantID: 1, KnowledgeBaseID: h.kb.ID, Type: "manual",
+	article := &types.Knowledge{ID: id, SpaceID: 1, KnowledgeBaseID: h.kb.ID, Type: "manual",
 		Title: "Searchfixture " + id, Source: "https://example.org/" + id, SourceKind: source,
 		ContentType: contentType, ProcessingMode: types.ProcessingModeForContentType(contentType),
 		ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", EmbeddingModelID: "fixture-model",
@@ -92,11 +92,11 @@ func (h *articleSearchFixture) add(t *testing.T, id, source, date, contentType, 
 	require.NoError(t, h.db.Create(article).Error)
 	if source == "article" {
 		vector := pgvector.NewHalfVector(articleSearchFixtureEmbedding(article.Title + "\n" + article.Description))
-		require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(knowledge_id,tenant_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
+		require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(knowledge_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
 			VALUES (?,1,?,'fixture-model',3,?,'fixture')`, article.ID, h.kb.ID, vector).Error)
 	}
 	for i := 0; i < count; i++ {
-		chunk := &types.Chunk{ID: fmt.Sprintf("%s-chunk-%03d", id, i), TenantID: 1, KnowledgeBaseID: h.kb.ID,
+		chunk := &types.Chunk{ID: fmt.Sprintf("%s-chunk-%03d", id, i), SpaceID: 1, KnowledgeBaseID: h.kb.ID,
 			KnowledgeID: id, ChunkIndex: i, Content: "searchfixture " + semantic + fmt.Sprintf(" body passage %d", i),
 			ChunkType: types.ChunkTypeText, IsEnabled: true}
 		require.NoError(t, h.db.Create(chunk).Error)
@@ -157,12 +157,12 @@ func TestArticleSearchPostgresMergesChunksAndSummaryOnlyRoutes(t *testing.T) {
 func TestArticleSearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 	h := newArticleSearchFixture(t)
 	h.add(t, "summary", "article", "2026-10-01", "reference", "semanticlaunch", 0)
-	entity := &types.Entity{ID: "entity-a", TenantID: 1, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}
+	entity := &types.Entity{ID: "entity-a", SpaceID: 1, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}
 	require.NoError(t, h.db.Create(entity).Error)
-	require.NoError(t, h.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: "summary", EntityID: entity.ID}).Error)
-	require.NoError(t, h.db.Create(&types.EntityAlias{ID: "alias-a", TenantID: 1, EntityID: entity.ID, Alias: "Aliasneedle", NormalizedAlias: "aliasneedle", EntityType: "company"}).Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-a", TenantID: 1, Name: "Topicneedle"}).Error)
-	require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: "summary", TopicID: "topic-a"}).Error)
+	require.NoError(t, h.db.Create(&types.KnowledgeEntity{SpaceID: 1, KnowledgeID: "summary", EntityID: entity.ID}).Error)
+	require.NoError(t, h.db.Create(&types.EntityAlias{ID: "alias-a", SpaceID: 1, EntityID: entity.ID, Alias: "Aliasneedle", NormalizedAlias: "aliasneedle", EntityType: "company"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-a", SpaceID: 1, Name: "Topicneedle"}).Error)
+	require.NoError(t, h.db.Create(&types.KnowledgeTopic{SpaceID: 1, KnowledgeID: "summary", TopicID: "topic-a"}).Error)
 	h.kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	for _, term := range []string{"Canonicalneedle", "Aliasneedle", "Topicneedle", "Termneedlesummary", "Publisherneedlesummary", "Authorneedlesummary"} {
 		t.Run(term, func(t *testing.T) {
@@ -197,10 +197,10 @@ func TestArticleSearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 	h.add(t, "mine", "mine", "", "", "semanticlaunch", 1)
 	h.add(t, "report", "report", "", "", "semanticlaunch", 1)
 	for _, id := range []string{"a", "b"} {
-		require.NoError(t, h.db.Create(&types.Entity{ID: "entity-" + id, TenantID: 1, CanonicalName: id, NormalizedName: id, EntityType: "company"}).Error)
-		require.NoError(t, h.db.Create(&types.Topic{ID: "topic-" + id, TenantID: 1, Name: id}).Error)
-		require.NoError(t, h.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: id, EntityID: "entity-" + id}).Error)
-		require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: id, TopicID: "topic-" + id}).Error)
+		require.NoError(t, h.db.Create(&types.Entity{ID: "entity-" + id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "company"}).Error)
+		require.NoError(t, h.db.Create(&types.Topic{ID: "topic-" + id, SpaceID: 1, Name: id}).Error)
+		require.NoError(t, h.db.Create(&types.KnowledgeEntity{SpaceID: 1, KnowledgeID: id, EntityID: "entity-" + id}).Error)
+		require.NoError(t, h.db.Create(&types.KnowledgeTopic{SpaceID: 1, KnowledgeID: id, TopicID: "topic-" + id}).Error)
 	}
 	// Keep query recall entirely semantic so the unrelated missing article is excluded.
 	h.kb.IndexingStrategy.KeywordEnabled = false

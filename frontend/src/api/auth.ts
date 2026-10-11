@@ -17,12 +17,12 @@ export interface LoginResponse {
     username: string
     email: string
     avatar?: string
-    tenant_id: number
+    space_id: number
     is_active: boolean
     created_at: string
     updated_at: string
   }
-  tenant?: {
+  space?: {
     id: number
     name: string
     description: string
@@ -33,7 +33,7 @@ export interface LoginResponse {
     updated_at: string
   } | null
   // Current space returned by password login.
-  active_tenant?: {
+  active_space?: {
     id: number
     name: string
     description?: string
@@ -63,7 +63,7 @@ export interface RegisterResponse {
       username: string
       email: string
     }
-    tenant: {
+    space: {
       id: string
       name: string
     }
@@ -76,7 +76,7 @@ export interface UserInfo {
   username: string
   email: string
   avatar?: string
-  tenant_id: string
+  space_id: string
   created_at: string
   updated_at: string
 }
@@ -84,31 +84,31 @@ export interface UserInfo {
 /**
  * 将后端用户信息规范化为前端 UserInfo，统一登录与令牌恢复时的字段。
  * 新增用户字段只需修改此处，避免遗漏系统管理员等权限属性。
- * fallbackTenantId 用于响应中用户对象缺少 tenant_id 时补充空间 ID。
+ * fallbackSpaceId 用于响应中用户对象缺少 space_id 时补充空间 ID。
  * 权限字段严格按 boolean true 读取。
  */
 export function userInfoFromApi(
   u: any,
-  fallbackTenantId?: string | number | null,
+  fallbackSpaceId?: string | number | null,
 ): UserInfo {
-  const rawTenantId =
-    u?.tenant_id !== undefined && u?.tenant_id !== null && u.tenant_id !== ''
-      ? u.tenant_id
-      : fallbackTenantId ?? ''
-  const tid = Number(rawTenantId) > 0 ? rawTenantId : ''
+  const rawSpaceId =
+    u?.space_id !== undefined && u?.space_id !== null && u.space_id !== ''
+      ? u.space_id
+      : fallbackSpaceId ?? ''
+  const tid = Number(rawSpaceId) > 0 ? rawSpaceId : ''
   return {
     id: u?.id || '',
     username: u?.username || '',
     email: u?.email || '',
     avatar: u?.avatar,
-    tenant_id: String(tid) || '',
+    space_id: String(tid) || '',
     created_at: u?.created_at || new Date().toISOString(),
     updated_at: u?.updated_at || new Date().toISOString(),
   }
 }
 
 // 空间信息接口
-export interface TenantInfo {
+export interface SpaceInfo {
   id: string
   name: string
   description?: string
@@ -178,10 +178,10 @@ export async function register(data: RegisterRequest): Promise<RegisterResponse>
   }
 }
 
-export async function getCurrentUser(): Promise<{ success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; tenant_required?: boolean }; message?: string }> {
+export async function getCurrentUser(): Promise<{ success: boolean; data?: { user: UserInfo; space?: SpaceInfo | null; space_required?: boolean }; message?: string }> {
   try {
     const response = await get('/api/v1/auth/me')
-    return response as unknown as { success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; tenant_required?: boolean }; message?: string }
+    return response as unknown as { success: boolean; data?: { user: UserInfo; space?: SpaceInfo | null; space_required?: boolean }; message?: string }
   } catch (error: any) {
     return {
       success: false,
@@ -193,14 +193,14 @@ export async function getCurrentUser(): Promise<{ success: boolean; data?: { use
 /**
  * 获取当前空间信息
  */
-export async function getCurrentTenant(): Promise<{ success: boolean; data?: TenantInfo; message?: string }> {
+export async function getCurrentSpace(): Promise<{ success: boolean; data?: SpaceInfo; message?: string }> {
   try {
-    const response = await get('/api/v1/auth/tenant')
-    return response as unknown as { success: boolean; data?: TenantInfo; message?: string }
+    const response = await get('/api/v1/auth/space')
+    return response as unknown as { success: boolean; data?: SpaceInfo; message?: string }
   } catch (error: any) {
     return {
       success: false,
-      message: error.message || t('error.auth.getTenantFailed')
+      message: error.message || t('error.auth.getSpaceFailed')
     }
   }
 }

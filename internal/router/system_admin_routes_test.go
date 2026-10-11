@@ -52,7 +52,7 @@ func (personalSystemRouteInspector) ListRuntimeTasks(context.Context, string, ty
 	return types.RuntimeTaskPage{}, true, nil
 }
 func (personalSystemRouteInspector) GetRuntimeTask(_ context.Context, queue, id string) (*types.RuntimeTaskInfo, bool, error) {
-	return &types.RuntimeTaskInfo{ID: id, TenantID: types.SingleTenantID, Queue: queue, State: types.RuntimeTaskArchived, AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionDelete}}, true, nil
+	return &types.RuntimeTaskInfo{ID: id, SpaceID: types.SingleSpaceID, Queue: queue, State: types.RuntimeTaskArchived, AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionDelete}}, true, nil
 }
 func (personalSystemRouteInspector) DeleteRuntimeTask(context.Context, string, string) (bool, error) {
 	return true, nil
@@ -64,12 +64,12 @@ func (personalSystemRouteInspector) PurgeArchivedRuntimeTasks(context.Context, s
 func TestPersonalUserAndAPIKeyCanAccessAllSystemRoutes(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	cfg := &config.Config{}
-	tenantSvc := service.NewTenantService(apprepo.NewTenantRepository(f.db))
-	users := service.NewUserService(cfg, apprepo.NewUserRepository(f.db), apprepo.NewAuthTokenRepository(f.db), tenantSvc)
-	keys := service.NewTenantAPIKeyService(apprepo.NewTenantAPIKeyRepository(f.db))
-	h := handler.NewSystemHandler(cfg, tenantSvc, users, personalSystemRouteSettings{}, keys, personalSystemRouteInspector{}, nil)
+	spaceSvc := service.NewSpaceService(apprepo.NewSpaceRepository(f.db))
+	users := service.NewUserService(cfg, apprepo.NewUserRepository(f.db), apprepo.NewAuthTokenRepository(f.db), spaceSvc)
+	keys := service.NewAPIKeyService(apprepo.NewAPIKeyRepository(f.db))
+	h := handler.NewSystemHandler(cfg, spaceSvc, users, personalSystemRouteSettings{}, keys, personalSystemRouteInspector{}, nil)
 	r := gin.New()
-	r.Use(middleware.ErrorHandler(), middleware.Auth(tenantSvc, users, keys))
+	r.Use(middleware.ErrorHandler(), middleware.Auth(spaceSvc, users, keys))
 	RegisterSystemRoutes(r.Group("/api/v1"), h, newAccessGuards(nil, nil, nil))
 
 	for _, route := range []struct{ method, path, body string }{

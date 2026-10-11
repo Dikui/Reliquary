@@ -6,7 +6,7 @@ export interface DataSource {
   maintenance_required?: boolean
   maintenance_missing_fields?: string[]
   id: string
-  tenant_id: number
+  space_id: number
   knowledge_base_id: string
   name: string
   default_content_type?: string | null

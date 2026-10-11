@@ -25,7 +25,7 @@ func newFollowFixture(t *testing.T) *followFixture {
 	h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalWebUser, ID: "follow-owner"})
 	entities := []types.Entity{entityRecord("entity-follow", "Followed company", "company"), entityRecord("entity-other", "Other company", "company")}
 	require.NoError(t, h.db.Create(&entities).Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-follow", TenantID: 1, Name: "Followed research"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-follow", SpaceID: 1, Name: "Followed research"}).Error)
 	return &followFixture{articleSearchFixture: h, follows: NewFollowService(h.db)}
 }
 
@@ -34,10 +34,10 @@ func (h *followFixture) link(t *testing.T, articleID string, entity, topic bool)
 	var when time.Time
 	require.NoError(t, h.db.Table("knowledges").Select("created_at").Where("id=?", articleID).Scan(&when).Error)
 	if entity {
-		require.NoError(t, h.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: articleID, EntityID: "entity-follow", CreatedAt: when}).Error)
+		require.NoError(t, h.db.Create(&types.KnowledgeEntity{SpaceID: 1, KnowledgeID: articleID, EntityID: "entity-follow", CreatedAt: when}).Error)
 	}
 	if topic {
-		require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: articleID, TopicID: "topic-follow", CreatedAt: when}).Error)
+		require.NoError(t, h.db.Create(&types.KnowledgeTopic{SpaceID: 1, KnowledgeID: articleID, TopicID: "topic-follow", CreatedAt: when}).Error)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestFollowsPostgresActionsIdempotencyAndLogs(t *testing.T) {
 		require.Equal(t, "api_key:follow-key", log.Actor)
 		require.JSONEq(t, "null", string(log.After))
 	}
-	otherCtx := context.WithValue(h.ctx, types.TenantIDContextKey, uint64(2))
+	otherCtx := context.WithValue(h.ctx, types.SpaceIDContextKey, uint64(2))
 	_, err = h.follows.Follow(otherCtx, "entity", "entity-follow")
 	require.Error(t, err)
 	for _, pair := range [][2]string{{"article", "entity-follow"}, {"entity", ""}, {"topic", "missing"}} {
@@ -185,7 +185,7 @@ func TestFollowsPostgresMergeTransferDeduplicationAndDeletion(t *testing.T) {
 				require.NoError(t, err)
 			}
 			article := h.add(t, "merged-article", "article", "2026-10-01", "event", "semanticlaunch", 0)
-			require.NoError(t, h.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: article.ID, EntityID: "entity-other"}).Error)
+			require.NoError(t, h.db.Create(&types.KnowledgeEntity{SpaceID: 1, KnowledgeID: article.ID, EntityID: "entity-other"}).Error)
 			require.NoError(t, h.db.Model(&types.KnowledgeBase{}).Where("id='search-kb'").Update("summary_model_id", "entity-chat").Error)
 			entities := NewEntityService(h.db, entityTestModels{model: &entityCountingChat{}})
 			require.NoError(t, entities.MergeEntities(h.ctx, "entity-follow", "entity-other"))
@@ -221,7 +221,7 @@ func TestFollowsPostgresMergeTransferDeduplicationAndDeletion(t *testing.T) {
 	var count int64
 	require.NoError(t, h.db.Model(&types.Follow{}).Count(&count).Error)
 	require.Zero(t, count)
-	require.Error(t, h.db.Create(&types.Follow{TenantID: 1, TargetType: "entity", TargetID: "missing"}).Error)
+	require.Error(t, h.db.Create(&types.Follow{SpaceID: 1, TargetType: "entity", TargetID: "missing"}).Error)
 	require.NoError(t, h.follows.Unfollow(h.ctx, "topic", "topic-follow"))
 }
 
@@ -347,7 +347,7 @@ func TestFollowFeedPostgresSimilarReportsRulesAndChildMetadata(t *testing.T) {
 				h.link(t, "c", true, true)
 				h.collected(t, "c", now.Add(-3*time.Hour))
 				config := &types.RetrievalConfig{SimilarReportsThreshold: 0.95}
-				require.NoError(t, h.db.Model(&types.Tenant{}).Where("id=1").Update("retrieval_config", config).Error)
+				require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("retrieval_config", config).Error)
 				for i, id := range []string{"a", "b", "c"} {
 					angle := float64(i) * math.Pi / 12
 					require.NoError(t, h.db.Exec("UPDATE article_embeddings SET embedding=? WHERE knowledge_id=?", pgvector.NewHalfVector([]float32{float32(math.Cos(angle)), float32(math.Sin(angle)), 0}), id).Error)
@@ -422,7 +422,7 @@ func TestFollowFeedPostgresLateEligibilityAndAssociationTimes(t *testing.T) {
 	// A new relation can arrive after qualification, including in a reprocessing write.
 	_, err = entities.ResolveEntities(h.ctx, "association-late", []types.EntityCandidate{{Name: "Followed company", EntityType: "company"}})
 	require.NoError(t, err)
-	require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: "historical", TopicID: "topic-follow", Source: types.TopicSourceModel, IsHistorical: true}).Error)
+	require.NoError(t, h.db.Create(&types.KnowledgeTopic{SpaceID: 1, KnowledgeID: "historical", TopicID: "topic-follow", Source: types.TopicSourceModel, IsHistorical: true}).Error)
 	result := h.feed(t, types.FollowFeedRequest{CollapseSimilar: articleSearchNoCollapse()})
 	require.ElementsMatch(t, []string{"processing-late", "recognized-late", "association-late"}, followFeedIDs(result))
 	require.EqualValues(t, 3, result.NewCount)
@@ -440,8 +440,8 @@ func TestFollowFeedPostgresLateEligibilityAndAssociationTimes(t *testing.T) {
 		}
 	}
 	// Adding a follow never changes an old article's entrance time.
-	require.NoError(t, h.db.Create(&types.Topic{TenantID: 1, ID: "history-follow", Name: "New historical follow"}).Error)
-	require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: "historical", TopicID: "history-follow", CreatedAt: old}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{SpaceID: 1, ID: "history-follow", Name: "New historical follow"}).Error)
+	require.NoError(t, h.db.Create(&types.KnowledgeTopic{SpaceID: 1, KnowledgeID: "historical", TopicID: "history-follow", CreatedAt: old}).Error)
 	_, err = h.follows.Follow(h.ctx, "topic", "history-follow")
 	require.NoError(t, err)
 	require.Empty(t, h.feed(t, types.FollowFeedRequest{TargetIDs: []string{"history-follow"}}).Results)

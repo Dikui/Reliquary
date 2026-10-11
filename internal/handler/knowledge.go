@@ -61,12 +61,12 @@ func (h *KnowledgeHandler) validateKnowledgeBaseAccess(c *gin.Context) (*types.K
 
 // validateKnowledgeBaseAccessWithKBID validates access to the given knowledge base ID (e.g. from query or body).
 // Checks that the knowledge base belongs to the current workspace.
-// Returns the knowledge base, its ID, the tenant ID, and any error.
+// Returns the knowledge base, its ID, the space ID, and any error.
 func (h *KnowledgeHandler) validateKnowledgeBaseAccessWithKBID(c *gin.Context, kbID string) (*types.KnowledgeBase, string, uint64, error) {
 	ctx := c.Request.Context()
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
-		logger.Error(ctx, "Failed to get tenant ID")
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if spaceID == 0 {
+		logger.Error(ctx, "Failed to get space ID")
 		return nil, "", 0, errors.NewUnauthorizedError("Unauthorized")
 	}
 	userID, userExists := c.Get(types.UserIDContextKey.String())
@@ -89,22 +89,22 @@ func (h *KnowledgeHandler) validateKnowledgeBaseAccessWithKBID(c *gin.Context, k
 		logger.ErrorWithFields(ctx, err, nil)
 		return nil, kbID, 0, errors.NewInternalServerError(err.Error())
 	}
-	if kb.TenantID == tenantID {
-		return kb, kb.ID, tenantID, nil
+	if kb.SpaceID == spaceID {
+		return kb, kb.ID, spaceID, nil
 	}
 
 	_ = userID
 	_ = userExists
-	logger.Warnf(ctx, "Permission denied to access KB %s, tenant ID: %d, KB tenant: %d", kbID, tenantID, kb.TenantID)
+	logger.Warnf(ctx, "Permission denied to access KB %s, space ID: %d, KB space: %d", kbID, spaceID, kb.SpaceID)
 	return nil, kbID, 0, errors.NewForbiddenError("Permission denied to access this knowledge base")
 }
 
 // resolveKnowledgeAndValidateKBAccess resolves knowledge within the current workspace.
-// Returns the knowledge, context with effectiveTenantID set for downstream service calls, and error.
+// Returns the knowledge, context with effectiveSpaceID set for downstream service calls, and error.
 func (h *KnowledgeHandler) resolveKnowledgeAndValidateKBAccess(c *gin.Context, knowledgeID string) (*types.Knowledge, context.Context, error) {
 	ctx := c.Request.Context()
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if spaceID == 0 {
 		return nil, ctx, errors.NewUnauthorizedError("Unauthorized")
 	}
 	userID, userExists := c.Get(types.UserIDContextKey.String())
@@ -115,8 +115,8 @@ func (h *KnowledgeHandler) resolveKnowledgeAndValidateKBAccess(c *gin.Context, k
 	}
 
 	// Knowledge must belong to the current workspace.
-	if knowledge.TenantID == tenantID {
-		return knowledge, context.WithValue(ctx, types.TenantIDContextKey, tenantID), nil
+	if knowledge.SpaceID == spaceID {
+		return knowledge, context.WithValue(ctx, types.SpaceIDContextKey, spaceID), nil
 	}
 
 	_ = userID
@@ -153,9 +153,9 @@ func (h *KnowledgeHandler) handleDuplicateKnowledgeError(c *gin.Context,
 // enqueueKnowledgeListDelete enqueues an async batch-delete task for the
 // given knowledge IDs and returns the background task ID.
 func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
-	ctx context.Context, tenantID uint64, ids []string,
+	ctx context.Context, spaceID uint64, ids []string,
 ) (string, error) {
-	entries, err := h.kgService.GetKnowledgeBatch(ctx, tenantID, ids)
+	entries, err := h.kgService.GetKnowledgeBatch(ctx, spaceID, ids)
 	if err != nil {
 		return "", err
 	}
@@ -176,7 +176,7 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 		}
 	}
 	payload := types.KnowledgeListDeletePayload{
-		TenantID:     tenantID,
+		SpaceID:      spaceID,
 		KnowledgeIDs: ids,
 		Initiator:    types.TaskInitiatorFromContext(ctx),
 	}
@@ -197,10 +197,10 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 // enqueueKnowledgeListReparse enqueues an async batch-reparse task for the
 // given knowledge IDs and returns the background task ID.
 func (h *KnowledgeHandler) enqueueKnowledgeListReparse(
-	ctx context.Context, tenantID uint64, ids []string, processConfig *types.KnowledgeProcessOverrides,
+	ctx context.Context, spaceID uint64, ids []string, processConfig *types.KnowledgeProcessOverrides,
 ) (string, error) {
 	payload := types.KnowledgeListReparsePayload{
-		TenantID:      tenantID,
+		SpaceID:       spaceID,
 		KnowledgeIDs:  ids,
 		ProcessConfig: processConfig,
 		Initiator:     types.TaskInitiatorFromContext(ctx),
@@ -225,12 +225,12 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 	logger.Info(ctx, "Start creating knowledge from file")
 
 	// Validate that the knowledge base belongs to the current workspace.
-	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
+	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
 
 	// Check write permission
 
@@ -342,12 +342,12 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 	logger.Info(ctx, "Start creating knowledge from URL")
 
 	// Validate that the knowledge base belongs to the current workspace.
-	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
+	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
 
 	// Check write permission
 
@@ -422,12 +422,12 @@ func (h *KnowledgeHandler) CreateManualKnowledge(c *gin.Context) {
 	logger.Info(ctx, "Start creating manual knowledge")
 
 	// Validate that the knowledge base belongs to the current workspace.
-	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
+	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
 
 	// Check write permission
 
@@ -482,7 +482,7 @@ func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 		return
 	}
 
-	// Re-fetch with the tenant-scoped service to populate joined source fields.
+	// Re-fetch with the space-scoped service to populate joined source fields.
 	if knowledge, err = h.kgService.GetKnowledgeByID(effCtx, id); err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(errors.NewNotFoundError("Knowledge not found"))
@@ -762,13 +762,13 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 	logger.Info(ctx, "Start retrieving knowledge list")
 
 	// Validate access to the knowledge base (read access - any permission level)
-	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
+	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
 
 	// Parse pagination parameters from query string
 	var pagination types.Pagination
@@ -818,7 +818,7 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 	}
 	logger.Infof(
 		ctx,
-		"Retrieving knowledge list under knowledge base, kb_id=%s keyword=%s file_type=%s parse_status=%s source=%s start_time=%s end_time=%s page=%d page_size=%d effectiveTenantID=%d",
+		"Retrieving knowledge list under knowledge base, kb_id=%s keyword=%s file_type=%s parse_status=%s source=%s start_time=%s end_time=%s page=%d page_size=%d effectiveSpaceID=%d",
 		secutils.SanitizeForLog(kbID),
 		secutils.SanitizeForLog(filter.Keyword),
 		secutils.SanitizeForLog(filter.FileType),
@@ -828,7 +828,7 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 		secutils.SanitizeForLog(c.Query("end_time")),
 		pagination.Page,
 		pagination.PageSize,
-		effectiveTenantID,
+		effectiveSpaceID,
 	)
 
 	// Retrieve paginated knowledge entries
@@ -879,23 +879,23 @@ func (h *KnowledgeHandler) requireKnowledgeWriteAccess(
 	c *gin.Context,
 	requestedKBID string,
 ) (string, uint64, error) {
-	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccessWithKBID(c, requestedKBID)
+	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccessWithKBID(c, requestedKBID)
 	if err != nil {
 		return "", 0, err
 	}
 
-	return kbID, effectiveTenantID, nil
+	return kbID, effectiveSpaceID, nil
 }
 
 // requireKnowledgeInKB verifies every ID exists and belongs to the given
 // knowledge base, so a batch operation cannot reach across knowledge bases.
 func (h *KnowledgeHandler) requireKnowledgeInKB(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 	ids []string,
 ) error {
-	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, tenantID, ids)
+	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, spaceID, ids)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		return errors.NewInternalServerError(err.Error())
@@ -935,15 +935,15 @@ func (h *KnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 	// Reuse the batch async pipeline so single-item delete shares the same
 	// hardening (queue retries, business-aware queue routing, marking-as-deleting
 	// inside the worker) as BatchDeleteKnowledge / ClearKnowledgeBaseContents.
-	effectiveTenantID, _ := effCtx.Value(types.TenantIDContextKey).(uint64)
-	if effectiveTenantID == 0 {
-		logger.Error(ctx, "Effective tenant ID missing after access validation")
+	effectiveSpaceID, _ := effCtx.Value(types.SpaceIDContextKey).(uint64)
+	if effectiveSpaceID == 0 {
+		logger.Error(ctx, "Effective space ID missing after access validation")
 		c.Error(errors.NewInternalServerError("workspace context unavailable"))
 		return
 	}
 
 	logger.Infof(ctx, "Enqueuing knowledge delete, ID: %s", secutils.SanitizeForLog(id))
-	taskID, err := h.enqueueKnowledgeListDelete(effCtx, effectiveTenantID, []string{id})
+	taskID, err := h.enqueueKnowledgeListDelete(effCtx, effectiveSpaceID, []string{id})
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue knowledge delete task: %v", err)
 		c.Error(err)
@@ -987,18 +987,18 @@ func (h *KnowledgeHandler) BatchDeleteKnowledge(c *gin.Context) {
 	}
 
 	// Resolve the sole knowledge base before applying the batch operation.
-	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccessWithKBID(c, "")
+	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccessWithKBID(c, "")
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
 
 	// Single batch fetch to validate that every id exists and belongs to the
-	// requested KB. The service-layer DeleteKnowledgeList only enforces tenant
+	// requested KB. The service-layer DeleteKnowledgeList only enforces space
 	// scope, not KB scope, so the handler must guard against cross-KB deletion.
-	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, effectiveTenantID, ids)
+	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, effectiveSpaceID, ids)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(errors.NewInternalServerError(err.Error()))
@@ -1017,7 +1017,7 @@ func (h *KnowledgeHandler) BatchDeleteKnowledge(c *gin.Context) {
 		}
 	}
 
-	taskID, err := h.enqueueKnowledgeListDelete(ctx, effectiveTenantID, ids)
+	taskID, err := h.enqueueKnowledgeListDelete(ctx, effectiveSpaceID, ids)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue batch knowledge delete task: %v", err)
 		c.Error(err)
@@ -1042,20 +1042,20 @@ func (h *KnowledgeHandler) ClearKnowledgeBaseContents(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start clearing knowledge base contents")
 
-	kb, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
+	kb, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
 	// Knowledge base contents can be cleared within the current workspace.
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if kb.TenantID != tenantID {
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if kb.SpaceID != spaceID {
 		c.Error(errors.NewForbiddenError("Knowledge base must belong to the current workspace"))
 		return
 	}
 
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
 
 	knowledgeList, err := h.kgService.ListKnowledgeByKnowledgeBaseID(ctx, kbID)
 	if err != nil {
@@ -1079,7 +1079,7 @@ func (h *KnowledgeHandler) ClearKnowledgeBaseContents(c *gin.Context) {
 		knowledgeIDs = append(knowledgeIDs, knowledge.ID)
 	}
 
-	taskID, err := h.enqueueKnowledgeListDelete(ctx, effectiveTenantID, knowledgeIDs)
+	taskID, err := h.enqueueKnowledgeListDelete(ctx, effectiveSpaceID, knowledgeIDs)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue knowledge list delete task: %v", err)
 		c.Error(errors.NewInternalServerError("Failed to enqueue cleanup task"))
@@ -1253,13 +1253,13 @@ type GetKnowledgeBatchRequest struct {
 func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	tenantID, ok := c.Get(types.TenantIDContextKey.String())
+	spaceID, ok := c.Get(types.SpaceIDContextKey.String())
 	if !ok {
-		logger.Error(ctx, "Failed to get tenant ID")
+		logger.Error(ctx, "Failed to get space ID")
 		c.Error(errors.NewUnauthorizedError("Unauthorized"))
 		return
 	}
-	effectiveTenantID := tenantID.(uint64)
+	effectiveSpaceID := spaceID.(uint64)
 
 	var req GetKnowledgeBatchRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -1273,7 +1273,7 @@ func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	knowledges, err := h.kgService.GetKnowledgeBatch(ctx, effectiveTenantID, req.IDs)
+	knowledges, err := h.kgService.GetKnowledgeBatch(ctx, effectiveSpaceID, req.IDs)
 	knowledges = filterKnowledgesByKBAllowSet(knowledges, map[string]bool{kbID: true})
 
 	if err != nil {
@@ -1599,15 +1599,15 @@ func (h *KnowledgeHandler) BatchReparseKnowledge(c *gin.Context) {
 		return
 	}
 
-	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccessWithKBID(c, "")
+	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccessWithKBID(c, "")
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
 
-	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, effectiveTenantID, ids)
+	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, effectiveSpaceID, ids)
 	if err != nil {
 		logger.Errorf(ctx, "failed to get knowledge batch, kb_id: %s, size: %d, err: %v", kbID, len(ids), err)
 		c.Error(errors.NewInternalServerError("failed to get knowledge batch"))
@@ -1626,7 +1626,7 @@ func (h *KnowledgeHandler) BatchReparseKnowledge(c *gin.Context) {
 		}
 	}
 
-	taskID, err := h.enqueueKnowledgeListReparse(ctx, effectiveTenantID, ids, req.ProcessConfig)
+	taskID, err := h.enqueueKnowledgeListReparse(ctx, effectiveSpaceID, ids, req.ProcessConfig)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue batch knowledge reparse task: %v", err)
 		c.Error(errors.NewInternalServerError("Failed to enqueue batch reparse task"))

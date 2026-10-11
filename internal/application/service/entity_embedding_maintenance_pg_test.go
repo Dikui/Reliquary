@@ -20,9 +20,9 @@ func TestSnapshotModelAndKnowledgeBaseEditsPreserveEntityAndQueueHistory(t *test
 	}}
 	rebuilder := NewEntityNameEmbeddingRebuilder(db, models, queue)
 	originalAt := time.Date(2025, 1, 2, 3, 4, 5, 123456000, time.UTC)
-	require.NoError(t, db.Create(&types.Entity{ID: "historical-entity", TenantID: 1, CanonicalName: "Historical Entity", NormalizedName: "historical entity", EntityType: "company",
+	require.NoError(t, db.Create(&types.Entity{ID: "historical-entity", SpaceID: 1, CanonicalName: "Historical Entity", NormalizedName: "historical entity", EntityType: "company",
 		Description: "Original profile", NameEmbedding: types.EntityNameEmbedding{1, 0, 0}, EmbeddingModelID: "team-vector", EmbeddingDimension: 3, CreatedAt: originalAt, UpdatedAt: originalAt}).Error)
-	require.NoError(t, db.Create(&types.EntityNameEmbeddingRebuildRun{ID: "historical-run", TenantID: 1, Status: "completed", Reason: "original", ModelID: "team-vector", Dimension: 3,
+	require.NoError(t, db.Create(&types.EntityNameEmbeddingRebuildRun{ID: "historical-run", SpaceID: 1, Status: "completed", Reason: "original", ModelID: "team-vector", Dimension: 3,
 		ProfileHash: "historical-profile", TotalCount: 1, ProcessedCount: 1, CreatedAt: originalAt, UpdatedAt: originalAt}).Error)
 	_, err := queue.Enqueue(taskqueue.NewTask(types.TypeEntityNameEmbeddingRebuild, []byte(`{"tenant_id":1,"run_id":"historical-run"}`)), taskqueue.Retention(time.Hour))
 	require.NoError(t, err)

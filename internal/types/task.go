@@ -199,7 +199,7 @@ const (
 // DocumentProcessPayload represents the document process task payload
 type DocumentProcessPayload struct {
 	RequestId       string   `json:"request_id"`
-	TenantID        uint64   `json:"tenant_id"`
+	SpaceID         uint64   `json:"tenant_id"`
 	KnowledgeID     string   `json:"knowledge_id"`
 	KnowledgeBaseID string   `json:"knowledge_base_id"`
 	FilePath        string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
@@ -220,14 +220,14 @@ type DocumentProcessPayload struct {
 
 // KnowledgeListDeletePayload represents the batch knowledge delete task payload
 type KnowledgeListDeletePayload struct {
-	TenantID     uint64        `json:"tenant_id"`
+	SpaceID      uint64        `json:"tenant_id"`
 	KnowledgeIDs []string      `json:"knowledge_ids"`
 	Initiator    TaskInitiator `json:"initiator,omitempty"`
 }
 
 // KnowledgeListReparsePayload represents the batch knowledge reparse task payload
 type KnowledgeListReparsePayload struct {
-	TenantID      uint64                     `json:"tenant_id"`
+	SpaceID       uint64                     `json:"tenant_id"`
 	KnowledgeIDs  []string                   `json:"knowledge_ids"`
 	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
 	Initiator     TaskInitiator              `json:"initiator,omitempty"`
@@ -237,7 +237,7 @@ type KnowledgeListReparsePayload struct {
 // Used for both create (publish) and update operations.
 type ManualProcessPayload struct {
 	RequestId       string `json:"request_id"`
-	TenantID        uint64 `json:"tenant_id"`
+	SpaceID         uint64 `json:"tenant_id"`
 	KnowledgeID     string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	Content         string `json:"content"`      // cleaned markdown content
@@ -247,6 +247,6 @@ type ManualProcessPayload struct {
 const TypeTopicBackfill = "topic:backfill"
 
 type TopicBackfillPayload struct {
-	TenantID uint64 `json:"tenant_id"`
-	JobID    string `json:"job_id"`
+	SpaceID uint64 `json:"tenant_id"`
+	JobID   string `json:"job_id"`
 }

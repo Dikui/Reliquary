@@ -15,12 +15,12 @@ import (
 
 // OpenAttachment resolves an article-relative image inside its own attachment directory.
 func (v *VaultService) OpenAttachment(ctx context.Context, id, reference string) (*os.File, error) {
-	tenant, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenant == 0 {
+	space, ok := types.SpaceIDFromContext(ctx)
+	if !ok || space == 0 {
 		return nil, werrors.NewUnauthorizedError("authenticated attachment reader required")
 	}
 	var knowledge types.Knowledge
-	if err := v.db.WithContext(ctx).Where("id=? AND tenant_id=? AND source_kind='article'", id, tenant).First(&knowledge).Error; err != nil {
+	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind='article'", id, space).First(&knowledge).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, werrors.NewNotFoundError("article not found")
 		}

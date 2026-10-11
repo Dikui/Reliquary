@@ -239,7 +239,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(imageHTML.includes(`src="${source}"`))
     const protectedHTML = protectProviderImageSrcInHTML(imageHTML)
     assert.ok(protectedHTML.includes(`data-protected-src="${source}"`))
-    const request = buildProtectedFileRequest(source, { mode: 'tenant' })!
+    const request = buildProtectedFileRequest(source, { mode: 'space' })!
     const url = new URL(request.url, 'http://localhost')
     assert.equal(url.pathname, '/api/v1/knowledge/vault-article/vault-attachment')
     assert.equal(url.searchParams.get('path'), ref)

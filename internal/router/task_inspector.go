@@ -35,7 +35,7 @@ type knowledgeIDProbe struct {
 }
 
 type runtimeTaskPayloadProbe struct {
-	TenantID        uint64   `json:"tenant_id,omitempty"`
+	SpaceID         uint64   `json:"tenant_id,omitempty"`
 	KnowledgeBaseID string   `json:"knowledge_base_id,omitempty"`
 	KnowledgeID     string   `json:"knowledge_id,omitempty"`
 	TaskID          string   `json:"task_id,omitempty"`
@@ -178,7 +178,7 @@ func runtimePayloadTime(value int64) *time.Time {
 
 func runtimeTaskActions(info types.RuntimeTaskInfo) []types.RuntimeTaskAction {
 	actions := make([]types.RuntimeTaskAction, 0, 3)
-	if info.TenantID != 0 && info.TenantID != types.SingleTenantID {
+	if info.SpaceID != 0 && info.SpaceID != types.SingleSpaceID {
 		return actions
 	}
 	if _, cancellable := taskTypesForKnowledgeCancel[info.Type]; cancellable && info.KnowledgeID != "" {
@@ -202,7 +202,7 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 		return types.RuntimeTaskInfo{}, fmt.Errorf("unsupported runtime task state %q", state)
 	}
 	probe := runtimeTaskPayloadProbe{}
-	payloadValid := json.Unmarshal(job.Payload, &probe) == nil
+	payloadValid := types.UnmarshalSpacePayload(job.Payload, &probe) == nil
 	enqueuedAt := probe.EnqueuedAt
 	if enqueuedAt == 0 {
 		enqueuedAt = probe.CreatedAt
@@ -212,7 +212,7 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 		LastError: job.LastError, LastFailedAt: job.LastFailedAt, NextProcessAt: runtimeTaskTime(job.ProcessAt),
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt, Deadline: job.Deadline,
 		EnqueuedAt: runtimePayloadTime(enqueuedAt), Retried: job.Retried, MaxRetry: job.MaxRetry,
-		Worker: job.WorkerPool, TenantID: probe.TenantID, KnowledgeBaseID: probe.KnowledgeBaseID,
+		Worker: job.WorkerPool, SpaceID: probe.SpaceID, KnowledgeBaseID: probe.KnowledgeBaseID,
 		KnowledgeID: probe.KnowledgeID, TaskID: probe.TaskID, DataSourceID: probe.DataSourceID,
 		SyncLogID: probe.SyncLogID, KnowledgeCount: len(probe.KnowledgeIDs),
 		AllowedActions: []types.RuntimeTaskAction{},
@@ -453,7 +453,7 @@ func matchesKnowledge(taskType string, payload []byte, knowledgeID string) bool 
 		return false
 	}
 	var probe knowledgeIDProbe
-	if err := json.Unmarshal(payload, &probe); err != nil {
+	if err := types.UnmarshalSpacePayload(payload, &probe); err != nil {
 		return false
 	}
 	return probe.KnowledgeID == knowledgeID

@@ -17,7 +17,7 @@ const { descriptor } = parse(source, { filename })
 const script = compileScript(descriptor, { id: filename })
 const template = compileTemplate({ id: filename, filename, source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
 assert.deepEqual(template.errors, [])
-const entity = { id: 'entity-a', tenant_id: 1, canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' } satisfies Entity
+const entity = { id: 'entity-a', space_id: 1, canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' } satisfies Entity
 const envelope = (data: unknown) => Promise.resolve({ success: true, data })
 async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Record<string, unknown>; status?: object; entities?: Entity[]; scenario?: (state: any, cleanup: () => void) => void | Promise<void> } = {}) {
   const i18n = createI18n({ legacy: false, locale: options.locale || 'zh-CN', messages: { 'zh-CN': zhCN, 'en-US': enUS } })

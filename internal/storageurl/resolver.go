@@ -21,7 +21,7 @@ func LocalStorageBaseDir() string {
 // FileServiceResolver uses the single process file service for local resources.
 type FileServiceResolver struct{ fileService interfaces.FileService }
 
-func NewFileServiceResolver(_ *types.Tenant, fileService interfaces.FileService) *FileServiceResolver {
+func NewFileServiceResolver(_ *types.Space, fileService interfaces.FileService) *FileServiceResolver {
 	return &FileServiceResolver{fileService: fileService}
 }
 

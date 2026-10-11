@@ -17,7 +17,7 @@ const pages = [
   '../views/knowledge/OperationLogs.vue',
   '../views/settings/Settings.vue',
   '../views/settings/KnowledgeSettings.vue',
-  '../views/settings/TenantInfo.vue',
+  '../views/settings/SpaceInfo.vue',
   '../views/knowledge/settings/DataSourceEditorDialog.vue',
   '../components/DocContent.vue',
   '../components/SideMenu.vue',

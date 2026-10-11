@@ -223,14 +223,14 @@ class AdminStorageTests(unittest.TestCase):
         self.assertTrue(state["scheduler_required"])
 
     def test_missing_cloud_parser_field_keeps_restore_paused(self):
-        expected = [{"kind": "tenants", "id": "1", "name": "Owner", "fields": ["parser_engine_config.mineru.api_key", "parser_engine_config.docreader.app_secret", "credentials"]}]
+        expected = [{"kind": "spaces", "id": "1", "name": "Owner", "fields": ["parser_engine_config.mineru.api_key", "parser_engine_config.docreader.app_secret", "credentials"]}]
         admin.json_write(self.root / "snapshot.json", {"required_credentials": expected})
         class FakeContext:
             def __init__(self, root):
                 self.root, self.calls = root, []
             def cli_json(self, *args):
                 self.calls.append(args)
-                return {"required_credentials": [{"kind": "tenants", "id": "1", "fields": ["parser_engine_config.mineru.api_key"]}]}
+                return {"required_credentials": [{"kind": "spaces", "id": "1", "fields": ["parser_engine_config.mineru.api_key"]}]}
         ctx = FakeContext(self.root)
         with self.assertRaisesRegex(admin.AdminError, "waiting_credentials"):
             admin.finalize_restore(ctx, self.root)
@@ -238,17 +238,25 @@ class AdminStorageTests(unittest.TestCase):
         state = json.loads((self.root / ".maintenance-restore.json").read_text())
         self.assertEqual(state["missing_parser_credentials"][0]["fields"], ["parser_engine_config.docreader.app_secret"])
 
+    def test_old_replica_parser_requirements_compare_with_current_names(self):
+        admin.json_write(self.root / "snapshot.json", {"required_credentials": [{"kind": "tenants", "id": "1", "fields": ["parser_engine_config.mineru.api_key"]}]})
+        class FakeContext:
+            def cli_json(self, *args):
+                return {"required_credentials": [{"kind": "spaces", "id": "1", "fields": ["parser_engine_config.mineru.api_key"]}]}
+        admin.require_parser_credentials(FakeContext(), self.root)
+        self.assertFalse((self.root / ".maintenance-restore.json").exists())
+
     def test_cloud_parser_gate_uses_only_present_field_names_and_ignores_other_credentials(self):
-        expected = [{"kind": "tenants", "id": "1", "name": "Owner", "fields": ["parser_engine_config.mineru.api_key", "credentials"]}, {"kind": "auth_tokens", "id": "history", "fields": ["token"]}]
+        expected = [{"kind": "spaces", "id": "1", "name": "Owner", "fields": ["parser_engine_config.mineru.api_key", "credentials"]}, {"kind": "auth_tokens", "id": "history", "fields": ["token"]}]
         admin.json_write(self.root / "snapshot.json", {"required_credentials": expected})
         class FakeContext:
             def cli_json(self, *args):
-                return {"required_credentials": [{"kind": "tenants", "id": "1", "fields": ["parser_engine_config.mineru.api_key"]}]}
+                return {"required_credentials": [{"kind": "spaces", "id": "1", "fields": ["parser_engine_config.mineru.api_key"]}]}
         admin.require_parser_credentials(FakeContext(), self.root)
         self.assertFalse((self.root / ".maintenance-restore.json").exists())
 
     def test_cloud_parser_gate_reads_original_package_requirements_when_scrubbed_snapshot_has_none(self):
-        admin.json_write(self.root / "manifest.json", {"required_credentials": [{"kind": "tenants", "id": "1", "fields": ["parser_engine_config.mineru_api_key"]}]})
+        admin.json_write(self.root / "manifest.json", {"required_credentials": [{"kind": "spaces", "id": "1", "fields": ["parser_engine_config.mineru_api_key"]}]})
         admin.json_write(self.root / "snapshot.json", {"required_credentials": []})
         class FakeContext:
             def __init__(self, root):
@@ -377,7 +385,7 @@ class AdminStorageTests(unittest.TestCase):
         return FakeContext(self.root), vault
 
     def test_rebuild_initializes_bare_database_and_preserves_original_requirements(self):
-        required = [{"kind": "tenants", "id": "1", "fields": ["parser_engine_config.mineru_api_key"]}]
+        required = [{"kind": "spaces", "id": "1", "fields": ["parser_engine_config.mineru_api_key"]}]
         ctx, vault = self.rebuild_context(required)
         with mock.patch.object(admin, "setup_models", return_value=False):
             admin.rebuild(ctx, argparse.Namespace(vault=str(vault), resume=False, no_scheduler=True))
@@ -407,7 +415,7 @@ class AdminStorageTests(unittest.TestCase):
         self.assertFalse(any(call[0] in {"migrate", "rebuild", "reembed"} for call in ctx.calls))
 
     def test_rebuild_resume_requires_original_cloud_parser_fields(self):
-        ctx, args = self.prepare_rebuild_resume([{"kind": "tenants", "id": "1", "fields": ["parser_engine_config.mineru_api_key"]}])
+        ctx, args = self.prepare_rebuild_resume([{"kind": "spaces", "id": "1", "fields": ["parser_engine_config.mineru_api_key"]}])
         with mock.patch.object(admin, "setup_models", return_value=True):
             with self.assertRaisesRegex(admin.AdminError, "waiting_credentials"):
                 admin.rebuild(ctx, args)

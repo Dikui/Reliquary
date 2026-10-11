@@ -34,7 +34,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
     '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     'vue-i18n': { useI18n: () => ({ t, tm: () => [], locale: ref(locale) }) },
     '@/utils/personalServerError': personalError,
-    '@/stores/auth': { useAuthStore: () => ({ currentTenantId: '1', isLoggedIn: false }) },
+    '@/stores/auth': { useAuthStore: () => ({ currentSpaceId: '1', isLoggedIn: false }) },
     '@/components/settings/SettingDrawer.vue': { default: stub, __esModule: true },
     '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
     '@/utils/clipboard': { copyWithToast() {} },
@@ -76,9 +76,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const { state } = await componentScenario('./integrations/ApiIntegrationSettings.vue', locale, {
       'tdesign-vue-next': { MessagePlugin: { success() {} } },
       '@/api/knowledge-base': { listKnowledgeBases: async () => ({ success: true, data: [] }) },
-      '@/api/tenant': {
-        createTenantAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'test-key' } } },
-        listTenantAPIKeys: async () => ({ success: true, data: [] }),
+      '@/api/space': {
+        createAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'test-key' } } },
+        listAPIKeys: async () => ({ success: true, data: [] }),
       },
     }, async state => {
       state.openCreate()
@@ -138,41 +138,41 @@ test('390px login navigation reserves its own normal-flow row before the introdu
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: space info shows used storage above the former limit without a quota or percentage`, async () => {
-    const { html, state } = await componentScenario('./settings/TenantInfo.vue', locale, {
+    const { html, state } = await componentScenario('./settings/SpaceInfo.vue', locale, {
       './GlobalModelTierSettings.vue': { default: stub, __esModule: true },
       'tdesign-vue-next': { MessagePlugin: { success() {} } },
-      '@/api/tenant': { getTenantInfo: async () => ({ success: true, data: { id: 1, name: 'Personal space', storage_used: 11 * 1024 ** 3, created_at: '2026-10-09T00:00:00Z' } }) },
+      '@/api/space': { getSpaceInfo: async () => ({ success: true, data: { id: 1, name: 'Personal space', storage_used: 11 * 1024 ** 3, created_at: '2026-10-09T00:00:00Z' } }) },
     }, async state => { await state.loadInfo() })
     assert.equal(state.error.value, '')
-    assert.ok(html.includes(translator(locale)('tenant.storage.usedLabel')))
+    assert.ok(html.includes(translator(locale)('space.storage.usedLabel')))
     assert.ok(html.includes('11 GB'))
     assert.ok(!html.includes('%'))
     assert.ok(!html.includes(locale === 'zh-CN' ? '配额' : 'Quota'))
-    assert.ok(html.includes(translator(locale)('tenant.details.editName')))
+    assert.ok(html.includes(translator(locale)('space.details.editName')))
   })
 
   test(`${locale}: default space copy is localized while unchanged edits retain server values`, async () => {
     const updates: unknown[] = []
-    const { html, state } = await componentScenario('./settings/TenantInfo.vue', locale, {
+    const { html, state } = await componentScenario('./settings/SpaceInfo.vue', locale, {
       'tdesign-vue-next': { MessagePlugin: { success() {} } },
-      '@/api/tenant': {
-        getTenantInfo: async () => ({ success: true, data: { id: 1, name: 'Personal workspace', description: 'Personal knowledge' } }),
-        updateTenant: async (input: unknown) => { updates.push(input); return { success: true } },
+      '@/api/space': {
+        getSpaceInfo: async () => ({ success: true, data: { id: 1, name: 'Personal workspace', description: 'Personal knowledge' } }),
+        updateSpace: async (input: unknown) => { updates.push(input); return { success: true } },
       },
     }, async state => {
       await state.loadInfo()
       state.startEditName()
       assert.equal(state.canSubmit.value, false)
-      await state.saveTenantName()
+      await state.saveSpaceName()
       state.startEditDescription()
       assert.equal(state.canSubmitDescription.value, false)
-      await state.saveTenantDescription()
+      await state.saveSpaceDescription()
     })
-    assert.ok(html.includes(translator(locale)('tenant.defaultName')))
-    assert.ok(html.includes(translator(locale)('tenant.defaultDescription')))
+    assert.ok(html.includes(translator(locale)('space.defaultName')))
+    assert.ok(html.includes(translator(locale)('space.defaultDescription')))
     if (locale === 'zh-CN') assert.doesNotMatch(html, /Personal workspace|Personal knowledge/)
-    assert.equal(state.tenantInfo.value.name, 'Personal workspace')
-    assert.equal(state.tenantInfo.value.description, 'Personal knowledge')
+    assert.equal(state.spaceInfo.value.name, 'Personal workspace')
+    assert.equal(state.spaceInfo.value.description, 'Personal knowledge')
     assert.deepEqual(updates, [])
   })
 

@@ -16,7 +16,7 @@ func TestCreateKnowledgeDefaultsCustomMetadataToEmptyObject(t *testing.T) {
 
 	repo := NewKnowledgeRepository(db)
 	knowledge := &types.Knowledge{
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Type:            "file",
 		Title:           "document.txt",
@@ -27,7 +27,7 @@ func TestCreateKnowledgeDefaultsCustomMetadataToEmptyObject(t *testing.T) {
 	require.NoError(t, repo.CreateKnowledge(context.Background(), knowledge))
 	require.JSONEq(t, `{}`, string(knowledge.CustomMetadata))
 
-	persisted, err := repo.GetKnowledgeByID(context.Background(), knowledge.TenantID, knowledge.ID)
+	persisted, err := repo.GetKnowledgeByID(context.Background(), knowledge.SpaceID, knowledge.ID)
 	require.NoError(t, err)
 	require.JSONEq(t, `{}`, string(persisted.CustomMetadata))
 }

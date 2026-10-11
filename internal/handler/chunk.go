@@ -34,7 +34,7 @@ func (h *ChunkHandler) GetChunkByIDOnly(c *gin.Context) {
 		return
 	}
 
-	// Get chunk by ID without tenant filter (chunk may belong to shared
+	// Get chunk by ID without space filter (chunk may belong to shared
 	// KB; the route-level KB-access guard already verified read
 	// permission against the parent KB before we got here).
 	chunk, err := h.service.GetChunkByIDOnly(ctx, chunkID)

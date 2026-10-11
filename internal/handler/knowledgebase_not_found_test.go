@@ -41,14 +41,14 @@ func (s *stubKBOnlyService) FillKnowledgeBaseCounts(ctx context.Context, kb *typ
 
 // newKBHandlerTestRouter mounts the production ErrorHandler so
 // c.Error(NewNotFoundError(...)) renders as the real 404 envelope.
-// Tenant id and user id are injected by a tiny middleware so
+// Space id and user id are injected by a tiny middleware so
 // validateAndGetKnowledgeBase doesn't bail at the unauthorized branch.
 func newKBHandlerTestRouter(svc interfaces.KnowledgeBaseService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler())
 	r.Use(func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
 		c.Set(types.UserIDContextKey.String(), "u-test")
 		c.Next()
 	})

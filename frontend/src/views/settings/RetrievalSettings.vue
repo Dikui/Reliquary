@@ -108,8 +108,8 @@ import { reactive, computed, onMounted, nextTick } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import {
-  getTenantRetrievalConfig,
-  updateTenantRetrievalConfig,
+  getSpaceRetrievalConfig,
+  updateSpaceRetrievalConfig,
   type RetrievalConfig,
 } from '@/api/retrieval'
 
@@ -131,7 +131,7 @@ let isInitializing = true
 
 const loadConfig = async () => {
   try {
-    const response = await getTenantRetrievalConfig()
+    const response = await getSpaceRetrievalConfig()
     if (response.data) {
       const cfg = response.data
       Object.assign(localConfig, {
@@ -165,7 +165,7 @@ const hasConfigChanged = (): boolean => {
 const saveConfig = async () => {
   if (!hasConfigChanged()) return
   try {
-    const response = await updateTenantRetrievalConfig({ ...localConfig })
+    const response = await updateSpaceRetrievalConfig({ ...localConfig })
     if (response.data) {
       initialConfig = { ...localConfig }
     }

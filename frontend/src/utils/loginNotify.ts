@@ -10,10 +10,10 @@ type Translator = (key: string, params?: Record<string, unknown>) => string
 // to split on).
 type TemplateResolver = (key: string) => unknown
 interface LoginResponseLike {
-  // response uses `tenant` (legacy backward-compat name on the Go side).
+  // Auth responses expose the personal space snapshot.
   // Accept either so callers don't have to normalise.
-  active_tenant?: { id?: number | string; name?: string } | null
-  tenant?: { id?: number | string; name?: string } | null
+  active_space?: { id?: number | string; name?: string } | null
+  space?: { id?: number | string; name?: string } | null
 }
 
 export function notifyLoginSuccess(
@@ -21,10 +21,10 @@ export function notifyLoginSuccess(
   t: Translator,
   tm: TemplateResolver,
 ): void {
-  const activeTenant = response?.active_tenant || response?.tenant
-  if (!activeTenant) return
+  const activeSpace = response?.active_space || response?.space
+  if (!activeSpace) return
 
-  const tenantName = workspaceName(activeTenant.name, t) || String(activeTenant.id || '')
+  const spaceName = workspaceName(activeSpace.name, t) || String(activeSpace.id || '')
   const rawTemplate = tm('auth.loginSuccessContent')
   const template = typeof rawTemplate === 'string' ? rawTemplate : ''
 
@@ -32,7 +32,7 @@ export function notifyLoginSuccess(
     title: t('auth.loginSuccessTitle'),
     content: renderWorkspaceNotifyContent({
       template,
-      name: tenantName,
+      name: spaceName,
     }),
     duration: 6000,
     closeBtn: true,

@@ -35,11 +35,11 @@
           </div>
         </div>
 
-        <div v-if="userName" class="dropdown-tenant-panel">
+        <div v-if="userName" class="dropdown-space-panel">
           <t-icon name="system-sum" class="menu-icon" aria-hidden="true" />
-          <div class="dropdown-tenant-panel-main">
-            <span class="dropdown-tenant-panel-name" :title="activeTenantName || userName">
-              {{ activeTenantName || userName }}
+          <div class="dropdown-space-panel-main">
+            <span class="dropdown-space-panel-name" :title="activeSpaceName || userName">
+              {{ activeSpaceName || userName }}
             </span>
 
           </div>
@@ -51,7 +51,7 @@
           <t-icon name="user" class="menu-icon" />
           <span>{{ $t('general.personalSettings') }}</span>
         </div>
-        <div class="menu-item" @click="handleQuickNav('tenant')">
+        <div class="menu-item" @click="handleQuickNav('space')">
           <t-icon name="user-circle" class="menu-icon" />
           <span>{{ $t('settings.workspaceSettings') }}</span>
         </div>
@@ -121,7 +121,7 @@ const props = defineProps<{ collapsed?: boolean }>()
 const sidebarCollapsed = computed(() => props.collapsed ?? uiStore.sidebarCollapsed)
 const authStore = useAuthStore()
 
-const activeTenantName = computed(() => workspaceName(authStore.tenant?.name, t))
+const activeSpaceName = computed(() => workspaceName(authStore.space?.name, t))
 
 const menuRef = ref<HTMLElement>()
 const menuVisible = ref(false)
@@ -220,16 +220,16 @@ const loadUserInfo = async () => {
       }
       // Keep stored user fields consistent with the authentication response.
       authStore.setUser(userInfoFromApi(user))
-      if (response.data.tenant) {
-        authStore.setTenant({
-          id: String(response.data.tenant.id),
-          name: response.data.tenant.name,
+      if (response.data.space) {
+        authStore.setSpace({
+          id: String(response.data.space.id),
+          name: response.data.space.name,
           owner_id: user.id,
-          created_at: response.data.tenant.created_at,
-          updated_at: response.data.tenant.updated_at
+          created_at: response.data.space.created_at,
+          updated_at: response.data.space.updated_at
         })
       } else {
-        authStore.setTenant(null)
+        authStore.setSpace(null)
       }
 
     }
@@ -348,7 +348,7 @@ onUnmounted(() => {
     text-overflow: ellipsis;
   }
 
-  .user-tenant-name {
+  .user-space-name {
     font-size: 14px;
     font-weight: 600;
     letter-spacing: -0.01em;
@@ -359,7 +359,7 @@ onUnmounted(() => {
     text-overflow: ellipsis;
   }
 
-  .user-tenant-meta {
+  .user-space-meta {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -369,7 +369,7 @@ onUnmounted(() => {
     line-height: 1.35;
     color: var(--td-text-color-secondary);
 
-    .user-tenant-meta-name {
+    .user-space-meta-name {
       flex: 0 1 auto;
       min-width: 0;
       overflow: hidden;
@@ -377,17 +377,17 @@ onUnmounted(() => {
       white-space: nowrap;
     }
 
-    .user-tenant-meta-sep {
+    .user-space-meta-sep {
       flex-shrink: 0;
       color: var(--td-text-color-placeholder);
     }
 
-    .user-tenant-meta-icon {
+    .user-space-meta-icon {
       flex-shrink: 0;
       color: inherit;
     }
 
-    .user-tenant-meta-role {
+    .user-space-meta-role {
       flex-shrink: 0;
     }
   }
@@ -502,7 +502,7 @@ onUnmounted(() => {
 }
 
 // 下拉 — 当前工作区：与下方 .menu-item 同款对齐（左 16px 图标槽 + 文案列 + 右侧操作图标）
-.dropdown-tenant-panel {
+.dropdown-space-panel {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -525,13 +525,13 @@ onUnmounted(() => {
     &.is-open {
       background: var(--td-bg-color-container-hover);
 
-      .dropdown-tenant-panel-trail {
+      .dropdown-space-panel-trail {
         color: var(--td-text-color-secondary);
       }
     }
   }
 
-  .dropdown-tenant-panel-main {
+  .dropdown-space-panel-main {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
@@ -539,7 +539,7 @@ onUnmounted(() => {
     gap: 1px;
   }
 
-  .dropdown-tenant-panel-name {
+  .dropdown-space-panel-name {
     font-size: 14px;
     font-weight: 500;
     color: var(--td-text-color-primary);
@@ -549,14 +549,14 @@ onUnmounted(() => {
     text-overflow: ellipsis;
   }
 
-  .dropdown-tenant-panel-trail {
+  .dropdown-space-panel-trail {
     flex-shrink: 0;
     font-size: 16px;
     color: var(--td-text-color-placeholder);
     transition: color 0.15s ease;
   }
 
-  .dropdown-tenant-panel-role {
+  .dropdown-space-panel-role {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -568,7 +568,7 @@ onUnmounted(() => {
     overflow: hidden;
     text-overflow: ellipsis;
 
-    .dropdown-tenant-panel-role-icon {
+    .dropdown-space-panel-role-icon {
       flex-shrink: 0;
       color: inherit;
     }
@@ -705,7 +705,7 @@ onUnmounted(() => {
 
 // 紧跟账号/空间区块后的分隔线：略收紧与上方的留白
 .dropdown-user-header+.menu-divider,
-.dropdown-tenant-panel+.menu-divider {
+.dropdown-space-panel+.menu-divider {
   margin-top: 1px;
 }
 

@@ -44,7 +44,7 @@ func TestExpandShortContextKeepsSourceCoordinates(t *testing.T) {
 		"next": {ID: "next", KnowledgeID: "doc", ChunkType: types.ChunkTypeText, Content: "next body", PreChunkID: "base"},
 	}}
 	plugin := &MergeStage{chunkRepo: repo}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	result := &types.SearchResult{
 		ID: "base", KnowledgeID: "doc", ChunkType: string(types.ChunkTypeText),
 		Content: "base body", StartAt: 100, EndAt: 120,

@@ -16,16 +16,16 @@ import (
 
 func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T) {
 	db := entityFixtureDB(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Entity routes"}).Error)
-	kb := types.KnowledgeBase{ID: "route-kb", TenantID: 1, Name: "Articles", Type: "document"}
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entity routes"}).Error)
+	kb := types.KnowledgeBase{ID: "route-kb", SpaceID: 1, Name: "Articles", Type: "document"}
 	kb.EnsureDefaults()
 	require.NoError(t, db.Create(&kb).Error)
-	entity := types.Entity{ID: "route-entity", TenantID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
+	entity := types.Entity{ID: "route-entity", SpaceID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
 	require.NoError(t, db.Create(&entity).Error)
-	require.NoError(t, db.Create(&types.EntityAlias{ID: "route-alias", TenantID: 1, EntityID: entity.ID, EntityType: "company", Alias: "艾克米", NormalizedAlias: "艾克米", ResolutionMethod: "exact", CreatedAt: time.Now()}).Error)
-	article := types.Knowledge{ID: "route-article", TenantID: 1, KnowledgeBaseID: kb.ID, Title: "Article mention", Type: types.KnowledgeTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+	require.NoError(t, db.Create(&types.EntityAlias{ID: "route-alias", SpaceID: 1, EntityID: entity.ID, EntityType: "company", Alias: "艾克米", NormalizedAlias: "艾克米", ResolutionMethod: "exact", CreatedAt: time.Now()}).Error)
+	article := types.Knowledge{ID: "route-article", SpaceID: 1, KnowledgeBaseID: kb.ID, Title: "Article mention", Type: types.KnowledgeTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, db.Create(&article).Error)
-	require.NoError(t, db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: article.ID, EntityID: entity.ID, CreatedAt: time.Now()}).Error)
+	require.NoError(t, db.Create(&types.KnowledgeEntity{SpaceID: 1, KnowledgeID: article.ID, EntityID: entity.ID, CreatedAt: time.Now()}).Error)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), entityIdentityMiddleware())
 	RegisterEntityRoutes(engine.Group("/api/v1"), handler.NewEntityHandler(service.NewEntityService(db, nil)))

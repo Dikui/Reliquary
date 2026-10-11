@@ -9,7 +9,7 @@ const t = (key: string) => i18n.global.t(key)
 // 模型类型定义
 export interface ModelConfig {
   id?: string;
-  tenant_id?: number;
+  space_id?: number;
   name: string;
   display_name?: string;
   type: 'KnowledgeQA' | 'Embedding' | 'Rerank';

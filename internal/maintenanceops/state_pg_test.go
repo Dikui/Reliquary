@@ -154,7 +154,7 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	ctx := context.Background()
 	const original = "Exact original content admitted before the power interruption."
 	require.NoError(t, source.Exec(`INSERT INTO knowledges
-		(id,tenant_id,knowledge_base_id,type,title,source,parse_status,vault_body)
+		(id,space_id,knowledge_base_id,type,title,source,parse_status,vault_body)
 		VALUES ('backup-processing',1,'backup-kb','manual','Interrupted article','','processing',?)`, original).Error)
 	payload, err := json.Marshal(map[string]any{"knowledge_id": "backup-processing", "content": original})
 	require.NoError(t, err)

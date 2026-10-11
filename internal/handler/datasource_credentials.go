@@ -32,12 +32,12 @@ func NewDataSourceCredentialsHandler(
 	return &DataSourceCredentialsHandler{service: service, kbService: kbService}
 }
 
-// ownDataSource is the same tenant-isolation check used in datasource.go,
+// ownDataSource is the same space-isolation check used in datasource.go,
 // duplicated here to avoid coupling the two handlers via internal helpers.
 func (h *DataSourceCredentialsHandler) ownDataSource(c *gin.Context) (*types.DataSource, bool) {
 	ctx := c.Request.Context()
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if spaceID == 0 {
 		c.Error(errors.NewBadRequestError("Workspace ID cannot be empty"))
 		return nil, false
 	}
@@ -48,7 +48,7 @@ func (h *DataSourceCredentialsHandler) ownDataSource(c *gin.Context) (*types.Dat
 		return nil, false
 	}
 	kb, err := h.kbService.GetKnowledgeBaseByID(ctx, ds.KnowledgeBaseID)
-	if err != nil || kb == nil || kb.TenantID != tenantID {
+	if err != nil || kb == nil || kb.SpaceID != spaceID {
 		c.Error(errors.NewNotFoundError("data source not found"))
 		return nil, false
 	}

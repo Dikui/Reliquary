@@ -39,7 +39,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 		return nil, err
 	}
 	var count int64
-	if err := s.db.WithContext(ctx).Unscoped().Model(&types.Knowledge{}).Where("tenant_id=?", kb.TenantID).Count(&count).Error; err != nil {
+	if err := s.db.WithContext(ctx).Unscoped().Model(&types.Knowledge{}).Where("space_id=?", kb.SpaceID).Count(&count).Error; err != nil {
 		return nil, err
 	}
 	if count != 0 {
@@ -121,7 +121,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 		count *int64
 	}{{"mine", &result.Mine}, {"report", &result.Reports}} {
 		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).
-			Where("tenant_id=? AND source_kind=? AND parse_status=?", kb.TenantID, target.kind, types.ParseStatusCompleted).
+			Where("space_id=? AND source_kind=? AND parse_status=?", kb.SpaceID, target.kind, types.ParseStatusCompleted).
 			Count(target.count).Error; err != nil {
 			return result, err
 		}
@@ -177,7 +177,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 		body = nil
 	}
 	now := time.Now().UTC()
-	knowledge := &types.Knowledge{ID: header.ID, TenantID: kb.TenantID, KnowledgeBaseID: kb.ID,
+	knowledge := &types.Knowledge{ID: header.ID, SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
 		Type: types.KnowledgeTypeManual, SourceKind: "article", VaultPath: path, VaultBody: string(body),
 		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true, ProcessingMode: mode,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
@@ -226,9 +226,9 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 		}
 		for _, name := range sortedUniqueNames(header.Topics) {
 			var topic types.Topic
-			err := tx.Where("tenant_id=? AND name=?", kb.TenantID, name).First(&topic).Error
+			err := tx.Where("space_id=? AND name=?", kb.SpaceID, name).First(&topic).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				topic = types.Topic{ID: uuid.NewString(), TenantID: kb.TenantID, Name: name, CreatedAt: now, UpdatedAt: now}
+				topic = types.Topic{ID: uuid.NewString(), SpaceID: kb.SpaceID, Name: name, CreatedAt: now, UpdatedAt: now}
 				err = tx.Create(&topic).Error
 			}
 			if err != nil {
@@ -236,23 +236,23 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 			}
 			// Headers cannot distinguish model and user selections. Preserve all
 			// recovered selections against later automatic classification.
-			if err := tx.Create(&types.KnowledgeTopic{TenantID: kb.TenantID, KnowledgeID: knowledge.ID,
+			if err := tx.Create(&types.KnowledgeTopic{SpaceID: kb.SpaceID, KnowledgeID: knowledge.ID,
 				TopicID: topic.ID, Source: types.TopicSourceUser, CreatedAt: collected.UTC()}).Error; err != nil {
 				return err
 			}
 		}
 		for _, link := range sortedUniqueNames(header.Entities) {
 			name := strings.TrimSpace(link[2 : len(link)-2])
-			entity, err := restoreVaultEntity(tx, kb.TenantID, name, now)
+			entity, err := restoreVaultEntity(tx, kb.SpaceID, name, now)
 			if err != nil {
 				return err
 			}
 			var existing int64
-			if err := tx.Model(&types.KnowledgeEntity{}).Where("tenant_id=? AND knowledge_id=? AND entity_id=?", kb.TenantID, knowledge.ID, entity.ID).Count(&existing).Error; err != nil {
+			if err := tx.Model(&types.KnowledgeEntity{}).Where("space_id=? AND knowledge_id=? AND entity_id=?", kb.SpaceID, knowledge.ID, entity.ID).Count(&existing).Error; err != nil {
 				return err
 			}
 			if existing == 0 {
-				if err := tx.Create(&types.KnowledgeEntity{TenantID: kb.TenantID, KnowledgeID: knowledge.ID,
+				if err := tx.Create(&types.KnowledgeEntity{SpaceID: kb.SpaceID, KnowledgeID: knowledge.ID,
 					EntityID: entity.ID, CreatedAt: collected.UTC()}).Error; err != nil {
 					return err
 				}
@@ -265,18 +265,18 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 
 // The header carries names rather than entity types or IDs. Restore exact
 // canonical/alias matches and create otherwise unknown names as the other type.
-func restoreVaultEntity(tx *gorm.DB, tenantID uint64, name string, now time.Time) (*types.Entity, error) {
+func restoreVaultEntity(tx *gorm.DB, spaceID uint64, name string, now time.Time) (*types.Entity, error) {
 	normalized := normalizeEntityName(name)
 	var entity types.Entity
-	err := tx.Where("tenant_id=? AND normalized_name=? AND merged_into_id=''", tenantID, normalized).
+	err := tx.Where("space_id=? AND normalized_name=? AND merged_into_id=''", spaceID, normalized).
 		Order("canonical_name, id").First(&entity).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		err = tx.Table("entities").Joins("JOIN entity_aliases AS aliases ON aliases.entity_id=entities.id AND aliases.tenant_id=entities.tenant_id").
-			Where("entities.tenant_id=? AND aliases.normalized_alias=? AND entities.merged_into_id=''", tenantID, normalized).
+		err = tx.Table("entities").Joins("JOIN entity_aliases AS aliases ON aliases.entity_id=entities.id AND aliases.space_id=entities.space_id").
+			Where("entities.space_id=? AND aliases.normalized_alias=? AND entities.merged_into_id=''", spaceID, normalized).
 			Order("entities.canonical_name, entities.id").Select("entities.*").First(&entity).Error
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		entity = types.Entity{ID: uuid.NewString(), TenantID: tenantID, CanonicalName: name, NormalizedName: normalized,
+		entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: name, NormalizedName: normalized,
 			EntityType: "other", EmbeddingNeedsRebuild: true, CreatedAt: now, UpdatedAt: now}
 		err = tx.Create(&entity).Error
 	}

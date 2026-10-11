@@ -20,14 +20,14 @@ function loadAPI(path: string, requests: Request[]) {
   return module.exports
 }
 
-test('space info and API key operations use singular paths without a tenant ID', async () => {
-  const requests: Request[] = [], api = loadAPI('./tenant.ts', requests)
-  await api.getTenantInfo()
-  await api.updateTenant({ name: 'Personal space' })
-  await api.listTenantAPIKeys()
-  await api.createTenantAPIKey({ name: 'Automation' })
-  await api.updateTenantAPIKey(7, { name: 'Renamed automation' })
-  await api.deleteTenantAPIKey(7)
+test('space info and API key operations use singular paths without a space ID', async () => {
+  const requests: Request[] = [], api = loadAPI('./space.ts', requests)
+  await api.getSpaceInfo()
+  await api.updateSpace({ name: 'Personal space' })
+  await api.listAPIKeys()
+  await api.createAPIKey({ name: 'Automation' })
+  await api.updateAPIKey(7, { name: 'Renamed automation' })
+  await api.deleteAPIKey(7)
   assert.deepEqual(requests, [
     { method: 'get', url: '/api/v1/space' },
     { method: 'put', url: '/api/v1/space', body: { name: 'Personal space' } },

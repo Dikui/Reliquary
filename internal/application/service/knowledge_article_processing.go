@@ -227,7 +227,7 @@ func (s *knowledgeService) callArticleProcessing(ctx context.Context, kb *types.
 		}
 		if sourceID := k.GetMetadata()["datasource_id"]; sourceID != "" {
 			var ds types.DataSource
-			if err := s.db.WithContext(ctx).Where("id=? AND tenant_id=?", sourceID, k.TenantID).First(&ds).Error; err != nil {
+			if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", sourceID, k.SpaceID).First(&ds).Error; err != nil {
 				return nil, fmt.Errorf("read subscription default content type: %w", err)
 			}
 			input.DefaultContentType = types.NormalizeContentType(ds.DefaultContentType)
@@ -304,7 +304,7 @@ func (s *knowledgeService) markArticleProcessingFailed(ctx context.Context, k *t
 }
 
 func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Knowledge, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig) error {
-	if aborted, _ := s.isKnowledgeAborted(ctx, k.TenantID, k.ID); aborted {
+	if aborted, _ := s.isKnowledgeAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
 	}
 	result, err := s.callArticleProcessing(ctx, kb, k, body, images)
@@ -318,7 +318,7 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 // A conversion prepares the model result before opening its database transaction
 // and owns the file write so it can restore the previous file on rollback.
 func (s *knowledgeService) persistArticleProcessingResult(ctx context.Context, kb *types.KnowledgeBase, k *types.Knowledge, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig, result *articleProcessingResult, writeFiles bool) error {
-	if aborted, _ := s.isKnowledgeAborted(ctx, k.TenantID, k.ID); aborted {
+	if aborted, _ := s.isKnowledgeAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
 	}
 	if s.db != nil {
@@ -331,7 +331,7 @@ func (s *knowledgeService) persistArticleProcessingResult(ctx context.Context, k
 			ProcessingReviewContentType string
 			ProcessingReviewReason      string
 		}
-		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Select("content_type", "content_type_corrected", "processing_mode", "source_unverified", "processing_review_status", "processing_review_content_type", "processing_review_reason").Where("id=? AND tenant_id=?", k.ID, k.TenantID).Take(&current).Error; err != nil {
+		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Select("content_type", "content_type_corrected", "processing_mode", "source_unverified", "processing_review_status", "processing_review_content_type", "processing_review_reason").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&current).Error; err != nil {
 			return err
 		}
 		k.SourceUnverified = current.SourceUnverified
@@ -358,7 +358,7 @@ func (s *knowledgeService) persistArticleProcessingResult(ctx context.Context, k
 			k.ProcessingReviewStatus = types.ProcessingReviewPending
 		}
 		if s.db != nil {
-			if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND tenant_id=? AND processing_review_status IN ?", k.ID, k.TenantID, []string{"", types.ProcessingReviewPending}).Updates(map[string]any{
+			if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND space_id=? AND processing_review_status IN ?", k.ID, k.SpaceID, []string{"", types.ProcessingReviewPending}).Updates(map[string]any{
 				"content_type_uncertain":         k.ContentTypeUncertain,
 				"processing_review_status":       k.ProcessingReviewStatus,
 				"processing_review_content_type": k.ProcessingReviewContentType,
@@ -392,7 +392,7 @@ func (s *knowledgeService) persistArticleProcessingResult(ctx context.Context, k
 		for _, entity := range resolved {
 			ids = append(ids, entity.ID)
 		}
-		query := s.db.WithContext(ctx).Where("tenant_id=? AND knowledge_id=?", k.TenantID, k.ID)
+		query := s.db.WithContext(ctx).Where("space_id=? AND knowledge_id=?", k.SpaceID, k.ID)
 		if len(ids) > 0 {
 			query = query.Where("entity_id NOT IN ?", ids)
 		}
@@ -568,7 +568,7 @@ func (s *knowledgeService) storeProcessedBody(ctx context.Context, kb *types.Kno
 	}
 	oldBody := ""
 	_ = json.Unmarshal(metadata["processed_body_path"], &oldBody)
-	path, err := s.resolveFileService(ctx, kb).SaveBytes(ctx, []byte(body), k.TenantID, k.ID+"-body.md", false)
+	path, err := s.resolveFileService(ctx, kb).SaveBytes(ctx, []byte(body), k.SpaceID, k.ID+"-body.md", false)
 	if err != nil {
 		return fmt.Errorf("save parsed article body: %w", err)
 	}
@@ -581,7 +581,7 @@ func (s *knowledgeService) storeProcessedBody(ctx context.Context, kb *types.Kno
 	if err = s.repo.UpdateKnowledge(ctx, k); err != nil {
 		return err
 	}
-	s.bindContentResources(ctx, k.TenantID, k.ID, body+" "+path)
+	s.bindContentResources(ctx, k.SpaceID, k.ID, body+" "+path)
 	if oldBody != "" && oldBody != path {
 		return s.resolveFileServiceForPath(ctx, kb, oldBody).DeleteFile(ctx, oldBody)
 	}
@@ -600,7 +600,7 @@ func (s *knowledgeService) removeSummaryOnlyBody(ctx context.Context, kb *types.
 		return err
 	}
 	if k.StorageSize > 0 {
-		if err := s.tenantRepo.AdjustStorageUsed(ctx, k.TenantID, -k.StorageSize); err != nil {
+		if err := s.spaceRepo.AdjustStorageUsed(ctx, k.SpaceID, -k.StorageSize); err != nil {
 			return err
 		}
 	}

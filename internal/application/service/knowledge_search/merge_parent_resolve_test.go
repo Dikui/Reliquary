@@ -24,7 +24,7 @@ func TestResolveParentChunksUsesCurrentContentAndImageURLs(t *testing.T) {
 		"child":  {ID: "child", ParentChunkID: "parent", ChunkType: types.ChunkTypeText, ImageInfo: string(imageInfo), IsEnabled: true},
 	}}
 	plugin := &MergeStage{chunkRepo: repo}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	result := &types.SearchResult{
 		ID: "child", KnowledgeID: "doc", ChunkType: string(types.ChunkTypeText),
 		ParentChunkID: "parent", Content: "current edited child body", StartAt: 999, EndAt: 1001,

@@ -20,7 +20,7 @@ func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.M
 		return nil
 	}
 	if article.StructuredSummary == nil || kb == nil || !kb.IndexingStrategy.VectorEnabled {
-		return db.WithContext(ctx).Exec("DELETE FROM article_embeddings WHERE tenant_id=? AND knowledge_id=?", article.TenantID, article.ID).Error
+		return db.WithContext(ctx).Exec("DELETE FROM article_embeddings WHERE space_id=? AND knowledge_id=?", article.SpaceID, article.ID).Error
 	}
 	embedder, err := GetTierEmbeddingModel(ctx, db, models, kb)
 	if err != nil {
@@ -38,8 +38,8 @@ func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.E
 	hash := vaultContentHash(content)
 	var count int64
 	if err := db.WithContext(ctx).Table("article_embeddings").
-		Where("tenant_id=? AND knowledge_id=? AND model_id=? AND dimension=? AND content_hash=?",
-			article.TenantID, article.ID, embedder.GetModelID(), embedder.GetDimensions(), hash).Count(&count).Error; err != nil {
+		Where("space_id=? AND knowledge_id=? AND model_id=? AND dimension=? AND content_hash=?",
+			article.SpaceID, article.ID, embedder.GetModelID(), embedder.GetDimensions(), hash).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {
@@ -64,15 +64,15 @@ func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.E
 		return fmt.Errorf("article embedding has zero length")
 	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := checkEmbeddingProfile(ctx, tx, embedder, article.TenantID); err != nil {
+		if err := checkEmbeddingProfile(ctx, tx, embedder, article.SpaceID); err != nil {
 			return err
 		}
 		return tx.Exec(`INSERT INTO article_embeddings
-		(tenant_id, knowledge_id, knowledge_base_id, model_id, dimension, embedding, content_hash)
+		(space_id, knowledge_id, knowledge_base_id, model_id, dimension, embedding, content_hash)
 		VALUES (?, ?, ?, ?, ?, ?::halfvec, ?)
 		ON CONFLICT (knowledge_id) DO UPDATE SET
 		model_id=EXCLUDED.model_id, dimension=EXCLUDED.dimension,
 		embedding=EXCLUDED.embedding, content_hash=EXCLUDED.content_hash, updated_at=NOW()`,
-			article.TenantID, article.ID, article.KnowledgeBaseID, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
+			article.SpaceID, article.ID, article.KnowledgeBaseID, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
 	})
 }

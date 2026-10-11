@@ -16,8 +16,8 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// ErrInvalidTenantID represents an error for invalid tenant ID
-var ErrInvalidTenantID = errors.New("invalid tenant ID")
+// ErrInvalidSpaceID represents an error for invalid space ID
+var ErrInvalidSpaceID = errors.New("invalid space ID")
 
 // knowledgeBaseService implements the knowledge base service interface
 type knowledgeBaseService struct {
@@ -55,7 +55,7 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 
 // GetKnowledgeBase returns the only active knowledge base in the personal space.
 func (s *knowledgeBaseService) GetKnowledgeBase(ctx context.Context) (*types.KnowledgeBase, error) {
-	kb, err := s.repo.GetKnowledgeBaseByTenantID(ctx, types.MustTenantIDFromContext(ctx))
+	kb, err := s.repo.GetKnowledgeBaseBySpaceID(ctx, types.MustSpaceIDFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *typ
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var active types.KnowledgeBase
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("tenant_id = ? AND id = ?", kb.TenantID, kb.ID).First(&active).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("space_id = ? AND id = ?", kb.SpaceID, kb.ID).First(&active).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return apperrors.NewNotFoundError("knowledge base not found")
 			}
@@ -95,7 +95,7 @@ func (s *knowledgeBaseService) GetKnowledgeBaseByID(ctx context.Context, id stri
 		return nil, err
 	}
 
-	if kb == nil || kb.TenantID != types.SingleTenantID {
+	if kb == nil || kb.SpaceID != types.SingleSpaceID {
 		return nil, repository.ErrKnowledgeBaseNotFound
 	}
 	kb.EnsureDefaults()
@@ -116,7 +116,7 @@ func (s *knowledgeBaseService) GetKnowledgeBaseByIDOnly(ctx context.Context, id 
 		return nil, err
 	}
 
-	if kb == nil || kb.TenantID != types.SingleTenantID {
+	if kb == nil || kb.SpaceID != types.SingleSpaceID {
 		return nil, repository.ErrKnowledgeBaseNotFound
 	}
 	kb.EnsureDefaults()
@@ -134,7 +134,7 @@ func (s *knowledgeBaseService) GetKnowledgeBasesByIDsOnly(ctx context.Context, i
 	}
 	teamKBs := make([]*types.KnowledgeBase, 0, len(kbs))
 	for _, kb := range kbs {
-		if kb != nil && kb.TenantID == types.SingleTenantID {
+		if kb != nil && kb.SpaceID == types.SingleSpaceID {
 			kb.EnsureDefaults()
 			teamKBs = append(teamKBs, kb)
 		}
@@ -142,17 +142,17 @@ func (s *knowledgeBaseService) GetKnowledgeBasesByIDsOnly(ctx context.Context, i
 	return teamKBs, nil
 }
 
-// FillKnowledgeBaseCounts fills KnowledgeCount, ChunkCount, IsProcessing, ProcessingCount for the given KB using kb.TenantID.
+// FillKnowledgeBaseCounts fills KnowledgeCount, ChunkCount, IsProcessing, ProcessingCount for the given KB using kb.SpaceID.
 func (s *knowledgeBaseService) FillKnowledgeBaseCounts(ctx context.Context, kb *types.KnowledgeBase) error {
 	if kb == nil {
 		return nil
 	}
-	tenantID := kb.TenantID
+	spaceID := kb.SpaceID
 	kb.EnsureDefaults()
-	if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
+	if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, spaceID, kb.ID); err == nil {
 		kb.KnowledgeCount = cnt
 	}
-	if processingCount, err := s.kgRepo.CountKnowledgeByStatus(ctx, tenantID, kb.ID, []string{"pending", "processing"}); err == nil {
+	if processingCount, err := s.kgRepo.CountKnowledgeByStatus(ctx, spaceID, kb.ID, []string{"pending", "processing"}); err == nil {
 		kb.IsProcessing = processingCount > 0
 		kb.ProcessingCount = processingCount
 	}
@@ -243,7 +243,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	}
 	currentEmbeddingModelID, _ := ResolveModelTier(ctx, nil, kb, types.ModelTierEmbedding)
 	if s.nameEmbeddingRebuilder != nil && previousEmbeddingModelID != currentEmbeddingModelID {
-		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.TenantID, "knowledge_base_embedding_model_changed"); err != nil {
+		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.SpaceID, "knowledge_base_embedding_model_changed"); err != nil {
 			return kb, fmt.Errorf("knowledge base update could not enqueue name embedding rebuild: %w", err)
 		}
 	}

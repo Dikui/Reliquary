@@ -30,15 +30,15 @@ func (s *classificationKnowledgeService) ListPagedKnowledgeByKnowledgeBaseID(ctx
 func TestKnowledgeListNormalizesContentTypeFilterWithPostgres(t *testing.T) {
 	db := pgtest.Open(t)
 	for _, contentType := range []string{types.ContentTypeEvent, types.ContentTypeTutorial, ""} {
-		require.NoError(t, db.Create(&types.Knowledge{TenantID: 1, KnowledgeBaseID: "kb-1", Type: "file", Title: "Article",
+		require.NoError(t, db.Create(&types.Knowledge{SpaceID: 1, KnowledgeBaseID: "kb-1", Type: "file", Title: "Article",
 			Source: "manual", ParseStatus: types.ParseStatusCompleted, ContentType: contentType}).Error)
 	}
 	gin.SetMode(gin.TestMode)
 	h := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: &classificationKnowledgeService{repo: repository.NewKnowledgeRepository(db)}}
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
-		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.TenantIDContextKey, uint64(1)))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.SpaceIDContextKey, uint64(1)))
 		c.Next()
 	})
 	router.GET("/knowledge-bases/:id/knowledge", h.ListKnowledge)

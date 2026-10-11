@@ -23,9 +23,9 @@ func (r *fakeKBRepo) CreateKnowledgeBase(_ context.Context, kb *types.KnowledgeB
 	r.rows[kb.ID] = kb
 	return nil
 }
-func (r *fakeKBRepo) GetKnowledgeBaseByTenantID(ctx context.Context, tenantID uint64) (*types.KnowledgeBase, error) {
+func (r *fakeKBRepo) GetKnowledgeBaseBySpaceID(ctx context.Context, spaceID uint64) (*types.KnowledgeBase, error) {
 	for _, kb := range r.rows {
-		if kb.TenantID == tenantID {
+		if kb.SpaceID == spaceID {
 			return kb, nil
 		}
 	}
@@ -34,9 +34,9 @@ func (r *fakeKBRepo) GetKnowledgeBaseByTenantID(ctx context.Context, tenantID ui
 func (r *fakeKBRepo) GetKnowledgeBaseByID(_ context.Context, id string) (*types.KnowledgeBase, error) {
 	return r.rows[id], nil
 }
-func (r *fakeKBRepo) GetKnowledgeBaseByIDAndTenant(_ context.Context, id string, tenantID uint64) (*types.KnowledgeBase, error) {
+func (r *fakeKBRepo) GetKnowledgeBaseByIDAndSpace(_ context.Context, id string, spaceID uint64) (*types.KnowledgeBase, error) {
 	kb := r.rows[id]
-	if kb == nil || kb.TenantID != tenantID {
+	if kb == nil || kb.SpaceID != spaceID {
 		return nil, stderrors.New("not found")
 	}
 	return kb, nil

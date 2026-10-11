@@ -14,17 +14,17 @@ func TestCheckKnowledgeExists_FileHashIsScopedByFileType(t *testing.T) {
 	db := setupKnowledgeTestDB(t)
 	repo := NewKnowledgeRepository(db)
 	ctx := context.Background()
-	tenantID := uint64(1)
+	spaceID := uint64(1)
 	kbID := uuid.NewString()
 	const fileHash = "same-content-hash"
 
 	require.NoError(t, db.Exec(`
-		INSERT INTO knowledges (id, tenant_id, knowledge_base_id, type, title, file_name, file_type, file_hash, parse_status)
+		INSERT INTO knowledges (id, space_id, knowledge_base_id, type, title, file_name, file_type, file_hash, parse_status)
 		VALUES (?, ?, ?, 'file', 'document.md', 'document.md', 'md', ?, 'completed')
-	`, uuid.NewString(), tenantID, kbID, fileHash).Error)
+	`, uuid.NewString(), spaceID, kbID, fileHash).Error)
 
 	t.Run("same content with another file type is allowed", func(t *testing.T) {
-		exists, knowledge, err := repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+		exists, knowledge, err := repo.CheckKnowledgeExists(ctx, spaceID, kbID, &types.KnowledgeCheckParams{
 			Type:     "file",
 			FileHash: fileHash,
 			FileType: "txt",
@@ -36,7 +36,7 @@ func TestCheckKnowledgeExists_FileHashIsScopedByFileType(t *testing.T) {
 	})
 
 	t.Run("same content and file type remains a duplicate", func(t *testing.T) {
-		exists, knowledge, err := repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+		exists, knowledge, err := repo.CheckKnowledgeExists(ctx, spaceID, kbID, &types.KnowledgeCheckParams{
 			Type:     "file",
 			FileHash: fileHash,
 			FileType: "md",
@@ -49,7 +49,7 @@ func TestCheckKnowledgeExists_FileHashIsScopedByFileType(t *testing.T) {
 	})
 
 	t.Run("file type matching is case-insensitive", func(t *testing.T) {
-		exists, knowledge, err := repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
+		exists, knowledge, err := repo.CheckKnowledgeExists(ctx, spaceID, kbID, &types.KnowledgeCheckParams{
 			Type:     "file",
 			FileHash: fileHash,
 			FileType: "MD",

@@ -170,8 +170,8 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 		})
 	}
 
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
+	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, spaceID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -226,10 +226,10 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 			if err := svc.clearIntakeSource(ctx, knowledge); err != nil {
 				return err
 			}
-			if err := deleteArticleEntityAssociations(ctx, svc.db, tenantID, []string{id}); err != nil {
+			if err := deleteArticleEntityAssociations(ctx, svc.db, spaceID, []string{id}); err != nil {
 				return err
 			}
-			return svc.repo.HardDeleteKnowledge(ctx, tenantID, id)
+			return svc.repo.HardDeleteKnowledge(ctx, spaceID, id)
 		}
 		if s.db == nil {
 			return knowledge, discard(s)
@@ -339,7 +339,7 @@ func (s *knowledgeService) saveIntakeUserDecision(ctx context.Context, knowledge
 			return err
 		}
 		if action == "admit_unverified" {
-			if err := tx.Model(&types.Knowledge{}).Where("id=? AND tenant_id=?", knowledge.ID, knowledge.TenantID).
+			if err := tx.Model(&types.Knowledge{}).Where("id=? AND space_id=?", knowledge.ID, knowledge.SpaceID).
 				Updates(map[string]any{"source_unverified": true, "processing_mode": types.ProcessingModeFull}).Error; err != nil {
 				return err
 			}
@@ -365,7 +365,7 @@ func (s *knowledgeService) recordIntakeImages(ctx context.Context, k *types.Know
 			seen[img.ServingURL] = true
 		}
 	}
-	s.bindContentResources(ctx, k.TenantID, k.ID, strings.Join(intake.Images, " "))
+	s.bindContentResources(ctx, k.SpaceID, k.ID, strings.Join(intake.Images, " "))
 	if err := k.SetIntakeMetadata(intake); err != nil {
 		return err
 	}
@@ -400,7 +400,7 @@ func (s *knowledgeService) saveIntakeOriginal(ctx context.Context, kb *types.Kno
 	}
 	intake, _ = k.IntakeMetadata()
 	fileSvc := s.resolveFileService(ctx, kb)
-	path, err := fileSvc.SaveBytes(ctx, []byte(body), k.TenantID, k.ID+".md", false)
+	path, err := fileSvc.SaveBytes(ctx, []byte(body), k.SpaceID, k.ID+".md", false)
 	if err != nil {
 		return err
 	}

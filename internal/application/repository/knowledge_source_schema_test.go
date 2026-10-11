@@ -32,7 +32,7 @@ func TestKnowledgeSourceSchemaAllowsObjectStorageURLs(t *testing.T) {
 	longURL := "https://example-bucket.cos.ap-beijing.myqcloud.com/test/" +
 		strings.Repeat("encoded-path-segment-", 20) + ".docx"
 	knowledge := &types.Knowledge{
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-1",
 		Type:            types.KnowledgeTypeManual,
 		Title:           "long source",
