@@ -29,6 +29,7 @@ type Services struct {
 	Topics   *service.TopicService
 	Entities *service.EntityService
 	Reports  *service.VaultDocumentService
+	Follows  *service.FollowService
 }
 
 // Handler uses sessionless Streamable HTTP so every request carries its own
@@ -95,6 +96,11 @@ type reportInput struct {
 	RelatedArticleIDs []string `json:"related_article_ids,omitempty"`
 }
 
+type followInput struct {
+	TargetType string `json:"target_type"`
+	TargetID   string `json:"target_id"`
+}
+
 func addTool[Input any](server *mcp.Server, name, description string, schema map[string]any, call func(context.Context, Input) (any, error)) {
 	mcp.AddTool(server, &mcp.Tool{Name: name, Description: description, InputSchema: schema},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, any, error) {
@@ -140,6 +146,34 @@ func registerTools(server *mcp.Server, services Services) {
 	addTool(server, "get_entity", "按 ID 读取实体档案和提及该实体的文章列表；已合并的实体 ID 自动解析到保留档案。"+externalContentNotice,
 		object(map[string]any{"id": text("实体 ID，必填")}, "id"),
 		func(ctx context.Context, in idInput) (any, error) { return services.Entities.EntityDetail(ctx, in.ID) })
+	addTool(server, "list_follows", "列出关注的实体与主题，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成文章数。只统计外部文章，排除用户文档、整理结果和待审内容；调用不更新上次查看时间。"+externalContentNotice,
+		object(map[string]any{}), func(ctx context.Context, _ struct{}) (any, error) {
+			items, err := services.Follows.ListFollows(ctx)
+			return map[string]any{"follows": items}, err
+		})
+	addTool(server, "follow_feed", "读取关注动态，按收录时间倒序返回与关注实体或主题关联的已完成外部文章，排除用户文档、整理结果和待审内容。results 中文章字段与 search 一致，另含 collected_at、entered_at、is_new、matched_follows；相似报道也保留这些字段。since 省略使用网页上次查看时间，首次查看前返回全部；is_new 始终以网页上次查看时间判定，new_count 是全局未看文章数。调用不更新上次查看时间。返回 next_cursor 时须用 cursor 继续翻页，直到没有 next_cursor；游标保留首请求的时间上限、since、对象筛选与折叠开关，后续只需 cursor 和 limit。主题历史归入不产生新动态。"+externalContentNotice,
+		object(map[string]any{
+			"cursor":           text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
+			"since":            text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的文章"),
+			"target_ids":       stringArray("关注对象 ID 列表，省略查询全部关注；多个对象取并集"),
+			"limit":            integer("最多返回的主文章数，默认 20，最大 100；折叠成员附在相似报道中", 1, 100),
+			"collapse_similar": boolean("是否按摘要向量相似度与发布时间窗口折叠相似报道，省略开启，规则与检索相同"),
+		}), func(ctx context.Context, in types.FollowFeedRequest) (any, error) {
+			return services.Follows.Feed(ctx, in)
+		})
+	addTool(server, "follow", "关注指定实体或主题，重复关注幂等，实际新增关注时写入操作日志。实体已合并时关注最终保留档案。返回关注对象的类型、ID、名称、关注时间和近 7 天文章数。"+externalContentNotice,
+		object(map[string]any{"target_type": enum("关注对象类型，必填", "entity", "topic"), "target_id": text("关注对象 ID，必填")}, "target_type", "target_id"),
+		func(ctx context.Context, in followInput) (any, error) {
+			return services.Follows.Follow(ctx, in.TargetType, in.TargetID)
+		})
+	addTool(server, "unfollow", "取消指定实体或主题的关注，重复取消幂等，实际删除关注时写入操作日志。实体已合并时取消最终保留档案的关注。返回请求对象和 following=false。"+externalContentNotice,
+		object(map[string]any{"target_type": enum("关注对象类型，必填", "entity", "topic"), "target_id": text("关注对象 ID，必填")}, "target_type", "target_id"),
+		func(ctx context.Context, in followInput) (any, error) {
+			if err := services.Follows.Unfollow(ctx, in.TargetType, in.TargetID); err != nil {
+				return nil, err
+			}
+			return map[string]any{"target_type": in.TargetType, "target_id": in.TargetID, "following": false}, nil
+		})
 	addTool(server, "ingest", "主动收藏外部内容，参数与 POST /api/v1/ingest 相同。经过模型收录审核，通过后异步处理；拒绝时 status=pending_review 并附 reason。返回 article_id、status、message 和 image_failures；status 为 exists 时返回已有文章 ID。agent_summary、agent_tags、source_name 仅保存数据库。"+externalContentNotice,
 		ingestSchema(), func(ctx context.Context, in types.IngestRequest) (any, error) {
 			return services.Articles.Ingest(ctx, &in)

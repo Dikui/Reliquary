@@ -23,6 +23,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
+  modules = { '@/components/FollowToggle.vue': empty, '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) }, ...modules }
   const filename = path.split('/').at(-1)!
   const { descriptor, errors } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'), { filename })
   assert.deepEqual(errors, [])

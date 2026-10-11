@@ -311,8 +311,8 @@ func (s *TopicService) finishBatch(ctx context.Context, job types.TopicBackfillJ
 		} else {
 			// INSERT SELECT also ignores articles deleted while the model was running.
 			if len(matched) > 0 {
-				if err := tx.Exec(`INSERT INTO knowledge_topics(tenant_id,knowledge_id,topic_id,source,created_at)
-				SELECT tenant_id,id,?,'model',CURRENT_TIMESTAMP FROM knowledges
+				if err := tx.Exec(`INSERT INTO knowledge_topics(tenant_id,knowledge_id,topic_id,source,created_at,is_historical)
+				SELECT tenant_id,id,?,'model',CURRENT_TIMESTAMP,true FROM knowledges
 				WHERE tenant_id=? AND id IN ? AND deleted_at IS NULL AND source_kind='article'
 				ON CONFLICT (knowledge_id,topic_id) DO NOTHING`, job.TopicID, job.TenantID, matched).Error; err != nil {
 					return err

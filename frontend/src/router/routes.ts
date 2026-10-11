@@ -59,6 +59,12 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           meta: { requiresInit: true, requiresAuth: true },
         },
         {
+          path: "follows",
+          name: "follows",
+          component: () => import('../views/knowledge/FollowFeed.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
+        },
+        {
           path: "operation-logs",
           name: "operationLogs",
           redirect: to => ({ path: '/platform/settings', query: { ...to.query, section: 'operation-logs' } }),

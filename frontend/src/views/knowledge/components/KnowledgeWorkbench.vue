@@ -39,7 +39,7 @@
           <div class="entity-detail">
             <t-empty v-if="!selectedEntity" :description="t('knowledgeWorkbench.entities.choose')" />
             <section v-else>
-              <div class="entity-detail__header"><div><span class="eyebrow">{{ entityTypeLabel(selectedEntity.entity_type) }}</span><h3>{{ selectedEntity.canonical_name }}</h3><p v-if="selectedEntity.description">{{ selectedEntity.description }}</p><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div>
+              <div class="entity-detail__header"><div><span class="eyebrow">{{ entityTypeLabel(selectedEntity.entity_type) }}</span><h3>{{ selectedEntity.canonical_name }}</h3><p v-if="selectedEntity.description">{{ selectedEntity.description }}</p><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><div class="entity-detail__actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div></div>
 
               <t-alert v-if="entityDetailError" theme="error" :message="entityDetailError" role="alert"><template #operation><t-button variant="text" :loading="entityDetailLoading" @click="selectEntity(selectedEntity)">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
               <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><t-empty v-if="!entityArticles.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><ul v-if="entityArticles.length"><li v-for="article in entityArticles" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></div></t-loading>
@@ -60,10 +60,13 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ENTITY_TYPES, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityArticle, type EntityNameEmbeddingRebuildStatus, type EntityType } from '@/api/entities'
 import MergeSuggestions from './MergeSuggestions.vue'
+import FollowToggle from '@/components/FollowToggle.vue'
+import { useFollowStore } from '@/stores/follows'
 
 const props = withDefaults(defineProps<{ initialEntityId?: string }>(), { initialEntityId: '' })
 const emit = defineEmits<{ 'open-source': [knowledgeId: string] }>()
 const { t, locale } = useI18n()
+const followStore = useFollowStore()
 const pageSize = 50
 const sections = ['entities', 'merges'] as const
 const activeSection = ref<typeof sections[number]>('entities')
@@ -100,7 +103,7 @@ function resetEntityList() { entityRequest++; detailRequest++; entities.value = 
 function scheduleEntitySearch() { if (entitySearchTimer) clearTimeout(entitySearchTimer); entityRequest++; if (entityComposing.value) return; if (!entityFilter.value.trim()) { resetEntityList(); return }; entitySearchTimer = setTimeout(() => { entitySearchTimer = null; resetEntityList() }, 300) }
 function endEntityComposition() { entityComposing.value = false; scheduleEntitySearch() }
 function onEntityEnter(_value: unknown, options?: { e?: KeyboardEvent }) { if (entityComposing.value || (options?.e?.isComposing || options?.e?.keyCode === 229)) return; if (entitySearchTimer) clearTimeout(entitySearchTimer); entitySearchTimer = null; resetEntityList() }
-async function refreshAfterMerge() { selectedEntity.value = null; entityArticles.value = []; detailRequest++; await loadEntities(); await loadNameEmbeddingStatus() }
+async function refreshAfterMerge() { selectedEntity.value = null; entityArticles.value = []; detailRequest++; await followStore.refreshAfterTargetChange(); await loadEntities(); await loadNameEmbeddingStatus() }
 async function refreshAll() { loading.value = true; try { await Promise.all([loadEntities(), loadNameEmbeddingStatus(), selectedEntity.value ? selectEntity(selectedEntity.value) : Promise.resolve(), mergeSuggestions.value?.refresh()]) } finally { loading.value = false } }
 async function loadMergeTargets(more = false) {
   if (more && mergeTargetsLoading.value) return
@@ -183,6 +186,7 @@ onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; 
 .entity-detail { min-width: 0; padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); }
 .entity-detail__header h3 { margin: 8px 0; }
 .entity-detail__header > div { min-width: 0; overflow-wrap: anywhere; }
+.entity-detail__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 .eyebrow { color: var(--td-text-color-secondary); font-size: 12px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 4px 8px; background: var(--td-bg-color-secondarycontainer); border-radius: var(--td-radius-small); font-size: 12px; overflow-wrap: anywhere; }

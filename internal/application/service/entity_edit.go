@@ -80,6 +80,15 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		if err := tx.Where("tenant_id=? AND entity_id=?", tenantID, merged.ID).Delete(&types.KnowledgeEntity{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Exec(`INSERT INTO follows (tenant_id, target_type, target_id, created_at)
+            SELECT tenant_id, 'entity', ?, created_at FROM follows WHERE tenant_id=? AND target_type='entity' AND target_id=?
+            ON CONFLICT (tenant_id, target_type, target_id) DO UPDATE
+            SET created_at=LEAST(follows.created_at, EXCLUDED.created_at)`, keep.ID, tenantID, merged.ID).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id=? AND target_type='entity' AND target_id=?", tenantID, merged.ID).Delete(&types.Follow{}).Error; err != nil {
+			return err
+		}
 		if err := saveEntityAlias(tx, keep, merged.CanonicalName, "merge"); err != nil {
 			return err
 		}

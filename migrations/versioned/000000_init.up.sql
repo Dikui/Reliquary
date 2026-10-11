@@ -1720,12 +1720,60 @@ CREATE TABLE public.knowledge_topics (
     knowledge_id character varying(36) NOT NULL,
     topic_id character varying(36) NOT NULL,
     source character varying(8) DEFAULT 'model' NOT NULL CHECK (source IN ('model','user')),
+    is_historical boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT uq_knowledge_topics_pair UNIQUE (knowledge_id, topic_id),
     FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE,
     FOREIGN KEY (tenant_id, topic_id) REFERENCES public.topics (tenant_id, id) ON DELETE CASCADE
 );
 CREATE INDEX idx_knowledge_topics_topic ON public.knowledge_topics (tenant_id, topic_id, knowledge_id);
+
+ALTER TABLE public.knowledges ADD COLUMN follow_ready_at timestamp with time zone;
+
+-- Capture qualification transitions in every processing and review write path.
+CREATE FUNCTION public.set_follow_ready_at() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE eligible boolean; was_eligible boolean := false;
+BEGIN
+    eligible := NEW.deleted_at IS NULL AND NEW.source_kind='article'
+        AND NEW.parse_status='completed' AND NEW.enable_status='enabled'
+        AND NEW.processing_review_status<>'pending'
+        AND COALESCE(NEW.metadata #>> '{intake,decision}','approved')='approved';
+    IF TG_OP='UPDATE' THEN
+        was_eligible := OLD.deleted_at IS NULL AND OLD.source_kind='article'
+            AND OLD.parse_status='completed' AND OLD.enable_status='enabled'
+            AND OLD.processing_review_status<>'pending'
+            AND COALESCE(OLD.metadata #>> '{intake,decision}','approved')='approved';
+        NEW.follow_ready_at := OLD.follow_ready_at;
+    END IF;
+    IF eligible AND NOT was_eligible THEN
+        NEW.follow_ready_at := clock_timestamp();
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER set_follow_ready_at BEFORE INSERT OR UPDATE OF
+    parse_status,enable_status,processing_review_status,metadata,source_kind,deleted_at
+    ON public.knowledges FOR EACH ROW EXECUTE FUNCTION public.set_follow_ready_at();
+
+CREATE TABLE public.follows (
+    tenant_id bigint NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    target_type character varying(8) NOT NULL CHECK (target_type IN ('entity', 'topic')),
+    target_id character varying(36) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    entity_id character varying(36) GENERATED ALWAYS AS (CASE WHEN target_type = 'entity' THEN target_id END) STORED,
+    topic_id character varying(36) GENERATED ALWAYS AS (CASE WHEN target_type = 'topic' THEN target_id END) STORED,
+    PRIMARY KEY (tenant_id, target_type, target_id),
+    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.entities(tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, topic_id) REFERENCES public.topics(tenant_id, id) ON DELETE CASCADE
+);
+CREATE TABLE public.follow_feed_states (
+    tenant_id bigint PRIMARY KEY REFERENCES public.tenants(id) ON DELETE CASCADE,
+    last_viewed_at timestamp with time zone NOT NULL
+);
+CREATE INDEX idx_knowledges_follow_feed ON public.knowledges (tenant_id, created_at DESC, id)
+WHERE deleted_at IS NULL AND source_kind = 'article' AND parse_status = 'completed'
+    AND enable_status = 'enabled' AND processing_review_status <> 'pending'
+    AND COALESCE(metadata #>> '{intake,decision}', 'approved') = 'approved';
 
 ALTER TABLE public.knowledges ADD COLUMN content_type_corrected boolean DEFAULT false NOT NULL;
 CREATE TABLE public.operation_logs (

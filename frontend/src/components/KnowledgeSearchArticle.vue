@@ -2,10 +2,11 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { KnowledgeSearchArticle } from '@/types/knowledgeSearch'
+import type { FollowFeedArticle } from '@/types/follows'
 import KnowledgeClassification from './KnowledgeClassification.vue'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
 
-const props = withDefaults(defineProps<{ article: KnowledgeSearchArticle; query: string; nested?: boolean }>(), { nested: false })
+const props = withDefaults(defineProps<{ article: KnowledgeSearchArticle; query: string; nested?: boolean; followFeed?: boolean }>(), { nested: false, followFeed: false })
 const emit = defineEmits<{ 'open-article': [article: KnowledgeSearchArticle]; 'open-entity': [id: string] }>()
 const { t, locale } = useI18n()
 const expanded = ref(false)
@@ -14,15 +15,18 @@ const published = computed(() => props.article.published_at
   ? new Date(props.article.published_at).toLocaleDateString(locale.value)
   : t('knowledgeSearch.missingPublishedAt'))
 const similarRegionID = computed(() => `similar-reports-${props.article.article_id}`)
+const feedArticle = computed(() => props.article as FollowFeedArticle)
 </script>
 
 <template>
   <article class="search-article" :class="{ nested }" :data-article-id="article.article_id">
     <div class="article-heading">
       <button type="button" class="article-title" @click="emit('open-article', article)">{{ article.title }}</button>
-      <span class="article-score">{{ t('knowledgeSearch.score') }} {{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
+      <t-tag v-if="followFeed && feedArticle.is_new" class="feed-new" size="small" theme="primary">{{ t('follows.new') }}</t-tag>
+      <span v-else-if="!followFeed" class="article-score">{{ t('knowledgeSearch.score') }} {{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
     </div>
     <p class="article-meta"><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span><span>{{ published }}</span><code v-if="article.vault_path">{{ article.vault_path }}</code></p>
+    <div v-if="followFeed" class="feed-attribution"><time :datetime="feedArticle.collected_at">{{ t('follows.collectedAt', { time: new Date(feedArticle.collected_at).toLocaleString(locale) }) }}</time><div class="feed-matches"><strong>{{ t('follows.matchedTargets') }}</strong><t-tag v-for="target in feedArticle.matched_follows" :key="`${target.target_type}:${target.target_id}`" size="small" variant="light-outline">{{ target.name }} ({{ t(`follows.targetTypes.${target.target_type}`) }})</t-tag></div></div>
     <KnowledgeClassification v-if="article.source === 'article'" :knowledge="classification" compact @open-entity="emit('open-entity', $event)" />
     <div v-if="article.snippets?.length" class="article-snippets">
       <strong>{{ t('knowledgeSearch.snippets') }}</strong>
@@ -34,7 +38,7 @@ const similarRegionID = computed(() => `similar-reports-${props.article.article_
         {{ t(expanded ? 'knowledgeSearch.hideSimilar' : 'knowledgeSearch.showSimilar', { count: article.similar_reports.length }) }}
       </button>
       <div v-if="expanded" :id="similarRegionID" class="similar-reports">
-        <KnowledgeSearchArticle v-for="similar in article.similar_reports" :key="similar.article_id" :article="similar" :query="query" nested @open-article="emit('open-article', $event)" @open-entity="emit('open-entity', $event)" />
+        <KnowledgeSearchArticle v-for="similar in article.similar_reports" :key="similar.article_id" :article="similar" :query="query" :follow-feed="followFeed" nested @open-article="emit('open-article', $event)" @open-entity="emit('open-entity', $event)" />
       </div>
     </template>
   </article>
@@ -48,6 +52,10 @@ const similarRegionID = computed(() => `similar-reports-${props.article.article_
 .article-score { flex-shrink: 0; color: var(--td-text-color-secondary); font-size: 12px; line-height: 24px; }
 .article-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--td-text-color-secondary); font-size: 12px; }
 .article-meta code { white-space: normal; }
+.feed-attribution { display: grid; gap: 6px; margin-block: 12px; color: var(--td-text-color-secondary); font-size: 12px; }
+.feed-matches { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.feed-matches strong { font-weight: 500; }
+.feed-new { flex-shrink: 0; }
 .article-snippets { display: grid; gap: 8px; margin-top: 14px; color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.7; }
 .article-snippets strong { color: var(--td-text-color-primary); font-weight: 500; }
 .article-snippets p { margin: 0; white-space: pre-wrap; }

@@ -24,6 +24,7 @@ var OperationTypes = []string{
 	"processing_review_confirm", "processing_review_correct", "processing_review_ignore",
 	"star", "unstar", "correct_content_type", "correct_topics", "merge_entities",
 	"create_topic", "update_topic", "delete_topic",
+	"follow", "unfollow",
 }
 
 type OperationLogPage struct {

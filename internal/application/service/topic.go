@@ -285,7 +285,14 @@ func (s *TopicService) replaceKnowledgeTopics(ctx context.Context, knowledgeID s
 		}
 		links := make([]types.KnowledgeTopic, 0, len(selected))
 		for _, topic := range selected {
-			links = append(links, types.KnowledgeTopic{TenantID: tenantID, KnowledgeID: knowledgeID, TopicID: topic.ID, Source: source})
+			link := types.KnowledgeTopic{TenantID: tenantID, KnowledgeID: knowledgeID, TopicID: topic.ID, Source: source}
+			for _, previous := range before {
+				if previous.TopicID == topic.ID {
+					link.CreatedAt, link.IsHistorical = previous.CreatedAt, previous.IsHistorical
+					break
+				}
+			}
+			links = append(links, link)
 		}
 		if len(links) > 0 {
 			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "knowledge_id"}, {Name: "topic_id"}}, DoNothing: true}).Create(&links).Error; err != nil {

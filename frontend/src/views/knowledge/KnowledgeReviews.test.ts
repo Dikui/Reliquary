@@ -176,7 +176,7 @@ test('source unverified and review fields survive the API, actual Pinia store an
   assert.equal(store().cardList[0].source_unverified, true)
   hook.getCardDetails({ id: processing.id }); await settle()
   for (const field of ['source_unverified', 'content_type_uncertain', 'processing_review_status', 'processing_review_content_type', 'processing_review_reason']) assert.equal(hook.details[field], records[0][field as keyof typeof records[0]], field)
-  const classification = component('../../components/KnowledgeClassification.vue', { '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': security })
+  const classification = component('../../components/KnowledgeClassification.vue', { './FollowToggle.vue': empty, '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': security })
   const listModules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeClassification.vue': moduleOf(classification), '@/components/KnowledgeStarToggle.vue': empty }
   for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok((await render(classification, { knowledge: hook.details }, locale)).includes(messages[locale].knowledgeReview.sourceUnverified))

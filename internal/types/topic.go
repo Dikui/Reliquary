@@ -16,11 +16,12 @@ type Topic struct {
 func (Topic) TableName() string { return "topics" }
 
 type KnowledgeTopic struct {
-	TenantID    uint64    `json:"tenant_id" gorm:"not null;index"`
-	KnowledgeID string    `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
-	TopicID     string    `json:"topic_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
-	Source      string    `json:"source" gorm:"type:varchar(8);not null;default:'model'"`
-	CreatedAt   time.Time `json:"created_at"`
+	TenantID     uint64    `json:"tenant_id" gorm:"not null;index"`
+	KnowledgeID  string    `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
+	TopicID      string    `json:"topic_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
+	IsHistorical bool      `json:"is_historical"`
+	Source       string    `json:"source" gorm:"type:varchar(8);not null;default:'model'"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 func (KnowledgeTopic) TableName() string { return "knowledge_topics" }

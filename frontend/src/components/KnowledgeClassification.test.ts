@@ -33,6 +33,7 @@ function component(path: string, modules: Record<string, unknown>) {
   return result
 }
 const classification = component('./KnowledgeClassification.vue', {
+  './FollowToggle.vue': emptyModule,
   '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) },
 })
 const reviewModule = { __esModule: true, default: component('./KnowledgeReviewActions.vue', { '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/api/knowledge-review': {}, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, 'tdesign-vue-next': { MessagePlugin: {} } }) }

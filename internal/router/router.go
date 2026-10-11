@@ -36,6 +36,7 @@ type RouterParams struct {
 	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
 	EntityHandler                *handler.EntityHandler
 	TopicHandler                 *handler.TopicHandler        `optional:"true"`
+	FollowHandler                *handler.FollowHandler       `optional:"true"`
 	OperationLogHandler          *handler.OperationLogHandler `optional:"true"`
 	MCPHandler                   *mcpserver.Handler           `optional:"true"`
 	TenantHandler                *handler.TenantHandler
@@ -137,6 +138,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		if params.TopicHandler != nil {
 			RegisterTopicRoutes(v1, params.TopicHandler, accessGuards)
+		}
+		if params.FollowHandler != nil {
+			RegisterFollowRoutes(v1, params.FollowHandler)
 		}
 		if params.OperationLogHandler != nil {
 			v1.GET("/operation-logs", params.OperationLogHandler.List)

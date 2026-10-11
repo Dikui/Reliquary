@@ -33,6 +33,8 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     vue: { ...require('vue'), onBeforeUnmount: (callback: () => void) => cleanups.push(callback) },
     'vue-i18n': { useI18n: () => i18n.global }, 'tdesign-vue-next': { MessagePlugin: { success() {} } },
     '@/api/entities': api,
+    '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
+    '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './MergeSuggestions.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('div', { class: 'merge-suggestions-test' }, i18n.global.t('mergeSuggestions.title')) }) } }
   function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports); return module.exports }
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender

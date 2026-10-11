@@ -168,7 +168,7 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
     const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
-    const classification = compileSFC('./KnowledgeClassification.vue').create({ '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const classification = compileSFC('./KnowledgeClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
     const flagged = await renderDetails([], locale, { loadedDetails: await loader.load('unverified'), classification: { __esModule: true, default: classification } })
     assert.ok(flagged.includes(messages[locale].knowledgeReview.sourceUnverified))
     const verified = await renderDetails([], locale, { loadedDetails: await loader.load('verified'), classification: { __esModule: true, default: classification } })

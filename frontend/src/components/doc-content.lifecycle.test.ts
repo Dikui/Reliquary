@@ -36,7 +36,7 @@ function unresolvedReferences(path: string, text = source(path)) {
 }
 
 test('detail and related article components have defined script and template references', () => {
-  for (const path of [detailPath, resolve('src/components/KnowledgeClassification.vue'), resolve('src/components/KnowledgeStarToggle.vue'), resolve('src/components/KnowledgeArticleJudgments.vue'), resolve('src/views/knowledge/TopicManagement.vue'), resolve('src/views/knowledge/OperationLogs.vue'), resolve('src/components/knowledge-processing-timeline.vue'), resolve('src/views/knowledge/components/DocumentActionMenu.vue'), resolve('src/views/knowledge/components/DocumentCardView.vue'), resolve('src/views/knowledge/components/DocumentListView.vue'), resolve('src/views/knowledge/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
+  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/KnowledgeClassification.vue'), resolve('src/components/KnowledgeStarToggle.vue'), resolve('src/components/KnowledgeArticleJudgments.vue'), resolve('src/views/knowledge/FollowFeed.vue'), resolve('src/views/knowledge/TopicManagement.vue'), resolve('src/views/knowledge/OperationLogs.vue'), resolve('src/components/knowledge-processing-timeline.vue'), resolve('src/views/knowledge/components/DocumentActionMenu.vue'), resolve('src/views/knowledge/components/DocumentCardView.vue'), resolve('src/views/knowledge/components/DocumentListView.vue'), resolve('src/views/knowledge/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
 })
 
 test('reference audit detects deleted callbacks in watchers, lifecycle, expose and template events', () => {

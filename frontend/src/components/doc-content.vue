@@ -1324,7 +1324,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               {{ $t('knowledgeBase.reprocess') }}
             </t-button>
           </div>
-          <KnowledgeClassification :knowledge="details" @open-entity="emit('openEntity', $event)" />
+          <KnowledgeClassification :knowledge="details" followable @open-entity="emit('openEntity', $event)" />
           <KnowledgeArticleJudgments v-if="canReprocess && !isIntakeRejected" :knowledge="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('knowledgeBase.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('knowledgeBase.parsingFailed') }}</p>

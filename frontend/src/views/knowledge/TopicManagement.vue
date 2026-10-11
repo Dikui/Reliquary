@@ -3,9 +3,12 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SafeTextarea from '@/components/SafeTextarea.vue'
+import FollowToggle from '@/components/FollowToggle.vue'
+import { useFollowStore } from '@/stores/follows'
 import { createTopic, deleteTopic, getTopicBackfill, listTopics, retryTopicBackfill, updateTopic, type Topic, type TopicBackfill } from '@/api/topics'
 
 const { t } = useI18n()
+const followStore = useFollowStore()
 const topics = ref<Topic[]>([]), loading = ref(false), error = ref('')
 const progress = reactive<Record<string, TopicBackfill | null>>({})
 const progressErrors = reactive<Record<string, string>>({}), retrying = reactive<Record<string, boolean>>({})
@@ -83,6 +86,7 @@ async function remove() {
     deleteTarget.value = null
     delete progress[id]
     MessagePlugin.success(t('topicManagement.deleted'))
+    await followStore.refreshAfterTargetChange()
     await load()
   } catch { deleteError.value = t('topicManagement.deleteFailed') }
   finally { deleting.value = false }
@@ -124,7 +128,7 @@ onUnmounted(() => { disposed = true; generation++; clearTimeout(pollTimer) })
             <li v-for="batch in progress[topic.id]!.batches!.filter(batch => batch.status === 'failed')" :key="batch.id">{{ t('topicManagement.batchFailure', { ordinal: batch.ordinal, count: batch.article_count, attempts: batch.attempts, reason: batch.error || t('common.error') }) }}</li>
           </ul>
           <div v-if="progressErrors[topic.id]" class="topic-error" role="alert">{{ progressErrors[topic.id] }} <t-button size="small" variant="text" @click="readProgress(topic.id).then(schedulePoll)">{{ t('common.retry') }}</t-button></div>
-          <div class="topic-actions"><t-button size="small" variant="outline" @click="openEditor(topic)">{{ t('topicManagement.edit') }}</t-button><t-button size="small" variant="text" theme="danger" @click="requestDelete(topic)">{{ t('common.delete') }}</t-button></div>
+          <div class="topic-actions"><FollowToggle target-type="topic" :target-id="topic.id" :name="topic.name" /><t-button size="small" variant="outline" @click="openEditor(topic)">{{ t('topicManagement.edit') }}</t-button><t-button size="small" variant="text" theme="danger" @click="requestDelete(topic)">{{ t('common.delete') }}</t-button></div>
         </li>
       </ul>
       <t-empty v-else-if="!loading && !error" :description="t('topicManagement.empty')" />
@@ -156,7 +160,7 @@ onUnmounted(() => { disposed = true; generation++; clearTimeout(pollTimer) })
 .topic-description { margin: 12px 0; line-height: 1.7; white-space: pre-wrap; }
 .topic-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; color: var(--td-text-color-secondary); font-size: 13px; }
 .topic-progress progress { width: 160px; accent-color: var(--td-brand-color); }
-.topic-actions { display: flex; gap: 12px; margin-top: 16px; }
+.topic-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .topic-form, .topic-form label { display: grid; gap: 8px; }
 .topic-form { gap: 16px; }
 .topic-error { color: var(--td-error-color); font-size: 13px; line-height: 1.7; }

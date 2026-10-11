@@ -277,6 +277,7 @@ const starredOptions = computed(() => [
 ]);
 const contentTypeOptions = computed(() => [...CONTENT_TYPES, 'unclassified'].map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })));
 const selectedEntityId = ref('');
+watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
 const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeKbTab.value = 'entities'; closeDoc(); };
 const fileTypeOptions = computed(() => [
   { label: t('knowledgeBase.allFileTypes'), value: '' },

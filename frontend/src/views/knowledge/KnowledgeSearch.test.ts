@@ -55,7 +55,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   assert.deepEqual(warnings, []); assert.deepEqual(errors, [])
   return html
 }
-const classificationModules = { '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
+const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
 function articleComponent() {
   return component('../../components/KnowledgeSearchArticle.vue', {
     './KnowledgeClassification.vue': moduleOf(component('../../components/KnowledgeClassification.vue', classificationModules)),

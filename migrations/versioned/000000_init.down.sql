@@ -3,6 +3,8 @@ DROP INDEX IF EXISTS public.idx_knowledge_bases_active_tenant;
 -- Source: 45daf07. Existing databases must be rebuilt before applying this baseline.
 
 BEGIN;
+DROP TRIGGER IF EXISTS set_follow_ready_at ON public.knowledges;
+DROP FUNCTION IF EXISTS public.set_follow_ready_at();
 DROP INDEX IF EXISTS public.knowledges_vault_path_unique;
 DROP TRIGGER IF EXISTS set_knowledge_search_header ON public.knowledges;
 DROP TRIGGER IF EXISTS sync_article_search_entities ON public.knowledge_entities;
@@ -22,6 +24,9 @@ DROP TABLE IF EXISTS public.article_embeddings;
 
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;
+DROP INDEX IF EXISTS public.idx_knowledges_follow_feed;
+DROP TABLE IF EXISTS public.follow_feed_states;
+DROP TABLE IF EXISTS public.follows;
 DROP INDEX IF EXISTS public.idx_knowledges_processing_review;
 DROP TABLE IF EXISTS public.operation_logs;
 DROP TABLE IF EXISTS public.topic_backfill_batches;
