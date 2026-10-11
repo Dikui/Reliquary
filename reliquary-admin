@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# One entry point for maintenance, migration and model preparation.
+set -Eeuo pipefail
+admin_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+exec python3 "$admin_root/scripts/reliquary_admin.py" "$@"

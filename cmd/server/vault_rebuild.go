@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"os/signal"
 
 	"reliquary/internal/container"
+	"reliquary/internal/logger"
 )
 
 func runVaultRebuild(output io.Writer) error {
+	logger.SetOutput(os.Stderr)
 	ctx, cancel := signal.NotifyContext(context.Background(), shutdownSignals...)
 	defer cancel()
 	result, err := container.RebuildVault(ctx)

@@ -31,7 +31,8 @@ type RouterParams struct {
 	ModelService                 interfaces.ModelService
 	KBHandler                    *handler.KnowledgeBaseHandler
 	KnowledgeHandler             *handler.KnowledgeHandler
-	VaultHandler                 *handler.VaultHandler `optional:"true"`
+	VaultHandler                 *handler.VaultHandler       `optional:"true"`
+	MaintenanceHandler           *handler.MaintenanceHandler `optional:"true"`
 	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
 	EntityHandler                *handler.EntityHandler
 	EmbeddingRebuildHandler      *handler.EmbeddingRebuildHandler `optional:"true"`
@@ -109,6 +110,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantAPIKeyService))
+	if params.MaintenanceHandler != nil {
+		r.Use(params.MaintenanceHandler.CollectionGate)
+	}
 	if params.MCPHandler != nil {
 		r.Any("/mcp", gin.WrapH(params.MCPHandler))
 	}
@@ -141,6 +145,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 			v1.GET("/vault/status", params.VaultHandler.Status)
 			v1.POST("/reports", params.VaultHandler.CreateReport)
 			v1.GET("/knowledge/:id/vault-attachment", accessGuards.KBExistsFromKnowledgeIDParam("id"), params.VaultHandler.Attachment)
+		}
+		if params.MaintenanceHandler != nil {
+			v1.GET("/maintenance/status", params.MaintenanceHandler.Status)
+			v1.PUT("/maintenance/configure", params.MaintenanceHandler.Configure)
 		}
 		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
 		v1.GET("/knowledge-search/options", params.KnowledgeSearchHandler.Options)

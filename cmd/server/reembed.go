@@ -16,6 +16,9 @@ func parseReembedArgs(args []string) (action, runID string, err error) {
 	if len(args) == 0 {
 		return "start", "", nil
 	}
+	if len(args) == 1 && args[0] == "--preserve-entity-timestamps" {
+		return "maintenance_start", "", nil
+	}
 	if len(args) == 2 && args[1] != "" {
 		if args[0] == "--resume" {
 			return "resume", args[1], nil
@@ -24,7 +27,7 @@ func parseReembedArgs(args []string) (action, runID string, err error) {
 			return "retry_failed", args[1], nil
 		}
 	}
-	return "", "", errors.New("usage: server reembed [--resume RUN_ID|--retry-failed RUN_ID]")
+	return "", "", errors.New("usage: server reembed [--preserve-entity-timestamps|--resume RUN_ID|--retry-failed RUN_ID]")
 }
 
 func runReembed(args []string, output io.Writer) error {

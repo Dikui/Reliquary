@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
@@ -214,3 +214,15 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     finally { view.app.unmount() }
   })
 }
+
+test('migration account relogin page submits only the existing account identity',async()=>{
+ const previous=globalThis.window
+ globalThis.window={open:()=>({opener:{},location:{replace(){}},close(){}})} as any
+ const view=await mount('zh-CN',{accounts:[{...account,status:'needs_login'}]})
+ try {
+  await view.state.signIn(account.id)
+  const request=view.calls.find(x=>x.path==='/api/v1/chatgpt/login')!
+  assert.deepEqual(request.body,{account_id:account.id})
+  if(process.env.RELIQUARY_RECOVERY_REQUESTS)appendFileSync(process.env.RELIQUARY_RECOVERY_REQUESTS,JSON.stringify({kind:'chatgpt_login',method:'POST',body:request.body})+'\n')
+ }finally{view.app.unmount();globalThis.window=previous}
+})

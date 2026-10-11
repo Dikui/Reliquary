@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -168,22 +169,26 @@ func (h *DataSourceHandler) UpdateDataSource(c *gin.Context) {
 
 	id := c.Param("id")
 
-	var req types.DataSource
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var patch map[string]json.RawMessage
+	if err := c.ShouldBindJSON(&patch); err != nil || patch == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-
 	existing, status, msg := h.getOwnedDataSource(ctx, tenantID, id)
 	if status != http.StatusOK {
 		c.JSON(status, gin.H{"error": msg})
+		return
+	}
+	req, err := dataSourceUpdateFields(existing, patch)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
 
 	req.ID = id
 	req.TenantID = existing.TenantID
 	req.KnowledgeBaseID = existing.KnowledgeBaseID
-	ds, err := h.service.UpdateDataSource(ctx, &req)
+	ds, err := h.service.UpdateDataSource(ctx, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

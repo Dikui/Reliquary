@@ -1,0 +1,290 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"crypto/md5"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"reliquary/internal/maintenance"
+	"reliquary/internal/types"
+)
+
+func (v *VaultService) StartReplica() error {
+	if v.replica == nil {
+		return nil
+	}
+	return v.replica.Start()
+}
+
+// Flush is the common barrier for shutdown, backup and migration. The caller
+// first pauses intake and stops writes; this then persists all database headers.
+func (v *VaultService) Flush(ctx context.Context) error {
+	var ids []string
+	if err := v.db.WithContext(ctx).Model(&types.Knowledge{}).Where("source_kind='article' AND vault_path<>'' AND parse_status<>'deleting'").Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := v.RefreshHeader(ctx, id); err != nil {
+			return err
+		}
+	}
+	if v.replica != nil {
+		return v.replica.Flush(ctx)
+	}
+	return nil
+}
+
+func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Verification, error) {
+	result := &maintenance.Verification{OK: true, Differences: []string{}, Repaired: []string{}}
+	var pendingImages int64
+	var articles []types.Knowledge
+	if err := v.db.WithContext(ctx).Unscoped().Where("vault_path<>'' AND deleted_at IS NULL").Find(&articles).Error; err != nil {
+		return result, err
+	}
+	for _, article := range articles {
+		path, err := vaultAbsolute(v.root, article.VaultPath)
+		if err != nil {
+			return result, err
+		}
+		actual, readErr := os.ReadFile(path)
+		if article.SourceKind != "article" {
+			if readErr != nil {
+				result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
+			} else if article.FileHash != "" && vaultContentHash(string(actual)) != article.FileHash {
+				result.Differences = append(result.Differences, article.VaultPath+": user file differs from indexed hash")
+			}
+			continue
+		}
+		header, err := v.articleHeader(ctx, &article)
+		if err != nil {
+			return result, err
+		}
+		body := []byte(article.VaultBody)
+		if article.ProcessingMode == types.ProcessingModeSummaryOnly {
+			body = nil
+		}
+		expected := append(RenderVaultArticleHeader(header), body...)
+		if readErr != nil || !bytes.Equal(actual, expected) {
+			if repair {
+				if err := v.atomicArticleWrite(path, RenderVaultArticleHeader(header), body, nil); err != nil {
+					return result, err
+				}
+				result.Repaired = append(result.Repaired, article.VaultPath)
+			} else {
+				result.Differences = append(result.Differences, article.VaultPath+": article file differs from database")
+			}
+		}
+		if article.VaultOriginalPath != "" {
+			path, err := vaultAbsolute(v.root, article.VaultOriginalPath)
+			if err != nil {
+				return result, err
+			}
+			if original, err := os.ReadFile(path); err != nil {
+				result.Differences = append(result.Differences, article.VaultOriginalPath+": "+err.Error())
+			} else if article.Type == "file" && len(article.FileHash) == 32 && fmt.Sprintf("%x", md5.Sum(original)) != article.FileHash {
+				result.Differences = append(result.Differences, article.VaultOriginalPath+": original attachment hash differs")
+			}
+		}
+		for _, reference := range articleImagePaths(&article) {
+			reader, err := v.ReadImage(&article, reference)
+			if err != nil {
+				result.Differences = append(result.Differences, article.VaultPath+": image missing: "+reference)
+				continue
+			}
+			data, readErr := io.ReadAll(reader)
+			reader.Close()
+			if readErr != nil {
+				return result, readErr
+			}
+			hash := fmt.Sprintf("%x", sha256.Sum256(data))
+			name := filepath.Base(reference)
+			if strings.HasPrefix(name, "image-") && len(name) >= 22 && name[6:22] != hash[:16] {
+				result.Differences = append(result.Differences, article.VaultPath+": image content hash differs: "+reference)
+			}
+			var expected string
+			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("knowledge_id=? AND attachment_path=? AND model_id=(SELECT COALESCE(NULLIF(model_tiers->>'embedding',''),embedding_model_id) FROM knowledge_bases WHERE id=?)", article.ID, reference, article.KnowledgeBaseID).Scan(&expected).Error; err != nil {
+				return result, err
+			}
+			if expected != "" && expected != hash {
+				result.Differences = append(result.Differences, article.VaultPath+": indexed image hash differs: "+reference)
+			}
+			if expected == "" {
+				var supports bool
+				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM knowledge_bases b JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id) WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.KnowledgeBaseID).Scan(&supports).Error; err != nil {
+					return result, err
+				}
+				if supports {
+					pendingImages++
+				}
+			}
+		}
+	}
+	if uploads := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR")); uploads != "" {
+		var resources []types.StoredResource
+		if err := v.db.WithContext(ctx).Where("provider='local' AND state='active' AND deleted_at IS NULL").Find(&resources).Error; err != nil {
+			return result, err
+		}
+		for _, resource := range resources {
+			relative := strings.TrimPrefix(resource.PhysicalPath, "local://")
+			if filepath.IsAbs(relative) {
+				resolved, err := filepath.Rel(uploads, relative)
+				if err != nil {
+					return result, err
+				}
+				relative = resolved
+			}
+			path, err := maintenance.SafePath(uploads, relative)
+			if err != nil {
+				return result, err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				result.Differences = append(result.Differences, "upload missing: "+relative)
+				continue
+			}
+			if resource.Size > 0 && int64(len(data)) != resource.Size {
+				result.Differences = append(result.Differences, "upload size differs: "+relative)
+			}
+			if resource.ContentHash != "" && fmt.Sprintf("%x", sha256.Sum256(data)) != resource.ContentHash {
+				result.Differences = append(result.Differences, "upload content hash differs: "+relative)
+			}
+		}
+	}
+	if v.replica != nil {
+		replica, err := maintenance.VerifyReplica(ctx, v.db, v.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), repair)
+		if err != nil {
+			return result, err
+		}
+		result.Differences = append(result.Differences, replica.Differences...)
+		result.Repaired = append(result.Repaired, replica.Repaired...)
+	}
+	result.OK = len(result.Differences) == 0
+	result.PendingVectors = map[string]int64{}
+	if pendingImages > 0 {
+		result.PendingVectors["images"] = pendingImages
+	}
+	for key, query := range map[string]string{
+		"articles": `SELECT count(*) FROM knowledges k JOIN knowledge_bases b ON b.id=k.knowledge_base_id WHERE k.deleted_at IS NULL AND k.source_kind='article' AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.knowledge_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"chunks":   `SELECT count(*) FROM chunks c JOIN knowledge_bases b ON b.id=c.knowledge_base_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
+ SELECT 1 FROM knowledge_bases b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
+ WHERE b.tenant_id=e.tenant_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
+ e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
+ OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
+ OR (COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0)>0
+ AND e.embedding_dimension<>COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0))))`,
+	} {
+		var count int64
+		if err := v.db.WithContext(ctx).Raw(query).Scan(&count).Error; err != nil {
+			return result, err
+		}
+		if count > 0 {
+			result.PendingVectors[key] = count
+		}
+	}
+	return result, nil
+}
+
+func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuildResult, error) {
+	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
+	_, err := maintenance.Import(ctx, s.db, s.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), func(row map[string]any) error {
+		path, _ := row["vault_path"].(string)
+		if path == "" {
+			return nil
+		}
+		abs, err := vaultAbsolute(s.root, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			return fmt.Errorf("restore original %s: %w", path, err)
+		}
+		if row["source_kind"] != "article" {
+			row["vault_body"] = ""
+			return nil
+		}
+		header, body, err := ParseVaultArticle(data)
+		if err != nil {
+			return err
+		}
+		if err := validateVaultRebuildHeader(header, body); err != nil {
+			return err
+		}
+		if fmt.Sprint(row["id"]) != header.ID {
+			return fmt.Errorf("article ID differs from replica: %s", path)
+		}
+		// Both readable copies must agree before any row is inserted.
+		checks := map[string]any{"title": header.Title, "content_type": header.ContentType, "source_unverified": header.SourceUnverified, "starred": header.Starred, "collect_reason": header.CollectReason}
+		for key, value := range checks {
+			if row[key] != value {
+				return fmt.Errorf("article header %s differs from replica field %s", path, key)
+			}
+		}
+		if header.ProcessingMode == types.ProcessingModeSummaryOnly {
+			body = nil
+		}
+		row["vault_body"] = string(body)
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := maintenance.VerifyImportedReplica(ctx, s.db, s.root); err != nil {
+		return result, err
+	}
+	ctx, kb, err := s.scope(ctx)
+	if err != nil {
+		return result, err
+	}
+	// Keyword reconstruction works while model credentials are being entered.
+	// Available-model vector rebuilding is a separate explicit maintenance step.
+	indexing := *kb
+	indexing.IndexingStrategy.VectorEnabled = false
+	var articles []types.Knowledge
+	if err := s.db.WithContext(ctx).Where("vault_path<>'' AND parse_status=?", types.ParseStatusCompleted).Find(&articles).Error; err != nil {
+		return result, err
+	}
+	for i := range articles {
+		article := &articles[i]
+		path, err := vaultAbsolute(s.root, article.VaultPath)
+		if err != nil {
+			return result, err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return result, err
+		}
+		body := string(data)
+		if article.SourceKind == "article" {
+			_, content, err := SplitVaultArticle(data)
+			if err != nil {
+				return result, err
+			}
+			body = string(content)
+			result.Articles++
+		} else if article.SourceKind == "mine" {
+			result.Mine++
+		} else {
+			result.Reports++
+		}
+		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.SourceKind == "article" {
+			continue
+		}
+		if err := s.indexVaultChunks(ctx, &indexing, article, body); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
+}
+
+func HasVaultReplica(root string) bool {
+	_, err := os.Stat(filepath.Join(root, ".reliquary", "manifest.json"))
+	return err == nil
+}

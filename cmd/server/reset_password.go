@@ -27,6 +27,9 @@ func runServerCommand(args []string, input io.Reader, output io.Writer) (bool, e
 	if len(args) == 0 {
 		return false, nil
 	}
+	if args[0] == "maintenance" {
+		return true, runMaintenance(args[1:], input, output)
+	}
 	if len(args) == 1 && args[0] == "vault-rebuild" {
 		return true, runVaultRebuild(output)
 	}

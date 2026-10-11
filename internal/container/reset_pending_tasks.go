@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/gorm"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -15,6 +16,14 @@ const resetPendingStaleWindow = 30 * time.Minute
 // PostgreSQL persists background tasks. Housekeeping checks their queue
 // and span activity, so startup must preserve those rows across replicas.
 func resetPendingTasks(db *gorm.DB) {
+	paused, err := maintenanceops.SnapshotPaused(context.Background(), db)
+	if err != nil {
+		logger.Warnf(context.Background(), "Cannot reset sync tasks without maintenance status: %v", err)
+		return
+	}
+	if paused {
+		return
+	}
 	now := time.Now()
 	result := db.Model(&types.SyncLog{}).
 		Where("status = ? AND started_at < ?", types.SyncLogStatusRunning, now.Add(-resetPendingStaleWindow)).

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
@@ -28,7 +28,7 @@ const template = compileTemplate({
 assert.deepEqual(template.errors, [])
 const stub = defineComponent({ setup(_, { slots }) { return () => h('div', slots.default?.()) } })
 
-async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promise<void>, options: { baseUrl?: string; origin?: string } = {}) {
+async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promise<void>, options: { baseUrl?: string; origin?: string; keys?: unknown[] } = {}) {
   const requests: Array<{ id?: number; payload: object }> = []
   const copies: Array<{ value: string; successKey: string }> = []
   const buttons: Array<{ label: unknown; click: (() => unknown) | undefined }> = []
@@ -42,7 +42,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     '@/utils/knowledgeSearch': searchHelpers,
     '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     '@/api/tenant': {
-      listTenantAPIKeys: async () => ({ success: true, data: [] }),
+      listTenantAPIKeys: async () => ({ success: true, data: options.keys ?? [] }),
       createTenantAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'token' } } },
       updateTenantAPIKey: async (id: number, payload: object) => { requests.push({ id, payload }); return { success: true } },
     },
@@ -73,11 +73,12 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     return () => h(DatePicker, { ...attrs, ...props })
   } })
   const app = createSSRApp({ render: () => h(ConfigProvider, { globalConfig: localeConfigs[locale] }, () => h(component)) })
-  for (const name of ['t-form', 't-form-item', 't-icon', 't-alert', 't-empty', 't-loading', 't-table', 't-textarea', 't-select']) app.component(name, stub)
+  for (const name of ['t-form', 't-form-item', 't-icon', 't-alert', 't-empty', 't-loading', 't-textarea', 't-select']) app.component(name, stub)
   app.component('t-button', defineComponent({ setup(_, { attrs, slots }) {
     buttons.push({ label: attrs['aria-label'], click: attrs.onClick as (() => unknown) | undefined })
     return () => h('button', attrs, slots.default?.())
   } }))
+  app.component('t-table', defineComponent({ props: ['data'], setup(props, { slots }) { return () => h('section', { 'data-api-key-table': '' }, props.data?.map((row: unknown) => h('div', Object.values(slots).flatMap(slot => slot?.({ row }) ?? [])))) } }))
   app.component('t-input', Input)
   app.component('t-date-picker', picker)
   const warnings: string[] = []
@@ -249,3 +250,20 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     function messagesFor(value: typeof locale) { return value === 'zh-CN' ? '检索' : 'Search' }
   })
 }
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+ test(`${locale}: restored API keys load as invalidated and offer regeneration`, async () => {
+  const copy = (locale === 'zh-CN' ? zh : en).integrations.api
+  const result = await scenario(locale, async state => { await state.load() }, { keys: [{id: 15, name: 'Old collector', api_key: '', status: 'migration_invalidated', created_at: '2026-01-01'}] })
+  assert.ok(result.html.includes(copy.migrationInvalidated)); assert.ok(result.html.includes(copy.regenerateMigratedKey)); assert.ok(!result.html.match(/data-api-key-table[^>]*>([\s\S]*?)<\/section>/)?.[1].includes(copy.apiKeyNeverExpires))
+  result.state.openCreate(); assert.equal(result.state.editingId.value, null)
+ })
+}
+
+test('migration replacement Key page save creates only the requested name',async()=>{
+ const {requests}=await scenario('zh-CN',async state=>{
+  await state.load();state.openCreate();state.form.name='Replacement collector';await state.save()
+ },{keys:[{id:1,name:'Old collector',status:'migration_invalidated'}]})
+ assert.deepEqual(requests,[{payload:{name:'Replacement collector'}}])
+ if(process.env.RELIQUARY_RECOVERY_REQUESTS)appendFileSync(process.env.RELIQUARY_RECOVERY_REQUESTS,JSON.stringify({kind:'new_api_key',method:'POST',body:requests[0].payload})+'\n')
+})

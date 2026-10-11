@@ -17,6 +17,7 @@ import (
 
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -96,6 +97,14 @@ func (h *HousekeepingService) Stop() {
 // runSweep is exported on the type for testability — tests can drive a
 // single sweep without waiting for the cron tick.
 func (h *HousekeepingService) runSweep(ctx context.Context) {
+	paused, err := maintenanceops.SnapshotPaused(ctx, h.db)
+	if err != nil {
+		logger.Warnf(ctx, "[Housekeeping] maintenance status unavailable: %v", err)
+		return
+	}
+	if paused {
+		return
+	}
 	threshold := h.staleThreshold()
 	cutoff := time.Now().Add(-threshold)
 

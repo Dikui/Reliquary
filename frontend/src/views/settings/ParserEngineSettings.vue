@@ -246,6 +246,7 @@
 </template>
 
 <script setup lang="ts">
+import { changedSettings } from '@/utils/settingsPatch'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -376,10 +377,13 @@ async function loadEngines() {
   }
 }
 
+const loadedConfig = ref<ParserEngineConfig>({})
+const loadedConfigForm = ref<ParserEngineConfig>({})
 async function loadConfig() {
   try {
     const res = await getParserEngineConfig()
     const data = res?.data
+    loadedConfig.value = { ...data }
     config.value = {
       mineru_endpoint: data?.mineru_endpoint ?? DEFAULT_PARSER_CONFIG.mineru_endpoint ?? '',
       mineru_api_key: data?.mineru_api_key ?? DEFAULT_PARSER_CONFIG.mineru_api_key ?? '',
@@ -396,6 +400,7 @@ async function loadConfig() {
       mineru_cloud_enable_ocr: data?.mineru_cloud_enable_ocr ?? DEFAULT_PARSER_CONFIG.mineru_cloud_enable_ocr ?? true,
       mineru_cloud_language: data?.mineru_cloud_language ?? DEFAULT_PARSER_CONFIG.mineru_cloud_language ?? 'ch',
     }
+    loadedConfigForm.value = buildConfigPayload()
   } catch {
     config.value = { ...DEFAULT_PARSER_CONFIG }
   }
@@ -467,7 +472,10 @@ async function onSave() {
   saving.value = true
   saveMessage.value = ''
   try {
-    await updateParserEngineConfig(buildConfigPayload())
+    const payload = { ...loadedConfig.value, ...changedSettings(loadedConfigForm.value, buildConfigPayload()) }
+    await updateParserEngineConfig(payload)
+    loadedConfig.value = payload
+    loadedConfigForm.value = buildConfigPayload()
     saveSuccess.value = true
     saveMessage.value = t('settings.parser.saveSuccess')
     drawerVisible.value = false

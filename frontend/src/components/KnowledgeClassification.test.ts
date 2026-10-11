@@ -1,3 +1,4 @@
+import { changedSettings } from '../utils/settingsPatch'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -117,6 +118,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: RSS editor renders all defaults and submits the selected content type`, async () => {
     const requests: Record<string, unknown>[] = []
     const editor = component('../views/knowledge/settings/DataSourceEditorDialog.vue', {
+      '@/utils/settingsPatch': { changedSettings },
       '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/components/SafeTextarea.vue': safeTextareaTestModule,
       '@/components/settings/SettingDrawer.vue': { __esModule: true, default: defineComponent({ setup: (_props, { slots }) => () => h('div', slots.default?.()) }) },
       'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {} } },

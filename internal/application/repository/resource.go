@@ -112,6 +112,6 @@ func (r *resourceRepository) GetValidGrant(
 // for the same resource and window from re-creating the row and reviving access.
 func (r *resourceRepository) DeleteExpiredGrants(ctx context.Context, before time.Time) error {
 	return r.db.WithContext(ctx).
-		Where("expires_at <= ?", before).
+		Where("expires_at <= ? AND token_hash NOT LIKE ?", before, types.MaintenanceExcludedCredentialPrefix+"%").
 		Delete(&types.ResourceAccessGrant{}).Error
 }

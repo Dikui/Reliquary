@@ -42,9 +42,10 @@ func (t ModelType) IsSupported() bool {
 type ModelStatus string
 
 const (
-	ModelStatusActive         ModelStatus = "active"          // Model is active
-	ModelStatusDownloading    ModelStatus = "downloading"     // Model is downloading
-	ModelStatusDownloadFailed ModelStatus = "download_failed" // Model download failed
+	ModelStatusActive             ModelStatus = "active"              // Model is active
+	ModelStatusDownloading        ModelStatus = "downloading"         // Model is downloading
+	ModelStatusDownloadFailed     ModelStatus = "download_failed"     // Model download failed
+	ModelStatusNeedsConfiguration ModelStatus = "needs_configuration" // Migration removed required credentials.
 )
 
 // ModelUsageBinding is a stable API identifier for one configuration field

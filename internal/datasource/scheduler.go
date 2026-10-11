@@ -13,6 +13,7 @@ import (
 	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -144,6 +145,10 @@ func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 		logger.Infof(ctx, "[Scheduler] skipping sync for ds=%s (not active or not found)", dataSourceID)
 		return
 	}
+	if missing, err := ds.MissingMaintenanceFields(); err != nil || len(missing) > 0 {
+		logger.Infof(ctx, "[Scheduler] skipping sync for ds=%s until maintenance configuration is complete", dataSourceID)
+		return
+	}
 
 	// Layer 1: prevent overlap with a still-running sync
 	if running, _ := s.syncLogRepo.HasRunningSync(ctx, dataSourceID); running {
@@ -217,12 +222,21 @@ func (s *Scheduler) triggerSyncTx(ctx context.Context, id string, tenantID uint6
 		return fmt.Errorf("scheduler requires a transactional task enqueuer")
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+			if maintenanceops.IsPausedError(err) {
+				return nil
+			}
+			return err
+		}
 		var ds types.DataSource
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Take(&ds).Error; err != nil {
 			return err
 		}
 		if ds.Status != types.DataSourceStatusActive {
 			return nil
+		}
+		if missing, err := ds.MissingMaintenanceFields(); err != nil || len(missing) > 0 {
+			return err
 		}
 		var running int64
 		if err := tx.Model(&types.SyncLog{}).Where("data_source_id = ? AND status = ?", id, types.SyncLogStatusRunning).Count(&running).Error; err != nil {

@@ -261,7 +261,7 @@ func TestVaultArticleHeaderRewritePreservesBodyAndRejectsHashMismatch(t *testing
 	v.articles.beforeTempWrite = nil
 }
 
-func TestVaultArticleDebounceWritesOnceAndCloseCancelsQueuedTasks(t *testing.T) {
+func TestVaultArticleDebounceWritesOnceAndCloseFlushesQueuedTasks(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	k := h.upload(t, "去抖", "# Debounce\n\nThe trailing timer coalesces changes without modifying the source body.")
 	before := vaultWriteCount(v)
@@ -276,7 +276,9 @@ func TestVaultArticleDebounceWritesOnceAndCloseCancelsQueuedTasks(t *testing.T) 
 	v.ScheduleRefresh(h.ctx, k.ID)
 	require.NoError(t, v.Close())
 	time.Sleep(60 * time.Millisecond)
-	require.Equal(t, before+1, vaultWriteCount(v))
+	require.Equal(t, before+2, vaultWriteCount(v))
+	_, header, _ := readVaultArticle(t, v, k)
+	require.Contains(t, string(header), "starred: true")
 }
 
 func TestVaultEntityMergeAndRenameRefreshEveryRelatedArticle(t *testing.T) {

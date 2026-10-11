@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
@@ -72,6 +72,11 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
     new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
     return module.exports
   }
+  modules['@i18n'] = i18n
+  modules['@/i18n'] = { __esModule:true,default:i18n }
+  modules['./modelUsage'] = evaluate(readFileSync(new URL('../api/model/modelUsage.ts',import.meta.url),'utf8'))
+  modules['../../utils/request'] = { put: async(path:string,body:any)=>{ if(process.env.RELIQUARY_RECOVERY_REQUESTS)appendFileSync(process.env.RELIQUARY_RECOVERY_REQUESTS,JSON.stringify({kind:'model_credentials',method:'PUT',path,body})+'\n');return {data:{fields:{api_key:{configured:true}}}} } }
+  modules['@/api/model'] = evaluate(readFileSync(new URL('../api/model/index.ts',import.meta.url),'utf8'))
   modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../api/chatgpt.ts', import.meta.url), 'utf8'))
   const component = evaluate(script.content).default
   component.ssrRender = evaluate(template.code).ssrRender
@@ -229,4 +234,15 @@ test('ChatGPT is unavailable to embedding and rerank model sources', async () =>
     assert.notEqual(state.formData.value.source, 'chatgpt'); assert.deepEqual(chatgptRequests, [])
     assert.doesNotMatch(html, /chatgpt-model-account/)
   }
+})
+
+test('restored model credential save uses only its subresource and unchanged editor confirm does not rewrite configuration', async()=>{
+ const modelData={id:'restored-model',modelName:'fixture-generation',source:'remote',provider:'generic',baseUrl:'http://localhost/v1',credentials:{api_key:{configured:false}}}
+ const {confirmed}=await renderEditor({modelData,scenario:async state=>{
+  state.formData.value={...state.formData.value,...modelData}
+  state.loadedConfiguration.value=state.configurationState()
+  assert.deepEqual(await state.credentialApi.value.save({api_key:'replacement'}),{api_key:{configured:true}})
+  await state.handleConfirm()
+ }})
+ assert.deepEqual(confirmed,[])
 })

@@ -505,6 +505,12 @@ func (v *VaultService) Close() error {
 	}
 	v.articles.mu.Unlock()
 	v.articles.wg.Wait()
+	if err := v.Flush(context.Background()); err != nil {
+		return err
+	}
+	if v.replica != nil {
+		return v.replica.Close()
+	}
 	return nil
 }
 

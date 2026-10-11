@@ -2,7 +2,9 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/panjf2000/ants/v2"
 	"reliquary/internal/application/repository"
@@ -14,7 +16,7 @@ import (
 
 // Reembed runs synchronously for CLI use with the same persistent checkpoints
 // as the background settings task. It does not start HTTP or background workers.
-func Reembed(ctx context.Context, action, runID string, progress func(*types.EmbeddingRebuildRun)) (*types.EmbeddingRebuildStatus, error) {
+func Reembed(ctx context.Context, action, runID string, progress func(*types.EmbeddingRebuildRun)) (result *types.EmbeddingRebuildStatus, resultErr error) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, err
@@ -43,7 +45,18 @@ func Reembed(ctx context.Context, action, runID string, progress func(*types.Emb
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		// Offline commands have no running replica writer. Persist every audit
+		// checkpoint before the process exits, including failure and Ctrl+C.
+		flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		defer cancel()
+		resultErr = errors.Join(resultErr, vault.Flush(flushCtx), vault.Close())
+	}()
 	rebuilder := service.NewEmbeddingRebuilder(db, models, nil, vault)
+	if action == "maintenance_start" {
+		rebuilder.PreserveEntityProfileTimestamps(true)
+		action = "start"
+	}
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
 	switch action {
 	case "start":

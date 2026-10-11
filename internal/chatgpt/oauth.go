@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/types"
 	"reliquary/internal/utils"
 )
 
@@ -139,7 +140,8 @@ func (m *Manager) BeginLogin(ctx context.Context, callbackURL, accountID string)
 	hash := sha256.Sum256([]byte(verifier))
 	query.Set("code_challenge", base64.RawURLEncoding.EncodeToString(hash[:]))
 	if err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("expires_at < ?", m.now()).Delete(&loginAttempt{}).Error; err != nil {
+		// Inactive restored markers preserve metadata, rather than an OAuth state.
+		if err := tx.Where("expires_at < ? AND state NOT LIKE ?", m.now(), types.MaintenanceExcludedCredentialPrefix+"%").Delete(&loginAttempt{}).Error; err != nil {
 			return err
 		}
 		return tx.Create(&attempt).Error

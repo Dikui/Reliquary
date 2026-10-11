@@ -37,7 +37,6 @@ import (
 	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/queue"
 	"reliquary/internal/router"
-	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
@@ -147,6 +146,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewKnowledgeBaseHandler))
 	must(container.Provide(handler.NewKnowledgeHandler))
 	must(container.Provide(handler.NewVaultHandler))
+	must(container.Provide(handler.NewMaintenanceHandler))
 	must(container.Provide(handler.NewKnowledgeSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewEmbeddingRebuildHandler))
@@ -155,7 +155,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewOperationLogHandler))
 	must(container.Provide(newMCPHandler))
 	must(container.Provide(handler.NewChunkHandler))
-	must(container.Provide(handler.NewModelHandler))
+	must(container.Provide(handler.NewModelHandlerWithMaintenance))
 	must(container.Provide(handler.NewChatGPTHandler))
 	must(container.Provide(handler.NewChatGPTPolicyHandler))
 	must(container.Provide(handler.NewInitializationHandler))
@@ -309,9 +309,8 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 			return nil, fmt.Errorf("database migration failed: %w", err)
 		}
 		syncSequences(db)
-		resetPendingTasks(db)
-		if err := types.LoadBuiltinModelsConfig(context.Background(), db, config.ConfigDir()); err != nil {
-			logger.Warnf(context.Background(), "Load builtin models config failed: %v", err)
+		if err := initializeRuntimeData(context.Background(), db, config.ConfigDir()); err != nil {
+			return nil, err
 		}
 	} else {
 		logger.Infof(context.Background(), "Auto-migration is disabled (AUTO_MIGRATE=false)")

@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/types"
 )
 
 func (m *Manager) replaceTokens(account *accountRecord, tokens *tokenResponse, old credentials) error {
@@ -194,7 +195,7 @@ func (m *Manager) Logout(ctx context.Context, accountID string) (*LogoutResult, 
 		}
 		account.ExpiresAt, account.EarliestRefreshAt = nil, nil
 		account.UpdatedAt = m.now().UTC()
-		if err := tx.Where("account_id = ?", accountID).Delete(&loginAttempt{}).Error; err != nil {
+		if err := tx.Where("account_id = ? AND state NOT LIKE ?", accountID, types.MaintenanceExcludedCredentialPrefix+"%").Delete(&loginAttempt{}).Error; err != nil {
 			return err
 		}
 		return tx.Save(&account).Error

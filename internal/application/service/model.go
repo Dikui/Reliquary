@@ -13,6 +13,7 @@ import (
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
@@ -173,6 +174,18 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 	}
 
 	logger.Infof(ctx, "Model found, name: %s, status: %s", model.Name, model.Status)
+	// A migration-paused model remains editable so the user can restore its
+	// credentials and custom headers. Runtime adapter getters reject it below.
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		if changed, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+			return nil, err
+		} else if changed {
+			if err := s.repo.Update(ctx, model); err != nil {
+				return nil, err
+			}
+		}
+		return model, nil
+	}
 
 	// Check model status
 	if model.Status == types.ModelStatusActive {
@@ -210,6 +223,17 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 	}
 
 	logger.Infof(ctx, "Retrieved %d models successfully", len(models))
+	for _, model := range models {
+		if model.Source == types.ModelSourceChatGPT {
+			if changed, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+				return nil, err
+			} else if changed {
+				if err := s.repo.Update(ctx, model); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	return models, nil
 }
 
@@ -271,6 +295,17 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 		model.IsBuiltin = true
 		model.ManagedBy = ""
 	}
+	preserveMaintenanceProvenance(model, existingModel)
+	if existingModel != nil && existingModel.Status == types.ModelStatusNeedsConfiguration {
+		model.Status = types.ModelStatusNeedsConfiguration
+		if model.Parameters.ExtraConfig == nil {
+			model.Parameters.ExtraConfig = map[string]string{}
+		}
+		model.Parameters.ExtraConfig[maintenanceRequiredFields] = existingModel.Parameters.ExtraConfig[maintenanceRequiredFields]
+		if _, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+			return err
+		}
+	}
 
 	// Configuration and vector invalidation commit together. A model ID can
 	// retain its dimensions while pointing at completely different weights.
@@ -286,6 +321,13 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 				return err
 			}
 			if !changed {
+				return nil
+			}
+			paused, err := maintenanceops.SnapshotPaused(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if paused {
 				return nil
 			}
 			return types.RetireEmbeddingVectors(ctx, tx, model.ID)
@@ -368,6 +410,9 @@ func (s *modelService) UpdateModelCredentials(
 	}
 	if !changed {
 		return existing, nil
+	}
+	if _, err := s.restoreMaintenanceModel(ctx, existing); err != nil {
+		return nil, err
 	}
 	if existing.IsBuiltin {
 		// Credential changes are also runtime overrides of YAML-managed data.
@@ -523,6 +568,9 @@ func (s *modelService) GetEmbeddingModel(ctx context.Context, modelId string) (e
 	}
 
 	logger.Infof(ctx, "Getting embedding model: %s, source: %s", model.Name, model.Source)
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
+	}
 
 	embedder, err := embedding.NewEmbedder(embedding.ConfigFromModel(model), s.pooler, s.ollamaService)
 	if err != nil {
@@ -550,6 +598,9 @@ func (s *modelService) GetRerankModel(ctx context.Context, modelId string) (rera
 	}
 
 	logger.Infof(ctx, "Getting rerank model: %s, source: %s", model.Name, model.Source)
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
+	}
 
 	reranker, err := rerank.NewReranker(rerank.ConfigFromModel(model, s.decryptAppSecret(model.Parameters.AppSecret)))
 	if err != nil {
@@ -591,6 +642,18 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 	}
 
 	logger.Infof(ctx, "Getting chat model: %s, source: %s", model.Name, model.Source)
+	if model.Status == types.ModelStatusNeedsConfiguration {
+		if changed, err := s.restoreMaintenanceModel(ctx, model); err != nil {
+			return nil, err
+		} else if changed {
+			if err := s.repo.Update(ctx, model); err != nil {
+				return nil, err
+			}
+		}
+		if model.Status == types.ModelStatusNeedsConfiguration {
+			return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
+		}
+	}
 
 	if model.Source == types.ModelSourceChatGPT {
 		return s.chatGPTModel(ctx, model)

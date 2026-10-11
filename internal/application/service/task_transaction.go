@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/file"
+	"reliquary/internal/maintenanceops"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -49,6 +50,9 @@ func knowledgeTaskTransaction[T any](ctx context.Context, s *knowledgeService, m
 	var storedPaths []string
 	var storedPathsMu sync.Mutex
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+			return err
+		}
 		copy := *s
 		copy.db = tx
 		copy.repo = repository.NewKnowledgeRepository(tx)

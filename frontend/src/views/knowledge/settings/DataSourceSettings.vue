@@ -266,7 +266,7 @@ onBeforeUnmount(stopPolling)
               <span class="ds-card__sep">·</span>
               <span class="ds-card__status" :class="`ds-card__status--${ds.status}`">
                 <span class="ds-status-dot" aria-hidden="true" />
-                {{ statusLabel(ds.status) }}
+                {{ ds.maintenance_required ? t('datasource.field.migrationCredentialsRequired') : statusLabel(ds.status) }}
               </span>
             </p>
             <p class="ds-card__detail">

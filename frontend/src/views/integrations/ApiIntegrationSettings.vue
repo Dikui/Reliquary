@@ -21,9 +21,9 @@
     <t-empty v-else-if="!keys.length" :description="t('integrations.api.noApiKeys')" />
     <div v-else class="api-table-shell">
       <t-table row-key="id" :data="keys" :columns="columns" :pagination="pagination" @page-change="onPageChange">
-        <template #api_key="{ row }"><code>{{ row.api_key }}</code></template>
-        <template #expires_at="{ row }">{{ row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
-        <template #actions="{ row }"><t-button variant="text" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</t-button><t-button theme="danger" variant="text" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</t-button></template>
+        <template #api_key="{ row }"><span v-if="row.status === 'migration_invalidated'">{{ t('integrations.api.migrationInvalidated') }}</span><code v-else>{{ row.api_key }}</code></template>
+        <template #expires_at="{ row }">{{ row.status === 'migration_invalidated' ? t('integrations.api.migrationInvalidated') : row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
+        <template #actions="{ row }"><t-button v-if="row.status === 'migration_invalidated'" variant="text" @click="openCreate">{{ t('integrations.api.regenerateMigratedKey') }}</t-button><t-button variant="text" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</t-button><t-button theme="danger" variant="text" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</t-button></template>
       </t-table>
     </div>
     <div class="setting-row">

@@ -9,6 +9,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import enUS from '../../i18n/locales/en-US'
 import zhCN from '../../i18n/locales/zh-CN'
+import { changedSettings } from '../../utils/settingsPatch'
 import { copyModelTiers } from '../../utils/modelTiers'
 
 const require = createRequire(import.meta.url)
@@ -27,11 +28,12 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
     'tdesign-vue-next': { MessagePlugin: { success() {} }, DialogPlugin: {} },
+    '@/utils/settingsPatch': { changedSettings },
     '@/utils/modelTiers': { copyModelTiers },
     '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: null }) },
     '@/stores/resources': { useResourcesStore: () => ({ allModels: [], ensureModels: async () => {}, invalidateKnowledgeBaseDetail() { requests.push({ cacheInvalidated: true }) } }) },
     '@/api/knowledge-base': {
-      getKnowledgeBase: async () => { requests.push({ method: 'get' }); return { success: true, data: { id: 'unique-kb', name: 'Knowledge Base', model_tiers: { generation: 'generation-old', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false }, indexing_strategy: { vector_enabled: true, keyword_enabled: true } } } },
+      getKnowledgeBase: async () => { requests.push({ method: 'get' }); return { success: true, data: { id: 'unique-kb', name: 'Knowledge Base', model_tiers: { generation: 'generation-old', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false, languages: null, parser_engine_rules: null }, indexing_strategy: { vector_enabled: true, keyword_enabled: true } } } },
       listKnowledgeFiles: async (id: string) => { requests.push({ articleListId: id }); return { data: [], total: 0 } },
       updateKnowledgeBase: async (body: unknown) => { requests.push({ method: 'put', body }); return failSave ? { success: false, message: 'Save unavailable' } : { success: true } },
     },
@@ -83,6 +85,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes('New image model'))
     assert.match(html, /<progress[^>]*value="4"[^>]*max="7"/)
     assert.equal(requests.find(item => item.method === 'put').body.config.model_tiers.embedding, 'embedding-new')
+    assert.deepEqual(Object.keys(requests.find(item=>item.method==='put').body.config),['model_tiers'])
     assert.equal(requests.filter(item => item.method === 'embedding-status').length, 1)
     assert.doesNotMatch(source, /:embedding-locked=/)
   })
@@ -102,6 +105,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(saves[0].body.config.model_tiers.generation, 'generation-new')
     assert.equal(saves[0].body.config.chunking_config.chunk_size, 128)
     assert.equal(saves[0].body.config.chunking_config.chunk_overlap, 0)
+    assert.equal(saves[0].body.config.chunking_config.languages,null)
+    assert.equal(saves[0].body.config.chunking_config.parser_engine_rules,null)
     assert.equal(saves[0].body.knowledge_base_id, undefined)
     assert.deepEqual(events, ['reliquary:knowledge-settings-saved'])
   })
@@ -117,3 +122,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.deepEqual(events, [])
   })
 }
+
+test('unchanged knowledge settings do not rewrite loaded null defaults', async () => {
+ const {requests}=await scenario('zh-CN',async state=>{await state.handleSubmit()})
+ assert.equal(requests.filter(x=>x.method==='put').length,0)
+})

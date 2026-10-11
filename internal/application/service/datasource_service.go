@@ -21,6 +21,7 @@ import (
 
 	"reliquary/internal/datasource"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -172,6 +173,12 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	if ds.TenantID != existing.TenantID {
 		return nil, datasource.ErrDataSourceInvalid
 	}
+	if ds.Status == "" {
+		ds.Status = existing.Status
+	}
+	if len(ds.Config) == 0 && existing.MaintenanceOriginalStatus() != "" {
+		ds.Config = existing.Config
+	}
 
 	// Credentials NEVER flow through this endpoint — they live behind the
 	// /credentials subresource. Force-preserve the stored credentials map
@@ -182,6 +189,9 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	if len(ds.Config) > 0 {
 		incomingCfg, parseIncErr := ds.ParseConfig()
 		existingCfg, parseExErr := existing.ParseConfig()
+		if existing.MaintenanceOriginalStatus() != "" && (parseIncErr != nil || parseExErr != nil) {
+			return nil, datasource.ErrInvalidConfig
+		}
 		if parseIncErr == nil && parseExErr == nil && incomingCfg != nil {
 			if incomingCfg.HasCredentials() {
 				logger.Warnf(ctx,
@@ -195,7 +205,7 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 				merged.Credentials = nil
 			}
 			merged.StripNonSecretCredentials(ds.Type)
-			if blob, err := merged.ToJSON(); err == nil {
+			if blob, err := dataSourceConfigWithStoredFields(existing.Config, &merged); err == nil {
 				ds.Config = blob
 			}
 			mergedCfg = &merged
@@ -212,7 +222,14 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 		configActuallyChanged = !reflect.DeepEqual(*mergedCfg, *existingParsedCfg)
 	}
 	hasCreds := mergedCfg != nil && mergedCfg.HasConfiguredCredentials(ds.Type)
-	if hasCreds && (ds.Type != existing.Type || configActuallyChanged) {
+	maintenanceErr := checkDataSourceMaintenance(ds)
+	if maintenanceErr != nil && ds.Status == types.DataSourceStatusActive {
+		return nil, maintenanceErr
+	}
+	if existing.MaintenanceOriginalStatus() != "" {
+		maintenanceErr = reconcileDataSourceMaintenance(ds)
+	}
+	if maintenanceErr == nil && hasCreds && (ds.Type != existing.Type || configActuallyChanged) {
 		if err := s.validateDataSourceConfig(ctx, ds); err != nil {
 			return nil, err
 		}
@@ -229,7 +246,7 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	}
 
 	logger.Infof(ctx, "data source updated: id=%s", ds.ID)
-	return ds, nil
+	return ds, maintenanceErr
 }
 
 // UpdateDataSourceCredentials replaces the connector credential map. This is
@@ -256,23 +273,31 @@ func (s *DataSourceService) UpdateDataSourceCredentials(
 	}
 	parsed.Credentials = credentials
 	parsed.StripNonSecretCredentials(existing.Type)
-	blob, err := parsed.ToJSON()
+	blob, err := dataSourceConfigWithStoredFields(existing.Config, parsed)
 	if err != nil {
 		return nil, err
 	}
 	existing.Config = blob
+	maintenanceErr := reconcileDataSourceMaintenance(existing)
 
 	// Run live validation now that the credentials are in place — surfaces
 	// "wrong token" feedback immediately to the user instead of waiting for
 	// the next scheduled sync.
-	if err := s.validateDataSourceConfig(ctx, existing); err != nil {
-		return nil, err
+	if maintenanceErr == nil {
+		if err := s.validateDataSourceConfig(ctx, existing); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.dsRepo.Update(ctx, existing); err != nil {
 		return nil, err
 	}
+	if s.scheduler != nil {
+		if err := s.scheduler.AddOrUpdate(existing); err != nil {
+			logger.Warnf(ctx, "failed to update data source maintenance schedule: id=%s", secutils.SanitizeForLog(id))
+		}
+	}
 	logger.Infof(ctx, "DataSource credentials updated: id=%s", secutils.SanitizeForLog(id))
-	return existing, nil
+	return existing, maintenanceErr
 }
 
 // ClearDataSourceCredentials wipes the connector credential map without
@@ -294,19 +319,21 @@ func (s *DataSourceService) ClearDataSourceCredentials(ctx context.Context, id s
 	}
 	parsed.StripNonSecretCredentials(existing.Type)
 	if !parsed.HasConfiguredCredentials(existing.Type) {
-		blob, err := parsed.ToJSON()
+		blob, err := dataSourceConfigWithStoredFields(existing.Config, parsed)
 		if err != nil {
 			return err
 		}
 		existing.Config = blob
+		_ = reconcileDataSourceMaintenance(existing)
 		return s.dsRepo.Update(ctx, existing)
 	}
 	parsed.Credentials = nil
-	blob, err := parsed.ToJSON()
+	blob, err := dataSourceConfigWithStoredFields(existing.Config, parsed)
 	if err != nil {
 		return err
 	}
 	existing.Config = blob
+	_ = reconcileDataSourceMaintenance(existing)
 	if err := s.dsRepo.Update(ctx, existing); err != nil {
 		return err
 	}
@@ -387,7 +414,6 @@ func (s *DataSourceService) ListAvailableResources(
 	if err != nil {
 		return nil, err
 	}
-
 	// Get connector
 	connector, err := s.connectorRegistry.Get(ds.Type)
 	if err != nil {
@@ -453,6 +479,9 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 			}
 			var result *types.SyncLog
 			err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+					return err
+				}
 				var source types.DataSource
 				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", dsID, types.SingleTenantID).First(&source).Error; err != nil {
 					return err
@@ -472,6 +501,9 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 
 	ds, err := s.GetDataSource(ctx, dsID)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkDataSourceMaintenance(ds); err != nil {
 		return nil, err
 	}
 
@@ -557,6 +589,9 @@ func (s *DataSourceService) ResumeDataSource(ctx context.Context, id string) err
 	if err != nil {
 		return err
 	}
+	if err := checkDataSourceMaintenance(ds); err != nil {
+		return err
+	}
 
 	ds.Status = types.DataSourceStatusActive
 	if err := s.dsRepo.Update(ctx, ds); err != nil {
@@ -614,6 +649,9 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *taskqueue.Tas
 			_ = s.syncLogRepo.Update(ctx, syncLog)
 		}
 		return nil
+	}
+	if err := checkDataSourceMaintenance(ds); err != nil {
+		return &types.ChatGPTDeferredError{Reason: "maintenance_configuration", RetryAt: time.Now().Add(15 * time.Minute), Cause: err}
 	}
 	wasPaused := ds.Status == types.DataSourceStatusPaused
 	defer func() {

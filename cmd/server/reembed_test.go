@@ -26,6 +26,7 @@ func TestParseReembedArguments(t *testing.T) {
 		action, id string
 	}{
 		{nil, "start", ""},
+		{[]string{"--preserve-entity-timestamps"}, "maintenance_start", ""},
 		{[]string{"--resume", "run-id"}, "resume", "run-id"},
 		{[]string{"--retry-failed", "run-id"}, "retry_failed", "run-id"},
 	} {
@@ -34,7 +35,7 @@ func TestParseReembedArguments(t *testing.T) {
 		require.Equal(t, test.action, action)
 		require.Equal(t, test.id, id)
 	}
-	for _, args := range [][]string{{"--resume"}, {"--retry-failed", ""}, {"--unknown", "id"}, {"--resume", "id", "extra"}} {
+	for _, args := range [][]string{{"--resume"}, {"--retry-failed", ""}, {"--unknown", "id"}, {"--resume", "id", "extra"}, {"--preserve-entity-timestamps", "--resume", "id"}} {
 		_, _, err := parseReembedArgs(args)
 		require.Error(t, err)
 	}

@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getVaultStatus, type VaultStatus } from '@/api/vault'
+import MaintenanceStatus from './MaintenanceStatus.vue'
 
 const { t, locale } = useI18n()
 const status = ref<VaultStatus | null>(null)
@@ -66,6 +67,7 @@ onBeforeUnmount(() => { generation++ })
       </div>
     </template>
   </section>
+  <MaintenanceStatus />
 </template>
 
 <style scoped lang="less">

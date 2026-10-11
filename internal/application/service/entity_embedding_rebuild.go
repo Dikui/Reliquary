@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/repository"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/embedding"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
@@ -107,6 +108,13 @@ func (r *EntityNameEmbeddingRebuilder) pendingQuery(db *gorm.DB, tenantID uint64
 // mention resolution. Unavailable profiles preserve existing vectors and flags.
 func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, tenantID uint64, reason string) error {
 	if r != nil && r.db != nil {
+		paused, err := maintenanceops.SnapshotPaused(ctx, r.db)
+		if err != nil {
+			return err
+		}
+		if paused {
+			return nil
+		}
 		if _, bound := r.tasks.(*transactionTaskEnqueuer); !bound {
 			return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 				copy, err := r.WithTransaction(ctx, tx)

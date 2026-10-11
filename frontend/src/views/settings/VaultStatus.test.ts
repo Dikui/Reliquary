@@ -31,6 +31,7 @@ async function scenario(locale: keyof typeof messages, getVaultStatus: () => Pro
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
     '@/api/vault': { getVaultStatus },
+    './MaintenanceStatus.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('section', { 'data-maintenance-status': true }) }) },
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }

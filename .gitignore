@@ -54,3 +54,13 @@ fix-docker.sh
 # WeChat Mini Program local/private configuration
 
 *.egg-info/
+
+# Local maintenance state, schedules and logs
+.maintenance-restore.json
+.maintenance-rebuild.json
+.maintenance-rebuild/
+.maintenance-schedule/
+.maintenance-runtime/
+.maintenance-runtime.previous/
+.maintenance-tools/
+compose.images.json

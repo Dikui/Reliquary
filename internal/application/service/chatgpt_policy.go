@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -55,6 +56,20 @@ func (s *ChatGPTPolicyService) locked(ctx context.Context, fn func(*types.ChatGP
 }
 
 func (s *ChatGPTPolicyService) Get(ctx context.Context) (*types.ChatGPTPolicy, error) {
+	if s.db.Migrator().HasTable("maintenance_state") {
+		paused, err := maintenanceops.SnapshotPaused(ctx, s.db)
+		if err != nil {
+			return nil, err
+		}
+		if paused {
+			var p types.ChatGPTPolicy
+			err := s.db.WithContext(ctx).First(&p, 1).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &types.ChatGPTPolicy{ID: 1, Day: s.now().UTC().Format(time.DateOnly)}, nil
+			}
+			return &p, err
+		}
+	}
 	return s.locked(ctx, func(*types.ChatGPTPolicy) error { return nil })
 }
 

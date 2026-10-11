@@ -25,5 +25,8 @@ func registerVaultIntegration(v *service.VaultService, documents *service.VaultD
 	h.SetArticles(v)
 	cleaner.RegisterWithName("Vault article headers", v.Close)
 	cleaner.RegisterWithName("Vault directory watcher", documents.Close)
+	if err := v.StartReplica(); err != nil {
+		return err
+	}
 	return documents.Start(context.Background())
 }

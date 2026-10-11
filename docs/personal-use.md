@@ -58,7 +58,7 @@ go run ./cmd/server reset-password
 
 Reliquary 可以通过自己的 OpenID Connect 登录，使用符合条件的 ChatGPT Plus 或 Pro 账号完成收录审核、文章处理、主题历史归入和实体判断。此方式适用于开源、本地部署应用，具体模型和权限以账号授权结果为准。它不会读取 ChatGPT 对话，也不会读取 Codex 的本地凭据。Embedding 和 rerank 继续配置其他模型来源。参考 [官方快速开始](https://developers.openai.com/siwc/quickstart) 和 [开源应用说明](https://developers.openai.com/siwc/token-sharing-open-source)。
 
-1. 在 `.env` 设置恰好 32 字节的 `SYSTEM_AES_KEY`。访问令牌、刷新令牌和保留的 ID token 都以 AES-256-GCM 加密后存入 PostgreSQL，没有明文降级。数据库备份需要保留同一密钥。
+1. 在 `.env` 设置恰好 32 字节的 `SYSTEM_AES_KEY`。访问令牌、刷新令牌和保留的 ID token 都以 AES-256-GCM 加密后存入 PostgreSQL，没有明文降级。维护命令不把这个密钥或数据库中的加密凭据写入备份或迁移包。恢复时生成新密钥，按清单重新授权 ChatGPT 和填写其他凭据。
 2. 配置 `CHATGPT_CALLBACK_URL=http://127.0.0.1:8080/auth/callback`，其中 `8080` 应与 Docker Compose 的 `APP_PORT` 后端映射端口一致。回调通过宿主机浏览器访问映射端口进入容器中已启动的后端；容器监听地址无需改成回环地址。回调必须使用 `127.0.0.1`，不能替换为 `localhost`，路径固定 `/auth/callback`。浏览器应运行在这台 Mac mini 上；其他电脑的 `127.0.0.1` 指向它自己，如需跨电脑操作，先建立访问该后端端口的本地 SSH 隧道。`CHATGPT_SETTINGS_URL` 设置成功页面返回模型设置的链接，默认前端地址为 `http://127.0.0.1/platform/settings?section=models`，前端端口变化时同步修改。参考 [官方登录流程](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)。
 3. 在现有 SSRF 白名单配置中保留已用条目，并追加 `auth.openai.com,api.openai.com`。例如已有本地 Ollama 白名单时设置 `SSRF_WHITELIST=host.docker.internal,auth.openai.com,api.openai.com`。授权发现、JWKS、令牌刷新和撤销使用 `auth.openai.com`，模型目录和 Responses 使用 `api.openai.com`；所有请求沿用现有 SSRF 防护。
 4. 重启后端，进入“设置 → 模型设置”，点击 **Continue with ChatGPT**。在新标签页完成账号、工作区和使用订阅额度的授权，确认回调页成功，再回到原设置页。首次使用会显示订阅用量确认。首次注册的客户端 ID 与部署主机 ID 都会保存，重启和再次登录继续使用；多个账号注册分别显示和保存。
@@ -123,7 +123,7 @@ cp .env.example .env
 | `LOCAL_STORAGE_BASE_DIR` | 容器内上传资源目录，建议保持 `/data/files` |
 | `DB_DRIVER`、`DB_HOST`、`DB_PORT` | 使用 `postgres`、Compose 服务名 `postgres` 与 `5432` |
 | `DB_USER`、`DB_PASSWORD`、`DB_NAME` | PostgreSQL 账号、密码和库名，同时用于初始化数据库服务 |
-| `JWT_SECRET`、`SYSTEM_AES_KEY` | 设置自己的登录签名密钥及 32 字节凭据加密密钥，迁移时保留加密密钥 |
+| `JWT_SECRET`、`SYSTEM_AES_KEY` | 设置自己的登录签名密钥及 32 字节凭据加密密钥；迁移和整体恢复时由维护命令生成新值 |
 | `OLLAMA_BASE_URL` | 容器访问 macOS 模型服务的地址，例如 `http://host.docker.internal:11434` |
 | `OLLAMA_OPTIONAL` | 设为 `true` 时，Ollama 暂不可用只输出告警 |
 | `SSRF_WHITELIST_EXTRA` | 部署额外放行的抓取或模型主机/IP/CIDR；与设置页白名单合并 |
@@ -209,78 +209,162 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 第一次启动包含约 1.5 GB 权重下载和加载时间。本机 Apple M4、16 GB 内存的 CPU 实测中，预热后的短文字约 26 ms、单图约 63 ms，28 个混合向量后台重建约 2 到 5 秒，峰值 RSS 约 1.5 GiB。相同规模输入的 1000 个向量可先按 1 到 3 分钟估计，长文窗口、其他进程负载、模型限流和网络会延长时间。完整收录、检索、重建记录见 `.scratch/kb-reshape/report-12.md`；不同模型和设备耗时不同。重建单位是向量数，长文章有多个分块，不能直接用文章数估算。可以用一小批实际数据的单项耗时乘以页面总数估计，再留出模型限流、磁盘读取和失败重试时间。默认模型文字上下文仅 64 tokens，本地服务对长文字分窗口编码并聚合，这只用于验证链路，未进行模型质量评测。
 
+## 维护入口与日常核对
+
+在部署源码目录使用 `./reliquary-admin`，宿主机需要 Python 3、Git、Docker 和 Docker Compose。它统一调用服务器维护子命令和 Docker Compose。保留 Compose 多服务，应用镜像按版本或提交标识，依赖镜像固定版本及摘要。操作时保持相同的 `COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`，不要同时运行其他维护命令。`./reliquary-admin --help` 和各子命令的 `--help` 显示全部选项。
+
+文章表头和文件库根目录的 `.reliquary/` 是数据库的可读副本。档案、主题及关联来源、关注和查看时间、处理复核、收录待审原文及附件、转载、操作日志、用户修正标志、收录附加字段和不含凭据的配置均有对应文件。变化后按表头相同的去抖时间写入，同目录原子替换；操作日志正常同步只追加 JSONL。文件格式和全部表列的归属见 [维护数据归属](maintenance-data.md)。不要在 Obsidian 修改这些副本。
+
+```bash
+./reliquary-admin verify
+./reliquary-admin verify --repair
+```
+
+第一条输出逐项差异，成功后应没有未解决的差异。第二条根据数据库补回文章文件和数据库副本，再核对；文件库中的 `mine/` 和 `reports/` 不由数据库恢复。错误时保留原库和故障文件，先检查输出指向的路径、权限和磁盘空间，再从完整备份恢复。不要通过删除数据库行消除差异。
+
+## 每周备份和每月恢复演练
+
+备份目录配置为文件库、上传资源及项目目录之外的绝对路径。例如 `/Users/yourname/Backups/Reliquary`，以后可以改为外接硬盘路径。外接硬盘到位前，这种备份只防止误删、应用损坏和升级失败；同一台机器的硬盘损坏仍可能同时损坏原件和备份，这个风险已接受。
+
+在运行正常部署的同一账号终端配置计划，再安装宿主机调度：
+
+```bash
+./reliquary-admin schedule configure \
+  --backup-directory /Users/yourname/Backups/Reliquary \
+  --backup-schedule '0 3 * * 0' \
+  --drill-schedule '0 4 1 * *' \
+  --timezone Asia/Shanghai --enabled true
+./reliquary-admin schedule install
+```
+
+第一条返回保存的目录、计划和时区。五个 cron 字段依次是分钟、小时、日期、月份和星期，上例每周日 03:00 备份、每月 1 日 04:00 演练。第二条应显示调度已安装，配置和日志保存在部署目录的 `.maintenance-schedule/`；macOS 使用当前登录用户的 launchd，Linux 使用用户 systemd。Docker 必须保持可用。调度器每分钟检查一次，首次运行立即备份和演练，主机休眠错过计划后补跑一次；失败、超时或中断的自动作业十五分钟后重试。换部署目录或机器后重新安装调度，不把旧机器的计划当成新机器已安装。暂停自动运行可执行 `./reliquary-admin schedule configure --enabled false`。
+
+每份备份完整导出数据库；文件库和上传资源按增量快照复制，未变化文件用硬链接，每份目录都能单独恢复。只保留最近 4 份正常完成的定期备份，不把失败的半成品作为成功备份。系统加密密钥、JWT 密钥、数据库密码、API Key、模型和订阅凭据、ChatGPT 令牌不进入备份。唯一账号的密码哈希保留，恢复后仍用原账号密码登录。
+
+备份暂停 RSS、HTTP/MCP 收录和上传，等待短写入事务及文件副本写入结束，再停止应用取得一致快照。它不等待主题历史归入、向量重建等长任务完成；队列和检查点一同导出。恢复后 PostgreSQL 队列重新领取中断任务，保留文章与重试预算。等待超过上限时跳过本次备份，恢复收录并记录告警，不生成假成功结果。请暂停 Obsidian 等外部编辑器写文件，程序无法锁住其他软件。
+
+手动触发和检查自动计划使用以下命令。手动备份的目录参数明确指定位置，避免与 `.env` 中的 `BACKUP_DIR` 默认值混淆：
+
+```bash
+./reliquary-admin backup /Users/yourname/Backups/Reliquary --timeout 300
+./reliquary-admin drill /Users/yourname/Backups/Reliquary
+./reliquary-admin schedule run --once
+```
+
+备份成功应显示 `backup complete and read-back verified` 和完整备份路径，设置中的文件库状态区域显示最近一次备份时间、大小、状态和错误，也显示最近一次恢复演练结果。`schedule run --once` 只运行当前到期的计划，已有其他 runner 时跳过，手动迁移暂停时也不运行；演练中可加 `--force` 强制运行两项，仍遵守暂停及自动运行开关。
+
+每月演练将最近一份备份恢复到隔离的临时应用容器、空数据库和临时目录，重建全文索引并运行 `verify`。通过后应显示 `Monthly restore drill passed`，临时数据库、文件和容器已删除。失败也清理临时环境，保留设置页错误和调度日志并告警。例行演练不需要访问原模型或调用付费模型，只核对不可再生数据和文件；模型可用性由 `setup-models` 单独检查。演练清理不能影响正常部署。
+
+普通备份默认不重复保存镜像。已有完整源码与固定版本镜像时，先准备新的空数据库、空文件库和空上传目录，保持目标应用停止，再在目标部署目录执行 `./reliquary-admin restore /完整备份路径`。它恢复数据并进入下文的模型及凭据等待流程，不会替换目标部署的代码。需要带代码及镜像的一体恢复包时执行 `backup /备份目录 --with-images`，再使用 `unpack` 恢复到空部署目录。
+
 ## 迁移到另一台 Mac mini
 
-迁移传输当前版本的完整数据库、文件库、上传资源与部署配置。旧结构不支持通过此步骤升级，旧 WeKnora 或旧 Reliquary 数据仍需重新安装。两台机器使用相同代码版本、PostgreSQL 主版本及 ParadeDB 扩展版本，保持容器内文件库和资源路径一致；宿主机绑定目录可以不同。
-
-上传资源的数据库记录可能包含绝对路径，如 `stored_resources.PhysicalPath` 与文章的 `FilePath`。修改宿主机目录时只改绑定挂载的 `source`，保持应用容器内 `LOCAL_STORAGE_BASE_DIR=/data/files`；单纯复制资源并改变容器内根目录不会自动修正这些数据库引用。文件库文章路径主要是相对路径，但完整迁移也建议保持容器内 `VAULT_ROOT=/data/vault`。
-
-1. 在原机器暂停 RSS 同步与外部收录，等待运行队列完成并等待表头更新写入。暂停 Obsidian 和其他工具对文件库的编辑。记录文章数、星标、主题和代表性的检索结果。
-2. 停止应用与网页，保留 PostgreSQL 运行。用脚本导出数据库并复制文件库和上传资源：
-
-   ```bash
-   docker compose stop app frontend
-   ./scripts/backup.sh /Users/yourname/Backups/reliquary-2026-10-11
-   ```
-
-   脚本使用 `pg_dump --format=custom` 生成 `database.dump`，另复制 `vault/` 与 `resources/`，记录格式标识与 SHA-256 校验。备份目录必须不存在或为空，已有内容会被拒绝。完成后可 `docker compose stop postgres` 关闭剩余服务；若原机器继续使用，执行 `docker compose start app frontend`。
-3. 将完整备份目录复制到新机器。另行复制 `.env`、Compose 配置、`config/config.yaml` 与自定义内置模型配置。`SYSTEM_AES_KEY` 必须保持一致，否则数据库里的模型 Key 和订阅凭据无法解密；登录签名配置也建议保持一致。脚本不把这些密钥写入备份清单。
-4. 在新机器修改宿主机目录、数据库连接、网页/API 端口、模型地址及必要的 SSRF 白名单。准备新的空 PostgreSQL 数据目录与空文件库/资源目录，构建相同版本镜像。先启动数据库，再创建处于停止状态的应用容器，避免自动迁移提前创建应用表：
-
-   ```bash
-   export COMPOSE_FILE=docker-compose.yml:compose.mac.yml
-   export COMPOSE_PROJECT_NAME=reliquary
-   docker compose build
-   docker compose up -d --wait postgres
-   docker compose create app
-   ./scripts/restore.sh /Users/yourname/Backups/reliquary-2026-10-11
-   ```
-
-   恢复前脚本校验备份，拒绝运行中的应用、已有应用表或非空文件目录。`pg_restore` 用单个事务导入到目标库，去除原库角色所有权与权限要求；仅在已确认没有应用表的目标库清理同名扩展和结构。文件复制在数据库提交后进行，若失败应保持应用停止，检查错误并用新的空库和空目录重试。
-5. 核对目录权限。默认命名卷恢复时，脚本会为镜像中的 `appuser` 修正权限；宿主机目录或自定义镜像由部署方检查。然后启动应用：
-
-   ```bash
-   docker compose run --rm --no-deps --user root --entrypoint sh app      -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
-   docker compose up -d
-   ```
-6. 登录并核对文章数、选定文章的表头与正文、星标、主题名/说明及关联。重复原机器的关键词与向量检索，检查命中文章和用户文档。打开“设置 > 文件库状态”，等待扫描完成，核对 `mine/` 和 `reports/` 数量、最近扫描与错误；确认上传原始文件与图片可读取。
-
-核对排序时，先让两侧索引统计一致。`pg_restore` 会重新创建全文索引；原库多次更新留下的死行可能影响 BM25 评分，进而改变混合检索排序。本次演练中仅 VACUUM 后分数仍有差异，两侧按相同版本重建全文索引后，完整检索响应一致。需要逐项比较评分与顺序时，可在原机器停止收录后、备份前，以及新机器导入后分别执行以下数据库维护，再比较相同查询。此维护清理和重建索引，不修改文章或检索配置，机制见 [ParadeDB 评分说明](https://www.paradedb.com/docs/reference/full-text/score#score-refresh)。
+旧机器在当前部署目录执行：
 
 ```bash
-docker compose exec -T postgres sh -eu -c '
-  psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-    -c "VACUUM (ANALYZE) public.knowledges;" \
-    -c "VACUUM (ANALYZE) public.chunks;" \
-    -c "REINDEX INDEX public.knowledges_summary_search_idx;" \
-    -c "REINDEX INDEX public.chunks_search_idx;"
-'
+./reliquary-admin pack /Volumes/Transfer/Reliquary-Migration
 ```
 
-脚本用法为 `scripts/backup.sh <备份目录>` 和 `scripts/restore.sh <备份目录>`，均提供 `--help`。默认从停止的 Compose 应用容器读取或写入挂载目录，因此可以处理命名卷。显式设置以下变量时，脚本直接复制宿主机目录：
+目标目录必须不存在或为空，而且不在文件库或上传资源目录内。命令暂停收录并等待普通处理队列清空，默认最多等待 300 秒，可用 `--timeout 600` 调整；主题历史归入和向量重建的检查点会保留。命令随后打包当前源码及 Git 历史、脱敏数据库导出、文件库（含 `.reliquary/`）、上传资源、脱敏配置、所有 Compose 服务的镜像文件、版本信息、表级校验、文件哈希和固定查询结果。模型权重不打包。
+
+完成前，命令读回磁盘文件并核对。只有所有核对通过才报告 `pack complete and read-back verified` 并恢复旧环境的收录；`--keep-paused` 会保留暂停并停止应用。等待超时、文件变化、磁盘不足或任何校验错误会停止并给出原因，不能把这样的目录用于迁移。打包期间暂停外部编辑器写文件。未提交的源码默认拒绝打包，需要保留经审阅的本地修改时显式加 `--include-worktree`，清单会记录提交和工作树状态。
+
+把整个目录复制到外接硬盘，在新机器进入该目录运行随包提供的入口：
 
 ```bash
-COMPOSE_FILE=docker-compose.yml:compose.mac.yml COMPOSE_PROJECT_NAME=reliquary   VAULT_ROOT=/Users/yourname/ReliquaryData/vault   LOCAL_STORAGE_BASE_DIR=/Users/yourname/ReliquaryData/files   ./scripts/backup.sh /Users/yourname/Backups/reliquary-2026-10-11
+./reliquary-admin unpack
 ```
 
-恢复时使用相同变量格式，路径改为新机器的空目标目录，命令改为 `restore.sh`。这里脚本的 `VAULT_ROOT` 和 `LOCAL_STORAGE_BASE_DIR` 覆盖值是宿主机路径，`.env` 内的应用配置仍可以使用 `/data/vault` 与 `/data/files`。数据库操作在 Compose 的 `postgres` 服务内执行，不需要宿主机安装 PostgreSQL 客户端；自定义服务名可设置 `APP_SERVICE`、`DB_SERVICE`。
+命令检查 Docker、Compose、端口、磁盘空间和目标目录，恢复源码与 Git 历史并载入镜像；生成新 `SYSTEM_AES_KEY`、`JWT_SECRET` 和数据库密码，写入权限受限的新 `.env`。数据库、文件库和上传资源一同恢复，并重建全文索引。宿主机目录可改变，容器中的文件库和资源路径应沿用包的配置，命令按需要映射恢复文件引用。
 
-### 只有文件库时重建
+默认的新部署目录是迁移包同级的 `包名-deployment`，可用 `--target /Users/yourname/Reliquary --project reliquary-new` 显式指定空目录及独立 Compose project。需要更换端口时，在打包目录运行 `APP_PORT=18080 FRONTEND_PORT=18081 ./reliquary-admin unpack --target /Users/yourname/Reliquary --project reliquary-new`。后续维护命令在新部署目录执行，保留生成的 `.env` 和 Compose 映射。
 
-没有数据库备份时，保留文件库的完整目录和附件，复制到新机器。准备新数据库，配置 `VAULT_ROOT`、模型地址和凭据加密密钥。保持应用停止，先启动数据库，然后运行专用重建命令：
+接下来必须看到核对结果和 `Reconfiguration checklist`。缺少本地模型时状态为 `waiting_models`，等待模型就绪；已选择的模型缺少凭据时为 `waiting_credentials`，等待重新填写。两种状态都会启动网页供登录和修改设置，但暂停收录与领取处理任务，保留所有中断任务。命令因等待返回非零状态是预期行为；不要通过手工 `maintenance resume` 跳过检查，也不要重复执行初次 `unpack` 覆盖已恢复的数据库。
+
+按清单重新填写模型 API Key、App Secret、鉴权请求头、订阅源凭据及解析器凭据，URL 中的认证参数也要补齐；ChatGPT 账号重新登录，回到模型列表刷新并测试。模型所需字段全部补齐后才解除该模型的维护暂停，只有 API Key 而仍缺 App Secret 或请求头时继续暂停。订阅源保存凭据并确认连接后按需要重新启用。收录 API Key 重新生成并更新 HTTP/MCP 调用方。自动生成的系统密钥和数据库密码无需填入旧值。
+
+检查模型地址、端口、SSRF 白名单、外部资源链接地址、ChatGPT 回调与设置页地址、备份位置及自动调度。每项配置完成前，对应模型、订阅或收录功能保持暂停。在新部署目录执行：
 
 ```bash
-docker compose up -d --wait postgres
-docker compose run --rm --no-deps --user root --entrypoint sh app   -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
-docker compose run --rm --no-deps app ./Reliquary vault-rebuild
-docker compose up -d
+./reliquary-admin setup-models --install --download --start
+./reliquary-admin unpack --resume
 ```
 
-命令使用应用相同的数据库配置和迁移，不启动 HTTP 服务或任务消费者，不修改文件库。知识数据库必须没有文章记录；配置和账号可以保留，完全空的数据库会创建个人空间与唯一知识库。输出 `articles`、`mine`、`reports` 和 `skipped`，逐项检查跳过的文件及原因。无法解析的文件会被跳过；如果中途重建失败，需要在空知识数据库修复后重试。
+第一条安装或下载缺少的本地模型并试调用；已就绪时可省略安装选项。第二条再次检查所选模型、凭据和文件，并默认在新部署目录安装本机自动备份与恢复演练调度。全部通过才显示 `State: ready` 并恢复队列与收录。不影响当前所选模型的其他未配置功能仍暂停，可之后逐项配置。在“设置 → 文件库 → 备份与恢复”查看目录及周月计划，使用 `schedule configure` 修改。
 
-重建能恢复文章 ID、表头、正文、星标、收藏理由、内容类型、实体与主题名称及关联，并重新生成检索索引。表头保留 source_unverified 及特殊全文保留的 processing_mode，重建后仍可识别来源未核实与保留正文。表头没有实体类型、别名和说明、主题说明、账号、API Key、模型配置、审核状态、关注关系与关注动态查看时间、操作日志、转载记录与采集器专有注解，这些内容无法从文件库恢复。没有已知实体可归入时，重建实体类型为“其他”。收录待审内容尚未写入文件库，也无法恢复；处理待复核文章可以恢复正文，但复核状态无法恢复。
+本机调度安装失败时显示 `waiting_scheduler`，应用保持维护暂停。检查 launchd 或用户 systemd 错误，修复后再运行 `unpack --resume`。`--no-scheduler` 仅用于隔离演练，防止演练环境注册本机计划；日常部署沿用默认行为。本任务的验证环境使用此选项，没有给开发机器安装自动计划。
 
-空数据库默认重建关键词索引，无需模型。若同时重建向量索引，可在 `.env` 配置 `VAULT_REBUILD_EMBEDDING_URL`、`VAULT_REBUILD_EMBEDDING_MODEL`、`VAULT_REBUILD_EMBEDDING_DIMENSION` 和必要的 `VAULT_REBUILD_EMBEDDING_API_KEY`，使用可访问的 OpenAI 兼容嵌入接口；已有模型配置时可设置 `VAULT_REBUILD_EMBEDDING_MODEL_ID`。确认模型主机已通过 SSRF 白名单。重建后对比文章数、表头中的用户判断、关键词/向量检索及文件库扫描状态。
+若新环境使用不同 embedding 模型，先选择并测试新模型，再运行 `unpack --resume`。程序自动以维护参数执行任务 12 的全部向量重建，覆盖正文分块、文章、图片、用户文档、整理结果及实体名称，保留实体档案时间，然后核对并开放使用。关键词索引仍可重建，不要求模型在线。向量本身和检索分数是可重新生成的数据，核对规则分别检查模型身份、维度、完整性和固定查询命中文章；不可再生数据逐表精确核对，不用分数误差放宽原文和用户判断。
+
+任何文件或数据不一致都退出失败，保持维护暂停，不进入正常使用。修复后重新核对，禁止把“程序能启动”当成迁移成功。
+
+## 只有文件库时重建
+
+保留整个文件库，包括隐藏的 `.reliquary/` 和 `attachments/`。准备新的空数据库和空上传目录，保持应用停止，执行：
+
+```bash
+./reliquary-admin rebuild /Users/yourname/RecoveredVault
+```
+
+命令读取表头、正文和 `.reliquary/`，恢复文章及表头未保存的用户数据、档案、待审内容、日志、配置和任务检查点，再生成全文索引并逐表核对原副本。重建成功后自动进入 snapshot 暂停，队列不会领取任务或消耗重试预算。缺少或损坏的副本、文章、待审附件会列出错误并停止。可重建的索引和向量不作为唯一原件。
+
+随后可以执行 `docker compose up -d app frontend` 启动网页，用原账号密码登录。按照程序输出的清单重新填写模型、订阅源和解析器凭据，ChatGPT 重新登录；账号密码哈希保留。此时处理队列与收录仍暂停，不要手工解除暂停。完成后执行：
+
+```bash
+./reliquary-admin setup-models
+./reliquary-admin rebuild /Users/yourname/RecoveredVault --resume
+```
+
+第一条确认配置模型可用；第二条只继续已经重建的库，读取初次保存的固定核对清单，不再次导入数据。它先严格核对，再检查模型及必需凭据，自动补齐全部向量，保留实体档案时间，核对向量完整性并安装本机备份调度。缺模型、缺凭据、向量失败、核对不一致或调度安装失败时继续暂停并返回非零状态。全部通过才显示 `State: ready`、解除维护暂停并让原有任务自动继续。其他未配置功能仍暂停。隔离演练可加 `--no-scheduler`，日常使用默认安装。初次清单保存在部署目录的 `.maintenance-rebuild.json` 等维护状态文件中，位于文件库之外，不进入迁移包。不要删除清单或重新执行初次 rebuild 来跳过失败。
+
+仅有任务 15 之前的文件库且没有 `.reliquary/` 时，旧 `vault-rebuild` 路径只能恢复表头和正文，没有对应副本的档案说明、日志、关注、待审及配置不能凭空恢复。保留原件和输出的跳过清单，寻找数据库备份，不要宣称完整重建成功。
+
+文章文件损坏时，数据库中的文章正文副本可恢复文章。`mine/` 和 `reports/` 的原文只靠文件库备份恢复，数据库的索引不是原文备份；最多丢失上次成功备份后的改动。其他软件修改或删除文件时也受这个限制。
+
+## 模型准备
+
+```bash
+./reliquary-admin setup-models
+```
+
+先检查 Ollama 是否存在、配置中的模型是否下载，以及多模态 embedding 服务是否可调用，最后对可用的配置模型各试调用一次。缺失时输出可执行的辅助命令；`setup-models --install --download --start` 使用官方安装方式安装 Ollama、显示下载进度并拉取缺失模型，为多模态服务创建独立 Python 环境和下载权重，随后启动服务。安装流程依据 [Ollama macOS 官方说明](https://docs.ollama.com/macos)、[Linux 官方说明](https://docs.ollama.com/linux) 和 [模型下载命令](https://docs.ollama.com/cli)。macOS 安装 Ollama 时按系统管理员密码及 CLI 权限提示操作，Linux 官方安装程序可能要求 sudo；不把密码写到配置或日志。模型权重默认留在 `~/.cache/reliquary-models/` 等本机模型缓存中，可用 `RELIQUARY_MODEL_HOME` 更改多模态模型目录，不进入迁移包或备份。
+
+没有所选模型或凭据时保持等待并返回非零状态。模型连通但名称、维度或文字与图片能力不符也不能视为就绪。填好凭据及模型之后重新运行检查和 `unpack --resume`。用 `--start` 启动的多模态服务会输出进程号及日志路径，停止时按输出执行 `kill 进程号`；重启机器后需按部署方式重新启动服务。
+
+## 升级与失败退回
+
+每次数据库结构变更都新增迁移文件，冻结 `000000_init`。规范与升级数据完整性测试要求见 [数据库迁移规范](database-migrations.md)。
+
+```bash
+./reliquary-admin upgrade
+```
+
+升级前自动产生整体备份，包括旧代码、旧镜像和旧数据。迁移完成后核对不可再生数据和文件，只有通过才恢复使用。失败时保持暂停并显示升级前快照位置。不要运行迁移 `down` 或修改 `schema_migrations` 来退回生产。
+
+退回需要用升级前快照恢复旧代码、旧镜像、旧数据库和旧文件库到新的空环境。`upgrade` 的自动备份包含这些镜像，因此可在该备份目录执行随包提供的入口：
+
+```bash
+./reliquary-admin unpack --target /Users/yourname/Reliquary-Rollback --project reliquary-rollback
+```
+
+如果旧部署占用默认端口，像迁移一样指定空闲的 `APP_PORT` 和 `FRONTEND_PORT`。应看到旧代码和镜像载入、数据核对通过以及重新填写凭据的清单；在回退部署目录补齐凭据、运行 `setup-models` 和 `unpack --resume`，确认 `State: ready` 后再切换使用旧版本。`restore` 只适用于已经准备好旧代码及旧镜像的空数据环境，不负责替换代码。升级以后新增的数据不在升级前备份中，先另存当前数据，不能直接覆盖。系统不支持数据库结构降级。
+
+任务 14 的数据库结构版本 0 没有维护暂停表，旧应用也没有维护子命令。首次升级会先构建独立维护 helper，停止旧应用后保存版本 0 的完整升级前备份，随后才执行新增迁移。整体回退至这种旧版本时，随包保留的 helper 执行核对和离线凭据填写，旧应用保持停止，状态为 `waiting_legacy_credentials`。不要直接启动旧网页填写凭据，否则旧 worker 可能提前处理任务。模型及订阅凭据可通过 `./reliquary-admin maintenance credentials --kind model --id 模型ID --input /权限为0600的凭据文件` 填写；订阅源使用 `--kind data-source`。解析器使用 `--kind tenant --id 1`，输入格式为 `{"parser_engine_config":{"mineru_api_key":"新填写的凭据"}}`，只允许修改秘密字段，保留原端点及解析参数。输入只在本机内存中传递，填写后删除自行准备的凭据文件。
+
+
+旧版 ChatGPT 通过离线维护入口重新登录，不导入旧令牌，也不用先升级数据库：
+
+```bash
+./reliquary-admin maintenance chatgpt-login --id 原账号ID --callback http://127.0.0.1:8080/auth/callback
+./reliquary-admin maintenance chatgpt-complete --input /仅本机目录/chatgpt-callback.json
+./reliquary-admin setup-models
+./reliquary-admin unpack --resume
+```
+
+第一条返回短期 `authorization_url` 和到期时间，用户在自己的浏览器打开并授权。回调端口按旧部署的 `APP_PORT` 填写。旧应用停止时，授权后本地连接失败是预期行为；复制浏览器地址栏中的完整回调 URL，在权限为 0600 的本机文件中写一个 JSON 对象 `{"callback_url":"完整回调URL"}`，交给第二条。也可通过 stdin 传入，不将授权码放在命令参数、迁移包或备份目录。程序使用原 OAuth 的 state、PKCE、签名和身份校验，成功后显示 `connected` 和恢复的模型 ID；随后删除输入文件。授权过期或客户端变更时按输出的新链接重新授权。原账号、主机 ID、客户端及非秘密授权历史保留。最后两条应显示模型试调用通过和 `State: ready`，此时才启动旧应用。
+
+维护期间读取 ChatGPT 配额只读原数据。真实模型试调用仍按原规则消耗配额；命令及设置页试调用将前后配额追加到操作日志。迁移核对只接受完整衔接的记录，原配额配置和既有日志仍须一致，不能通过跳过额度计数完成核对。
+
 
 ## 外部 Agent 接入
 

@@ -204,10 +204,12 @@ func (r *authTokenRepository) DeleteToken(ctx context.Context, id string) error 
 
 // DeleteExpiredTokens deletes all expired tokens
 func (r *authTokenRepository) DeleteExpiredTokens(ctx context.Context) error {
-	return r.db.WithContext(ctx).Where("expires_at < NOW()").Delete(&types.AuthToken{}).Error
+	return r.db.WithContext(ctx).Where("expires_at < NOW() AND token NOT LIKE ?", types.MaintenanceExcludedCredentialPrefix+"%").Delete(&types.AuthToken{}).Error
 }
 
 // RevokeTokensByUserID revokes all tokens for a user
 func (r *authTokenRepository) RevokeTokensByUserID(ctx context.Context, userID string) error {
-	return r.db.WithContext(ctx).Model(&types.AuthToken{}).Where("user_id = ?", userID).Update("is_revoked", true).Error
+	// Portable snapshots keep inactive credential markers as historical metadata.
+	// They cannot authenticate and must retain their original revocation state.
+	return r.db.WithContext(ctx).Model(&types.AuthToken{}).Where("user_id = ? AND token NOT LIKE ?", userID, types.MaintenanceExcludedCredentialPrefix+"%").Update("is_revoked", true).Error
 }

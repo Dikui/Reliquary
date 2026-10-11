@@ -126,6 +126,7 @@ func (c *Client) claim(ctx context.Context, p *workerPool) (*Job, error) {
 		token := uuid.NewString()
 		r := db.Raw(`WITH next AS (
 		 SELECT id FROM task_jobs WHERE queue = ? AND state IN ('pending','scheduled','retry')
+		 AND NOT EXISTS (SELECT 1 FROM maintenance_state WHERE paused AND pause_mode='snapshot')
 		 AND process_at <= ? ORDER BY process_at, created_at, id FOR UPDATE SKIP LOCKED LIMIT 1
 		) UPDATE task_jobs AS j SET state='active',started_at=?,updated_at=?,lease_until=?,claim_token=?,worker_pool=?
 		 FROM next WHERE j.id=next.id RETURNING j.*`, q, now, now, now, now.Add(c.config.LeaseDuration), token, p.name).Scan(&j)
@@ -334,7 +335,11 @@ func updateCounter(tx *gorm.DB, queue string, now time.Time, success bool) error
 }
 
 func (c *Client) recoverJobs(ctx context.Context, all bool) error {
-	q := c.db.WithContext(ctx).Model(&Job{}).Where("state = ?", TaskStateActive)
+	return c.recoverJobsWithDB(ctx, c.db, all)
+}
+
+func (c *Client) recoverJobsWithDB(ctx context.Context, db *gorm.DB, all bool) error {
+	q := db.WithContext(ctx).Model(&Job{}).Where("state = ?", TaskStateActive)
 	if !all {
 		q = q.Where("lease_until < ?", time.Now().UTC())
 		// The singleton lock means every live handler belongs to this process.
@@ -351,6 +356,24 @@ func (c *Client) recoverJobs(ctx context.Context, all bool) error {
 		}
 	}
 	return q.Updates(map[string]interface{}{"state": TaskStatePending, "process_at": time.Now().UTC(), "updated_at": time.Now().UTC(), "claim_token": "", "worker_pool": "", "lease_until": nil}).Error
+}
+
+func (c *Client) maintenanceCycle(ctx context.Context) error {
+	return c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var paused bool
+		// Holding this row lock until the writes finish also prevents a pause
+		// from crossing an already admitted maintenance cycle.
+		if err := tx.Raw(`SELECT paused AND pause_mode='snapshot' FROM maintenance_state WHERE id=true FOR SHARE`).Scan(&paused).Error; err != nil {
+			return err
+		}
+		if paused {
+			return nil
+		}
+		if err := c.recoverJobsWithDB(ctx, tx, false); err != nil {
+			return err
+		}
+		return tx.Exec(`DELETE FROM task_jobs WHERE state='completed' AND completed_at + retention_ns / 1000.0 * interval '1 microsecond' < now()`).Error
+	})
 }
 
 func (c *Client) maintain(ctx context.Context, conn *sql.Conn) error {
@@ -370,10 +393,9 @@ func (c *Client) maintain(ctx context.Context, conn *sql.Conn) error {
 				return err
 			}
 			maintenanceCtx, stop := context.WithTimeout(ctx, 5*time.Second)
-			if err := c.recoverJobs(maintenanceCtx, false); err != nil && ctx.Err() == nil {
-				log.Printf("task queue rescue: %v", err)
+			if err := c.maintenanceCycle(maintenanceCtx); err != nil && ctx.Err() == nil {
+				log.Printf("task queue maintenance: %v", err)
 			}
-			_ = c.db.WithContext(maintenanceCtx).Exec(`DELETE FROM task_jobs WHERE state='completed' AND completed_at + retention_ns / 1000.0 * interval '1 microsecond' < now()`).Error
 			stop()
 		}
 	}

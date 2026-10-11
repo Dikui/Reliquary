@@ -3,6 +3,8 @@ import { get, post, put, del } from '../../utils/request'
 // --- Types ---
 
 export interface DataSource {
+  maintenance_required?: boolean
+  maintenance_missing_fields?: string[]
   id: string
   tenant_id: number
   knowledge_base_id: string

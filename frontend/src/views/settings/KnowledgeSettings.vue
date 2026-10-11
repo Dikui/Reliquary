@@ -108,6 +108,7 @@ import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { getKnowledgeBase, listKnowledgeFiles, updateKnowledgeBase } from '@/api/knowledge-base'
 import { useResourcesStore } from '@/stores/resources'
 import { useUIStore } from '@/stores/ui'
+import { changedSettings } from '@/utils/settingsPatch'
 import { copyModelTiers } from '@/utils/modelTiers'
 import type { ResolvedModelTiers } from '@/types/modelTiers'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
@@ -124,6 +125,7 @@ const initialSection = props.initialSection || uiStore.settingsInitialSubSection
 const currentSection = ref(tabs.includes(initialSection) ? initialSection : 'basic')
 const formData = ref<any>(null), saved = ref(''), loading = ref(false), saving = ref(false), error = ref('')
 const activeKbId = ref(''), hasFiles = ref(false), initialIndexingStrategy = ref<any>(null)
+const loadedKnowledgeBase = ref<any>(null)
 const resolvedModelTiers = ref<ResolvedModelTiers>({})
 const allModels = computed(() => resources.allModels)
 const dirty = computed(() => !!formData.value && JSON.stringify(formData.value) !== saved.value)
@@ -138,6 +140,7 @@ async function load() {
     if (request !== generation) return
     const kb = response?.data
     if (!kb) throw new Error(t('knowledgeEditor.messages.loadDataFailed'))
+    loadedKnowledgeBase.value = kb
     activeKbId.value = kb.id
     const files: any = await listKnowledgeFiles(kb.id, { page: 1, page_size: 1 })
     if (request !== generation) return
@@ -179,50 +182,55 @@ async function load() {
 function handleChunkingConfigUpdate(value: any) { formData.value.chunkingConfig = { ...value } }
 function handleParserEngineRulesUpdate(value: any) { formData.value.chunkingConfig.parserEngineRules = value }
 function toggleVectorIndexing() { if (!isIndexingLocked.value) { const enabled = !formData.value.indexingStrategy.vectorEnabled; formData.value.indexingStrategy = { vectorEnabled: enabled, keywordEnabled: enabled } } }
-const buildSubmitData = () => {
-  if (!formData.value) return null
+const buildSubmitData = (value = formData.value) => {
+  if (!value) return null
 
   const data: any = {
-    model_tiers: copyModelTiers(formData.value.modelTiers),
-    name: formData.value.name,
-    description: formData.value.description,
+    model_tiers: copyModelTiers(value.modelTiers),
+    name: value.name,
+    description: value.description,
     chunking_config: {
-      chunk_size: formData.value.chunkingConfig.chunkSize,
-      chunk_overlap: formData.value.chunkingConfig.chunkOverlap,
-      separators: formData.value.chunkingConfig.separators,
-      enable_parent_child: formData.value.chunkingConfig.enableParentChild,
-      parent_chunk_size: formData.value.chunkingConfig.parentChunkSize,
-      child_chunk_size: formData.value.chunkingConfig.childChunkSize,
+      chunk_size: value.chunkingConfig.chunkSize,
+      chunk_overlap: value.chunkingConfig.chunkOverlap,
+      separators: value.chunkingConfig.separators,
+      enable_parent_child: value.chunkingConfig.enableParentChild,
+      parent_chunk_size: value.chunkingConfig.parentChunkSize,
+      child_chunk_size: value.chunkingConfig.childChunkSize,
       // Adaptive chunking fields are always sent (empty/zero values
       // included) so the user can clear them — backend uses pointer DTOs
       // to distinguish "not in payload" from "explicitly empty".
-      strategy: formData.value.chunkingConfig.strategy ?? '',
-      token_limit: formData.value.chunkingConfig.tokenLimit ?? 0,
-      languages: formData.value.chunkingConfig.languages ?? [],
-      table_metadata_instructions: formData.value.chunkingConfig.tableMetadataInstructions || '',
-      parser_engine_rules: formData.value.chunkingConfig.parserEngineRules || []
+      strategy: value.chunkingConfig.strategy ?? '',
+      token_limit: value.chunkingConfig.tokenLimit ?? 0,
+      languages: value.chunkingConfig.languages ?? [],
+      table_metadata_instructions: value.chunkingConfig.tableMetadataInstructions || '',
+      parser_engine_rules: value.chunkingConfig.parserEngineRules || []
     },
-    embedding_model_id: formData.value.modelTiers.embedding || '',
-    summary_model_id: formData.value.modelTiers.generation || '',
-    indexing_strategy: { vector_enabled: formData.value.indexingStrategy.vectorEnabled, keyword_enabled: formData.value.indexingStrategy.keywordEnabled },
+    embedding_model_id: value.modelTiers.embedding || '',
+    summary_model_id: value.modelTiers.generation || '',
+    indexing_strategy: { vector_enabled: value.indexingStrategy.vectorEnabled, keyword_enabled: value.indexingStrategy.keywordEnabled },
   }
 
   return data
 }
 
 async function handleSubmit() {
-  if (saving.value || loading.value || !formData.value) return
+  if (saving.value || loading.value || !formData.value || !dirty.value) return
   if (!formData.value.name.trim()) { error.value = t('knowledgeEditor.messages.nameRequired'); currentSection.value = 'basic'; return }
   if (needsEmbedding.value && !formData.value.modelTiers.embedding) { error.value = t('knowledgeEditor.indexing.embeddingRequired'); currentSection.value = 'models'; return }
   if (!formData.value.modelTiers.generation) { error.value = t('knowledgeEditor.messages.summaryRequired'); currentSection.value = 'models'; return }
   saving.value = true; error.value = ''
   try {
     const data = buildSubmitData()
-    const result: any = await updateKnowledgeBase({ name: data.name, description: data.description, config: {
-      model_tiers: data.model_tiers, chunking_config: data.chunking_config,
-      indexing_strategy: data.indexing_strategy,
-    } })
+    const changes = changedSettings(buildSubmitData(JSON.parse(saved.value)), data)
+    const original = loadedKnowledgeBase.value
+    const config: Record<string, unknown> = {}
+    for (const field of ['model_tiers', 'chunking_config', 'indexing_strategy']) {
+      if (changes[field]) config[field] = { ...original[field], ...changes[field] }
+    }
+    const result: any = await updateKnowledgeBase({ name: data.name, description: data.description, ...(Object.keys(config).length ? { config } : {}) })
     if (!result.success) throw new Error(result.message || t('common.operationFailed'))
+    for (const [field, value] of Object.entries(config)) original[field] = value
+    original.name = data.name; original.description = data.description
     saved.value = JSON.stringify(formData.value)
     resources.invalidateKnowledgeBaseDetail()
     window.dispatchEvent(new CustomEvent('reliquary:knowledge-settings-saved'))

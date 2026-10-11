@@ -140,6 +140,61 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	require.Equal(t, 7, h.embedder.calls)
 }
 
+func TestMaintenanceEmbeddingRebuildPreservesAllEntityProfileColumns(t *testing.T) {
+	for _, preserve := range []bool{true, false} {
+		name := "normal"
+		if preserve {
+			name = "maintenance"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := newAllRebuildFixture(t, false)
+			originalAt := time.Date(2025, 1, 2, 3, 4, 5, 123456000, time.UTC)
+			require.NoError(t, h.db.Model(&types.Entity{}).Where("id='entity'").UpdateColumn("updated_at", originalAt).Error)
+			var before, after string
+			profileSQL := `SELECT (to_jsonb(e)-'name_embedding'-'embedding_model_id'-'embedding_dimension'-'embedding_needs_rebuild')::text FROM entities e WHERE id='entity'`
+			require.NoError(t, h.db.Raw(profileSQL).Scan(&before).Error)
+			h.rebuilder.PreserveEntityProfileTimestamps(preserve)
+			run, err := h.rebuilder.Start(h.ctx, 1)
+			require.NoError(t, err)
+			require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
+			require.Equal(t, "completed", h.state(t).Status)
+			require.NoError(t, h.db.Raw(profileSQL).Scan(&after).Error)
+			entity := readNameEntity(t, h.db, "entity")
+			require.Equal(t, "replacement-model", entity.EmbeddingModelID)
+			require.Equal(t, 3, entity.EmbeddingDimension)
+			require.False(t, entity.EmbeddingNeedsRebuild)
+			require.Equal(t, types.EntityNameEmbedding(h.embedder.vector()), entity.NameEmbedding)
+			if preserve {
+				require.JSONEq(t, before, after, "all nonregenerated profile columns must survive maintenance")
+				require.True(t, entity.UpdatedAt.Equal(originalAt))
+			} else {
+				require.True(t, entity.UpdatedAt.After(originalAt), "ordinary task 12 rebuild keeps its existing timestamp behavior")
+			}
+		})
+	}
+}
+
+func TestMaintenanceEmbeddingRebuildRejectsConcurrentEntityTimestampEdit(t *testing.T) {
+	h := newAllRebuildFixture(t, false)
+	h.rebuilder.PreserveEntityProfileTimestamps(true)
+	var editedAt time.Time
+	h.embedder.onEmbed = func(_ context.Context, text string) error {
+		if strings.Contains(text, "Rebuild Entity") {
+			editedAt = time.Date(2026, 10, 11, 10, 20, 30, 123456000, time.UTC)
+			require.NoError(t, h.db.Model(&types.Entity{}).Where("id='entity'").UpdateColumn("updated_at", editedAt).Error)
+		}
+		return nil
+	}
+	run, err := h.rebuilder.Start(h.ctx, 1)
+	require.NoError(t, err)
+	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
+	require.EqualValues(t, 1, h.state(t).FailedCount)
+	entity := readNameEntity(t, h.db, "entity")
+	require.True(t, entity.UpdatedAt.Equal(editedAt), "maintenance must not overwrite a concurrent profile edit")
+	require.Equal(t, "fixture-model", entity.EmbeddingModelID)
+	require.True(t, entity.EmbeddingNeedsRebuild)
+}
+
 func TestAllEmbeddingRebuildInterruptResumeAndFailedRetry(t *testing.T) {
 	h := newAllRebuildFixture(t, true)
 	run, err := h.rebuilder.Start(h.ctx, 1)

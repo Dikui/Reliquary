@@ -25,6 +25,7 @@ import (
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -206,6 +207,16 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 }
 
 func (s *VaultDocumentService) runScan(ctx context.Context) {
+	paused, err := maintenanceops.SnapshotPaused(ctx, s.db)
+	if err != nil {
+		if ctx.Err() == nil {
+			logger.Errorf(ctx, "Vault maintenance status unavailable: %v", err)
+		}
+		return
+	}
+	if paused {
+		return
+	}
 	if err := s.Scan(ctx, false); err != nil && ctx.Err() == nil {
 		logger.Errorf(ctx, "Vault document scan failed: %v", err)
 	}
@@ -417,7 +428,9 @@ func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.Know
 		}
 	}
 	knowledge.Title = vaultDocumentTitle(path, body, kind)
-	knowledge.VaultBody = body
+	// User documents and reports have a single original in the file library.
+	// Their text is used for indexing, never stored as a recovery copy in SQL.
+	knowledge.VaultBody = ""
 	knowledge.FileSize = int64(len(body))
 	knowledge.FileHash = hash
 	knowledge.UpdatedAt = time.Now().UTC()

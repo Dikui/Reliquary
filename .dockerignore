@@ -34,6 +34,13 @@ logs/
 tmp/
 temp/
 .scratch/
+.maintenance-tools/
+.maintenance-runtime/
+.maintenance-runtime.previous/
+.maintenance-schedule/
+.maintenance-restore.json
+.maintenance-rebuild.json
+.maintenance-rebuild/
 *.log
 *.pid
 
@@ -53,6 +60,8 @@ test/data/mswag.txt
 
 # 敏感文件
 .env
+.env.*
+!.env.example
 *.pem
 *.key
 *.crt

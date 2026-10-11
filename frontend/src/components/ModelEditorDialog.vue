@@ -802,6 +802,8 @@ const selectModelType = async (type: EditorModelType) => {
 }
 
 // 监听 visible 变化，初始化表单
+const loadedConfiguration = ref('')
+const configurationState = () => JSON.stringify({ ...formData.value, apiKey: undefined, credentials: undefined })
 watch(() => props.visible, (val) => {
   if (val) {
     // 检查Ollama服务状态
@@ -859,6 +861,7 @@ watch(() => props.visible, (val) => {
       }
     } finally {
       nextTick(() => {
+        loadedConfiguration.value = configurationState()
         hydratingForm.value = false
       })
     }
@@ -1278,6 +1281,10 @@ const checkRemoteAPI = async () => {
 
 // 确认保存
 const handleConfirm = async () => {
+  if (isEdit.value && loadedConfiguration.value && configurationState() === loadedConfiguration.value) {
+    emit('update:visible', false)
+    return
+  }
   try {
     // 手动校验必填字段
     if (!formData.value.modelName || !formData.value.modelName.trim()) {

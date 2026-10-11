@@ -199,6 +199,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 		return nil, err
 	}
 
+	original := *kb
 	current := *kb
 	kb = &current
 	previousEmbeddingModelID, _ := ResolveModelTier(ctx, nil, kb, types.ModelTierEmbedding)
@@ -234,7 +235,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	kb.EnsureDefaults()
 
 	logger.Info(ctx, "Saving knowledge base update")
-	if err := s.persistKnowledgeBase(ctx, kb); err != nil {
+	if err := s.persistKnowledgeBaseSettings(ctx, kb, &original, config); err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_base_id": id,
 		})

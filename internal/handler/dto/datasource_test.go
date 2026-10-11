@@ -110,3 +110,11 @@ func TestDataSourceResponse_NoConfig(t *testing.T) {
 	// No config jsonb stored → no config object in the response.
 	assert.NotContains(t, string(body), `"config":`)
 }
+
+func TestDataSourceResponseMigrationChecklist(t *testing.T) {
+	ds := &types.DataSource{Type: "rss", Status: "paused", Config: types.JSON(`{"credentials":null,"_reliquary_maintenance_required_fields":"[\"config.credentials.auth_headers.Authorization\"]"}`)}
+	response := NewDataSourceResponse(ds)
+	assert.True(t, response.MaintenanceRequired)
+	assert.Equal(t, []string{"config.credentials.auth_headers.Authorization"}, response.MaintenanceMissingFields)
+	assert.False(t, response.Credentials["credentials"].Configured)
+}

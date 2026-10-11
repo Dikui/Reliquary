@@ -75,3 +75,26 @@ func TestRSSScheduledEnqueueFailureRollsBackSyncLog(t *testing.T) {
 	require.Zero(t, logs)
 	require.Zero(t, jobs)
 }
+
+func TestRSSScheduleCannotBypassMaintenanceCredentialChecklist(t *testing.T) {
+	db := pgtest.Open(t)
+	source := &types.DataSource{TenantID: 1, Name: "Incomplete restored RSS", Type: "rss", Status: types.DataSourceStatusActive,
+		Config: types.JSON(`{"credentials":null,"_reliquary_maintenance_required_fields":"[\"config.credentials.auth_headers.Authorization\"]"}`)}
+	require.NoError(t, db.Create(source).Error)
+	scheduler := NewScheduler(repository.NewDataSourceRepository(db), repository.NewSyncLogRepository(db), queue.NewClient(db))
+	scheduler.SetDatabase(db)
+	require.NoError(t, scheduler.triggerSyncTx(context.Background(), source.ID, source.TenantID))
+	var logs, jobs int64
+	require.NoError(t, db.Model(&types.SyncLog{}).Count(&logs).Error)
+	require.NoError(t, db.Model(&queue.Job{}).Count(&jobs).Error)
+	require.Zero(t, logs)
+	require.Zero(t, jobs)
+	// Fill the field without changing status, exercising the scheduler's own
+	// check rather than relying on the settings API to enforce the pause.
+	require.NoError(t, db.Model(source).Update("config", types.JSON(`{"credentials":{"auth_headers":"{\"authorization\":\"replacement-header\"}"},"_reliquary_maintenance_required_fields":"[\"config.credentials.auth_headers.Authorization\"]"}`)).Error)
+	require.NoError(t, scheduler.triggerSyncTx(context.Background(), source.ID, source.TenantID))
+	require.NoError(t, db.Model(&types.SyncLog{}).Count(&logs).Error)
+	require.NoError(t, db.Model(&queue.Job{}).Count(&jobs).Error)
+	require.EqualValues(t, 1, logs)
+	require.EqualValues(t, 1, jobs)
+}

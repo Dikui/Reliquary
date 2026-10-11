@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 	"reliquary/internal/config"
+	"reliquary/internal/maintenance"
 )
 
 // VaultService persists articles and refreshes their database-owned headers.
@@ -16,6 +17,7 @@ type VaultService struct {
 	root     string
 	cfg      config.VaultConfig
 	articles vaultArticleState
+	replica  *maintenance.Writer
 }
 
 func NewVaultService(db *gorm.DB, cfg *config.Config) (*VaultService, error) {
@@ -31,5 +33,5 @@ func NewVaultService(db *gorm.DB, cfg *config.Config) (*VaultService, error) {
 			return nil, fmt.Errorf("create vault directory %s: %w", dir, err)
 		}
 	}
-	return &VaultService{db: db, root: root, cfg: *cfg.Vault}, nil
+	return &VaultService{db: db, root: root, cfg: *cfg.Vault, replica: maintenance.NewWriter(db, root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), cfg.Vault.HeaderDebounce)}, nil
 }

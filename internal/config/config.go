@@ -138,7 +138,7 @@ func LoadConfig() (*Config, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("unable to decode config into struct: %w", err)
 	}
-	fmt.Printf("Using configuration file: %s\n", viper.ConfigFileUsed())
+	fmt.Fprintf(os.Stderr, "Using configuration file: %s\n", viper.ConfigFileUsed())
 
 	resolvedConfigDir = filepath.Dir(viper.ConfigFileUsed())
 

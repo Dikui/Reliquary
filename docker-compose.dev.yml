@@ -3,8 +3,7 @@
 services:
   # 只启动依赖的基础设施服务
   postgres:
-    image: paradedb/paradedb:v0.22.2-pg17
-    container_name: Reliquary-postgres-dev
+    image: paradedb/paradedb:v0.22.2-pg17@sha256:af585013f97f622715de01e48d00558f7edf17055d7b40deafc9f98ca8d99a56
     ports:
       - "${DB_PORT:-5432}:5432"
     environment:
@@ -16,7 +15,7 @@ services:
     networks:
       - Reliquary-network-dev
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USER}"]
       interval: 10s
       timeout: 10s
       retries: 3

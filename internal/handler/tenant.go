@@ -73,6 +73,7 @@ type tenantAPIKeyUpdateRequest struct {
 }
 
 type tenantAPIKeyResponse struct {
+	Status     string     `json:"status"`
 	ID         uint64     `json:"id"`
 	Name       string     `json:"name"`
 	APIKey     string     `json:"api_key"`
@@ -290,7 +291,16 @@ func tenantAPIKeyForResponse(key *types.TenantAPIKey) tenantAPIKeyResponse {
 	if key == nil {
 		return tenantAPIKeyResponse{}
 	}
+	status := "active"
+	if key.APIKey == "" && key.KeyHash == fmt.Sprintf("disabled-%d", key.ID) {
+		status = "migration_invalidated"
+	} else if key.RevokedAt != nil {
+		status = "revoked"
+	} else if key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now()) {
+		status = "expired"
+	}
 	return tenantAPIKeyResponse{
+		Status:     status,
 		ID:         key.ID,
 		Name:       key.Name,
 		APIKey:     key.APIKey,

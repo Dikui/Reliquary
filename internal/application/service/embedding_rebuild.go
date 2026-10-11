@@ -25,14 +25,21 @@ var errRebuildStopped = errors.New("embedding rebuild paused or superseded")
 // EmbeddingRebuilder checkpoints every vector together with its destination
 // write. Restarting or retrying never repeats successful checkpoint items.
 type EmbeddingRebuilder struct {
-	db       *gorm.DB
-	profiles *EntityNameEmbeddingRebuilder
-	tasks    interfaces.TaskEnqueuer
-	vault    *VaultService
+	db                              *gorm.DB
+	profiles                        *EntityNameEmbeddingRebuilder
+	tasks                           interfaces.TaskEnqueuer
+	vault                           *VaultService
+	preserveEntityProfileTimestamps bool
 }
 
 func NewEmbeddingRebuilder(db *gorm.DB, models interfaces.ModelService, tasks interfaces.TaskEnqueuer, vault *VaultService) *EmbeddingRebuilder {
 	return &EmbeddingRebuilder{db: db, profiles: NewEntityNameEmbeddingRebuilder(db, models, nil), tasks: tasks, vault: vault}
+}
+
+// PreserveEntityProfileTimestamps is configured before starting a maintenance
+// rebuild. Vector regeneration must retain the portable entity profile values.
+func (r *EmbeddingRebuilder) PreserveEntityProfileTimestamps(preserve bool) {
+	r.preserveEntityProfileTimestamps = preserve
 }
 
 func (r *EmbeddingRebuilder) Status(ctx context.Context, tenantID uint64) (*types.EmbeddingRebuildStatus, error) {
@@ -374,8 +381,13 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			if err := lockEntitySpaceShared(tx, run.TenantID); err != nil {
 				return err
 			}
-			result := tx.Model(&types.Entity{}).Where("id=? AND tenant_id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=?", entity.ID, run.TenantID, entity.CanonicalName, entity.EntityType, entity.Description).
-				Updates(map[string]any{"name_embedding": types.EntityNameEmbedding(vector), "embedding_model_id": run.ModelID, "embedding_dimension": run.Dimension, "embedding_needs_rebuild": false})
+			query := tx.Model(&types.Entity{}).Where("id=? AND tenant_id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=?", entity.ID, run.TenantID, entity.CanonicalName, entity.EntityType, entity.Description)
+			updates := map[string]any{"name_embedding": types.EntityNameEmbedding(vector), "embedding_model_id": run.ModelID, "embedding_dimension": run.Dimension, "embedding_needs_rebuild": false}
+			if r.preserveEntityProfileTimestamps {
+				query = query.Where("updated_at=?", entity.UpdatedAt)
+				updates["updated_at"] = entity.UpdatedAt
+			}
+			result := query.Updates(updates)
 			return rebuildSourceWriteResult(result)
 		}, nil
 	}

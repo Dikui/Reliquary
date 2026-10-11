@@ -59,6 +59,8 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 	}
 	link := filepath.Join(root, "attachments", article.ID, "linked.png")
 	require.NoError(t, os.Symlink(filepath.Join(root, article.VaultPath), link))
+	// Remove the deliberately unsafe fixture before the vault's final flush.
+	t.Cleanup(func() { require.NoError(t, os.Remove(link)) })
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/"+article.ID+"/vault-attachment?"+url.Values{"path": {"../../attachments/" + article.ID + "/linked.png"}}.Encode(), nil))
 	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())

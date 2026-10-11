@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import { changedSettings } from '@/utils/settingsPatch'
 import { CONTENT_TYPES } from '@/types/knowledgeClassification'
 import { createDataSource, updateDataSource, triggerSync, validateCredentials, putDataSourceCredentials, deleteDataSourceCredentials, type DataSource } from '@/api/datasource'
 
@@ -17,7 +18,10 @@ const error = ref('')
 const testResult = ref('')
 const configured = ref(false)
 const replaceCredentials = ref(false)
+const migrationRequired = computed(() => props.dataSource?.maintenance_required === true)
+const headersRequired = computed(() => migrationRequired.value && props.dataSource?.maintenance_missing_fields?.some(field => field.includes('credentials.auth_headers')) === true)
 const form = ref({ name: '', default_content_type: '', feedUrls: '', publisher: '', articlePathPrefix: '', authHeaders: '', sync_schedule: '0 0 2 * * *', sync_mode: 'incremental' as 'incremental' | 'full', sync_deletions: true })
+const loadedForm = ref<any>(null)
 const contentTypeOptions = computed(() => [{ value: '', label: t('datasource.defaultContentTypeUnspecified') }, ...CONTENT_TYPES.map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) }))])
 const scheduleOptions = computed(() => [
   { label: t('datasource.schedule30min'), value: '0 */30 * * * *' },
@@ -55,11 +59,12 @@ watch(visible, (open) => {
   const ds = props.dataSource
   const settings = ds?.config?.settings || {}
   form.value = { name: ds?.name || '', default_content_type: ds?.default_content_type || '', feedUrls: settings.feed_urls || ds?.config?.resource_ids?.join('\n') || '', publisher: settings.publisher || '', articlePathPrefix: settings.article_path_prefix || '', authHeaders: '', sync_schedule: ds?.sync_schedule || '0 0 2 * * *', sync_mode: ds?.sync_mode || 'incremental', sync_deletions: ds?.sync_deletions ?? true }
-  configured.value = ds?.credentials?.credentials?.configured === true
+  loadedForm.value = { ...form.value }
+  configured.value = ds?.credentials?.credentials?.configured === true && !ds?.maintenance_required
   replaceCredentials.value = false
   error.value = ''
   testResult.value = ''
-})
+}, { immediate: true })
 async function testConnection() {
   if (!form.value.feedUrls.trim() || testing.value) return
   testing.value = true
@@ -75,18 +80,24 @@ async function removeCredentials() {
 }
 async function save() {
   if (submitting.value) return
+  if (headersRequired.value && !form.value.authHeaders.trim()) { error.value = t('datasource.field.migrationHeadersReason'); return }
   if (!form.value.name.trim() || !form.value.feedUrls.trim()) { error.value = t('datasource.requiredFields'); return }
   submitting.value = true
   error.value = ''
   try {
     const credentials = form.value.authHeaders.trim() ? { auth_headers: form.value.authHeaders } : {}
-    const settings = { feed_urls: form.value.feedUrls.trim(), publisher: form.value.publisher, article_path_prefix: form.value.articlePathPrefix }
-    const payload: Partial<DataSource> = { name: form.value.name.trim(), type: 'rss', default_content_type: form.value.default_content_type, config: { credentials: props.dataSource ? {} : credentials, settings, resource_ids: [] }, sync_schedule: form.value.sync_schedule, sync_mode: form.value.sync_mode, sync_deletions: form.value.sync_deletions, status: 'active' }
     if (props.dataSource) {
-      if (replaceCredentials.value) await putDataSourceCredentials(props.dataSource.id, credentials)
-      await updateDataSource(props.dataSource.id, payload)
+      if (replaceCredentials.value || form.value.authHeaders.trim()) await putDataSourceCredentials(props.dataSource.id, credentials)
+      const publicFields = (value: typeof form.value) => ({
+        name: value.name.trim(), default_content_type: value.default_content_type,
+        sync_schedule: value.sync_schedule, sync_mode: value.sync_mode, sync_deletions: value.sync_deletions,
+        config: { settings: { feed_urls: value.feedUrls.trim(), publisher: value.publisher, article_path_prefix: value.articlePathPrefix } },
+      })
+      const patch = changedSettings(publicFields(loadedForm.value), publicFields(form.value))
+      if (Object.keys(patch).length) await updateDataSource(props.dataSource.id, patch)
       MessagePlugin.warning(t('datasource.updateSuccessSyncHint'))
     } else {
+      const payload: Partial<DataSource> = { name: form.value.name.trim(), type: 'rss', default_content_type: form.value.default_content_type, config: { credentials, settings: { feed_urls: form.value.feedUrls.trim(), publisher: form.value.publisher, article_path_prefix: form.value.articlePathPrefix }, resource_ids: [] }, sync_schedule: form.value.sync_schedule, sync_mode: form.value.sync_mode, sync_deletions: form.value.sync_deletions, status: 'active' }
       const response: any = await createDataSource(payload)
       const id = (response.data || response).id
       try { await triggerSync(id); MessagePlugin.success(t('datasource.createAndSyncSuccess')) }
@@ -102,6 +113,7 @@ async function save() {
 <template>
   <SettingDrawer v-model:visible="visible" :title="t(dataSource ? 'datasource.edit' : 'datasource.add')" :confirm-text="t('common.save')" :confirm-loading="submitting" storage-key="setting-drawer:width:datasource-editor" width="640px" @confirm="save">
     <template #footer-left><t-button variant="outline" :loading="testing" :disabled="submitting || (configured && !replaceCredentials)" @click="testConnection">{{ t('datasource.testConnection') }}</t-button></template>
+    <t-alert v-if="migrationRequired" theme="warning" :message="t('datasource.field.migrationCredentialsRequired')" />
     <t-form :data="form" layout="vertical" label-align="top" @submit.prevent>
       <t-form-item :label="t('datasource.nameLabel')" name="name"><t-input v-model="form.name" :disabled="submitting" /></t-form-item>
       <div class="rss-presets"><t-button v-for="[name, url, publisher, prefix] in rssPresets" :key="url" variant="outline" size="small" :disabled="submitting" @click="selectPreset(name, url, publisher, prefix)">{{ name }}</t-button></div>
@@ -110,7 +122,7 @@ async function save() {
       <t-form-item :label="t('datasource.defaultContentType')" name="default_content_type"><div class="field-stack"><t-select v-model="form.default_content_type" :options="contentTypeOptions" :disabled="submitting" :aria-label="t('datasource.defaultContentType')" /><p>{{ t('datasource.defaultContentTypeHint') }}</p></div></t-form-item>
       <t-form-item :label="t('datasource.field.articlePathPrefix')" name="articlePathPrefix"><div class="field-stack"><t-input v-model="form.articlePathPrefix" :disabled="submitting" /><p>{{ t('datasource.field.articlePathPrefixHint') }}</p></div></t-form-item>
       <div v-if="configured && !replaceCredentials" class="credential-actions"><span>{{ t('credential.configured') }}</span><t-button variant="text" @click="replaceCredentials = true">{{ t('credential.update') }}</t-button><t-popconfirm :content="t('credential.confirmRemovePrompt')" @confirm="removeCredentials"><t-button variant="text" theme="danger">{{ t('credential.remove') }}</t-button></t-popconfirm></div>
-      <t-form-item v-else :label="t('datasource.field.authHeaders')" name="authHeaders"><t-input v-model="form.authHeaders" type="password" :disabled="submitting" :placeholder="t('datasource.field.authHeadersHint')" /></t-form-item>
+      <t-form-item v-else :label="t(headersRequired ? 'datasource.field.migrationHeadersLabel' : 'datasource.field.authHeaders')" :required="headersRequired" name="authHeaders"><t-input v-model="form.authHeaders" type="password" :disabled="submitting" :placeholder="t('datasource.field.authHeadersHint')" /><p v-if="headersRequired">{{ t('datasource.field.migrationHeadersReason') }}</p></t-form-item>
       <t-form-item :label="t('datasource.syncScheduleLabel')" name="sync_schedule"><t-select v-model="form.sync_schedule" :options="scheduleOptions" :disabled="submitting" /></t-form-item>
       <t-form-item :label="t('datasource.syncModeLabel')" name="sync_mode"><t-radio-group v-model="form.sync_mode" :disabled="submitting"><t-radio value="incremental">{{ t('datasource.syncMode.incremental') }}</t-radio><t-radio value="full">{{ t('datasource.syncMode.full') }}</t-radio></t-radio-group></t-form-item>
 
