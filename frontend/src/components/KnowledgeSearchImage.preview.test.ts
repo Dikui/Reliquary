@@ -56,8 +56,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         'data-overlay-close': props.closeOnOverlay, 'data-escape-close': props.closeOnEscKeydown,
       }, [h('button', { 'data-close-preview': true, onClick: () => emit('close') }, 'Close')]) : null,
     })
+    const preview = loadComponent(new URL('./ImagePreview.vue', import.meta.url), {
+      'tdesign-vue-next': { ImageViewer: viewer },
+    })
     const image = loadComponent(new URL('./KnowledgeSearchImage.vue', import.meta.url), {
-      '@/utils/protectedFileAccess': protectedAccess, 'tdesign-vue-next': { ImageViewer: viewer },
+      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
     })
     const article = loadComponent(new URL('./KnowledgeSearchArticle.vue', import.meta.url), {
       './KnowledgeSearchImage.vue': moduleOf(image), './KnowledgeClassification.vue': empty,

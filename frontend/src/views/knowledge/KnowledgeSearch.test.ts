@@ -58,9 +58,14 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
 }
 const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
 function articleComponent() {
+  const preview = component('../../components/ImagePreview.vue', {
+    'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
+  })
   return component('../../components/KnowledgeSearchArticle.vue', {
     './KnowledgeClassification.vue': moduleOf(component('../../components/KnowledgeClassification.vue', classificationModules)),
-    './KnowledgeSearchImage.vue': moduleOf(component('../../components/KnowledgeSearchImage.vue', { '@/utils/protectedFileAccess': protectedAccess })),
+    './KnowledgeSearchImage.vue': moduleOf(component('../../components/KnowledgeSearchImage.vue', {
+      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
+    })),
     './GlobalCommandPalette/useHighlight': highlight,
   })
 }

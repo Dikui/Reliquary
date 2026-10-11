@@ -30,6 +30,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 | Duplicate intake | KnowledgeDuplicateNotice and useKnowledgeDuplicates | Intake API 409 with optional match_method | Manual, URL and file intake | Actual SFC and hook regression tests |
 | Repost sources | RepostSources | Knowledge detail API | Document preview | Shared component and full SFC regression tests |
 | Article classification | KnowledgeClassification | Article content_type, processing_mode, structured_summary, entities and topics | Compact list and complete detail | Actual SFC render, link safety and locale tests |
+| Image preview | ImagePreview wrapping TDesign ImageViewer | KnowledgeSearchImage and picture-preview | Authenticated search Blob and existing picture URL | Real browser Escape, opening focus and trigger focus restoration |
 
 ## Flow ledger
 

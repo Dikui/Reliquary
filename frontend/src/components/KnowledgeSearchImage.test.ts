@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { defineComponent } from 'vue'
 import { createI18n } from 'vue-i18n'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
@@ -19,7 +20,12 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       fetch: async (url: string, options: RequestInit) => { requests.push({ url, options }); return { ok: requests.length > 1, status: 503, blob: async () => new Blob(['fixture'], { type: 'image/png' }) } },
     })) { previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, value }) }
     URL.revokeObjectURL = value => { revoked.push(value); originalRevoke(value) }
-    const component = loadComponent(new URL('./KnowledgeSearchImage.vue', import.meta.url), { '@/utils/protectedFileAccess': protectedAccess })
+    const preview = loadComponent(new URL('./ImagePreview.vue', import.meta.url), {
+      'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
+    })
+    const component = loadComponent(new URL('./KnowledgeSearchImage.vue', import.meta.url), {
+      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': { __esModule: true, default: preview },
+    })
     const app = renderer.createApp(component, { articleId: 'search-image-1', path: relative, title: 'Image evidence' })
     app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)
     const root = element('root')
