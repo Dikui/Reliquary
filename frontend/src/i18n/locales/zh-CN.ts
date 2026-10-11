@@ -29,7 +29,7 @@ export default {
   "topicsFailed": "主题未保存，请重试。"
 },
   topicManagement: {
-  "title": "主题管理",
+  "title": "主题",
   "description": "管理关注方向，并把历史文章归入对应主题。",
   "create": "新建主题",
   "edit": "修改主题",
@@ -73,7 +73,7 @@ export default {
   "timezone": "显示时区：{timezone}",
   "actor": "操作者",
   "webActor": "网页",
-  "object": "对象 ID",
+  "object": "关联记录 ID",
   "before": "修改前",
   "after": "修改后",
   "noValue": "无",
@@ -98,10 +98,10 @@ export default {
 },
   menu: {
     batchManage: '批量管理',
-  "knowledgeBase": "知识库",
-  "settings": "系统设置",
+  "knowledgeBase": "文章",
+  "settings": "设置",
   "logout": "退出登录",
-  "search": "搜索",
+  "search": "知识检索",
   "collapseSidebar": "收起侧栏",
   "expandSidebar": "展开侧栏",
   "logoutSuccess": "已退出登录"
@@ -344,13 +344,13 @@ export default {
       mcpUrl: 'MCP 服务地址',
       mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取文章、收录、待审区、星标和写入整理结果。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
       copyMcpUrl: '复制 MCP 服务地址',
-      apiKeys: 'API Keys',
+      apiKeys: 'API 密钥',
       apiKeysDesc: "API Key 拥有与你登录后相同的全部访问权限。",
       createApiKey: '创建 API Key',
       createApiKeyDialogDesc: '设置此 API Key 的名称和可选有效期。',
       noApiKeys: '暂无 API Key',
       apiKeyName: '名称',
-      apiKeyValue: 'API Key',
+      apiKeyValue: 'API 密钥',
       apiKeyNamePlaceholder: '例如：个人自动化',
       apiKeyNameRequired: '请输入 API Key 名称',
       createdAt: '创建时间',
@@ -363,7 +363,7 @@ export default {
       loadApiKeysFailed: '加载 API Key 列表失败',
       apiKeyCreated: 'API Key 已创建',
       requestExample: '请求示例',
-      playgroundTitle: 'API Playground',
+      playgroundTitle: '接口调试',
       playgroundDesc: '使用 API Key 查询知识并查看响应。',
       playgroundOpen: '打开 Playground',
       playgroundDrawerDesc: '使用 API Key 查询知识并查看响应',
@@ -569,7 +569,7 @@ export default {
           desc: 'MinerU 自部署服务'
         },
         simple: {
-          name: 'Simple',
+          name: '内置解析器',
           desc: '简单格式 & 图片解析（无需外部服务）'
         },
         anydoc: {
@@ -618,7 +618,7 @@ export default {
     requestPreview: '检索请求参数',
   },
   commandPalette: {
-    placeholder: "搜索知识库、文件…",
+    placeholder: "搜索文章、用户文档与整理结果…",
     clearRecent: '清除',
     retrieval: '检索参数',
     hotkey: {
@@ -632,7 +632,7 @@ export default {
       adjustRetrieval: '调整检索参数'
     },
     quick: {
-      knowledge: '打开知识库',
+      knowledge: '打开文章',
       settings: '打开设置',
     },
     match: {
@@ -640,7 +640,7 @@ export default {
       keyword: '关键字'
     },
     group: {
-      chunks: '知识库文件',
+      chunks: '检索结果',
 
       commands: '命令',
       recent: '最近搜索',
@@ -751,7 +751,7 @@ export default {
       parameters: '请求参数',
       thinking: '思考模式',
       thinkingDesc: '仅对支持思考模式的模型生效',
-      systemPrompt: 'System Prompt',
+      systemPrompt: '系统提示词',
       systemPromptPlaceholder: '可选，输入系统提示词',
       run: '运行测试',
       copyResult: '复制结果',
@@ -812,7 +812,7 @@ export default {
       empty: "暂无生成模型"
     },
     source: {
-      remote: 'Remote',
+      remote: '远程',
       openaiCompatible: 'OpenAI兼容',
       custom: '自定义'
     },
@@ -822,8 +822,8 @@ export default {
     },
     typeShort: {
       chat: "生成",
-      embedding: 'Embedding',
-      rerank: 'ReRank',
+      embedding: '向量',
+      rerank: '重排',
     }
   },
   upload: {
@@ -842,9 +842,9 @@ export default {
 
   },
   platform: {
-    subtitle: '大模型驱动的个人知识框架',
+    subtitle: '个人知识的收集、存储与检索',
     description: "收录、保存和检索你的知识资料",
-    rag: 'RAG 增强生成',
+    rag: '知识检索',
     hybridSearch: '混合检索',
     multimodalParsing: '多模态文档解析',
     hybridSearchEngine: "混合检索",
@@ -852,12 +852,6 @@ export default {
     independentTenant: "个人知识管理",
     fullApiAccess: '完整 API 访问',
     knowledgeBaseManagement: '知识库管理',
-    carousel: {
-      hybridSearchTitle: '混合检索策略',
-      hybridSearchDesc: "BM25 + 向量检索",
-      smartDocRetrievalTitle: '智能文档检索',
-      smartDocRetrievalDesc: 'PDF/Word/图片多格式解析'
-    }
   },
   font: {
     uiFont: '界面字体',
@@ -941,9 +935,9 @@ export default {
       sourceLabel: '模型来源',
       sourceLocal: 'Ollama',
       sourceRemote: 'API',
-      baseUrlLabel: 'Base URL',
+      baseUrlLabel: '服务地址',
       displayNameLabel: '显示名称（可选）',
-      displayNamePlaceholder: '例如：客服问答模型',
+      displayNamePlaceholder: '例如：文章处理模型',
       displayNameDesc: '仅用于界面展示，实际调用仍使用上面的模型名称。',
       baseUrlPlaceholder: '例如：https://api.openai.com/v1',
       apiKeyOptional: 'API Key（可选）',
@@ -1297,7 +1291,7 @@ export default {
           loadedAll: '已全部加载，共 {count} 条',
           loadingMore: '正在加载更多…',
           attempts: '执行 {current}/{max}',
-          unknownTarget: '未识别到关联对象',
+          unknownTarget: '未识别到关联记录',
           knowledgeBaseLabel: '知识库 ID',
           knowledgeLabel: '文档 ID',
           taskIDLabel: '业务任务 ID',
@@ -1458,6 +1452,8 @@ export default {
     }
   },
   tenant: {
+    defaultName: '个人空间',
+    defaultDescription: '个人知识',
     title: '空间信息',
     currentTenant: '当前空间',
     sectionDescription: '查看空间的详细配置信息',
@@ -1572,6 +1568,8 @@ export default {
         contextHeader: '上下文标题',
         fallbackWarning: '策略链已穷尽 — 当前设置无法智能分块此内容',
         stats: {
+          min: '最小',
+          max: '最大',
           chunks: '块',
           truncated: '已截断；总数 {total}'
         },
@@ -1637,8 +1635,8 @@ export default {
       embeddingOptional: '（可选）',
     },
     document: {
-      title: '文档',
-      subtitle: "管理和组织文档知识库"
+      title: '文章',
+      subtitle: "收集文章、处理待审内容与管理用户判断"
     },
     messages: {
       loadModelsFailed: '加载模型列表失败',
@@ -1720,7 +1718,7 @@ export default {
     },
     success: {
       draftSaved: '草稿已保存',
-      published: '消息已提交，正在审核'
+      published: '文章已提交，正在审核'
     },
     warning: {
       knowledgeUnavailable: '无法加载知识库，请关闭编辑器后重试。',
@@ -1923,7 +1921,7 @@ export default {
   },
   settings: {
     vault: {
-      title: '文件库',
+      title: '文件库状态',
       root: '根目录',
       rootHint: '由服务器配置，此处只读。',
       mine: '用户文档',
@@ -1940,7 +1938,7 @@ export default {
     modelManagement: '模型管理',
     parserEngine: '解析引擎',
     versionInfo: '版本信息',
-    taskQueue: '任务队列',
+    taskQueue: '运行队列',
     tenantInfo: '空间信息',
     workspaceSettings: '空间设置',
     system: '系统设置',
@@ -1980,14 +1978,14 @@ export default {
       saveSuccess: '保存成功',
       saveFailed: '保存失败',
       mineruEndpointPlaceholder: '如 https://your-mineru.example.com',
-      defaultPipeline: '默认 pipeline',
+      defaultPipeline: '默认处理流程',
       languagePlaceholder: '如 ch、en、ja（默认 ch）',
       mineruCloudApiKeyPlaceholder: 'MinerU 云服务 API Key',
       vlmLabel: 'vlm（视觉语言模型）',
       mineruHtmlLabel: 'MinerU-HTML（HTML 解析）',
       serverUrl: '服务器地址',
       vlmServerUrlPlaceholder: '如 http://your-vllm-server:8000',
-      vlmServerUrlHint: '当 Backend 选择 vlm-http-client 或 hybrid-http-client 时需要填写',
+      vlmServerUrlHint: '当后端类型选择 vlm-http-client 或 hybrid-http-client 时需要填写',
     },
     capabilityUnavailable: '当前部署不支持此功能，已返回可用页面。',
     navGroups: {
@@ -2009,7 +2007,7 @@ export default {
     copyDetails: '复制详情',
     copied: '已复制到剪贴板',
     close: '关闭',
-    live: 'LIVE',
+    live: '实时',
     liveTooltip: '解析进行中，每 2 秒自动刷新一次',
     autoRefreshOn: '自动刷新中',
     fetchFailedShort: '刷新失败',
@@ -2178,6 +2176,7 @@ export default {
     }
   },
   knowledgeBase: {
+    collectReason: '收藏理由',
     vaultPath: '文件库路径',
     copyVaultPath: '复制文件库路径',
     contentTypes: {"event":"事件","opinion":"观点","research":"研究","tutorial":"教程","case":"案例","reference":"参考","unclassified":"未分类"},
@@ -2198,23 +2197,23 @@ export default {
     description: '描述',
     settings: '设置',
 
-    searchMessageContent: '搜索消息内容',
+    searchMessageContent: '搜索文章内容',
     uploadSuccess: '文件上传成功！',
     uploadFailed: '文件上传失败！',
     fileExists: '文件已存在',
-    duplicateFound: '该消息已存在',
-    duplicateSimilarFound: '与已有消息高度相似',
-    viewExistingMessage: '查看已有消息',
+    duplicateFound: '该文章已存在',
+    duplicateSimilarFound: '与已有文章高度相似',
+    viewExistingMessage: '查看已有文章',
     dismissDuplicateNotice: '关闭重复提示',
     uploadAllSuccess: '成功上传 {count} 个文件！',
     uploadPartialSuccess: '上传完成：成功 {success} 个，失败 {fail} 个',
     uploadAllFailed: '所有文件上传失败',
 
     videosUnsupported: '已跳过 {count} 个视频文件（暂不支持视频上传）',
-    unsupportedTypesHint: '部分文档类型（{types}）暂无可用解析引擎，上传后将无法解析',
+    unsupportedTypesHint: '部分文件类型（{types}）暂无可用解析引擎，上传后将无法解析',
     goToParserSettings: '前往配置',
     importURL: '导入网页',
-    addDocument: '添加文档',
+    addDocument: '添加文章',
     importURLTitle: '导入网页',
     urlRequired: '请输入URL',
     invalidURL: '请输入有效的URL',
@@ -2237,7 +2236,7 @@ export default {
     channelUnknown: '未知',
     urlSource: '来源网址',
     webContent: '网页内容',
-    documentContent: '文档内容',
+    documentContent: '文章内容',
     importTime: '导入时间',
     createTime: '创建时间',
     createdAt: '创建',
@@ -2251,7 +2250,7 @@ export default {
     viewParentContext: '查看父块上下文',
     parentContextLoadFailed: '加载父上下文失败',
     customMetadata: '自定义元数据',
-    metadataCapabilityHint: '用于文档总结，并在文档被召回后作为文档级上下文辅助回答；不会参与索引或影响召回排序',
+    metadataCapabilityHint: '随文章保存的附加信息，供阅读时查看；不建立索引，也不影响检索排序',
     noCustomMetadata: '暂无自定义元数据',
     addMetadataField: '添加元数据字段',
     metadataKeyPlaceholder: '字段名',
@@ -2263,20 +2262,20 @@ export default {
     metadataKeyRequired: '元数据字段名不能为空',
     metadataKeyDuplicate: '元数据字段 {key} 重复',
     metadataNumberRequired: '元数据字段 {key} 必须是有效数字',
-    noDocumentSummary: '暂无文档摘要',
+    noDocumentSummary: '暂无文章摘要',
     notInitialized: '该知识库尚未完成初始化配置，请先前往设置页面配置模型信息后再上传文件',
     getInfoFailed: '获取知识库信息失败，无法上传文件',
     missingId: '缺少知识库ID',
     deleteFailed: '删除失败，请稍后再试！',
     uploadTime: '上传时间',
-    editDocument: '编辑文档',
+    editDocument: '编辑文章',
     rebuildDocument: '重建知识',
-    rebuildConfirm: '确认重建文档"{fileName}"？该操作会清理现有分块并重新解析。',
+    rebuildConfirm: '确认重建文章"{fileName}"？该操作会清理现有分块并重新解析。',
     rebuildSubmitted: '重建任务已提交',
     rebuildFailed: '重建失败，请稍后再试',
-    rebuildInProgress: '当前文档正在解析中，请稍后重试',
+    rebuildInProgress: '当前文章正在解析中，请稍后重试',
     cancelParse: '停止解析',
-    cancelParseConfirmBody: "确认停止解析\"{title}\"？已写入的分块会保留，可稍后通过\"重建\"重新触发；优化阶段（摘要 / 问答）的待执行任务会被立即丢弃。",
+    cancelParseConfirmBody: "确认停止解析\"{title}\"？已写入的分块会保留，可稍后通过\"重建\"重新触发；该文章尚未执行的处理任务会被取消。",
     cancelParseSubmitted: '已停止解析',
     cancelParseFailed: '停止失败，请稍后再试',
     draft: '草稿',
@@ -2292,20 +2291,20 @@ export default {
     intakeDiscard: '确认不收录',
     intakeReviewSubmitted: '已提交审核',
     intakeReviewFailed: '审核操作失败',
-    untitledDocument: '未命名文档',
+    untitledDocument: '未命名文章',
     moreOptions: '更多操作',
-    deleteDocument: '删除文档',
+    deleteDocument: '删除文章',
 
     parsingFailed: '解析失败',
     parsingInProgress: '解析中...',
     documentSummary: '摘要',
     detailSectionMeta: '基本信息',
-    confirmDeleteDocument: '确认删除文档"{fileName}"，删除后将无法恢复',
+    confirmDeleteDocument: '确认删除文章"{fileName}"，删除后将无法恢复',
     confirmDelete: '确认删除',
     viewModeGrid: '卡片视图',
     viewModeList: '列表视图',
     viewModeToggle: '切换视图',
-    columnName: '文件名',
+    columnName: '标题',
     columnSize: '大小',
     columnSource: '来源',
     columnStatus: '状态',
@@ -2315,14 +2314,14 @@ export default {
     selectedCount: '已选 {count} 项',
     clearSelection: '取消选择',
     batchDelete: '批量删除',
-    confirmBatchDeleteDocument: '确认删除选中的 {count} 个文档？删除后将无法恢复。',
-    batchDeleteSuccess: '成功删除 {count} 个文档',
+    confirmBatchDeleteDocument: '确认删除选中的 {count} 篇文章？删除后将无法恢复。',
+    batchDeleteSuccess: '成功删除 {count} 篇文章',
     batchDeleteFailed: '批量删除失败',
-    confirmBatchReparseDocument: '确认重建选中的 {count} 个文档？现有内容将被清除并重新解析。',
+    confirmBatchReparseDocument: '确认重建选中的 {count} 篇文章？现有内容将被清除并重新解析。',
     confirmBatchReparse: '确认并重新解析',
     batchReparseSuccess: '已提交 {count} 个重建任务',
     batchReparseFailed: '批量重建失败',
-    batchReparseSkippedInFlight: '已跳过 {count} 个正在解析中的文档',
+    batchReparseSkippedInFlight: '已跳过 {count} 个正在解析中的文章',
     statusCompleted: '已完成',
     statusProcessing: '解析中',
     statusFinalizing: '优化中',
@@ -2338,7 +2337,7 @@ export default {
     textMarkdownFormat: 'text、markdown格式文件，不超过200K',
     dragFileNotText: '请拖拽文件而不是文本或链接',
     searchPlaceholder: '搜索知识库...',
-    docSearchPlaceholder: '搜索文档名称...',
+    docSearchPlaceholder: '搜索文章标题...',
     fileTypeFilter: '文件类型',
     allFileTypes: '全部类型',
     parseStatusFilter: '解析状态',
@@ -2383,7 +2382,7 @@ export default {
       source: '来源',
       enabled: '已启用',
       fileStorage: '文件存储',
-      documentCount: '文档数',
+      documentCount: '文章数',
       supportedFileTypes: '可上传格式',
       chunking: '分块',
       parentShort: '父',

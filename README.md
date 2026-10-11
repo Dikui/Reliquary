@@ -1,208 +1,85 @@
 # Reliquary
 
-基于 [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0) 的首版源码底座。
-本仓库的项目名称为 Reliquary，程序内部标识遵循各语言的大小写规范，保留上游功能、许可和第三方服务。
+[简体中文](README_CN.md)
 
-- 仓库：http://192.168.1.146:3000/dikui/Reliquary
-- 上游提交：`1edcd54b43606d9079bb36650efe3f68707a79ea`
-- 来源、命名范围与保留项：[UPSTREAM.md](UPSTREAM.md)
+Reliquary is a personal information component for collecting, storing, deduplicating, and retrieving articles. One personal space contains one knowledge base. External AI tools perform analysis and write reports through the intake API and MCP.
 
-## 从源码启动
+The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0), commit `1edcd54b43606d9079bb36650efe3f68707a79ea`. See [UPSTREAM.md](UPSTREAM.md) for provenance and retained licensing.
+
+## Features
+
+| Capability | Current behavior |
+| --- | --- |
+| Collection | Global RSS subscriptions, file uploads, URL import, and an authenticated intake API for external collectors |
+| Intake review | Subscription content passes intake review; rejected content remains in the pending area until you approve or discard it |
+| Article processing | One processing call produces a content type, a common summary, entities, and user-defined topics; processing models with vision can read article images in the same call |
+| Storage modes | Events, opinions, and research retain their full text, images, and original files; tutorials, cases, and references retain a summary and original link |
+| File library | Approved articles become Markdown files with generated headers; `mine/` contains your documents and `reports/` contains saved analysis |
+| Search | Hybrid full-text and vector retrieval, merged article results, filters for content type, entities, topics, publication dates, stars, and source directory; similar reporting can be collapsed |
+| Personal decisions | Star articles, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical article summaries |
+| External AI | MCP supports search, article reading, collection, pending review, stars, entity/topic lookup, and writing saved analysis |
+| Administration | Knowledge base, subscriptions, models, file library status, operation log, API integration, and runtime queues |
+
+Article bodies remain unchanged after their first write. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates article headers in one direction; manual header edits in Obsidian may be overwritten. Your documents are indexed without being edited by the application.
+
+The Web UI provides article management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. See [CONTEXT.md](CONTEXT.md) and [ADR 0009](docs/adr/0009-kb-collect-store-retrieve.md) for terminology and design.
+
+## Run from source
+
+Requirements: Git, Node.js/npm, Docker, and Docker Compose. Application images are built locally; this repository does not publish installation packages or public application images.
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
-# 按 .env 中的说明配置模型服务、数据库密码等参数。
+# Configure database credentials, JWT_SECRET, SYSTEM_AES_KEY, and model endpoints.
 ./scripts/build_frontend_dist.sh
 docker compose up -d --build
 ```
 
-需要 Git、Node.js/npm 和 Docker Compose。镜像使用本地 `reliquary-*` 名称并从本仓库构建；
-本首版未发布预编译程序、Homebrew 安装包或公共镜像。下方及其他文档中的上游发布链接仅用于参考，
-使用本项目请采用上述源码构建方式。
+The frontend build helper installs dependencies with `npm ci` during a normal installation. Configure the readable file library and its permissions before starting the application, as described in [the Mac mini deployment guide](docs/personal-use.md#部署在-mac-mini).
 
-Go 主模块为 `reliquary`；
-环境变量前缀为 `RELIQUARY_`。此版本面向全新安装，不自动迁移旧 WeKnora 数据目录、数据库或浏览器设置。2026-10-07 已将 PostgreSQL `000000` 至 `000098` 迁移压缩为新的 `000000_init` 基线，旧 Reliquary 数据库也必须重建，不能原地升级；操作说明见 [数据库迁移排障](docs/migration-troubleshooting.md#single-baseline-and-database-rebuild)。
+By default the Web UI is at `http://localhost`, and the backend API is at `http://localhost:8080`. The first successful registration closes further registration. The single user and valid API keys have full access to the personal space. Deploy on your private network.
 
-本版本供个人单用户使用，首次注册后关闭注册。登录用户和有效 API Key 拥有全部权限，密码恢复使用本地命令，详见[个人使用说明](docs/personal-use.md)。
+Apple Silicon model serving can run natively on macOS with Ollama and Metal. Model configuration supports Ollama, OpenAI-compatible endpoints, and native Anthropic generation; embeddings and reranking use their corresponding supported interfaces. See [the personal use guide](docs/personal-use.md) for setup and external integration.
 
-知识工作台提供实体档案、别名、实体合并与待合并建议。文章通过全文与向量检索访问，使用方法见 [实体档案说明](docs/知识库融合说明.md)。
+## Backup and migration
 
-## 上游功能与使用说明
-
-## 📌 Overview
-
-[**Reliquary**](https://weknora.weixin.qq.com) is an open-source, LLM-powered knowledge framework built for personal document collection, storage, and retrieval.
-
-Reliquary collects, stores, deduplicates, and retrieves articles in one knowledge base. File uploads, URL import, global RSS subscriptions, site adapters, intake review, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage. Analysis and report writing use external AI tools.
-
-The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. Generation models use OpenAI-compatible APIs, the native Anthropic API, or local Ollama. Provider presets cover OpenAI, Anthropic, DeepSeek, Alibaba Cloud, Zhipu, Moonshot, SiliconFlow, Volcengine, OpenRouter, Google Gemini and Ollama, plus a generic OpenAI-compatible option for other services. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
-
-
-## 📱 Interface Showcase
-
-<table>
-  <tr>
-    <td width="50%" align="center"><b>📄 Articles & Batch Operations</b><br/><img src="./docs/images/kb-document-list.png" alt="Article List and Batch Operations" width="100%"></td>
-  </tr>
-</table>
-
-## 🏗️ Architecture
-
-Files, URLs and RSS articles pass through intake review and parsing. One processing call produces the content type, summary, entities and topics. Events, opinions and research retain the full body with chunks and vector indexes; tutorials, cases and references retain a summary and original link. PostgreSQL stores article records, entities, topics and search indexes; local storage keeps bodies, source files and images for full articles. The Web UI retrieves knowledge without generating answers.
-
-## 🧩 Feature Overview
-
-**Knowledge Management**
-
-| Capability | Details |
-|------------|---------|
-| Knowledge Base | One automatically created document knowledge base; sign in directly to the article page |
-| Knowledge Settings | Model tiers, chunking, parser rules and indexing in one settings page; processing models with vision read body images within the same call |
-| Per-Upload Process Config | Override parser and chunking per upload batch via upload-confirm dialog or `process_config` API; reprocess with new settings |
-| Article Processing | Six content types determine full storage or a summary and link; the common summary includes an overview, points and key terms, with entity and topic associations |
-| Batch Reparse | Re-queue parsing for multiple documents at once with optional per-batch `process_config` |
-| Subscriptions | Global RSS, Atom, JSON Feed and site adapters in Settings, with incremental and full sync, schedules and logs |
-| Document Formats | PDF / Word / Txt / Markdown / EPUB / Images / CSV / Excel / PPT / JSON |
-| Retrieval Strategies | BM25 sparse / Dense retrieval / parent-child chunking / HNSW-accelerated pgvector (1024-dim) / multi-dimensional indexing |
-| Batch Selection | Marquee drag-select multiple documents in the KB list for batch reparse and deletion |
-
-**Integrations & Extensions**
-
-| Capability | Details |
-|------------|---------|
-| Model Presets | Generic OpenAI-compatible / OpenAI / Anthropic / DeepSeek / Alibaba Cloud / Zhipu / Moonshot / SiliconFlow / Volcengine / OpenRouter / Google Gemini / Ollama |
-| Embeddings | OpenAI-compatible APIs and Ollama; Alibaba Cloud text embeddings, Zhipu and SiliconFlow use the compatible API |
-| Reranking | Generic `/rerank` APIs and Alibaba Cloud Bailian |
-| Vector DB | PostgreSQL (ParadeDB: pgvector + pg_search) |
-| Object Storage | Local filesystem |
-| API Integration | Full-access API keys with API Key management; `resource_urls=public` returns directly loadable file/image URLs |
-
-**Platform**
-
-| Capability | Details |
-|------------|---------|
-| Deployment | Docker Compose with private and offline support |
-| UI | Web UI / RESTful API |
-| Access Control | One personal user with complete access, automatic registration closure, full-access API keys and local password recovery |
-| Security | AES-256-GCM at-rest encryption for API keys and data-source credentials with graceful key rotation; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses |
-| Observability | Model usage in `model_usage`, document processing timelines, runtime task queues and worker governance |
-| Task Management | MQ async tasks with worker-pool governance (core / enrichment / maintenance + elastic shared pool) and per-model background concurrency governors; automatic database migration on version upgrade |
-| Model Management | Centralized model tiers for the single knowledge base, declarative built-in models via YAML, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, WeKnora Cloud hosted models and parsing |
-
-## 🧩 Chrome Extension
-
-[**Reliquary Chrome Extension**](https://chromewebstore.google.com/detail/jpemjbopikggjlmikmclgbmkhhopjdgd) lets you capture web content directly into your Reliquary knowledge base. Select text, images, or entire pages in the browser and save them as knowledge entries with one click — no copy-paste or file upload needed.
-
-
-## 🚀 Getting Started
-
-### 🛠 Prerequisites
-
-- [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/)
-- [Git](https://git-scm.com/)
-
-### 📦 Installation & Launch
+Back up PostgreSQL, the file library, and uploaded resources together while application writes and file edits are paused. Copy deployment configuration and encryption keys separately. The [migration guide](docs/personal-use.md#迁移到另一台-mac-mini) describes restoring onto another Mac mini, checking articles and search, and rebuilding from the file library when a database backup is unavailable.
 
 ```bash
-git clone http://192.168.1.146:3000/dikui/Reliquary.git
-cd Reliquary
-cp .env.example .env   # Edit .env as needed, see comments in the file
-./scripts/build_frontend_dist.sh
-docker compose up -d --build
+docker compose stop app frontend
+./scripts/backup.sh /path/to/new-backup
+# On the destination, start PostgreSQL and create the stopped app container first.
+./scripts/restore.sh /path/to/new-backup
 ```
 
-Once started, visit **http://localhost** to get started.
+Both scripts accept a backup directory and honor `COMPOSE_FILE` and `COMPOSE_PROJECT_NAME`. Run `--help` for host directory overrides and empty destination requirements.
 
-> To use a local Ollama model, run `ollama serve > /dev/null 2>&1 &` first.
+This release requires a new installation when replacing older WeKnora or Reliquary schemas. The migration described above transfers the current schema between machines; it does not upgrade older schemas. See [database baseline rebuild guidance](docs/migration-troubleshooting.md#single-baseline-and-database-rebuild).
 
-### 🌐 Service URLs
-
-| Service | URL |
-|---------|-----|
-| Web UI | `http://localhost` |
-| Backend API | `http://localhost:8080` |
-
-## 📘 API Reference
-
-Start with the [personal use guide](./docs/personal-use.md) and [entity registry guide](./docs/知识库融合说明.md).
-
-Troubleshooting FAQ: [Troubleshooting FAQ](./docs/QA.md)
-
-## 🧭 Developer Guide
-
-### ⚡ Fast Development Mode (Recommended)
-
-If you need to frequently modify code, **you don't need to rebuild Docker images every time**! Use fast development mode:
+## Development and validation
 
 ```bash
-# Start infrastructure
 make dev-start
-
-# Start backend (new terminal)
-make dev-app
-
-# Start frontend (new terminal)
-make dev-frontend
+make dev-app       # Separate terminal
+make dev-frontend  # Separate terminal
 ```
 
-**Development Advantages:**
-- ✅ Frontend modifications auto hot-reload (no restart needed)
-- ✅ Backend modifications quick restart (5-10 seconds, supports Air hot-reload)
-- ✅ No need to rebuild Docker images
-- ✅ Support IDE breakpoint debugging
-
-**Detailed Documentation:** [Development Environment Quick Start](./docs/开发指南.md)
-
-
-## 🤝 Contributing
-
-Welcome to submit [Issues](https://github.com/Tencent/WeKnora/issues) or Pull Requests.
-
-**Process:** Fork → Create branch → Commit changes → Open PR
-
-**Standards:** Format code with `gofmt`, follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:` / `fix:` / `docs:` / `test:` / `refactor:`)
-
-### Validation
-
-For a focused PR, validate the changed scope first:
+See [the development guide](docs/开发指南.md). Issues and specs are local Markdown files under `.scratch/<feature-slug>/`, following [the issue tracker conventions](docs/agents/issue-tracker.md).
 
 ```bash
-git fetch origin main
-git diff --check origin/main...HEAD
-golangci-lint run --new-from-rev=origin/main ./...
-go test ./path/to/changed/package -count=1
+go build ./...
+go vet ./...
+go test -count=1 ./...
+cd frontend
+npm run type-check
+npm run build
+npm test
 ```
 
-Run `gofmt` on changed Go files before committing. For frontend changes, run the relevant tests from `frontend/` and use `npm run type-check` when the change affects TypeScript or Vue components.
+Database integration tests require the PostgreSQL test DSN in `RELIQUARY_TEST_PG_DSN`. Format changed Go files with `gofmt` and report baseline or environment failures with the exact command.
 
-The full maintainer gate remains:
+## License
 
-```bash
-make fmt
-make lint
-make test
-```
-
-`make fmt` formats the entire Go repository, so run it only with a clean worktree and review the resulting diff. Some full-suite tests require local infrastructure or service configuration. If a full check fails for an unrelated baseline or environment reason, include the exact command and failure in the PR while still providing passing targeted tests for your change.
-
-## 🔒 Security Notice
-
-**Important:** Starting from v0.1.3, Reliquary includes login authentication functionality to enhance system security. For production deployments, we strongly recommend:
-
-- Deploy Reliquary services in internal/private network environments rather than public internet
-- Avoid exposing the service directly to public networks to prevent potential information leakage
-- Configure proper firewall rules and access controls for your deployment environment
-- Regularly update to the latest version for security patches and improvements
-
-## 👥 Contributors
-
-Thanks to these excellent contributors:
-
-[![Contributors](https://contrib.rocks/image?repo=Tencent/WeKnora)](https://github.com/Tencent/WeKnora/graphs/contributors)
-
-## 📄 License
-
-This project is licensed under the [MIT License](./LICENSE).
-You are free to use, modify, and distribute the code with proper attribution.
+[MIT](LICENSE). Upstream attribution and third-party licenses remain in the repository.

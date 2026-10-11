@@ -211,7 +211,8 @@ type SearchParams struct {
 	DisableKeywordsMatch bool      `json:"disable_keywords_match"`
 	DisableVectorMatch   bool      `json:"disable_vector_match"`
 	KnowledgeIDs         []string  `json:"knowledge_ids"`
-	OnlyRecommended      bool      `json:"only_recommended"`
+	// OnlyRecommended is accepted for compatibility and has no effect.
+	OnlyRecommended bool `json:"only_recommended"`
 	// SkipContextEnrichment skips fetching parent, nearby, and relation chunks
 	// in processSearchResults when callers perform their own context assembly.
 	SkipContextEnrichment bool `json:"skip_context_enrichment,omitempty"`

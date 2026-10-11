@@ -35,7 +35,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 
 | Operation | Pending | Success | Failure recovery |
 | --- | --- | --- | --- |
-| View entity | Clear the previous article list and show loading | Show type, aliases and articles mentioning the entity from all knowledge bases | Keep selection, show inline error and allow refresh |
+| View entity | Clear the previous article list and show loading | Show type, aliases and articles mentioning the entity in the single knowledge base | Keep selection, show inline error and allow refresh |
 | Filter entity list | Debounce search and invalidate older requests | Show the filtered list with explicit load more | Show inline error and allow refresh |
 | Merge entity | App-owned dialog names the retained entity and space-wide consequences; disable duplicate requests | Refresh the entity list and announce success | Keep selected target and show inline error |
 | Accept merge suggestion | Shared confirmation names both entities and space-wide consequences | Refresh the list, retain filter and announce success | Keep list and show inline error |
@@ -73,4 +73,6 @@ Article stars wait for server confirmation before updating the card, row or deta
 
 The article detail uses KnowledgeArticleJudgments for content type and topic corrections. Full text to summary and link requires a second confirmation stating that body, body index and attachments will be removed. Failure keeps the dialog open. Summary and link to full text keeps the existing article on fetch failure and displays the reason; success reloads body chunks. Corrected types remain visible after reprocessing. Topic corrections save selected IDs and reload current associations. Busy corrections disable reprocessing. Review offers explicit approve, reject, retry and discard actions with shared pending and inline failure states.
 
-The operation log lives at /platform/operation-logs and lists user actions newest first, with exact local timestamps, displayed timezone, object ID and before/after values. Operation type and page are stored in the URL. Filter changes reset the page and invalidate earlier requests. Refresh and failed-read retry preserve readable records. Log entries are read-only.
+The main navigation lists articles, knowledge search, entities, topics and settings. The entity entry opens /platform/knowledge?tab=entities. Articles include the pending review area. Settings provide knowledge base, subscriptions, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
+
+The operation log lives at /platform/settings?section=operation-logs and lists user actions newest first, with exact local timestamps, displayed timezone, resource ID and before/after values. The previous /platform/operation-logs route redirects to settings and preserves query parameters. Operation type and page are stored in the URL. Filter changes reset the page and invalidate earlier requests. Refresh and failed-read retry preserve readable records. Log entries are read-only.

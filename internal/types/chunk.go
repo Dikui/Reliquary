@@ -40,36 +40,8 @@ const (
 	ChunkStatusIndexed ChunkStatus = 2
 )
 
-// ChunkFlags 定义 Chunk 的标志位，用于管理多个布尔状态
+// ChunkFlags 保留已有分块状态字段的存储类型。
 type ChunkFlags int
-
-const (
-	// ChunkFlagRecommended 表示可推荐状态（1 << 0 = 1）
-	// 当设置此标志时，该 Chunk 可以被推荐给用户
-	ChunkFlagRecommended ChunkFlags = 1 << 0
-	// 未来可扩展更多标志位：
-	// ChunkFlagHot    ChunkFlags = 1 << 2  // 热门
-)
-
-// HasFlag 检查是否设置了指定标志
-func (f ChunkFlags) HasFlag(flag ChunkFlags) bool {
-	return f&flag != 0
-}
-
-// SetFlag 设置指定标志
-func (f ChunkFlags) SetFlag(flag ChunkFlags) ChunkFlags {
-	return f | flag
-}
-
-// ClearFlag 清除指定标志
-func (f ChunkFlags) ClearFlag(flag ChunkFlags) ChunkFlags {
-	return f &^ flag
-}
-
-// ToggleFlag 切换指定标志
-func (f ChunkFlags) ToggleFlag(flag ChunkFlags) ChunkFlags {
-	return f ^ flag
-}
 
 // ImageInfo 表示与 Chunk 关联的图片信息
 type ImageInfo struct {
@@ -115,8 +87,7 @@ type Chunk struct {
 	ChunkIndex int `json:"chunk_index"`
 	// Whether the chunk is enabled, can be used to temporarily disable certain chunks
 	IsEnabled bool `json:"is_enabled"               gorm:"default:true"`
-	// Flags 存储多个布尔状态的位标志（如推荐状态等）
-	// 默认值为 ChunkFlagRecommended (1)，表示默认可推荐
+	// Flags 保留存储列、API 字段及原默认值；当前检索不读取此字段。
 	Flags ChunkFlags `json:"flags"                    gorm:"default:1"`
 	// Status of the chunk
 	Status int `json:"status"                   gorm:"default:0"`
@@ -149,8 +120,6 @@ type Chunk struct {
 	// ContextHeader is a Markdown heading breadcrumb prepended when indexing.
 	ContextHeader string `json:"-" gorm:"type:text"`
 }
-
-// The current content lives on Chunk; this table stores prior versions.
 
 // EmbeddingContent returns the chunk content with ContextHeader prepended
 // when set. Use this where the embedding model needs section context that

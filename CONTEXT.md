@@ -1,6 +1,6 @@
 # Reliquary 知识组织
 
-Reliquary 是个人信息组件，负责信息的收集、存储、去重与检索；简报、报告等综合分析由外部 AI 通过接口完成。本文件描述 [ADR 0009](docs/adr/0009-kb-collect-store-retrieve.md) 确定的目标模型，改造完成前代码中仍存在已删除的概念（见文末“不再使用的术语”）。
+Reliquary 是个人信息组件，负责信息的收集、存储、去重与检索；简报、报告等综合分析由外部 AI 通过接口完成。本文件描述 [ADR 0009](docs/adr/0009-kb-collect-store-retrieve.md) 确定的当前模型，文末“不再使用的术语”列出已删除的概念与旧称。
 
 ## Language
 

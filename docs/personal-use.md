@@ -1,78 +1,198 @@
-# 个人单用户使用
+# 个人使用指南
 
-系统只有一个用户和一个个人空间，租户 ID 固定为 `1`。首个用户注册成功后，注册接口拒绝后续请求，登录页隐藏注册入口。
+Reliquary 在一个个人空间的唯一知识库中收集、存储、去重与检索文章。综合分析和写报告由外部 AI 通过收录接口与 MCP 完成。统一术语和设计见 [CONTEXT.md](../CONTEXT.md) 与 [ADR 0009](adr/0009-kb-collect-store-retrieve.md)。
 
-登录用户拥有全部权限，可以管理系统设置、运行队列、模型和实体档案。API Key 通过 `Authorization: Bearer <key>` 鉴权，具有相同的访问权限，可按名称和有效期管理、撤销。现有 REST 接口也保留 `X-API-Key`。检索固定查询唯一知识库，时间条件继续作为业务筛选条件。
+## 账号与网页入口
 
-用户可在登录后修改自己的密码。忘记密码时，在仓库根目录导出与服务器相同的 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME` 环境变量，将新密码从标准输入交给本地命令：
+系统只有一个用户。首个用户注册成功后关闭注册，登录用户与有效 API Key 可以访问个人空间全部内容。API Key 支持名称、有效期和撤销，使用 `Authorization: Bearer <key>` 鉴权，现有 REST 接口也接受 `X-API-Key`。
+
+登录后进入文章页。主要入口为文章、知识检索、实体、主题和设置。文章页包含待审区，可以审核通过或丢弃订阅内容，标记星标，修正内容类型和主题，并简单查看文章。实体页管理规范名、别名和合并；主题页管理名称、说明及历史文章归入进度。设置集中提供知识库、订阅源、模型、文件库状态、操作日志、API 集成和运行队列。
+
+用户可在页面修改密码。忘记密码时，保持数据库可用，在仓库根目录使用服务器相同的数据库配置执行：
 
 ```bash
 go run ./cmd/server reset-password
 ```
 
-输入新密码后按回车。命令直接更新唯一用户的密码哈希，并撤销旧登录令牌；密码最少 8 个字符，UTF-8 编码不超过 72 字节。本地重置没有 HTTP 接口。
+新密码从标准输入读取，最少 8 个字符，UTF-8 编码不超过 72 字节。修改会撤销旧登录令牌。Docker 部署可执行 `docker compose run --rm --no-deps app ./Reliquary reset-password`。
 
-设置中的“订阅源”页面统一管理 RSS、Atom、JSON Feed 和 RSS 连接器内的站点适配器，保留定时同步、手动同步、订阅筛选、同步日志及可选鉴权头。订阅文章自动进入唯一知识库。
+## 收集、审核与处理
 
-决策依据见 [ADR 0007](adr/0007-personal-single-user.md)。
+收集入口包括全局 RSS 订阅、文件上传、按网址收录以及 `POST /api/v1/ingest` 收录接口。订阅源可设置默认内容类型，保留计划同步、手动同步和同步日志。订阅内容经过收录审核，未通过的内容进入待审区，只在数据库保留，审核通过后才写入文件库。主动收录直接进入去重和异步处理。
 
-检索直接查询同一个 PostgreSQL（ParadeDB）数据库，保留 pgvector 与 BM25 混合检索、融合和重排。设置中的“知识库”页面统一配置模型档位、分块、解析规则、图片处理与索引策略，配置保存在唯一知识库中。解析引擎设置管理服务地址和凭据。文件库由必填的 `VAULT_ROOT` 指定；上传和解析过程中使用的资源继续保存在 `LOCAL_STORAGE_BASE_DIR`。备份需包含 PostgreSQL、文件库和资源目录。
+规范化网址、正文哈希与近似重复检测用于去重，转载只补充来源记录。一篇文章通过一次处理调用得到内容类型、统一摘要、实体和主题。摘要包含一句话概述、3 到 5 条要点与关键名词。实体归一到实体档案，主题由用户定义，一篇文章可以属于多个主题。新建主题或修改说明后，可用历史摘要批量归入，页面显示进度。
 
-文件库启动时创建 `articles/`、`mine/`、`reports/`、`attachments/`。Compose 将文件库挂载为独立的 `vault-data` 卷，默认路径 `/data/vault`；`scripts/dev.sh app` 默认使用仓库下的 `.local-data/vault`。直接执行服务器时需先导出 `VAULT_ROOT`。文章表头以数据库为准，正文首次写入后保持不变。用户在 Obsidian 中修改的表头会在下一次字段变化时被覆盖。
+| 内容类型 | 处理方式 |
+| --- | --- |
+| 事件、观点、研究 | 全文保存，正文、图片和原始文件写入文件库 |
+| 教程、案例、参考 | 摘要加链接，需要时打开原链接阅读 |
 
-`mine/` 和 `reports/` 的 Markdown 只读并建立索引。`VAULT_STABLE_WAIT` 设置文件停止变化后的等待时长，默认 `10m`；`VAULT_SCAN_INTERVAL` 设置兜底全量扫描间隔，默认 `1m`。文章表头重写通过 `VAULT_HEADER_DEBOUNCE` 合并同一文章的连续变化，默认 `5s`。设置页显示文件库根目录和两个目录的扫描状态。
+处理模型支持视觉时，在同一次调用中读取正文图片。生成模型支持 OpenAI 兼容、Anthropic 原生与 Ollama 接口。嵌入支持 OpenAI 兼容与 Ollama；重排支持通用 `/rerank` 格式及阿里云百炼接口。在设置中测试模型连接、维度、视觉支持与实际调用，再配置知识库的处理和嵌入模型。
 
-`POST /api/v1/reports` 接收 `title`、`markdown`、可选的 `related_article_ids`，保存整理结果后立即建索引。`GET /api/v1/vault/status` 读取扫描状态；`GET /api/v1/knowledge/:id/vault-attachment?path=...` 使用登录态或 API Key 读取该文章的附件，路径相对文章文件。它们沿用现有认证。
+文本、Markdown 和图片使用 simple 解析；PDF、Office 与 EPUB 可使用进程内 anydoc，CSV 可使用 simple 或 anydoc。应用镜像默认以 `WITH_ANYDOC=1` 构建。直接 `go run` 时如需 anydoc，先执行 `make anydoc-lib`，再使用 `go run -tags anydoc ./cmd/server`；未链接时相关格式会提示构建要求。复杂排版与扫描件可选择已配置的 MinerU 或 MinerU Cloud 解析器。按网址收录使用 HTTP 抓取，需要 JavaScript 渲染的网页可能无法取得正文。
 
-停止服务器后，可在空知识数据库上执行以下命令。配置和账号可以保留，文章记录必须为空；完全空的应用数据库会创建个人空间与唯一知识库。
+## 文件库与检索
+
+`VAULT_ROOT` 指定服务器文件库，启动时创建以下目录：
+
+| 目录 | 内容与使用方式 |
+| --- | --- |
+| `articles/年-月/` | 已批准文章的 Markdown 表头与正文 |
+| `attachments/` | 全文文章的图片与原始文件 |
+| `mine/` | 用户自己编辑的 Markdown 文档，程序只读并建立索引 |
+| `reports/` | 外部 AI 写入的整理结果，可被检索 |
+
+用 Obsidian 打开文件库即可阅读。正文首次写入后保持不变，表头由数据库单向生成；手动修改文章表头可能被下一次字段更新覆盖。星标、收藏理由、内容类型、实体与主题以数据库为准。上传和解析过程仍使用 `LOCAL_STORAGE_BASE_DIR` 保存通用资源，备份同时包含此目录。
+
+`VAULT_HEADER_DEBOUNCE` 合并表头连续更新，默认 `5s`。`VAULT_STABLE_WAIT` 是用户文档停止变化后的索引等待时间，默认 `10m`；`VAULT_SCAN_INTERVAL` 是兜底扫描间隔，默认 `1m`。文件库状态页显示目录、最近扫描、文件数量与错误。
+
+知识检索覆盖文章表头、全文正文、用户文档和整理结果，使用 PostgreSQL 全文与向量混合检索，按文章合并命中片段。可按内容类型、实体、主题、发布时间、星标及来源目录筛选。按发布时间筛选会排除缺少发布时间的文章并说明数量，采集时间不会代替发布时间。相似报道按摘要向量和时间窗口折叠，可以展开。
+
+只运行一个后端进程。模型并发、速率和接口限流由该进程维护；Redis 保存 Asynq 后台队列及配置通知。迁移前先等运行队列完成，数据库备份不包含 Redis 中未完成的任务。
+
+## 部署在 Mac mini
+
+Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 环境。应用、PostgreSQL（ParadeDB）与 Redis 使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
 
 ```bash
-export VAULT_ROOT=/path/to/vault
-go run ./cmd/server vault-rebuild
+git clone http://192.168.1.146:3000/dikui/Reliquary.git
+cd Reliquary
+cp .env.example .env
 ```
 
-命令使用与服务器相同的 PostgreSQL 环境变量及迁移，不启动监听器或任务消费者，不修改文件库内容。无法解析的文件在输出的 `skipped` 清单中列出。已有向量模型配置时重新建立向量索引；完全空的数据库默认建立关键词索引。要在空数据库中同时重建向量，可导出 `VAULT_REBUILD_EMBEDDING_URL`、`VAULT_REBUILD_EMBEDDING_MODEL`、`VAULT_REBUILD_EMBEDDING_DIMENSION`，以及需要时的 `VAULT_REBUILD_EMBEDDING_API_KEY`，配置 OpenAI 兼容嵌入接口；保留模型配置时也可用 `VAULT_REBUILD_EMBEDDING_MODEL_ID` 指定现有模型。
+编辑 `.env`，至少确认以下配置：
 
-重建恢复表头中的字段、正文、实体和主题名称及关联。表头没有实体类型、别名、实体说明、主题说明、账号或模型配置，这些数据需随数据库备份；无既有实体可归入时，新建实体类型为“其他”。
+| 配置 | 说明 |
+| --- | --- |
+| `VAULT_ROOT` | 容器内文件库路径，建议保持 `/data/vault` |
+| `LOCAL_STORAGE_BASE_DIR` | 容器内上传资源目录，建议保持 `/data/files` |
+| `DB_DRIVER`、`DB_HOST`、`DB_PORT` | 使用 `postgres`、Compose 服务名 `postgres` 与 `5432` |
+| `DB_USER`、`DB_PASSWORD`、`DB_NAME` | PostgreSQL 账号、密码和库名，同时用于初始化数据库服务 |
+| `REDIS_ADDR`、`REDIS_PASSWORD` | Compose 内通常使用 `redis:6379`，密码与 Redis 服务保持一致 |
+| `JWT_SECRET`、`SYSTEM_AES_KEY` | 设置自己的登录签名密钥及 32 字节凭据加密密钥，迁移时保留加密密钥 |
+| `OLLAMA_BASE_URL` | 容器访问 macOS 模型服务的地址，例如 `http://host.docker.internal:11434` |
+| `OLLAMA_OPTIONAL` | 设为 `true` 时，Ollama 暂不可用只输出告警 |
+| `SSRF_WHITELIST_EXTRA` | 部署额外放行的抓取或模型主机/IP/CIDR；与设置页白名单合并 |
+| `APP_PORT`、`FRONTEND_PORT` | 宿主机 API 与网页端口，默认 `8080` 和 `80` |
+| `APP_EXTERNAL_URL` | 需要外部调用方读取限时文件链接时填写内网访问地址并代理 `/r/` |
 
-生成模型只使用三种接口：OpenAI 兼容、Anthropic 原生和 Ollama 本地。服务商下拉框从后端预设表读取，包含通用 OpenAI 兼容、OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama。其他服务可选择通用 OpenAI 兼容并填写地址。Gemini 使用官方兼容地址 `https://generativelanguage.googleapis.com/v1beta/openai/`。Ollama 模型列表和拉取管理继续保留。
+模型服务的完整地址、模型名、API Key、嵌入维度在“设置 > 模型”配置，知识库页选择具体档位。也可通过 [内置模型配置](BUILTIN_MODELS.md) 声明。迁移后需要检查数据库中保存的模型地址是否仍可访问。
 
-嵌入使用 OpenAI 兼容接口或 Ollama。阿里云文本嵌入默认地址为 `https://dashscope.aliyuncs.com/compatible-mode/v1`，智谱和硅基流动嵌入也使用兼容接口。重排使用通用 `/rerank` 格式或阿里云百炼原生接口；硅基流动、Jina、vLLM 和 Xinference 等兼容服务可使用通用格式。服务商预设按模型类型筛选，具体模型需支持相应接口。模型测试调用、思考模式、并发与速率限制、模型分级和路由继续保留。
+Compose 默认使用 `vault-data` 与 `data-files` 命名卷。为便于 Obsidian 阅读与直接复制，建议将两者换为宿主机目录。先创建目录，再在 `.env` 添加实际的绝对路径：
 
-文件访问继续使用带鉴权的 `/files` 代理与 `/files/presigned`。配置 `APP_EXTERNAL_URL` 并代理 `/r/` 后，可生成限时匿名文件链接。
+```dotenv
+RELIQUARY_VAULT_DIR=/Users/yourname/ReliquaryData/vault
+RELIQUARY_FILES_DIR=/Users/yourname/ReliquaryData/files
+VAULT_ROOT=/data/vault
+LOCAL_STORAGE_BASE_DIR=/data/files
+```
 
-解析保留 `simple`、`anydoc`、`mineru` 和 `mineru_cloud`。文本、Markdown 和图片使用 simple；PDF、Office 和 EPUB 默认使用进程内 anydoc，CSV 默认使用 simple，也可显式选择 anydoc；扫描件和复杂排版可以在解析引擎设置中选择已配置的 MinerU。HTML、HTM、MHTML、XMind 和音频文件上传返回明确的不支持错误，按网址收录使用 HTTP 抓取；需要 JavaScript 渲染的页面返回无法抓取正文的失败原因。
+创建本地 `compose.mac.yml`，同一容器目标的卷配置会替换默认命名卷：
 
-本地开发需先安装 Rust 工具链，然后在仓库根目录执行：
+```yaml
+services:
+  app:
+    volumes:
+      - type: bind
+        source: ${RELIQUARY_VAULT_DIR}
+        target: /data/vault
+      - type: bind
+        source: ${RELIQUARY_FILES_DIR}
+        target: /data/files
+```
+
+将 `.env` 中的目录替换为自己的路径后，执行：
 
 ```bash
-make anydoc-lib
-export SSRF_WHITELIST_EXTRA="${SSRF_WHITELIST_EXTRA-198.18.0.0/15}"
-go run -tags anydoc ./cmd/server
+mkdir -p /Users/yourname/ReliquaryData/vault /Users/yourname/ReliquaryData/files
+export COMPOSE_FILE=docker-compose.yml:compose.mac.yml
+export COMPOSE_PROJECT_NAME=reliquary
+./scripts/build_frontend_dist.sh
+docker compose build
+docker compose run --rm --no-deps --user root --entrypoint sh app   -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
+docker compose up -d
 ```
 
-应用镜像默认以 `WITH_ANYDOC=1` 构建。普通 `go run ./cmd/server` 不链接 anydoc，PDF 和 Office 解析会提示静态库和 `-tags anydoc` 的构建要求；可以在设置中为 PDF 显式选择已配置的 MinerU。单次解析调用超时由 `PARSER_CALL_TIMEOUT` 设置，默认 30 分钟。
+启动后访问 `.env` 配置的网页端口，注册唯一用户，配置模型并收录一篇文章。检查文件库是否产生 Markdown，知识检索是否命中。后续执行 Compose、备份或恢复时，使用相同的 `COMPOSE_FILE` 与 `COMPOSE_PROJECT_NAME`。
 
-只运行一个后端进程。模型并发与速率限制、接口限流保存在进程内存中，重启后重新计数。Redis 继续用于 Asynq 任务队列及任务检查，以及运行配置缓存变更通知。
+推荐将 Ollama 直接安装到 macOS，在宿主机运行生成和嵌入模型。Ollama 支持 Apple GPU 的 Metal 加速；其官方文档说明 macOS 上的 Docker 容器不能使用 GPU 加速。因此将模型服务放在 macOS，Compose 中只运行 Reliquary 与数据服务，不依赖 CUDA。参见 [Ollama 硬件支持](https://docs.ollama.com/gpu)与 [Ollama FAQ](https://docs.ollama.com/faq#how-do-i-use-ollama-with-gpu-acceleration-in-docker)。
 
-按网址收录、RSS 与站点适配器继续可用，使用带 SSRF 防护的 HTTP 抓取。综合分析和报告由外部 AI 工具完成。
+若 Ollama 桌面应用仅监听回环地址，可按[官方环境变量说明](https://docs.ollama.com/faq#setting-environment-variables-on-mac)执行 `launchctl setenv OLLAMA_HOST "0.0.0.0:11434"` 并重启 Ollama，让 Docker 通过 `host.docker.internal:11434` 访问。使用命令行服务时可在单独终端执行 `OLLAMA_HOST=0.0.0.0:11434 ollama serve`。让此端口只在可信内网可达。选择能放入统一内存的模型，先测试文章处理与嵌入，再调整后台并发。
 
-Docker Compose、`make run`、`scripts/dev.sh app` 和委托该脚本的 `scripts/quick-dev.sh` 默认设置 `SSRF_WHITELIST_EXTRA=198.18.0.0/15`。这一基准测试保留网段正常公网不会使用；本机代理采用 fake-ip 时，公网域名可能解析到该网段，默认放行使按网址收录和抓取继续可用。该项不会放行回环、私网、链路本地地址、`localhost`、`postgres` 或 `redis` 等 Docker 服务名，已有 SSRF 校验规则继续生效。
+若模型连接被 SSRF 校验拒绝，可把实际使用的 `host.docker.internal` 或模型主机加入 `SSRF_WHITELIST_EXTRA` 后重启应用。Compose 默认额外放行 `198.18.0.0/15`，用于本机代理 fake-ip；没有此需求可在 `.env` 显式设置 `SSRF_WHITELIST_EXTRA=`。默认网段本身不会放行回环、私网或 Docker 服务名，额外配置应写明具体需要访问的主机。
 
-Docker Compose 和开发脚本可在 `.env` 中设置自定义 `SSRF_WHITELIST_EXTRA` 覆盖默认值，多个值用逗号分隔；显式写入 `SSRF_WHITELIST_EXTRA=` 关闭默认放行，修改后需重启应用。Docker Compose 也可用 `SSRF_WHITELIST_EXTRA= docker compose up -d app` 关闭。宿主机开发脚本优先使用调用方已设置的环境变量，其次为 `.env.local`、`.env`，最后为默认值；`SSRF_WHITELIST_EXTRA= ./scripts/dev.sh app` 同样关闭。`docker-compose.dev.yml` 仅启动 PostgreSQL 和 Redis，宿主机后端通过上述脚本获得该默认值。直接 `go run` 或执行二进制时，请先按上面的 `export` 示例设置此变量；`make run` 已带默认值，并使用当前 shell 中导出的变量，不单独加载 `.env`。
+## 迁移到另一台 Mac mini
 
-`SSRF_WHITELIST_EXTRA` 始终与设置页的 SSRF 白名单合并，设置页保存为空列表或修改白名单不会覆盖部署配置。要关闭 fake-ip 放行，应在部署环境中将该变量显式设为空，同时从设置页白名单移除自行添加的同一网段。
+迁移传输当前版本的完整数据库、文件库、上传资源与部署配置。旧结构不支持通过此步骤升级，旧 WeKnora 或旧 Reliquary 数据仍需重新安装。两台机器使用相同代码版本、PostgreSQL 主版本及 ParadeDB 扩展版本，保持容器内文件库和资源路径一致；宿主机绑定目录可以不同。
 
+上传资源的数据库记录可能包含绝对路径，如 `stored_resources.PhysicalPath` 与文章的 `FilePath`。修改宿主机目录时只改绑定挂载的 `source`，保持应用容器内 `LOCAL_STORAGE_BASE_DIR=/data/files`；单纯复制资源并改变容器内根目录不会自动修正这些数据库引用。文件库文章路径主要是相对路径，但完整迁移也建议保持容器内 `VAULT_ROOT=/data/vault`。
 
-网页保留知识库、文章查看、实体档案、检索、收录审核与待审区、模型配置、队列、系统设置和 API Key 管理。CSV、Excel 收录摘要继续使用进程内 DuckDB 读取表结构和样本。
+1. 在原机器暂停 RSS 同步与外部收录，等待运行队列完成并等待表头更新写入。暂停 Obsidian 和其他工具对文件库的编辑。记录文章数、星标、主题和代表性的检索结果。
+2. 停止应用与网页，保留 PostgreSQL 运行。用脚本导出数据库并复制文件库和上传资源：
 
-空间信息与 API Key 使用 `/api/v1/space` 及其子路径，系统设置与队列使用 `/api/v1/system/settings` 和 `/api/v1/system/runtime/queues`。已用空间继续统计，不设存储限额。
+   ```bash
+   docker compose stop app frontend
+   ./scripts/backup.sh /Users/yourname/Backups/reliquary-2026-10-11
+   ```
 
-未设置 `SYSTEM_AES_KEY` 时，模型 API Key 与数据源凭据将以明文保存；启动日志输出警告，系统信息页显示凭据加密状态。设置有效的 32 字节密钥后按现有行为加密保存。
+   脚本使用 `pg_dump --format=custom` 生成 `database.dump`，另复制 `vault/` 与 `resources/`，记录格式标识与 SHA-256 校验。备份目录必须不存在或为空，已有内容会被拒绝。完成后可 `docker compose stop postgres redis` 关闭剩余服务；若原机器继续使用，执行 `docker compose start app frontend`。
+3. 将完整备份目录复制到新机器。另行复制 `.env`、Compose 配置、`config/config.yaml` 与自定义内置模型配置。`SYSTEM_AES_KEY` 必须保持一致，否则数据库里的模型 Key 和订阅凭据无法解密；登录签名配置也建议保持一致。脚本不把这些密钥写入备份清单。
+4. 在新机器修改宿主机目录、数据库连接、网页/API 端口、模型地址及必要的 SSRF 白名单。准备新的空 PostgreSQL 数据目录与空文件库/资源目录，构建相同版本镜像。先启动数据库和 Redis，再创建处于停止状态的应用容器，避免自动迁移提前创建应用表：
 
-注册时自动创建名为“知识库”或“Knowledge Base”的唯一知识库，服务启动时会补建缺失记录。PostgreSQL 唯一约束保证每个空间最多有一个未删除的知识库。登录后直接进入 `/platform/knowledge` 的文章页面，旧知识库页面地址重定向到此页面。
+   ```bash
+   export COMPOSE_FILE=docker-compose.yml:compose.mac.yml
+   export COMPOSE_PROJECT_NAME=reliquary
+   docker compose build
+   docker compose up -d --wait postgres redis
+   docker compose create app
+   ./scripts/restore.sh /Users/yourname/Backups/reliquary-2026-10-11
+   ```
 
-`GET /api/v1/knowledge-base` 读取唯一知识库，`PUT /api/v1/knowledge-base` 更新设置。文章列表、上传、网址收录与混合检索等子资源统一保留 `/api/v1/knowledge-bases/:id/...`，ID 必须是实际存在的唯一知识库，否则返回 404。订阅源使用全局 `/api/v1/data-sources` 及其子路径。
+   恢复前脚本校验备份，拒绝运行中的应用、已有应用表或非空文件目录。`pg_restore` 用单个事务导入到目标库，去除原库角色所有权与权限要求；仅在已确认没有应用表的目标库清理同名扩展和结构。文件复制在数据库提交后进行，若失败应保持应用停止，检查错误并用新的空库和空目录重试。
+5. 核对目录权限。默认命名卷恢复时，脚本会为镜像中的 `appuser` 修正权限；宿主机目录或自定义镜像由部署方检查。然后启动应用：
+
+   ```bash
+   docker compose run --rm --no-deps --user root --entrypoint sh app      -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
+   docker compose up -d
+   ```
+6. 登录并核对文章数、选定文章的表头与正文、星标、主题名/说明及关联。重复原机器的关键词与向量检索，检查命中文章和用户文档。打开“设置 > 文件库状态”，等待扫描完成，核对 `mine/` 和 `reports/` 数量、最近扫描与错误；确认上传原始文件与图片可读取。
+
+核对排序时，先让两侧索引统计一致。`pg_restore` 会重新创建全文索引；原库多次更新留下的死行可能影响 BM25 评分，进而改变混合检索排序。本次演练中仅 VACUUM 后分数仍有差异，两侧按相同版本重建全文索引后，完整检索响应一致。需要逐项比较评分与顺序时，可在原机器停止收录后、备份前，以及新机器导入后分别执行以下数据库维护，再比较相同查询。此维护清理和重建索引，不修改文章或检索配置，机制见 [ParadeDB 评分说明](https://www.paradedb.com/docs/reference/full-text/score#score-refresh)。
+
+```bash
+docker compose exec -T postgres sh -eu -c '
+  psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -c "VACUUM (ANALYZE) public.knowledges;" \
+    -c "VACUUM (ANALYZE) public.chunks;" \
+    -c "REINDEX INDEX public.knowledges_summary_search_idx;" \
+    -c "REINDEX INDEX public.chunks_search_idx;"
+'
+```
+
+脚本用法为 `scripts/backup.sh <备份目录>` 和 `scripts/restore.sh <备份目录>`，均提供 `--help`。默认从停止的 Compose 应用容器读取或写入挂载目录，因此可以处理命名卷。显式设置以下变量时，脚本直接复制宿主机目录：
+
+```bash
+COMPOSE_FILE=docker-compose.yml:compose.mac.yml COMPOSE_PROJECT_NAME=reliquary   VAULT_ROOT=/Users/yourname/ReliquaryData/vault   LOCAL_STORAGE_BASE_DIR=/Users/yourname/ReliquaryData/files   ./scripts/backup.sh /Users/yourname/Backups/reliquary-2026-10-11
+```
+
+恢复时使用相同变量格式，路径改为新机器的空目标目录，命令改为 `restore.sh`。这里脚本的 `VAULT_ROOT` 和 `LOCAL_STORAGE_BASE_DIR` 覆盖值是宿主机路径，`.env` 内的应用配置仍可以使用 `/data/vault` 与 `/data/files`。数据库操作在 Compose 的 `postgres` 服务内执行，不需要宿主机安装 PostgreSQL 客户端；自定义服务名可设置 `APP_SERVICE`、`DB_SERVICE`。
+
+### 只有文件库时重建
+
+没有数据库备份时，保留文件库的完整目录和附件，复制到新机器。准备新数据库与 Redis，配置 `VAULT_ROOT`、模型地址和凭据加密密钥。保持应用停止，先启动数据库，然后运行专用重建命令：
+
+```bash
+docker compose up -d --wait postgres redis
+docker compose run --rm --no-deps --user root --entrypoint sh app   -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
+docker compose run --rm --no-deps app ./Reliquary vault-rebuild
+docker compose up -d
+```
+
+命令使用应用相同的数据库配置和迁移，不启动 HTTP 服务或任务消费者，不修改文件库。知识数据库必须没有文章记录；配置和账号可以保留，完全空的数据库会创建个人空间与唯一知识库。输出 `articles`、`mine`、`reports` 和 `skipped`，逐项检查跳过的文件及原因。无法解析的文件会被跳过；如果中途重建失败，需要在空知识数据库修复后重试。
+
+重建能恢复文章 ID、表头、正文、星标、收藏理由、内容类型、实体与主题名称及关联，并重新生成检索索引。表头没有实体类型、别名和说明、主题说明、账号、API Key、模型配置、审核状态、操作日志、转载记录与采集器专有注解，这些内容无法从文件库恢复。没有已知实体可归入时，重建实体类型为“其他”。待审区内容尚未写入文件库，也无法恢复。
+
+空数据库默认重建关键词索引，无需模型。若同时重建向量索引，可在 `.env` 配置 `VAULT_REBUILD_EMBEDDING_URL`、`VAULT_REBUILD_EMBEDDING_MODEL`、`VAULT_REBUILD_EMBEDDING_DIMENSION` 和必要的 `VAULT_REBUILD_EMBEDDING_API_KEY`，使用可访问的 OpenAI 兼容嵌入接口；已有模型配置时可设置 `VAULT_REBUILD_EMBEDDING_MODEL_ID`。确认模型主机已通过 SSRF 白名单。重建后对比文章数、表头中的用户判断、关键词/向量检索及文件库扫描状态。
 
 ## 外部 Agent 接入
 

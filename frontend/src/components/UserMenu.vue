@@ -111,6 +111,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { getCurrentUser, logout as logoutApi, userInfoFromApi } from '@/api/auth'
 import { useI18n } from 'vue-i18n'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
+import { workspaceName } from '@/utils/workspaceCopy'
 
 const { t } = useI18n()
 
@@ -120,12 +121,7 @@ const props = defineProps<{ collapsed?: boolean }>()
 const sidebarCollapsed = computed(() => props.collapsed ?? uiStore.sidebarCollapsed)
 const authStore = useAuthStore()
 
-const activeTenantName = computed(() => {
-  return (
-    authStore.tenant?.name ||
-    ''
-  )
-})
+const activeTenantName = computed(() => workspaceName(authStore.tenant?.name, t))
 
 const menuRef = ref<HTMLElement>()
 const menuVisible = ref(false)

@@ -57,7 +57,7 @@ function createEnvironment(locale = 'zh-CN') {
     createKnowledgeFromURL: (kbId: string, payload: any) => intake('url', kbId, payload),
     uploadKnowledgeFile: (kbId: string, payload: any) => intake('file', kbId, payload),
     getKnowledgeBase: () => envelope({ id: 'kb-a' }),
-    getKnowledgeDetails: () => envelope({ id: 'owner-a', knowledge_base_id: 'kb-a', title: 'Existing message' }),
+    getKnowledgeDetails: () => envelope({ id: 'owner-a', knowledge_base_id: 'kb-a', title: 'Existing article' }),
     getKnowledgeDetailsCon: () => Promise.resolve({ success: true, data: [], total: 0 }),
     listKnowledgeFiles: () => Promise.resolve({ success: true, data: [], total: 0 }),
   };
@@ -168,12 +168,12 @@ function createEnvironment(locale = 'zh-CN') {
 
 function duplicateResponse(code = 'duplicate_manual', method?: string) {
   return { status: 409, success: false, code, message: 'Message already exists', match_method: method,
-    data: { id: 'owner-a', knowledge_base_id: 'kb-a', title: 'Existing message', repost_sources: [{ match_method: 'simhash' }] } };
+    data: { id: 'owner-a', knowledge_base_id: 'kb-a', title: 'Existing article', repost_sources: [{ match_method: 'simhash' }] } };
 }
 
 for (const locale of ['zh-CN', 'en-US']) {
   for (const method of [undefined, 'content_hash', 'simhash']) {
-    test(`${locale} manual duplicate ${method || 'legacy'} retains the draft and opens the existing message`, async () => {
+    test(`${locale} manual duplicate ${method || 'legacy'} retains the draft and opens the existing article`, async () => {
       const env = createEnvironment(locale);
       try {
         env.state.response = duplicateResponse('duplicate_manual', method);

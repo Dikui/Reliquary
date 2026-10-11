@@ -61,7 +61,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "operation-logs",
           name: "operationLogs",
-          component: () => import('../views/knowledge/OperationLogs.vue'),
+          redirect: to => ({ path: '/platform/settings', query: { ...to.query, section: 'operation-logs' } }),
           meta: { requiresInit: true, requiresAuth: true },
         },
         {

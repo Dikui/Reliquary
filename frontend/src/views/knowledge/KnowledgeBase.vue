@@ -399,7 +399,11 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
 
 // 唯一知识库加载后获取文章内容
 // Sync activeKbTab to URL query so it survives page refresh
+watch(() => route.query.tab, (tab) => {
+  activeKbTab.value = tab === 'entities' ? 'entities' : 'documents'
+})
 watch(activeKbTab, (tab) => {
+  if (route.query.tab === (tab === 'entities' ? 'entities' : undefined)) return
   const query = { ...route.query }
   if (tab === 'documents') {
     delete query.tab

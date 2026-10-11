@@ -25,8 +25,6 @@
                       'has-submenu': item.children && item.children.length > 0,
                       'expanded': expandedMenus.includes(item.key)
                     }]" @click="handleNavClick(item)">
-                      <!-- 沙箱：隔离运行窗口，避免和 Ollama / 系统设置共用 server -->
-
                       <span v-if="item.emoji" class="nav-icon nav-icon-emoji">{{ item.emoji }}</span>
                       <t-icon v-else :name="item.icon" class="nav-icon" />
                       <span class="nav-label">{{ item.label }}</span>
@@ -76,22 +74,14 @@
                     <ModelSettings />
                   </div>
 
-                  <!-- 消息管理 -->
-
-                  <!-- 我的记忆（个人记忆管理） -->
-
-                  <!-- 沙箱密钥 -->
-
                   <div v-if="currentSection === 'knowledge'" class="section"><KnowledgeSettings ref="knowledgeSettingsView" :initial-section="currentSubSection || undefined" /></div>
                   <div v-if="currentSection === 'datasource'" class="section"><DataSourceSettings /></div>
+                  <div v-if="currentSection === 'vault'" class="section"><VaultStatus /></div>
+                  <div v-if="currentSection === 'operation-logs'" class="section"><OperationLogs /></div>
                   <!-- 解析引擎 -->
                   <div v-if="currentSection === 'parser'" class="section">
                     <ParserEngineSettings />
                   </div>
-
-                  <!-- 存储引擎 -->
-
-                  <!-- 沙箱 -->
 
                   <!-- 系统信息 -->
                   <div v-if="currentSection === 'system'" class="section">
@@ -149,6 +139,8 @@ import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
 import KnowledgeSettings from './KnowledgeSettings.vue'
+import VaultStatus from './VaultStatus.vue'
+import OperationLogs from '@/views/knowledge/OperationLogs.vue'
 import DataSourceSettings from '@/views/knowledge/settings/DataSourceSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
@@ -237,6 +229,8 @@ const navItems = computed(() => {
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
     { key: 'knowledge', icon: 'file', label: t('settings.knowledgeSettings') },
     { key: 'datasource', icon: 'rss', label: t('settings.dataSources') },
+    { key: 'vault', icon: 'folder', label: t('settings.vault.title') },
+    { key: 'operation-logs', icon: 'history', label: t('operationLogs.title') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
@@ -283,13 +277,13 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'knowledge', 'datasource', 'parser',
+        'knowledge', 'datasource', 'vault', 'parser',
       ]),
     },
     {
       key: 'system_administration',
       label: t('settings.navGroups.systemAdministration'),
-      items: pickItems(['system-global', 'runtime-queues']),
+      items: pickItems(['system-global', 'operation-logs', 'runtime-queues']),
     },
     {
       key: 'platform',

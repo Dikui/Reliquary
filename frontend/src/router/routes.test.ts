@@ -132,3 +132,10 @@ test('knowledge search has an independent page and preserves query and filter UR
   assert.equal(router.currentRoute.value.query.sources, 'article')
   assert.equal(router.currentRoute.value.query.collapse_similar, 'false')
 })
+
+test('the operation log bookmark opens its settings section and preserves filters', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  await router.push('/platform/operation-logs?operation_type=star&page=2')
+  assert.equal(router.currentRoute.value.name, 'settings')
+  assert.deepEqual(router.currentRoute.value.query, { section: 'operation-logs', operation_type: 'star', page: '2' })
+})

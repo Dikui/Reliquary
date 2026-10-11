@@ -12,6 +12,7 @@ import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import * as personalError from '../utils/personalServerError'
 import * as searchHelpers from '../utils/knowledgeSearch'
+import * as workspaceCopy from '../utils/workspaceCopy'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../utils/sfcStyleTestHelpers'
 
 const require = createRequire(import.meta.url)
@@ -38,16 +39,15 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
     '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
     '@/utils/clipboard': { copyWithToast() {} },
     '@/utils/loginNotify': { notifyLoginSuccess() {} },
+    '@/utils/workspaceCopy': workspaceCopy,
     '@/utils/passwordValidation': { newPasswordRules: () => [] },
     'vue-router': { useRouter: () => ({ replace() {}, push() {} }) },
-    'swiper/vue': { Swiper: stub, SwiperSlide: stub },
-    'swiper/modules': {},
     ...modules,
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
     new Function('require', 'module', 'exports', ts.transpileModule(code.replaceAll('__FRONTEND_VERSION__', "'test'").replaceAll('__FRONTEND_COMMIT__', "'test'"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(
-      (name: string) => (name.endsWith('.css') || name.startsWith('swiper/css')) ? {} : name.endsWith('.svg') ? { default: '', __esModule: true } : mocks[name] ?? require(name), module, module.exports)
+      (name: string) => name.endsWith('.css') ? {} : name.endsWith('.svg') ? { default: '', __esModule: true } : mocks[name] ?? require(name), module, module.exports)
     return module.exports
   }
   const component = evaluate(script.content).default
@@ -149,6 +149,31 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(!html.includes('%'))
     assert.ok(!html.includes(locale === 'zh-CN' ? '配额' : 'Quota'))
     assert.ok(html.includes(translator(locale)('tenant.details.editName')))
+  })
+
+  test(`${locale}: default space copy is localized while unchanged edits retain server values`, async () => {
+    const updates: unknown[] = []
+    const { html, state } = await componentScenario('./settings/TenantInfo.vue', locale, {
+      'tdesign-vue-next': { MessagePlugin: { success() {} } },
+      '@/api/tenant': {
+        getTenantInfo: async () => ({ success: true, data: { id: 1, name: 'Personal workspace', description: 'Personal knowledge' } }),
+        updateTenant: async (input: unknown) => { updates.push(input); return { success: true } },
+      },
+    }, async state => {
+      await state.loadInfo()
+      state.startEditName()
+      assert.equal(state.canSubmit.value, false)
+      await state.saveTenantName()
+      state.startEditDescription()
+      assert.equal(state.canSubmitDescription.value, false)
+      await state.saveTenantDescription()
+    })
+    assert.ok(html.includes(translator(locale)('tenant.defaultName')))
+    assert.ok(html.includes(translator(locale)('tenant.defaultDescription')))
+    if (locale === 'zh-CN') assert.doesNotMatch(html, /Personal workspace|Personal knowledge/)
+    assert.equal(state.tenantInfo.value.name, 'Personal workspace')
+    assert.equal(state.tenantInfo.value.description, 'Personal knowledge')
+    assert.deepEqual(updates, [])
   })
 
   for (const encrypted of [false, true]) {

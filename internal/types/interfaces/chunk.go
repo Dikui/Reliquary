@@ -67,10 +67,6 @@ type ChunkRepository interface {
 	CountChunksByKnowledgeBaseID(ctx context.Context, tenantID uint64, kbID string) (int64, error)
 	// DeleteUnindexedChunks deletes unindexed chunks by knowledge id and chunk index range
 	DeleteUnindexedChunks(ctx context.Context, tenantID uint64, knowledgeID string) ([]*types.Chunk, error)
-	// UpdateChunkFlagsBatch updates flags for multiple chunks in batch using a single SQL statement.
-	// setFlags: map of chunk ID to flags to set (OR operation)
-	// clearFlags: map of chunk ID to flags to clear (AND NOT operation)
-	UpdateChunkFlagsBatch(ctx context.Context, tenantID uint64, kbID string, setFlags map[string]types.ChunkFlags, clearFlags map[string]types.ChunkFlags) error
 }
 
 // ChunkService defines the interface for chunk service operations

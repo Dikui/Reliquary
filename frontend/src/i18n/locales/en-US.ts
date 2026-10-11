@@ -73,7 +73,7 @@ export default {
   "timezone": "Display timezone: {timezone}",
   "actor": "Actor",
   "webActor": "Web",
-  "object": "Object ID",
+  "object": "Related record ID",
   "before": "Before",
   "after": "After",
   "noValue": "None",
@@ -98,10 +98,10 @@ export default {
 },
   menu: {
     batchManage: 'Batch manage',
-  "knowledgeBase": "Knowledge Base",
-  "settings": "System settings",
+  "knowledgeBase": "Articles",
+  "settings": "Settings",
   "logout": "Logout",
-  "search": "Search",
+  "search": "Knowledge search",
   "collapseSidebar": "Collapse sidebar",
   "expandSidebar": "Expand sidebar",
   "logoutSuccess": "Logged out successfully"
@@ -284,6 +284,7 @@ export default {
     tenantTooltipWithCreator: 'Created by {creator}',
   },
   knowledgeBase: {
+    collectReason: 'Collection reason',
     vaultPath: 'Vault path',
     copyVaultPath: 'Copy vault path',
     contentTypes: {"event":"Event","opinion":"Opinion","research":"Research","tutorial":"Tutorial","case":"Case","reference":"Reference","unclassified":"Unclassified"},
@@ -316,7 +317,7 @@ export default {
       source: 'Source',
       enabled: 'Enabled',
       fileStorage: 'File storage',
-      documentCount: 'Documents',
+      documentCount: 'Articles',
       supportedFileTypes: 'Accepted formats',
       chunking: 'Chunking',
       parentShort: 'parent',
@@ -326,23 +327,23 @@ export default {
     description: 'Description',
     settings: 'Settings',
 
-    searchMessageContent: 'Search message content',
+    searchMessageContent: 'Search article content',
     uploadSuccess: 'File uploaded successfully!',
     uploadFailed: 'File upload failed!',
     fileExists: 'File already exists',
-    duplicateFound: 'This message already exists',
-    duplicateSimilarFound: 'This message is highly similar to an existing message',
-    viewExistingMessage: 'View existing message',
+    duplicateFound: 'This article already exists',
+    duplicateSimilarFound: 'This article is highly similar to an existing article',
+    viewExistingMessage: 'View existing article',
     dismissDuplicateNotice: 'Dismiss duplicate notice',
     uploadAllSuccess: 'Successfully uploaded {count} file! | Successfully uploaded {count} files!',
     uploadPartialSuccess: 'Upload completed: {success} succeeded, {fail} failed',
     uploadAllFailed: 'All files failed to upload',
 
     videosUnsupported: 'Skipped {count} video file (video upload is not supported) | Skipped {count} video files (video upload is not supported)',
-    unsupportedTypesHint: 'Some document types ({types}) have no available parser engine and cannot be processed',
+    unsupportedTypesHint: 'Some file types ({types}) have no available parser engine and cannot be processed',
     goToParserSettings: 'Configure',
     importURL: 'Import from URL',
-    addDocument: 'Add Document',
+    addDocument: 'Add Article',
     importURLTitle: 'Import from URL',
     urlRequired: 'Please enter a URL',
     invalidURL: 'Please enter a valid URL',
@@ -365,7 +366,7 @@ export default {
     channelUnknown: 'Unknown',
     urlSource: 'Source URL',
     webContent: 'Web Content',
-    documentContent: 'Document Content',
+    documentContent: 'Article Content',
     importTime: 'Import Time',
     createTime: 'Create Time',
     createdAt: 'Created',
@@ -379,7 +380,7 @@ export default {
     viewParentContext: 'View Parent Context',
     parentContextLoadFailed: 'Failed to load parent context',
     customMetadata: 'Custom metadata',
-    metadataCapabilityHint: 'Used for document summaries and as document-level context after retrieval; it is not indexed and does not affect retrieval ranking',
+    metadataCapabilityHint: 'Additional information saved with the article for reading; it is not indexed and does not affect retrieval ranking',
     noCustomMetadata: 'No custom metadata',
     addMetadataField: 'Add metadata field',
     metadataKeyPlaceholder: 'Field name',
@@ -391,20 +392,20 @@ export default {
     metadataKeyRequired: 'Metadata field name is required',
     metadataKeyDuplicate: 'Duplicate metadata field: {key}',
     metadataNumberRequired: 'Metadata field {key} must be a valid number',
-    noDocumentSummary: 'No document summary',
+    noDocumentSummary: 'No article summary',
     notInitialized: 'Knowledge base is not initialized. Please configure models in settings before uploading files',
     getInfoFailed: 'Failed to get knowledge base information, file upload is not possible',
     missingId: 'Knowledge base ID is missing',
     deleteFailed: 'Delete failed. Please try again later!',
     uploadTime: 'Upload Time',
-    editDocument: 'Edit Document',
-    rebuildDocument: 'Rebuild Document',
-    rebuildConfirm: 'Rebuild document "{fileName}"? This will clear existing chunks and parse it again.',
+    editDocument: 'Edit Article',
+    rebuildDocument: 'Rebuild Article',
+    rebuildConfirm: 'Rebuild article "{fileName}"? This will clear existing chunks and parse it again.',
     rebuildSubmitted: 'Rebuild task submitted',
     rebuildFailed: 'Rebuild failed. Please try again later',
-    rebuildInProgress: 'This document is currently being parsed. Please try again later',
+    rebuildInProgress: 'This article is currently being parsed. Please try again later',
     cancelParse: 'Stop parsing',
-    cancelParseConfirmBody: "Stop parsing \"{title}\"? Saved chunks remain and can be rebuilt later. Pending optimization tasks for summaries and questions will be discarded.",
+    cancelParseConfirmBody: "Stop parsing \"{title}\"? Saved chunks remain and can be rebuilt later. Pending processing tasks for this article will be cancelled.",
     cancelParseSubmitted: 'Parsing stopped',
     cancelParseFailed: 'Failed to stop, please try again later',
     draft: 'Draft',
@@ -420,20 +421,20 @@ export default {
     intakeDiscard: 'Discard',
     intakeReviewSubmitted: 'Review submitted',
     intakeReviewFailed: 'Review failed',
-    untitledDocument: 'Untitled Document',
+    untitledDocument: 'Untitled Article',
     moreOptions: 'More actions',
-    deleteDocument: 'Delete Document',
+    deleteDocument: 'Delete Article',
 
     parsingFailed: 'Parsing failed',
     parsingInProgress: 'Parsing...',
     documentSummary: 'Summary',
     detailSectionMeta: 'Basic info',
-    confirmDeleteDocument: 'Confirm deletion of document "{fileName}", recovery will be impossible after deletion',
+    confirmDeleteDocument: 'Confirm deletion of article "{fileName}", recovery will be impossible after deletion',
     confirmDelete: 'Confirm Delete',
     viewModeGrid: 'Grid view',
     viewModeList: 'List view',
     viewModeToggle: 'Toggle view',
-    columnName: 'Name',
+    columnName: 'Title',
     columnSize: 'Size',
     columnSource: 'Source',
     columnStatus: 'Status',
@@ -443,14 +444,14 @@ export default {
     selectedCount: '{count} selected',
     clearSelection: 'Deselect all',
     batchDelete: 'Delete selected',
-    confirmBatchDeleteDocument: 'Delete {count} selected document? This action cannot be undone. | Delete {count} selected documents? This action cannot be undone.',
-    batchDeleteSuccess: 'Deleted {count} document | Deleted {count} documents',
+    confirmBatchDeleteDocument: 'Delete {count} selected article? This action cannot be undone. | Delete {count} selected articles? This action cannot be undone.',
+    batchDeleteSuccess: 'Deleted {count} article | Deleted {count} articles',
     batchDeleteFailed: 'Batch delete failed',
-    confirmBatchReparseDocument: 'Rebuild {count} selected document? Existing content will be cleared and the document will be re-parsed. | Rebuild {count} selected documents? Existing content will be cleared and each document will be re-parsed.',
+    confirmBatchReparseDocument: 'Rebuild {count} selected article? Existing content will be cleared and the article will be re-parsed. | Rebuild {count} selected articles? Existing content will be cleared and each article will be re-parsed.',
     confirmBatchReparse: 'Confirm and reparse',
     batchReparseSuccess: 'Submitted {count} rebuild task | Submitted {count} rebuild tasks',
     batchReparseFailed: 'Batch rebuild failed',
-    batchReparseSkippedInFlight: 'Skipped {count} document still being parsed | Skipped {count} documents still being parsed',
+    batchReparseSkippedInFlight: 'Skipped {count} article still being parsed | Skipped {count} articles still being parsed',
     statusCompleted: 'Completed',
     statusProcessing: 'Processing',
     statusFinalizing: 'Optimizing',
@@ -466,7 +467,7 @@ export default {
     textMarkdownFormat: 'text, markdown format files, max 200K',
     dragFileNotText: 'Please drag files instead of text or links',
     searchPlaceholder: 'Search knowledge bases...',
-    docSearchPlaceholder: 'Search document names...',
+    docSearchPlaceholder: 'Search article titles...',
     fileTypeFilter: 'File Type',
     allFileTypes: 'All Types',
     parseStatusFilter: 'Status',
@@ -679,7 +680,7 @@ export default {
   },
   settings: {
     vault: {
-      title: 'File vault',
+      title: 'Vault status',
       root: 'Root directory',
       rootHint: 'Configured on the server. This value is read-only.',
       mine: 'User documents',
@@ -696,7 +697,7 @@ export default {
     modelManagement: 'Model Management',
     parserEngine: 'Parser Engine',
     versionInfo: 'Version Info',
-    taskQueue: 'Task Queues',
+    taskQueue: 'Runtime queues',
     tenantInfo: 'Workspace Info',
     workspaceSettings: 'Workspace Settings',
     navGroups: {
@@ -1039,8 +1040,8 @@ export default {
       updateSuccess: 'Configuration saved successfully',
     },
     document: {
-      title: 'Document Management',
-      subtitle: "Manage and organize document knowledge bases"
+      title: 'Articles',
+      subtitle: "Collect articles, review pending content and manage your decisions"
     },
     models: {
       title: 'Model Configuration',
@@ -1142,6 +1143,8 @@ export default {
           languages: 'languages'
         },
         stats: {
+          min: 'Min',
+          max: 'Max',
           chunks: 'chunk | chunks',
           truncated: 'truncated; total {total}'
         }
@@ -1157,6 +1160,8 @@ export default {
       },}
   },
   tenant: {
+    defaultName: 'Personal workspace',
+    defaultDescription: 'Personal knowledge',
     title: 'Workspace Information',
     currentTenant: 'Current Workspace',
     sectionDescription: 'View detailed configuration for the workspace',
@@ -1370,7 +1375,7 @@ export default {
           loadedAll: 'All {count} loaded',
           loadingMore: 'Loading more…',
           attempts: 'Attempt {current}/{max}',
-          unknownTarget: 'No related object identified',
+          unknownTarget: 'No related record identified',
           knowledgeBaseLabel: 'Knowledge base ID',
           knowledgeLabel: 'Document ID',
           taskIDLabel: 'Business task ID',
@@ -1620,9 +1625,9 @@ export default {
         local: 'e.g. llama2:latest',
         remote: 'e.g. gpt-4, claude-3-opus',
       },
-      baseUrlLabel: 'Base URL',
+      baseUrlLabel: 'Service URL',
       displayNameLabel: 'Display name (optional)',
-      displayNamePlaceholder: 'e.g. Support QA model',
+      displayNamePlaceholder: 'e.g. Article processing model',
       displayNameDesc: 'Used only in the UI. Runtime calls still use the model name above.',
       baseUrlPlaceholder: 'e.g. https://api.openai.com/v1',
       apiKeyOptional: 'API Key (optional)',
@@ -1817,9 +1822,9 @@ export default {
     }
   },
   platform: {
-    subtitle: 'LLM-Powered Personal Knowledge Framework',
+    subtitle: 'Collect, store and retrieve your personal knowledge',
     description: "Collect, store and retrieve your knowledge",
-    rag: 'RAG Enhanced Generation',
+    rag: 'Knowledge retrieval',
     hybridSearch: 'Hybrid Search',
     multimodalParsing: 'Multimodal Document Parsing',
     hybridSearchEngine: "Hybrid retrieval",
@@ -1827,12 +1832,6 @@ export default {
     independentTenant: "Personal knowledge management",
     fullApiAccess: 'Full API Access',
     knowledgeBaseManagement: 'Knowledge Base Management',
-    carousel: {
-      hybridSearchTitle: 'Hybrid search strategy',
-      hybridSearchDesc: "BM25 + vector retrieval",
-      smartDocRetrievalTitle: 'Intelligent document retrieval',
-      smartDocRetrievalDesc: 'PDF/Word/Image multi-format parsing'
-    }
   },
   time: {
     today: 'Today',
@@ -2066,12 +2065,12 @@ export default {
     requestPreview: 'Search request parameters',
   },
   commandPalette: {
-    placeholder: "Search knowledge bases and files…",
+    placeholder: "Search articles, your documents and reports…",
     clearRecent: 'Clear',
     retrieval: 'Retrieval settings',
 
     group: {
-      chunks: 'Files',
+      chunks: 'Search results',
 
       commands: 'Commands',
       recent: 'Recent',
@@ -2082,7 +2081,7 @@ export default {
       keyword: 'Keyword'
     },
     quick: {
-      knowledge: 'Open knowledge bases',
+      knowledge: 'Open articles',
       settings: 'Open settings',
     },
     empty: {
@@ -2116,7 +2115,7 @@ export default {
       fileTypeImage: 'Images',
       engines: {
         simple: {
-          name: 'Simple',
+          name: 'Built-in parser',
           desc: 'Simple format & image parsing (no external service required)'
         },
         anydoc: {

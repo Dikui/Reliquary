@@ -192,7 +192,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.deepEqual(calls, [['retry', topic.id], ['create', { name: 'New topic', description: 'New description' }], ['update', topic.id, { name: topic.name, description: 'Changed description' }], ['delete', topic.id]])
   })
   test(`${locale}: operation log displays before and after, time and type filters`, async () => {
-    const calls: unknown[] = [], urls: unknown[] = [], route = { query: { operation_type: 'star', page: '2' } }
+    const calls: unknown[] = [], urls: unknown[] = [], route = { path: '/platform/settings', query: { section: 'operation-logs', operation_type: 'star', page: '2' } }
     const view = component('./OperationLogs.vue', {
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace: (value: any) => { urls.push(value); return Promise.resolve() } }) },
       '@/api/operation-logs': { OPERATION_TYPES, listOperationLogs: async (input: any) => { calls.push(input); return { success: true, data: { items: [{ id: 'log-a', operation_type: 'star', object_id: 'article-a', before: { starred: false }, after: { starred: true }, created_at: '2026-10-11T04:00:00Z' }], total: 1 } } } },
@@ -205,7 +205,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes('&quot;starred&quot;: false'))
     assert.ok(html.includes('&quot;starred&quot;: true'))
     assert.match(html, /datetime="2026-10-11T04:00:00Z"/)
-    assert.deepEqual(urls, [{ query: { operation_type: 'correct_topics' } }])
+    assert.deepEqual(urls, [{ query: { section: 'operation-logs', operation_type: 'correct_topics' } }])
   })
   test(`${locale}: operation log renders web actors, named API keys and missing-name fallback`, async () => {
     const actors = [

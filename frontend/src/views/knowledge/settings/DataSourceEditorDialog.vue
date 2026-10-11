@@ -105,10 +105,10 @@ async function save() {
     <t-form :data="form" layout="vertical" label-align="top" @submit.prevent>
       <t-form-item :label="t('datasource.nameLabel')" name="name"><t-input v-model="form.name" :disabled="submitting" /></t-form-item>
       <div class="rss-presets"><t-button v-for="[name, url, publisher, prefix] in rssPresets" :key="url" variant="outline" size="small" :disabled="submitting" @click="selectPreset(name, url, publisher, prefix)">{{ name }}</t-button></div>
-      <t-form-item :label="t('datasource.field.feedUrls')" name="feedUrls"><SafeTextarea v-model="form.feedUrls" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="submitting" /><p>{{ t('datasource.field.feedUrlsHint') }}</p></t-form-item>
+      <t-form-item :label="t('datasource.field.feedUrls')" name="feedUrls"><div class="field-stack"><SafeTextarea v-model="form.feedUrls" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="submitting" /><p>{{ t('datasource.field.feedUrlsHint') }}</p></div></t-form-item>
       <t-form-item :label="t('datasource.field.feedPublisher')" name="publisher"><t-input v-model="form.publisher" :disabled="submitting" /></t-form-item>
-      <t-form-item :label="t('datasource.defaultContentType')" name="default_content_type"><t-select v-model="form.default_content_type" :options="contentTypeOptions" :disabled="submitting" :aria-label="t('datasource.defaultContentType')" /><p>{{ t('datasource.defaultContentTypeHint') }}</p></t-form-item>
-      <t-form-item :label="t('datasource.field.articlePathPrefix')" name="articlePathPrefix"><t-input v-model="form.articlePathPrefix" :disabled="submitting" /><p>{{ t('datasource.field.articlePathPrefixHint') }}</p></t-form-item>
+      <t-form-item :label="t('datasource.defaultContentType')" name="default_content_type"><div class="field-stack"><t-select v-model="form.default_content_type" :options="contentTypeOptions" :disabled="submitting" :aria-label="t('datasource.defaultContentType')" /><p>{{ t('datasource.defaultContentTypeHint') }}</p></div></t-form-item>
+      <t-form-item :label="t('datasource.field.articlePathPrefix')" name="articlePathPrefix"><div class="field-stack"><t-input v-model="form.articlePathPrefix" :disabled="submitting" /><p>{{ t('datasource.field.articlePathPrefixHint') }}</p></div></t-form-item>
       <div v-if="configured && !replaceCredentials" class="credential-actions"><span>{{ t('credential.configured') }}</span><t-button variant="text" @click="replaceCredentials = true">{{ t('credential.update') }}</t-button><t-popconfirm :content="t('credential.confirmRemovePrompt')" @confirm="removeCredentials"><t-button variant="text" theme="danger">{{ t('credential.remove') }}</t-button></t-popconfirm></div>
       <t-form-item v-else :label="t('datasource.field.authHeaders')" name="authHeaders"><t-input v-model="form.authHeaders" type="password" :disabled="submitting" :placeholder="t('datasource.field.authHeadersHint')" /></t-form-item>
       <t-form-item :label="t('datasource.syncScheduleLabel')" name="sync_schedule"><t-select v-model="form.sync_schedule" :options="scheduleOptions" :disabled="submitting" /></t-form-item>
@@ -122,5 +122,7 @@ async function save() {
 
 <style scoped lang="less">
 .rss-presets, .credential-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.field-stack { display: flex; flex-direction: column; width: 100%; min-width: 0; }
+.field-stack :deep(.t-textarea) { width: 100%; }
 p { color: var(--td-text-color-secondary); font-size: 12px; margin: 6px 0 0; }
 </style>

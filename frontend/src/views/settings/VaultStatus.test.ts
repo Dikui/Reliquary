@@ -69,7 +69,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.match(html, /<dd>12<\/dd>/)
     assert.match(html, /<dd>3<\/dd>/)
     assert.doesNotMatch(html, /<input|<textarea/)
-    assert.ok(readFileSync(new URL('./KnowledgeSettings.vue', import.meta.url), 'utf8').includes('<VaultStatus />'))
+    assert.ok(readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8').includes('currentSection === \'vault\''))
+    assert.ok(readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8').includes('<VaultStatus />'))
   })
 
   test(`${locale}: a failed refresh preserves the status and offers retry`, async () => {

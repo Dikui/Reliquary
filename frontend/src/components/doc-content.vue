@@ -1203,6 +1203,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                 <t-tag size="small" variant="light" theme="warning">{{ getChannelLabel(details.channel) }}</t-tag>
               </span>
             </div>
+            <div v-if="details.collect_reason?.trim()" class="doc-detail-row doc-collect-reason-row">
+              <span class="doc-detail-label">{{ $t('knowledgeBase.collectReason') }}</span>
+              <span class="doc-detail-value">{{ details.collect_reason }}</span>
+            </div>
             <div v-if="details.vault_path" class="doc-detail-row doc-vault-path-row">
               <span class="doc-detail-label">{{ $t('knowledgeBase.vaultPath') }}</span>
               <span class="doc-detail-value doc-vault-path-value">

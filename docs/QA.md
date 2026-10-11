@@ -126,7 +126,7 @@ docker compose restart app
 
 ## 29. 文件存储在哪里？
 
-文件统一保存到 `LOCAL_STORAGE_BASE_DIR` 指定的本地目录。知识库仍可选择嵌入模型。备份时保存 PostgreSQL 数据与本地文件目录。
+文章的表头、正文、附件以及 `mine/`、`reports/` 保存在 `VAULT_ROOT` 指定的文件库中。上传资源仍使用 `LOCAL_STORAGE_BASE_DIR`。迁移时同时保存 PostgreSQL、文件库和上传资源，步骤与备份脚本见[个人使用指南](personal-use.md)。
 
 ## 30. 后台解析/入库任务积压或需要排查失败任务怎么办？
 

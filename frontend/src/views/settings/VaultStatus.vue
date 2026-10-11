@@ -69,7 +69,7 @@ onBeforeUnmount(() => { generation++ })
 </template>
 
 <style scoped lang="less">
-.vault-status { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--td-component-border); }
+.vault-status { color: var(--td-text-color-primary); }
 .vault-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 h3 { margin: 0; font-size: 18px; }
 .vault-root { margin: 20px 0 0; }

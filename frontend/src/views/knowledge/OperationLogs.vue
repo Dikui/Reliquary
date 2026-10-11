@@ -31,7 +31,7 @@ async function load() {
   } catch { if (current === generation && !disposed) error.value = t('operationLogs.loadFailed') }
   finally { if (current === generation && !disposed) loading.value = false }
 }
-function syncURL() { void router.replace({ query: { ...(operationType.value ? { operation_type: operationType.value } : {}), ...(page.value > 1 ? { page: String(page.value) } : {}) } }) }
+function syncURL() { void router.replace({ query: { ...(route.path === '/platform/settings' ? { section: 'operation-logs' } : {}), ...(operationType.value ? { operation_type: operationType.value } : {}), ...(page.value > 1 ? { page: String(page.value) } : {}) } }) }
 function readURL() {
   const value = typeof route.query.operation_type === 'string' ? route.query.operation_type : ''
   operationType.value = OPERATION_TYPES.includes(value as typeof OPERATION_TYPES[number]) ? value : ''
@@ -70,7 +70,7 @@ onUnmounted(() => { disposed = true; generation++ })
 </template>
 
 <style scoped lang="less">
-.operation-log-page { height: 100%; box-sizing: border-box; overflow-y: auto; padding: 32px; color: var(--td-text-color-primary); }
+.operation-log-page { min-width: 0; color: var(--td-text-color-primary); }
 header h1 { margin: 0; font-size: 24px; }
 header p, .log-toolbar { color: var(--td-text-color-secondary); line-height: 1.7; }
 .log-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; font-size: 13px; }
@@ -82,5 +82,5 @@ header p, .log-toolbar { color: var(--td-text-color-secondary); line-height: 1.7
 .log-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .log-values pre { margin: 6px 0 0; padding: 12px; border-radius: var(--td-radius-small); background: var(--td-bg-color-secondarycontainer); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
 .log-error { color: var(--td-error-color); }
-@media (max-width: 640px) { .operation-log-page { padding: 16px; } .log-values { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .log-values { grid-template-columns: minmax(0, 1fr); } }
 </style>

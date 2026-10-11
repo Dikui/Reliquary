@@ -77,7 +77,7 @@ Reliquary 后端采用清晰的分层架构：
 ├────────────────────────┤
 │   数据层 (repository)  │  数据库访问 / 缓存
 ├────────────────────────┤
-│   领域模型 (types)     │  KnowledgeBase / Knowledge / Chunk ...
+│   数据模型 (types)     │  KnowledgeBase / Knowledge / Chunk ...
 └────────────────────────┘
 \`\`\`
 
@@ -188,7 +188,7 @@ const CHAPTER_SAMPLE = `第 1 章 引言
 1.2 名词约定
 
 - 网关层（Gateway）：负责入口流量调度与协议转换
-- 业务层（Service）：承载领域逻辑与编排
+- 业务层（Service）：承载业务逻辑与编排
 - 存储层（Storage）：封装持久化与缓存细节
 - 推理层（Inference）：与外部 LLM / 嵌入模型交互的隔离层
 
@@ -236,11 +236,11 @@ docker compose up -d
 
 3.2.2 可选服务
 
-搜索、对象存储与增强 PDF 解析服务通过 Compose profile 按需启动。
+PostgreSQL 与 Redis 随 Docker Compose 常驻，增强 PDF 解析服务按需配置。
 
 3.3 配置最佳实践
 
-- 把外部依赖（数据库、对象存储、向量库）放在配置中心，避免硬编码
+- 把外部依赖（数据库、文件存储、模型服务）放在配置中，避免硬编码
 - 模型 API key 用 Secret 管理，按环境隔离
 - 日志走 stdout/stderr 由编排平台采集，避免本地落盘
 

@@ -57,7 +57,6 @@
 
                     </div>
                   </div>
-                  <VaultStatus />
                 </div>
 
                 <!-- 模型配置 -->
@@ -115,7 +114,6 @@ import SafeTextarea from '@/components/SafeTextarea.vue'
 import KBParserSettings from '@/views/knowledge/settings/KBParserSettings.vue'
 import KBChunkingSettings from '@/views/knowledge/settings/KBChunkingSettings.vue'
 import KBAdvancedSettings from '@/views/knowledge/settings/KBAdvancedSettings.vue'
-import VaultStatus from '@/views/settings/VaultStatus.vue'
 const { t } = useI18n()
 const props = defineProps<{ initialSection?: string }>()
 const resources = useResourcesStore(), uiStore = useUIStore()

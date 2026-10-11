@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { compileScript, compileStyleAsync, compileTemplate, parse } from '@vue/compiler-sfc'
 import { renderToString } from '@vue/server-renderer'
-import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch } from 'vue'
+import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
@@ -97,6 +97,7 @@ interface DetailRenderOptions {
   scenario?: (state: any) => void | Promise<void>
   ssrContext?: Record<string, any>
   details?: Record<string, unknown>
+  loadedDetails?: Record<string, unknown>
 }
 async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
   const component = detailSFC.create({
@@ -127,9 +128,70 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
   }
   return renderComponent(component, {
     visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', knowledgeType: 'document',
-    details: { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
+    details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
   }, locale, options.ssrContext)
+}
+
+// Use the production article-detail loader; only its network and store dependencies
+// are replaced. The resulting reactive details object is passed to the real drawer.
+function createArticleDetailsLoader(records: Record<string, Record<string, unknown>>) {
+  const calls: string[] = []
+  const hookSource = readFileSync(new URL('../hooks/useKnowledgeBase.ts', import.meta.url), 'utf8')
+  const modules = {
+    pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
+    '../utils/index': { formatStringDate: () => '2026-10-11' },
+    'tdesign-vue-next': { MessagePlugin: {} },
+    '@/api/knowledge-base/index': {
+      getKnowledgeDetails: async (id: string) => {
+        calls.push(id)
+        return { success: true, data: { id, title: id, type: 'manual', source_kind: 'article',
+          parse_status: 'completed', updated_at: '2026-10-11T00:00:00Z', ...records[id] } }
+      },
+      getKnowledgeDetailsCon: async () => ({ success: true, data: [], total: 0 }),
+    },
+    '@/stores/knowledge': { knowledgeStore: () => ({}) },
+    'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
+    '@/stores/resources': { useResourcesStore: () => ({}) },
+    './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) },
+  }
+  const hook = evaluate(hookSource, modules).default('kb-a')
+  return { hook, calls, async load(id: string) {
+    hook.getCardDetails({ id })
+    await new Promise<void>(resolve => setImmediate(resolve))
+    return hook.details
+  } }
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: API collection reason reaches the actual loading hook and article drawer`, async () => {
+    const reason = locale === 'zh-CN' ? '保存测量方法与来源。' : 'Keep measurement methods and sources.'
+    const loader = createArticleDetailsLoader({ article: { collect_reason: reason } })
+    const loadedDetails = await loader.load('article')
+    const html = await renderDetails([], locale, { loadedDetails })
+    assert.deepEqual(loader.calls, ['article'], 'The production hook requested article details')
+    assert.match(html, /doc-collect-reason-row/, 'The API reason survives projection into drawer props')
+    assert.ok(html.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(html.includes(reason))
+  })
+
+  test(`${locale}: actual loading path clears the previous reason and hides empty API values`, async () => {
+    const loader = createArticleDetailsLoader({
+      saved: { collect_reason: 'Keep the source.' },
+      empty: { collect_reason: '' }, missing: {}, nullable: { collect_reason: null },
+      whitespace: { collect_reason: '   ' },
+    })
+    for (const id of ['empty', 'missing', 'nullable', 'whitespace']) {
+      await loader.load('saved')
+      loader.hook.getCardDetails({ id })
+      assert.equal(loader.hook.details.collect_reason, '', 'Changing articles clears the reason immediately')
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const html = await renderDetails([], locale, { loadedDetails: loader.hook.details })
+      assert.doesNotMatch(html, /doc-collect-reason-row/)
+      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+      assert.ok(!html.includes('Keep the source.'))
+    }
+  })
 }
 
 function repostBlock(html: string) {
@@ -139,6 +201,23 @@ function repostBlock(html: string) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: article basic information displays and escapes the collection reason`, async () => {
+    const html = await renderDetails([], locale, { details: { collect_reason: '保存研究来源 <script>alert(1)</script>' } })
+    const row = html.match(/<div class="doc-detail-row doc-collect-reason-row">([\s\S]*?)<\/div>/)?.[1]
+    assert.ok(row, 'The reason is a basic-information row')
+    assert.ok(row.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(row.includes('保存研究来源 &lt;script&gt;alert(1)&lt;/script&gt;'))
+    assert.doesNotMatch(row, /<script>/)
+  })
+
+  for (const collect_reason of [undefined, null, '', '   ']) {
+    test(`${locale}: article basic information hides an empty collection reason ${JSON.stringify(collect_reason)}`, async () => {
+      const html = await renderDetails([], locale, { details: { collect_reason } })
+      assert.doesNotMatch(html, /doc-collect-reason-row/)
+      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+    })
+  }
+
   test(`${locale}: article renderer sends relative attachment images through protected vault access`, async () => {
     const ref = '../../attachments/vault-article/图表.png'
     let imageHTML = ''
