@@ -54,7 +54,7 @@ func TestLoadBuiltinModelsConfig_FileMissing(t *testing.T) {
 	// Pre-seed a yaml-managed row to verify it is NOT touched when the
 	// config file is absent (file-missing path must skip the sweep).
 	require.NoError(t, db.Create(&Model{
-		ID: "pre-existing-yaml", Name: "n", Type: ModelTypeKnowledgeQA,
+		ID: "pre-existing-yaml", Name: "n", Type: ModelTypeGeneration,
 		Source: ModelSourceRemote, Status: ModelStatusActive,
 		IsBuiltin: true, ManagedBy: BuiltinModelManagedBy,
 	}).Error)
@@ -72,7 +72,7 @@ func TestLoadBuiltinModelsConfig_ParseError(t *testing.T) {
 	dir := writeYAML(t, "builtin_models: [oops: : bad")
 
 	require.NoError(t, db.Create(&Model{
-		ID: "pre-existing-yaml", Name: "n", Type: ModelTypeKnowledgeQA,
+		ID: "pre-existing-yaml", Name: "n", Type: ModelTypeGeneration,
 		Source: ModelSourceRemote, Status: ModelStatusActive,
 		IsBuiltin: true, ManagedBy: BuiltinModelManagedBy,
 	}).Error)
@@ -100,7 +100,7 @@ func TestLoadBuiltinModelsConfig_BasicUpsert(t *testing.T) {
 	var m Model
 	require.NoError(t, db.Where("id = ?", "builtin-llm").First(&m).Error)
 	assert.Equal(t, "gpt-4o-mini", m.Name)
-	assert.Equal(t, ModelTypeKnowledgeQA, m.Type)
+	assert.Equal(t, ModelTypeGeneration, m.Type)
 	assert.Equal(t, ModelSourceRemote, m.Source, "default source must be remote")
 	assert.Equal(t, ModelStatusActive, m.Status, "default status must be active")
 	assert.Equal(t, uint64(10000), m.SpaceID, "default space_id must be 10000")
@@ -210,7 +210,7 @@ func TestLoadBuiltinModelsConfig_DriftSweepIgnoresManual(t *testing.T) {
 
 	// Seed a manual SQL-style builtin (managed_by="").
 	require.NoError(t, db.Create(&Model{
-		ID: "manual-builtin", Name: "manual", Type: ModelTypeKnowledgeQA,
+		ID: "manual-builtin", Name: "manual", Type: ModelTypeGeneration,
 		Source: ModelSourceRemote, Status: ModelStatusActive,
 		IsBuiltin: true, ManagedBy: "",
 	}).Error)
@@ -254,7 +254,7 @@ func TestLoadBuiltinModelsConfig_ClearsExistingDefault(t *testing.T) {
 
 	// Seed an existing default (manual, e.g. user picked it via UI).
 	require.NoError(t, db.Create(&Model{
-		ID: "user-default", Name: "user", Type: ModelTypeKnowledgeQA,
+		ID: "user-default", Name: "user", Type: ModelTypeGeneration,
 		SpaceID: 10000, Source: ModelSourceRemote, Status: ModelStatusActive,
 		IsDefault: true, IsBuiltin: false, ManagedBy: "",
 	}).Error)
@@ -282,12 +282,12 @@ func TestLoadBuiltinModelsConfig_EmptyListSweepsAllYAMLManaged(t *testing.T) {
 
 	// Seed one yaml-managed and one manual builtin.
 	require.NoError(t, db.Create(&Model{
-		ID: "yaml-old", Name: "y", Type: ModelTypeKnowledgeQA,
+		ID: "yaml-old", Name: "y", Type: ModelTypeGeneration,
 		Source: ModelSourceRemote, Status: ModelStatusActive,
 		IsBuiltin: true, ManagedBy: BuiltinModelManagedBy,
 	}).Error)
 	require.NoError(t, db.Create(&Model{
-		ID: "manual-builtin", Name: "m", Type: ModelTypeKnowledgeQA,
+		ID: "manual-builtin", Name: "m", Type: ModelTypeGeneration,
 		Source: ModelSourceRemote, Status: ModelStatusActive,
 		IsBuiltin: true, ManagedBy: "",
 	}).Error)
@@ -359,7 +359,7 @@ func repeatChar(s string, n int) string {
 	return string(out)
 }
 
-func TestLoadBuiltinModelsConfig_PreservesEntryIDOverBeforeCreate(t *testing.T) {
+func TestLoadBuiltinModelsConfig_PreservesModelIDOverBeforeCreate(t *testing.T) {
 	// Regression guard: BeforeCreate now only generates a UUID when ID is
 	// empty. YAML always supplies a stable id; if BeforeCreate ever forgets
 	// the guard and overwrites it, the UPSERT key changes and idempotency

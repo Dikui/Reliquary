@@ -409,7 +409,7 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 	observations := gin.H{}
 
 	switch model.Type {
-	case types.ModelTypeKnowledgeQA:
+	case types.ModelTypeGeneration:
 		if strings.TrimSpace(input) == "" {
 			c.Error(errors.NewBadRequestError("query cannot be empty"))
 			return
@@ -668,7 +668,7 @@ type ModelProviderDTO struct {
 // KnowledgeQA -> chat, Embedding -> embedding, Rerank -> rerank, VLLM -> vllm
 func modelTypeToFrontend(mt types.ModelType) string {
 	switch mt {
-	case types.ModelTypeKnowledgeQA:
+	case types.ModelTypeGeneration:
 		return "chat"
 	case types.ModelTypeEmbedding:
 		return "embedding"
@@ -692,7 +692,7 @@ func (h *ModelHandler) ListModelProviders(c *gin.Context) {
 	var backendModelType types.ModelType
 	switch modelType {
 	case "chat":
-		backendModelType = types.ModelTypeKnowledgeQA
+		backendModelType = types.ModelTypeGeneration
 	case "embedding":
 		backendModelType = types.ModelTypeEmbedding
 	case "rerank":

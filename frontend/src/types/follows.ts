@@ -1,4 +1,4 @@
-import type { KnowledgeSearchArticle } from './knowledgeSearch'
+import type { SearchEntry } from './search'
 
 export type FollowTargetType = 'entity' | 'topic'
 export interface FollowTarget {
@@ -17,7 +17,7 @@ export interface FollowFeedRequest {
   collapse_similar?: boolean
   include_seen?: boolean
 }
-export interface FollowFeedArticle extends KnowledgeSearchArticle {
+export interface FollowFeedArticle extends SearchEntry {
   entered_at: string | null
   collected_at: string
   is_new: boolean

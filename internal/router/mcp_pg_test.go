@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -95,7 +96,7 @@ type mcpFixture struct {
 	*personalAuthFixture
 	ctx       context.Context
 	kb        *types.KnowledgeBase
-	articles  mcpserver.ArticleService
+	articles  mcpserver.EntryService
 	files     interfaces.FileService
 	vault     *service.VaultService
 	documents *service.VaultDocumentService
@@ -112,11 +113,11 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	require.NoError(t, f.db.Where("name=?", "personal integration").First(&key).Error)
 	ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIKey, ID: fmt.Sprint(key.ID)})
 	require.NoError(t, service.EnsureSingleKnowledgeBase(ctx, f.db))
-	kbRepo, knowledgeRepo := apprepo.NewKnowledgeBaseRepository(f.db), apprepo.NewKnowledgeRepository(f.db)
+	kbRepo, entryRepo := apprepo.NewKnowledgeBaseRepository(f.db), apprepo.NewEntryRepository(f.db)
 	chunkRepo := apprepo.NewChunkRepository(f.db)
 	models := mcpFixtureModels{service.NewModelService(apprepo.NewModelRepository(f.db), kbRepo, nil, nil, f.params.SpaceService)}
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(f.db))
-	bases := service.NewKnowledgeBaseService(f.db, kbRepo, knowledgeRepo, chunkRepo, models, engine, nil)
+	bases := service.NewKnowledgeBaseService(f.db, kbRepo, entryRepo, chunkRepo, models, engine, nil)
 	kb, err := bases.GetKnowledgeBase(ctx)
 	require.NoError(t, err)
 	kb.EmbeddingModelID = "mcp-embedding"
@@ -131,18 +132,18 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	t.Cleanup(func() { require.NoError(t, vault.Close()) })
 	files := file.NewLocalFileService(t.TempDir(), "")
 	queue := &mcpFixtureQueue{}
-	chunks := service.NewChunkService(chunkRepo, knowledgeRepo, kbRepo, models, engine)
-	knowledge, err := service.NewKnowledgeService(f.db, cfg, knowledgeRepo, bases,
+	chunks := service.NewChunkService(chunkRepo, entryRepo, kbRepo, models, engine)
+	entry, err := service.NewEntryService(f.db, cfg, entryRepo, bases,
 		apprepo.NewSpaceRepository(f.db), f.params.SpaceService, chunks, chunkRepo, files, nil, models, queue,
 		nil, engine, nil, nil)
 	require.NoError(t, err)
-	knowledge.(interface{ SetVault(*service.VaultService) }).SetVault(vault)
+	entry.(interface{ SetVault(*service.VaultService) }).SetVault(vault)
 	documents, err := service.NewVaultDocumentService(f.db, models, engine, root, time.Minute, time.Minute)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
-	articles := knowledge.(mcpserver.ArticleService)
-	adapter := mcpserver.New(mcpserver.Services{Articles: articles,
-		Search: service.NewKnowledgeSearchService(bases, f.params.SpaceService, models, f.db),
+	articles := entry.(mcpserver.EntryService)
+	adapter := mcpserver.New(mcpserver.Services{Entries: articles,
+		Search: service.NewSearchService(bases, f.params.SpaceService, models, f.db),
 		Topics: service.NewTopicService(f.db), Entities: service.NewEntityService(f.db, models), Reports: documents, Follows: service.NewFollowService(f.db)})
 	f.router.Any("/mcp", gin.WrapH(adapter))
 	server := httptest.NewServer(f.router)
@@ -151,30 +152,30 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 		vault: vault, documents: documents, queue: queue, server: server, root: root}
 }
 
-func (f *mcpFixture) seedArticle(t *testing.T, title, mode, body string) *types.Knowledge {
+func (f *mcpFixture) seedArticle(t *testing.T, title, mode, body string) *types.Entry {
 	t.Helper()
-	article := &types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
 		Type: "url", Title: title, SourceKind: "article", Source: "https://example.org/" + uuid.NewString(),
 		ContentType: "event", ProcessingMode: mode, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
-		StructuredSummary: &types.KnowledgeSummary{Overview: "MCP source summary", Points: []string{"one", "two", "three"}, KeyTerms: []string{"MCP"}},
+		StructuredSummary: &types.EntrySummary{Overview: "MCP source summary", Points: []string{"one", "two", "three"}, KeyTerms: []string{"MCP"}},
 		CollectReason:     "供 MCP 检索", CreatedAt: time.Now().UTC()}
 	if mode == types.ProcessingModeSummaryOnly {
 		article.ContentType = "tutorial"
 	}
-	require.NoError(t, article.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved",
+	require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved",
 		SourceInfo: types.SourceInfo{OriginalURL: article.Source, Publisher: "MCP publisher", Author: "MCP author", PublishedAt: "2026-10-01"}}))
 	require.NoError(t, f.db.Create(article).Error)
 	require.NoError(t, f.vault.WriteArticle(f.ctx, article, body, nil))
 	return article
 }
 
-func (f *mcpFixture) seedPending(t *testing.T, title string) *types.Knowledge {
+func (f *mcpFixture) seedPending(t *testing.T, title string) *types.Entry {
 	t.Helper()
 	bodyPath, err := f.files.SaveBytes(f.ctx, []byte("# "+title+"\n\nAwaiting a deliberate approval."), types.SingleSpaceID, uuid.NewString()+".md", false)
 	require.NoError(t, err)
-	article := &types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
 		Type: "manual", Title: title, SourceKind: "article", ParseStatus: types.ParseStatusRejected, EnableStatus: "disabled"}
-	require.NoError(t, article.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "rejected", OriginalPath: bodyPath,
+	require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", OriginalPath: bodyPath,
 		SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/" + article.ID, Publisher: "Pending publisher"}}))
 	require.NoError(t, f.db.Create(article).Error)
 	return article
@@ -215,6 +216,16 @@ func mcpCall(t *testing.T, client *mcp.ClientSession, name string, arguments any
 	text := response.Content[0].(*mcp.TextContent)
 	require.JSONEq(t, string(data), text.Text)
 	if result != nil {
+		// Decode the stable external envelope into the current internal DTO only
+		// after asserting both wire representations above.
+		if _, ingest := result.(*types.IngestResult); !ingest {
+			var value any
+			decoder := json.NewDecoder(bytes.NewReader(data))
+			decoder.UseNumber()
+			require.NoError(t, decoder.Decode(&value))
+			data, err = json.Marshal(currentMCPTestFields(value))
+			require.NoError(t, err)
+		}
 		require.NoError(t, json.Unmarshal(data, result))
 	}
 	request, err := json.Marshal(arguments)
@@ -231,8 +242,8 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "MCP Acme", NormalizedName: "mcp acme", EntityType: "company"}
 	require.NoError(t, f.db.Create(&entity).Error)
 	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, EntityID: entity.ID, Alias: "MCP alias", NormalizedAlias: "mcp alias", EntityType: "company"}).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeEntity{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, EntityID: entity.ID}).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeTopic{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, TopicID: topic.ID, Source: "user"}).Error)
+	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entity.ID}).Error)
+	require.NoError(t, f.db.Create(&types.EntryTopic{SpaceID: types.SingleSpaceID, EntryID: article.ID, TopicID: topic.ID, Source: "user"}).Error)
 	client := f.connect(t, "2025-11-25")
 	tools, err := client.ListTools(context.Background(), nil)
 	require.NoError(t, err)
@@ -245,13 +256,13 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 		}
 	}
 	require.ElementsMatch(t, []string{"search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "resolve_processing_review"}, names)
-	var search types.ArticleSearchResponse
+	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
 		"topic_ids": []string{topic.ID}, "sources": []string{"article"}, "starred": false,
 		"published_from": "2026-10-01", "published_to": "2026-10-02", "collapse_similar": false, "limit": 5}, &search)
 	require.Len(t, search.Results, 1)
-	require.Equal(t, article.ID, search.Results[0].ArticleID)
-	var read service.ArticleReadResult
+	require.Equal(t, article.ID, search.Results[0].EntryID)
+	var read service.EntryReadResult
 	mcpCall(t, client, "get_article", map[string]any{"id": article.ID}, &read)
 	require.Contains(t, read.Body, "中文与 emoji 🙂")
 	require.Equal(t, article.Source, read.Header.URL)
@@ -272,31 +283,31 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	require.Equal(t, entity.ID, entities.Entities[0].ID)
 	var detail types.EntityDetail
 	mcpCall(t, client, "get_entity", map[string]any{"id": entity.ID}, &detail)
-	require.Len(t, detail.Knowledge, 1)
-	require.Equal(t, article.ID, detail.Knowledge[0].ID)
+	require.Len(t, detail.Entries, 1)
+	require.Equal(t, article.ID, detail.Entries[0].ID)
 	var ingest types.IngestResult
 	mcpCall(t, client, "ingest", map[string]any{"url": "https://example.org/mcp-ingest", "content": "# Deliberate collection\n\nOriginal MCP ingress text.", "title": "MCP ingress", "publisher": "MCP publisher", "source_name": "mcp-test-agent", "collect_reason": "MCP 主动收藏"}, &ingest)
 	require.Equal(t, "pending", ingest.Status)
-	require.NotEmpty(t, ingest.ArticleID)
+	require.NotEmpty(t, ingest.EntryID)
 	var pending types.PageResult
 	mcpCall(t, client, "list_pending", map[string]any{"page": 1, "page_size": 10}, &pending)
 	require.EqualValues(t, 2, pending.Total)
-	var approved types.Knowledge
+	var approved types.Entry
 	mcpCall(t, client, "approve_pending", map[string]any{"id": approve.ID}, &approved)
 	require.Equal(t, types.ParseStatusPending, approved.ParseStatus)
 	intake, err := approved.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
-	var discarded types.Knowledge
+	var discarded types.Entry
 	mcpCall(t, client, "discard_pending", map[string]any{"id": discard.ID}, &discarded)
 	require.Equal(t, discard.ID, discarded.ID)
 	var count int64
-	require.NoError(t, f.db.Model(&types.Knowledge{}).Where("id=?", discard.ID).Count(&count).Error)
+	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", discard.ID).Count(&count).Error)
 	require.Zero(t, count)
-	var starred types.Knowledge
+	var starred types.Entry
 	mcpCall(t, client, "set_star", map[string]any{"id": article.ID, "starred": true}, &starred)
 	require.True(t, starred.Starred)
-	var report types.Knowledge
+	var report types.Entry
 	mcpCall(t, client, "write_report", map[string]any{"title": "MCP report", "markdown": "# MCP report\n\nReport compares source material.", "related_article_ids": []string{article.ID}}, &report)
 	require.Equal(t, "report", report.SourceKind)
 	require.Equal(t, types.ParseStatusCompleted, report.ParseStatus)
@@ -331,7 +342,7 @@ func TestMCPArticleUnicodeSegmentsAndSummaryOnly(t *testing.T) {
 	assembled := ""
 	offset := 0
 	for {
-		var read service.ArticleReadResult
+		var read service.EntryReadResult
 		mcpCall(t, client, "get_article", map[string]any{"id": article.ID, "offset": offset, "length": 3}, &read)
 		require.True(t, utf8.ValidString(read.Body))
 		require.Equal(t, offset, read.Offset)
@@ -344,11 +355,11 @@ func TestMCPArticleUnicodeSegmentsAndSummaryOnly(t *testing.T) {
 		offset = *read.NextOffset
 	}
 	require.Equal(t, body, assembled)
-	var atEnd service.ArticleReadResult
+	var atEnd service.EntryReadResult
 	mcpCall(t, client, "get_article", map[string]any{"id": article.ID, "offset": len([]rune(body)), "length": 3}, &atEnd)
 	require.Empty(t, atEnd.Body)
 	require.Nil(t, atEnd.NextOffset)
-	var readSummary service.ArticleReadResult
+	var readSummary service.EntryReadResult
 	mcpCall(t, client, "get_article", map[string]any{"id": summary.ID}, &readSummary)
 	require.Empty(t, readSummary.Body)
 	require.Equal(t, "MCP source summary", readSummary.Header.Summary.Overview)
@@ -429,12 +440,12 @@ func TestMCPIntakeRejectionAndProcessingReviewKindsAndActions(t *testing.T) {
 	f.queue.mu.Lock()
 	require.Empty(t, f.queue.tasks)
 	f.queue.mu.Unlock()
-	var pendingArticle types.Knowledge
-	require.NoError(t, f.db.First(&pendingArticle, "id=?", rejected.ArticleID).Error)
+	var pendingArticle types.Entry
+	require.NoError(t, f.db.First(&pendingArticle, "id=?", rejected.EntryID).Error)
 	require.Equal(t, types.ParseStatusRejected, pendingArticle.ParseStatus)
 	require.Empty(t, pendingArticle.VaultPath)
 
-	reviews := []*types.Knowledge{}
+	reviews := []*types.Entry{}
 	for _, label := range []string{"confirm", "correct", "ignore"} {
 		article := f.seedArticle(t, "Processing "+label, types.ProcessingModeFull, "# Processing fixture\n\nRetained original evidence "+label+".\n")
 		require.NoError(t, f.db.Model(article).Updates(map[string]any{"content_type": "tutorial", "content_type_uncertain": true, "processing_review_status": "pending", "processing_review_content_type": "tutorial", "processing_review_reason": "Tutorial and research are both plausible"}).Error)
@@ -442,8 +453,8 @@ func TestMCPIntakeRejectionAndProcessingReviewKindsAndActions(t *testing.T) {
 	}
 	for _, kind := range []string{"", "intake", "processing"} {
 		var result struct {
-			Data  []types.Knowledge `json:"data"`
-			Total int64             `json:"total"`
+			Data  []types.Entry `json:"data"`
+			Total int64         `json:"total"`
 		}
 		args := map[string]any{"page": 1, "page_size": 10}
 		if kind != "" {
@@ -477,16 +488,16 @@ func TestMCPIntakeRejectionAndProcessingReviewKindsAndActions(t *testing.T) {
 		result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "resolve_processing_review", Arguments: map[string]any{"id": reviews[0].ID, "action": action, "content_type": "reference"}})
 		require.NoError(t, err)
 		require.True(t, result.IsError)
-		read, err := f.articles.GetArticle(f.ctx, reviews[0].ID, 0, 0)
+		read, err := f.articles.ReadEntry(f.ctx, reviews[0].ID, 0, 0)
 		require.NoError(t, err)
 		require.Contains(t, read.Body, "Retained original")
 	}
-	var confirmed, corrected, ignored types.Knowledge
+	var confirmed, corrected, ignored types.Entry
 	mcpCall(t, client, "resolve_processing_review", map[string]any{"id": reviews[0].ID, "action": "confirm", "confirm_remove_body": true}, &confirmed)
 	require.Equal(t, "confirmed", confirmed.ProcessingReviewStatus)
 	require.False(t, confirmed.ContentTypeCorrected)
 	require.Equal(t, "summary_only", confirmed.ProcessingMode)
-	read, err := f.articles.GetArticle(f.ctx, confirmed.ID, 0, 0)
+	read, err := f.articles.ReadEntry(f.ctx, confirmed.ID, 0, 0)
 	require.NoError(t, err)
 	require.Empty(t, read.Body)
 	mcpCall(t, client, "resolve_processing_review", map[string]any{"id": reviews[1].ID, "action": "correct", "content_type": "reference", "confirm_remove_body": true}, &corrected)
@@ -497,8 +508,8 @@ func TestMCPIntakeRejectionAndProcessingReviewKindsAndActions(t *testing.T) {
 	require.Equal(t, "ignored", ignored.ProcessingReviewStatus)
 	require.Equal(t, "full", ignored.ProcessingMode)
 	var empty struct {
-		Data  []types.Knowledge `json:"data"`
-		Total int64             `json:"total"`
+		Data  []types.Entry `json:"data"`
+		Total int64         `json:"total"`
 	}
 	mcpCall(t, client, "list_pending", map[string]any{"kind": "processing"}, &empty)
 	require.Empty(t, empty.Data)
@@ -522,12 +533,12 @@ func TestMCPUnverifiedSourceReadAndSearch(t *testing.T) {
 	require.NoError(t, article.SetIntakeMetadata(intake))
 	require.NoError(t, f.db.Model(article).Update("metadata", article.Metadata).Error)
 	client := f.connect(t, "2025-11-25")
-	var read service.ArticleReadResult
+	var read service.EntryReadResult
 	mcpCall(t, client, "get_article", map[string]any{"id": article.ID}, &read)
 	require.True(t, read.SourceUnverified)
 	require.True(t, read.Header.SourceUnverified)
 	require.Empty(t, read.OriginalURL)
-	var result types.ArticleSearchResponse
+	var result types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"query": "searchfixture", "collapse_similar": false}, &result)
 	require.Len(t, result.Results, 1)
 	require.True(t, result.Results[0].SourceUnverified)
@@ -547,17 +558,17 @@ func TestHTTPPendingReviewsReturnsFrontendEnvelopeAndKinds(t *testing.T) {
 	review := f.seedArticle(t, "Processing pending", types.ProcessingModeFull, "# original\n\nReviewable evidence.\n")
 	require.NoError(t, f.db.Model(review).Updates(map[string]any{"processing_review_status": "pending", "processing_review_content_type": "event", "content_type_uncertain": true, "processing_review_reason": "event or opinion"}).Error)
 	for _, kind := range []string{"", "intake", "processing"} {
-		request, err := http.NewRequest(http.MethodGet, f.server.URL+"/api/v1/knowledge/pending?kind="+kind, nil)
+		request, err := http.NewRequest(http.MethodGet, f.server.URL+"/api/v1/entries/pending?kind="+kind, nil)
 		require.NoError(t, err)
 		request.Header.Set("Authorization", "Bearer "+f.key)
 		response, err := http.DefaultClient.Do(request)
 		require.NoError(t, err)
 		var result struct {
-			Success  bool              `json:"success"`
-			Data     []types.Knowledge `json:"data"`
-			Total    int64             `json:"total"`
-			Page     int               `json:"page"`
-			PageSize int               `json:"page_size"`
+			Success  bool          `json:"success"`
+			Data     []types.Entry `json:"data"`
+			Total    int64         `json:"total"`
+			Page     int           `json:"page"`
+			PageSize int           `json:"page_size"`
 		}
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 		require.NoError(t, response.Body.Close())
@@ -580,7 +591,7 @@ func TestHTTPPendingReviewsReturnsFrontendEnvelopeAndKinds(t *testing.T) {
 		}
 	}
 	for _, query := range []string{"kind=bad", "page=zero", "page=-1", "page_size=101"} {
-		request, err := http.NewRequest(http.MethodGet, f.server.URL+"/api/v1/knowledge/pending?"+query, nil)
+		request, err := http.NewRequest(http.MethodGet, f.server.URL+"/api/v1/entries/pending?"+query, nil)
 		require.NoError(t, err)
 		request.Header.Set("Authorization", "Bearer "+f.key)
 		response, err := http.DefaultClient.Do(request)
@@ -593,7 +604,7 @@ func TestHTTPPendingReviewsReturnsFrontendEnvelopeAndKinds(t *testing.T) {
 func TestMCPMissingSourcePendingActionsRequireConfirmationAndIndexMine(t *testing.T) {
 	f := newMCPFixture(t)
 	client := f.connect(t, "2025-11-25")
-	createPending := func(title string) *types.Knowledge {
+	createPending := func(title string) *types.Entry {
 		item := f.seedPending(t, title)
 		intake, err := item.IntakeMetadata()
 		require.NoError(t, err)
@@ -609,13 +620,13 @@ func TestMCPMissingSourcePendingActionsRequireConfirmationAndIndexMine(t *testin
 		require.NoError(t, err)
 		require.True(t, response.IsError)
 	}
-	var retried types.Knowledge
+	var retried types.Entry
 	mcpCall(t, client, "approve_pending", map[string]any{"id": supplemented.ID, "action": "supplement_url", "url": "https://example.org/supplemented"}, &retried)
 	intake, err := retried.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
 	require.Equal(t, "user_supplemented", intake.SourceInfo.OriginalURLSource)
-	var unverified types.Knowledge
+	var unverified types.Entry
 	mcpCall(t, client, "approve_pending", map[string]any{"id": admitted.ID, "action": "admit_unverified", "confirmed": true}, &unverified)
 	require.True(t, unverified.SourceUnverified)
 	require.Equal(t, "full", unverified.ProcessingMode)
@@ -623,7 +634,7 @@ func TestMCPMissingSourcePendingActionsRequireConfirmationAndIndexMine(t *testin
 	require.NoError(t, err)
 	require.Empty(t, intake.SourceInfo.OriginalURL)
 	require.Equal(t, "approved", intake.Decision)
-	var mine types.Knowledge
+	var mine types.Entry
 	mcpCall(t, client, "approve_pending", map[string]any{"id": converted.ID, "action": "convert_to_mine", "confirmed": true}, &mine)
 	require.Equal(t, "mine", mine.SourceKind)
 	require.Equal(t, types.ParseStatusCompleted, mine.ParseStatus)
@@ -632,13 +643,44 @@ func TestMCPMissingSourcePendingActionsRequireConfirmationAndIndexMine(t *testin
 	require.NoError(t, err)
 	require.Contains(t, string(data), "Awaiting a deliberate approval")
 	var count int64
-	require.NoError(t, f.db.Model(&types.Knowledge{}).Where("id=?", converted.ID).Count(&count).Error)
+	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", converted.ID).Count(&count).Error)
 	require.Zero(t, count)
-	var search types.ArticleSearchResponse
+	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"query": "Awaiting", "sources": []string{"mine"}, "collapse_similar": false}, &search)
 	require.Len(t, search.Results, 1)
-	require.Equal(t, mine.ID, search.Results[0].ArticleID)
+	require.Equal(t, mine.ID, search.Results[0].EntryID)
 	var logs []types.OperationLog
 	require.NoError(t, f.db.Where("operation_type IN ?", []string{"review_supplement_url", "review_admit_unverified", "review_convert_to_mine"}).Find(&logs).Error)
 	require.Len(t, logs, 3)
+}
+
+func currentMCPTestFields(value any) any {
+	switch v := value.(type) {
+	case []any:
+		for i := range v {
+			v[i] = currentMCPTestFields(v[i])
+		}
+	case map[string]any:
+		out := map[string]any{}
+		for key, child := range v {
+			switch key {
+			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers":
+				out[key] = child
+				continue
+			}
+			switch key {
+			case "article_id", "knowledge_id":
+				key = "entry_id"
+			case "knowledge_ids":
+				key = "entry_ids"
+			case "knowledge":
+				key = "entries"
+			case "tenant_id":
+				key = "space_id"
+			}
+			out[key] = currentMCPTestFields(child)
+		}
+		return out
+	}
+	return value
 }

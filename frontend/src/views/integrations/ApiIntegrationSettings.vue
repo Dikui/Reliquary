@@ -51,7 +51,7 @@
         <t-form-item :label="t('integrations.api.apiKeyValue')"><t-input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></t-form-item>
 
         <t-form-item :label="t('integrations.api.playgroundQuestion')"><SafeTextarea v-model="playground.query" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="running" /></t-form-item>
-        <KnowledgeSearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" />
+        <SearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" />
       </t-form>
       <t-alert v-if="searchOptionsError" theme="error" :message="searchOptionsError"><template #operation><t-button variant="text" @click="loadSearchOptions">{{ t('common.retry') }}</t-button></template></t-alert>
       <strong class="request-preview-label">{{ t('knowledgeSearch.requestPreview') }}</strong>
@@ -68,10 +68,10 @@ import { DialogPlugin, MessagePlugin, type DateValue, type DateMultipleValue } f
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import SafeTextarea from '@/components/SafeTextarea.vue'
-import KnowledgeSearchFilters from '@/components/KnowledgeSearchFilters.vue'
-import { getKnowledgeSearchOptions } from '@/api/knowledge-search'
-import type { KnowledgeSearchOptions } from '@/types/knowledgeSearch'
-import { buildKnowledgeSearchRequest, knowledgeSearchErrorMessage, knowledgeSearchErrorCode, defaultSearchFilters } from '@/utils/knowledgeSearch'
+import SearchFilters from '@/components/SearchFilters.vue'
+import { getSearchOptions } from '@/api/search'
+import type { SearchOptions } from '@/types/search'
+import { buildSearchRequest, searchErrorMessage, searchErrorCode, defaultSearchFilters } from '@/utils/search'
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
 import { copyWithToast } from '@/utils/clipboard'
@@ -108,9 +108,9 @@ const createdToken = ref('')
 const playgroundVisible = ref(false)
 const playground = reactive({ apiKey: '', query: '' })
 const playgroundFilters = ref(defaultSearchFilters())
-const searchOptions = ref<KnowledgeSearchOptions>({ entities: [], topics: [] })
+const searchOptions = ref<SearchOptions>({ entities: [], topics: [] })
 const searchOptionsLoading = ref(false), searchOptionsError = ref('')
-const playgroundRequestPreview = computed(() => JSON.stringify(buildKnowledgeSearchRequest(playground.query, playgroundFilters.value), null, 2))
+const playgroundRequestPreview = computed(() => JSON.stringify(buildSearchRequest(playground.query, playgroundFilters.value), null, 2))
 const running = ref(false)
 const playgroundError = ref('')
 const playgroundResult = ref('')
@@ -169,7 +169,7 @@ async function loadSearchOptions() {
   searchOptionsLoading.value = true
   searchOptionsError.value = ''
   try {
-    const response = await getKnowledgeSearchOptions()
+    const response = await getSearchOptions()
     if (!response.success) throw new Error(response.message)
     searchOptions.value = response.data
   } catch { searchOptionsError.value = t('knowledgeSearch.optionsFailed') }
@@ -184,11 +184,11 @@ async function runQuery() {
   playgroundError.value = ''
   try {
     playgroundResult.value = ''
-    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify(buildKnowledgeSearchRequest(playground.query, playgroundFilters.value)) })
+    const response = await fetch(`${apiBaseUrl.value}/api/v1/search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify(buildSearchRequest(playground.query, playgroundFilters.value)) })
     const body = await response.json()
     if (!response.ok || body.success === false) throw body
     playgroundResult.value = JSON.stringify(body, null, 2)
-  } catch (e: any) { const code = knowledgeSearchErrorCode(e); playgroundError.value = `${code === undefined ? '' : `${code}: `}${knowledgeSearchErrorMessage(e, t)}` }
+  } catch (e: any) { const code = searchErrorCode(e); playgroundError.value = `${code === undefined ? '' : `${code}: `}${searchErrorMessage(e, t)}` }
   finally { running.value = false }
 }
 onMounted(load)

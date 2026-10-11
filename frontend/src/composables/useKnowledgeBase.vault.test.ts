@@ -14,14 +14,14 @@ function createHook(detailsAPI: (id: string) => Promise<unknown>, list: object[]
     '../utils/index': { formatStringDate: () => '2026-10-11' },
     'tdesign-vue-next': { MessagePlugin: {} },
     '@/api/knowledge-base': {
-      getKnowledgeDetails: detailsAPI,
-      listKnowledgeFiles: async () => ({ data: list, total: list.length }),
-      getKnowledgeDetailsCon: async () => ({ success: true, data: [], total: 0 }),
+      getEntryDetails: detailsAPI,
+      listEntryFiles: async () => ({ data: list, total: list.length }),
+      getEntryDetailsCon: async () => ({ success: true, data: [], total: 0 }),
     },
-    '@/stores/knowledge': { knowledgeStore: () => ({}) },
+    '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
-    './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) },
+    './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
   }
   const output = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -72,7 +72,7 @@ test('mine and report names display the indexed heading without removing dots', 
     updated_at: '2026-10-11T00:00:00Z',
   }))
   const hook = createHook(async id => ({ success: true, data: records.find(row => row.id === id) }), records)
-  await hook.getKnowled()
+  await hook.loadEntries()
   assert.deepEqual(hook.cardList.value.map((row: any) => row.file_name), records.map(row => row.title))
   for (const record of records) {
     hook.getCardDetails(record)

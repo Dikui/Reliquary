@@ -21,16 +21,16 @@ func TestOpenRunsVersionedMigrations(t *testing.T) {
 	if err := db.Raw("SELECT version, dirty FROM schema_migrations").Row().Scan(&version, &dirty); err != nil {
 		t.Fatal(err)
 	}
-	if dirty || version != 2 {
-		t.Fatalf("expected the clean space naming migration at version 2, got version=%d dirty=%v", version, dirty)
+	if dirty || version != 3 {
+		t.Fatalf("expected the clean entry naming migration at version 3, got version=%d dirty=%v", version, dirty)
 	}
 	var count int64
 	if err := db.Raw("SELECT COUNT(*) FROM pg_extension WHERE extname IN ('vector', 'pg_search', 'pg_trgm')").Scan(&count).Error; err != nil || count != 3 {
 		t.Fatalf("required PostgreSQL extensions: count=%d error=%v", count, err)
 	}
 	if err := db.Exec(`INSERT INTO chunks
-		(space_id, knowledge_base_id, knowledge_id, content, chunk_index, start_at, end_at)
-		VALUES (1, 'pgtest-kb', 'pgtest-knowledge', 'PostgreSQL integration tests', 0, 0, 28)`).Error; err != nil {
+		(space_id, knowledge_base_id, entry_id, content, chunk_index, start_at, end_at)
+		VALUES (1, 'pgtest-kb', 'pgtest-entry', 'PostgreSQL integration tests', 0, 0, 28)`).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO embeddings (source_id, source_type, dimension, embedding)

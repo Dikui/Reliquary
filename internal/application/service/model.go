@@ -263,7 +263,7 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	if err := validateImageEmbeddingModel(model); err != nil {
 		return err
 	}
-	if model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+	if model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeGeneration || model.Status != types.ModelStatusActive {
 		inUse, err := s.chatGPTFallbackInUse(ctx, model.ID)
 		if err != nil {
 			return err

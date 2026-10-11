@@ -195,7 +195,7 @@ func TestCloneContextPreservesPrincipal(t *testing.T) {
 	}
 }
 
-// Document ingestion detaches mid-flight: knowledge_create hands processChunks
+// Document ingestion detaches mid-flight: entry_create hands processChunks
 // to a goroutine on a cloned context, and processChunks vectorises every chunk.
 // If the background mark does not survive, that work stops being visible to the
 // per-model concurrency governor and the ingestion storm it exists to contain

@@ -20,7 +20,7 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 	require.NoError(t, db.Exec(`UPDATE maintenance_state SET paused=true,pause_mode='snapshot',pause_reason='restoring backup' WHERE id=true`).Error)
 	client := queue.NewClient(db)
 	for _, state := range []string{"active", "pending", "scheduled", "completed"} {
-		_, err := client.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"knowledge_id":"preserved-article","original":"preserve entire payload"}`)), queue.TaskID(state), queue.MaxRetry(5), queue.Retention(time.Hour), queue.Deadline(time.Now().Add(24*time.Hour)))
+		_, err := client.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"entry_id":"preserved-article","original":"preserve entire payload"}`)), queue.TaskID(state), queue.MaxRetry(5), queue.Retention(time.Hour), queue.Deadline(time.Now().Add(24*time.Hour)))
 		require.NoError(t, err)
 		require.NoError(t, db.Exec(`UPDATE task_jobs SET state=?,process_at='2026-10-01T12:00:00Z',created_at='2026-10-01T10:00:00Z',updated_at='2026-10-01T12:00:00Z',retried=2,fail_count=1,last_failed_at='2026-10-01T11:00:00Z',last_error='preserved previous error',group_name='preserved-group' WHERE id=?`, state, state).Error)
 	}
@@ -75,7 +75,7 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 		})
 	}
 	for _, mutation := range []struct{ name, change, restore string }{
-		{"payload", `payload='{"knowledge_id":"different"}'`, `payload='{"knowledge_id":"preserved-article","original":"preserve entire payload"}'`},
+		{"payload", `payload='{"entry_id":"different"}'`, `payload='{"entry_id":"preserved-article","original":"preserve entire payload"}'`},
 		{"retry", `retried=3`, `retried=2`},
 		{"failure", `fail_count=2`, `fail_count=1`},
 		{"budget", `max_retry=6`, `max_retry=5`},

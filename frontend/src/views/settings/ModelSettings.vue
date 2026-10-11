@@ -612,7 +612,7 @@ const openUsageResource = async (
 ) => {
   showUsageDialog.value = false
   const knowledgeBaseSection = modelUsageKnowledgeBaseSection(bindings)
-  uiStore.openSettings('knowledge', knowledgeBaseSection)
+  uiStore.openSettings('entry', knowledgeBaseSection)
 }
 
 // 获取模型操作菜单选项

@@ -47,7 +47,7 @@ INSERT INTO follows(tenant_id,target_type,target_id) VALUES(1,'entity','entity')
 INSERT INTO task_jobs(id,task_type,queue,payload,state) VALUES('old-task','manual:process','default','{"tenant_id":1,"knowledge_id":"item"}','pending');
 `).Error)
 	before := baselineContents(t, db)
-	require.NoError(t, m.Up())
+	require.NoError(t, m.Migrate(2))
 	after := baselineContents(t, db)
 	for table, raw := range before {
 		var rows []map[string]any
@@ -94,7 +94,7 @@ INSERT INTO task_jobs(id,task_type,queue,payload,state) VALUES('old-task','manua
 	// Undo the explicit post-up test edits before exact old-data comparison.
 	require.NoError(t, db.Exec(`UPDATE entities SET canonical_name='Original entity' WHERE id='entity'; UPDATE topics SET name='Original topic' WHERE id='topic'`).Error)
 	require.Equal(t, before, baselineContents(t, db))
-	require.NoError(t, m.Up())
+	require.NoError(t, m.Migrate(2))
 	require.NoError(t, db.Raw(obsoleteSchemaObjects).Scan(&leftovers).Error)
 	require.Empty(t, leftovers)
 }

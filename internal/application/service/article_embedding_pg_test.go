@@ -83,7 +83,7 @@ func TestArticleChunkPrefixDoesNotEnterStoredBodyOrFullText(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
 	article := h.upload(t, "Vector context", "# Separate body\n\nchunkbodyfixture original observations.")
 	var chunks []types.Chunk
-	require.NoError(t, h.db.Where("knowledge_id=?", article.ID).Order("chunk_index").Find(&chunks).Error)
+	require.NoError(t, h.db.Where("entry_id=?", article.ID).Order("chunk_index").Find(&chunks).Error)
 	require.NotEmpty(t, chunks)
 	inputs := e.recorded()
 	for _, chunk := range chunks {
@@ -96,11 +96,11 @@ func TestArticleChunkPrefixDoesNotEnterStoredBodyOrFullText(t *testing.T) {
 		require.NotContains(t, chunk.ContextHeader, " · ")
 	}
 	var searchText string
-	require.NoError(t, h.db.Table("knowledges").Where("id=?", article.ID).Pluck("search_text", &searchText).Error)
+	require.NoError(t, h.db.Table("entries").Where("id=?", article.ID).Pluck("search_text", &searchText).Error)
 	require.NotContains(t, searchText, " · ")
 	require.NotContains(t, searchText, "chunkbodyfixture", "header index does not repeat the body")
 	var hits int64
-	require.NoError(t, h.db.Table("chunks").Where("knowledge_id=? AND seq_id @@@ paradedb.match_disjunction('content', ?)", article.ID, "chunkbodyfixture").Count(&hits).Error)
+	require.NoError(t, h.db.Table("chunks").Where("entry_id=? AND seq_id @@@ paradedb.match_disjunction('content', ?)", article.ID, "chunkbodyfixture").Count(&hits).Error)
 	require.Positive(t, hits)
 	for _, date := range []string{"", "2026-10-01"} {
 		copy := *article
@@ -112,13 +112,13 @@ func TestArticleChunkPrefixDoesNotEnterStoredBodyOrFullText(t *testing.T) {
 		if date != "" {
 			want += " · " + date
 		}
-		require.Equal(t, want+"\nbody", buildKnowledgeIndexContent(&copy, "body"))
+		require.Equal(t, want+"\nbody", buildEntryIndexContent(&copy, "body"))
 	}
 }
 
 func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
-	article, err := h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID,
+	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
 		newMultipartFileHeader(t, "Undated article.md", "# Independent observation\n\nundatedprefixfixture exact source observations."),
 		map[string]string{"publisher": "Undated publisher", "original_url": "https://example.org/undated"},
 		nil, "", types.ChannelWeb, nil)
@@ -133,7 +133,7 @@ func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	h.drain(t)
 	article = h.article(t, article.ID)
 	var chunks []types.Chunk
-	require.NoError(t, h.db.Where("knowledge_id=?", article.ID).Find(&chunks).Error)
+	require.NoError(t, h.db.Where("entry_id=?", article.ID).Find(&chunks).Error)
 	require.NotEmpty(t, chunks)
 	for _, chunk := range chunks {
 		if chunk.ChunkType != types.ChunkTypeParentText {
@@ -141,7 +141,7 @@ func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 		}
 	}
 	var date struct{ SearchPublishedAt *time.Time }
-	require.NoError(t, h.db.Table("knowledges").Where("id=?", article.ID).First(&date).Error)
+	require.NoError(t, h.db.Table("entries").Where("id=?", article.ID).First(&date).Error)
 	require.Nil(t, date.SearchPublishedAt)
 }
 
@@ -150,15 +150,15 @@ func TestArticleEmbeddingGeneratesForSummaryOnlyAndRecomputesAfterReprocessing(t
 	h.processor.output = validProcessingFixture("tutorial")
 	article := h.upload(t, "Summary vector", "bodyonlyfixture this tutorial body is discarded.")
 	var chunkCount, bodyVectorCount int64
-	require.NoError(t, h.db.Model(&types.Chunk{}).Where("knowledge_id=?", article.ID).Count(&chunkCount).Error)
+	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", article.ID).Count(&chunkCount).Error)
 	require.Zero(t, chunkCount)
-	require.NoError(t, h.db.Table("embeddings").Where("knowledge_id=?", article.ID).Count(&bodyVectorCount).Error)
+	require.NoError(t, h.db.Table("embeddings").Where("entry_id=?", article.ID).Count(&bodyVectorCount).Error)
 	require.Zero(t, bodyVectorCount)
 	var before struct {
 		ContentHash string
 		Embedding   pgvector.HalfVector
 	}
-	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", article.ID).First(&before).Error)
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).First(&before).Error)
 	wantInput := article.Title + "\n" + article.StructuredSummary.RenderText()
 	require.Contains(t, e.recorded(), wantInput)
 	require.Equal(t, vaultContentHash(wantInput), before.ContentHash)
@@ -185,7 +185,7 @@ func TestArticleEmbeddingGeneratesForSummaryOnlyAndRecomputesAfterReprocessing(t
 	require.NoError(t, article.SetIntakeMetadata(intake))
 	article.Source = intake.SourceInfo.OriginalURL
 	require.NoError(t, h.db.Save(article).Error)
-	_, err = h.service.ReparseKnowledge(h.ctx, article.ID, nil)
+	_, err = h.service.ReparseEntry(h.ctx, article.ID, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	article = h.article(t, article.ID)
@@ -193,14 +193,14 @@ func TestArticleEmbeddingGeneratesForSummaryOnlyAndRecomputesAfterReprocessing(t
 		ContentHash string
 		Embedding   pgvector.HalfVector
 	}
-	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", article.ID).First(&after).Error)
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).First(&after).Error)
 	require.NotEqual(t, before.ContentHash, after.ContentHash)
 	require.NotEqual(t, before.Embedding.Slice(), after.Embedding.Slice())
 	require.Contains(t, e.recorded(), article.Title+"\n"+article.StructuredSummary.RenderText())
 	var hits int64
-	require.NoError(t, h.db.Table("knowledges").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, "bodyonlyfixture").Count(&hits).Error)
+	require.NoError(t, h.db.Table("entries").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, "bodyonlyfixture").Count(&hits).Error)
 	require.Zero(t, hits, "summary-only body is not full-text indexed")
-	require.NoError(t, h.db.Table("knowledges").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, "reprocessedfixture").Count(&hits).Error)
+	require.NoError(t, h.db.Table("entries").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, "reprocessedfixture").Count(&hits).Error)
 	require.EqualValues(t, 1, hits)
 }
 
@@ -208,35 +208,35 @@ func TestArticleTitleVectorChangeRollsBackWhenEmbeddingFails(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
 	article := h.upload(t, "Original title", "Measured deployment details and original observations.")
 	var originalHash string
-	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", article.ID).Pluck("content_hash", &originalHash).Error)
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &originalHash).Error)
 	e.err = errors.New("fixture embedding unavailable")
-	err := h.service.UpdateKnowledge(h.ctx, &types.Knowledge{ID: article.ID, Title: "Changed title"})
+	err := h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Title: "Changed title"})
 	require.ErrorContains(t, err, "fixture embedding unavailable")
 	reloaded := h.article(t, article.ID)
 	require.Equal(t, article.Title, reloaded.Title)
 	var currentHash string
-	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", article.ID).Pluck("content_hash", &currentHash).Error)
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &currentHash).Error)
 	require.Equal(t, originalHash, currentHash)
 	e.err = nil
-	require.NoError(t, h.service.UpdateKnowledge(h.ctx, &types.Knowledge{ID: article.ID, Title: "Changed title"}))
+	require.NoError(t, h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Title: "Changed title"}))
 	reloaded = h.article(t, article.ID)
 	require.Equal(t, "Changed title", reloaded.Title)
-	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", article.ID).Pluck("content_hash", &currentHash).Error)
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &currentHash).Error)
 	require.NotEqual(t, originalHash, currentHash)
 }
 
 func TestUnprocessedArticleTitleUpdateDoesNotRequireEmbedding(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article := &types.Knowledge{ID: "pending-article", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
+	article := &types.Entry{ID: "pending-article", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		Type: "url", SourceKind: "article", Title: "Pending title", Source: "https://example.org/pending",
 		ParseStatus: types.ParseStatusPending, EnableStatus: "enabled", ProcessingMode: types.ProcessingModeFull}
 	require.NoError(t, h.db.Create(article).Error)
 	h.service.modelService = nil
-	require.NoError(t, h.service.UpdateKnowledge(h.ctx, &types.Knowledge{ID: article.ID, Title: "Edited pending title"}))
+	require.NoError(t, h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Title: "Edited pending title"}))
 	reloaded := h.article(t, article.ID)
 	require.Equal(t, "Edited pending title", reloaded.Title)
 	var count int64
-	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
 	require.Zero(t, count)
 }
 
@@ -250,18 +250,18 @@ func TestVaultDocumentChunkPrefixesHaveNoArticleVectors(t *testing.T) {
 	report, err := h.documents.CreateReport(h.ctx, "Synthesis", "# Synthesis\n\nreportprefixfixture preserved analysis", nil)
 	require.NoError(t, err)
 	for _, pair := range []struct {
-		knowledge *types.Knowledge
-		label     string
+		entry *types.Entry
+		label string
 	}{{mine, "本人"}, {report, "整理结果"}} {
 		var chunks []types.Chunk
-		require.NoError(t, h.db.Where("knowledge_id=?", pair.knowledge.ID).Find(&chunks).Error)
+		require.NoError(t, h.db.Where("entry_id=?", pair.entry.ID).Find(&chunks).Error)
 		require.NotEmpty(t, chunks)
 		for _, chunk := range chunks {
-			require.Contains(t, e.recorded(), pair.knowledge.Title+" · "+pair.label+"\n"+chunk.Content)
+			require.Contains(t, e.recorded(), pair.entry.Title+" · "+pair.label+"\n"+chunk.Content)
 			require.NotContains(t, chunk.Content, pair.label)
 		}
 		var count int64
-		require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", pair.knowledge.ID).Count(&count).Error)
+		require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", pair.entry.ID).Count(&count).Error)
 		require.Zero(t, count)
 	}
 }
@@ -276,15 +276,15 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	require.NoError(t, err)
 	intake.SourceInfo.Publisher, intake.SourceInfo.Author = "Publishermarker", "Authormarker"
 	require.NoError(t, article.SetIntakeMetadata(intake))
-	article.StructuredSummary = &types.KnowledgeSummary{Overview: "Overviewmarker", Points: []string{"Pointmarker"}, KeyTerms: []string{"Termmarker"}}
+	article.StructuredSummary = &types.EntrySummary{Overview: "Overviewmarker", Points: []string{"Pointmarker"}, KeyTerms: []string{"Termmarker"}}
 	require.NoError(t, h.db.Save(article).Error)
 	var vectors int64
-	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", article.ID).Count(&vectors).Error)
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Count(&vectors).Error)
 	require.Zero(t, vectors, "summary updates invalidate the old article vector until it is rebuilt")
 	assertHit := func(term string, want int64) {
 		t.Helper()
 		var count int64
-		require.NoError(t, h.db.Table("knowledges").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, term).Count(&count).Error)
+		require.NoError(t, h.db.Table("entries").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, term).Count(&count).Error)
 		require.Equal(t, want, count, term)
 	}
 	for _, term := range []string{"Headermarker", "Publishermarker", "Authormarker", "Overviewmarker", "Pointmarker", "Termmarker", "Entitymarker", "Aliasmarker", "Topicmarker"} {
@@ -292,7 +292,7 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	}
 	assertHit("discardedfixture", 0)
 	var entityID string
-	require.NoError(t, h.db.Table("knowledge_entities").Where("knowledge_id=?", article.ID).Pluck("entity_id", &entityID).Error)
+	require.NoError(t, h.db.Table("entry_entities").Where("entry_id=?", article.ID).Pluck("entity_id", &entityID).Error)
 	require.NoError(t, h.db.Table("entities").Where("id=?", entityID).Update("canonical_name", "Renamedentitymarker").Error)
 	assertHit("Renamedentitymarker", 1)
 	assertHit("Entitymarker", 1) // The original mention remains an alias after a canonical rename.
@@ -305,16 +305,16 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	require.NoError(t, h.db.Table("topics").Where("id=?", topic.ID).Update("name", "Updatedtopicmarker").Error)
 	assertHit("Updatedtopicmarker", 1)
 	assertHit("Topicmarker", 0)
-	require.NoError(t, h.db.Where("knowledge_id=?", article.ID).Delete(&types.KnowledgeTopic{}).Error)
+	require.NoError(t, h.db.Where("entry_id=?", article.ID).Delete(&types.EntryTopic{}).Error)
 	assertHit("Updatedtopicmarker", 0)
-	require.NoError(t, h.db.Where("knowledge_id=?", article.ID).Delete(&types.KnowledgeEntity{}).Error)
+	require.NoError(t, h.db.Where("entry_id=?", article.ID).Delete(&types.EntryEntity{}).Error)
 	assertHit("Renamedentitymarker", 0)
 	var text string
-	require.NoError(t, h.db.Table("knowledges").Where("id=?", article.ID).Pluck("search_text", &text).Error)
+	require.NoError(t, h.db.Table("entries").Where("id=?", article.ID).Pluck("search_text", &text).Error)
 	require.False(t, strings.Contains(text, " · "))
 }
 
-func TestArticleSearchPublishedAtUsesExplicitValidSourceDate(t *testing.T) {
+func TestEntrySearchPublishedAtUsesExplicitValidSourceDate(t *testing.T) {
 	h, _ := newArticleIndexingHarness(t)
 	article := h.upload(t, "Known date", "Date independent observations for a published article.")
 	for _, date := range []string{"2026-10-01", "2026-10-01T08:00:00+08:00", "", "tomorrow", "2026-02-30"} {
@@ -324,7 +324,7 @@ func TestArticleSearchPublishedAtUsesExplicitValidSourceDate(t *testing.T) {
 		require.NoError(t, article.SetIntakeMetadata(intake))
 		require.NoError(t, h.db.Save(article).Error)
 		var row struct{ SearchPublishedAt *time.Time }
-		require.NoError(t, h.db.Table("knowledges").Where("id=?", article.ID).First(&row).Error)
+		require.NoError(t, h.db.Table("entries").Where("id=?", article.ID).First(&row).Error)
 		if date == "2026-10-01" || date == "2026-10-01T08:00:00+08:00" {
 			require.NotNil(t, row.SearchPublishedAt)
 			require.Equal(t, "2026-10-01T00:00:00Z", row.SearchPublishedAt.UTC().Format(time.RFC3339))

@@ -95,7 +95,7 @@ func TestMaintenanceChatGPTProbePreservesRealQuotaAndAppendsExactAuditChain(t *t
 	require.NoError(t, err)
 	accountID := "00000000-0000-0000-0000-000000000015"
 	require.NoError(t, db.Exec(`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,credentials,status,expires_at) VALUES(?,?,?,?,?,'connected',?)`, accountID, "probe-client", "https://auth.openai.com", "probe-subject", credential, time.Now().Add(time.Hour)).Error)
-	model := &types.Model{ID: "maintenance-chatgpt-probe", SpaceID: types.SingleSpaceID, Name: "fixture", Type: types.ModelTypeKnowledgeQA,
+	model := &types.Model{ID: "maintenance-chatgpt-probe", SpaceID: types.SingleSpaceID, Name: "fixture", Type: types.ModelTypeGeneration,
 		Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive, Parameters: types.ModelParameters{Provider: "chatgpt", InterfaceType: "responses", ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, db.Create(model).Error)
 	limit := 10
@@ -227,7 +227,7 @@ func TestOfflineChatGPTModelProbeWithoutMaintenanceStateAuditsRealQuotaWithoutMi
 	require.NoError(t, err)
 	accountID := "00000000-0000-0000-0000-000000000016"
 	require.NoError(t, db.Exec(`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,credentials,status,expires_at) VALUES(?,?,?,?,?,'connected',?)`, accountID, "offline-probe-client", "https://auth.openai.com", "offline-probe-subject", credential, time.Now().Add(time.Hour)).Error)
-	model := &types.Model{ID: "offline-probe-model", SpaceID: 1, Name: "fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
+	model := &types.Model{ID: "offline-probe-model", SpaceID: 1, Name: "fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{Provider: "chatgpt", InterfaceType: "responses", ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, db.Create(model).Error)
 	var calls atomic.Int32
@@ -252,7 +252,7 @@ func TestOfflineChatGPTModelProbeWithoutMaintenanceStateAuditsRealQuotaWithoutMi
 	}
 	version, dirty, err := migration.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 2, version)
+	require.EqualValues(t, 3, version)
 	require.False(t, dirty)
 	require.False(t, db.Migrator().HasTable("maintenance_state"))
 }

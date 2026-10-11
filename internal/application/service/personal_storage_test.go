@@ -33,15 +33,15 @@ func TestPersonalIntakeBeyondFormerStorageLimitKeepsUsageAccounting(t *testing.T
 		EmbeddingModelID: "embedding-1", IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
 	}
 	require.NoError(t, db.Create(kb).Error)
-	repo := repository.NewKnowledgeRepository(db)
+	repo := repository.NewEntryRepository(db)
 	spaceRepo := repository.NewSpaceRepository(db)
 	models := parentChildModelService{embedder: parentChildEmbedder{}}
 	engine := &personalStorageRetrieveEngine{}
 	retrieval := &retriever.PostgresRetrievalService{RetrieveEngineService: engine}
-	queue := &createKnowledgeTaskEnqueuerStub{}
+	queue := &createEntryTaskEnqueuerStub{}
 	chunks := NewChunkService(repository.NewChunkRepository(db), repo, repository.NewKnowledgeBaseRepository(db), models, retrieval)
-	svc := &knowledgeService{
-		db: db, repo: repo, spaceRepo: spaceRepo, kbService: &createKnowledgeFileKBServiceStub{kb: kb},
+	svc := &entryService{
+		db: db, repo: repo, spaceRepo: spaceRepo, kbService: &createEntryFileKBServiceStub{kb: kb},
 		fileSvc: filesvc.NewLocalFileService(t.TempDir(), ""), task: queue, chunkService: chunks, modelService: models, retrieveEngine: retrieval,
 	}
 	// Use a deterministic allowed origin so this intake regression does not depend on DNS.
@@ -50,31 +50,31 @@ func TestPersonalIntakeBeyondFormerStorageLimitKeepsUsageAccounting(t *testing.T
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	creators := []struct {
 		name   string
-		create func() (*types.Knowledge, error)
+		create func() (*types.Entry, error)
 	}{
-		{"upload", func() (*types.Knowledge, error) {
-			return svc.CreateKnowledgeFromFile(ctx, kb.ID, newMultipartFileHeader(t, "upload.txt", "uploaded content"), nil, nil, "", types.ChannelWeb, nil)
+		{"upload", func() (*types.Entry, error) {
+			return svc.CreateEntryFromFile(ctx, kb.ID, newMultipartFileHeader(t, "upload.txt", "uploaded content"), nil, nil, "", types.ChannelWeb, nil)
 		}},
-		{"website", func() (*types.Knowledge, error) {
-			return svc.CreateKnowledgeFromURL(ctx, kb.ID, "https://storage-test.example/article", "", "", nil, "Website content", types.ChannelWeb, nil)
+		{"website", func() (*types.Entry, error) {
+			return svc.CreateEntryFromURL(ctx, kb.ID, "https://storage-test.example/article", "", "", nil, "Website content", types.ChannelWeb, nil)
 		}},
-		{"file URL", func() (*types.Knowledge, error) {
-			return svc.CreateKnowledgeFromURL(ctx, kb.ID, "https://storage-test.example/document.pdf", "", "", nil, "Downloaded content", types.ChannelWeb, nil)
+		{"file URL", func() (*types.Entry, error) {
+			return svc.CreateEntryFromURL(ctx, kb.ID, "https://storage-test.example/document.pdf", "", "", nil, "Downloaded content", types.ChannelWeb, nil)
 		}},
-		{"manual", func() (*types.Knowledge, error) {
-			return svc.CreateKnowledgeFromManual(ctx, kb.ID, &types.ManualKnowledgePayload{Title: "Manual content", Content: "Personal manually created body", Status: types.ManualKnowledgeStatusPublish}, types.ChannelWeb)
+		{"manual", func() (*types.Entry, error) {
+			return svc.CreateEntryFromManual(ctx, kb.ID, &types.ManualEntryPayload{Title: "Manual content", Content: "Personal manually created body", Status: types.ManualEntryStatusPublish}, types.ChannelWeb)
 		}},
 	}
-	var created []*types.Knowledge
+	var created []*types.Entry
 	for _, creator := range creators {
 		t.Run(creator.name, func(t *testing.T) {
 			item, err := creator.create()
 			require.NoError(t, err)
 			require.NotNil(t, item)
 			item.ParseStatus = types.ParseStatusProcessing
-			require.NoError(t, repo.UpdateKnowledge(ctx, item))
+			require.NoError(t, repo.UpdateEntry(ctx, item))
 			svc.processChunks(ctx, kb, item, []types.ParsedChunk{{Content: creator.name + " body", ParentIndex: -1}})
-			stored, err := repo.GetKnowledgeByID(ctx, space.ID, item.ID)
+			stored, err := repo.GetEntryByID(ctx, space.ID, item.ID)
 			require.NoError(t, err)
 			require.NotEqual(t, types.ParseStatusFailed, stored.ParseStatus, stored.ErrorMessage)
 			require.EqualValues(t, 256, stored.StorageSize)
@@ -88,7 +88,7 @@ func TestPersonalIntakeBeyondFormerStorageLimitKeepsUsageAccounting(t *testing.T
 	require.Len(t, created, len(creators))
 	require.Len(t, engine.indexed, 1)
 	for i, item := range created {
-		require.NoError(t, svc.DeleteKnowledge(ctx, item.ID))
+		require.NoError(t, svc.DeleteEntry(ctx, item.ID))
 		current, err := spaceRepo.GetSpaceByID(ctx, space.ID)
 		require.NoError(t, err)
 		require.Equal(t, initialUsed+int64(len(created)-i-1)*256, current.StorageUsed)

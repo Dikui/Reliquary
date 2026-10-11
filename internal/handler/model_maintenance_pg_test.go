@@ -44,7 +44,7 @@ func TestSnapshotChatGPTModelDebugAuditsRealQuotaIncludingFailedCalls(t *testing
 	require.NoError(t, err)
 	accountID := uuid.NewString()
 	require.NoError(t, db.Exec(`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,credentials,status,expires_at) VALUES(?,'debug-client','https://auth.openai.com','debug-subject',?,'connected',?)`, accountID, credential, time.Now().Add(time.Hour)).Error)
-	model := &types.Model{ID: "maintenance-debug", SpaceID: 1, Name: "fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
+	model := &types.Model{ID: "maintenance-debug", SpaceID: 1, Name: "fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{Provider: "chatgpt", InterfaceType: "responses", ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, db.Create(model).Error)
 	limit := 10

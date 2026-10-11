@@ -59,7 +59,7 @@ test('vault image references are protected and hydrated through the authenticate
     assert.equal(requests.length, 1)
     const request = requests[0]
     const url = new URL(request.url, 'http://localhost')
-    assert.equal(url.pathname, '/api/v1/knowledge/vault-hydration-id/vault-attachment')
+    assert.equal(url.pathname, '/api/v1/entries/vault-hydration-id/vault-attachment')
     assert.equal(url.searchParams.get('path'), relative)
     assert.deepEqual(request.options.headers, { Authorization: 'Bearer vault-hydration-token' })
     assert.equal(request.options.credentials, 'include')

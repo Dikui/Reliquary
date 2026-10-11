@@ -30,7 +30,7 @@ func (s *modelService) validateChatGPTModel(ctx context.Context, m *types.Model)
 	if m.Source != types.ModelSourceChatGPT {
 		return nil
 	}
-	if m.Type != types.ModelTypeKnowledgeQA {
+	if m.Type != types.ModelTypeGeneration {
 		return errors.New("ChatGPT plan supports generation models only; configure a separate embedding model")
 	}
 	if s.db == nil {
@@ -55,7 +55,7 @@ func (s *modelService) validateChatGPTModel(ctx context.Context, m *types.Model)
 }
 
 func (s *modelService) chatGPTModel(ctx context.Context, m *types.Model) (chat.Chat, error) {
-	if m.Type != types.ModelTypeKnowledgeQA {
+	if m.Type != types.ModelTypeGeneration {
 		return nil, errors.New("ChatGPT plan supports generation models only")
 	}
 	if s.db == nil {
@@ -87,7 +87,7 @@ func (s *modelService) chatGPTModel(ctx context.Context, m *types.Model) (chat.C
 		if err != nil {
 			return nil, err
 		}
-		if model == nil || model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+		if model == nil || model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeGeneration || model.Status != types.ModelStatusActive {
 			return nil, errors.New("configured fallback is not an active local generation model")
 		}
 		return s.GetChatModel(ctx, id)

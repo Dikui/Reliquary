@@ -10,15 +10,15 @@ import { collectTranslationCallsFromSource } from './translationCallAudit'
 
 const retiredCopy = /消息|对象|知识上下文|领域|领域模板|开放字段|字段归并|事实记录|证据版本|抽取模式|关注范围|事件聚合|事件热度|具体所指标签|内容性质标签|自由标签|关注价值|Agent 策略|策略版本|跟踪任务|知识工作流|知识报告|可编辑工作副本|不可变原文|知识工作台|message content|existing message|knowledge context|knowledge workbench/i
 const pages = [
-  '../views/knowledge/KnowledgeBase.vue',
-  '../views/knowledge/KnowledgeSearch.vue',
-  '../views/knowledge/components/KnowledgeWorkbench.vue',
-  '../views/knowledge/TopicManagement.vue',
-  '../views/knowledge/OperationLogs.vue',
+  '../views/knowledge-base/KnowledgeBase.vue',
+  '../views/knowledge-base/SearchView.vue',
+  '../views/knowledge-base/components/EntryWorkbench.vue',
+  '../views/knowledge-base/TopicManagement.vue',
+  '../views/knowledge-base/OperationLogs.vue',
   '../views/settings/Settings.vue',
-  '../views/settings/KnowledgeSettings.vue',
+  '../views/settings/KnowledgeBaseSettings.vue',
   '../views/settings/SpaceInfo.vue',
-  '../views/knowledge/settings/DataSourceEditorDialog.vue',
+  '../views/knowledge-base/settings/DataSourceEditorDialog.vue',
   '../components/DocContent.vue',
   '../components/SideMenu.vue',
   '../components/UserMenu.vue',

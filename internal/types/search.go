@@ -11,12 +11,12 @@ type SearchTargetType string
 const (
 	// SearchTargetTypeKnowledgeBase - search entire knowledge base
 	SearchTargetTypeKnowledgeBase SearchTargetType = "knowledge_base"
-	// SearchTargetTypeKnowledge - search specific knowledge files within a knowledge base
-	SearchTargetTypeKnowledge SearchTargetType = "knowledge"
+	// SearchTargetTypeEntry - search specific entry files within a knowledge base
+	SearchTargetTypeEntry SearchTargetType = "knowledge"
 )
 
 // SearchTarget represents a unified search target
-// Either search an entire knowledge base, or specific knowledge files within a knowledge base
+// Either search an entire knowledge base, or specific entry files within a knowledge base
 type SearchTarget struct {
 	// Type of search target
 	Type SearchTargetType `json:"type"`
@@ -25,9 +25,9 @@ type SearchTarget struct {
 	// SpaceID is the space ID that owns this knowledge base
 	// Required for cross-space shared KB queries
 	SpaceID uint64 `json:"space_id"`
-	// KnowledgeIDs is the list of specific knowledge IDs to search within the knowledge base
-	// Only used when Type is SearchTargetTypeKnowledge
-	KnowledgeIDs []string `json:"knowledge_ids,omitempty"`
+	// EntryIDs is the list of specific entry IDs to search within the knowledge base
+	// Only used when Type is SearchTargetTypeEntry
+	EntryIDs []string `json:"entry_ids,omitempty"`
 	// DisableRecallThresholds keeps recall broad inside an already constrained,
 	// user-selected scope. The reranker still orders candidates, but vector and
 	// keyword thresholds cannot erase the whole explicit scope before reranking.
@@ -56,19 +56,19 @@ func (st SearchTargets) HasRecallThresholdOverride() bool {
 	return false
 }
 
-// HasKnowledgeRetrievalScope reports whether a request has any effective
-// knowledge retrieval scope.
-func HasKnowledgeRetrievalScope(
+// HasEntryRetrievalScope reports whether a request has any effective
+// entry retrieval scope.
+func HasEntryRetrievalScope(
 	searchTargets SearchTargets,
 	knowledgeBaseIDs []string,
-	knowledgeIDs []string,
+	entryIDs []string,
 ) bool {
 	for _, id := range knowledgeBaseIDs {
 		if id != "" {
 			return true
 		}
 	}
-	for _, id := range knowledgeIDs {
+	for _, id := range entryIDs {
 		if id != "" {
 			return true
 		}
@@ -77,7 +77,7 @@ func HasKnowledgeRetrievalScope(
 		if target == nil || target.KnowledgeBaseID == "" {
 			continue
 		}
-		if target.Type == SearchTargetTypeKnowledgeBase || len(target.KnowledgeIDs) > 0 {
+		if target.Type == SearchTargetTypeKnowledgeBase || len(target.EntryIDs) > 0 {
 			return true
 		}
 	}
@@ -138,12 +138,12 @@ type SearchResult struct {
 	ID string `gorm:"column:id"              json:"id"`
 	// Content
 	Content string `gorm:"column:content"         json:"content"`
-	// Knowledge ID
-	KnowledgeID string `gorm:"column:knowledge_id"    json:"knowledge_id"`
+	// Entry ID
+	EntryID string `gorm:"column:entry_id"    json:"entry_id"`
 	// Chunk index
 	ChunkIndex int `gorm:"column:chunk_index"     json:"chunk_index"`
-	// Knowledge title
-	KnowledgeTitle string `gorm:"column:knowledge_title" json:"knowledge_title"`
+	// Entry title
+	EntryTitle string `gorm:"column:entry_title" json:"entry_title"`
 	// Start at
 	StartAt int `gorm:"column:start_at"        json:"start_at"`
 	// End at
@@ -166,16 +166,16 @@ type SearchResult struct {
 	// 图片信息 (JSON 格式)
 	ImageInfo string `json:"image_info"`
 
-	// Knowledge file name
-	// Used for file type knowledge, contains the original file name
-	KnowledgeFilename string `json:"knowledge_filename"`
+	// Entry file name
+	// Used for file type entry, contains the original file name
+	EntryFilename string `json:"entry_filename"`
 
-	// Knowledge source
-	// Used to indicate the source of the knowledge, such as "url"
-	KnowledgeSource string `json:"knowledge_source"`
+	// Entry source
+	// Used to indicate the source of the entry, such as "url"
+	EntrySource string `json:"entry_source"`
 
-	// KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, rss)
-	KnowledgeChannel string `json:"knowledge_channel"`
+	// EntryChannel indicates through which channel the entry was ingested (web, api, rss)
+	EntryChannel string `json:"entry_channel"`
 
 	// ChunkMetadata stores chunk-level metadata (e.g., generated questions)
 	ChunkMetadata JSON `json:"chunk_metadata,omitempty"`
@@ -183,11 +183,11 @@ type SearchResult struct {
 	// MatchedContent is the actual content that was matched in vector search
 	MatchedContent string `json:"matched_content,omitempty"`
 
-	// KnowledgeDescription is the description of the knowledge document
-	KnowledgeDescription string `json:"knowledge_description,omitempty"`
+	// EntryDescription is the description of the entry document
+	EntryDescription string `json:"entry_description,omitempty"`
 
-	// KnowledgeCustomMetadata is user-authored context safe to expose to models.
-	KnowledgeCustomMetadata string `json:"knowledge_custom_metadata,omitempty"`
+	// EntryCustomMetadata is user-authored context safe to expose to models.
+	EntryCustomMetadata string `json:"entry_custom_metadata,omitempty"`
 
 	// KnowledgeBaseID is the ID of the knowledge base this result belongs to
 	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"`
@@ -210,7 +210,7 @@ type SearchParams struct {
 	MatchCount           int       `json:"match_count"`
 	DisableKeywordsMatch bool      `json:"disable_keywords_match"`
 	DisableVectorMatch   bool      `json:"disable_vector_match"`
-	KnowledgeIDs         []string  `json:"knowledge_ids"`
+	EntryIDs             []string  `json:"entry_ids"`
 	// OnlyRecommended is accepted for compatibility and has no effect.
 	OnlyRecommended bool `json:"only_recommended"`
 	// SkipContextEnrichment skips fetching parent, nearby, and relation chunks

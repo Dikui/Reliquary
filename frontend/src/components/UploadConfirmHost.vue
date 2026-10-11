@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import UploadConfirmDialog from '@/views/knowledge/components/UploadConfirmDialog.vue'
+import UploadConfirmDialog from '@/views/knowledge-base/components/UploadConfirmDialog.vue'
 import { useUploadConfirmStore } from '@/stores/uploadConfirm'
 
 const uploadConfirmStore = useUploadConfirmStore()

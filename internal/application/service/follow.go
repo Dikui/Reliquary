@@ -166,10 +166,10 @@ const followEligibleSQL = `k.deleted_at IS NULL AND k.source_kind='article'
     AND k.parse_status='completed' AND k.enable_status='enabled' AND k.processing_review_status<>'pending'
     AND COALESCE(k.metadata #>> '{intake,decision}','approved')='approved'`
 
-const followMatchSQL = `((f.target_type='entity' AND EXISTS (SELECT 1 FROM knowledge_entities ke
-    WHERE ke.space_id=k.space_id AND ke.knowledge_id=k.id AND ke.entity_id=f.target_id))
-    OR (f.target_type='topic' AND EXISTS (SELECT 1 FROM knowledge_topics kt
-    WHERE kt.space_id=k.space_id AND kt.knowledge_id=k.id AND kt.topic_id=f.target_id)))`
+const followMatchSQL = `((f.target_type='entity' AND EXISTS (SELECT 1 FROM entry_entities ke
+    WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.entity_id=f.target_id))
+    OR (f.target_type='topic' AND EXISTS (SELECT 1 FROM entry_topics kt
+    WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.topic_id=f.target_id)))`
 
 func (s *FollowService) ListFollows(ctx context.Context) ([]types.FollowTarget, error) {
 	spaceID, err := followSpace(ctx)
@@ -180,7 +180,7 @@ func (s *FollowService) ListFollows(ctx context.Context) ([]types.FollowTarget, 
 	result := []types.FollowTarget{}
 	err = s.db.WithContext(ctx).Raw(`SELECT f.target_type,f.target_id,f.created_at,
         CASE WHEN f.target_type='entity' THEN e.canonical_name ELSE t.name END AS name,
-        (SELECT count(*) FROM knowledges k WHERE k.space_id=f.space_id AND `+followEligibleSQL+`
+        (SELECT count(*) FROM entries k WHERE k.space_id=f.space_id AND `+followEligibleSQL+`
             AND k.created_at>=? AND k.created_at<=? AND `+followMatchSQL+`) AS recent_article_count
         FROM follows f LEFT JOIN entities e ON f.target_type='entity' AND e.space_id=f.space_id AND e.id=f.target_id
         LEFT JOIN topics t ON f.target_type='topic' AND t.space_id=f.space_id AND t.id=f.target_id

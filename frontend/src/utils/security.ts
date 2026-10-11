@@ -191,7 +191,7 @@ function providerSourceFromImageSrc(src: string): string | null {
     }
 
     const filePath = (url.searchParams.get('file_path') || '').trim();
-    const vaultAttachment = /^\/api\/v1\/knowledge\/([^/]+)\/vault-attachment$/.exec(url.pathname);
+    const vaultAttachment = /^\/api\/v1\/entry\/([^/]+)\/vault-attachment$/.exec(url.pathname);
     if (vaultAttachment) {
       const path = url.searchParams.get('path');
       return path ? `vault://${vaultAttachment[1]}/${encodeURIComponent(path)}` : null;

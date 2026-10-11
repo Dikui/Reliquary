@@ -34,11 +34,11 @@ func TestArticleStarPersistsHeaderLogsAndListFilter(t *testing.T) {
 			header, got, err := ParseVaultArticle(data)
 			return err == nil && header.Starred == starred && string(got) == string(body)
 		}, time.Second, 10*time.Millisecond)
-		_, total, err := repository.NewKnowledgeRepository(h.db).ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.KnowledgeListFilter{Starred: &starred})
+		_, total, err := repository.NewEntryRepository(h.db).ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.EntryListFilter{Starred: &starred})
 		require.NoError(t, err)
 		require.EqualValues(t, 1, total)
 		opposite := !starred
-		_, total, err = repository.NewKnowledgeRepository(h.db).ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.KnowledgeListFilter{Starred: &opposite})
+		_, total, err = repository.NewEntryRepository(h.db).ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.EntryListFilter{Starred: &opposite})
 		require.NoError(t, err)
 		require.Zero(t, total)
 	}
@@ -56,8 +56,8 @@ func TestArticleStarPersistsHeaderLogsAndListFilter(t *testing.T) {
 	require.EqualValues(t, 1, page.Total)
 }
 
-func TestArticleSearchStarredFiltersAndMissingCount(t *testing.T) {
-	h := newArticleSearchFixture(t)
+func TestEntrySearchStarredFiltersAndMissingCount(t *testing.T) {
+	h := newEntrySearchFixture(t)
 	a := h.add(t, "starred", "article", "2026-10-10", "event", "semanticlaunch", 1)
 	h.add(t, "plain", "article", "2026-10-10", "event", "semanticlaunch", 1)
 	h.add(t, "mine", "mine", "", "", "semanticlaunch", 1)
@@ -65,21 +65,21 @@ func TestArticleSearchStarredFiltersAndMissingCount(t *testing.T) {
 	require.NoError(t, h.db.Model(a).Update("starred", true).Error)
 	require.NoError(t, h.db.Model(missing).Update("starred", true).Error)
 	starred := true
-	result, err := h.svc.Search(h.ctx, types.ArticleSearchRequest{Query: "semanticlaunch", Starred: &starred, CollapseSimilar: boolPointer(false), Limit: 100})
+	result, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, CollapseSimilar: boolPointer(false), Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 2)
 	for _, r := range result.Results {
 		require.True(t, r.Starred)
 	}
-	result, err = h.svc.Search(h.ctx, types.ArticleSearchRequest{Query: "semanticlaunch", Starred: &starred, PublishedFrom: "2026-10-01", Limit: 100})
+	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, PublishedFrom: "2026-10-01", Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)
 	starred = false
-	result, err = h.svc.Search(h.ctx, types.ArticleSearchRequest{Query: "semanticlaunch", Starred: &starred, Limit: 100})
+	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
-	require.Equal(t, "plain", result.Results[0].ArticleID)
+	require.Equal(t, "plain", result.Results[0].EntryID)
 }
 
 func boolPointer(v bool) *bool { return &v }
@@ -92,7 +92,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, err)
 			h.service.SetVault(v)
 			t.Cleanup(func() { require.NoError(t, v.Close()) })
-			a, err := h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
+			a, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
 			require.NoError(t, err)
 			h.drain(t)
 			a = h.article(t, a.ID)
@@ -106,14 +106,14 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			var row struct {
 				PublishedAt *time.Time `gorm:"column:search_published_at"`
 			}
-			require.NoError(t, h.db.Table("knowledges").Select("search_published_at").Where("id=?", a.ID).Scan(&row).Error)
+			require.NoError(t, h.db.Table("entries").Select("search_published_at").Where("id=?", a.ID).Scan(&row).Error)
 			require.Nil(t, row.PublishedAt)
 			_, header, _ := readVaultArticle(t, v, a)
 			require.Contains(t, string(header), "published_at: null\n")
-			search := NewKnowledgeSearchService(articleSearchFixtureBases{kb: h.kb}, nil, nil, h.db)
+			search := NewSearchService(entrySearchFixtureBases{kb: h.kb}, nil, nil, h.db)
 			space, _ := types.SpaceInfoFromContext(h.ctx)
 			space.RetrievalConfig = &types.RetrievalConfig{KeywordThreshold: .00001, RerankTopK: 20}
-			result, err := search.Search(h.ctx, types.ArticleSearchRequest{Query: "Undatedfixture", PublishedFrom: "2026-10-01", Limit: 20})
+			result, err := search.Search(h.ctx, types.EntrySearchRequest{Query: "Undatedfixture", PublishedFrom: "2026-10-01", Limit: 20})
 			require.NoError(t, err)
 			require.Empty(t, result.Results)
 			require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)
@@ -125,12 +125,12 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		a := &types.Knowledge{ID: "review-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
+		a := &types.Entry{ID: "review-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
 		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.SpaceID, a.ID+".md", false)
 		require.NoError(t, err)
-		require.NoError(t, a.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "rejected", Reason: "Needs human judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/" + action}}))
+		require.NoError(t, a.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", Reason: "Needs human judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/" + action}}))
 		require.NoError(t, h.db.Create(a).Error)
-		_, err = h.service.ReviewKnowledgeIntake(h.ctx, a.ID, action, types.SourceInfo{})
+		_, err = h.service.ReviewEntryIntake(h.ctx, a.ID, action, types.SourceInfo{})
 		require.NoError(t, err)
 	}
 	page, err := NewOperationLogService(h.db).List(h.ctx, "", 1, 100)
@@ -163,15 +163,15 @@ func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 func TestIntakeReviewAuditFailurePreservesDecisionAndOriginal(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		a := &types.Knowledge{ID: "audit-failure-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
+		a := &types.Entry{ID: "audit-failure-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
 		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.SpaceID, a.ID, false)
 		require.NoError(t, err)
-		require.NoError(t, a.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "rejected", Reason: "Needs judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/" + action}}))
+		require.NoError(t, a.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", Reason: "Needs judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/" + action}}))
 		require.NoError(t, h.db.Create(a).Error)
 	}
 	require.NoError(t, h.db.Exec(`CREATE FUNCTION fail_review_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$; CREATE TRIGGER fail_review_audit BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION fail_review_audit()`).Error)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		_, err := h.service.ReviewKnowledgeIntake(h.ctx, "audit-failure-"+action, action, types.SourceInfo{})
+		_, err := h.service.ReviewEntryIntake(h.ctx, "audit-failure-"+action, action, types.SourceInfo{})
 		require.ErrorContains(t, err, "audit unavailable")
 		a := h.article(t, "audit-failure-"+action)
 		intake, err := a.IntakeMetadata()

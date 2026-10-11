@@ -7,7 +7,7 @@ import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import type { EmbeddingRebuildData, EmbeddingRebuildRun } from '../api/embedding-rebuild'
-import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../views/knowledge/componentTestHarness'
+import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../views/knowledge-base/componentTestHarness'
 
 const messages = { 'zh-CN': zh, 'en-US': en }
 const baseRun: EmbeddingRebuildRun = { id: 'run-1', status: 'pending', model_id: 'model-1', model_name: 'Multimodal model', dimension: 512, total_count: 10, completed_count: 0, failed_count: 0 }

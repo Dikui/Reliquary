@@ -47,7 +47,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
 	var result struct {
-		Data types.Knowledge `json:"data"`
+		Data types.Entry `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
 	require.Equal(t, "report", result.Data.SourceKind)
@@ -60,7 +60,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
-	require.Equal(t, result.Data.ID, hits[0].Results[0].KnowledgeID)
+	require.Equal(t, result.Data.ID, hits[0].Results[0].EntryID)
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/vault/status", nil))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

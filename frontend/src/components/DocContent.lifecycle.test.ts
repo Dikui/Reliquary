@@ -36,7 +36,7 @@ function unresolvedReferences(path: string, text = source(path)) {
 }
 
 test('detail and related article components have defined script and template references', () => {
-  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/KnowledgeClassification.vue'), resolve('src/components/KnowledgeStarToggle.vue'), resolve('src/components/KnowledgeArticleJudgments.vue'), resolve('src/views/knowledge/FollowFeed.vue'), resolve('src/views/knowledge/TopicManagement.vue'), resolve('src/views/knowledge/OperationLogs.vue'), resolve('src/components/KnowledgeProcessingTimeline.vue'), resolve('src/views/knowledge/components/DocumentActionMenu.vue'), resolve('src/views/knowledge/components/DocumentCardView.vue'), resolve('src/views/knowledge/components/DocumentListView.vue'), resolve('src/views/knowledge/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
+  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/EntryClassification.vue'), resolve('src/components/EntryStarToggle.vue'), resolve('src/components/EntryArticleJudgments.vue'), resolve('src/views/knowledge-base/FollowFeed.vue'), resolve('src/views/knowledge-base/TopicManagement.vue'), resolve('src/views/knowledge-base/OperationLogs.vue'), resolve('src/components/EntryProcessingTimeline.vue'), resolve('src/views/knowledge-base/components/DocumentActionMenu.vue'), resolve('src/views/knowledge-base/components/DocumentCardView.vue'), resolve('src/views/knowledge-base/components/DocumentListView.vue'), resolve('src/views/knowledge-base/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
 })
 
 test('reference audit detects deleted callbacks in watchers, lifecycle, expose and template events', () => {
@@ -87,12 +87,12 @@ test('mounted detail switches articles and modes, closes and unmounts without un
       marked: { marked: { use() {}, Renderer: class {}, parse: passthrough } }, 'marked-katex-extension': { __esModule: true, default: () => ({}) },
       'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
-      '@/api/knowledge-base': { KNOWLEDGE_CHUNK_PAGE_SIZE: 25 },
+      '@/api/knowledge-base': { ENTRY_CHUNK_PAGE_SIZE: 25 },
       '@/utils/clipboard': { copyWithToast() {} },
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
-      '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/KnowledgeProcessingTimeline.vue': empty, '@/components/KnowledgeReviewActions.vue': empty, '@/components/KnowledgeArticleJudgments.vue': empty, '@/components/KnowledgeClassification.vue': empty,
-      '@/views/knowledge/components/RepostSources.vue': empty, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
+      '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryClassification.vue': empty,
+      '@/views/knowledge-base/components/RepostSources.vue': empty, '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
     }).default
     detail.render = evaluate(template.code, {}).render
     let state: any

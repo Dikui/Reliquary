@@ -6,7 +6,7 @@ import (
 )
 
 // RetrievalConfig holds the global retrieval/search configuration for a space.
-// Knowledge retrieval uses these parameters before optional reranking.
+// Entry retrieval uses these parameters before optional reranking.
 //
 // Stored as a JSONB column on the spaces table, managed via the settings UI
 // at /space/kv/retrieval-config.

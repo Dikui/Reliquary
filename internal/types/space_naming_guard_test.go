@@ -19,6 +19,8 @@ type namingException struct {
 // Each exception allows specific literal tokens in a specific file. Go
 // identifiers are checked separately and have no exceptions.
 var namingExceptions = map[string]namingException{
+	"internal/testutil/pgtest/entry_migration_test.go":                     {Reason: "条目迁移夹具保留原队列归属键", Tokens: []string{"tenant_id"}},
+	"internal/router/mcp_pg_test.go":                                       {Reason: "MCP 旧响应转换为测试内部 DTO", Tokens: []string{"tenant_id"}},
 	"frontend/src/stores/auth.ts":                                          {Reason: "已持久化的浏览器会话存储键与旧用户缓存转换，HTTP 不接受旧字段", Tokens: []string{"reliquary_tenant", "tenant_id"}},
 	"frontend/src/utils/requestAvailability.test.ts":                       {Reason: "旧浏览器会话升级后经过实际请求拦截器及 store 加载新字段", Tokens: []string{"reliquary_tenant", "tenant_id"}},
 	"internal/application/service/topic_management_pg_test.go":             {Reason: "真实数据库断言主题操作日志保留内部旧键", Tokens: []string{"tenant_id"}},

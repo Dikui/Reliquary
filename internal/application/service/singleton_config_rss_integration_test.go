@@ -33,13 +33,13 @@ func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *knowledgeB
 	indices := pgretriever.NewPostgresRetrieveEngineRepository(h.db)
 	h.service.retrieveEngine = retriever.NewPostgresRetrievalService(indices)
 	chunks := h.service.chunkService.(*chunkService)
-	chunks.knowledgeRepo = h.service.repo
+	chunks.entryRepo = h.service.repo
 	chunks.kbRepository = repository.NewKnowledgeBaseRepository(h.db)
 	chunks.modelService = models
 	chunks.retrieveEngine = h.service.retrieveEngine
 	require.NoError(t, h.db.Create(&types.Model{ID: "saved-embedding", SpaceID: h.kb.SpaceID, Name: "Fixture embedding", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 	require.NoError(t, h.db.Model(h.kb).Update("embedding_model_id", "saved-embedding").Error)
-	bases := &knowledgeBaseService{db: h.db, repo: repository.NewKnowledgeBaseRepository(h.db), kgRepo: h.service.repo}
+	bases := &knowledgeBaseService{db: h.db, repo: repository.NewKnowledgeBaseRepository(h.db), entryRepo: h.service.repo}
 	h.service.kbService = bases
 	return bases
 }
@@ -47,7 +47,7 @@ func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *knowledgeB
 func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	bases := singletonIntakeSettings(t, h)
-	require.NoError(t, h.db.Create(&types.Model{ID: "saved-light", SpaceID: h.kb.SpaceID, Name: "Fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive}).Error)
+	require.NoError(t, h.db.Create(&types.Model{ID: "saved-light", SpaceID: h.kb.SpaceID, Name: "Fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive}).Error)
 	config := &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Light: "saved-light", Generation: "saved-light", Embedding: "saved-embedding"}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: "recursive", Separators: []string{"\n\n", "\n", " "}}}
 	_, err := bases.UpdateKnowledgeBase(h.ctx, h.kb.ID, h.kb.Name, "", config)
 	require.NoError(t, err)
@@ -65,11 +65,11 @@ func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testin
 			text = "Researchers published original experimental measurements on telescope optics, detector sensitivity and observatory calibration. "
 		}
 		body := "# " + marker + "\n\n" + strings.Repeat(text, 28)
-		article, err := h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, marker+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + marker, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+		article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, marker+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + marker, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 		require.NoError(t, err)
 		h.drain(t)
 		require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
-		chunks, err := h.service.chunkRepo.ListChunksByKnowledgeIDAndTypes(h.ctx, h.kb.SpaceID, article.ID, []types.ChunkType{types.ChunkTypeText})
+		chunks, err := h.service.chunkRepo.ListChunksByEntryIDAndTypes(h.ctx, h.kb.SpaceID, article.ID, []types.ChunkType{types.ChunkTypeText})
 		require.NoError(t, err)
 		return chunks
 	}
@@ -130,7 +130,7 @@ func TestGlobalRSSSourceAutomaticallyWritesToKnowledgeBaseAndKeepsSyncLogs(t *te
 	syncQueue := &retainedProcessingQueue{}
 	scheduler := datasource.NewScheduler(dsRepo, logs, syncQueue)
 	t.Cleanup(scheduler.Stop)
-	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, knowledgeService: h.service, kbService: bases, taskEnqueuer: syncQueue, connectorRegistry: registry, scheduler: scheduler, spaceRepo: h.service.spaceRepo}
+	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, entryService: h.service, kbService: bases, taskEnqueuer: syncQueue, connectorRegistry: registry, scheduler: scheduler, spaceRepo: h.service.spaceRepo}
 	cfg, err := (&types.DataSourceConfig{Type: types.ConnectorTypeRSS, Settings: map[string]interface{}{"feed_urls": server.URL + "/feed.xml", "publisher": "Fixture publisher"}}).ToJSON()
 	require.NoError(t, err)
 	created, err := syncer.CreateDataSource(h.ctx, &types.DataSource{ID: "global-feed", SpaceID: h.kb.SpaceID, Name: "Fixture publisher", Type: types.ConnectorTypeRSS, Config: cfg, Status: types.DataSourceStatusActive, CreatedAt: time.Now().Add(-24 * time.Hour)})
@@ -141,7 +141,7 @@ func TestGlobalRSSSourceAutomaticallyWritesToKnowledgeBaseAndKeepsSyncLogs(t *te
 	require.Len(t, syncQueue.tasks, 1)
 	require.NoError(t, syncer.ProcessSync(h.ctx, syncQueue.tasks[0]))
 	h.drain(t)
-	var articles []types.Knowledge
+	var articles []types.Entry
 	require.NoError(t, h.db.Find(&articles).Error)
 	require.Len(t, articles, 1)
 	require.Equal(t, h.kb.ID, articles[0].KnowledgeBaseID)

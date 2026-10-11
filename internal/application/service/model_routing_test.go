@@ -78,10 +78,10 @@ func TestTierChatCountsAttemptAndAnnotatesCalls(t *testing.T) {
 func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
 	model := &tierTestChat{}
 	models := &tierTestModels{chat: model}
-	message := &types.Knowledge{ID: "message", SpaceID: 1, KnowledgeBaseID: "kb", Channel: "manual"}
-	require.NoError(t, message.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/source", PublishedAt: "2026-10-01"}}))
-	repo := &intakeRepo{knowledge: message}
-	svc := &knowledgeService{repo: repo, modelService: models}
+	message := &types.Entry{ID: "message", SpaceID: 1, KnowledgeBaseID: "kb", Channel: "manual"}
+	require.NoError(t, message.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/source", PublishedAt: "2026-10-01"}}))
+	repo := &intakeRepo{entry: message}
+	svc := &entryService{repo: repo, modelService: models}
 	rejected, err := svc.reviewIntake(context.Background(), &types.KnowledgeBase{ID: "kb", SpaceID: 1, ModelTiers: types.ModelTierConfig{Light: "chosen-light"}}, message, "Acme released a report.")
 	require.NoError(t, err)
 	require.False(t, rejected)

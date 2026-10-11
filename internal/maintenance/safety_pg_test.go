@@ -91,13 +91,13 @@ func TestOriginalPublicURLExamplesRemainExactWhileConfigurationCredentialsAreExc
 	db := pgtest.Open(t)
 	seed(t, db)
 	example := "https://example.test/linguistics?token=public-lexical-example&api_key=example-placeholder"
-	require.NoError(t, db.Exec(`UPDATE knowledges SET vault_body=?,metadata=?::jsonb WHERE id='pending'`, example, `{"manual":{"content":"`+example+`"},"intake":{"original_content":"`+example+`"}}`).Error)
+	require.NoError(t, db.Exec(`UPDATE entries SET vault_body=?,metadata=?::jsonb WHERE id='pending'`, example, `{"manual":{"content":"`+example+`"},"intake":{"original_content":"`+example+`"}}`).Error)
 	require.NoError(t, db.Exec(`UPDATE models SET parameters=parameters || '{"base_url":"https://provider.example.test?api_key=external-private-key","extra_config":{"access_key_id":"storage-access-private-12345","secret_access_key":"storage-secret-private-12345","secret_key":"storage-provider-secret-12345"}}'::jsonb WHERE id='chat'`).Error)
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(snapshot)
 	require.NoError(t, err)
-	for _, row := range snapshot.Tables["knowledges"] {
+	for _, row := range snapshot.Tables["entries"] {
 		if row["id"] != "pending" {
 			continue
 		}
@@ -118,10 +118,10 @@ func TestVectorDimensionsMatchActualValuesAndModelConfiguration(t *testing.T) {
 	db := pgtest.Open(t)
 	seed(t, db)
 	for _, statement := range []string{
-		`INSERT INTO chunks(id,space_id,knowledge_base_id,knowledge_id,content,chunk_index,start_at,end_at,content_hash) VALUES('dim-chunk',1,'kb','article','observations',0,0,12,'chunkhash')`,
-		`INSERT INTO embeddings(source_id,source_type,chunk_id,knowledge_id,knowledge_base_id,model_id,dimension,embedding) VALUES('dim-chunk',0,'dim-chunk','article','kb','embed',3,'[1,0,0]')`,
-		`INSERT INTO article_embeddings(knowledge_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','embed',3,'[1,0,0]','articlehash')`,
-		`INSERT INTO image_embeddings(knowledge_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','image.png','embed',3,'[1,0,0]','imagehash')`,
+		`INSERT INTO chunks(id,space_id,knowledge_base_id,entry_id,content,chunk_index,start_at,end_at,content_hash) VALUES('dim-chunk',1,'kb','article','observations',0,0,12,'chunkhash')`,
+		`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,knowledge_base_id,model_id,dimension,embedding) VALUES('dim-chunk',0,'dim-chunk','article','kb','embed',3,'[1,0,0]')`,
+		`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','embed',3,'[1,0,0]','articlehash')`,
+		`INSERT INTO image_embeddings(entry_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','image.png','embed',3,'[1,0,0]','imagehash')`,
 		`UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`,
 	} {
 		require.NoError(t, db.Exec(statement).Error)
@@ -183,7 +183,7 @@ func TestCredentialsStayInMemoryAndAreExcludedFromHeadersErrorsAndCompressedFile
 	require.NoError(t, db.Exec(`UPDATE chatgpt_accounts SET credentials=?`, chatgptCredentials).Error)
 	require.NoError(t, db.Exec(`UPDATE models SET parameters=jsonb_set(parameters,'{api_key}',to_jsonb(?::text)) WHERE id='chat'`, ciphertext).Error)
 	require.NoError(t, db.Exec(`UPDATE models SET parameters=jsonb_set(parameters,'{custom_headers}','{"X-Auth":"unusual-authentication-value-1234567890","Accept":"application/json","Content-Type":"application/json","User-Agent":"Reliquary"}'::jsonb) WHERE id='chat'`).Error)
-	require.NoError(t, db.Exec(`UPDATE knowledges SET error_message=?,vault_body=?,metadata='{"original":"Bearer tokens authenticate HTTP requests."}'::jsonb WHERE id='pending'`, "Provider repeated "+secret+" during retry; owner-jwt-operational-secret-9876543210", "Basic principles are preserved in the original. "+secret).Error)
+	require.NoError(t, db.Exec(`UPDATE entries SET error_message=?,vault_body=?,metadata='{"original":"Bearer tokens authenticate HTTP requests."}'::jsonb WHERE id='pending'`, "Provider repeated "+secret+" during retry; owner-jwt-operational-secret-9876543210", "Basic principles are preserved in the original. "+secret).Error)
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(snapshot)
@@ -227,7 +227,7 @@ func TestCredentialsStayInMemoryAndAreExcludedFromHeadersErrorsAndCompressedFile
 	_, err = Scrub(ctx, db)
 	require.NoError(t, err)
 	var diagnostic string
-	require.NoError(t, db.Table("knowledges").Select("error_message").Where("id='pending'").Scan(&diagnostic).Error)
+	require.NoError(t, db.Table("entries").Select("error_message").Where("id='pending'").Scan(&diagnostic).Error)
 	require.Equal(t, "Provider repeated [credential excluded] during retry; [credential excluded]", diagnostic)
 }
 
@@ -268,11 +268,11 @@ func TestManifestExplicitModelChangeAndLogAppendStillRejectPermanentDataTamperin
 	require.NoError(t, err)
 	require.Contains(t, CompareManifestWithOptions(expected, actual, true, true), "table embedding_rebuild_runs")
 	require.NoError(t, db.Exec(`UPDATE embedding_rebuild_runs SET model_id='new-embed' WHERE id='new-rebuild'`).Error)
-	require.NoError(t, db.Exec(`UPDATE knowledges SET content_type_corrected=false WHERE id='article'`).Error)
+	require.NoError(t, db.Exec(`UPDATE entries SET content_type_corrected=false WHERE id='article'`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)
-	require.Contains(t, CompareManifestWithOptions(expected, actual, true, true), "table knowledges")
-	require.NoError(t, db.Exec(`UPDATE knowledges SET content_type_corrected=true WHERE id='article'`).Error)
+	require.Contains(t, CompareManifestWithOptions(expected, actual, true, true), "table entries")
+	require.NoError(t, db.Exec(`UPDATE entries SET content_type_corrected=true WHERE id='article'`).Error)
 	require.NoError(t, db.Exec(`UPDATE models SET display_name='changed unrelated chat model' WHERE id='chat'`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)

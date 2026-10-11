@@ -26,14 +26,14 @@ type RouterParams struct {
 	FileService                  interfaces.FileService
 	UserService                  interfaces.UserService
 	KBService                    interfaces.KnowledgeBaseService
-	KnowledgeService             interfaces.KnowledgeService
+	EntryService                 interfaces.EntryService
 	ChunkService                 interfaces.ChunkService
 	ModelService                 interfaces.ModelService
 	KBHandler                    *handler.KnowledgeBaseHandler
-	KnowledgeHandler             *handler.KnowledgeHandler
+	EntryHandler                 *handler.EntryHandler
 	VaultHandler                 *handler.VaultHandler       `optional:"true"`
 	MaintenanceHandler           *handler.MaintenanceHandler `optional:"true"`
-	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
+	SearchHandler                *handler.SearchHandler
 	EntityHandler                *handler.EntityHandler
 	EmbeddingRebuildHandler      *handler.EmbeddingRebuildHandler `optional:"true"`
 	TopicHandler                 *handler.TopicHandler            `optional:"true"`
@@ -129,7 +129,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 需要认证的API路由
 	v1 := r.Group("/api/v1")
 	{
-		accessGuards := newAccessGuards(params.KBService, params.KnowledgeService, params.ChunkService)
+		accessGuards := newAccessGuards(params.KBService, params.EntryService, params.ChunkService)
 
 		RegisterAuthRoutes(v1, params.AuthHandler, accessGuards)
 		RegisterSpaceRoutes(v1, params.SpaceHandler, accessGuards)
@@ -140,18 +140,18 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.SpaceService,
 			params.FileService,
 			params.ResourceCatalog)
-		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
+		RegisterEntryRoutes(v1, params.EntryHandler, accessGuards)
 		if params.VaultHandler != nil {
 			v1.GET("/vault/status", params.VaultHandler.Status)
 			v1.POST("/reports", params.VaultHandler.CreateReport)
-			v1.GET("/knowledge/:id/vault-attachment", accessGuards.KBExistsFromKnowledgeIDParam("id"), params.VaultHandler.Attachment)
+			v1.GET("/entries/:id/vault-attachment", accessGuards.KBExistsFromEntryIDParam("id"), params.VaultHandler.Attachment)
 		}
 		if params.MaintenanceHandler != nil {
 			v1.GET("/maintenance/status", params.MaintenanceHandler.Status)
 			v1.PUT("/maintenance/configure", params.MaintenanceHandler.Configure)
 		}
-		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
-		v1.GET("/knowledge-search/options", params.KnowledgeSearchHandler.Options)
+		v1.POST("/search", params.SearchHandler.SearchEntry)
+		v1.GET("/search/options", params.SearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)
 		if params.TopicHandler != nil {

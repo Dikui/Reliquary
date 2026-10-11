@@ -19,18 +19,18 @@ func (v *VaultService) OpenAttachment(ctx context.Context, id, reference string)
 	if !ok || space == 0 {
 		return nil, werrors.NewUnauthorizedError("authenticated attachment reader required")
 	}
-	var knowledge types.Knowledge
-	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind='article'", id, space).First(&knowledge).Error; err != nil {
+	var entry types.Entry
+	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind='article'", id, space).First(&entry).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, werrors.NewNotFoundError("article not found")
 		}
 		return nil, err
 	}
-	if knowledge.VaultPath == "" || reference == "" || filepath.IsAbs(reference) || strings.Contains(reference, "\\") {
+	if entry.VaultPath == "" || reference == "" || filepath.IsAbs(reference) || strings.Contains(reference, "\\") {
 		return nil, werrors.NewBadRequestError("invalid article attachment path")
 	}
-	relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(knowledge.VaultPath)), filepath.FromSlash(reference))))
-	if !strings.HasPrefix(relative, "attachments/"+knowledge.ID+"/") {
+	relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(entry.VaultPath)), filepath.FromSlash(reference))))
+	if !strings.HasPrefix(relative, "attachments/"+entry.ID+"/") {
 		return nil, werrors.NewBadRequestError("attachment path must belong to the article")
 	}
 	abs, err := vaultAbsolute(v.root, relative)

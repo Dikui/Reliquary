@@ -23,7 +23,7 @@ var ErrInvalidSpaceID = errors.New("invalid space ID")
 type knowledgeBaseService struct {
 	db             *gorm.DB
 	repo           interfaces.KnowledgeBaseRepository
-	kgRepo         interfaces.KnowledgeRepository
+	entryRepo         interfaces.EntryRepository
 	chunkRepo      interfaces.ChunkRepository
 	modelService   interfaces.ModelService
 	retrieveEngine interfaces.RetrievalService
@@ -34,7 +34,7 @@ type knowledgeBaseService struct {
 
 // NewKnowledgeBaseService creates a new knowledge base service
 func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepository,
-	kgRepo interfaces.KnowledgeRepository,
+	entryRepo interfaces.EntryRepository,
 	chunkRepo interfaces.ChunkRepository,
 	modelService interfaces.ModelService,
 	retrieveEngine interfaces.RetrievalService,
@@ -44,7 +44,7 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 	return &knowledgeBaseService{
 		db:             db,
 		repo:           repo,
-		kgRepo:         kgRepo,
+		entryRepo:         entryRepo,
 		chunkRepo:      chunkRepo,
 		modelService:   modelService,
 		retrieveEngine: retrieveEngine,
@@ -142,17 +142,17 @@ func (s *knowledgeBaseService) GetKnowledgeBasesByIDsOnly(ctx context.Context, i
 	return teamKBs, nil
 }
 
-// FillKnowledgeBaseCounts fills KnowledgeCount, ChunkCount, IsProcessing, ProcessingCount for the given KB using kb.SpaceID.
+// FillKnowledgeBaseCounts fills EntryCount, ChunkCount, IsProcessing, ProcessingCount for the given KB using kb.SpaceID.
 func (s *knowledgeBaseService) FillKnowledgeBaseCounts(ctx context.Context, kb *types.KnowledgeBase) error {
 	if kb == nil {
 		return nil
 	}
 	spaceID := kb.SpaceID
 	kb.EnsureDefaults()
-	if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, spaceID, kb.ID); err == nil {
-		kb.KnowledgeCount = cnt
+	if cnt, err := s.entryRepo.CountEntryByKnowledgeBaseID(ctx, spaceID, kb.ID); err == nil {
+		kb.EntryCount = cnt
 	}
-	if processingCount, err := s.kgRepo.CountKnowledgeByStatus(ctx, spaceID, kb.ID, []string{"pending", "processing"}); err == nil {
+	if processingCount, err := s.entryRepo.CountEntryByStatus(ctx, spaceID, kb.ID, []string{"pending", "processing"}); err == nil {
 		kb.IsProcessing = processingCount > 0
 		kb.ProcessingCount = processingCount
 	}

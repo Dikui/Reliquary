@@ -72,7 +72,7 @@ short faq.`
 // TestSplit_PreservesPositionInvariantAcrossTiers ensures every chunk's
 // (Start, End, Content) triple stays consistent — End-Start must equal the
 // rune length of Content, and runes[Start:End] must equal Content. This is
-// the contract that knowledge.go:2278+ relies on for document reconstruction
+// the contract that entry.go:2278+ relies on for document reconstruction
 // during summary generation.
 func TestSplit_PreservesPositionInvariantAcrossTiers(t *testing.T) {
 	cases := map[string]string{

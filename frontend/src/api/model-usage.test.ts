@@ -80,7 +80,7 @@ test('rejects malformed details instead of guessing from the server message', ()
 test('keeps navigation and localization stable for all resource kinds', () => {
   assert.deepEqual(
     modelUsageResourceRoute('knowledge_base', 'kb/with slash'),
-    { path: '/platform/settings', query: { section: 'knowledge', subsection: 'models' } },
+    { path: '/platform/settings', query: { section: 'knowledge-base', subsection: 'models' } },
   )
   assert.equal(modelUsageBindingI18nKey('generation_model_tier'), 'modelSettings.usage.bindings.generation_model_tier')
   assert.equal(modelUsageBindingI18nKey('future_binding'), 'modelSettings.usage.bindings.unknown')

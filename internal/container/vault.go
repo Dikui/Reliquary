@@ -15,10 +15,10 @@ func newVaultDocumentService(db *gorm.DB, cfg *config.Config, models interfaces.
 	return service.NewVaultDocumentService(db, models, retrieval, cfg.Vault.Root, cfg.Vault.StableWait, cfg.Vault.ScanInterval)
 }
 
-func registerVaultIntegration(v *service.VaultService, documents *service.VaultDocumentService, knowledge interfaces.KnowledgeService, entities *service.EntityService, h *handler.VaultHandler, cleaner interfaces.ResourceCleaner) error {
-	setter, ok := knowledge.(interface{ SetVault(*service.VaultService) })
+func registerVaultIntegration(v *service.VaultService, documents *service.VaultDocumentService, entry interfaces.EntryService, entities *service.EntityService, h *handler.VaultHandler, cleaner interfaces.ResourceCleaner) error {
+	setter, ok := entry.(interface{ SetVault(*service.VaultService) })
 	if !ok {
-		return fmt.Errorf("vault integration unavailable for %T", knowledge)
+		return fmt.Errorf("vault integration unavailable for %T", entry)
 	}
 	setter.SetVault(v)
 	entities.SetHeaderRefresher(v)

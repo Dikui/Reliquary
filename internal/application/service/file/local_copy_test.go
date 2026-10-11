@@ -17,7 +17,7 @@ import (
 // (space/exports) and returns its local:// path.
 func seedLocalObject(t *testing.T, baseDir string, spaceID uint64, name string, data []byte) string {
 	t.Helper()
-	dir := filepath.Join(baseDir, "0", "src-knowledge")
+	dir := filepath.Join(baseDir, "0", "src-entry")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	full := filepath.Join(dir, name)
 	require.NoError(t, os.WriteFile(full, data, 0o644))
@@ -39,7 +39,7 @@ func readLocal(t *testing.T, svc interface {
 }
 
 // TestLocalCopyFile_IndependentCopy verifies that CopyFile creates a real,
-// independent copy: it exists at a new knowledge-owned path AND survives
+// independent copy: it exists at a new entry-owned path AND survives
 // deletion of the source object (the C1/C2 regression this PR fixes).
 func TestLocalCopyFile_IndependentCopy(t *testing.T) {
 	base := t.TempDir()
@@ -48,11 +48,11 @@ func TestLocalCopyFile_IndependentCopy(t *testing.T) {
 	content := []byte("hello deep copy")
 	srcPath := seedLocalObject(t, base, 0, "doc.txt", content)
 
-	newPath, err := svc.CopyFile(context.Background(), srcPath, 42, "dst-knowledge")
+	newPath, err := svc.CopyFile(context.Background(), srcPath, 42, "dst-entry")
 	require.NoError(t, err)
 
-	// New path must be knowledge-owned: local://42/dst-knowledge/<unique>.txt
-	require.True(t, strings.HasPrefix(newPath, localScheme+"42/dst-knowledge/"),
+	// New path must be entry-owned: local://42/dst-entry/<unique>.txt
+	require.True(t, strings.HasPrefix(newPath, localScheme+"42/dst-entry/"),
 		"unexpected dst path: %s", newPath)
 	assert.Equal(t, ".txt", filepath.Ext(newPath))
 

@@ -52,7 +52,7 @@ test('a component scope refines the default space plane', () => {
 test('all file proxies are recognized as protected proxy paths', () => {
   assert.equal(isProtectedFileProxyPath('/files'), true)
   assert.equal(isProtectedFileProxyPath('/api/v1/knowledge-bases/kb-1/files'), true)
-  assert.equal(isProtectedFileProxyPath('/api/v1/knowledge/article-id/vault-attachment'), true)
+  assert.equal(isProtectedFileProxyPath('/api/v1/entries/article-id/vault-attachment'), true)
 })
 
 test('vault attachments use the authenticated article proxy with their relative path', () => {
@@ -67,7 +67,7 @@ test('vault attachments use the authenticated article proxy with their relative 
     for (const access of [{ mode: 'space' }, { mode: 'knowledgeBase', kbId: 'kb-1' }] as ProtectedFileAccessContext[]) {
       const request = buildProtectedFileRequest(source, access)!
       const url = new URL(request.url, 'http://localhost')
-      assert.equal(url.pathname, '/api/v1/knowledge/article-id/vault-attachment')
+      assert.equal(url.pathname, '/api/v1/entries/article-id/vault-attachment')
       assert.equal(url.searchParams.get('path'), relative)
       assert.deepEqual(request.headers, { Authorization: 'Bearer vault-secret-token' })
       assert.doesNotMatch(request.url, /vault-secret-token|token=/)

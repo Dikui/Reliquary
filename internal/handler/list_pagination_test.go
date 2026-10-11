@@ -31,7 +31,7 @@ func TestParseOffsetPagination(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
-			c.Request = httptest.NewRequest("GET", "/knowledge/search"+tt.query, nil)
+			c.Request = httptest.NewRequest("GET", "/entries/search"+tt.query, nil)
 
 			offset, limit, ok := parseOffsetPagination(c)
 			if ok != tt.wantOK {
@@ -56,7 +56,7 @@ func TestParseOffsetPagination(t *testing.T) {
 	}
 }
 
-func TestSearchKnowledgeRejectsInvalidPagination(t *testing.T) {
+func TestSearchEntryRejectsInvalidPagination(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	for _, query := range []string{
@@ -65,9 +65,9 @@ func TestSearchKnowledgeRejectsInvalidPagination(t *testing.T) {
 	} {
 		t.Run(query, func(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
-			c.Request = httptest.NewRequest("GET", "/knowledge/search"+query, nil)
+			c.Request = httptest.NewRequest("GET", "/entries/search"+query, nil)
 
-			(&KnowledgeHandler{}).SearchKnowledge(c)
+			(&EntryHandler{}).SearchEntry(c)
 
 			if len(c.Errors) != 1 {
 				t.Fatalf("got %d errors, want 1", len(c.Errors))

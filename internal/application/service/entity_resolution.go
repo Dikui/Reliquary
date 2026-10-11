@@ -152,7 +152,7 @@ func (s *EntityService) entityNameEmbedder(ctx context.Context, spaceID uint64) 
 	return profile.embedder, profile.modelID, profile.hash, nil
 }
 
-func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, spaceID uint64, knowledgeID string, input []entityResolutionInput) ([]types.Entity, map[string]types.Entity, error) {
+func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, spaceID uint64, entryID string, input []entityResolutionInput) ([]types.Entity, map[string]types.Entity, error) {
 	embedder, embeddingModelID, embeddingHash, err := s.entityNameEmbedder(ctx, spaceID)
 	if err != nil {
 		return nil, nil, err
@@ -251,7 +251,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 						if !containsString(candidateIDs, candidate.ID) {
 							continue
 						}
-						suggestion := types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: spaceID, KnowledgeID: knowledgeID, NewEntityID: entity.ID, CandidateEntityID: candidate.ID, Reason: decision.Reason, Status: "pending", CreatedAt: time.Now()}
+						suggestion := types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: spaceID, EntryID: entryID, NewEntityID: entity.ID, CandidateEntityID: candidate.ID, Reason: decision.Reason, Status: "pending", CreatedAt: time.Now()}
 						if suggestion.Reason == "" {
 							suggestion.Reason = "Entity identity remains uncertain after candidate judgment."
 						}
@@ -474,7 +474,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			if suggestion.NewEntityID == suggestion.CandidateEntityID {
 				continue
 			}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "new_entity_id"}, {Name: "candidate_entity_id"}, {Name: "knowledge_id"}}, DoNothing: true}).Create(&suggestion).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "new_entity_id"}, {Name: "candidate_entity_id"}, {Name: "entry_id"}}, DoNothing: true}).Create(&suggestion).Error; err != nil {
 				return nil, err
 			}
 		}

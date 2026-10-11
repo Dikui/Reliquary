@@ -4,7 +4,7 @@ import test from 'node:test'
 
 const source = readFileSync(new URL('./ModelSettings.vue', import.meta.url), 'utf8')
 const knowledgeBaseEditorSource = readFileSync(
-  new URL('./KnowledgeSettings.vue', import.meta.url),
+  new URL('./KnowledgeBaseSettings.vue', import.meta.url),
   'utf8',
 )
 
@@ -16,7 +16,7 @@ test('model deletion renders structured usage groups and localized fallback erro
 
 test('referenced knowledge configuration opens in the single settings center', () => {
   assert.match(source, /openUsageResource\('knowledge_base', resource\.id, resource\.bindings\)/)
-  assert.match(source, /uiStore\.openSettings\('knowledge', knowledgeBaseSection\)/)
+  assert.match(source, /uiStore\.openSettings\('entry', knowledgeBaseSection\)/)
   assert.match(knowledgeBaseEditorSource, /getKnowledgeBase\(\)/)
   assert.match(knowledgeBaseEditorSource, /await updateKnowledgeBase\(/)
   assert.match(knowledgeBaseEditorSource, /if \(request !== generation\) return/)

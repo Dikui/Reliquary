@@ -104,9 +104,9 @@ func (s *resourceCatalogFileService) SaveFile(
 	ctx context.Context,
 	file *multipart.FileHeader,
 	spaceID uint64,
-	knowledgeID string,
+	entryID string,
 ) (string, error) {
-	physical, err := s.inner.SaveFile(ctx, file, spaceID, knowledgeID)
+	physical, err := s.inner.SaveFile(ctx, file, spaceID, entryID)
 	if err != nil {
 		return "", err
 	}
@@ -114,8 +114,8 @@ func (s *resourceCatalogFileService) SaveFile(
 	if err != nil {
 		return "", err
 	}
-	if knowledgeID != "" {
-		if err := s.catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, knowledgeID, types.ResourceRelationSourceFile); err != nil {
+	if entryID != "" {
+		if err := s.catalog.Bind(ctx, ref, types.ResourceOwnerEntry, entryID, types.ResourceRelationSourceFile); err != nil {
 			_ = s.DeleteFile(ctx, ref)
 			return "", fmt.Errorf("bind stored resource: %w", err)
 		}
@@ -184,13 +184,13 @@ func (s *resourceCatalogFileService) CopyFile(
 	ctx context.Context,
 	filePath string,
 	spaceID uint64,
-	knowledgeID string,
+	entryID string,
 ) (string, error) {
 	physical, _, err := s.resolve(ctx, filePath)
 	if err != nil {
 		return "", err
 	}
-	copied, err := s.inner.CopyFile(ctx, physical, spaceID, knowledgeID)
+	copied, err := s.inner.CopyFile(ctx, physical, spaceID, entryID)
 	if err != nil {
 		return "", err
 	}
@@ -198,8 +198,8 @@ func (s *resourceCatalogFileService) CopyFile(
 	if err != nil {
 		return "", err
 	}
-	if knowledgeID != "" {
-		if err := s.catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, knowledgeID, types.ResourceRelationSourceFile); err != nil {
+	if entryID != "" {
+		if err := s.catalog.Bind(ctx, ref, types.ResourceOwnerEntry, entryID, types.ResourceRelationSourceFile); err != nil {
 			_ = s.DeleteFile(ctx, ref)
 			return "", fmt.Errorf("bind copied resource: %w", err)
 		}

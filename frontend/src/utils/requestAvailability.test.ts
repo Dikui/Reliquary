@@ -9,7 +9,7 @@ import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import { translatePersonalServerMessage } from './personalServerError'
-import { element, loadComponent, renderer, settle, visibleText } from '../views/knowledge/componentTestHarness'
+import { element, loadComponent, renderer, settle, visibleText } from '../views/knowledge-base/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 function evaluate(path: string, modules: Record<string, any>) {
@@ -39,6 +39,12 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = 
    const status = Number(mode)
    throw new AxiosError('failed', AxiosError.ERR_BAD_RESPONSE, packet, undefined, { status, statusText: 'Unavailable', headers: {}, config: packet, data: { success: false, error: { code: status === 503 ? 1008 : 1001, message: 'Authentication temporarily unavailable' } } })
   }
+  if (packet.url?.startsWith('/api/v1/knowledge-bases/kb-entries/entries')) {
+    return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: [{ id: 'loaded-entry', source_kind: 'mine', title: 'Original document', updated_at: '2026-10-01T00:00:00Z' }], total: 1 } }
+  }
+  if (packet.url === '/api/v1/entries/loaded-entry/spans') {
+    return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: { entry_id: 'loaded-entry', spans: [] } } }
+  }
   if (packet.url === '/api/v1/space') {
    if (packet.method === 'put') transport.spaceName = JSON.parse(packet.data).name
    return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: { id: 1, space_id: 1, name: transport.spaceName } } }
@@ -64,7 +70,7 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = 
   if (priorStorage) Object.defineProperty(globalThis, 'localStorage', priorStorage); else delete (globalThis as any).localStorage
   if (priorWindow) Object.defineProperty(globalThis, 'window', priorWindow); else delete (globalThis as any).window
  })
- return { request, store, spaceApi, transport, storage, location, calls, root: noticeRoot }
+ return { request, store, spaceApi, transport, storage, location, calls, modules, i18n, root: noticeRoot }
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
  for (const mode of ['503', 'network', 'timeout']) {
@@ -120,5 +126,29 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   assert.equal((await f.spaceApi.getSpaceInfo()).data.name, 'Updated personal space')
   assert.equal(f.calls.at(-1)?.headers.Authorization, 'Bearer valid-session')
   assert.ok(f.calls.some(packet => packet.url === '/api/v1/space' && packet.method === 'put'))
+ })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+ test(`${locale}: entry requests load through Axios interceptors and the actual Pinia store`, async t => {
+  const f=fixture(t,locale)
+  f.modules['../utils/request']=f.request
+  const api=evaluate('../api/knowledge-base.ts',f.modules)
+  const storeModule=evaluate('../stores/entry.ts',f.modules)
+  const modules={...f.modules,pinia:require('pinia'),'@/api/knowledge-base':api,'@/stores/entry':storeModule,
+    '../utils/index': { formatStringDate:()=> '2026-10-01', kbFileTypeVerification:()=>true },
+    'tdesign-vue-next':{MessagePlugin:{}},'vue-i18n':{useI18n:()=>({t:f.i18n.global.t})},
+    './useEntryDuplicates':{useEntryDuplicates:()=>({})}}
+  const hook=evaluate('../composables/useKnowledgeBase.ts',modules).default('kb-entries')
+  await hook.loadEntries()
+  assert.equal(storeModule.entryStore().cardList[0].id,'loaded-entry')
+  assert.equal(hook.total.value,1)
+  const spans=await api.getEntrySpans('loaded-entry')
+  assert.equal(spans.data.entry_id,'loaded-entry')
+  const list=f.calls.find(packet=>packet.url?.startsWith('/api/v1/knowledge-bases/kb-entries/entries'))
+  assert.ok(list)
+  assert.equal(list.headers.Authorization,'Bearer valid-session')
+  assert.equal(f.calls.at(-1)?.url,'/api/v1/entries/loaded-entry/spans')
+  assert.ok(!f.calls.some(packet=>packet.url?.startsWith('/api/v1/knowledge/')))
  })
 }

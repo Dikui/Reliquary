@@ -63,17 +63,17 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
-	repo := repository.NewKnowledgeRepository(db)
+	repo := repository.NewEntryRepository(db)
 	chunkRepo := repository.NewChunkRepository(db)
 	chunks := &chunkService{chunkRepository: chunkRepo}
 	model := &retainedProcessingChat{}
 	models := &summaryStateModelService{model: model}
 	queue := &retainedProcessingQueue{}
 	bases := retainedProcessingKB{kb: kb}
-	svc := &knowledgeService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
+	svc := &entryService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		kbService: bases, modelService: models, task: queue, spaceRepo: repository.NewSpaceRepository(db),
 		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
-	article, err := svc.CreateKnowledgeFromManual(ctx, kb.ID, &types.ManualKnowledgePayload{
+	article, err := svc.CreateEntryFromManual(ctx, kb.ID, &types.ManualEntryPayload{
 		Title: "Widget announcement", Content: "# Widget\n\nAcme released its new widget product. The original announcement describes deployment choices, supported platforms and the complete product capabilities.", Status: "publish",
 		SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/widget", PublishedAt: "2026-10-01"},
 	}, types.ChannelWeb)
@@ -88,7 +88,7 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 			t.Fatalf("unexpected background task %q", task.Type())
 		}
 	}
-	completed, err := repo.GetKnowledgeByID(ctx, 1, article.ID)
+	completed, err := repo.GetEntryByID(ctx, 1, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
 	require.Equal(t, types.SummaryStatusCompleted, completed.SummaryStatus)

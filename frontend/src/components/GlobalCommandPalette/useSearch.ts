@@ -1,15 +1,15 @@
-import { knowledgeSearchErrorMessage } from '@/utils/knowledgeSearch'
+import { searchErrorMessage } from '@/utils/search'
 import { useI18n } from 'vue-i18n'
 import { onUnmounted, ref, watch } from 'vue'
-import { searchKnowledgeArticles } from '@/api/knowledge-search'
-import type { KnowledgeSearchArticle } from '@/types/knowledgeSearch'
+import { searchEntries } from '@/api/search'
+import type { SearchEntry } from '@/types/search'
 
 export interface CmdkChunk {
   id: string
   chunk_index: number
-  knowledge_id: string
+  entry_id: string
   knowledge_base_id: string
-  knowledge_title: string
+  entry_title: string
   content: string
   matched_content?: string
   image_path?: string
@@ -18,34 +18,34 @@ export interface CmdkChunk {
 }
 
 export interface CmdkFileGroup {
-  knowledgeId: string
+  entryId: string
   kbId: string
   title: string
   chunks: CmdkChunk[]
-  source?: KnowledgeSearchArticle['source']
+  source?: SearchEntry['source']
   source_unverified?: boolean
   similarCount?: number
   imagePath?: string
 }
 
-export function articleFileGroups(articles: KnowledgeSearchArticle[]): CmdkFileGroup[] {
+export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
   return articles.map(article => ({
-    knowledgeId: article.article_id, kbId: '', title: article.title, source: article.source,
+    entryId: article.entry_id, kbId: '', title: article.title, source: article.source,
     source_unverified: Boolean(article.source_unverified),
     similarCount: article.similar_reports?.length || 0,
     imagePath: article.source === 'article' ? article.snippets?.find(snippet => snippet.image_path)?.image_path : undefined,
-    chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.article_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
-      id: snippet.chunk_id, chunk_index: snippet.chunk_index, knowledge_id: article.article_id,
-      knowledge_base_id: '', knowledge_title: article.title, content: snippet.content,
+    chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.entry_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
+      id: snippet.chunk_id, chunk_index: snippet.chunk_index, entry_id: article.entry_id,
+      knowledge_base_id: '', entry_title: article.title, content: snippet.content,
       match_type: snippet.match_type, score: article.score,
       image_path: 'image_path' in snippet ? snippet.image_path : undefined,
     })),
   }))
 }
 
-/** Knowledge search with debouncing and protection against stale responses. */
+/** Entry search with debouncing and protection against stale responses. */
 export function useCmdkSearch(options: {
-  /** How many knowledge chunks to keep after grouping; default no-cap. */
+  /** How many entry chunks to keep after grouping; default no-cap. */
   chunkLimit?: number
   /** Debounce delay in ms. */
   debounceMs?: number
@@ -77,11 +77,11 @@ export function useCmdkSearch(options: {
     hasSearched.value = true
 
     searchError.value = ''
-    const articles = await searchKnowledgeArticles({ query: q }).then(res => {
+    const articles = await searchEntries({ query: q }).then(res => {
       if (!res?.success) throw res
       return res.data.results
     }).catch(error => {
-      if (seq === requestSeq) searchError.value = knowledgeSearchErrorMessage(error, t)
+      if (seq === requestSeq) searchError.value = searchErrorMessage(error, t)
       return []
     })
 

@@ -22,7 +22,7 @@ func TestSnapshotPausePreservesBuiltinModelsAndSyncLogsAtStartup(t *testing.T) {
     parameters:
       provider: openai
 `), 0o644))
-	require.NoError(t, db.Create(&types.Model{ID: "waiting-builtin", SpaceID: types.SingleSpaceID, Name: "original model", Type: types.ModelTypeKnowledgeQA,
+	require.NoError(t, db.Create(&types.Model{ID: "waiting-builtin", SpaceID: types.SingleSpaceID, Name: "original model", Type: types.ModelTypeGeneration,
 		Source: types.ModelSourceRemote, Status: types.ModelStatusNeedsConfiguration, IsBuiltin: true, ManagedBy: types.BuiltinModelManagedBy,
 		Parameters: types.ModelParameters{Provider: "openai", ExtraConfig: map[string]string{"maintenance_required_fields": `["api_key"]`}},
 	}).Error)

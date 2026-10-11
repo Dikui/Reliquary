@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestKnowledgeSettingsSavePreservesUneditedStoredJSON(t *testing.T) {
+func TestKnowledgeBaseSettingsSavePreservesUneditedStoredJSON(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	require.NoError(t, db.Exec(`INSERT INTO models(id,space_id,name,type,source,status,parameters) VALUES('gen',1,'Generation','KnowledgeQA','remote','active','{}'),('embed',1,'Embedding','Embedding','remote','active','{}'),('new-embed',1,'New embedding','Embedding','remote','active','{}'); INSERT INTO knowledge_bases(id,space_id,name,description,embedding_model_id,summary_model_id,chunking_config,model_tiers,indexing_strategy) VALUES('kb',1,'Original','Retained','embed','gen','{"chunk_size":512,"chunk_overlap":0,"separators":null,"languages":null,"parser_engine_rules":null,"extension":{"array":[],"null":null}}','{"generation":"gen","embedding":"embed","light":null,"extension":null}','null')`).Error)

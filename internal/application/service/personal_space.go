@@ -29,7 +29,7 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 		}
 		svc := NewSpaceService(repo)
 		_, err = svc.CreateSpace(ctx, &types.Space{
-			ID: types.SingleSpaceID, Name: "Personal workspace", Description: "Personal knowledge", Status: "active",
+			ID: types.SingleSpaceID, Name: "Personal workspace", Description: "Personal entry", Status: "active",
 		})
 		return err
 	})

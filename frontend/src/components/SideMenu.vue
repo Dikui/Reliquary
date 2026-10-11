@@ -1,7 +1,7 @@
 <template>
   <aside class="aside_box" :class="{ 'aside_box--collapsed': sidebarCollapsed }">
     <div class="logo_row">
-      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.knowledgeBase')" @click="navigate('knowledge')">
+      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.knowledgeBase')" @click="navigate('entries')">
         <img class="logo" src="@/assets/img/reliquary.svg" alt="Reliquary">
       </button>
       <t-tooltip :content="t(sidebarCollapsed ? 'menu.expandSidebar' : 'menu.collapseSidebar')" placement="right">
@@ -42,8 +42,8 @@ onMounted(() => { refreshFollowCount(); followTimer = setInterval(refreshFollowC
 onUnmounted(() => { clearInterval(followTimer); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', refreshFollowCount) })
 const { visibleMenuArr } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && uiStore.sidebarCollapsed)
-const active = (path: string, tab?: string) => path === 'knowledge'
-  ? route.name === 'knowledge' && (tab === 'entities' ? route.query.tab === 'entities' : route.query.tab !== 'entities')
+const active = (path: string, tab?: string) => path === 'entries'
+  ? route.name === 'entries' && (tab === 'entities' ? route.query.tab === 'entities' : route.query.tab !== 'entities')
   : route.path === `/platform/${path}`
 function toggleNavigation() { if (props.mobileOverlay) emit('close'); else uiStore.toggleSidebar() }
 function navigate(path: string, tab?: string) {

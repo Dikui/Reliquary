@@ -1,18 +1,18 @@
 import { get, post, put, del, postUpload, getDown } from "../utils/request";
 import type { ModelTierConfig } from '@/types/modelTiers';
-import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
-import type { KnowledgeSearchRequest } from '@/types/knowledgeSearch';
+import type { EntryProcessOverrides } from '@/types/entryProcess';
+import type { SearchRequest } from '@/types/search';
 
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }
 
-export type KnowledgeDuplicateCode = 'duplicate_manual' | 'duplicate_file' | 'duplicate_url';
-export type KnowledgeDuplicateMatchMethod = 'url' | 'file_hash' | 'content_hash' | 'simhash';
+export type EntryDuplicateCode = 'duplicate_manual' | 'duplicate_file' | 'duplicate_url';
+export type EntryDuplicateMatchMethod = 'url' | 'file_hash' | 'content_hash' | 'simhash';
 
 /** The method describes this intake attempt, independently of older repost sources. */
-export interface KnowledgeDuplicateResponse {
+export interface EntryDuplicateResponse {
   success: false;
-  code: KnowledgeDuplicateCode;
-  match_method?: KnowledgeDuplicateMatchMethod;
+  code: EntryDuplicateCode;
+  match_method?: EntryDuplicateMatchMethod;
   message?: string;
   data?: { id: string; knowledge_base_id?: string; title?: string; file_name?: string };
 }
@@ -26,12 +26,12 @@ export function updateKnowledgeBase(data: { name: string; description?: string; 
 }
 
 // 知识文件 API（基于具体知识库）
-export function uploadKnowledgeFile(
+export function uploadEntryFile(
   kbId: string,
   data: {
     file: File
     fileName?: string
-    process_config?: KnowledgeProcessOverrides | string
+    process_config?: EntryProcessOverrides | string
     source_info?: IntakeSourceInfo | string
     [key: string]: any
   } = { file: new File([], '') },
@@ -47,32 +47,32 @@ export function uploadKnowledgeFile(
     }
     formData.append(key, value);
   });
-  return postUpload(`/api/v1/knowledge-bases/${kbId}/knowledge/file`, formData, onProgress);
+  return postUpload(`/api/v1/knowledge-bases/${kbId}/entries/file`, formData, onProgress);
 }
 
 // 从URL创建知识
-export function createKnowledgeFromURL(
+export function createEntryFromURL(
   kbId: string,
-  data: { url: string; process_config?: KnowledgeProcessOverrides; source_info?: IntakeSourceInfo },
+  data: { url: string; process_config?: EntryProcessOverrides; source_info?: IntakeSourceInfo },
 ) {
-  return post(`/api/v1/knowledge-bases/${kbId}/knowledge/url`, data);
+  return post(`/api/v1/knowledge-bases/${kbId}/entries/url`, data);
 }
 
 // 手工创建知识
-export function createManualKnowledge(
+export function createManualEntry(
   kbId: string,
   data: {
     title: string
     content: string
     status: string
-    process_config?: KnowledgeProcessOverrides
+    process_config?: EntryProcessOverrides
     source_info?: IntakeSourceInfo
   },
 ) {
-  return post(`/api/v1/knowledge-bases/${kbId}/knowledge/manual`, data);
+  return post(`/api/v1/knowledge-bases/${kbId}/entries/manual`, data);
 }
 
-export function listKnowledgeFiles(
+export function listEntryFiles(
   kbId: string,
   params: {
     page: number;
@@ -99,73 +99,73 @@ export function listKnowledgeFiles(
   if (params.start_time) query.append('start_time', params.start_time);
   if (params.end_time) query.append('end_time', params.end_time);
   const qs = query.toString();
-  return get(`/api/v1/knowledge-bases/${kbId}/knowledge?${qs}`);
+  return get(`/api/v1/knowledge-bases/${kbId}/entries?${qs}`);
 }
 
-export function getKnowledgeDetails(id: string) {
+export function getEntryDetails(id: string) {
   const query = new URLSearchParams();
   const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge/${id}?${qs}` : `/api/v1/knowledge/${id}`);
+  return get(qs ? `/api/v1/entries/${id}?${qs}` : `/api/v1/entries/${id}`);
 }
 
-export function updateManualKnowledge(
+export function updateManualEntry(
   id: string,
-  data: { title: string; content: string; status: string; process_config?: KnowledgeProcessOverrides },
+  data: { title: string; content: string; status: string; process_config?: EntryProcessOverrides },
 ) {
-  return put(`/api/v1/knowledge/manual/${id}`, data);
+  return put(`/api/v1/entries/${id}/manual`, data);
 }
 
-export function reparseKnowledge(id: string, data?: { process_config?: KnowledgeProcessOverrides }) {
-  return post(`/api/v1/knowledge/${id}/reparse`, data);
+export function reparseEntry(id: string, data?: { process_config?: EntryProcessOverrides }) {
+  return post(`/api/v1/entries/${id}/reparse`, data);
 }
 
-export function cancelKnowledgeParse(id: string) {
-  return post(`/api/v1/knowledge/${id}/cancel-parse`);
+export function cancelEntryParse(id: string) {
+  return post(`/api/v1/entries/${id}/cancel-parse`);
 }
 
-export function getKnowledgeSpans(id: string, attempt?: number) {
+export function getEntrySpans(id: string, attempt?: number) {
   const qs = attempt ? `?attempt=${attempt}` : '';
-  return get(`/api/v1/knowledge/${id}/spans${qs}`);
+  return get(`/api/v1/entries/${id}/spans${qs}`);
 }
 
-export function delKnowledgeDetails(id: string) {
-  return del(`/api/v1/knowledge/${id}`);
+export function delEntryDetails(id: string) {
+  return del(`/api/v1/entries/${id}`);
 }
 
 // 批量删除（同一知识库内）。后端会校验所有 id 隶属于 kb_id 且具有编辑权限。
-export function batchDeleteKnowledge(ids: string[]) {
-  return post(`/api/v1/knowledge/batch-delete`, { ids });
+export function batchDeleteEntry(ids: string[]) {
+  return post(`/api/v1/entries/batch-delete`, { ids });
 }
 
-export function downKnowledgeDetails(id: string) {
-  return getDown(`/api/v1/knowledge/${id}/download`);
+export function downEntryDetails(id: string) {
+  return getDown(`/api/v1/entries/${id}/download`);
 }
 
-export function previewKnowledgeFile(id: string) {
-  return getDown(`/api/v1/knowledge/${id}/preview`);
+export function previewEntryFile(id: string) {
+  return getDown(`/api/v1/entries/${id}/preview`);
 }
 
-export function reviewKnowledge(id: string, data: { action: 'approve' | 'reject' | 'retry' | 'discard'; source_info?: IntakeSourceInfo }) {
-  return post(`/api/v1/knowledge/${id}/review`, data);
+export function reviewEntry(id: string, data: { action: 'approve' | 'reject' | 'retry' | 'discard'; source_info?: IntakeSourceInfo }) {
+  return post(`/api/v1/entries/${id}/review`, data);
 }
 
 /** @param idsQueryString - query string with ids (e.g. ids=xxx&ids=yyy) */
-export function batchQueryKnowledge(idsQueryString: string) {
-  return get(`/api/v1/knowledge/batch?${idsQueryString}`);
+export function batchQueryEntry(idsQueryString: string) {
+  return get(`/api/v1/entries/batch?${idsQueryString}`);
 }
 
-export const KNOWLEDGE_CHUNK_PAGE_SIZE = 25;
+export const ENTRY_CHUNK_PAGE_SIZE = 25;
 
-export function getKnowledgeDetailsCon(id: string, page: number) {
-  return get(`/api/v1/chunks/${id}?page=${page}&page_size=${KNOWLEDGE_CHUNK_PAGE_SIZE}`);
+export function getEntryDetailsCon(id: string, page: number) {
+  return get(`/api/v1/chunks/${id}?page=${page}&page_size=${ENTRY_CHUNK_PAGE_SIZE}`);
 }
 
-export function updateKnowledgeMetadata(knowledgeId: string, customMetadata: Record<string, unknown>) {
-  return put(`/api/v1/knowledge/${knowledgeId}`, { custom_metadata: customMetadata });
+export function updateEntryMetadata(entryId: string, customMetadata: Record<string, unknown>) {
+  return put(`/api/v1/entries/${entryId}`, { custom_metadata: customMetadata });
 }
 
-export function reprocessKnowledge(knowledgeId: string) {
-  return post(`/api/v1/knowledge/${knowledgeId}/reprocess`, {});
+export function reprocessEntry(entryId: string) {
+  return post(`/api/v1/entries/${entryId}/reprocess`, {});
 }
 
 // Get chunk by chunk_id only (new endpoint - to be added to backend)
@@ -184,7 +184,7 @@ const buildQuery = (params?: Record<string, any>) => {
   return queryString ? `?${queryString}` : '';
 };
 
-export function searchKnowledge(
+export function searchEntry(
   keyword: string,
   offset = 0,
   limit = 20,
@@ -201,18 +201,18 @@ export function searchKnowledge(
     query.set('file_types', fileTypes.join(','));
   }
   if (options?.recent) query.set('recent', 'true');
-  return get(`/api/v1/knowledge/search?${query.toString()}`);
+  return get(`/api/v1/entries/search?${query.toString()}`);
 }
 
-export function knowledgeSemanticSearch(data: KnowledgeSearchRequest) {
-  return post('/api/v1/knowledge-search', data);
+export function semanticSearch(data: SearchRequest) {
+  return post('/api/v1/search', data);
 }
 
-export function batchReparseKnowledge(ids: string[], processConfig?: KnowledgeProcessOverrides) {
-  return post(`/api/v1/knowledge/batch-reparse`, {
+export function batchReparseEntry(ids: string[], processConfig?: EntryProcessOverrides) {
+  return post(`/api/v1/entries/batch-reparse`, {
     ids,
     process_config: processConfig,
   });
 }
 
-export interface KnowledgeRepostSource { id: string; knowledge_id: string; original_url?: string; publisher?: string; author?: string; published_at?: string; published_at_missing?: boolean; match_method: string }
+export interface EntryRepostSource { id: string; entry_id: string; original_url?: string; publisher?: string; author?: string; published_at?: string; published_at_missing?: boolean; match_method: string }

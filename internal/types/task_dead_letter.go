@@ -51,7 +51,7 @@ func (TaskDeadLetter) TableName() string {
 // have to guess at variations.
 const (
 	TaskScopeKnowledgeBase = "knowledge_base"
-	TaskScopeKnowledge     = "knowledge"
+	TaskScopeEntry         = "knowledge"
 	TaskScopeSpace         = "tenant"
 	TaskScopeUnknown       = "unknown"
 )

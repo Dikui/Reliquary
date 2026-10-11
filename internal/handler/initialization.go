@@ -561,7 +561,7 @@ func (h *InitializationHandler) CheckRemoteModel(c *gin.Context) {
 		return
 	}
 
-	model := h.buildTestModel(&req, types.ModelTypeKnowledgeQA, types.ModelSourceRemote)
+	model := h.buildTestModel(&req, types.ModelTypeGeneration, types.ModelSourceRemote)
 	available, message := h.checkChatModelConnection(ctx, model)
 
 	logger.Infof(ctx, "Remote model check completed, available: %v, message: %s", available, message)

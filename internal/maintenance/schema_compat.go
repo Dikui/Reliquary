@@ -14,21 +14,24 @@ import (
 // any scrub changes share one transaction; failures roll everything back.
 // The exact old application remains responsible for running the old deployment.
 func WithCurrentNames(db *gorm.DB, run func(*gorm.DB) error) error {
-	var legacy bool
+	var legacy, oldEntries bool
 	if err := db.Raw("SELECT to_regclass('public.tenants') IS NOT NULL").Scan(&legacy).Error; err != nil {
 		return err
 	}
-	if !legacy {
+	if err := db.Raw("SELECT to_regclass('public.knowledges') IS NOT NULL").Scan(&oldEntries).Error; err != nil {
+		return err
+	}
+	if !legacy && !oldEntries {
 		return run(db)
 	}
-	read := func(direction string) (string, error) {
+	read := func(version, direction string) (string, error) {
 		directory, err := os.Getwd()
 		if err != nil {
 			return "", err
 		}
 		var data []byte
 		for {
-			data, err = os.ReadFile(filepath.Join(directory, "migrations/versioned/000002_space_naming."+direction+".sql"))
+			data, err = os.ReadFile(filepath.Join(directory, "migrations/versioned/"+version+"."+direction+".sql"))
 			if err == nil || !os.IsNotExist(err) || filepath.Dir(directory) == directory {
 				break
 			}
@@ -39,21 +42,35 @@ func WithCurrentNames(db *gorm.DB, run func(*gorm.DB) error) error {
 		}
 		return strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(string(data)), "BEGIN;"), "COMMIT;"), nil
 	}
-	up, err := read("up")
-	if err != nil {
-		return err
+	versions := []string{}
+	if legacy {
+		versions = append(versions, "000002_space_naming")
 	}
-	down, err := read("down")
-	if err != nil {
-		return err
+	if oldEntries {
+		versions = append(versions, "000003_entry_naming")
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec(up).Error; err != nil {
-			return err
+		for _, version := range versions {
+			up, err := read(version, "up")
+			if err != nil {
+				return err
+			}
+			if err = tx.Exec(up).Error; err != nil {
+				return err
+			}
 		}
 		if err := run(tx); err != nil {
 			return err
 		}
-		return tx.Exec(down).Error
+		for i := len(versions) - 1; i >= 0; i-- {
+			down, err := read(versions[i], "down")
+			if err != nil {
+				return err
+			}
+			if err = tx.Exec(down).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }

@@ -314,7 +314,7 @@ type FetchedItem struct {
 	SourceResourceID string `json:"source_resource_id"`
 
 	// ReplacesSubtree, when true, tells ingestion to reconcile this item's
-	// sub-items: after the parent is (re)ingested, every existing knowledge item
+	// sub-items: after the parent is (re)ingested, every existing entry item
 	// whose external_id starts with SubtreeChildPrefix(ExternalID) that is NOT
 	// listed in SubtreeKeep is deleted as stale. Used by connectors that fan one
 	// source node out into a parent document plus attachment/image sub-items

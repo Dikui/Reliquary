@@ -471,7 +471,7 @@ JSON
 > 召回率 92%
 ```
 
-外部 Agent 收录经过同一模型审核，调用方的判断、agent_summary 与 agent_tags 不会替代审核。审核拒绝时返回 HTTP 201、status: "pending_review" 与 reason，文章进入收录待审，正文不会写入文件库；通过后才进入异步处理。新文章通过时返回 HTTP 201，响应为 `{"success":true,"data":{"article_id":"...","status":"pending","message":"...","image_failures":[]}}`；可用同一个 Key 请求 `GET /api/v1/knowledge/<article_id>` 查看 `parse_status`。如果任务入队失败，返回状态为 `failed`。去重命中返回 HTTP 200、已有 `article_id`、`status: "exists"` 与 `message: "已存在"`，不再次处理；本次有收藏理由且原文章没有时，补写收藏理由并刷新表头。收录操作记录在操作日志中。正文和附件最终是否保留，仍由既有内容类型与处理方式决定。
+外部 Agent 收录经过同一模型审核，调用方的判断、agent_summary 与 agent_tags 不会替代审核。审核拒绝时返回 HTTP 201、status: "pending_review" 与 reason，文章进入收录待审，正文不会写入文件库；通过后才进入异步处理。新文章通过时返回 HTTP 201，响应为 `{"success":true,"data":{"article_id":"...","status":"pending","message":"...","image_failures":[]}}`；可用同一个 Key 请求 `GET /api/v1/entries/<article_id>` 查看 `parse_status`。如果任务入队失败，返回状态为 `failed`。去重命中返回 HTTP 200、已有 `article_id`、`status: "exists"` 与 `message: "已存在"`，不再次处理；本次有收藏理由且原文章没有时，补写收藏理由并刷新表头。收录操作记录在操作日志中。正文和附件最终是否保留，仍由既有内容类型与处理方式决定。
 
 MCP 服务使用 Streamable HTTP，路径为 `/mcp`。在可访问内网的 Claude Code 终端执行以下完整命令，使用上例设置的地址与 Key：
 

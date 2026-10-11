@@ -29,10 +29,10 @@ func TestMaintenanceRejectsCollectionBeforeReadingUploadBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), h.CollectionGate)
-	for _, path := range []string{"/api/v1/ingest", "/api/v1/knowledge-bases/:id/knowledge/file", "/api/v1/knowledge-bases/:id/knowledge/manual", "/api/v1/data-sources/:id/sync"} {
+	for _, path := range []string{"/api/v1/ingest", "/api/v1/knowledge-bases/:id/entries/file", "/api/v1/knowledge-bases/:id/entries/manual", "/api/v1/data-sources/:id/sync"} {
 		r.POST(path, func(c *gin.Context) { t.Error("paused collection handler executed") })
 	}
-	for _, path := range []string{"/api/v1/ingest", "/api/v1/knowledge-bases/articles/knowledge/file", "/api/v1/knowledge-bases/articles/knowledge/manual", "/api/v1/data-sources/rss/sync"} {
+	for _, path := range []string{"/api/v1/ingest", "/api/v1/knowledge-bases/articles/entries/file", "/api/v1/knowledge-bases/articles/entries/manual", "/api/v1/data-sources/rss/sync"} {
 		body := &maintenanceCountedBody{}
 		request := httptest.NewRequest(http.MethodPost, path, nil)
 		request.Body = body
@@ -41,9 +41,9 @@ func TestMaintenanceRejectsCollectionBeforeReadingUploadBody(t *testing.T) {
 		require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
 		require.Zero(t, body.reads)
 	}
-	r.GET("/api/v1/knowledge-search/options", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/api/v1/search/options", func(c *gin.Context) { c.Status(http.StatusOK) })
 	response := httptest.NewRecorder()
-	r.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/knowledge-search/options", nil))
+	r.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/search/options", nil))
 	require.Equal(t, http.StatusOK, response.Code)
 }
 

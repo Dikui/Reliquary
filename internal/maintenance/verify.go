@@ -21,7 +21,7 @@ type TableManifest struct {
 	Regenerated  bool                `json:"regenerated"`
 	Data         []map[string]any    `json:"data,omitempty"`
 	JSONNulls    map[string][]string `json:"json_nulls,omitempty"`
-	legacySHA256 string
+	legacySHA256 map[int]string
 }
 type Retrieval struct {
 	Query string   `json:"query"`
@@ -81,8 +81,11 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			entry.Rows = int64(len(rows))
 			entry.JSONNulls = snapshot.JSONNulls[table]
 			entry.Data = rows
-			legacy, _ := json.Marshal(namedRows(portable, true))
-			entry.legacySHA256 = sum(legacy)
+			entry.legacySHA256 = map[int]string{}
+			for _, version := range []int{1, 2} {
+				legacy, _ := json.Marshal(namedRows(portable, true, version))
+				entry.legacySHA256[version] = sum(legacy)
+			}
 		}
 		manifest.Tables[table] = entry
 	}
@@ -103,8 +106,8 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	for _, query := range []string{"maintenancearchive", "observations", "reference"} {
 		var ids []string
 		if err := db.WithContext(ctx).Raw(`SELECT DISTINCT id FROM (
- SELECT k.id FROM public.knowledges k WHERE k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND k.search_seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('title',?),paradedb.match_disjunction('description',?),paradedb.match_disjunction('search_text',?)])
- UNION ALL SELECT c.knowledge_id AS id FROM public.chunks c JOIN public.knowledges k ON k.id=c.knowledge_id WHERE c.deleted_at IS NULL AND c.is_enabled AND k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND c.seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('content',?),paradedb.match_disjunction('context_header',?),paradedb.match_disjunction('search_title',?)])
+ SELECT k.id FROM public.entries k WHERE k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND k.search_seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('title',?),paradedb.match_disjunction('description',?),paradedb.match_disjunction('search_text',?)])
+ UNION ALL SELECT c.entry_id AS id FROM public.chunks c JOIN public.entries k ON k.id=c.entry_id WHERE c.deleted_at IS NULL AND c.is_enabled AND k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND c.seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('content',?),paradedb.match_disjunction('context_header',?),paradedb.match_disjunction('search_title',?)])
 ) matched ORDER BY id LIMIT 20`, query, query, query, query, query, query).Scan(&ids).Error; err != nil {
 			return nil, err
 		}

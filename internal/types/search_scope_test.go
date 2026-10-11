@@ -2,19 +2,19 @@ package types
 
 import "testing"
 
-func TestHasKnowledgeRetrievalScope(t *testing.T) {
+func TestHasEntryRetrievalScope(t *testing.T) {
 	tests := []struct {
 		name             string
 		searchTargets    SearchTargets
 		knowledgeBaseIDs []string
-		knowledgeIDs     []string
+		entryIDs         []string
 		want             bool
 	}{
 		{name: "empty", want: false},
 		{name: "nil target", searchTargets: SearchTargets{nil}, want: false},
-		{name: "empty document target", searchTargets: SearchTargets{{Type: SearchTargetTypeKnowledge, KnowledgeBaseID: "kb-1"}}, want: false},
+		{name: "empty document target", searchTargets: SearchTargets{{Type: SearchTargetTypeEntry, KnowledgeBaseID: "kb-1"}}, want: false},
 		{name: "knowledge base IDs", knowledgeBaseIDs: []string{"kb-1"}, want: true},
-		{name: "knowledge IDs", knowledgeIDs: []string{"doc-1"}, want: true},
+		{name: "entry IDs", entryIDs: []string{"doc-1"}, want: true},
 		{
 			name: "knowledge base target",
 			searchTargets: SearchTargets{
@@ -29,9 +29,9 @@ func TestHasKnowledgeRetrievalScope(t *testing.T) {
 			name: "explicit document target",
 			searchTargets: SearchTargets{
 				{
-					Type:                    SearchTargetTypeKnowledge,
+					Type:                    SearchTargetTypeEntry,
 					KnowledgeBaseID:         "kb-1",
-					KnowledgeIDs:            []string{"doc-1"},
+					EntryIDs:                []string{"doc-1"},
 					DisableRecallThresholds: true,
 				},
 			},
@@ -41,9 +41,9 @@ func TestHasKnowledgeRetrievalScope(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := HasKnowledgeRetrievalScope(tt.searchTargets, tt.knowledgeBaseIDs, tt.knowledgeIDs)
+			got := HasEntryRetrievalScope(tt.searchTargets, tt.knowledgeBaseIDs, tt.entryIDs)
 			if got != tt.want {
-				t.Fatalf("HasKnowledgeRetrievalScope() = %v, want %v", got, tt.want)
+				t.Fatalf("HasEntryRetrievalScope() = %v, want %v", got, tt.want)
 			}
 		})
 	}

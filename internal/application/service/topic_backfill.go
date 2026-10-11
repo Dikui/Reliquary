@@ -38,7 +38,7 @@ func (s *TopicService) enqueueBackfill(tx *gorm.DB, topic *types.Topic) error {
 		return err
 	}
 	var ids []string
-	if err := tx.Model(&types.Knowledge{}).Where("space_id=? AND source_kind='article' AND parse_status=? AND (structured_summary IS NOT NULL OR description<>'')", topic.SpaceID, types.ParseStatusCompleted).
+	if err := tx.Model(&types.Entry{}).Where("space_id=? AND source_kind='article' AND parse_status=? AND (structured_summary IS NOT NULL OR description<>'')", topic.SpaceID, types.ParseStatusCompleted).
 		Order("created_at,id").Pluck("id", &ids).Error; err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (s *TopicService) enqueueBackfill(tx *gorm.DB, topic *types.Topic) error {
 		if err != nil {
 			return err
 		}
-		batch := types.TopicBackfillBatch{ID: uuid.NewString(), JobID: job.ID, Ordinal: ordinal, KnowledgeIDs: types.JSON(raw), ArticleCount: end - offset, Status: "pending"}
+		batch := types.TopicBackfillBatch{ID: uuid.NewString(), JobID: job.ID, Ordinal: ordinal, EntryIDs: types.JSON(raw), ArticleCount: end - offset, Status: "pending"}
 		if err := tx.Create(&batch).Error; err != nil {
 			return err
 		}
@@ -245,10 +245,10 @@ func (s *TopicService) runBackfillJob(ctx context.Context, job types.TopicBackfi
 }
 func (s *TopicService) judgeBatch(ctx context.Context, job types.TopicBackfillJob, batch types.TopicBackfillBatch) ([]string, error) {
 	var ids []string
-	if err := json.Unmarshal(batch.KnowledgeIDs, &ids); err != nil {
+	if err := json.Unmarshal(batch.EntryIDs, &ids); err != nil {
 		return nil, err
 	}
-	var articles []types.Knowledge
+	var articles []types.Entry
 	if err := s.db.WithContext(ctx).Where("space_id=? AND id IN ? AND source_kind='article' AND parse_status=?", job.SpaceID, ids, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
 		return nil, err
 	}
@@ -335,10 +335,10 @@ func (s *TopicService) finishBatch(ctx context.Context, job types.TopicBackfillJ
 		} else {
 			// INSERT SELECT also ignores articles deleted while the model was running.
 			if len(matched) > 0 {
-				if err := tx.Exec(`INSERT INTO knowledge_topics(space_id,knowledge_id,topic_id,source,created_at,is_historical)
-				SELECT space_id,id,?,'model',CURRENT_TIMESTAMP,true FROM knowledges
+				if err := tx.Exec(`INSERT INTO entry_topics(space_id,entry_id,topic_id,source,created_at,is_historical)
+				SELECT space_id,id,?,'model',CURRENT_TIMESTAMP,true FROM entries
 				WHERE space_id=? AND id IN ? AND deleted_at IS NULL AND source_kind='article'
-				ON CONFLICT (knowledge_id,topic_id) DO NOTHING`, job.TopicID, job.SpaceID, matched).Error; err != nil {
+				ON CONFLICT (entry_id,topic_id) DO NOTHING`, job.TopicID, job.SpaceID, matched).Error; err != nil {
 					return err
 				}
 			}

@@ -11,7 +11,7 @@ import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import * as personalError from '../utils/personalServerError'
-import * as searchHelpers from '../utils/knowledgeSearch'
+import * as searchHelpers from '../utils/search'
 import * as workspaceCopy from '../utils/workspaceCopy'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../utils/sfcStyleTestHelpers'
 
@@ -29,9 +29,9 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   const t = translator(locale)
   const mocks: Record<string, unknown> = {
     '@/components/SafeTextarea.vue': safeTextareaTestModule,
-    '@/components/KnowledgeSearchFilters.vue': { default: stub, __esModule: true },
-    '@/utils/knowledgeSearch': searchHelpers,
-    '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
+    '@/components/SearchFilters.vue': { default: stub, __esModule: true },
+    '@/utils/search': searchHelpers,
+    '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     'vue-i18n': { useI18n: () => ({ t, tm: () => [], locale: ref(locale) }) },
     '@/utils/personalServerError': personalError,
     '@/stores/auth': { useAuthStore: () => ({ currentSpaceId: '1', isLoggedIn: false }) },
@@ -120,7 +120,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       })
       return () => h('div', slots.default?.())
     } })
-    await componentScenario('./knowledge/settings/DataSourceSyncLogs.vue', locale, { '@/api/datasource': {} }, async () => {}, {
+    await componentScenario('./knowledge-base/settings/DataSourceSyncLogs.vue', locale, { '@/api/datasource': {} }, async () => {}, {
       dataSourceId: 'rss', visible: true, 'onUpdate:visible': (value: boolean) => updates.push(value),
     }, drawer)
     assert.deepEqual(updates, [false])
@@ -170,7 +170,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     })
     assert.ok(html.includes(translator(locale)('space.defaultName')))
     assert.ok(html.includes(translator(locale)('space.defaultDescription')))
-    if (locale === 'zh-CN') assert.doesNotMatch(html, /Personal workspace|Personal knowledge/)
+    if (locale === 'zh-CN') assert.doesNotMatch(html, /Personal workspace|Personal entry/)
     assert.equal(state.spaceInfo.value.name, 'Personal workspace')
     assert.equal(state.spaceInfo.value.description, 'Personal knowledge')
     assert.deepEqual(updates, [])

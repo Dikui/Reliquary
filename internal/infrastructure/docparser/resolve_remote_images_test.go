@@ -37,7 +37,7 @@ type savedEntry struct {
 }
 
 func (m *mockFileService) CheckConnectivity(ctx context.Context) error { return nil }
-func (m *mockFileService) SaveFile(ctx context.Context, file *multipart.FileHeader, spaceID uint64, knowledgeID string) (string, error) {
+func (m *mockFileService) SaveFile(ctx context.Context, file *multipart.FileHeader, spaceID uint64, entryID string) (string, error) {
 	return "", nil
 }
 func (m *mockFileService) SaveBytes(ctx context.Context, data []byte, spaceID uint64, fileName string, temp bool) (string, error) {
@@ -51,7 +51,7 @@ func (m *mockFileService) GetFileURL(ctx context.Context, filePath string) (stri
 	return filePath, nil
 }
 func (m *mockFileService) DeleteFile(ctx context.Context, filePath string) error { return nil }
-func (m *mockFileService) CopyFile(ctx context.Context, srcPath string, spaceID uint64, knowledgeID string) (string, error) {
+func (m *mockFileService) CopyFile(ctx context.Context, srcPath string, spaceID uint64, entryID string) (string, error) {
 	return "", nil
 }
 

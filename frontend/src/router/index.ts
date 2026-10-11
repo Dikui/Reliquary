@@ -66,7 +66,7 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth === false || to.meta.requiresInit === false) {
     // 如果已登录用户访问登录页面，重定向到文章页面
     if (to.path === '/login' && authStore.isLoggedIn) {
-      next('/platform/knowledge')
+      next('/platform/entries')
       return
     }
     next()
@@ -96,7 +96,7 @@ router.beforeEach(async (to, from, next) => {
   const requiredCapability = to.meta.requiredCapability as DeploymentCapabilityKey | undefined
   if (requiredCapability && !deploymentCapabilities.isSupported(requiredCapability)) {
     MessagePlugin.warning(i18n.global.t('settings.capabilityUnavailable'))
-    next('/platform/knowledge')
+    next('/platform/entries')
     return
   }
 

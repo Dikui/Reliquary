@@ -54,18 +54,18 @@ func (e *allRebuildEmbedder) EmbedImage(ctx context.Context, dataURL string) ([]
 }
 
 type allRebuildFixture struct {
-	*articleSearchFixture
+	*entrySearchFixture
 	rebuilder *EmbeddingRebuilder
 	embedder  *allRebuildEmbedder
 	queue     *nameRebuildQueue
 	models    *nameRebuildModels
-	full      *types.Knowledge
+	full      *types.Entry
 	imagePath string
 }
 
 func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	t.Helper()
-	h := newArticleSearchFixture(t)
+	h := newEntrySearchFixture(t)
 	full := h.add(t, "full", "article", "2026-10-01", "event", "semanticlaunch", 2)
 	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
 	h.add(t, "mine", "mine", "", "", "personal", 1)
@@ -84,7 +84,7 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, "data:image/png;base64,"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "attachments", full.ID, "photo.png"), data, 0644))
-	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,knowledge_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
+	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,entry_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
 		VALUES(1,?, ?, ?, 'fixture-model',3,?,'old')`, full.ID, h.kb.ID, imagePath, pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
 	configureNameEmbedding(t, h.db, "replacement-model", 3)
 	h.kb.EmbeddingModelID, h.kb.ModelTiers.Embedding = "replacement-model", "replacement-model"
@@ -92,7 +92,7 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	embedder := &allRebuildEmbedder{nameRebuildEmbedder: nameRebuildEmbedder{id: "replacement-model", dimension: 3}, supportImages: images}
 	models := &nameRebuildModels{models: map[string]embedding.Embedder{"replacement-model": embedder}}
 	queue := &nameRebuildQueue{}
-	return &allRebuildFixture{articleSearchFixture: h, rebuilder: NewEmbeddingRebuilder(h.db, models, queue, vault), embedder: embedder, queue: queue, models: models, full: full, imagePath: imagePath}
+	return &allRebuildFixture{entrySearchFixture: h, rebuilder: NewEmbeddingRebuilder(h.db, models, queue, vault), embedder: embedder, queue: queue, models: models, full: full, imagePath: imagePath}
 }
 
 func (h *allRebuildFixture) state(t *testing.T) *types.EmbeddingRebuildRun {
@@ -128,7 +128,7 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	require.Equal(t, "replacement-model", entity.EmbeddingModelID)
 	require.Equal(t, 3, entity.EmbeddingDimension)
 	require.False(t, entity.EmbeddingNeedsRebuild)
-	var documents []types.Knowledge
+	var documents []types.Entry
 	require.NoError(t, h.db.Where("processing_mode='full'").Find(&documents).Error)
 	for _, document := range documents {
 		require.Equal(t, "replacement-model", document.EmbeddingModelID)
@@ -245,7 +245,7 @@ func TestAllEmbeddingRebuildPauseFencesInFlightAndRetrievalRemainsUsable(t *test
 	require.NoError(t, err)
 	h.embedder.onEmbed = func(_ context.Context, _ string) error {
 		// This runs while the embedding provider is working, before the write.
-		response := h.search(t, types.ArticleSearchRequest{Query: "searchfixture", CollapseSimilar: articleSearchNoCollapse()})
+		response := h.search(t, types.EntrySearchRequest{Query: "searchfixture", CollapseSimilar: entrySearchNoCollapse()})
 		require.NotEmpty(t, response.Results, "keyword search continues while old vector identities are excluded")
 		require.NoError(t, h.rebuilder.Pause(h.ctx, 1, run.ID))
 		return nil
@@ -303,7 +303,7 @@ func TestAllEmbeddingRebuildImagePauseDoesNotWaitForProvider(t *testing.T) {
 	require.Equal(t, "paused", paused.Status)
 	require.EqualValues(t, 5, paused.CompletedCount)
 	var identity string
-	require.NoError(t, h.db.Table("image_embeddings").Select("model_id").Where("knowledge_id=?", h.full.ID).Scan(&identity).Error)
+	require.NoError(t, h.db.Table("image_embeddings").Select("model_id").Where("entry_id=?", h.full.ID).Scan(&identity).Error)
 	require.Equal(t, "fixture-model", identity)
 	h.embedder.onImage = nil
 	require.NoError(t, h.rebuilder.Continue(h.ctx, 1, run.ID, false))

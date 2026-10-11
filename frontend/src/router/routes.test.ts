@@ -37,12 +37,12 @@ test('removed feature routes return to knowledge bases with one notice', async (
     await router.push('/login')
     const previousNotices = notices
     await router.push(path)
-    assert.equal(router.currentRoute.value.name, 'knowledge', path)
-    assert.equal(router.currentRoute.value.fullPath, '/platform/knowledge', path)
+    assert.equal(router.currentRoute.value.name, 'entries', path)
+    assert.equal(router.currentRoute.value.fullPath, '/platform/entries', path)
     assert.equal(notices, previousNotices + 1, path)
     notifyRemovedFeatureRedirect(router.currentRoute.value, () => { notices++ })
     assert.equal(notices, previousNotices + 1, 'a completed redirect is announced once')
-    await router.push('/platform/knowledge')
+    await router.push('/platform/entries')
     assert.equal(notices, previousNotices + 1, 'a list refresh does not repeat the notice')
   }
 })
@@ -64,7 +64,7 @@ test('unknown root and platform paths match an application error page', async ()
 
   const source = readFileSync(new URL('../views/NotFound.vue', import.meta.url), 'utf8')
   assert.match(source, /<h1>\{\{ t\('navigation.pageNotFound'\) \}\}<\/h1>/)
-  assert.match(source, /router.push\('\/platform\/knowledge'\)/)
+  assert.match(source, /router.push\('\/platform\/entries'\)/)
   assert.match(source, /t\('navigation.returnToKnowledge'\)/)
 })
 
@@ -72,7 +72,7 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   const routes = createApplicationRoutes()
   const platform = routes.find(route => route.name === 'Platform')!
   const settings = platform.children!.find(route => route.name === 'settings')!
-  const list = platform.children!.find(route => route.name === 'knowledge')!
+  const list = platform.children!.find(route => route.name === 'entries')!
   assert.equal('component' in settings && settings.component, 'component' in list && list.component)
 
   const source = readFileSync(new URL('../views/platform/index.vue', import.meta.url), 'utf8')
@@ -102,32 +102,32 @@ test('login and registration return to knowledge bases and removed conversation 
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   for (const path of ['/', '/platform']) {
     await router.push(path)
-    assert.equal(router.currentRoute.value.name, 'knowledge')
+    assert.equal(router.currentRoute.value.name, 'entries')
   }
-  for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents', '/platform/knowledge/obsolete']) {
+  for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents', '/platform/entries/obsolete']) {
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
   }
   const login = readFileSync(new URL('../views/auth/Login.vue', import.meta.url), 'utf8')
-  assert.equal((login.match(/router\.replace\('\/platform\/knowledge'\)/g) || []).length, 2)
+  assert.equal((login.match(/router\.replace\('\/platform\/entries'\)/g) || []).length, 2)
   const navigation = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
-  assert.match(navigation, /to\.path === '\/login' && authStore\.isLoggedIn[\s\S]*next\('\/platform\/knowledge'\)/)
+  assert.match(navigation, /to\.path === '\/login' && authStore\.isLoggedIn[\s\S]*next\('\/platform\/entries'\)/)
 })
 
 test('old knowledge list and ID routes redirect to the single article page', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   for (const old of ['/platform/knowledge-bases', '/platform/knowledge-bases/kb-a', '/platform/knowledge-bases/kb-a/documents']) {
-    await router.push(old + '?knowledge_id=article-a')
-    assert.equal(router.currentRoute.value.path, '/platform/knowledge')
-    assert.equal(router.currentRoute.value.query.knowledge_id, 'article-a')
+    await router.push(old + '?entry_id=article-a')
+    assert.equal(router.currentRoute.value.path, '/platform/entries')
+    assert.equal(router.currentRoute.value.query.entry_id, 'article-a')
     assert.deepEqual(router.currentRoute.value.params, {})
   }
 })
 
 test('knowledge search has an independent page and preserves query and filter URLs', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  await router.push('/platform/knowledge-search?q=Launch&sources=article&collapse_similar=false')
-  assert.equal(router.currentRoute.value.name, 'knowledgeSearch')
+  await router.push('/platform/search?q=Launch&sources=article&collapse_similar=false')
+  assert.equal(router.currentRoute.value.name, 'search')
   assert.equal(router.currentRoute.value.query.q, 'Launch')
   assert.equal(router.currentRoute.value.query.sources, 'article')
   assert.equal(router.currentRoute.value.query.collapse_similar, 'false')
@@ -138,4 +138,22 @@ test('the operation log bookmark opens its settings section and preserves filter
   await router.push('/platform/operation-logs?operation_type=star&page=2')
   assert.equal(router.currentRoute.value.name, 'settings')
   assert.deepEqual(router.currentRoute.value.query, { section: 'operation-logs', operation_type: 'star', page: '2' })
+})
+
+test('saved list and search bookmarks redirect with query and hash intact', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  for (const [oldPath, newPath] of [['/platform/knowledge', '/platform/entries'], ['/platform/knowledge-search', '/platform/search']]) {
+    await router.push(`${oldPath}?query=observations&sources=mine#selected`)
+    assert.equal(router.currentRoute.value.path, newPath)
+    assert.deepEqual(router.currentRoute.value.query, { query: 'observations', sources: 'mine' })
+    assert.equal(router.currentRoute.value.hash, '#selected')
+  }
+})
+
+test('a pre-rename bookmarked entry selection reaches the current detail query', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  await router.push('/platform/knowledge?knowledge_id=original-entry#detail')
+  assert.equal(router.currentRoute.value.path, '/platform/entries')
+  assert.deepEqual(router.currentRoute.value.query, { entry_id: 'original-entry' })
+  assert.equal(router.currentRoute.value.hash, '#detail')
 })

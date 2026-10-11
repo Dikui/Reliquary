@@ -35,17 +35,17 @@ func TestPersonalPostgresRetrievalResults(t *testing.T) {
 		{first, "retrieval retrieval retrieval retrieval retrieval postgres postgres postgres postgres", []float32{1, 0, 0}},
 		{second, "retrieval retrieval retrieval postgres postgres context budgets keyword vector", []float32{0.9, 0.2, 0}},
 		{first, "retrieval postgres storage parsing indexing document content context scopes", []float32{0.7, 0.5, 0}},
-		{second, "personal knowledge local files queue background processing task worker", []float32{0.1, 1, 0}},
+		{second, "personal entry local files queue background processing task worker", []float32{0.1, 1, 0}},
 	}
 	for _, definition := range definitions {
-		knowledge := f.createKnowledge(t, definition.kb, "Sample document")
-		chunk := f.createChunk(t, knowledge, definition.body, "", types.ChunkTypeText)
+		entry := f.createEntry(t, definition.kb, "Sample document")
+		chunk := f.createChunk(t, entry, definition.body, "", types.ChunkTypeText)
 		require.NoError(t, f.indices.Save(f.ctx, &types.IndexInfo{
 			Content: chunk.Content, SourceID: chunk.ID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID,
-			KnowledgeID: knowledge.ID, KnowledgeBaseID: definition.kb.ID, IsEnabled: true,
+			EntryID: entry.ID, KnowledgeBaseID: definition.kb.ID, IsEnabled: true,
 		}, map[string]any{"embedding": map[string][]float32{chunk.ID: definition.vector}}))
 	}
-	service := &knowledgeBaseService{db: f.db, repo: f.kbs, kgRepo: f.knowledge, chunkRepo: f.chunks,
+	service := &knowledgeBaseService{db: f.db, repo: f.kbs, entryRepo: f.entry, chunkRepo: f.chunks,
 		modelService: personalRetrievalModels{}, retrieveEngine: f.retrieval}
 	recorded := make(map[string][]personalRetrievalHit)
 	for _, query := range []string{"retrieval", "postgres"} {

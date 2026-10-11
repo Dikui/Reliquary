@@ -166,7 +166,7 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 	parsed, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	h.models.SetChatGPTTransport(&http.Client{Transport: chatGPTGenerationTransport{parsed, server.Client().Transport}})
-	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.kb.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT,
+	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.kb.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT,
 		Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 32768, ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, h.models.CreateModel(h.ctx, model))
 	// Embeddings retain their own supported billing route and httptest fixture.
@@ -275,7 +275,7 @@ func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecove
 					}
 					return chatGPTGenerationSuccess(t, request)
 				})
-				article, err := h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID,
+				article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
 					newMultipartFileHeader(t, "quota-original.md", "Fixture Acme published an original product announcement with measured capabilities."),
 					map[string]string{"publisher": "Fixture Acme", "original_url": "https://example.org/quota-original", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 				require.NoError(t, err)
@@ -383,7 +383,7 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
 			require.NoError(t, err)
 			require.Equal(t, "pending", result.Status)
-			pending := h.article(t, result.ArticleID)
+			pending := h.article(t, result.EntryID)
 			require.Equal(t, types.ParseStatusPending, pending.ParseStatus)
 			intake, err := pending.IntakeMetadata()
 			require.NoError(t, err)
@@ -402,12 +402,12 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 			err = h.service.ProcessManualUpdate(types.WithTaskRetryMetadata(h.ctx, 0, 3), task)
 			require.True(t, types.IsChatGPTDeferred(err))
 			require.Len(t, h.requests(), before, "paused manual worker must not contact the API")
-			require.Equal(t, types.ParseStatusPending, h.article(t, result.ArticleID).ParseStatus)
+			require.Equal(t, types.ParseStatusPending, h.article(t, result.EntryID).ParseStatus)
 			quota.Store(false)
 			_, err = h.policy.Resume(h.ctx)
 			require.NoError(t, err)
 			require.NoError(t, h.service.ProcessManualUpdate(types.WithTaskRetryMetadata(h.ctx, 0, 3), task))
-			require.Equal(t, types.ParseStatusCompleted, h.article(t, result.ArticleID).ParseStatus)
+			require.Equal(t, types.ParseStatusCompleted, h.article(t, result.EntryID).ParseStatus)
 		})
 	}
 }
@@ -420,7 +420,7 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 		}
 		return chatGPTGenerationSuccess(t, request)
 	})
-	article, err := h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID,
+	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
 		newMultipartFileHeader(t, "missing-link.md", "Fixture Acme published a complete original announcement with product measurements and documented deployment choices."),
 		map[string]string{"publisher": "Fixture Acme"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
@@ -433,7 +433,7 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 	original := intake.OriginalPath
 	inspector := chatGPTScheduledQueue(t, h)
 	quota.Store(true)
-	reviewed, err := h.service.ReviewKnowledgeIntake(h.ctx, article.ID, "supplement_url", types.SourceInfo{OriginalURL: "https://example.org/supplemented-original"})
+	reviewed, err := h.service.ReviewEntryIntake(h.ctx, article.ID, "supplement_url", types.SourceInfo{OriginalURL: "https://example.org/supplemented-original"})
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusPending, reviewed.ParseStatus)
 	intake, err = reviewed.IntakeMetadata()

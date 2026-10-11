@@ -19,7 +19,7 @@ type pgVector struct {
 	SourceID        string              `json:"source_id"         gorm:"column:source_id;not null"`
 	SourceType      int                 `json:"source_type"       gorm:"column:source_type;not null"`
 	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
-	KnowledgeID     string              `json:"knowledge_id"      gorm:"column:knowledge_id"`
+	EntryID         string              `json:"entry_id"      gorm:"column:entry_id"`
 	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
 	ModelID         string              `json:"model_id" gorm:"column:model_id"`
 	Dimension       int                 `json:"dimension"         gorm:"column:dimension;not null"`
@@ -35,7 +35,7 @@ type pgVectorWithScore struct {
 	SourceID        string              `json:"source_id"         gorm:"column:source_id;not null"`
 	SourceType      int                 `json:"source_type"       gorm:"column:source_type;not null"`
 	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
-	KnowledgeID     string              `json:"knowledge_id"      gorm:"column:knowledge_id"`
+	EntryID         string              `json:"entry_id"      gorm:"column:entry_id"`
 	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
 	Content         string              `json:"content"           gorm:"column:content;->"`
 	ContextHeader   string              `json:"-"                 gorm:"column:context_header;->"`
@@ -63,7 +63,7 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 		SourceID:        indexInfo.SourceID,
 		SourceType:      int(indexInfo.SourceType),
 		ChunkID:         indexInfo.ChunkID,
-		KnowledgeID:     indexInfo.KnowledgeID,
+		EntryID:         indexInfo.EntryID,
 		KnowledgeBaseID: indexInfo.KnowledgeBaseID,
 		// Preserve the historical default for callers that omit IsEnabled.
 		// Disabled chunks are filtered from chunks and explicit status maps win below.
@@ -107,7 +107,7 @@ func fromDBVectorEmbeddingWithScore(embedding *pgVectorWithScore, matchType type
 		SourceID:        embedding.SourceID,
 		SourceType:      types.SourceType(embedding.SourceType),
 		ChunkID:         embedding.ChunkID,
-		KnowledgeID:     embedding.KnowledgeID,
+		EntryID:         embedding.EntryID,
 		KnowledgeBaseID: embedding.KnowledgeBaseID,
 		Content:         content,
 		Score:           embedding.Score,

@@ -97,7 +97,7 @@ func checkMaintenanceModels(ctx context.Context, db *gorm.DB, modelID string, tr
 					}
 					check.Images = true
 				}
-			case types.ModelTypeKnowledgeQA:
+			case types.ModelTypeGeneration:
 				adapter, err := models.GetChatModel(probeCtx, model.ID)
 				if err != nil {
 					return err

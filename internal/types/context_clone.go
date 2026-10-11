@@ -41,7 +41,7 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 
 	// Marks model calls as coming from an queue worker so the per-model
 	// concurrency governor throttles them, leaving foreground model latency
-	// alone. Document ingestion detaches mid-flight — knowledge_create hands
+	// alone. Document ingestion detaches mid-flight — entry_create hands
 	// processChunks to a goroutine on a cloned context, and processChunks is
 	// what vectorises every chunk. Dropping the mark there would let exactly
 	// the ingestion storm the governor exists to contain run past it. Keeping

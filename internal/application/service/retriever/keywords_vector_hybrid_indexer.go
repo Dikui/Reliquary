@@ -287,23 +287,23 @@ func (v *KeywordsVectorHybridRetrieveEngineService) boundedConcurrentBatchSaveNo
 
 // DeleteByChunkIDList deletes vectors by their chunk IDs
 func (v *KeywordsVectorHybridRetrieveEngineService) DeleteByChunkIDList(ctx context.Context,
-	indexIDList []string, dimension int, knowledgeType string,
+	indexIDList []string, dimension int, entryType string,
 ) error {
-	return v.indexRepository.DeleteByChunkIDList(ctx, indexIDList, dimension, knowledgeType)
+	return v.indexRepository.DeleteByChunkIDList(ctx, indexIDList, dimension, entryType)
 }
 
 // DeleteBySourceIDList deletes vectors by their source IDs
 func (v *KeywordsVectorHybridRetrieveEngineService) DeleteBySourceIDList(ctx context.Context,
-	sourceIDList []string, dimension int, knowledgeType string,
+	sourceIDList []string, dimension int, entryType string,
 ) error {
-	return v.indexRepository.DeleteBySourceIDList(ctx, sourceIDList, dimension, knowledgeType)
+	return v.indexRepository.DeleteBySourceIDList(ctx, sourceIDList, dimension, entryType)
 }
 
-// DeleteByKnowledgeIDList deletes vectors by their knowledge IDs
-func (v *KeywordsVectorHybridRetrieveEngineService) DeleteByKnowledgeIDList(ctx context.Context,
-	knowledgeIDList []string, dimension int, knowledgeType string,
+// DeleteByEntryIDList deletes vectors by their entry IDs
+func (v *KeywordsVectorHybridRetrieveEngineService) DeleteByEntryIDList(ctx context.Context,
+	entryIDList []string, dimension int, entryType string,
 ) error {
-	return v.indexRepository.DeleteByKnowledgeIDList(ctx, knowledgeIDList, dimension, knowledgeType)
+	return v.indexRepository.DeleteByEntryIDList(ctx, entryIDList, dimension, entryType)
 }
 
 // Support returns the retriever types supported by this engine

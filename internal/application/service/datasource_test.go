@@ -102,7 +102,7 @@ func TestProcessSyncRSSPartialFailureKeepsCursorForRetry(t *testing.T) {
 	svc := &DataSourceService{dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
 		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, SpaceID: 1}},
 		connectorRegistry: registry, spaceRepo: &processSyncSpaceRepo{space: &types.Space{ID: 1}},
-		knowledgeService: &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}},
+		entryService: &rssIntakeEntryService{repo: &deletionLookupEntryRepo{}},
 	}
 	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, SpaceID: 1, SyncLogID: log.ID})
 	require.NoError(t, err)
@@ -278,13 +278,13 @@ func (r *processSyncSpaceRepo) GetSpaceByID(context.Context, uint64) (*types.Spa
 	return r.space, nil
 }
 
-func (r *deletionLookupKnowledgeRepo) UpdateKnowledge(_ context.Context, knowledge *types.Knowledge) error {
+func (r *deletionLookupEntryRepo) UpdateEntry(_ context.Context, entry *types.Entry) error {
 	if r.metadataUpdateErr != nil {
 		return r.metadataUpdateErr
 	}
 	metadata := map[string]string{}
-	if len(knowledge.Metadata) > 0 {
-		if err := json.Unmarshal(knowledge.Metadata, &metadata); err != nil {
+	if len(entry.Metadata) > 0 {
+		if err := json.Unmarshal(entry.Metadata, &metadata); err != nil {
 			return err
 		}
 	}
@@ -292,9 +292,9 @@ func (r *deletionLookupKnowledgeRepo) UpdateKnowledge(_ context.Context, knowled
 	return nil
 }
 
-func (r *deletionLookupKnowledgeRepo) FindByDataSourceExternalID(
+func (r *deletionLookupEntryRepo) FindByDataSourceExternalID(
 	_ context.Context, spaceID uint64, knowledgeBaseID, dataSourceID, externalID string,
-) (*types.Knowledge, error) {
+) (*types.Entry, error) {
 	if r.lookupErr != nil {
 		return nil, r.lookupErr
 	}
@@ -302,10 +302,10 @@ func (r *deletionLookupKnowledgeRepo) FindByDataSourceExternalID(
 	r.knowledgeBaseID = knowledgeBaseID
 	r.dataSourceID = dataSourceID
 	r.externalID = externalID
-	return r.knowledge, nil
+	return r.entry, nil
 }
 
-func (r *deletionLookupKnowledgeRepo) HardDeleteKnowledge(_ context.Context, _ uint64, id string) error {
+func (r *deletionLookupEntryRepo) HardDeleteEntry(_ context.Context, _ uint64, id string) error {
 	if r.hardDeleteErr != nil {
 		return r.hardDeleteErr
 	}
@@ -313,9 +313,9 @@ func (r *deletionLookupKnowledgeRepo) HardDeleteKnowledge(_ context.Context, _ u
 	return nil
 }
 
-func (r *deletionLookupKnowledgeRepo) HardDeleteKnowledgeList(_ context.Context, _ uint64, ids []string) error {
+func (r *deletionLookupEntryRepo) HardDeleteEntryList(_ context.Context, _ uint64, ids []string) error {
 	for _, id := range ids {
-		if err := r.HardDeleteKnowledge(context.Background(), 0, id); err != nil {
+		if err := r.HardDeleteEntry(context.Background(), 0, id); err != nil {
 			return err
 		}
 	}
@@ -324,48 +324,48 @@ func (r *deletionLookupKnowledgeRepo) HardDeleteKnowledgeList(_ context.Context,
 
 // scopedDeletionRepo models two data sources sharing the same external_id.
 type scopedDeletionRepo struct {
-	interfaces.KnowledgeRepository
-	live        map[string]*types.Knowledge
+	interfaces.EntryRepository
+	live        map[string]*types.Entry
 	hardDeleted []string
 }
 
 func (r *scopedDeletionRepo) FindByDataSourceExternalID(
 	_ context.Context, _ uint64, _, dataSourceID, externalID string,
-) (*types.Knowledge, error) {
+) (*types.Entry, error) {
 	if r.live == nil {
 		return nil, nil
 	}
 	return r.live[dataSourceID+"|"+externalID], nil
 }
 
-func (r *scopedDeletionRepo) HardDeleteKnowledge(_ context.Context, _ uint64, id string) error {
+func (r *scopedDeletionRepo) HardDeleteEntry(_ context.Context, _ uint64, id string) error {
 	r.hardDeleted = append(r.hardDeleted, id)
 	return nil
 }
 
-func (r *scopedDeletionRepo) HardDeleteKnowledgeList(_ context.Context, _ uint64, ids []string) error {
+func (r *scopedDeletionRepo) HardDeleteEntryList(_ context.Context, _ uint64, ids []string) error {
 	r.hardDeleted = append(r.hardDeleted, ids...)
 	return nil
 }
 
-// keyedDeletionRepo maps external_id to live knowledge for multi-item sync tests.
+// keyedDeletionRepo maps external_id to live entry for multi-item sync tests.
 type keyedDeletionRepo struct {
-	interfaces.KnowledgeRepository
-	items         map[string]*types.Knowledge
+	interfaces.EntryRepository
+	items         map[string]*types.Entry
 	hardDeleted   []string
 	hardDeleteErr error
 }
 
 func (r *keyedDeletionRepo) FindByDataSourceExternalID(
 	_ context.Context, _ uint64, _, _, externalID string,
-) (*types.Knowledge, error) {
+) (*types.Entry, error) {
 	if r.items == nil {
 		return nil, nil
 	}
 	return r.items[externalID], nil
 }
 
-func (r *keyedDeletionRepo) HardDeleteKnowledge(_ context.Context, _ uint64, id string) error {
+func (r *keyedDeletionRepo) HardDeleteEntry(_ context.Context, _ uint64, id string) error {
 	if r.hardDeleteErr != nil {
 		return r.hardDeleteErr
 	}
@@ -373,9 +373,9 @@ func (r *keyedDeletionRepo) HardDeleteKnowledge(_ context.Context, _ uint64, id 
 	return nil
 }
 
-func (r *keyedDeletionRepo) HardDeleteKnowledgeList(_ context.Context, _ uint64, ids []string) error {
+func (r *keyedDeletionRepo) HardDeleteEntryList(_ context.Context, _ uint64, ids []string) error {
 	for _, id := range ids {
-		if err := r.HardDeleteKnowledge(context.Background(), 0, id); err != nil {
+		if err := r.HardDeleteEntry(context.Background(), 0, id); err != nil {
 			return err
 		}
 	}
@@ -385,20 +385,20 @@ func (r *keyedDeletionRepo) HardDeleteKnowledgeList(_ context.Context, _ uint64,
 // syncDeletionHarness wires a DataSourceService around a connector that always
 // reports one deleted item, with overridable lookup/delete fakes.
 type syncDeletionHarness struct {
-	ds            *types.DataSource
-	syncLogID     string
-	syncLogRepo   *processSyncSyncLogRepo
-	knowledgeRepo *deletionLookupKnowledgeRepo
-	knowledgeSvc  *sweepFakeKS
-	svc           *DataSourceService
+	ds          *types.DataSource
+	syncLogID   string
+	syncLogRepo *processSyncSyncLogRepo
+	entryRepo   *deletionLookupEntryRepo
+	entrySvc    *sweepFakeKS
+	svc         *DataSourceService
 }
 
 // newSyncDeletionHarness builds a full-sync ProcessSync fixture. Passing nil
-// for repo/ks selects the happy-path defaults: an existing knowledge item and
+// for repo/ks selects the happy-path defaults: an existing entry item and
 // no lookup/delete errors.
 func newSyncDeletionHarness(
 	t *testing.T, syncDeletions bool, dsID, logID string,
-	repo *deletionLookupKnowledgeRepo, ks *sweepFakeKS,
+	repo *deletionLookupEntryRepo, ks *sweepFakeKS,
 ) *syncDeletionHarness {
 	t.Helper()
 	configJSON, err := (&types.DataSourceConfig{Type: deletedItemConnectorType}).ToJSON()
@@ -423,7 +423,7 @@ func newSyncDeletionHarness(
 		StartedAt:    time.Now().UTC(),
 	}
 	if repo == nil {
-		repo = &deletionLookupKnowledgeRepo{knowledge: &types.Knowledge{ID: "knowledge-gone"}}
+		repo = &deletionLookupEntryRepo{entry: &types.Entry{ID: "entry-gone"}}
 	}
 	if ks == nil {
 		ks = &sweepFakeKS{repo: repo}
@@ -433,15 +433,15 @@ func newSyncDeletionHarness(
 	require.NoError(t, registry.Register(deletedItemConnector{}))
 
 	return &syncDeletionHarness{
-		ds:            ds,
-		syncLogID:     syncLog.ID,
-		syncLogRepo:   syncLogRepo,
-		knowledgeRepo: repo,
-		knowledgeSvc:  ks,
+		ds:          ds,
+		syncLogID:   syncLog.ID,
+		syncLogRepo: syncLogRepo,
+		entryRepo:   repo,
+		entrySvc:    ks,
 		svc: &DataSourceService{
 			dsRepo:            newKBDeleteDSRepo(ds.KnowledgeBaseID, ds),
 			syncLogRepo:       syncLogRepo,
-			knowledgeService:  ks,
+			entryService:      ks,
 			kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, SpaceID: ds.SpaceID}},
 			connectorRegistry: registry,
 			spaceRepo:         &processSyncSpaceRepo{space: &types.Space{ID: ds.SpaceID}},
@@ -479,19 +479,19 @@ func deletionFailedCount(t *testing.T, log *types.SyncLog) int {
 	return counters.DeletionFailed
 }
 
-// TestProcessSync_SyncDeletionsDeletesMatchingKnowledge verifies that a
-// deleted source item removes the matching KB knowledge (counted as Deleted),
+// TestProcessSync_SyncDeletionsDeletesMatchingEntry verifies that a
+// deleted source item removes the matching KB entry (counted as Deleted),
 // and that the lookup is scoped to space, KB, data source and external ID.
 // TestIngestItem_URLCreationAttachesDataSourceMetadata verifies that a
 // URL-only item gets its datasource scoping keys attached right after
 // creation, so a later source-side deletion can find it via
-// FindByDataSourceExternalID (CreateKnowledgeFromURL itself persists no
+// FindByDataSourceExternalID (CreateEntryFromURL itself persists no
 // metadata).
 func TestIngestItem_URLCreationAttachesDataSourceMetadata(t *testing.T) {
 	ds := &types.DataSource{ID: "ds-1", SpaceID: 1, KnowledgeBaseID: "kb-1"}
-	repo := &deletionLookupKnowledgeRepo{}
-	ks := &sweepFakeKS{repo: repo, createURLKnowledge: &types.Knowledge{ID: "url-knowledge-1"}}
-	svc := &DataSourceService{knowledgeService: ks}
+	repo := &deletionLookupEntryRepo{}
+	ks := &sweepFakeKS{repo: repo, createURLEntry: &types.Entry{ID: "url-entry-1"}}
+	svc := &DataSourceService{entryService: ks}
 
 	isUpdate, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "url:1",
@@ -504,26 +504,26 @@ func TestIngestItem_URLCreationAttachesDataSourceMetadata(t *testing.T) {
 	assert.Equal(t, "url:1", repo.metadataUpdates[0]["external_id"])
 }
 
-type rssIntakeKnowledgeService struct {
-	interfaces.KnowledgeService
-	repo      interfaces.KnowledgeRepository
-	payload   *types.ManualKnowledgePayload
+type rssIntakeEntryService struct {
+	interfaces.EntryService
+	repo      interfaces.EntryRepository
+	payload   *types.ManualEntryPayload
 	channel   string
 	updatedID string
 	rejected  bool
 	updateErr error
 }
 
-func (s *rssIntakeKnowledgeService) GetRepository() interfaces.KnowledgeRepository { return s.repo }
-func (s *rssIntakeKnowledgeService) CreateKnowledgeFromManual(_ context.Context, _ string, payload *types.ManualKnowledgePayload, channel string) (*types.Knowledge, error) {
+func (s *rssIntakeEntryService) GetRepository() interfaces.EntryRepository { return s.repo }
+func (s *rssIntakeEntryService) CreateEntryFromManual(_ context.Context, _ string, payload *types.ManualEntryPayload, channel string) (*types.Entry, error) {
 	s.payload, s.channel = payload, channel
-	return &types.Knowledge{ID: "received"}, nil
+	return &types.Entry{ID: "received"}, nil
 }
 
 func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
-	repo := &deletionLookupKnowledgeRepo{}
-	ks := &rssIntakeKnowledgeService{repo: repo}
-	svc := &DataSourceService{knowledgeService: ks}
+	repo := &deletionLookupEntryRepo{}
+	ks := &rssIntakeEntryService{repo: repo}
+	svc := &DataSourceService{entryService: ks}
 	ds := &types.DataSource{ID: "rss-source", SpaceID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeRSS}
 	updated, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
@@ -531,7 +531,7 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, updated)
-	require.Equal(t, types.ManualKnowledgeStatusPublish, ks.payload.Status)
+	require.Equal(t, types.ManualEntryStatusPublish, ks.payload.Status)
 	require.Equal(t, "Full original text", ks.payload.Content)
 	require.Equal(t, types.SourceInfo{Author: "Original Author", Publisher: "Publishing Institution", OriginalURL: "https://example.com/article", PublishedAt: "2026-09-23T08:30:00Z"}, ks.payload.SourceInfo)
 	require.Equal(t, "rss-source", ks.payload.SourceMetadata["datasource_id"])
@@ -543,11 +543,11 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	stored["intake"] = json.RawMessage(`{"decision":"approved"}`)
 	oldMetadata, err = json.Marshal(stored)
 	require.NoError(t, err)
-	repo.knowledge = &types.Knowledge{ID: "old", Metadata: types.JSON(oldMetadata)}
+	repo.entry = &types.Entry{ID: "old", Metadata: types.JSON(oldMetadata)}
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
 	})
-	var duplicate *types.DuplicateKnowledgeError
+	var duplicate *types.DuplicateEntryError
 	require.ErrorAs(t, err, &duplicate)
 	updated, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
@@ -565,7 +565,7 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	require.Zero(t, result.Deleted)
 	require.Empty(t, result.Errors)
 	require.Equal(t, types.ChannelRSS, ks.channel)
-	repo.knowledge = nil
+	repo.entry = nil
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "qwen:undated", Title: "Undated", Content: []byte("Original body"),
 		Metadata: map[string]string{"publisher": "Qwen", "intake_reject_reason": "Qwen article missing publication date"},
@@ -575,41 +575,41 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	require.Empty(t, ks.payload.SourceInfo.OriginalURL)
 }
 
-func TestProcessSync_SyncDeletionsDeletesMatchingKnowledge(t *testing.T) {
+func TestProcessSync_SyncDeletionsDeletesMatchingEntry(t *testing.T) {
 	h := newSyncDeletionHarness(t, true, "ds-delete-characterization", "log-delete-characterization", nil, nil)
 	updated, err := h.run(t)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, updated.ItemsDeleted)
-	assert.Equal(t, []string{"knowledge-gone"}, h.knowledgeSvc.deleted)
-	assert.Equal(t, h.ds.SpaceID, h.knowledgeRepo.spaceID)
-	assert.Equal(t, h.ds.KnowledgeBaseID, h.knowledgeRepo.knowledgeBaseID)
-	assert.Equal(t, h.ds.ID, h.knowledgeRepo.dataSourceID)
-	assert.Equal(t, "file:gone", h.knowledgeRepo.externalID)
+	assert.Equal(t, []string{"entry-gone"}, h.entrySvc.deleted)
+	assert.Equal(t, h.ds.SpaceID, h.entryRepo.spaceID)
+	assert.Equal(t, h.ds.KnowledgeBaseID, h.entryRepo.knowledgeBaseID)
+	assert.Equal(t, h.ds.ID, h.entryRepo.dataSourceID)
+	assert.Equal(t, "file:gone", h.entryRepo.externalID)
 }
 
 // TestProcessSync_SyncDeletionsDisabledSkipsDeletion verifies that with
 // SyncDeletions off the item is neither deleted nor counted (Deleted=0,
-// Skipped=0, no DeleteKnowledge call).
+// Skipped=0, no DeleteEntry call).
 func TestProcessSync_SyncDeletionsDisabledSkipsDeletion(t *testing.T) {
 	h := newSyncDeletionHarness(t, false, "ds-delete-disabled", "log-delete-disabled", nil, nil)
 	updated, err := h.run(t)
 	require.NoError(t, err)
 
-	assert.Empty(t, h.knowledgeSvc.deleted)
+	assert.Empty(t, h.entrySvc.deleted)
 	assert.Equal(t, 0, updated.ItemsDeleted)
 	assert.Equal(t, 0, updated.ItemsSkipped)
 }
 
 // TestProcessSync_SyncDeletionsAlreadyGoneCountsSkipped verifies the
-// idempotent path: the source item reports deletion but no KB knowledge
+// idempotent path: the source item reports deletion but no KB entry
 // matches, so the item counts as Skipped and nothing is deleted.
 func TestProcessSync_SyncDeletionsAlreadyGoneCountsSkipped(t *testing.T) {
-	h := newSyncDeletionHarness(t, true, "ds-delete-gone", "log-delete-gone", &deletionLookupKnowledgeRepo{}, nil)
+	h := newSyncDeletionHarness(t, true, "ds-delete-gone", "log-delete-gone", &deletionLookupEntryRepo{}, nil)
 	updated, err := h.run(t)
 	require.NoError(t, err)
 
-	assert.Empty(t, h.knowledgeSvc.deleted)
+	assert.Empty(t, h.entrySvc.deleted)
 	assert.Equal(t, 0, updated.ItemsDeleted)
 	assert.Equal(t, 1, updated.ItemsSkipped)
 }
@@ -617,14 +617,14 @@ func TestProcessSync_SyncDeletionsAlreadyGoneCountsSkipped(t *testing.T) {
 // TestProcessSync_SyncDeletionsLookupFailureCountsFailed verifies that a
 // failing scoped lookup surfaces as a Failed item with the
 // deletion_lookup_failed code, increments DeletionFailed, and never calls
-// DeleteKnowledge.
+// DeleteEntry.
 func TestProcessSync_SyncDeletionsLookupFailureCountsFailed(t *testing.T) {
-	repo := &deletionLookupKnowledgeRepo{lookupErr: errors.New("lookup failed")}
+	repo := &deletionLookupEntryRepo{lookupErr: errors.New("lookup failed")}
 	h := newSyncDeletionHarness(t, true, "ds-delete-lookup-fail", "log-delete-lookup-fail", repo, nil)
 	updated, err := h.run(t)
 	require.Error(t, err)
 
-	assert.Empty(t, h.knowledgeSvc.deleted)
+	assert.Empty(t, h.entrySvc.deleted)
 	assert.Equal(t, 0, updated.ItemsDeleted)
 	assert.Equal(t, 1, updated.ItemsFailed)
 	result, err := updated.ParseResult()
@@ -635,16 +635,16 @@ func TestProcessSync_SyncDeletionsLookupFailureCountsFailed(t *testing.T) {
 }
 
 // TestProcessSync_SyncDeletionsDeleteFailureCountsFailed verifies that a
-// failing DeleteKnowledge call surfaces as a Failed item with the
+// failing DeleteEntry call surfaces as a Failed item with the
 // deletion_failed code and increments DeletionFailed without counting
 // the item as Deleted.
 func TestProcessSync_SyncDeletionsDeleteFailureCountsFailed(t *testing.T) {
 	h := newSyncDeletionHarness(t, true, "ds-delete-fail", "log-delete-fail", nil, nil)
-	h.knowledgeSvc.deleteErr = errors.New("delete failed")
+	h.entrySvc.deleteErr = errors.New("delete failed")
 	updated, err := h.run(t)
 	require.Error(t, err)
 
-	assert.Equal(t, []string{"knowledge-gone"}, h.knowledgeSvc.deleted)
+	assert.Equal(t, []string{"entry-gone"}, h.entrySvc.deleted)
 	assert.Equal(t, 0, updated.ItemsDeleted)
 	assert.Equal(t, 1, updated.ItemsFailed)
 	result, err := updated.ParseResult()
@@ -660,17 +660,17 @@ func TestProcessSync_SyncDeletionsHardDeletesRow(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, updated.ItemsDeleted)
-	assert.Equal(t, []string{"knowledge-gone"}, h.knowledgeSvc.deleted)
-	assert.Equal(t, []string{"knowledge-gone"}, h.knowledgeRepo.hardDeleted)
+	assert.Equal(t, []string{"entry-gone"}, h.entrySvc.deleted)
+	assert.Equal(t, []string{"entry-gone"}, h.entryRepo.hardDeleted)
 }
 
 func TestApplyFetchedItem_SyncDeletionScopedPerDataSource(t *testing.T) {
-	repo := &scopedDeletionRepo{live: map[string]*types.Knowledge{
-		"ds-a|file:shared": {ID: "knowledge-a"},
-		"ds-b|file:shared": {ID: "knowledge-b"},
+	repo := &scopedDeletionRepo{live: map[string]*types.Entry{
+		"ds-a|file:shared": {ID: "entry-a"},
+		"ds-b|file:shared": {ID: "entry-b"},
 	}}
 	ks := &sweepFakeKS{repo: repo}
-	svc := &DataSourceService{knowledgeService: ks}
+	svc := &DataSourceService{entryService: ks}
 
 	result := &types.SyncResult{}
 	dsA := &types.DataSource{
@@ -682,9 +682,9 @@ func TestApplyFetchedItem_SyncDeletionScopedPerDataSource(t *testing.T) {
 	}, result)
 
 	assert.Equal(t, 1, result.Deleted)
-	assert.Equal(t, []string{"knowledge-a"}, ks.deleted)
-	assert.Equal(t, []string{"knowledge-a"}, repo.hardDeleted)
-	assert.NotContains(t, ks.deleted, "knowledge-b")
+	assert.Equal(t, []string{"entry-a"}, ks.deleted)
+	assert.Equal(t, []string{"entry-a"}, repo.hardDeleted)
+	assert.NotContains(t, ks.deleted, "entry-b")
 }
 
 type mixedSyncConnector struct{}
@@ -733,7 +733,7 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 		Status: types.SyncLogStatusRunning, StartedAt: time.Now().UTC(),
 	}
 	repo := &keyedDeletionRepo{
-		items:         map[string]*types.Knowledge{"file:gone": {ID: "knowledge-gone"}},
+		items:         map[string]*types.Entry{"file:gone": {ID: "entry-gone"}},
 		hardDeleteErr: errors.New("hard delete failed"),
 	}
 	ks := &sweepFakeKS{repo: repo}
@@ -744,7 +744,7 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 	svc := &DataSourceService{
 		dsRepo:            newKBDeleteDSRepo(ds.KnowledgeBaseID, ds),
 		syncLogRepo:       syncLogRepo,
-		knowledgeService:  ks,
+		entryService:      ks,
 		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, SpaceID: ds.SpaceID}},
 		connectorRegistry: registry,
 		spaceRepo:         &processSyncSpaceRepo{space: &types.Space{ID: ds.SpaceID}},
@@ -767,9 +767,9 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 
 func TestIngestItem_URLCreationMetadataAttachFailure(t *testing.T) {
 	ds := &types.DataSource{ID: "ds-1", SpaceID: 1, KnowledgeBaseID: "kb-1"}
-	repo := &deletionLookupKnowledgeRepo{metadataUpdateErr: errors.New("db unavailable")}
-	ks := &sweepFakeKS{repo: repo, createURLKnowledge: &types.Knowledge{ID: "url-knowledge-1"}}
-	svc := &DataSourceService{knowledgeService: ks}
+	repo := &deletionLookupEntryRepo{metadataUpdateErr: errors.New("db unavailable")}
+	ks := &sweepFakeKS{repo: repo, createURLEntry: &types.Entry{ID: "url-entry-1"}}
+	svc := &DataSourceService{entryService: ks}
 
 	_, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "url:1",
@@ -779,11 +779,11 @@ func TestIngestItem_URLCreationMetadataAttachFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "attach datasource metadata")
 }
 
-type deletionLookupKnowledgeRepo struct {
-	interfaces.KnowledgeRepository
-	knowledge         *types.Knowledge
+type deletionLookupEntryRepo struct {
+	interfaces.EntryRepository
+	entry             *types.Entry
 	lookupErr         error
-	metadataUpdates   []map[string]string // metadata persisted via UpdateKnowledge
+	metadataUpdates   []map[string]string // metadata persisted via UpdateEntry
 	metadataUpdateErr error
 	hardDeleted       []string
 	hardDeleteErr     error

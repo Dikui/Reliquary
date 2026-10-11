@@ -67,7 +67,7 @@ func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 	payload, err := json.Marshal(map[string]any{
 		"space_id":          types.SingleSpaceID,
 		"knowledge_base_id": "kb-1",
-		"knowledge_id":      "knowledge-1",
+		"entry_id":          "entry-1",
 		"file_url":          "secret://signed-document-url",
 	})
 	if err != nil {
@@ -83,7 +83,7 @@ func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 		t.Fatalf("project task: %v", err)
 	}
 	if info.State != types.RuntimeTaskActive || info.SpaceID != types.SingleSpaceID ||
-		info.KnowledgeBaseID != "kb-1" || info.KnowledgeID != "knowledge-1" {
+		info.KnowledgeBaseID != "kb-1" || info.EntryID != "entry-1" {
 		t.Fatalf("safe routing metadata missing: %+v", info)
 	}
 	if info.StartedAt == nil || !info.StartedAt.Equal(started) || info.Worker != "core" {
@@ -95,7 +95,7 @@ func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 }
 
 func TestProjectRuntimeTaskActionsFollowCurrentState(t *testing.T) {
-	payload := []byte(`{"tenant_id":1,"knowledge_id":"knowledge-1"}`)
+	payload := []byte(`{"tenant_id":1,"entry_id":"entry-1"}`)
 	cases := []struct {
 		state task.TaskState
 		want  []types.RuntimeTaskAction
@@ -130,13 +130,13 @@ func TestProjectRuntimeTaskActionsRespectPersonalSpaceBoundary(t *testing.T) {
 		payload []byte
 		allowed bool
 	}{
-		{"personal_space", []byte(`{"tenant_id":1,"knowledge_id":"knowledge-1"}`), true},
-		{"legacy_no_space", []byte(`{"knowledge_id":"knowledge-1"}`), true},
-		{"legacy_zero_space", []byte(`{"tenant_id":0,"knowledge_id":"knowledge-1"}`), true},
-		{"foreign_space", []byte(`{"tenant_id":2,"knowledge_id":"knowledge-2"}`), false},
-		{"retired_space", []byte(`{"tenant_id":42,"knowledge_id":"knowledge-42"}`), false},
+		{"personal_space", []byte(`{"tenant_id":1,"entry_id":"entry-1"}`), true},
+		{"legacy_no_space", []byte(`{"entry_id":"entry-1"}`), true},
+		{"legacy_zero_space", []byte(`{"tenant_id":0,"entry_id":"entry-1"}`), true},
+		{"foreign_space", []byte(`{"tenant_id":2,"entry_id":"entry-2"}`), false},
+		{"retired_space", []byte(`{"tenant_id":42,"entry_id":"entry-42"}`), false},
 		{"malformed_json", []byte(`{"tenant_id":1`), false},
-		{"invalid_space_type", []byte(`{"tenant_id":"1","knowledge_id":"knowledge-1"}`), false},
+		{"invalid_space_type", []byte(`{"tenant_id":"1","entry_id":"entry-1"}`), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -169,18 +169,18 @@ func TestProjectRuntimeTaskUsesAllowListedBatchMetadata(t *testing.T) {
 		"tenant_id":9,
 		"task_id":"reparse-1",
 		"knowledge_base_id":"kb",
-		"knowledge_ids":["a","b"],
+		"entry_ids":["a","b"],
 		"created_at":1700000000,
 		"content":"must-not-be-projected"
 	}`)
 	info, err := projectRuntimeTask(&task.Job{
-		ID: "task-reparse", Queue: types.QueueMaintenance, TaskType: types.TypeKnowledgeListReparse,
+		ID: "task-reparse", Queue: types.QueueMaintenance, TaskType: types.TypeEntryListReparse,
 		Payload: payload, State: task.TaskStatePending,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.TaskID != "reparse-1" || info.KnowledgeBaseID != "kb" || info.KnowledgeCount != 2 || info.EnqueuedAt == nil {
+	if info.TaskID != "reparse-1" || info.KnowledgeBaseID != "kb" || info.EntryCount != 2 || info.EnqueuedAt == nil {
 		t.Fatalf("batch projection mismatch: %+v", info)
 	}
 	if len(info.AllowedActions) != 0 {
@@ -216,15 +216,15 @@ func TestPurgeArchivedRuntimeTasksOnlyDeletesTeamAndLegacyTasks(t *testing.T) {
 	now := time.Now()
 	retained := []string{}
 	for i := 0; i < listPageSize+20; i++ {
-		insertRuntimeJob(t, inspector, "team-"+strconv.Itoa(i), `{"tenant_id":1,"knowledge_id":"team-knowledge"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
+		insertRuntimeJob(t, inspector, "team-"+strconv.Itoa(i), `{"tenant_id":1,"entry_id":"team-entry"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
 		if i%3 == 0 {
 			id := "foreign-" + strconv.Itoa(i)
-			insertRuntimeJob(t, inspector, id, `{"tenant_id":42,"knowledge_id":"foreign-knowledge"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
+			insertRuntimeJob(t, inspector, id, `{"tenant_id":42,"entry_id":"foreign-entry"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
 			retained = append(retained, id)
 		}
 	}
-	insertRuntimeJob(t, inspector, "legacy-zero", `{"tenant_id":0,"knowledge_id":"team-knowledge"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
-	insertRuntimeJob(t, inspector, "legacy-missing", `{"knowledge_id":"team-knowledge"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
+	insertRuntimeJob(t, inspector, "legacy-zero", `{"tenant_id":0,"entry_id":"team-entry"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
+	insertRuntimeJob(t, inspector, "legacy-missing", `{"entry_id":"team-entry"}`, types.QueueDefault, types.RuntimeTaskArchived, now)
 	// JSONB prevents invalid JSON from being stored. A JSON string preserves
 	// the invalid metadata guard while exercising a valid storage value.
 	insertRuntimeJob(t, inspector, "invalid-shape", `"invalid metadata"`, types.QueueDefault, types.RuntimeTaskArchived, now)
@@ -273,7 +273,7 @@ func TestArchivedTaskDeletionRequiresUnchangedArchivedSnapshot(t *testing.T) {
 				if _, err := inspector.RunRuntimeTask(ctx, types.QueueDefault, "task"); err != nil {
 					t.Fatal(err)
 				}
-			} else if err := inspector.db.Model(&task.Job{}).Where("id = ?", "task").Update("payload", json.RawMessage(`{"tenant_id":1,"knowledge_id":"changed"}`)).Error; err != nil {
+			} else if err := inspector.db.Model(&task.Job{}).Where("id = ?", "task").Update("payload", json.RawMessage(`{"tenant_id":1,"entry_id":"changed"}`)).Error; err != nil {
 				t.Fatal(err)
 			}
 			deleted, err := inspector.deleteArchivedRuntimeTask(ctx, types.QueueDefault, "task", job.Payload)
@@ -362,7 +362,7 @@ func TestListRuntimeTasksPaginatesNewestPendingTasksWithoutOverlap(t *testing.T)
 	inspector := newPostgresInspectorTest(t)
 	start := time.Now()
 	for i, id := range []string{"old", "middle", "new"} {
-		insertRuntimeJob(t, inspector, id, `{"tenant_id":1,"knowledge_id":"knowledge-1"}`, types.QueueDefault, types.RuntimeTaskPending, start.Add(time.Duration(i)*time.Second))
+		insertRuntimeJob(t, inspector, id, `{"tenant_id":1,"entry_id":"entry-1"}`, types.QueueDefault, types.RuntimeTaskPending, start.Add(time.Duration(i)*time.Second))
 	}
 	first, supported, err := inspector.ListRuntimeTasks(context.Background(), types.QueueDefault, types.RuntimeTaskPending, "", 2)
 	if err != nil || !supported {
@@ -416,7 +416,7 @@ func TestRuntimeTaskMutationsPreserveRetryCountAndRespectQueue(t *testing.T) {
 
 func TestPostgresRuntimeQueueHTTPReadsAndMutatesRealRows(t *testing.T) {
 	inspector := newPostgresInspectorTest(t)
-	insertRuntimeJob(t, inspector, "runtime-http", `{"tenant_id":1,"knowledge_id":"article-1","file_url":"private-document"}`, types.QueueDefault, types.RuntimeTaskArchived, time.Now())
+	insertRuntimeJob(t, inspector, "runtime-http", `{"tenant_id":1,"entry_id":"article-1","file_url":"private-document"}`, types.QueueDefault, types.RuntimeTaskArchived, time.Now())
 	if err := inspector.db.Model(&task.Job{}).Where("id = ?", "runtime-http").Updates(map[string]any{"retried": 3, "last_error": "model unavailable"}).Error; err != nil {
 		t.Fatal(err)
 	}

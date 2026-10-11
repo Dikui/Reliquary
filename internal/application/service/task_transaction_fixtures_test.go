@@ -37,7 +37,7 @@ func (q *nameRebuildQueue) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqu
 	return q.Enqueue(task, opts...)
 }
 
-func (q *createKnowledgeTaskEnqueuerStub) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+func (q *createEntryTaskEnqueuerStub) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	return q.Enqueue(task, opts...)
 }
 

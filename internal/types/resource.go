@@ -24,7 +24,7 @@ const (
 // bytes live as long as at least one owner still claims them, which is what
 // permits multiple articles to reference one file until the last claim is released.
 const (
-	ResourceOwnerKnowledge = "knowledge"
+	ResourceOwnerEntry = "knowledge"
 )
 
 // Resource binding relations describe why an owner claims a resource.

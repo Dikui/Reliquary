@@ -51,7 +51,7 @@ func TestResourceCatalogBindingAndAccessGrant(t *testing.T) {
 		interfaces.ResourceRegistration{OriginalName: "report.pdf"},
 	)
 	require.NoError(t, err)
-	require.NoError(t, catalog.Bind(ctx, ref, "knowledge", "knowledge-1", "source_file"))
+	require.NoError(t, catalog.Bind(ctx, ref, "entry", "entry-1", "source_file"))
 
 	token, err := catalog.CreateAccessGrant(ctx, ref, time.Minute)
 	require.NoError(t, err)
@@ -73,14 +73,14 @@ func TestResourceCatalogReleaseKeepsFileWhileAnotherOwnerClaimsIt(t *testing.T) 
 	ref, err := catalog.Register(ctx, 7, "local://7/exports/chart.html", interfaces.ResourceRegistration{})
 	require.NoError(t, err)
 
-	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, "kn-2", types.ResourceRelationAttachment))
-	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, "kn-1", types.ResourceRelationAttachment))
+	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerEntry, "kn-2", types.ResourceRelationAttachment))
+	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerEntry, "kn-1", types.ResourceRelationAttachment))
 
-	remaining, err := catalog.Release(ctx, ref, types.ResourceOwnerKnowledge, "kn-1")
+	remaining, err := catalog.Release(ctx, ref, types.ResourceOwnerEntry, "kn-1")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, remaining, "the other article still owns this file")
 
-	remaining, err = catalog.Release(ctx, ref, types.ResourceOwnerKnowledge, "kn-2")
+	remaining, err = catalog.Release(ctx, ref, types.ResourceOwnerEntry, "kn-2")
 	require.NoError(t, err)
 	require.EqualValues(t, 0, remaining, "the last claim is gone, the bytes can go too")
 }
@@ -93,10 +93,10 @@ func TestResourceCatalogBindIsIdempotentPerOwner(t *testing.T) {
 	ref, err := catalog.Register(ctx, 7, "local://7/exports/a.png", interfaces.ResourceRegistration{})
 	require.NoError(t, err)
 
-	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, "kn-1", types.ResourceRelationAttachment))
-	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, "kn-1", types.ResourceRelationAttachment))
+	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerEntry, "kn-1", types.ResourceRelationAttachment))
+	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerEntry, "kn-1", types.ResourceRelationAttachment))
 
-	remaining, err := catalog.Release(ctx, ref, types.ResourceOwnerKnowledge, "kn-1")
+	remaining, err := catalog.Release(ctx, ref, types.ResourceOwnerEntry, "kn-1")
 	require.NoError(t, err)
 	require.EqualValues(t, 0, remaining)
 }
@@ -107,13 +107,13 @@ func TestResourceCatalogReleaseUnknownReference(t *testing.T) {
 	catalog, _ := newResourceCatalogForTest(t)
 	ctx := context.Background()
 
-	remaining, err := catalog.Release(ctx, "local://7/exports/legacy.png", types.ResourceOwnerKnowledge, "kn-1")
+	remaining, err := catalog.Release(ctx, "local://7/exports/legacy.png", types.ResourceOwnerEntry, "kn-1")
 	require.NoError(t, err)
 	require.EqualValues(t, -1, remaining, "a raw provider path has no claims to account for")
 
 	ref, err := catalog.Register(ctx, 7, "local://7/exports/b.png", interfaces.ResourceRegistration{})
 	require.NoError(t, err)
-	remaining, err = catalog.Release(ctx, ref, types.ResourceOwnerKnowledge, "never-bound")
+	remaining, err = catalog.Release(ctx, ref, types.ResourceOwnerEntry, "never-bound")
 	require.NoError(t, err)
 	require.EqualValues(t, 0, remaining)
 

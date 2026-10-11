@@ -46,7 +46,7 @@ func TestQueuedLegacyPayloadExecutesWithCurrentSpaceContext(t *testing.T) {
 		done <- payload.SpaceID
 		return nil
 	})
-	for _, payload := range []string{`{"tenant_id":1,"knowledge_id":"legacy"}`, `{"space_id":1,"knowledge_id":"current"}`} {
+	for _, payload := range []string{`{"tenant_id":1,"entry_id":"legacy"}`, `{"space_id":1,"entry_id":"current"}`} {
 		_, err := client.Enqueue(queue.NewTask(types.TypeDocumentProcess, []byte(payload)))
 		require.NoError(t, err)
 	}

@@ -15,7 +15,7 @@ import (
 
 type vaultDocuments interface {
 	Status(context.Context) (service.VaultStatus, error)
-	CreateReport(context.Context, string, string, []string) (*types.Knowledge, error)
+	CreateReport(context.Context, string, string, []string) (*types.Entry, error)
 }
 
 type VaultHandler struct {

@@ -17,7 +17,7 @@ import (
 // Chunks are segments of documents that have been processed and prepared for indexing
 type chunkService struct {
 	chunkRepository interfaces.ChunkRepository // Repository for chunk data persistence
-	knowledgeRepo   interfaces.KnowledgeRepository
+	entryRepo       interfaces.EntryRepository
 	kbRepository    interfaces.KnowledgeBaseRepository
 	modelService    interfaces.ModelService
 	retrieveEngine  interfaces.RetrievalService
@@ -32,14 +32,14 @@ type chunkService struct {
 //   - interfaces.ChunkService: Initialized chunk service implementation
 func NewChunkService(
 	chunkRepository interfaces.ChunkRepository,
-	knowledgeRepo interfaces.KnowledgeRepository,
+	entryRepo interfaces.EntryRepository,
 	kbRepository interfaces.KnowledgeBaseRepository,
 	modelService interfaces.ModelService,
 	retrieveEngine interfaces.RetrievalService,
 ) interfaces.ChunkService {
 	return &chunkService{
 		chunkRepository: chunkRepository,
-		knowledgeRepo:   knowledgeRepo,
+		entryRepo:       entryRepo,
 		kbRepository:    kbRepository,
 		modelService:    modelService,
 		retrieveEngine:  retrieveEngine,
@@ -81,7 +81,7 @@ func (s *chunkService) CreateChunks(ctx context.Context, chunks []*types.Chunk) 
 // This method fetches a specific chunk using its ID and validates space access
 // Parameters:
 //   - ctx: Context with authentication and request information
-//   - knowledgeID: ID of the knowledge document containing the chunk
+//   - entryID: ID of the entry document containing the chunk
 //   - id: ID of the chunk to retrieve
 //
 // Returns:
@@ -117,27 +117,27 @@ func (s *chunkService) GetChunkByIDOnly(ctx context.Context, id string) (*types.
 	return chunk, nil
 }
 
-// ListChunksByKnowledgeID lists all chunks for a knowledge ID
-// This method retrieves all chunks belonging to a specific knowledge document
+// ListChunksByEntryID lists all chunks for a entry ID
+// This method retrieves all chunks belonging to a specific entry document
 // Parameters:
 //   - ctx: Context with authentication and request information
-//   - knowledgeID: ID of the knowledge document
+//   - entryID: ID of the entry document
 //
 // Returns:
-//   - []*types.Chunk: List of chunks belonging to the knowledge document
+//   - []*types.Chunk: List of chunks belonging to the entry document
 //   - error: Any error encountered during retrieval
-func (s *chunkService) ListChunksByKnowledgeID(ctx context.Context, knowledgeID string) ([]*types.Chunk, error) {
-	logger.Info(ctx, "Start listing chunks by knowledge ID")
-	logger.Infof(ctx, "Knowledge ID: %s", knowledgeID)
+func (s *chunkService) ListChunksByEntryID(ctx context.Context, entryID string) ([]*types.Chunk, error) {
+	logger.Info(ctx, "Start listing chunks by entry ID")
+	logger.Infof(ctx, "Entry ID: %s", entryID)
 
 	spaceID := types.MustSpaceIDFromContext(ctx)
 	logger.Infof(ctx, "Space ID: %d", spaceID)
 
-	chunks, err := s.chunkRepository.ListChunksByKnowledgeID(ctx, spaceID, knowledgeID)
+	chunks, err := s.chunkRepository.ListChunksByEntryID(ctx, spaceID, entryID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_id": knowledgeID,
-			"space_id":     spaceID,
+			"entry_id": entryID,
+			"space_id": spaceID,
 		})
 		return nil, err
 	}
@@ -146,23 +146,23 @@ func (s *chunkService) ListChunksByKnowledgeID(ctx context.Context, knowledgeID 
 	return chunks, nil
 }
 
-// ListPagedChunksByKnowledgeID lists chunks for a knowledge ID with pagination
+// ListPagedChunksByEntryID lists chunks for a entry ID with pagination
 // This method retrieves chunks with pagination support for better performance with large datasets
 // Parameters:
 //   - ctx: Context with authentication and request information
-//   - knowledgeID: ID of the knowledge document
+//   - entryID: ID of the entry document
 //   - page: Pagination parameters including page number and page size
 //
 // Returns:
 //   - *types.PageResult: Paginated result containing chunks and pagination metadata
 //   - error: Any error encountered during retrieval
-func (s *chunkService) ListPagedChunksByKnowledgeID(ctx context.Context,
-	knowledgeID string, page *types.Pagination, chunkType []types.ChunkType,
+func (s *chunkService) ListPagedChunksByEntryID(ctx context.Context,
+	entryID string, page *types.Pagination, chunkType []types.ChunkType,
 ) (*types.PageResult, error) {
 	spaceID := types.MustSpaceIDFromContext(ctx)
-	chunks, total, err := s.chunkRepository.ListPagedChunksByKnowledgeID(ctx,
+	chunks, total, err := s.chunkRepository.ListPagedChunksByEntryID(ctx,
 		spaceID,
-		knowledgeID,
+		entryID,
 		page,
 		chunkType,
 		"",
@@ -170,8 +170,8 @@ func (s *chunkService) ListPagedChunksByKnowledgeID(ctx context.Context,
 		nil)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_id": knowledgeID,
-			"space_id":     spaceID,
+			"entry_id": entryID,
+			"space_id": spaceID,
 		})
 		return nil, err
 	}
@@ -191,14 +191,14 @@ func (s *chunkService) ListPagedChunksByKnowledgeID(ctx context.Context,
 //
 // This method handles the actual update logic for a chunk, including updating the vector database representation
 func (s *chunkService) UpdateChunk(ctx context.Context, chunk *types.Chunk) error {
-	logger.Infof(ctx, "Updating chunk, ID: %s, knowledge ID: %s", chunk.ID, chunk.KnowledgeID)
+	logger.Infof(ctx, "Updating chunk, ID: %s, entry ID: %s", chunk.ID, chunk.EntryID)
 
 	// Update the chunk in the repository
 	err := s.chunkRepository.UpdateChunk(ctx, chunk)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"chunk_id":     chunk.ID,
-			"knowledge_id": chunk.KnowledgeID,
+			"chunk_id": chunk.ID,
+			"entry_id": chunk.EntryID,
 		})
 		return err
 	}
@@ -279,51 +279,51 @@ func (s *chunkService) DeleteChunks(ctx context.Context, ids []string) error {
 	return nil
 }
 
-// DeleteChunksByKnowledgeID deletes all chunks for a knowledge ID
-// This method removes all chunks belonging to a specific knowledge document
+// DeleteChunksByEntryID deletes all chunks for a entry ID
+// This method removes all chunks belonging to a specific entry document
 // Parameters:
 //   - ctx: Context with authentication and request information
-//   - knowledgeID: ID of the knowledge document
+//   - entryID: ID of the entry document
 //
 // Returns:
 //   - error: Any error encountered during bulk deletion
-func (s *chunkService) DeleteChunksByKnowledgeID(ctx context.Context, knowledgeID string) error {
-	logger.Info(ctx, "Start deleting all chunks by knowledge ID")
-	logger.Infof(ctx, "Knowledge ID: %s", knowledgeID)
+func (s *chunkService) DeleteChunksByEntryID(ctx context.Context, entryID string) error {
+	logger.Info(ctx, "Start deleting all chunks by entry ID")
+	logger.Infof(ctx, "Entry ID: %s", entryID)
 
 	spaceID := types.MustSpaceIDFromContext(ctx)
 	logger.Infof(ctx, "Space ID: %d", spaceID)
 
-	err := s.chunkRepository.DeleteChunksByKnowledgeID(ctx, spaceID, knowledgeID)
+	err := s.chunkRepository.DeleteChunksByEntryID(ctx, spaceID, entryID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_id": knowledgeID,
-			"space_id":     spaceID,
+			"entry_id": entryID,
+			"space_id": spaceID,
 		})
 		return err
 	}
 
-	logger.Info(ctx, "All chunks under knowledge deleted successfully")
+	logger.Info(ctx, "All chunks under entry deleted successfully")
 	return nil
 }
 
-func (s *chunkService) DeleteByKnowledgeList(ctx context.Context, ids []string) error {
-	logger.Info(ctx, "Start deleting all chunks by knowledge IDs")
-	logger.Infof(ctx, "Knowledge IDs: %v", ids)
+func (s *chunkService) DeleteByEntryList(ctx context.Context, ids []string) error {
+	logger.Info(ctx, "Start deleting all chunks by entry IDs")
+	logger.Infof(ctx, "Entry IDs: %v", ids)
 
 	spaceID := types.MustSpaceIDFromContext(ctx)
 	logger.Infof(ctx, "Space ID: %d", spaceID)
 
-	err := s.chunkRepository.DeleteByKnowledgeList(ctx, spaceID, ids)
+	err := s.chunkRepository.DeleteByEntryList(ctx, spaceID, ids)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_id": ids,
-			"space_id":     spaceID,
+			"entry_id": ids,
+			"space_id": spaceID,
 		})
 		return err
 	}
 
-	logger.Info(ctx, "All chunks under knowledge deleted successfully")
+	logger.Info(ctx, "All chunks under entry deleted successfully")
 	return nil
 }
 

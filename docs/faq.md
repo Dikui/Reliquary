@@ -79,11 +79,11 @@ docker compose restart app
 
 ## 14. 文档解析卡在「处理中」/ 解析追踪时间线打不开怎么办？
 
-0.6.1 起每个文档解析都会记录一棵 文档处理 Span 树（`knowledge_processing_spans` 表），可在知识库卡片菜单或卡片上的「Trace」入口打开侧边时间线，逐阶段查看进度。常见情况：
+0.6.1 起每个文档解析都会记录一棵 文档处理 Span 树（`entry_processing_spans` 表），可在知识库卡片菜单或卡片上的「Trace」入口打开侧边时间线，逐阶段查看进度。常见情况：
 
 - **文档长时间停在「处理中」**：先打开时间线看是哪个阶段没有推进（解析 / 处理调用 / 切分 / 向量化）。看门狗轮询会检查卡住的任务；如确认是某次处理挂死，可在时间线面板点击「中止解析」，文章进入已取消状态。
 - **时间线一直显示「更新中」但无数据**：通常是轮询请求静默失败（网络 / 反向代理截断 SSE）。0.6.1 会显式暴露轮询失败，刷新页面或检查 Nginx 是否缓冲了响应即可。
-- **没有时间线数据**：确认数据库基线已执行，`knowledge_processing_spans` 表存在（服务启动会自动迁移）。
+- **没有时间线数据**：确认数据库基线已执行，`entry_processing_spans` 表存在（服务启动会自动迁移）。
 
 ## 16. 内置模型（builtin models）如何用 YAML 声明式管理？
 
@@ -99,10 +99,10 @@ docker compose restart app
 
 ## 18. 上传时如何自定义解析配置（process_config）？
 
-文件上传与 URL 收录可携带 `process_config`（`KnowledgeProcessOverrides`），在**本次批次**内覆盖唯一知识库默认的解析引擎与分块设置，而不会改动持久化配置。Web UI 在上传前会弹出确认对话框供调整。
+文件上传与 URL 收录可携带 `process_config`（`EntryProcessOverrides`），在**本次批次**内覆盖唯一知识库默认的解析引擎与分块设置，而不会改动持久化配置。Web UI 在上传前会弹出确认对话框供调整。
 
 - **与 KB 默认配置的关系**：未传的字段沿用 KB 默认值。
-- **重新处理**：`POST /knowledge/:id/reparse` 可在 body 中传 `process_config` 以新配置重跑处理，覆盖项会写入 `knowledge.metadata.process_overrides`。摘要加链接的文章先按原链接重新抓取，抓取失败会显示明确原因。
+- **重新处理**：`POST /entries/:id/reparse` 可在 body 中传 `process_config` 以新配置重跑处理，覆盖项会写入 `entries.metadata.process_overrides`。摘要加链接的文章先按原链接重新抓取，抓取失败会显示明确原因。
 - **图片处理**：支持视觉的处理模型在同一次调用中读取正文图片；不支持视觉时仅处理文字。上传单独图片需要支持视觉的模型。音频上传不受支持，会返回明确错误。
 
 ## 20. pgvector 检索变慢或刚升级后需要做什么？
@@ -112,7 +112,7 @@ docker compose restart app
 
 ## 23. 如何批量重新解析文档？
 
-在知识库文档列表框选多篇文档后，使用批量操作栏的 **重新解析**；也可调用 `POST /knowledge/batch-reparse`，body 可含 `ids` 与可选 `process_config`。任务异步入队，UI 会在入队后刷新状态。单篇仍可用 `POST /knowledge/:id/reparse`。
+在知识库文档列表框选多篇文档后，使用批量操作栏的 **重新解析**；也可调用 `POST /entries/batch-reparse`，body 可含 `ids` 与可选 `process_config`。任务异步入队，UI 会在入队后刷新状态。单篇仍可用 `POST /entries/:id/reparse`。
 
 ## 24. RSS 数据源如何配置？
 

@@ -99,9 +99,9 @@ func VerifyFileURLSig(filePath string, spaceID uint64, expiresStr, sig string) b
 }
 
 // kbScopedExportsSegment is the only storage prefix served by the KB-scoped
-// file proxy. Embedded chunk images land under exports/; raw knowledge
-// uploads use {space}/{knowledgeID}/... and are served via
-// /knowledge/{id}/download instead.
+// file proxy. Embedded chunk images land under exports/; raw entry
+// uploads use {space}/{entryID}/... and are served via
+// /entries/{id}/download instead.
 const kbScopedExportsSegment = "exports"
 
 // ValidateStoragePathSpace ensures the space segment embedded in a provider://
@@ -123,7 +123,7 @@ func ValidateStoragePathSpace(filePath string, spaceID uint64) error {
 // requires the path to belong to the KB owner space and to live under the
 // exports/ namespace used for embedded images (SaveBytes / multimodal output).
 // This prevents borrowers with shared-KB read access from using the proxy to
-// fetch arbitrary owner-space objects such as raw knowledge uploads.
+// fetch arbitrary owner-space objects such as raw entry uploads.
 func ValidateKBScopedStoragePath(filePath string, spaceID uint64) error {
 	if err := ValidateStoragePathSpace(filePath, spaceID); err != nil {
 		return err

@@ -31,7 +31,7 @@ func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.Entity
 		Joins("JOIN entities candidate ON candidate.space_id=entity_merge_suggestions.space_id AND candidate.id=entity_merge_suggestions.candidate_entity_id").
 		Where("entity_merge_suggestions.space_id=?", spaceID)
 	if kbID != "" {
-		query = query.Where("EXISTS (SELECT 1 FROM knowledges k WHERE k.id=entity_merge_suggestions.knowledge_id AND k.space_id=entity_merge_suggestions.space_id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)", kbID)
+		query = query.Where("EXISTS (SELECT 1 FROM entries k WHERE k.id=entity_merge_suggestions.entry_id AND k.space_id=entity_merge_suggestions.space_id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)", kbID)
 	}
 	if status != "all" {
 		query = query.Where("entity_merge_suggestions.status=?", status)

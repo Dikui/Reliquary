@@ -146,13 +146,13 @@ func (r *chunkRepository) ListChunksBySeqID(
 	return chunks, nil
 }
 
-// ListChunksByKnowledgeID lists all chunks for a knowledge ID
-func (r *chunkRepository) ListChunksByKnowledgeID(
-	ctx context.Context, spaceID uint64, knowledgeID string,
+// ListChunksByEntryID lists all chunks for a entry ID
+func (r *chunkRepository) ListChunksByEntryID(
+	ctx context.Context, spaceID uint64, entryID string,
 ) ([]*types.Chunk, error) {
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("space_id = ? AND knowledge_id = ? and chunk_type = ?", spaceID, knowledgeID, "text").
+		Where("space_id = ? AND entry_id = ? and chunk_type = ?", spaceID, entryID, "text").
 		Order("chunk_index ASC").
 		Find(&chunks).Error; err != nil {
 		return nil, err
@@ -160,19 +160,19 @@ func (r *chunkRepository) ListChunksByKnowledgeID(
 	return chunks, nil
 }
 
-// ListChunksByKnowledgeIDAndTypes lists a knowledge's chunks restricted to the
-// given chunk types. ListChunksByKnowledgeID is text-only by design, so callers
+// ListChunksByEntryIDAndTypes lists a entry's chunks restricted to the
+// given chunk types. ListChunksByEntryID is text-only by design, so callers
 // that also need summary / parent_text / image chunks come through here rather
 // than widening that query underneath its existing callers.
-func (r *chunkRepository) ListChunksByKnowledgeIDAndTypes(
-	ctx context.Context, spaceID uint64, knowledgeID string, chunkTypes []types.ChunkType,
+func (r *chunkRepository) ListChunksByEntryIDAndTypes(
+	ctx context.Context, spaceID uint64, entryID string, chunkTypes []types.ChunkType,
 ) ([]*types.Chunk, error) {
 	if len(chunkTypes) == 0 {
 		return nil, nil
 	}
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("space_id = ? AND knowledge_id = ? AND chunk_type IN ?", spaceID, knowledgeID, chunkTypes).
+		Where("space_id = ? AND entry_id = ? AND chunk_type IN ?", spaceID, entryID, chunkTypes).
 		Order("chunk_index ASC").
 		Find(&chunks).Error; err != nil {
 		return nil, err
@@ -180,10 +180,10 @@ func (r *chunkRepository) ListChunksByKnowledgeIDAndTypes(
 	return chunks, nil
 }
 
-// ListPagedChunksByKnowledgeID lists chunks for a knowledge ID with pagination
-func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
+// ListPagedChunksByEntryID lists chunks for a entry ID with pagination
+func (r *chunkRepository) ListPagedChunksByEntryID(ctx context.Context,
 	spaceID uint64,
-	knowledgeID string,
+	entryID string,
 	page *types.Pagination,
 	chunkType []types.ChunkType,
 	keyword string,
@@ -194,8 +194,8 @@ func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
 	keyword = strings.TrimSpace(keyword)
 
 	baseFilter := func(db *gorm.DB) *gorm.DB {
-		db = db.Where("space_id = ? AND knowledge_id = ? AND chunk_type IN (?) AND status in (?)",
-			spaceID, knowledgeID, chunkType, []int{int(types.ChunkStatusIndexed), int(types.ChunkStatusDefault)})
+		db = db.Where("space_id = ? AND entry_id = ? AND chunk_type IN (?) AND status in (?)",
+			spaceID, entryID, chunkType, []int{int(types.ChunkStatusIndexed), int(types.ChunkStatusDefault)})
 		if isEnabled != nil {
 			db = db.Where("is_enabled = ?", *isEnabled)
 		}
@@ -217,7 +217,7 @@ func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
 	// Then query the paginated data
 	dataQuery := baseFilter(r.db.WithContext(ctx))
 
-	// Determine sort order based on knowledge type
+	// Determine sort order based on entry type
 	var orderClause string
 
 	// Document: sort by chunk_index
@@ -409,31 +409,31 @@ func (r *chunkRepository) DeleteChunks(ctx context.Context, spaceID uint64, ids 
 	return nil
 }
 
-// DeleteChunksByKnowledgeID deletes all chunks for a knowledge ID
-func (r *chunkRepository) DeleteChunksByKnowledgeID(ctx context.Context, spaceID uint64, knowledgeID string) error {
+// DeleteChunksByEntryID deletes all chunks for a entry ID
+func (r *chunkRepository) DeleteChunksByEntryID(ctx context.Context, spaceID uint64, entryID string) error {
 	return r.db.WithContext(ctx).Where(
-		"space_id = ? AND knowledge_id = ?", spaceID, knowledgeID,
+		"space_id = ? AND entry_id = ?", spaceID, entryID,
 	).Delete(&types.Chunk{}).Error
 }
 
-// ListImageInfoByKnowledgeIDs returns non-empty image_info values for the given knowledge IDs.
+// ListImageInfoByEntryIDs returns non-empty image_info values for the given entry IDs.
 // The cleanup scan includes all stored chunk types.
-func (r *chunkRepository) ListImageInfoByKnowledgeIDs(
-	ctx context.Context, spaceID uint64, knowledgeIDs []string,
+func (r *chunkRepository) ListImageInfoByEntryIDs(
+	ctx context.Context, spaceID uint64, entryIDs []string,
 ) ([]interfaces.ChunkImageInfo, error) {
 	var results []interfaces.ChunkImageInfo
 	err := r.db.WithContext(ctx).
 		Model(&types.Chunk{}).
-		Select("knowledge_id, image_info").
-		Where("space_id = ? AND knowledge_id IN ? AND image_info != ''", spaceID, knowledgeIDs).
+		Select("entry_id, image_info").
+		Where("space_id = ? AND entry_id IN ? AND image_info != ''", spaceID, entryIDs).
 		Scan(&results).Error
 	return results, err
 }
 
-// DeleteByKnowledgeList deletes all chunks for a knowledge list
-func (r *chunkRepository) DeleteByKnowledgeList(ctx context.Context, spaceID uint64, knowledgeIDs []string) error {
+// DeleteByEntryList deletes all chunks for a entry list
+func (r *chunkRepository) DeleteByEntryList(ctx context.Context, spaceID uint64, entryIDs []string) error {
 	return r.db.WithContext(ctx).Where(
-		"space_id = ? AND knowledge_id in ?", spaceID, knowledgeIDs,
+		"space_id = ? AND entry_id in ?", spaceID, entryIDs,
 	).Delete(&types.Chunk{}).Error
 }
 
@@ -450,21 +450,21 @@ func (r *chunkRepository) CountChunksByKnowledgeBaseID(
 	return count, err
 }
 
-// DeleteUnindexedChunks by knowledge id and chunk index range
+// DeleteUnindexedChunks by entry id and chunk index range
 func (r *chunkRepository) DeleteUnindexedChunks(
 	ctx context.Context,
 	spaceID uint64,
-	knowledgeID string,
+	entryID string,
 ) ([]*types.Chunk, error) {
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("space_id = ? AND knowledge_id = ? AND status = ?", spaceID, knowledgeID, types.ChunkStatusStored).
+		Where("space_id = ? AND entry_id = ? AND status = ?", spaceID, entryID, types.ChunkStatusStored).
 		Find(&chunks).Error; err != nil {
 		return nil, err
 	}
 	if len(chunks) > 0 {
 		if err := r.db.WithContext(ctx).
-			Where("space_id = ? AND knowledge_id = ? AND status = ?", spaceID, knowledgeID, types.ChunkStatusStored).
+			Where("space_id = ? AND entry_id = ? AND status = ?", spaceID, entryID, types.ChunkStatusStored).
 			Delete(&types.Chunk{}).Error; err != nil {
 			return nil, err
 		}

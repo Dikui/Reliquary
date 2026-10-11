@@ -10,7 +10,7 @@ export const PROVIDER_SCHEME_PATTERN = 'resource|local|vault';
 const PROVIDER_FILE_SCHEME_RE = new RegExp(`^(${PROVIDER_SCHEME_PATTERN}):\\/\\/\\S+$`, 'i');
 
 const KB_FILE_PROXY_PATH_RE = /^\/api\/v1\/knowledge-bases\/[^/]+\/files$/;
-const VAULT_ATTACHMENT_PROXY_PATH_RE = /^\/api\/v1\/knowledge\/[^/]+\/vault-attachment$/;
+const VAULT_ATTACHMENT_PROXY_PATH_RE = /^\/api\/v1\/entries\/[^/]+\/vault-attachment$/;
 
 export type ProtectedFileAccessContext =
   /** 登录用户通过 Bearer 访问文件。 */
@@ -108,12 +108,12 @@ export function buildProtectedFileRequest(
   const vault = /^vault:\/\/([^/]+)\/(.+)$/i.exec(filePath);
   if (vault) {
     try {
-      const knowledgeID = decodeURIComponent(vault[1]);
+      const entryID = decodeURIComponent(vault[1]);
       const path = decodeURIComponent(vault[2]);
-      if (!knowledgeID || !path) return null;
+      if (!entryID || !path) return null;
       const query = new URLSearchParams({ path }).toString();
       return {
-        url: `/api/v1/knowledge/${encodeURIComponent(knowledgeID)}/vault-attachment?${query}`,
+        url: `/api/v1/entries/${encodeURIComponent(entryID)}/vault-attachment?${query}`,
         headers: spaceRequestHeaders(),
       };
     } catch {

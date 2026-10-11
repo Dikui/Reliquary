@@ -157,7 +157,7 @@ const handleGlobalDrop = async (event: DragEvent) => {
         return;
     }
 
-    window.dispatchEvent(new CustomEvent('reliquary:knowledge-file-drop', {
+    window.dispatchEvent(new CustomEvent('reliquary:entry-file-drop', {
         detail: { kbId: getCurrentKbId(), files: droppedFiles }
     }));
 }
@@ -170,7 +170,7 @@ onMounted(() => {
     document.addEventListener('dragleave', handleGlobalDragLeave, true);
     document.addEventListener('drop', handleGlobalDrop, true);
     // 支持通过 URL 查询参数打开全局命令面板，例如旧路径
-    // /platform/knowledge-search?q=foo 重定向后携带 ?cmdk=foo
+    // /platform/search?q=foo 重定向后携带 ?cmdk=foo
     maybeOpenCmdkFromRoute()
 });
 

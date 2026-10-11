@@ -75,7 +75,7 @@ func (h *TopicHandler) RetryBackfill(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
-func (h *TopicHandler) CorrectKnowledgeTopics(c *gin.Context) {
+func (h *TopicHandler) CorrectEntryTopics(c *gin.Context) {
 	var input struct {
 		IDs *[]string `json:"topic_ids" binding:"required"`
 	}
@@ -83,7 +83,7 @@ func (h *TopicHandler) CorrectKnowledgeTopics(c *gin.Context) {
 		c.Error(werrors.NewBadRequestError("topic_ids must be an array"))
 		return
 	}
-	if err := h.service.SetUserKnowledgeTopics(c.Request.Context(), c.Param("id"), *input.IDs); err != nil {
+	if err := h.service.SetUserEntryTopics(c.Request.Context(), c.Param("id"), *input.IDs); err != nil {
 		c.Error(err)
 		return
 	}

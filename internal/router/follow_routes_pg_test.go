@@ -39,10 +39,10 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	var targets struct{ Data []types.FollowTarget }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &targets))
 	require.Len(t, targets.Data, 2)
-	article := types.Knowledge{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.Data.ID, Type: "manual", Title: "HTTP feed article", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now().UTC().Add(-time.Hour)}
+	article := types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.Data.ID, Type: "manual", Title: "HTTP feed article", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now().UTC().Add(-time.Hour)}
 	require.NoError(t, f.db.Create(&article).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeEntity{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, EntityID: entity.ID}).Error)
-	require.NoError(t, f.db.Create(&types.KnowledgeTopic{SpaceID: types.SingleSpaceID, KnowledgeID: article.ID, TopicID: topic.ID}).Error)
+	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entity.ID}).Error)
+	require.NoError(t, f.db.Create(&types.EntryTopic{SpaceID: types.SingleSpaceID, EntryID: article.ID, TopicID: topic.ID}).Error)
 	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/follows/state", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code)
 	var state struct{ Data types.FollowFeedState }
@@ -54,7 +54,7 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	var feed struct{ Data types.FollowFeedResponse }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &feed))
 	require.Len(t, feed.Data.Results, 1)
-	require.Equal(t, article.ID, feed.Data.Results[0].ArticleID)
+	require.Equal(t, article.ID, feed.Data.Results[0].EntryID)
 	require.Len(t, feed.Data.Results[0].MatchedFollows, 2)
 	require.True(t, feed.Data.Results[0].IsNew)
 	require.NotEmpty(t, feed.Data.Results[0].Snippets)

@@ -70,11 +70,11 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 		return nil, err
 	}
 	var count int64
-	if err := db.WithContext(ctx).Unscoped().Model(&types.Knowledge{}).Count(&count).Error; err != nil {
+	if err := db.WithContext(ctx).Unscoped().Model(&types.Entry{}).Count(&count).Error; err != nil {
 		return nil, err
 	}
 	if count != 0 {
-		return nil, fmt.Errorf("vault-rebuild requires an empty knowledge database")
+		return nil, fmt.Errorf("vault-rebuild requires an empty entry database")
 	}
 	if err := configureVaultRebuildEmbedding(ctx, db, kb); err != nil {
 		return nil, err

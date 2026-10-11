@@ -186,7 +186,7 @@ func splitParentChild(text string, parentCfg, childCfg SplitterConfig, withDiagn
 }
 
 // NormalizeSplitterConfig applies the same base splitter defaults used by
-// knowledge ingestion before parent-child derivation or single-pass splitting.
+// entry ingestion before parent-child derivation or single-pass splitting.
 func NormalizeSplitterConfig(cfg SplitterConfig) SplitterConfig {
 	if cfg.ChunkSize <= 0 {
 		cfg.ChunkSize = DefaultChunkSize
@@ -213,7 +213,7 @@ func NormalizeLineEndings(text string) string {
 }
 
 // DeriveParentChildConfigs produces the exact parent and child splitter
-// configurations used by knowledge ingestion. Keeping this here lets preview
+// configurations used by entry ingestion. Keeping this here lets preview
 // and ingestion remain in lockstep as the parent-child defaults evolve.
 // Languages are copied to both levels so parent and child splitters use the same boundary rules.
 // TokenLimit is copied only to children because parents keep the configured context window.
@@ -319,7 +319,7 @@ func runTier(tier StrategyTier, text string, cfg SplitterConfig, profile *DocPro
 }
 
 // ensureDefaults fills in zero-value config fields with sane defaults.
-// Mirrors buildSplitterConfig in internal/application/service/knowledge.go
+// Mirrors buildSplitterConfig in internal/application/service/entry.go
 // so direct callers of this package get the same numbers.
 //
 // When cfg.TokenLimit is set, ChunkSize is clamped to the character budget

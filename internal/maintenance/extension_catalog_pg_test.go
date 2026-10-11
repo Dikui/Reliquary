@@ -87,7 +87,7 @@ func TestNonDefaultExtensionDataStopsMaintenanceWithoutChangingOriginal(t *testi
 		{"modified standard SRS", "public.spatial_ref_sys", `UPDATE public.spatial_ref_sys SET srtext='Modified standard reference definition' WHERE srid=4326`},
 		{"geocoder setting", "tiger.geocode_settings", `INSERT INTO tiger.geocode_settings(name,setting) VALUES('custom_precision','7')`},
 		{"modified seeded dictionary", "tiger.pagc_lex", `UPDATE tiger.pagc_lex SET word='Modified dictionary word' WHERE id=(SELECT min(id) FROM tiger.pagc_lex)`},
-		{"materialized view definition", "pgivm.pg_ivm_immv", `INSERT INTO pgivm.pg_ivm_immv(immvrelid,viewdef,ispopulated,lastivmupdate) VALUES('public.knowledges'::regclass,'SELECT title FROM public.knowledges',false,'0'::xid8)`},
+		{"materialized view definition", "pgivm.pg_ivm_immv", `INSERT INTO pgivm.pg_ivm_immv(immvrelid,viewdef,ispopulated,lastivmupdate) VALUES('public.entries'::regclass,'SELECT title FROM public.entries',false,'0'::xid8)`},
 		{"topology metadata", "topology.topology", `INSERT INTO topology.topology(id,name,srid,precision,hasz,useslargeids) VALUES(999,'custom_topology',4326,0,false,false)`},
 		{"tokenizer typmod cache", "paradedb._typmod_cache", `SELECT paradedb._save_typmod(ARRAY['unreviewed-custom-tokenizer'])`},
 	} {

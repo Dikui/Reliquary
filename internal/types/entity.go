@@ -43,7 +43,7 @@ type EntityAlias struct {
 func (EntityAlias) TableName() string { return "entity_aliases" }
 
 type EntityMergeSuggestion struct {
-	KnowledgeID         string     `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
+	EntryID             string     `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
 	ID                  string     `json:"id" gorm:"type:varchar(36);primaryKey"`
 	SpaceID             uint64     `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
 	NewEntityID         string     `json:"new_entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
@@ -60,15 +60,15 @@ func (EntityMergeSuggestion) TableName() string {
 	return "entity_merge_suggestions"
 }
 
-// KnowledgeEntity associates an article with a canonical entity.
-type KnowledgeEntity struct {
-	SpaceID     uint64    `json:"space_id" gorm:"not null;index"`
-	KnowledgeID string    `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_entity"`
-	EntityID    string    `json:"entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_entity;index"`
-	CreatedAt   time.Time `json:"created_at"`
+// EntryEntity associates an article with a canonical entity.
+type EntryEntity struct {
+	SpaceID   uint64    `json:"space_id" gorm:"not null;index"`
+	EntryID   string    `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity"`
+	EntityID  string    `json:"entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity;index"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
-func (KnowledgeEntity) TableName() string { return "knowledge_entities" }
+func (EntryEntity) TableName() string { return "entry_entities" }
 
 type EntityMergeRecord struct {
 	ID            string    `json:"id" gorm:"type:varchar(36);primaryKey"`
@@ -97,8 +97,8 @@ type EntityQuery struct {
 }
 
 type EntityDetail struct {
-	Entity    Entity      `json:"entity"`
-	Knowledge []Knowledge `json:"knowledge"`
+	Entity  Entity  `json:"entity"`
+	Entries []Entry `json:"entries"`
 }
 
 var EntityTypes = []string{"company", "person", "product", "project", "organization", "other"}

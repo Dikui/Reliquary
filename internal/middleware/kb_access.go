@@ -11,7 +11,7 @@ import (
 	"reliquary/internal/types"
 )
 
-// Knowledge-base access stays within the authenticated workspace.
+// Entry-base access stays within the authenticated workspace.
 var ErrResourceNotFound = stderrors.New("resource not found")
 
 // KBAccess captures the result of a successful KB access resolution.
@@ -49,15 +49,15 @@ type KBLookup interface {
 	GetKnowledgeBaseByID(ctx context.Context, id string) (*types.KnowledgeBase, error)
 }
 
-// KnowledgeLookup mirrors KBLookup but for resolving a knowledge id
+// EntryLookup mirrors KBLookup but for resolving a entry id
 // (document id) back to its parent KB. Used by the chunk routes whose
-// URL param is a knowledge_id, not a kb_id.
-type KnowledgeLookup interface {
-	GetKnowledgeByIDOnly(ctx context.Context, id string) (*types.Knowledge, error)
+// URL param is a entry_id, not a kb_id.
+type EntryLookup interface {
+	GetEntryByIDOnly(ctx context.Context, id string) (*types.Entry, error)
 }
 
 // ChunkLookup mirrors KBLookup for resolving a chunk id back to its
-// owning knowledge document, which then resolves to the parent KB.
+// owning entry document, which then resolves to the parent KB.
 // Used by the /chunks/by-id/:id routes that address chunks directly.
 type ChunkLookup interface {
 	GetChunkByIDOnly(ctx context.Context, id string) (*types.Chunk, error)
@@ -65,7 +65,7 @@ type ChunkLookup interface {
 
 // KBIDResolver tells the guard how to find the kb_id for a given
 // request. Built-in resolvers below cover the param shapes we use:
-// :id, :kb_id, :knowledge_id (-> parent KB).
+// :id, :kb_id, :entry_id (-> parent KB).
 //
 // On error, resolvers MUST return either a 4xx apperror (bad request /
 // not found) or a generic Go error for transient/internal failures;
@@ -83,40 +83,40 @@ func KBIDFromParam(param string) KBIDResolver {
 	}
 }
 
-// KBIDFromKnowledgeIDParam reads `:knowledge_id` from the URL, looks
-// up the knowledge document, and returns its KB id. Used by the chunk
-// routes that address a chunk via /chunks/:knowledge_id.
+// KBIDFromEntryIDParam reads `:entry_id` from the URL, looks
+// up the entry document, and returns its KB id. Used by the chunk
+// routes that address a chunk via /chunks/:entry_id.
 //
 // A genuine "not found" maps to 404; transient errors (DB hiccup,
 // service unavailable) are surfaced as a plain Go error so the guard
 // can return 503 instead of pretending the resource doesn't exist
 // (a 404 here would also short-circuit any retry / monitoring).
-func KBIDFromKnowledgeIDParam(param string, kgService KnowledgeLookup) KBIDResolver {
+func KBIDFromEntryIDParam(param string, kgService EntryLookup) KBIDResolver {
 	return func(c *gin.Context) (string, error) {
 		v := c.Param(param)
 		if v == "" {
 			return "", apperrors.NewBadRequestError("missing " + param + " in path")
 		}
-		k, err := kgService.GetKnowledgeByIDOnly(c.Request.Context(), v)
+		k, err := kgService.GetEntryByIDOnly(c.Request.Context(), v)
 		if err != nil {
 			if isResourceNotFound(err) {
-				return "", apperrors.NewNotFoundError("Knowledge not found")
+				return "", apperrors.NewNotFoundError("Entry not found")
 			}
 			return "", err
 		}
 		if k == nil {
-			return "", apperrors.NewNotFoundError("Knowledge not found")
+			return "", apperrors.NewNotFoundError("Entry not found")
 		}
 		return k.KnowledgeBaseID, nil
 	}
 }
 
-// KBIDFromChunkIDParam walks chunk_id -> knowledge_id -> kb_id.
+// KBIDFromChunkIDParam walks chunk_id -> entry_id -> kb_id.
 // Used by /chunks/by-id/:id routes that address a chunk directly. The
 // chunk's KnowledgeBaseID is denormalised on the row, so a single
-// lookup is enough — no need to chain through GetKnowledgeByIDOnly.
+// lookup is enough — no need to chain through GetEntryByIDOnly.
 //
-// Not-found / transient split mirrors KBIDFromKnowledgeIDParam.
+// Not-found / transient split mirrors KBIDFromEntryIDParam.
 func KBIDFromChunkIDParam(param string, chunkService ChunkLookup) KBIDResolver {
 	return func(c *gin.Context) (string, error) {
 		v := c.Param(param)
@@ -153,9 +153,9 @@ func KBIDFromChunkIDParam(param string, chunkService ChunkLookup) KBIDResolver {
 func isResourceNotFound(err error) bool {
 	// ErrChunkNotFound is defined in the repository layer and aliased by the
 	// service; match the canonical repo sentinel so this predicate depends
-	// only on the repository package (KB / Knowledge / Chunk are all here).
+	// only on the repository package (KB / Entry / Chunk are all here).
 	return stderrors.Is(err, apprepo.ErrKnowledgeBaseNotFound) ||
-		stderrors.Is(err, apprepo.ErrKnowledgeNotFound) ||
+		stderrors.Is(err, apprepo.ErrEntryNotFound) ||
 		stderrors.Is(err, apprepo.ErrChunkNotFound) ||
 		stderrors.Is(err, ErrResourceNotFound)
 }

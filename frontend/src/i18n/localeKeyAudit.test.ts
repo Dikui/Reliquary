@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { parseStatusToTimelineStatus } from '../utils/knowledgeProcessingStatus.ts'
+import { parseStatusToTimelineStatus } from '../utils/entryProcessingStatus.ts'
+import { CHUNKING_SAMPLES } from '../views/knowledge-base/settings/chunkingSamples.ts'
+import { KNOWN_MODEL_USAGE_BINDINGS, modelUsageBindingI18nKey } from '../api/model-usage.ts'
+import { entryDuplicateMessageKey } from '../utils/entryDuplicate.ts'
 import { before, test } from 'node:test'
 
 import {
@@ -20,6 +23,7 @@ import {
 import {
   LITERAL_TRANSLATION_KEY_EXCEPTIONS,
   collectTranslationCallsFromSources,
+  findTranslationReferenceFailures,
   type TranslationCall,
 } from './translationCallAudit.ts'
 
@@ -81,6 +85,24 @@ test('literal translation calls and conditional keys exist in both locales', () 
     }
   }
   assert.deepEqual(failures, [], failures.join('\n'))
+})
+
+test('dynamic translation prefixes and mapped keys exist in both locales', () => {
+  const failures = findTranslationReferenceFailures(translationCalls, localeKeysByName,
+    (locale, key) => getLocaleValueAtPath(LOCALE_BUNDLES[locale as LocaleName], key) !== undefined)
+  assert.deepEqual(failures, [], failures.map(({ file, line, key, locale }) => `${file}:${line}: ${key} missing in ${locale}`).join('\n'))
+})
+
+test('indirect translation helpers and relative sample label maps resolve in both locales', () => {
+  const sampleCall = translationCalls.find(call => call.file.endsWith('/KBChunkingDebug.vue') && call.expression.includes('p.labelKey'))
+  assert.ok(sampleCall?.prefix)
+  const keys = [
+    ...CHUNKING_SAMPLES.map(sample => `${sampleCall.prefix}${sample.labelKey}`),
+    ...[...KNOWN_MODEL_USAGE_BINDINGS, 'unknown'].map(modelUsageBindingI18nKey),
+    entryDuplicateMessageKey({ id: 'row', knowledgeBaseId: 'kb', title: '', inputLabel: '', code: 'duplicate_manual', matchMethod: 'simhash' }),
+    entryDuplicateMessageKey({ id: 'row', knowledgeBaseId: 'kb', title: '', inputLabel: '', code: 'duplicate_manual' }),
+  ]
+  assert.deepEqual(findUsedKeysMissingInLocales(keys, localeKeysByName), [])
 })
 
 const PARSER_ENGINE_NAMES = [
@@ -187,13 +209,13 @@ test('current backend parsing statuses and error codes are localized and retaine
   const syncCodes = [...new Set([...syncSource.matchAll(/\bCode:\s*"([a-z_]+)"/g)].map(match => match[1]))]
   assert.ok(parsingCodes.length, 'Parser error code declarations must be scanned')
   assert.ok(syncCodes.length, 'Datasource error code declarations must be scanned')
-  const knowledgeSource = readFileSync(new URL('../../../internal/types/knowledge.go', import.meta.url), 'utf8')
-  const parseStatuses = [...knowledgeSource.matchAll(/ParseStatus\w+\s*=\s*"([a-z_]+)"/g)].map(match => match[1])
-  const spanSource = readFileSync(new URL('../../../internal/types/knowledge_span.go', import.meta.url), 'utf8')
+  const entrySource = readFileSync(new URL('../../../internal/types/entry.go', import.meta.url), 'utf8')
+  const parseStatuses = [...entrySource.matchAll(/ParseStatus\w+\s*=\s*"([a-z_]+)"/g)].map(match => match[1])
+  const spanSource = readFileSync(new URL('../../../internal/types/entry_span.go', import.meta.url), 'utf8')
   const spanStatuses = [...spanSource.matchAll(/SpanStatus\w+\s*=\s*"([a-z_]+)"/g)].map(match => match[1])
-  const manualStatuses = new Map([...knowledgeSource.matchAll(/(ManualKnowledgeStatus\w+)\s*=\s*"([a-z_]+)"/g)].map(match => [match[1], match[2]]))
-  const createSource = readFileSync(new URL('../../../internal/application/service/knowledge_create.go', import.meta.url), 'utf8')
-  const manualParseStatuses = [...createSource.matchAll(/(?:ParseStatus:\s*|\.ParseStatus\s*=\s*)types\.(ManualKnowledgeStatus\w+)/g)].map(match => {
+  const manualStatuses = new Map([...entrySource.matchAll(/(ManualEntryStatus\w+)\s*=\s*"([a-z_]+)"/g)].map(match => [match[1], match[2]]))
+  const createSource = readFileSync(new URL('../../../internal/application/service/entry_create.go', import.meta.url), 'utf8')
+  const manualParseStatuses = [...createSource.matchAll(/(?:ParseStatus:\s*|\.ParseStatus\s*=\s*)types\.(ManualEntryStatus\w+)/g)].map(match => {
     const value = manualStatuses.get(match[1])
     assert.ok(value, `Resolve the manual parse status ${match[1]}`)
     return value

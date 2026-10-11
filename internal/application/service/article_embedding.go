@@ -15,12 +15,12 @@ import (
 
 // indexArticleEmbedding is also used when rebuilding from the vault. Documents
 // in mine and reports only have chunk vectors; they have no article summary.
-func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, article *types.Knowledge) error {
+func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, article *types.Entry) error {
 	if db == nil || article == nil || article.SourceKind == "mine" || article.SourceKind == "report" {
 		return nil
 	}
 	if article.StructuredSummary == nil || kb == nil || !kb.IndexingStrategy.VectorEnabled {
-		return db.WithContext(ctx).Exec("DELETE FROM article_embeddings WHERE space_id=? AND knowledge_id=?", article.SpaceID, article.ID).Error
+		return db.WithContext(ctx).Exec("DELETE FROM article_embeddings WHERE space_id=? AND entry_id=?", article.SpaceID, article.ID).Error
 	}
 	embedder, err := GetTierEmbeddingModel(ctx, db, models, kb)
 	if err != nil {
@@ -29,7 +29,7 @@ func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.M
 	return saveArticleEmbedding(ctx, db, embedder, article)
 }
 
-func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.Embedder, article *types.Knowledge) error {
+func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.Embedder, article *types.Entry) error {
 	summary := ""
 	if article.StructuredSummary != nil {
 		summary = article.StructuredSummary.RenderText()
@@ -38,7 +38,7 @@ func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.E
 	hash := vaultContentHash(content)
 	var count int64
 	if err := db.WithContext(ctx).Table("article_embeddings").
-		Where("space_id=? AND knowledge_id=? AND model_id=? AND dimension=? AND content_hash=?",
+		Where("space_id=? AND entry_id=? AND model_id=? AND dimension=? AND content_hash=?",
 			article.SpaceID, article.ID, embedder.GetModelID(), embedder.GetDimensions(), hash).Count(&count).Error; err != nil {
 		return err
 	}
@@ -68,9 +68,9 @@ func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.E
 			return err
 		}
 		return tx.Exec(`INSERT INTO article_embeddings
-		(space_id, knowledge_id, knowledge_base_id, model_id, dimension, embedding, content_hash)
+		(space_id, entry_id, knowledge_base_id, model_id, dimension, embedding, content_hash)
 		VALUES (?, ?, ?, ?, ?, ?::halfvec, ?)
-		ON CONFLICT (knowledge_id) DO UPDATE SET
+		ON CONFLICT (entry_id) DO UPDATE SET
 		model_id=EXCLUDED.model_id, dimension=EXCLUDED.dimension,
 		embedding=EXCLUDED.embedding, content_hash=EXCLUDED.content_hash, updated_at=NOW()`,
 			article.SpaceID, article.ID, article.KnowledgeBaseID, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error

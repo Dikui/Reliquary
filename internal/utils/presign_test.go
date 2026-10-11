@@ -103,7 +103,7 @@ func TestValidateKBScopedStoragePath(t *testing.T) {
 	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/local://10008/exports/img.jpg", spaceID))
 	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/s3://bucket/ap-test/10008/exports/a.png", spaceID))
 
-	assert.Error(t, ValidateKBScopedStoragePath("local://10008/knowledge-id/123.pdf", spaceID))
+	assert.Error(t, ValidateKBScopedStoragePath("local://10008/entry-id/123.pdf", spaceID))
 	assert.Error(t, ValidateKBScopedStoragePath("local://9999/exports/img.jpg", spaceID))
 	assert.Error(t, ValidateKBScopedStoragePath("local://10008/other/img.jpg", spaceID))
 	assert.Error(t, ValidateKBScopedStoragePath("storage://backend-a/local://9999/exports/img.jpg", spaceID))

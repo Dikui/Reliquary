@@ -11,7 +11,7 @@ import (
 )
 
 func TestBackgroundTaskMiddlewareUsesPersonalSpace(t *testing.T) {
-	for _, payload := range []string{`{"tenant_id":1}`, `{"knowledge_id":"article-1"}`, `{}`} {
+	for _, payload := range []string{`{"tenant_id":1}`, `{"entry_id":"article-1"}`, `{}`} {
 		t.Run(payload, func(t *testing.T) {
 			called := false
 			handler := backgroundTaskMiddleware()(queue.HandlerFunc(func(ctx context.Context, task *queue.Task) error {

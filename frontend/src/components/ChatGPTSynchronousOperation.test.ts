@@ -10,7 +10,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
-import { CONTENT_TYPES } from '../types/knowledgeClassification'
+import { CONTENT_TYPES } from '../types/entryClassification'
 import { translatePersonalServerMessage } from '../utils/personalServerError'
 
 const require = createRequire(import.meta.url)
@@ -62,15 +62,15 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const article = { id: 'article/quota', source_kind: 'article', content_type: 'tutorial', processing_mode: 'summary_only', parse_status: 'completed', processing_review_status: 'pending', processing_review_content_type: 'event', metadata: {}, title: 'Preserved article' }
       const before = structuredClone(article)
       const modules = {
-        '@/types/knowledgeClassification': { CONTENT_TYPES }, 'tdesign-vue-next': { MessagePlugin: { success() { assert.fail('a paused correction cannot report success') } } },
+        '@/types/entryClassification': { CONTENT_TYPES }, 'tdesign-vue-next': { MessagePlugin: { success() { assert.fail('a paused correction cannot report success') } } },
         '@/utils/security': { isValidURL: () => true },
         '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
-        '@/api/knowledge-base': { getKnowledgeDetails: async () => ({ success: true, data: article }) },
-        './KnowledgeStarToggle.vue': moduleOf(defineComponent({ setup: () => () => null })),
-        '@/api/knowledge-judgments': evaluate(source('../api/knowledge-judgments.ts'), { '@/utils/request': request }),
-        '@/api/knowledge-review': evaluate(source('../api/knowledge-review.ts'), { '@/utils/request': request }),
+        '@/api/knowledge-base': { getEntryDetails: async () => ({ success: true, data: article }) },
+        './EntryStarToggle.vue': moduleOf(defineComponent({ setup: () => () => null })),
+        '@/api/entry-judgments': evaluate(source('../api/entry-judgments.ts'), { '@/utils/request': request }),
+        '@/api/entry-review': evaluate(source('../api/entry-review.ts'), { '@/utils/request': request }),
       }
-      const view = component(operation === 'content-type' ? './KnowledgeArticleJudgments.vue' : './KnowledgeReviewActions.vue', modules)
+      const view = component(operation === 'content-type' ? './EntryArticleJudgments.vue' : './ReviewActions.vue', modules)
       const setup = view.setup
       view.setup = (props: object, ctx: object) => {
         const state = setup(props, ctx)
@@ -83,7 +83,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         return state
       }
       let emittedChanges = 0
-      const app = createSSRApp(view, { knowledge: article, onUpdated: () => emittedChanges++, onChanged: () => emittedChanges++ })
+      const app = createSSRApp(view, { entry: article, onUpdated: () => emittedChanges++, onChanged: () => emittedChanges++ })
       app.use(createI18n({ legacy: false, locale, messages }))
       const stub = defineComponent({ props: ['visible'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', attrs, slots.default?.()) })
       for (const name of ['t-button', 't-select', 't-input', 't-dialog']) app.component(name, stub)
@@ -95,7 +95,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(html.includes(messages[locale].chatgpt.synchronousRetry))
       assert.equal(emittedChanges, 0)
       assert.equal(calls.length, 1)
-      assert.equal(calls[0].url, `/api/v1/knowledge/article%2Fquota/${operation}`)
+      assert.equal(calls[0].url, `/api/v1/entries/article%2Fquota/${operation}`)
       assert.equal(calls[0].method, operation === 'content-type' ? 'put' : 'post')
       assert.equal(calls[0].headers.Authorization, 'Bearer reliquary-user-fixture')
       assert.equal(calls[0].headers['Accept-Language'], locale)

@@ -40,13 +40,13 @@ func (s *EntityService) requireSpace(ctx context.Context) (uint64, error) {
 
 // ResolveEntities resolves caller-provided candidates and records article associations.
 // It is intentionally independent from article intake.
-func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string, input []types.EntityCandidate) ([]types.Entity, error) {
+func (s *EntityService) ResolveEntities(ctx context.Context, entryID string, input []types.EntityCandidate) ([]types.Entity, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var article types.Knowledge
-	if err = s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, knowledgeID).First(&article).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	var article types.Entry
+	if err = s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, entryID).First(&article).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, werrors.NewNotFoundError("article not found")
 	} else if err != nil {
 		return nil, err
@@ -90,15 +90,15 @@ func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string,
 	if err != nil {
 		return nil, err
 	}
-	planned, _, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, spaceID, knowledgeID, candidates)
+	planned, _, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, spaceID, entryID, candidates)
 	if err != nil {
 		return nil, err
 	}
 	resolvedIDs := []string{}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Recheck the article while writing so a concurrent deletion cannot leave mentions.
-		var current types.Knowledge
-		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("id=? AND space_id=?", knowledgeID, spaceID).First(&current).Error; err != nil {
+		var current types.Entry
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("id=? AND space_id=?", entryID, spaceID).First(&current).Error; err != nil {
 			return err
 		}
 		ids, err := persistEntities(tx, planned)
@@ -108,8 +108,8 @@ func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string,
 		for _, entity := range planned {
 			id := ids[entity.ID]
 			resolvedIDs = appendUniqueEntityString(resolvedIDs, id)
-			link := types.KnowledgeEntity{SpaceID: spaceID, KnowledgeID: knowledgeID, EntityID: id, CreatedAt: time.Now()}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "knowledge_id"}, {Name: "entity_id"}}, DoNothing: true}).Create(&link).Error; err != nil {
+			link := types.EntryEntity{SpaceID: spaceID, EntryID: entryID, EntityID: id, CreatedAt: time.Now()}
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "entry_id"}, {Name: "entity_id"}}, DoNothing: true}).Create(&link).Error; err != nil {
 				return err
 			}
 		}
@@ -174,7 +174,7 @@ func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) (
 	}
 	query := s.db.WithContext(ctx).Model(&types.Entity{}).Where("entities.space_id=? AND entities.merged_into_id=''", spaceID)
 	if kbID != "" {
-		query = query.Where(`EXISTS (SELECT 1 FROM knowledge_entities links JOIN knowledges k ON k.id=links.knowledge_id AND k.space_id=links.space_id WHERE links.space_id=entities.space_id AND links.entity_id=entities.id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)`, kbID)
+		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities links JOIN entries k ON k.id=links.entry_id AND k.space_id=links.space_id WHERE links.space_id=entities.space_id AND links.entity_id=entities.id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)`, kbID)
 	}
 	if q.EntityType != "" {
 		query = query.Where("entities.entity_type=?", types.NormalizeEntityType(q.EntityType))
@@ -207,8 +207,8 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 	if err := s.loadAliases(ctx, spaceID, entities); err != nil {
 		return nil, err
 	}
-	result := &types.EntityDetail{Entity: entities[0], Knowledge: []types.Knowledge{}}
-	err = s.db.WithContext(ctx).Model(&types.Knowledge{}).Joins("JOIN knowledge_entities links ON links.knowledge_id=knowledges.id AND links.space_id=knowledges.space_id").Where("knowledges.space_id=? AND links.entity_id=?", spaceID, entity.ID).Order("knowledges.created_at DESC,knowledges.id").Find(&result.Knowledge).Error
+	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}}
+	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND links.entity_id=?", spaceID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
 	return result, err
 }
 func (s *EntityService) ListMergeRecords(ctx context.Context, id string) ([]types.EntityMergeRecord, error) {

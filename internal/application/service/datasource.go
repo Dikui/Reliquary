@@ -32,7 +32,7 @@ type DataSourceService struct {
 	db                *gorm.DB
 	dsRepo            interfaces.DataSourceRepository
 	syncLogRepo       interfaces.SyncLogRepository
-	knowledgeService  interfaces.KnowledgeService
+	entryService      interfaces.EntryService
 	kbService         interfaces.KnowledgeBaseService
 	taskEnqueuer      interfaces.TaskEnqueuer
 	connectorRegistry *datasource.ConnectorRegistry
@@ -45,7 +45,7 @@ func NewDataSourceService(
 	db *gorm.DB,
 	dsRepo interfaces.DataSourceRepository,
 	syncLogRepo interfaces.SyncLogRepository,
-	knowledgeService interfaces.KnowledgeService,
+	entryService interfaces.EntryService,
 	kbService interfaces.KnowledgeBaseService,
 	taskEnqueuer interfaces.TaskEnqueuer,
 	connectorRegistry *datasource.ConnectorRegistry,
@@ -57,7 +57,7 @@ func NewDataSourceService(
 		db:                db,
 		dsRepo:            dsRepo,
 		syncLogRepo:       syncLogRepo,
-		knowledgeService:  knowledgeService,
+		entryService:      entryService,
 		kbService:         kbService,
 		taskEnqueuer:      taskEnqueuer,
 		connectorRegistry: connectorRegistry,
@@ -778,7 +778,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *taskqueue.Tas
 		Total: len(items), Metrics: config.FetchMetrics,
 	}
 
-	// Set space context so KnowledgeService can resolve space info correctly
+	// Set space context so EntryService can resolve space info correctly
 	ctx = context.WithValue(ctx, types.SpaceIDContextKey, types.SingleSpaceID)
 
 	space, err := s.spaceRepo.GetSpaceByID(ctx, ds.SpaceID)
@@ -905,12 +905,12 @@ func (s *DataSourceService) applyFetchedItem(
 		}
 		// Perform real KB deletion, scoped to items owned by this data source
 		// so identical external IDs from different data sources cannot collide.
-		repo := s.knowledgeService.GetRepository()
+		repo := s.entryService.GetRepository()
 		existing, lookupErr := repo.FindByDataSourceExternalID(
 			ctx, ds.SpaceID, ds.KnowledgeBaseID, ds.ID, item.ExternalID,
 		)
 		if lookupErr != nil {
-			logger.Errorf(ctx, "failed to find deleted knowledge for external_id=%s (ds=%s, kb=%s): %v",
+			logger.Errorf(ctx, "failed to find deleted entry for external_id=%s (ds=%s, kb=%s): %v",
 				item.ExternalID, ds.ID, ds.KnowledgeBaseID, lookupErr)
 			result.Failed++
 			result.DeletionFailed++
@@ -927,13 +927,13 @@ func (s *DataSourceService) applyFetchedItem(
 			result.Skipped++
 			return
 		}
-		if deleteErr := s.knowledgeService.DeleteKnowledge(ctx, existing.ID); deleteErr != nil {
+		if deleteErr := s.entryService.DeleteEntry(ctx, existing.ID); deleteErr != nil {
 			// The cursor is already past this item, so a failed deletion normally
 			// retries only on a later full sync. Counted separately so the
 			// sync-log message can warn the operator about this gap.
 			result.Failed++
 			result.DeletionFailed++
-			logger.Errorf(ctx, "failed to delete knowledge %s for external_id=%s (ds=%s): %v",
+			logger.Errorf(ctx, "failed to delete entry %s for external_id=%s (ds=%s): %v",
 				existing.ID, item.ExternalID, ds.ID, deleteErr)
 			recordSyncError(result, types.SyncItemError{
 				Title:   item.Title,
@@ -942,10 +942,10 @@ func (s *DataSourceService) applyFetchedItem(
 			})
 			return
 		}
-		if herr := repo.HardDeleteKnowledge(ctx, ds.SpaceID, existing.ID); herr != nil {
+		if herr := repo.HardDeleteEntry(ctx, ds.SpaceID, existing.ID); herr != nil {
 			result.Failed++
 			result.DeletionFailed++
-			logger.Errorf(ctx, "failed to hard-delete knowledge %s for external_id=%s (ds=%s): %v",
+			logger.Errorf(ctx, "failed to hard-delete entry %s for external_id=%s (ds=%s): %v",
 				existing.ID, item.ExternalID, ds.ID, herr)
 			recordSyncError(result, types.SyncItemError{
 				Title:   item.Title,
@@ -973,7 +973,7 @@ func (s *DataSourceService) applyFetchedItem(
 
 	isUpdate, err := s.ingestItem(ctx, ds, item)
 	if err != nil {
-		var dupErr *types.DuplicateKnowledgeError
+		var dupErr *types.DuplicateEntryError
 		switch {
 		case errors.As(err, &dupErr):
 			// Duplicate file/URL is not a failure — count as skipped.
@@ -1251,8 +1251,8 @@ func (s *DataSourceService) validateDataSourceConfig(ctx context.Context, ds *ty
 // identities are skipped so a later source change cannot replace an original.
 //
 // Routing logic:
-//   - Has Content bytes → CreateKnowledgeFromFile (走完整的文档解析 pipeline)
-//   - Has URL only      → CreateKnowledgeFromURL  (让 Reliquary 下载并解析)
+//   - Has Content bytes → CreateEntryFromFile (走完整的文档解析 pipeline)
+//   - Has URL only      → CreateEntryFromURL  (让 Reliquary 下载并解析)
 //
 // Returns (isUpdate, error) — isUpdate is true when an existing item was replaced.
 func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource, item *types.FetchedItem) (bool, error) {
@@ -1278,7 +1278,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		}
 		// ponytail: compare stored Markdown, not remote image bytes; add image fingerprints if in-place image edits matter.
 		contentHash := fmt.Sprintf("%x", sha256.Sum256(item.Content))
-		existing, err := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
+		existing, err := s.entryService.GetRepository().FindByDataSourceExternalID(
 			ctx, ds.SpaceID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
 		if err != nil {
 			return false, err
@@ -1286,8 +1286,8 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		if existing != nil {
 			return false, types.NewDuplicateURLError(existing)
 		}
-		payload := &types.ManualKnowledgePayload{
-			Title: item.Title, Content: string(item.Content), Status: types.ManualKnowledgeStatusPublish,
+		payload := &types.ManualEntryPayload{
+			Title: item.Title, Content: string(item.Content), Status: types.ManualEntryStatusPublish,
 			SourceMetadata: map[string]string{
 				"external_id": item.ExternalID, "datasource_id": ds.ID, "source_resource_id": item.SourceResourceID,
 				"content_sha256": contentHash,
@@ -1299,21 +1299,21 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		if reason := metadata["intake_reject_reason"]; reason != "" {
 			payload.SourceMetadata["intake_reject_reason"] = reason
 		}
-		_, err = s.knowledgeService.CreateKnowledgeFromManual(ctx, ds.KnowledgeBaseID, payload, channel)
+		_, err = s.entryService.CreateEntryFromManual(ctx, ds.KnowledgeBaseID, payload, channel)
 		return false, err
 	}
 
 	// Preserve previously collected originals when a connector sees them again.
 	isUpdate := false
-	var existing *types.Knowledge
+	var existing *types.Entry
 	if item.ExternalID != "" {
-		repo := s.knowledgeService.GetRepository()
+		repo := s.entryService.GetRepository()
 		// Scope the lookup to items owned by this data source so identical
 		// external IDs from two data sources cannot collide or overwrite each
 		// other during updates.
 		found, err := repo.FindByDataSourceExternalID(ctx, ds.SpaceID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
 		if err != nil {
-			logger.Warnf(ctx, "failed to check existing knowledge for external_id=%s: %v", item.ExternalID, err)
+			logger.Warnf(ctx, "failed to check existing entry for external_id=%s: %v", item.ExternalID, err)
 			// Non-fatal: proceed with creation (may produce duplicate)
 		} else {
 			existing = found
@@ -1323,13 +1323,13 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		return false, types.NewDuplicateFileError(existing)
 	}
 
-	// Case 1: content already fetched → build a FileHeader from bytes and call CreateKnowledgeFromFile
+	// Case 1: content already fetched → build a FileHeader from bytes and call CreateEntryFromFile
 	if len(item.Content) > 0 {
 		fh, err := bytesToFileHeader(item.Content, item.FileName)
 		if err != nil {
 			return isUpdate, fmt.Errorf("build file header: %w", err)
 		}
-		if _, err := s.knowledgeService.CreateKnowledgeFromFile(
+		if _, err := s.entryService.CreateEntryFromFile(
 			ctx,
 			ds.KnowledgeBaseID,
 			fh,
@@ -1339,7 +1339,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			channel,
 			nil,
 		); err != nil {
-			var dupErr *types.DuplicateKnowledgeError
+			var dupErr *types.DuplicateEntryError
 			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) && !isUpdate {
 				// Identical content is already present in the KB under THIS node's
 				// own external_id, so the parent effectively exists — reconcile the
@@ -1356,13 +1356,13 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 
 	// Case 2: only a remote URL — let Reliquary handle downloading and parsing
 	if item.URL != "" {
-		var created *types.Knowledge
+		var created *types.Entry
 		var err error
-		created, err = s.knowledgeService.CreateKnowledgeFromURL(ctx, ds.KnowledgeBaseID, item.URL, item.FileName, "", nil,
+		created, err = s.entryService.CreateEntryFromURL(ctx, ds.KnowledgeBaseID, item.URL, item.FileName, "", nil,
 			item.Title, channel, nil)
 
 		if err != nil {
-			var dupErr *types.DuplicateKnowledgeError
+			var dupErr *types.DuplicateEntryError
 			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) && !isUpdate {
 				// Identical content is already present in the KB under THIS node's
 				// own external_id, so the parent effectively exists — reconcile the
@@ -1371,14 +1371,14 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			}
 			return isUpdate, err
 		}
-		// URL-created knowledge has no metadata, so a later deletion could
+		// URL-created entry has no metadata, so a later deletion could
 		// never find it. Attach the datasource keys on fresh creation only;
 		// the duplicate path reuses an existing row without altering its source.
 		if created != nil {
-			if err := mergeStringMetadataIntoKnowledge(created, metadata); err != nil {
+			if err := mergeStringMetadataIntoEntry(created, metadata); err != nil {
 				return isUpdate, err
 			}
-			if err := s.knowledgeService.GetRepository().UpdateKnowledge(ctx, created); err != nil {
+			if err := s.entryService.GetRepository().UpdateEntry(ctx, created); err != nil {
 				return isUpdate, fmt.Errorf("attach datasource metadata: %w", err)
 			}
 		}
@@ -1394,19 +1394,19 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 // dupIsSameNode reports whether a duplicate-content error means the parent still
 // exists in the KB *under this item's own external_id* — i.e. a content-dedup hit
 // against this same node, so reconciling its subtree is safe. File deduplication
-// keys on file_hash plus file_type (CheckKnowledgeExists), so an updated node whose rebuilt body
-// happens to hash-collide with a DIFFERENT knowledge item (another node, or a
+// keys on file_hash plus file_type (CheckEntryExists), so an updated node whose rebuilt body
+// happens to hash-collide with a DIFFERENT entry item (another node, or a
 // manually-uploaded file with no external_id) would otherwise sweep this node's
 // children even though its own parent row was just deleted for the update and
 // never recreated — deleting those children with no parent to replace them. In
 // that case the matched row's external_id differs (or is absent), so we skip the
 // sweep and leave the children intact.
-func dupIsSameNode(dupErr *types.DuplicateKnowledgeError, item *types.FetchedItem) bool {
-	return dupErr != nil && dupErr.Knowledge != nil &&
-		dupErr.Knowledge.GetMetadata()["external_id"] == item.ExternalID
+func dupIsSameNode(dupErr *types.DuplicateEntryError, item *types.FetchedItem) bool {
+	return dupErr != nil && dupErr.Entry != nil &&
+		dupErr.Entry.GetMetadata()["external_id"] == item.ExternalID
 }
 
-// sweepStaleSubtree deletes STALE sub-items of item — knowledge whose external_id
+// sweepStaleSubtree deletes STALE sub-items of item — entry whose external_id
 // is prefixed with "<item.ExternalID>#" (e.g. attachment children of a docx node)
 // that is NOT listed in item.SubtreeKeep, i.e. no longer present in the source.
 //
@@ -1422,7 +1422,7 @@ func (s *DataSourceService) sweepStaleSubtree(ctx context.Context, ds *types.Dat
 	if !item.ReplacesSubtree || item.ExternalID == "" {
 		return
 	}
-	repo := s.knowledgeService.GetRepository()
+	repo := s.entryService.GetRepository()
 	children, err := repo.FindByMetadataKeyPrefix(ctx, ds.SpaceID, ds.KnowledgeBaseID, "external_id", types.SubtreeChildPrefix(item.ExternalID))
 	if err != nil {
 		logger.Warnf(ctx, "failed to list subtree of external_id=%s: %v", item.ExternalID, err)
@@ -1456,17 +1456,17 @@ func (s *DataSourceService) sweepStaleSubtree(ctx context.Context, ds *types.Dat
 	}
 	// Batch the deletion so a node whose attachment set shrank from N pays one
 	// round of the delete fan-out rather than N sequential ones.
-	if derr := s.knowledgeService.DeleteKnowledgeList(ctx, ids); derr != nil {
+	if derr := s.entryService.DeleteEntryList(ctx, ids); derr != nil {
 		logger.Warnf(ctx, "failed to delete %d stale sub-item(s) of external_id=%s: %v",
 			len(ids), item.ExternalID, derr)
-	} else if herr := repo.HardDeleteKnowledgeList(ctx, ds.SpaceID, ids); herr != nil {
+	} else if herr := repo.HardDeleteEntryList(ctx, ds.SpaceID, ids); herr != nil {
 		logger.Warnf(ctx, "failed to hard-delete %d stale sub-item(s) of external_id=%s: %v",
 			len(ids), item.ExternalID, herr)
 	}
 }
 
 // bytesToFileHeader wraps a []byte into a *multipart.FileHeader so it can be
-// consumed by KnowledgeService.CreateKnowledgeFromFile.
+// consumed by EntryService.CreateEntryFromFile.
 func bytesToFileHeader(data []byte, filename string) (*multipart.FileHeader, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -1511,10 +1511,10 @@ func timePtr(t time.Time) *time.Time {
 
 const maxSyncResultErrors = 100
 
-func mergeStringMetadataIntoKnowledge(knowledge *types.Knowledge, metadata map[string]string) error {
+func mergeStringMetadataIntoEntry(entry *types.Entry, metadata map[string]string) error {
 	var raw map[string]json.RawMessage
-	if len(knowledge.Metadata) > 0 {
-		if err := json.Unmarshal(knowledge.Metadata, &raw); err != nil {
+	if len(entry.Metadata) > 0 {
+		if err := json.Unmarshal(entry.Metadata, &raw); err != nil {
 			return err
 		}
 	}
@@ -1532,6 +1532,6 @@ func mergeStringMetadataIntoKnowledge(knowledge *types.Knowledge, metadata map[s
 	if err != nil {
 		return err
 	}
-	knowledge.Metadata = types.JSON(encoded)
+	entry.Metadata = types.JSON(encoded)
 	return nil
 }

@@ -77,11 +77,11 @@ func newTopicManagementService(t *testing.T, h *articleProcessingHarness) (*Topi
 	ctx := types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalWebUser, ID: "topic-owner"})
 	return svc, model, ctx
 }
-func historicalTopicArticles(t *testing.T, h *articleProcessingHarness, count int) []types.Knowledge {
+func historicalTopicArticles(t *testing.T, h *articleProcessingHarness, count int) []types.Entry {
 	t.Helper()
-	articles := make([]types.Knowledge, 0, count)
+	articles := make([]types.Entry, 0, count)
 	for i := 0; i < count; i++ {
-		article := types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: fmt.Sprintf("Historical article %02d", i), Description: fmt.Sprintf("Historical summary %02d about products", i), SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+		article := types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: fmt.Sprintf("Historical article %02d", i), Description: fmt.Sprintf("Historical summary %02d about products", i), SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 		require.NoError(t, h.db.Create(&article).Error)
 		articles = append(articles, article)
 	}
@@ -96,10 +96,10 @@ func runTopicJob(t *testing.T, svc *TopicService, ctx context.Context, id string
 	require.NoError(t, err)
 	return job
 }
-func topicLinks(t *testing.T, svc *TopicService, topicID string) []types.KnowledgeTopic {
+func topicLinks(t *testing.T, svc *TopicService, topicID string) []types.EntryTopic {
 	t.Helper()
-	result := []types.KnowledgeTopic{}
-	require.NoError(t, svc.db.Where("topic_id=?", topicID).Order("knowledge_id").Find(&result).Error)
+	result := []types.EntryTopic{}
+	require.NoError(t, svc.db.Where("topic_id=?", topicID).Order("entry_id").Find(&result).Error)
 	return result
 }
 func operationCount(t *testing.T, svc *TopicService) int64 {
@@ -128,7 +128,7 @@ func TestTopicManagementUniqueScopeDeletionRefreshAndUserLogs(t *testing.T) {
 	other, err := svc.CreateTopic(otherCtx, &types.Topic{Name: "Research"})
 	require.NoError(t, err)
 	require.Error(t, svc.DeleteTopic(otherCtx, topic.ID))
-	require.Error(t, svc.SetUserKnowledgeTopics(ctx, article.ID, []string{other.ID}))
+	require.Error(t, svc.SetUserEntryTopics(ctx, article.ID, []string{other.ID}))
 	job := runTopicJob(t, svc, ctx, topic.ID)
 	require.Equal(t, "completed", job.Status)
 	require.Len(t, topicLinks(t, svc, topic.ID), 1)
@@ -152,11 +152,11 @@ func TestTopicManagementUniqueScopeDeletionRefreshAndUserLogs(t *testing.T) {
 	_, err = svc.UpdateTopic(ctx, topic.ID, &emptyName, nil)
 	require.Error(t, err)
 	apiCtx := types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "fixture-key"})
-	require.NoError(t, svc.SetUserKnowledgeTopics(apiCtx, article.ID, []string{topic.ID}))
+	require.NoError(t, svc.SetUserEntryTopics(apiCtx, article.ID, []string{topic.ID}))
 	links := topicLinks(t, svc, topic.ID)
 	require.Len(t, links, 1)
 	require.Equal(t, types.TopicSourceUser, links[0].Source)
-	require.NoError(t, svc.ReplaceKnowledgeTopics(ctx, article.ID, nil))
+	require.NoError(t, svc.ReplaceEntryTopics(ctx, article.ID, nil))
 	require.Len(t, topicLinks(t, svc, topic.ID), 1, "reprocessing keeps a manual topic")
 	var apiLog types.OperationLog
 	require.NoError(t, h.db.Where("operation_type='correct_topics'").First(&apiLog).Error)
@@ -186,9 +186,9 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 	svc, model, ctx := newTopicManagementService(t, h)
 	articles := historicalTopicArticles(t, h, 65)
 	for _, kind := range []string{"mine", "report"} {
-		require.NoError(t, h.db.Create(&types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.KnowledgeTypeManual, SourceKind: kind, Title: "Personal document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
+		require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.EntryTypeManual, SourceKind: kind, Title: "Personal document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
 	}
-	require.NoError(t, h.db.Create(&types.Knowledge{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: "Rejected article", Description: "Also about products", ParseStatus: types.ParseStatusRejected}).Error)
+	require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: "Rejected article", Description: "Also about products", ParseStatus: types.ParseStatusRejected}).Error)
 	_, err := svc.CreateTopic(ctx, &types.Topic{Name: "Other topic", Description: "Other description"})
 	require.NoError(t, err)
 	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Target topic", Description: "Product announcements"})
@@ -221,7 +221,7 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 		require.Equal(t, types.TopicSourceModel, link.Source)
 	}
 	require.Equal(t, int64(2), operationCount(t, svc))
-	require.NoError(t, svc.SetUserKnowledgeTopics(ctx, articles[0].ID, []string{topic.ID}))
+	require.NoError(t, svc.SetUserEntryTopics(ctx, articles[0].ID, []string{topic.ID}))
 	description := "none"
 	_, err = svc.UpdateTopic(ctx, topic.ID, nil, &description)
 	require.NoError(t, err)
@@ -233,7 +233,7 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 	require.Len(t, model.calls(), 6)
 	links = topicLinks(t, svc, topic.ID)
 	require.Len(t, links, 1)
-	require.Equal(t, articles[0].ID, links[0].KnowledgeID)
+	require.Equal(t, articles[0].ID, links[0].EntryID)
 	require.Equal(t, int64(4), operationCount(t, svc), "background reclassification never writes an operation log")
 }
 

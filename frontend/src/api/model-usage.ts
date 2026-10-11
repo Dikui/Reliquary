@@ -134,5 +134,5 @@ export function modelUsageResourceRoute(
   id: string,
   bindings: readonly string[] = [],
 ) {
-  return { path: '/platform/settings', query: { section: 'knowledge', subsection: modelUsageKnowledgeBaseSection(bindings) } }
+  return { path: '/platform/settings', query: { section: 'knowledge-base', subsection: modelUsageKnowledgeBaseSection(bindings) } }
 }

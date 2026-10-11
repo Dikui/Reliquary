@@ -36,7 +36,7 @@ const (
 	// parsing the backwards-compatible English error message.
 	ErrModelInUse ErrorCode = 2300
 
-	ErrKnowledgeSearchUnavailable ErrorCode = 2400
+	ErrSearchUnavailable ErrorCode = 2400
 
 	// Add more error codes here
 )
@@ -206,7 +206,7 @@ func IsAppError(err error) (*AppError, bool) {
 	return appErr, ok
 }
 
-// NewKnowledgeSearchUnavailableError hides dependency details from search clients.
-func NewKnowledgeSearchUnavailableError() *AppError {
-	return &AppError{Code: ErrKnowledgeSearchUnavailable, Message: "Knowledge search is temporarily unavailable. Please retry.", HTTPCode: http.StatusServiceUnavailable}
+// NewSearchUnavailableError hides dependency details from search clients.
+func NewSearchUnavailableError() *AppError {
+	return &AppError{Code: ErrSearchUnavailable, Message: "Entry search is temporarily unavailable. Please retry.", HTTPCode: http.StatusServiceUnavailable}
 }

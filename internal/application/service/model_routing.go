@@ -33,7 +33,7 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 		if err := db.WithContext(ctx).Where("id = ? AND (space_id = ? OR is_builtin = true)", id, types.MustSpaceIDFromContext(ctx)).First(&model).Error; err != nil {
 			return fmt.Errorf("%s model is unavailable: %w", tier, err)
 		}
-		expected := types.ModelTypeKnowledgeQA
+		expected := types.ModelTypeGeneration
 		if tier == types.ModelTierEmbedding {
 			expected = types.ModelTypeEmbedding
 		}

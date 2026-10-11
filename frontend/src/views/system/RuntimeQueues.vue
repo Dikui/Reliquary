@@ -709,11 +709,11 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
       value: task.knowledge_base_id,
     })
   }
-  if (task.knowledge_id) {
+  if (task.entry_id) {
     refs.push({
-      key: 'knowledge',
+      key: 'entry',
       label: t('system.globalSettings.runtime.tasks.knowledgeLabel'),
-      value: task.knowledge_id,
+      value: task.entry_id,
     })
   }
   if (task.task_id) {
@@ -727,8 +727,8 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   if (task.target_kb_id) refs.push({ key: 'target-kb', label: t('system.globalSettings.runtime.tasks.targetKBLabel'), value: task.target_kb_id })
   if (task.data_source_id) refs.push({ key: 'datasource', label: t('system.globalSettings.runtime.tasks.dataSourceLabel'), value: task.data_source_id })
   if (task.sync_log_id) refs.push({ key: 'sync-log', label: t('system.globalSettings.runtime.tasks.syncLogLabel'), value: task.sync_log_id })
-  if (task.knowledge_count) {
-    refs.push({ key: 'knowledge-count', label: t('system.globalSettings.runtime.tasks.knowledgeCountLabel'), value: String(task.knowledge_count) })
+  if (task.entry_count) {
+    refs.push({ key: 'entry-count', label: t('system.globalSettings.runtime.tasks.knowledgeCountLabel'), value: String(task.entry_count) })
   }
   if (task.space_id) {
     refs.push({

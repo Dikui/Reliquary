@@ -74,11 +74,11 @@ func newVaultDocumentHarness(t *testing.T, wait time.Duration) *vaultDocumentHar
 	return &vaultDocumentHarness{h, s, e, root}
 }
 
-func (h *vaultDocumentHarness) byPath(t *testing.T, path string) *types.Knowledge {
+func (h *vaultDocumentHarness) byPath(t *testing.T, path string) *types.Entry {
 	t.Helper()
-	var knowledge types.Knowledge
-	require.NoError(t, h.db.Where("vault_path=?", path).First(&knowledge).Error)
-	return &knowledge
+	var entry types.Entry
+	require.NoError(t, h.db.Where("vault_path=?", path).First(&entry).Error)
+	return &entry
 }
 
 func (h *vaultDocumentHarness) write(t *testing.T, path, body string) string {
@@ -92,7 +92,7 @@ func (h *vaultDocumentHarness) write(t *testing.T, path, body string) string {
 func (h *vaultDocumentHarness) assertSearch(t *testing.T, id, term string) {
 	t.Helper()
 	hits, err := h.documents.retrieval.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType,
-		KnowledgeBaseIDs: []string{h.kb.ID}, KnowledgeIDs: []string{id}, Query: term, TopK: 10}})
+		KnowledgeBaseIDs: []string{h.kb.ID}, EntryIDs: []string{id}, Query: term, TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 }
@@ -103,7 +103,7 @@ func TestVaultMineSettlesAndOnlyChangedChunkIsEmbedded(t *testing.T) {
 	path := h.write(t, "mine/nested/note.md", body)
 	require.NoError(t, h.documents.Scan(h.ctx, false))
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
 	require.Zero(t, count, "an actively edited document must not be indexed")
 	time.Sleep(90 * time.Millisecond)
 	require.NoError(t, h.documents.Scan(h.ctx, false))
@@ -113,7 +113,7 @@ func TestVaultMineSettlesAndOnlyChangedChunkIsEmbedded(t *testing.T) {
 	require.Empty(t, document.ContentType)
 	require.Nil(t, document.StructuredSummary)
 	var old []*types.Chunk
-	require.NoError(t, h.db.Where("knowledge_id=?", document.ID).Order("chunk_index").Find(&old).Error)
+	require.NoError(t, h.db.Where("entry_id=?", document.ID).Order("chunk_index").Find(&old).Error)
 	require.Len(t, old, 3, "heading boundaries should isolate the changed paragraph")
 	require.Equal(t, len(old), h.embedder.inputCount())
 	h.assertSearch(t, document.ID, "bravo")
@@ -124,7 +124,7 @@ func TestVaultMineSettlesAndOnlyChangedChunkIsEmbedded(t *testing.T) {
 	time.Sleep(90 * time.Millisecond)
 	require.NoError(t, h.documents.Scan(h.ctx, false))
 	var current []*types.Chunk
-	require.NoError(t, h.db.Where("knowledge_id=?", document.ID).Order("chunk_index").Find(&current).Error)
+	require.NoError(t, h.db.Where("entry_id=?", document.ID).Order("chunk_index").Find(&current).Error)
 	require.Len(t, current, 3)
 	require.Equal(t, len(old)+1, h.embedder.inputCount(), "only the changed hash needs a new vector")
 	kept := 0
@@ -143,9 +143,9 @@ func TestVaultMineSettlesAndOnlyChangedChunkIsEmbedded(t *testing.T) {
 	require.NoError(t, h.documents.Scan(h.ctx, false))
 	require.Equal(t, len(old)+1, h.embedder.inputCount(), "unchanged files do not invoke the model")
 	var relations int64
-	require.NoError(t, h.db.Model(&types.KnowledgeEntity{}).Count(&relations).Error)
+	require.NoError(t, h.db.Model(&types.EntryEntity{}).Count(&relations).Error)
 	require.Zero(t, relations)
-	require.NoError(t, h.db.Model(&types.KnowledgeTopic{}).Count(&relations).Error)
+	require.NoError(t, h.db.Model(&types.EntryTopic{}).Count(&relations).Error)
 	require.Zero(t, relations)
 }
 
@@ -154,31 +154,31 @@ func TestVaultMineWatcherRenameAndDeleteCleanRecordsAndVectors(t *testing.T) {
 	// The preexisting file verifies startup schedules stabilization without an event.
 	path := h.write(t, "mine/start.md", "# First heading\n\nwatchfixture searchable paragraph")
 	require.NoError(t, h.documents.Start(h.ctx))
-	var first types.Knowledge
+	var first types.Entry
 	require.Eventually(t, func() bool {
 		return h.db.Where("vault_path=? AND parse_status=?", "mine/start.md", types.ParseStatusCompleted).First(&first).Error == nil
 	}, 3*time.Second, 20*time.Millisecond)
 	renamed := filepath.Join(h.root, "mine", "renamed.md")
 	require.NoError(t, os.Rename(path, renamed))
-	var second types.Knowledge
+	var second types.Entry
 	require.Eventually(t, func() bool {
 		var count int64
-		if h.db.Model(&types.Knowledge{}).Where("id=?", first.ID).Count(&count).Error != nil || count != 0 {
+		if h.db.Model(&types.Entry{}).Where("id=?", first.ID).Count(&count).Error != nil || count != 0 {
 			return false
 		}
 		return h.db.Where("vault_path=? AND parse_status=?", "mine/renamed.md", types.ParseStatusCompleted).First(&second).Error == nil
 	}, 3*time.Second, 20*time.Millisecond)
 	require.NotEqual(t, first.ID, second.ID)
 	var count int64
-	require.NoError(t, h.db.Table("embeddings").Where("knowledge_id=?", first.ID).Count(&count).Error)
+	require.NoError(t, h.db.Table("embeddings").Where("entry_id=?", first.ID).Count(&count).Error)
 	require.Zero(t, count)
 	require.NoError(t, os.Remove(renamed))
 	require.Eventually(t, func() bool {
-		return h.db.Unscoped().Model(&types.Knowledge{}).Where("id=?", second.ID).Count(&count).Error == nil && count == 0
+		return h.db.Unscoped().Model(&types.Entry{}).Where("id=?", second.ID).Count(&count).Error == nil && count == 0
 	}, 3*time.Second, 20*time.Millisecond)
-	require.NoError(t, h.db.Unscoped().Model(&types.Chunk{}).Where("knowledge_id IN ?", []string{first.ID, second.ID}).Count(&count).Error)
+	require.NoError(t, h.db.Unscoped().Model(&types.Chunk{}).Where("entry_id IN ?", []string{first.ID, second.ID}).Count(&count).Error)
 	require.Zero(t, count)
-	require.NoError(t, h.db.Table("embeddings").Where("knowledge_id IN ?", []string{first.ID, second.ID}).Count(&count).Error)
+	require.NoError(t, h.db.Table("embeddings").Where("entry_id IN ?", []string{first.ID, second.ID}).Count(&count).Error)
 	require.Zero(t, count)
 	status, err := h.documents.Status(h.ctx)
 	require.NoError(t, err)
@@ -290,8 +290,8 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 	freshVault, err := NewVaultService(fresh.db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 20 * time.Millisecond}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, freshVault.Close()) })
-	for _, original := range []*types.Knowledge{full, summary} {
-		var restored types.Knowledge
+	for _, original := range []*types.Entry{full, summary} {
+		var restored types.Entry
 		require.NoError(t, fresh.db.Where("id=?", original.ID).First(&restored).Error)
 		require.Equal(t, original.Title, restored.Title)
 		require.Equal(t, original.ContentType, restored.ContentType)
@@ -300,7 +300,7 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 		require.Equal(t, original.StructuredSummary, restored.StructuredSummary)
 		require.Equal(t, original.Description, restored.Description)
 		var articleVectors int64
-		require.NoError(t, fresh.db.Table("article_embeddings").Where("knowledge_id=?", restored.ID).Count(&articleVectors).Error)
+		require.NoError(t, fresh.db.Table("article_embeddings").Where("entry_id=?", restored.ID).Count(&articleVectors).Error)
 		require.EqualValues(t, 1, articleVectors, "both full and summary-only articles restore their summary vector")
 		require.Equal(t, original.Starred, restored.Starred)
 		require.Equal(t, original.CollectReason, restored.CollectReason)
@@ -323,7 +323,7 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 		require.NoError(t, err)
 		require.Equal(t, originalSource.SourceInfo, restoredSource.SourceInfo)
 		var chunks int64
-		require.NoError(t, fresh.db.Model(&types.Chunk{}).Where("knowledge_id=?", restored.ID).Count(&chunks).Error)
+		require.NoError(t, fresh.db.Model(&types.Chunk{}).Where("entry_id=?", restored.ID).Count(&chunks).Error)
 		if restored.ProcessingMode == types.ProcessingModeSummaryOnly {
 			require.Zero(t, chunks)
 		} else {
@@ -333,29 +333,29 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 		require.Equal(t, before, vaultFileHashes(t, root), "refreshing a rebuilt header preserves every file byte")
 	}
 	var topics []string
-	require.NoError(t, fresh.db.Table("topics").Joins("JOIN knowledge_topics links ON links.topic_id=topics.id").Where("links.knowledge_id=?", full.ID).Pluck("topics.name", &topics).Error)
+	require.NoError(t, fresh.db.Table("topics").Joins("JOIN entry_topics links ON links.topic_id=topics.id").Where("links.entry_id=?", full.ID).Pluck("topics.name", &topics).Error)
 	require.Equal(t, []string{topic.Name}, topics)
-	var restoredTopicLinks []types.KnowledgeTopic
-	require.NoError(t, fresh.db.Where("knowledge_id=?", full.ID).Find(&restoredTopicLinks).Error)
+	var restoredTopicLinks []types.EntryTopic
+	require.NoError(t, fresh.db.Where("entry_id=?", full.ID).Find(&restoredTopicLinks).Error)
 	require.Len(t, restoredTopicLinks, 1)
 	require.Equal(t, types.TopicSourceUser, restoredTopicLinks[0].Source, "recovery conservatively preserves every topic selection")
-	require.NoError(t, NewTopicService(fresh.db).ReplaceKnowledgeTopics(fresh.ctx, full.ID, nil))
+	require.NoError(t, NewTopicService(fresh.db).ReplaceEntryTopics(fresh.ctx, full.ID, nil))
 	var restoredTopicCount int64
-	require.NoError(t, fresh.db.Model(&types.KnowledgeTopic{}).Where("knowledge_id=?", full.ID).Count(&restoredTopicCount).Error)
+	require.NoError(t, fresh.db.Model(&types.EntryTopic{}).Where("entry_id=?", full.ID).Count(&restoredTopicCount).Error)
 	require.EqualValues(t, 1, restoredTopicCount, "later model output cannot erase recovered topics")
 	var entities []string
-	require.NoError(t, fresh.db.Table("entities").Joins("JOIN knowledge_entities links ON links.entity_id=entities.id").Where("links.knowledge_id=?", full.ID).Pluck("entities.canonical_name", &entities).Error)
+	require.NoError(t, fresh.db.Table("entities").Joins("JOIN entry_entities links ON links.entity_id=entities.id").Where("links.entry_id=?", full.ID).Pluck("entities.canonical_name", &entities).Error)
 	require.Equal(t, []string{"研究实体"}, entities)
 	for _, query := range []struct{ id, term string }{{full.ID, "rebuildfixture"}, {summary.ID, "Original"}} {
-		hits, err := r.Retrieve(fresh.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, KnowledgeBaseIDs: []string{fresh.kb.ID}, KnowledgeIDs: []string{query.id}, Query: query.term, TopK: 10}})
+		hits, err := r.Retrieve(fresh.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, KnowledgeBaseIDs: []string{fresh.kb.ID}, EntryIDs: []string{query.id}, Query: query.term, TopK: 10}})
 		require.NoError(t, err)
 		require.NotEmpty(t, hits)
 	}
-	var restoredReport types.Knowledge
+	var restoredReport types.Entry
 	require.NoError(t, fresh.db.Where("vault_path=?", report.VaultPath).First(&restoredReport).Error)
 	require.Contains(t, string(restoredReport.Metadata), full.ID)
 	_, err = rebuild.Rebuild(fresh.ctx)
-	require.ErrorContains(t, err, "empty knowledge database")
+	require.ErrorContains(t, err, "empty entry database")
 }
 
 func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T) {
@@ -407,7 +407,7 @@ func TestVaultDirectorySymlinkDoesNotDeleteExistingIndexOrWriteReport(t *testing
 	require.NoError(t, os.RemoveAll(filepath.Join(h.root, "mine")))
 	require.NoError(t, os.Symlink(external, filepath.Join(h.root, "mine")))
 	require.ErrorContains(t, h.documents.Scan(h.ctx, true), "symbolic link")
-	var saved types.Knowledge
+	var saved types.Entry
 	require.NoError(t, h.db.Where("id=?", document.ID).First(&saved).Error)
 	require.NoError(t, os.RemoveAll(filepath.Join(h.root, "reports")))
 	require.NoError(t, os.Symlink(external, filepath.Join(h.root, "reports")))

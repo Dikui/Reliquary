@@ -81,8 +81,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewSpaceRepository))
 	must(container.Provide(repository.NewAPIKeyRepository))
 	must(container.Provide(repository.NewKnowledgeBaseRepository))
-	must(container.Provide(repository.NewKnowledgeRepository))
-	must(container.Provide(repository.NewKnowledgeSpanRepository))
+	must(container.Provide(repository.NewEntryRepository))
+	must(container.Provide(repository.NewEntrySpanRepository))
 	must(container.Provide(repository.NewChunkRepository))
 	must(container.Provide(repository.NewModelRepository))
 	must(container.Provide(repository.NewUserRepository))
@@ -97,8 +97,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewSpaceService))
 	must(container.Provide(service.NewAPIKeyService))
 	must(container.Provide(service.NewKnowledgeBaseService))
-	must(container.Provide(service.NewKnowledgeService))
-	must(container.Provide(service.NewKnowledgeSearchService))
+	must(container.Provide(service.NewEntryService))
+	must(container.Provide(service.NewSearchService))
 	must(container.Provide(service.NewSpanTracker))
 	must(container.Provide(service.NewChunkService))
 	must(container.Provide(service.NewEntityService))
@@ -138,16 +138,16 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
-	logger.Debugf(ctx, "[Container] Knowledge housekeeping runner registered")
+	logger.Debugf(ctx, "[Container] Entry housekeeping runner registered")
 
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
 	must(container.Provide(handler.NewSpaceHandler))
 	must(container.Provide(handler.NewKnowledgeBaseHandler))
-	must(container.Provide(handler.NewKnowledgeHandler))
+	must(container.Provide(handler.NewEntryHandler))
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewMaintenanceHandler))
-	must(container.Provide(handler.NewKnowledgeSearchHandler))
+	must(container.Provide(handler.NewSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewEmbeddingRebuildHandler))
 	must(container.Provide(handler.NewTopicHandler))
@@ -473,8 +473,8 @@ func startDataSourceScheduler(scheduler *datasource.Scheduler, cleaner interface
 	})
 }
 
-// startHousekeepingService starts the knowledge housekeeping cron and registers
-// cleanup. This is the safety net that recovers any knowledge stuck in
+// startHousekeepingService starts the entry housekeeping cron and registers
+// cleanup. This is the safety net that recovers any entry stuck in
 // "processing" past a configurable threshold (see HousekeepingService for
 // rationale). Best-effort: a startup error is logged but does NOT abort the
 // container — the rest of the system stays usable.
@@ -485,7 +485,7 @@ func startHousekeepingService(svc *service.HousekeepingService, cleaner interfac
 	if err := svc.Start(context.Background()); err != nil {
 		logger.Warnf(context.Background(), "[Container] housekeeping start failed: %v", err)
 	}
-	cleaner.RegisterWithName("KnowledgeHousekeeping", func() error {
+	cleaner.RegisterWithName("EntryHousekeeping", func() error {
 		svc.Stop()
 		return nil
 	})

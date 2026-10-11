@@ -31,7 +31,7 @@ type Space struct {
 	ParserEngineConfig *ParserEngineConfig `yaml:"parser_engine_config" json:"parser_engine_config" gorm:"type:jsonb"`
 	// Credentials retains encrypted metadata from existing deployments.
 	Credentials *CredentialsConfig `yaml:"credentials" json:"credentials" gorm:"type:jsonb"`
-	// Retrieval config: global search/retrieval parameters used by knowledge search
+	// Retrieval config: global search/retrieval parameters used by entry search
 	RetrievalConfig *RetrievalConfig `yaml:"retrieval_config" json:"retrieval_config" gorm:"type:jsonb"`
 	// Creation time
 	CreatedAt time.Time `yaml:"created_at"          json:"created_at"`

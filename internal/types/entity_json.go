@@ -13,8 +13,8 @@ func (e Entity) MarshalJSON() ([]byte, error) {
 func (e EntityDetail) MarshalJSON() ([]byte, error) {
 	type response EntityDetail
 	out := response(e)
-	if out.Knowledge == nil {
-		out.Knowledge = []Knowledge{}
+	if out.Entries == nil {
+		out.Entries = []Entry{}
 	}
 	return json.Marshal(out)
 }

@@ -7,14 +7,24 @@ import (
 )
 
 // FormatVersion is the personal-space replica and verification manifest format.
-const FormatVersion = 2
+const FormatVersion = 3
 
-func supportedFormat(version int) bool { return version == 1 || version == FormatVersion }
+func supportedFormat(version int) bool { return version >= 1 && version <= FormatVersion }
 
 // Only SQL row envelopes are renamed. Nested JSON, queue payloads and log values
 // remain byte-for-byte equivalent JSON values.
 func currentTable(table string) string {
 	switch table {
+	case "knowledges":
+		return "entries"
+	case "knowledge_entities":
+		return "entry_entities"
+	case "knowledge_topics":
+		return "entry_topics"
+	case "knowledge_processing_spans":
+		return "entry_processing_spans"
+	case "knowledge_repost_sources":
+		return "entry_repost_sources"
 	case "tenants":
 		return "spaces"
 	case "tenant_api_keys":
@@ -24,28 +34,67 @@ func currentTable(table string) string {
 	}
 }
 
-func legacyTable(table string) string {
-	switch table {
-	case "spaces":
-		return "tenants"
-	case "api_keys":
-		return "tenant_api_keys"
-	default:
-		return table
+// Legacy row envelopes are versioned; opaque JSON is never traversed.
+func legacyTable(table string, versions ...int) string {
+	version := 1
+	if len(versions) > 0 {
+		version = versions[0]
 	}
+	if version == 1 {
+		switch table {
+		case "spaces":
+			return "tenants"
+		case "api_keys":
+			return "tenant_api_keys"
+		}
+	}
+	if version < 3 {
+		switch table {
+		case "entries":
+			return "knowledges"
+		case "entry_entities":
+			return "knowledge_entities"
+		case "entry_topics":
+			return "knowledge_topics"
+		case "entry_processing_spans":
+			return "knowledge_processing_spans"
+		case "entry_repost_sources":
+			return "knowledge_repost_sources"
+		}
+	}
+	return table
 }
 
-func namedRows(rows []map[string]any, legacy bool) []map[string]any {
-	result := make([]map[string]any, len(rows))
-	from, to := "tenant_id", "space_id"
-	if legacy {
-		from, to = to, from
+func namedRows(rows []map[string]any, legacy bool, versions ...int) []map[string]any {
+	version := 1
+	if len(versions) > 0 {
+		version = versions[0]
 	}
+	result := make([]map[string]any, len(rows))
 	for i, row := range rows {
 		copy := make(map[string]any, len(row))
 		for column, value := range row {
-			if column == from {
-				column = to
+			if legacy {
+				if version == 1 && column == "space_id" {
+					column = "tenant_id"
+				}
+				if version < 3 {
+					switch column {
+					case "entry_id":
+						column = "knowledge_id"
+					case "entry_ids":
+						column = "knowledge_ids"
+					}
+				}
+			} else {
+				switch column {
+				case "tenant_id":
+					column = "space_id"
+				case "knowledge_id":
+					column = "entry_id"
+				case "knowledge_ids":
+					column = "entry_ids"
+				}
 			}
 			copy[column] = value
 		}
@@ -93,7 +142,7 @@ func currentSnapshot(snapshot *Snapshot) error {
 // Compare old backup hashes in their original naming vocabulary. The rows and
 // all business comparisons still use current SQL names. No nested key changes.
 func currentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
-	if expected.FormatVersion != 1 || actual.FormatVersion != FormatVersion {
+	if expected.FormatVersion >= FormatVersion || actual.FormatVersion != FormatVersion {
 		return expected, actual
 	}
 	left, right := *expected, *actual
@@ -107,15 +156,20 @@ func currentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 		}
 		entry.Columns = append([]string(nil), entry.Columns...)
 		for i, column := range entry.Columns {
-			if column == "tenant_id" {
+			switch column {
+			case "tenant_id":
 				entry.Columns[i] = "space_id"
+			case "knowledge_id":
+				entry.Columns[i] = "entry_id"
+			case "knowledge_ids":
+				entry.Columns[i] = "entry_ids"
 			}
 		}
 		left.Tables[table] = entry
 	}
 	for table, entry := range actual.Tables {
-		if entry.legacySHA256 != "" {
-			entry.SHA256 = entry.legacySHA256
+		if entry.legacySHA256[expected.FormatVersion] != "" {
+			entry.SHA256 = entry.legacySHA256[expected.FormatVersion]
 		}
 		right.Tables[table] = entry
 	}
@@ -133,14 +187,14 @@ func currentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 			if entry.Data == nil {
 				continue
 			}
-			oldData, _ := json.MarshalIndent(namedRows(entry.Data, true), "", "  ")
+			oldData, _ := json.MarshalIndent(namedRows(entry.Data, true, expected.FormatVersion), "", "  ")
 			newData, _ := json.MarshalIndent(entry.Data, "", "  ")
 			oldData, newData = append(oldData, '\n'), append(newData, '\n')
 			if before.SHA256 != sum(oldData) || before.Size != int64(len(oldData)) {
 				continue
 			}
 			for _, after := range actual.Files[group] {
-				if after.Path == before.Path && after.SHA256 == sum(newData) && after.Size == int64(len(newData)) {
+				if after.Path == ".reliquary/data/"+table+".json" && after.SHA256 == sum(newData) && after.Size == int64(len(newData)) {
 					left.Files[group][i] = after
 				}
 			}

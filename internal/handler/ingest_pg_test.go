@@ -68,7 +68,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "kb-1", SpaceID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.KnowledgeBaseTypeDocument}).Error)
 	queue := &ingestHandlerQueue{}
 	bases := &ingestHandlerBases{}
-	articles, err := service.NewKnowledgeService(db, &config.Config{}, repository.NewKnowledgeRepository(db), bases,
+	articles, err := service.NewEntryService(db, &config.Config{}, repository.NewEntryRepository(db), bases,
 		repository.NewSpaceRepository(db), nil, nil, nil, file.NewLocalFileService(t.TempDir(), ""), nil, ingestHandlerModels{},
 		queue, nil, nil, docparser.NewImageResolver(), nil)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	require.NoError(t, err)
 	articles.(interface{ SetVault(*service.VaultService) }).SetVault(vault)
 	t.Cleanup(func() { require.NoError(t, vault.Close()) })
-	h := NewKnowledgeHandler(nil, articles, bases, queue, nil)
+	h := NewEntryHandler(nil, articles, bases, queue, nil)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
@@ -112,8 +112,8 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	require.Equal(t, "pending_review", rejected.Data.Status)
 	require.Equal(t, "model rejected source", rejected.Data.Reason)
 	require.Empty(t, queue.tasks)
-	var pending types.Knowledge
-	require.NoError(t, db.First(&pending, "id=?", rejected.Data.ArticleID).Error)
+	var pending types.Entry
+	require.NoError(t, db.First(&pending, "id=?", rejected.Data.EntryID).Error)
 	require.Equal(t, types.ParseStatusRejected, pending.ParseStatus)
 	require.Empty(t, pending.VaultPath)
 	input := types.IngestRequest{URL: "https://example.org/ada/article123", Publisher: "Journal", Content: "# Complete original\n\nMeasured product capabilities.", Title: "External article", SourceName: "grok-bot", AgentSummary: "annotation-summary", AgentTags: []string{"annotation-tag"}, Thread: []types.IngestThreadItem{{Author: "Ada", PublishedAt: "2026-10-01", Content: "Supporting thread."}}, Quotes: []types.IngestQuote{{Content: "Quoted external source."}}}
@@ -141,9 +141,9 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 		require.Equal(t, attempt.state, result.Data.Status)
 		require.NotNil(t, result.Data.ImageFailures)
 		if articleID == "" {
-			articleID = result.Data.ArticleID
+			articleID = result.Data.EntryID
 		} else {
-			require.Equal(t, articleID, result.Data.ArticleID)
+			require.Equal(t, articleID, result.Data.EntryID)
 			require.Equal(t, "已存在", result.Data.Message)
 		}
 	}
@@ -155,7 +155,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	require.NotContains(t, string(queue.tasks[0].Payload()), "annotation-summary")
 	require.NotContains(t, string(queue.tasks[0].Payload()), "annotation-tag")
 	require.NotContains(t, string(queue.tasks[0].Payload()), "grok-bot")
-	var article types.Knowledge
+	var article types.Entry
 	require.NoError(t, db.First(&article, "id=?", articleID).Error)
 	require.Equal(t, "Retain these measurements", article.CollectReason)
 	require.Equal(t, "grok-bot", article.SourceName)
@@ -166,6 +166,6 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	require.Len(t, logs, 3)
 	for _, log := range logs {
 		require.Equal(t, "api_key:external-test", log.Actor)
-		require.Contains(t, []string{articleID, rejected.Data.ArticleID}, log.ObjectID)
+		require.Contains(t, []string{articleID, rejected.Data.EntryID}, log.ObjectID)
 	}
 }

@@ -110,7 +110,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 			return err
 		}
 		var chunks []struct{ ID, SourceKind string }
-		if err := tx.Table("chunks c").Joins("JOIN knowledges k ON k.id=c.knowledge_id AND k.space_id=c.space_id").
+		if err := tx.Table("chunks c").Joins("JOIN entries k ON k.id=c.entry_id AND k.space_id=c.space_id").
 			Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status=? AND k.processing_mode='full' AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column')", spaceID, types.ParseStatusCompleted).
 			Select("c.id,k.source_kind").Order("c.id").Scan(&chunks).Error; err != nil {
 			return err
@@ -127,7 +127,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 			}
 			add(kind, chunk.ID, "")
 		}
-		var articles []types.Knowledge
+		var articles []types.Entry
 		if err := tx.Where("space_id=? AND source_kind='article' AND parse_status=?", spaceID, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
 			return err
 		}
@@ -391,9 +391,9 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			return rebuildSourceWriteResult(result)
 		}, nil
 	}
-	var article types.Knowledge
+	var article types.Entry
 	var chunk types.Chunk
-	knowledgeID := item.SourceID
+	entryID := item.SourceID
 	if strings.HasSuffix(item.Kind, "_chunk") {
 		if err := r.db.WithContext(ctx).Where("space_id=? AND id=?", run.SpaceID, item.SourceID).First(&chunk).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -401,9 +401,9 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			}
 			return nil, err
 		}
-		knowledgeID = chunk.KnowledgeID
+		entryID = chunk.EntryID
 	}
-	if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND parse_status=?", run.SpaceID, knowledgeID, types.ParseStatusCompleted).First(&article).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND parse_status=?", run.SpaceID, entryID, types.ParseStatusCompleted).First(&article).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -415,7 +415,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		}
 		return prepareArticleImageEmbedding(ctx, r.db, r.vault, profile.embedder, &article, item.AttachmentPath, true)
 	}
-	content := buildKnowledgeIndexContent(&article, chunk.Content)
+	content := buildEntryIndexContent(&article, chunk.Content)
 	if item.Kind == "article" {
 		if article.StructuredSummary == nil {
 			return nil, nil
@@ -430,7 +430,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 	}
 	hash := vaultContentHash(content)
 	return func(tx *gorm.DB) error {
-		var current types.Knowledge
+		var current types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, article.ID).First(&current).Error; err != nil {
 			return err
 		}
@@ -438,8 +438,8 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			if current.StructuredSummary == nil || vaultContentHash(strings.TrimSpace(current.Title)+"\n"+current.StructuredSummary.RenderText()) != hash {
 				return errors.New("article changed while embedding; retry this item")
 			}
-			return tx.Exec(`INSERT INTO article_embeddings (space_id,knowledge_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
-				VALUES (?,?,?,?,?,?::halfvec,?) ON CONFLICT (knowledge_id) DO UPDATE SET model_id=EXCLUDED.model_id,
+			return tx.Exec(`INSERT INTO article_embeddings (space_id,entry_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
+				VALUES (?,?,?,?,?,?::halfvec,?) ON CONFLICT (entry_id) DO UPDATE SET model_id=EXCLUDED.model_id,
 				dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,updated_at=NOW()`,
 				run.SpaceID, article.ID, article.KnowledgeBaseID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), hash).Error
 		}
@@ -447,10 +447,10 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, chunk.ID).First(&currentChunk).Error; err != nil {
 			return err
 		}
-		if current.ProcessingMode != types.ProcessingModeFull || vaultContentHash(buildKnowledgeIndexContent(&current, currentChunk.Content)) != hash {
+		if current.ProcessingMode != types.ProcessingModeFull || vaultContentHash(buildEntryIndexContent(&current, currentChunk.Content)) != hash {
 			return errors.New("document chunk changed while embedding; retry this item")
 		}
-		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,knowledge_id,knowledge_base_id,model_id,dimension,embedding,is_enabled)
+		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,entry_id,knowledge_base_id,model_id,dimension,embedding,is_enabled)
 			VALUES (?,0,?,?,?,?,?,?::halfvec,?) ON CONFLICT (source_id,source_type) DO UPDATE SET model_id=EXCLUDED.model_id,
 			dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,is_enabled=EXCLUDED.is_enabled,updated_at=NOW()`,
 			chunk.ID, chunk.ID, article.ID, article.KnowledgeBaseID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), chunk.IsEnabled).Error; err != nil {
@@ -458,9 +458,9 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		}
 		// The document marker becomes current only after all its chunk vectors
 		// have matching identities. Per-vector retrieval can use each earlier.
-		return tx.Exec(`UPDATE knowledges SET embedding_model_id=? WHERE space_id=? AND id=? AND NOT EXISTS (
+		return tx.Exec(`UPDATE entries SET embedding_model_id=? WHERE space_id=? AND id=? AND NOT EXISTS (
 			SELECT 1 FROM chunks c LEFT JOIN embeddings e ON e.chunk_id=c.id AND e.source_type=0
-			WHERE c.knowledge_id=knowledges.id AND c.space_id=knowledges.space_id AND c.deleted_at IS NULL
+			WHERE c.entry_id=entries.id AND c.space_id=entries.space_id AND c.deleted_at IS NULL
 			AND c.chunk_type IN ('text','summary','table_summary','table_column')
 			AND (e.id IS NULL OR e.model_id<>? OR e.dimension<>?))`, run.ModelID, run.SpaceID, article.ID, run.ModelID, run.Dimension).Error
 	}, nil

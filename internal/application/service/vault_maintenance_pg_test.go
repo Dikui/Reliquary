@@ -24,7 +24,7 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	require.NoError(t, h.db.Where("canonical_name='Company'").First(&entity).Error)
 	require.NoError(t, h.db.Model(&entity).Update("description", "User entity description").Error)
 	require.NoError(t, h.db.Create(&types.Topic{ID: "maintenance-topic", SpaceID: 1, Name: "Maintenance", Description: "User authored description", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
-	require.NoError(t, h.db.Create(&types.KnowledgeTopic{SpaceID: 1, KnowledgeID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
+	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
 	require.NoError(t, h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?),(1,'topic','maintenance-topic')", entity.ID).Error)
 	require.NoError(t, h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error)
 	for path, body := range map[string]string{"mine/note.md": "# User original\n\nOnly the file and backup can recover this text.", "reports/report.md": "# Report original\n\nThis report remains user owned."} {
@@ -54,13 +54,13 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	after, err := maintenance.BuildManifest(context.Background(), fresh, v.root, "")
 	require.NoError(t, err)
 	require.Empty(t, maintenance.CompareManifest(before, after))
-	for _, original := range []*types.Knowledge{full, summary} {
-		var rebuilt types.Knowledge
+	for _, original := range []*types.Entry{full, summary} {
+		var rebuilt types.Entry
 		require.NoError(t, fresh.Where("id=?", original.ID).First(&rebuilt).Error)
 		require.Equal(t, original.VaultPath, rebuilt.VaultPath)
 		require.Equal(t, original.VaultBody, rebuilt.VaultBody)
 	}
-	var personal []types.Knowledge
+	var personal []types.Entry
 	require.NoError(t, fresh.Where("source_kind IN ('mine','report')").Find(&personal).Error)
 	require.Len(t, personal, 2)
 	for _, document := range personal {

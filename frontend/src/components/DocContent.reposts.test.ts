@@ -13,10 +13,10 @@ import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import { safeExternalUrl } from '../utils/externalUrl'
-import type { KnowledgeRepostSource } from '../api/knowledge-base'
+import type { EntryRepostSource } from '../api/knowledge-base'
 import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML } from '../utils/security'
 import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
-import { CONTENT_TYPES } from '../types/knowledgeClassification'
+import { CONTENT_TYPES } from '../types/entryClassification'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
@@ -47,10 +47,10 @@ function compileSFC(path: string) {
     return component
   } }
 }
-const repostSFC = compileSFC('../views/knowledge/components/RepostSources.vue')
+const repostSFC = compileSFC('../views/knowledge-base/components/RepostSources.vue')
 const detailSFC = compileSFC('./DocContent.vue')
-const actionMenuSFC = compileSFC('../views/knowledge/components/DocumentActionMenu.vue')
-const batchBarSFC = compileSFC('../views/knowledge/components/DocumentBatchBar.vue')
+const actionMenuSFC = compileSFC('../views/knowledge-base/components/DocumentActionMenu.vue')
+const batchBarSFC = compileSFC('../views/knowledge-base/components/DocumentBatchBar.vue')
 const actualRepostSources = repostSFC.create({ '@/utils/externalUrl': { safeExternalUrl } })
 const sharedRepostModule = { __esModule: true, default: actualRepostSources }
 const emptyComponent = defineComponent({ setup: () => () => null })
@@ -58,9 +58,9 @@ const emptyModule = { __esModule: true, default: emptyComponent }
 const envelope = (data: unknown) => Promise.resolve({ success: true, data })
 const unexpectedAPI = () => { throw new Error('The repost rendering test must not call a remote API') }
 
-function source(overrides: Partial<KnowledgeRepostSource> = {}): KnowledgeRepostSource {
+function source(overrides: Partial<EntryRepostSource> = {}): EntryRepostSource {
   return {
-    id: 'repost-a', knowledge_id: 'message-a', publisher: 'P4 News',
+    id: 'repost-a', entry_id: 'message-a', publisher: 'P4 News',
     original_url: 'https://news.example/repost', published_at: '2026-10-06T08:30:00+08:00',
     match_method: 'content_hash', ...overrides,
   }
@@ -101,24 +101,24 @@ interface DetailRenderOptions {
   loadedDetails?: Record<string, unknown>
   classification?: unknown
 }
-async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
+async function renderDetails(sources: EntryRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
   const component = detailSFC.create({
     marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } },
     'marked-katex-extension': { __esModule: true, default: () => ({}) },
     'highlight.js': { __esModule: true, default: {} },
     mermaid: { __esModule: true, default: { initialize() {} } },
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI } },
-    '@/api/knowledge-base': { KNOWLEDGE_CHUNK_PAGE_SIZE: 20, getKnowledgeDetails: unexpectedAPI },
+    '@/api/knowledge-base': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI },
     '@/utils/clipboard': { copyWithToast: async (text: string, successKey: string) => { options.copyRequests?.push({ text, successKey }); return true } },
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL,
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/KnowledgeReviewActions.vue': emptyModule, '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/KnowledgeClassification.vue': options.classification || emptyModule,
+    '@/components/ReviewActions.vue': emptyModule, '@/components/EntryArticleJudgments.vue': emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
-    '@/components/KnowledgeProcessingTimeline.vue': emptyModule,
-    '@/views/knowledge/components/RepostSources.vue': sharedRepostModule,
-    '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+    '@/components/EntryProcessingTimeline.vue': emptyModule,
+    '@/views/knowledge-base/components/RepostSources.vue': sharedRepostModule,
+    '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   }, options.environment)
   if (options.scenario) {
     const setup = component.setup
@@ -129,7 +129,7 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
     }
   }
   return renderComponent(component, {
-    visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', knowledgeType: 'document',
+    visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', entryType: 'document',
     details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
   }, locale, options.ssrContext)
@@ -145,17 +145,17 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
     '../utils/index': { formatStringDate: () => '2026-10-11' },
     'tdesign-vue-next': { MessagePlugin: {} },
     '@/api/knowledge-base': {
-      getKnowledgeDetails: async (id: string) => {
+      getEntryDetails: async (id: string) => {
         calls.push(id)
         return { success: true, data: { id, title: id, type: 'manual', source_kind: 'article',
           parse_status: 'completed', updated_at: '2026-10-11T00:00:00Z', ...records[id] } }
       },
-      getKnowledgeDetailsCon: async () => ({ success: true, data: [], total: 0 }),
+      getEntryDetailsCon: async () => ({ success: true, data: [], total: 0 }),
     },
-    '@/stores/knowledge': { knowledgeStore: () => ({}) },
+    '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
-    './useKnowledgeDuplicates': { useKnowledgeDuplicates: () => ({}) },
+    './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
   }
   const hook = evaluate(hookSource, modules).default('kb-a')
   return { hook, calls, async load(id: string) {
@@ -168,7 +168,7 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
     const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
-    const classification = compileSFC('./KnowledgeClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
     const flagged = await renderDetails([], locale, { loadedDetails: await loader.load('unverified'), classification: { __esModule: true, default: classification } })
     assert.ok(flagged.includes(messages[locale].knowledgeReview.sourceUnverified))
     const verified = await renderDetails([], locale, { loadedDetails: await loader.load('verified'), classification: { __esModule: true, default: classification } })
@@ -241,7 +241,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(protectedHTML.includes(`data-protected-src="${source}"`))
     const request = buildProtectedFileRequest(source, { mode: 'space' })!
     const url = new URL(request.url, 'http://localhost')
-    assert.equal(url.pathname, '/api/v1/knowledge/vault-article/vault-attachment')
+    assert.equal(url.pathname, '/api/v1/entries/vault-article/vault-attachment')
     assert.equal(url.searchParams.get('path'), ref)
     assert.doesNotMatch(request.url, /token=/)
   })
@@ -320,7 +320,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(block.includes((copy.matchMethods as Record<string, string>)[item.match_method]))
     }
     assert.equal([...block.matchAll(/target="_blank" rel="noopener noreferrer"/g)].length, 4)
-    assert.doesNotMatch(block, /knowledgeWorkbench\.sourceTime\./)
+    assert.doesNotMatch(block, /entryWorkbench\.sourceTime\./)
   })
 
 

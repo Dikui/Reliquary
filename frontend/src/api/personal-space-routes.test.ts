@@ -52,7 +52,7 @@ test('settings, runtime queues and space key values use the current API routes',
 
 test('the platform knowledge list remains the entry point after removing the standalone home route', () => {
   const routes = createApplicationRoutes()
-  assert.equal(routes.find(route => route.path === '/')?.redirect, '/platform/knowledge')
+  assert.equal(routes.find(route => route.path === '/')?.redirect, '/platform/entries')
   assert.ok(!routes.some(route => route.path === '/knowledgeBase' || route.name === 'home'))
-  assert.ok(routes.find(route => route.path === '/platform')?.children?.some(route => route.path === 'knowledge'))
+  assert.ok(routes.find(route => route.path === '/platform')?.children?.some(route => route.path === 'entries'))
 })

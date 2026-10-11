@@ -3,24 +3,24 @@ import { storeToRefs } from "pinia";
 import { formatStringDate, kbFileTypeVerification } from "../utils/index";
 import { MessagePlugin } from "tdesign-vue-next";
 import {
-  uploadKnowledgeFile,
-  listKnowledgeFiles,
-  getKnowledgeDetails,
-  delKnowledgeDetails,
-  getKnowledgeDetailsCon,
+  uploadEntryFile,
+  listEntryFiles,
+  getEntryDetails,
+  delEntryDetails,
+  getEntryDetailsCon,
 } from "@/api/knowledge-base";
-import { knowledgeStore } from "@/stores/knowledge";
+import { entryStore } from "@/stores/entry";
 import { useI18n } from 'vue-i18n';
-import type { KnowledgeRepostSource } from '@/api/knowledge-base';
-import type { ClassifiedKnowledge, StructuredSummary, KnowledgeTopic } from '@/types/knowledgeClassification';
+import type { EntryRepostSource } from '@/api/knowledge-base';
+import type { ClassifiedEntry, StructuredSummary, EntryTopic } from '@/types/entryClassification';
 import { useResourcesStore } from '@/stores/resources';
-import { useKnowledgeDuplicates } from './useKnowledgeDuplicates';
+import { useEntryDuplicates } from './useEntryDuplicates';
 
 export default function (knowledgeBaseId?: string) {
-  const usemenuStore = knowledgeStore();
+  const usemenuStore = entryStore();
   const { t } = useI18n();
   const { cardList, total } = storeToRefs(usemenuStore);
-  const duplicates = useKnowledgeDuplicates(() => knowledgeBaseId || useResourcesStore().knowledgeBase?.id);
+  const duplicates = useEntryDuplicates(() => knowledgeBaseId || useResourcesStore().knowledgeBase?.id);
   let moreIndex = ref(-1);
   const details = reactive({
     title: "",
@@ -29,7 +29,7 @@ export default function (knowledgeBaseId?: string) {
     id: "",
     total: 0,
     type: "",
-    source_kind: '' as NonNullable<ClassifiedKnowledge['source_kind']> | '',
+    source_kind: '' as NonNullable<ClassifiedEntry['source_kind']> | '',
     vault_path: '',
     source: "",
     channel: "",
@@ -45,20 +45,20 @@ export default function (knowledgeBaseId?: string) {
     processing_review_reason: '',
     processing_mode: 'full' as 'full' | 'summary_only',
     structured_summary: null as StructuredSummary | null,
-    entities: [] as NonNullable<ClassifiedKnowledge['entities']>,
-    topics: [] as KnowledgeTopic[],
+    entities: [] as NonNullable<ClassifiedEntry['entities']>,
+    topics: [] as EntryTopic[],
     parse_status: "",
     error_message: "",
 	metadata: {} as Record<string, any>,
 	custom_metadata: {} as Record<string, unknown>,
     chunkLoading: false,
     chunkLoadError: "",
-    repost_sources: [] as KnowledgeRepostSource[],
+    repost_sources: [] as EntryRepostSource[],
   });
-  let knowledgeListGeneration = 0;
+  let entryListGeneration = 0;
   let chunkRequestGeneration = 0;
-  let activeKnowledgeId = '';
-  const getKnowled = (
+  let activeEntryId = '';
+  const loadEntries = (
     query: {
       page: number;
       page_size: number;
@@ -75,11 +75,11 @@ export default function (knowledgeBaseId?: string) {
   ): Promise<void> => {
     const targetKbId = kbId || knowledgeBaseId;
     if (!targetKbId) return Promise.resolve();
-    const requestGeneration = query.page === 1 ? ++knowledgeListGeneration : knowledgeListGeneration;
+    const requestGeneration = query.page === 1 ? ++entryListGeneration : entryListGeneration;
 
-    return listKnowledgeFiles(targetKbId, query)
+    return listEntryFiles(targetKbId, query)
       .then((result: any) => {
-        if (requestGeneration !== knowledgeListGeneration) return;
+        if (requestGeneration !== entryListGeneration) return;
 
         const { data, total: totalResult } = result;
     const cardList_ = data.map((item: any) => {
@@ -109,10 +109,10 @@ export default function (knowledgeBaseId?: string) {
       })
       .catch(() => {});
   };
-  const delKnowledge = (index: number, item: any, onSuccess?: () => void) => {
+  const delEntry = (index: number, item: any, onSuccess?: () => void) => {
     cardList.value[index].isMore = false;
     moreIndex.value = -1;
-    return delKnowledgeDetails(item.id)
+    return delEntryDetails(item.id)
       .then(async (result: any) => {
         if (result.success) {
           MessagePlugin.info(t('knowledgeBase.deleteSuccess'));
@@ -124,7 +124,7 @@ export default function (knowledgeBaseId?: string) {
             const maxPolls = 30;
             const delayMs = 400;
             for (let i = 0; i < maxPolls; i++) {
-              await getKnowled();
+              await loadEntries();
               const stillPresent = (cardList.value || []).some((c: any) => c.id === item.id);
               if (!stillPresent) break;
               await new Promise<void>((r) => setTimeout(r, delayMs));
@@ -165,12 +165,12 @@ export default function (knowledgeBaseId?: string) {
       return;
     }
 
-    return uploadKnowledgeFile(currentKbId, { file })
+    return uploadEntryFile(currentKbId, { file })
       .then((result: any) => {
         if (duplicates.showDuplicate(result, file.name)) return;
         if (result.success) {
           MessagePlugin.info(t('knowledgeBase.uploadSuccess'));
-          getKnowled({ page: 1, page_size: 35 }, currentKbId);
+          loadEntries({ page: 1, page_size: 35 }, currentKbId);
         } else {
           const errorMessage = result.error?.message || result.message || t('knowledgeBase.uploadFailed');
           MessagePlugin.error(errorMessage);
@@ -186,7 +186,7 @@ export default function (knowledgeBaseId?: string) {
       });
   };
   const getCardDetails = (item: any) => {
-    activeKnowledgeId = item.id;
+    activeEntryId = item.id;
     chunkRequestGeneration++;
     Object.assign(details, {
       title: "",
@@ -219,9 +219,9 @@ export default function (knowledgeBaseId?: string) {
       chunkLoadError: "",
       repost_sources: [],
     });
-    getKnowledgeDetails(item.id)
+    getEntryDetails(item.id)
       .then((result: any) => {
-        if (activeKnowledgeId !== item.id) return;
+        if (activeEntryId !== item.id) return;
         if (result.success && result.data) {
           const { data } = result;
           Object.assign(details, {
@@ -265,9 +265,9 @@ export default function (knowledgeBaseId?: string) {
     const requestGeneration = ++chunkRequestGeneration;
     details.chunkLoading = true;
     details.chunkLoadError = "";
-    getKnowledgeDetailsCon(id, page)
+    getEntryDetailsCon(id, page)
       .then((result: any) => {
-        if (requestGeneration !== chunkRequestGeneration || activeKnowledgeId !== id) return;
+        if (requestGeneration !== chunkRequestGeneration || activeEntryId !== id) return;
         if (result.success && result.data) {
           const { data, total: totalResult } = result;
           details.md = data;
@@ -277,10 +277,10 @@ export default function (knowledgeBaseId?: string) {
         }
       })
       .catch((err: any) => {
-        if (requestGeneration !== chunkRequestGeneration || activeKnowledgeId !== id) return;
+        if (requestGeneration !== chunkRequestGeneration || activeEntryId !== id) return;
         details.chunkLoadError = err?.message || t('knowledgeBase.chunkLoadFailed');
         console.error("[ChunkLoad] failed", {
-          knowledgeId: id,
+          entryId: id,
           page,
           error: err,
         });
@@ -295,9 +295,9 @@ export default function (knowledgeBaseId?: string) {
     ...duplicates,
     cardList,
     moreIndex,
-    getKnowled,
+    loadEntries,
     details,
-    delKnowledge,
+    delEntry,
     openMore,
     onVisibleChange,
     requestMethod,

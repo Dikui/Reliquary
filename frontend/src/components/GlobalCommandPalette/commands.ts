@@ -33,13 +33,13 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
   const { router, t, close } = ctx
   return [
     {
-      id: 'open-knowledge',
+      id: 'open-entry',
       label: t('commandPalette.quick.knowledge'),
       icon: 'file',
-      keywords: ['kb', 'knowledge', 'base', '知识库', '文档'],
+      keywords: ['kb', 'entry', 'base', '知识库', '文档'],
       run: () => {
         close()
-        router.push('/platform/knowledge')
+        router.push('/platform/entries')
       },
     },
     {

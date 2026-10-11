@@ -30,16 +30,16 @@ func seed(t *testing.T, db *gorm.DB) {
 		`INSERT INTO entity_merge_records(id,space_id,keep_entity_id,merge_entity_id,actor,created_at) VALUES('merge',1,'entity-a','entity-b','owner',now())`,
 		`UPDATE entities SET merged_into_id='entity-a' WHERE id='entity-b'`,
 		`INSERT INTO topics(id,space_id,name,description) VALUES('topic',1,'Maintenance','User topic description')`,
-		`INSERT INTO knowledges(id,space_id,knowledge_base_id,type,title,content_type,content_type_corrected,processing_review_status,processing_review_content_type,processing_review_reason,source_unverified,processing_mode,source_kind,source,parse_status,metadata,custom_metadata,collect_reason,agent_summary,agent_tags,vault_body) VALUES('pending',1,'kb','manual','Pending source','research',false,'','','',false,'full','article','','rejected','{"manual":{"content":"Original review text"},"intake":{"decision":"rejected","reason":"missing link"}}','{"caller":"Grok"}','collect because useful','Caller summary','["tag"]','Pending original'),('article',1,'kb','manual','Research article','research',true,'pending','research','uncertain classification',true,'full','article','','completed','{"intake":{"decision":"approved","source_info":{"publisher":"Publisher"}}}','{}','owner reason','','[]','Immutable body')`,
-		`INSERT INTO knowledge_entities(space_id,knowledge_id,entity_id) VALUES(1,'article','entity-a')`,
-		`INSERT INTO knowledge_topics(space_id,knowledge_id,topic_id,source,is_historical) VALUES(1,'article','topic','user',true)`,
-		`INSERT INTO knowledge_repost_sources(id,space_id,knowledge_base_id,knowledge_id,original_url,source_fingerprint,match_method,created_at) VALUES('repost',1,'kb','article','https://example.test/repost','abcdef','url',now())`,
+		`INSERT INTO entries(id,space_id,knowledge_base_id,type,title,content_type,content_type_corrected,processing_review_status,processing_review_content_type,processing_review_reason,source_unverified,processing_mode,source_kind,source,parse_status,metadata,custom_metadata,collect_reason,agent_summary,agent_tags,vault_body) VALUES('pending',1,'kb','manual','Pending source','research',false,'','','',false,'full','article','','rejected','{"manual":{"content":"Original review text"},"intake":{"decision":"rejected","reason":"missing link"}}','{"caller":"Grok"}','collect because useful','Caller summary','["tag"]','Pending original'),('article',1,'kb','manual','Research article','research',true,'pending','research','uncertain classification',true,'full','article','','completed','{"intake":{"decision":"approved","source_info":{"publisher":"Publisher"}}}','{}','owner reason','','[]','Immutable body')`,
+		`INSERT INTO entry_entities(space_id,entry_id,entity_id) VALUES(1,'article','entity-a')`,
+		`INSERT INTO entry_topics(space_id,entry_id,topic_id,source,is_historical) VALUES(1,'article','topic','user',true)`,
+		`INSERT INTO entry_repost_sources(id,space_id,knowledge_base_id,entry_id,original_url,source_fingerprint,match_method,created_at) VALUES('repost',1,'kb','article','https://example.test/repost','abcdef','url',now())`,
 		`INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity','entity-a'),(1,'topic','topic')`,
 		`INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T12:00:00Z')`,
 		`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-1',1,'owner','follow','entity-a','{}','{"followed":true}')`,
 		`INSERT INTO resources(id,handle,space_id,provider,physical_path,location_hash) VALUES('resource','1234567890123456789012',1,'local','local://1/pending/raw.txt','location')`,
-		`INSERT INTO resource_bindings(id,resource_id,space_id,owner_type,owner_id) VALUES('binding','resource',1,'knowledge','pending')`,
-		`INSERT INTO task_jobs(id,task_type,queue,payload,state,retried,fail_count,claim_token,worker_pool) VALUES('job','manual:process','default','{"knowledge_id":"pending"}','active',2,1,'old-claim','core')`,
+		`INSERT INTO resource_bindings(id,resource_id,space_id,owner_type,owner_id) VALUES('binding','resource',1,'entry','pending')`,
+		`INSERT INTO task_jobs(id,task_type,queue,payload,state,retried,fail_count,claim_token,worker_pool) VALUES('job','manual:process','default','{"entry_id":"pending"}','active',2,1,'old-claim','core')`,
 		`INSERT INTO api_keys(id,space_id,name,key_hash,api_key) VALUES(1,1,'external caller','API_HASH_SECRET','API_SECRET')`,
 		`INSERT INTO chatgpt_hosts(id,ext_agent_host_id) VALUES(1,'host-preserved')`,
 		`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,email,credentials,status) VALUES('00000000-0000-0000-0000-000000000001','client-preserved','https://auth.openai.com','subject-preserved','chatgpt@example.test','CHATGPT_TOKEN_SECRET','connected')`,
@@ -62,12 +62,12 @@ func TestReplicaPreservesJSONLiteralNullDistinctFromSQLNull(t *testing.T) {
 	source := pgtest.Open(t)
 	seed(t, source)
 	require.NoError(t, source.Exec(`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-json-null',1,'owner','create_topic','topic','null'::jsonb,'null'::jsonb)`).Error)
-	require.NoError(t, source.Exec(`UPDATE knowledges SET structured_summary='null'::jsonb WHERE id='pending'`).Error)
-	require.NoError(t, source.Exec(`UPDATE knowledges SET structured_summary=NULL WHERE id='article'`).Error)
+	require.NoError(t, source.Exec(`UPDATE entries SET structured_summary='null'::jsonb WHERE id='pending'`).Error)
+	require.NoError(t, source.Exec(`UPDATE entries SET structured_summary=NULL WHERE id='article'`).Error)
 	snapshot, err := Capture(ctx, source)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"before_value", "after_value"}, snapshot.JSONNulls["operation_logs"]["op-json-null"])
-	require.Contains(t, snapshot.JSONNulls["knowledges"]["pending"], "structured_summary")
+	require.Contains(t, snapshot.JSONNulls["entries"]["pending"], "structured_summary")
 	root := t.TempDir()
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
 	target := pgtest.Open(t)
@@ -76,7 +76,7 @@ func TestReplicaPreservesJSONLiteralNullDistinctFromSQLNull(t *testing.T) {
 	var jsonNull, sqlNull bool
 	require.NoError(t, target.Raw(`SELECT before_value='null'::jsonb AND after_value='null'::jsonb FROM operation_logs WHERE id='op-json-null'`).Scan(&jsonNull).Error)
 	require.True(t, jsonNull)
-	require.NoError(t, target.Raw(`SELECT structured_summary IS NULL FROM knowledges WHERE id='article'`).Scan(&sqlNull).Error)
+	require.NoError(t, target.Raw(`SELECT structured_summary IS NULL FROM entries WHERE id='article'`).Scan(&sqlNull).Error)
 	require.True(t, sqlNull)
 	restored, err := Capture(ctx, target)
 	require.NoError(t, err)
@@ -191,7 +191,7 @@ func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
 	oldInfo, err := os.Stat(logPath)
 	require.NoError(t, err)
 	// Each class changes through raw SQL, exercising the periodic fallback too.
-	for _, statement := range []string{`UPDATE entities SET description='new description' WHERE id='entity-a'`, `UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`, `UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`, `UPDATE knowledge_topics SET source='model' WHERE topic_id='topic'`, `UPDATE follow_feed_states SET last_viewed_at=now()`, `UPDATE knowledges SET processing_review_reason='new review', content_type_corrected=false WHERE id='article'`, `UPDATE knowledges SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`, `UPDATE knowledge_repost_sources SET author='new author'`, `UPDATE data_sources SET name='renamed RSS'`, `UPDATE models SET display_name='renamed model'`, `INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`} {
+	for _, statement := range []string{`UPDATE entities SET description='new description' WHERE id='entity-a'`, `UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`, `UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`, `UPDATE entry_topics SET source='model' WHERE topic_id='topic'`, `UPDATE follow_feed_states SET last_viewed_at=now()`, `UPDATE entries SET processing_review_reason='new review', content_type_corrected=false WHERE id='article'`, `UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`, `UPDATE entry_repost_sources SET author='new author'`, `UPDATE data_sources SET name='renamed RSS'`, `UPDATE models SET display_name='renamed model'`, `INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
 	require.Eventually(t, func() bool {
@@ -293,7 +293,7 @@ func TestVectorManifestComparesCoverageAndProfileNotValuesOrChunkIDs(t *testing.
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
-	for _, statement := range []string{`INSERT INTO chunks(id,space_id,knowledge_base_id,knowledge_id,content,chunk_index,start_at,end_at,content_hash) VALUES('chunk-a',1,'kb','article','observations',0,0,12,'chunkhash')`, `INSERT INTO embeddings(source_id,source_type,chunk_id,knowledge_id,knowledge_base_id,model_id,dimension,embedding) VALUES('chunk-a',0,'chunk-a','article','kb','embed',3,'[1,0,0]')`, `INSERT INTO article_embeddings(knowledge_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','embed',3,'[1,0,0]','articlehash')`, `INSERT INTO image_embeddings(knowledge_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','../../attachments/article/image.png','embed',3,'[1,0,0]','imagehash')`, `UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`} {
+	for _, statement := range []string{`INSERT INTO chunks(id,space_id,knowledge_base_id,entry_id,content,chunk_index,start_at,end_at,content_hash) VALUES('chunk-a',1,'kb','article','observations',0,0,12,'chunkhash')`, `INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,knowledge_base_id,model_id,dimension,embedding) VALUES('chunk-a',0,'chunk-a','article','kb','embed',3,'[1,0,0]')`, `INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','embed',3,'[1,0,0]','articlehash')`, `INSERT INTO image_embeddings(entry_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','../../attachments/article/image.png','embed',3,'[1,0,0]','imagehash')`, `UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
 	wanted, err := BuildManifest(ctx, db, root, "")

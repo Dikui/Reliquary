@@ -149,7 +149,7 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 				}
 				// Published original text lives in the vault. Rejected/pending text
 				// has no article file and remains in this readable replica.
-				if table == "knowledges" && row["vault_path"] != "" {
+				if table == "entries" && row["vault_path"] != "" {
 					delete(clean, "vault_body")
 				}
 				items = append(items, clean)
@@ -310,8 +310,8 @@ func replicaFilesForFormat(snapshot *Snapshot, format int) (map[string][]byte, e
 		if configTable(table) {
 			dir = "config"
 		}
-		if format == 1 {
-			table, rows = legacyTable(table), namedRows(rows, true)
+		if format < FormatVersion {
+			table, rows = legacyTable(table, format), namedRows(rows, true, format)
 		}
 		data, err := json.MarshalIndent(rows, "", "  ")
 		if err != nil {
@@ -400,11 +400,15 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	if err := AtomicWrite(filepath.Join(directory, "manifest.json"), append(data, '\n')); err != nil {
 		return err
 	}
-	for _, table := range []string{"spaces", "api_keys"} {
+	for _, table := range []string{"spaces", "api_keys", "entries", "entry_entities", "entry_topics", "entry_processing_spans", "entry_repost_sources"} {
 		if _, present := snapshot.Tables[table]; !present {
 			continue
 		}
-		oldPath := filepath.Join(directory, "config", legacyTable(table)+".json")
+		dir := "data"
+		if configTable(table) {
+			dir = "config"
+		}
+		oldPath := filepath.Join(directory, dir, legacyTable(table)+".json")
 		if err := os.Remove(oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

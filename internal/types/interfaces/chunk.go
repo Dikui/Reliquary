@@ -6,10 +6,10 @@ import (
 	"reliquary/internal/types"
 )
 
-// ChunkImageInfo holds (knowledge_id, image_info) pairs for image cleanup before chunk deletion.
+// ChunkImageInfo holds (entry_id, image_info) pairs for image cleanup before chunk deletion.
 type ChunkImageInfo struct {
-	KnowledgeID string `gorm:"column:knowledge_id"`
-	ImageInfo   string `gorm:"column:image_info"`
+	EntryID   string `gorm:"column:entry_id"`
+	ImageInfo string `gorm:"column:image_info"`
 }
 
 // ChunkRepository defines the interface for chunk repository operations
@@ -27,18 +27,18 @@ type ChunkRepository interface {
 	ListChunksByIDOnly(ctx context.Context, ids []string) ([]*types.Chunk, error)
 	// ListChunksBySeqID lists chunks by seq_ids
 	ListChunksBySeqID(ctx context.Context, spaceID uint64, seqIDs []int64) ([]*types.Chunk, error)
-	// ListChunksByKnowledgeID lists the knowledge's text chunks. Despite the name
-	// it filters to chunk_type = 'text'; reach for ListChunksByKnowledgeIDAndTypes
+	// ListChunksByEntryID lists the entry's text chunks. Despite the name
+	// it filters to chunk_type = 'text'; reach for ListChunksByEntryIDAndTypes
 	// when summary, parent_text or image chunks are needed too.
-	ListChunksByKnowledgeID(ctx context.Context, spaceID uint64, knowledgeID string) ([]*types.Chunk, error)
-	// ListChunksByKnowledgeIDAndTypes lists the knowledge's chunks restricted to
+	ListChunksByEntryID(ctx context.Context, spaceID uint64, entryID string) ([]*types.Chunk, error)
+	// ListChunksByEntryIDAndTypes lists the entry's chunks restricted to
 	// the given chunk types, ordered by chunk_index.
-	ListChunksByKnowledgeIDAndTypes(
-		ctx context.Context, spaceID uint64, knowledgeID string, chunkTypes []types.ChunkType,
+	ListChunksByEntryIDAndTypes(
+		ctx context.Context, spaceID uint64, entryID string, chunkTypes []types.ChunkType,
 	) ([]*types.Chunk, error)
-	ListPagedChunksByKnowledgeID(ctx context.Context,
+	ListPagedChunksByEntryID(ctx context.Context,
 		spaceID uint64,
-		knowledgeID string,
+		entryID string,
 		page *types.Pagination,
 		chunkType []types.ChunkType,
 		keyword string,
@@ -57,16 +57,16 @@ type ChunkRepository interface {
 	DeleteChunk(ctx context.Context, spaceID uint64, id string) error
 	// DeleteChunks deletes chunks by IDs in batch
 	DeleteChunks(ctx context.Context, spaceID uint64, ids []string) error
-	// DeleteChunksByKnowledgeID deletes chunks by knowledge id
-	DeleteChunksByKnowledgeID(ctx context.Context, spaceID uint64, knowledgeID string) error
-	// DeleteByKnowledgeList deletes all chunks for a knowledge list
-	DeleteByKnowledgeList(ctx context.Context, spaceID uint64, knowledgeIDs []string) error
-	// ListImageInfoByKnowledgeIDs returns non-empty (knowledge_id, image_info) pairs for image cleanup.
-	ListImageInfoByKnowledgeIDs(ctx context.Context, spaceID uint64, knowledgeIDs []string) ([]ChunkImageInfo, error)
+	// DeleteChunksByEntryID deletes chunks by entry id
+	DeleteChunksByEntryID(ctx context.Context, spaceID uint64, entryID string) error
+	// DeleteByEntryList deletes all chunks for a entry list
+	DeleteByEntryList(ctx context.Context, spaceID uint64, entryIDs []string) error
+	// ListImageInfoByEntryIDs returns non-empty (entry_id, image_info) pairs for image cleanup.
+	ListImageInfoByEntryIDs(ctx context.Context, spaceID uint64, entryIDs []string) ([]ChunkImageInfo, error)
 	// CountChunksByKnowledgeBaseID counts the number of chunks in a knowledge base.
 	CountChunksByKnowledgeBaseID(ctx context.Context, spaceID uint64, kbID string) (int64, error)
-	// DeleteUnindexedChunks deletes unindexed chunks by knowledge id and chunk index range
-	DeleteUnindexedChunks(ctx context.Context, spaceID uint64, knowledgeID string) ([]*types.Chunk, error)
+	// DeleteUnindexedChunks deletes unindexed chunks by entry id and chunk index range
+	DeleteUnindexedChunks(ctx context.Context, spaceID uint64, entryID string) ([]*types.Chunk, error)
 }
 
 // ChunkService defines the interface for chunk service operations
@@ -77,12 +77,12 @@ type ChunkService interface {
 	GetChunkByID(ctx context.Context, id string) (*types.Chunk, error)
 	// GetChunkByIDOnly gets a chunk by id without space filter (for permission resolution)
 	GetChunkByIDOnly(ctx context.Context, id string) (*types.Chunk, error)
-	// ListChunksByKnowledgeID lists chunks by knowledge id
-	ListChunksByKnowledgeID(ctx context.Context, knowledgeID string) ([]*types.Chunk, error)
-	// ListPagedChunksByKnowledgeID lists paged chunks by knowledge id
-	ListPagedChunksByKnowledgeID(
+	// ListChunksByEntryID lists chunks by entry id
+	ListChunksByEntryID(ctx context.Context, entryID string) ([]*types.Chunk, error)
+	// ListPagedChunksByEntryID lists paged chunks by entry id
+	ListPagedChunksByEntryID(
 		ctx context.Context,
-		knowledgeID string,
+		entryID string,
 		page *types.Pagination,
 		chunkType []types.ChunkType,
 	) (*types.PageResult, error)
@@ -94,10 +94,10 @@ type ChunkService interface {
 	DeleteChunk(ctx context.Context, id string) error
 	// DeleteChunks deletes chunks by IDs in batch
 	DeleteChunks(ctx context.Context, ids []string) error
-	// DeleteChunksByKnowledgeID deletes chunks by knowledge id
-	DeleteChunksByKnowledgeID(ctx context.Context, knowledgeID string) error
-	// DeleteByKnowledgeList deletes all chunks for a knowledge list
-	DeleteByKnowledgeList(ctx context.Context, ids []string) error
+	// DeleteChunksByEntryID deletes chunks by entry id
+	DeleteChunksByEntryID(ctx context.Context, entryID string) error
+	// DeleteByEntryList deletes all chunks for a entry list
+	DeleteByEntryList(ctx context.Context, ids []string) error
 	// ListChunkByParentID lists chunks by parent id
 	ListChunkByParentID(ctx context.Context, spaceID uint64, parentID string) ([]*types.Chunk, error)
 	// GetRepository gets the chunk repository

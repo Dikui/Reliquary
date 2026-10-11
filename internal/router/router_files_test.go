@@ -71,7 +71,7 @@ func (s *stubFileService) CheckConnectivity(ctx context.Context) error {
 	return nil
 }
 
-func (s *stubFileService) SaveFile(ctx context.Context, file *multipart.FileHeader, spaceID uint64, knowledgeID string) (string, error) {
+func (s *stubFileService) SaveFile(ctx context.Context, file *multipart.FileHeader, spaceID uint64, entryID string) (string, error) {
 	panic("unexpected call to SaveFile")
 }
 
@@ -94,7 +94,7 @@ func (s *stubFileService) DeleteFile(ctx context.Context, filePath string) error
 	panic("unexpected call to DeleteFile")
 }
 
-func (s *stubFileService) CopyFile(ctx context.Context, srcPath string, spaceID uint64, knowledgeID string) (string, error) {
+func (s *stubFileService) CopyFile(ctx context.Context, srcPath string, spaceID uint64, entryID string) (string, error) {
 	panic("unexpected call to CopyFile")
 }
 
@@ -329,8 +329,8 @@ func TestKBScopedFilesRejectsPathNotOwnedByKBSpace(t *testing.T) {
 	}
 }
 
-// KB-scoped proxy is for embedded exports/ images only; raw knowledge uploads
-// must use /knowledge/:id/download even when the space matches.
+// KB-scoped proxy is for embedded exports/ images only; raw entry uploads
+// must use /entries/:id/download even when the space matches.
 func TestKBScopedFilesRejectsNonExportsPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -348,7 +348,7 @@ func TestKBScopedFilesRejectsNonExportsPath(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet,
-		"/knowledge-bases/kb-1/files?file_path="+url.QueryEscape("local://10008/knowledge-id/123.pdf"), nil)
+		"/knowledge-bases/kb-1/files?file_path="+url.QueryEscape("local://10008/entry-id/123.pdf"), nil)
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)
 

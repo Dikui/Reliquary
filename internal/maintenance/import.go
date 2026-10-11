@@ -139,7 +139,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	for _, requirement := range snapshot.Required {
 		missing[requirement.Kind+":"+requirement.ID] = true
 	}
-	for _, row := range snapshot.Tables["knowledges"] {
+	for _, row := range snapshot.Tables["entries"] {
 		if materialize != nil {
 			if err := materialize(row); err != nil {
 				return nil, err
@@ -147,13 +147,13 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 		}
 	}
 	var existing int64
-	if err := db.WithContext(ctx).Table("knowledges").Count(&existing).Error; err != nil {
+	if err := db.WithContext(ctx).Table("entries").Count(&existing).Error; err != nil {
 		return nil, err
 	}
 	if existing != 0 {
-		return nil, errors.New("replica import requires an empty knowledge database")
+		return nil, errors.New("replica import requires an empty entry database")
 	}
-	order := []string{"spaces", "users", "auth_tokens", "knowledge_bases", "models", "data_sources", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "knowledges", "knowledge_entities", "knowledge_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "sync_logs", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "knowledge_processing_spans", "knowledge_repost_sources", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
+	order := []string{"spaces", "users", "auth_tokens", "knowledge_bases", "models", "data_sources", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "sync_logs", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
 	covered := map[string]bool{}
 	for _, table := range order {
 		covered[table] = true
@@ -175,7 +175,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 		}
 		// This trigger records a real processing transition. Import must keep the
 		// historical qualification timestamp rather than manufacture a new one.
-		if err := tx.Exec("ALTER TABLE public.knowledges DISABLE TRIGGER set_follow_ready_at").Error; err != nil {
+		if err := tx.Exec("ALTER TABLE public.entries DISABLE TRIGGER set_follow_ready_at").Error; err != nil {
 			return err
 		}
 		for _, table := range order {
@@ -247,7 +247,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 				}
 			}
 		}
-		if err := tx.Exec("ALTER TABLE public.knowledges ENABLE TRIGGER set_follow_ready_at").Error; err != nil {
+		if err := tx.Exec("ALTER TABLE public.entries ENABLE TRIGGER set_follow_ready_at").Error; err != nil {
 			return err
 		}
 		// Restore every owned serial sequence, including audit history IDs.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -162,7 +163,9 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 				return err
 			}
 			var wanted maintenance.Manifest
-			if err := json.Unmarshal(data, &wanted); err != nil {
+			reader := json.NewDecoder(bytes.NewReader(data))
+			reader.UseNumber()
+			if err := reader.Decode(&wanted); err != nil {
 				return err
 			}
 			if *allowReconfigurationAppend {
@@ -266,12 +269,12 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		}
 		return emit(result)
 	case "reindex":
-		for _, index := range []string{"chunks_search_idx", "knowledges_summary_search_idx"} {
+		for _, index := range []string{"chunks_search_idx", "entries_summary_search_idx"} {
 			if err := db.WithContext(ctx).Exec("REINDEX INDEX public." + index).Error; err != nil {
 				return err
 			}
 		}
-		if err := db.WithContext(ctx).Exec("ANALYZE public.knowledges,public.chunks").Error; err != nil {
+		if err := db.WithContext(ctx).Exec("ANALYZE public.entries,public.chunks").Error; err != nil {
 			return err
 		}
 		return emit(map[string]bool{"reindexed": true})

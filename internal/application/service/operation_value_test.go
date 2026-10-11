@@ -12,8 +12,8 @@ func TestOperationValuesKeepPersistedOwnershipKey(t *testing.T) {
 	for _, value := range []any{
 		types.Topic{SpaceID: 1, ID: "topic"},
 		&types.Topic{SpaceID: 1, ID: "topic"},
-		types.KnowledgeTopic{SpaceID: 1, KnowledgeID: "article", TopicID: "topic"},
-		[]types.KnowledgeTopic{{SpaceID: 1, KnowledgeID: "article", TopicID: "topic"}},
+		types.EntryTopic{SpaceID: 1, EntryID: "article", TopicID: "topic"},
+		[]types.EntryTopic{{SpaceID: 1, EntryID: "article", TopicID: "topic"}},
 	} {
 		data, err := marshalOperationValue(value)
 		require.NoError(t, err)

@@ -20,7 +20,7 @@ func NewMaintenanceHandler(db *gorm.DB) *MaintenanceHandler { return &Maintenanc
 func (h *MaintenanceHandler) CollectionGate(c *gin.Context) {
 	path := c.FullPath()
 	intake := c.Request.Method == http.MethodPost && (path == "/api/v1/ingest" ||
-		strings.HasPrefix(path, "/api/v1/knowledge-bases/:id/knowledge/") ||
+		strings.HasPrefix(path, "/api/v1/knowledge-bases/:id/entries/") ||
 		(path == "/api/v1/data-sources/:id/sync"))
 	if intake {
 		state, err := maintenanceops.Status(c.Request.Context(), h.db)

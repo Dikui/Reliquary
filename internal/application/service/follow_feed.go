@@ -16,16 +16,16 @@ import (
 )
 
 func (s *FollowService) eligibleFeed(ctx context.Context, spaceID uint64, cutoff time.Time, targetIDs []string) *gorm.DB {
-	query := s.db.WithContext(ctx).Table("knowledges k").Where("k.space_id=? AND k.created_at<=? AND k.follow_ready_at<=?", spaceID, cutoff, cutoff).Where(followEligibleSQL)
+	query := s.db.WithContext(ctx).Table("entries k").Where("k.space_id=? AND k.created_at<=? AND k.follow_ready_at<=?", spaceID, cutoff, cutoff).Where(followEligibleSQL)
 	query = query.Joins(`JOIN LATERAL (
  SELECT MAX(matches.entered_at) AS entered_at, COUNT(*) AS match_count, ARRAY_AGG(matches.target_id) AS target_ids FROM (
  SELECT GREATEST(k.follow_ready_at,ke.created_at) AS entered_at, f.target_id
- FROM knowledge_entities ke JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
- WHERE ke.space_id=k.space_id AND ke.knowledge_id=k.id AND ke.created_at<=? AND f.created_at<=?
+ FROM entry_entities ke JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
+ WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.created_at<=? AND f.created_at<=?
  UNION ALL
  SELECT CASE WHEN kt.is_historical THEN NULL ELSE GREATEST(k.follow_ready_at,kt.created_at) END, f.target_id
- FROM knowledge_topics kt JOIN follows f ON f.space_id=kt.space_id AND f.target_type='topic' AND f.target_id=kt.topic_id
- WHERE kt.space_id=k.space_id AND kt.knowledge_id=k.id AND kt.created_at<=? AND f.created_at<=?
+ FROM entry_topics kt JOIN follows f ON f.space_id=kt.space_id AND f.target_type='topic' AND f.target_id=kt.topic_id
+ WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.created_at<=? AND f.created_at<=?
  ) matches) entry ON entry.match_count>0`, cutoff, cutoff, cutoff, cutoff)
 	if len(targetIDs) > 0 {
 		query = query.Where("EXISTS (SELECT 1 FROM unnest(entry.target_ids) target(id) WHERE target.id IN ?)", targetIDs)
@@ -117,7 +117,7 @@ type followCursor struct {
 	Collapse    bool       `json:"collapse"`
 	IncludeSeen bool       `json:"include_seen"`
 	CollectedAt time.Time  `json:"collected"`
-	ArticleID   string     `json:"id"`
+	EntryID     string     `json:"id"`
 }
 
 func decodeFollowCursor(value string, spaceID uint64) (*followCursor, error) {
@@ -130,7 +130,7 @@ func decodeFollowCursor(value string, spaceID uint64) (*followCursor, error) {
 		return invalid()
 	}
 	var cursor followCursor
-	if json.Unmarshal(data, &cursor) != nil || cursor.Version != 1 || cursor.SpaceID != spaceID || cursor.Cutoff.IsZero() || cursor.Cutoff.After(time.Now()) || cursor.CollectedAt.IsZero() || cursor.CollectedAt.After(cursor.Cutoff) || cursor.ArticleID == "" || len(cursor.ArticleID) > 36 {
+	if json.Unmarshal(data, &cursor) != nil || cursor.Version != 1 || cursor.SpaceID != spaceID || cursor.Cutoff.IsZero() || cursor.Cutoff.After(time.Now()) || cursor.CollectedAt.IsZero() || cursor.CollectedAt.After(cursor.Cutoff) || cursor.EntryID == "" || len(cursor.EntryID) > 36 {
 		return invalid()
 	}
 	if _, _, err := normalizeFollowFeed(types.FollowFeedRequest{TargetIDs: cursor.Targets}); err != nil {
@@ -200,29 +200,29 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 		return response, nil
 	}
 	// Reuse the retrieval projection and folding without invoking ranking or models.
-	search := &knowledgeSearchService{db: s.db}
+	search := &searchService{db: s.db}
 	var space types.Space
 	if err := s.db.WithContext(ctx).Select("id,retrieval_config").Where("id=?", spaceID).First(&space).Error; err != nil {
 		return nil, err
 	}
 	config := space.RetrievalConfig
-	hits := make([]articleSearchHit, 0, len(rows))
+	hits := make([]entrySearchHit, 0, len(rows))
 	collected := map[string]time.Time{}
 	entered := map[string]*time.Time{}
 	for _, row := range rows {
-		hits = append(hits, articleSearchHit{KnowledgeID: row.ID, MatchType: types.MatchTypeKeywords})
+		hits = append(hits, entrySearchHit{EntryID: row.ID, MatchType: types.MatchTypeKeywords})
 		collected[row.ID] = row.CreatedAt
 		entered[row.ID] = row.EnteredAt
 	}
-	articles, err := search.mergeArticleHits(ctx, spaceID, [][]articleSearchHit{nil, nil, hits}, config)
+	articles, err := search.mergeEntryHits(ctx, spaceID, [][]entrySearchHit{nil, nil, hits}, config)
 	if err != nil {
 		return nil, err
 	}
-	slices.SortFunc(articles, func(a, b *types.ArticleSearchResult) int {
-		if result := collected[b.ArticleID].Compare(collected[a.ArticleID]); result != 0 {
+	slices.SortFunc(articles, func(a, b *types.EntrySearchResult) int {
+		if result := collected[b.EntryID].Compare(collected[a.EntryID]); result != 0 {
 			return result
 		}
-		return strings.Compare(a.ArticleID, b.ArticleID)
+		return strings.Compare(a.EntryID, b.EntryID)
 	})
 	follows, err := s.ListFollows(ctx)
 	if err != nil {
@@ -242,12 +242,12 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 		}
 		for _, entity := range article.Entities {
 			if follow, ok := byTarget[types.FollowTargetEntity+":"+entity.ID]; ok {
-				matched[article.ArticleID] = append(matched[article.ArticleID], follow)
+				matched[article.EntryID] = append(matched[article.EntryID], follow)
 			}
 		}
 		for _, topic := range article.Topics {
 			if follow, ok := byTarget[types.FollowTargetTopic+":"+topic.ID]; ok {
-				matched[article.ArticleID] = append(matched[article.ArticleID], follow)
+				matched[article.EntryID] = append(matched[article.EntryID], follow)
 			}
 		}
 	}
@@ -257,11 +257,11 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 			return nil, err
 		}
 	}
-	var project func(*types.ArticleSearchResult) *types.FollowFeedArticle
-	project = func(article *types.ArticleSearchResult) *types.FollowFeedArticle {
-		date := collected[article.ArticleID]
-		result := &types.FollowFeedArticle{ArticleSearchResult: *article, CollectedAt: date, EnteredAt: entered[article.ArticleID],
-			IsNew: entered[article.ArticleID] != nil && (state.LastViewedAt == nil || entered[article.ArticleID].After(*state.LastViewedAt)), MatchedFollows: matched[article.ArticleID], SimilarReports: []*types.FollowFeedArticle{}}
+	var project func(*types.EntrySearchResult) *types.FollowFeedArticle
+	project = func(article *types.EntrySearchResult) *types.FollowFeedArticle {
+		date := collected[article.EntryID]
+		result := &types.FollowFeedArticle{EntrySearchResult: *article, CollectedAt: date, EnteredAt: entered[article.EntryID],
+			IsNew: entered[article.EntryID] != nil && (state.LastViewedAt == nil || entered[article.EntryID].After(*state.LastViewedAt)), MatchedFollows: matched[article.EntryID], SimilarReports: []*types.FollowFeedArticle{}}
 		for _, child := range article.SimilarReports {
 			result.SimilarReports = append(result.SimilarReports, project(child))
 		}
@@ -269,9 +269,9 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 	}
 	// Fold the full query window before keyset slicing so children cannot reappear.
 	if cursor != nil {
-		articles = slices.DeleteFunc(articles, func(a *types.ArticleSearchResult) bool {
-			date := collected[a.ArticleID]
-			return date.After(cursor.CollectedAt) || (date.Equal(cursor.CollectedAt) && a.ArticleID <= cursor.ArticleID)
+		articles = slices.DeleteFunc(articles, func(a *types.EntrySearchResult) bool {
+			date := collected[a.EntryID]
+			return date.After(cursor.CollectedAt) || (date.Equal(cursor.CollectedAt) && a.EntryID <= cursor.EntryID)
 		})
 	}
 	pageSize := min(limit, len(articles))
@@ -280,7 +280,7 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 	}
 	if len(articles) > pageSize {
 		last := articles[pageSize-1]
-		next := followCursor{Version: 1, SpaceID: spaceID, Cutoff: cutoff, Since: since, Targets: request.TargetIDs, Collapse: request.CollapseSimilar == nil || *request.CollapseSimilar, IncludeSeen: request.IncludeSeen, CollectedAt: collected[last.ArticleID], ArticleID: last.ArticleID}
+		next := followCursor{Version: 1, SpaceID: spaceID, Cutoff: cutoff, Since: since, Targets: request.TargetIDs, Collapse: request.CollapseSimilar == nil || *request.CollapseSimilar, IncludeSeen: request.IncludeSeen, CollectedAt: collected[last.EntryID], EntryID: last.EntryID}
 		data, err := json.Marshal(next)
 		if err != nil {
 			return nil, err

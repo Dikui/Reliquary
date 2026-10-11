@@ -10,10 +10,10 @@ import "highlight.js/styles/github.css";
 import mermaid from "mermaid";
 import { onMounted, ref, nextTick, onUnmounted, watch, computed } from "vue";
 import {
-  downKnowledgeDetails, getChunkByIdOnly, previewKnowledgeFile,
-  updateKnowledgeMetadata,
-  reprocessKnowledge, getKnowledgeDetails,
-  KNOWLEDGE_CHUNK_PAGE_SIZE,
+  downEntryDetails, getChunkByIdOnly, previewEntryFile,
+  updateEntryMetadata,
+  reprocessEntry, getEntryDetails,
+  ENTRY_CHUNK_PAGE_SIZE,
 } from "@/api/knowledge-base";
 import { MessagePlugin } from "tdesign-vue-next";
 import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages, isValidURL } from '@/utils/security';
@@ -21,12 +21,12 @@ import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
 import { useI18n } from 'vue-i18n';
 import DocumentPreview from '@/components/DocumentPreview.vue';
-import RepostSources from '@/views/knowledge/components/RepostSources.vue';
-import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
-import KnowledgeReviewActions from '@/components/KnowledgeReviewActions.vue';
-import KnowledgeArticleJudgments from '@/components/KnowledgeArticleJudgments.vue';
-import KnowledgeProcessingTimeline from '@/components/KnowledgeProcessingTimeline.vue';
-import { resolveKnowledgeDownloadFileName } from '@/views/knowledge/knowledgeDownloadFileName';
+import RepostSources from '@/views/knowledge-base/components/RepostSources.vue';
+import EntryClassification from '@/components/EntryClassification.vue';
+import ReviewActions from '@/components/ReviewActions.vue';
+import EntryArticleJudgments from '@/components/EntryArticleJudgments.vue';
+import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
+import { resolveEntryDownloadFileName } from '@/views/knowledge-base/entryDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
 import { getApiBaseUrl } from '@/utils/api-base';
 import { copyWithToast } from '@/utils/clipboard';
@@ -117,7 +117,7 @@ const saveMetadata = async () => {
       value[key] = parseMetadataValue(row);
     }
     metadataSaving.value = true;
-    const result: any = await updateKnowledgeMetadata(props.details.id, value);
+    const result: any = await updateEntryMetadata(props.details.id, value);
     props.details.custom_metadata = value;
     metadataEditing.value = false;
     if (result?.data) {
@@ -138,7 +138,7 @@ const reprocess = async () => {
   if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value) return;
   reprocessing.value = true;
   try {
-    const result: any = await reprocessKnowledge(props.details.id);
+    const result: any = await reprocessEntry(props.details.id);
     applyProcessingState(result?.data || { parse_status: 'pending' });
     MessagePlugin.success(t('knowledgeBase.reprocessQueued'));
   } catch (error: any) {
@@ -190,7 +190,7 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "parse_status", "kbId"]);
+const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "kbId"]);
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
@@ -227,7 +227,7 @@ const loadIntakeOriginal = async () => {
   intakeOriginalError.value = '';
   try {
     const start = intakeOriginalOffset.value;
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/knowledge/${props.details.id}/preview`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${props.details.id}/preview`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('reliquary_token') || ''}`,
         Range: `bytes=${start}-${start + 65535}`,
@@ -282,7 +282,7 @@ const scheduleProcessingPoll = () => {
     processingPollTimer = null;
     if (generation !== processingPollGeneration || !props.visible || props.details?.id !== id) return;
     try {
-      const result: any = await getKnowledgeDetails(id);
+      const result: any = await getEntryDetails(id);
       if (generation === processingPollGeneration && props.details?.id === id && result?.success && result.data) {
         applyProcessingState(result.data);
         if (!isProcessing.value && props.details.processing_mode !== 'summary_only') emit('getDoc', 1);
@@ -522,7 +522,7 @@ const preprocessMathDelimiters = (rawText: string): string => {
     .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
 };
 const renderer = new marked.Renderer();
-const CHUNK_PAGE_SIZE = KNOWLEDGE_CHUNK_PAGE_SIZE;
+const CHUNK_PAGE_SIZE = ENTRY_CHUNK_PAGE_SIZE;
 const chunkPage = ref(1);
 const loadedChunkPage = ref(1);
 let pendingChunkPage: number | null = null;
@@ -789,7 +789,7 @@ const loadAudioPreview = async () => {
   if (!props.details?.id || audioBlobUrl.value) return;
   audioLoading.value = true;
   try {
-    const blob = await previewKnowledgeFile(props.details.id);
+    const blob = await previewEntryFile(props.details.id);
     audioBlobUrl.value = URL.createObjectURL(blob);
   } catch (err) {
     console.error('Audio preview load failed:', err);
@@ -1088,7 +1088,7 @@ const getParentContent = (item: any) => {
 };
 
 const downloadFile = () => {
-  downKnowledgeDetails(props.details.id)
+  downEntryDetails(props.details.id)
     .then((result) => {
       if (result) {
         if (url.value) {
@@ -1098,7 +1098,7 @@ const downloadFile = () => {
         const link = document.createElement("a");
         link.style.display = "none";
         link.setAttribute("href", url.value);
-        link.setAttribute("download", resolveKnowledgeDownloadFileName(props.details));
+        link.setAttribute("download", resolveEntryDownloadFileName(props.details));
         document.body.appendChild(link);
         link.click();
         nextTick(() => {
@@ -1160,7 +1160,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
            link's status dot / duration stays live even before the user
            opens the secondary drawer. -->
       <div class="kp-trigger-shadow" aria-hidden="true">
-        <KnowledgeProcessingTimeline v-if="details.id" :knowledge-id="details.id" :parse-status="details.parse_status"
+        <EntryProcessingTimeline v-if="details.id" :entry-id="details.id" :parse-status="details.parse_status"
           :compact="true" :grace-poll="false" @update:has-spans="hasTimelineSpans = $event"
           @update:summary="timelineSummary = $event" />
       </div>
@@ -1179,7 +1179,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         placement="right" :class="['kp-secondary-drawer', { 'kp-secondary-drawer--resizing': timelineDrawerResizing }]"
         @close="closeTimeline">
         <div class="kp-drawer-shell" :class="{ 'kp-drawer-shell--resizing': timelineDrawerResizing }">
-          <KnowledgeProcessingTimeline v-if="details.id && timelineDrawerVisible" :knowledge-id="details.id"
+          <EntryProcessingTimeline v-if="details.id && timelineDrawerVisible" :entry-id="details.id"
             :parse-status="details.parse_status" :doc-title="details.title" show-close @close="closeTimeline" />
         </div>
       </t-drawer>
@@ -1230,12 +1230,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('knowledgeBase.intakePreviewOriginal') : $t('knowledgeBase.intakeLoadMore')) : $t('knowledgeBase.intakePreviewOriginal') }}</t-button>
           <p v-if="intakeOriginalError" class="field-hint field-hint--error">{{ intakeOriginalError }}</p>
           <div v-if="intakeOriginal" class="md-content" v-html="processMarkdown(intakeOriginal)" />
-          <KnowledgeReviewActions v-if="isIntakeRejected" :knowledge="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
+          <ReviewActions v-if="isIntakeRejected" :entry="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
         </section>
 
         <section v-if="details.processing_review_status === 'pending'" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('knowledgeReview.processing') }}</h4>
-          <KnowledgeReviewActions :knowledge="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
+          <ReviewActions :entry="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
         </section>
 
         <section v-if="details.repost_sources?.length" class="setting-drawer__section doc-repost-section">
@@ -1324,8 +1324,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               {{ $t('knowledgeBase.reprocess') }}
             </t-button>
           </div>
-          <KnowledgeClassification :knowledge="details" followable @open-entity="emit('openEntity', $event)" />
-          <KnowledgeArticleJudgments v-if="canReprocess && !isIntakeRejected" :knowledge="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
+          <EntryArticleJudgments v-if="canReprocess && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('knowledgeBase.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('knowledgeBase.parsingFailed') }}</p>
         </section>
@@ -1444,7 +1444,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
 
           <div v-else-if="viewMode === 'preview'">
-            <DocumentPreview :knowledgeId="details.id" :fileType="details.file_type" :fileName="details.title"
+            <DocumentPreview :entryId="details.id" :fileType="details.file_type" :fileName="details.title"
               :active="viewMode === 'preview'" />
           </div>
         </section>

@@ -10,7 +10,7 @@ import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 import * as personalServerError from '../../utils/personalServerError'
-import * as searchHelpers from '../../utils/knowledgeSearch'
+import * as searchHelpers from '../../utils/search'
 
 const require = createRequire(import.meta.url)
 const { DatePicker, Input, ConfigProvider } = require('tdesign-vue-next')
@@ -39,8 +39,8 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     '@/utils/personalServerError': personalServerError,
     '@/utils/api-base': { getApiBaseUrl: () => options.baseUrl ?? 'http://localhost' },
     '@/utils/clipboard': { copyWithToast(value: string, successKey: string) { copies.push({ value, successKey }) } },
-    '@/utils/knowledgeSearch': searchHelpers,
-    '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
+    '@/utils/search': searchHelpers,
+    '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     '@/api/space': {
       listAPIKeys: async () => ({ success: true, data: options.keys ?? [] }),
       createAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'token' } } },

@@ -30,15 +30,15 @@ func (s *stubKBLookup) GetKnowledgeBaseByID(_ context.Context, id string) (*type
 	return nil, apprepo.ErrKnowledgeBaseNotFound
 }
 
-// TestIsResourceNotFound_RecognisesKnowledgeSentinel pins that a missing
-// *document* (knowledge) is treated as not-found, not a transient error.
-// Regression: ErrKnowledgeNotFound was absent from the predicate, so
-// GET/DELETE /knowledge/:id and chunk list resolved a missing doc into a
+// TestIsResourceNotFound_RecognisesEntrySentinel pins that a missing
+// *document* (entry) is treated as not-found, not a transient error.
+// Regression: ErrEntryNotFound was absent from the predicate, so
+// GET/DELETE /entries/:id and chunk list resolved a missing doc into a
 // raw 500 instead of a 404 — which the CLI then surfaced as a retryable
 // server.error (exit 7), looping agents on a permanently-absent doc.
-func TestIsResourceNotFound_RecognisesKnowledgeSentinel(t *testing.T) {
-	require.True(t, isResourceNotFound(apprepo.ErrKnowledgeNotFound),
-		"missing document (ErrKnowledgeNotFound) must classify as not-found")
+func TestIsResourceNotFound_RecognisesEntrySentinel(t *testing.T) {
+	require.True(t, isResourceNotFound(apprepo.ErrEntryNotFound),
+		"missing document (ErrEntryNotFound) must classify as not-found")
 	require.True(t, isResourceNotFound(apprepo.ErrKnowledgeBaseNotFound),
 		"missing KB must still classify as not-found")
 	require.True(t, isResourceNotFound(apprepo.ErrChunkNotFound),

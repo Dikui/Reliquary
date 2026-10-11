@@ -23,7 +23,7 @@ func TestParseTaskID_CompoundTaskType(t *testing.T) {
 }
 
 func TestTaskSpaceID(t *testing.T) {
-	taskID := GenerateTaskID("knowledge_move", 7, "source-kb")
+	taskID := GenerateTaskID("entry_move", 7, "source-kb")
 	got, err := TaskSpaceID(taskID)
 	if err != nil {
 		t.Fatalf("TaskSpaceID failed: %v", err)

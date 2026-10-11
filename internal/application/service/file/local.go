@@ -46,17 +46,17 @@ func NewLocalFileService(baseDir, externalURL string) interfaces.FileService {
 }
 
 // SaveFile stores an uploaded file to the local file system
-// The file is stored in a directory structure: baseDir/spaceID/knowledgeID/filename
+// The file is stored in a directory structure: baseDir/spaceID/entryID/filename
 // Returns the full file path or an error if saving fails
 func (s *localFileService) SaveFile(ctx context.Context,
-	file *multipart.FileHeader, spaceID uint64, knowledgeID string,
+	file *multipart.FileHeader, spaceID uint64, entryID string,
 ) (string, error) {
 	logger.Info(ctx, "Starting to save file locally")
-	logger.Infof(ctx, "File information: name=%s, size=%d, space ID=%d, knowledge ID=%s",
-		file.Filename, file.Size, spaceID, knowledgeID)
+	logger.Infof(ctx, "File information: name=%s, size=%d, space ID=%d, entry ID=%s",
+		file.Filename, file.Size, spaceID, entryID)
 
-	// Create storage directory with space and knowledge ID
-	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", spaceID), knowledgeID)
+	// Create storage directory with space and entry ID
+	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", spaceID), entryID)
 	if _, err := secutils.SafePathUnderBase(s.baseDir, dir); err != nil {
 		logger.Errorf(ctx, "Path traversal denied for SaveFile dir: %v", err)
 		return "", fmt.Errorf("invalid path: %w", err)
@@ -154,12 +154,12 @@ func (s *localFileService) DeleteFile(ctx context.Context, filePath string) erro
 	return nil
 }
 
-// CopyFile copies an existing local object to a new knowledge-owned object.
-// The destination uses the same layout as SaveFile (baseDir/{spaceID}/{knowledgeID}/{unique}{ext}),
+// CopyFile copies an existing local object to a new entry-owned object.
+// The destination uses the same layout as SaveFile (baseDir/{spaceID}/{entryID}/{unique}{ext}),
 // and the copy is a real byte-for-byte copy (no hardlink) so deleting the source
 // never affects it. Returns ErrCrossBackendCopy when srcPath is not a local path.
 func (s *localFileService) CopyFile(ctx context.Context,
-	srcPath string, spaceID uint64, knowledgeID string,
+	srcPath string, spaceID uint64, entryID string,
 ) (string, error) {
 	// Only local paths are accepted. A provider scheme other than local://
 	// means an unsupported source location, which this service
@@ -176,8 +176,8 @@ func (s *localFileService) CopyFile(ctx context.Context,
 		return "", fmt.Errorf("invalid source path: %w", err)
 	}
 
-	// Build destination path with the knowledge-owned layout.
-	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", spaceID), knowledgeID)
+	// Build destination path with the entry-owned layout.
+	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", spaceID), entryID)
 	if _, err := secutils.SafePathUnderBase(s.baseDir, dir); err != nil {
 		logger.Errorf(ctx, "Path traversal denied for CopyFile dir: %v", err)
 		return "", fmt.Errorf("invalid path: %w", err)

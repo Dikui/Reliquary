@@ -23,7 +23,7 @@ test('dark sidebar CSS filters only the wordmark after scoped compilation', asyn
 })
 
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
-const source = readFileSync(new URL('../views/knowledge/settings/KBChunkingDebug.vue', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../views/knowledge-base/settings/KBChunkingDebug.vue', import.meta.url), 'utf8')
 const statsTemplate = source.match(/<div class="chunk-stats">[\s\S]*?\n          <\/div>/)![0]
 const compiled = compileTemplate({ source: statsTemplate, filename: 'chunk-stats.vue', id: 'ui09-stats', ssr: true, ssrCssVars: [] })
 assert.deepEqual(compiled.errors, [])
@@ -42,7 +42,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes(locale === 'zh-CN' ? '最大 317' : 'Max 317'))
     assert.ok(html.includes(locale === 'zh-CN' ? '已截断；总数 10' : 'truncated; total 10'))
     assert.ok(html.includes(locale === 'zh-CN' ? '块' : 'chunks'))
-    assert.doesNotMatch(html, /knowledgeEditor\./)
+    assert.doesNotMatch(html, /entryEditor\./)
     if (locale === 'zh-CN') assert.doesNotMatch(html, /\bmin\b|\bmax\b/i)
   })
 }

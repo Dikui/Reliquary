@@ -38,7 +38,7 @@ END $$`).Error)
 	require.ErrorContains(t, err, "fixture refuses report audit")
 	require.Equal(t, before, vaultFileHashes(t, h.root), "audit failure removes only the newly created report file")
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Where("source_kind='report'").Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report'").Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	require.NoError(t, h.db.Model(&types.Chunk{}).Count(&count).Error)
 	require.Equal(t, chunkCount, count)
@@ -78,6 +78,6 @@ func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
 	require.NoError(t, h.documents.Scan(h.ctx, true))
 	require.Equal(t, before, vaultFileHashes(t, h.root))
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Where("source_kind='report' AND parse_status='completed'").Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report' AND parse_status='completed'").Count(&count).Error)
 	require.EqualValues(t, 1, count)
 }

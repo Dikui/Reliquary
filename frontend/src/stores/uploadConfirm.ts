@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess'
+import type { EntryProcessOverrides } from '@/types/entryProcess'
 import type { IntakeSourceInfo } from '@/api/knowledge-base'
 export type { IntakeSourceInfo } from '@/api/knowledge-base'
 
@@ -7,21 +7,21 @@ export type UploadConfirmMode = 'file' | 'url' | 'manual' | 'reparse'
 
 export interface UploadConfirmManualSource {
   kbId: string
-  knowledgeId?: string
+  entryId?: string
   title: string
   content: string
   sourceInfo?: IntakeSourceInfo
 }
 
 export interface UploadConfirmReparseSource {
-  knowledgeId: string
+  entryId: string
   fileName?: string
   fileType?: string
-  processOverrides?: KnowledgeProcessOverrides | null
+  processOverrides?: EntryProcessOverrides | null
 }
 
 export interface UploadConfirmResult {
-  processConfig: KnowledgeProcessOverrides
+  processConfig: EntryProcessOverrides
   mode: UploadConfirmMode
   files?: File[]
   urls?: string[]

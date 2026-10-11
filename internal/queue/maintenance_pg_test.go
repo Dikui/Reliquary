@@ -16,7 +16,7 @@ func TestSnapshotPauseRestoresInterruptedQueueWithoutClaimingUntilResume(t *test
 	db := pgtest.Open(t)
 	require.NoError(t, db.Exec("UPDATE maintenance_state SET paused=true,pause_mode='snapshot',pause_reason='waiting_credentials' WHERE id=true").Error)
 	client := NewClient(db)
-	job, err := client.Enqueue(NewTask(types.TypeManualProcess, []byte(`{"knowledge_id":"waiting-credentials","content":"Retain original while waiting"}`)), MaxRetry(3), Retention(time.Hour))
+	job, err := client.Enqueue(NewTask(types.TypeManualProcess, []byte(`{"entry_id":"waiting-credentials","content":"Retain original while waiting"}`)), MaxRetry(3), Retention(time.Hour))
 	require.NoError(t, err)
 	require.NoError(t, db.Model(&Job{}).Where("id=?", job.ID).Updates(map[string]any{"state": TaskStateActive, "retried": 1, "fail_count": 1, "claim_token": "old-process", "lease_until": time.Now().Add(time.Hour)}).Error)
 	executed := make(chan *Task, 1)
@@ -52,7 +52,7 @@ func TestDrainPauseAllowsPreviouslyAcceptedTaskToFinish(t *testing.T) {
 	executed := make(chan struct{}, 1)
 	require.NoError(t, client.Start(context.Background(), HandlerFunc(func(context.Context, *Task) error { executed <- struct{}{}; return nil }), testConfig()))
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	_, err := client.Enqueue(NewTask(types.TypeDocumentProcess, []byte(`{"knowledge_id":"accepted-before-pack"}`)))
+	_, err := client.Enqueue(NewTask(types.TypeDocumentProcess, []byte(`{"entry_id":"accepted-before-pack"}`)))
 	require.NoError(t, err)
 	select {
 	case <-executed:

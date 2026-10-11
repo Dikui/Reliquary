@@ -47,7 +47,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
-		TypeKnowledgeListDelete, TypeKnowledgeListReparse,
+		TypeEntryListDelete, TypeEntryListReparse,
 	}},
 }
 
@@ -188,8 +188,8 @@ type WorkerServerStat struct {
 
 const (
 	TypeDocumentProcess            = "document:process"       // 文档处理任务
-	TypeKnowledgeListDelete        = "knowledge:list_delete"  // 批量删除知识任务
-	TypeKnowledgeListReparse       = "knowledge:list_reparse" // 批量重解析知识任务
+	TypeEntryListDelete            = "knowledge:list_delete"  // 批量删除知识任务
+	TypeEntryListReparse           = "knowledge:list_reparse" // 批量重解析知识任务
 	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
 	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
 	TypeManualProcess              = "manual:process"  // 手工知识更新任务（cleanup + 重新索引）
@@ -200,7 +200,7 @@ const (
 type DocumentProcessPayload struct {
 	RequestId       string   `json:"request_id"`
 	SpaceID         uint64   `json:"tenant_id"`
-	KnowledgeID     string   `json:"knowledge_id"`
+	EntryID         string   `json:"knowledge_id"`
 	KnowledgeBaseID string   `json:"knowledge_base_id"`
 	FilePath        string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
 	FileName        string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
@@ -209,7 +209,7 @@ type DocumentProcessPayload struct {
 	FileURL         string   `json:"file_url,omitempty"`  // 文件资源链接（file_url导入时使用）
 	Passages        []string `json:"passages,omitempty"`  // 文本段落（文本导入时使用）
 	Language        string   `json:"language,omitempty"`  // Request locale for {{language}} in prompt templates
-	// Attempt is the per-knowledge attempt number this task belongs to.
+	// Attempt is the per-entry attempt number this task belongs to.
 	// Set on enqueue (initial parse → attempt 1; reparse → max+1) so
 	// every span recorded by this task lands on the right attempt
 	// branch. Queue retries within an attempt keep the same value so
@@ -218,27 +218,27 @@ type DocumentProcessPayload struct {
 	Attempt int `json:"attempt,omitempty"`
 }
 
-// KnowledgeListDeletePayload represents the batch knowledge delete task payload
-type KnowledgeListDeletePayload struct {
-	SpaceID      uint64        `json:"tenant_id"`
-	KnowledgeIDs []string      `json:"knowledge_ids"`
-	Initiator    TaskInitiator `json:"initiator,omitempty"`
+// EntryListDeletePayload represents the batch entry delete task payload
+type EntryListDeletePayload struct {
+	SpaceID   uint64        `json:"tenant_id"`
+	EntryIDs  []string      `json:"knowledge_ids"`
+	Initiator TaskInitiator `json:"initiator,omitempty"`
 }
 
-// KnowledgeListReparsePayload represents the batch knowledge reparse task payload
-type KnowledgeListReparsePayload struct {
-	SpaceID       uint64                     `json:"tenant_id"`
-	KnowledgeIDs  []string                   `json:"knowledge_ids"`
-	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
-	Initiator     TaskInitiator              `json:"initiator,omitempty"`
+// EntryListReparsePayload represents the batch entry reparse task payload
+type EntryListReparsePayload struct {
+	SpaceID       uint64                 `json:"tenant_id"`
+	EntryIDs      []string               `json:"knowledge_ids"`
+	ProcessConfig *EntryProcessOverrides `json:"process_config,omitempty"`
+	Initiator     TaskInitiator          `json:"initiator,omitempty"`
 }
 
-// ManualProcessPayload represents the manual knowledge processing task payload.
+// ManualProcessPayload represents the manual entry processing task payload.
 // Used for both create (publish) and update operations.
 type ManualProcessPayload struct {
 	RequestId       string `json:"request_id"`
 	SpaceID         uint64 `json:"tenant_id"`
-	KnowledgeID     string `json:"knowledge_id"`
+	EntryID         string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	Content         string `json:"content"`      // cleaned markdown content
 	NeedCleanup     bool   `json:"need_cleanup"` // true for update, false for create

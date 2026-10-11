@@ -34,6 +34,9 @@ func UnmarshalSpacePayload(data []byte, destination any) error {
 	if owner != nil {
 		fields["tenant_id"], _ = json.Marshal(*owner)
 	}
+	if err := normalizeEntryPayload(fields); err != nil {
+		return err
+	}
 	normalized, err := json.Marshal(fields)
 	if err != nil {
 		return err
@@ -49,12 +52,12 @@ func (p *ManualProcessPayload) UnmarshalJSON(data []byte) error {
 	type plain ManualProcessPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
-func (p *KnowledgeListDeletePayload) UnmarshalJSON(data []byte) error {
-	type plain KnowledgeListDeletePayload
+func (p *EntryListDeletePayload) UnmarshalJSON(data []byte) error {
+	type plain EntryListDeletePayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
-func (p *KnowledgeListReparsePayload) UnmarshalJSON(data []byte) error {
-	type plain KnowledgeListReparsePayload
+func (p *EntryListReparsePayload) UnmarshalJSON(data []byte) error {
+	type plain EntryListReparsePayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
 func (p *TopicBackfillPayload) UnmarshalJSON(data []byte) error {

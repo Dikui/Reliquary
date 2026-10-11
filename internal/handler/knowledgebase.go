@@ -49,7 +49,7 @@ func (h *KnowledgeBaseHandler) HybridSearch(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	c.Error(apperrors.NewBadRequestError("chunk search and knowledge base scope are no longer supported; use POST /api/v1/knowledge-search with query and article filters"))
+	c.Error(apperrors.NewBadRequestError("chunk search and knowledge base scope are no longer supported; use POST /api/v1/search with query and article filters"))
 }
 
 func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*types.KnowledgeBase, string, uint64, error) {
@@ -102,7 +102,7 @@ func (h *KnowledgeBaseHandler) GetKnowledgeBase(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	// Fill counts (knowledge_count, chunk_count, is_processing) so hover/detail shows correct numbers
+	// Fill counts (entry_count, chunk_count, is_processing) so hover/detail shows correct numbers
 	if fillErr := h.service.FillKnowledgeBaseCounts(c.Request.Context(), kb); fillErr != nil {
 		logger.Warnf(c.Request.Context(), "Failed to fill KB counts for %s: %v", kb.ID, fillErr)
 	}

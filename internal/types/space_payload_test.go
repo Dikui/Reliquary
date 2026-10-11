@@ -9,7 +9,7 @@ import (
 
 func TestSpacePayloadAcceptsBothKeysWithoutChangingPersistentWriters(t *testing.T) {
 	for _, data := range []string{`{"tenant_id":1}`, `{"space_id":1}`, `{"tenant_id":1,"space_id":1}`} {
-		payloads := []any{&DocumentProcessPayload{}, &ManualProcessPayload{}, &KnowledgeListDeletePayload{}, &KnowledgeListReparsePayload{}, &TopicBackfillPayload{}, &DataSourceSyncPayload{}, &EmbeddingRebuildPayload{}, &EntityNameEmbeddingRebuildPayload{}}
+		payloads := []any{&DocumentProcessPayload{}, &ManualProcessPayload{}, &EntryListDeletePayload{}, &EntryListReparsePayload{}, &TopicBackfillPayload{}, &DataSourceSyncPayload{}, &EmbeddingRebuildPayload{}, &EntityNameEmbeddingRebuildPayload{}}
 		for _, payload := range payloads {
 			require.NoError(t, json.Unmarshal([]byte(data), payload))
 			encoded, err := json.Marshal(payload)

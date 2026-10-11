@@ -3,8 +3,8 @@
  * matches in <mark> tags. The input text is HTML-escaped first so the output
  * is safe to bind with v-html.
  *
- * Extracted from the legacy KnowledgeSearch.vue so it can be reused by the
- * command palette and the knowledge search bar.
+ * Extracted from the legacy SearchView.vue so it can be reused by the
+ * command palette and the entry search bar.
  */
 export function escapeHtml(str: string): string {
   return (str || '')

@@ -1,7 +1,7 @@
 // @ts-nocheck
 <script setup lang="ts">
 import { ref, shallowRef, watch, onUnmounted, nextTick, defineAsyncComponent } from 'vue';
-import { previewKnowledgeFile } from '@/api/knowledge-base';
+import { previewEntryFile } from '@/api/knowledge-base';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import markedKatex from 'marked-katex-extension';
@@ -29,7 +29,7 @@ const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx'));
 const { t } = useI18n();
 
 const props = defineProps<{
-  knowledgeId?: string;
+  entryId?: string;
   fileType: string;
   fileName: string;
   active: boolean;
@@ -206,11 +206,11 @@ function onImageLoad(e: Event) {
 }
 
 function getPreviewSourceKey(): string {
-  return props.knowledgeId ? `knowledge:${props.knowledgeId}` : ''
+  return props.entryId ? `entry:${props.entryId}` : ''
 }
 
 async function fetchPreviewBlob(): Promise<Blob> {
-  if (props.knowledgeId) return previewKnowledgeFile(props.knowledgeId)
+  if (props.entryId) return previewEntryFile(props.entryId)
   throw new Error('Missing preview source')
 }
 
@@ -328,7 +328,7 @@ function cleanup() {
 }
 
 watch(
-  () => [props.active, props.knowledgeId],
+  () => [props.active, props.entryId],
   ([active]) => {
     if (active && getPreviewSourceKey()) {
       loadPreview();

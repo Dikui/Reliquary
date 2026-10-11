@@ -256,21 +256,21 @@ func buildExcelCreateTableSQL(tableName, filename string, sheetNames []string) s
 	)
 }
 
-func (t *Loader) LoadFromKnowledge(ctx context.Context, knowledge *types.Knowledge) (*TableSchema, error) {
-	if knowledge == nil {
-		return nil, fmt.Errorf("knowledge cannot be nil")
+func (t *Loader) LoadFromEntry(ctx context.Context, entry *types.Entry) (*TableSchema, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("entry cannot be nil")
 	}
-	tableName := t.TableName(knowledge)
+	tableName := t.TableName(entry)
 
 	// Normalize file type to lowercase for comparison
-	fileType := strings.ToLower(knowledge.FileType)
+	fileType := strings.ToLower(entry.FileType)
 
-	logger.Infof(ctx, "[DataTableSummary] Loading knowledge '%s' (type: %s) into table '%s' for job %s",
-		knowledge.ID, fileType, tableName, t.jobID)
+	logger.Infof(ctx, "[DataTableSummary] Loading entry '%s' (type: %s) into table '%s' for job %s",
+		entry.ID, fileType, tableName, t.jobID)
 
-	localPath, cleanup, err := t.materializeKnowledgeFile(ctx, knowledge)
+	localPath, cleanup, err := t.materializeEntryFile(ctx, entry)
 	if err != nil {
-		return nil, fmt.Errorf("failed to materialize knowledge '%s' for DuckDB: %w", knowledge.ID, err)
+		return nil, fmt.Errorf("failed to materialize entry '%s' for DuckDB: %w", entry.ID, err)
 	}
 	defer cleanup()
 
@@ -280,25 +280,25 @@ func (t *Loader) LoadFromKnowledge(ctx context.Context, knowledge *types.Knowled
 	case "xlsx", "xls":
 		return t.LoadFromExcel(ctx, localPath, tableName)
 	default:
-		logger.Warnf(ctx, "[DataTableSummary] Unsupported file type '%s' for knowledge '%s' in job %s",
-			fileType, knowledge.ID, t.jobID)
+		logger.Warnf(ctx, "[DataTableSummary] Unsupported file type '%s' for entry '%s' in job %s",
+			fileType, entry.ID, t.jobID)
 		return nil, fmt.Errorf("unsupported file type: %s (supported types: csv, xlsx, xls)", fileType)
 	}
 }
 
-func (t *Loader) materializeKnowledgeFile(ctx context.Context, knowledge *types.Knowledge) (string, func(), error) {
+func (t *Loader) materializeEntryFile(ctx context.Context, entry *types.Entry) (string, func(), error) {
 	noop := func() {}
 
-	reader, err := t.resolveFileServiceForKnowledge(ctx, knowledge).GetFile(ctx, knowledge.FilePath)
+	reader, err := t.resolveFileServiceForEntry(ctx, entry).GetFile(ctx, entry.FilePath)
 	if err != nil {
-		return "", noop, fmt.Errorf("failed to open file for knowledge '%s': %w", knowledge.ID, err)
+		return "", noop, fmt.Errorf("failed to open file for entry '%s': %w", entry.ID, err)
 	}
 	defer reader.Close()
 
 	// Preserve the file extension so DuckDB's format auto-detection still
 	// works (e.g. the CSV reader expects .csv, xlsx reader expects .xlsx).
 	suffix := ""
-	if ext := strings.ToLower(strings.TrimSpace(knowledge.FileType)); ext != "" {
+	if ext := strings.ToLower(strings.TrimSpace(entry.FileType)); ext != "" {
 		suffix = "." + ext
 	}
 
@@ -318,15 +318,15 @@ func (t *Loader) materializeKnowledgeFile(ctx context.Context, knowledge *types.
 	if _, err := io.Copy(tmp, reader); err != nil {
 		_ = tmp.Close()
 		cleanup()
-		return "", noop, fmt.Errorf("failed to copy knowledge '%s' to temp file: %w", knowledge.ID, err)
+		return "", noop, fmt.Errorf("failed to copy entry '%s' to temp file: %w", entry.ID, err)
 	}
 	if err := tmp.Close(); err != nil {
 		cleanup()
-		return "", noop, fmt.Errorf("failed to finalize temp file for knowledge '%s': %w", knowledge.ID, err)
+		return "", noop, fmt.Errorf("failed to finalize temp file for entry '%s': %w", entry.ID, err)
 	}
 
-	logger.Infof(ctx, "[DataTableSummary] Materialized knowledge '%s' to temp file %s for job %s",
-		knowledge.ID, tmpPath, t.jobID)
+	logger.Infof(ctx, "[DataTableSummary] Materialized entry '%s' to temp file %s for job %s",
+		entry.ID, tmpPath, t.jobID)
 
 	return tmpPath, cleanup, nil
 }
@@ -397,8 +397,8 @@ func (t *Loader) LoadFromTable(ctx context.Context, tableName string) (*TableSch
 	return schema, nil
 }
 
-func (t *Loader) TableName(knowledge *types.Knowledge) string {
-	return "k_" + strings.ReplaceAll(knowledge.ID, "-", "_")
+func (t *Loader) TableName(entry *types.Entry) string {
+	return "k_" + strings.ReplaceAll(entry.ID, "-", "_")
 }
 
 func (t *TableSchema) Description() string {
@@ -415,6 +415,6 @@ func (t *TableSchema) Description() string {
 	return builder.String()
 }
 
-func (t *Loader) resolveFileServiceForKnowledge(ctx context.Context, knowledge *types.Knowledge) interfaces.FileService {
+func (t *Loader) resolveFileServiceForEntry(ctx context.Context, entry *types.Entry) interfaces.FileService {
 	return t.fileService
 }

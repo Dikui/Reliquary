@@ -25,17 +25,17 @@ type RetrieveParams struct {
 	Embedding []float32
 	// Knowledge base IDs
 	KnowledgeBaseIDs []string
-	// Knowledge IDs
-	KnowledgeIDs []string
-	// Excluded knowledge IDs
-	ExcludeKnowledgeIDs []string
+	// Entry IDs
+	EntryIDs []string
+	// Excluded entry IDs
+	ExcludeEntryIDs []string
 	// Excluded chunk IDs
 	ExcludeChunkIDs []string
 	// Number of results to return
 	TopK int
 	// Similarity threshold
-	Threshold     float64
-	KnowledgeType string
+	Threshold float64
+	EntryType string
 	// Additional parameters, different retrievers may require different parameters
 	AdditionalParams map[string]interface{}
 	// Retriever type
@@ -54,8 +54,8 @@ type IndexWithScore struct {
 	SourceType SourceType
 	// Chunk ID
 	ChunkID string
-	// Knowledge ID
-	KnowledgeID string
+	// Entry ID
+	EntryID string
 	// Knowledge base ID
 	KnowledgeBaseID string
 	// Score

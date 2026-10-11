@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ManualKnowledgeEditor from '@/components/ManualKnowledgeEditor.vue'
+import ManualEntryEditor from '@/components/ManualEntryEditor.vue'
 import UploadConfirmHost from '@/components/UploadConfirmHost.vue'
 import ServiceAvailabilityNotice from '@/components/ServiceAvailabilityNotice.vue'
 
@@ -24,7 +24,7 @@ const tdGlobalConfig = computed(() => tdLocaleMap[locale.value] || enUSConfig)
     <div id="app">
       <ServiceAvailabilityNotice />
       <RouterView />
-      <ManualKnowledgeEditor />
+      <ManualEntryEditor />
       <UploadConfirmHost />
     </div>
   </t-config-provider>

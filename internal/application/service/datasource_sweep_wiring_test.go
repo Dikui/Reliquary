@@ -15,66 +15,66 @@ import (
 // implemented; everything else is nil (never called by this path). ──
 
 type sweepFakeRepo struct {
-	interfaces.KnowledgeRepository
-	prefixCalls  []string           // recorded prefix arguments
-	prefixReturn []*types.Knowledge // children to return from FindByMetadataKeyPrefix
+	interfaces.EntryRepository
+	prefixCalls  []string       // recorded prefix arguments
+	prefixReturn []*types.Entry // children to return from FindByMetadataKeyPrefix
 }
 
-func (r *sweepFakeRepo) FindByMetadataKey(ctx context.Context, spaceID uint64, kbID, key, value string) (*types.Knowledge, error) {
+func (r *sweepFakeRepo) FindByMetadataKey(ctx context.Context, spaceID uint64, kbID, key, value string) (*types.Entry, error) {
 	return nil, nil // no existing main item → skip the case-1 update delete
 }
 
 func (r *sweepFakeRepo) FindByDataSourceExternalID(
 	_ context.Context, _ uint64, _, _, _ string,
-) (*types.Knowledge, error) {
+) (*types.Entry, error) {
 	return nil, nil // no existing main item -> skip the case-1 update delete
 }
 
-func (r *sweepFakeRepo) HardDeleteKnowledge(context.Context, uint64, string) error {
+func (r *sweepFakeRepo) HardDeleteEntry(context.Context, uint64, string) error {
 	return nil
 }
 
-func (r *sweepFakeRepo) HardDeleteKnowledgeList(context.Context, uint64, []string) error {
+func (r *sweepFakeRepo) HardDeleteEntryList(context.Context, uint64, []string) error {
 	return nil
 }
 
-func (r *sweepFakeRepo) FindByMetadataKeyPrefix(ctx context.Context, spaceID uint64, kbID, key, prefix string) ([]*types.Knowledge, error) {
+func (r *sweepFakeRepo) FindByMetadataKeyPrefix(ctx context.Context, spaceID uint64, kbID, key, prefix string) ([]*types.Entry, error) {
 	r.prefixCalls = append(r.prefixCalls, key+"|"+prefix)
 	return r.prefixReturn, nil
 }
 
 type sweepFakeKS struct {
-	interfaces.KnowledgeService
-	repo               interfaces.KnowledgeRepository
-	events             []string // ordered log of "delete:<id>" and "create:<fname>"
-	deleted            []string
-	createErr          error            // if set, CreateKnowledgeFromFile returns it after logging
-	deleteErr          error            // if set, DeleteKnowledge returns it after logging
-	createURLKnowledge *types.Knowledge // if set, CreateKnowledgeFromURL returns it
+	interfaces.EntryService
+	repo           interfaces.EntryRepository
+	events         []string // ordered log of "delete:<id>" and "create:<fname>"
+	deleted        []string
+	createErr      error        // if set, CreateEntryFromFile returns it after logging
+	deleteErr      error        // if set, DeleteEntry returns it after logging
+	createURLEntry *types.Entry // if set, CreateEntryFromURL returns it
 }
 
-func (k *sweepFakeKS) GetRepository() interfaces.KnowledgeRepository { return k.repo }
+func (k *sweepFakeKS) GetRepository() interfaces.EntryRepository { return k.repo }
 
-func (k *sweepFakeKS) CreateKnowledgeFromURL(
+func (k *sweepFakeKS) CreateEntryFromURL(
 	_ context.Context, _ string, _ string, _ string, _ string, _ *bool,
-	_ string, _ string, _ *types.KnowledgeProcessOverrides, _ ...types.SourceInfo,
-) (*types.Knowledge, error) {
-	return k.createURLKnowledge, nil
+	_ string, _ string, _ *types.EntryProcessOverrides, _ ...types.SourceInfo,
+) (*types.Entry, error) {
+	return k.createURLEntry, nil
 }
 
-func (k *sweepFakeKS) ReviewKnowledgeIntake(context.Context, string, string, types.SourceInfo) (*types.Knowledge, error) {
+func (k *sweepFakeKS) ReviewEntryIntake(context.Context, string, string, types.SourceInfo) (*types.Entry, error) {
 	return nil, nil
 }
 
-func (k *sweepFakeKS) DeleteKnowledge(ctx context.Context, id string) error {
+func (k *sweepFakeKS) DeleteEntry(ctx context.Context, id string) error {
 	k.events = append(k.events, "delete:"+id)
 	k.deleted = append(k.deleted, id)
 	return k.deleteErr
 }
 
-// DeleteKnowledgeList is the batched delete the subtree sweep now uses; record
+// DeleteEntryList is the batched delete the subtree sweep now uses; record
 // each id in order so create-before-delete ordering is still asserted.
-func (k *sweepFakeKS) DeleteKnowledgeList(ctx context.Context, ids []string) error {
+func (k *sweepFakeKS) DeleteEntryList(ctx context.Context, ids []string) error {
 	for _, id := range ids {
 		k.events = append(k.events, "delete:"+id)
 		k.deleted = append(k.deleted, id)
@@ -82,16 +82,16 @@ func (k *sweepFakeKS) DeleteKnowledgeList(ctx context.Context, ids []string) err
 	return nil
 }
 
-func (k *sweepFakeKS) CreateKnowledgeFromFile(
+func (k *sweepFakeKS) CreateEntryFromFile(
 	ctx context.Context, kbID string, file *multipart.FileHeader, metadata map[string]string,
 	enableMultimodel *bool, customFileName string, channel string,
-	processOverrides *types.KnowledgeProcessOverrides,
-) (*types.Knowledge, error) {
+	processOverrides *types.EntryProcessOverrides,
+) (*types.Entry, error) {
 	k.events = append(k.events, "create:"+customFileName)
 	if k.createErr != nil {
 		return nil, k.createErr
 	}
-	return &types.Knowledge{ID: "new-knowledge"}, nil
+	return &types.Entry{ID: "new-entry"}, nil
 }
 
 // TestIngestItem_ReplacesSubtreeSweepsStaleChildrenAfterCreate verifies the
@@ -102,12 +102,12 @@ func (k *sweepFakeKS) CreateKnowledgeFromFile(
 // write never destroys existing children (the new children arrive as separate
 // items later in the same sync, so the sweep still precedes their creation).
 func TestIngestItem_ReplacesSubtreeSweepsStaleChildrenAfterCreate(t *testing.T) {
-	repo := &sweepFakeRepo{prefixReturn: []*types.Knowledge{
+	repo := &sweepFakeRepo{prefixReturn: []*types.Entry{
 		childWithExternalID("stale-child-1", "nt-parent#file#1", "ds-1"),
 		childWithExternalID("stale-child-2", "nt-parent#file#2", "ds-1"),
 	}}
 	ks := &sweepFakeKS{repo: repo}
-	s := &DataSourceService{knowledgeService: ks}
+	s := &DataSourceService{entryService: ks}
 
 	ds := &types.DataSource{
 		ID:              "ds-1",
@@ -151,12 +151,12 @@ func TestIngestItem_ReplacesSubtreeSweepsStaleChildrenAfterCreate(t *testing.T) 
 }
 
 // TestIngestItem_ReplacesSubtreeSweepsOnDuplicateParent verifies that when the
-// parent body is a content-dedup hit (CreateKnowledgeFromFile returns a
-// DuplicateKnowledgeError), the subtree is still swept: the parent effectively
+// parent body is a content-dedup hit (CreateEntryFromFile returns a
+// DuplicateEntryError), the subtree is still swept: the parent effectively
 // exists, so children removed from the doc must not linger. Regression guard for
 // the "sweep runs only after a *fresh* create" gap.
 func TestIngestItem_ReplacesSubtreeSweepsOnDuplicateParent(t *testing.T) {
-	repo := &sweepFakeRepo{prefixReturn: []*types.Knowledge{
+	repo := &sweepFakeRepo{prefixReturn: []*types.Entry{
 		childWithExternalID("stale-child-1", "nt-parent#file#1", "ds-1"),
 	}}
 	// The dedup hit is THIS node's own row (same external_id) — a genuine
@@ -165,7 +165,7 @@ func TestIngestItem_ReplacesSubtreeSweepsOnDuplicateParent(t *testing.T) {
 		repo:      repo,
 		createErr: types.NewDuplicateFileError(childWithExternalID("existing-parent", "nt-parent", "ds-1")),
 	}
-	s := &DataSourceService{knowledgeService: ks}
+	s := &DataSourceService{entryService: ks}
 
 	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
@@ -178,9 +178,9 @@ func TestIngestItem_ReplacesSubtreeSweepsOnDuplicateParent(t *testing.T) {
 	// ingestItem surfaces the dup error to the caller (applyFetchedItem counts it
 	// Skipped), but the sweep must still have run.
 	_, err := s.ingestItem(context.Background(), ds, item)
-	var dupErr *types.DuplicateKnowledgeError
+	var dupErr *types.DuplicateEntryError
 	if !errors.As(err, &dupErr) {
-		t.Fatalf("want DuplicateKnowledgeError, got %v", err)
+		t.Fatalf("want DuplicateEntryError, got %v", err)
 	}
 	if len(ks.deleted) != 1 || ks.deleted[0] != "stale-child-1" {
 		t.Fatalf("dup parent must still sweep stale children, deleted = %+v", ks.deleted)
@@ -189,19 +189,19 @@ func TestIngestItem_ReplacesSubtreeSweepsOnDuplicateParent(t *testing.T) {
 
 // TestIngestItem_NoSweepWhenDuplicateIsDifferentNode guards the data-loss path:
 // when an updated node's rebuilt body content-hash-collides with a DIFFERENT
-// knowledge item (dedup keys on file_hash plus file_type), the parent row under this
+// entry item (dedup keys on file_hash plus file_type), the parent row under this
 // node's external_id no longer exists (it was deleted for the update and never
 // recreated), so the subtree must NOT be swept — deleting the children would
 // destroy them with no parent to replace them.
 func TestIngestItem_NoSweepWhenDuplicateIsDifferentNode(t *testing.T) {
-	repo := &sweepFakeRepo{prefixReturn: []*types.Knowledge{{ID: "would-be-orphaned-child"}}}
+	repo := &sweepFakeRepo{prefixReturn: []*types.Entry{{ID: "would-be-orphaned-child"}}}
 	// The dedup hit is a DIFFERENT node's row (external_id "nt-other"). A manual
 	// upload with no external_id at all would behave identically (empty != ours).
 	ks := &sweepFakeKS{
 		repo:      repo,
 		createErr: types.NewDuplicateFileError(childWithExternalID("some-other-doc", "nt-other", "ds-1")),
 	}
-	s := &DataSourceService{knowledgeService: ks}
+	s := &DataSourceService{entryService: ks}
 
 	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
@@ -212,23 +212,23 @@ func TestIngestItem_NoSweepWhenDuplicateIsDifferentNode(t *testing.T) {
 	}
 
 	_, err := s.ingestItem(context.Background(), ds, item)
-	var dupErr *types.DuplicateKnowledgeError
+	var dupErr *types.DuplicateEntryError
 	if !errors.As(err, &dupErr) {
-		t.Fatalf("want DuplicateKnowledgeError, got %v", err)
+		t.Fatalf("want DuplicateEntryError, got %v", err)
 	}
 	if len(ks.deleted) != 0 {
 		t.Fatalf("dup against a different node must NOT sweep this node's children, deleted = %+v", ks.deleted)
 	}
 }
 
-// childWithExternalID builds a stale-child Knowledge row carrying the external_id
+// childWithExternalID builds a stale-child Entry row carrying the external_id
 // and datasource_id metadata the sweep reads to decide ownership and presence.
-func childWithExternalID(id, externalID, dataSourceID string) *types.Knowledge {
+func childWithExternalID(id, externalID, dataSourceID string) *types.Entry {
 	b, _ := json.Marshal(map[string]string{
 		"external_id":   externalID,
 		"datasource_id": dataSourceID,
 	})
-	return &types.Knowledge{ID: id, Metadata: types.JSON(b)}
+	return &types.Entry{ID: id, Metadata: types.JSON(b)}
 }
 
 // TestIngestItem_SubtreeKeepPreservesPresentChild verifies the per-child sweep
@@ -238,12 +238,12 @@ func childWithExternalID(id, externalID, dataSourceID string) *types.Knowledge {
 // still-present attachment that failed to re-ingest this cycle must keep its
 // previously-synced good copy instead of being deleted with nothing to replace it.
 func TestIngestItem_SubtreeKeepPreservesPresentChild(t *testing.T) {
-	repo := &sweepFakeRepo{prefixReturn: []*types.Knowledge{
+	repo := &sweepFakeRepo{prefixReturn: []*types.Entry{
 		childWithExternalID("child-present", "nt-parent#file#present", "ds-1"),
 		childWithExternalID("child-gone", "nt-parent#file#gone", "ds-1"),
 	}}
 	ks := &sweepFakeKS{repo: repo}
-	s := &DataSourceService{knowledgeService: ks}
+	s := &DataSourceService{entryService: ks}
 
 	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
@@ -265,12 +265,12 @@ func TestIngestItem_SubtreeKeepPreservesPresentChild(t *testing.T) {
 }
 
 func TestIngestItem_SubtreeSweepSkipsOtherDataSourceChildren(t *testing.T) {
-	repo := &sweepFakeRepo{prefixReturn: []*types.Knowledge{
+	repo := &sweepFakeRepo{prefixReturn: []*types.Entry{
 		childWithExternalID("own-child", "nt-parent#file#gone", "ds-1"),
 		childWithExternalID("other-ds-child", "nt-parent#file#gone", "ds-other"),
 	}}
 	ks := &sweepFakeKS{repo: repo}
-	s := &DataSourceService{knowledgeService: ks}
+	s := &DataSourceService{entryService: ks}
 
 	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
@@ -293,7 +293,7 @@ func TestIngestItem_SubtreeSweepSkipsOtherDataSourceChildren(t *testing.T) {
 func TestIngestItem_NoSweepWhenFlagUnset(t *testing.T) {
 	repo := &sweepFakeRepo{}
 	ks := &sweepFakeKS{repo: repo}
-	s := &DataSourceService{knowledgeService: ks}
+	s := &DataSourceService{entryService: ks}
 
 	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", SpaceID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
@@ -335,7 +335,7 @@ func TestApplyFetchedItem_EmbeddedImageIngestFailureCountsAsSkip(t *testing.T) {
 
 	// Embedded image whose ingest fails → Skipped, not Failed.
 	ksImg := &sweepFakeKS{repo: &sweepFakeRepo{}, createErr: ingestErr}
-	sImg := &DataSourceService{knowledgeService: ksImg}
+	sImg := &DataSourceService{entryService: ksImg}
 	resImg := &types.SyncResult{}
 	sImg.applyFetchedItem(context.Background(), ds,
 		newItem("nt#image#x", map[string]string{"embedded_image": "true"}), resImg)
@@ -346,7 +346,7 @@ func TestApplyFetchedItem_EmbeddedImageIngestFailureCountsAsSkip(t *testing.T) {
 
 	// Control: a non-image item with the same error → Failed.
 	ksDoc := &sweepFakeKS{repo: &sweepFakeRepo{}, createErr: ingestErr}
-	sDoc := &DataSourceService{knowledgeService: ksDoc}
+	sDoc := &DataSourceService{entryService: ksDoc}
 	resDoc := &types.SyncResult{}
 	sDoc.applyFetchedItem(context.Background(), ds, newItem("nt-doc", nil), resDoc)
 	if resDoc.Failed != 1 || resDoc.Skipped != 0 {

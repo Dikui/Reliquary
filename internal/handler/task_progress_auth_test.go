@@ -20,7 +20,7 @@ func TestRequireTaskProgressSpace_RejectsCrossSpace(t *testing.T) {
 }
 
 func TestRequireTaskProgressSpace_AllowsOwnSpace(t *testing.T) {
-	taskID := utils.GenerateTaskID("knowledge_move", 1, "kb-source")
+	taskID := utils.GenerateTaskID("entry_move", 1, "kb-source")
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 
 	if err := requireTaskProgressSpace(ctx, taskID); err != nil {

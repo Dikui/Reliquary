@@ -104,7 +104,7 @@ type listingProfile struct {
 	improveTitle func(string, string) bool
 }
 
-// SiteAdapterRegistry keeps page-specific knowledge outside the generic connector.
+// SiteAdapterRegistry keeps page-specific entry outside the generic connector.
 type SiteAdapterRegistry struct{ adapters []SiteAdapter }
 
 func NewSiteAdapterRegistry(adapters ...SiteAdapter) *SiteAdapterRegistry {

@@ -9,7 +9,7 @@ const (
 
 // ArticleProcessingMode retains the full source until an uncertain model
 // classification is resolved, and always retains sources admitted without a URL.
-func ArticleProcessingMode(k *Knowledge) string {
+func ArticleProcessingMode(k *Entry) string {
 	if k.SourceUnverified {
 		return ProcessingModeFull
 	}

@@ -24,7 +24,7 @@ func (s *summaryStateModelService) GetModelByID(_ context.Context, id string) (*
 	if s.metadata != nil {
 		return s.metadata, s.err
 	}
-	return &types.Model{ID: id, Type: types.ModelTypeKnowledgeQA}, s.err
+	return &types.Model{ID: id, Type: types.ModelTypeGeneration}, s.err
 }
 
 func validProcessingFixture(contentType string) string {

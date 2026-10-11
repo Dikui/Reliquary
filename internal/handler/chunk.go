@@ -14,11 +14,11 @@ import (
 
 type ChunkHandler struct {
 	service   interfaces.ChunkService
-	kgService interfaces.KnowledgeService
+	kgService interfaces.EntryService
 }
 
 // NewChunkHandler creates a new chunk handler.
-func NewChunkHandler(service interfaces.ChunkService, kgService interfaces.KnowledgeService) *ChunkHandler {
+func NewChunkHandler(service interfaces.ChunkService, kgService interfaces.EntryService) *ChunkHandler {
 	return &ChunkHandler{service: service, kgService: kgService}
 }
 
@@ -55,15 +55,15 @@ func (h *ChunkHandler) GetChunkByIDOnly(c *gin.Context) {
 	})
 }
 
-// ListKnowledgeChunks godoc
-func (h *ChunkHandler) ListKnowledgeChunks(c *gin.Context) {
+// ListEntryChunks godoc
+func (h *ChunkHandler) ListEntryChunks(c *gin.Context) {
 	ctx := c.Request.Context()
-	logger.Info(ctx, "Start retrieving knowledge chunks list")
+	logger.Info(ctx, "Start retrieving entry chunks list")
 
-	knowledgeID := secutils.SanitizeForLog(c.Param("knowledge_id"))
-	if knowledgeID == "" {
-		logger.Error(ctx, "Knowledge ID is empty")
-		c.Error(errors.NewBadRequestError("Knowledge ID cannot be empty"))
+	entryID := secutils.SanitizeForLog(c.Param("entry_id"))
+	if entryID == "" {
+		logger.Error(ctx, "Entry ID is empty")
+		c.Error(errors.NewBadRequestError("Entry ID cannot be empty"))
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *ChunkHandler) ListKnowledgeChunks(c *gin.Context) {
 		}
 	}
 
-	result, err := h.service.ListPagedChunksByKnowledgeID(ctx, knowledgeID, &pagination, chunkType)
+	result, err := h.service.ListPagedChunksByEntryID(ctx, entryID, &pagination, chunkType)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(errors.NewInternalServerError(err.Error()))

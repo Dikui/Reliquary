@@ -22,12 +22,16 @@ func marshalOperationValue(value any) ([]byte, error) {
 			fields["tenant_id"] = owner
 			delete(fields, "space_id")
 		}
+		if id, ok := fields["entry_id"]; ok {
+			fields["knowledge_id"] = id
+			delete(fields, "entry_id")
+		}
 		return json.Marshal(fields)
 	}
 	switch value.(type) {
-	case types.Topic, *types.Topic, types.KnowledgeTopic, *types.KnowledgeTopic:
+	case types.Topic, *types.Topic, types.EntryTopic, *types.EntryTopic:
 		return row(data)
-	case []types.KnowledgeTopic:
+	case []types.EntryTopic:
 		var rows []json.RawMessage
 		if err := json.Unmarshal(data, &rows); err != nil {
 			return nil, err

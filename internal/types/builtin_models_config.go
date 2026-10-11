@@ -275,9 +275,9 @@ func pruneOrphanYAMLManagedModels(ctx context.Context, db *gorm.DB, keepIDs []st
 // case-sensitively and a misspelled YAML entry would produce a row that
 // looks present in the table but is unusable downstream.
 var validBuiltinModelTypes = map[ModelType]struct{}{
-	ModelTypeKnowledgeQA: {},
-	ModelTypeEmbedding:   {},
-	ModelTypeRerank:      {},
+	ModelTypeGeneration: {},
+	ModelTypeEmbedding:  {},
+	ModelTypeRerank:     {},
 }
 
 // validBuiltinModelStatuses is the set of statuses the loader accepts.

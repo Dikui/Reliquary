@@ -72,12 +72,12 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 				return err
 			}
 		}
-		if err := tx.Exec(`INSERT INTO knowledge_entities (space_id, knowledge_id, entity_id, created_at)
-            SELECT space_id, knowledge_id, ?, created_at FROM knowledge_entities WHERE space_id=? AND entity_id=?
-            ON CONFLICT (knowledge_id, entity_id) DO NOTHING`, keep.ID, spaceID, merged.ID).Error; err != nil {
+		if err := tx.Exec(`INSERT INTO entry_entities (space_id, entry_id, entity_id, created_at)
+            SELECT space_id, entry_id, ?, created_at FROM entry_entities WHERE space_id=? AND entity_id=?
+            ON CONFLICT (entry_id, entity_id) DO NOTHING`, keep.ID, spaceID, merged.ID).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("space_id=? AND entity_id=?", spaceID, merged.ID).Delete(&types.KnowledgeEntity{}).Error; err != nil {
+		if err := tx.Where("space_id=? AND entity_id=?", spaceID, merged.ID).Delete(&types.EntryEntity{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Exec(`INSERT INTO follows (space_id, target_type, target_id, created_at)
@@ -127,8 +127,8 @@ func (s *EntityService) refreshArticleHeadersForEntity(ctx context.Context, spac
 		return nil
 	}
 	var ids []string
-	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEntity{}).
-		Where("space_id=? AND entity_id=?", spaceID, entityID).Pluck("knowledge_id", &ids).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&types.EntryEntity{}).
+		Where("space_id=? AND entity_id=?", spaceID, entityID).Pluck("entry_id", &ids).Error; err != nil {
 		return err
 	}
 	for _, id := range ids {

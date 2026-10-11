@@ -16,7 +16,7 @@ function captureUpload() {
       return Promise.resolve({ success: true })
     } }
   }, module, module.exports)
-  return { upload: module.exports.uploadKnowledgeFile, requests }
+  return { upload: module.exports.uploadEntryFile, requests }
 }
 
 for (const serialized of [false, true]) {
@@ -32,7 +32,7 @@ for (const serialized of [false, true]) {
       process_config: serialized ? configJSON : config, channel: undefined }, progress)
     assert.equal(requests.length, 1)
     const { url, form, progress: forwarded } = requests[0]!
-    assert.equal(url, '/api/v1/knowledge-bases/kb/knowledge/file')
+    assert.equal(url, '/api/v1/knowledge-bases/kb/entries/file')
     assert.equal(forwarded, progress)
     for (const [key, expected, text] of [['source_info', source, sourceJSON], ['process_config', config, configJSON]] as const) {
       const value = form.get(key)

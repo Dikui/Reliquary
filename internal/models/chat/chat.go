@@ -178,7 +178,7 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 // RemoteAPIChat 处理，provider 特定行为在构造时通过 providerAdapter 解析。
 func NewRemoteChat(config *ChatConfig) (Chat, error) {
 	providerName := provider.Resolve(provider.ProviderName(config.Provider), config.BaseURL)
-	if provider.GetOrDefault(providerName).Implementations[types.ModelTypeKnowledgeQA] == "anthropic" {
+	if provider.GetOrDefault(providerName).Implementations[types.ModelTypeGeneration] == "anthropic" {
 		return NewAnthropicChat(config)
 	}
 	return NewRemoteAPIChat(config)

@@ -257,13 +257,13 @@ export interface RuntimeTask {
   worker?: string
   space_id?: number
   knowledge_base_id?: string
-  knowledge_id?: string
+  entry_id?: string
   task_id?: string
   source_kb_id?: string
   target_kb_id?: string
   data_source_id?: string
   sync_log_id?: string
-  knowledge_count?: number
+  entry_count?: number
 }
 
 export interface RuntimeTasksResponse {

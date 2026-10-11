@@ -15,16 +15,16 @@ type Topic struct {
 
 func (Topic) TableName() string { return "topics" }
 
-type KnowledgeTopic struct {
+type EntryTopic struct {
 	SpaceID      uint64    `json:"space_id" gorm:"not null;index"`
-	KnowledgeID  string    `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
-	TopicID      string    `json:"topic_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
+	EntryID      string    `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_topics_pair"`
+	TopicID      string    `json:"topic_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_topics_pair"`
 	IsHistorical bool      `json:"is_historical"`
 	Source       string    `json:"source" gorm:"type:varchar(8);not null;default:'model'"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-func (KnowledgeTopic) TableName() string { return "knowledge_topics" }
+func (EntryTopic) TableName() string { return "entry_topics" }
 
 const (
 	TopicSourceModel = "model"
@@ -55,7 +55,7 @@ type TopicBackfillBatch struct {
 	ID           string     `json:"id" gorm:"type:varchar(36);primaryKey"`
 	JobID        string     `json:"-"`
 	Ordinal      int        `json:"ordinal"`
-	KnowledgeIDs JSON       `json:"-" gorm:"type:jsonb"`
+	EntryIDs     JSON       `json:"-" gorm:"type:jsonb"`
 	ArticleCount int        `json:"article_count"`
 	Status       string     `json:"status"`
 	Attempts     int        `json:"attempts"`

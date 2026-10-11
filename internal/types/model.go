@@ -19,19 +19,19 @@ type ModelType string
 
 // SupportsImageProcessing reports whether a model can view article images.
 func (m *Model) SupportsImageProcessing() bool {
-	return m != nil && (m.Type == ModelTypeKnowledgeQA && m.Parameters.SupportsVision)
+	return m != nil && (m.Type == ModelTypeGeneration && m.Parameters.SupportsVision)
 }
 
 const (
-	ModelTypeEmbedding   ModelType = "Embedding"   // Embedding model
-	ModelTypeRerank      ModelType = "Rerank"      // Rerank model
-	ModelTypeKnowledgeQA ModelType = "KnowledgeQA" // KnowledgeQA model
+	ModelTypeEmbedding  ModelType = "Embedding"   // Embedding model
+	ModelTypeRerank     ModelType = "Rerank"      // Rerank model
+	ModelTypeGeneration ModelType = "KnowledgeQA" // KnowledgeQA model
 )
 
 // IsSupported reports whether this model type is available in this deployment.
 func (t ModelType) IsSupported() bool {
 	switch t {
-	case ModelTypeKnowledgeQA, ModelTypeEmbedding, ModelTypeRerank:
+	case ModelTypeGeneration, ModelTypeEmbedding, ModelTypeRerank:
 		return true
 	default:
 		return false

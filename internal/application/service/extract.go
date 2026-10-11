@@ -75,7 +75,7 @@ Please output in the following format (one paragraph per column):
 // It does not create article summaries, chunks or separate queue jobs.
 type DataTableSummaryService struct{}
 
-func (s *knowledgeService) prepareTableProcessingBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Knowledge) (string, error) {
+func (s *entryService) prepareTableProcessingBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry) (string, error) {
 	db, err := sql.Open("duckdb", ":memory:")
 	if err != nil {
 		return "", fmt.Errorf("open table parser: %w", err)
@@ -83,7 +83,7 @@ func (s *knowledgeService) prepareTableProcessingBody(ctx context.Context, kb *t
 	defer db.Close()
 	loader := datatable.NewLoader(s.resolveFileServiceForPath(ctx, kb, k.FilePath), db, "article_table_"+k.ID)
 	defer loader.Cleanup(ctx)
-	schema, err := loader.LoadFromKnowledge(ctx, k)
+	schema, err := loader.LoadFromEntry(ctx, k)
 	if err != nil {
 		return "", fmt.Errorf("parse data table: %w", err)
 	}

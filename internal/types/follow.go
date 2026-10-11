@@ -36,7 +36,7 @@ type FollowFeedRequest struct {
 
 // FollowFeedArticle preserves the retrieval projection, including folded items.
 type FollowFeedArticle struct {
-	ArticleSearchResult
+	EntrySearchResult
 	EnteredAt      *time.Time           `json:"entered_at"`
 	CollectedAt    time.Time            `json:"collected_at"`
 	IsNew          bool                 `json:"is_new"`
