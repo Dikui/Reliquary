@@ -1096,6 +1096,9 @@ export default {
     languageSaved: '语言设置已保存'
   },
   model: {
+    imageProcessingUnsupported: '图片处理模型不支持视觉或多模态',
+    imageProcessingNotFound: '图片处理模型不存在',
+    imageProcessingUnavailable: '图片处理模型服务不可用',
     modelName: '模型名称',
     defaultTag: '默认',
     addModelInSettings: '前往全局设置添加模型',

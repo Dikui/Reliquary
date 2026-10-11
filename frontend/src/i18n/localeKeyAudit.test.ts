@@ -21,7 +21,6 @@ import {
   type LocaleName,
 } from './localeKeyAudit.ts'
 import {
-  LITERAL_TRANSLATION_KEY_EXCEPTIONS,
   collectTranslationCallsFromSources,
   findTranslationReferenceFailures,
   type TranslationCall,
@@ -71,11 +70,6 @@ test('literal translation calls and conditional keys exist in both locales', () 
   const failures: string[] = []
   for (const call of translationCalls) {
     for (const key of call.literalKeys) {
-      const exception = LITERAL_TRANSLATION_KEY_EXCEPTIONS.find((entry) => entry.file === call.file && entry.key === key)
-      if (exception) {
-        assert.ok(exception.reason.trim(), `Exception requires a reason: ${call.file}:${key}`)
-        continue
-      }
       for (const [localeName, keys] of Object.entries(localeKeysByName) as Array<[LocaleName, Set<string>]>) {
         const exists = call.kind === 'tree'
           ? getLocaleValueAtPath(LOCALE_BUNDLES[localeName], key) !== undefined

@@ -5,6 +5,7 @@ import { formatFileSize } from '@/utils/files';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
+import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
 import type { ArticleJudgment } from '@/api/entry-judgments';
 import type { ClassifiedEntry } from '@/types/entryClassification';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
@@ -258,7 +259,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
       <div class="card-content">
         <div class="card-content-nav">
           <div v-if="batchMode" class="card-nav-check" @click.stop>
-            <t-checkbox
+            <SelectionCheckbox
               class="card-select-checkbox"
               size="small"
               :checked="selectedIds.has(item.id)"

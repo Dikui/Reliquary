@@ -1801,6 +1801,9 @@ export default {
     }
   },
   model: {
+    imageProcessingUnsupported: 'The image processing model does not support vision or multimodal input',
+    imageProcessingNotFound: 'Image processing model not found',
+    imageProcessingUnavailable: 'Image processing model service is unavailable',
     modelName: 'Model Name',
     defaultTag: 'Default',
     addModelInSettings: 'Go to global settings to add models',

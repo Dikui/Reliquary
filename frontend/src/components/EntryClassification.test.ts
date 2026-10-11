@@ -19,7 +19,9 @@ const emptyModule = { __esModule: true, default: defineComponent({ setup: () => 
 function evaluate(code: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
+    ? { __esModule: true, default: component('./SelectionCheckbox.vue', {}) }
+    : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {

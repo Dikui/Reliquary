@@ -1169,7 +1169,7 @@ func (h *EntryHandler) PreviewEntryFile(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
+	entry, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1210,6 +1210,11 @@ func (h *EntryHandler) PreviewEntryFile(c *gin.Context) {
 	}
 	c.Header("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
 	c.Header("Cache-Control", "private, max-age=3600")
+	if entry.IsManual() && entry.VaultPath == "" {
+		// Editable sources share a preview URL across saves. Reopening must
+		// read the latest body instead of a previously cached draft response.
+		c.Header("Cache-Control", "no-store")
+	}
 
 	http.ServeContent(c.Writer, c.Request, filename, time.Now(), tmp)
 }

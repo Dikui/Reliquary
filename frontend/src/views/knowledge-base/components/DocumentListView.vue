@@ -5,6 +5,7 @@ import { formatFileSize, getFileIcon } from '@/utils/files';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
+import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
 import type { ArticleJudgment } from '@/api/entry-judgments';
 import type { ClassifiedEntry } from '@/types/entryClassification';
 
@@ -175,7 +176,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         :class="{ selected: selectedIds.has(item.id), 'menu-open': moreOpen === item.id }" :data-select-id="item.id"
         role="row" @click="emit('open', item)">
         <div class="cell cell-check" @click.stop>
-          <t-checkbox class="doc-list-check" size="small" :checked="selectedIds.has(item.id)" :title="item.file_name"
+          <SelectionCheckbox class="doc-list-check" size="small" :checked="selectedIds.has(item.id)" :title="item.file_name"
             @change="(c: boolean, ctx?: { e?: Event }) => onRowCheckboxChange(item, c, ctx)" />
         </div>
 

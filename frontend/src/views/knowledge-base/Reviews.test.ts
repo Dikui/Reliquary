@@ -19,7 +19,9 @@ const security = { isValidURL: (url: string) => /^https?:\/\/[\w.-]+/.test(url) 
 function evaluate(code: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
+    ? moduleOf(component('../../components/SelectionCheckbox.vue', {}))
+    : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
   return module.exports
 }
 function source(path: string) { return readFileSync(new URL(path, import.meta.url), 'utf8') }

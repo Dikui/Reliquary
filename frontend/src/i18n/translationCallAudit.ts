@@ -217,7 +217,7 @@ export function findTranslationReferenceFailures(
     const references = [
       ...call.literalKeys.map((key) => ({ key, kind: call.kind === 'tree' ? 'prefix' : 'key' })),
       ...(call.prefixes ?? (call.prefix ? [call.prefix] : [])).map((prefix) => ({ key: prefix.replace(/\.$/, ''), kind: 'prefix' })),
-    ].filter((reference) => !LITERAL_TRANSLATION_KEY_EXCEPTIONS.some((entry) => reference.kind === 'key' && entry.file === call.file && entry.key === reference.key))
+    ]
     return references.flatMap((reference) => Object.entries(locales).flatMap(([locale, keys]) => {
       const exists = keys.has(reference.key) || (reference.kind === 'prefix' && (prefixExists
         ? prefixExists(locale, reference.key)
@@ -226,14 +226,3 @@ export function findTranslationReferenceFailures(
     }))
   })
 }
-
-/** Existing missing messages are limited to this unchanged helper and these exact keys. */
-export const LITERAL_TRANSLATION_KEY_EXCEPTIONS: ReadonlyArray<{
-  file: string
-  key: string
-  reason: string
-}> = [
-  { file: 'utils/personalServerError.ts', key: 'model.imageProcessingUnsupported', reason: 'Already absent from both locales before naming cleanup; retain the existing image error behavior outside this repair.' },
-  { file: 'utils/personalServerError.ts', key: 'model.imageProcessingNotFound', reason: 'Already absent from both locales before naming cleanup; retain the existing image error behavior outside this repair.' },
-  { file: 'utils/personalServerError.ts', key: 'model.imageProcessingUnavailable', reason: 'Already absent from both locales before naming cleanup; retain the existing image error behavior outside this repair.' },
-]

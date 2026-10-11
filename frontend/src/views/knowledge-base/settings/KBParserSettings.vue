@@ -266,16 +266,6 @@ async function loadEngines(force = false) {
     parserEngines.value = []
   } finally {
     loading.value = false
-    ensureCompleteRules()
-  }
-}
-
-function ensureCompleteRules() {
-  if (!parserEngines.value.length) return
-  const complete = buildCompleteRules()
-  if (complete.length && complete.length > localEngineRules.value.length) {
-    localEngineRules.value = complete
-    emit('update:parserEngineRules', complete)
   }
 }
 

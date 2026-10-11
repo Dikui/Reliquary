@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -162,7 +164,10 @@ func TestGitBundleCredentialScanReadsCompressedHistoryObjects(t *testing.T) {
 	bundle := filepath.Join(t.TempDir(), "code.bundle")
 	command := exec.Command("git", "bundle", "create", bundle, "--all")
 	require.NoError(t, command.Run())
-	require.NoError(t, scanGitBundle(context.Background(), bundle, []string{"random-private-key-not-in-history-8731546789"}))
+	sentinel := make([]byte, 32)
+	_, err := rand.Read(sentinel)
+	require.NoError(t, err)
+	require.NoError(t, scanGitBundle(context.Background(), bundle, []string{hex.EncodeToString(sentinel)}))
 	// The project name occurs in committed files, proving that packed objects
 	// are decoded rather than searching only the compressed bundle bytes.
 	require.Error(t, scanGitBundle(context.Background(), bundle, []string{"Reliquary"}))

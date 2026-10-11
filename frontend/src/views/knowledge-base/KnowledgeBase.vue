@@ -1125,6 +1125,7 @@ const toggleSelectRow = (id: string, checked: boolean, shiftKey?: boolean) => {
 };
 
 const onCardGridCheckboxChange = (id: string, checked: boolean, ctx?: { e?: Event }) => {
+  if (!ctx?.e && shouldSuppressDocClick()) return;
   const me = ctx?.e as MouseEvent | undefined;
   toggleSelectRow(id, checked, !!me?.shiftKey);
 };
