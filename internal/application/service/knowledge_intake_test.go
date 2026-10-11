@@ -8,8 +8,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/models/chat"
@@ -176,7 +176,7 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 			files.saved = map[string][]byte{"input": []byte("Full source body with analysis.")}
 			payload, err := json.Marshal(types.DocumentProcessPayload{TenantID: 1, KnowledgeID: knowledge.ID, KnowledgeBaseID: "kb", FilePath: "input", FileName: "message.txt", FileType: "txt"})
 			require.NoError(t, err)
-			err = svc.ProcessDocument(context.Background(), asynq.NewTask(types.TypeDocumentProcess, payload, asynq.MaxRetry(0)))
+			err = svc.ProcessDocument(context.Background(), taskqueue.NewTask(types.TypeDocumentProcess, payload, taskqueue.MaxRetry(0)))
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -285,9 +285,9 @@ type intakeFileService struct {
 
 type intakeTask struct{ calls int }
 
-func (t *intakeTask) Enqueue(*asynq.Task, ...asynq.Option) (*asynq.TaskInfo, error) {
+func (t *intakeTask) Enqueue(*taskqueue.Task, ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	t.calls++
-	return &asynq.TaskInfo{}, nil
+	return &taskqueue.TaskInfo{}, nil
 }
 
 func (s *intakeFileService) GetFile(_ context.Context, path string) (io.ReadCloser, error) {

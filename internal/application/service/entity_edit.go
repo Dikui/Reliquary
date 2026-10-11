@@ -103,18 +103,21 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		if err := tx.Model(&keep).Updates(map[string]any{"embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
-		return NewOperationLogService(tx).RecordTx(ctx, tx, "merge_entities", keep.ID,
+		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "merge_entities", keep.ID,
 			map[string]any{"keep_entity_id": keep.ID, "merge_entity_id": merged.ID, "merged_into_id": ""},
-			map[string]any{"keep_entity_id": keep.ID, "merge_entity_id": merged.ID, "merged_into_id": keep.ID})
+			map[string]any{"keep_entity_id": keep.ID, "merge_entity_id": merged.ID, "merged_into_id": keep.ID}); err != nil {
+			return err
+		}
+		if s.nameEmbeddingRebuilder != nil {
+			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, tenantID, "entity_merge")
+		}
+		return nil
 	})
 	if err != nil {
 		return err
 	}
 	if err := s.refreshArticleHeadersForEntity(ctx, tenantID, keepEntityID); err != nil {
 		return err
-	}
-	if s.nameEmbeddingRebuilder != nil && !entityDatabaseInTransaction(s.db) {
-		return s.nameEmbeddingRebuilder.Enqueue(ctx, tenantID, "entity_merge")
 	}
 	return nil
 }
@@ -175,6 +178,9 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 			return err
 		}
 		entity.CanonicalName, entity.NormalizedName, entity.EmbeddingNeedsRebuild = name, normalizeEntityName(name), true
+		if s.nameEmbeddingRebuilder != nil {
+			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, tenantID, "entity_renamed")
+		}
 		return nil
 	})
 	if err != nil {
@@ -182,11 +188,6 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 	}
 	if err = s.refreshArticleHeadersForEntity(ctx, tenantID, entityID); err != nil {
 		return &entity, err
-	}
-	if s.nameEmbeddingRebuilder != nil && !entityDatabaseInTransaction(s.db) {
-		if err = s.nameEmbeddingRebuilder.Enqueue(ctx, tenantID, "entity_renamed"); err != nil {
-			return &entity, err
-		}
 	}
 	return &entity, nil
 }
@@ -226,15 +227,13 @@ func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, d
 		}
 		entity.Description = description
 		entity.EmbeddingNeedsRebuild = true
+		if s.nameEmbeddingRebuilder != nil {
+			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, tenantID, "entity_description_updated")
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
-	}
-	if s.nameEmbeddingRebuilder != nil && !entityDatabaseInTransaction(s.db) {
-		if err := s.nameEmbeddingRebuilder.Enqueue(ctx, tenantID, "entity_description_updated"); err != nil {
-			return &entity, err
-		}
 	}
 	return &entity, nil
 }

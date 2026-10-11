@@ -14,7 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hibiken/asynq"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"reliquary/internal/application/repository"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/datasource"
 	"reliquary/internal/logger"
@@ -25,6 +28,7 @@ import (
 
 // DataSourceService implements the DataSourceService interface
 type DataSourceService struct {
+	db                *gorm.DB
 	dsRepo            interfaces.DataSourceRepository
 	syncLogRepo       interfaces.SyncLogRepository
 	knowledgeService  interfaces.KnowledgeService
@@ -37,6 +41,7 @@ type DataSourceService struct {
 
 // NewDataSourceService creates a new data source service
 func NewDataSourceService(
+	db *gorm.DB,
 	dsRepo interfaces.DataSourceRepository,
 	syncLogRepo interfaces.SyncLogRepository,
 	knowledgeService interfaces.KnowledgeService,
@@ -48,6 +53,7 @@ func NewDataSourceService(
 
 ) interfaces.DataSourceService {
 	return &DataSourceService{
+		db:                db,
 		dsRepo:            dsRepo,
 		syncLogRepo:       syncLogRepo,
 		knowledgeService:  knowledgeService,
@@ -324,7 +330,7 @@ func (s *DataSourceService) DeleteDataSource(ctx context.Context, id string) err
 	// Remove cron schedule
 	s.scheduler.Remove(id)
 
-	// Cancel any pending/running sync logs so queued asynq tasks won't retry
+	// Cancel any pending/running sync logs so queued queued tasks won't retry
 	if err := s.syncLogRepo.CancelPendingByDataSource(ctx, id); err != nil {
 		logger.Warnf(ctx, "failed to cancel pending sync logs for ds=%s: %v", id, err)
 	}
@@ -439,6 +445,31 @@ func (s *DataSourceService) ResolveResourceAncestors(
 
 // ManualSync triggers an immediate sync for a data source
 func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types.SyncLog, error) {
+	if s.db != nil {
+		if _, bound := s.taskEnqueuer.(*transactionTaskEnqueuer); !bound {
+			queue, ok := s.taskEnqueuer.(interfaces.TransactionalTaskEnqueuer)
+			if !ok {
+				return nil, errors.New("task queue must support PostgreSQL transactions")
+			}
+			var result *types.SyncLog
+			err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				var source types.DataSource
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", dsID, types.SingleTenantID).First(&source).Error; err != nil {
+					return err
+				}
+				copy := *s
+				copy.db = tx
+				copy.dsRepo = repository.NewDataSourceRepository(tx)
+				copy.syncLogRepo = repository.NewSyncLogRepository(tx)
+				copy.taskEnqueuer = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
+				var err error
+				result, err = copy.ManualSync(ctx, dsID)
+				return err
+			})
+			return result, err
+		}
+	}
+
 	ds, err := s.GetDataSource(ctx, dsID)
 	if err != nil {
 		return nil, err
@@ -474,8 +505,8 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 	}
 
 	payloadJSON, _ := json.Marshal(payload)
-	task := asynq.NewTask(types.TypeDataSourceSync, payloadJSON,
-		asynq.Queue(types.QueueSync), asynq.MaxRetry(5), asynq.Timeout(2*time.Hour))
+	task := taskqueue.NewTask(types.TypeDataSourceSync, payloadJSON,
+		taskqueue.Queue(types.QueueSync), taskqueue.MaxRetry(5), taskqueue.Timeout(2*time.Hour))
 
 	_, err = s.taskEnqueuer.Enqueue(task)
 	if err != nil {
@@ -561,8 +592,8 @@ func (s *DataSourceService) GetSyncLog(ctx context.Context, syncLogID string) (*
 	return log, nil
 }
 
-// ProcessSync handles the actual sync operation (called by asynq task)
-func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) error {
+// ProcessSync handles the actual sync operation (called by queued task)
+func (s *DataSourceService) ProcessSync(ctx context.Context, task *taskqueue.Task) error {
 	var payload types.DataSourceSyncPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "failed to unmarshal sync payload: %v", err)
@@ -1021,7 +1052,7 @@ func (s *DataSourceService) processSyncStreaming(
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
 
 	forceFull := payload.ForceFull || ds.SyncMode == types.SyncModeFull
-	attempt, _ := asynq.GetRetryCount(ctx)
+	attempt, _ := taskqueue.GetRetryCount(ctx)
 	startCursor, err := streamStartCursor(ds, forceFull, attempt)
 	if err != nil {
 		logger.Errorf(ctx, "failed to parse sync cursor: %v", err)
@@ -1036,7 +1067,7 @@ func (s *DataSourceService) processSyncStreaming(
 	nextCursor, fetchErr := sc.FetchStream(ctx, config, startCursor, handler)
 	if fetchErr != nil {
 		// Progress so far is already checkpointed onto ds.LastSyncCursor; leave
-		// it in place so the Asynq retry resumes from there. Persist counts.
+		// it in place so the queue retry resumes from there. Persist counts.
 		logger.Errorf(ctx, "streaming fetch failed: %v", fetchErr)
 		resultJSON, _ := result.ToJSON()
 		s.updateSyncRunResult(ctx, ds, syncLog, result, resultJSON,

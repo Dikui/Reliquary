@@ -10,7 +10,7 @@ database connection limits.
 | Pool | Default per instance | Queues | Purpose |
 | --- | ---: | --- | --- |
 | Core | 8 | `default` | Parsing, one article processing call and indexing |
-| Enrichment | 12 | `entity` | Entity name embedding rebuilds |
+| Enrichment | 12 | `entity` | Entity and article embedding rebuilds, topic backfill |
 | Maintenance | 4 | `sync`, `low` | Source sync, batch reprocessing and deletion |
 | Shared | 6 | Core and enrichment queues | Elastic capacity borrowed by the side with backlog |
 
@@ -21,22 +21,17 @@ and indexing. Maintenance is intentionally excluded from the
 shared pool because its long-running tasks could pin elastic capacity needed by
 the user-facing pipeline.
 
-Asynq dequeue is atomic. Dedicated and shared servers may safely subscribe to
+PostgreSQL claiming uses row locks with SKIP LOCKED. Dedicated and shared pools consume
 the same core/enrichment queues; one task is still processed by one worker.
 
 ## Configuration
 
 All settings are available under System settings and require a service restart:
 
-- `asynq.core_concurrency` / `RELIQUARY_ASYNQ_CORE_CONCURRENCY`
-- `asynq.enrichment_concurrency` / `RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY`
-- `asynq.maintenance_concurrency` / `RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY`
-- `asynq.shared_concurrency` / `RELIQUARY_ASYNQ_SHARED_CONCURRENCY`
-
-The old aggregate `asynq.concurrency` / `RELIQUARY_ASYNQ_CONCURRENCY` setting is
-retired. Deployments that set it must migrate to the explicit pool settings.
-Persisted old rows are ignored and hidden from the System settings page so they
-cannot be mistaken for an effective runtime control.
+- `queue.core_concurrency` / `RELIQUARY_QUEUE_CORE_CONCURRENCY`
+- `queue.enrichment_concurrency` / `RELIQUARY_QUEUE_ENRICHMENT_CONCURRENCY`
+- `queue.maintenance_concurrency` / `RELIQUARY_QUEUE_MAINTENANCE_CONCURRENCY`
+- `queue.shared_concurrency` / `RELIQUARY_QUEUE_SHARED_CONCURRENCY`
 
 ## Capacity layers
 
@@ -70,7 +65,7 @@ The runtime dashboard reports:
 
 - configured concurrency per instance;
 - live server instance count;
-- cluster capacity aggregated from active asynq heartbeats;
+- cluster capacity aggregated from the single PostgreSQL queue worker;
 - active workers and utilization;
 - queue backlog, retries, dead letters, and oldest pending age;
 - model concurrency and limiter waiting.

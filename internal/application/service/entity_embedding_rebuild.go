@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/application/repository"
 	"reliquary/internal/models/embedding"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -105,6 +106,18 @@ func (r *EntityNameEmbeddingRebuilder) pendingQuery(db *gorm.DB, tenantID uint64
 // Profile-wide marking happens only at explicit lifecycle triggers, never in
 // mention resolution. Unavailable profiles preserve existing vectors and flags.
 func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, tenantID uint64, reason string) error {
+	if r != nil && r.db != nil {
+		if _, bound := r.tasks.(*transactionTaskEnqueuer); !bound {
+			return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				copy, err := r.WithTransaction(ctx, tx)
+				if err != nil {
+					return err
+				}
+				return copy.MarkAndEnqueue(ctx, tenantID, reason)
+			})
+		}
+	}
+
 	if r == nil || r.db == nil || tenantID == 0 {
 		return errors.New("embedding rebuild scope or database is unavailable")
 	}
@@ -133,6 +146,18 @@ func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, tenan
 	return r.Enqueue(ctx, tenantID, reason)
 }
 func (r *EntityNameEmbeddingRebuilder) Enqueue(ctx context.Context, tenantID uint64, reason string) error {
+	if r != nil && r.db != nil {
+		if _, bound := r.tasks.(*transactionTaskEnqueuer); !bound {
+			return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				copy, err := r.WithTransaction(ctx, tx)
+				if err != nil {
+					return err
+				}
+				return copy.Enqueue(ctx, tenantID, reason)
+			})
+		}
+	}
+
 	if r == nil || r.db == nil || tenantID == 0 {
 		return errors.New("embedding rebuild scope or database is unavailable")
 	}
@@ -153,7 +178,7 @@ func (r *EntityNameEmbeddingRebuilder) Enqueue(ctx context.Context, tenantID uin
 	if r.tasks == nil {
 		queueErr = errors.New("embedding rebuild task queue is unavailable")
 	} else {
-		_, queueErr = r.tasks.Enqueue(asynq.NewTask(types.TypeEntityNameEmbeddingRebuild, payload), asynq.Queue(types.QueueEntity), asynq.MaxRetry(3), asynq.Timeout(30*time.Minute))
+		_, queueErr = r.tasks.Enqueue(taskqueue.NewTask(types.TypeEntityNameEmbeddingRebuild, payload), taskqueue.Queue(types.QueueEntity), taskqueue.MaxRetry(3), taskqueue.Timeout(30*time.Minute))
 	}
 	if queueErr != nil {
 		if err := r.finish(ctx, &run, "failed", queueErr); err != nil {
@@ -208,7 +233,7 @@ func (r *EntityNameEmbeddingRebuilder) finish(ctx context.Context, run *types.En
 	}
 	return query.Updates(map[string]any{"status": status, "error": detail, "processed_count": run.ProcessedCount, "model_calls": run.ModelCalls, "finished_at": now, "updated_at": now}).Error
 }
-func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *asynq.Task) (handleErr error) {
+func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskqueue.Task) (handleErr error) {
 	var payload types.EntityNameEmbeddingRebuildPayload
 	if task == nil {
 		return errors.New("embedding rebuild task is unavailable")
@@ -360,4 +385,35 @@ func (r *EntityNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, tenantID uint64
 		return errors.New("embedding model configuration changed during rebuild")
 	}
 	return nil
+}
+
+func (r *EntityNameEmbeddingRebuilder) WithTransaction(ctx context.Context, tx *gorm.DB) (*EntityNameEmbeddingRebuilder, error) {
+	queue, ok := r.tasks.(interfaces.TransactionalTaskEnqueuer)
+	if !ok {
+		return nil, errors.New("entity embedding task queue must support PostgreSQL transactions")
+	}
+	copy := *r
+	copy.db = tx
+	// Profile construction must read model edits from this transaction too.
+	if models, ok := r.models.(*modelService); ok {
+		boundModels := *models
+		boundModels.db = tx
+		boundModels.repo = repository.NewModelRepository(tx)
+		boundModels.kbRepo = repository.NewKnowledgeBaseRepository(tx)
+		copy.models = &boundModels
+	}
+	copy.tasks = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
+	return &copy, nil
+}
+
+func (r *EntityNameEmbeddingRebuilder) EnqueueTx(ctx context.Context, tx *gorm.DB, tenantID uint64, reason string) error {
+	copy, err := r.WithTransaction(ctx, tx)
+	if err != nil {
+		return err
+	}
+	return copy.Enqueue(ctx, tenantID, reason)
+}
+
+func (r *EntityNameEmbeddingRebuilder) BindTransaction(ctx context.Context, tx *gorm.DB) (EntityNameEmbeddingRebuildTrigger, error) {
+	return r.WithTransaction(ctx, tx)
 }

@@ -1487,8 +1487,11 @@ export default {
         autoRefresh: 'Auto-refresh (every 5s)',
         loading: 'Loading...',
         retry: 'Retry',
+        reconnecting: 'Queue paused, reconnecting',
+        reconnectAlert: 'Queue paused, reconnecting. Reconnect keeps failing; check the database connection.',
+        latestConnectionError: 'Latest error',
         unavailableTitle: 'Task queues unavailable',
-        unavailable: 'The task queue is currently unavailable. Check the Redis connection.',
+        unavailable: 'The task queue is currently unavailable. Check the database connection.',
         empty: 'No queue data available',
         detailsTitle: 'Queue details',
         detailsDescription: 'Live load and wait time for every processing lane. “Failed (stopped)” means the task exceeded its retry limit and will not run automatically again.',
@@ -1564,7 +1567,7 @@ export default {
           lastFailedAt: 'Last failed',
           completedAt: 'Completed',
           deadline: 'Deadline',
-          worker: 'Worker',
+          worker: 'Worker pool',
           health: 'Runtime health',
           orphaned: 'Worker heartbeat lost; waiting for recovery',
           cancel: 'Cancel task',
@@ -1587,8 +1590,8 @@ export default {
             completed: 'Completed'
           },
           guides: {
-            active: 'Inspect the worker, start time, deadline, and orphan status. Cancel is offered only when the business state can be updated safely.',
-            pending: 'Pending tasks have not been claimed. Cancellation updates business state instead of only removing Redis data.',
+            active: 'Inspect the worker pool, start time, deadline, and orphan status. Cancel is offered only when the business state can be updated safely.',
+            pending: 'Pending tasks have not been claimed. Cancellation updates article state and cancels related tasks.',
             scheduled: 'Scheduled tasks can run early; document pipeline tasks can also use safe business cancellation.',
             retry: 'Use the last error, attempt count, and next run time to decide whether to run now or cancel.',
             archived: 'Fix the root cause before running again. Clearing a record does not complete the original business task.',
@@ -1615,6 +1618,7 @@ export default {
 
             entityNameEmbeddingRebuild: 'Entity name embedding rebuild',
             embeddingRebuild: 'Rebuild all embeddings',
+            topicBackfill: 'Assign historical articles to a topic',
           }
         },
         models: {
@@ -1643,7 +1647,7 @@ export default {
         },
         poolDescriptions: {
           core: 'Guaranteed document and manual parsing capacity',
-          enrichment: "Rebuild entity name embeddings or all embeddings",
+          enrichment: "Rebuild entity name embeddings or all embeddings, or assign historical articles to topics",
           maintenance: 'Source sync, batch work, and deletion cleanup',
           shared: 'Borrowed by core or enrichment according to backlog',
         },
@@ -1657,7 +1661,7 @@ export default {
           default: 'Document parse, manual reparse',
           sync: 'Manual & scheduled sync',
           low: "Batch reparse and cleanup",
-          entity: "Rebuild entity name embeddings or all embeddings",
+          entity: "Rebuild entity name embeddings or all embeddings, or assign historical articles to topics",
         }
       },
       keyLabels: {
@@ -1666,7 +1670,7 @@ export default {
         ssrf: {
           whitelist: 'SSRF protection allowlist'
         },
-        asynq: {
+        queue: {
           core_concurrency: 'Guaranteed core parse concurrency',
           enrichment_concurrency: 'Guaranteed enrichment concurrency',
           maintenance_concurrency: 'Maintenance concurrency',
@@ -1682,9 +1686,9 @@ export default {
         ssrf: {
           whitelist: 'SSRF protection allowlist. Accepts entries such as example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1. Takes effect immediately after saving. The SSRF_WHITELIST_EXTRA environment variable is still maintained by the deployer and is not overridden here.'
         },
-        asynq: {
+        queue: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual parsing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
-          enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings, with shared capacity available. Restart after changing.",
+          enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings and assigning historical articles to topics, with shared capacity available. Restart after changing.",
           maintenance_concurrency: 'Per-process concurrency for source sync, batch work, and cleanup, hard-isolated from the user-facing pipeline. Minimum 1; requires a service restart.',
           shared_concurrency: 'Per-process elastic concurrency shared by core parsing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
@@ -1733,6 +1737,7 @@ export default {
     }
   },
   error: {
+    serviceUnavailable: 'Service temporarily unavailable, retrying',
     networkError: 'Network error, please check your connection',
     invalidCredentials: 'Invalid username or password',
     tokenRefreshFailed: 'Token refresh failed',

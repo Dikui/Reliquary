@@ -18,13 +18,13 @@ type runtimeTestSettings struct{}
 
 func (runtimeTestSettings) GetInt(_ context.Context, key, _ string, def int64) int64 {
 	switch key {
-	case "asynq.core_concurrency":
+	case "queue.core_concurrency":
 		return 8
-	case "asynq.enrichment_concurrency":
+	case "queue.enrichment_concurrency":
 		return 12
-	case "asynq.maintenance_concurrency":
+	case "queue.maintenance_concurrency":
 		return 4
-	case "asynq.shared_concurrency":
+	case "queue.shared_concurrency":
 		return 6
 	default:
 		return def
@@ -42,8 +42,7 @@ func (runtimeTestSettings) Get(context.Context, string) (*types.SystemSetting, e
 func (runtimeTestSettings) Update(context.Context, string, any) (*types.SystemSetting, error) {
 	return nil, nil
 }
-func (runtimeTestSettings) Reset(context.Context, string) error  { return nil }
-func (runtimeTestSettings) SubscribeRedis(context.Context) error { return nil }
+func (runtimeTestSettings) Reset(context.Context, string) error { return nil }
 
 type runtimeInvalidSettings struct{ runtimeTestSettings }
 

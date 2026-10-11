@@ -163,6 +163,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const calls: string[] = [], policy = { ...initialPolicy, reason: 'subscription_sharing_usage_unavailable', retry_at: '2026-10-11T10:05:00Z' }
     const modules: Record<string, unknown> = {
       '@/utils/request': { get: async (path: string) => {
+        if (path === '/health') return { status: 'ok', queue_connection: { state: 'active', alert: false, alert_after_seconds: 300 } }
         calls.push(path)
         if (path.endsWith('/accounts')) return { success: true, data: { accounts: [{ ...account, status: 'needs_login' }], encryption_ready: true, callback_url: '' } }
         if (path.endsWith('/policy')) return { success: true, data: { ...policy } }
@@ -176,6 +177,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../../api/chatgpt.ts', import.meta.url), 'utf8'), modules)
     modules['@/api/system'] = evaluate(readFileSync(new URL('../../api/system/index.ts', import.meta.url), 'utf8'), modules)
     modules['@/components/ChatGPTUsageStatus.vue'] = moduleOf(component(new URL('../../components/ChatGPTUsageStatus.vue', import.meta.url), modules).result)
+    modules['./QueueConnectionNotice.vue'] = moduleOf(component(new URL('../system/QueueConnectionNotice.vue', import.meta.url), modules).result)
     const view = component(new URL('../system/RuntimeQueues.vue', import.meta.url), modules)
     const app = renderer.createApp(view.result)
     app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)

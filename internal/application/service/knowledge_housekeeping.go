@@ -1,21 +1,8 @@
 // Package service: knowledge housekeeping.
 //
-// HousekeepingService periodically scans for knowledge rows that have been
-// stuck in "processing" longer than any reasonable execution window and
-// marks them as failed. This is the safety net that catches anything the
-// other defences (asynq retry, dead-letter callback, image_multimodal
-// finalize-on-last-attempt) miss — for example:
-//
-//   - Worker process killed mid-handler before any defer could run.
-//   - Parser call genuinely exceeding ParserCallTimeout AND the
-//     worker subsequently being lost before retry kicks in.
-//   - Multimodal Redis counter set to N but ALL N image tasks failing in
-//     ways that bypass finalize (extremely rare; defence-in-depth here).
-//
-// Without this sweep, a single unlucky failure mode can leave a knowledge
-// row in "processing" forever — invisible to users except as a permanent
-// spinner. With this sweep the worst-case latency from stall to user-
-// visible failure is bounded to ~1 stale-threshold + 1 sweep interval.
+// HousekeepingService marks only old article rows without live queue records
+// or recent span activity as failed. PostgreSQL queue leases and startup rescue
+// handle worker crashes; this sweep covers orphaned rows and manual corruption.
 package service
 
 import (
@@ -189,26 +176,33 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 		// Visibility into "stale span heartbeat but tasks still queued"
 		// — i.e. backpressure, not a stuck row. Persistent counts here
 		// mean the queue is the bottleneck (raise the matching per-pool or
-		// shared asynq concurrency, or document_process_timeout), not that
+		// shared queue concurrency, or document_process_timeout), not that
 		// housekeeping misfires.
 		logger.Infof(ctx,
 			"[Housekeeping] %d candidate(s) skipped — tasks still queued (backpressure, not stuck)",
 			queueSkipped)
 	}
 
-	// Sweep B: knowledge summary stuck. Summary is post-parse; threshold
-	// is shorter because summary tasks are bounded by a single LLM call.
-	// No span heartbeat exists for the summary stage (it lives in a
-	// downstream asynq task), so we accept the original simple check.
-	summaryCutoff := time.Now().Add(-1 * time.Hour)
-	resSummary := h.db.WithContext(ctx).Model(&types.Knowledge{}).
-		Where("summary_status = ? AND updated_at < ?", types.SummaryStatusProcessing, summaryCutoff).
-		Update("summary_status", types.SummaryStatusFailed)
-	if resSummary.Error != nil {
-		logger.Warnf(ctx, "[Housekeeping] summary sweep failed: %v", resSummary.Error)
-	} else if resSummary.RowsAffected > 0 {
-		logger.Infof(ctx, "[Housekeeping] recovered %d stuck summary rows", resSummary.RowsAffected)
+	// Apply the queue ownership check to summaries too. A long article task
+	// may still be indexing while its summary remains marked processing.
+	summaryCutoff := time.Now().Add(-time.Hour)
+	var summaryCandidates []types.Knowledge
+	if err := h.db.WithContext(ctx).Where("summary_status = ? AND updated_at < ?", types.SummaryStatusProcessing, summaryCutoff).Find(&summaryCandidates).Error; err != nil {
+		logger.Warnf(ctx, "[Housekeeping] summary candidate query failed: %v", err)
+		return
 	}
+	orphans, _ := h.filterOutQueued(ctx, summaryCandidates)
+	if len(orphans) > 0 {
+		ids := make([]string, 0, len(orphans))
+		for _, article := range orphans {
+			ids = append(ids, article.ID)
+		}
+		result := h.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id IN ? AND summary_status = ? AND updated_at < ?", ids, types.SummaryStatusProcessing, summaryCutoff).Update("summary_status", types.SummaryStatusFailed)
+		if result.Error != nil {
+			logger.Warnf(ctx, "[Housekeeping] summary sweep failed: %v", result.Error)
+		}
+	}
+
 }
 
 // filterByLastSpanActivity returns the subset of candidates whose most
@@ -280,8 +274,8 @@ func (h *HousekeepingService) filterOutQueued(
 		queued, err := h.inspector.HasQueuedTasksForKnowledge(ctx, k.ID)
 		if err != nil {
 			logger.Warnf(ctx,
-				"[Housekeeping] queue probe failed for %s: %v (will fail safe and treat as stuck)", k.ID, err)
-			out = append(out, k)
+				"[Housekeeping] queue probe failed for %s: %v (preserving row until ownership can be verified)", k.ID, err)
+			skipped++
 			continue
 		}
 		if queued {

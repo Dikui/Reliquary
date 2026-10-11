@@ -31,6 +31,8 @@
       </div>
     </header>
 
+    <QueueConnectionNotice :status="queueConnection" />
+
     <ChatGPTUsageStatus v-if="chatgptPolicy?.paused || chatgptAccounts.some(account => account.status === 'needs_login')" :policy="chatgptPolicy" :accounts="chatgptAccounts" :busy="chatgptResuming" :error="chatgptError" settings-link @resume="resumeChatGPTUsage" />
 
     <div v-if="chatgptError && !chatgptPolicy" class="rq-state rq-state--error" role="alert">
@@ -514,6 +516,8 @@
 </template>
 
 <script setup lang="ts">
+import QueueConnectionNotice from './QueueConnectionNotice.vue'
+import type { QueueConnectionStatus } from '@/api/system'
 import { formatCountCopy } from '@/i18n/countCopy'
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -525,6 +529,7 @@ import { mergeRuntimeTaskPage } from './runtimeTaskPagination'
 import {
   getRuntimeTasks,
   getRuntimeQueues,
+  getQueueConnectionStatus,
   mutateRuntimeTask,
   purgeArchivedRuntimeTasks,
   type ModelRuntimeStat,
@@ -562,6 +567,7 @@ const queues = ref<QueueStat[]>([])
 const pools = ref<RuntimeWorkerPool[]>([])
 const models = ref<ModelRuntimeStat[]>([])
 const modelLimiterAvailable = ref(false)
+const queueConnection = ref<QueueConnectionStatus>()
 const available = ref(true)
 const loading = ref(false)
 const loadedOnce = ref(false)
@@ -593,6 +599,7 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'index:delete': 'indexDelete',
   'entity:name_embedding_rebuild': 'entityNameEmbeddingRebuild',
   'knowledge:embedding_rebuild': 'embeddingRebuild',
+  'topic:backfill': 'topicBackfill',
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -736,7 +743,7 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   if (task.last_failed_at) refs.push({ key: 'failed', label: t('system.globalSettings.runtime.tasks.lastFailedAt'), value: formatTaskTime(task.last_failed_at) })
   if (task.completed_at) refs.push({ key: 'completed', label: t('system.globalSettings.runtime.tasks.completedAt'), value: formatTaskTime(task.completed_at) })
   if (task.deadline) refs.push({ key: 'deadline', label: t('system.globalSettings.runtime.tasks.deadline'), value: formatTaskTime(task.deadline) })
-  if (task.worker) refs.push({ key: 'worker', label: t('system.globalSettings.runtime.tasks.worker'), value: task.worker })
+  if (task.worker) refs.push({ key: 'worker', label: t('system.globalSettings.runtime.tasks.worker'), value: poolLabel(task.worker) })
   if (task.is_orphaned) refs.push({ key: 'orphaned', label: t('system.globalSettings.runtime.tasks.health'), value: t('system.globalSettings.runtime.tasks.orphaned') })
   return refs
 }
@@ -914,10 +921,19 @@ async function purgeArchivedTasks() {
 }
 
 async function load(showSpinner: boolean) {
-  loadChatGPTStatus()
   if (showSpinner) loading.value = true
   try {
+    const connection = await getQueueConnectionStatus()
+    queueConnection.value = connection
+    if (connection?.state === 'reconnecting') {
+      available.value = false
+      loadedOnce.value = true
+      error.value = ''
+      return
+    }
+    loadChatGPTStatus()
     const resp = await getRuntimeQueues()
+    queueConnection.value = resp.queue_connection
     available.value = resp.available
     pools.value = resp.pools || []
     queues.value = resp.queues || []

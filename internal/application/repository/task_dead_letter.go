@@ -20,7 +20,7 @@ func NewTaskDeadLetterRepository(db *gorm.DB) interfaces.TaskDeadLetterRepositor
 	return &taskDeadLetterRepository{db: db}
 }
 
-// Insert records one dead letter. Best-effort caller: the asynq
+// Insert records one dead letter. Best-effort caller: the queue
 // middleware swallows the error so a failed insert never masks the
 // underlying task error.
 func (r *taskDeadLetterRepository) Insert(ctx context.Context, dl *types.TaskDeadLetter) error {

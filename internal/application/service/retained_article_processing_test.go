@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
 	"reliquary/internal/models/chat"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -27,11 +27,11 @@ func (s retainedProcessingKB) GetKnowledgeBaseByIDOnly(context.Context, string) 
 	return s.kb, nil
 }
 
-type retainedProcessingQueue struct{ tasks []*asynq.Task }
+type retainedProcessingQueue struct{ tasks []*taskqueue.Task }
 
-func (q *retainedProcessingQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (q *retainedProcessingQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.tasks = append(q.tasks, task)
-	return &asynq.TaskInfo{ID: fmt.Sprint(len(q.tasks))}, nil
+	return &taskqueue.TaskInfo{ID: fmt.Sprint(len(q.tasks))}, nil
 }
 
 type retainedProcessingChatInterface interface{ chat.Chat }

@@ -7,7 +7,7 @@ import (
 
 // TaskDeadLetterRepository persists archived task failures for inspection.
 type TaskDeadLetterRepository interface {
-	// Insert records one dead letter. Best-effort caller: the asynq
+	// Insert records one dead letter. Best-effort caller: the queue
 	// middleware ignores the error so a failed insert never masks the
 	// underlying task error.
 	Insert(ctx context.Context, dl *types.TaskDeadLetter) error

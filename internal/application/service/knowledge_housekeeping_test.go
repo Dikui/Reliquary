@@ -285,12 +285,11 @@ func TestHousekeeping_StillRecoversWhenNoQueuedTask(t *testing.T) {
 }
 
 // TestHousekeeping_QueueProbeError_FailsSafe confirms the fail-safe
-// direction: when the queue probe errors we still recover the row rather
-// than leaving it stranded forever.
+// direction: preserve the row when queue ownership cannot be verified.
 func TestHousekeeping_QueueProbeError_FailsSafe(t *testing.T) {
 	db := setupHousekeepingDB(t)
 	svc := newHousekeepingSvcWithInspector(db, fakeTaskInspector{
-		err: errors.New("redis unavailable"),
+		err: errors.New("task queue unavailable"),
 	})
 	stale := time.Now().Add(-3 * time.Hour)
 	insertKnowledge(t, db, "kid-probeerr", types.ParseStatusProcessing, stale)
@@ -301,8 +300,8 @@ func TestHousekeeping_QueueProbeError_FailsSafe(t *testing.T) {
 	require.NoError(t, db.Raw(
 		`SELECT parse_status FROM knowledges WHERE id = ?`, "kid-probeerr",
 	).Row().Scan(&status))
-	assert.Equal(t, types.ParseStatusFailed, status,
-		"queue probe error must fail safe and still recover the stuck row")
+	assert.Equal(t, types.ParseStatusProcessing, status,
+		"queue probe error must preserve a potentially executing task")
 }
 
 // TestHousekeeping_PreservesRecentlyTouched: any knowledge whose
@@ -321,4 +320,15 @@ func TestHousekeeping_PreservesRecentlyTouched(t *testing.T) {
 	).Row().Scan(&status))
 	assert.Equal(t, types.ParseStatusProcessing, status,
 		"knowledge updated within the cutoff must be left alone")
+}
+
+func TestHousekeepingPreservesSummaryOwnedByQueue(t *testing.T) {
+	db := setupHousekeepingDB(t)
+	svc := newHousekeepingSvcWithInspector(db, fakeTaskInspector{queued: map[string]bool{"summary-queued": true}})
+	insertKnowledge(t, db, "summary-queued", types.ParseStatusCompleted, time.Now().Add(-3*time.Hour))
+	require.NoError(t, db.Exec("UPDATE knowledges SET summary_status=? WHERE id=?", types.SummaryStatusProcessing, "summary-queued").Error)
+	svc.runSweep(context.Background())
+	var status string
+	require.NoError(t, db.Raw("SELECT summary_status FROM knowledges WHERE id=?", "summary-queued").Scan(&status).Error)
+	require.Equal(t, types.SummaryStatusProcessing, status)
 }

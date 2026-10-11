@@ -87,8 +87,6 @@ check_var "LOCAL_STORAGE_BASE_DIR"
 check_var "VAULT_ROOT"
 
 echo ""
-log_info "Redis 配置:"
-check_var "REDIS_ADDR"
 
 echo ""
 log_info "Ollama 配置:"

@@ -15,7 +15,9 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/config"
+	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -403,6 +405,9 @@ func (s *userService) ValidateToken(ctx context.Context, tokenString string) (*t
 
 	// Check if token is revoked
 	tokenRecord, err := s.tokenRepo.GetTokenByValue(ctx, tokenString)
+	if err != nil && !errors.Is(err, apprepo.ErrTokenNotFound) {
+		return nil, 0, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable")
+	}
 	if err != nil || tokenRecord == nil || tokenRecord.IsRevoked {
 		return nil, 0, errors.New("token is revoked")
 	}
@@ -411,6 +416,9 @@ func (s *userService) ValidateToken(ctx context.Context, tokenString string) (*t
 	}
 
 	user, err := s.userRepo.GetUserByID(ctx, userID)
+	if err != nil && !errors.Is(err, apprepo.ErrUserNotFound) {
+		return nil, 0, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable")
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -517,6 +525,9 @@ func (s *userService) RefreshToken(
 
 	// Check if token is revoked
 	tokenRecord, err := s.tokenRepo.GetTokenByValue(ctx, refreshTokenString)
+	if err != nil && !errors.Is(err, apprepo.ErrTokenNotFound) {
+		return "", "", apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable")
+	}
 	if err != nil || tokenRecord == nil || tokenRecord.IsRevoked {
 		return "", "", errors.New("refresh token is revoked")
 	}
@@ -526,16 +537,25 @@ func (s *userService) RefreshToken(
 
 	// Get user
 	user, err := s.userRepo.GetUserByID(ctx, userID)
+	if err != nil && !errors.Is(err, apprepo.ErrUserNotFound) {
+		return "", "", apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable")
+	}
 	if err != nil {
 		return "", "", err
 	}
 
 	// Revoke old refresh token
 	tokenRecord.IsRevoked = true
-	_ = s.tokenRepo.UpdateToken(ctx, tokenRecord)
+	if err := s.tokenRepo.UpdateToken(ctx, tokenRecord); err != nil {
+		return "", "", apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable")
+	}
 
 	// Generate new tokens
-	return s.GenerateTokens(ctx, user)
+	accessToken, newRefreshToken, err = s.GenerateTokens(ctx, user)
+	if err != nil {
+		return "", "", apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable")
+	}
+	return accessToken, newRefreshToken, nil
 }
 
 // Logout invalidates every outstanding session for the user identified by

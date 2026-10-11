@@ -35,10 +35,7 @@ type SystemSettingRepository interface {
 // owns the registry of legal keys; reading or writing an unknown key
 // returns an error from Update / falls through to default for Get.
 //
-// P1 ships with no in-memory cache: every GetXxx hits the DB. The
-// callers (file-upload size check, etc.) are not on a hot path so the
-// extra ~1ms is negligible. P2 may add Redis pubsub + a TTL cache;
-// the SubscribeRedis hook below is a placeholder for that.
+// A process-local cache is refreshed synchronously on writes.
 type SystemSettingService interface {
 	// GetInt returns the resolved int64 value for `key`.
 	//
@@ -76,17 +73,9 @@ type SystemSettingService interface {
 	// Reset removes the DB override for `key` so the resolver falls
 	// back to ENV / built-in default. Idempotent: deleting a key that
 	// was never persisted returns nil. Invalidates the local cache and
-	// publishes to peers.
+	// applies dependent in-process controls.
 	// Returns an error only when the DB write itself fails; callers
 	// must NOT translate "no row" into a 404 — that's the success
 	// path for an idempotent reset.
 	Reset(ctx context.Context, key string) error
-
-	// SubscribeRedis is a P2 hook: when implemented, it will subscribe
-	// to a "reliquary:system_settings:changed" channel and invalidate any
-	// in-memory cache on receipt. P1 implementations may return a no-op
-	// because there is no cache yet. Keeping the method in the interface
-	// now means P2 can drop in a real implementation without changing
-	// the container wiring.
-	SubscribeRedis(ctx context.Context) error
 }

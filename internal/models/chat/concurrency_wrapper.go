@@ -11,10 +11,10 @@ import (
 // background stage (summary / question / context / multimodal enrichment), which
 // all target the same model. This governor caps concurrent calls per model at
 // the client layer — the one place that sees all task types — instead of at the
-// asynq queue layer, whose weights are scheduling priority rather than
+// queue queue layer, whose weights are scheduling priority rather than
 // throttling.
 //
-// Only background (asynq worker) calls are throttled; interactive chat is left
+// Only background (queue worker) calls are throttled; interactive chat is left
 // untouched (see types.IsBackgroundTask), so a document-ingestion storm cannot
 // exhaust the provider yet user-facing latency is never gated behind the
 // semaphore. The governor singleton itself lives in the limiter package so chat

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/datasource"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -48,7 +48,7 @@ func TestProcessSyncCancelsWhenKnowledgeBaseDeleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload))
+	err = svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload))
 	require.NoError(t, err)
 
 	updated := syncLogRepo.logs[syncLog.ID]
@@ -72,7 +72,7 @@ func TestProcessSyncDailySourceFailureKeepsSourceActiveForNextRun(t *testing.T) 
 				logs.logs[id] = &types.SyncLog{ID: id, DataSourceID: ds.ID, TenantID: ds.TenantID, Status: types.SyncLogStatusRunning}
 				payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: id})
 				require.NoError(t, err)
-				require.Error(t, svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload)))
+				require.Error(t, svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 				assert.Equal(t, types.SyncLogStatusFailed, logs.logs[id].Status)
 				assert.Equal(t, types.DataSourceStatusActive, ds.Status)
 			}
@@ -106,7 +106,7 @@ func TestProcessSyncRSSPartialFailureKeepsCursorForRetry(t *testing.T) {
 	}
 	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: 1, SyncLogID: log.ID})
 	require.NoError(t, err)
-	require.NoError(t, svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload)))
+	require.NoError(t, svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 	require.Equal(t, types.SyncLogStatusPartial, log.Status)
 	require.Equal(t, types.JSON(`{"revision":"old"}`), ds.LastSyncCursor)
 }
@@ -460,7 +460,7 @@ func (h *syncDeletionHarness) run(t *testing.T) (*types.SyncLog, error) {
 		ForceFull:    true,
 	})
 	require.NoError(t, err)
-	err = h.svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload))
+	err = h.svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload))
 
 	updated := h.syncLogRepo.logs[h.syncLogID]
 	require.NotNil(t, updated)
@@ -754,7 +754,7 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 		DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: syncLog.ID, ForceFull: true,
 	})
 	require.NoError(t, err)
-	err = svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload))
+	err = svc.ProcessSync(context.Background(), taskqueue.NewTask(types.TypeDataSourceSync, payload))
 	require.NoError(t, err, "partial failure must not fail the whole sync")
 
 	updated := syncLogRepo.logs[syncLog.ID]

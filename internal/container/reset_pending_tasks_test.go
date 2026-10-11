@@ -91,10 +91,11 @@ func setupResetPendingDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.Exec(resetPendingSpansDDL).Error)
 	require.NoError(t, db.Exec(resetPendingOpsDDL).Error)
 	require.NoError(t, db.Exec(resetPendingKnowledgeBasesDDL).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE task_jobs (state TEXT, payload JSONB)`).Error)
 	return db
 }
 
-func TestResetPendingTasks_KnowledgeFreshInDistributedMode(t *testing.T) {
+func TestResetPendingTasks_KnowledgeFreshInQueueMode(t *testing.T) {
 	db := setupResetPendingDB(t)
 	fresh := time.Now().Add(-5 * time.Minute)
 	require.NoError(t, db.Exec(
@@ -102,7 +103,6 @@ func TestResetPendingTasks_KnowledgeFreshInDistributedMode(t *testing.T) {
 		"k-fresh", types.ParseStatusProcessing, fresh,
 	).Error)
 
-	t.Setenv("REDIS_ADDR", "redis:6379")
 	resetPendingTasks(db)
 
 	var status string
@@ -112,7 +112,7 @@ func TestResetPendingTasks_KnowledgeFreshInDistributedMode(t *testing.T) {
 	assert.Equal(t, types.ParseStatusProcessing, status)
 }
 
-func TestResetPendingTasks_DistributedModePreservesEveryStage(t *testing.T) {
+func TestResetPendingTasks_QueueModePreservesEveryStage(t *testing.T) {
 	cases := []struct {
 		name        string
 		parseStatus string
@@ -131,7 +131,6 @@ func TestResetPendingTasks_DistributedModePreservesEveryStage(t *testing.T) {
 				"k-active-span", tc.parseStatus, stale,
 			).Error)
 
-			t.Setenv("REDIS_ADDR", "redis:6379")
 			resetPendingTasks(db)
 
 			var status string
@@ -139,12 +138,12 @@ func TestResetPendingTasks_DistributedModePreservesEveryStage(t *testing.T) {
 				`SELECT parse_status FROM knowledges WHERE id = ?`, "k-active-span",
 			).Row().Scan(&status))
 			assert.Equal(t, tc.parseStatus, status,
-				"distributed tasks belong to Asynq/housekeeping, not startup reset")
+				"persistent tasks belong to the queue/housekeeping, not startup reset")
 		})
 	}
 }
 
-func TestResetPendingTasks_DistributedSummaryTaskSurvivesRestart(t *testing.T) {
+func TestResetPendingTasks_QueuedSummaryTaskSurvivesRestart(t *testing.T) {
 	db := setupResetPendingDB(t)
 	stale := time.Now().Add(-2 * time.Hour)
 	require.NoError(t, db.Exec(
@@ -153,7 +152,6 @@ func TestResetPendingTasks_DistributedSummaryTaskSurvivesRestart(t *testing.T) {
 		"k-summary", types.ParseStatusCompleted, types.SummaryStatusProcessing, stale,
 	).Error)
 
-	t.Setenv("REDIS_ADDR", "redis:6379")
 	resetPendingTasks(db)
 
 	var status string
@@ -171,7 +169,6 @@ func TestResetPendingTasks_SyncLogStaleRunning(t *testing.T) {
 		"sync-1", types.SyncLogStatusRunning, stale,
 	).Error)
 
-	t.Setenv("REDIS_ADDR", "redis:6379")
 	resetPendingTasks(db)
 
 	var status string
@@ -181,4 +178,15 @@ func TestResetPendingTasks_SyncLogStaleRunning(t *testing.T) {
 	).Row().Scan(&status, &finishedAt))
 	assert.Equal(t, types.SyncLogStatusFailed, status)
 	require.NotNil(t, finishedAt)
+}
+
+func TestResetPendingTasksPreservesSyncLogOwnedByRecoverableTask(t *testing.T) {
+	db := setupResetPendingDB(t)
+	stale := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, db.Exec(`INSERT INTO sync_logs (id,status,started_at) VALUES (?,?,?)`, "sync-owned", types.SyncLogStatusRunning, stale).Error)
+	require.NoError(t, db.Exec(`INSERT INTO task_jobs (state,payload) VALUES ('active','{"sync_log_id":"sync-owned"}')`).Error)
+	resetPendingTasks(db)
+	var status string
+	require.NoError(t, db.Raw(`SELECT status FROM sync_logs WHERE id='sync-owned'`).Scan(&status).Error)
+	require.Equal(t, types.SyncLogStatusRunning, status)
 }

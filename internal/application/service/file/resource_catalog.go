@@ -23,6 +23,7 @@ type resourceCatalogFileService struct {
 	inner       interfaces.FileService
 	catalog     interfaces.ResourceCatalog
 	externalURL string
+	onStored    func(string)
 }
 
 // NewResourceCatalogFileService decorates a physical FileService with stable
@@ -39,6 +40,18 @@ func NewResourceCatalogFileService(
 		catalog:     catalog,
 		externalURL: strings.TrimRight(strings.TrimSpace(os.Getenv("APP_EXTERNAL_URL")), "/"),
 	}
+}
+
+// WithResourceCatalog binds a decorated file service to the caller's catalog.
+// onStored tracks new physical objects for cleanup if its database transaction
+// rolls back. Provider drivers and unrelated file-service fixtures are reused.
+func WithResourceCatalog(svc interfaces.FileService, catalog interfaces.ResourceCatalog, onStored func(string)) interfaces.FileService {
+	if decorated, ok := svc.(*resourceCatalogFileService); ok {
+		copy := *decorated
+		copy.catalog, copy.onStored = catalog, onStored
+		return &copy
+	}
+	return svc
 }
 
 func (s *resourceCatalogFileService) CheckConnectivity(ctx context.Context) error {
@@ -68,6 +81,9 @@ func (s *resourceCatalogFileService) register(
 	temporary bool,
 	contentHash string,
 ) (string, error) {
+	if s.onStored != nil {
+		s.onStored(physical)
+	}
 	kind, mimeType := resourceKind(name)
 	ref, err := s.catalog.Register(ctx, tenantID, physical, interfaces.ResourceRegistration{
 		Kind:         kind,

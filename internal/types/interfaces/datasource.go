@@ -3,7 +3,7 @@ package interfaces
 import (
 	"context"
 
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -68,8 +68,8 @@ type DataSourceService interface {
 	// GetSyncLog retrieves a specific sync log entry
 	GetSyncLog(ctx context.Context, syncLogID string) (*types.SyncLog, error)
 
-	// ProcessSync handles the actual sync operation (called by asynq task)
-	ProcessSync(ctx context.Context, task *asynq.Task) error
+	// ProcessSync handles the actual sync operation (called by background task)
+	ProcessSync(ctx context.Context, task *taskqueue.Task) error
 }
 
 // DataSourceRepository defines database access patterns for data sources

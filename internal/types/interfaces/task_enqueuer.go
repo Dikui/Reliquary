@@ -1,9 +1,18 @@
 package interfaces
 
-import "github.com/hibiken/asynq"
+import (
+	"context"
+	"gorm.io/gorm"
+	"reliquary/internal/queue"
+)
 
-// TaskEnqueuer abstracts task enqueueing. *asynq.Client satisfies this interface.
-// Tests can provide lightweight task enqueuers through the same interface.
+// TaskEnqueuer abstracts task enqueueing for producers and their fixtures.
 type TaskEnqueuer interface {
-	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+	Enqueue(task *queue.Task, opts ...queue.Option) (*queue.TaskInfo, error)
+}
+
+// TransactionalTaskEnqueuer inserts on the caller's PostgreSQL transaction.
+type TransactionalTaskEnqueuer interface {
+	TaskEnqueuer
+	EnqueueTx(ctx context.Context, tx *gorm.DB, task *queue.Task, opts ...queue.Option) (*queue.TaskInfo, error)
 }

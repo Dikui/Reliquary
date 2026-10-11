@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/common"
 	werrors "reliquary/internal/errors"
@@ -485,6 +485,12 @@ func (s *knowledgeService) ReparseKnowledge(
 	knowledgeID string,
 	processOverrides *types.KnowledgeProcessOverrides,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.ReparseKnowledge(ctx, knowledgeID, processOverrides)
+		})
+	}
+
 	logger.Info(ctx, "Start re-parsing knowledge")
 
 	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
@@ -590,7 +596,7 @@ func (s *knowledgeService) ReparseKnowledge(
 		if err != nil {
 			return nil, err
 		}
-		if _, err = s.task.Enqueue(asynq.NewTask(types.TypeDocumentProcess, encoded, documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...)); err != nil {
+		if _, err = s.task.Enqueue(taskqueue.NewTask(types.TypeDocumentProcess, encoded, documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...)); err != nil {
 			s.markKnowledgeEnqueueFailed(ctx, existing)
 			return existing, err
 		}
@@ -686,10 +692,10 @@ func (s *knowledgeService) ReparseKnowledge(
 			return existing, werrors.NewInternalServerError("Failed to submit processing task")
 		}
 
-		task := asynq.NewTask(
+		task := taskqueue.NewTask(
 			types.TypeDocumentProcess,
 			payloadBytes,
-			documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+			documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 		)
 		info, err := s.task.Enqueue(task)
 		if err != nil {
@@ -726,7 +732,7 @@ func (s *knowledgeService) ReparseKnowledge(
 			return existing, werrors.NewInternalServerError("Failed to submit processing task")
 		}
 
-		task := asynq.NewTask(
+		task := taskqueue.NewTask(
 			types.TypeDocumentProcess,
 			payloadBytes,
 			documentProcessTaskOptions(s.config)...,
@@ -764,10 +770,10 @@ func (s *knowledgeService) ReparseKnowledge(
 			return existing, werrors.NewInternalServerError("Failed to submit processing task")
 		}
 
-		task := asynq.NewTask(
+		task := taskqueue.NewTask(
 			types.TypeDocumentProcess,
 			payloadBytes,
-			documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+			documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 		)
 		info, err := s.task.Enqueue(task)
 		if err != nil {
@@ -782,6 +788,7 @@ func (s *knowledgeService) ReparseKnowledge(
 	}
 
 	logger.Warnf(ctx, "Knowledge %s has no parseable content (no file, URL, or manual content)", knowledgeID)
+	s.recordTerminalMutationFailure()
 	existing.ParseStatus = types.ParseStatusFailed
 	existing.ErrorMessage = "Knowledge has no parseable content"
 	if err := s.repo.UpdateKnowledge(ctx, existing); err != nil {
@@ -817,9 +824,9 @@ func resetKnowledgeForReparse(knowledge *types.Knowledge, kb *types.KnowledgeBas
 //     existing ReparseKnowledge API, which overwrites status back to pending.
 //   - Any in-flight worker reads the new status at its next checkpoint and
 //     bails (see processChunks / ProcessDocument / downstream handlers).
-//   - The asynq inspector (if available) dequeues pending / scheduled / retry
+//   - The task inspector (if available) dequeues pending / scheduled / retry
 //     tasks for this knowledge_id across all queues used by the pipeline
-//     and signals active workers to stop. in-memory fixtures (no Redis) skips the
+//     and signals active workers to stop. in-memory fixtures (no queue client) skips the
 //     dequeue step — the checkpoint-based abort is the only stop signal there.
 //   - Idempotent: re-calling on an already-cancelled row is a no-op.
 //
@@ -910,7 +917,7 @@ func (s *knowledgeService) dequeueKnowledgeTasks(ctx context.Context, knowledgeI
 	}
 }
 
-func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Task) error {
+func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Task) error {
 	var payload types.ManualProcessPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "failed to unmarshal manual process task payload: %v", err)
@@ -1014,8 +1021,8 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Tas
 	return s.triggerManualProcessing(ctx, kb, knowledge, payload.Content, true)
 }
 
-// ProcessDocument handles Asynq document processing tasks
-func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (returnErr error) {
+// ProcessDocument handles PostgreSQL queue document processing tasks
+func (s *knowledgeService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (returnErr error) {
 	var payload types.DocumentProcessPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "failed to unmarshal document process task payload: %v", err)
@@ -1030,8 +1037,8 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 	}
 
 	// 获取任务重试信息，用于判断是否是最后一次重试
-	retryCount, _ := asynq.GetRetryCount(ctx)
-	maxRetry, _ := asynq.GetMaxRetry(ctx)
+	retryCount, _ := taskqueue.GetRetryCount(ctx)
+	maxRetry, _ := taskqueue.GetMaxRetry(ctx)
 	isLastRetry := retryCount >= maxRetry
 
 	tenantInfo, err := s.tenantRepo.GetTenantByID(ctx, payload.TenantID)
@@ -1143,7 +1150,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 
 	// Resolve the attempt for span tracking. The enqueue site sets
 	// payload.Attempt to a fresh number for the initial parse and to
-	// max+1 for each user-initiated reparse. Asynq retries within a
+	// max+1 for each user-initiated reparse. PostgreSQL queue retries within a
 	// single user action keep the same payload (so retries record
 	// onto the same attempt). For payloads predating this code we
 	// fall back to OpenAttempt.
@@ -1628,7 +1635,7 @@ func (s *knowledgeService) failKnowledge(
 	return nil, fmt.Errorf(format, args...)
 }
 
-func (s *knowledgeService) ProcessKnowledgeListReparse(ctx context.Context, t *asynq.Task) error {
+func (s *knowledgeService) ProcessKnowledgeListReparse(ctx context.Context, t *taskqueue.Task) error {
 	var payload types.KnowledgeListReparsePayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "Failed to unmarshal knowledge list reparse payload: %v", err)
@@ -1684,6 +1691,6 @@ func runKnowledgeListReparseSubmissions(
 	}
 	return outcome, fmt.Errorf(
 		"%w: batch reparse submitted %d item(s) and failed %d: %w",
-		asynq.SkipRetry, outcome.Submitted, outcome.Failed, errors.Join(failures...),
+		taskqueue.SkipRetry, outcome.Submitted, outcome.Failed, errors.Join(failures...),
 	)
 }

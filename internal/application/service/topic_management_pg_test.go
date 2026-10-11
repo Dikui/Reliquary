@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/chat"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -270,6 +271,8 @@ func TestTopicHistoricalBackfillConfiguredBatchesFailureAndRetry(t *testing.T) {
 func TestTopicHistoricalBackfillWorkerRestartsPersistedRunningBatch(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	svc, _, ctx := newTopicManagementService(t, h)
+	queue := taskqueue.NewClient(h.db)
+	svc.SetTaskEnqueuer(queue)
 	historicalTopicArticles(t, h, 3)
 	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Restart topic", Description: "Product announcements"})
 	require.NoError(t, err)
@@ -277,8 +280,9 @@ func TestTopicHistoricalBackfillWorkerRestartsPersistedRunningBatch(t *testing.T
 	require.NoError(t, err)
 	require.NoError(t, h.db.Model(&types.TopicBackfillJob{}).Where("id=?", job.ID).Update("status", "running").Error)
 	require.NoError(t, h.db.Model(&types.TopicBackfillBatch{}).Where("job_id=?", job.ID).Update("status", "running").Error)
-	require.NoError(t, svc.Start(context.Background()))
-	t.Cleanup(func() { require.NoError(t, svc.Close()) })
+	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("task_type=?", types.TypeTopicBackfill).Updates(map[string]any{"state": taskqueue.TaskStateActive, "lease_until": time.Now().Add(time.Hour), "claim_token": "crashed-process"}).Error)
+	require.NoError(t, queue.Start(context.Background(), taskqueue.HandlerFunc(svc.HandleBackfill), taskqueue.Config{}))
+	t.Cleanup(func() { require.NoError(t, queue.Close()) })
 	require.Eventually(t, func() bool {
 		state, err := svc.BackfillStatus(ctx, topic.ID)
 		return err == nil && state.Status == "completed" && state.Processed == 3
@@ -326,4 +330,33 @@ func TestTopicHistoricalBackfillIgnoresSupersededInFlightDecisions(t *testing.T)
 	job := runTopicJob(t, svc, ctx, topic.ID)
 	require.Equal(t, "completed", job.Status)
 	require.Empty(t, topicLinks(t, svc, topic.ID))
+}
+
+func TestTopicHistoricalBackfillDuplicateQueueTasksDoNotResetALiveBatch(t *testing.T) {
+	h := newArticleProcessingHarness(t, false)
+	svc, model, ctx := newTopicManagementService(t, h)
+	historicalTopicArticles(t, h, 1)
+	model.block = make(chan struct{})
+	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Serialized topic", Description: "Product history"})
+	require.NoError(t, err)
+	job, err := svc.BackfillStatus(ctx, topic.ID)
+	require.NoError(t, err)
+	raw, err := json.Marshal(types.TopicBackfillPayload{TenantID: types.SingleTenantID, JobID: job.ID})
+	require.NoError(t, err)
+	task := taskqueue.NewTask(types.TypeTopicBackfill, raw)
+	first := make(chan error, 1)
+	go func() { first <- svc.HandleBackfill(ctx, task) }()
+	require.Eventually(t, func() bool { return len(model.calls()) == 1 }, time.Second, 10*time.Millisecond)
+	secondCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	require.Error(t, svc.HandleBackfill(secondCtx, task), "the duplicate execution waits for its existing live worker")
+	require.Len(t, model.calls(), 1)
+	state, err := svc.BackfillStatus(ctx, topic.ID)
+	require.NoError(t, err)
+	require.Equal(t, "running", state.Batches[0].Status)
+	require.Equal(t, 1, state.Batches[0].Attempts)
+	close(model.block)
+	require.NoError(t, <-first)
+	require.NoError(t, svc.HandleBackfill(ctx, task))
+	require.Len(t, model.calls(), 1, "the completed queue replay does not repeat classification")
 }

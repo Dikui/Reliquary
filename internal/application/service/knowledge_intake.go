@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 	"io"
 	"net/url"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
+	taskqueue "reliquary/internal/queue"
 	"strings"
 	"time"
 
@@ -164,6 +164,12 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 // ReviewKnowledgeIntake retries an initially rejected message or discards its
 // stored source. It deliberately does not alter previously approved records.
 func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action string, source types.SourceInfo) (reviewed *types.Knowledge, reviewErr error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.ReviewKnowledgeIntake(ctx, id, action, source)
+		})
+	}
+
 	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
 	if err != nil {
@@ -307,7 +313,7 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 			var deferred *types.ChatGPTDeferredError
 			if errors.As(err, &deferred) {
 				s.markArticleProcessingFailed(ctx, knowledge, err)
-				_, enqueueErr := s.enqueueManualProcessing(ctx, knowledge, string(body), false, asynq.ProcessAt(deferred.RetryAt))
+				_, enqueueErr := s.enqueueManualProcessing(ctx, knowledge, string(body), false, taskqueue.ProcessAt(deferred.RetryAt))
 				return knowledge, enqueueErr
 			}
 			if err != nil || rejected {
@@ -463,6 +469,11 @@ func (s *knowledgeService) clearIntakeSource(ctx context.Context, k *types.Knowl
 }
 
 func (s *knowledgeService) failIntake(ctx context.Context, k *types.Knowledge) {
+	if s.taskEnqueueFailedInTransaction() || ctx.Err() != nil {
+		// An interrupted worker will run again from its durable queue record.
+		// Keep the stored original available to that recovered execution.
+		return
+	}
 	intake, err := k.IntakeMetadata()
 	if err != nil || intake == nil || intake.Decision != "pending" {
 		return
@@ -473,6 +484,7 @@ func (s *knowledgeService) failIntake(ctx context.Context, k *types.Knowledge) {
 	}
 	cleanupErr := s.clearIntakeSource(ctx, k)
 	intake, _ = k.IntakeMetadata()
+	s.recordTerminalMutationFailure()
 	intake.Decision, intake.Reason = "error", reason
 	k.ParseStatus, k.EnableStatus, k.ErrorMessage = types.ParseStatusFailed, "disabled", intake.Reason
 	if cleanupErr != nil {

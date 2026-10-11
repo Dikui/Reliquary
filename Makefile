@@ -255,9 +255,6 @@ clean-db:
 	@if [ $$(docker volume ls -q -f name=reliquary_postgres-data) ]; then \
 		docker volume rm reliquary_postgres-data; \
 	fi
-	@if [ $$(docker volume ls -q -f name=reliquary_redis_data) ]; then \
-		docker volume rm reliquary_redis_data; \
-	fi
 
 # Environment check
 check-env:

@@ -16,9 +16,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	apprepo "reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service"
@@ -28,6 +28,7 @@ import (
 	"reliquary/internal/mcpserver"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -77,14 +78,17 @@ func (mcpFixtureModels) GetChatModel(context.Context, string) (chat.Chat, error)
 
 type mcpFixtureQueue struct {
 	mu    sync.Mutex
-	tasks []*asynq.Task
+	tasks []*taskqueue.Task
 }
 
-func (q *mcpFixtureQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (q *mcpFixtureQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.tasks = append(q.tasks, task)
-	return &asynq.TaskInfo{ID: uuid.NewString()}, nil
+	return &taskqueue.TaskInfo{ID: uuid.NewString()}, nil
+}
+func (q *mcpFixtureQueue) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+	return q.Enqueue(task, opts...)
 }
 
 type mcpFixture struct {
@@ -130,7 +134,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	chunks := service.NewChunkService(chunkRepo, knowledgeRepo, kbRepo, models, engine)
 	knowledge, err := service.NewKnowledgeService(f.db, cfg, knowledgeRepo, bases,
 		apprepo.NewTenantRepository(f.db), f.params.TenantService, chunks, chunkRepo, files, nil, models, queue,
-		nil, engine, nil, nil, nil)
+		nil, engine, nil, nil)
 	require.NoError(t, err)
 	knowledge.(interface{ SetVault(*service.VaultService) }).SetVault(vault)
 	documents, err := service.NewVaultDocumentService(f.db, models, engine, root, time.Minute, time.Minute)

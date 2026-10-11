@@ -7,7 +7,7 @@ import (
 
 // TaskDeadLetter is one row in the `task_dead_letters` archive: a
 // permanent record of a task whose retry budget was exhausted. The table
-// is populated by the asynq dead-letter middleware whenever a task exhausts
+// is populated by the queue dead-letter middleware whenever a task exhausts
 // its retry budget. Every registered task type shares this archive.
 //
 // Operators query by (Scope, ScopeID) — e.g. "all dead letters for KB
@@ -29,8 +29,8 @@ type TaskDeadLetter struct {
 	ScopeID string `json:"scope_id" gorm:"type:varchar(64)"`
 	// Optional secondary identifier for grouping failures by source document.
 	RelatedID string `json:"related_id" gorm:"type:varchar(64);default:''"`
-	// Raw task payload at the time of failure. For asynq tasks this is
-	// the verbatim asynq.Task.Payload(); for service-level dead letters
+	// Raw task payload at the time of failure. For queue tasks this is
+	// the verbatim queue.Task.Payload(); for service-level dead letters
 	// the consumer chooses what to record.
 	Payload json.RawMessage `json:"payload" gorm:"type:jsonb"`
 	// String form of the final error. Long stack traces are kept verbatim.

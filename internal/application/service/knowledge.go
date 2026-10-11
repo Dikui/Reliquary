@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	redis "github.com/redis/go-redis/v9"
 	"io"
 	"strings"
 
@@ -54,7 +53,6 @@ type knowledgeService struct {
 	modelService    interfaces.ModelService
 	task            interfaces.TaskEnqueuer
 	taskInspector   interfaces.TaskInspector
-	redisClient     *redis.Client
 	imageResolver   *docparser.ImageResolver
 
 	// spanTracker records the per-attempt span tree for the parsing
@@ -90,7 +88,6 @@ func NewKnowledgeService(
 	task interfaces.TaskEnqueuer,
 	taskInspector interfaces.TaskInspector,
 	retrieveEngine interfaces.RetrievalService,
-	redisClient *redis.Client,
 	imageResolver *docparser.ImageResolver,
 	spanTracker SpanTracker,
 
@@ -110,7 +107,6 @@ func NewKnowledgeService(
 		task:            task,
 		taskInspector:   taskInspector,
 		retrieveEngine:  retrieveEngine,
-		redisClient:     redisClient,
 		imageResolver:   imageResolver,
 		spanTracker:     spanTracker,
 	}, nil

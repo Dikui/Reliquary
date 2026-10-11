@@ -10,6 +10,7 @@ import (
 	"reliquary/internal/chatgpt"
 	"strings"
 
+	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
@@ -214,6 +215,21 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 
 // UpdateModel updates an existing model in the repository
 func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) error {
+	if s.nameEmbeddingRebuilder != nil && s.db != nil && !entityDatabaseInTransaction(s.db) {
+		return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			copy := *s
+			copy.db = tx
+			copy.repo = repository.NewModelRepository(tx)
+			copy.kbRepo = repository.NewKnowledgeBaseRepository(tx)
+			bound, err := s.nameEmbeddingRebuilder.BindTransaction(ctx, tx)
+			if err != nil {
+				return err
+			}
+			copy.nameEmbeddingRebuilder = bound
+			return copy.UpdateModel(ctx, model)
+		})
+	}
+
 	if model.Type != "" && !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
 	}
@@ -291,11 +307,11 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 		entityEmbeddingProfileHash(existingModel.ID, existingModel.Parameters.EmbeddingParameters.Dimension, existingModel) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model) {
 		profileModel, resolveErr := ResolveModelTier(ctx, s.db, nil, types.ModelTierEmbedding)
 		if resolveErr != nil {
-			return fmt.Errorf("model saved but name embedding profile could not be resolved: %w", resolveErr)
+			return fmt.Errorf("model update could not resolve name embedding profile: %w", resolveErr)
 		}
 		if profileModel == model.ID {
 			if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, types.SingleTenantID, "embedding_model_updated"); err != nil {
-				return fmt.Errorf("model saved but name embedding rebuild could not be queued: %w", err)
+				return fmt.Errorf("model update could not enqueue name embedding rebuild: %w", err)
 			}
 		}
 	}

@@ -6,7 +6,7 @@ set -e
 # the mount inherits the host UID/GID which may differ from the
 # container's appuser. This entrypoint runs as root, fixes ownership,
 # then drops privileges to appuser via gosu — the same pattern used
-# by official postgres/redis images.
+# by the official PostgreSQL image.
 
 # Directories that may be bind-mounted and need appuser access
 MOUNT_DIRS=(

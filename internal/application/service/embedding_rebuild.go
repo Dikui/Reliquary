@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/models/embedding"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -205,7 +205,7 @@ func (r *EmbeddingRebuilder) Enqueue(ctx context.Context, run *types.EmbeddingRe
 	if r.tasks == nil {
 		err = errors.New("embedding rebuild task queue is unavailable")
 	} else {
-		_, err = r.tasks.Enqueue(asynq.NewTask(types.TypeEmbeddingRebuild, payload), asynq.Queue(types.QueueEntity), asynq.MaxRetry(3), asynq.Timeout(24*time.Hour))
+		_, err = r.tasks.Enqueue(taskqueue.NewTask(types.TypeEmbeddingRebuild, payload), taskqueue.Queue(types.QueueEntity), taskqueue.MaxRetry(3), taskqueue.Timeout(24*time.Hour))
 	}
 	if err != nil {
 		persistErr := r.db.WithContext(ctx).Model(&types.EmbeddingRebuildRun{}).Where("id=? AND status='pending'", run.ID).
@@ -215,10 +215,10 @@ func (r *EmbeddingRebuilder) Enqueue(ctx context.Context, run *types.EmbeddingRe
 	return nil
 }
 
-func (r *EmbeddingRebuilder) Handle(ctx context.Context, task *asynq.Task) error {
+func (r *EmbeddingRebuilder) Handle(ctx context.Context, task *taskqueue.Task) error {
 	var payload types.EmbeddingRebuildPayload
 	if task == nil || json.Unmarshal(task.Payload(), &payload) != nil || payload.TenantID != types.SingleTenantID || payload.RunID == "" {
-		return fmt.Errorf("invalid embedding rebuild payload: %w", asynq.SkipRetry)
+		return fmt.Errorf("invalid embedding rebuild payload: %w", taskqueue.SkipRetry)
 	}
 	return r.Run(ctx, payload.TenantID, payload.RunID, nil)
 }
@@ -492,4 +492,45 @@ func rebuildErrorText(err error) string {
 	}
 	value := []rune(err.Error())
 	return string(value[:min(1000, len(value))])
+}
+
+// StartAndEnqueue commits the rebuild snapshot with its background task.
+func (r *EmbeddingRebuilder) StartAndEnqueue(ctx context.Context, tenantID uint64) (run *types.EmbeddingRebuildRun, err error) {
+	queue, ok := r.tasks.(interfaces.TransactionalTaskEnqueuer)
+	if !ok {
+		return nil, errors.New("embedding task queue must support PostgreSQL transactions")
+	}
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		copy := *r
+		profiles := *r.profiles
+		copy.db, profiles.db = tx, tx
+		copy.profiles = &profiles
+		copy.tasks = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
+		var err error
+		run, err = copy.Start(ctx, tenantID)
+		if err != nil {
+			return err
+		}
+		return copy.Enqueue(ctx, run)
+	})
+	return run, err
+}
+
+// ContinueAndEnqueue makes a resume checkpoint and its task visible together.
+func (r *EmbeddingRebuilder) ContinueAndEnqueue(ctx context.Context, tenantID uint64, runID string, retryFailed bool) error {
+	queue, ok := r.tasks.(interfaces.TransactionalTaskEnqueuer)
+	if !ok {
+		return errors.New("embedding task queue must support PostgreSQL transactions")
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		copy := *r
+		profiles := *r.profiles
+		copy.db, profiles.db = tx, tx
+		copy.profiles = &profiles
+		copy.tasks = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
+		if err := copy.Continue(ctx, tenantID, runID, retryFailed); err != nil {
+			return err
+		}
+		return copy.Enqueue(ctx, &types.EmbeddingRebuildRun{ID: runID, TenantID: tenantID})
+	})
 }

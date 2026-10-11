@@ -1,5 +1,7 @@
 # Reliquary
 
+Background jobs and application data persist in PostgreSQL, with transactional enqueue and crash recovery. Deployments require no separate queue service. See [ADR 0010](docs/adr/0010-postgres-task-queue.md).
+
 [简体中文](README_CN.md)
 
 Reliquary is a personal information component for collecting, storing, deduplicating, and retrieving articles. One personal space contains one knowledge base. External AI tools perform analysis and write reports through the intake API and MCP.

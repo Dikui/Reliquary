@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
@@ -27,6 +27,12 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	kbID string, file *multipart.FileHeader, metadata map[string]string, enableMultimodel *bool, customFileName string, channel string,
 	processOverrides *types.KnowledgeProcessOverrides,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.CreateKnowledgeFromFile(ctx, kbID, file, metadata, enableMultimodel, customFileName, channel, processOverrides)
+		})
+	}
+
 	logger.Info(ctx, "Start creating knowledge from file")
 
 	fileName := path.Base(strings.ReplaceAll(file.Filename, "\\", "/"))
@@ -174,8 +180,8 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, err
 	}
 
-	// Enqueue document processing task to Asynq
-	logger.Info(ctx, "Enqueuing document processing task to Asynq")
+	// Enqueue document processing task to PostgreSQL
+	logger.Info(ctx, "Enqueuing document processing task to PostgreSQL")
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
@@ -196,10 +202,10 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return knowledge, nil
 	}
 
-	task := asynq.NewTask(
+	task := taskqueue.NewTask(
 		types.TypeDocumentProcess,
 		payloadBytes,
-		documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+		documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 	)
 	info, err := s.task.Enqueue(task)
 	if err != nil {
@@ -238,6 +244,12 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 	kbID string, rawURL string, fileName string, fileType string, enableMultimodel *bool, title string, channel string,
 	processOverrides *types.KnowledgeProcessOverrides, sourceInfos ...types.SourceInfo,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.CreateKnowledgeFromURL(ctx, kbID, rawURL, fileName, fileType, enableMultimodel, title, channel, processOverrides, sourceInfos...)
+		})
+	}
+
 	if blockedIntakeURL(rawURL) {
 		return nil, werrors.NewBadRequestError("X/Twitter sources require Grok ingestion")
 	}
@@ -373,8 +385,8 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 		return nil, err
 	}
 
-	// Enqueue URL processing task to Asynq
-	logger.Info(ctx, "Enqueuing URL processing task to Asynq")
+	// Enqueue URL processing task to PostgreSQL
+	logger.Info(ctx, "Enqueuing URL processing task to PostgreSQL")
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
@@ -392,10 +404,10 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 		return knowledge, nil
 	}
 
-	task := asynq.NewTask(
+	task := taskqueue.NewTask(
 		types.TypeDocumentProcess,
 		payloadBytes,
-		documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+		documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 	)
 	info, err := s.task.Enqueue(task)
 	if err != nil {
@@ -632,7 +644,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		return knowledge, nil
 	}
 
-	task := asynq.NewTask(
+	task := taskqueue.NewTask(
 		types.TypeDocumentProcess,
 		payloadBytes,
 		documentProcessTaskOptions(s.config)...,
@@ -667,6 +679,12 @@ func (s *knowledgeService) CreateKnowledgeFromPassageSync(ctx context.Context,
 func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	kbID string, payload *types.ManualKnowledgePayload, channel string,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.CreateKnowledgeFromManual(ctx, kbID, payload, channel)
+		})
+	}
+
 	logger.Info(ctx, "Start creating manual knowledge entry")
 
 	if payload == nil {
@@ -833,6 +851,12 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Context,
 	kbID string, passage []string, syncMode bool, channel string,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.createKnowledgeFromPassageInternal(ctx, kbID, passage, syncMode, channel)
+		})
+	}
+
 	if syncMode {
 		logger.Info(ctx, "Start creating knowledge from passage (sync)")
 	} else {
@@ -890,8 +914,8 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 		s.processDocumentFromPassage(ctx, kb, knowledge, safePassages)
 		logger.Infof(ctx, "Knowledge from passage created successfully (sync), ID: %s", knowledge.ID)
 	} else {
-		// Enqueue passage processing task to Asynq
-		logger.Info(ctx, "Enqueuing passage processing task to Asynq")
+		// Enqueue passage processing task to PostgreSQL
+		logger.Info(ctx, "Enqueuing passage processing task to PostgreSQL")
 		tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 
 		// Check question generation config
@@ -912,10 +936,10 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 			return knowledge, nil
 		}
 
-		task := asynq.NewTask(
+		task := taskqueue.NewTask(
 			types.TypeDocumentProcess,
 			payloadBytes,
-			documentProcessTaskOptions(s.config, asynq.MaxRetry(3))...,
+			documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
 		)
 		info, err := s.task.Enqueue(task)
 		if err != nil {
@@ -931,10 +955,16 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 
 // UpdateManualKnowledge updates manual Markdown knowledge content.
 // For publish status, the heavy operations (cleanup old indexes, re-chunking,
-// re-embedding) are offloaded to an Asynq task so the HTTP response returns quickly.
+// re-embedding) are offloaded to a PostgreSQL task so the HTTP response returns quickly.
 func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	knowledgeID string, payload *types.ManualKnowledgePayload,
 ) (*types.Knowledge, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.Knowledge, error) {
+			return copy.UpdateManualKnowledge(ctx, knowledgeID, payload)
+		})
+	}
+
 	logger.Info(ctx, "Start updating manual knowledge entry")
 	if payload == nil {
 		return nil, werrors.NewBadRequestError("请求内容不能为空")
@@ -999,10 +1029,24 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, werrors.NewBadRequestError("an approved article body cannot be changed")
 	}
 
-	if intake != nil {
-		if intake.Decision == "rejected" && !types.IsAuthenticatedFromContext(ctx) {
-			return nil, werrors.NewForbiddenError("an authenticated user is required to review intake")
+	if intake != nil && intake.Decision == "rejected" && !types.IsAuthenticatedFromContext(ctx) {
+		return nil, werrors.NewForbiddenError("an authenticated user is required to review intake")
+	}
+	if status == types.ManualKnowledgeStatusPublish {
+		if _, err := ApplyKnowledgeProcessOverrides(ctx, kb, existing, payload.ProcessConfig, nil, nil); err != nil {
+			return nil, err
 		}
+	}
+	processingQueued := false
+	if _, bound := s.task.(*transactionTaskEnqueuer); bound && status == types.ManualKnowledgeStatusPublish {
+		// Workers only see this task after commit. Enqueue before replacing
+		// the stored source so a queue failure leaves the old body intact.
+		if _, err := s.enqueueManualProcessing(ctx, existing, cleanContent, true); err != nil {
+			return existing, err
+		}
+		processingQueued = true
+	}
+	if intake != nil {
 		intake.SourceInfo = mergeSourceInfo(intake.SourceInfo, payload.SourceInfo)
 		intake.Decision, intake.Reason = "pending", ""
 		if err := existing.SetIntakeMetadata(intake); err != nil {
@@ -1060,17 +1104,15 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	existing.Description = ""
 	existing.ProcessedAt = nil
 
-	if _, err := ApplyKnowledgeProcessOverrides(ctx, kb, existing, payload.ProcessConfig, nil, nil); err != nil {
-		return nil, err
-	}
-
 	if err := s.repo.UpdateKnowledge(ctx, existing); err != nil {
 		logger.Errorf(ctx, "Failed to persist manual knowledge before indexing: %v", err)
 		return nil, err
 	}
 
 	logger.Infof(ctx, "Manual knowledge updated, enqueuing async processing task, ID: %s", existing.ID)
-	_, err = s.enqueueManualProcessing(ctx, existing, cleanContent, true)
+	if !processingQueued {
+		_, err = s.enqueueManualProcessing(ctx, existing, cleanContent, true)
+	}
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue manual processing task: %v", err)
 		// Non-fatal: mark as failed so user can retry
@@ -1099,9 +1141,9 @@ func mergeSourceInfo(old, updated types.SourceInfo) types.SourceInfo {
 	return updated
 }
 
-// enqueueManualProcessing enqueues a manual:process Asynq task for async cleanup + re-indexing.
+// enqueueManualProcessing enqueues a manual:process PostgreSQL task for async cleanup + re-indexing.
 func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
-	knowledge *types.Knowledge, content string, needCleanup bool, extraOptions ...asynq.Option,
+	knowledge *types.Knowledge, content string, needCleanup bool, extraOptions ...taskqueue.Option,
 ) (string, error) {
 	requestID, _ := types.RequestIDFromContext(ctx)
 	payload := types.ManualProcessPayload{
@@ -1118,13 +1160,13 @@ func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
 		return "", fmt.Errorf("failed to marshal manual process payload: %w", err)
 	}
 
-	options := append([]asynq.Option{asynq.Queue(types.QueueDefault), asynq.MaxRetry(3), asynq.Timeout(30 * time.Minute)}, extraOptions...)
-	task := asynq.NewTask(types.TypeManualProcess, payloadBytes, options...)
+	options := append([]taskqueue.Option{taskqueue.Queue(types.QueueDefault), taskqueue.MaxRetry(3), taskqueue.Timeout(30 * time.Minute)}, extraOptions...)
+	task := taskqueue.NewTask(types.TypeManualProcess, payloadBytes, options...)
 	info, err := s.task.Enqueue(task)
 	if err != nil {
 		return "", fmt.Errorf("failed to enqueue manual process task: %w", err)
 	}
-	logger.Infof(ctx, "Enqueued manual process task: knowledge_id=%s, asynq_id=%s", knowledge.ID, info.ID)
+	logger.Infof(ctx, "Enqueued manual process task: knowledge_id=%s, task_id=%s", knowledge.ID, info.ID)
 	return info.ID, nil
 }
 

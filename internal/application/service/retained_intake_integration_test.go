@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
@@ -20,6 +19,7 @@ import (
 	"reliquary/internal/datasource"
 	"reliquary/internal/datasource/connector/rss"
 	"reliquary/internal/models/chat"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
@@ -232,7 +232,7 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 		require.NoError(t, logs.Create(h.ctx, log))
 		payload, err := json.Marshal(types.DataSourceSyncPayload{TenantID: h.kb.TenantID, DataSourceID: ds.ID, SyncLogID: log.ID, ForceFull: true})
 		require.NoError(t, err)
-		require.NoError(t, syncer.ProcessSync(h.ctx, asynq.NewTask(types.TypeDataSourceSync, payload)))
+		require.NoError(t, syncer.ProcessSync(h.ctx, taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 		h.drain(t)
 		log, err = logs.FindByID(h.ctx, id)
 		require.NoError(t, err)

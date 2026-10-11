@@ -12,6 +12,7 @@ import (
 	"time"
 
 	apprepo "reliquary/internal/application/repository"
+	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -70,6 +71,9 @@ func (s *tenantAPIKeyService) AuthenticateAPIKey(ctx context.Context, token stri
 		return nil, apprepo.ErrTenantAPIKeyNotFound
 	}
 	key, err := s.repo.GetAPIKeyByHash(ctx, hashTenantAPIKey(token))
+	if err != nil && !errors.Is(err, apprepo.ErrTenantAPIKeyNotFound) {
+		return nil, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable")
+	}
 	if err != nil {
 		return nil, err
 	}

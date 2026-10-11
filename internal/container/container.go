@@ -16,7 +16,6 @@ import (
 
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/panjf2000/ants/v2"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/dig"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -25,7 +24,6 @@ import (
 	"reliquary/internal/application/service"
 	"reliquary/internal/application/service/file"
 	"reliquary/internal/chatgpt"
-	"reliquary/internal/common"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
 	"reliquary/internal/datasource"
@@ -37,6 +35,7 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/limiter"
 	"reliquary/internal/models/utils/ollama"
+	"reliquary/internal/queue"
 	"reliquary/internal/router"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -62,7 +61,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(config.LoadConfig))
 	must(container.Provide(initDatabase))
 	must(container.Provide(initFileService))
-	must(container.Provide(initRedisClient))
 	must(container.Provide(initAntsPool))
 
 	// Register goroutine pool cleanup handler
@@ -123,20 +121,19 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewResourceRepository))
 	must(container.Provide(service.NewResourceCatalog))
 	logger.Debugf(ctx, "[Container] Registering task enqueuer...")
-	must(container.Provide(router.NewAsyncqClient, dig.As(new(interfaces.TaskEnqueuer))))
-	// Dedicated pools guarantee capacity for each task stage.
-	must(container.Provide(router.NewCoreAsynqServer, dig.Name("coreAsynqServer")))
-	must(container.Provide(router.NewEnrichmentAsynqServer, dig.Name("enrichmentAsynqServer")))
-	must(container.Provide(router.NewMaintenanceAsynqServer, dig.Name("maintenanceAsynqServer")))
-	must(container.Provide(router.NewSharedAsynqServer, dig.Name("sharedAsynqServer")))
-	must(container.Provide(router.NewAsynqInspector))
-	must(container.Provide(router.NewAsynqTaskInspector))
+	must(container.Provide(queue.NewClient))
+	must(container.Provide(func(client *queue.Client) interfaces.TaskEnqueuer { return client }))
+	must(container.Provide(router.NewPostgresTaskInspector))
 	must(container.Invoke(registerModelConcurrencyLimiter))
 
 	// Data source sync framework
 	logger.Debugf(ctx, "[Container] Registering data source sync framework...")
 	must(container.Provide(initConnectorRegistry))
-	must(container.Provide(datasource.NewScheduler))
+	must(container.Provide(func(db *gorm.DB, sources interfaces.DataSourceRepository, logs interfaces.SyncLogRepository, tasks interfaces.TaskEnqueuer) *datasource.Scheduler {
+		scheduler := datasource.NewScheduler(sources, logs, tasks)
+		scheduler.SetDatabase(db)
+		return scheduler
+	}))
 	must(container.Provide(service.NewDataSourceService))
 	must(container.Invoke(startDataSourceScheduler))
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
@@ -182,7 +179,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
 	must(container.Provide(router.NewRouter))
-	must(container.Invoke(router.RunAsynqServer))
+	must(container.Invoke(router.RunTaskServer))
 	must(container.Invoke(recoverEntityNameEmbeddings))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
@@ -274,32 +271,6 @@ func registerModelConcurrencyLimiter(ss interfaces.SystemSettingService) {
 	}
 	logger.Infof(context.Background(),
 		"[ModelLimiter] background model concurrency governed per-model, limit=%d (in process)", limit)
-}
-
-func initRedisClient() (*redis.Client, error) {
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		return nil, fmt.Errorf("REDIS_ADDR is required")
-	}
-	db, err := strconv.Atoi(os.Getenv("REDIS_DB"))
-	if err != nil {
-		db = 0
-	}
-
-	client := redis.NewClient(&redis.Options{
-		Addr:      redisAddr,
-		Username:  os.Getenv("REDIS_USERNAME"),
-		Password:  os.Getenv("REDIS_PASSWORD"),
-		DB:        db,
-		TLSConfig: common.RedisTLSConfig(),
-	})
-
-	_, err = client.Ping(context.Background()).Result()
-	if err != nil {
-		return nil, fmt.Errorf("连接Redis失败: %w", err)
-	}
-
-	return client, nil
 }
 
 // initDatabase initializes database connection

@@ -52,7 +52,7 @@ go run ./cmd/server reset-password
 
 知识检索覆盖文章表头、全文正文、用户文档和整理结果，使用 PostgreSQL 全文与向量混合检索，按文章合并命中片段。可按内容类型、实体、主题、发布时间、星标及来源目录筛选。按发布时间筛选会排除缺少发布时间的文章并说明数量，采集时间不会代替发布时间。相似报道按摘要向量和时间窗口折叠，可以展开。
 
-只运行一个后端进程。模型并发、速率和接口限流由该进程维护；Redis 保存 Asynq 后台队列及配置通知。迁移前先等运行队列完成，数据库备份不包含 Redis 中未完成的任务。
+只运行一个后端进程。模型并发、速率和接口限流由该进程维护；后台任务与业务数据在同一 PostgreSQL 事务中持久化，设置保存后立即刷新进程内缓存。数据库备份同时包含未完成任务，恢复后任务可继续执行。文件库与数据库仍需一致性备份，迁移前应停止写入并等待运行队列完成。详见 [ADR 0010](adr/0010-postgres-task-queue.md)。
 
 ## 使用 ChatGPT 订阅
 
@@ -107,7 +107,7 @@ Reliquary 提供资料，不生成周报或推送通知。下面是外部 AI 通
 
 ## 部署在 Mac mini
 
-Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 环境。应用、PostgreSQL（ParadeDB）与 Redis 使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
+Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 环境。应用与 PostgreSQL（ParadeDB）使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
@@ -123,7 +123,6 @@ cp .env.example .env
 | `LOCAL_STORAGE_BASE_DIR` | 容器内上传资源目录，建议保持 `/data/files` |
 | `DB_DRIVER`、`DB_HOST`、`DB_PORT` | 使用 `postgres`、Compose 服务名 `postgres` 与 `5432` |
 | `DB_USER`、`DB_PASSWORD`、`DB_NAME` | PostgreSQL 账号、密码和库名，同时用于初始化数据库服务 |
-| `REDIS_ADDR`、`REDIS_PASSWORD` | Compose 内通常使用 `redis:6379`，密码与 Redis 服务保持一致 |
 | `JWT_SECRET`、`SYSTEM_AES_KEY` | 设置自己的登录签名密钥及 32 字节凭据加密密钥，迁移时保留加密密钥 |
 | `OLLAMA_BASE_URL` | 容器访问 macOS 模型服务的地址，例如 `http://host.docker.internal:11434` |
 | `OLLAMA_OPTIONAL` | 设为 `true` 时，Ollama 暂不可用只输出告警 |
@@ -224,15 +223,15 @@ go run ./cmd/server reembed --retry-failed <任务ID>
    ./scripts/backup.sh /Users/yourname/Backups/reliquary-2026-10-11
    ```
 
-   脚本使用 `pg_dump --format=custom` 生成 `database.dump`，另复制 `vault/` 与 `resources/`，记录格式标识与 SHA-256 校验。备份目录必须不存在或为空，已有内容会被拒绝。完成后可 `docker compose stop postgres redis` 关闭剩余服务；若原机器继续使用，执行 `docker compose start app frontend`。
+   脚本使用 `pg_dump --format=custom` 生成 `database.dump`，另复制 `vault/` 与 `resources/`，记录格式标识与 SHA-256 校验。备份目录必须不存在或为空，已有内容会被拒绝。完成后可 `docker compose stop postgres` 关闭剩余服务；若原机器继续使用，执行 `docker compose start app frontend`。
 3. 将完整备份目录复制到新机器。另行复制 `.env`、Compose 配置、`config/config.yaml` 与自定义内置模型配置。`SYSTEM_AES_KEY` 必须保持一致，否则数据库里的模型 Key 和订阅凭据无法解密；登录签名配置也建议保持一致。脚本不把这些密钥写入备份清单。
-4. 在新机器修改宿主机目录、数据库连接、网页/API 端口、模型地址及必要的 SSRF 白名单。准备新的空 PostgreSQL 数据目录与空文件库/资源目录，构建相同版本镜像。先启动数据库和 Redis，再创建处于停止状态的应用容器，避免自动迁移提前创建应用表：
+4. 在新机器修改宿主机目录、数据库连接、网页/API 端口、模型地址及必要的 SSRF 白名单。准备新的空 PostgreSQL 数据目录与空文件库/资源目录，构建相同版本镜像。先启动数据库，再创建处于停止状态的应用容器，避免自动迁移提前创建应用表：
 
    ```bash
    export COMPOSE_FILE=docker-compose.yml:compose.mac.yml
    export COMPOSE_PROJECT_NAME=reliquary
    docker compose build
-   docker compose up -d --wait postgres redis
+   docker compose up -d --wait postgres
    docker compose create app
    ./scripts/restore.sh /Users/yourname/Backups/reliquary-2026-10-11
    ```
@@ -268,10 +267,10 @@ COMPOSE_FILE=docker-compose.yml:compose.mac.yml COMPOSE_PROJECT_NAME=reliquary  
 
 ### 只有文件库时重建
 
-没有数据库备份时，保留文件库的完整目录和附件，复制到新机器。准备新数据库与 Redis，配置 `VAULT_ROOT`、模型地址和凭据加密密钥。保持应用停止，先启动数据库，然后运行专用重建命令：
+没有数据库备份时，保留文件库的完整目录和附件，复制到新机器。准备新数据库，配置 `VAULT_ROOT`、模型地址和凭据加密密钥。保持应用停止，先启动数据库，然后运行专用重建命令：
 
 ```bash
-docker compose up -d --wait postgres redis
+docker compose up -d --wait postgres
 docker compose run --rm --no-deps --user root --entrypoint sh app   -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
 docker compose run --rm --no-deps app ./Reliquary vault-rebuild
 docker compose up -d

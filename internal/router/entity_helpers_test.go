@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
@@ -50,11 +50,19 @@ func entityRequest(t *testing.T, engine *gin.Engine, method, target, body string
 	return rec
 }
 
-type entityTaskQueue struct{ tasks []*asynq.Task }
+type entityTaskQueue struct{ tasks []*taskqueue.Task }
 
-func (q *entityTaskQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (q *entityTaskQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.tasks = append(q.tasks, task)
-	return &asynq.TaskInfo{ID: task.Type()}, nil
+	return &taskqueue.TaskInfo{ID: task.Type()}, nil
+}
+
+func (q *entityTaskQueue) EnqueueTx(ctx context.Context, tx *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+	info, err := taskqueue.NewClient(tx).EnqueueTx(ctx, tx, task, opts...)
+	if err == nil {
+		q.tasks = append(q.tasks, task)
+	}
+	return info, err
 }
 
 type entityEnvelope struct {

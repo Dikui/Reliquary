@@ -1,7 +1,7 @@
 package types
 
 // Worker-pool names are part of the runtime observability API. Each pool is
-// backed by an independent asynq.Server, so concurrency is hard-isolated
+// backed by an independent PostgreSQL worker pool, so concurrency is hard-isolated
 // between pools instead of being only a weighted dequeue preference.
 const (
 	WorkerPoolCore        = "core"
@@ -20,9 +20,7 @@ const (
 		DefaultMaintenanceWorkerConcurrency + DefaultSharedWorkerConcurrency
 )
 
-// Asynq queue names. QueueMaintenance intentionally keeps the physical Redis
-// name "low" so tasks enqueued by older releases remain consumable during a
-// rolling deployment. New code uses the business-semantic constant.
+// Queue names. QueueMaintenance keeps the name "low" for the runtime API.
 const (
 	QueueDefault     = "default"
 	QueueEntity      = "entity"
@@ -46,7 +44,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
-	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild}},
+	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse,
@@ -64,7 +62,7 @@ func QueueDefinitions() []QueueDefinition {
 }
 
 // QueueForTaskType returns the declared queue for a task type. Producers still
-// pass the queue explicitly to asynq, while tests and observability can use
+// pass the queue explicitly to queue, while tests and observability can use
 // this mapping to detect drift.
 func QueueForTaskType(taskType string) (string, bool) {
 	for _, definition := range queueDefinitions {
@@ -77,7 +75,7 @@ func QueueForTaskType(taskType string) (string, bool) {
 	return "", false
 }
 
-// QueueWeightsForPool returns the asynq queue configuration for one worker
+// QueueWeightsForPool returns the queue configuration for one worker
 // pool. An empty map indicates a programming error in the pool declaration.
 func QueueWeightsForPool(pool string) map[string]int {
 	weights := make(map[string]int)
@@ -136,10 +134,10 @@ func ResolveWorkerPoolConcurrency(read func(key, env string, fallback int) int) 
 		}
 		return value
 	}
-	allocation.Core = positive("asynq.core_concurrency", "RELIQUARY_ASYNQ_CORE_CONCURRENCY", allocation.Core)
-	allocation.Enrichment = positive("asynq.enrichment_concurrency", "RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY", allocation.Enrichment)
-	allocation.Maintenance = positive("asynq.maintenance_concurrency", "RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY", allocation.Maintenance)
-	allocation.Shared = positive("asynq.shared_concurrency", "RELIQUARY_ASYNQ_SHARED_CONCURRENCY", allocation.Shared)
+	allocation.Core = positive("queue.core_concurrency", "RELIQUARY_QUEUE_CORE_CONCURRENCY", allocation.Core)
+	allocation.Enrichment = positive("queue.enrichment_concurrency", "RELIQUARY_QUEUE_ENRICHMENT_CONCURRENCY", allocation.Enrichment)
+	allocation.Maintenance = positive("queue.maintenance_concurrency", "RELIQUARY_QUEUE_MAINTENANCE_CONCURRENCY", allocation.Maintenance)
+	allocation.Shared = positive("queue.shared_concurrency", "RELIQUARY_QUEUE_SHARED_CONCURRENCY", allocation.Shared)
 	return allocation
 }
 
@@ -147,9 +145,9 @@ func (c WorkerPoolConcurrency) UpstreamTotal() int {
 	return c.Core + c.Enrichment + c.Maintenance + c.Shared
 }
 
-// QueueStat is a read-only depth snapshot of a single asynq queue, used
+// QueueStat is a read-only depth snapshot of a single queue, used
 // by the System runtime dashboard. Field names mirror the counts
-// exposed by asynq.QueueInfo. Pool / Weight are static metadata (which
+// exposed by queue.QueueInfo. Pool / Weight are static metadata (which
 // worker pool drains the queue and its scheduling weight within that
 // pool) so the UI can group and explain the lanes without the frontend
 // hard-coding the topology.
@@ -175,13 +173,11 @@ type QueueStat struct {
 	Paused bool `json:"paused"`
 	// LatencyMs is the age of the oldest pending task, in milliseconds.
 	LatencyMs int64 `json:"latency_ms"`
-	// MemoryUsageBytes is the approximate Redis memory the queue occupies.
-	MemoryUsageBytes int64 `json:"memory_usage_bytes"`
 }
 
-// WorkerServerStat is one live asynq server heartbeat. Queue weights identify
+// WorkerServerStat is one live PostgreSQL worker pool snapshot. Queue weights identify
 // which logical pool the server belongs to; the runtime handler aggregates
-// these records across replicas so configured per-instance capacity is not
+// these records across pools so configured per-instance capacity is not
 // confused with actual cluster capacity.
 type WorkerServerStat struct {
 	Concurrency int
@@ -216,7 +212,7 @@ type DocumentProcessPayload struct {
 	// Attempt is the per-knowledge attempt number this task belongs to.
 	// Set on enqueue (initial parse → attempt 1; reparse → max+1) so
 	// every span recorded by this task lands on the right attempt
-	// branch. Asynq retries within an attempt keep the same value so
+	// branch. Queue retries within an attempt keep the same value so
 	// retried spans overwrite the previous attempt's row rather than
 	// fan out into a new attempt for every retry.
 	Attempt int `json:"attempt,omitempty"`
@@ -246,4 +242,11 @@ type ManualProcessPayload struct {
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	Content         string `json:"content"`      // cleaned markdown content
 	NeedCleanup     bool   `json:"need_cleanup"` // true for update, false for create
+}
+
+const TypeTopicBackfill = "topic:backfill"
+
+type TopicBackfillPayload struct {
+	TenantID uint64 `json:"tenant_id"`
+	JobID    string `json:"job_id"`
 }

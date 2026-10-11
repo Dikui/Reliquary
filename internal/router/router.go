@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	redis "github.com/redis/go-redis/v9"
 	"os"
 	"strings"
 	"time"
@@ -52,7 +51,6 @@ type RouterParams struct {
 	InitializationHandler        *handler.InitializationHandler
 	SystemHandler                *handler.SystemHandler
 	ResourceCatalog              interfaces.ResourceCatalog
-	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
 }
@@ -96,7 +94,11 @@ func NewRouter(params RouterParams) *gin.Engine {
 
 	// 健康检查（不需要认证）
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		response := gin.H{"status": "ok"}
+		if params.SystemHandler != nil {
+			response["queue_connection"] = params.SystemHandler.QueueConnectionHealth()
+		}
+		c.JSON(200, response)
 	})
 
 	if params.ChatGPTHandler != nil {

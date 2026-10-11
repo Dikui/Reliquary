@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
@@ -28,11 +28,11 @@ import (
 
 // KnowledgeHandler processes HTTP requests related to knowledge resources
 type KnowledgeHandler struct {
-	cfg         *config.Config
-	kgService   interfaces.KnowledgeService
-	kbService   interfaces.KnowledgeBaseService
-	asynqClient interfaces.TaskEnqueuer
-	spanRepo    repository.KnowledgeSpanRepository
+	cfg        *config.Config
+	kgService  interfaces.KnowledgeService
+	kbService  interfaces.KnowledgeBaseService
+	taskClient interfaces.TaskEnqueuer
+	spanRepo   repository.KnowledgeSpanRepository
 }
 
 // NewKnowledgeHandler creates a new knowledge handler instance
@@ -40,15 +40,15 @@ func NewKnowledgeHandler(
 	cfg *config.Config,
 	kgService interfaces.KnowledgeService,
 	kbService interfaces.KnowledgeBaseService,
-	asynqClient interfaces.TaskEnqueuer,
+	taskClient interfaces.TaskEnqueuer,
 	spanRepo repository.KnowledgeSpanRepository,
 ) *KnowledgeHandler {
 	return &KnowledgeHandler{
-		cfg:         cfg,
-		kgService:   kgService,
-		kbService:   kbService,
-		asynqClient: asynqClient,
-		spanRepo:    spanRepo,
+		cfg:        cfg,
+		kgService:  kgService,
+		kbService:  kbService,
+		taskClient: taskClient,
+		spanRepo:   spanRepo,
 	}
 }
 
@@ -151,7 +151,7 @@ func (h *KnowledgeHandler) handleDuplicateKnowledgeError(c *gin.Context,
 }
 
 // enqueueKnowledgeListDelete enqueues an async batch-delete task for the
-// given knowledge IDs and returns the asynq task ID.
+// given knowledge IDs and returns the background task ID.
 func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 	ctx context.Context, tenantID uint64, ids []string,
 ) (string, error) {
@@ -185,9 +185,9 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 	if err != nil {
 		return "", fmt.Errorf("marshal payload: %w", err)
 	}
-	task := asynq.NewTask(types.TypeKnowledgeListDelete, payloadBytes,
-		asynq.Queue(types.QueueMaintenance), asynq.MaxRetry(3), asynq.Timeout(2*time.Hour))
-	info, err := h.asynqClient.Enqueue(task)
+	task := taskqueue.NewTask(types.TypeKnowledgeListDelete, payloadBytes,
+		taskqueue.Queue(types.QueueMaintenance), taskqueue.MaxRetry(3), taskqueue.Timeout(2*time.Hour))
+	info, err := h.taskClient.Enqueue(task)
 	if err != nil {
 		return "", fmt.Errorf("enqueue task: %w", err)
 	}
@@ -195,7 +195,7 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 }
 
 // enqueueKnowledgeListReparse enqueues an async batch-reparse task for the
-// given knowledge IDs and returns the asynq task ID.
+// given knowledge IDs and returns the background task ID.
 func (h *KnowledgeHandler) enqueueKnowledgeListReparse(
 	ctx context.Context, tenantID uint64, ids []string, processConfig *types.KnowledgeProcessOverrides,
 ) (string, error) {
@@ -210,9 +210,9 @@ func (h *KnowledgeHandler) enqueueKnowledgeListReparse(
 	if err != nil {
 		return "", fmt.Errorf("marshal payload: %w", err)
 	}
-	task := asynq.NewTask(types.TypeKnowledgeListReparse, payloadBytes,
-		asynq.Queue(types.QueueMaintenance), asynq.MaxRetry(3), asynq.Timeout(time.Hour))
-	info, err := h.asynqClient.Enqueue(task)
+	task := taskqueue.NewTask(types.TypeKnowledgeListReparse, payloadBytes,
+		taskqueue.Queue(types.QueueMaintenance), taskqueue.MaxRetry(3), taskqueue.Timeout(time.Hour))
+	info, err := h.taskClient.Enqueue(task)
 	if err != nil {
 		return "", fmt.Errorf("enqueue task: %w", err)
 	}
@@ -933,7 +933,7 @@ func (h *KnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 	}
 
 	// Reuse the batch async pipeline so single-item delete shares the same
-	// hardening (asynq retries, business-aware queue routing, marking-as-deleting
+	// hardening (queue retries, business-aware queue routing, marking-as-deleting
 	// inside the worker) as BatchDeleteKnowledge / ClearKnowledgeBaseContents.
 	effectiveTenantID, _ := effCtx.Value(types.TenantIDContextKey).(uint64)
 	if effectiveTenantID == 0 {

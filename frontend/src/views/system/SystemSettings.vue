@@ -26,6 +26,8 @@
       </p>
     </div>
 
+    <QueueConnectionNotice poll />
+
     <div v-if="loading && settings.length === 0" class="loading-state">
       <t-loading :text="t('system.globalSettings.loading')" />
     </div>
@@ -240,11 +242,13 @@
 </template>
 
 <script setup lang="ts">
+import QueueConnectionNotice from './QueueConnectionNotice.vue'
 import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
   listSystemSettings,
+  getQueueConnectionStatus,
   updateSystemSetting,
   resetSystemSetting,
   type SystemSettingItem,
@@ -358,10 +362,10 @@ type SettingsSection = 'runtime' | 'security' | 'other'
 // unexpected key.
 const SETTINGS_SECTION_KEYS: Record<Exclude<SettingsSection, 'other'>, readonly string[]> = {
   runtime: [
-    'asynq.core_concurrency',
-    'asynq.enrichment_concurrency',
-    'asynq.maintenance_concurrency',
-    'asynq.shared_concurrency',
+    'queue.core_concurrency',
+    'queue.enrichment_concurrency',
+    'queue.maintenance_concurrency',
+    'queue.shared_concurrency',
     'model.max_concurrency',
   ],
   security: ['ssrf.whitelist'],
@@ -537,13 +541,17 @@ function placeholderFor(item: SystemSettingItem): string {
 }
 
 function minimumFor(item: SystemSettingItem): number {
-  if (item.key.startsWith('asynq.') && item.key.endsWith('_concurrency')) return 1
+  if (item.key.startsWith('queue.') && item.key.endsWith('_concurrency')) return 1
   return 0
 }
 
 async function loadSettings() {
   loading.value = true
   try {
+    if ((await getQueueConnectionStatus())?.state === 'reconnecting') {
+      settingsRetryTimer = setTimeout(loadSettings, 5000)
+      return
+    }
     const list = await listSystemSettings()
     settings.value = list
     // Reset edit values to the canonical state on every load — no
@@ -724,11 +732,13 @@ async function persistSetting(item: SystemSettingItem) {
   }
 }
 
+let settingsRetryTimer: ReturnType<typeof setTimeout> | undefined
 onMounted(() => {
   loadSettings()
 })
 
 onUnmounted(() => {
+  if (settingsRetryTimer) clearTimeout(settingsRetryTimer)
   if (savedKeyTimer) clearTimeout(savedKeyTimer)
 })
 </script>

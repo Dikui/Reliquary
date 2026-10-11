@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	apprepo "reliquary/internal/application/repository"
+	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"strconv"
@@ -49,22 +52,39 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 		if token, ok := bearerToken(c); ok {
 			if !mcpRequest {
 				candidate, tenantID, err := users.ValidateToken(ctx, token)
+				if authUnavailable(c, err) {
+					return
+				}
 				if err == nil && tenantID == types.SingleTenantID {
 					user = candidate
 				}
 			}
 			if user == nil && keys != nil {
 				key, err := keys.AuthenticateAPIKey(ctx, token)
+				if authUnavailable(c, err) {
+					return
+				}
 				if err == nil && key != nil && key.TenantIDValue() == types.SingleTenantID {
-					user, _ = users.GetUserByTenantID(ctx, types.SingleTenantID)
+					user, err = users.GetUserByTenantID(ctx, types.SingleTenantID)
+					if err != nil && !errors.Is(err, apprepo.ErrUserNotFound) {
+						authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
+						return
+					}
 					principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10)}
 				}
 			}
 		}
 		if !mcpRequest && user == nil && keys != nil && c.GetHeader("X-API-Key") != "" {
 			key, err := keys.AuthenticateAPIKey(ctx, c.GetHeader("X-API-Key"))
+			if authUnavailable(c, err) {
+				return
+			}
 			if err == nil && key != nil && key.TenantIDValue() == types.SingleTenantID {
-				user, _ = users.GetUserByTenantID(ctx, types.SingleTenantID)
+				user, err = users.GetUserByTenantID(ctx, types.SingleTenantID)
+				if err != nil && !errors.Is(err, apprepo.ErrUserNotFound) {
+					authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
+					return
+				}
 				principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10)}
 			}
 		}
@@ -80,6 +100,10 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 			}
 		}
 		tenant, err := tenants.GetTenantByID(ctx, types.SingleTenantID)
+		if err != nil && !errors.Is(err, apprepo.ErrTenantNotFound) {
+			authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
+			return
+		}
 		if err != nil || tenant == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid personal workspace"})
 			return
@@ -90,4 +114,15 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 		applyAuthSession(c, authSession{User: user, Principal: principal, TenantID: types.SingleTenantID, Tenant: tenant})
 		c.Next()
 	}
+}
+
+// authUnavailable preserves credentials when their database checks cannot run.
+func authUnavailable(c *gin.Context, err error) bool {
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) || appErr.HTTPCode != http.StatusServiceUnavailable {
+		return false
+	}
+	c.Header("Retry-After", "5")
+	c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": appErr})
+	return true
 }

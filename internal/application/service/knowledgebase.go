@@ -166,6 +166,23 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	description string,
 	config *types.KnowledgeBaseConfig,
 ) (*types.KnowledgeBase, error) {
+	if s.nameEmbeddingRebuilder != nil && s.db != nil && !entityDatabaseInTransaction(s.db) {
+		var result *types.KnowledgeBase
+		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			copy := *s
+			copy.db = tx
+			copy.repo = repository.NewKnowledgeBaseRepository(tx)
+			bound, err := s.nameEmbeddingRebuilder.BindTransaction(ctx, tx)
+			if err != nil {
+				return err
+			}
+			copy.nameEmbeddingRebuilder = bound
+			result, err = copy.UpdateKnowledgeBase(ctx, id, name, description, config)
+			return err
+		})
+		return result, err
+	}
+
 	if id == "" {
 		logger.Error(ctx, "Knowledge base ID is empty")
 		return nil, errors.New("knowledge base ID cannot be empty")
@@ -226,7 +243,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	currentEmbeddingModelID, _ := ResolveModelTier(ctx, nil, kb, types.ModelTierEmbedding)
 	if s.nameEmbeddingRebuilder != nil && previousEmbeddingModelID != currentEmbeddingModelID {
 		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.TenantID, "knowledge_base_embedding_model_changed"); err != nil {
-			return kb, fmt.Errorf("knowledge base saved but name embedding rebuild could not be queued: %w", err)
+			return kb, fmt.Errorf("knowledge base update could not enqueue name embedding rebuild: %w", err)
 		}
 	}
 

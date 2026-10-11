@@ -31,7 +31,7 @@ func (w *concurrencyEmbedder) EmbedImage(ctx context.Context, image string) ([]f
 // vectorises every chunk, so a single batch upload can burst the whole worker
 // pool against one embedding provider. Like chat, embedding is governed
 // at the client layer via the shared per-model concurrency governor. Only
-// background (asynq worker) calls are throttled — see limiter.Gate /
+// background (queue worker) calls are throttled: see limiter.Gate /
 // types.IsBackgroundTask; interactive query embedding is never gated.
 //
 // Placement note: unlike chat (outermost), this wrapper sits INNERMOST,

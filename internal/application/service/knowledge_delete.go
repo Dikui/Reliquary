@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/logger"
@@ -574,8 +574,8 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 	return cleanupErr
 }
 
-// ProcessKnowledgeListDelete handles Asynq knowledge list delete tasks
-func (s *knowledgeService) ProcessKnowledgeListDelete(ctx context.Context, t *asynq.Task) error {
+// ProcessKnowledgeListDelete handles PostgreSQL queue knowledge list delete tasks
+func (s *knowledgeService) ProcessKnowledgeListDelete(ctx context.Context, t *taskqueue.Task) error {
 	var payload types.KnowledgeListDeletePayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "Failed to unmarshal knowledge list delete payload: %v", err)

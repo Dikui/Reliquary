@@ -39,7 +39,7 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	RequestIDContextKey: true,
 	LanguageContextKey:  true,
 
-	// Marks model calls as coming from an asynq worker so the per-model
+	// Marks model calls as coming from an queue worker so the per-model
 	// concurrency governor throttles them, leaving foreground model latency
 	// alone. Document ingestion detaches mid-flight — knowledge_create hands
 	// processChunks to a goroutine on a cloned context, and processChunks is

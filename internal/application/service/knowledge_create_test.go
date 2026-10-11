@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -106,11 +106,11 @@ type createKnowledgeTaskEnqueuerStub struct {
 }
 
 func (s *createKnowledgeTaskEnqueuerStub) Enqueue(
-	task *asynq.Task,
-	opts ...asynq.Option,
-) (*asynq.TaskInfo, error) {
+	task *taskqueue.Task,
+	opts ...taskqueue.Option,
+) (*taskqueue.TaskInfo, error) {
 	s.calls++
-	return &asynq.TaskInfo{ID: "task-1", Queue: "default"}, nil
+	return &taskqueue.TaskInfo{ID: "task-1", Queue: "default"}, nil
 }
 
 func TestCreateKnowledgeFromFileDoesNotPersistWhenStorageSaveFails(t *testing.T) {

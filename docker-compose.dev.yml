@@ -24,18 +24,6 @@ services:
     restart: unless-stopped
     stop_grace_period: 1m
 
-  redis:
-    image: redis:7.0-alpine
-    container_name: Reliquary-redis-dev
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data_dev:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    restart: always
-    networks:
-      - Reliquary-network-dev
-
 
 networks:
   Reliquary-network-dev:
@@ -43,4 +31,3 @@ networks:
 
 volumes:
   postgres-data-dev:
-  redis_data_dev:

@@ -91,8 +91,5 @@ func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID 
 	if err == nil && accept {
 		err = s.refreshArticleHeadersForEntity(ctx, tenantID, item.CandidateEntityID)
 	}
-	if err == nil && accept && s.nameEmbeddingRebuilder != nil {
-		err = s.nameEmbeddingRebuilder.Enqueue(ctx, tenantID, "entity_merge")
-	}
 	return &item, err
 }

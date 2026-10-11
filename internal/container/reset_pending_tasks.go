@@ -12,12 +12,13 @@ import (
 const resetPendingStaleWindow = 30 * time.Minute
 
 // resetPendingTasks cleans stale synchronization logs after a restart.
-// Asynq persists knowledge and summary tasks. Housekeeping checks their queue
+// PostgreSQL persists background tasks. Housekeeping checks their queue
 // and span activity, so startup must preserve those rows across replicas.
 func resetPendingTasks(db *gorm.DB) {
 	now := time.Now()
 	result := db.Model(&types.SyncLog{}).
 		Where("status = ? AND started_at < ?", types.SyncLogStatusRunning, now.Add(-resetPendingStaleWindow)).
+		Where(`NOT EXISTS (SELECT 1 FROM task_jobs WHERE state IN ('pending','active','scheduled','retry') AND payload->>'sync_log_id' = sync_logs.id)`).
 		Updates(map[string]interface{}{
 			"status":        types.SyncLogStatusFailed,
 			"error_message": "Sync interrupted due to application restart",

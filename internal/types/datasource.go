@@ -470,7 +470,7 @@ func (e *SyncItemError) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// DataSourceSyncPayload represents the asynq task payload for data source sync
+// DataSourceSyncPayload represents the queue task payload for data source sync
 type DataSourceSyncPayload struct {
 	Initiator TaskInitiator `json:"initiator,omitempty"`
 	// Trigger distinguishes a user-requested run from a scheduler-created run.

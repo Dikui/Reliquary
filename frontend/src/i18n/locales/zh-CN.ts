@@ -1258,6 +1258,7 @@ export default {
     }
   },
   error: {
+    serviceUnavailable: '服务暂时不可用，正在重试',
     networkError: '网络错误，请检查您的网络连接',
     invalidCredentials: '用户名或密码错误',
     tokenRefreshFailed: 'Token刷新失败',
@@ -1390,9 +1391,9 @@ export default {
         model: {
           max_concurrency: "后台任务对单个模型的默认并发上限，按模型 ID 在本进程内共享。每次调用读取并立即生效，无需重启。0 或负数关闭默认上限，每个模型仍遵守模型管理中设置的独立上限。"
         },
-        asynq: {
+        queue: {
           core_concurrency: '文档解析与手工重解析的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
-          enrichment_concurrency: "实体名称向量重建与全部向量重建的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
+          enrichment_concurrency: "实体名称向量重建、全部向量重建与主题历史归入的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
           maintenance_concurrency: '数据源同步、批处理和清理任务的每实例并发，与用户面流水线硬隔离；修改后需重启。',
           shared_concurrency: '核心解析与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
@@ -1406,7 +1407,7 @@ export default {
         model: {
           max_concurrency: '模型默认并发上限'
         },
-        asynq: {
+        queue: {
           core_concurrency: '核心解析保底并发数',
           enrichment_concurrency: '内容富化保底并发数',
           maintenance_concurrency: '维护与同步并发数',
@@ -1425,8 +1426,11 @@ export default {
         autoRefresh: '自动刷新（每 5 秒）',
         loading: '加载中...',
         retry: '重试',
+        reconnecting: '队列已暂停，正在重连',
+        reconnectAlert: '队列已暂停，正在重连；持续失败，请检查数据库连接',
+        latestConnectionError: '最近错误',
         unavailableTitle: '任务队列不可用',
-        unavailable: '任务队列当前不可用，请检查 Redis 连接。',
+        unavailable: '任务队列当前不可用，请检查数据库连接。',
         empty: '暂无队列数据',
         detailsTitle: '队列明细',
         detailsDescription: '各处理通道的实时负载与等待情况。“最终失败”表示任务超过重试上限，已停止自动执行。',
@@ -1487,7 +1491,7 @@ export default {
           lastFailedAt: '最后失败',
           completedAt: '完成时间',
           deadline: '执行截止',
-          worker: '执行实例',
+          worker: '执行池',
           health: '运行健康',
           orphaned: '执行实例已失联，等待恢复',
           cancel: '终止任务',
@@ -1512,8 +1516,8 @@ export default {
             delete: '失败记录已清除'
           },
           guides: {
-            active: '运行中任务可查看执行实例、开始时间和截止时间。只有具备完整业务取消语义的任务才允许终止。',
-            pending: '排队任务尚未被 worker 领取。终止操作会同步更新业务状态，而不是只删除 Redis 记录。',
+            active: '运行中任务可查看执行池、开始时间和截止时间。只有具备完整业务取消语义的任务才允许终止。',
+            pending: '排队任务尚未被执行程序领取。终止操作会同步更新文章状态并取消相关任务。',
             scheduled: '定时任务可提前立即执行；支持业务取消的文档任务也可以安全终止。',
             retry: '请结合最后错误、重试次数和下次执行时间判断是否立即执行或终止。',
             archived: '请先修复失败原因再立即执行。清除记录不会完成原业务任务。',
@@ -1538,6 +1542,7 @@ export default {
 
             entityNameEmbeddingRebuild: '实体名称向量重建',
             embeddingRebuild: '全部向量重建',
+            topicBackfill: '主题历史归入',
           }
         },
         failedNotice: {
@@ -1578,7 +1583,7 @@ export default {
         },
         poolDescriptions: {
           core: '文档解析与手工重解析的保底容量',
-          enrichment: "实体名称向量重建与全部向量重建",
+          enrichment: "实体名称向量重建、全部向量重建与主题历史归入",
           maintenance: '数据源同步、批处理与删除清理',
           shared: '由核心解析与内容富化按积压借用',
         },
@@ -1592,7 +1597,7 @@ export default {
           default: '文档解析、手工重解析',
           sync: '手动与定时同步',
           low: "批量重解析、删除清理",
-          entity: "实体名称向量重建与全部向量重建",
+          entity: "实体名称向量重建、全部向量重建与主题历史归入",
         },
         errors: {
           generic: '获取队列状态失败'

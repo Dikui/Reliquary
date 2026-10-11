@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/infrastructure/docparser/anydoc"
@@ -41,7 +41,7 @@ func TestPersonalPDFParserUnavailableErrorPersistsForAPI(t *testing.T) {
 		FilePath: knowledge.FilePath, FileName: knowledge.FileName, FileType: knowledge.FileType,
 	})
 	require.NoError(t, err)
-	require.NoError(t, svc.ProcessDocument(ctx, asynq.NewTask(types.TypeDocumentProcess, payload, asynq.MaxRetry(0))))
+	require.NoError(t, svc.ProcessDocument(ctx, taskqueue.NewTask(types.TypeDocumentProcess, payload, taskqueue.MaxRetry(0))))
 
 	// Reload through the same service used by the knowledge detail API.
 	loaded, err := svc.GetKnowledgeByID(ctx, knowledge.ID)

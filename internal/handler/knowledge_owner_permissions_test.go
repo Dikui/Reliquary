@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/middleware"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -53,9 +53,9 @@ func (s *ownerKnowledgePermissionsService) ListKnowledgeByKnowledgeBaseID(contex
 
 type ownerKnowledgePermissionsQueue struct{ actions int }
 
-func (s *ownerKnowledgePermissionsQueue) Enqueue(*asynq.Task, ...asynq.Option) (*asynq.TaskInfo, error) {
+func (s *ownerKnowledgePermissionsQueue) Enqueue(*taskqueue.Task, ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	s.actions++
-	return &asynq.TaskInfo{ID: "owner-permissions-task"}, nil
+	return &taskqueue.TaskInfo{ID: "owner-permissions-task"}, nil
 }
 
 type ownerKnowledgePermissionsCase struct {
@@ -102,7 +102,7 @@ func ownerKnowledgePermissionsRouter(item ownerKnowledgePermissionsCase) (*gin.E
 	gin.SetMode(gin.TestMode)
 	service := &ownerKnowledgePermissionsService{}
 	queue := &ownerKnowledgePermissionsQueue{}
-	h := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: service, asynqClient: queue}
+	h := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: service, taskClient: queue}
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
 		c.Set(types.TenantIDContextKey.String(), uint64(1))

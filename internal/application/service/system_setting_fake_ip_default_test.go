@@ -68,14 +68,12 @@ func TestSystemSettingFakeIPExtraSurvivesWhitelistEdits(t *testing.T) {
 			}
 		})
 	}
-	// Reload uses the same merge bridge as a settings-page save.
-	repo.row = &types.SystemSetting{
-		Key: "ssrf.whitelist", Value: types.JSON(`["203.0.113.30"]`),
-		ValueType: "string_list", LastModifiedBy: "personal-user",
+	_, err := svc.Update(ctx, "ssrf.whitelist", []string{"203.0.113.30"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	svc.reload(ctx, "ssrf.whitelist")
 	if !utils.IsSSRFWhitelisted("203.0.113.30") || !utils.IsSSRFWhitelisted("198.18.12.34") {
-		t.Fatal("settings reload did not merge primary and deployment fake IP whitelist")
+		t.Fatal("settings update did not merge primary and deployment fake IP whitelist")
 	}
 	t.Setenv("SSRF_WHITELIST_EXTRA", "")
 	svc.applySSRFWhitelist(ctx)

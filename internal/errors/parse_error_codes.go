@@ -40,9 +40,9 @@ const (
 	// Keep the serialized code used by ingestion events and existing clients.
 	ErrCodeIndexWriteFailed = "VECTORSTORE_WRITE_FAILED"
 
-	// ErrCodeTaskTimeout — asynq retry budget exhausted. Used by the
+	// ErrCodeTaskTimeout: queue retry budget exhausted. Used by the
 	// dead-letter callback when promoting a task failure into a stage
-	// failure. Distinct from DocReaderTimeout: this is the asynq-level
+	// failure. Distinct from DocReaderTimeout: this is the queue-level
 	// timeout (whole task), not the parser-call-level timeout.
 	ErrCodeTaskTimeout = "TASK_TIMEOUT"
 

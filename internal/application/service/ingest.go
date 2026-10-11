@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -29,6 +29,12 @@ var _ interfaces.IngestService = (*knowledgeService)(nil)
 // article processing used by other entry points. Source URLs are provenance only;
 // fetching is limited to image URLs through the existing SSRF protected resolver.
 func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequest) (*types.IngestResult, error) {
+	if s.needsTaskTransaction() {
+		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.IngestResult, error) {
+			return copy.Ingest(ctx, request)
+		})
+	}
+
 	if err := validateIngestRequest(request); err != nil {
 		return nil, err
 	}
@@ -196,7 +202,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	s.bindContentResources(ctx, tenantID, article.ID, body)
 	rejected, err := s.reviewIntake(ctx, kb, article, body)
 	var deferred *types.ChatGPTDeferredError
-	var processOptions []asynq.Option
+	var processOptions []taskqueue.Option
 	if err != nil {
 		s.markArticleProcessingFailed(ctx, article, err)
 		if !errors.As(err, &deferred) {
@@ -205,7 +211,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		}
 		// Collection has committed. Keep its unreviewed original and let the
 		// worker repeat the same review after the generation pause.
-		processOptions = append(processOptions, asynq.ProcessAt(deferred.RetryAt))
+		processOptions = append(processOptions, taskqueue.ProcessAt(deferred.RetryAt))
 	}
 	if rejected {
 		intake, _ = article.IntakeMetadata()

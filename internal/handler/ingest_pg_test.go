@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/application/service/file"
@@ -18,16 +18,20 @@ import (
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/middleware"
 	"reliquary/internal/models/chat"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
-type ingestHandlerQueue struct{ tasks []*asynq.Task }
+type ingestHandlerQueue struct{ tasks []*taskqueue.Task }
 
-func (q *ingestHandlerQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (q *ingestHandlerQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.tasks = append(q.tasks, task)
-	return &asynq.TaskInfo{ID: "ingest-test-task"}, nil
+	return &taskqueue.TaskInfo{ID: "ingest-test-task"}, nil
+}
+func (q *ingestHandlerQueue) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+	return q.Enqueue(task, opts...)
 }
 
 type ingestHandlerChat struct{}
@@ -66,7 +70,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	bases := &ingestHandlerBases{}
 	articles, err := service.NewKnowledgeService(db, &config.Config{}, repository.NewKnowledgeRepository(db), bases,
 		repository.NewTenantRepository(db), nil, nil, nil, file.NewLocalFileService(t.TempDir(), ""), nil, ingestHandlerModels{},
-		queue, nil, nil, nil, docparser.NewImageResolver(), nil)
+		queue, nil, nil, docparser.NewImageResolver(), nil)
 	require.NoError(t, err)
 	vault, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: t.TempDir()}})
 	require.NoError(t, err)

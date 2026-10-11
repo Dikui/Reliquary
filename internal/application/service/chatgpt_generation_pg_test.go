@@ -14,13 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/chatgpt"
 	"reliquary/internal/models/embedding"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
 )
@@ -350,14 +349,21 @@ func TestChatGPTQuotaDefersHistoricalTopicBatchWithoutOrdinaryFailureAttempt(t *
 	require.Len(t, topicLinks(t, topics, topic.ID), 1)
 }
 
-func chatGPTScheduledQueue(t *testing.T, h *chatGPTGenerationHarness) *asynq.Inspector {
+func chatGPTScheduledQueue(t *testing.T, h *chatGPTGenerationHarness) *taskqueue.Client {
 	t.Helper()
-	redis := miniredis.RunT(t)
-	client := asynq.NewClient(asynq.RedisClientOpt{Addr: redis.Addr()})
-	inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: redis.Addr()})
-	t.Cleanup(func() { _ = client.Close(); _ = inspector.Close() })
+	client := taskqueue.NewClient(h.db)
 	h.service.task = client
-	return inspector
+	return client
+}
+
+func chatGPTScheduledTasks(ctx context.Context, client *taskqueue.Client) ([]*taskqueue.TaskInfo, error) {
+	var jobs []taskqueue.Job
+	err := client.DB().WithContext(ctx).Where("queue=? AND state=?", types.QueueDefault, taskqueue.TaskStateScheduled).Order("created_at").Find(&jobs).Error
+	result := make([]*taskqueue.TaskInfo, 0, len(jobs))
+	for i := range jobs {
+		result = append(result, jobs[i].Info())
+	}
+	return result, err
 }
 
 func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery(t *testing.T) {
@@ -384,14 +390,14 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 			require.Equal(t, "pending", intake.Decision)
 			require.NotEmpty(t, intake.OriginalPath)
 			require.Contains(t, h.service.fileSvc.(*articleProcessingFiles).saved, intake.OriginalPath)
-			tasks, err := inspector.ListScheduledTasks(types.QueueDefault, asynq.PageSize(10))
+			tasks, err := chatGPTScheduledTasks(h.ctx, inspector)
 			require.NoError(t, err)
 			require.Len(t, tasks, 1)
 			require.Equal(t, types.TypeManualProcess, tasks[0].Type)
 			require.Equal(t, 3, tasks[0].MaxRetry)
 			require.Zero(t, tasks[0].Retried)
 			require.True(t, tasks[0].NextProcessAt.After(time.Now().Add(4*time.Minute)))
-			task := asynq.NewTask(tasks[0].Type, tasks[0].Payload)
+			task := taskqueue.NewTask(tasks[0].Type, tasks[0].Payload)
 			before := len(h.requests())
 			err = h.service.ProcessManualUpdate(types.WithTaskRetryMetadata(h.ctx, 0, 3), task)
 			require.True(t, types.IsChatGPTDeferred(err))
@@ -435,7 +441,7 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 	require.Equal(t, "pending", intake.Decision)
 	require.Equal(t, original, intake.OriginalPath)
 	require.Contains(t, h.service.fileSvc.(*articleProcessingFiles).saved, original)
-	tasks, err := inspector.ListScheduledTasks(types.QueueDefault, asynq.PageSize(10))
+	tasks, err := chatGPTScheduledTasks(h.ctx, inspector)
 	require.NoError(t, err)
 	require.Len(t, tasks, 1)
 	require.Equal(t, 3, tasks[0].MaxRetry)
@@ -444,6 +450,6 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 	quota.Store(false)
 	_, err = h.policy.Resume(h.ctx)
 	require.NoError(t, err)
-	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, asynq.NewTask(tasks[0].Type, tasks[0].Payload)))
+	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, taskqueue.NewTask(tasks[0].Type, tasks[0].Payload)))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
 }

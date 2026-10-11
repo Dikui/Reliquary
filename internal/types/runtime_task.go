@@ -16,7 +16,7 @@ var (
 )
 
 // RuntimeTaskState is the stable operator-facing task lifecycle. It mirrors
-// the durable states exposed by asynq while keeping the HTTP API independent
+// the durable task states while keeping the HTTP API independent
 // from the queue library's Go enum.
 type RuntimeTaskState string
 
@@ -93,4 +93,14 @@ func (t RuntimeTaskInfo) Allows(action RuntimeTaskAction) bool {
 		}
 	}
 	return false
+}
+
+// QueueConnectionStatus remains readable when PostgreSQL is offline.
+type QueueConnectionStatus struct {
+	State             string     `json:"state"`
+	LastError         string     `json:"last_error,omitempty"`
+	Since             *time.Time `json:"since,omitempty"`
+	NextRetryAt       *time.Time `json:"next_retry_at,omitempty"`
+	Alert             bool       `json:"alert"`
+	AlertAfterSeconds int64      `json:"alert_after_seconds"`
 }

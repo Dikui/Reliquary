@@ -55,17 +55,17 @@ func TestQueueDefinitionsAreUniqueAndConsumable(t *testing.T) {
 	}
 }
 
-func TestQueueMaintenanceKeepsLegacyPhysicalName(t *testing.T) {
+func TestQueueMaintenanceKeepsRuntimeName(t *testing.T) {
 	if QueueMaintenance != "low" {
-		t.Fatalf("maintenance queue must keep legacy Redis name during rolling upgrades, got %q", QueueMaintenance)
+		t.Fatalf("maintenance queue must keep established runtime name, got %q", QueueMaintenance)
 	}
 }
 
-func TestEveryAsynqTaskTypeHasADeclaredQueue(t *testing.T) {
+func TestEveryTaskTypeHasADeclaredQueue(t *testing.T) {
 	taskTypes := []string{
 		TypeDocumentProcess,
 		TypeKnowledgeListReparse, TypeKnowledgeListDelete,
-		TypeManualProcess, TypeDataSourceSync, TypeEntityNameEmbeddingRebuild,
+		TypeManualProcess, TypeDataSourceSync, TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill,
 	}
 	for _, taskType := range taskTypes {
 		if _, ok := QueueForTaskType(taskType); !ok {
@@ -87,10 +87,10 @@ func TestDefaultWorkerPoolConcurrencyIsExplicitBudget(t *testing.T) {
 
 func TestResolveWorkerPoolConcurrencyFallsBackPerPool(t *testing.T) {
 	allocation := ResolveWorkerPoolConcurrency(func(key, _ string, fallback int) int {
-		if key == "asynq.core_concurrency" {
+		if key == "queue.core_concurrency" {
 			return 15
 		}
-		if key == "asynq.shared_concurrency" {
+		if key == "queue.shared_concurrency" {
 			return 0
 		}
 		return fallback

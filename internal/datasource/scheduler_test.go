@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -150,16 +150,16 @@ type fakeTaskEnqueuer struct {
 	lastQueue atomic.Value
 }
 
-func (e *fakeTaskEnqueuer) Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+func (e *fakeTaskEnqueuer) Enqueue(task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	e.count.Add(1)
 	for _, opt := range opts {
-		if opt.Type() == asynq.QueueOpt {
+		if opt.Type() == taskqueue.QueueOpt {
 			if queue, ok := opt.Value().(string); ok {
 				e.lastQueue.Store(queue)
 			}
 		}
 	}
-	return &asynq.TaskInfo{ID: "task-fake"}, nil
+	return &taskqueue.TaskInfo{ID: "task-fake"}, nil
 }
 
 // ──────────────────────────────────────────────────────────────────────

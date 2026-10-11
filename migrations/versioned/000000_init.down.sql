@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS public.task_queue_counters;
+DROP TABLE IF EXISTS public.task_jobs;
 DROP TABLE IF EXISTS public.chatgpt_policy;
 DROP TABLE IF EXISTS public.chatgpt_login_attempts;
 DROP TABLE IF EXISTS public.chatgpt_accounts;

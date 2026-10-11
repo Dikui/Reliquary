@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,19 +18,16 @@ import (
 
 // TopicService owns user topic changes and durable historical classification.
 type TopicService struct {
-	db         *gorm.DB
-	models     interfaces.ModelService
-	headers    ArticleHeaderRefresher
-	logs       *OperationLogService
-	batchSize  int
-	workerMu   sync.Mutex
-	cancel     context.CancelFunc
-	workerDone chan struct{}
-	wake       chan struct{}
+	db        *gorm.DB
+	models    interfaces.ModelService
+	headers   ArticleHeaderRefresher
+	logs      *OperationLogService
+	batchSize int
+	tasks     interfaces.TaskEnqueuer
 }
 
 func NewTopicService(db *gorm.DB) *TopicService {
-	return &TopicService{db: db, batchSize: 30, wake: make(chan struct{}, 1)}
+	return &TopicService{db: db, batchSize: 30}
 }
 func (s *TopicService) SetHeaderRefresher(v ArticleHeaderRefresher) { s.headers = v }
 func (s *TopicService) SetOperationLogs(v *OperationLogService)     { s.logs = v }
@@ -95,12 +91,7 @@ func (s *TopicService) refresh(ctx context.Context, ids []string) {
 		s.headers.ScheduleRefresh(ctx, id)
 	}
 }
-func (s *TopicService) signal() {
-	select {
-	case s.wake <- struct{}{}:
-	default:
-	}
-}
+func (s *TopicService) SetTaskEnqueuer(queue interfaces.TaskEnqueuer) { s.tasks = queue }
 
 func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*types.Topic, error) {
 	tenantID, err := s.requireTenant(ctx)
@@ -131,7 +122,6 @@ func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*ty
 	if err != nil {
 		return nil, topicDatabaseError(err)
 	}
-	s.signal()
 	return &copy, nil
 }
 
@@ -193,7 +183,6 @@ func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, descrip
 	}
 	if changed {
 		s.refresh(ctx, affected)
-		s.signal()
 	}
 	return &result, nil
 }

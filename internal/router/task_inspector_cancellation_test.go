@@ -2,13 +2,10 @@ package router
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
-
+	task "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -16,102 +13,48 @@ func TestMatchesKnowledgePreservesPerKnowledgeAllowList(t *testing.T) {
 	if !matchesKnowledge(types.TypeDocumentProcess, []byte(`{"knowledge_id":"knowledge-1"}`), "knowledge-1") {
 		t.Fatal("document task should remain cancellable by knowledge ID")
 	}
-}
-
-func enqueueTask(t *testing.T, client *asynq.Client, taskType, payload, taskID string) {
-	t.Helper()
-	if _, err := client.Enqueue(
-		asynq.NewTask(taskType, []byte(payload)),
-		asynq.Queue(types.QueueDefault),
-		asynq.TaskID(taskID),
-	); err != nil {
-		t.Fatalf("enqueue %s: %v", taskID, err)
+	if matchesKnowledge(types.TypeDataSourceSync, []byte(`{"knowledge_id":"knowledge-1"}`), "knowledge-1") {
+		t.Fatal("data source sync must not be cancelled as article processing")
+	}
+	if matchesKnowledge(types.TypeDocumentProcess, []byte(`{"knowledge_id":"knowledge-2"}`), "knowledge-1") {
+		t.Fatal("another article must remain unaffected")
 	}
 }
 
-func scheduleTask(t *testing.T, client *asynq.Client, taskType, payload, taskID string) {
-	t.Helper()
-	if _, err := client.Enqueue(
-		asynq.NewTask(taskType, []byte(payload)),
-		asynq.Queue(types.QueueDefault),
-		asynq.TaskID(taskID),
-		asynq.ProcessAt(time.Now().Add(time.Hour)),
-	); err != nil {
-		t.Fatalf("schedule %s: %v", taskID, err)
+func TestPostgresKnowledgeCancellationRemovesAllQueuedStatesAndSignalsActive(t *testing.T) {
+	inspector := newPostgresInspectorTest(t)
+	ctx := context.Background()
+	states := []types.RuntimeTaskState{types.RuntimeTaskPending, types.RuntimeTaskScheduled, types.RuntimeTaskRetry, types.RuntimeTaskActive, types.RuntimeTaskArchived}
+	for _, state := range states {
+		insertRuntimeJob(t, inspector, string(state), `{"knowledge_id":"knowledge-1"}`, types.QueueDefault, state, time.Now())
 	}
-}
-
-func hasTaskID(tasks []*asynq.TaskInfo, taskID string) bool {
-	for _, task := range tasks {
-		if task.ID == taskID {
-			return true
-		}
+	insertRuntimeJob(t, inspector, "other", `{"knowledge_id":"knowledge-2"}`, types.QueueDefault, types.RuntimeTaskPending, time.Now())
+	exists, err := inspector.HasQueuedTasksForKnowledge(ctx, "knowledge-1")
+	if err != nil || !exists {
+		t.Fatalf("live tasks not found: exists=%v err=%v", exists, err)
 	}
-	return false
-}
-
-func taskIDs(tasks []*asynq.TaskInfo) []string {
-	ids := make([]string, 0, len(tasks))
-	for _, task := range tasks {
-		ids = append(ids, task.ID)
+	deleted, cancelled, err := inspector.CancelTasksForKnowledge(ctx, "knowledge-1")
+	if err != nil || deleted != 3 || cancelled != 1 {
+		t.Fatalf("cancel deleted=%d signaled=%d err=%v", deleted, cancelled, err)
 	}
-	return ids
-}
-
-func waitForTaskState(t *testing.T, inspector *asynq.Inspector, taskID string, want asynq.TaskState) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	var lastState asynq.TaskState
-	for time.Now().Before(deadline) {
-		task, err := inspector.GetTaskInfo(types.QueueDefault, taskID)
-		if err == nil {
-			lastState = task.State
-			if task.State == want {
-				return
-			}
-		} else if !errors.Is(err, asynq.ErrTaskNotFound) {
-			t.Fatalf("get task %s: %v", taskID, err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("task %s state = %v, want %v", taskID, lastState, want)
-}
-
-func waitForAsynqCancellationSubscriber(t *testing.T, redisClient *redis.Client) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		subscribers, err := redisClient.PubSubNumSub(context.Background(), "asynq:cancel").Result()
-		if err != nil {
-			t.Fatalf("query cancellation subscribers: %v", err)
-		}
-		if subscribers["asynq:cancel"] > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("asynq cancellation subscriber did not start")
-}
-
-func waitForTaskToLeaveLiveStates(t *testing.T, inspector *asynq.Inspector, taskID string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	var lastState asynq.TaskState
-	for time.Now().Before(deadline) {
-		task, err := inspector.GetTaskInfo(types.QueueDefault, taskID)
-		if errors.Is(err, asynq.ErrTaskNotFound) {
-			return
-		}
-		if err != nil {
-			t.Fatalf("get task %s: %v", taskID, err)
-		}
-		lastState = task.State
-		switch task.State {
-		case asynq.TaskStatePending, asynq.TaskStateScheduled, asynq.TaskStateRetry, asynq.TaskStateActive:
-			time.Sleep(10 * time.Millisecond)
-		default:
-			return
+	for _, state := range states[:3] {
+		if _, _, err := inspector.GetRuntimeTask(ctx, types.QueueDefault, string(state)); err == nil {
+			t.Fatalf("%s task survived", state)
 		}
 	}
-	t.Fatalf("task %s remained in live state %v", taskID, lastState)
+	var active task.Job
+	if err := inspector.db.Where("id = ?", "active").First(&active).Error; err != nil || !active.CancelRequested {
+		t.Fatalf("active task did not receive persistent cancellation: %+v err=%v", active, err)
+	}
+	for _, id := range []string{"other", "archived"} {
+		if _, _, err := inspector.GetRuntimeTask(ctx, types.QueueDefault, id); err != nil {
+			t.Fatalf("unrelated/history task %s removed: %v", id, err)
+		}
+	}
+	// The durable active marker stays live until the worker acknowledges it,
+	// preventing orphan housekeeping from failing an article during that gap.
+	exists, err = inspector.HasQueuedTasksForKnowledge(ctx, "knowledge-1")
+	if err != nil || !exists {
+		t.Fatalf("active cancellation marker lost: exists=%v err=%v", exists, err)
+	}
 }

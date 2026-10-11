@@ -114,6 +114,7 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'indexDelete',
   'entityNameEmbeddingRebuild',
   'embeddingRebuild',
+  'topicBackfill',
 ] as const
 
 test('runtime queue worker pool and queue labels exist in every locale', () => {

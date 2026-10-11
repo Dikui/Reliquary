@@ -13,7 +13,7 @@ import (
 )
 
 // Reembed runs synchronously for CLI use with the same persistent checkpoints
-// as the background settings task. It does not start Redis or HTTP services.
+// as the background settings task. It does not start HTTP or background workers.
 func Reembed(ctx context.Context, action, runID string, progress func(*types.EmbeddingRebuildRun)) (*types.EmbeddingRebuildStatus, error) {
 	cfg, err := config.LoadConfig()
 	if err != nil {

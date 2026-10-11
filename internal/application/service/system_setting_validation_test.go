@@ -9,11 +9,11 @@ func TestValidateWorkerConcurrencyMinimums(t *testing.T) {
 		value   any
 		wantErr bool
 	}{
-		{name: "core zero", key: "asynq.core_concurrency", value: 0, wantErr: true},
-		{name: "core minimum", key: "asynq.core_concurrency", value: 1},
-		{name: "enrichment minimum", key: "asynq.enrichment_concurrency", value: 1},
-		{name: "maintenance minimum", key: "asynq.maintenance_concurrency", value: 1},
-		{name: "shared minimum", key: "asynq.shared_concurrency", value: 1},
+		{name: "core zero", key: "queue.core_concurrency", value: 0, wantErr: true},
+		{name: "core minimum", key: "queue.core_concurrency", value: 1},
+		{name: "enrichment minimum", key: "queue.enrichment_concurrency", value: 1},
+		{name: "maintenance minimum", key: "queue.maintenance_concurrency", value: 1},
+		{name: "shared minimum", key: "queue.shared_concurrency", value: 1},
 	}
 
 	for _, tt := range tests {

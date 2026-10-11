@@ -4,7 +4,7 @@
 
 ## 1. 如何查看日志？
 ```bash
-docker compose logs -f app postgres redis
+docker compose logs -f app postgres
 ```
 
 ## 2. 如何启动和停止服务？
@@ -133,13 +133,9 @@ docker compose restart app
 **运行时任务队列面板**与 **Worker 池治理**提供独立池（core / enrichment / maintenance）和弹性共享池。文章的一次处理调用在 core 池中执行，enrichment 池负责实体名称向量重建：
 
 - 在 **系统设置 → 运行时队列** 查看队列深度、按模型并发统计、失败任务详情，并可手动重试。
-- 可通过 `RELIQUARY_ASYNQ_*_CONCURRENCY` 与 `asynq.*_concurrency` 系统设置调整各池并发（需重启服务）；`model.max_concurrency` 用于约束单模型后台并发。
+- 可通过 `RELIQUARY_QUEUE_*_CONCURRENCY` 与 `queue.*_concurrency` 系统设置调整各池并发（需重启服务）；`model.max_concurrency` 用于约束单模型后台并发。
 - 详见 [`docs/worker-pool-governance.md`](./worker-pool-governance.md)。注意：Worker 并发只是调度预算，仍受模型配额、解析引擎容量和数据库连接数限制。
 
-
-## 33. 如何为 Redis 启用 TLS？
-
-0.7.0 支持 Redis 的 **TLS 连接**（#1930）。按环境变量启用 TLS 后，启动日志会打印 TLS 配置状态便于确认。若连接失败，请核对证书/CA 配置与 Redis 服务端是否要求 TLS。
 
 ## 36. 如何使用火山引擎 Rerank？
 

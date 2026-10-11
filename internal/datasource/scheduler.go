@@ -7,24 +7,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/robfig/cron/v3"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
-// Scheduler manages cron-based periodic sync for data sources.
-//
-// robfig/cron fires at absolute wall-clock times (e.g. "0 0 * * * *" always fires
-// at the top of every hour regardless of when the process started). So multiple
-// instances will fire at the same moment. Dedup is handled by two layers:
-//
-//  1. HasRunningSync — if a previous sync is still running, skip (prevent overlap).
-//  2. asynq.TaskID  — deterministic ID per (dataSourceID, minute). Redis ensures
-//     only one task with a given ID is enqueued. Losers get ErrTaskIDConflict.
+// Scheduler enqueues periodic work at absolute cron times. PostgreSQL stores
+// the sync log and task in one transaction; a deterministic task ID suppresses
+// duplicate ticks. The same cron runner can schedule future maintenance jobs.
 type Scheduler struct {
+	db           *gorm.DB
 	cron         *cron.Cron
 	dsRepo       interfaces.DataSourceRepository
 	syncLogRepo  interfaces.SyncLogRepository
@@ -129,16 +126,18 @@ func (s *Scheduler) addEntryLocked(ds *types.DataSource) error {
 	return nil
 }
 
-// triggerSync is called by the cron runner on each tick.
-//
-// Layer 1 — DB: if a previous sync is still running, skip. This prevents
-// overlap when a sync takes longer than the cron interval.
-//
-// Layer 2 — Redis: deterministic asynq.TaskID = "dssync:<dsID>:<minute>".
-// Since robfig/cron fires at absolute wall-clock times, all instances trigger
-// at the same minute. The first Enqueue wins; others get ErrTaskIDConflict.
+// SetDatabase binds the production scheduler to transactional PostgreSQL writes.
+func (s *Scheduler) SetDatabase(db *gorm.DB) { s.db = db }
+
+// triggerSync persists one scheduled synchronization request.
 func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 	ctx := context.Background()
+	if s.db != nil {
+		if err := s.triggerSyncTx(ctx, dataSourceID, tenantID); err != nil && err != taskqueue.ErrTaskIDConflict {
+			logger.Errorf(ctx, "[Scheduler] sync enqueue failed for ds=%s: %v", dataSourceID, err)
+		}
+		return
+	}
 
 	ds, err := s.dsRepo.FindByID(ctx, dataSourceID)
 	if err != nil || ds == nil || ds.Status != types.DataSourceStatusActive {
@@ -172,20 +171,20 @@ func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 	}
 
 	payloadJSON, _ := json.Marshal(payload)
-	task := asynq.NewTask(types.TypeDataSourceSync, payloadJSON)
+	task := taskqueue.NewTask(types.TypeDataSourceSync, payloadJSON)
 
-	// Layer 2: deterministic TaskID — all instances in the same minute produce the same ID
+	// A stable ID prevents duplicate scheduled tasks within the same minute.
 	taskID := fmt.Sprintf("dssync:%s:%s", dataSourceID, time.Now().UTC().Truncate(time.Minute).Format("200601021504"))
 
 	_, err = s.taskEnqueuer.Enqueue(task,
-		asynq.Queue(types.QueueSync),
-		asynq.MaxRetry(5),
-		asynq.Timeout(2*time.Hour),
-		asynq.TaskID(taskID),
+		taskqueue.Queue(types.QueueSync),
+		taskqueue.MaxRetry(5),
+		taskqueue.Timeout(2*time.Hour),
+		taskqueue.TaskID(taskID),
 	)
 	if err != nil {
-		if err == asynq.ErrTaskIDConflict {
-			logger.Infof(ctx, "[Scheduler] sync already enqueued by another instance for ds=%s", dataSourceID)
+		if err == taskqueue.ErrTaskIDConflict {
+			logger.Infof(ctx, "[Scheduler] sync already enqueued for ds=%s", dataSourceID)
 			syncLog.Status = types.SyncLogStatusCanceled
 			now := time.Now().UTC()
 			syncLog.FinishedAt = &now
@@ -210,4 +209,38 @@ func (s *Scheduler) EntryCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.entries)
+}
+
+func (s *Scheduler) triggerSyncTx(ctx context.Context, id string, tenantID uint64) error {
+	enqueuer, ok := s.taskEnqueuer.(interfaces.TransactionalTaskEnqueuer)
+	if !ok {
+		return fmt.Errorf("scheduler requires a transactional task enqueuer")
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var ds types.DataSource
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Take(&ds).Error; err != nil {
+			return err
+		}
+		if ds.Status != types.DataSourceStatusActive {
+			return nil
+		}
+		var running int64
+		if err := tx.Model(&types.SyncLog{}).Where("data_source_id = ? AND status = ?", id, types.SyncLogStatusRunning).Count(&running).Error; err != nil {
+			return err
+		}
+		if running > 0 {
+			return nil
+		}
+		log := &types.SyncLog{DataSourceID: id, TenantID: tenantID, Status: types.SyncLogStatusRunning, StartedAt: time.Now().UTC()}
+		if err := tx.Create(log).Error; err != nil {
+			return err
+		}
+		payload, err := json.Marshal(&types.DataSourceSyncPayload{DataSourceID: id, TenantID: tenantID, SyncLogID: log.ID, Trigger: "schedule"})
+		if err != nil {
+			return err
+		}
+		taskID := fmt.Sprintf("dssync:%s:%s", id, time.Now().UTC().Truncate(time.Minute).Format("200601021504"))
+		_, err = enqueuer.EnqueueTx(ctx, tx, taskqueue.NewTask(types.TypeDataSourceSync, payload), taskqueue.Queue(types.QueueSync), taskqueue.MaxRetry(5), taskqueue.Timeout(2*time.Hour), taskqueue.TaskID(taskID))
+		return err
+	})
 }

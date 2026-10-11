@@ -58,7 +58,7 @@ RSS 数据源通过统一框架调度订阅和站点文章的同步。
 \`\`\`bash
 git clone http://192.168.1.146:3000/dikui/reliquary && cd Reliquary
 cp .env.example .env       # 修改你的模型与数据库配置
-make dev-start             # 启动 postgres / redis
+make dev-start             # 启动 postgres
 make dev-app               # 启动后端，热重载
 make dev-frontend          # 启动前端，自动刷新
 \`\`\`
@@ -236,7 +236,7 @@ docker compose up -d
 
 3.2.2 可选服务
 
-PostgreSQL 与 Redis 随 Docker Compose 常驻，增强 PDF 解析服务按需配置。
+PostgreSQL 随 Docker Compose 常驻，增强 PDF 解析服务按需配置。
 
 3.3 配置最佳实践
 

@@ -55,6 +55,7 @@ function fixture(t: TestContext) {
   setActivePinia(createPinia())
   const store = evaluateFile('./follows.ts', { pinia: { defineStore }, vue: { ref }, '@/api/follows': api, '@/utils/rfc3339': timestamps }).useFollowStore()
   t.after(async () => {
+    request.stopServiceAvailabilityRetry()
     for (const packet of requests) if (!packet.finished) packet.resolve(envelope(packet.config.url === '/api/v1/follows' ? [] : transport.state))
     await new Promise<void>(resolve => setImmediate(resolve))
     storage.clear()

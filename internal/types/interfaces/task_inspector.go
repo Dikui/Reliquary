@@ -7,15 +7,9 @@ import (
 )
 
 // TaskInspector abstracts queue inspection / cancellation against the
-// task backend. It is best-effort: implementations may scan a finite
-// number of tasks per call and return whatever count they could
-// affect. Tests can provide a lightweight implementation of this interface.
-//
-// Use cases today: user-initiated cancel of an in-progress knowledge
-// parse, which must remove downstream multimodal / post-process /
-// question / summary tasks already enqueued against the same
-// knowledge_id, plus signal active workers to stop at their next
-// checkpoint.
+// task backend. Tests can provide a lightweight implementation.
+// User cancellation removes queued article processing tasks and signals
+// active workers to stop at their next checkpoint.
 type TaskInspector interface {
 	// CancelTasksForKnowledge removes pending/scheduled/retry tasks
 	// whose payload references the given knowledge ID, and signals
@@ -35,11 +29,9 @@ type TaskInspector interface {
 	// whose enrichment subtasks are merely backlogged behind a busy
 	// queue (no span heartbeat yet because no worker has picked them up).
 	//
-	// Best-effort and short-circuiting: it returns true as soon as the
-	// first match is seen. On backend error it returns (false, err);
-	// callers decide the fail-safe direction. in-memory fixtures (no Redis)
-	// always returns false — inline executors never queue, so the
-	// span/updated_at checks remain authoritative there.
+	// On backend error it returns (false, err); callers decide the fail-safe
+	// direction. Inline task fixtures always return false because they do
+	// not queue work, so their span and updated_at checks stay authoritative.
 	HasQueuedTasksForKnowledge(ctx context.Context, knowledgeID string) (bool, error)
 
 	// QueueStats returns a read-only depth snapshot for every queue this
@@ -49,14 +41,12 @@ type TaskInspector interface {
 	// on the current backend. Callers use false to render an unavailable
 	// state rather than an empty table.
 	//
-	// Best-effort: a per-queue backend error is logged and that queue is
-	// surfaced as a zeroed row (so the full lane set stays visible) rather
-	// than failing the whole call.
+	// Queues with no records appear as zeroed rows. Database errors are
+	// returned so unavailable storage is distinguishable from empty queues.
 	QueueStats(ctx context.Context) (stats []types.QueueStat, supported bool, err error)
 
-	// WorkerServerStats returns live asynq server heartbeats across all
-	// replicas. The runtime dashboard uses them to aggregate actual cluster
-	// capacity and busy workers for each configured pool.
+	// WorkerServerStats returns live worker capacity and busy workers in
+	// the running process for each configured pool.
 	WorkerServerStats(ctx context.Context) (stats []types.WorkerServerStat, supported bool, err error)
 }
 

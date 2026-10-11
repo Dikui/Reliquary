@@ -67,9 +67,9 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil)
 	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, tenantSvc)
 	knowledge, err := service.NewKnowledgeService(db, cfg, knowledgeRepo, kb, tenantRepo, tenantSvc,
-		nil, nil, nil, nil, models, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, models, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
-	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), nil, cfg)
+	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), cfg)
 	system := handler.NewSystemHandler(cfg, tenantSvc, users, settings, keys, nil, nil)
 	params := RouterParams{
 		Config: cfg, UserService: users, TenantService: tenantSvc,
@@ -148,7 +148,7 @@ func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 		if apiKey {
 			credential = f.key
 		}
-		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/settings/asynq.core_concurrency", `{"value":4}`, credential, apiKey)
+		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/settings/queue.core_concurrency", `{"value":4}`, credential, apiKey)
 		require.Equal(t, http.StatusOK, settings.Code, settings.Body.String())
 		model := personalRequest(t, f.router, http.MethodPost, "/api/v1/models", fmt.Sprintf(`{"name":"test-model-%d","type":"KnowledgeQA","source":"remote","parameters":{}}`, i), credential, apiKey)
 		require.Equal(t, http.StatusCreated, model.Code, model.Body.String())

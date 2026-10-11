@@ -84,7 +84,7 @@ func (i TaskInitiator) Apply(ctx context.Context) context.Context {
 	return ctx
 }
 
-// WithBackgroundTask marks ctx as originating from an asynq background worker
+// WithBackgroundTask marks ctx as originating from an queue background worker
 // (document parse / summary / question / multimodal enrichment). The
 // model concurrency governor throttles only background LLM traffic, so this flag
 // determines whether the per-model concurrency limit applies. See
@@ -109,14 +109,14 @@ type taskRetryMetadata struct {
 }
 
 // WithTaskRetryMetadata records retry counters for task executors that do not
-// provide Asynq's native worker context, notably direct test handlers.
+// provide queue's native worker context, notably direct test handlers.
 func WithTaskRetryMetadata(ctx context.Context, retried, maxRetry int) context.Context {
 	return context.WithValue(ctx, taskRetryMetadataContextKey{}, taskRetryMetadata{
 		retried: retried, maxRetry: maxRetry,
 	})
 }
 
-// TaskRetryMetadataFromContext returns retry counters supplied by a non-Asynq
+// TaskRetryMetadataFromContext returns retry counters supplied by a non-queue
 // task executor. The boolean is false for ordinary request contexts.
 func TaskRetryMetadataFromContext(ctx context.Context) (retried, maxRetry int, ok bool) {
 	if ctx == nil {

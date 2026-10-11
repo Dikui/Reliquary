@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/hibiken/asynq"
 	"image"
 	"image/png"
 	"io"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/infrastructure/docparser"
+	taskqueue "reliquary/internal/queue"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -78,7 +78,7 @@ func TestSimpleImageProcessingWithoutVisionKeepsOriginal(t *testing.T) {
 	svc := &knowledgeService{repo: repo, kbService: intakeKBService{}, tenantRepo: intakeTenantRepo{}, tenantService: intakeTenantService{}, fileSvc: files, imageResolver: docparser.NewImageResolver(), modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"valid source"}`}}, chunkService: &parentChildChunkService{}, retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: &parentChildRetrieveEngine{}}, task: parentChildTaskEnqueuer{}}
 	payload, err := json.Marshal(types.DocumentProcessPayload{TenantID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb", FilePath: input, FileName: "image.png", FileType: "png"})
 	require.NoError(t, err)
-	require.ErrorContains(t, svc.ProcessDocument(context.Background(), asynq.NewTask(types.TypeDocumentProcess, payload, asynq.MaxRetry(0))), "does not support vision")
+	require.ErrorContains(t, svc.ProcessDocument(context.Background(), taskqueue.NewTask(types.TypeDocumentProcess, payload, taskqueue.MaxRetry(0))), "does not support vision")
 	require.Equal(t, types.ParseStatusFailed, repo.knowledge.ParseStatus)
 	require.Contains(t, repo.knowledge.ErrorMessage, "does not support vision")
 	intake, err := repo.knowledge.IntakeMetadata()

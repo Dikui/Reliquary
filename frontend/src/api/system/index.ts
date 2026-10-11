@@ -169,9 +169,9 @@ export async function resetSystemSetting(key: string): Promise<void> {
 
 /**
  * QueueStat mirrors types.QueueStat on the backend: a read-only depth
- * snapshot of one asynq queue. `pool` identifies the independent worker pool;
+ * snapshot of one durable task queue. `pool` identifies the independent worker pool;
  * `weight` is the queue's scheduling weight within that pool.
- * Counts follow asynq.QueueInfo semantics — `active` is the number of
+ * The `active` count is the number of
  * tasks currently being processed (the closest thing to "workers busy"),
  * `pending` is the backlog waiting to be picked up.
  */
@@ -190,7 +190,6 @@ export interface QueueStat {
   failed: number
   paused: boolean
   latency_ms: number
-  memory_usage_bytes: number
 }
 
 export interface RuntimeWorkerPool {
@@ -213,10 +212,19 @@ export interface ModelRuntimeStat {
 
 /**
  * Runtime queue dashboard payload. Each pool includes configured per-process
- * concurrency and live cluster capacity/active workers aggregated from asynq
- * server heartbeats.
+ * concurrency and live capacity/active workers in the running process.
  */
+export interface QueueConnectionStatus {
+ state: 'active' | 'reconnecting' | 'stopped'
+ last_error?: string
+ since?: string
+ next_retry_at?: string
+ alert: boolean
+ alert_after_seconds: number
+}
+
 export interface RuntimeQueuesResponse {
+ queue_connection?: QueueConnectionStatus
   available: boolean
   upstream_concurrency: number
   parse_concurrency: number
@@ -267,7 +275,7 @@ export interface RuntimeTasksResponse {
 }
 
 /**
- * Fetch the live asynq queue depths + worker-pool concurrency.
+ * Fetch durable queue depths and worker-pool concurrency.
  * Returns the object directly — no {data: ...} wrapping (see
  * utils/request.ts interceptor).
  */
@@ -310,4 +318,10 @@ export async function purgeArchivedRuntimeTasks(
     `/api/v1/system/runtime/queues/${encodeURIComponent(queue)}/archived`,
   )
   return response as unknown as { success: boolean; deleted: number }
+}
+
+/** Local health remains readable while database-backed authentication is offline. */
+export async function getQueueConnectionStatus(): Promise<QueueConnectionStatus | undefined> {
+ const response = await get('/health') as { queue_connection?: QueueConnectionStatus }
+ return response.queue_connection
 }

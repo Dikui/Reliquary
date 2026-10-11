@@ -281,7 +281,7 @@ func (t *spanTracker) BeginStage(ctx context.Context, knowledgeID string, attemp
 	}
 	// Find root span — we need its span_id as parent for stage rows. We
 	// also reuse this scan to detect an existing row for the same stage
-	// name in this attempt: re-entry (asynq retry, double-call from
+	// name in this attempt: re-entry (queue retry, double-call from
 	// adjacent code paths) MUST NOT create a second row, otherwise the
 	// timeline shows two segments for the same stage and LookupStage
 	// becomes ambiguous.
@@ -391,7 +391,7 @@ func (t *spanTracker) BeginSubSpan(ctx context.Context, parent *Span, name, kind
 	if kind != types.SpanKindGeneration && kind != types.SpanKindSubSpan {
 		kind = types.SpanKindSubSpan
 	}
-	// Asynq retry / server restart can re-run the same handler while the
+	// PostgreSQL queue retry / server restart can re-run the same handler while the
 	// previous invocation's span is still status=running (worker died
 	// without EndSpan). Cancel same-name open rows so the UI shows one
 	// logical subspan per (attempt, name) instead of duplicate stripes.

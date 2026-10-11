@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -103,6 +103,6 @@ var _ interfaces.SyncLogRepository = (*kbDeleteSyncLogRepo)(nil)
 
 type kbDeleteTaskEnqueuer struct{}
 
-func (kbDeleteTaskEnqueuer) Enqueue(_ *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
-	return &asynq.TaskInfo{ID: "kb-delete-task"}, nil
+func (kbDeleteTaskEnqueuer) Enqueue(_ *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+	return &taskqueue.TaskInfo{ID: "kb-delete-task"}, nil
 }

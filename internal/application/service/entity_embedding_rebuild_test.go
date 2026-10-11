@@ -10,31 +10,31 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
 type nameRebuildQueue struct {
 	mu    sync.Mutex
-	tasks []*asynq.Task
+	tasks []*taskqueue.Task
 	err   error
 }
 
-func (q *nameRebuildQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (q *nameRebuildQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.err != nil {
 		return nil, q.err
 	}
 	q.tasks = append(q.tasks, task)
-	return &asynq.TaskInfo{ID: uuid.NewString()}, nil
+	return &taskqueue.TaskInfo{ID: uuid.NewString()}, nil
 }
-func (q *nameRebuildQueue) last(t *testing.T) *asynq.Task {
+func (q *nameRebuildQueue) last(t *testing.T) *taskqueue.Task {
 	t.Helper()
 	q.mu.Lock()
 	defer q.mu.Unlock()

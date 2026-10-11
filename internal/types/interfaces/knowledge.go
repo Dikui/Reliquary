@@ -5,7 +5,7 @@ import (
 	"io"
 	"mime/multipart"
 
-	"github.com/hibiken/asynq"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -106,14 +106,14 @@ type KnowledgeService interface {
 	CancelKnowledgeParse(ctx context.Context, knowledgeID string) (*types.Knowledge, error)
 	// GetRepository gets the knowledge repository
 	GetRepository() KnowledgeRepository
-	// ProcessManualUpdate handles Asynq manual knowledge update tasks (cleanup + re-indexing)
-	ProcessManualUpdate(ctx context.Context, t *asynq.Task) error
-	// ProcessDocument handles Asynq document processing tasks
-	ProcessDocument(ctx context.Context, t *asynq.Task) error
-	// ProcessKnowledgeListDelete handles Asynq knowledge list delete tasks
-	ProcessKnowledgeListDelete(ctx context.Context, t *asynq.Task) error
-	// ProcessKnowledgeListReparse handles Asynq knowledge list reparse tasks
-	ProcessKnowledgeListReparse(ctx context.Context, t *asynq.Task) error
+	// ProcessManualUpdate handles background manual knowledge update tasks (cleanup + re-indexing)
+	ProcessManualUpdate(ctx context.Context, t *taskqueue.Task) error
+	// ProcessDocument handles background document processing tasks
+	ProcessDocument(ctx context.Context, t *taskqueue.Task) error
+	// ProcessKnowledgeListDelete handles background knowledge list delete tasks
+	ProcessKnowledgeListDelete(ctx context.Context, t *taskqueue.Task) error
+	// ProcessKnowledgeListReparse handles background knowledge list reparse tasks
+	ProcessKnowledgeListReparse(ctx context.Context, t *taskqueue.Task) error
 	// SearchKnowledge searches knowledge items by keyword across the tenant.
 	// fileTypes: optional list of file extensions to filter by (e.g., ["csv", "xlsx"])
 	SearchKnowledge(ctx context.Context, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error)

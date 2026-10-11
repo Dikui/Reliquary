@@ -1,5 +1,7 @@
 # Reliquary
 
+后台任务与业务数据同存 PostgreSQL，支持事务内入队与崩溃恢复，部署不需要单独的队列服务。详见 [ADR 0010](docs/adr/0010-postgres-task-queue.md)。
+
 [English](README.md)
 
 Reliquary 是个人信息组件，负责文章的收集、存储、去重与检索。一个个人空间只有一个知识库。外部 AI 通过收录接口与 MCP 进行综合分析、整理和写报告。

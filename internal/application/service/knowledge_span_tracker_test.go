@@ -272,7 +272,7 @@ func TestSpanTracker_BeginSubSpan_HangsUnderParent(t *testing.T) {
 
 // TestSpanTracker_BeginStage_ReentryIsIdempotent guarantees that a second
 // BeginStage call for the same (kid, attempt, stage) reuses the existing
-// span row instead of inserting a duplicate. Without this, an asynq retry
+// span row instead of inserting a duplicate. Without this, an queue retry
 // or any code path that begins a stage twice would produce two timeline
 // segments for the same stage, and LookupStage would resolve to whichever
 // row sorts first — both regressions the original implementation had.

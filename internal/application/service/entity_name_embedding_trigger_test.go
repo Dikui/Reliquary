@@ -5,11 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/models/embedding"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -25,6 +25,7 @@ type nameEmbeddingTriggerSpy struct {
 	calls  []nameEmbeddingTriggerCall
 	err    error
 	onCall func()
+	db     *gorm.DB
 }
 
 func (s *nameEmbeddingTriggerSpy) call(mark bool, tenantID uint64, reason string) error {
@@ -41,6 +42,11 @@ func (s *nameEmbeddingTriggerSpy) Enqueue(_ context.Context, tenantID uint64, re
 	return s.call(false, tenantID, reason)
 }
 
+func (s *nameEmbeddingTriggerSpy) BindTransaction(_ context.Context, tx *gorm.DB) (EntityNameEmbeddingRebuildTrigger, error) {
+	s.db = tx
+	return s, nil
+}
+
 func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 	t.Helper()
 	db := pgtest.Open(t)
@@ -54,7 +60,7 @@ func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 	return db, ctx
 }
 
-func TestKnowledgeBaseNameEmbeddingTriggersAfterCommittedChanges(t *testing.T) {
+func TestKnowledgeBaseNameEmbeddingTriggersInTheSettingsTransaction(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
 	kb := &types.KnowledgeBase{}
 	require.NoError(t, db.Where("tenant_id=1").First(kb).Error)
@@ -64,8 +70,8 @@ func TestKnowledgeBaseNameEmbeddingTriggersAfterCommittedChanges(t *testing.T) {
 	config := &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}}
 	spy.onCall = func() {
 		var saved types.KnowledgeBase
-		require.NoError(t, db.First(&saved, "id = ?", kb.ID).Error)
-		require.Equal(t, config.ModelTiers.Embedding, saved.ModelTiers.Embedding, "enqueue sees committed configuration")
+		require.NoError(t, spy.db.First(&saved, "id = ?", kb.ID).Error)
+		require.Equal(t, config.ModelTiers.Embedding, saved.ModelTiers.Embedding, "enqueue sees configuration inside its transaction")
 	}
 	_, err := svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", config)
 	require.NoError(t, err)
@@ -77,7 +83,10 @@ func TestKnowledgeBaseNameEmbeddingTriggersAfterCommittedChanges(t *testing.T) {
 	config.ModelTiers.Embedding = ""
 	spy.err = errors.New("queue unavailable")
 	saved, err := svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", config)
-	require.ErrorContains(t, err, "knowledge base saved")
+	require.ErrorContains(t, err, "queue unavailable")
+	var unchanged types.KnowledgeBase
+	require.NoError(t, db.First(&unchanged, "id=?", kb.ID).Error)
+	require.Equal(t, "override-vector", unchanged.ModelTiers.Embedding, "queue failure rolls back settings")
 	require.NotNil(t, saved)
 	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "knowledge_base_embedding_model_changed"}}, spy.calls)
 }
@@ -99,12 +108,15 @@ func TestEmbeddingModelUpdateTriggersCurrentTeamProfileOnly(t *testing.T) {
 	model.Parameters.EmbeddingParameters.Dimension = 4
 	spy.onCall = func() {
 		var saved types.Model
-		require.NoError(t, db.First(&saved, "id = ?", model.ID).Error)
+		require.NoError(t, spy.db.First(&saved, "id = ?", model.ID).Error)
 		require.Equal(t, 4, saved.Parameters.EmbeddingParameters.Dimension)
 	}
 	spy.err = errors.New("queue disconnected")
 	err := svc.UpdateModel(ctx, &model)
-	require.ErrorContains(t, err, "model saved")
+	require.ErrorContains(t, err, "queue disconnected")
+	var unchanged types.Model
+	require.NoError(t, db.First(&unchanged, "id=?", model.ID).Error)
+	require.Equal(t, 3, unchanged.Parameters.EmbeddingParameters.Dimension, "queue failure rolls back the model profile")
 	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "embedding_model_updated"}}, spy.calls)
 	spy.calls, spy.err, spy.onCall = nil, nil, nil
 	model = types.Model{}
@@ -114,11 +126,11 @@ func TestEmbeddingModelUpdateTriggersCurrentTeamProfileOnly(t *testing.T) {
 	require.Empty(t, spy.calls, "an unused model does not change the entity profile")
 }
 
-type nameEmbeddingTriggerQueue struct{ tasks []*asynq.Task }
+type nameEmbeddingTriggerQueue struct{ tasks []*taskqueue.Task }
 
-func (q *nameEmbeddingTriggerQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (q *nameEmbeddingTriggerQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.tasks = append(q.tasks, task)
-	return &asynq.TaskInfo{ID: "name-rebuild", Type: task.Type()}, nil
+	return &taskqueue.TaskInfo{ID: "name-rebuild", Type: task.Type()}, nil
 }
 
 type nameEmbeddingTriggerModels struct {

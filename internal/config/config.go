@@ -46,7 +46,7 @@ type KnowledgeBaseConfig struct {
 	KeepSeparator          bool          `yaml:"keep_separator"   json:"keep_separator"`
 	DocumentProcessTimeout time.Duration `yaml:"document_process_timeout"  json:"document_process_timeout"`
 	// ParserCallTimeout caps a single parser call. Without this the
-	// gRPC call inherits the asynq task context (whole DocumentProcessTimeout,
+	// gRPC call inherits the queue task context (whole DocumentProcessTimeout,
 	// default 2h+), so a hung parser would block a worker for hours and
 	// leave knowledge in "processing". Default 30 minutes is generous enough
 	// for OCR-heavy large PDFs while ensuring forward progress.
@@ -54,7 +54,7 @@ type KnowledgeBaseConfig struct {
 }
 
 // DefaultDocumentProcessTimeout is the ceiling for a single document:process
-// Asynq task when document_process_timeout is unset or non-positive.
+// queue task when document_process_timeout is unset or non-positive.
 const DefaultDocumentProcessTimeout = 2 * time.Hour
 
 // DocumentProcessTimeout returns the effective document-process task timeout.
