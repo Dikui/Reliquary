@@ -97,7 +97,9 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 					newBody = body
 					for _, image := range images {
 						intake.Images = append(intake.Images, image.ServingURL)
-						rememberIngestStoredFile(ctx, files, image.ServingURL)
+						if err := rememberIngestStoredFile(ctx, files, image.ServingURL); err != nil {
+							return nil, err
+						}
 					}
 					resolved, changed = true, true
 				}
@@ -142,7 +144,9 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 					ref = refs[0]
 					for _, storedImage := range stored {
 						intake.Images = append(intake.Images, storedImage.ServingURL)
-						rememberIngestStoredFile(ctx, files, storedImage.ServingURL)
+						if err := rememberIngestStoredFile(ctx, files, storedImage.ServingURL); err != nil {
+							return nil, err
+						}
 					}
 				}
 				mappings[missing.SourceURL] = ref
@@ -174,7 +178,9 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 					if err != nil {
 						return nil, err
 					}
-					rememberIngestStoredFile(ctx, files, ref)
+					if err := rememberIngestStoredFile(ctx, files, ref); err != nil {
+						return nil, err
+					}
 				}
 				label := strings.NewReplacer("[", "\\[", "]", "\\]", "\n", " ").Replace(asset.Name)
 				links = append(links, fmt.Sprintf("[%s](<%s>)", label, ref))
@@ -205,7 +211,9 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 		if err != nil {
 			return nil, err
 		}
-		rememberIngestStoredFile(ctx, files, path)
+		if err := rememberIngestStoredFile(ctx, files, path); err != nil {
+			return nil, err
+		}
 		article.FilePath, article.FileName, article.FileType, article.FileSize = path, asset.Name, asset.Type, int64(len(data))
 		ref := path
 		if s.vault != nil && article.VaultPath != "" && !summarySupplement {
@@ -237,7 +245,9 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 		newBody = resolved
 		for _, image := range stored {
 			intake.Images = append(intake.Images, image.ServingURL)
-			rememberIngestStoredFile(ctx, files, image.ServingURL)
+			if err := rememberIngestStoredFile(ctx, files, image.ServingURL); err != nil {
+				return nil, err
+			}
 		}
 		if s.vault != nil && article.VaultPath != "" && !summarySupplement {
 			for _, source := range articleImagesInOrder(newBody, nil) {
@@ -300,7 +310,9 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 		if err != nil {
 			return nil, err
 		}
-		rememberIngestStoredFile(ctx, files, path)
+		if err := rememberIngestStoredFile(ctx, files, path); err != nil {
+			return nil, err
+		}
 		intake.OriginalPath = path
 	}
 	article.Incomplete = len(remaining) > 0

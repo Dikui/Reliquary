@@ -34,13 +34,18 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if s.needsTaskTransaction() {
 		changes := &ingestFileChanges{}
 		ctx = context.WithValue(ctx, ingestFileChangesKey{}, changes)
-		result, err = entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestResult, error) { return copy.Ingest(ctx, request) })
+		result, err = entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestResult, error) {
+			result, err := copy.Ingest(ctx, request)
+			if err == nil && result != nil && (result.Status == "exists" || result.Status == "discarded") {
+				// Cleanup participates in the transaction: a failed cleanup must
+				// not commit a repost or an operation reported as invalid.
+				err = changes.removeUnusedStoredFiles(ctx, copy.fileSvc)
+			}
+			return result, err
+		})
 		if err != nil {
 			err = errors.Join(err, changes.rollback(s.vault))
 		} else {
-			if result != nil && (result.Status == "exists" || result.Status == "discarded") {
-				err = changes.removeUnusedStoredFiles()
-			}
 			err = errors.Join(err, changes.finish())
 		}
 		return result, err

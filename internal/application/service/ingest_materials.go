@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"reliquary/internal/application/service/file"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/searchutil"
@@ -212,7 +213,9 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 		if err != nil {
 			return "", "", err
 		}
-		rememberIngestStoredFile(ctx, files, path)
+		if err := rememberIngestStoredFile(ctx, files, path); err != nil {
+			return "", "", err
+		}
 		article.FilePath, article.FileName, article.FileType, article.FileSize = path, asset.Name, asset.Type, int64(len(data))
 		attachments := []types.IngestAttachment{{AssetID: asset.ID, Name: asset.Name, Type: asset.Type, Path: path, Size: int64(len(data)), SourceURL: request.File.SourceURL}}
 		if err := article.SetIngestAttachments(attachments); err != nil {
@@ -233,7 +236,9 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 			copy.Content = parsedBody
 			for _, image := range parsedImages {
 				intake.Images = append(intake.Images, image.ServingURL)
-				rememberIngestStoredFile(ctx, files, image.ServingURL)
+				if err := rememberIngestStoredFile(ctx, files, image.ServingURL); err != nil {
+					return "", "", err
+				}
 			}
 			if err := article.SetIntakeMetadata(intake); err != nil {
 				return "", "", err
@@ -250,7 +255,9 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 	}
 	for _, image := range stored {
 		intake.Images = append(intake.Images, image.ServingURL)
-		rememberIngestStoredFile(ctx, files, image.ServingURL)
+		if err := rememberIngestStoredFile(ctx, files, image.ServingURL); err != nil {
+			return "", "", err
+		}
 	}
 	body := assembleIngestBody(&copy, refs)
 	canonical := assembleIngestBody(&copy, canonicalRefs)
@@ -273,7 +280,9 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 	if err != nil {
 		return "", "", err
 	}
-	rememberIngestStoredFile(ctx, files, path)
+	if err := rememberIngestStoredFile(ctx, files, path); err != nil {
+		return "", "", err
+	}
 	intake.OriginalPath = path
 	if err := article.SetIntakeMetadata(intake); err != nil {
 		return "", "", err
@@ -384,8 +393,9 @@ func (s *entryService) readIngestBody(ctx context.Context, kb *types.KnowledgeBa
 // fails, and removes newly saved unreferenced material.
 type ingestFileChangesKey struct{}
 type ingestStoredFile struct {
-	files interfaces.FileService
-	path  string
+	provider interfaces.FileService
+	physical string
+	ref      string
 }
 type ingestVaultFile struct {
 	article *types.Entry
@@ -397,10 +407,22 @@ type ingestFileChanges struct {
 	vaultFiles  []ingestVaultFile
 }
 
-func rememberIngestStoredFile(ctx context.Context, files interfaces.FileService, path string) {
+func rememberIngestStoredFile(ctx context.Context, files interfaces.FileService, path string) error {
 	if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {
-		changes.stored = append(changes.stored, ingestStoredFile{files, path})
+		// Parser aliases can share one upload. Deleting its resource reference
+		// twice would try to resolve an already deleted resource.
+		for _, stored := range changes.stored {
+			if stored.ref == path {
+				return nil
+			}
+		}
+		provider, physical, err := file.PhysicalFile(ctx, files, path)
+		if err != nil {
+			return err
+		}
+		changes.stored = append(changes.stored, ingestStoredFile{provider: provider, physical: physical, ref: path})
 	}
+	return nil
 }
 func (c *ingestFileChanges) rollback(v *VaultService) error {
 	var err error
@@ -412,7 +434,13 @@ func (c *ingestFileChanges) rollback(v *VaultService) error {
 			err = errors.Join(err, v.DeleteStoredArticleAttachment(file.article, file.path))
 		}
 	}
-	err = errors.Join(err, c.removeUnusedStoredFiles())
+	// Only physical providers escape the transaction. Resource rows have already
+	// rolled back, so resolving their handles here would use an expired catalog.
+	for _, stored := range c.stored {
+		if cleanupErr := stored.provider.DeleteFile(context.Background(), stored.physical); !errors.Is(cleanupErr, os.ErrNotExist) {
+			err = errors.Join(err, cleanupErr)
+		}
+	}
 	return err
 }
 func (c *ingestFileChanges) finish() error {
@@ -423,10 +451,10 @@ func (c *ingestFileChanges) finish() error {
 	return err
 }
 
-func (c *ingestFileChanges) removeUnusedStoredFiles() error {
+func (c *ingestFileChanges) removeUnusedStoredFiles(ctx context.Context, files interfaces.FileService) error {
 	var err error
-	for _, file := range c.stored {
-		if cleanupErr := file.files.DeleteFile(context.Background(), file.path); !errors.Is(cleanupErr, os.ErrNotExist) {
+	for _, stored := range c.stored {
+		if cleanupErr := files.DeleteFile(ctx, stored.ref); !errors.Is(cleanupErr, os.ErrNotExist) {
 			err = errors.Join(err, cleanupErr)
 		}
 	}
