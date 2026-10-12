@@ -1,32 +1,50 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listPendingEntry, type ReviewKind, type ReviewEntry } from '@/api/entry-review'
+import { listIncompleteArticles } from '@/api/ingest'
+import type { IncompleteArticle } from '@/types/ingest'
 import { isValidURL } from '@/utils/security'
 import ReviewActions from '@/components/ReviewActions.vue'
+import MissingMaterials from '@/components/MissingMaterials.vue'
+import IncompleteActions from '@/components/IncompleteActions.vue'
 
-const emit = defineEmits<{ 'open-source': [id: string]; changed: [] }>()
+const emit = defineEmits<{ 'open-source': [id: string]; changed: []; refreshed: [] }>()
 const { t } = useI18n()
-const kind = ref<ReviewKind>('intake'), records = ref<ReviewEntry[]>([]), total = ref(0), page = ref(1)
-const loading = ref(false), error = ref(''), busy = ref(false)
+type PendingKind = ReviewKind | 'incomplete'
+const kind = ref<PendingKind>('intake'), records = ref<ReviewEntry[]>([]), incompleteRecords = ref<IncompleteArticle[]>([]), total = ref(0), page = ref(1)
+const loading = ref(false), error = ref(''), busyIds = ref(new Set<string>())
+const busy = computed(() => busyIds.value.size > 0)
 const pageSize = 20
 let generation = 0
-function originalURL(item: ReviewEntry) { const url = item.metadata?.intake?.source_info?.original_url || ''; return /^https?:\/\//i.test(url) && isValidURL(url) ? url : '' }
+function safeURL(url: string) { return /^https?:\/\//i.test(url) && isValidURL(url) ? url : '' }
+function originalURL(item: ReviewEntry) { return safeURL(item.metadata?.intake?.source_info?.original_url || item.source || '') }
+function articleLink(id: string) { return `/platform/entries?entry_id=${encodeURIComponent(id)}` }
 async function load() {
   const current = ++generation
   loading.value = true; error.value = ''
   try {
-    const response = await listPendingEntry({ kind: kind.value, page: page.value, page_size: pageSize })
+    const selected = kind.value
+    const response = selected === 'incomplete'
+      ? await listIncompleteArticles({ page: page.value, page_size: pageSize, include_attempted: true })
+      : await listPendingEntry({ kind: selected, page: page.value, page_size: pageSize })
     if (!response.success) throw new Error(response.message || t('knowledgeReview.loadFailed'))
     if (current !== generation) return
-    records.value = response.data || []; total.value = response.total || 0
-    if (!records.value.length && page.value > 1) { page.value--; await load() }
+    if (selected === 'incomplete') incompleteRecords.value = (response.data || []) as IncompleteArticle[]
+    else records.value = (response.data || []) as ReviewEntry[]
+    total.value = response.total || 0
+    if (!response.data?.length && page.value > 1) { page.value--; await load() }
   } catch (cause: any) { if (current === generation) error.value = cause?.message || t('knowledgeReview.loadFailed') }
   finally { if (current === generation) loading.value = false }
 }
-function changeKind(value: string | number) { generation++; kind.value = value as ReviewKind; page.value = 1; records.value = []; total.value = 0; void load() }
+function changeKind(value: string | number) {
+  if (busy.value || !['intake', 'processing', 'incomplete'].includes(String(value))) return
+  generation++; kind.value = value as PendingKind; page.value = 1; records.value = []; incompleteRecords.value = []; total.value = 0; void load()
+}
 function changePage(value: { current: number }) { page.value = value.current; void load() }
+function setBusy(id: string, value: boolean) { if (value) busyIds.value.add(id); else busyIds.value.delete(id) }
 async function reviewed() { emit('changed'); await load() }
+async function refresh() { if (busy.value) return; emit('refreshed'); await load() }
 onMounted(load)
 onUnmounted(() => { generation++ })
 defineExpose({ refresh: load })
@@ -34,22 +52,34 @@ defineExpose({ refresh: load })
 
 <template>
   <section class="pending-reviews" :aria-label="t('knowledgeReview.title')">
-    <div class="review-heading"><h3>{{ t('knowledgeReview.title') }}</h3><t-button variant="outline" :loading="loading" :disabled="busy" @click="load">{{ t('knowledgeWorkbench.refresh') }}</t-button></div>
+    <div class="review-heading"><h3>{{ t('knowledgeReview.title') }}</h3><t-button variant="outline" :loading="loading" :disabled="busy" @click="refresh">{{ t('knowledgeWorkbench.refresh') }}</t-button></div>
     <t-tabs :value="kind" @change="changeKind">
       <t-tab-panel value="intake" :label="t('knowledgeReview.intake')" :disabled="busy" />
       <t-tab-panel value="processing" :label="t('knowledgeReview.processing')" :disabled="busy" />
+      <t-tab-panel value="incomplete" :label="t('knowledgeReview.incomplete')" :disabled="busy" />
     </t-tabs>
-    <p class="review-description">{{ t(kind === 'intake' ? 'knowledgeReview.intakeHint' : 'knowledgeReview.processingHint') }}</p>
-    <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="load">{{ t('common.retry') }}</t-button></template></t-alert>
+    <p class="review-description">{{ t(`knowledgeReview.${kind}Hint`) }}</p>
+    <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" :disabled="busy" @click="refresh">{{ t('common.retry') }}</t-button></template></t-alert>
     <t-loading :loading="loading" show-overlay>
       <div class="review-list">
-        <t-empty v-if="!records.length && !loading && !error" :description="t(kind === 'intake' ? 'knowledgeReview.emptyIntake' : 'knowledgeReview.emptyProcessing')" />
+        <t-empty v-if="!(kind === 'incomplete' ? incompleteRecords.length : records.length) && !loading && !error" :description="t(kind === 'intake' ? 'knowledgeReview.emptyIntake' : kind === 'processing' ? 'knowledgeReview.emptyProcessing' : 'knowledgeReview.emptyIncomplete')" />
         <article v-for="item in records" :key="item.id" class="review-record" :data-review-id="item.id">
           <div class="review-record-heading"><h4>{{ item.title || item.file_name || t('knowledgeBase.untitledDocument') }}</h4><t-button variant="text" :disabled="busy" @click="emit('open-source', item.id)">{{ t('knowledgeBase.intakePreviewOriginal') }}</t-button></div>
-          <p v-if="kind === 'intake' && item.metadata?.intake?.reason">{{ item.metadata.intake.reason }}</p>
+          <t-tag v-if="kind === 'intake' && item.acquisition === 'model_written'" class="acquisition-tag" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
+          <p v-if="kind === 'intake' && item.related_article_id">{{ t('knowledgeReview.conflictReason') }} <a :href="articleLink(item.related_article_id)" @click.prevent="emit('open-source', item.related_article_id)">{{ t('knowledgeReview.relatedArticle') }}</a></p>
+          <p v-else-if="kind === 'intake' && item.metadata?.intake?.reason">{{ item.metadata.intake.reason }}</p>
+          <MissingMaterials v-if="kind === 'intake'" :items="(item.missing_materials || []).filter(material => material.type === 'content')" />
           <a v-if="originalURL(item)" :href="originalURL(item)" target="_blank" rel="noopener noreferrer">{{ originalURL(item) }}</a>
           <p v-if="item.metadata?.intake?.source_info?.original_url_source === 'from_file'" class="review-link-source">{{ t('knowledgeReview.extractedLink') }}</p>
-          <ReviewActions :entry="item" @changed="reviewed" @busy-change="busy = $event" />
+          <ReviewActions :entry="item" @changed="reviewed" @busy-change="setBusy(item.id, $event)" />
+        </article>
+        <article v-for="item in incompleteRecords" :key="item.article_id" class="review-record" :data-incomplete-id="item.article_id">
+          <div class="review-record-heading"><h4><a :href="articleLink(item.article_id)" @click.prevent="emit('open-source', item.article_id)">{{ item.title || t('knowledgeBase.untitledDocument') }}</a></h4><t-tag v-if="item.external_completion_attempted" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.attemptedTitle') }}</t-tag></div>
+          <a v-if="safeURL(item.url)" :href="safeURL(item.url)" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
+          <p>{{ t('ingestStatus.acquisitionLabel') }}: {{ item.acquisition ? t(`ingestStatus.acquisition.${item.acquisition}`) : t('ingestStatus.unknownAcquisition') }}</p>
+          <p v-if="item.external_completion_attempted">{{ t('ingestStatus.attemptedHint') }}</p>
+          <MissingMaterials :items="item.missing || []" />
+          <IncompleteActions :article-id="item.article_id" :title="item.title" allow-discard @changed="reviewed" @busy-change="setBusy(item.article_id, $event)" />
         </article>
       </div>
     </t-loading>
@@ -68,5 +98,7 @@ defineExpose({ refresh: load })
 .review-record p { margin: 0; }
 .review-record a { color: var(--td-brand-color); }
 .review-record a:hover { text-decoration: underline; }
+.review-record a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+.acquisition-tag { justify-self: start; }
 @media (max-width: 560px) { .review-record { padding: 14px; } .review-record-heading { flex-direction: column; gap: 8px; } }
 </style>

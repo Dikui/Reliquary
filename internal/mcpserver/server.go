@@ -180,7 +180,7 @@ func contractFields(value any) any {
 }
 
 func registerTools(server *mcp.Server, services Services) {
-	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示用户确认无链接入库，来源尚未核实。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示用户确认无链接入库，来源尚未核实。incomplete=true 表示文章材料缺失，待补全；相似报道中的文章也包含该字段。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
 		object(map[string]any{
 			"query":         text("查询文本，必填"),
 			"content_types": stringArray("内容类型：event、opinion、research、tutorial、case、reference"),
@@ -221,7 +221,7 @@ func registerTools(server *mcp.Server, services Services) {
 			items, err := services.Follows.ListFollows(ctx)
 			return map[string]any{"follows": items}, err
 		})
-	addTool(server, "follow_feed", "读取关注动态，按收录时间倒序返回与关注实体或主题关联的已完成外部文章，排除用户文档、整理结果和待审内容。results 中文章字段与 search 一致，另含 collected_at、entered_at、is_new、matched_follows；相似报道也保留这些字段。since 省略使用网页上次查看时间，首次查看前返回全部；is_new 始终以网页上次查看时间判定，new_count 是全局未看文章数。调用不更新上次查看时间。返回 next_cursor 时须用 cursor 继续翻页，直到没有 next_cursor；游标保留首请求的时间上限、since、对象筛选与折叠开关，后续只需 cursor 和 limit。主题历史归入不产生新动态。"+externalContentNotice,
+	addTool(server, "follow_feed", "读取关注动态，按收录时间倒序返回与关注实体或主题关联的已完成外部文章，排除用户文档、整理结果和待审内容。results 中文章字段与 search 一致，另含 collected_at、entered_at、is_new、matched_follows；相似报道也保留这些字段。incomplete=true 表示文章材料缺失，待补全；相似报道中的文章也包含该字段。since 省略使用网页上次查看时间，首次查看前返回全部；is_new 始终以网页上次查看时间判定，new_count 是全局未看文章数。调用不更新上次查看时间。返回 next_cursor 时须用 cursor 继续翻页，直到没有 next_cursor；游标保留首请求的时间上限、since、对象筛选与折叠开关，后续只需 cursor 和 limit。主题历史归入不产生新动态。"+externalContentNotice,
 		object(map[string]any{
 			"cursor":           text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
 			"since":            text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的文章"),

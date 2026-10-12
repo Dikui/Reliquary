@@ -21,6 +21,8 @@ const originalURL = computed(() => {
       <t-tag size="small" variant="light-outline">{{ t(`knowledgeBase.contentTypes.${type}`) }}</t-tag>
       <t-tag size="small" variant="light-outline">{{ t(entry.processing_mode === 'summary_only' ? 'knowledgeBase.processingModes.summary_only' : 'knowledgeBase.processingModes.full') }}</t-tag>
       <t-tag v-if="entry.source_unverified" size="small" theme="warning" variant="light-outline">{{ t('knowledgeReview.sourceUnverified') }}</t-tag>
+      <t-tag v-if="entry.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
+      <t-tag v-if="entry.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>
     </div>
     <div v-if="entry.structured_summary" class="structured-summary">
       <div class="summary-overview"><strong>{{ t('knowledgeBase.summaryOverview') }}</strong><p>{{ entry.structured_summary.overview }}</p></div>

@@ -307,6 +307,11 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
           </t-popup>
         </div>
 
+        <div v-if="item.parse_status !== 'completed' && (item.acquisition === 'model_written' || item.incomplete)" class="card-ingest-status">
+          <t-tag v-if="item.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
+          <t-tag v-if="item.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>
+        </div>
+
         <!-- Parse status display -->
         <div v-if="isParseInFlight(item.parse_status)" class="card-analyze card-analyze-trace">
           <t-icon name="loading" class="card-analyze-loading"></t-icon>
@@ -584,6 +589,8 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
     letter-spacing: 0.01em;
     margin-right: 8px;
   }
+
+  .card-ingest-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 
   .more-wrap {
     flex-shrink: 0;

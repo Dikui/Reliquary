@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 import { renderToString } from '@vue/server-renderer'
-import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch } from 'vue'
+import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
@@ -62,8 +62,35 @@ const listModules = {
   '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
 }
 const props = { selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }
+
+function articleLoadingHook(record: Record<string, unknown>) {
+  return evaluate(readFileSync(new URL('../composables/useKnowledgeBase.ts', import.meta.url), 'utf8'), {
+    pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
+    '../utils/index': { formatStringDate: () => '2026-10-12' },
+    'tdesign-vue-next': { MessagePlugin: {} },
+    '@/api/knowledge-base': { listEntryFiles: async () => ({ data: [record], total: 1 }) },
+    '@/stores/entry': { entryStore: () => ({}) },
+    'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
+    '@/stores/resources': { useResourcesStore: () => ({}) },
+    './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
+  }).default('kb-articles')
+}
 for (const locale of ['zh-CN', 'en-US'] as const) {
   const copy = messages[locale].knowledgeBase
+  test(`${locale}: cards and rows show and hide ingest markers through the production list loading hook`, async () => {
+    for (const parse_status of ['completed', 'processing', 'failed']) for (const flagged of [true, false, undefined]) {
+      const hook = articleLoadingHook({ ...article, parse_status, acquisition: flagged ? 'model_written' : 'verbatim', ...(flagged !== undefined ? { incomplete: flagged } : {}), updated_at: '2026-10-12T00:00:00Z' })
+      await hook.loadEntries()
+      for (const path of ['../views/knowledge-base/components/DocumentCardView.vue', '../views/knowledge-base/components/DocumentListView.vue']) {
+        const html = await render(component(path, listModules), { ...props, items: hook.cardList.value }, locale)
+        assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged), path)
+        assert.equal(html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged), path)
+        for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+          assert.equal(html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), `${path}: ${hint}`)
+        }
+      }
+    }
+  })
   test(`${locale}: cards and rows render the content type, mode, three summary sections and relations`, async () => {
     for (const path of ['../views/knowledge-base/components/DocumentCardView.vue', '../views/knowledge-base/components/DocumentListView.vue']) {
       const html = await render(component(path, listModules), { ...props, items: [article] }, locale)
@@ -86,6 +113,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/api/knowledge-base': { ENTRY_CHUNK_PAGE_SIZE: 25, reprocessEntry: async (id: string) => { requests.push(id); return { success: true, data: { parse_status: 'pending' } } } },
       '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/DocumentPreview.vue': emptyModule,
       '@/utils/clipboard': { copyWithToast() {} },
+      '@/components/MissingMaterials.vue': emptyModule, '@/components/IncompleteActions.vue': emptyModule,
       '@/components/ReviewActions.vue': reviewModule, '@/components/EntryArticleJudgments.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/views/knowledge-base/components/RepostSources.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
     }
     const detail = component('./DocContent.vue', modules)

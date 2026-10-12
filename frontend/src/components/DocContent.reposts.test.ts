@@ -80,7 +80,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
       return () => props.visible === false ? null : h('div', { ...attrs, 'data-drawer-size': props.size }, [props.message, props.description, slots.header?.(), slots.default?.()])
     },
   })
-  for (const name of ['t-drawer', 't-button', 't-icon', 't-tag', 't-tooltip', 't-loading', 't-empty', 't-select', 't-input', 't-input-number', 't-textarea', 't-checkbox', 't-alert', 't-pagination', 't-popup', 't-popconfirm', 't-switch']) app.component(name, stub)
+  for (const name of ['t-drawer', 't-dialog', 't-button', 't-icon', 't-tag', 't-tooltip', 't-loading', 't-empty', 't-select', 't-input', 't-input-number', 't-textarea', 't-checkbox', 't-alert', 't-pagination', 't-popup', 't-popconfirm', 't-switch']) app.component(name, stub)
   const errors: unknown[] = []
   const warnings: string[] = []
   app.config.errorHandler = error => errors.push(error)
@@ -100,6 +100,11 @@ interface DetailRenderOptions {
   details?: Record<string, unknown>
   loadedDetails?: Record<string, unknown>
   classification?: unknown
+  missingMaterials?: unknown
+  incompleteActions?: unknown
+  reviewActions?: unknown
+  articleJudgments?: unknown
+  onReviewChanged?: (...args: unknown[]) => void
 }
 async function renderDetails(sources: EntryRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
   const component = detailSFC.create({
@@ -114,9 +119,10 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/ReviewActions.vue': emptyModule, '@/components/EntryArticleJudgments.vue': emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule,
+    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
     '@/components/EntryProcessingTimeline.vue': emptyModule,
+    '@/components/MissingMaterials.vue': options.missingMaterials || emptyModule, '@/components/IncompleteActions.vue': options.incompleteActions || emptyModule,
     '@/views/knowledge-base/components/RepostSources.vue': sharedRepostModule,
     '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   }, options.environment)
@@ -130,6 +136,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
   }
   return renderComponent(component, {
     visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', entryType: 'document',
+    onReviewChanged: options.onReviewChanged,
     details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
   }, locale, options.ssrContext)
@@ -166,6 +173,83 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: detail conflict keeps its approval label after loading the actual related article field`, async () => {
+    const loader = createArticleDetailsLoader({ conflict: { related_article_id: 'original-article', parse_status: 'rejected', metadata: { intake: { source: 'api', decision: 'rejected', source_info: { original_url: 'https://example.com/conflict' } } } } })
+    const review = compileSFC('./ReviewActions.vue').create({ '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) }, 'tdesign-vue-next': { MessagePlugin: {} } })
+    const loadedDetails = await loader.load('conflict')
+    const html = await renderDetails([], locale, { loadedDetails, reviewActions: { __esModule: true, default: review } })
+    assert.equal(loadedDetails.related_article_id, 'original-article')
+    assert.ok(html.includes(messages[locale].knowledgeReview.saveAsNew))
+  })
+  test(`${locale}: details prevent cross-action submissions and refresh review counts only on article judgments`, async () => {
+    const loader = createArticleDetailsLoader({ article: { incomplete: true } })
+    const loadedDetails = await loader.load('article')
+    const events: unknown[][] = []
+    const disabled: boolean[] = []
+    const judgments = defineComponent({ props: ['disabled'], setup(props) { disabled.push(Boolean(props.disabled)); return () => null } })
+    await renderDetails([], locale, { loadedDetails, articleJudgments: { __esModule: true, default: judgments }, onReviewChanged: (...args: unknown[]) => events.push(args), async scenario(state) {
+      state.incompleteBusy.value = true
+      await state.reprocess()
+      state.applyProcessingState({ parse_status: 'completed' })
+      assert.equal(events.length, 0, 'processing polls do not refresh pending counts')
+      state.applyArticleJudgment({ content_type: 'research' })
+      assert.equal(events.length, 1)
+    } })
+    assert.deepEqual(disabled, [true])
+    assert.equal(events[0]![1], false)
+    const accepts: boolean[] = []
+    const action = defineComponent({ props: ['disabled'], setup(props) { accepts.push(Boolean(props.disabled)); return () => null } })
+    await renderDetails([], locale, { loadedDetails, incompleteActions: { __esModule: true, default: action }, scenario(state) { state.articleJudgmentsBusy.value = true } })
+    assert.deepEqual(accepts, [true])
+  })
+  test(`${locale}: actual detail loader displays ingest markers and missing reasons, then accepting clears its state and refresh event`, async () => {
+    const missing = [{ type: 'image', source_url: 'https://example.com/image.png', reason: 'Access denied', api_key_name: 'External Collector', submitted_at: '2026-10-12T08:00:00Z' }]
+    const loader = createArticleDetailsLoader({ incomplete: { acquisition: 'model_written', incomplete: true, missing_materials: missing }, complete: { acquisition: 'extracted', incomplete: false }, unspecified: { acquisition: 'extracted' } })
+    const classified = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const materials = compileSFC('./MissingMaterials.vue').create({ '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const requests: string[] = []
+    const api = evaluate(readFileSync(new URL('../api/ingest.ts', import.meta.url), 'utf8'), { '@/utils/request': { post: async (url: string) => { requests.push(url); return { success: true } } } })
+    const action = () => compileSFC('./IncompleteActions.vue').create({ '@/api/ingest': api, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
+    const modules = { classification: { __esModule: true, default: classified }, missingMaterials: { __esModule: true, default: materials } }
+    const details = await loader.load('incomplete')
+    const initial = await renderDetails([], locale, { ...modules, loadedDetails: details, incompleteActions: { __esModule: true, default: action() } })
+    assert.ok(initial.includes(messages[locale].ingestStatus.modelWritten))
+    assert.ok(initial.includes(`title="${messages[locale].ingestStatus.modelWrittenHint.replaceAll("'", "&#39;")}"`))
+    assert.ok(initial.includes(messages[locale].ingestStatus.incomplete))
+    assert.ok(initial.includes(`title="${messages[locale].ingestStatus.incompleteHint.replaceAll("'", "&#39;")}"`))
+    for (const text of ['Access denied', 'External Collector', 'https://example.com/image.png', messages[locale].ingestStatus.acceptIncomplete]) assert.ok(initial.includes(text), text)
+    assert.equal(requests.length, 0, 'opening article details never accepts automatically')
+    const events: unknown[][] = []
+    const accepting = action(), setup = accepting.setup
+    accepting.setup = (props: object, context: object) => {
+      const state = setup(props, context)
+      onServerPrefetch(async () => {
+        state.request('accept'); state.cancel(); await state.confirm()
+        assert.equal(requests.length, 0, 'cancel confirmation does not call the endpoint')
+        state.request('accept'); await state.confirm()
+      })
+      return state
+    }
+    await renderDetails([], locale, { ...modules, loadedDetails: details, incompleteActions: { __esModule: true, default: accepting }, onReviewChanged: (...args: unknown[]) => events.push(args) })
+    assert.deepEqual(requests, ['/api/v1/ingest/incomplete/accept-incomplete'])
+    assert.equal(details.incomplete, false)
+    assert.deepEqual(details.missing_materials, [])
+    assert.equal(events.length, 1)
+    assert.equal(events[0]![1], false)
+    const after = await renderDetails([], locale, { ...modules, loadedDetails: details })
+    assert.doesNotMatch(after, /class="[^"]*incomplete-materials|Access denied/)
+    assert.ok(after.includes(messages[locale].ingestStatus.modelWritten))
+    assert.ok(after.includes(`title="${messages[locale].ingestStatus.modelWrittenHint.replaceAll("'", "&#39;")}"`))
+    assert.ok(!after.includes(`title="${messages[locale].ingestStatus.incompleteHint.replaceAll("'", "&#39;")}"`))
+    for (const id of ['complete', 'unspecified']) {
+      const complete = await renderDetails([], locale, { ...modules, loadedDetails: await loader.load(id) })
+      assert.ok(!complete.includes(messages[locale].ingestStatus.modelWritten))
+      assert.doesNotMatch(complete, /class="[^"]*incomplete-materials/)
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.ok(!complete.includes(`title="${hint.replaceAll("'", "&#39;")}"`), `${id}: ${hint}`)
+      }
+    }
+  })
   test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
     const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
     const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })

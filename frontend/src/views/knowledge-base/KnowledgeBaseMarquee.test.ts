@@ -36,6 +36,7 @@ async function mountLibrary(realCheckbox = false) {
       duplicateNotices: ref([]), loadEntries: async () => { cardList.value = [...items] }, clearDuplicateNotices() {},
     }) },
     '@/stores/ui': { useUIStore: () => ({ openManualEditor: ({ entryId }: any) => opened.push(entryId) }) },
+    '@/stores/pendingCounts': { usePendingCountsStore: () => ({ total: null, refresh: async () => {} }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
     '@/stores/resources': { useResourcesStore: () => ({ knowledgeBase: { id: 'kb' }, fetchKnowledgeBase: async () => ({ id: 'kb' }) }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },

@@ -24,6 +24,8 @@ export interface CmdkFileGroup {
   chunks: CmdkChunk[]
   source?: SearchEntry['source']
   source_unverified?: boolean
+  acquisition?: SearchEntry['acquisition']
+  incomplete?: boolean
   similarCount?: number
   imagePath?: string
 }
@@ -32,6 +34,8 @@ export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
   return articles.map(article => ({
     entryId: article.entry_id, kbId: '', title: article.title, source: article.source,
     source_unverified: Boolean(article.source_unverified),
+    acquisition: article.source === 'article' ? article.acquisition : undefined,
+    incomplete: article.source === 'article' ? article.incomplete : undefined,
     similarCount: article.similar_reports?.length || 0,
     imagePath: article.source === 'article' ? article.snippets?.find(snippet => snippet.image_path)?.image_path : undefined,
     chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.entry_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({

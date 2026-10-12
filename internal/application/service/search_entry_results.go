@@ -84,6 +84,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
 			Acquisition:    entry.Acquisition,
+			Incomplete:     entry.SourceKind == "article" && entry.Incomplete,
 			ProcessingMode: entry.ProcessingMode, Summary: entry.StructuredSummary, Starred: entry.Starred,
 			SourceUnverified: entry.SourceUnverified,
 			Entities:         entities[entry.ID], Topics: topics[entry.ID],

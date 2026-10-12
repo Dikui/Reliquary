@@ -12,6 +12,7 @@ const emit = defineEmits<{ changed: [value: ReviewEntry | undefined, removed: bo
 const { t } = useI18n()
 const fieldID = useId()
 const busy = ref(false), error = ref(''), sourceDraft = ref<IntakeSourceInfo>({}), typeDraft = ref<ContentType | ''>('')
+let disposed = false
 const urlInput = ref<{ focus: () => void }>(), invalidURL = ref(false)
 const confirmation = ref<IntakeReviewAction | ProcessingReviewAction | ''>('')
 const processing = computed(() => props.entry.processing_review_status === 'pending' || props.entry.review_kind === 'processing')
@@ -25,11 +26,11 @@ const confirmationLabel = computed(() => confirmationIsBodyRemoval.value ? t('ar
 watch(() => props.entry.id, () => { error.value = ''; invalidURL.value = false; confirmation.value = '' })
 watch(() => props.entry.metadata?.intake?.source_info, value => { sourceDraft.value = { ...value } }, { immediate: true, deep: true })
 watch(() => props.entry.content_type, value => { typeDraft.value = CONTENT_TYPES.includes(value as ContentType) ? value as ContentType : '' }, { immediate: true })
-watch(busy, value => emit('busy-change', value))
-onUnmounted(() => emit('busy-change', false))
+watch(busy, value => { if (!disposed) emit('busy-change', value) }, { flush: 'sync' })
+onUnmounted(() => { disposed = true; emit('busy-change', false) })
 function typeLabel(value: string) { return t(`knowledgeBase.contentTypes.${CONTENT_TYPES.includes(value as ContentType) ? value : 'unclassified'}`) }
 async function submit(action: IntakeReviewAction | ProcessingReviewAction, confirmed = false) {
-  if (busy.value) return
+  if (disposed || busy.value) return
   error.value = ''
   invalidURL.value = false
   if (action === 'supplement_url') {
@@ -49,11 +50,11 @@ async function submit(action: IntakeReviewAction | ProcessingReviewAction, confi
       ? await resolveProcessingReview(id, { action: action as ProcessingReviewAction, ...(action === 'correct' ? { content_type: typeDraft.value as ContentType } : {}), confirm_remove_body: confirmed })
       : await resolveIntakeReview(id, { action: action as IntakeReviewAction, ...(['admit_unverified', 'convert_to_mine', 'discard'].includes(action) ? { confirmed } : { source_info: { ...sourceDraft.value } }) })
     if (!response.success) throw new Error(response.message || t('knowledgeReview.failed'))
-    if (props.entry.id !== id) return
+    if (disposed || props.entry.id !== id) return
     confirmation.value = ''
     MessagePlugin.success(t('knowledgeReview.saved'))
     emit('changed', response.data, ['discard', 'convert_to_mine'].includes(action))
-  } catch (cause: any) { if (props.entry.id === id) error.value = cause?.message || t('knowledgeReview.failed') }
+  } catch (cause: any) { if (!disposed && props.entry.id === id) error.value = cause?.message || t('knowledgeReview.failed') }
   finally { busy.value = false }
 }
 </script>
@@ -87,7 +88,7 @@ async function submit(action: IntakeReviewAction | ProcessingReviewAction, confi
         <t-button variant="outline" :disabled="busy" @click="submit('convert_to_mine')">{{ t('knowledgeReview.actions.convert_to_mine') }}</t-button>
       </div>
       <div v-else class="review-buttons">
-        <t-button theme="primary" :loading="busy" :disabled="busy" @click="submit('approve')">{{ t('articleJudgments.approveReview') }}</t-button>
+        <t-button theme="primary" :loading="busy" :disabled="busy" @click="submit('approve')">{{ t(entry.related_article_id ? 'knowledgeReview.saveAsNew' : 'articleJudgments.approveReview') }}</t-button>
         <t-button variant="outline" :disabled="busy" @click="submit('reject')">{{ t('articleJudgments.rejectReview') }}</t-button>
         <t-button variant="outline" :disabled="busy" @click="submit('retry')">{{ t('knowledgeBase.intakeRetry') }}</t-button>
       </div>

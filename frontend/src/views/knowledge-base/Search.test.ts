@@ -77,6 +77,17 @@ const article: SearchEntry = {
   score: 0.9, similar_reports: [], vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
 }
 
+function ingestSearchAPI(fields: Record<string, unknown>) {
+  return evaluate(readFileSync(new URL('../../api/search.ts', import.meta.url), 'utf8'), {
+    '@/utils/request': {
+      post: async (url: string) => {
+        assert.equal(url, '/api/v1/search')
+        return { success: true, data: { results: structuredClone([{ ...article, ...fields }]), excluded_missing_published_at: 0 } }
+      },
+    },
+  })
+}
+
 test('search requests and URL state preserve all filters without old scope parameters', () => {
   const filters = { ...helpers.defaultSearchFilters(), content_types: ['research', 'event'] as const, entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'] as const, published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
   const mutable = { ...filters, content_types: [...filters.content_types], sources: [...filters.sources] }
@@ -87,6 +98,30 @@ test('search requests and URL state preserve all filters without old scope param
   assert.deepEqual(invalid.filters.content_types, ['event']); assert.deepEqual(invalid.filters.sources, ['mine']); assert.equal(invalid.filters.limit, 20)
 })
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: search markers show and hide using fields loaded through the real search API`, async () => {
+    for (const flagged of [true, false, undefined]) {
+      const api = ingestSearchAPI({ acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) })
+      const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, api.searchEntries, locale)
+      assert.equal(result.html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(result.html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.equal(result.html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
+      }
+    }
+  })
+  test(`${locale}: folded results use ingest fields through the real API loading path`, async () => {
+    for (const flagged of [true, false, undefined]) {
+      const api = ingestSearchAPI({ similar_reports: [{ ...article, entry_id: 'nested', acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) }] })
+      const result = await api.searchEntries({ query: 'Launch' })
+      const html = await render(articleComponent(), { article: result.data.results[0], query: 'Launch' }, locale, async state => { state.expanded.value = true })
+      const nested = html.slice(html.indexOf('data-article-id="nested"'))
+      assert.equal(nested.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(nested.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.equal(nested.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
+      }
+    }
+  })
   test(`${locale}: source unverified marker reaches search results through the page API loading path`, async () => {
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }], excluded_missing_published_at: 0 } }), locale)
     assert.ok(result.html.includes(messages[locale].knowledgeReview.sourceUnverified))
@@ -181,6 +216,27 @@ test('search page rejects invalid date order and ignores an older response after
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: command palette markers use response fields through the real search API and hook`, async () => {
+    for (const flagged of [true, false, undefined]) {
+      const api = ingestSearchAPI({ acquisition: flagged ? 'model_written' : 'verbatim', ...(flagged !== undefined ? { incomplete: flagged } : {}) })
+      const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), { '@/utils/search': helpers, '@/api/search': api })
+      const item = component('../../components/GlobalCommandPalette/ResultItem.vue', {})
+      const palette = defineComponent({ setup() {
+        const state = hook.useCmdkSearch({})
+        onServerPrefetch(async () => { state.query.value = 'Launch'; await state.retry() })
+        return () => state.fileGroups.value.length ? h(item, { index: 0, title: state.fileGroups.value[0].title, acquisition: state.fileGroups.value[0].acquisition, incomplete: state.fileGroups.value[0].incomplete }) : null
+      } })
+      const html = await render(palette, {}, locale)
+      assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.equal(html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
+      }
+    }
+    const template = readFileSync(new URL('../../components/GlobalCommandPalette.vue', import.meta.url), 'utf8')
+    assert.match(template, /:acquisition="item.file.acquisition"/)
+    assert.match(template, /:incomplete="item.file.incomplete"/)
+  })
   test(`${locale}: dependency failures render a localized message and retain retry without upstream text`, async () => {
     let attempts = 0
     const result = await pageScenario(async state => {

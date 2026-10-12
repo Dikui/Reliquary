@@ -23,6 +23,8 @@ import { useI18n } from 'vue-i18n';
 import DocumentPreview from '@/components/DocumentPreview.vue';
 import RepostSources from '@/views/knowledge-base/components/RepostSources.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import MissingMaterials from '@/components/MissingMaterials.vue';
+import IncompleteActions from '@/components/IncompleteActions.vue';
 import ReviewActions from '@/components/ReviewActions.vue';
 import EntryArticleJudgments from '@/components/EntryArticleJudgments.vue';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
@@ -133,9 +135,10 @@ const saveMetadata = async () => {
 
 const reprocessing = ref(false);
 const articleJudgmentsBusy = ref(false);
+const incompleteBusy = ref(false);
 const canReprocess = computed(() => !['mine', 'report'].includes(props.details?.source_kind || ''));
 const reprocess = async () => {
-  if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value) return;
+  if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value || incompleteBusy.value) return;
   reprocessing.value = true;
   try {
     const result: any = await reprocessEntry(props.details.id);
@@ -260,6 +263,10 @@ const applyProcessingState = (value: Record<string, unknown>) => {
   Object.assign(props.details, value);
   if (props.details?.id) emit('processingStateChange', { ...value, id: props.details.id });
 };
+const applyIncompleteChange = () => {
+  applyProcessingState({ incomplete: false, missing_materials: [] });
+  emit('reviewChanged', props.details, false);
+};
 const applyArticleJudgment = (value: Record<string, unknown>) => {
   const previousMode = props.details.processing_mode;
   applyProcessingState(value);
@@ -267,6 +274,7 @@ const applyArticleJudgment = (value: Record<string, unknown>) => {
     props.details.md = [];
     props.details.total = 0;
   } else if (previousMode === 'summary_only' && !isProcessing.value) emit('getDoc', 1);
+  emit('reviewChanged', props.details, false);
 };
 let processingPollTimer: ReturnType<typeof setTimeout> | null = null;
 let processingPollGeneration = 0;
@@ -1319,13 +1327,17 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.documentSummary') }}</h4>
-            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy" @click="reprocess">
+            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy || incompleteBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
               {{ $t('knowledgeBase.reprocess') }}
             </t-button>
           </div>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
-          <EntryArticleJudgments v-if="canReprocess && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
+            <MissingMaterials :items="details.missing_materials || []" />
+            <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />
+          </section>
+          <EntryArticleJudgments v-if="canReprocess && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('knowledgeBase.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('knowledgeBase.parsingFailed') }}</p>
         </section>

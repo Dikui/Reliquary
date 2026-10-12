@@ -124,6 +124,28 @@ func entrySearchIDs(response *types.EntrySearchResponse) []string {
 
 func entrySearchNoCollapse() *bool { value := false; return &value }
 
+func TestEntrySearchPostgresIncompleteStateIsOnlyForArticles(t *testing.T) {
+	h := newEntrySearchFixture(t)
+	for _, item := range []struct {
+		id         string
+		source     string
+		incomplete bool
+	}{
+		{"complete", "article", false},
+		{"incomplete", "article", true},
+		{"mine", "mine", true},
+		{"report", "report", true},
+	} {
+		article := h.add(t, item.id, item.source, "2026-10-01", "event", "semanticlaunch", 0)
+		require.NoError(t, h.db.Model(article).Update("incomplete", item.incomplete).Error)
+	}
+	response := h.search(t, types.EntrySearchRequest{Query: "searchfixture", CollapseSimilar: entrySearchNoCollapse()})
+	require.Equal(t, []string{"complete", "incomplete", "mine", "report"}, entrySearchIDs(response))
+	for _, result := range response.Results {
+		require.Equal(t, result.EntryID == "incomplete", result.Incomplete, result.EntryID)
+	}
+}
+
 func TestEntrySearchPostgresMergesChunksAndSummaryOnlyRoutes(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	h.add(t, "full", "article", "2026-10-01", "event", "semanticlaunch", 80)

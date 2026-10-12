@@ -72,6 +72,7 @@ function createEnvironment(locale = 'zh-CN') {
     marked: { marked: { parse: (text: string) => text, use() {} } },
     '@/api/knowledge-base': api,
     '@/stores/entry': { entryStore: () => store },
+    '@/stores/pendingCounts': { usePendingCountsStore: () => ({ total: null, refresh: async () => {} }) },
     '@/stores/ui': { useUIStore: () => uiStore },
     '@/stores/menu': { useMenuStore: () => ({}) },
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true, effectiveSpaceId: '' }) },

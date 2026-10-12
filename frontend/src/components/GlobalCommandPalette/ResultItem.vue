@@ -20,6 +20,8 @@
           {{ badge }}
         </span>
         <span v-if="sourceUnverified" class="cmdk-item__badge cmdk-item__badge--keyword">{{ t('knowledgeReview.sourceUnverified') }}</span>
+        <span v-if="acquisition === 'model_written'" class="cmdk-item__badge" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</span>
+        <span v-if="incomplete" class="cmdk-item__badge cmdk-item__badge--keyword" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</span>
         <span v-if="score != null" class="cmdk-item__score">{{ (score * 100).toFixed(0) }}%</span>
       </div>
       <div v-if="$slots.subtitle || subtitle" class="cmdk-item__subtitle">
@@ -55,6 +57,8 @@ defineProps<{
   badgeVariant?: 'vector' | 'keyword' | 'default'
   score?: number
   sourceUnverified?: boolean
+  acquisition?: string
+  incomplete?: boolean
   /** Visible hint for the ⌘N shortcut that triggers this row (N: 1-9). */
   shortcut?: number | string
 }>()

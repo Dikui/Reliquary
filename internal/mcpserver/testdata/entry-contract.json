@@ -175,6 +175,7 @@
         "article_id": "item",
         "content_type": "",
         "entities": null,
+        "incomplete": false,
         "original_url": "",
         "processing_mode": "",
         "published_at": null,

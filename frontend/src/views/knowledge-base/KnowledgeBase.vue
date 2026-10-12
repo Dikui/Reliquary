@@ -35,6 +35,8 @@ import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
+import PendingCountBadge from '@/components/PendingCountBadge.vue';
+import { usePendingCountsStore } from '@/stores/pendingCounts';
 import { CONTENT_TYPES } from '@/types/entryClassification';
 import type { ArticleJudgment } from '@/api/entry-judgments';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
@@ -50,6 +52,7 @@ import type { ParserEngineInfo } from '@/api/system';
 import { getUploadFileKey, filterUnsupportedAudioFiles } from './utils/uploadSources';
 const route = useRoute();
 const { t } = useI18n();
+const pendingCounts = usePendingCountsStore();
 const kbId = computed(() => resources.knowledgeBase?.id || '');
 const kbInfo = ref<any>(null);
 const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(null);
@@ -718,6 +721,7 @@ const confirmDeleteEntry = (index: number, item: EntryCard) => {
       if (!stillPresent) break;
       await new Promise<void>((r) => setTimeout(r, delayMs));
     }
+    await pendingCounts.refresh();
   });
 };
 
@@ -1104,6 +1108,7 @@ const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknow
 const syncArticleJudgment = (state: ArticleJudgment) => {
   syncDocumentProcessingState({ ...state });
   if (details.id === state.id) Object.assign(details, state);
+  void pendingCounts.refresh();
 };
 
 const toggleSelectRow = (id: string, checked: boolean, shiftKey?: boolean) => {
@@ -1210,10 +1215,13 @@ const openEntryItem = (item: EntryCard) => {
 };
 
 const pendingReviewsRef = ref<InstanceType<typeof PendingReviews>>();
+const handlePendingChanged = async () => {
+  await Promise.all([loadEntryFiles(kbId.value), pendingCounts.refresh()]);
+};
 const handleReviewChanged = async (_value: unknown, removed: boolean) => {
   if (removed) closeDoc();
   else if (details.id) getCardDetails({ id: details.id });
-  await Promise.all([loadEntryFiles(kbId.value), pendingReviewsRef.value?.refresh()]);
+  await Promise.all([loadEntryFiles(kbId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
 };
 
 const confirmBatchDelete = async () => {
@@ -1237,6 +1245,7 @@ const confirmBatchDelete = async () => {
         if (!stillPresent) break;
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }
+      await pendingCounts.refresh();
     } else {
       MessagePlugin.error(res?.message || t('knowledgeBase.batchDeleteFailed'));
     }
@@ -1357,7 +1366,7 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
               <t-icon name="chevron-right" class="breadcrumb-separator" />
                 <button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]" :aria-pressed="activeKbTab === 'documents'"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'reviews' }]" :aria-pressed="activeKbTab === 'reviews'" @click="activeKbTab = 'reviews'">{{ $t('knowledgeReview.title') }}</button>
+                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'reviews' }]" :aria-pressed="activeKbTab === 'reviews'" @click="activeKbTab = 'reviews'">{{ $t('knowledgeReview.title') }} <PendingCountBadge /></button>
                 <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'entities' }]" :aria-pressed="activeKbTab === 'entities'"
                     @click="activeKbTab = 'entities'">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
             </h2>
@@ -1392,7 +1401,7 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
           @open-source="openSourceDoc" />
       </div>
 
-      <PendingReviews v-if="activeKbTab === 'reviews' && kbId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="loadEntryFiles(kbId)" />
+      <PendingReviews v-if="activeKbTab === 'reviews' && kbId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
 
       <template v-if="activeKbTab === 'documents'">
         <div class="entry-main">
