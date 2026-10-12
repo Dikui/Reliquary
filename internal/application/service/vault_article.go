@@ -89,6 +89,7 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 		PublishedAt: canonicalVaultDate(source.PublishedAt), CollectedAt: k.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
 		ContentType: k.ContentType, Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason}
 	h.SourceUnverified = k.SourceUnverified
+	h.Acquisition = k.Acquisition
 	if k.SourceUnverified {
 		h.URL = ""
 	}
@@ -132,8 +133,8 @@ func vaultArticleMonth(h VaultArticleHeader, collected time.Time) string {
 	return collected.UTC().Format("2006-01")
 }
 
-// WriteArticle writes an approved article once. Reprocessing only schedules a
-// metadata refresh, so the first body bytes remain authoritative.
+// WriteArticle publishes approved material and verifies existing body bytes.
+// A completed header-only intake may publish its first body after processing.
 func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body string, read func(context.Context, string) (io.ReadCloser, error)) error {
 	if k == nil || (k.SourceKind != "" && k.SourceKind != "article") {
 		return errors.New("only articles can be written to articles/")
@@ -160,6 +161,18 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		return errors.New("article must pass intake review before vault write")
 	}
 	if k.VaultPath != "" {
+		if isIngestArticle(k) && ingestCompletionPending(k) {
+			if err := v.publishCompletedHeaderOnlyArticle(ctx, k, body, read); err != nil {
+				v.recordArticleError(ctx, k.ID, err)
+				return err
+			}
+			return nil
+		}
+		if isIngestArticle(k) && body != k.VaultBody {
+			err := errors.New("published ingest article body differs from its stored body; replacement refused")
+			v.recordArticleError(ctx, k.ID, err)
+			return err
+		}
 		v.ScheduleRefresh(ctx, k.ID)
 		return nil
 	}
@@ -182,33 +195,18 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	if k.ProcessingMode == types.ProcessingModeSummaryOnly {
 		body = ""
 	} else {
-		body, err = v.copyArticleImages(ctx, k, relative, body, read)
+		body, original, err = v.prepareArticleMaterials(ctx, k, relative, body, read)
 		if err != nil {
 			return err
-		}
-		if k.FilePath != "" {
-			if read == nil {
-				return errors.New("original file reader is unavailable")
-			}
-			file, err := read(ctx, k.FilePath)
-			if err != nil {
-				return fmt.Errorf("read original article file: %w", err)
-			}
-			original = filepath.ToSlash(filepath.Join("attachments", k.ID, vaultOriginalFileName(k.FileName)))
-			data, readErr := io.ReadAll(file)
-			file.Close()
-			if readErr != nil {
-				return readErr
-			}
-			if err = v.writeAttachment(original, data); err != nil {
-				return err
-			}
 		}
 	}
 	if err = v.atomicArticleWrite(abs, RenderVaultArticleHeader(h), []byte(body), nil); err != nil {
 		return err
 	}
 	values := map[string]any{"source_kind": "article", "vault_path": relative, "vault_body": body, "vault_original_path": original}
+	if isIngestArticle(k) {
+		values["ingest_attachments"] = k.IngestAttachments
+	}
 	if err = v.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(values).Error; err != nil {
 		_ = os.Remove(abs)
 		return err
@@ -263,6 +261,16 @@ func (v *VaultService) copyArticleImages(ctx context.Context, k *types.Entry, ar
 	stored := map[string]string{}
 	for _, item := range replacements {
 		if _, ok := stored[item.url]; ok {
+			continue
+		}
+		if isIngestArticle(k) && remoteIngestImage(item.url) {
+			stored[item.url] = item.url
+			continue
+		}
+		// A supplement may retain images already copied into this article's
+		// own attachment directory. Those bytes are already authoritative.
+		if isArticleAttachmentReference(k.ID, articlePath, item.url) {
+			stored[item.url] = item.url
 			continue
 		}
 		data, err := readVaultImage(ctx, item.url, read)
@@ -433,7 +441,8 @@ func (v *VaultService) atomicArticleWrite(abs string, header, body, previous []b
 			return err
 		}
 		_, currentBody, err := SplitVaultArticle(current)
-		if err != nil || sha256.Sum256(currentBody) != sha256.Sum256(body) {
+		_, previousBody, previousErr := SplitVaultArticle(previous)
+		if err != nil || previousErr != nil || sha256.Sum256(currentBody) != sha256.Sum256(previousBody) {
 			return errors.New("vault body changed concurrently; replacement refused")
 		}
 	}

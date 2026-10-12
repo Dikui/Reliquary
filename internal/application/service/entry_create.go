@@ -1258,6 +1258,14 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	if clean == "" {
 		return errors.New("manual article body is empty")
 	}
+	if isIngestArticle(entry) {
+		clean = content
+	}
+	if isIngestArticle(entry) {
+		if err := s.recordMissingIngestImages(ctx, entry, clean); err != nil {
+			return err
+		}
+	}
 
 	// Resolve embedded data:base64 images and remote http(s) images → storage, replace URLs.
 	// Runs before chunking so chunks contain stable provider:// URLs.
@@ -1281,25 +1289,31 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			clean = afterDataURI
 			resolvedImages = append(resolvedImages, fromDataURI...)
 		}
-		updatedContent, storedImages, resolveErr := s.imageResolver.ResolveRemoteImages(ctx, clean, fileSvc, entry.SpaceID)
-		if err := s.recordIntakeImages(ctx, entry, storedImages); err != nil {
-			entry.ParseStatus = types.ParseStatusFailed
-			return errors.New("manual article processing failed")
-		}
-		if resolveErr != nil {
-			logger.Warnf(ctx, "Remote image resolution partially failed: %v", resolveErr)
-			if intake, _ := entry.IntakeMetadata(); intake != nil {
-				entry.ParseStatus, entry.ErrorMessage, entry.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
-				_ = s.repo.UpdateEntry(ctx, entry)
+		if isIngestArticle(entry) {
+			if err := s.recordMissingIngestImages(ctx, entry, clean); err != nil {
+				return err
+			}
+		} else {
+			updatedContent, storedImages, resolveErr := s.imageResolver.ResolveRemoteImages(ctx, clean, fileSvc, entry.SpaceID)
+			if err := s.recordIntakeImages(ctx, entry, storedImages); err != nil {
+				entry.ParseStatus = types.ParseStatusFailed
 				return errors.New("manual article processing failed")
 			}
-		}
-		if updatedContent != "" {
-			clean = updatedContent
-		}
-		if len(storedImages) > 0 {
-			logger.Infof(ctx, "Resolved %d remote images for manual entry %s", len(storedImages), entry.ID)
-			resolvedImages = append(resolvedImages, storedImages...)
+			if resolveErr != nil {
+				logger.Warnf(ctx, "Remote image resolution partially failed: %v", resolveErr)
+				if intake, _ := entry.IntakeMetadata(); intake != nil {
+					entry.ParseStatus, entry.ErrorMessage, entry.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
+					_ = s.repo.UpdateEntry(ctx, entry)
+					return errors.New("manual article processing failed")
+				}
+			}
+			if updatedContent != "" {
+				clean = updatedContent
+			}
+			if len(storedImages) > 0 {
+				logger.Infof(ctx, "Resolved %d remote images for manual entry %s", len(storedImages), entry.ID)
+				resolvedImages = append(resolvedImages, storedImages...)
+			}
 		}
 		if intake, _ := entry.IntakeMetadata(); intake != nil && s.hasUnstoredArticleImages(entry, clean) {
 			entry.ParseStatus, entry.ErrorMessage, entry.UpdatedAt = types.ParseStatusFailed, "intake has unstored content images", time.Now()

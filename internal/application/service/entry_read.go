@@ -18,6 +18,7 @@ type EntryReadResult struct {
 	ProcessingMode   string             `json:"processing_mode"`
 	ParseStatus      string             `json:"parse_status"`
 	SourceUnverified bool               `json:"source_unverified"`
+	Acquisition      string             `json:"acquisition"`
 	Offset           int                `json:"offset"`
 	Length           int                `json:"length"`
 	TotalLength      int                `json:"total_length"`
@@ -53,7 +54,7 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
 	result := &EntryReadResult{Header: header, OriginalURL: header.URL,
-		ProcessingMode: entry.ProcessingMode, ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Offset: offset}
+		ProcessingMode: entry.ProcessingMode, ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
 	if entry.ProcessingMode == "summary_only" {
 		if offset > 0 {
 			return nil, werrors.NewBadRequestError("offset exceeds the stored body length")

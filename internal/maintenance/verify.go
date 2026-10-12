@@ -44,6 +44,10 @@ type Verification struct {
 }
 
 func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Manifest, error) {
+	rules, err := schemaRules(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	snapshot, err := Capture(ctx, db)
 	if err != nil {
 		return nil, err
@@ -69,7 +73,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 		if !ok {
 			entry.Regenerated = true
 		} else {
-			for column, category := range Rules[table].Columns() {
+			for column, category := range rules[table].Columns() {
 				if category != Regenerated && !secretColumn(table, column) {
 					entry.Columns = append(entry.Columns, column)
 				}

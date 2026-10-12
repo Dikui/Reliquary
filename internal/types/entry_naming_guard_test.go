@@ -19,6 +19,7 @@ type entryNamingException struct {
 }
 
 var entryNamingExceptions = map[string]entryNamingException{
+	"internal/testutil/pgtest/ingest_migration_test.go":                        {Reason: "升级保全 fixture 的嵌套历史 JSON 键须逐字保留，不能随新迁移改名", Tokens: []string{"knowledge_id"}},
 	"internal/application/service/entry_create.go":                             {Reason: "无标题来源的既有下载文件名格式，文件库名称保持不变", Tokens: []string{"Knowledge"}},
 	"internal/application/repository/retriever/postgres/summary.go":            {Reason: "检索摘要命中的既有合成 ID 前缀，保持返回结果完全一致", Tokens: []string{"knowledge"}},
 	"internal/types/entry_summary.go":                                          {Reason: "检索摘要命中的既有合成 ID 前缀，保持返回结果完全一致", Tokens: []string{"knowledge"}},

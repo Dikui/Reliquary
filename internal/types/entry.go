@@ -140,6 +140,17 @@ type Entry struct {
 	AgentSummary                string        `json:"agent_summary" gorm:"type:text;not null;default:''"`
 	AgentTags                   JSON          `json:"agent_tags" gorm:"type:jsonb;not null"`
 	SourceName                  string        `json:"source_name" gorm:"type:text;not null;default:''"`
+	Acquisition                 string        `json:"acquisition" gorm:"type:varchar(16);not null;default:''"`
+	Incomplete                  bool          `json:"incomplete" gorm:"not null;default:false"`
+	ExternalCompletionAttempted bool          `json:"external_completion_attempted" gorm:"not null;default:false"`
+	IngestAPIKeyID              uint64        `json:"ingest_api_key_id" gorm:"not null;default:0"`
+	IngestAPIKeyName            string        `json:"ingest_api_key_name" gorm:"type:text;not null;default:''"`
+	LastIngestAPIKeyID          uint64        `json:"last_ingest_api_key_id" gorm:"not null;default:0"`
+	LastIngestAPIKeyName        string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
+	MissingMaterials            JSON          `json:"missing_materials" gorm:"type:jsonb;not null"`
+	IngestAttachments           JSON          `json:"ingest_attachments" gorm:"type:jsonb;not null"`
+	ContentTypeHint             string        `json:"content_type_hint" gorm:"type:varchar(16);not null;default:''"`
+	RelatedArticleID            string        `json:"related_article_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	StructuredSummary           *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
 	Entities                    []Entity      `json:"entities" gorm:"-"`
 	Topics                      []Topic       `json:"topics" gorm:"-"`
@@ -260,7 +271,54 @@ func (k *Entry) BeforeCreate(tx *gorm.DB) (err error) {
 	if len(k.AgentTags) == 0 {
 		k.AgentTags = JSON(`[]`)
 	}
+	if len(k.MissingMaterials) == 0 {
+		k.MissingMaterials = JSON(`[]`)
+	}
+	if len(k.IngestAttachments) == 0 {
+		k.IngestAttachments = JSON(`[]`)
+	}
 	return nil
+}
+
+func (k *Entry) IngestMissing() []IngestMissing {
+	items := []IngestMissing{}
+	if k != nil && len(k.MissingMaterials) != 0 {
+		_ = json.Unmarshal(k.MissingMaterials, &items)
+	}
+	if items == nil {
+		items = []IngestMissing{}
+	}
+	return items
+}
+func (k *Entry) SetIngestMissing(items []IngestMissing) error {
+	if items == nil {
+		items = []IngestMissing{}
+	}
+	data, err := json.Marshal(items)
+	if err == nil {
+		k.MissingMaterials = JSON(data)
+	}
+	return err
+}
+func (k *Entry) IngestAttachmentRecords() []IngestAttachment {
+	items := []IngestAttachment{}
+	if k != nil && len(k.IngestAttachments) != 0 {
+		_ = json.Unmarshal(k.IngestAttachments, &items)
+	}
+	if items == nil {
+		items = []IngestAttachment{}
+	}
+	return items
+}
+func (k *Entry) SetIngestAttachments(items []IngestAttachment) error {
+	if items == nil {
+		items = []IngestAttachment{}
+	}
+	data, err := json.Marshal(items)
+	if err == nil {
+		k.IngestAttachments = JSON(data)
+	}
+	return err
 }
 
 // ManualEntryMetadata stores metadata for manual Markdown entry content.

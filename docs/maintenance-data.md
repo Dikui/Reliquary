@@ -1,10 +1,12 @@
 # 数据归属与文件库恢复格式
 
-所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、968 列，其中 public 44 张表、523 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。下表列出 public 的 44 张表。
+所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 84 张表、995 列，其中 public 46 张表、550 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。下表列出 public 的 46 张表。
 
 维护副本与核对清单的 `format_version` 为 3，表名使用 `spaces`、`api_keys`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`entry_id`、`entry_ids`。导入及核对接受版本 1 和 2：版本 1 先映射个人空间表及归属列，两个旧版本都将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 3，完成清单原子替换后才移除旧表文件。文章摘要向量 `article_embeddings` 不包含用户文档和整理结果，因此保留表名，仅外键列改为 `entry_id`。
 
-个人空间命名迁移仅改名和重建引用旧列的函数及 BM25 索引，分类数量不变。迁移后的真实 PostgreSQL 目录核对仍为上述 82 张表、968 列，见 [命名清理证据](tasks/naming-02/evidence/schema-statistics.json)。
+个人空间命名迁移仅改名和重建引用旧列的函数及 BM25 索引，分类数量不变，当时的目录为 82 张表、968 列，见 [命名清理证据](tasks/naming-02/evidence/schema-statistics.json)。迁移 `000004_ingest_only` 新增 2 张表与 27 列，当前目录为上述 84 张表、995 列。
+
+离线维护按数据库记录的迁移版本选择归属清单。版本 0 至 3 使用 `000004` 之前的严格列集合，仍核对未知表与未知列；不会为了读取新增字段而升级旧数据库，也不更改旧迁移历史。旧命名适配仍只在同一事务内临时转换并恢复，版本 4 使用当前完整清单。
 
 | 表 | 在表头 | 在 `.reliquary/` | 可重新生成 | 属于配置或密钥 |
 | --- | --- | --- | --- | --- |
@@ -27,15 +29,17 @@
 | `follow_feed_states` | 无 | `space_id`、`last_viewed_at` | 无 | 无 |
 | `follows` | 无 | `space_id`、`target_type`、`target_id`、`created_at` | `entity_id`、`topic_id` | 无 |
 | `image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`knowledge_base_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
+| `ingest_assets` | 无 | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 |
+| `ingest_discards` | 无 | `space_id`、`normalized_url`、`article_id`、`discarded_at`、`reason` | 无 | 无 |
 | `knowledge_bases` | 无 | 无 | 无 | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id` |
 | `entry_entities` | 无 | `space_id`、`entry_id`、`entity_id`、`created_at` | 无 | 无 |
 | `entry_processing_spans` | 无 | `id`、`entry_id`、`attempt`、`span_id`、`parent_span_id`、`name`、`kind`、`status`、`input`、`output`、`metadata`、`error_code`、`error_message`、`error_detail`、`started_at`、`finished_at`、`duration_ms`、`created_at`、`updated_at` | 无 | 无 |
 | `entry_repost_sources` | 无 | `id`、`space_id`、`knowledge_base_id`、`entry_id`、`original_url`、`normalized_url`、`source_fingerprint`、`author`、`publisher`、`published_at`、`published_at_missing`、`match_method`、`sim_hash_distance`、`created_at` | 无 | 无 |
 | `entry_topics` | 无 | `space_id`、`entry_id`、`topic_id`、`source`、`is_historical`、`created_at` | 无 | 无 |
-| `entries` | `title`、`content_type`、`source_unverified`、`starred`、`collect_reason`、`structured_summary`、`created_at` | `id`、`space_id`、`knowledge_base_id`、`type`、`description`、`content_type_uncertain`、`processing_review_status`、`processing_review_content_type`、`processing_review_reason`、`processing_mode`、`source_kind`、`vault_path`、`vault_body`、`vault_original_path`、`agent_summary`、`agent_tags`、`source_name`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`storage_size`、`metadata`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count` | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
+| `entries` | `title`、`content_type`、`source_unverified`、`starred`、`collect_reason`、`structured_summary`、`created_at`、`acquisition` | `id`、`space_id`、`knowledge_base_id`、`type`、`description`、`content_type_uncertain`、`processing_review_status`、`processing_review_content_type`、`processing_review_reason`、`processing_mode`、`source_kind`、`vault_path`、`vault_body`、`vault_original_path`、`agent_summary`、`agent_tags`、`source_name`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`storage_size`、`metadata`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count`、`incomplete`、`external_completion_attempted`、`ingest_api_key_id`、`ingest_api_key_name`、`last_ingest_api_key_id`、`last_ingest_api_key_name`、`missing_materials`、`ingest_attachments`、`content_type_hint`、`related_article_id` | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
 | `maintenance_state` | 无 | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error` | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | `backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` |
 | `models` | 无 | 无 | 无 | `id`、`space_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` |
-| `operation_logs` | 无 | `id`、`space_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at` | 无 | 无 |
+| `operation_logs` | 无 | `id`、`space_id`、`actor`、`api_key_id`、`api_key_name`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at` | 无 | 无 |
 | `resource_access_grants` | 无 | `id`、`resource_id`、`access_scope`、`expires_at`、`revoked_at`、`created_at` | 无 | `token_hash` |
 | `resource_bindings` | 无 | `id`、`resource_id`、`space_id`、`owner_type`、`owner_id`、`relation`、`created_at` | 无 | 无 |
 | `resources` | 无 | `id`、`handle`、`space_id`、`provider`、`physical_path`、`location_hash`、`kind`、`mime_type`、`original_name`、`size`、`content_hash`、`lifecycle`、`expires_at`、`state`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 |
@@ -144,7 +148,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 | `topology.layer` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | `topology.topology` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 
-扩展目录完整性测试遍历全部非系统表和列，验证 82 张表、968 列都有四类归属；另外验证未知 schema 表、零列表、新列、缺列、改变扩展拥有者、同列物化视图替换，以及各类非默认扩展内容都会失败，失败后原始行不变。扩展默认行不进入应用副本导入事务，新环境由固定版本镜像的扩展安装重新建立，再按同一清单核对。
+扩展目录完整性测试遍历全部非系统表和列，验证 84 张表、995 列都有四类归属；另外验证未知 schema 表、零列表、新列、缺列、改变扩展拥有者、同列物化视图替换，以及各类非默认扩展内容都会失败，失败后原始行不变。扩展默认行不进入应用副本导入事务，新环境由固定版本镜像的扩展安装重新建立，再按同一清单核对。
 
 表头中的文章 ID 同时作为副本各表的关联主键保存。文章 `metadata` 中的来源作者、发布者、发布时间也出现在表头，但原始的收录字段整体保留在副本，避免改写原始来源格式和精度。表头字段在副本中保留一份确定的核对值，导入时检查两份值一致。
 
@@ -202,3 +206,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 待填字段名同时保存在 manifest.json 与 config/required_credentials.json，冗余文件内记录规范清单 SHA256，外层 manifest 也记录其文件哈希。主 manifest 损坏而冗余文件有效时，verify --repair 可恢复主清单并保留尚未填写的解析器字段名。两个副本都损坏、数据库又无法推断原缺失字段时，程序拒绝覆盖坏原件，要求从备份恢复清单。旧格式没有冗余文件且原数据库仍含解析器凭据时，可从当前数据库字段重新生成；清单始终只保存字段名，不保存任何凭据值。
 
 维护期间真实 ChatGPT 模型试调用会消耗实际配额，不撤销消耗。配额行有变化时追加 actor=maintenance、operation_type=maintenance_model_probe、object_id=模型 ID 的操作日志，before_value 与 after_value 分别保存完整安全 chatgpt_policy 行数组，原来没有行时保存空数组。默认核对仍拒绝配额变化；仅 --allow-reconfiguration-append 按日志时间顺序核对完整审计链，第一份 before 必须等于旧完整行，下一份 before 必须等于上一份 after，最后 after 必须等于当前完整行。id、daily_limit、fallback_model_id 始终保持旧配置，原无配额行时只接受默认的无限制及空备用模型配置；只有 day、daily_used、paused、reason、retry_at、updated_at 可沿真实试调用的记录变化。旧日志逐行保持，缺审计、缺一条记录、不连续、字段不完整、模型或 actor 不符、日限及备用模型改变均拒绝核对，不用恢复备份清零实际调用消耗。
+
+收录附件与丢弃记录属于不可再生业务数据。未引用附件的文件随现有上传资源镜像保留，`ingest_assets` 的引用归属与过期时间进入副本并恢复；24 小时清理任务属于 `task_jobs`，按已有未完成任务恢复规则续跑。被引用附件的文章文件与本地附件按文件哈希保全。`ingest_discards` 保留规范化链接、原文章 ID、丢弃时间与原因，即使原文章已删除，重建之后仍能阻止再次收录。
+
+获取方式 `entries.acquisition` 写入文章表头并保留副本核对值；待补全状态、缺失材料的原地址与原因、提交 Key 的 ID 与名称、提交时间、外部补全尝试状态、附件清单、关联待审文章 ID 与类型参考全部进入副本。操作日志的 Key ID 与名称为调用方身份快照，保留历史名称，不包含认证 Key 或其哈希。原 API Key 的凭据仍按既有规则排除。

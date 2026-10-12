@@ -215,7 +215,18 @@ func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
 	// row could leave a "file missing but row present" zombie that can neither be
 	// reparsed nor cleanly re-deleted (issue #2192). Orphaning a file after the
 	// row is gone is the tolerable failure mode instead.
+	if err := s.rememberIngestDiscard(ctx, entry, ingestDiscardReason(ctx)); err != nil {
+		return err
+	}
+	if s.db != nil && entry.SourceKind == "article" {
+		if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_discard", id, map[string]any{"url": entry.Source, "missing": entry.IngestMissing()}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+			return err
+		}
+	}
 	if err := deleteEntryAssociations(ctx, s.db, spaceID, []string{id}); err != nil {
+		return err
+	}
+	if err := s.releaseIngestArticleAssets(ctx, id); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteEntry(ctx, spaceID, id); err != nil {
@@ -430,13 +441,26 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 	// only orphans storage.
 	deleteRows := func(svc *entryService) error {
 		for _, entry := range entryList {
+			if err := svc.rememberIngestDiscard(ctx, entry, "用户丢弃"); err != nil {
+				return err
+			}
+			if svc.db != nil && entry.SourceKind == "article" {
+				if intake, _ := entry.IntakeMetadata(); intake == nil || intake.Decision != "rejected" {
+					if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "ingest_discard", entry.ID, map[string]any{"url": entry.Source, "missing": entry.IngestMissing()}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+						return err
+					}
+				}
+			}
 			if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
 				if svc.db == nil {
 					continue
 				}
-				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", entry.ID, intake, nil); err != nil {
+				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", entry.ID, intake, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
 					return err
 				}
+			}
+			if err := svc.releaseIngestArticleAssets(ctx, entry.ID); err != nil {
+				return err
 			}
 		}
 		if err := deleteEntryAssociations(ctx, svc.db, spaceInfo.ID, ids); err != nil {

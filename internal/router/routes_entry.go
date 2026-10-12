@@ -24,6 +24,11 @@ func RegisterChunkRoutes(r *gin.RouterGroup, handler *handler.ChunkHandler, g *a
 
 func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *accessGuards) {
 	r.POST("/ingest", handler.Ingest)
+	r.POST("/ingest/check", handler.CheckIngestURLs)
+	r.POST("/ingest/assets", handler.UploadIngestAsset)
+	r.GET("/ingest/incomplete", handler.ListIncomplete)
+	r.POST("/ingest/:id/accept-incomplete", g.KBExistsFromEntryIDParam("id"), handler.AcceptIncomplete)
+	r.POST("/ingest/:id/discard", g.KBExistsFromEntryIDParam("id"), handler.DiscardIngest)
 	kb := r.Group("/knowledge-bases/:id/entries")
 	kbRead := kb
 	{

@@ -25,29 +25,31 @@ import (
 
 var _ interfaces.IngestService = (*entryService)(nil)
 
-// Ingest stores deliberate collection with the same deduplication and asynchronous
-// article processing used by other entry points. Source URLs are provenance only;
-// fetching is limited to image URLs through the existing SSRF protected resolver.
-func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest) (*types.IngestResult, error) {
-	if s.needsTaskTransaction() {
-		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestResult, error) {
-			return copy.Ingest(ctx, request)
-		})
-	}
-
+// Ingest never retrieves source material from a URL. Supplied bytes are parsed
+// locally, then reviewed and processed by the existing article pipeline.
+func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest) (result *types.IngestResult, err error) {
 	if err := validateIngestRequest(request); err != nil {
 		return nil, err
 	}
-	spaceID, ok := types.SpaceIDFromContext(ctx)
-	if !ok || spaceID == 0 {
-		return nil, werrors.NewUnauthorizedError("personal space is required")
+	if s.needsTaskTransaction() {
+		changes := &ingestFileChanges{}
+		ctx = context.WithValue(ctx, ingestFileChangesKey{}, changes)
+		result, err = entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestResult, error) { return copy.Ingest(ctx, request) })
+		if err != nil {
+			err = errors.Join(err, changes.rollback(s.vault))
+		} else {
+			if result != nil && (result.Status == "exists" || result.Status == "discarded") {
+				err = changes.removeUnusedStoredFiles()
+			}
+			err = errors.Join(err, changes.finish())
+		}
+		return result, err
 	}
-	if _, ok := types.PrincipalFromContext(ctx); !ok {
-		return nil, werrors.NewUnauthorizedError("authenticated collector required")
+	ctx, keyID, keyName, err := s.ingestIdentity(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if s.db == nil {
-		return nil, werrors.NewInternalServerError("ingest database is unavailable")
-	}
+	spaceID, _ := types.SpaceIDFromContext(ctx)
 	kb, err := s.kbService.GetKnowledgeBase(ctx)
 	if err != nil {
 		return nil, err
@@ -60,232 +62,292 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if title == "" {
 		title = strings.TrimSpace(request.URL)
 	}
-	// A source URL may exceed the title column while remaining valid provenance.
+	if title == "" {
+		title = "待审文章"
+	}
 	if len([]rune(title)) > 255 {
 		title = string([]rune(title)[:255])
 	}
-	annotationTags := request.AgentTags
-	if annotationTags == nil {
-		annotationTags = []string{}
+	tags := request.AgentTags
+	if tags == nil {
+		tags = []string{}
 	}
-	tags, err := json.Marshal(annotationTags)
-	if err != nil {
-		return nil, err
-	}
+	tagJSON, _ := json.Marshal(tags)
 	article := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, KnowledgeBaseID: kb.ID,
 		Type: types.EntryTypeManual, SourceKind: "article", Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual,
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
 		EmbeddingModelID: kb.EmbeddingModelID, CollectReason: strings.TrimSpace(request.CollectReason),
-		AgentSummary: request.AgentSummary, AgentTags: types.JSON(tags), SourceName: request.SourceName}
+		AgentSummary: request.AgentSummary, AgentTags: types.JSON(tagJSON), SourceName: request.SourceName,
+		Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint,
+		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName}
 	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "pending", SourceInfo: types.SourceInfo{
 		OriginalURL: article.Source, Author: request.Author, Publisher: request.Publisher,
 		PublishedAt: normalizeIntakePublicationDate(request.PublishedAt)}}
 	if err := article.SetIntakeMetadata(intake); err != nil {
 		return nil, err
 	}
-	// Stable source references make content fingerprints independent of generated
-	// storage filenames. The worker receives only successfully stored references.
-	canonicalRefs := make([]string, len(request.Images))
-	for i, image := range request.Images {
-		canonicalRefs[i] = ingestCanonicalImageReference(image)
+	setMessageFingerprint(article, "")
+	// Hold the existing collection lock through lookup, byte storage and enqueue.
+	// Concurrent deliveries and supplements therefore commit one mutation.
+	if err := lockMessageDeduplication(s.db.WithContext(ctx), article); err != nil {
+		return nil, err
 	}
-	canonicalBody := assembleIngestBody(request, canonicalRefs)
+	if discarded, err := s.lookupIngestDiscard(ctx, article.NormalizedURL); err != nil {
+		return nil, err
+	} else if discarded != nil {
+		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
+	}
+	if existing, err := s.findIngestURL(ctx, article.NormalizedURL, true); err != nil {
+		return nil, err
+	} else if existing != nil {
+		if existing.Incomplete || ingestMissingContentPending(existing) {
+			return s.supplementIngest(ctx, kb, existing, request, keyID, keyName)
+		}
+		if _, err := recordIngestDuplicate(ctx, s.db, existing, article, "url", 0); err != nil {
+			return nil, err
+		}
+		if s.vault != nil {
+			s.vault.ScheduleRefresh(ctx, existing.ID)
+		}
+		return ingestResult(existing, "exists", "该文章已收录。", "", ""), nil
+	}
+	if strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" && (request.File == nil || (request.File.AssetID == "" && request.File.Data == "")) && !hasIngestMissing(request.Missing, "content", "") {
+		return nil, werrors.NewBadRequestError("missing content requires a missing item explaining the reason")
+	}
+	body, canonicalBody, err := s.storeIngestMaterials(ctx, kb, article, request)
+	if err != nil {
+		return nil, err
+	}
+	intake, _ = article.IntakeMetadata()
+	if err := extractIntakeOriginalLink(article, body, nil, article.FileType, nil); err != nil {
+		return nil, err
+	}
+	intake, _ = article.IntakeMetadata()
 	setMessageFingerprint(article, canonicalBody)
-	result := &types.IngestResult{ImageFailures: []types.IngestImageFailure{}}
-	var duplicate *types.Entry
-	var refresh bool
-	// Avoid image downloads when the normalized URL or body is already collected.
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockMessageDeduplication(tx, article); err != nil {
-			return err
-		}
-		var method string
-		var distance int
-		duplicate, method, distance, err = findMessageDuplicate(tx, article)
-		if err != nil || duplicate == nil {
-			return err
-		}
-		refresh, err = recordIngestDuplicate(ctx, tx, duplicate, article, method, distance)
-		return err
-	})
+	// Source evidence extracted from a supplied file also participates in lookup.
+	if discarded, err := s.lookupIngestDiscard(ctx, article.NormalizedURL); err != nil {
+		return nil, err
+	} else if discarded != nil {
+		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
+	}
+	duplicate, method, distance, err := findMessageDuplicate(s.db.WithContext(ctx), article)
 	if err != nil {
 		return nil, err
 	}
 	if duplicate != nil {
-		if refresh && s.vault != nil {
-			s.vault.ScheduleRefresh(ctx, duplicate.ID)
-		}
-		result.EntryID, result.Status, result.Message = duplicate.ID, "exists", "已存在"
-		return result, nil
-	}
-	fileSvc := s.resolveFileService(ctx, kb)
-	refs, stored, failures := s.resolveIngestImages(ctx, request.Images, fileSvc, spaceID)
-	result.ImageFailures = failures
-	body := assembleIngestBody(request, refs)
-	// Failed images and their descriptions are absent from the immutable body,
-	// so reserve the fingerprint of the successfully collected content as well.
-	for i, ref := range refs {
-		if ref == "" {
-			canonicalRefs[i] = ""
-		}
-	}
-	setMessageFingerprint(article, assembleIngestBody(request, canonicalRefs))
-	cleanup := func() error {
-		for _, image := range stored {
-			if strings.HasPrefix(image.ServingURL, "http://") || strings.HasPrefix(image.ServingURL, "https://") {
-				continue
-			}
-			if err := fileSvc.DeleteFile(ctx, image.ServingURL); err != nil {
-				return err
-			}
-		}
-		if intake.OriginalPath != "" {
-			return fileSvc.DeleteFile(ctx, intake.OriginalPath)
-		}
-		return nil
-	}
-	intake.OriginalPath, err = fileSvc.SaveBytes(ctx, []byte(body), spaceID, article.ID+".md", false)
-	if err != nil {
-		if cleanupErr := cleanup(); cleanupErr != nil {
-			return nil, fmt.Errorf("save ingest body: %v; cleanup: %w", err, cleanupErr)
-		}
-		return nil, err
-	}
-	for _, image := range stored {
-		intake.Images = append(intake.Images, image.ServingURL)
-	}
-	if err := article.SetIntakeMetadata(intake); err != nil {
-		_ = cleanup()
-		return nil, err
-	}
-	meta := types.NewManualEntryMetadata("", types.ManualEntryStatusPublish, 1)
-	if err := article.SetManualMetadata(meta); err != nil {
-		_ = cleanup()
-		return nil, err
-	}
-	// Recheck under the same lock as creation. Concurrent deliveries cannot reserve
-	// multiple articles, and the operation log commits with collection or reason fill.
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockMessageDeduplication(tx, article); err != nil {
-			return err
-		}
-		var method string
-		var distance int
-		duplicate, method, distance, err = findMessageDuplicate(tx, article)
-		if err != nil {
-			return err
-		}
-		if duplicate != nil {
-			refresh, err = recordIngestDuplicate(ctx, tx, duplicate, article, method, distance)
-			return err
-		}
-		if err := tx.Create(article).Error; err != nil {
-			return err
-		}
-		return NewOperationLogService(tx).RecordTx(ctx, tx, "ingest", article.ID, nil, map[string]any{
-			"url": article.Source, "status": "pending", "collect_reason": article.CollectReason, "source_name": article.SourceName})
-	})
-	if err != nil || duplicate != nil {
-		if cleanupErr := cleanup(); cleanupErr != nil {
-			return nil, cleanupErr
-		}
-		if err != nil {
+		if _, err := recordIngestDuplicate(ctx, s.db, duplicate, article, method, distance); err != nil {
 			return nil, err
 		}
-		if refresh && s.vault != nil {
+		if s.vault != nil {
 			s.vault.ScheduleRefresh(ctx, duplicate.ID)
 		}
-		result.EntryID, result.Status, result.Message = duplicate.ID, "exists", "已存在"
-		return result, nil
+		return ingestResult(duplicate, "exists", "该文章已收录。", "", ""), nil
+	}
+	if err := article.SetManualMetadata(types.NewManualEntryMetadata("", types.ManualEntryStatusPublish, 1)); err != nil {
+		return nil, err
+	}
+	missingContent := !hasIngestBody(request, body) || hasIngestMissing(article.IngestMissing(), "content", "")
+	if missingContent {
+		intake.Decision, intake.Reason = "rejected", "正文缺失"
+		article.ParseStatus = types.ParseStatusRejected
+		article.Incomplete = true
+		if err := article.SetIntakeMetadata(intake); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.db.WithContext(ctx).Create(article).Error; err != nil {
+		return nil, err
+	}
+	if err := s.referenceIngestMaterials(ctx, article, request); err != nil {
+		return nil, err
+	}
+	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", article.ID, nil, map[string]any{
+		"url": article.Source, "acquisition": article.Acquisition, "collect_reason": article.CollectReason, "missing": article.IngestMissing()}); err != nil {
+		return nil, err
 	}
 	s.bindContentResources(ctx, spaceID, article.ID, body)
-	rejected, err := s.reviewIntake(ctx, kb, article, body)
-	var deferred *types.ChatGPTDeferredError
-	var processOptions []taskqueue.Option
-	if err != nil {
-		s.markArticleProcessingFailed(ctx, article, err)
-		if !errors.As(err, &deferred) {
-			s.failIntake(ctx, article)
-			return nil, err
+	if missingContent {
+		return ingestResult(article, "pending_review", "正文缺失，已保存到收录待审。", intake.Reason, ""), nil
+	}
+	return s.finishIngestReview(ctx, kb, article, body)
+}
+
+func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBatchRequest) (*types.IngestBatchResult, error) {
+	if request == nil || len(request.Items) < 1 || len(request.Items) > 50 {
+		return nil, werrors.NewBadRequestError("items must contain between 1 and 50 entries")
+	}
+	if _, _, _, err := s.ingestIdentity(ctx); err != nil {
+		return nil, err
+	}
+	var total int64
+	for _, item := range request.Items {
+		total += ingestInlineSize(item.File, item.Images)
+	}
+	if total > types.MaxIngestInlineRequestBytes {
+		return nil, werrors.NewBadRequestError("inline files exceed the 20 MiB request limit")
+	}
+	result := &types.IngestBatchResult{Items: make([]types.IngestResult, 0, len(request.Items))}
+	for i := range request.Items {
+		item, err := s.Ingest(ctx, &request.Items[i])
+		if err != nil {
+			var app *werrors.AppError
+			reason := "内部处理失败"
+			message := "该条目收录失败，请稍后重试。"
+			if errors.As(err, &app) && app.HTTPCode == http.StatusBadRequest {
+				reason = app.Message
+				message = "该条目无效，请检查获取方式、材料和缺失说明后重试。"
+			}
+			item = ingestResult(nil, "invalid", message, reason, "")
 		}
-		// Collection has committed. Keep its unreviewed original and let the
-		// worker repeat the same review after the generation pause.
-		processOptions = append(processOptions, taskqueue.ProcessAt(deferred.RetryAt))
-	}
-	if rejected {
-		intake, _ = article.IntakeMetadata()
-		result.EntryID, result.Status, result.Message, result.Reason = article.ID, "pending_review", "等待收录审核", intake.Reason
-		return result, nil
-	}
-	if _, err := s.enqueueManualProcessing(ctx, article, body, false, processOptions...); err != nil {
-		s.markEntryEnqueueFailed(ctx, article)
-		result.EntryID, result.Status, result.Message = article.ID, types.ParseStatusFailed, "处理入队失败"
-		return result, nil
-	}
-	result.EntryID, result.Status, result.Message = article.ID, types.ParseStatusPending, "已收录，正在处理"
-	if deferred != nil {
-		result.Message = "已收录，等待模型恢复后处理"
+		item.Index = i
+		result.Items = append(result.Items, *item)
 	}
 	return result, nil
+}
+
+func (s *entryService) finishIngestReview(ctx context.Context, kb *types.KnowledgeBase, article *types.Entry, body string) (*types.IngestResult, error) {
+	rejected, err := s.reviewIntake(ctx, kb, article, body)
+	var deferred *types.ChatGPTDeferredError
+	var options []taskqueue.Option
+	if err != nil {
+		if !errors.As(err, &deferred) {
+			return nil, err
+		}
+		s.markArticleProcessingFailed(ctx, article, err)
+		options = append(options, taskqueue.ProcessAt(deferred.RetryAt))
+	}
+	if rejected {
+		intake, _ := article.IntakeMetadata()
+		return ingestResult(article, "pending_review", "已保存，等待收录审核。", intake.Reason, ""), nil
+	}
+	if _, err := s.enqueueManualProcessing(ctx, article, body, false, options...); err != nil {
+		return nil, err
+	}
+	return ingestResult(article, "accepted", "已收录，正在处理。", "", ""), nil
+}
+
+func ingestResult(article *types.Entry, status, message, reason, id string) *types.IngestResult {
+	result := &types.IngestResult{EntryID: id, Status: status, Message: message, Reason: reason, Completeness: []types.IngestMissing{}, ImageFailures: []types.IngestImageFailure{}}
+	if article != nil {
+		result.EntryID = article.ID
+		if article.Incomplete {
+			result.Completeness = article.IngestMissing()
+		}
+	}
+	if result.Completeness == nil {
+		result.Completeness = []types.IngestMissing{}
+	}
+	return result
 }
 
 func recordIngestDuplicate(ctx context.Context, tx *gorm.DB, existing, incoming *types.Entry, method string, distance int) (bool, error) {
 	if err := recordMessageRepost(tx, existing, incoming, method, distance); err != nil {
 		return false, err
 	}
-	// The deduplication lock serializes collection; the row lock also protects
-	// concurrent user edits and processing updates to this article.
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", existing.SpaceID, existing.ID).First(existing).Error; err != nil {
 		return false, err
 	}
 	before := existing.CollectReason
 	filled := strings.TrimSpace(before) == "" && incoming.CollectReason != ""
+	updates := map[string]any{"last_ingest_api_key_id": incoming.LastIngestAPIKeyID, "last_ingest_api_key_name": incoming.LastIngestAPIKeyName, "updated_at": time.Now()}
 	if filled {
-		if err := tx.Model(existing).Updates(map[string]any{"collect_reason": incoming.CollectReason, "updated_at": time.Now()}).Error; err != nil {
-			return false, err
-		}
+		updates["collect_reason"] = incoming.CollectReason
+		existing.CollectReason = incoming.CollectReason
+	}
+	if err := tx.Model(existing).Updates(updates).Error; err != nil {
+		return false, err
 	}
 	err := NewOperationLogService(tx).RecordTx(ctx, tx, "ingest", existing.ID,
-		map[string]any{"collect_reason": before}, map[string]any{"url": incoming.Source, "status": "exists", "collect_reason": existing.CollectReason, "source_name": incoming.SourceName})
+		map[string]any{"collect_reason": before}, map[string]any{"url": incoming.Source, "status": "exists", "collect_reason": existing.CollectReason})
 	return filled, err
 }
 
 func validateIngestRequest(request *types.IngestRequest) error {
-	if request == nil || strings.TrimSpace(request.URL) == "" || strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" {
-		return werrors.NewBadRequestError("url and content are required")
+	bad := func(message string) error { return werrors.NewBadRequestError(message) }
+	if request == nil {
+		return bad("item is required")
 	}
-	if !validIngestURL(strings.TrimSpace(request.URL)) || len(request.URL) > 2048 {
-		return werrors.NewBadRequestError("url must be an absolute HTTP or HTTPS URL of at most 2048 bytes")
+	if request.InputError != "" {
+		return bad(request.InputError)
+	}
+	if request.Acquisition != "verbatim" && request.Acquisition != "extracted" && request.Acquisition != "model_written" {
+		return bad("acquisition must be verbatim, extracted or model_written")
+	}
+	if request.URL != "" && (!validIngestURL(strings.TrimSpace(request.URL)) || len(request.URL) > 2048) {
+		return bad("url must be an absolute HTTP or HTTPS URL of at most 2048 bytes")
 	}
 	if len([]rune(request.Content)) > manualContentMaxLength {
-		return werrors.NewBadRequestError("content exceeds 200000 characters")
+		return bad("content exceeds 200000 characters")
 	}
 	if len([]rune(strings.TrimSpace(request.Title))) > 255 {
-		return werrors.NewBadRequestError("title exceeds 255 characters")
+		return bad("title exceeds 255 characters")
+	}
+	if request.ContentTypeHint != "" && types.NormalizeContentType(request.ContentTypeHint) == "" {
+		return bad("invalid content_type_hint")
 	}
 	if len(request.Images) > 100 {
-		return werrors.NewBadRequestError("images supports at most 100 items")
+		return bad("images supports at most 100 items")
+	}
+	for i, missing := range request.Missing {
+		if missing.Type != "content" && missing.Type != "file" && missing.Type != "image" {
+			return bad(fmt.Sprintf("missing[%d] has an invalid type", i))
+		}
+		if strings.TrimSpace(missing.Reason) == "" {
+			return bad(fmt.Sprintf("missing[%d].reason is required", i))
+		}
+		if missing.SourceURL != "" && !validIngestURL(missing.SourceURL) {
+			return bad(fmt.Sprintf("missing[%d].source_url must be an HTTP or HTTPS URL", i))
+		}
+	}
+	if validIngestURL(strings.TrimSpace(request.Content)) && !hasIngestMissing(request.Missing, "content", "") {
+		return bad("content link requires a corresponding missing explanation")
+	}
+
+	if request.File != nil {
+		file := request.File
+		if file.AssetID != "" && file.Data != "" {
+			return bad("file requires one of asset_id or data")
+		}
+		if file.AssetID == "" && file.Data == "" && !hasIngestMissing(request.Missing, "file", file.SourceURL) {
+			return bad("file link requires a corresponding missing explanation")
+		}
+		if file.Data != "" {
+			if _, err := decodeIngestInline(file.Data); err != nil {
+				return bad(err.Error())
+			}
+		}
 	}
 	for i, image := range request.Images {
-		if (strings.TrimSpace(image.URL) == "") == (strings.TrimSpace(image.Data) == "") {
-			return werrors.NewBadRequestError(fmt.Sprintf("images[%d] requires exactly one of url or data", i))
+		if image.AssetID != "" && image.Data != "" {
+			return bad(fmt.Sprintf("images[%d] requires one of asset_id or data", i))
 		}
-		if image.URL != "" && !validIngestURL(image.URL) {
-			return werrors.NewBadRequestError(fmt.Sprintf("images[%d].url must be an absolute HTTP or HTTPS URL", i))
+		if image.AssetID == "" && image.Data == "" {
+			source := ingestImageSource(image)
+			if source == "" || !validIngestURL(source) || !hasIngestMissing(request.Missing, "image", source) {
+				return bad(fmt.Sprintf("images[%d] link requires a corresponding missing explanation", i))
+			}
+		}
+		if image.Data != "" {
+			if _, err := decodeIngestInline(image.Data); err != nil {
+				return bad(err.Error())
+			}
+		}
+		if image.SourceURL != "" && !validIngestURL(image.SourceURL) {
+			return bad(fmt.Sprintf("images[%d].source_url is invalid", i))
 		}
 	}
 	for i, item := range request.Thread {
 		if strings.TrimSpace(item.Content) == "" {
-			return werrors.NewBadRequestError(fmt.Sprintf("thread[%d].content is required", i))
+			return bad(fmt.Sprintf("thread[%d].content is required", i))
 		}
 	}
 	for i, quote := range request.Quotes {
 		if strings.TrimSpace(quote.Content) == "" {
-			return werrors.NewBadRequestError(fmt.Sprintf("quotes[%d].content is required", i))
+			return bad(fmt.Sprintf("quotes[%d].content is required", i))
 		}
 		if quote.URL != "" && !validIngestURL(quote.URL) {
-			return werrors.NewBadRequestError(fmt.Sprintf("quotes[%d].url must be an absolute HTTP or HTTPS URL", i))
+			return bad(fmt.Sprintf("quotes[%d].url must be an HTTP or HTTPS URL", i))
 		}
 	}
 	return nil
@@ -296,33 +358,34 @@ func validIngestURL(raw string) bool {
 	return err == nil && u.Hostname() != "" && u.User == nil && (u.Scheme == "http" || u.Scheme == "https") && !strings.ContainsAny(raw, "\r\n\t")
 }
 
+func ingestImageSource(image types.IngestImage) string {
+	if image.SourceURL != "" {
+		return image.SourceURL
+	}
+	return image.URL
+}
+
+// A remote image is retained as provenance and never handed to a downloader.
 func (s *entryService) resolveIngestImages(ctx context.Context, input []types.IngestImage, files interfaces.FileService, spaceID uint64) ([]string, []docparser.StoredImage, []types.IngestImageFailure) {
 	refs := make([]string, len(input))
 	stored := []docparser.StoredImage{}
 	failures := []types.IngestImageFailure{}
-	resolver := s.imageResolver
-	if resolver == nil {
-		resolver = docparser.NewImageResolver()
-	}
+	resolver := docparser.NewImageResolver()
 	for i, image := range input {
-		ref := image.URL
+		if image.Data == "" {
+			refs[i] = ingestImageSource(image)
+			continue
+		}
+		ref, err := ingestImageDataURI(image.Data)
 		var images []docparser.StoredImage
-		var err error
-		if image.Data != "" {
-			ref, err = ingestImageDataURI(image.Data)
-			if err == nil {
-				_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, spaceID)
-			}
-		} else {
-			// URL.String escapes Markdown delimiters without changing the target.
-			u, _ := url.Parse(ref)
-			_, images, err = resolver.ResolveRemoteImages(ctx, "![image](<"+u.String()+">)", files, spaceID)
+		if err == nil {
+			_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, spaceID)
 		}
 		if err == nil && len(images) != 1 {
 			err = fmt.Errorf("image could not be stored")
 		}
 		if err != nil {
-			failures = append(failures, types.IngestImageFailure{Index: i, URL: image.URL, Reason: err.Error()})
+			failures = append(failures, types.IngestImageFailure{Index: i, URL: ingestImageSource(image), Reason: err.Error()})
 			continue
 		}
 		refs[i] = images[0].ServingURL
@@ -353,7 +416,7 @@ func ingestImageDataURI(raw string) (string, error) {
 
 func ingestCanonicalImageReference(image types.IngestImage) string {
 	if image.Data == "" {
-		return image.URL
+		return ingestImageSource(image)
 	}
 	payload := strings.TrimSpace(image.Data)
 	if strings.HasPrefix(payload, "data:") {

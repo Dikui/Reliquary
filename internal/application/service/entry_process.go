@@ -567,6 +567,9 @@ func (s *entryService) ReparseEntry(
 	}
 
 	if existing.ProcessingMode == "summary_only" {
+		if isIngestArticle(existing) {
+			return existing, werrors.NewBadRequestError("摘要加链接的收录文章没有可重处理的正文，请由外部工具用同一原文链接补入全文")
+		}
 		source, err := entrySourceInfo(existing)
 		if err != nil {
 			return nil, err
@@ -1062,6 +1065,9 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	}
 
 	refetchingOriginal := entry.ProcessingMode == "summary_only" && (payload.URL != "" || payload.FileURL != "")
+	if isIngestArticle(entry) && (payload.URL != "" || payload.FileURL != "") {
+		return errors.New("收录文章不允许下载原文或原始文件，请通过收录接口补全")
+	}
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
 		if intake.Decision == "rejected" || intake.Decision == "error" {
@@ -1311,24 +1317,30 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 
 		// Resolve remote http(s) images (e.g. markdown external URLs) → download + upload to storage.
 		// ResolveAndStore handles inline bytes and base64; ResolveRemoteImages handles http/https URLs.
-		updatedContent, remoteImages, remoteErr := s.imageResolver.ResolveRemoteImages(ctx, convertResult.MarkdownContent, fileSvc, spaceID)
-		if err := s.recordIntakeImages(ctx, entry, remoteImages); err != nil {
-			return err
-		}
-		if remoteErr != nil {
-			logger.Warnf(ctx, "Remote image resolution partially failed: %v", remoteErr)
-			if intake, _ := entry.IntakeMetadata(); intake != nil {
-				return fmt.Errorf("resolve intake images: %w", remoteErr)
+		if isIngestArticle(entry) {
+			if err := s.recordMissingIngestImages(ctx, entry, convertResult.MarkdownContent); err != nil {
+				return err
+			}
+		} else {
+			updatedContent, remoteImages, remoteErr := s.imageResolver.ResolveRemoteImages(ctx, convertResult.MarkdownContent, fileSvc, spaceID)
+			if err := s.recordIntakeImages(ctx, entry, remoteImages); err != nil {
+				return err
+			}
+			if remoteErr != nil {
+				logger.Warnf(ctx, "Remote image resolution partially failed: %v", remoteErr)
+				if intake, _ := entry.IntakeMetadata(); intake != nil {
+					return fmt.Errorf("resolve intake images: %w", remoteErr)
+				}
+			}
+			if updatedContent != "" {
+				convertResult.MarkdownContent = updatedContent
+			}
+			if len(remoteImages) > 0 {
+				logger.Infof(ctx, "Resolved %d remote images for entry %s", len(remoteImages), entry.ID)
+				storedImages = append(storedImages, remoteImages...)
 			}
 		}
-		if updatedContent != "" {
-			convertResult.MarkdownContent = updatedContent
-		}
-		if len(remoteImages) > 0 {
-			logger.Infof(ctx, "Resolved %d remote images for entry %s", len(remoteImages), entry.ID)
-			storedImages = append(storedImages, remoteImages...)
-		}
-		if intake, _ := entry.IntakeMetadata(); intake != nil && docparser.HasUnstoredImages(convertResult.MarkdownContent) {
+		if intake, _ := entry.IntakeMetadata(); intake != nil && s.hasUnstoredArticleImages(entry, convertResult.MarkdownContent) {
 			return fmt.Errorf("intake has unstored content images")
 		}
 
@@ -1353,7 +1365,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		}
 	}
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
-		if docparser.HasUnstoredImages(convertResult.MarkdownContent) {
+		if s.hasUnstoredArticleImages(entry, convertResult.MarkdownContent) {
 			return fmt.Errorf("intake has unstored content images")
 		}
 		if err := s.saveIntakeOriginal(ctx, kb, entry, convertResult.MarkdownContent, convertResult.Metadata); err != nil {
@@ -1432,6 +1444,9 @@ func (s *entryService) convert(
 	}
 	s.beginStage(ctx, entry.ID, types.StageDocReader, docInput)
 	isURL := payload.URL != ""
+	if isIngestArticle(entry) && (isURL || payload.FileURL != "") {
+		return nil, errors.New("收录文章只能解析已经提供的文件")
+	}
 	fileType := payload.FileType
 	spaceOverrides := s.getParserEngineOverridesFromContext(ctx)
 	var uploadOverrides map[string]string
@@ -1471,7 +1486,17 @@ func (s *entryService) convert(
 	logger.Infof(ctx, "[convert] kb=%s fileType=%s isURL=%v engine=%q rules=%+v",
 		kb.ID, fileType, isURL, parserEngine, eff.ChunkingConfig.ParserEngineRules)
 
-	reader, readerErr := docparser.NewReader(ctx, parserEngine, fileType, isURL, docparser.ReaderDeps{Overrides: mergedOverrides})
+	var reader interfaces.DocReader
+	var readerErr error
+	if isIngestArticle(entry) {
+		if docparser.IsSimpleFormat(fileType) {
+			reader = &docparser.SimpleFormatReader{}
+		} else {
+			reader = docparser.NewAnydocReader(nil, nil)
+		}
+	} else {
+		reader, readerErr = docparser.NewReader(ctx, parserEngine, fileType, isURL, docparser.ReaderDeps{Overrides: mergedOverrides})
+	}
 	if readerErr != nil {
 		logger.Errorf(ctx, "[convert] no doc reader for kb=%s entry=%s fileType=%s engine=%q isURL=%v",
 			kb.ID, entry.ID, fileType, parserEngine, isURL)

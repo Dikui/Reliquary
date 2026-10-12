@@ -378,11 +378,13 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 				return chatGPTGenerationSuccess(t, request)
 			})
 			h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
-			h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "chatgpt-fixture-collector"})
+			spaceID := h.kb.SpaceID
+			require.NoError(t, h.db.Create(&types.APIKey{ID: 19, SpaceID: &spaceID, Name: "ChatGPT fixture collector", KeyHash: "chatgpt-fixture-collector"}).Error)
+			h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "19"})
 			inspector := chatGPTScheduledQueue(t, h)
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
+			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Acquisition: "verbatim", URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
 			require.NoError(t, err)
-			require.Equal(t, "pending", result.Status)
+			require.Equal(t, "accepted", result.Status)
 			pending := h.article(t, result.EntryID)
 			require.Equal(t, types.ParseStatusPending, pending.ParseStatus)
 			intake, err := pending.IntakeMetadata()

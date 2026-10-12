@@ -11,12 +11,14 @@ const PrincipalAPIKey = "api_key"
 type Principal struct {
 	Type string
 	ID   string
+	Name string
 }
 
 func (p Principal) Normalize() Principal {
 	return Principal{
 		Type: strings.TrimSpace(p.Type),
 		ID:   strings.TrimSpace(p.ID),
+		Name: strings.TrimSpace(p.Name),
 	}
 }
 

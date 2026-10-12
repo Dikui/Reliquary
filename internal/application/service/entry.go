@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"gorm.io/gorm"
@@ -39,21 +40,23 @@ var (
 // entryService implements the entry service interface
 // service 实现知识服务接口
 type entryService struct {
-	db              *gorm.DB
-	config          *config.Config
-	retrieveEngine  interfaces.RetrievalService
-	repo            interfaces.EntryRepository
-	kbService       interfaces.KnowledgeBaseService
-	spaceRepo       interfaces.SpaceRepository
-	spaceService    interfaces.SpaceService
-	chunkService    interfaces.ChunkService
-	chunkRepo       interfaces.ChunkRepository
-	fileSvc         interfaces.FileService
-	resourceCatalog interfaces.ResourceCatalog
-	modelService    interfaces.ModelService
-	task            interfaces.TaskEnqueuer
-	taskInspector   interfaces.TaskInspector
-	imageResolver   *docparser.ImageResolver
+	db               *gorm.DB
+	config           *config.Config
+	retrieveEngine   interfaces.RetrievalService
+	repo             interfaces.EntryRepository
+	kbService        interfaces.KnowledgeBaseService
+	spaceRepo        interfaces.SpaceRepository
+	spaceService     interfaces.SpaceService
+	chunkService     interfaces.ChunkService
+	chunkRepo        interfaces.ChunkRepository
+	fileSvc          interfaces.FileService
+	resourceCatalog  interfaces.ResourceCatalog
+	modelService     interfaces.ModelService
+	task             interfaces.TaskEnqueuer
+	taskInspector    interfaces.TaskInspector
+	imageResolver    *docparser.ImageResolver
+	contentTransport http.RoundTripper
+	ingestDocReader  interfaces.DocReader
 
 	// spanTracker records the per-attempt span tree for the parsing
 	// pipeline. Best-effort: a nil tracker (test harness) is safely

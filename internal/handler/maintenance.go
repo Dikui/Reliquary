@@ -19,7 +19,7 @@ func NewMaintenanceHandler(db *gorm.DB) *MaintenanceHandler { return &Maintenanc
 // The service transaction repeats this check under the collection advisory lock.
 func (h *MaintenanceHandler) CollectionGate(c *gin.Context) {
 	path := c.FullPath()
-	intake := c.Request.Method == http.MethodPost && (path == "/api/v1/ingest" ||
+	intake := c.Request.Method == http.MethodPost && ((strings.HasPrefix(path, "/api/v1/ingest") && path != "/api/v1/ingest/check") ||
 		strings.HasPrefix(path, "/api/v1/knowledge-bases/:id/entries/") ||
 		(path == "/api/v1/data-sources/:id/sync"))
 	if intake {

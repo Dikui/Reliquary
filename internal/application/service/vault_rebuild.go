@@ -148,6 +148,9 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 	if header.SourceUnverified && header.URL != "" {
 		return fmt.Errorf("unverified source must not contain an original URL")
 	}
+	if header.Acquisition != "" && header.Acquisition != "verbatim" && header.Acquisition != "extracted" && header.Acquisition != "model_written" {
+		return fmt.Errorf("invalid acquisition %q", header.Acquisition)
+	}
 	if !utf8.Valid(body) {
 		return fmt.Errorf("article body must be valid UTF-8")
 	}
@@ -182,6 +185,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true, ProcessingMode: mode,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
 		SourceUnverified: header.SourceUnverified,
+		Acquisition:      header.Acquisition,
 		ParseStatus:      types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
 		EnableStatus: "enabled", Channel: types.ChannelAPI, FileName: filepath.Base(path), FileType: "md",
 		CreatedAt: collected.UTC(), UpdatedAt: now, ProcessedAt: &now,

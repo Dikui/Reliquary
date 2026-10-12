@@ -44,7 +44,8 @@ func escapeLikeKeyword(keyword string) string {
 // the column here means Save can never touch it.
 // User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
-var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified", "ContentTypeUncertain", "ProcessingReviewStatus", "ProcessingReviewContentType", "ProcessingReviewReason"}
+var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified", "ContentTypeUncertain", "ProcessingReviewStatus", "ProcessingReviewContentType", "ProcessingReviewReason",
+	"Acquisition", "Incomplete", "ExternalCompletionAttempted", "MissingMaterials", "IngestAttachments", "ContentTypeHint", "RelatedArticleID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
 
 // entryRepository implements knowledge base and entry repository interface
 type entryRepository struct {

@@ -95,12 +95,13 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 	var result *articleProcessingResult
 	var temporaryRefs []string
 	committed := false
+	missingBody := isIngestArticle(before) && before.ProcessingMode == types.ProcessingModeSummaryOnly && mode == types.ProcessingModeFull
 	defer func() {
 		if !committed {
 			s.deleteCorrectionFiles(context.WithoutCancel(ctx), kb, temporaryRefs)
 		}
 	}()
-	if before.ProcessingMode == types.ProcessingModeSummaryOnly && mode == types.ProcessingModeFull {
+	if before.ProcessingMode == types.ProcessingModeSummaryOnly && mode == types.ProcessingModeFull && !missingBody {
 		body, images, temporaryRefs, err = s.fetchCorrectedArticle(ctx, kb, &fetched, eff)
 		if err != nil {
 			return before, werrors.NewBadRequestError("could not save the full article: " + err.Error())
@@ -124,6 +125,21 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 			return werrors.NewConflictError("the article changed during conversion; reload it and try again")
 		}
 		updated.ContentType, updated.ContentTypeCorrected, updated.ProcessingMode, updated.UpdatedAt = contentType, corrected, mode, time.Now()
+		if missingBody {
+			missing := updated.IngestMissing()
+			hasContent := false
+			for _, item := range missing {
+				hasContent = hasContent || item.Type == "content"
+			}
+			if !hasContent {
+				missing = append(missing, types.IngestMissing{Type: "content", SourceURL: updated.Source,
+					Reason: "修正为全文保存，需要正文", APIKeyID: updated.IngestAPIKeyID, APIKeyName: updated.IngestAPIKeyName, SubmittedAt: time.Now()})
+			}
+			if err := updated.SetIngestMissing(missing); err != nil {
+				return err
+			}
+			updated.Incomplete, updated.ExternalCompletionAttempted = true, false
+		}
 		if reviewAction == "confirm" {
 			updated.ProcessingReviewStatus = types.ProcessingReviewConfirmed
 		} else if before.ProcessingReviewStatus == types.ProcessingReviewPending || reviewAction == "correct" {
@@ -154,7 +170,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 				return err
 			}
 		}
-		if s.vault != nil && before.ProcessingMode != mode {
+		if s.vault != nil && before.ProcessingMode != mode && !missingBody {
 			read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
 				return s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
 			}
@@ -224,6 +240,9 @@ func (s *entryService) contentTypeTransactionService(tx *gorm.DB) *entryService 
 // fetchCorrectedArticle reuses the reprocessing reader and image resolver but
 // does not write processing status or source metadata before conversion succeeds.
 func (s *entryService) fetchCorrectedArticle(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, eff types.EffectiveProcessConfig) (body string, images []docparser.StoredImage, refs []string, err error) {
+	if isIngestArticle(k) {
+		return "", nil, nil, errors.New("收录文章需要外部工具提供正文，不能下载原文")
+	}
 	source, err := entrySourceInfo(k)
 	if err != nil {
 		return "", nil, nil, err

@@ -66,6 +66,8 @@ type StoredImage struct {
 type ImageResolver struct {
 	// SpaceID for storage path namespacing
 	SpaceID uint64
+	// RemoteTransport allows a caller to supply the content-request transport.
+	RemoteTransport http.RoundTripper
 }
 
 // NewImageResolver creates a resolver.
@@ -923,10 +925,10 @@ func (r *ImageResolver) ResolveRemoteImages(
 	var httpClient *http.Client
 	client := func() *http.Client {
 		if httpClient == nil {
-			httpClient = secutils.NewSSRFSafeHTTPClient(secutils.SSRFSafeHTTPClientConfig{
+			httpClient = secutils.NewSSRFSafeHTTPClientWithTransport(secutils.SSRFSafeHTTPClientConfig{
 				Timeout:      remoteImageFetchTimeout,
 				MaxRedirects: 5,
-			})
+			}, r.RemoteTransport)
 		}
 		return httpClient
 	}

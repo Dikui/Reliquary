@@ -32,6 +32,7 @@ type VaultArticleHeader struct {
 	CollectReason    string              `yaml:"collect_reason" json:"collect_reason"`
 	SourceUnverified bool                `yaml:"source_unverified,omitempty" json:"source_unverified"`
 	ProcessingMode   string              `yaml:"processing_mode,omitempty" json:"processing_mode,omitempty"`
+	Acquisition      string              `yaml:"acquisition,omitempty" json:"acquisition,omitempty"`
 }
 
 // RenderVaultArticleHeader uses a fixed field order and JSON double quoted
@@ -66,6 +67,9 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	}
 	if h.ProcessingMode != "" {
 		writeVaultScalar(&b, "processing_mode", h.ProcessingMode)
+	}
+	if h.Acquisition != "" {
+		writeVaultScalar(&b, "acquisition", h.Acquisition)
 	}
 	b.WriteString("---\n")
 	return []byte(b.String())

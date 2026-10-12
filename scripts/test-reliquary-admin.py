@@ -24,6 +24,55 @@ class AdminStorageTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_ingest_data_is_preserved_by_package_storage_restore_and_verify(self):
+        vault, resources = self.root / "vault", self.root / "resources"
+        (vault / ".reliquary").mkdir(parents=True)
+        resources.mkdir()
+        tables = {
+            "entries": [{"id": "article", "acquisition": "model_written", "incomplete": True,
+                         "external_completion_attempted": True, "ingest_api_key_id": 7,
+                         "ingest_api_key_name": "Original collector", "last_ingest_api_key_id": 8,
+                         "last_ingest_api_key_name": "Completion collector", "content_type_hint": "research",
+                         "related_article_id": "original", "missing_materials": [{"type": "image",
+                         "source_url": "https://example.test/missing.png", "reason": "Image unavailable"}],
+                         "ingest_attachments": [{"asset_id": "asset", "path": "local://original.pdf"}]}],
+            "ingest_assets": [{"id": "asset", "space_id": 1, "name": "original.pdf", "file_type": "pdf",
+                              "size": len(b"%PDF original bytes"), "path": "local://original.pdf", "created_at": "2026-10-12T00:00:00Z",
+                              "referenced_at": "2026-10-12T01:00:00Z", "entry_id": "article"}],
+            "ingest_discards": [{"space_id": 1, "normalized_url": "https://example.test/discarded",
+                                "article_id": "discarded", "discarded_at": "2026-10-12T02:00:00Z", "reason": "User discarded"}],
+            "operation_logs": [{"id": "operation", "api_key_id": 8, "api_key_name": "Completion collector"}],
+        }
+        for table, rows in tables.items():
+            admin.json_write(vault / ".reliquary" / (table + ".json"), rows)
+        (resources / "original.pdf").write_bytes(b"%PDF original bytes")
+        source = object.__new__(admin.Context)
+        source.direct, source.local_server = True, None
+        source.env = {"VAULT_ROOT": str(vault), "LOCAL_STORAGE_BASE_DIR": str(resources)}
+        package = self.root / "package"
+        package.mkdir()
+        # These are the production copy and restore methods used by pack,
+        # unpack, and the storage stage preceding the Go rebuild importer.
+        source.copy_storage("vault", package / "vault")
+        source.copy_storage("resources", package / "resources")
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT})
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        admin.check_files(package)
+        restored_vault, restored_resources = self.root / "restored-vault", self.root / "restored-resources"
+        restored_vault.mkdir()
+        restored_resources.mkdir()
+        target = object.__new__(admin.Context)
+        target.direct, target.local_server = True, None
+        target.env = {"VAULT_ROOT": str(restored_vault), "LOCAL_STORAGE_BASE_DIR": str(restored_resources)}
+        target.restore_storage("vault", package / "vault")
+        target.restore_storage("resources", package / "resources")
+        for table, rows in tables.items():
+            self.assertEqual(json.loads((restored_vault / ".reliquary" / (table + ".json")).read_text()), rows)
+        self.assertEqual((restored_resources / "original.pdf").read_bytes(), b"%PDF original bytes")
+        admin.json_write(package / "vault" / ".reliquary" / "ingest_discards.json", [])
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
+
     def test_incremental_snapshots_share_only_previous_immutable_files(self):
         source = self.root / "source"
         source.mkdir()

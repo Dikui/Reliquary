@@ -83,6 +83,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 		result := &types.EntrySearchResult{
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
+			Acquisition:    entry.Acquisition,
 			ProcessingMode: entry.ProcessingMode, Summary: entry.StructuredSummary, Starred: entry.Starred,
 			SourceUnverified: entry.SourceUnverified,
 			Entities:         entities[entry.ID], Topics: topics[entry.ID],

@@ -374,19 +374,25 @@ Grok Bot、Claude Code 等调用方需能访问 Reliquary 的内网地址。在�
 
 HTTP 收录与 MCP 使用同一个 Key，通过 `Authorization: Bearer <key>` 发送。Key 具有个人空间的全部访问权限。此接入方式只用于内网，调用方负责采集正文、补全推文串与引用、记录收藏理由；Reliquary 负责去重、处理、存储与检索。
 
-`POST /api/v1/ingest` 接收 JSON：
+`POST /api/v1/ingest` 接收批量 JSON `{"items":[...]}`，每次 1 到 50 条，逐条返回结果；一条无效或失败不影响其他条目。下表为每个条目的字段：
 
 | 字段 | 含义 |
 | --- | --- |
-| `url`、`content` | 必填，原链接与 Markdown 或纯文本正文 |
+| `url` | 必填，原文链接；为空时从材料提取，提取不到则进入收录待审 |
+| `content`、`file` | Markdown 正文全文或上传后的附件 ID，也可用文件对象 `{"asset_id":"..."}`，至少提供一项；拿不到正文时在 missing 中说明 |
+| `acquisition` | 必填，逐字原文 verbatim、网页提取 extracted、模型整理 model_written |
+| `missing` | 缺失材料数组，每项含 type（content、file、image）、source_url 原地址、reason 原因；用链接代替材料时必须说明 |
 | `title`、`author`、`publisher`、`published_at` | 可选，标题、作者、发布者与发布时间；时间使用 YYYY-MM-DD 或 RFC3339，未知时不填写 |
-| `images` | 可选数组，每项在 `url` 与 `data` 中选择一个；`data` 为图片 base64，可另传 `caption` 图片说明与 `text` 图片中的文字 |
+| `images` | 可选数组，每项为上传后的 asset_id、source_url 原地址，可另传 caption 图片说明与 text 图片中的文字；MCP 使用 base64 data |
+| `content_type_hint` | 可选内容类型建议，仅作处理参考，不替代模型判定 |
 | `thread` | 可选推文串数组，每项有 `content`，可另传 `author` 与 `published_at` |
 | `quotes` | 可选引用数组，每项有 `content`，可另传 `author` 与 `url` |
 | `collect_reason` | 可选收藏理由，写入文章表头 |
 | `agent_summary`、`agent_tags`、`source_name` | 可选调用方摘要、字符串标签数组、调用方名称，仅存数据库，不进入表头或处理调用的提示词 |
 
-下面模拟 Grok Bot 发送正文、推文串、引用和图片。将地址与 Key 替换为实际值；通过反向代理子路径访问时，地址需包含该子路径。
+送入完整材料：正文全文、原始文件、图片文件。能送文件就送文件，拿不到时才送链接，并在 missing 中写明原因。Reliquary 不抓取原文，也不下载图片和文件。
+
+下面模拟 Grok Bot 发送正文、推文串、引用和图片。先通过 `POST /api/v1/ingest/assets` 的 multipart file 字段上传图片，再将返回的 asset_id 填入示例。未被收录引用的附件在 24 小时后清理。将地址与 Key 替换为实际值；通过反向代理子路径访问时，地址需包含该子路径。
 
 ```bash
 export RELIQUARY_URL='http://192.168.1.20:8080'
@@ -396,7 +402,9 @@ curl --fail-with-body --request POST "${RELIQUARY_URL}/api/v1/ingest" \
   --header 'Content-Type: application/json' \
   --data-binary @- <<'JSON'
 {
+  "items": [{
   "url": "https://example.com/research/original-article",
+  "acquisition": "extracted",
   "content": "团队发布了新的检索模型，以下记录原文要点。",
   "title": "检索模型发布记录",
   "author": "Example Researcher",
@@ -404,7 +412,8 @@ curl --fail-with-body --request POST "${RELIQUARY_URL}/api/v1/ingest" \
   "published_at": "2026-10-11T08:00:00Z",
   "images": [
     {
-      "data": "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAA+UlEQVR4nO3RQQ0AIAzAwElCGPIRgIw9ekkFNLk592mxWT+IBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtAABoBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtAABoBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtAABoBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtAABoBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtAABoBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtAABoBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtAABoBwBAOwAA2gEA0A4AgHYAALQDAKAdAADtPtWtBd0rlTRDAAAAAElFTkSuQmCC",
+      "asset_id": "替换为图片上传返回的附件 ID",
+      "source_url": "https://example.com/chart.png",
       "caption": "评测图示例",
       "text": "召回率 92%"
     }
@@ -427,11 +436,12 @@ curl --fail-with-body --request POST "${RELIQUARY_URL}/api/v1/ingest" \
   "agent_summary": "Grok Bot 提供的采集摘要",
   "agent_tags": ["retrieval", "model"],
   "source_name": "grok-bot"
+  }]
 }
 JSON
 ```
 
-图片也可使用 `{"url":"https://example.com/chart.png","caption":"评测图","text":"召回率 92%"}`。下载沿用带 SSRF 防护的抓取，失败项跳过，响应的 `image_failures` 列出零起始的 `index`、`url` 与 `reason`。其余内容继续收录。
+拿不到图片时，在 missing 中说明，例如 `{"type":"image","source_url":"https://example.com/chart.png","reason":"来源没有开放图片下载"}`。正文中的原地址引用保留，文章标记为待补全。MCP 文件与图片使用 base64 data；每项解码后最多 10 MiB，工具参数 JSON 最多 20 MiB，内联文件解码后的合计最多 20 MiB，并遵守现有上传类型与大小规则。
 
 主内容经既有 Markdown 清理与首尾空白裁剪后放在正文开头，按固定次序追加非空的推文串、引用、成功图片。推文和引用从 1 开始编号，图片保留输入数组中的序号；可选作者、时间、来源、说明和图片文字仅在提供时输出。引用和图片文字逐行添加 Markdown 引用前缀。全文文章的最终正文示例：
 
@@ -471,7 +481,9 @@ JSON
 > 召回率 92%
 ```
 
-外部 Agent 收录经过同一模型审核，调用方的判断、agent_summary 与 agent_tags 不会替代审核。审核拒绝时返回 HTTP 201、status: "pending_review" 与 reason，文章进入收录待审，正文不会写入文件库；通过后才进入异步处理。新文章通过时返回 HTTP 201，响应为 `{"success":true,"data":{"article_id":"...","status":"pending","message":"...","image_failures":[]}}`；可用同一个 Key 请求 `GET /api/v1/entries/<article_id>` 查看 `parse_status`。如果任务入队失败，返回状态为 `failed`。去重命中返回 HTTP 200、已有 `article_id`、`status: "exists"` 与 `message: "已存在"`，不再次处理；本次有收藏理由且原文章没有时，补写收藏理由并刷新表头。收录操作记录在操作日志中。正文和附件最终是否保留，仍由既有内容类型与处理方式决定。
+外部 Agent 收录经过同一模型审核，调用方的判断、agent_summary 与 agent_tags 不会替代审核。批量请求返回 HTTP 200，响应为 `{"success":true,"data":{"items":[{"index":0,"article_id":"...","status":"accepted","message":"已收录","reason":"","completeness":[]}]}}`。每条 status 为 accepted、exists、supplemented、pending_review、conflict、discarded 或 invalid；message 是可直接转述给用户的中文，completeness 列出仍缺的材料及原因。正文缺失或审核拒绝时进入收录待审；通过后异步处理，可用同一个 Key 请求 `GET /api/v1/entries/<article_id>` 查看 parse_status 与 acquisition。材料齐全时文章定稿；缺文件或图片时正常处理并标记待补全。查重命中保持 exists 并合并收藏理由，已丢弃链接返回 discarded。收录、补全与接受缺失均记录 API Key 名称和 ID。
+
+外部工具先用 `POST /api/v1/ingest/check` 或 check_urls 查重，再获取完整材料并收录。通过 list_incomplete 读取缺失清单，用同一原文链接再次收录以补全；只补缺失材料，已有正文不改动。补全一次后仍缺失的文章只留给用户处理；用户可用 accept_incomplete 接受缺失并定稿。
 
 MCP 服务使用 Streamable HTTP，路径为 `/mcp`。在可访问内网的 Claude Code 终端执行以下完整命令，使用上例设置的地址与 Key：
 
@@ -485,12 +497,15 @@ HTTP 连接与 Bearer 头的命令格式见 [Claude Code 官方 MCP 文档](http
 
 | 工具 | 参数 | 返回 |
 | --- | --- | --- |
-| `search` | `query`；可选 `content_types`、`entity_ids`、`topic_ids`、`published_from`、`published_to`、`starred`、`sources`、`collapse_similar`、`limit` | 与知识检索 HTTP 接口相同的文章合并结果、片段、相似报道、source_unverified 及缺失发布时间排除数量 |
-| `get_article` | `id`；可选 `offset`、`length`，按 Unicode 字符计数，默认 0 与 20000，长度最大 100000 | 表头、正文、处理方式、处理状态、source_unverified，以及 `offset`、`length`、`total_length`、可继续读取时的 `next_offset`；摘要加链接文章返回 `header.summary` 与 `original_url`，`body` 为空 |
+| `search` | `query`；可选 `content_types`、`entity_ids`、`topic_ids`、`published_from`、`published_to`、`starred`、`sources`、`collapse_similar`、`limit` | 与知识检索 HTTP 接口相同的文章合并结果、片段、相似报道、acquisition、source_unverified 及缺失发布时间排除数量 |
+| `get_article` | `id`；可选 `offset`、`length`，按 Unicode 字符计数，默认 0 与 20000，长度最大 100000 | 表头、正文、处理方式、处理状态、acquisition、source_unverified，以及 `offset`、`length`、`total_length`、可继续读取时的 `next_offset`；摘要加链接文章返回 `header.summary` 与 `original_url`，`body` 为空 |
 | `list_topics` | 无 | `{topics: [...]}`，包含主题名称、说明与文章数 |
 | `list_entities` | 可选 `entity` 名称或别名模糊查询、`entity_type` 类型、`limit`、`offset`；默认 50 条，最多 100 条 | `{entities: [...]}`，实体列表；类型为 `company`、`person`、`product`、`project`、`organization`、`other` |
 | `get_entity` | `id` | 实体档案与提及该实体的文章列表 |
-| `ingest` | 与上述收录接口相同 | 文章 ID、状态、待审原因及图片失败清单 |
+| `ingest` | items 数组，与上述收录接口相同；文件与图片使用 base64 | 逐条的 index、文章 ID、状态、中文消息、原因与缺失清单 |
+| `check_urls` | urls 数组，1 到 100 条 | 每条的链接、状态、文章 ID、是否待补全 |
+| `list_incomplete` | 可选 page、page_size，默认 1 与 20，最多每页 100 条 | 待补全文章与缺失清单，排除已尝试外部补全的条目 |
+| `accept_incomplete` | id | 接受缺失，文章定稿，写入操作日志 |
 | `list_pending` | 可选 `kind`、`page`、`page_size`，默认 1 与 20，最多每页 100 条 | kind 为 intake 或 processing；省略返回两者，每项 review_kind 标明类别 |
 | `approve_pending` | `id`；可选 `action`、`url`、`confirmed` | 默认 approve；缺链接可 supplement_url 补链接重审、admit_unverified 无链接入库、convert_to_mine 转本人文档，后两者必须 confirmed=true |
 | `resolve_processing_review` | `id`、`action`；可选 `content_type`、`confirm_remove_body` | confirm 确认模型类型、correct 修正、ignore 忽略；删除正文必须二次确认 |

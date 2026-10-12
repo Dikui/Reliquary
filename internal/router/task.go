@@ -81,6 +81,11 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
 	mux.HandleFunc(types.TypeDataSourceSync, params.DataSourceService.ProcessSync)
 	mux.HandleFunc(types.TypeTopicBackfill, params.TopicService.HandleBackfill)
+	if assets, ok := params.EntryService.(interface {
+		HandleIngestAssetCleanup(context.Context, *queue.Task) error
+	}); ok {
+		mux.HandleFunc(types.TypeIngestAssetCleanup, assets.HandleIngestAssetCleanup)
+	}
 	config := queue.Config{Pools: resolveWorkerPoolConcurrency(params.SystemSettings), OnDeadLetter: newDeadLetterEntryFailer(params.EntryService, params.SpanTracker)}
 	if raw := os.Getenv("RELIQUARY_QUEUE_RECONNECT_ALERT_AFTER"); raw != "" {
 		duration, err := time.ParseDuration(raw)

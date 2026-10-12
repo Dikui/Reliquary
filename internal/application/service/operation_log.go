@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,8 +46,19 @@ func (s *OperationLogService) RecordTx(ctx context.Context, tx *gorm.DB, operati
 	if tx == nil {
 		return werrors.NewInternalServerError("operation log database is unavailable")
 	}
+	var keyID uint64
+	keyName := actor.Name
+	if actor.Type == types.PrincipalAPIKey {
+		keyID, _ = strconv.ParseUint(actor.ID, 10, 64)
+		if keyID > 0 && keyName == "" {
+			if err := tx.WithContext(ctx).Table("api_keys").Where("id=? AND space_id=?", keyID, spaceID).Select("name").Scan(&keyName).Error; err != nil {
+				return err
+			}
+		}
+	}
 	return tx.WithContext(ctx).Create(&types.OperationLog{ID: uuid.NewString(), SpaceID: spaceID,
 		Actor: actor.StorageID(), OperationType: operationType, ObjectID: objectID,
+		APIKeyID: keyID, APIKeyName: keyName,
 		Before: types.JSON(oldValue), After: types.JSON(newValue), CreatedAt: time.Now()}).Error
 }
 
@@ -93,7 +105,10 @@ func (s *OperationLogService) List(ctx context.Context, operationType string, pa
 			names[key.Actor] = key.Name
 		}
 		for i := range result.Items {
-			result.Items[i].ActorName = names[result.Items[i].Actor]
+			result.Items[i].ActorName = result.Items[i].APIKeyName
+			if result.Items[i].ActorName == "" {
+				result.Items[i].ActorName = names[result.Items[i].Actor]
+			}
 		}
 	}
 	return result, nil

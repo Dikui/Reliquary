@@ -68,6 +68,7 @@ type articleProcessingInput struct {
 	Body               string                   `json:"body"`
 	BodyTruncated      bool                     `json:"body_truncated"`
 	DefaultContentType string                   `json:"default_content_type,omitempty"`
+	ContentTypeHint    string                   `json:"content_type_hint,omitempty"`
 	ExistingTopics     []articleProcessingTopic `json:"existing_topics"`
 }
 
@@ -164,7 +165,23 @@ func (s *entryService) processingImageDataURI(ctx context.Context, kb *types.Kno
 	var data []byte
 	var err error
 	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
-		data, err = secutils.DownloadBytes(ref)
+		if isIngestArticle(k) {
+			return "", errors.New("未提供图片文件")
+		}
+		if s.contentTransport == nil {
+			data, err = secutils.DownloadBytes(ref)
+		} else {
+			client := secutils.NewSSRFSafeHTTPClientWithTransport(secutils.SSRFSafeHTTPClientConfig{Timeout: 60 * time.Second, MaxRedirects: 10}, s.contentTransport)
+			response, requestErr := client.Get(ref)
+			if requestErr != nil {
+				return "", requestErr
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				return "", fmt.Errorf("processing image HTTP %d", response.StatusCode)
+			}
+			data, err = io.ReadAll(response.Body)
+		}
 	} else {
 		var file io.ReadCloser
 		var readErr error
@@ -212,6 +229,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, kb *types.Know
 		return nil, err
 	}
 	input := articleProcessingInput{Title: k.Title, Body: body, ExistingTopics: []articleProcessingTopic{}}
+	input.ContentTypeHint = k.ContentTypeHint
 	source, err := entrySourceInfo(k)
 	if err != nil {
 		return nil, err
@@ -234,6 +252,9 @@ func (s *entryService) callArticleProcessing(ctx context.Context, kb *types.Know
 		}
 	}
 	prompt := articleProcessingPrompt
+	if input.ContentTypeHint != "" {
+		prompt += "\ncontent_type_hint 是外部工具对内容类型的建议，仅作参考输入，不替代你的判断。仍须按文章内容判定主要用途。"
+	}
 	if input.DefaultContentType != "" {
 		prompt += "\n订阅源默认内容类型为 " + input.DefaultContentType + "，仅作参考，文章内容优先。"
 	}
@@ -241,7 +262,13 @@ func (s *entryService) callArticleProcessing(ctx context.Context, kb *types.Know
 	images := []string{}
 	if model != nil && model.Parameters.SupportsVision {
 		refs := articleImagesInOrder(body, stored)
-		for _, ref := range refs[:min(len(refs), imageLimit)] {
+		for _, ref := range refs {
+			if isIngestArticle(k) && remoteIngestImage(ref) {
+				continue
+			}
+			if len(images) >= imageLimit {
+				break
+			}
 			uri, err := s.processingImageDataURI(ctx, kb, k, ref)
 			if err != nil {
 				return nil, err
@@ -322,6 +349,17 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, kb *t
 		return nil
 	}
 	if s.db != nil {
+		if isIngestArticle(k) {
+			var latest types.Entry
+			if err := s.db.WithContext(ctx).Select("acquisition", "incomplete", "external_completion_attempted", "missing_materials", "ingest_attachments", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_article_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
+				return err
+			}
+			k.Acquisition, k.Incomplete, k.ExternalCompletionAttempted = latest.Acquisition, latest.Incomplete, latest.ExternalCompletionAttempted
+			k.MissingMaterials, k.IngestAttachments = latest.MissingMaterials, latest.IngestAttachments
+			k.IngestAPIKeyID, k.IngestAPIKeyName = latest.IngestAPIKeyID, latest.IngestAPIKeyName
+			k.LastIngestAPIKeyID, k.LastIngestAPIKeyName = latest.LastIngestAPIKeyID, latest.LastIngestAPIKeyName
+			k.ContentTypeHint, k.RelatedArticleID = latest.ContentTypeHint, latest.RelatedArticleID
+		}
 		var current struct {
 			ContentType                 string
 			ContentTypeCorrected        bool
@@ -460,6 +498,9 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, kb *t
 // approved article is available in the vault. Uploaded source bytes and image
 // providers remain for downloads, parsing original formats and indexed images.
 func (s *entryService) removeParsedBodyCopies(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, images []docparser.StoredImage) error {
+	if isIngestArticle(k) && k.Incomplete && k.ProcessingMode == types.ProcessingModeSummaryOnly {
+		return nil
+	}
 	metadata := map[string]json.RawMessage{}
 	if len(k.Metadata) > 0 {
 		if err := json.Unmarshal(k.Metadata, &metadata); err != nil {
@@ -542,6 +583,7 @@ func articleChunkImages(content string) []types.ParsedImage {
 // Relative image destinations in a persisted article already point to managed
 // vault attachments. Validate their presence before the existing intake check.
 func (s *entryService) hasUnstoredArticleImages(k *types.Entry, body string) bool {
+	body = recordedMissingImageBody(k, body)
 	if s.vault == nil || k.VaultPath == "" {
 		return docparser.HasUnstoredImages(body)
 	}
@@ -604,6 +646,12 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, kb *types.Know
 			return err
 		}
 	}
+	// An incomplete summary article still needs its supplied original material
+	// for the completion processing call. It remains outside the public body.
+	if isIngestArticle(k) && k.Incomplete {
+		k.StorageSize, k.EmbeddingModelID = 0, ""
+		return s.repo.UpdateEntry(ctx, k)
+	}
 
 	metadata := map[string]json.RawMessage{}
 	if len(k.Metadata) > 0 {
@@ -617,6 +665,13 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, kb *types.Know
 	_ = json.Unmarshal(metadata["processed_images"], &oldImages)
 	refs := append([]string{k.FilePath, path}, oldImages...)
 	refs = append(refs, articleImagesInOrder(body, images)...)
+	if isIngestArticle(k) {
+		for _, attachment := range k.IngestAttachmentRecords() {
+			if strings.HasPrefix(attachment.Path, "local://") || strings.HasPrefix(attachment.Path, "resource://") {
+				refs = append(refs, attachment.Path)
+			}
+		}
+	}
 	if intake, _ := k.IntakeMetadata(); intake != nil {
 		refs = append(refs, intake.OriginalPath)
 		refs = append(refs, intake.Images...)
@@ -656,6 +711,14 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, kb *types.Know
 	k.FilePath = ""
 	k.StorageSize = 0
 	k.EmbeddingModelID = ""
+	if isIngestArticle(k) {
+		if err := k.SetIngestAttachments(nil); err != nil {
+			return err
+		}
+		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Update("ingest_attachments", k.IngestAttachments).Error; err != nil {
+			return err
+		}
+	}
 	return s.repo.UpdateEntry(ctx, k)
 }
 

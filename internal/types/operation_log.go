@@ -8,6 +8,8 @@ type OperationLog struct {
 	SpaceID       uint64    `json:"space_id"`
 	Actor         string    `json:"actor"`
 	ActorName     string    `json:"actor_name,omitempty" gorm:"-"`
+	APIKeyID      uint64    `json:"api_key_id,omitempty" gorm:"not null;default:0"`
+	APIKeyName    string    `json:"api_key_name,omitempty" gorm:"type:text;not null;default:''"`
 	OperationType string    `json:"operation_type"`
 	ObjectID      string    `json:"object_id"`
 	Before        JSON      `json:"before" gorm:"column:before_value;type:jsonb"`
@@ -19,6 +21,7 @@ func (OperationLog) TableName() string { return "operation_logs" }
 
 var OperationTypes = []string{
 	"ingest", "write_report",
+	"ingest_supplement", "ingest_conflict", "accept_incomplete", "ingest_discard",
 	"review_approve", "review_reject", "review_retry", "review_discard",
 	"review_supplement_url", "review_admit_unverified", "review_convert_to_mine",
 	"processing_review_confirm", "processing_review_correct", "processing_review_ignore",

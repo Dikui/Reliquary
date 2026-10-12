@@ -52,13 +52,17 @@ func Schema(ctx context.Context, db *gorm.DB) ([]Column, error) {
 }
 
 func ValidateClassification(ctx context.Context, db *gorm.DB) error {
+	rules, err := schemaRules(ctx, db)
+	if err != nil {
+		return err
+	}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return err
 	}
 	present := map[string]map[string]bool{}
 	for _, c := range columns {
-		rule, ok := Rules[c.Table]
+		rule, ok := rules[c.Table]
 		if !ok {
 			return fmt.Errorf("unclassified database table %s", c.Table)
 		}
@@ -70,7 +74,7 @@ func ValidateClassification(ctx context.Context, db *gorm.DB) error {
 		}
 		present[c.Table][c.Name] = true
 	}
-	for table, rule := range Rules {
+	for table, rule := range rules {
 		seen := map[string]bool{}
 		for _, group := range []string{rule.Header, rule.Sidecar, rule.Regenerated, rule.Configuration} {
 			for _, column := range strings.Fields(group) {

@@ -49,6 +49,10 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 	if err := ValidateClassification(ctx, db); err != nil {
 		return nil, err
 	}
+	rules, err := schemaRules(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	snapshot := &Snapshot{FormatVersion: FormatVersion, Tables: map[string][]map[string]any{}, Required: []Requirement{}, JSONNulls: map[string]map[string][]string{}}
 	columns, err := Schema(ctx, db)
 	if err != nil {
@@ -58,7 +62,7 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 	jsonColumns := map[string][]string{}
 	for _, column := range columns {
 		present[column.Table] = true
-		if column.DataType == "jsonb" && Rules[column.Table].Columns()[column.Name] != Regenerated && !secretColumn(column.Table, column.Name) {
+		if column.DataType == "jsonb" && rules[column.Table].Columns()[column.Name] != Regenerated && !secretColumn(column.Table, column.Name) {
 			jsonColumns[column.Table] = append(jsonColumns[column.Table], column.Name)
 		}
 	}
@@ -72,7 +76,7 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 			if !present[table] || table == "schema_migrations" {
 				continue
 			}
-			rule := Rules[table].Columns()
+			rule := rules[table].Columns()
 			persistent := false
 			for _, category := range rule {
 				if category != Regenerated {

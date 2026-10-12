@@ -48,6 +48,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeEntryListDelete, TypeEntryListReparse,
+		TypeIngestAssetCleanup,
 	}},
 }
 
@@ -194,6 +195,7 @@ const (
 	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
 	TypeManualProcess              = "manual:process"  // 手工知识更新任务（cleanup + 重新索引）
 	TypeDataSourceSync             = "datasource:sync" // 数据源同步任务
+	TypeIngestAssetCleanup         = "ingest:asset_cleanup"
 )
 
 // DocumentProcessPayload represents the document process task payload

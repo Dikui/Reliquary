@@ -219,11 +219,17 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 	if action == "discard" {
 		discard := func(svc *entryService) error {
 			if svc.db != nil {
-				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", id, before, nil); err != nil {
+				if err := svc.rememberIngestDiscard(ctx, entry, ingestDiscardReason(ctx)); err != nil {
+					return err
+				}
+				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", id, before, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
 					return err
 				}
 			}
 			if err := svc.clearIntakeSource(ctx, entry); err != nil {
+				return err
+			}
+			if err := svc.releaseIngestArticleAssets(ctx, id); err != nil {
 				return err
 			}
 			if err := deleteEntryAssociations(ctx, svc.db, spaceID, []string{id}); err != nil {

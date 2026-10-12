@@ -222,6 +222,11 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		}
 		// Both readable copies must agree before any row is inserted.
 		checks := map[string]any{"title": header.Title, "content_type": header.ContentType, "source_unverified": header.SourceUnverified, "starred": header.Starred, "collect_reason": header.CollectReason}
+		if _, present := row["acquisition"]; present {
+			checks["acquisition"] = header.Acquisition
+		} else if header.Acquisition != "" {
+			return fmt.Errorf("article acquisition differs from replica: %s", path)
+		}
 		for key, value := range checks {
 			if row[key] != value {
 				return fmt.Errorf("article header %s differs from replica field %s", path, key)
