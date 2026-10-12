@@ -64,7 +64,7 @@ func TestQueueMaintenanceKeepsRuntimeName(t *testing.T) {
 func TestEveryTaskTypeHasADeclaredQueue(t *testing.T) {
 	taskTypes := []string{
 		TypeDocumentProcess,
-		TypeKnowledgeListReparse, TypeKnowledgeListDelete,
+		TypeEntryListReparse, TypeEntryListDelete,
 		TypeManualProcess, TypeDataSourceSync, TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill,
 	}
 	for _, taskType := range taskTypes {

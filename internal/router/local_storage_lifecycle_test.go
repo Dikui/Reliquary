@@ -23,7 +23,7 @@ import (
 	"reliquary/internal/types"
 )
 
-// Uploaded knowledge files and rewritten Markdown images share the local
+// Uploaded entry files and rewritten Markdown images share the local
 // filesystem and the resource catalog, including deletion of their bytes.
 func TestLocalFileResourceLifecycle(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -34,8 +34,8 @@ func TestLocalFileResourceLifecycle(t *testing.T) {
 	catalog := service.NewResourceCatalog(repository.NewResourceRepository(db))
 	raw := filesvc.NewLocalFileService(baseDir, "")
 	engine := gin.New()
-	serveResourceGrants(engine, catalog, &stubTenantService{get: func(context.Context, uint64) (*types.Tenant, error) {
-		return &types.Tenant{ID: 1}, nil
+	serveResourceGrants(engine, catalog, &stubSpaceService{get: func(context.Context, uint64) (*types.Space, error) {
+		return &types.Space{ID: 1}, nil
 	}}, raw)
 	server := httptest.NewServer(engine)
 	t.Cleanup(server.Close)
@@ -48,7 +48,7 @@ func TestLocalFileResourceLifecycle(t *testing.T) {
 		name    string
 		content []byte
 	}{
-		{"knowledge.md", []byte("# Local storage\n\nKnowledge file content.")},
+		{"entry.md", []byte("# Local storage\n\nEntry file content.")},
 		{"figure.png", pngSample.Bytes()},
 	} {
 		t.Run(sample.name, func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestLocalFileResourceLifecycle(t *testing.T) {
 			request.Header.Set("Content-Type", writer.FormDataContentType())
 			require.NoError(t, request.ParseMultipartForm(1024))
 			t.Cleanup(func() { require.NoError(t, request.MultipartForm.RemoveAll()) })
-			ref, err := files.SaveFile(ctx, request.MultipartForm.File["file"][0], 1, "knowledge-1")
+			ref, err := files.SaveFile(ctx, request.MultipartForm.File["file"][0], 1, "entry-1")
 			require.NoError(t, err)
 			require.True(t, strings.HasPrefix(ref, types.ResourceScheme))
 			physical, _, err := catalog.ResolvePath(ctx, ref)
@@ -75,7 +75,7 @@ func TestLocalFileResourceLifecycle(t *testing.T) {
 			require.NoError(t, reader.Close())
 			require.Equal(t, sample.content, stored)
 			image := "![figure](" + ref + ")"
-			rewritten := storageurl.NewRewriter(storageurl.NewFileServiceResolver(&types.Tenant{ID: 1}, files), "TEST").String(ctx, image)
+			rewritten := storageurl.NewRewriter(storageurl.NewFileServiceResolver(&types.Space{ID: 1}, files), "TEST").String(ctx, image)
 			require.NotContains(t, rewritten, "resource://")
 			link := strings.TrimSuffix(strings.TrimPrefix(rewritten, "![figure]("), ")")
 			response, err := server.Client().Get(link)

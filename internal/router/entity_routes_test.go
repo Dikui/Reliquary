@@ -16,16 +16,16 @@ import (
 
 func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T) {
 	db := entityFixtureDB(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Entity routes"}).Error)
-	kb := types.KnowledgeBase{ID: "route-kb", TenantID: 1, Name: "Articles", Type: "document"}
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entity routes"}).Error)
+	kb := types.KnowledgeBase{ID: "route-kb", SpaceID: 1, Name: "Articles", Type: "document"}
 	kb.EnsureDefaults()
 	require.NoError(t, db.Create(&kb).Error)
-	entity := types.Entity{ID: "route-entity", TenantID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
+	entity := types.Entity{ID: "route-entity", SpaceID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
 	require.NoError(t, db.Create(&entity).Error)
-	require.NoError(t, db.Create(&types.EntityAlias{ID: "route-alias", TenantID: 1, EntityID: entity.ID, EntityType: "company", Alias: "艾克米", NormalizedAlias: "艾克米", ResolutionMethod: "exact", CreatedAt: time.Now()}).Error)
-	article := types.Knowledge{ID: "route-article", TenantID: 1, KnowledgeBaseID: kb.ID, Title: "Article mention", Type: types.KnowledgeTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+	require.NoError(t, db.Create(&types.EntityAlias{ID: "route-alias", SpaceID: 1, EntityID: entity.ID, EntityType: "company", Alias: "艾克米", NormalizedAlias: "艾克米", ResolutionMethod: "exact", CreatedAt: time.Now()}).Error)
+	article := types.Entry{ID: "route-article", SpaceID: 1, KnowledgeBaseID: kb.ID, Title: "Article mention", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, db.Create(&article).Error)
-	require.NoError(t, db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: article.ID, EntityID: entity.ID, CreatedAt: time.Now()}).Error)
+	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: entity.ID, CreatedAt: time.Now()}).Error)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), entityIdentityMiddleware())
 	RegisterEntityRoutes(engine.Group("/api/v1"), handler.NewEntityHandler(service.NewEntityService(db, nil)))
@@ -44,8 +44,8 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	require.NoError(t, json.Unmarshal(envelope.Data, &detail))
 	require.Equal(t, "company", detail.Entity.EntityType)
 	require.Equal(t, []string{"艾克米"}, detail.Entity.Aliases)
-	require.Len(t, detail.Knowledge, 1)
-	require.Equal(t, article.ID, detail.Knowledge[0].ID)
+	require.Len(t, detail.Entries, 1)
+	require.Equal(t, article.ID, detail.Entries[0].ID)
 	for _, query := range []string{"limit=0", "limit=101", "offset=-1"} {
 		response = entityRequest(t, engine, http.MethodGet, "/api/v1/entities?"+query, "", 1, entityOwnerID)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
@@ -59,7 +59,7 @@ func TestEntityResponsesEncodeEmptyAliasesAndArticlesAsArrays(t *testing.T) {
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(encoded, &fields))
-	require.JSONEq(t, "[]", string(fields["knowledge"]))
+	require.JSONEq(t, "[]", string(fields["entries"]))
 	var entityFields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(fields["entity"], &entityFields))
 	require.JSONEq(t, "[]", string(entityFields["aliases"]))

@@ -134,7 +134,7 @@ func (h *EntityHandler) NameEmbeddingRebuildStatus(c *gin.Context) {
 		c.Error(werrors.NewInternalServerError("name embedding rebuilder unavailable"))
 		return
 	}
-	item, err := h.rebuilder.Status(c.Request.Context(), types.MustTenantIDFromContext(c.Request.Context()))
+	item, err := h.rebuilder.Status(c.Request.Context(), types.MustSpaceIDFromContext(c.Request.Context()))
 	if err != nil {
 		c.Error(err)
 		return
@@ -147,7 +147,7 @@ func (h *EntityHandler) RebuildNameEmbeddings(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if err := h.rebuilder.MarkAndEnqueue(ctx, types.MustTenantIDFromContext(ctx), "administrator"); err != nil {
+	if err := h.rebuilder.MarkAndEnqueue(ctx, types.MustSpaceIDFromContext(ctx), "administrator"); err != nil {
 		c.Error(err)
 		return
 	}

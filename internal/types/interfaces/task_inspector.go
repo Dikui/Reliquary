@@ -11,19 +11,19 @@ import (
 // User cancellation removes queued article processing tasks and signals
 // active workers to stop at their next checkpoint.
 type TaskInspector interface {
-	// CancelTasksForKnowledge removes pending/scheduled/retry tasks
-	// whose payload references the given knowledge ID, and signals
+	// CancelTasksForEntry removes pending/scheduled/retry tasks
+	// whose payload references the given entry ID, and signals
 	// active workers running such tasks to stop. Returns rough
 	// counts of (deletedFromQueue, activeCancelled) for observability.
 	// Errors are returned but callers should treat the operation as
 	// best-effort: the row-level abort flag remains the source of
 	// truth, this just prevents wasted work.
-	CancelTasksForKnowledge(ctx context.Context, knowledgeID string) (deleted int, cancelled int, err error)
+	CancelTasksForEntry(ctx context.Context, entryID string) (deleted int, cancelled int, err error)
 
-	// HasQueuedTasksForKnowledge reports whether any pending / scheduled
-	// / retry / active task referencing the given knowledge ID still
+	// HasQueuedTasksForEntry reports whether any pending / scheduled
+	// / retry / active task referencing the given entry ID still
 	// lives in the queue backend. It is the read-only counterpart of
-	// CancelTasksForKnowledge: the housekeeping sweep calls it before
+	// CancelTasksForEntry: the housekeeping sweep calls it before
 	// flipping a long-idle "processing"/"finalizing" row to "failed" so
 	// it can tell a genuinely orphaned row (no task anywhere) from one
 	// whose enrichment subtasks are merely backlogged behind a busy
@@ -32,7 +32,7 @@ type TaskInspector interface {
 	// On backend error it returns (false, err); callers decide the fail-safe
 	// direction. Inline task fixtures always return false because they do
 	// not queue work, so their span and updated_at checks stay authoritative.
-	HasQueuedTasksForKnowledge(ctx context.Context, knowledgeID string) (bool, error)
+	HasQueuedTasksForEntry(ctx context.Context, entryID string) (bool, error)
 
 	// QueueStats returns a read-only depth snapshot for every queue this
 	// application enqueues into, for the System Admin runtime dashboard.
@@ -69,9 +69,9 @@ type RuntimeTaskInspector interface {
 	// operator-facing AllowedActions. Used when the business row is already
 	// gone but a retry/pending task survived (orphan cleanup).
 	ForceDeleteRuntimeTask(ctx context.Context, queue, taskID string) (supported bool, err error)
-	// PurgeArchivedRuntimeTasks removes team and legacy tenantless archived
+	// PurgeArchivedRuntimeTasks removes team and legacy spaceless archived
 	// (finally-failed) tasks from one queue and returns the deletion count.
-	// Other tenants and invalid payloads remain available for diagnostics.
+	// Other spaces and invalid payloads remain available for diagnostics.
 	// It only ever touches the archived (dead-letter) set, so live
 	// pending/active/scheduled/retry tasks are never affected. Business state
 	// is intentionally left untouched: archived tasks have already had their

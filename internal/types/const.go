@@ -4,10 +4,10 @@ package types
 type ContextKey string
 
 const (
-	// TenantIDContextKey is the context key for tenant ID
-	TenantIDContextKey ContextKey = "TenantID"
-	// TenantInfoContextKey is the context key for tenant information
-	TenantInfoContextKey ContextKey = "TenantInfo"
+	// SpaceIDContextKey is the context key for space ID
+	SpaceIDContextKey ContextKey = "SpaceID"
+	// SpaceInfoContextKey is the context key for space information
+	SpaceInfoContextKey ContextKey = "SpaceInfo"
 	// RequestIDContextKey is the context key for request ID
 	RequestIDContextKey ContextKey = "RequestID"
 	// LoggerContextKey is the context key for logger

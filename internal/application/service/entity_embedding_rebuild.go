@@ -41,9 +41,9 @@ type entityEmbeddingProfile struct {
 func entityEmbeddingProfileHash(modelID string, dimension int, model *types.Model) string {
 	return types.EmbeddingProfileHash(modelID, dimension, model)
 }
-func (r *EntityNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id string, tenantID uint64) (*types.Model, error) {
+func (r *EntityNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id string, spaceID uint64) (*types.Model, error) {
 	var metadata types.Model
-	err := r.db.WithContext(ctx).Where("id=? AND (tenant_id=? OR is_builtin=true)", id, tenantID).First(&metadata).Error
+	err := r.db.WithContext(ctx).Where("id=? AND (space_id=? OR is_builtin=true)", id, spaceID).First(&metadata).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -56,8 +56,8 @@ func (r *EntityNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id s
 	return &metadata, nil
 }
 
-func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, tenantID uint64) (entityEmbeddingProfile, error) {
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, tenantID)
+func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, spaceID uint64) (entityEmbeddingProfile, error) {
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	id, err := ResolveModelTier(ctx, r.db, nil, types.ModelTierEmbedding)
 	profile := entityEmbeddingProfile{modelID: id}
 	if err != nil {
@@ -69,7 +69,7 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, tenantID uin
 	if r.models == nil {
 		return profile, errors.New("embedding model service is unavailable")
 	}
-	before, err := r.profileMetadata(ctx, id, tenantID)
+	before, err := r.profileMetadata(ctx, id, spaceID)
 	if err != nil {
 		return profile, err
 	}
@@ -81,7 +81,7 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, tenantID uin
 		return profile, errors.New("embedding model has no usable dimensions")
 	}
 	profile.dimension = model.GetDimensions()
-	after, err := r.profileMetadata(ctx, id, tenantID)
+	after, err := r.profileMetadata(ctx, id, spaceID)
 	if err != nil {
 		return profile, err
 	}
@@ -100,13 +100,13 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, tenantID uin
 	return profile, nil
 }
 
-func (r *EntityNameEmbeddingRebuilder) pendingQuery(db *gorm.DB, tenantID uint64, _ entityEmbeddingProfile) *gorm.DB {
-	return db.Model(&types.Entity{}).Where("tenant_id=? AND merged_into_id='' AND embedding_needs_rebuild", tenantID)
+func (r *EntityNameEmbeddingRebuilder) pendingQuery(db *gorm.DB, spaceID uint64, _ entityEmbeddingProfile) *gorm.DB {
+	return db.Model(&types.Entity{}).Where("space_id=? AND merged_into_id='' AND embedding_needs_rebuild", spaceID)
 }
 
 // Profile-wide marking happens only at explicit lifecycle triggers, never in
 // mention resolution. Unavailable profiles preserve existing vectors and flags.
-func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, tenantID uint64, reason string) error {
+func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, spaceID uint64, reason string) error {
 	if r != nil && r.db != nil {
 		paused, err := maintenanceops.SnapshotPaused(ctx, r.db)
 		if err != nil {
@@ -121,29 +121,29 @@ func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, tenan
 				if err != nil {
 					return err
 				}
-				return copy.MarkAndEnqueue(ctx, tenantID, reason)
+				return copy.MarkAndEnqueue(ctx, spaceID, reason)
 			})
 		}
 	}
 
-	if r == nil || r.db == nil || tenantID == 0 {
+	if r == nil || r.db == nil || spaceID == 0 {
 		return errors.New("embedding rebuild scope or database is unavailable")
 	}
-	profile, profileErr := r.profile(ctx, tenantID)
+	profile, profileErr := r.profile(ctx, spaceID)
 	force := reason == "embedding_model_updated"
 	if profileErr == nil && !force {
 		var previous types.EntityNameEmbeddingRebuildRun
-		err := r.db.WithContext(ctx).Where("tenant_id=? AND status='completed' AND profile_hash<>''", tenantID).Order("created_at DESC,id DESC").First(&previous).Error
+		err := r.db.WithContext(ctx).Where("space_id=? AND status='completed' AND profile_hash<>''", spaceID).Order("created_at DESC,id DESC").First(&previous).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 		force = (err == nil && previous.ModelID == profile.modelID && previous.ProfileHash != profile.hash) || (errors.Is(err, gorm.ErrRecordNotFound) && reason == "startup")
 	}
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpaceShared(tx, tenantID); err != nil {
+		if err := lockEntitySpaceShared(tx, spaceID); err != nil {
 			return err
 		}
-		query := tx.Model(&types.Entity{}).Where("tenant_id=? AND merged_into_id='' AND NOT embedding_needs_rebuild", tenantID)
+		query := tx.Model(&types.Entity{}).Where("space_id=? AND merged_into_id='' AND NOT embedding_needs_rebuild", spaceID)
 		if profileErr == nil && !force {
 			query = query.Where("name_embedding IS NULL OR embedding_model_id<>? OR embedding_dimension<>? OR vector_dims(name_embedding)<>?", profile.modelID, profile.dimension, profile.dimension)
 		}
@@ -151,9 +151,9 @@ func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, tenan
 	}); err != nil {
 		return err
 	}
-	return r.Enqueue(ctx, tenantID, reason)
+	return r.Enqueue(ctx, spaceID, reason)
 }
-func (r *EntityNameEmbeddingRebuilder) Enqueue(ctx context.Context, tenantID uint64, reason string) error {
+func (r *EntityNameEmbeddingRebuilder) Enqueue(ctx context.Context, spaceID uint64, reason string) error {
 	if r != nil && r.db != nil {
 		if _, bound := r.tasks.(*transactionTaskEnqueuer); !bound {
 			return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -161,27 +161,27 @@ func (r *EntityNameEmbeddingRebuilder) Enqueue(ctx context.Context, tenantID uin
 				if err != nil {
 					return err
 				}
-				return copy.Enqueue(ctx, tenantID, reason)
+				return copy.Enqueue(ctx, spaceID, reason)
 			})
 		}
 	}
 
-	if r == nil || r.db == nil || tenantID == 0 {
+	if r == nil || r.db == nil || spaceID == 0 {
 		return errors.New("embedding rebuild scope or database is unavailable")
 	}
-	profile, _ := r.profile(ctx, tenantID)
+	profile, _ := r.profile(ctx, spaceID)
 	var pending int64
-	if err := r.pendingQuery(r.db.WithContext(ctx), tenantID, profile).Count(&pending).Error; err != nil {
+	if err := r.pendingQuery(r.db.WithContext(ctx), spaceID, profile).Count(&pending).Error; err != nil {
 		return err
 	}
 	if pending == 0 {
 		return nil
 	}
-	run := types.EntityNameEmbeddingRebuildRun{ID: uuid.NewString(), TenantID: tenantID, Status: "pending", Reason: strings.TrimSpace(reason), ModelID: profile.modelID, Dimension: profile.dimension, ProfileHash: profile.hash, TotalCount: pending, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	run := types.EntityNameEmbeddingRebuildRun{ID: uuid.NewString(), SpaceID: spaceID, Status: "pending", Reason: strings.TrimSpace(reason), ModelID: profile.modelID, Dimension: profile.dimension, ProfileHash: profile.hash, TotalCount: pending, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := r.db.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
 	}
-	payload, _ := json.Marshal(types.EntityNameEmbeddingRebuildPayload{TenantID: tenantID, RunID: run.ID})
+	payload, _ := json.Marshal(types.EntityNameEmbeddingRebuildPayload{SpaceID: spaceID, RunID: run.ID})
 	var queueErr error
 	if r.tasks == nil {
 		queueErr = errors.New("embedding rebuild task queue is unavailable")
@@ -196,17 +196,17 @@ func (r *EntityNameEmbeddingRebuilder) Enqueue(ctx context.Context, tenantID uin
 	}
 	return nil
 }
-func (r *EntityNameEmbeddingRebuilder) Status(ctx context.Context, tenantID uint64) (*types.EntityNameEmbeddingRebuildStatus, error) {
-	if r == nil || r.db == nil || tenantID == 0 {
+func (r *EntityNameEmbeddingRebuilder) Status(ctx context.Context, spaceID uint64) (*types.EntityNameEmbeddingRebuildStatus, error) {
+	if r == nil || r.db == nil || spaceID == 0 {
 		return nil, errors.New("embedding rebuild scope or database is unavailable")
 	}
-	profile, _ := r.profile(ctx, tenantID)
+	profile, _ := r.profile(ctx, spaceID)
 	status := &types.EntityNameEmbeddingRebuildStatus{}
-	if err := r.pendingQuery(r.db.WithContext(ctx), tenantID, profile).Count(&status.PendingCount).Error; err != nil {
+	if err := r.pendingQuery(r.db.WithContext(ctx), spaceID, profile).Count(&status.PendingCount).Error; err != nil {
 		return nil, err
 	}
 	var run types.EntityNameEmbeddingRebuildRun
-	err := r.db.WithContext(ctx).Where("tenant_id=?", tenantID).Order("created_at DESC,id DESC").First(&run).Error
+	err := r.db.WithContext(ctx).Where("space_id=?", spaceID).Order("created_at DESC,id DESC").First(&run).Error
 	if err == nil {
 		status.LatestRun = &run
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -215,17 +215,17 @@ func (r *EntityNameEmbeddingRebuilder) Status(ctx context.Context, tenantID uint
 	return status, nil
 }
 func (r *EntityNameEmbeddingRebuilder) Startup(ctx context.Context) error {
-	tenantID, ok := types.TenantIDFromContext(ctx)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
-		tenantID = 1
+		spaceID = 1
 	}
-	var space types.Tenant
-	if err := r.db.WithContext(ctx).Select("id").Where("id=?", tenantID).First(&space).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	var space types.Space
+	if err := r.db.WithContext(ctx).Select("id").Where("id=?", spaceID).First(&space).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil
 	} else if err != nil {
 		return err
 	}
-	return r.MarkAndEnqueue(ctx, tenantID, "startup")
+	return r.MarkAndEnqueue(ctx, spaceID, "startup")
 }
 func (r *EntityNameEmbeddingRebuilder) finish(ctx context.Context, run *types.EntityNameEmbeddingRebuildRun, status string, cause error) error {
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -235,7 +235,7 @@ func (r *EntityNameEmbeddingRebuilder) finish(ctx context.Context, run *types.En
 	if cause != nil {
 		detail = string([]rune(cause.Error())[:min(1000, len([]rune(cause.Error())))])
 	}
-	query := r.db.WithContext(persistCtx).Model(&types.EntityNameEmbeddingRebuildRun{}).Where("id=? AND tenant_id=?", run.ID, run.TenantID)
+	query := r.db.WithContext(persistCtx).Model(&types.EntityNameEmbeddingRebuildRun{}).Where("id=? AND space_id=?", run.ID, run.SpaceID)
 	if run.AttemptID != "" {
 		query = query.Where("attempt_id=?", run.AttemptID)
 	}
@@ -249,14 +249,14 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("embedding rebuild payload: %w", err)
 	}
-	if payload.TenantID == 0 || payload.RunID == "" {
+	if payload.SpaceID == 0 || payload.RunID == "" {
 		return errors.New("embedding rebuild task scope is invalid")
 	}
-	ctx = types.WithBackgroundTask(context.WithValue(ctx, types.TenantIDContextKey, payload.TenantID))
+	ctx = types.WithBackgroundTask(context.WithValue(ctx, types.SpaceIDContextKey, payload.SpaceID))
 	var run types.EntityNameEmbeddingRebuildRun
 	completed := false
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=?", payload.RunID, payload.TenantID).First(&run).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", payload.RunID, payload.SpaceID).First(&run).Error; err != nil {
 			return err
 		}
 		if run.Status == "completed" {
@@ -287,14 +287,14 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 			handleErr = errors.Join(handleErr, err)
 		}
 	}()
-	profile, err := r.profile(ctx, payload.TenantID)
+	profile, err := r.profile(ctx, payload.SpaceID)
 	if err != nil {
 		return err
 	}
 	run.ModelID = profile.modelID
 	run.Dimension = profile.dimension
 	run.ProfileHash = profile.hash
-	if err := r.pendingQuery(r.db.WithContext(ctx), payload.TenantID, profile).Count(&run.TotalCount).Error; err != nil {
+	if err := r.pendingQuery(r.db.WithContext(ctx), payload.SpaceID, profile).Count(&run.TotalCount).Error; err != nil {
 		return err
 	}
 	if err := r.db.WithContext(ctx).Model(&types.EntityNameEmbeddingRebuildRun{}).Where("id=? AND attempt_id=?", run.ID, run.AttemptID).Updates(map[string]any{"model_id": run.ModelID, "dimension": run.Dimension, "profile_hash": run.ProfileHash, "total_count": run.TotalCount}).Error; err != nil {
@@ -304,7 +304,7 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 	cursor := ""
 	for {
 		var entities []types.Entity
-		query := r.pendingQuery(r.db.WithContext(ctx), payload.TenantID, profile).Order("id").Limit(batchSize)
+		query := r.pendingQuery(r.db.WithContext(ctx), payload.SpaceID, profile).Order("id").Limit(batchSize)
 		if cursor != "" {
 			query = query.Where("id>?", cursor)
 		}
@@ -341,22 +341,22 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 		}
 		var written int64
 		if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			if err := lockEntitySpaceShared(tx, payload.TenantID); err != nil {
+			if err := lockEntitySpaceShared(tx, payload.SpaceID); err != nil {
 				return err
 			}
-			if err := r.checkProfile(tx, payload.TenantID, profile); err != nil {
+			if err := r.checkProfile(tx, payload.SpaceID, profile); err != nil {
 				return err
 			}
 			// A concurrent retry cannot commit results after a newer attempt takes over.
 			var currentRun types.EntityNameEmbeddingRebuildRun
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "attempt_id").Where("id=? AND tenant_id=?", run.ID, run.TenantID).First(&currentRun).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "attempt_id").Where("id=? AND space_id=?", run.ID, run.SpaceID).First(&currentRun).Error; err != nil {
 				return err
 			}
 			if currentRun.AttemptID != run.AttemptID {
 				return errors.New("embedding rebuild attempt was superseded")
 			}
 			for i, entity := range entities {
-				result := tx.Model(&types.Entity{}).Where("tenant_id=? AND id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=? AND updated_at=?", payload.TenantID, entity.ID, entity.CanonicalName, entity.EntityType, entity.Description, entity.UpdatedAt).
+				result := tx.Model(&types.Entity{}).Where("space_id=? AND id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=? AND updated_at=?", payload.SpaceID, entity.ID, entity.CanonicalName, entity.EntityType, entity.Description, entity.UpdatedAt).
 					Updates(map[string]any{"name_embedding": types.EntityNameEmbedding(vectors[i]), "embedding_model_id": profile.modelID, "embedding_dimension": profile.dimension, "embedding_needs_rebuild": false, "updated_at": time.Now()})
 				if result.Error != nil {
 					return result.Error
@@ -371,9 +371,9 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 	}
 	return nil
 }
-func (r *EntityNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, tenantID uint64, profile entityEmbeddingProfile) error {
+func (r *EntityNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, spaceID uint64, profile entityEmbeddingProfile) error {
 	var kb types.KnowledgeBase
-	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers", "embedding_model_id").Where("tenant_id=?", tenantID).First(&kb).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers", "embedding_model_id").Where("space_id=?", spaceID).First(&kb).Error; err != nil {
 		return err
 	}
 	id, err := ResolveModelTier(context.Background(), nil, &kb, types.ModelTierEmbedding)
@@ -381,7 +381,7 @@ func (r *EntityNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, tenantID uint64
 		return errors.New("knowledge base embedding profile changed during rebuild")
 	}
 	var metadata types.Model
-	err = tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (tenant_id=? OR is_builtin=true)", profile.modelID, tenantID).First(&metadata).Error
+	err = tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (space_id=? OR is_builtin=true)", profile.modelID, spaceID).First(&metadata).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -414,12 +414,12 @@ func (r *EntityNameEmbeddingRebuilder) WithTransaction(ctx context.Context, tx *
 	return &copy, nil
 }
 
-func (r *EntityNameEmbeddingRebuilder) EnqueueTx(ctx context.Context, tx *gorm.DB, tenantID uint64, reason string) error {
+func (r *EntityNameEmbeddingRebuilder) EnqueueTx(ctx context.Context, tx *gorm.DB, spaceID uint64, reason string) error {
 	copy, err := r.WithTransaction(ctx, tx)
 	if err != nil {
 		return err
 	}
-	return copy.Enqueue(ctx, tenantID, reason)
+	return copy.Enqueue(ctx, spaceID, reason)
 }
 
 func (r *EntityNameEmbeddingRebuilder) BindTransaction(ctx context.Context, tx *gorm.DB) (EntityNameEmbeddingRebuildTrigger, error) {

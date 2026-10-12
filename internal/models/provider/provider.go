@@ -49,7 +49,7 @@ func (p ProviderInfo) GetDefaultURL(modelType types.ModelType) string {
 	if address, ok := p.DefaultURLs[modelType]; ok {
 		return address
 	}
-	return p.DefaultURLs[types.ModelTypeKnowledgeQA]
+	return p.DefaultURLs[types.ModelTypeGeneration]
 }
 
 func (p ProviderInfo) ValidateConfig(config *Config) error {

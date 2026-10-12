@@ -23,13 +23,13 @@ import "sort"
 var contextCloneAcrossDetach = map[ContextKey]bool{
 	// Caller identity and workspace scope. Background work runs as the same
 	// principal in the same workspace, so all of this has to survive; a
-	// detached goroutine that loses its tenant reads another tenant's rows or
+	// detached goroutine that loses its space reads another space's rows or
 	// none at all.
-	TenantIDContextKey:   true,
-	TenantInfoContextKey: true,
-	UserContextKey:       true,
-	UserIDContextKey:     true,
-	PrincipalContextKey:  true,
+	SpaceIDContextKey:   true,
+	SpaceInfoContextKey: true,
+	UserContextKey:      true,
+	UserIDContextKey:    true,
+	PrincipalContextKey: true,
 
 	// The visitor identity must remain distinct across background work.
 	EmbedQueryContextKey: true,
@@ -41,7 +41,7 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 
 	// Marks model calls as coming from an queue worker so the per-model
 	// concurrency governor throttles them, leaving foreground model latency
-	// alone. Document ingestion detaches mid-flight — knowledge_create hands
+	// alone. Document ingestion detaches mid-flight — entry_create hands
 	// processChunks to a goroutine on a cloned context, and processChunks is
 	// what vectorises every chunk. Dropping the mark there would let exactly
 	// the ingestion storm the governor exists to contain run past it. Keeping

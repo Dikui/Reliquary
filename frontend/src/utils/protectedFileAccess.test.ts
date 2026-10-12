@@ -16,8 +16,8 @@ test.afterEach(() => {
   setDefaultProtectedFileAccess(null)
 })
 
-test('tenant access routes through the tenant-scoped proxy', () => {
-  const request = buildProtectedFileRequest(RESOURCE, { mode: 'tenant' })
+test('space access routes through the space-scoped proxy', () => {
+  const request = buildProtectedFileRequest(RESOURCE, { mode: 'space' })
 
   assert.equal(request?.url, `/files?file_path=${encodeURIComponent(RESOURCE)}`)
 })
@@ -33,26 +33,26 @@ test('knowledge-base access routes through the KB-scoped proxy', () => {
 
 
 test('non-storage sources are not proxied', () => {
-  assert.equal(buildProtectedFileRequest('https://example.com/a.png', { mode: 'tenant' }), null)
+  assert.equal(buildProtectedFileRequest('https://example.com/a.png', { mode: 'space' }), null)
   assert.equal(isProviderFileURL('https://example.com/a.png'), false)
   assert.equal(isProviderFileURL('local://42/a.png'), true)
 })
 
-test('a component scope refines the default tenant plane', () => {
+test('a component scope refines the default space plane', () => {
   const override: ProtectedFileAccessContext = { mode: 'knowledgeBase', kbId: 'kb-1' }
 
   assert.deepEqual(resolveProtectedFileAccess(override), override)
-  assert.deepEqual(resolveProtectedFileAccess(), { mode: 'tenant' })
+  assert.deepEqual(resolveProtectedFileAccess(), { mode: 'space' })
   assert.deepEqual(
     resolveProtectedFileAccess({ mode: 'knowledgeBase', kbId: '  ' }),
-    { mode: 'tenant' },
+    { mode: 'space' },
   )
 })
 
 test('all file proxies are recognized as protected proxy paths', () => {
   assert.equal(isProtectedFileProxyPath('/files'), true)
   assert.equal(isProtectedFileProxyPath('/api/v1/knowledge-bases/kb-1/files'), true)
-  assert.equal(isProtectedFileProxyPath('/api/v1/knowledge/article-id/vault-attachment'), true)
+  assert.equal(isProtectedFileProxyPath('/api/v1/entries/article-id/vault-attachment'), true)
 })
 
 test('vault attachments use the authenticated article proxy with their relative path', () => {
@@ -64,16 +64,16 @@ test('vault attachments use the authenticated article proxy with their relative 
     const relative = '../../attachments/article-id/图表.png'
     const source = `vault://article-id/${encodeURIComponent(relative)}`
     assert.equal(isProviderFileURL(source), true)
-    for (const access of [{ mode: 'tenant' }, { mode: 'knowledgeBase', kbId: 'kb-1' }] as ProtectedFileAccessContext[]) {
+    for (const access of [{ mode: 'space' }, { mode: 'knowledgeBase', kbId: 'kb-1' }] as ProtectedFileAccessContext[]) {
       const request = buildProtectedFileRequest(source, access)!
       const url = new URL(request.url, 'http://localhost')
-      assert.equal(url.pathname, '/api/v1/knowledge/article-id/vault-attachment')
+      assert.equal(url.pathname, '/api/v1/entries/article-id/vault-attachment')
       assert.equal(url.searchParams.get('path'), relative)
       assert.deepEqual(request.headers, { Authorization: 'Bearer vault-secret-token' })
       assert.doesNotMatch(request.url, /vault-secret-token|token=/)
     }
     for (const invalid of ['vault://article-id/', 'vault://article-id/%E0%A4', 'vault://missing-id']) {
-      assert.equal(buildProtectedFileRequest(invalid, { mode: 'tenant' }), null, invalid)
+      assert.equal(buildProtectedFileRequest(invalid, { mode: 'space' }), null, invalid)
     }
   } finally {
     if (previous) Object.defineProperty(globalThis, 'localStorage', previous)

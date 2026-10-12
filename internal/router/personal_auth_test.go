@@ -56,42 +56,42 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db := pgtest.Open(t)
-	require.NoError(t, service.EnsureSingleTeamSpace(context.Background(), db))
+	require.NoError(t, service.EnsurePersonalSpace(context.Background(), db))
 	cfg := &config.Config{}
-	tenantRepo := apprepo.NewTenantRepository(db)
-	tenantSvc := service.NewTenantService(tenantRepo)
-	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), apprepo.NewAuthTokenRepository(db), tenantSvc)
-	keys := service.NewTenantAPIKeyService(apprepo.NewTenantAPIKeyRepository(db))
-	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
+	spaceRepo := apprepo.NewSpaceRepository(db)
+	spaceSvc := service.NewSpaceService(spaceRepo)
+	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), apprepo.NewAuthTokenRepository(db), spaceSvc)
+	keys := service.NewAPIKeyService(apprepo.NewAPIKeyRepository(db))
+	entryRepo := apprepo.NewEntryRepository(db)
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
-	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil)
-	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, tenantSvc)
-	knowledge, err := service.NewKnowledgeService(db, cfg, knowledgeRepo, kb, tenantRepo, tenantSvc,
+	kb := service.NewKnowledgeBaseService(db, kbRepo, entryRepo, nil, nil, nil, nil)
+	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, spaceSvc)
+	entry, err := service.NewEntryService(db, cfg, entryRepo, kb, spaceRepo, spaceSvc,
 		nil, nil, nil, nil, models, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), cfg)
-	system := handler.NewSystemHandler(cfg, tenantSvc, users, settings, keys, nil, nil)
+	system := handler.NewSystemHandler(cfg, spaceSvc, users, settings, keys, nil, nil)
 	params := RouterParams{
-		Config: cfg, UserService: users, TenantService: tenantSvc,
-		TenantAPIKeyService: keys, KBService: kb, KnowledgeService: knowledge,
-		KBHandler:              handler.NewKnowledgeBaseHandler(kb),
-		KnowledgeHandler:       handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil),
-		KnowledgeSearchHandler: &handler.KnowledgeSearchHandler{},
-		ModelHandler:           handler.NewModelHandler(models),
-		EntityHandler:          handler.NewEntityHandler(service.NewEntityService(db, nil)),
-		TenantHandler:          handler.NewTenantHandler(tenantSvc, keys, users, kb, cfg, settings),
-		AuthHandler:            handler.NewAuthHandler(users, tenantSvc), SystemHandler: system,
+		Config: cfg, UserService: users, SpaceService: spaceSvc,
+		APIKeyService: keys, KBService: kb, EntryService: entry,
+		KBHandler:     handler.NewKnowledgeBaseHandler(kb),
+		EntryHandler:  handler.NewEntryHandler(cfg, entry, kb, nil, nil),
+		SearchHandler: &handler.SearchHandler{},
+		ModelHandler:  handler.NewModelHandler(models),
+		EntityHandler: handler.NewEntityHandler(service.NewEntityService(db, nil)),
+		SpaceHandler:  handler.NewSpaceHandler(spaceSvc, keys, users, kb, cfg, settings),
+		AuthHandler:   handler.NewAuthHandler(users, spaceSvc), SystemHandler: system,
 	}
-	guards := newAccessGuards(kb, knowledge, nil)
+	guards := newAccessGuards(kb, entry, nil)
 	r := gin.New()
-	r.Use(middleware.ErrorHandler(), middleware.Auth(tenantSvc, users, keys))
+	r.Use(middleware.ErrorHandler(), middleware.Auth(spaceSvc, users, keys))
 	v1 := r.Group("/api/v1")
 	RegisterAuthRoutes(v1, params.AuthHandler, guards)
-	RegisterTenantRoutes(v1, params.TenantHandler, guards)
+	RegisterSpaceRoutes(v1, params.SpaceHandler, guards)
 	RegisterSystemRoutes(v1, system, guards)
 	RegisterModelRoutes(v1, params.ModelHandler, nil, guards)
 	RegisterEntityRoutes(v1, params.EntityHandler)
-	RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, guards)
+	RegisterEntryRoutes(v1, params.EntryHandler, guards)
 	RegisterKnowledgeBaseRoutes(v1, params.KBHandler, guards)
 	f := &personalAuthFixture{db: db, router: r, params: params}
 	register := personalRequest(t, r, http.MethodPost, "/api/v1/auth/register", `{"username":"personal","email":"personal@example.test","password":"initial-password"}`, "", false)
@@ -159,16 +159,16 @@ func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 	t.Helper()
 	now := time.Now().UTC()
-	kb, err := f.params.KBService.GetKnowledgeBase(context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID))
+	kb, err := f.params.KBService.GetKnowledgeBase(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
 	require.NoError(t, err)
 	for i := 1; i <= 2; i++ {
 		kbID := kb.ID
-		knowledgeID := fmt.Sprintf("personal-message-%d", i)
+		entryID := fmt.Sprintf("personal-message-%d", i)
 		entityID := fmt.Sprintf("personal-entity-%d", i)
-		require.NoError(t, f.db.Create(&types.Knowledge{ID: knowledgeID, TenantID: 1, KnowledgeBaseID: kbID, Type: types.KnowledgeTypeManual, Title: "Acme source", FileName: knowledgeID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, TenantID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
+		require.NoError(t, f.db.Create(&types.Entry{ID: entryID, SpaceID: 1, KnowledgeBaseID: kbID, Type: types.EntryTypeManual, Title: "Acme source", FileName: entryID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
+		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, SpaceID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
 
-		require.NoError(t, f.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: knowledgeID, EntityID: entityID, CreatedAt: now}).Error)
+		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entryID, EntityID: entityID, CreatedAt: now}).Error)
 	}
 }
 
@@ -176,7 +176,7 @@ func TestPersonalAPIKeyAndLoginReturnAllEntities(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	seedPersonalEntities(t, f)
 	cases := []struct{ method, path, body string }{
-		{http.MethodGet, "/api/v1/knowledge/search?keyword=Acme", ""},
+		{http.MethodGet, "/api/v1/entries/search?keyword=Acme", ""},
 		{http.MethodGet, "/api/v1/entities", ""},
 		{http.MethodGet, "/api/v1/entities/personal-entity-2", ""},
 	}
@@ -222,7 +222,7 @@ func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(created.Body.Bytes(), &response))
 		require.Nil(t, response.Data.ExpiresAt)
-		var stored types.TenantAPIKey
+		var stored types.APIKey
 		require.NoError(t, f.db.First(&stored, response.Data.ID).Error)
 		require.Nil(t, stored.ExpiresAt)
 		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", response.Data.Token, true)

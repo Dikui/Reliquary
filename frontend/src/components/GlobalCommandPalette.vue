@@ -46,10 +46,10 @@
         <!-- Active search results -->
         <template v-else>
           <t-button variant="text" @click="openFullSearch">{{ t('knowledgeSearch.fullSearch') }}</t-button>
-          <!-- Knowledge messages (one representative match each) -->
+          <!-- Entry messages (one representative match each) -->
           <ResultGroup v-if="isGroupVisible('chunks') && fileGroups.length" :label="t('commandPalette.group.chunks')"
             :count="fileGroups.length">
-            <template v-for="(item, i) in flatChunkItems" :key="'c-' + item.file.knowledgeId">
+            <template v-for="(item, i) in flatChunkItems" :key="'c-' + item.file.entryId">
               <ResultItem :index="flatIndexFor('chunks', i)" :selected="selectedIndex === flatIndexFor('chunks', i)"
                 :shortcut="shortcutFor(flatIndexFor('chunks', i))" icon-name="file"
                 :badge="item.chunk.image_path ? t('knowledgeSearch.imageMatch') : item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
@@ -60,7 +60,7 @@
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>
                 </template>
                 <template #subtitle>
-                  <KnowledgeSearchImage v-if="item.file.imagePath" :article-id="item.file.knowledgeId" :path="item.file.imagePath" :title="item.file.title" compact />
+                  <SearchImage v-if="item.file.imagePath" :article-id="item.file.entryId" :path="item.file.imagePath" :title="item.file.title" compact />
                   <span v-html="highlight(item.chunk.matched_content || item.chunk.content)" />
                 </template>
               </ResultItem>
@@ -128,7 +128,7 @@ import { highlightText } from './GlobalCommandPalette/useHighlight'
 import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
 import ResultGroup from './GlobalCommandPalette/ResultGroup.vue'
 import ResultItem from './GlobalCommandPalette/ResultItem.vue'
-import KnowledgeSearchImage from './KnowledgeSearchImage.vue'
+import SearchImage from './SearchImage.vue'
 import RetrievalSettings from '@/views/settings/RetrievalSettings.vue'
 
 const { t } = useI18n()
@@ -240,7 +240,7 @@ const flatItems = computed<FlatItem[]>(() => {
     } else if (g === 'chunks') {
       flatChunkItems.value.forEach((item) => {
         out.push({
-          key: `knowledge:${item.file.knowledgeId}`,
+          key: `entry:${item.file.entryId}`,
           group: g,
           run: () => openChunk(item),
         })
@@ -282,28 +282,28 @@ const primaryActionForSelected = (ev?: { cmd: boolean }) => {
 const openChunk = (item: FlatChunkItem) => {
   commandPaletteStore.pushRecent(query.value)
   commandPaletteStore.closePalette()
-  const alreadyViewingKnowledge = route.name === 'knowledge'
+  const alreadyViewingEntry = route.name === 'entries'
   // On the articles page, router.push to the same path+query
   // is a no-op (vue-router dedupes identical navigations), so the document
   // auto-open logic never fires. Dispatch a global event that KnowledgeBase.vue
   // listens for to open the matching article.
-  if (alreadyViewingKnowledge) {
+  if (alreadyViewingEntry) {
     window.dispatchEvent(
-      new CustomEvent('reliquary:open-knowledge', {
-        detail: { kbId: item.file.kbId, knowledgeId: item.file.knowledgeId },
+      new CustomEvent('reliquary:open-entry', {
+        detail: { kbId: item.file.kbId, entryId: item.file.entryId },
       }),
     )
     return
   }
   router.push({
-    path: '/platform/knowledge',
-    query: { knowledge_id: item.file.knowledgeId },
+    path: '/platform/entries',
+    query: { entry_id: item.file.entryId },
   })
 }
 
 const openFullSearch = () => {
   commandPaletteStore.closePalette()
-  router.push({ path: '/platform/knowledge-search', query: query.value.trim() ? { q: query.value.trim() } : {} })
+  router.push({ path: '/platform/search', query: query.value.trim() ? { q: query.value.trim() } : {} })
 }
 
 const highlight = (text: string) => highlightText(text, query.value)

@@ -10,10 +10,10 @@ import (
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/common"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 )
 
 // pgRepository implements PostgreSQL-based retrieval operations
@@ -135,7 +135,7 @@ func (g *pgRepository) BatchSave(
 }
 
 // DeleteByChunkIDList deletes indices by chunk IDs
-func (g *pgRepository) DeleteByChunkIDList(ctx context.Context, chunkIDList []string, dimension int, knowledgeType string) error {
+func (g *pgRepository) DeleteByChunkIDList(ctx context.Context, chunkIDList []string, dimension int, entryType string) error {
 	logger.GetLogger(ctx).Infof("[Postgres] Deleting indices by chunk IDs, count: %d", len(chunkIDList))
 	result := g.db.WithContext(ctx).Where("chunk_id IN ?", chunkIDList).Delete(&pgVector{})
 	if result.Error != nil {
@@ -147,7 +147,7 @@ func (g *pgRepository) DeleteByChunkIDList(ctx context.Context, chunkIDList []st
 }
 
 // DeleteBySourceIDList deletes indices by source IDs
-func (g *pgRepository) DeleteBySourceIDList(ctx context.Context, sourceIDList []string, dimension int, knowledgeType string) error {
+func (g *pgRepository) DeleteBySourceIDList(ctx context.Context, sourceIDList []string, dimension int, entryType string) error {
 	if len(sourceIDList) == 0 {
 		return nil
 	}
@@ -161,15 +161,15 @@ func (g *pgRepository) DeleteBySourceIDList(ctx context.Context, sourceIDList []
 	return nil
 }
 
-// DeleteByKnowledgeIDList deletes indices by knowledge IDs
-func (g *pgRepository) DeleteByKnowledgeIDList(ctx context.Context, knowledgeIDList []string, dimension int, knowledgeType string) error {
-	logger.GetLogger(ctx).Infof("[Postgres] Deleting indices by knowledge IDs, count: %d", len(knowledgeIDList))
-	result := g.db.WithContext(ctx).Where("knowledge_id IN ?", knowledgeIDList).Delete(&pgVector{})
+// DeleteByEntryIDList deletes indices by entry IDs
+func (g *pgRepository) DeleteByEntryIDList(ctx context.Context, entryIDList []string, dimension int, entryType string) error {
+	logger.GetLogger(ctx).Infof("[Postgres] Deleting indices by entry IDs, count: %d", len(entryIDList))
+	result := g.db.WithContext(ctx).Where("entry_id IN ?", entryIDList).Delete(&pgVector{})
 	if result.Error != nil {
-		logger.GetLogger(ctx).Errorf("[Postgres] Failed to delete indices by knowledge IDs: %v", result.Error)
+		logger.GetLogger(ctx).Errorf("[Postgres] Failed to delete indices by entry IDs: %v", result.Error)
 		return result.Error
 	}
-	logger.GetLogger(ctx).Infof("[Postgres] Successfully deleted %d indices by knowledge IDs", result.RowsAffected)
+	logger.GetLogger(ctx).Infof("[Postgres] Successfully deleted %d indices by entry IDs", result.RowsAffected)
 	return nil
 }
 
@@ -194,22 +194,22 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	logger.GetLogger(ctx).Infof("[Postgres] Keywords retrieval: query=%s, topK=%d", params.Query, params.TopK)
 	conds := make([]clause.Expression, 0)
 
-	// KnowledgeBaseIDs and KnowledgeIDs use AND logic
+	// KnowledgeBaseIDs and EntryIDs use AND logic
 	// - If only KnowledgeBaseIDs: search entire knowledge bases
-	// - If only KnowledgeIDs: search specific documents
+	// - If only EntryIDs: search specific documents
 	// - If both: search specific documents within the knowledge bases (AND)
 	if len(params.KnowledgeBaseIDs) > 0 {
 		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by knowledge base IDs: %v", params.KnowledgeBaseIDs)
 		conds = append(conds, clause.IN{
 			Column: "c.knowledge_base_id",
-			Values: common.ToInterfaceSlice(params.KnowledgeBaseIDs),
+			Values: utils.ToInterfaceSlice(params.KnowledgeBaseIDs),
 		})
 	}
-	if len(params.KnowledgeIDs) > 0 {
-		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by knowledge IDs: %v", params.KnowledgeIDs)
+	if len(params.EntryIDs) > 0 {
+		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by entry IDs: %v", params.EntryIDs)
 		conds = append(conds, clause.IN{
-			Column: "c.knowledge_id",
-			Values: common.ToInterfaceSlice(params.KnowledgeIDs),
+			Column: "c.entry_id",
+			Values: utils.ToInterfaceSlice(params.EntryIDs),
 		})
 	}
 
@@ -240,7 +240,7 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 
 	var embeddingDBList []pgVectorWithScore
 	err := g.db.WithContext(ctx).Table("chunks AS c").
-		Joins("JOIN knowledges AS k ON k.id = c.knowledge_id").
+		Joins("JOIN entries AS k ON k.id = c.entry_id").
 		Joins("JOIN knowledge_bases AS kb ON kb.id = c.knowledge_base_id").
 		Clauses(conds...).
 		Select([]string{
@@ -250,7 +250,7 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 			"c.id AS source_id",
 			"0 AS source_type",
 			"c.id AS chunk_id",
-			"c.knowledge_id",
+			"c.entry_id",
 			"c.knowledge_base_id",
 		}).
 		Limit(int(params.TopK)).
@@ -332,9 +332,9 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	whereParts = append(whereParts, fmt.Sprintf("dimension = $%d", len(allVars)+1))
 	allVars = append(allVars, dimension)
 
-	// KnowledgeBaseIDs and KnowledgeIDs use AND logic
+	// KnowledgeBaseIDs and EntryIDs use AND logic
 	// - If only KnowledgeBaseIDs: search entire knowledge bases
-	// - If only KnowledgeIDs: search specific documents
+	// - If only EntryIDs: search specific documents
 	// - If both: search specific documents within the knowledge bases (AND)
 	if len(params.KnowledgeBaseIDs) > 0 {
 		logger.GetLogger(ctx).Debugf(
@@ -350,18 +350,18 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		whereParts = append(whereParts, fmt.Sprintf("knowledge_base_id IN (%s)",
 			strings.Join(placeholders, ", ")))
 	}
-	if len(params.KnowledgeIDs) > 0 {
+	if len(params.EntryIDs) > 0 {
 		logger.GetLogger(ctx).Debugf(
-			"[Postgres] Filtering vector search by knowledge IDs: %v",
-			params.KnowledgeIDs,
+			"[Postgres] Filtering vector search by entry IDs: %v",
+			params.EntryIDs,
 		)
-		placeholders := make([]string, len(params.KnowledgeIDs))
+		placeholders := make([]string, len(params.EntryIDs))
 		paramStart := len(allVars) + 1
-		for i := range params.KnowledgeIDs {
+		for i := range params.EntryIDs {
 			placeholders[i] = fmt.Sprintf("$%d", paramStart+i)
-			allVars = append(allVars, params.KnowledgeIDs[i])
+			allVars = append(allVars, params.EntryIDs[i])
 		}
-		whereParts = append(whereParts, fmt.Sprintf("knowledge_id IN (%s)",
+		whereParts = append(whereParts, fmt.Sprintf("entry_id IN (%s)",
 			strings.Join(placeholders, ", ")))
 	}
 
@@ -412,7 +412,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	querySQL := fmt.Sprintf(`
 		SELECT 
 			e.id, c.content, c.context_header, k.title, c.metadata,
-			e.source_id, e.source_type, e.chunk_id, e.knowledge_id, e.knowledge_base_id,
+			e.source_id, e.source_type, e.chunk_id, e.entry_id, e.knowledge_base_id,
 			(1 - candidates.distance) as score
 		FROM (
 			SELECT 
@@ -425,7 +425,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		) AS candidates
 		JOIN embeddings AS e ON e.id = candidates.id
 		JOIN chunks AS c ON c.id = e.chunk_id
-		JOIN knowledges AS k ON k.id = c.knowledge_id
+		JOIN entries AS k ON k.id = c.entry_id
 		WHERE candidates.distance <= $%[4]d
 			AND c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
@@ -463,7 +463,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		}
 		// pgvector >= 0.8 supports iterative scan, which keeps pulling more
 		// candidates from HNSW until the post-filter (knowledge_base_id /
-		// knowledge_id / is_enabled) yields enough rows. Without it,
+		// entry_id / is_enabled) yields enough rows. Without it,
 		// HNSW returns at most ef_search candidates and the outer filter may
 		// silently lose recall when the filter is selective.
 		// Best-effort: ignore failure on older pgvector versions.

@@ -722,7 +722,7 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                     with (stage / "database.dump").open("wb") as stream:
                         ctx.pg("pg_dump", database, "-Fc", "--no-owner", "--no-acl", output=stream)
                     snapshot = ctx.cli_json("manifest", overrides=side)
-                    # A scrubbed tenant no longer contains the parser keys.
+                    # A scrubbed space no longer contains the parser keys.
                     # Keep their original field names for reconfiguration and
                     # narrow credential-related comparison exceptions.
                     snapshot["required_credentials"] = before.get("required_credentials", [])
@@ -839,6 +839,8 @@ def restore(ctx, package, args):
     for name in ("vault", "resources"):
         ctx.restore_storage(name, package / name)
     legacy = ctx.legacy_schema()
+    if not legacy:
+        ctx.cli_json("migrate")
     freeze_restored_queue(ctx)
     ctx.cli_json("reindex")
     expected = str(package / "snapshot.json")
@@ -889,7 +891,7 @@ def print_credentials(required):
 
 def start_paused_environment(ctx):
     if ctx.legacy_schema():
-        print("Legacy application stays offline because its task queue does not support the maintenance pause gate. Enter model, data-source or tenant parser credentials using maintenance credentials. For ChatGPT, use maintenance chatgpt-login, authorize its URL, then maintenance chatgpt-complete with the local redirect URL on stdin. Run unpack --resume after these steps.")
+        print("Legacy application stays offline because its task queue does not support the maintenance pause gate. Enter model, data-source or space parser credentials using maintenance credentials. For ChatGPT, use maintenance chatgpt-login, authorize its URL, then maintenance chatgpt-complete with the local redirect URL on stdin. Run unpack --resume after these steps.")
         return
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")
@@ -939,28 +941,28 @@ def require_parser_credentials(ctx, package, state_name=".maintenance-restore.js
         expected += json.loads(snapshot_path.read_text()).get("required_credentials", [])
     wanted = {}
     for item in expected:
-        if item.get("kind") == "tenants":
+        if item.get("kind") in ("spaces", "tenants"):
             fields = {field for field in item.get("fields", []) if field.startswith("parser_engine_config.")}
             if fields:
-                tenant = str(item["id"])
-                previous = wanted.get(tenant, (item.get("name", item["id"]), set()))
-                wanted[tenant] = (previous[0], previous[1] | fields)
+                space = str(item["id"])
+                previous = wanted.get(space, (item.get("name", item["id"]), set()))
+                wanted[space] = (previous[0], previous[1] | fields)
     if not wanted:
         return
     current = (ctx.cli_json("manifest", overrides=overrides) if overrides is not None else ctx.cli_json("manifest")).get("required_credentials", [])
     present = {}
     for item in current:
-        if item.get("kind") == "tenants":
+        if item.get("kind") in ("spaces", "tenants"):
             present.setdefault(str(item["id"]), set()).update(item.get("fields", []))
-    missing = [{"kind": "tenants", "id": tenant, "name": name, "fields": sorted(fields - present.get(tenant, set()))}
-               for tenant, (name, fields) in wanted.items() if fields - present.get(tenant, set())]
+    missing = [{"kind": "spaces", "id": space, "name": name, "fields": sorted(fields - present.get(space, set()))}
+               for space, (name, fields) in wanted.items() if fields - present.get(space, set())]
     if missing:
         state_path = ctx.root / state_name
         state = json.loads(state_path.read_text()) if state_path.exists() else {}
         state.update({"state": "waiting_credentials", "package": str(package), "missing_parser_credentials": missing})
         json_write(state_path, state)
         print_credentials(missing)
-        raise AdminError("State: waiting_credentials. Collection and task execution remain paused. Fill every listed cloud parser credential in tenant/parser settings, then run " + resume_command + ".")
+        raise AdminError("State: waiting_credentials. Collection and task execution remain paused. Fill every listed cloud parser credential in space/parser settings, then run " + resume_command + ".")
 
 
 def embedding_identity(value):
@@ -1100,7 +1102,7 @@ def finalize_restore(ctx, package):
         unresolved = ctx.sql("SELECT (SELECT count(*) FROM models WHERE deleted_at IS NULL AND status='needs_configuration') + (SELECT count(*) FROM chatgpt_accounts WHERE status='needs_login')")
         if int(unresolved or "0"):
             json_write(ctx.root / ".maintenance-restore.json", {"state": "waiting_legacy_credentials", "package": str(package), "scheduler_required": False})
-            raise AdminError("State: waiting_legacy_credentials. The exact old image and schema have been restored and verified; the legacy application stays offline until credentials are entered. Use maintenance credentials --kind model|tenant --id ID --input FILE, or maintenance chatgpt-login followed by maintenance chatgpt-complete --input FILE for a new ChatGPT sign-in.")
+            raise AdminError("State: waiting_legacy_credentials. The exact old image and schema have been restored and verified; the legacy application stays offline until credentials are entered. Use maintenance credentials --kind model|space --id ID --input FILE, or maintenance chatgpt-login followed by maintenance chatgpt-complete --input FILE for a new ChatGPT sign-in.")
     original_models = json.loads((package / "models.json").read_text()) if (package / "models.json").exists() else None
     current = ctx.cli_json("models")
     # Compare embedding identity, not regenerated vector values.

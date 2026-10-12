@@ -14,13 +14,13 @@ func TestSignFileURL_RoundTrip(t *testing.T) {
 
 	baseURL := "https://reliquary.example.com"
 	filePath := "local://1/abc/img.png"
-	var tenantID uint64 = 1
+	var spaceID uint64 = 1
 
-	signed, err := SignFileURL(baseURL, filePath, tenantID, 1*time.Hour)
+	signed, err := SignFileURL(baseURL, filePath, spaceID, 1*time.Hour)
 	require.NoError(t, err)
 	assert.Contains(t, signed, "https://reliquary.example.com/api/v1/files/presigned")
 	assert.Contains(t, signed, "file_path=")
-	assert.Contains(t, signed, "tenant_id=1")
+	assert.Contains(t, signed, "space_id=1")
 	assert.Contains(t, signed, "sig=")
 }
 
@@ -36,48 +36,48 @@ func TestVerifyFileURLSig_Valid(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
 
 	filePath := "local://42/knowledge/img.jpg"
-	var tenantID uint64 = 42
+	var spaceID uint64 = 42
 	key := getPresignKey()
 	require.NotNil(t, key)
 
 	expires := time.Now().Add(1 * time.Hour).Unix()
-	sig := signPayload(key, filePath, tenantID, expires)
+	sig := signPayload(key, filePath, spaceID, expires)
 
-	assert.True(t, VerifyFileURLSig(filePath, tenantID, strconv.FormatInt(expires, 10), sig))
+	assert.True(t, VerifyFileURLSig(filePath, spaceID, strconv.FormatInt(expires, 10), sig))
 }
 
 func TestVerifyFileURLSig_Expired(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
 
 	filePath := "local://1/img.png"
-	var tenantID uint64 = 1
+	var spaceID uint64 = 1
 	key := getPresignKey()
 	require.NotNil(t, key)
 
 	expires := time.Now().Add(-1 * time.Hour).Unix() // already expired
-	sig := signPayload(key, filePath, tenantID, expires)
+	sig := signPayload(key, filePath, spaceID, expires)
 
-	assert.False(t, VerifyFileURLSig(filePath, tenantID, strconv.FormatInt(expires, 10), sig))
+	assert.False(t, VerifyFileURLSig(filePath, spaceID, strconv.FormatInt(expires, 10), sig))
 }
 
 func TestVerifyFileURLSig_Tampered(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
 
 	filePath := "local://1/img.png"
-	var tenantID uint64 = 1
+	var spaceID uint64 = 1
 	key := getPresignKey()
 	require.NotNil(t, key)
 
 	expires := time.Now().Add(1 * time.Hour).Unix()
-	sig := signPayload(key, filePath, tenantID, expires)
+	sig := signPayload(key, filePath, spaceID, expires)
 	expiresStr := strconv.FormatInt(expires, 10)
 
 	// Tamper with file path
-	assert.False(t, VerifyFileURLSig("local://1/other.png", tenantID, expiresStr, sig))
-	// Tamper with tenant ID
+	assert.False(t, VerifyFileURLSig("local://1/other.png", spaceID, expiresStr, sig))
+	// Tamper with space ID
 	assert.False(t, VerifyFileURLSig(filePath, 999, expiresStr, sig))
 	// Tamper with signature
-	assert.False(t, VerifyFileURLSig(filePath, tenantID, expiresStr, "deadbeef"))
+	assert.False(t, VerifyFileURLSig(filePath, spaceID, expiresStr, "deadbeef"))
 }
 
 func TestVerifyFileURLSig_NoKey(t *testing.T) {
@@ -86,30 +86,30 @@ func TestVerifyFileURLSig_NoKey(t *testing.T) {
 	assert.False(t, VerifyFileURLSig("local://1/img.png", 1, "99999999999", "abc"))
 }
 
-func TestValidateStoragePathTenant(t *testing.T) {
-	assert.NoError(t, ValidateStoragePathTenant("local://42/knowledge/file.pdf", 42))
-	assert.Error(t, ValidateStoragePathTenant("local://7/knowledge/file.pdf", 42))
-	assert.Error(t, ValidateStoragePathTenant("local://docs/example.txt", 42))
+func TestValidateStoragePathSpace(t *testing.T) {
+	assert.NoError(t, ValidateStoragePathSpace("local://42/knowledge/file.pdf", 42))
+	assert.Error(t, ValidateStoragePathSpace("local://7/knowledge/file.pdf", 42))
+	assert.Error(t, ValidateStoragePathSpace("local://docs/example.txt", 42))
 }
 
 func TestValidateKBScopedStoragePath(t *testing.T) {
-	const tenantID uint64 = 10008
+	const spaceID uint64 = 10008
 
-	assert.NoError(t, ValidateKBScopedStoragePath("local://10008/exports/img.jpg", tenantID))
-	assert.NoError(t, ValidateKBScopedStoragePath("minio://bucket/10008/exports/uuid.png", tenantID))
-	assert.NoError(t, ValidateKBScopedStoragePath("s3://bucket/exports/10008/uuid.png", tenantID))
+	assert.NoError(t, ValidateKBScopedStoragePath("local://10008/exports/img.jpg", spaceID))
+	assert.NoError(t, ValidateKBScopedStoragePath("minio://bucket/10008/exports/uuid.png", spaceID))
+	assert.NoError(t, ValidateKBScopedStoragePath("s3://bucket/exports/10008/uuid.png", spaceID))
 
-	// storage://<backendID>/ wrapped paths must resolve to the same tenant/exports scope.
-	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/local://10008/exports/img.jpg", tenantID))
-	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/s3://bucket/ap-test/10008/exports/a.png", tenantID))
+	// storage://<backendID>/ wrapped paths must resolve to the same space/exports scope.
+	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/local://10008/exports/img.jpg", spaceID))
+	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/s3://bucket/ap-test/10008/exports/a.png", spaceID))
 
-	assert.Error(t, ValidateKBScopedStoragePath("local://10008/knowledge-id/123.pdf", tenantID))
-	assert.Error(t, ValidateKBScopedStoragePath("local://9999/exports/img.jpg", tenantID))
-	assert.Error(t, ValidateKBScopedStoragePath("local://10008/other/img.jpg", tenantID))
-	assert.Error(t, ValidateKBScopedStoragePath("storage://backend-a/local://9999/exports/img.jpg", tenantID))
+	assert.Error(t, ValidateKBScopedStoragePath("local://10008/entry-id/123.pdf", spaceID))
+	assert.Error(t, ValidateKBScopedStoragePath("local://9999/exports/img.jpg", spaceID))
+	assert.Error(t, ValidateKBScopedStoragePath("local://10008/other/img.jpg", spaceID))
+	assert.Error(t, ValidateKBScopedStoragePath("storage://backend-a/local://9999/exports/img.jpg", spaceID))
 }
 
-func TestParseTenantIDFromStoragePath(t *testing.T) {
+func TestParseSpaceIDFromStoragePath(t *testing.T) {
 	tests := []struct {
 		path string
 		want uint64
@@ -130,8 +130,8 @@ func TestParseTenantIDFromStoragePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := ParseTenantIDFromStoragePath(tt.path)
-			assert.Equal(t, tt.want, got, "ParseTenantIDFromStoragePath(%q)", tt.path)
+			got := ParseSpaceIDFromStoragePath(tt.path)
+			assert.Equal(t, tt.want, got, "ParseSpaceIDFromStoragePath(%q)", tt.path)
 		})
 	}
 }

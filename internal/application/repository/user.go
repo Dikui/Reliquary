@@ -28,7 +28,7 @@ func NewUserRepository(db *gorm.DB) interfaces.UserRepository {
 
 // CreateUser creates a user
 func (r *userRepository) CreateUser(ctx context.Context, user *types.User) error {
-	if user == nil || user.TenantID != types.SingleTenantID {
+	if user == nil || user.SpaceID != types.SingleSpaceID {
 		return errors.New("invalid personal space")
 	}
 
@@ -89,10 +89,10 @@ func (r *userRepository) GetUserByUsername(ctx context.Context, username string)
 	return &user, nil
 }
 
-// GetUserByTenantID gets the sole user of the personal workspace
-func (r *userRepository) GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error) {
+// GetUserBySpaceID gets the sole user of the personal workspace
+func (r *userRepository) GetUserBySpaceID(ctx context.Context, spaceID uint64) (*types.User, error) {
 	var user types.User
-	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Order("created_at ASC").First(&user).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("space_id = ?", spaceID).Order("created_at ASC").First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
@@ -103,7 +103,7 @@ func (r *userRepository) GetUserByTenantID(ctx context.Context, tenantID uint64)
 
 // UpdateUser updates a user
 func (r *userRepository) UpdateUser(ctx context.Context, user *types.User) error {
-	if user == nil || user.TenantID != types.SingleTenantID {
+	if user == nil || user.SpaceID != types.SingleSpaceID {
 		return errors.New("invalid personal space")
 	}
 

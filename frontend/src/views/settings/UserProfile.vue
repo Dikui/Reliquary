@@ -8,14 +8,14 @@
     <!-- Loading -->
     <div v-if="loading" class="loading-inline">
       <t-loading size="small" />
-      <span>{{ $t('tenant.loadingInfo') }}</span>
+      <span>{{ $t('space.loadingInfo') }}</span>
     </div>
 
     <!-- Error -->
     <div v-else-if="error" class="error-inline">
       <t-alert theme="error" :message="error">
         <template #operation>
-          <t-button size="small" @click="loadInfo">{{ $t('tenant.retry') }}</t-button>
+          <t-button size="small" @click="loadInfo">{{ $t('space.retry') }}</t-button>
         </template>
       </t-alert>
     </div>
@@ -25,8 +25,8 @@
       <!-- 用户 ID -->
       <div class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('tenant.api.userIdLabel') }}</label>
-          <p class="desc">{{ $t('tenant.api.userIdDescription') }}</p>
+          <label>{{ $t('space.api.userIdLabel') }}</label>
+          <p class="desc">{{ $t('space.api.userIdDescription') }}</p>
         </div>
         <div class="setting-control">
           <span class="info-value">{{ userInfo?.id || '-' }}</span>
@@ -36,8 +36,8 @@
       <!-- 用户名 -->
       <div class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('tenant.api.usernameLabel') }}</label>
-          <p class="desc">{{ $t('tenant.api.usernameDescription') }}</p>
+          <label>{{ $t('space.api.usernameLabel') }}</label>
+          <p class="desc">{{ $t('space.api.usernameDescription') }}</p>
         </div>
         <div class="setting-control">
           <span class="info-value">{{ userInfo?.username || '-' }}</span>
@@ -47,8 +47,8 @@
       <!-- 邮箱 -->
       <div class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('tenant.api.emailLabel') }}</label>
-          <p class="desc">{{ $t('tenant.api.emailDescription') }}</p>
+          <label>{{ $t('space.api.emailLabel') }}</label>
+          <p class="desc">{{ $t('space.api.emailDescription') }}</p>
         </div>
         <div class="setting-control">
           <span class="info-value">{{ userInfo?.email || '-' }}</span>
@@ -58,8 +58,8 @@
       <!-- 注册时间 -->
       <div class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('tenant.api.createdAtLabel') }}</label>
-          <p class="desc">{{ $t('tenant.api.createdAtDescription') }}</p>
+          <label>{{ $t('space.api.createdAtLabel') }}</label>
+          <p class="desc">{{ $t('space.api.createdAtDescription') }}</p>
         </div>
         <div class="setting-control">
           <span class="info-value">{{ formatDate(userInfo?.created_at) }}</span>
@@ -233,17 +233,17 @@ const loadInfo = async () => {
     if ((resp as any).success && resp.data) {
       userInfo.value = resp.data.user
     } else {
-      error.value = resp.message || t('tenant.messages.fetchFailed')
+      error.value = resp.message || t('space.messages.fetchFailed')
     }
   } catch (err: any) {
-    error.value = err?.message || t('tenant.messages.networkError')
+    error.value = err?.message || t('space.messages.networkError')
   } finally {
     loading.value = false
   }
 }
 
 const formatDate = (dateStr: string | undefined) => {
-  if (!dateStr) return t('tenant.unknown')
+  if (!dateStr) return t('space.unknown')
   try {
     const d = new Date(dateStr)
     const fmt = new Intl.DateTimeFormat(locale.value || 'zh-CN', {
@@ -255,7 +255,7 @@ const formatDate = (dateStr: string | undefined) => {
     })
     return fmt.format(d)
   } catch {
-    return t('tenant.formatError')
+    return t('space.formatError')
   }
 }
 

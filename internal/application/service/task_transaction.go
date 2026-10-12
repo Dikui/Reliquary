@@ -33,20 +33,20 @@ func (q *transactionTaskEnqueuer) Enqueue(task *taskqueue.Task, opts ...taskqueu
 	}
 	return info, err
 }
-func (s *knowledgeService) needsTaskTransaction() bool {
+func (s *entryService) needsTaskTransaction() bool {
 	if s.db == nil {
 		return false
 	}
 	_, bound := s.task.(*transactionTaskEnqueuer)
 	return !bound
 }
-func knowledgeTaskTransaction[T any](ctx context.Context, s *knowledgeService, mutation func(*knowledgeService) (T, error)) (result T, err error) {
+func entryTaskTransaction[T any](ctx context.Context, s *entryService, mutation func(*entryService) (T, error)) (result T, err error) {
 	queue, ok := s.task.(interfaces.TransactionalTaskEnqueuer)
 	if !ok {
 		return result, errors.New("task queue must support PostgreSQL transactions")
 	}
 	var responseErr error
-	var rollbackArticle *types.Knowledge
+	var rollbackArticle *types.Entry
 	var storedPaths []string
 	var storedPathsMu sync.Mutex
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -55,9 +55,9 @@ func knowledgeTaskTransaction[T any](ctx context.Context, s *knowledgeService, m
 		}
 		copy := *s
 		copy.db = tx
-		copy.repo = repository.NewKnowledgeRepository(tx)
+		copy.repo = repository.NewEntryRepository(tx)
 		copy.chunkRepo = repository.NewChunkRepository(tx)
-		copy.tenantRepo = repository.NewTenantRepository(tx)
+		copy.spaceRepo = repository.NewSpaceRepository(tx)
 		copy.retrieveEngine = s.contentTypeTransactionService(tx).retrieveEngine
 		copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewKnowledgeBaseRepository(tx), copy.modelService, copy.retrieveEngine)
 		if _, ok := s.resourceCatalog.(*resourceCatalog); ok {
@@ -69,29 +69,29 @@ func knowledgeTaskTransaction[T any](ctx context.Context, s *knowledgeService, m
 			})
 		}
 		if _, ok := s.spanTracker.(*spanTracker); ok {
-			copy.spanTracker = NewSpanTracker(repository.NewKnowledgeSpanRepository(tx), tx)
+			copy.spanTracker = NewSpanTracker(repository.NewEntrySpanRepository(tx), tx)
 		}
 		bound := &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
 		copy.task = bound
 		result, responseErr = mutation(&copy)
 		if bound.enqueueErr != nil {
-			article, _ := any(result).(*types.Knowledge)
-			if ingest, ok := any(result).(*types.IngestResult); ok && ingest != nil && ingest.ArticleID != "" {
-				var created types.Knowledge
-				if queryErr := tx.Where("id=?", ingest.ArticleID).First(&created).Error; queryErr == nil {
+			article, _ := any(result).(*types.Entry)
+			if ingest, ok := any(result).(*types.IngestResult); ok && ingest != nil && ingest.EntryID != "" {
+				var created types.Entry
+				if queryErr := tx.Where("id=?", ingest.EntryID).First(&created).Error; queryErr == nil {
 					article = &created
 				}
 			}
 			if article != nil {
 				var existed int64
-				if queryErr := s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=?", article.ID).Count(&existed).Error; queryErr == nil && existed == 0 {
+				if queryErr := s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=?", article.ID).Count(&existed).Error; queryErr == nil && existed == 0 {
 					rollbackArticle = article
 				}
 			}
 			return bound.enqueueErr
 		}
 		// A duplicate collection still records its additional source atomically.
-		var duplicate *types.DuplicateKnowledgeError
+		var duplicate *types.DuplicateEntryError
 		if errors.As(responseErr, &duplicate) || bound.commitFailure {
 			return nil
 		}
@@ -122,18 +122,18 @@ func knowledgeTaskTransaction[T any](ctx context.Context, s *knowledgeService, m
 	}
 	return result, responseErr
 }
-func (s *knowledgeService) taskEnqueueFailedInTransaction() bool {
+func (s *entryService) taskEnqueueFailedInTransaction() bool {
 	bound, ok := s.task.(*transactionTaskEnqueuer)
 	return ok && bound.enqueueErr != nil
 }
 
-func (s *knowledgeService) recordTerminalMutationFailure() {
+func (s *entryService) recordTerminalMutationFailure() {
 	if bound, ok := s.task.(*transactionTaskEnqueuer); ok {
 		bound.commitFailure = true
 	}
 }
 
-func (s *knowledgeService) removeRolledBackCollectionSource(ctx context.Context, k *types.Knowledge) error {
+func (s *entryService) removeRolledBackCollectionSource(ctx context.Context, k *types.Entry) error {
 	intake, err := k.IntakeMetadata()
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func (s *knowledgeService) removeRolledBackCollectionSource(ctx context.Context,
 		refs = append(append(refs, intake.OriginalPath), intake.Images...)
 	}
 	seen := map[string]bool{}
-	releaser := knowledgeResourceOwners(s.resourceCatalog, k.ID)
+	releaser := entryResourceOwners(s.resourceCatalog, k.ID)
 	for _, ref := range refs {
 		if ref == "" || seen[ref] {
 			continue

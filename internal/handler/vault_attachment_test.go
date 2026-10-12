@@ -24,15 +24,15 @@ import (
 
 func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
-	require.NoError(t, service.EnsureSingleTeamSpace(ctx, db))
-	kb, err := repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
+	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
+	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	root := t.TempDir()
 	v, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, v.Close()) })
-	article := &types.Knowledge{ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: kb.ID, Title: "Attachment", SourceKind: "article", Type: "url", Source: "https://example.org/image", ParseStatus: types.ParseStatusCompleted, ContentType: "event", ProcessingMode: "full"}
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.ID, Title: "Attachment", SourceKind: "article", Type: "url", Source: "https://example.org/image", ParseStatus: types.ParseStatusCompleted, ContentType: "event", ProcessingMode: "full"}
 	require.NoError(t, db.Create(article).Error)
 	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="
 	body := "# Attachment\n\n![image](data:image/png;base64," + png + ")"
@@ -43,8 +43,8 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 	h.SetArticles(v)
 	router := gin.New()
 	router.Use(func(c *gin.Context) { c.Request = c.Request.WithContext(ctx); c.Next() }, middleware.ErrorHandler())
-	router.GET("/api/v1/knowledge/:id/vault-attachment", h.Attachment)
-	requestPath := "/api/v1/knowledge/" + article.ID + "/vault-attachment?" + url.Values{"path": {refs[0].URL}}.Encode()
+	router.GET("/api/v1/entries/:id/vault-attachment", h.Attachment)
+	requestPath := "/api/v1/entries/" + article.ID + "/vault-attachment?" + url.Values{"path": {refs[0].URL}}.Encode()
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, requestPath, nil))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -54,7 +54,7 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 	require.Equal(t, "image/png", response.Header().Get("Content-Type"))
 	for _, path := range []string{"../../../outside.png", "../../attachments/other/image.png", "/etc/passwd"} {
 		response = httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/"+article.ID+"/vault-attachment?"+url.Values{"path": {path}}.Encode(), nil))
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/entries/"+article.ID+"/vault-attachment?"+url.Values{"path": {path}}.Encode(), nil))
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
 	link := filepath.Join(root, "attachments", article.ID, "linked.png")
@@ -62,6 +62,6 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 	// Remove the deliberately unsafe fixture before the vault's final flush.
 	t.Cleanup(func() { require.NoError(t, os.Remove(link)) })
 	response = httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/"+article.ID+"/vault-attachment?"+url.Values{"path": {"../../attachments/" + article.ID + "/linked.png"}}.Encode(), nil))
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/entries/"+article.ID+"/vault-attachment?"+url.Values{"path": {"../../attachments/" + article.ID + "/linked.png"}}.Encode(), nil))
 	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 }

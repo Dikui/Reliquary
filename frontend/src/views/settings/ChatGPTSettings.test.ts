@@ -8,7 +8,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { click, descendants, element, hasClass, registerPrimitives, renderer, settle, visibleText } from '../knowledge/componentTestHarness'
+import { click, descendants, element, hasClass, registerPrimitives, renderer, settle, visibleText } from '../knowledge-base/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
@@ -175,7 +175,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/components/settings/SettingDrawer.vue': moduleOf(defineComponent({ setup: () => () => null })),
     }
     modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../../api/chatgpt.ts', import.meta.url), 'utf8'), modules)
-    modules['@/api/system'] = evaluate(readFileSync(new URL('../../api/system/index.ts', import.meta.url), 'utf8'), modules)
+    modules['@/api/system'] = evaluate(readFileSync(new URL('../../api/system.ts', import.meta.url), 'utf8'), modules)
     modules['@/components/ChatGPTUsageStatus.vue'] = moduleOf(component(new URL('../../components/ChatGPTUsageStatus.vue', import.meta.url), modules).result)
     modules['./QueueConnectionNotice.vue'] = moduleOf(component(new URL('../system/QueueConnectionNotice.vue', import.meta.url), modules).result)
     const view = component(new URL('../system/RuntimeQueues.vue', import.meta.url), modules)

@@ -19,7 +19,7 @@ async function scenario(locale: keyof typeof messages, stored: object, action: (
   const template = compileTemplate({ id: 'retrieval-test', filename: 'RetrievalSettings.vue', source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
   assert.deepEqual(template.errors, [])
   const modules: Record<string, unknown> = {
-    '@/api/retrieval': { getTenantRetrievalConfig: async () => ({ data: stored }), updateTenantRetrievalConfig: async (payload: object) => { requests.push(payload); return { data: payload } } },
+    '@/api/retrieval': { getSpaceRetrievalConfig: async () => ({ data: stored }), updateSpaceRetrievalConfig: async (payload: object) => { requests.push(payload); return { data: payload } } },
     'tdesign-vue-next': { MessagePlugin: { success() {} } },
   }
   function evaluate(code: string) {

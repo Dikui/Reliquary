@@ -34,10 +34,10 @@ import (
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/limiter"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/queue"
 	"reliquary/internal/router"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils/ollama"
 )
 
 // BuildContainer constructs the dependency injection container
@@ -78,11 +78,11 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Data repositories layer
 	logger.Debugf(ctx, "[Container] Registering repositories...")
-	must(container.Provide(repository.NewTenantRepository))
-	must(container.Provide(repository.NewTenantAPIKeyRepository))
+	must(container.Provide(repository.NewSpaceRepository))
+	must(container.Provide(repository.NewAPIKeyRepository))
 	must(container.Provide(repository.NewKnowledgeBaseRepository))
-	must(container.Provide(repository.NewKnowledgeRepository))
-	must(container.Provide(repository.NewKnowledgeSpanRepository))
+	must(container.Provide(repository.NewEntryRepository))
+	must(container.Provide(repository.NewEntrySpanRepository))
 	must(container.Provide(repository.NewChunkRepository))
 	must(container.Provide(repository.NewModelRepository))
 	must(container.Provide(repository.NewUserRepository))
@@ -94,11 +94,11 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Business service layer
 	logger.Debugf(ctx, "[Container] Registering business services...")
-	must(container.Provide(service.NewTenantService))
-	must(container.Provide(service.NewTenantAPIKeyService))
+	must(container.Provide(service.NewSpaceService))
+	must(container.Provide(service.NewAPIKeyService))
 	must(container.Provide(service.NewKnowledgeBaseService))
-	must(container.Provide(service.NewKnowledgeService))
-	must(container.Provide(service.NewKnowledgeSearchService))
+	must(container.Provide(service.NewEntryService))
+	must(container.Provide(service.NewSearchService))
 	must(container.Provide(service.NewSpanTracker))
 	must(container.Provide(service.NewChunkService))
 	must(container.Provide(service.NewEntityService))
@@ -138,16 +138,16 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
-	logger.Debugf(ctx, "[Container] Knowledge housekeeping runner registered")
+	logger.Debugf(ctx, "[Container] Entry housekeeping runner registered")
 
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
-	must(container.Provide(handler.NewTenantHandler))
+	must(container.Provide(handler.NewSpaceHandler))
 	must(container.Provide(handler.NewKnowledgeBaseHandler))
-	must(container.Provide(handler.NewKnowledgeHandler))
+	must(container.Provide(handler.NewEntryHandler))
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewMaintenanceHandler))
-	must(container.Provide(handler.NewKnowledgeSearchHandler))
+	must(container.Provide(handler.NewSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewEmbeddingRebuildHandler))
 	must(container.Provide(handler.NewTopicHandler))
@@ -169,7 +169,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
 	// Wire the model package's local image resolver so image inputs can read
-	// local:// images that live under a tenant's configured storage PathPrefix
+	// local:// images that live under a space's configured storage PathPrefix
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerModelLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
@@ -315,7 +315,7 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	} else {
 		logger.Infof(context.Background(), "Auto-migration is disabled (AUTO_MIGRATE=false)")
 	}
-	if err := service.EnsureSingleTeamSpace(context.Background(), db); err != nil {
+	if err := service.EnsurePersonalSpace(context.Background(), db); err != nil {
 		return nil, err
 	}
 	if err := service.EnsureSingleKnowledgeBase(context.Background(), db); err != nil {
@@ -473,8 +473,8 @@ func startDataSourceScheduler(scheduler *datasource.Scheduler, cleaner interface
 	})
 }
 
-// startHousekeepingService starts the knowledge housekeeping cron and registers
-// cleanup. This is the safety net that recovers any knowledge stuck in
+// startHousekeepingService starts the entry housekeeping cron and registers
+// cleanup. This is the safety net that recovers any entry stuck in
 // "processing" past a configurable threshold (see HousekeepingService for
 // rationale). Best-effort: a startup error is logged but does NOT abort the
 // container — the rest of the system stays usable.
@@ -485,7 +485,7 @@ func startHousekeepingService(svc *service.HousekeepingService, cleaner interfac
 	if err := svc.Start(context.Background()); err != nil {
 		logger.Warnf(context.Background(), "[Container] housekeeping start failed: %v", err)
 	}
-	cleaner.RegisterWithName("KnowledgeHousekeeping", func() error {
+	cleaner.RegisterWithName("EntryHousekeeping", func() error {
 		svc.Stop()
 		return nil
 	})

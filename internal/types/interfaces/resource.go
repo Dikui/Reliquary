@@ -21,7 +21,7 @@ type ResourceRepository interface {
 	Create(ctx context.Context, resource *types.StoredResource) error
 	GetByID(ctx context.Context, id string) (*types.StoredResource, error)
 	GetByHandle(ctx context.Context, handle string) (*types.StoredResource, error)
-	GetByTenantLocation(ctx context.Context, tenantID uint64, locationHash string) (*types.StoredResource, error)
+	GetBySpaceLocation(ctx context.Context, spaceID uint64, locationHash string) (*types.StoredResource, error)
 	MarkDeleted(ctx context.Context, id string) error
 	CreateBinding(ctx context.Context, binding *types.ResourceBinding) error
 	DeleteBinding(ctx context.Context, resourceID, ownerType, ownerID string) error
@@ -44,14 +44,14 @@ type ResourceRegistration struct {
 // ResourceCatalog maps public resource references to internal storage
 // locations and manages their access capabilities.
 type ResourceCatalog interface {
-	Register(ctx context.Context, tenantID uint64, physicalPath string, meta ResourceRegistration) (string, error)
+	Register(ctx context.Context, spaceID uint64, physicalPath string, meta ResourceRegistration) (string, error)
 	Resolve(ctx context.Context, reference string) (*types.StoredResource, error)
 	ResolvePath(ctx context.Context, value string) (string, *types.StoredResource, error)
 	Bind(ctx context.Context, reference, ownerType, ownerID, relation string) error
 	// Release drops one owner's claim on a resource and reports how many
 	// claims remain. Callers use the count to decide whether the bytes may be
 	// deleted: a resource still referenced by another owner — the assistant
-	// message an answer was saved from, a second knowledge entry — must
+	// message an answer was saved from, a second entry entry — must
 	// survive the owner being removed.
 	//
 	// remaining is -1 when the answer is unknown (the reference is not a

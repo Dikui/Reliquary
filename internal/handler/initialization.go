@@ -18,10 +18,10 @@ import (
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
+	"reliquary/internal/utils/ollama"
 )
 
 // DownloadTask 下载任务信息
@@ -561,7 +561,7 @@ func (h *InitializationHandler) CheckRemoteModel(c *gin.Context) {
 		return
 	}
 
-	model := h.buildTestModel(&req, types.ModelTypeKnowledgeQA, types.ModelSourceRemote)
+	model := h.buildTestModel(&req, types.ModelTypeGeneration, types.ModelSourceRemote)
 	available, message := h.checkChatModelConnection(ctx, model)
 
 	logger.Infof(ctx, "Remote model check completed, available: %v, message: %s", available, message)

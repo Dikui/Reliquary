@@ -30,7 +30,7 @@ const BuiltinModelManagedBy = "yaml"
 // Each entry becomes a row in the models table with is_builtin=true.
 type BuiltinModelEntry struct {
 	ID          string          `yaml:"id"`
-	TenantID    uint64          `yaml:"tenant_id"`
+	SpaceID     uint64          `yaml:"space_id"`
 	Name        string          `yaml:"name"`
 	Type        ModelType       `yaml:"type"`
 	Source      ModelSource     `yaml:"source"`
@@ -38,6 +38,36 @@ type BuiltinModelEntry struct {
 	IsDefault   bool            `yaml:"is_default"`
 	Status      ModelStatus     `yaml:"status"`
 	Parameters  ModelParameters `yaml:"parameters"`
+}
+
+// UnmarshalYAML accepts the previous configuration spelling during upgrades.
+// An explicitly supplied current key takes precedence, including a zero value.
+func (e *BuiltinModelEntry) UnmarshalYAML(node *yaml.Node) error {
+	type plain BuiltinModelEntry
+	var value plain
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	current := false
+	var previous *yaml.Node
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		switch node.Content[i].Value {
+		case "space_id":
+			current = true
+		case "tenant_id":
+			previous = node.Content[i+1]
+		}
+	}
+	if previous != nil {
+		log.Printf("[builtin-models] WARN: tenant_id is deprecated; use space_id")
+		if !current {
+			if err := previous.Decode(&value.SpaceID); err != nil {
+				return err
+			}
+		}
+	}
+	*e = BuiltinModelEntry(value)
+	return nil
 }
 
 type builtinModelsFile struct {
@@ -79,7 +109,7 @@ func interpolateBuiltinModelEnv(s string) string {
 //     therefore the supported way to retire a built-in model — no manual
 //     SQL needed.
 //   - If is_default=true is set on a YAML entry, the loader first clears
-//     is_default on any other rows in the same (tenant_id, type) bucket,
+//     is_default on any other rows in the same (space_id, type) bucket,
 //     mirroring the invariant enforced by the API path. Multiple entries
 //     with is_default=true for the same bucket result in last-one-wins with
 //     a warning.
@@ -153,17 +183,17 @@ func LoadBuiltinModelsConfig(ctx context.Context, db *gorm.DB, configDir string)
 			continue
 		}
 
-		// Mirror the API path's "single default per (tenant_id, type)"
+		// Mirror the API path's "single default per (space_id, type)"
 		// invariant: clear other defaults before promoting this one.
 		// Excluded our own id so we don't churn against ourselves.
 		if m.IsDefault {
 			if err := db.WithContext(ctx).
 				Model(&Model{}).
-				Where("tenant_id = ? AND type = ? AND id <> ? AND is_default = ?",
-					m.TenantID, m.Type, m.ID, true).
+				Where("space_id = ? AND type = ? AND id <> ? AND is_default = ?",
+					m.SpaceID, m.Type, m.ID, true).
 				Update("is_default", false).Error; err != nil {
-				log.Printf("[builtin-models] WARN: clear existing default for tenant=%d type=%s failed: %v; continuing",
-					m.TenantID, m.Type, err)
+				log.Printf("[builtin-models] WARN: clear existing default for space=%d type=%s failed: %v; continuing",
+					m.SpaceID, m.Type, err)
 			}
 		}
 
@@ -181,7 +211,7 @@ func LoadBuiltinModelsConfig(ctx context.Context, db *gorm.DB, configDir string)
 			res := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"tenant_id", "name", "type", "source", "description",
+					"space_id", "name", "type", "source", "description",
 					"parameters", "is_default", "status", "is_builtin",
 					"managed_by", "deleted_at", "updated_at",
 				}),
@@ -245,9 +275,9 @@ func pruneOrphanYAMLManagedModels(ctx context.Context, db *gorm.DB, keepIDs []st
 // case-sensitively and a misspelled YAML entry would produce a row that
 // looks present in the table but is unusable downstream.
 var validBuiltinModelTypes = map[ModelType]struct{}{
-	ModelTypeKnowledgeQA: {},
-	ModelTypeEmbedding:   {},
-	ModelTypeRerank:      {},
+	ModelTypeGeneration: {},
+	ModelTypeEmbedding:  {},
+	ModelTypeRerank:     {},
 }
 
 // validBuiltinModelStatuses is the set of statuses the loader accepts.
@@ -304,14 +334,14 @@ func errBuiltinModel(format string, args ...interface{}) error {
 }
 
 // toModel converts a YAML entry to a runtime Model with sensible defaults.
-// tenant_id defaults to DefaultBuiltinModelTenantID (10000, matching the
-// seed value of tenants_id_seq); source defaults to "remote"; status
+// space_id defaults to DefaultBuiltinModelSpaceID (10000, matching the
+// seed value of spaces_id_seq); source defaults to "remote"; status
 // defaults to "active". IsBuiltin and ManagedBy are always forced
 // regardless of YAML input.
 func (e *BuiltinModelEntry) toModel() Model {
-	tenantID := e.TenantID
-	if tenantID == 0 {
-		tenantID = DefaultBuiltinModelTenantID
+	spaceID := e.SpaceID
+	if spaceID == 0 {
+		spaceID = DefaultBuiltinModelSpaceID
 	}
 	source := e.Source
 	if source == "" {
@@ -323,7 +353,7 @@ func (e *BuiltinModelEntry) toModel() Model {
 	}
 	return Model{
 		ID:          e.ID,
-		TenantID:    tenantID,
+		SpaceID:     spaceID,
 		Name:        e.Name,
 		Type:        e.Type,
 		Source:      source,

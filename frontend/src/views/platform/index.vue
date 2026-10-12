@@ -25,11 +25,11 @@
     </div>
 </template>
 <script setup lang="ts">
-import Menu from '@/components/menu.vue'
+import Menu from '@/components/SideMenu.vue'
 import { ref, onMounted, onUnmounted, nextTick, provide, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router'
 import { useEditorResourcesStore } from '@/stores/editorResources'
-import UploadMask from '@/components/upload-mask.vue'
+import UploadMask from '@/components/UploadMask.vue'
 import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
@@ -157,7 +157,7 @@ const handleGlobalDrop = async (event: DragEvent) => {
         return;
     }
 
-    window.dispatchEvent(new CustomEvent('reliquary:knowledge-file-drop', {
+    window.dispatchEvent(new CustomEvent('reliquary:entry-file-drop', {
         detail: { kbId: getCurrentKbId(), files: droppedFiles }
     }));
 }
@@ -170,7 +170,7 @@ onMounted(() => {
     document.addEventListener('dragleave', handleGlobalDragLeave, true);
     document.addEventListener('drop', handleGlobalDrop, true);
     // 支持通过 URL 查询参数打开全局命令面板，例如旧路径
-    // /platform/knowledge-search?q=foo 重定向后携带 ?cmdk=foo
+    // /platform/search?q=foo 重定向后携带 ?cmdk=foo
     maybeOpenCmdkFromRoute()
 });
 

@@ -20,12 +20,12 @@ func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTas
 	source, target := pgtest.Open(t), pgtest.Open(t)
 	root, uploads := t.TempDir(), t.TempDir()
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", uploads)
-	_, err := repository.EnsureTenantKnowledgeBase(ctx, source, types.SingleTenantID, "")
+	_, err := repository.EnsureSpaceKnowledgeBase(ctx, source, types.SingleSpaceID, "")
 	require.NoError(t, err)
-	require.NoError(t, source.Create(&types.Entity{ID: "preserved-profile", TenantID: 1, CanonicalName: "Preserved owner profile", NormalizedName: "preserved owner profile", EntityType: "product", Description: "Keep user information while configuring recovery"}).Error)
+	require.NoError(t, source.Create(&types.Entity{ID: "preserved-profile", SpaceID: 1, CanonicalName: "Preserved owner profile", NormalizedName: "preserved owner profile", EntityType: "product", Description: "Keep user information while configuring recovery"}).Error)
 	jobs := queue.NewClient(source)
 	for _, state := range []string{"active", "pending"} {
-		_, err := jobs.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"knowledge_id":"preserved-article","original":"accepted original"}`)), queue.TaskID(state), queue.MaxRetry(7))
+		_, err := jobs.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"entry_id":"preserved-article","original":"accepted original"}`)), queue.TaskID(state), queue.MaxRetry(7))
 		require.NoError(t, err)
 		require.NoError(t, source.Exec(`UPDATE task_jobs SET state=?,retried=2,fail_count=1,last_error='preserved previous failure' WHERE id=?`, state, state).Error)
 	}
@@ -72,7 +72,7 @@ func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTas
 		require.Equal(t, 1, job.FailCount)
 		require.Equal(t, 7, job.MaxRetry)
 		require.Equal(t, "preserved previous failure", job.LastError)
-		require.JSONEq(t, `{"knowledge_id":"preserved-article","original":"accepted original"}`, string(job.Payload))
+		require.JSONEq(t, `{"entry_id":"preserved-article","original":"accepted original"}`, string(job.Payload))
 	}
 	// A running application's writer records legitimate startup lease recovery.
 	// The paired manifest comparison still preserves every unrelated table.
@@ -90,18 +90,18 @@ func TestReplicaVaultRebuildRejectsExistingArticlesWithoutPausingTheExistingData
 	source, target := pgtest.Open(t), pgtest.Open(t)
 	root, uploads := t.TempDir(), t.TempDir()
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", uploads)
-	kb, err := repository.EnsureTenantKnowledgeBase(ctx, source, 1, "")
+	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, source, 1, "")
 	require.NoError(t, err)
 	snapshot, err := maintenance.Capture(ctx, source)
 	require.NoError(t, err)
 	require.NoError(t, maintenance.WriteSnapshot(root, uploads, snapshot))
-	require.NoError(t, target.Create(&types.Knowledge{ID: "existing-original", TenantID: 1, KnowledgeBaseID: kb.ID, Title: "Preserve this existing article", Type: "manual", SourceKind: "article", ParseStatus: types.ParseStatusPending}).Error)
+	require.NoError(t, target.Create(&types.Entry{ID: "existing-original", SpaceID: 1, KnowledgeBaseID: kb.ID, Title: "Preserve this existing article", Type: "manual", SourceKind: "article", ParseStatus: types.ParseStatusPending}).Error)
 	_, err = rebuildVaultWithDatabase(ctx, target, &config.Config{Vault: &config.VaultConfig{Root: root}})
-	require.ErrorContains(t, err, "requires an empty knowledge database")
+	require.ErrorContains(t, err, "requires an empty entry database")
 	state, err := maintenanceops.Status(ctx, target)
 	require.NoError(t, err)
 	require.False(t, state.Paused)
-	var original types.Knowledge
+	var original types.Entry
 	require.NoError(t, target.First(&original, "id='existing-original'").Error)
 	require.Equal(t, "Preserve this existing article", original.Title)
 }

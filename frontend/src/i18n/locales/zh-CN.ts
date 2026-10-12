@@ -1028,7 +1028,7 @@ export default {
     multimodalParsing: '多模态文档解析',
     hybridSearchEngine: "混合检索",
     ragQandA: "知识检索",
-    independentTenant: "个人知识管理",
+    independentSpace: "个人知识管理",
     fullApiAccess: '完整 API 访问',
     knowledgeBaseManagement: '知识库管理',
   },
@@ -1096,6 +1096,9 @@ export default {
     languageSaved: '语言设置已保存'
   },
   model: {
+    imageProcessingUnsupported: '图片处理模型不支持视觉或多模态',
+    imageProcessingNotFound: '图片处理模型不存在',
+    imageProcessingUnavailable: '图片处理模型服务不可用',
     modelName: '模型名称',
     defaultTag: '默认',
     addModelInSettings: '前往全局设置添加模型',
@@ -1280,7 +1283,7 @@ export default {
       checkFailed: '检查失败',
       testFailed: '测试失败'
     },
-    tenant: {
+    space: {
       getApiPrincipalConfigFailed: '获取 API 用户身份配置失败',
       updateApiPrincipalConfigFailed: '更新 API 用户身份配置失败',
       createApiPrincipalTestTokenFailed: '生成 API 测试 Token 失败',
@@ -1296,7 +1299,7 @@ export default {
       loginFailed: '登录失败',
       registerFailed: '注册失败',
       getUserFailed: '获取用户信息失败',
-      getTenantFailed: '获取空间信息失败',
+      getSpaceFailed: '获取空间信息失败',
       refreshTokenFailed: '刷新Token失败',
       logoutFailed: '登出失败',
       validateTokenFailed: 'Token验证失败'
@@ -1484,7 +1487,7 @@ export default {
           knowledgeBaseLabel: '知识库 ID',
           knowledgeLabel: '文档 ID',
           taskIDLabel: '业务任务 ID',
-          tenantLabel: '空间 ID',
+          spaceLabel: '空间 ID',
           sourceKBLabel: '来源知识库',
           targetKBLabel: '目标知识库',
           dataSourceLabel: '数据源 ID',
@@ -1642,11 +1645,11 @@ export default {
       networkError: '网络错误，请稍后重试'
     }
   },
-  tenant: {
+  space: {
     defaultName: '个人空间',
     defaultDescription: '个人知识',
     title: '空间信息',
-    currentTenant: '当前空间',
+    currentSpace: '当前空间',
     sectionDescription: '查看空间的详细配置信息',
     statusActive: '活跃',
     statusInactive: '未激活',
@@ -2043,7 +2046,7 @@ export default {
   authStore: {
     errors: {
       parseUserFailed: '解析用户信息失败',
-      parseTenantFailed: '解析空间信息失败',
+      parseSpaceFailed: '解析空间信息失败',
 
     }
   },
@@ -2156,7 +2159,7 @@ export default {
     parserEngine: '解析引擎',
     versionInfo: '版本信息',
     taskQueue: '运行队列',
-    tenantInfo: '空间信息',
+    spaceInfo: '空间信息',
     workspaceSettings: '空间设置',
     system: '系统设置',
     parser: {
@@ -2613,9 +2616,9 @@ export default {
   resourceOrigin: {
     mine: '我创建',
     mineTooltip: '由当前用户创建',
-    tenant: '本空间',
-    tenantTooltip: '在本空间中创建',
-    tenantTooltipWithCreator: '由 {creator} 创建',
+    space: '本空间',
+    spaceTooltip: '在本空间中创建',
+    spaceTooltipWithCreator: '由 {creator} 创建',
   },
 
   countCopy: {

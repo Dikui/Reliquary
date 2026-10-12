@@ -98,7 +98,7 @@ func resetUserPassword(ctx context.Context, db *gorm.DB, password string) error 
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Limit(2).Find(&users).Error; err != nil {
 			return err
 		}
-		if len(users) != 1 || users[0].TenantID != types.SingleTenantID {
+		if len(users) != 1 || users[0].SpaceID != types.SingleSpaceID {
 			return errors.New("password reset requires exactly one registered user")
 		}
 		if err := tx.Model(&users[0]).Update("password_hash", string(hash)).Error; err != nil {

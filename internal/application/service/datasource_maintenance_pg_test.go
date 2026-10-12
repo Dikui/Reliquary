@@ -22,7 +22,7 @@ import (
 
 func TestDataSourceMaintenanceProvenanceSurvivesLiveSettingsAndCredentials(t *testing.T) {
 	db := pgtest.Open(t)
-	ds := &types.DataSource{ID: "maintenance-source", TenantID: types.SingleTenantID, KnowledgeBaseID: "kb", Name: "Original paused source", Type: deletedItemConnectorType, Status: types.DataSourceStatusPaused,
+	ds := &types.DataSource{ID: "maintenance-source", SpaceID: types.SingleSpaceID, KnowledgeBaseID: "kb", Name: "Original paused source", Type: deletedItemConnectorType, Status: types.DataSourceStatusPaused,
 		Config: types.JSON(`{"type":"test-sync-deletion","settings":{"url":"https://example.test/rss"},"credentials":null,"_reliquary_maintenance_original_status":"paused","_reliquary_maintenance_original_updated_at":"2026-01-02T03:04:05","_reliquary_maintenance_required_fields":"[\"credentials.auth_headers\"]","old_extension":{"retained":true}}`)}
 	repo := repository.NewDataSourceRepository(db)
 	require.NoError(t, repo.Create(context.Background(), ds))
@@ -61,14 +61,14 @@ func TestDataSourceMaintenanceProvenanceSurvivesLiveSettingsAndCredentials(t *te
 func TestAcceptedDataSourceTaskWaitsForMaintenanceCredentialsWithoutLosingBudget(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	source := &types.DataSource{ID: "restored-incomplete-source", TenantID: 1, Type: "rss", Status: types.DataSourceStatusPaused,
+	source := &types.DataSource{ID: "restored-incomplete-source", SpaceID: 1, Type: "rss", Status: types.DataSourceStatusPaused,
 		Config: types.JSON(`{"credentials":null,"_reliquary_maintenance_required_fields":"[\"config.credentials.auth_headers.Authorization\"]"}`)}
 	require.NoError(t, db.Create(source).Error)
-	syncLog := &types.SyncLog{DataSourceID: source.ID, TenantID: 1, Status: types.SyncLogStatusRunning, StartedAt: time.Now().Add(-time.Hour)}
+	syncLog := &types.SyncLog{DataSourceID: source.ID, SpaceID: 1, Status: types.SyncLogStatusRunning, StartedAt: time.Now().Add(-time.Hour)}
 	require.NoError(t, db.Create(syncLog).Error)
 	var before string
 	require.NoError(t, db.Raw(`SELECT to_jsonb(t)::text FROM sync_logs t WHERE id=?`, syncLog.ID).Scan(&before).Error)
-	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: source.ID, TenantID: 1, SyncLogID: syncLog.ID})
+	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: source.ID, SpaceID: 1, SyncLogID: syncLog.ID})
 	require.NoError(t, err)
 	svc := &DataSourceService{dsRepo: repository.NewDataSourceRepository(db), syncLogRepo: repository.NewSyncLogRepository(db)}
 	client := queue.NewClient(db)
@@ -104,7 +104,7 @@ func TestDataSourceMaintenanceRequiresEveryFieldBeforeLiveOperations(t *testing.
 	t.Setenv("SYSTEM_AES_KEY", "01234567890123456789012345678901")
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	ds := &types.DataSource{ID: "incomplete-source", TenantID: types.SingleTenantID, KnowledgeBaseID: "kb", Name: "Previously active source", Type: deletedItemConnectorType, Status: types.DataSourceStatusPaused,
+	ds := &types.DataSource{ID: "incomplete-source", SpaceID: types.SingleSpaceID, KnowledgeBaseID: "kb", Name: "Previously active source", Type: deletedItemConnectorType, Status: types.DataSourceStatusPaused,
 		Config: types.JSON(`{"type":"test-sync-deletion","settings":{"feed_url":"https://example.test/rss"},"credentials":null,"_reliquary_maintenance_original_status":"active","_reliquary_maintenance_original_updated_at":"2026-01-02T03:04:05","_reliquary_maintenance_required_fields":"[\"config.credentials.token\",\"config.credentials.app_secret\",\"config.credentials.auth_headers.Authorization\",\"config.settings.feed_url.userinfo\",\"config.settings.feed_url.query.API_Key\"]"}`)}
 	repo := repository.NewDataSourceRepository(db)
 	require.NoError(t, repo.Create(ctx, ds))
@@ -169,7 +169,7 @@ func TestRestoredRSSHeadersCanBeFilledThenSettingsSaved(t *testing.T) {
 			config := map[string]any{"type": "rss", "settings": map[string]any{"feed_urls": server.URL}, "credentials": nil, "_reliquary_maintenance_original_status": original, "_reliquary_maintenance_required_fields": `["config.credentials.auth_headers"]`}
 			blob, err := json.Marshal(config)
 			require.NoError(t, err)
-			source := &types.DataSource{ID: "restored-rss", TenantID: 1, KnowledgeBaseID: "kb", Name: "Private feed", Type: "rss", Status: "paused", Config: blob}
+			source := &types.DataSource{ID: "restored-rss", SpaceID: 1, KnowledgeBaseID: "kb", Name: "Private feed", Type: "rss", Status: "paused", Config: blob}
 			require.NoError(t, repo.Create(ctx, source))
 			svc := &DataSourceService{dsRepo: repo, connectorRegistry: registry, scheduler: datasource.NewScheduler(repo, nil, nil)}
 			filled, err := svc.UpdateDataSourceCredentials(ctx, source.ID, map[string]interface{}{"auth_headers": "Authorization: Bearer replacement"})

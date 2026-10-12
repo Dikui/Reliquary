@@ -23,20 +23,20 @@ const (
 	ErrTimeout            ErrorCode = 1009
 	ErrValidation         ErrorCode = 1010
 
-	// Tenant related error codes (2000-2099)
-	ErrTenantNotFound         ErrorCode = 2000
-	ErrTenantAlreadyExists    ErrorCode = 2001
-	ErrTenantInactive         ErrorCode = 2002
-	ErrTenantNameRequired     ErrorCode = 2003
-	ErrTenantInvalidStatus    ErrorCode = 2004
-	ErrTenantCreationDisabled ErrorCode = 2005
+	// Space related error codes (2000-2099)
+	ErrSpaceNotFound         ErrorCode = 2000
+	ErrSpaceAlreadyExists    ErrorCode = 2001
+	ErrSpaceInactive         ErrorCode = 2002
+	ErrSpaceNameRequired     ErrorCode = 2003
+	ErrSpaceInvalidStatus    ErrorCode = 2004
+	ErrSpaceCreationDisabled ErrorCode = 2005
 
 	// Model lifecycle errors (2300-2399).
 	// The dedicated code lets clients render structured usage details without
 	// parsing the backwards-compatible English error message.
 	ErrModelInUse ErrorCode = 2300
 
-	ErrKnowledgeSearchUnavailable ErrorCode = 2400
+	ErrSearchUnavailable ErrorCode = 2400
 
 	// Add more error codes here
 )
@@ -69,7 +69,7 @@ func NewBadRequestError(message string) *AppError {
 	}
 }
 
-// NewModelInUseError creates the typed HTTP 400 returned when active tenant
+// NewModelInUseError creates the typed HTTP 400 returned when active space
 // resources still reference a model.
 func NewModelInUseError(message string, details any) *AppError {
 	return &AppError{
@@ -117,7 +117,7 @@ func NewConflictError(message string) *AppError {
 }
 
 // NewTooManyRequestsError creates a 429 error, used by quota-style
-// guards (e.g. per-user self-service tenant creation cap).
+// guards (e.g. per-user self-service space creation cap).
 func NewTooManyRequestsError(message string) *AppError {
 	if message == "" {
 		message = "too many requests"
@@ -163,38 +163,38 @@ func NewValidationError(message string) *AppError {
 	}
 }
 
-// Tenant related errors
-func NewTenantNotFoundError() *AppError {
+// Space related errors
+func NewSpaceNotFoundError() *AppError {
 	return &AppError{
-		Code:     ErrTenantNotFound,
+		Code:     ErrSpaceNotFound,
 		Message:  "空间不存在",
 		HTTPCode: http.StatusNotFound,
 	}
 }
 
-// NewTenantAlreadyExistsError creates a tenant already exists error
-func NewTenantAlreadyExistsError() *AppError {
+// NewSpaceAlreadyExistsError creates a space already exists error
+func NewSpaceAlreadyExistsError() *AppError {
 	return &AppError{
-		Code:     ErrTenantAlreadyExists,
+		Code:     ErrSpaceAlreadyExists,
 		Message:  "空间已存在",
 		HTTPCode: http.StatusConflict,
 	}
 }
 
-// NewTenantInactiveError creates a tenant inactive error
-func NewTenantInactiveError() *AppError {
+// NewSpaceInactiveError creates a space inactive error
+func NewSpaceInactiveError() *AppError {
 	return &AppError{
-		Code:     ErrTenantInactive,
+		Code:     ErrSpaceInactive,
 		Message:  "空间已停用",
 		HTTPCode: http.StatusForbidden,
 	}
 }
 
-// NewTenantCreationDisabledError reports a deployment-policy denial for
-// ordinary self-service tenant creation.
-func NewTenantCreationDisabledError() *AppError {
+// NewSpaceCreationDisabledError reports a deployment-policy denial for
+// ordinary self-service space creation.
+func NewSpaceCreationDisabledError() *AppError {
 	return &AppError{
-		Code:     ErrTenantCreationDisabled,
+		Code:     ErrSpaceCreationDisabled,
 		Message:  "only the personal workspace is available",
 		HTTPCode: http.StatusForbidden,
 	}
@@ -206,7 +206,7 @@ func IsAppError(err error) (*AppError, bool) {
 	return appErr, ok
 }
 
-// NewKnowledgeSearchUnavailableError hides dependency details from search clients.
-func NewKnowledgeSearchUnavailableError() *AppError {
-	return &AppError{Code: ErrKnowledgeSearchUnavailable, Message: "Knowledge search is temporarily unavailable. Please retry.", HTTPCode: http.StatusServiceUnavailable}
+// NewSearchUnavailableError hides dependency details from search clients.
+func NewSearchUnavailableError() *AppError {
+	return &AppError{Code: ErrSearchUnavailable, Message: "Entry search is temporarily unavailable. Please retry.", HTTPCode: http.StatusServiceUnavailable}
 }

@@ -48,7 +48,7 @@ type KnowledgeBaseConfig struct {
 	// ParserCallTimeout caps a single parser call. Without this the
 	// gRPC call inherits the queue task context (whole DocumentProcessTimeout,
 	// default 2h+), so a hung parser would block a worker for hours and
-	// leave knowledge in "processing". Default 30 minutes is generous enough
+	// leave entry in "processing". Default 30 minutes is generous enough
 	// for OCR-heavy large PDFs while ensuring forward progress.
 	ParserCallTimeout time.Duration `yaml:"parser_call_timeout"   json:"parser_call_timeout"`
 }

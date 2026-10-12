@@ -26,7 +26,7 @@ import (
 
 type retainedIntakeFiles struct{ intakeFileService }
 
-func (s *retainedIntakeFiles) SaveFile(ctx context.Context, header *multipart.FileHeader, tenant uint64, id string) (string, error) {
+func (s *retainedIntakeFiles) SaveFile(ctx context.Context, header *multipart.FileHeader, space uint64, id string) (string, error) {
 	file, err := header.Open()
 	if err != nil {
 		return "", err
@@ -36,7 +36,7 @@ func (s *retainedIntakeFiles) SaveFile(ctx context.Context, header *multipart.Fi
 	if err != nil {
 		return "", err
 	}
-	return s.SaveBytes(ctx, body, tenant, id, false)
+	return s.SaveBytes(ctx, body, space, id, false)
 }
 
 type retainedIntakeModel struct {
@@ -67,7 +67,7 @@ type retainedIntakeHarness struct {
 	db        *gorm.DB
 	ctx       context.Context
 	kb        *types.KnowledgeBase
-	service   *knowledgeService
+	service   *entryService
 	queue     *retainedProcessingQueue
 	model     *retainedIntakeModel
 	processed int
@@ -76,24 +76,24 @@ type retainedIntakeHarness struct {
 func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	t.Helper()
 	db := pgtest.Open(t)
-	tenant := &types.Tenant{ID: types.SingleTenantID, Name: "Personal space"}
-	require.NoError(t, db.Create(tenant).Error)
-	kb := &types.KnowledgeBase{ID: "kb", TenantID: tenant.ID, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
+	space := &types.Space{ID: types.SingleSpaceID, Name: "Personal space"}
+	require.NoError(t, db.Create(space).Error)
+	kb := &types.KnowledgeBase{ID: "kb", SpaceID: space.ID, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
 		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024,
 			ParserEngineRules: []types.ParserEngineRule{{FileTypes: []string{"md", "txt"}, Engine: "simple"}}}}
 	require.NoError(t, db.Create(kb).Error)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, tenant.ID)
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, space.ID)
+	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
-	repo := repository.NewKnowledgeRepository(db)
+	repo := repository.NewEntryRepository(db)
 	chunkRepo := repository.NewChunkRepository(db)
 	chunks := &chunkService{chunkRepository: chunkRepo}
 	queue := &retainedProcessingQueue{}
 	model := &retainedIntakeModel{}
 	bases := retainedProcessingKB{kb: kb}
-	svc := &knowledgeService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
+	svc := &entryService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		kbService: bases, modelService: &summaryStateModelService{model: model}, task: queue,
-		tenantRepo: repository.NewTenantRepository(db), fileSvc: &retainedIntakeFiles{},
+		spaceRepo: repository.NewSpaceRepository(db), fileSvc: &retainedIntakeFiles{},
 		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
 	return &retainedIntakeHarness{db: db, ctx: ctx, kb: kb, service: svc, queue: queue, model: model}
 }
@@ -115,9 +115,9 @@ func (h *retainedIntakeHarness) drain(t *testing.T) {
 	}
 }
 
-func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Knowledge {
+func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Entry {
 	t.Helper()
-	article, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, id)
+	article, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, id)
 	require.NoError(t, err)
 	return article
 }
@@ -125,14 +125,14 @@ func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Knowledg
 func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	body := "# Uploadfixture\n\nAcme published an original technical announcement with supported deployment capabilities and measured product improvements."
-	article, err := h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "announcement.md", body),
+	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "announcement.md", body),
 		map[string]string{"publisher": "Acme", "original_url": "https://example.com/uploadfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	completed := h.article(t, article.ID)
 	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
 	require.Equal(t, types.SummaryStatusCompleted, completed.SummaryStatus)
-	chunks, err := h.service.chunkRepo.ListChunksByKnowledgeID(h.ctx, h.kb.TenantID, article.ID)
+	chunks, err := h.service.chunkRepo.ListChunksByEntryID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, chunks)
 	require.Contains(t, chunks[0].Content, "Uploadfixture")
@@ -140,7 +140,7 @@ func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T
 	for _, column := range []string{"source_content", "content_revision", "index_status", "last_editor_id"} {
 		require.False(t, h.db.Migrator().HasColumn(&types.Chunk{}, column), column)
 	}
-	require.False(t, h.db.Migrator().HasTable("knowledge_strategy_versions"))
+	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
 	require.Equal(t, []string{intakeReviewPrompt()}, h.model.prompts)
 	require.NotContains(t, string(completed.Metadata), "classification")
 }
@@ -154,14 +154,14 @@ func TestLocalURLArticleCompletes(t *testing.T) {
 	}))
 	defer server.Close()
 	h := newRetainedIntakeHarness(t)
-	article, err := h.service.CreateKnowledgeFromURL(h.ctx, h.kb.ID, server.URL+"/article", "", "", nil, "URLfixture", types.ChannelWeb, nil,
+	article, err := h.service.CreateEntryFromURL(h.ctx, h.kb.ID, server.URL+"/article", "", "", nil, "URLfixture", types.ChannelWeb, nil,
 		types.SourceInfo{Publisher: "Acme", PublishedAt: "2026-10-01", OriginalURL: server.URL + "/article"})
 	require.NoError(t, err)
 	h.drain(t)
 	completed := h.article(t, article.ID)
 	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
 	require.Equal(t, types.SummaryStatusCompleted, completed.SummaryStatus)
-	reader, _, err := h.service.GetKnowledgeBody(h.ctx, article.ID)
+	reader, _, err := h.service.GetEntryBody(h.ctx, article.ID)
 	require.NoError(t, err)
 	defer reader.Close()
 	body, err := io.ReadAll(reader)
@@ -172,7 +172,7 @@ func TestLocalURLArticleCompletes(t *testing.T) {
 func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	h.model.malformed = true
-	article, err := h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID,
+	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
 		newMultipartFileHeader(t, "malformed.md", "Acme published the complete original product announcement with detailed deployment options."),
 		map[string]string{"publisher": "Acme", "original_url": "https://example.com/malformedfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
@@ -184,7 +184,7 @@ func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "error", intake.Decision)
 	require.Empty(t, intake.OriginalPath)
-	require.False(t, h.db.Migrator().HasTable("knowledge_strategy_versions"))
+	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
 	require.Equal(t, []string{intakeReviewPrompt()}, h.model.prompts)
 }
 
@@ -222,15 +222,15 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 	cfg := &types.DataSourceConfig{Type: types.ConnectorTypeRSS, Settings: map[string]interface{}{"feed_urls": server.URL + "/feed.xml", "publisher": "Fixture publisher"}}
 	encoded, err := cfg.ToJSON()
 	require.NoError(t, err)
-	ds := &types.DataSource{ID: "feed", TenantID: h.kb.TenantID, KnowledgeBaseID: h.kb.ID, Type: types.ConnectorTypeRSS, Name: "Fixture publisher", Config: encoded,
+	ds := &types.DataSource{ID: "feed", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.ConnectorTypeRSS, Name: "Fixture publisher", Config: encoded,
 		SyncMode: types.SyncModeFull, Status: types.DataSourceStatusActive, CreatedAt: time.Now().Add(-24 * time.Hour)}
 	require.NoError(t, dsRepo.Create(h.ctx, ds))
-	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, knowledgeService: h.service, kbService: h.service.kbService,
-		connectorRegistry: registry, tenantRepo: h.service.tenantRepo}
+	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, entryService: h.service, kbService: h.service.kbService,
+		connectorRegistry: registry, spaceRepo: h.service.spaceRepo}
 	sync := func(id string) *types.SyncLog {
-		log := &types.SyncLog{ID: id, TenantID: h.kb.TenantID, DataSourceID: ds.ID, Status: types.SyncLogStatusRunning}
+		log := &types.SyncLog{ID: id, SpaceID: h.kb.SpaceID, DataSourceID: ds.ID, Status: types.SyncLogStatusRunning}
 		require.NoError(t, logs.Create(h.ctx, log))
-		payload, err := json.Marshal(types.DataSourceSyncPayload{TenantID: h.kb.TenantID, DataSourceID: ds.ID, SyncLogID: log.ID, ForceFull: true})
+		payload, err := json.Marshal(types.DataSourceSyncPayload{SpaceID: h.kb.SpaceID, DataSourceID: ds.ID, SyncLogID: log.ID, ForceFull: true})
 		require.NoError(t, err)
 		require.NoError(t, syncer.ProcessSync(h.ctx, taskqueue.NewTask(types.TypeDataSourceSync, payload)))
 		h.drain(t)
@@ -240,10 +240,10 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 	}
 	first := sync("first-sync")
 	require.Equal(t, 3, first.ItemsCreated)
-	var articles []types.Knowledge
+	var articles []types.Entry
 	require.NoError(t, h.db.Order("title").Find(&articles).Error)
 	require.Len(t, articles, 3)
-	byTitle := make(map[string]types.Knowledge)
+	byTitle := make(map[string]types.Entry)
 	for _, article := range articles {
 		byTitle[article.Title] = article
 	}
@@ -251,10 +251,10 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 	require.Equal(t, types.ParseStatusCompleted, approved.ParseStatus)
 	require.Equal(t, types.ParseStatusRejected, rejected.ParseStatus)
 	require.Equal(t, types.ParseStatusRejected, discarded.ParseStatus)
-	waiting, err := h.service.ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.ID, &types.Pagination{Page: 1, PageSize: 10}, types.KnowledgeListFilter{ParseStatus: types.ParseStatusRejected})
+	waiting, err := h.service.ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.ID, &types.Pagination{Page: 1, PageSize: 10}, types.EntryListFilter{ParseStatus: types.ParseStatusRejected})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, waiting.Total)
-	original, _, err := h.service.GetKnowledgeBody(h.ctx, approved.ID)
+	original, _, err := h.service.GetEntryBody(h.ctx, approved.ID)
 	require.NoError(t, err)
 	originalBody, err := io.ReadAll(original)
 	require.NoError(t, err)
@@ -265,9 +265,9 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 	require.Zero(t, second.ItemsCreated)
 	require.Zero(t, second.ItemsUpdated)
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
 	require.EqualValues(t, 3, count, "changed originals must not create review candidates")
-	reader, _, err := h.service.GetKnowledgeBody(h.ctx, approved.ID)
+	reader, _, err := h.service.GetEntryBody(h.ctx, approved.ID)
 	require.NoError(t, err)
 	unchanged, err := io.ReadAll(reader)
 	require.NoError(t, err)
@@ -278,18 +278,18 @@ func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
 	syncer.applyFetchedItem(h.ctx, ds, &types.FetchedItem{ExternalID: "different-guid", Title: "Changed original", Content: []byte(strings.Repeat("Changed complete original. ", 10)),
 		URL: server.URL + "/approvedfixture?utm_source=feed", Metadata: map[string]string{"publisher": "Fixture publisher", "published_at": "2026-10-01"}}, result)
 	require.Equal(t, 1, result.Skipped)
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
 	require.EqualValues(t, 3, count)
 	h.model.approveRetry = true
-	_, err = h.service.ReviewKnowledgeIntake(h.ctx, rejected.ID, "retry", types.SourceInfo{})
+	_, err = h.service.ReviewEntryIntake(h.ctx, rejected.ID, "retry", types.SourceInfo{})
 	require.NoError(t, err)
 	h.drain(t)
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, rejected.ID).ParseStatus)
-	_, err = h.service.ReviewKnowledgeIntake(h.ctx, discarded.ID, "discard", types.SourceInfo{})
+	_, err = h.service.ReviewEntryIntake(h.ctx, discarded.ID, "discard", types.SourceInfo{})
 	require.NoError(t, err)
-	_, err = h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, discarded.ID)
-	require.ErrorIs(t, err, repository.ErrKnowledgeNotFound)
-	waiting, err = h.service.ListPagedKnowledgeByKnowledgeBaseID(h.ctx, h.kb.ID, &types.Pagination{Page: 1, PageSize: 10}, types.KnowledgeListFilter{ParseStatus: types.ParseStatusRejected})
+	_, err = h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, discarded.ID)
+	require.ErrorIs(t, err, repository.ErrEntryNotFound)
+	waiting, err = h.service.ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.ID, &types.Pagination{Page: 1, PageSize: 10}, types.EntryListFilter{ParseStatus: types.ParseStatusRejected})
 	require.NoError(t, err)
 	require.Zero(t, waiting.Total)
 }

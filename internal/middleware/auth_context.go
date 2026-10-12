@@ -12,9 +12,9 @@ type authSession struct {
 	// User is the authenticated (possibly synthetic) user. Required.
 	User      *types.User
 	Principal types.Principal
-	// TenantID and Tenant identify the personal workspace.
-	TenantID uint64
-	Tenant   *types.Tenant
+	// SpaceID and Space identify the personal workspace.
+	SpaceID uint64
+	Space   *types.Space
 }
 
 // applyAuthSession writes the session onto BOTH context surfaces of the
@@ -34,11 +34,11 @@ func applyAuthSession(c *gin.Context, s authSession) {
 		ctx = context.WithValue(ctx, key, v)
 	}
 
-	if s.TenantID != 0 {
-		set(types.TenantIDContextKey, s.TenantID)
+	if s.SpaceID != 0 {
+		set(types.SpaceIDContextKey, s.SpaceID)
 	}
-	if s.Tenant != nil {
-		set(types.TenantInfoContextKey, s.Tenant)
+	if s.Space != nil {
+		set(types.SpaceInfoContextKey, s.Space)
 	}
 	if s.User != nil {
 		set(types.UserContextKey, s.User)

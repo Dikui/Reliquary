@@ -1,6 +1,6 @@
 import { get, put } from '@/utils/request'
 
-// RetrievalConfig represents the global retrieval/search configuration for a tenant.
+// RetrievalConfig represents the global retrieval/search configuration for a space.
 // Shared by the full search page and command palette.
 export interface RetrievalConfig {
   embedding_top_k: number
@@ -16,12 +16,12 @@ export interface RetrievalConfig {
   rrf_image_weight?: number
 }
 
-// Get tenant retrieval config via KV API
-export function getTenantRetrievalConfig() {
+// Get space retrieval config via KV API
+export function getSpaceRetrievalConfig() {
   return get('/api/v1/space/kv/retrieval-config')
 }
 
-// Update tenant retrieval config via KV API
-export function updateTenantRetrievalConfig(config: RetrievalConfig) {
+// Update space retrieval config via KV API
+export function updateSpaceRetrievalConfig(config: RetrievalConfig) {
   return put('/api/v1/space/kv/retrieval-config', config)
 }

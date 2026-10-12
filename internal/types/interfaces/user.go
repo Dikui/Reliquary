@@ -23,8 +23,8 @@ type UserService interface {
 	GetUserByEmail(ctx context.Context, email string) (*types.User, error)
 	// GetUserByUsername gets a user by username
 	GetUserByUsername(ctx context.Context, username string) (*types.User, error)
-	// GetUserByTenantID gets the sole user of the personal workspace
-	GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error)
+	// GetUserBySpaceID gets the sole user of the personal workspace
+	GetUserBySpaceID(ctx context.Context, spaceID uint64) (*types.User, error)
 	// UpdateUser updates user information
 	UpdateUser(ctx context.Context, user *types.User) error
 	// DeleteUser deletes a user
@@ -63,8 +63,8 @@ type UserRepository interface {
 	GetUserByEmail(ctx context.Context, email string) (*types.User, error)
 	// GetUserByUsername gets a user by username
 	GetUserByUsername(ctx context.Context, username string) (*types.User, error)
-	// GetUserByTenantID gets the sole user of the personal workspace
-	GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error)
+	// GetUserBySpaceID gets the sole user of the personal workspace
+	GetUserBySpaceID(ctx context.Context, spaceID uint64) (*types.User, error)
 	// UpdateUser updates a user
 	UpdateUser(ctx context.Context, user *types.User) error
 	// DeleteUser deletes a user

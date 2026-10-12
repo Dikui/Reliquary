@@ -58,7 +58,7 @@ func TestIngestRequiredFieldsAndStructuredValidation(t *testing.T) {
 		})
 	}
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
 	require.Zero(t, count)
 	require.Empty(t, h.queue.tasks)
 }
@@ -98,7 +98,7 @@ func TestIngestBodyStructureImagesModelReviewAnnotationsAndAudit(t *testing.T) {
 	result, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "pending", result.Status)
-	require.NotEmpty(t, result.ArticleID)
+	require.NotEmpty(t, result.EntryID)
 	require.Len(t, result.ImageFailures, 2)
 	require.Equal(t, 1, result.ImageFailures[0].Index)
 	require.Equal(t, request.Images[1].URL, result.ImageFailures[0].URL)
@@ -112,12 +112,12 @@ func TestIngestBodyStructureImagesModelReviewAnnotationsAndAudit(t *testing.T) {
 	for _, annotation := range []string{request.AgentSummary, request.AgentTags[0], request.SourceName} {
 		require.NotContains(t, queued, annotation)
 	}
-	before := h.article(t, result.ArticleID)
+	before := h.article(t, result.EntryID)
 	intake, err := before.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
 	h.drain(t)
-	article := h.article(t, result.ArticleID)
+	article := h.article(t, result.EntryID)
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
 	require.Equal(t, request.AgentSummary, article.AgentSummary)
 	require.JSONEq(t, `["agent-secret-tag"]`, string(article.AgentTags))
@@ -162,20 +162,20 @@ func TestIngestDuplicateReturnsExistingAndFillsReasonWithoutReprocessing(t *test
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	h.drain(t)
-	article := h.article(t, first.ArticleID)
+	article := h.article(t, first.EntryID)
 	_, _, originalBody := readVaultArticle(t, vault, article)
 	request.URL = "https://example.org/ada/status/456#thread"
 	request.CollectReason = "保留做研究"
 	request.Content = "Repeated URL arrives with a modified delivery."
 	duplicate, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
-	require.Equal(t, first.ArticleID, duplicate.ArticleID)
+	require.Equal(t, first.EntryID, duplicate.EntryID)
 	require.Equal(t, "exists", duplicate.Status)
 	require.Equal(t, "已存在", duplicate.Message)
 	require.Empty(t, duplicate.ImageFailures)
 	require.Len(t, h.queue.tasks, 1)
 	require.Len(t, h.processor.requests, 1)
-	require.Equal(t, request.CollectReason, h.article(t, first.ArticleID).CollectReason)
+	require.Equal(t, request.CollectReason, h.article(t, first.EntryID).CollectReason)
 	require.Eventually(t, func() bool {
 		data, err := os.ReadFile(filepath.Join(vault.root, article.VaultPath))
 		if err != nil {
@@ -187,9 +187,9 @@ func TestIngestDuplicateReturnsExistingAndFillsReasonWithoutReprocessing(t *test
 	request.CollectReason = "后续理由不能覆盖"
 	_, err = h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
-	require.Equal(t, "保留做研究", h.article(t, first.ArticleID).CollectReason)
+	require.Equal(t, "保留做研究", h.article(t, first.EntryID).CollectReason)
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	logs, err := NewOperationLogService(h.db).List(h.ctx, "ingest", 1, 100)
 	require.NoError(t, err)
@@ -245,15 +245,15 @@ func TestIngestDuplicateReasonSurvivesInFlightProcessingAndVaultWrite(t *testing
 	case <-time.After(5 * time.Second):
 		t.Fatal("article processing did not reach the model substitute")
 	}
-	stale := h.article(t, first.ArticleID)
+	stale := h.article(t, first.EntryID)
 	require.Equal(t, types.ParseStatusProcessing, stale.ParseStatus)
 	require.Empty(t, stale.CollectReason)
 	request.CollectReason = "保留这次实验的测量结论"
 	duplicate, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
-	require.Equal(t, first.ArticleID, duplicate.ArticleID)
+	require.Equal(t, first.EntryID, duplicate.EntryID)
 	require.Equal(t, "exists", duplicate.Status)
-	require.Equal(t, request.CollectReason, h.article(t, first.ArticleID).CollectReason)
+	require.Equal(t, request.CollectReason, h.article(t, first.EntryID).CollectReason)
 	resume()
 	select {
 	case err := <-result:
@@ -261,7 +261,7 @@ func TestIngestDuplicateReasonSurvivesInFlightProcessingAndVaultWrite(t *testing
 	case <-time.After(5 * time.Second):
 		t.Fatal("article processing did not finish")
 	}
-	article := h.article(t, first.ArticleID)
+	article := h.article(t, first.EntryID)
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
 	require.Equal(t, request.CollectReason, article.CollectReason)
 	_, header, body := readVaultArticle(t, vault, article)
@@ -281,18 +281,18 @@ func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) 
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	canonical, _, _ := messageBodyFingerprint(assembleIngestBody(request, []string{ingestCanonicalImageReference(request.Images[0])}))
-	require.Equal(t, canonical, h.article(t, first.ArticleID).ContentHash)
+	require.Equal(t, canonical, h.article(t, first.EntryID).ContentHash)
 	h.drain(t)
-	require.Equal(t, canonical, h.article(t, first.ArticleID).ContentHash)
+	require.Equal(t, canonical, h.article(t, first.EntryID).ContentHash)
 	request.URL = "https://example.org/repost"
 	request.CollectReason = "原始结果"
 	duplicate, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
-	require.Equal(t, first.ArticleID, duplicate.ArticleID)
+	require.Equal(t, first.EntryID, duplicate.EntryID)
 	require.Equal(t, "exists", duplicate.Status)
 	require.Len(t, h.queue.tasks, 1)
 	require.Len(t, h.processor.requests, 1)
-	reposts, err := loadKnowledgeRepostSources(h.db, h.kb.TenantID, []string{first.ArticleID}, nil)
+	reposts, err := loadEntryRepostSources(h.db, h.kb.SpaceID, []string{first.EntryID}, nil)
 	require.NoError(t, err)
 	require.Len(t, reposts, 1)
 	require.Equal(t, "content_hash", reposts[0].MatchMethod)
@@ -301,7 +301,7 @@ func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) 
 	unrelated, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "pending", unrelated.Status, "shared image bytes cannot dominate textual deduplication")
-	require.NotEqual(t, first.ArticleID, unrelated.ArticleID)
+	require.NotEqual(t, first.EntryID, unrelated.EntryID)
 }
 
 func TestIngestImageSSRFRejectionIsSkippedAndReported(t *testing.T) {
@@ -322,7 +322,7 @@ func TestIngestImageSSRFRejectionIsSkippedAndReported(t *testing.T) {
 	require.Contains(t, result.ImageFailures[0].Reason, "SSRF")
 	require.Zero(t, requests, "the existing SSRF protected downloader must reject the private target before HTTP")
 	h.drain(t)
-	article := h.article(t, result.ArticleID)
+	article := h.article(t, result.EntryID)
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
 	_, _, body := readVaultArticle(t, vault, article)
 	require.NotContains(t, string(body), "## 图片")
@@ -342,7 +342,7 @@ func TestIngestFailedImageFingerprintMatchesSameBodyWithoutImage(t *testing.T) {
 	require.Len(t, first.ImageFailures, 1)
 	require.Contains(t, first.ImageFailures[0].Reason, "404")
 	h.drain(t)
-	article := h.article(t, first.ArticleID)
+	article := h.article(t, first.EntryID)
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
 	request.URL = "https://example.org/same-announcement"
 	request.Images = nil
@@ -350,11 +350,11 @@ func TestIngestFailedImageFingerprintMatchesSameBodyWithoutImage(t *testing.T) {
 	require.Equal(t, canonical, article.ContentHash)
 	duplicate, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
-	require.Equal(t, first.ArticleID, duplicate.ArticleID)
+	require.Equal(t, first.EntryID, duplicate.EntryID)
 	require.Equal(t, "exists", duplicate.Status)
 	require.Len(t, h.queue.tasks, 1)
 	require.Len(t, h.processor.requests, 1)
-	reposts, err := loadKnowledgeRepostSources(h.db, h.kb.TenantID, []string{article.ID}, nil)
+	reposts, err := loadEntryRepostSources(h.db, h.kb.SpaceID, []string{article.ID}, nil)
 	require.NoError(t, err)
 	require.Len(t, reposts, 1)
 	require.Equal(t, "content_hash", reposts[0].MatchMethod)
@@ -369,14 +369,14 @@ func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	request.CollectReason = "不应提交"
 	_, err = h.service.Ingest(h.ctx, request)
 	require.ErrorContains(t, err, "audit unavailable")
-	require.Empty(t, h.article(t, first.ArticleID).CollectReason)
+	require.Empty(t, h.article(t, first.EntryID).CollectReason)
 	request.URL = "https://example.org/audit-new"
 	request.Content = "A totally distinct second paper studies different physical properties and their relationships."
 	request.Images = []types.IngestImage{{Data: strings.SplitN(articleImageDataURI(t, 14), ",", 2)[1]}}
 	_, err = h.service.Ingest(h.ctx, request)
 	require.ErrorContains(t, err, "audit unavailable")
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	require.Len(t, h.queue.tasks, 1)
 	files := h.service.fileSvc.(*articleProcessingFiles)

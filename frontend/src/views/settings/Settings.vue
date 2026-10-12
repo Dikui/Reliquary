@@ -74,7 +74,7 @@
                     <ModelSettings />
                   </div>
 
-                  <div v-if="currentSection === 'knowledge'" class="section"><KnowledgeSettings ref="knowledgeSettingsView" :initial-section="currentSubSection || undefined" /></div>
+                  <div v-if="currentSection === 'knowledge-base'" class="section"><KnowledgeBaseSettings ref="kbSettingsView" :initial-section="currentSubSection || undefined" /></div>
                   <div v-if="currentSection === 'datasource'" class="section"><DataSourceSettings /></div>
                   <div v-if="currentSection === 'vault'" class="section"><VaultStatus /></div>
                   <div v-if="currentSection === 'operation-logs'" class="section"><OperationLogs /></div>
@@ -105,8 +105,8 @@
                   </div>
 
                   <!-- 空间信息 -->
-                  <div v-if="currentSection === 'tenant'" class="section">
-                    <TenantInfo ref="tenantInfoView" />
+                  <div v-if="currentSection === 'space'" class="section">
+                    <SpaceInfo ref="spaceInfoView" />
                   </div>
 
                   <!-- 发布集成 -->
@@ -132,16 +132,16 @@ import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SystemInfo from './SystemInfo.vue'
-import TenantInfo from './TenantInfo.vue'
+import SpaceInfo from './SpaceInfo.vue'
 import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
-import KnowledgeSettings from './KnowledgeSettings.vue'
+import KnowledgeBaseSettings from './KnowledgeBaseSettings.vue'
 import VaultStatus from './VaultStatus.vue'
-import OperationLogs from '@/views/knowledge/OperationLogs.vue'
-import DataSourceSettings from '@/views/knowledge/settings/DataSourceSettings.vue'
+import OperationLogs from '@/views/knowledge-base/OperationLogs.vue'
+import DataSourceSettings from '@/views/knowledge-base/settings/DataSourceSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
@@ -168,11 +168,11 @@ const uiStore = useUIStore()
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
-const knowledgeSettingsView = ref<InstanceType<typeof KnowledgeSettings>>()
-const tenantInfoView = ref<InstanceType<typeof TenantInfo>>()
-const canLeaveCurrentSection = () => currentSection.value === 'tenant'
-  ? tenantInfoView.value?.confirmLeave() ?? Promise.resolve(true)
-  : currentSection.value === 'knowledge' ? knowledgeSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
+const kbSettingsView = ref<InstanceType<typeof KnowledgeBaseSettings>>()
+const spaceInfoView = ref<InstanceType<typeof SpaceInfo>>()
+const canLeaveCurrentSection = () => currentSection.value === 'space'
+  ? spaceInfoView.value?.confirmLeave() ?? Promise.resolve(true)
+  : currentSection.value === 'knowledge-base' ? kbSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
 const expandedMenus = ref<string[]>([])
@@ -227,7 +227,7 @@ const navItems = computed(() => {
     { key: 'general', icon: 'setting', label: t('general.title') },
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
-    { key: 'knowledge', icon: 'file', label: t('settings.knowledgeSettings') },
+    { key: 'knowledge-base', icon: 'file', label: t('settings.knowledgeSettings') },
     { key: 'datasource', icon: 'rss', label: t('settings.dataSources') },
     { key: 'vault', icon: 'folder', label: t('settings.vault.title') },
     { key: 'operation-logs', icon: 'history', label: t('operationLogs.title') },
@@ -236,7 +236,7 @@ const navItems = computed(() => {
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
-    { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
+    { key: 'space', icon: 'user-circle', label: t('settings.spaceInfo') },
     ...integrationItems,
   ]
   // 入口的策略一致。
@@ -259,7 +259,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant']),
+      items: pickItems(['space']),
     },
     {
       key: 'models_runtime',
@@ -277,7 +277,7 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'knowledge', 'datasource', 'vault', 'parser',
+        'knowledge-base', 'datasource', 'vault', 'parser',
       ]),
     },
     {
@@ -358,7 +358,7 @@ const handleClose = async () => {
   if (route.path === '/platform/settings') {
     const sec = route.query.section
     if (!router.options.history.state.back || sec === 'system-global' || sec === 'runtime-queues') {
-      router.push('/platform/knowledge')
+      router.push('/platform/entries')
     } else {
       router.back()
     }
@@ -712,7 +712,7 @@ onUnmounted(() => {
   container-type: inline-size;
   // Bumped from 600 to 760 when the modal grew from 900→1080 (see
   // .settings-modal). Without this, single-column panes (General,
-  // Tenant, API key, …) leave a wide right-hand gutter inside the
+  // Space, API key, …) leave a wide right-hand gutter inside the
   // wider modal. 760 keeps comfortable reading-width on long
   // descriptions without the form fields stretching to the full
   // panel width — which would look stranger than a small gutter.

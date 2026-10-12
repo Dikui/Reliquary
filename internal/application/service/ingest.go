@@ -23,14 +23,14 @@ import (
 	"reliquary/internal/utils"
 )
 
-var _ interfaces.IngestService = (*knowledgeService)(nil)
+var _ interfaces.IngestService = (*entryService)(nil)
 
 // Ingest stores deliberate collection with the same deduplication and asynchronous
 // article processing used by other entry points. Source URLs are provenance only;
 // fetching is limited to image URLs through the existing SSRF protected resolver.
-func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequest) (*types.IngestResult, error) {
+func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest) (*types.IngestResult, error) {
 	if s.needsTaskTransaction() {
-		return knowledgeTaskTransaction(ctx, s, func(copy *knowledgeService) (*types.IngestResult, error) {
+		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestResult, error) {
 			return copy.Ingest(ctx, request)
 		})
 	}
@@ -38,8 +38,8 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	if err := validateIngestRequest(request); err != nil {
 		return nil, err
 	}
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
 		return nil, werrors.NewUnauthorizedError("personal space is required")
 	}
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
@@ -52,7 +52,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	if err != nil {
 		return nil, err
 	}
-	if kb.TenantID != tenantID {
+	if kb.SpaceID != spaceID {
 		return nil, werrors.NewForbiddenError("knowledge base belongs to another space")
 	}
 	now := time.Now()
@@ -72,13 +72,13 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	if err != nil {
 		return nil, err
 	}
-	article := &types.Knowledge{ID: uuid.NewString(), TenantID: tenantID, KnowledgeBaseID: kb.ID,
-		Type: types.KnowledgeTypeManual, SourceKind: "article", Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
-		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.KnowledgeTypeManual,
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, KnowledgeBaseID: kb.ID,
+		Type: types.EntryTypeManual, SourceKind: "article", Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
+		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual,
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
 		EmbeddingModelID: kb.EmbeddingModelID, CollectReason: strings.TrimSpace(request.CollectReason),
 		AgentSummary: request.AgentSummary, AgentTags: types.JSON(tags), SourceName: request.SourceName}
-	intake := &types.KnowledgeIntakeMetadata{Source: "ingest", Decision: "pending", SourceInfo: types.SourceInfo{
+	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "pending", SourceInfo: types.SourceInfo{
 		OriginalURL: article.Source, Author: request.Author, Publisher: request.Publisher,
 		PublishedAt: normalizeIntakePublicationDate(request.PublishedAt)}}
 	if err := article.SetIntakeMetadata(intake); err != nil {
@@ -93,7 +93,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	canonicalBody := assembleIngestBody(request, canonicalRefs)
 	setMessageFingerprint(article, canonicalBody)
 	result := &types.IngestResult{ImageFailures: []types.IngestImageFailure{}}
-	var duplicate *types.Knowledge
+	var duplicate *types.Entry
 	var refresh bool
 	// Avoid image downloads when the normalized URL or body is already collected.
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -116,11 +116,11 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		if refresh && s.vault != nil {
 			s.vault.ScheduleRefresh(ctx, duplicate.ID)
 		}
-		result.ArticleID, result.Status, result.Message = duplicate.ID, "exists", "已存在"
+		result.EntryID, result.Status, result.Message = duplicate.ID, "exists", "已存在"
 		return result, nil
 	}
 	fileSvc := s.resolveFileService(ctx, kb)
-	refs, stored, failures := s.resolveIngestImages(ctx, request.Images, fileSvc, tenantID)
+	refs, stored, failures := s.resolveIngestImages(ctx, request.Images, fileSvc, spaceID)
 	result.ImageFailures = failures
 	body := assembleIngestBody(request, refs)
 	// Failed images and their descriptions are absent from the immutable body,
@@ -145,7 +145,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		}
 		return nil
 	}
-	intake.OriginalPath, err = fileSvc.SaveBytes(ctx, []byte(body), tenantID, article.ID+".md", false)
+	intake.OriginalPath, err = fileSvc.SaveBytes(ctx, []byte(body), spaceID, article.ID+".md", false)
 	if err != nil {
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			return nil, fmt.Errorf("save ingest body: %v; cleanup: %w", err, cleanupErr)
@@ -159,7 +159,7 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		_ = cleanup()
 		return nil, err
 	}
-	meta := types.NewManualKnowledgeMetadata("", types.ManualKnowledgeStatusPublish, 1)
+	meta := types.NewManualEntryMetadata("", types.ManualEntryStatusPublish, 1)
 	if err := article.SetManualMetadata(meta); err != nil {
 		_ = cleanup()
 		return nil, err
@@ -196,10 +196,10 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 		if refresh && s.vault != nil {
 			s.vault.ScheduleRefresh(ctx, duplicate.ID)
 		}
-		result.ArticleID, result.Status, result.Message = duplicate.ID, "exists", "已存在"
+		result.EntryID, result.Status, result.Message = duplicate.ID, "exists", "已存在"
 		return result, nil
 	}
-	s.bindContentResources(ctx, tenantID, article.ID, body)
+	s.bindContentResources(ctx, spaceID, article.ID, body)
 	rejected, err := s.reviewIntake(ctx, kb, article, body)
 	var deferred *types.ChatGPTDeferredError
 	var processOptions []taskqueue.Option
@@ -215,28 +215,28 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	}
 	if rejected {
 		intake, _ = article.IntakeMetadata()
-		result.ArticleID, result.Status, result.Message, result.Reason = article.ID, "pending_review", "等待收录审核", intake.Reason
+		result.EntryID, result.Status, result.Message, result.Reason = article.ID, "pending_review", "等待收录审核", intake.Reason
 		return result, nil
 	}
 	if _, err := s.enqueueManualProcessing(ctx, article, body, false, processOptions...); err != nil {
-		s.markKnowledgeEnqueueFailed(ctx, article)
-		result.ArticleID, result.Status, result.Message = article.ID, types.ParseStatusFailed, "处理入队失败"
+		s.markEntryEnqueueFailed(ctx, article)
+		result.EntryID, result.Status, result.Message = article.ID, types.ParseStatusFailed, "处理入队失败"
 		return result, nil
 	}
-	result.ArticleID, result.Status, result.Message = article.ID, types.ParseStatusPending, "已收录，正在处理"
+	result.EntryID, result.Status, result.Message = article.ID, types.ParseStatusPending, "已收录，正在处理"
 	if deferred != nil {
 		result.Message = "已收录，等待模型恢复后处理"
 	}
 	return result, nil
 }
 
-func recordIngestDuplicate(ctx context.Context, tx *gorm.DB, existing, incoming *types.Knowledge, method string, distance int) (bool, error) {
+func recordIngestDuplicate(ctx context.Context, tx *gorm.DB, existing, incoming *types.Entry, method string, distance int) (bool, error) {
 	if err := recordMessageRepost(tx, existing, incoming, method, distance); err != nil {
 		return false, err
 	}
 	// The deduplication lock serializes collection; the row lock also protects
 	// concurrent user edits and processing updates to this article.
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id=? AND id=?", existing.TenantID, existing.ID).First(existing).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", existing.SpaceID, existing.ID).First(existing).Error; err != nil {
 		return false, err
 	}
 	before := existing.CollectReason
@@ -296,7 +296,7 @@ func validIngestURL(raw string) bool {
 	return err == nil && u.Hostname() != "" && u.User == nil && (u.Scheme == "http" || u.Scheme == "https") && !strings.ContainsAny(raw, "\r\n\t")
 }
 
-func (s *knowledgeService) resolveIngestImages(ctx context.Context, input []types.IngestImage, files interfaces.FileService, tenantID uint64) ([]string, []docparser.StoredImage, []types.IngestImageFailure) {
+func (s *entryService) resolveIngestImages(ctx context.Context, input []types.IngestImage, files interfaces.FileService, spaceID uint64) ([]string, []docparser.StoredImage, []types.IngestImageFailure) {
 	refs := make([]string, len(input))
 	stored := []docparser.StoredImage{}
 	failures := []types.IngestImageFailure{}
@@ -311,12 +311,12 @@ func (s *knowledgeService) resolveIngestImages(ctx context.Context, input []type
 		if image.Data != "" {
 			ref, err = ingestImageDataURI(image.Data)
 			if err == nil {
-				_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, tenantID)
+				_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, spaceID)
 			}
 		} else {
 			// URL.String escapes Markdown delimiters without changing the target.
 			u, _ := url.Parse(ref)
-			_, images, err = resolver.ResolveRemoteImages(ctx, "![image](<"+u.String()+">)", files, tenantID)
+			_, images, err = resolver.ResolveRemoteImages(ctx, "![image](<"+u.String()+">)", files, spaceID)
 		}
 		if err == nil && len(images) != 1 {
 			err = fmt.Errorf("image could not be stored")

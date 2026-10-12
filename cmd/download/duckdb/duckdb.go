@@ -9,7 +9,7 @@ import (
 )
 
 // duckdbExtensions is the list of DuckDB extensions required by Reliquary's
-// data analysis tool. `spatial` is used for layer metadata (st_read_meta)
+// tabular file parsing during collection. `spatial` is used for layer metadata (st_read_meta)
 // so we can enumerate sheet names from Excel files, while `excel` provides
 // the dedicated read_xlsx reader with proper type inference.
 var duckdbExtensions = []string{"spatial", "excel"}

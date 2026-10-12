@@ -32,9 +32,9 @@ type IndexInfo struct {
 	SourceID        string     // ID of the source document
 	SourceType      SourceType // Type of the source
 	ChunkID         string     // ID of the text chunk
-	KnowledgeID     string     // ID of the knowledge
+	EntryID         string     // ID of the entry
 	KnowledgeBaseID string     // ID of the knowledge base
-	KnowledgeType   string     // Type of the knowledge (e.g., "manual", "file")
+	EntryType       string     // Type of the entry (e.g., "manual", "file")
 	IsEnabled       bool       // Whether the chunk is enabled for retrieval
 	IsRecommended   bool       // Whether the chunk is recommended
 }

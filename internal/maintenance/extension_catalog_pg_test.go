@@ -75,7 +75,7 @@ func TestCatalogGuardRejectsAlteredOwnershipAndApplicationMaterializedView(t *te
 	t.Run("same-column materialized view", func(t *testing.T) {
 		db := pgtest.Open(t)
 		require.NoError(t, db.Exec(`DROP TABLE topics CASCADE`).Error)
-		require.NoError(t, db.Exec(`CREATE MATERIALIZED VIEW topics AS SELECT 'topic'::text AS id,1::bigint AS tenant_id,'name'::text AS name,'description'::text AS description,now() AS created_at,now() AS updated_at`).Error)
+		require.NoError(t, db.Exec(`CREATE MATERIALIZED VIEW topics AS SELECT 'topic'::text AS id,1::bigint AS space_id,'name'::text AS name,'description'::text AS description,now() AS created_at,now() AS updated_at`).Error)
 		require.ErrorContains(t, ValidateClassification(ctx, db), "unreviewed application relation kind for public.topics")
 	})
 }
@@ -87,7 +87,7 @@ func TestNonDefaultExtensionDataStopsMaintenanceWithoutChangingOriginal(t *testi
 		{"modified standard SRS", "public.spatial_ref_sys", `UPDATE public.spatial_ref_sys SET srtext='Modified standard reference definition' WHERE srid=4326`},
 		{"geocoder setting", "tiger.geocode_settings", `INSERT INTO tiger.geocode_settings(name,setting) VALUES('custom_precision','7')`},
 		{"modified seeded dictionary", "tiger.pagc_lex", `UPDATE tiger.pagc_lex SET word='Modified dictionary word' WHERE id=(SELECT min(id) FROM tiger.pagc_lex)`},
-		{"materialized view definition", "pgivm.pg_ivm_immv", `INSERT INTO pgivm.pg_ivm_immv(immvrelid,viewdef,ispopulated,lastivmupdate) VALUES('public.knowledges'::regclass,'SELECT title FROM public.knowledges',false,'0'::xid8)`},
+		{"materialized view definition", "pgivm.pg_ivm_immv", `INSERT INTO pgivm.pg_ivm_immv(immvrelid,viewdef,ispopulated,lastivmupdate) VALUES('public.entries'::regclass,'SELECT title FROM public.entries',false,'0'::xid8)`},
 		{"topology metadata", "topology.topology", `INSERT INTO topology.topology(id,name,srid,precision,hasz,useslargeids) VALUES(999,'custom_topology',4326,0,false,false)`},
 		{"tokenizer typmod cache", "paradedb._typmod_cache", `SELECT paradedb._save_typmod(ARRAY['unreviewed-custom-tokenizer'])`},
 	} {

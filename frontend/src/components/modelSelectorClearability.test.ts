@@ -3,8 +3,8 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 
 const selector = readFileSync(new URL('./ModelSelector.vue', import.meta.url), 'utf8')
-const kbEditor = readFileSync(new URL('../views/settings/KnowledgeSettings.vue', import.meta.url), 'utf8')
-const uploadConfirm = readFileSync(new URL('../views/knowledge/components/UploadConfirmDialog.vue', import.meta.url), 'utf8')
+const kbEditor = readFileSync(new URL('../views/settings/KnowledgeBaseSettings.vue', import.meta.url), 'utf8')
+const uploadConfirm = readFileSync(new URL('../views/knowledge-base/components/UploadConfirmDialog.vue', import.meta.url), 'utf8')
 
 function modelSelectorTag(source: string, selectedModelBinding: string): string {
   const tag = source

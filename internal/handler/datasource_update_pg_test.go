@@ -42,7 +42,7 @@ func TestRestoredDataSourcePageRequestsPreserveUneditedJSON(t *testing.T) {
 			}
 			blob, err := json.Marshal(config)
 			require.NoError(t, err)
-			ds := &types.DataSource{ID: "restored", KnowledgeBaseID: "kb", TenantID: 1, Name: "Private RSS", Type: "rss", Status: "paused", SyncSchedule: "", SyncMode: "incremental", SyncDeletions: false, Config: blob, LastSyncCursor: types.JSON(`{"null":null,"array":[]}`), LastSyncResult: types.JSON(`null`)}
+			ds := &types.DataSource{ID: "restored", KnowledgeBaseID: "kb", SpaceID: 1, Name: "Private RSS", Type: "rss", Status: "paused", SyncSchedule: "", SyncMode: "incremental", SyncDeletions: false, Config: blob, LastSyncCursor: types.JSON(`{"null":null,"array":[]}`), LastSyncResult: types.JSON(`null`)}
 			if resources == "sql-null-state" {
 				ds.LastSyncCursor = nil
 				ds.LastSyncResult = nil
@@ -52,14 +52,14 @@ func TestRestoredDataSourcePageRequestsPreserveUneditedJSON(t *testing.T) {
 			require.NoError(t, registry.Register(rss.NewConnector()))
 			svc := service.NewDataSourceService(db, repo, nil, nil, nil, nil, registry, datasource.NewScheduler(repo, nil, nil), nil)
 			kb := &stubKBServiceForDS{getByID: func(context.Context, string) (*types.KnowledgeBase, error) {
-				return &types.KnowledgeBase{ID: "kb", TenantID: 1}, nil
+				return &types.KnowledgeBase{ID: "kb", SpaceID: 1}, nil
 			}}
 			h := NewDataSourceHandler(svc, kb)
 			credentials := NewDataSourceCredentialsHandler(svc, kb)
 			gin.SetMode(gin.TestMode)
 			r := gin.New()
 			r.Use(errorCapture())
-			r.Use(func(c *gin.Context) { c.Set(types.TenantIDContextKey.String(), uint64(1)); c.Next() })
+			r.Use(func(c *gin.Context) { c.Set(types.SpaceIDContextKey.String(), uint64(1)); c.Next() })
 			r.PUT("/api/v1/data-sources/:id", h.UpdateDataSource)
 			r.PUT("/api/v1/data-sources/:id/credentials", credentials.Put)
 			before, err := maintenance.BuildManifest(ctx, db, t.TempDir(), "")

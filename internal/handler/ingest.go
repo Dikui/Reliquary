@@ -11,7 +11,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func (h *KnowledgeHandler) Ingest(c *gin.Context) {
+func (h *EntryHandler) Ingest(c *gin.Context) {
 	var input types.IngestRequest
 	decoder := json.NewDecoder(c.Request.Body)
 	decoder.DisallowUnknownFields()

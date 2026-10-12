@@ -42,7 +42,7 @@ type DataSource struct {
 	ID string `json:"id" gorm:"type:varchar(36);primaryKey"`
 
 	// Workspace ID for multi-workspace isolation
-	TenantID uint64 `json:"tenant_id" gorm:"index"`
+	SpaceID uint64 `json:"space_id" gorm:"index"`
 
 	// Target knowledge base ID
 	KnowledgeBaseID string `json:"knowledge_base_id" gorm:"index"`
@@ -123,7 +123,7 @@ type SyncLog struct {
 	DataSourceID string `json:"data_source_id" gorm:"index"`
 
 	// Workspace ID
-	TenantID uint64 `json:"tenant_id" gorm:"index"`
+	SpaceID uint64 `json:"space_id" gorm:"index"`
 
 	// Sync status: running, success, partial, failed, canceled
 	Status string `json:"status" gorm:"type:varchar(32);index"`
@@ -314,7 +314,7 @@ type FetchedItem struct {
 	SourceResourceID string `json:"source_resource_id"`
 
 	// ReplacesSubtree, when true, tells ingestion to reconcile this item's
-	// sub-items: after the parent is (re)ingested, every existing knowledge item
+	// sub-items: after the parent is (re)ingested, every existing entry item
 	// whose external_id starts with SubtreeChildPrefix(ExternalID) that is NOT
 	// listed in SubtreeKeep is deleted as stale. Used by connectors that fan one
 	// source node out into a parent document plus attachment/image sub-items
@@ -480,7 +480,7 @@ type DataSourceSyncPayload struct {
 	DataSourceID string `json:"data_source_id"`
 
 	// Workspace ID
-	TenantID uint64 `json:"tenant_id"`
+	SpaceID uint64 `json:"tenant_id"`
 
 	// Sync log ID (for tracking)
 	SyncLogID string `json:"sync_log_id"`

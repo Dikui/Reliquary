@@ -15,12 +15,13 @@ import (
 )
 
 type TableManifest struct {
-	Rows        int64               `json:"rows"`
-	SHA256      string              `json:"sha256"`
-	Columns     []string            `json:"columns"`
-	Regenerated bool                `json:"regenerated"`
-	Data        []map[string]any    `json:"data,omitempty"`
-	JSONNulls   map[string][]string `json:"json_nulls,omitempty"`
+	Rows         int64               `json:"rows"`
+	SHA256       string              `json:"sha256"`
+	Columns      []string            `json:"columns"`
+	Regenerated  bool                `json:"regenerated"`
+	Data         []map[string]any    `json:"data,omitempty"`
+	JSONNulls    map[string][]string `json:"json_nulls,omitempty"`
+	legacySHA256 map[int]string
 }
 type Retrieval struct {
 	Query string   `json:"query"`
@@ -47,7 +48,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	if err != nil {
 		return nil, err
 	}
-	manifest := &Manifest{FormatVersion: 1, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
+	manifest := &Manifest{FormatVersion: FormatVersion, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return nil, err
@@ -79,8 +80,11 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			entry.SHA256 = sum(data)
 			entry.Rows = int64(len(rows))
 			entry.JSONNulls = snapshot.JSONNulls[table]
-			if table == "models" || table == "data_sources" || table == "chatgpt_accounts" || table == "tenants" || table == "chatgpt_policy" || table == "knowledge_bases" || table == "operation_logs" || table == "embedding_rebuild_runs" || table == "embedding_rebuild_items" || table == "entity_embedding_rebuild_runs" || table == "task_jobs" || table == "tenant_api_keys" || inactiveCredentialTable(table) {
-				entry.Data = rows
+			entry.Data = rows
+			entry.legacySHA256 = map[int]string{}
+			for _, version := range []int{1, 2} {
+				legacy, _ := json.Marshal(namedRows(portable, true, version))
+				entry.legacySHA256[version] = sum(legacy)
 			}
 		}
 		manifest.Tables[table] = entry
@@ -102,8 +106,8 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	for _, query := range []string{"maintenancearchive", "observations", "reference"} {
 		var ids []string
 		if err := db.WithContext(ctx).Raw(`SELECT DISTINCT id FROM (
- SELECT k.id FROM public.knowledges k WHERE k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND k.search_seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('title',?),paradedb.match_disjunction('description',?),paradedb.match_disjunction('search_text',?)])
- UNION ALL SELECT c.knowledge_id AS id FROM public.chunks c JOIN public.knowledges k ON k.id=c.knowledge_id WHERE c.deleted_at IS NULL AND c.is_enabled AND k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND c.seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('content',?),paradedb.match_disjunction('context_header',?),paradedb.match_disjunction('search_title',?)])
+ SELECT k.id FROM public.entries k WHERE k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND k.search_seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('title',?),paradedb.match_disjunction('description',?),paradedb.match_disjunction('search_text',?)])
+ UNION ALL SELECT c.entry_id AS id FROM public.chunks c JOIN public.entries k ON k.id=c.entry_id WHERE c.deleted_at IS NULL AND c.is_enabled AND k.deleted_at IS NULL AND k.parse_status='completed' AND k.enable_status='enabled' AND c.seq_id @@@ paradedb.boolean(should => ARRAY[paradedb.match_disjunction('content',?),paradedb.match_disjunction('context_header',?),paradedb.match_disjunction('search_title',?)])
 ) matched ORDER BY id LIMIT 20`, query, query, query, query, query, query).Scan(&ids).Error; err != nil {
 			return nil, err
 		}
@@ -211,13 +215,13 @@ func comparableCredentialRows(table string, expected, actual []map[string]any, r
 	if table == "task_jobs" {
 		return comparableTaskRows(expected, actual)
 	}
-	if table != "models" && table != "data_sources" && table != "chatgpt_accounts" && table != "tenants" {
+	if table != "models" && table != "data_sources" && table != "chatgpt_accounts" && table != "spaces" {
 		return canonicalRows(table, expected), canonicalRows(table, actual)
 	}
 	allowed := map[string]bool{}
 	for _, requirement := range requirements {
 		if requirement.Kind == table {
-			if table != "tenants" {
+			if table != "spaces" {
 				allowed[requirement.ID] = true
 			} else {
 				for _, field := range requirement.Fields {
@@ -240,7 +244,7 @@ func comparableCredentialRows(table string, expected, actual []map[string]any, r
 		if !found || !allowed[id] {
 			continue
 		}
-		if table == "tenants" {
+		if table == "spaces" {
 			row["updated_at"] = wanted["updated_at"]
 			continue
 		}
@@ -284,9 +288,11 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 	if err != nil {
 		return result, err
 	}
+	storedFormat := FormatVersion
 	if saved, err := Load(root); err != nil {
 		result.Differences = append(result.Differences, "replica manifest or asset integrity: "+err.Error())
 	} else {
+		storedFormat = saved.storedFormat
 		before, _ := json.Marshal(saved.JSONNulls)
 		after, _ := json.Marshal(snapshot.JSONNulls)
 		if !bytes.Equal(before, after) {
@@ -318,7 +324,7 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 			}
 		}
 	}
-	expected, err := replicaFiles(snapshot)
+	expected, err := replicaFilesForFormat(snapshot, storedFormat)
 	if err != nil {
 		return result, err
 	}
@@ -334,7 +340,7 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 	}
 	// The log is never rewritten. A corrupted or altered previous record is a
 	// hard failure even when repair is explicitly requested.
-	if err := checkLogs(filepath.Join(root, ".reliquary", "operation_logs.jsonl"), snapshot.Tables["operation_logs"]); err != nil {
+	if err := checkLogs(filepath.Join(root, ".reliquary", "operation_logs.jsonl"), namedRows(snapshot.Tables["operation_logs"], true)); err != nil {
 		result.Differences = append(result.Differences, err.Error())
 		if repair {
 			path := filepath.Join(root, ".reliquary", "operation_logs.jsonl")
@@ -407,6 +413,7 @@ func CompareManifestWithOptions(expected, actual *Manifest, allowModelChange, al
 }
 
 func CompareManifestWithSettings(expected, actual *Manifest, options CompareOptions) []string {
+	expected, actual = currentManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
@@ -464,7 +471,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 		rowsMatch := wanted.Rows == current.Rows
 		if (wanted.Data != nil || wanted.Rows == 0) && current.Data != nil {
 			left, right := comparableCredentialRows(table, wanted.Data, current.Data, expected.Required)
-			if options.AllowReconfigurationAppend && table == "tenant_api_keys" {
+			if options.AllowReconfigurationAppend && table == "api_keys" {
 				right = reconfiguredAPIKeyRows(left, right, expected.Required)
 				rowsMatch = len(left) == len(right)
 			}

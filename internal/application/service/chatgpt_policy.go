@@ -79,10 +79,10 @@ func (s *ChatGPTPolicyService) Update(ctx context.Context, limit *int, fallback 
 	}
 	if fallback != "" {
 		var model types.Model
-		if err := s.db.WithContext(ctx).Where("id=? AND tenant_id=?", fallback, types.SingleTenantID).First(&model).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", fallback, types.SingleSpaceID).First(&model).Error; err != nil {
 			return nil, fmt.Errorf("fallback model: %w", err)
 		}
-		if model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+		if model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeGeneration || model.Status != types.ModelStatusActive {
 			return nil, errors.New("fallback must be an active local generation model")
 		}
 	}

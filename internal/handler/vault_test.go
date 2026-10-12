@@ -24,9 +24,9 @@ import (
 
 func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
-	require.NoError(t, service.EnsureSingleTeamSpace(ctx, db))
-	kb, err := repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
+	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
+	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, db.Save(kb).Error)
@@ -47,7 +47,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
 	var result struct {
-		Data types.Knowledge `json:"data"`
+		Data types.Entry `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
 	require.Equal(t, "report", result.Data.SourceKind)
@@ -60,7 +60,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
-	require.Equal(t, result.Data.ID, hits[0].Results[0].KnowledgeID)
+	require.Equal(t, result.Data.ID, hits[0].Results[0].EntryID)
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/vault/status", nil))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

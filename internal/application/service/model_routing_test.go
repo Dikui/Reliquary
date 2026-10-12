@@ -15,8 +15,8 @@ import (
 
 func TestModelTiersUseOnlyKnowledgeBaseSettings(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, Name: "Knowledge Base", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	kb := &types.KnowledgeBase{ID: "kb", SpaceID: 1, Name: "Knowledge Base", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
 	require.NoError(t, db.Create(kb).Error)
 	for _, tier := range types.ModelTiers {
 		resolved, err := resolveModelTier(ctx, db, nil, tier)
@@ -78,11 +78,11 @@ func TestTierChatCountsAttemptAndAnnotatesCalls(t *testing.T) {
 func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
 	model := &tierTestChat{}
 	models := &tierTestModels{chat: model}
-	message := &types.Knowledge{ID: "message", TenantID: 1, KnowledgeBaseID: "kb", Channel: "manual"}
-	require.NoError(t, message.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/source", PublishedAt: "2026-10-01"}}))
-	repo := &intakeRepo{knowledge: message}
-	svc := &knowledgeService{repo: repo, modelService: models}
-	rejected, err := svc.reviewIntake(context.Background(), &types.KnowledgeBase{ID: "kb", TenantID: 1, ModelTiers: types.ModelTierConfig{Light: "chosen-light"}}, message, "Acme released a report.")
+	message := &types.Entry{ID: "message", SpaceID: 1, KnowledgeBaseID: "kb", Channel: "manual"}
+	require.NoError(t, message.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/source", PublishedAt: "2026-10-01"}}))
+	repo := &intakeRepo{entry: message}
+	svc := &entryService{repo: repo, modelService: models}
+	rejected, err := svc.reviewIntake(context.Background(), &types.KnowledgeBase{ID: "kb", SpaceID: 1, ModelTiers: types.ModelTierConfig{Light: "chosen-light"}}, message, "Acme released a report.")
 	require.NoError(t, err)
 	require.False(t, rejected)
 	require.Equal(t, 1, model.calls)
@@ -95,13 +95,13 @@ func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
 
 func TestModelTierReferencesProtectModelDeletion(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	global := &types.Tenant{ID: 1, Name: "Space"}
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	global := &types.Space{ID: 1, Name: "Space"}
 	require.NoError(t, db.Create(global).Error)
-	kb := &types.KnowledgeBase{ID: "tier-bound-kb", TenantID: 1, Name: "Research KB", Type: types.KnowledgeBaseTypeDocument, ModelTiers: types.ModelTierConfig{Generation: "bound-model"}}
+	kb := &types.KnowledgeBase{ID: "tier-bound-kb", SpaceID: 1, Name: "Research KB", Type: types.KnowledgeBaseTypeDocument, ModelTiers: types.ModelTierConfig{Generation: "bound-model"}}
 	kb.EnsureDefaults()
 	require.NoError(t, db.Create(kb).Error)
-	svc := &modelService{db: db, kbRepo: repository.NewKnowledgeBaseRepository(db), tenantService: &stubTenantServiceForModelDelete{tenant: global}}
+	svc := &modelService{db: db, kbRepo: repository.NewKnowledgeBaseRepository(db), spaceService: &stubSpaceServiceForModelDelete{space: global}}
 	usage, err := svc.getModelUsageDetails(ctx, 1, "bound-model")
 	require.NoError(t, err)
 	require.True(t, usage.InUse())

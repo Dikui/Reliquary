@@ -7,7 +7,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../knowledge/componentTestHarness'
+import { descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../knowledge-base/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
@@ -17,7 +17,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       test(`${locale}: ${page} loads reconnect ${alert ? 'alert' : 'notice'} through actual health API`, async () => {
         const calls: string[] = []
         const api = { exports: {} as any }
-        const code = ts.transpileModule(readFileSync(new URL('../../api/system/index.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+        const code = ts.transpileModule(readFileSync(new URL('../../api/system.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
         new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {
           get: async (url: string) => {
             calls.push(url)

@@ -11,7 +11,7 @@ import (
 )
 
 func builtinModelContext(systemAdmin bool) context.Context {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 	if systemAdmin {
 		return context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	}
@@ -20,7 +20,7 @@ func builtinModelContext(systemAdmin bool) context.Context {
 
 func TestUpdateBuiltinModel_RequiresSystemAdmin(t *testing.T) {
 	stored := &types.Model{
-		ID: "builtin-chat", TenantID: 10000, IsBuiltin: true,
+		ID: "builtin-chat", SpaceID: 10000, IsBuiltin: true,
 		ManagedBy: types.BuiltinModelManagedBy,
 	}
 	updated := false
@@ -42,7 +42,7 @@ func TestUpdateBuiltinModel_RequiresSystemAdmin(t *testing.T) {
 
 func TestUpdateBuiltinModel_SystemAdminCreatesRuntimeOverride(t *testing.T) {
 	stored := &types.Model{
-		ID: "builtin-chat", TenantID: 10000, IsBuiltin: true,
+		ID: "builtin-chat", SpaceID: 10000, IsBuiltin: true,
 		ManagedBy: types.BuiltinModelManagedBy,
 	}
 	var saved *types.Model
@@ -58,7 +58,7 @@ func TestUpdateBuiltinModel_SystemAdminCreatesRuntimeOverride(t *testing.T) {
 	input := &types.Model{ID: stored.ID, Name: "edited"}
 	require.NoError(t, svc.UpdateModel(builtinModelContext(true), input))
 	require.NotNil(t, saved)
-	assert.Equal(t, uint64(10000), saved.TenantID)
+	assert.Equal(t, uint64(10000), saved.SpaceID)
 	assert.True(t, saved.IsBuiltin)
 	assert.Empty(t, saved.ManagedBy, "UI edit must stop later YAML reconciliation")
 }
@@ -66,8 +66,8 @@ func TestUpdateBuiltinModel_SystemAdminCreatesRuntimeOverride(t *testing.T) {
 func TestUpdateBuiltinModelCredentials_SystemAdminOnly(t *testing.T) {
 	newKey := "sk-new"
 
-	t.Run("tenant admin denied", func(t *testing.T) {
-		stored := &types.Model{ID: "builtin-chat", TenantID: 10000, IsBuiltin: true}
+	t.Run("space admin denied", func(t *testing.T) {
+		stored := &types.Model{ID: "builtin-chat", SpaceID: 10000, IsBuiltin: true}
 		svc := NewModelService(&stubModelRepoForDelete{model: stored}, nil, nil, nil, nil)
 		_, err := svc.UpdateModelCredentials(builtinModelContext(false), stored.ID, &newKey, nil)
 		require.Error(t, err)
@@ -78,7 +78,7 @@ func TestUpdateBuiltinModelCredentials_SystemAdminOnly(t *testing.T) {
 
 	t.Run("system admin saves runtime override", func(t *testing.T) {
 		stored := &types.Model{
-			ID: "builtin-chat", TenantID: 10000, IsBuiltin: true,
+			ID: "builtin-chat", SpaceID: 10000, IsBuiltin: true,
 			ManagedBy: types.BuiltinModelManagedBy,
 		}
 		var saved *types.Model

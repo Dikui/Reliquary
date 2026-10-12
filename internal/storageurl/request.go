@@ -15,8 +15,8 @@ func NewRequestRewriter(
 	if mode != ModePublic {
 		return NewRewriter(nil, "API")
 	}
-	tenant, _ := types.TenantInfoFromContext(ctx)
-	resolver := NewFileServiceResolver(tenant, defaultSvc).WithContext(ctx)
+	space, _ := types.SpaceInfoFromContext(ctx)
+	resolver := NewFileServiceResolver(space, defaultSvc).WithContext(ctx)
 	return NewRewriter(resolver, "API")
 }
 

@@ -51,7 +51,7 @@ func NewRemoteAPIChat(chatConfig *ChatConfig) (*RemoteAPIChat, error) {
 	config := openai.DefaultConfig(apiKey)
 	if baseURL := chatConfig.BaseURL; baseURL != "" {
 		config.BaseURL = strings.TrimRight(baseURL, "/")
-	} else if defaultURL := provider.GetOrDefault(providerName).GetDefaultURL(types.ModelTypeKnowledgeQA); defaultURL != "" {
+	} else if defaultURL := provider.GetOrDefault(providerName).GetDefaultURL(types.ModelTypeGeneration); defaultURL != "" {
 		config.BaseURL = strings.TrimRight(defaultURL, "/")
 	}
 

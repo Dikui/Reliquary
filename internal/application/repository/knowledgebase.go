@@ -3,6 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
+	"strings"
+	"time"
 
 	"gorm.io/gorm"
 	"reliquary/internal/types"
@@ -26,10 +29,10 @@ func (r *knowledgeBaseRepository) CreateKnowledgeBase(ctx context.Context, kb *t
 	return r.db.WithContext(ctx).Create(kb).Error
 }
 
-// GetKnowledgeBaseByID gets a knowledge base by id within the team tenant
+// GetKnowledgeBaseByID gets a knowledge base by id within the personal space
 func (r *knowledgeBaseRepository) GetKnowledgeBaseByID(ctx context.Context, id string) (*types.KnowledgeBase, error) {
 	var kb types.KnowledgeBase
-	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, types.SingleTenantID).First(&kb).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND space_id = ?", id, types.SingleSpaceID).First(&kb).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrKnowledgeBaseNotFound
 		}
@@ -38,10 +41,10 @@ func (r *knowledgeBaseRepository) GetKnowledgeBaseByID(ctx context.Context, id s
 	return &kb, nil
 }
 
-// GetKnowledgeBaseByIDAndTenant gets a knowledge base by id only if it belongs to the given tenant (enforces tenant isolation)
-func (r *knowledgeBaseRepository) GetKnowledgeBaseByIDAndTenant(ctx context.Context, id string, tenantID uint64) (*types.KnowledgeBase, error) {
+// GetKnowledgeBaseByIDAndSpace gets a knowledge base by id only if it belongs to the given space (enforces space isolation)
+func (r *knowledgeBaseRepository) GetKnowledgeBaseByIDAndSpace(ctx context.Context, id string, spaceID uint64) (*types.KnowledgeBase, error) {
 	var kb types.KnowledgeBase
-	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, tenantID).First(&kb).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND space_id = ?", id, spaceID).First(&kb).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrKnowledgeBaseNotFound
 		}
@@ -56,16 +59,16 @@ func (r *knowledgeBaseRepository) GetKnowledgeBaseByIDs(ctx context.Context, ids
 		return []*types.KnowledgeBase{}, nil
 	}
 	var kbs []*types.KnowledgeBase
-	if err := r.db.WithContext(ctx).Where("id IN ? AND tenant_id = ?", ids, types.SingleTenantID).Find(&kbs).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id IN ? AND space_id = ?", ids, types.SingleSpaceID).Find(&kbs).Error; err != nil {
 		return nil, err
 	}
 	return kbs, nil
 }
 
-// GetKnowledgeBaseByTenantID returns the active knowledge base for one space.
-func (r *knowledgeBaseRepository) GetKnowledgeBaseByTenantID(ctx context.Context, tenantID uint64) (*types.KnowledgeBase, error) {
+// GetKnowledgeBaseBySpaceID returns the active knowledge base for one space.
+func (r *knowledgeBaseRepository) GetKnowledgeBaseBySpaceID(ctx context.Context, spaceID uint64) (*types.KnowledgeBase, error) {
 	var kb types.KnowledgeBase
-	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).First(&kb).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&kb).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrKnowledgeBaseNotFound
 		}
@@ -82,12 +85,12 @@ func (r *knowledgeBaseRepository) UpdateKnowledgeBase(ctx context.Context, kb *t
 // CountByModelID counts active knowledge bases that reference modelID in any
 // model-binding column (scalar fields or JSON config blobs).
 func (r *knowledgeBaseRepository) CountByModelID(
-	ctx context.Context, tenantID uint64, modelID string,
+	ctx context.Context, spaceID uint64, modelID string,
 ) (int64, error) {
 	var count int64
 	query := r.db.WithContext(ctx).
 		Model(&types.KnowledgeBase{}).
-		Where("tenant_id = ?", tenantID)
+		Where("space_id = ?", spaceID)
 	query = scopeKnowledgeBasesByModelID(query, modelID)
 	err := query.Count(&count).Error
 	return count, err
@@ -97,7 +100,7 @@ func (r *knowledgeBaseRepository) CountByModelID(
 // selects only the columns needed to identify the resource and its bindings;
 // GORM's default scope excludes soft-deleted rows.
 func (r *knowledgeBaseRepository) ListModelUsages(
-	ctx context.Context, tenantID uint64, modelID string,
+	ctx context.Context, spaceID uint64, modelID string,
 ) ([]types.ModelUsageResource, error) {
 	rows := make([]*types.KnowledgeBase, 0)
 	query := r.db.WithContext(ctx).
@@ -106,7 +109,7 @@ func (r *knowledgeBaseRepository) ListModelUsages(
 			"id", "name", "embedding_model_id", "summary_model_id",
 			"model_tiers",
 		).
-		Where("tenant_id = ?", tenantID)
+		Where("space_id = ?", spaceID)
 	query = scopeKnowledgeBasesByModelID(query, modelID)
 	if err := query.Order("name ASC, id ASC").Limit(types.ModelUsageListLimit).Find(&rows).Error; err != nil {
 		return nil, err
@@ -125,4 +128,36 @@ func (r *knowledgeBaseRepository) ListModelUsages(
 		})
 	}
 	return usages, nil
+}
+
+// EnsureSpaceKnowledgeBase creates the settings resource once. Callers may pass
+// an existing registration transaction so the user and knowledge base commit together.
+func EnsureSpaceKnowledgeBase(ctx context.Context, db *gorm.DB, spaceID uint64, creatorID string) (*types.KnowledgeBase, error) {
+	if spaceID != types.SingleSpaceID {
+		return nil, errors.New("invalid personal space")
+	}
+	var kb *types.KnowledgeBase
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", int64(72651002)).Error; err != nil {
+			return err
+		}
+		repo := NewKnowledgeBaseRepository(tx)
+		existing, err := repo.GetKnowledgeBaseBySpaceID(ctx, spaceID)
+		if err == nil {
+			kb = existing
+			return nil
+		}
+		if !errors.Is(err, ErrKnowledgeBaseNotFound) {
+			return err
+		}
+		name := "Knowledge Base"
+		if strings.HasPrefix(strings.ToLower(types.LanguageFromContextOrDefault(ctx)), "zh") {
+			name = "知识库"
+		}
+		now := time.Now().UTC()
+		kb = &types.KnowledgeBase{ID: uuid.NewString(), SpaceID: spaceID, CreatorID: creatorID, Name: name, Type: types.KnowledgeBaseTypeDocument, CreatedAt: now, UpdatedAt: now}
+		kb.EnsureDefaults()
+		return repo.CreateKnowledgeBase(ctx, kb)
+	})
+	return kb, err
 }

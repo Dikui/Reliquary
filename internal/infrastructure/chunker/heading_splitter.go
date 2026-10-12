@@ -84,7 +84,7 @@ func splitByHeadingsImpl(text string, cfg SplitterConfig, profile *DocProfile) [
 		// Single-chunk section: emit as-is, breadcrumb tracked separately.
 		// The breadcrumb is delivered via Chunk.ContextHeader (not Content)
 		// to preserve End-Start == len(Content) invariants relied on by
-		// document reconstruction (knowledge.go:2278+).
+		// document reconstruction (entry.go:2278+).
 		if bcLen+2+secLen <= cfg.ChunkSize {
 			out = append(out, Chunk{
 				Content:       sectionContent,
@@ -167,7 +167,7 @@ func coalesceTinyChunks(in []Chunk, chunkSize int) []Chunk {
 	}
 	out = append(out, cur)
 
-	// Re-sequence — downstream code (knowledge.go) expects Seq to be a dense
+	// Re-sequence — downstream code (entry.go) expects Seq to be a dense
 	// 0..N-1 range over the returned slice.
 	for i := range out {
 		out[i].Seq = i

@@ -9,7 +9,7 @@ func TestParseProviderScheme(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"local://tenant/file.pdf", "local"},
+		{"local://space/file.pdf", "local"},
 		{"https://example.com/img.png", ""},
 		{"http://localhost:9000/bucket/key", ""},
 		{"/data/files/images/abc.png", ""},

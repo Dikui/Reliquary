@@ -67,7 +67,7 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 		Embedding                            pgvector.HalfVector
 	}
 	var rows []row
-	require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Order("attachment_path").Scan(&rows).Error)
+	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Order("attachment_path").Scan(&rows).Error)
 	require.Len(t, rows, 2)
 	for index, stored := range rows {
 		require.Equal(t, "embedding", stored.ModelID)
@@ -89,7 +89,7 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 	err = saveArticleImageEmbedding(h.ctx, h.db, vault, embedder, article, paths[0], true)
 	require.ErrorContains(t, err, "fixture unavailable")
 	var count int64
-	require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
 	require.EqualValues(t, 2, count, "failed replacement keeps the prior image vector")
 }
 
@@ -107,7 +107,7 @@ func TestArticleImagesSkipSummaryOnlyAndUnsupportedModels(t *testing.T) {
 			require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
 			require.Empty(t, e.images)
 			var count int64
-			require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Count(&count).Error)
+			require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
 			require.Zero(t, count)
 		})
 	}
@@ -135,13 +135,13 @@ func TestArticleImageVectorsCleanOnSummaryOnlyAndSoftDeletion(t *testing.T) {
 	h, _, _ := newArticleImageHarness(t, true)
 	article := h.upload(t, "Image cleanup", "Original illustration records verifiable source details.\n\n![chart]("+articleImageDataURI(t, 21)+")")
 	var count int64
-	require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	require.NoError(t, h.db.Model(article).Update("processing_mode", types.ProcessingModeSummaryOnly).Error)
-	require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
 	require.Zero(t, count)
 	article = h.upload(t, "Image delete", "Different original illustration contains complete measurements.\n\n![chart]("+articleImageDataURI(t, 67)+")")
 	require.NoError(t, h.db.Delete(article).Error)
-	require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
 	require.Zero(t, count)
 }

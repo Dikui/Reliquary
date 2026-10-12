@@ -54,7 +54,7 @@ func TestMaintenanceMigrationPreservesFrozenBaselineData(t *testing.T) {
 		require.NoError(t, databaseErr)
 	})
 	// The database now has the exact previous commit's schema, version 0.
-	require.NoError(t, m.Steps(-1))
+	require.NoError(t, m.Migrate(0))
 	version, dirty, err := m.Version()
 	require.NoError(t, err)
 	require.EqualValues(t, 0, version)
@@ -85,7 +85,7 @@ INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,email,status) VALUES('0
 	before := baselineContents(t, db)
 	require.Greater(t, len(before), 35, "all previous-commit tables must be compared")
 	t.Logf("exact full-column JSON comparison covers %d frozen-baseline tables", len(before))
-	require.NoError(t, m.Up())
+	require.NoError(t, m.Migrate(1))
 	version, dirty, err = m.Version()
 	require.NoError(t, err)
 	require.EqualValues(t, 1, version)
@@ -101,6 +101,6 @@ INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,email,status) VALUES('0
 	// backup and old application, rather than downgrading a live database.
 	require.NoError(t, m.Steps(-1))
 	require.Equal(t, before, baselineContents(t, db))
-	require.NoError(t, m.Up())
+	require.NoError(t, m.Migrate(1))
 	require.Equal(t, before, baselineContents(t, db))
 }

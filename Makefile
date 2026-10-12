@@ -119,8 +119,8 @@ clean:
 # Build Docker image
 docker-build-app:
 	@echo "获取版本信息..."
-	@eval $$(./scripts/get_version.sh env); \
-	./scripts/get_version.sh info; \
+	@eval $$(./scripts/get-version.sh env); \
+	./scripts/get-version.sh info; \
 	docker build --platform $(PLATFORM) \
 		--build-arg VERSION_ARG="$$VERSION" \
 		--build-arg COMMIT_ID_ARG="$$COMMIT_ID" \
@@ -131,7 +131,7 @@ docker-build-app:
 
 # Build frontend Docker image
 docker-build-frontend:
-	./scripts/build_frontend_dist.sh
+	./scripts/build-frontend-dist.sh
 	docker build --platform $(PLATFORM) -f frontend/Dockerfile -t reliquary-ui:latest frontend/
 
 # Build all Docker images
@@ -148,19 +148,19 @@ docker-run:
 
 # 使用新脚本启动所有服务
 start-all:
-	./scripts/start_all.sh
+	./scripts/start-all.sh
 
 # 使用新脚本仅启动Ollama服务
 start-ollama:
-	./scripts/start_all.sh --ollama
+	./scripts/start-all.sh --ollama
 
 # 使用新脚本仅启动Docker容器
 start-docker:
-	./scripts/start_all.sh --docker
+	./scripts/start-all.sh --docker
 
 # 使用新脚本停止所有服务
 stop-all:
-	./scripts/start_all.sh --stop
+	./scripts/start-all.sh --stop
 
 # Stop Docker container (传统方式)
 docker-stop:
@@ -168,16 +168,16 @@ docker-stop:
 
 # 从源码构建镜像相关命令
 build-images:
-	./scripts/build_images.sh
+	./scripts/build-images.sh
 
 build-images-app:
-	./scripts/build_images.sh --app
+	./scripts/build-images.sh --app
 
 build-images-frontend:
-	./scripts/build_images.sh --frontend
+	./scripts/build-images.sh --frontend
 
 clean-images:
-	./scripts/build_images.sh --clean
+	./scripts/build-images.sh --clean
 
 # Restart Docker container (stop, start)
 docker-restart:
@@ -258,15 +258,15 @@ clean-db:
 
 # Environment check
 check-env:
-	./scripts/start_all.sh --check
+	./scripts/start-all.sh --check
 
 # List containers
 list-containers:
-	./scripts/start_all.sh --list
+	./scripts/start-all.sh --list
 
 # Pull latest images
 pull-images:
-	./scripts/start_all.sh --pull
+	./scripts/start-all.sh --pull
 
 # Show current platform
 show-platform:

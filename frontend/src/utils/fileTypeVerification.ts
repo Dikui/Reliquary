@@ -34,7 +34,7 @@ const DEFAULT_VALID_TYPES = new Set([
   "ogg",
 ]);
 
-export function shouldRejectKnowledgeFileType(
+export function shouldRejectEntryFileType(
   filename: string,
   validTypes?: Set<string> | string[],
 ) {

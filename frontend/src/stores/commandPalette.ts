@@ -5,12 +5,12 @@ import { useAuthStore } from './auth'
 const RECENT_KEY_PREFIX = 'reliquary_cmdk_recent'
 const RECENT_LIMIT = 4
 
-// recentKey scopes "recent searches" to the active (user, tenant) pair.
+// recentKey scopes "recent searches" to the active (user, space) pair.
 // Separate recent searches for users sharing a browser. The "anon" key
 // keeps the palette functional before login finishes hydrating.
-function recentKey(userId: string | null | undefined, tenantId: number | string | null | undefined): string {
+function recentKey(userId: string | null | undefined, spaceId: number | string | null | undefined): string {
   const u = userId ? String(userId) : 'anon'
-  const t = tenantId !== null && tenantId !== undefined && tenantId !== '' ? String(tenantId) : 'none'
+  const t = spaceId !== null && spaceId !== undefined && spaceId !== '' ? String(spaceId) : 'none'
   return `${RECENT_KEY_PREFIX}:${u}:${t}`
 }
 
@@ -29,7 +29,7 @@ export const useCommandPaletteStore = defineStore('commandPalette', () => {
   // setup time pinia may not have finished registering peer stores yet.
   const currentRecentKey = (): string => {
     const auth = useAuthStore()
-    return recentKey(auth.user?.id, auth.effectiveTenantId)
+    return recentKey(auth.user?.id, auth.effectiveSpaceId)
   }
 
   const loadRecent = () => {
@@ -78,7 +78,7 @@ export const useCommandPaletteStore = defineStore('commandPalette', () => {
   watch(
     () => {
       const auth = useAuthStore()
-      return [auth.user?.id, auth.effectiveTenantId] as const
+      return [auth.user?.id, auth.effectiveSpaceId] as const
     },
     () => loadRecent(),
     { immediate: true },

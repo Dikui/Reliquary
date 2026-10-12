@@ -52,10 +52,10 @@ func (runtimeInvalidSettings) GetInt(_ context.Context, _ string, _ string, _ in
 
 type runtimeTestInspector struct{}
 
-func (runtimeTestInspector) CancelTasksForKnowledge(context.Context, string) (int, int, error) {
+func (runtimeTestInspector) CancelTasksForEntry(context.Context, string) (int, int, error) {
 	return 0, 0, nil
 }
-func (runtimeTestInspector) HasQueuedTasksForKnowledge(context.Context, string) (bool, error) {
+func (runtimeTestInspector) HasQueuedTasksForEntry(context.Context, string) (bool, error) {
 	return false, nil
 }
 func (runtimeTestInspector) QueueStats(context.Context) ([]types.QueueStat, bool, error) {
@@ -80,7 +80,7 @@ type runtimeTaskTestInspector struct {
 	purgedQueue         string
 	purgedCount         int
 	purgeErr            error
-	cancelKnowledge     string
+	cancelEntry         string
 	cancelDeleted       int
 	mutatedQueue        string
 	nextCursor          string
@@ -94,31 +94,31 @@ type runtimeTaskTestInspector struct {
 	getRuntimeTaskCalls int
 }
 
-func (r *runtimeTaskTestInspector) CancelTasksForKnowledge(
-	_ context.Context, knowledgeID string,
+func (r *runtimeTaskTestInspector) CancelTasksForEntry(
+	_ context.Context, entryID string,
 ) (int, int, error) {
-	r.cancelKnowledge = knowledgeID
+	r.cancelEntry = entryID
 	if r.cancelDeleted > 0 {
 		return r.cancelDeleted, 0, nil
 	}
 	return 0, 0, nil
 }
 
-type runtimeKnowledgeCancelTest struct {
-	tenantID    uint64
-	knowledgeID string
-	err         error
+type runtimeEntryCancelTest struct {
+	spaceID uint64
+	entryID string
+	err     error
 }
 
-func (r *runtimeKnowledgeCancelTest) CancelKnowledgeParse(
-	ctx context.Context, knowledgeID string,
-) (*types.Knowledge, error) {
-	r.tenantID, _ = ctx.Value(types.TenantIDContextKey).(uint64)
-	r.knowledgeID = knowledgeID
+func (r *runtimeEntryCancelTest) CancelEntryParse(
+	ctx context.Context, entryID string,
+) (*types.Entry, error) {
+	r.spaceID, _ = ctx.Value(types.SpaceIDContextKey).(uint64)
+	r.entryID = entryID
 	if r.err != nil {
 		return nil, r.err
 	}
-	return &types.Knowledge{ID: knowledgeID, TenantID: r.tenantID}, nil
+	return &types.Entry{ID: entryID, SpaceID: r.spaceID}, nil
 }
 
 func (r *runtimeTaskTestInspector) ListRuntimeTasks(
@@ -288,7 +288,7 @@ func TestListRuntimeTasksReturnsSafeTaskDetails(t *testing.T) {
 		Retried:         5,
 		MaxRetry:        5,
 		KnowledgeBaseID: "kb-1",
-		KnowledgeID:     "knowledge-1",
+		EntryID:         "entry-1",
 	}}}
 	handler := &SystemHandler{taskInspector: inspector}
 	recorder := httptest.NewRecorder()
@@ -307,7 +307,7 @@ func TestListRuntimeTasksReturnsSafeTaskDetails(t *testing.T) {
 	if !response.Available || len(response.Tasks) != 1 {
 		t.Fatalf("unexpected response: %+v", response)
 	}
-	if response.Tasks[0].KnowledgeID != "knowledge-1" || response.Tasks[0].LastError != "model unavailable" {
+	if response.Tasks[0].EntryID != "entry-1" || response.Tasks[0].LastError != "model unavailable" {
 		t.Fatalf("task details missing: %+v", response.Tasks[0])
 	}
 }
@@ -471,17 +471,17 @@ func TestListRuntimeTasksRejectsUnknownState(t *testing.T) {
 	}
 }
 
-func TestRuntimeTaskCancelUsesSingleTeamContext(t *testing.T) {
+func TestRuntimeTaskCancelUsesPersonalSpaceContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, tenantID := range []uint64{0, types.SingleTenantID} {
-		t.Run(strconv.FormatUint(tenantID, 10), func(t *testing.T) {
+	for _, spaceID := range []uint64{0, types.SingleSpaceID} {
+		t.Run(strconv.FormatUint(spaceID, 10), func(t *testing.T) {
 			inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
 				ID: "task-cancel", Queue: types.QueueDefault, Type: types.TypeDocumentProcess,
-				State: types.RuntimeTaskActive, TenantID: tenantID, KnowledgeID: "knowledge-1",
+				State: types.RuntimeTaskActive, SpaceID: spaceID, EntryID: "entry-1",
 				AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 			}}}
-			canceller := &runtimeKnowledgeCancelTest{}
-			handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
+			canceller := &runtimeEntryCancelTest{}
+			handler := &SystemHandler{taskInspector: inspector, entrySvc: canceller}
 			recorder := httptest.NewRecorder()
 			ctx, _ := gin.CreateTestContext(recorder)
 			ctx.Params = gin.Params{
@@ -490,35 +490,35 @@ func TestRuntimeTaskCancelUsesSingleTeamContext(t *testing.T) {
 				{Key: "action", Value: string(types.RuntimeTaskActionCancel)},
 			}
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/cancel", nil)
-			ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), types.TenantIDContextKey, uint64(999)))
+			ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), types.SpaceIDContextKey, uint64(999)))
 
 			handler.MutateRuntimeTask(ctx)
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
 			}
-			if canceller.tenantID != types.SingleTenantID || canceller.knowledgeID != "knowledge-1" {
+			if canceller.spaceID != types.SingleSpaceID || canceller.entryID != "entry-1" {
 				t.Fatalf("domain cancellation context mismatch: %+v", canceller)
 			}
 		})
 	}
 }
 
-func TestRuntimeTaskActionsRejectForeignTenantBeforeMutation(t *testing.T) {
+func TestRuntimeTaskActionsRejectForeignSpaceBeforeMutation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, tenantID := range []uint64{2, 42} {
+	for _, spaceID := range []uint64{2, 42} {
 		for _, action := range []types.RuntimeTaskAction{
 			types.RuntimeTaskActionCancel, types.RuntimeTaskActionRunNow, types.RuntimeTaskActionDelete,
 		} {
-			t.Run(strconv.FormatUint(tenantID, 10)+"/"+string(action), func(t *testing.T) {
+			t.Run(strconv.FormatUint(spaceID, 10)+"/"+string(action), func(t *testing.T) {
 				inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
 					ID: "task-foreign", Queue: types.QueueDefault, Type: types.TypeDocumentProcess,
-					State: types.RuntimeTaskArchived, TenantID: tenantID, KnowledgeID: "foreign-knowledge",
+					State: types.RuntimeTaskArchived, SpaceID: spaceID, EntryID: "foreign-entry",
 					AllowedActions: []types.RuntimeTaskAction{
 						types.RuntimeTaskActionCancel, types.RuntimeTaskActionRunNow, types.RuntimeTaskActionDelete,
 					},
 				}}}
-				canceller := &runtimeKnowledgeCancelTest{}
-				handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
+				canceller := &runtimeEntryCancelTest{}
+				handler := &SystemHandler{taskInspector: inspector, entrySvc: canceller}
 				recorder := httptest.NewRecorder()
 				ctx, _ := gin.CreateTestContext(recorder)
 				ctx.Params = gin.Params{
@@ -533,7 +533,7 @@ func TestRuntimeTaskActionsRejectForeignTenantBeforeMutation(t *testing.T) {
 					t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
 				}
 				if inspector.retriedTask != "" || inspector.deletedTask != "" || inspector.forceDeleted != "" ||
-					inspector.cancelKnowledge != "" || canceller.knowledgeID != "" {
+					inspector.cancelEntry != "" || canceller.entryID != "" {
 					t.Fatalf("foreign task caused mutation: inspector=%+v cancellation=%+v", inspector, canceller)
 				}
 			})
@@ -541,15 +541,15 @@ func TestRuntimeTaskActionsRejectForeignTenantBeforeMutation(t *testing.T) {
 	}
 }
 
-func TestRuntimeTaskCancelPurgesOrphanWhenKnowledgeGone(t *testing.T) {
+func TestRuntimeTaskCancelPurgesOrphanWhenEntryGone(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
 		ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
-		State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
+		State: types.RuntimeTaskRetry, SpaceID: types.SingleSpaceID, EntryID: "entry-gone",
 		AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 	}}}
-	canceller := &runtimeKnowledgeCancelTest{err: repository.ErrKnowledgeNotFound}
-	handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
+	canceller := &runtimeEntryCancelTest{err: repository.ErrEntryNotFound}
+	handler := &SystemHandler{taskInspector: inspector, entrySvc: canceller}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{
@@ -565,7 +565,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenKnowledgeGone(t *testing.T) {
 	}
 	if inspector.forceDeleted != "task-orphan" {
 		t.Fatalf("expected force delete, got deleted=%q force=%q cancel=%q",
-			inspector.deletedTask, inspector.forceDeleted, inspector.cancelKnowledge)
+			inspector.deletedTask, inspector.forceDeleted, inspector.cancelEntry)
 	}
 }
 
@@ -575,12 +575,12 @@ func TestRuntimeTaskCancelPurgesOrphanAfterSiblingSweep(t *testing.T) {
 		cancelDeleted: 2,
 		tasks: []types.RuntimeTaskInfo{{
 			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
-			State: types.RuntimeTaskArchived, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
+			State: types.RuntimeTaskArchived, SpaceID: types.SingleSpaceID, EntryID: "entry-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
 	}
-	canceller := &runtimeKnowledgeCancelTest{err: repository.ErrKnowledgeNotFound}
-	handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
+	canceller := &runtimeEntryCancelTest{err: repository.ErrEntryNotFound}
+	handler := &SystemHandler{taskInspector: inspector, entrySvc: canceller}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{
@@ -594,9 +594,9 @@ func TestRuntimeTaskCancelPurgesOrphanAfterSiblingSweep(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
 	}
-	if inspector.cancelKnowledge != "knowledge-gone" || inspector.forceDeleted != "task-orphan" {
+	if inspector.cancelEntry != "entry-gone" || inspector.forceDeleted != "task-orphan" {
 		t.Fatalf("expected sibling sweep then force delete, got cancel=%q force=%q",
-			inspector.cancelKnowledge, inspector.forceDeleted)
+			inspector.cancelEntry, inspector.forceDeleted)
 	}
 }
 
@@ -609,12 +609,12 @@ func TestRuntimeTaskCancelPurgesOrphanWhenSweepAlreadyRemovedTask(t *testing.T) 
 		getRuntimeErrFrom: 2,
 		tasks: []types.RuntimeTaskInfo{{
 			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
-			State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
+			State: types.RuntimeTaskRetry, SpaceID: types.SingleSpaceID, EntryID: "entry-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
 	}
-	canceller := &runtimeKnowledgeCancelTest{err: repository.ErrKnowledgeNotFound}
-	handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
+	canceller := &runtimeEntryCancelTest{err: repository.ErrEntryNotFound}
+	handler := &SystemHandler{taskInspector: inspector, entrySvc: canceller}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{

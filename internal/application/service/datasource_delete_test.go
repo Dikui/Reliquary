@@ -33,7 +33,7 @@ func newDataSourceDeleteFixture(t *testing.T) *dataSourceDeleteFixture {
 	syncLogRepo := repository.NewSyncLogRepository(db)
 	ds := &types.DataSource{
 		ID:              "ds-delete",
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: "kb-delete",
 		Name:            "Delete fixture",
 		Type:            types.ConnectorTypeRSS,
@@ -43,13 +43,13 @@ func newDataSourceDeleteFixture(t *testing.T) *dataSourceDeleteFixture {
 	pendingLog := &types.SyncLog{
 		ID:           "log-pending",
 		DataSourceID: ds.ID,
-		TenantID:     ds.TenantID,
+		SpaceID:      ds.SpaceID,
 		Status:       "pending",
 	}
 	runningLog := &types.SyncLog{
 		ID:           "log-running",
 		DataSourceID: ds.ID,
-		TenantID:     ds.TenantID,
+		SpaceID:      ds.SpaceID,
 		Status:       types.SyncLogStatusRunning,
 	}
 	require.NoError(t, dsRepo.Create(context.Background(), ds))

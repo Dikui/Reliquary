@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/panjf2000/ants/v2"
-	"reliquary/internal/models/utils"
+	"reliquary/internal/utils"
 )
 
 type batchEmbedder struct {

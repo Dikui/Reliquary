@@ -7,8 +7,8 @@ import (
 
 	"reliquary/internal/logger"
 	"reliquary/internal/models/provider"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
+	"reliquary/internal/utils/ollama"
 )
 
 // Embedder defines the interface for text vectorization

@@ -26,7 +26,7 @@ type KnowledgeBase struct {
 	// Description of the knowledge base
 	Description string `yaml:"description"             json:"description"`
 	// Workspace ID
-	TenantID uint64 `yaml:"tenant_id"               json:"tenant_id"`
+	SpaceID uint64 `yaml:"space_id"               json:"space_id"`
 	// CreatorID records the user who created this team knowledge base.
 	CreatorID string `yaml:"creator_id"              json:"creator_id"              gorm:"type:varchar(36);index"`
 	// Chunking configuration
@@ -44,12 +44,12 @@ type KnowledgeBase struct {
 	UpdatedAt time.Time `yaml:"updated_at"              json:"updated_at"`
 	// Deletion time of the knowledge base
 	DeletedAt gorm.DeletedAt `yaml:"deleted_at"              json:"deleted_at"              gorm:"index"`
-	// Knowledge count (not stored in database, calculated on query)
-	KnowledgeCount int64 `yaml:"knowledge_count"         json:"knowledge_count"         gorm:"-"`
+	// Entry count (not stored in database, calculated on query)
+	EntryCount int64 `yaml:"entry_count"         json:"entry_count"         gorm:"-"`
 	// Chunk count (not stored in database, calculated on query)
 	ChunkCount   int64 `yaml:"chunk_count"             json:"chunk_count"             gorm:"-"`
 	IsProcessing bool  `yaml:"is_processing"           json:"is_processing"           gorm:"-"`
-	// ProcessingCount indicates the number of knowledge items being processed (for document type knowledge bases)
+	// ProcessingCount indicates the number of entry items being processed (for document type knowledge bases)
 	ProcessingCount int64 `yaml:"processing_count"        json:"processing_count"        gorm:"-"`
 }
 

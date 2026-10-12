@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    tenant_id INTEGER NOT NULL,
+    space_id INTEGER NOT NULL,
     type VARCHAR(32) NOT NULL DEFAULT 'document',
     chunking_config JSONB NOT NULL DEFAULT '{}',
     embedding_model_id VARCHAR(64) NOT NULL,
@@ -47,17 +47,17 @@ func makeKB() *types.KnowledgeBase {
 	return &types.KnowledgeBase{
 		ID:               uuid.New().String(),
 		Name:             "test-kb",
-		TenantID:         1,
+		SpaceID:          1,
 		EmbeddingModelID: "test-embed",
 		SummaryModelID:   "test-summary",
 	}
 }
 
-func TestKnowledgeBaseLookupOnlyReturnsSingleTeam(t *testing.T) {
+func TestKnowledgeBaseLookupOnlyReturnsPersonalSpace(t *testing.T) {
 	db := setupKBTestDB(t)
 	repo := NewKnowledgeBaseRepository(db)
 	teamKB, foreignKB := makeKB(), makeKB()
-	foreignKB.TenantID = 2
+	foreignKB.SpaceID = 2
 	require.NoError(t, db.Create(teamKB).Error)
 	require.NoError(t, db.Create(foreignKB).Error)
 	ctx := db.Statement.Context

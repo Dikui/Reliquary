@@ -65,16 +65,16 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 		}
 		return result, nil
 	}
-	kb, err := repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	if err != nil {
 		return nil, err
 	}
 	var count int64
-	if err := db.WithContext(ctx).Unscoped().Model(&types.Knowledge{}).Count(&count).Error; err != nil {
+	if err := db.WithContext(ctx).Unscoped().Model(&types.Entry{}).Count(&count).Error; err != nil {
 		return nil, err
 	}
 	if count != 0 {
-		return nil, fmt.Errorf("vault-rebuild requires an empty knowledge database")
+		return nil, fmt.Errorf("vault-rebuild requires an empty entry database")
 	}
 	if err := configureVaultRebuildEmbedding(ctx, db, kb); err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 	if err != nil {
 		return nil, err
 	}
-	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollamaClient, embedding.NewBatchEmbedder(workers), service.NewTenantService(repository.NewTenantRepository(db)), db)
+	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollamaClient, embedding.NewBatchEmbedder(workers), service.NewSpaceService(repository.NewSpaceRepository(db)), db)
 	documents, err := service.NewVaultDocumentService(db, models, NewPostgresRetrievalService(db), cfg.Vault.Root, cfg.Vault.StableWait, cfg.Vault.ScanInterval)
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, kb *types.
 		if name == "" || err != nil || dimension <= 0 || dimension > 4096 {
 			return fmt.Errorf("embedding URL requires VAULT_REBUILD_EMBEDDING_MODEL and a positive VAULT_REBUILD_EMBEDDING_DIMENSION up to 4096")
 		}
-		model := &types.Model{ID: uuid.NewString(), TenantID: types.SingleTenantID, Name: name, Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{BaseURL: endpoint, APIKey: os.Getenv("VAULT_REBUILD_EMBEDDING_API_KEY"), InterfaceType: "openai", Provider: "generic", EmbeddingParameters: types.EmbeddingParameters{Dimension: dimension}}}
+		model := &types.Model{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: name, Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{BaseURL: endpoint, APIKey: os.Getenv("VAULT_REBUILD_EMBEDDING_API_KEY"), InterfaceType: "openai", Provider: "generic", EmbeddingParameters: types.EmbeddingParameters{Dimension: dimension}}}
 		if err := db.WithContext(ctx).Create(model).Error; err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, kb *types.
 		return nil
 	}
 	var model types.Model
-	if err := db.WithContext(ctx).Where("id=? AND tenant_id=? AND type=?", id, types.SingleTenantID, types.ModelTypeEmbedding).First(&model).Error; err != nil {
+	if err := db.WithContext(ctx).Where("id=? AND space_id=? AND type=?", id, types.SingleSpaceID, types.ModelTypeEmbedding).First(&model).Error; err != nil {
 		return fmt.Errorf("rebuild embedding model: %w", err)
 	}
 	kb.EmbeddingModelID = id

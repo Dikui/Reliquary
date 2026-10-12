@@ -44,12 +44,12 @@ func TestModelResponse_OmitsSecrets(t *testing.T) {
 	assert.Contains(t, s, `"display_name":"Support QA"`)
 }
 
-func TestModelResponse_BuiltinStripsTenantConfig(t *testing.T) {
+func TestModelResponse_BuiltinStripsSpaceConfig(t *testing.T) {
 	m := &types.Model{
 		ID:        "builtin-1",
 		IsBuiltin: true,
 		Parameters: types.ModelParameters{
-			BaseURL:        "https://tenant-private.example.com",
+			BaseURL:        "https://space-private.example.com",
 			APIKey:         "should-not-leak",
 			SupportsVision: true,
 			ExtraConfig:    map[string]string{"region": "cn-hangzhou"},
@@ -57,15 +57,15 @@ func TestModelResponse_BuiltinStripsTenantConfig(t *testing.T) {
 	}
 	resp := NewModelResponse(context.Background(), m)
 	assert.Empty(t, resp.Parameters.BaseURL,
-		"builtin must not leak per-tenant base URL")
+		"builtin must not leak per-space base URL")
 	assert.Nil(t, resp.Parameters.ExtraConfig,
-		"builtin must not leak per-tenant extra_config")
+		"builtin must not leak per-space extra_config")
 	assert.True(t, resp.Parameters.SupportsVision,
-		"capability metadata must survive (not per-tenant)")
+		"capability metadata must survive (not per-space)")
 
 	body, _ := json.Marshal(resp)
 	assert.False(t, strings.Contains(string(body), "should-not-leak"))
-	assert.False(t, strings.Contains(string(body), "tenant-private.example.com"))
+	assert.False(t, strings.Contains(string(body), "space-private.example.com"))
 }
 
 func TestModelResponse_UserCanManageBuiltinConfig(t *testing.T) {
@@ -99,7 +99,7 @@ func TestModelResponse_UserCanReadIntegrationDetail(t *testing.T) {
 	m := &types.Model{
 		ID: "m-2",
 		Parameters: types.ModelParameters{
-			BaseURL:       "https://tenant-private.example.com",
+			BaseURL:       "https://space-private.example.com",
 			CustomHeaders: map[string]string{"Authorization": "Bearer secret"},
 			ExtraConfig:   map[string]string{"region": "cn-hangzhou"},
 		},

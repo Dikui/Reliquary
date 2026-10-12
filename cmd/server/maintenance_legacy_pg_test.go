@@ -26,14 +26,14 @@ func TestMaintenanceHelperSnapshotsLegacySchemaWithoutUpgradingIt(t *testing.T) 
 		require.NoError(t, sourceErr)
 		require.NoError(t, databaseErr)
 	})
-	require.NoError(t, migrations.Steps(-1))
+	require.NoError(t, migrations.Migrate(0))
 	require.NoError(t, db.Exec(`
 INSERT INTO tenants(id,name,business) VALUES(1,'Legacy maintenance','personal');
 INSERT INTO users(id,username,email,password_hash) VALUES('legacy-user','Legacy owner','legacy@example.invalid','fixture-password-hash');
 INSERT INTO models(id,tenant_id,name,type,source,status,parameters) VALUES('legacy-model',1,'Legacy model','knowledge-qa','remote','active','{"api_key":"fixture-legacy-key","interface_type":"openai"}');
 INSERT INTO knowledge_bases(id,name,tenant_id,embedding_model_id,summary_model_id) VALUES('legacy-kb','Articles',1,'legacy-model','legacy-model');
-INSERT INTO knowledges(id,tenant_id,knowledge_base_id,type,title,source,parse_status,metadata)
-VALUES('legacy-article',1,'legacy-kb','manual','Original awaiting review','','pending_review','{"intake":{"original_content":"Exact legacy original.","reason":"missing source"}}');
+INSERT INTO knowledges(id,tenant_id,knowledge_base_id,type,title,source,parse_status,content_sim_hash,metadata)
+VALUES('legacy-article',1,'legacy-kb','manual','Original awaiting review','','pending_review',9007199254740993,'{"intake":{"original_content":"Exact legacy original.","reason":"missing source"}}');
 INSERT INTO task_jobs(id,task_type,queue,state,payload,claim_token,lease_until) VALUES('legacy-active','manual:process','default','active','{"knowledge_id":"legacy-article"}','legacy-worker',now()+interval '1 hour');
 `).Error)
 	contents := func() map[string]string {
@@ -57,9 +57,9 @@ INSERT INTO task_jobs(id,task_type,queue,state,payload,claim_token,lease_until) 
 	} {
 		t.Setenv(key, value)
 	}
-	invoke := func(name string) map[string]any {
+	invoke := func(name string, arguments ...string) map[string]any {
 		var output bytes.Buffer
-		handled, err := runServerCommand([]string{"maintenance", name}, bytes.NewReader(nil), &output)
+		handled, err := runServerCommand(append([]string{"maintenance", name}, arguments...), bytes.NewReader(nil), &output)
 		require.True(t, handled)
 		require.NoError(t, err, output.String())
 		var result map[string]any
@@ -70,6 +70,14 @@ INSERT INTO task_jobs(id,task_type,queue,state,payload,claim_token,lease_until) 
 	manifest := invoke("manifest")
 	require.NotContains(t, manifest["tables"], "maintenance_state")
 	require.Equal(t, true, invoke("verify")["ok"])
+	manifestFile := filepath.Join(t.TempDir(), "manifest.json")
+	// Write the raw manifest from the command to preserve its exact 64-bit values.
+	var raw bytes.Buffer
+	_, err = runServerCommand([]string{"maintenance", "manifest"}, bytes.NewReader(nil), &raw)
+	require.NoError(t, err)
+	encoded := raw.Bytes()
+	require.NoError(t, os.WriteFile(manifestFile, encoded, 0600))
+	require.Equal(t, true, invoke("verify", "--manifest", manifestFile)["ok"])
 	require.Equal(t, before, contents(), "legacy pre-upgrade maintenance must not change schema or accepted data")
 	version, dirty, err := migrations.Version()
 	require.NoError(t, err)

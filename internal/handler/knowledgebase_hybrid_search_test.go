@@ -22,7 +22,7 @@ type hybridSearchTestService struct {
 }
 
 func (s *hybridSearchTestService) GetKnowledgeBaseByID(_ context.Context, id string) (*types.KnowledgeBase, error) {
-	return &types.KnowledgeBase{ID: id, TenantID: 1}, nil
+	return &types.KnowledgeBase{ID: id, SpaceID: 1}, nil
 }
 
 func (s *hybridSearchTestService) HybridSearch(
@@ -43,7 +43,7 @@ func newHybridSearchTestRouter(svc interfaces.KnowledgeBaseService) *gin.Engine 
 	router := gin.New()
 	router.Use(middleware.ErrorHandler())
 	router.Use(func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
 		c.Set(types.UserIDContextKey.String(), "u-test")
 		c.Next()
 	})
@@ -52,8 +52,8 @@ func newHybridSearchTestRouter(svc interfaces.KnowledgeBaseService) *gin.Engine 
 	return router
 }
 
-func TestHybridSearchRequiresArticleSearchEndpoint(t *testing.T) {
-	for _, body := range []string{`{}`, `{"query_text":"query","match_count":3}`, `{"query":"query"}`, `{"knowledge_ids":["article"]}`, `{"query_embedding":[1,0,0],"disable_keywords_match":true}`} {
+func TestHybridSearchRequiresEntrySearchEndpoint(t *testing.T) {
+	for _, body := range []string{`{}`, `{"query_text":"query","match_count":3}`, `{"query":"query"}`, `{"entry_ids":["article"]}`, `{"query_embedding":[1,0,0],"disable_keywords_match":true}`} {
 		svc := &hybridSearchTestService{}
 		response := performHybridSearchRequest(svc, body)
 		if response.Code != http.StatusBadRequest {
@@ -62,7 +62,7 @@ func TestHybridSearchRequiresArticleSearchEndpoint(t *testing.T) {
 		if svc.searchCalls != 0 {
 			t.Fatalf("old route reached HybridSearch %d time(s)", svc.searchCalls)
 		}
-		if !strings.Contains(response.Body.String(), "POST /api/v1/knowledge-search") {
+		if !strings.Contains(response.Body.String(), "POST /api/v1/search") {
 			t.Fatalf("expected new endpoint guidance, got %s", response.Body.String())
 		}
 	}

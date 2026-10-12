@@ -16,9 +16,9 @@ import (
 type TaskDeadLetter struct {
 	// Auto-increment row id.
 	ID int64 `json:"id" gorm:"primaryKey;autoIncrement"`
-	// Tenant scope mirrored from the original task payload (best-effort:
+	// Space scope mirrored from the original task payload (best-effort:
 	// if the middleware can't decode the payload, this falls back to 0).
-	TenantID uint64 `json:"tenant_id" gorm:"index"`
+	SpaceID uint64 `json:"space_id" gorm:"index"`
 	// Task identifier (e.g. "document:process").
 	TaskType string `json:"task_type" gorm:"type:varchar(64)"`
 	// Logical task scope. Falls back to
@@ -51,7 +51,7 @@ func (TaskDeadLetter) TableName() string {
 // have to guess at variations.
 const (
 	TaskScopeKnowledgeBase = "knowledge_base"
-	TaskScopeKnowledge     = "knowledge"
-	TaskScopeTenant        = "tenant"
+	TaskScopeEntry         = "knowledge"
+	TaskScopeSpace         = "tenant"
 	TaskScopeUnknown       = "unknown"
 )

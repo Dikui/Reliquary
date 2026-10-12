@@ -28,7 +28,7 @@ func TestChatGPTPauseRetriesWithoutConsumingBudgetIncludingFinalAttempt(t *testi
 			handler := chatGPTPermanentFailureMiddleware()(queue.HandlerFunc(func(context.Context, *queue.Task) error { return fmt.Errorf("processing: %w", pause) }))
 			require.NoError(t, client.Start(context.Background(), handler, chatGPTQueueConfig()))
 			t.Cleanup(func() { require.NoError(t, client.Close()) })
-			payload := []byte(`{"knowledge_id":"fixture"}`)
+			payload := []byte(`{"entry_id":"fixture"}`)
 			headers := map[string]string{"fixture": "preserve-13", "trace": "trace-fixture"}
 			deadline := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 			original, err := client.Enqueue(queue.NewTaskWithHeaders(types.TypeDocumentProcess, payload, headers), queue.MaxRetry(budget), queue.Timeout(2*time.Hour), queue.Deadline(deadline), queue.Retention(time.Hour), queue.Group("batch"))
@@ -68,7 +68,7 @@ func TestChatGPTPermanentFailureArchivesFirstAttemptAndRecordsDeadLetter(t *test
 	handler := chatGPTPermanentFailureMiddleware()(queue.HandlerFunc(func(context.Context, *queue.Task) error { calls.Add(1); return fmt.Errorf("processing: %w", upstream) }))
 	require.NoError(t, client.Start(context.Background(), handler, config))
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	original, err := client.Enqueue(queue.NewTask(types.TypeDocumentProcess, []byte(`{"knowledge_id":"permanent"}`)), queue.MaxRetry(3))
+	original, err := client.Enqueue(queue.NewTask(types.TypeDocumentProcess, []byte(`{"entry_id":"permanent"}`)), queue.MaxRetry(3))
 	require.NoError(t, err)
 	var info *queue.TaskInfo
 	require.Eventually(t, func() bool {
@@ -111,7 +111,7 @@ func TestChatGPTOrdinaryFailureRetainsRetryBudgetWithoutDeadLetter(t *testing.T)
 	}))
 	require.NoError(t, client.Start(context.Background(), handler, config))
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	original, err := client.Enqueue(queue.NewTask(types.TypeDocumentProcess, []byte(`{"knowledge_id":"retry"}`)), queue.MaxRetry(3))
+	original, err := client.Enqueue(queue.NewTask(types.TypeDocumentProcess, []byte(`{"entry_id":"retry"}`)), queue.MaxRetry(3))
 	require.NoError(t, err)
 	var info *queue.TaskInfo
 	require.Eventually(t, func() bool {

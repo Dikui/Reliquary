@@ -16,7 +16,7 @@ import (
 // Content holds exactly the text from the original document between Start
 // and End (rune offsets), so End-Start == utf8.RuneCountInString(Content).
 // This invariant is relied on by document-reconstruction code paths
-// (knowledge.go:2278+ for summary generation, UI highlighting, etc.).
+// (entry.go:2278+ for summary generation, UI highlighting, etc.).
 //
 // ContextHeader is a separately-tracked context string (e.g. a Markdown
 // heading breadcrumb) that should be prepended at embedding/retrieval time
@@ -76,8 +76,8 @@ type SplitterConfig struct {
 }
 
 // Default chunk sizing constants. Single source of truth for the entire
-// chunker package and (via knowledge.go::buildSplitterConfig) the
-// knowledge service. The frontend KnowledgeBaseEditorModal mirrors these
+// chunker package and (via entry.go::buildSplitterConfig) the
+// entry service. The frontend KnowledgeBaseEditorModal mirrors these
 // numbers in its initial form state — keep them in sync if you change
 // either value here.
 //
@@ -93,7 +93,7 @@ type SplitterConfig struct {
 // where reasoning crosses chunks.
 //
 // MIGRATION NOTE: Prior versions had three different overlap defaults
-// (Go DefaultConfig: 64, knowledge.go buildSplitterConfig: 50, Python
+// (Go DefaultConfig: 64, entry.go buildSplitterConfig: 50, Python
 // original Python reader: 100). All consolidated to 80 here.
 //
 // Omitted overlap uses 80. Explicitly stored zero disables overlap on the

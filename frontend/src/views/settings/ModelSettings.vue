@@ -25,7 +25,7 @@
         <p class="builtin-hint-text">
           {{ $t('modelSettings.builtinModels.descriptionAdmin') }}
         </p>
-        <a class="doc-link" href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/BUILTIN_MODELS.md" target="_blank"
+        <a class="doc-link" href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/builtin-models.md" target="_blank"
           rel="noopener noreferrer">
           {{ $t('modelSettings.builtinModels.viewGuide') }}
           <t-icon name="link" class="link-icon" />
@@ -612,7 +612,7 @@ const openUsageResource = async (
 ) => {
   showUsageDialog.value = false
   const knowledgeBaseSection = modelUsageKnowledgeBaseSection(bindings)
-  uiStore.openSettings('knowledge', knowledgeBaseSection)
+  uiStore.openSettings('entry', knowledgeBaseSection)
 }
 
 // 获取模型操作菜单选项

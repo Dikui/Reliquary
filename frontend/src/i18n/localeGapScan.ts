@@ -5,8 +5,8 @@ import {
   type LocaleName,
 } from './localeKeyAudit.ts'
 import {
-  LITERAL_TRANSLATION_KEY_EXCEPTIONS,
   collectTranslationCallsFromSources,
+  findTranslationReferenceFailures,
 } from './translationCallAudit.ts'
 
 const calls = collectTranslationCallsFromSources()
@@ -15,7 +15,6 @@ const localeKeys = Object.fromEntries(
 ) as Record<LocaleName, Set<string>>
 
 const missing = calls.flatMap((call) => call.literalKeys.flatMap((key) => {
-  if (LITERAL_TRANSLATION_KEY_EXCEPTIONS.some((entry) => entry.file === call.file && entry.key === key)) return []
   return (Object.keys(LOCALE_BUNDLES) as LocaleName[]).flatMap((locale) => {
     const exists = call.kind === 'tree'
       ? getLocaleValueAtPath(LOCALE_BUNDLES[locale], key) !== undefined
@@ -28,7 +27,13 @@ console.log(`Translation calls: ${calls.length}`)
 console.log(`Literal keys: ${new Set(calls.flatMap((call) => call.literalKeys)).size}`)
 console.log(`Missing literal references: ${missing.length}`)
 for (const failure of missing) console.log(failure)
-console.log(`Explicit exceptions: ${LITERAL_TRANSLATION_KEY_EXCEPTIONS.length}`)
+
+const referenceFailures = findTranslationReferenceFailures(calls, localeKeys,
+  (locale, key) => getLocaleValueAtPath(LOCALE_BUNDLES[locale as LocaleName], key) !== undefined)
+console.log(`Missing translation keys or prefixes: ${referenceFailures.length}`)
+for (const failure of referenceFailures) {
+  console.log(`${failure.file}:${failure.line}:${failure.column}: ${failure.kind} ${failure.key} missing in ${failure.locale}`)
+}
 
 const dynamic = calls.filter((call) => call.dynamic)
 console.log(`\nDynamic calls requiring manual review: ${dynamic.length}`)
@@ -42,4 +47,4 @@ for (const call of dynamic) {
   console.log(`  ${call.prefix ? `prefix ${call.prefix}, ` : ''}${matches}`)
 }
 
-if (missing.length) process.exitCode = 1
+if (missing.length || referenceFailures.length) process.exitCode = 1

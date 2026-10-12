@@ -449,9 +449,9 @@ export default {
   resourceOrigin: {
     mine: 'Mine',
     mineTooltip: 'Created by you',
-    tenant: 'Workspace',
-    tenantTooltip: 'Created in this workspace',
-    tenantTooltipWithCreator: 'Created by {creator}',
+    space: 'Workspace',
+    spaceTooltip: 'Created in this workspace',
+    spaceTooltipWithCreator: 'Created by {creator}',
   },
   knowledgeBase: {
     sourceKinds: { mine: 'Personal document', report: 'Report' },
@@ -893,7 +893,7 @@ export default {
     parserEngine: 'Parser Engine',
     versionInfo: 'Version Info',
     taskQueue: 'Runtime queues',
-    tenantInfo: 'Workspace Info',
+    spaceInfo: 'Workspace Info',
     workspaceSettings: 'Workspace Settings',
     navGroups: {
       account: 'Account',
@@ -1019,7 +1019,7 @@ export default {
   authStore: {
     errors: {
       parseUserFailed: 'Failed to parse user information',
-      parseTenantFailed: 'Failed to parse workspace information',
+      parseSpaceFailed: 'Failed to parse workspace information',
 
     }
   },
@@ -1356,11 +1356,11 @@ export default {
         placeholder: 'For example: this is a sales-order table, amounts are in CNY, and status uses internal codes…'
       },}
   },
-  tenant: {
+  space: {
     defaultName: 'Personal workspace',
     defaultDescription: 'Personal knowledge',
     title: 'Workspace Information',
-    currentTenant: 'Current Workspace',
+    currentSpace: 'Current Workspace',
     sectionDescription: 'View detailed configuration for the workspace',
     statusActive: 'Active',
     statusInactive: 'Not activated',
@@ -1579,7 +1579,7 @@ export default {
           knowledgeBaseLabel: 'Knowledge base ID',
           knowledgeLabel: 'Document ID',
           taskIDLabel: 'Business task ID',
-          tenantLabel: 'Workspace ID',
+          spaceLabel: 'Workspace ID',
           sourceKBLabel: 'Source knowledge base',
           targetKBLabel: 'Target knowledge base',
           dataSourceLabel: 'Data source ID',
@@ -1778,7 +1778,7 @@ export default {
       loginFailed: 'Login failed',
       registerFailed: 'Registration failed',
       getUserFailed: 'Failed to get user info',
-      getTenantFailed: 'Failed to get workspace info',
+      getSpaceFailed: 'Failed to get workspace info',
       refreshTokenFailed: 'Token refresh failed',
       logoutFailed: 'Logout failed',
       validateTokenFailed: 'Token validation failed'
@@ -1789,7 +1789,7 @@ export default {
       updateFailed: 'Failed to update model',
       deleteFailed: 'Failed to delete model'
     },
-    tenant: {
+    space: {
       getApiPrincipalConfigFailed: 'Failed to get API principal config',
       updateApiPrincipalConfigFailed: 'Failed to update API principal config',
       createApiPrincipalTestTokenFailed: 'Failed to create API test token',
@@ -1801,6 +1801,9 @@ export default {
     }
   },
   model: {
+    imageProcessingUnsupported: 'The image processing model does not support vision or multimodal input',
+    imageProcessingNotFound: 'Image processing model not found',
+    imageProcessingUnavailable: 'Image processing model service is unavailable',
     modelName: 'Model Name',
     defaultTag: 'Default',
     addModelInSettings: 'Go to global settings to add models',
@@ -2038,7 +2041,7 @@ export default {
     multimodalParsing: 'Multimodal Document Parsing',
     hybridSearchEngine: "Hybrid retrieval",
     ragQandA: "Knowledge retrieval",
-    independentTenant: "Personal knowledge management",
+    independentSpace: "Personal knowledge management",
     fullApiAccess: 'Full API Access',
     knowledgeBaseManagement: 'Knowledge Base Management',
   },

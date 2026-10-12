@@ -2,9 +2,9 @@ type Translator = (key: string) => string
 
 // Translate server defaults for display while retaining user-supplied values.
 export function workspaceName(value: string | null | undefined, t: Translator): string {
-  return value === 'Personal workspace' ? t('tenant.defaultName') : value || ''
+  return value === 'Personal workspace' ? t('space.defaultName') : value || ''
 }
 
 export function workspaceDescription(value: string | null | undefined, t: Translator): string {
-  return value === 'Personal knowledge' ? t('tenant.defaultDescription') : value || ''
+  return value === 'Personal knowledge' ? t('space.defaultDescription') : value || ''
 }

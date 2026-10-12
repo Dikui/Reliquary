@@ -15,8 +15,8 @@ import (
 
 func TestEntityNameEmbeddingAdministratorStatusAndTrigger(t *testing.T) {
 	db := entityFixtureDB(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Embedding lifecycle"}).Error)
-	entity := types.Entity{ID: "embedding-pending", TenantID: 1, CanonicalName: "名称", NormalizedName: "名称", EntityType: "product", Description: "模型说明", EmbeddingNeedsRebuild: true}
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Embedding lifecycle"}).Error)
+	entity := types.Entity{ID: "embedding-pending", SpaceID: 1, CanonicalName: "名称", NormalizedName: "名称", EntityType: "product", Description: "模型说明", EmbeddingNeedsRebuild: true}
 	require.NoError(t, db.Create(&entity).Error)
 	queue := &entityTaskQueue{}
 	rebuilder := service.NewEntityNameEmbeddingRebuilder(db, nil, queue)
@@ -48,8 +48,8 @@ func TestEntityNameEmbeddingAdministratorStatusAndTrigger(t *testing.T) {
 
 func TestEntityDescriptionHTTPAllowsEmptyAndRejectsMissing(t *testing.T) {
 	db := entityFixtureDB(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Entity editor"}).Error)
-	entity := types.Entity{ID: "description-object", TenantID: 1, CanonicalName: "实体", NormalizedName: "实体", EntityType: "product", Description: "旧说明", EmbeddingNeedsRebuild: false}
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entity editor"}).Error)
+	entity := types.Entity{ID: "description-object", SpaceID: 1, CanonicalName: "实体", NormalizedName: "实体", EntityType: "product", Description: "旧说明", EmbeddingNeedsRebuild: false}
 	require.NoError(t, db.Create(&entity).Error)
 	h := handler.NewEntityHandler(service.NewEntityService(db, nil))
 	engine := gin.New()

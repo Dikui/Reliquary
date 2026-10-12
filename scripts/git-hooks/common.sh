@@ -205,7 +205,7 @@ run_app_vet_test() {
 
 run_frontend_checks() {
   log_step "frontend: verify (test, type-check, build)"
-  "$ROOT/scripts/verify_frontend_pr.sh"
+  "$ROOT/scripts/verify-frontend-pr.sh"
   log_ok "frontend checks"
 }
 

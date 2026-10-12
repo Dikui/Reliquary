@@ -26,23 +26,23 @@ type RouterParams struct {
 	FileService                  interfaces.FileService
 	UserService                  interfaces.UserService
 	KBService                    interfaces.KnowledgeBaseService
-	KnowledgeService             interfaces.KnowledgeService
+	EntryService                 interfaces.EntryService
 	ChunkService                 interfaces.ChunkService
 	ModelService                 interfaces.ModelService
 	KBHandler                    *handler.KnowledgeBaseHandler
-	KnowledgeHandler             *handler.KnowledgeHandler
+	EntryHandler                 *handler.EntryHandler
 	VaultHandler                 *handler.VaultHandler       `optional:"true"`
 	MaintenanceHandler           *handler.MaintenanceHandler `optional:"true"`
-	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
+	SearchHandler                *handler.SearchHandler
 	EntityHandler                *handler.EntityHandler
 	EmbeddingRebuildHandler      *handler.EmbeddingRebuildHandler `optional:"true"`
 	TopicHandler                 *handler.TopicHandler            `optional:"true"`
 	FollowHandler                *handler.FollowHandler           `optional:"true"`
 	OperationLogHandler          *handler.OperationLogHandler     `optional:"true"`
 	MCPHandler                   *mcpserver.Handler               `optional:"true"`
-	TenantHandler                *handler.TenantHandler
-	TenantService                interfaces.TenantService
-	TenantAPIKeyService          interfaces.TenantAPIKeyService
+	SpaceHandler                 *handler.SpaceHandler
+	SpaceService                 interfaces.SpaceService
+	APIKeyService                interfaces.APIKeyService
 	ChunkHandler                 *handler.ChunkHandler
 	ChatGPTHandler               *handler.ChatGPTHandler       `optional:"true"`
 	ChatGPTPolicyHandler         *handler.ChatGPTPolicyHandler `optional:"true"`
@@ -106,10 +106,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 		r.GET("/auth/callback", params.ChatGPTHandler.Callback)
 		r.GET("/auth/chatgpt/continue", params.ChatGPTHandler.ContinueLogin)
 	}
-	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService)
+	serveResourceGrants(r, params.ResourceCatalog, params.SpaceService, params.FileService)
 
 	// 认证中间件
-	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantAPIKeyService))
+	r.Use(middleware.Auth(params.SpaceService, params.UserService, params.APIKeyService))
 	if params.MaintenanceHandler != nil {
 		r.Use(params.MaintenanceHandler.CollectionGate)
 	}
@@ -121,7 +121,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	serveFilesWithResources(r, params.FileService, params.ResourceCatalog)
 
 	// Presigned file access: no auth required, signature-verified.
-	servePresignedFiles(r, params.TenantService)
+	servePresignedFiles(r, params.SpaceService)
 
 	// Diagnostic preview of presigned URLs behind authentication middleware.
 	servePresignedPreview(r, params.Config, params.ResourceCatalog)
@@ -129,29 +129,29 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 需要认证的API路由
 	v1 := r.Group("/api/v1")
 	{
-		accessGuards := newAccessGuards(params.KBService, params.KnowledgeService, params.ChunkService)
+		accessGuards := newAccessGuards(params.KBService, params.EntryService, params.ChunkService)
 
 		RegisterAuthRoutes(v1, params.AuthHandler, accessGuards)
-		RegisterTenantRoutes(v1, params.TenantHandler, accessGuards)
+		RegisterSpaceRoutes(v1, params.SpaceHandler, accessGuards)
 		RegisterKnowledgeBaseRoutes(v1, params.KBHandler, accessGuards)
 		serveKBScopedFiles(
 			v1,
 			accessGuards,
-			params.TenantService,
+			params.SpaceService,
 			params.FileService,
 			params.ResourceCatalog)
-		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
+		RegisterEntryRoutes(v1, params.EntryHandler, accessGuards)
 		if params.VaultHandler != nil {
 			v1.GET("/vault/status", params.VaultHandler.Status)
 			v1.POST("/reports", params.VaultHandler.CreateReport)
-			v1.GET("/knowledge/:id/vault-attachment", accessGuards.KBExistsFromKnowledgeIDParam("id"), params.VaultHandler.Attachment)
+			v1.GET("/entries/:id/vault-attachment", accessGuards.KBExistsFromEntryIDParam("id"), params.VaultHandler.Attachment)
 		}
 		if params.MaintenanceHandler != nil {
 			v1.GET("/maintenance/status", params.MaintenanceHandler.Status)
 			v1.PUT("/maintenance/configure", params.MaintenanceHandler.Configure)
 		}
-		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
-		v1.GET("/knowledge-search/options", params.KnowledgeSearchHandler.Options)
+		v1.POST("/search", params.SearchHandler.SearchEntry)
+		v1.GET("/search/options", params.SearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)
 		if params.TopicHandler != nil {

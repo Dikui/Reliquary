@@ -22,7 +22,7 @@ type DataSourceResponse struct {
 	MaintenanceRequired      bool                 `json:"maintenance_required"`
 	MaintenanceMissingFields []string             `json:"maintenance_missing_fields,omitempty"`
 	ID                       string               `json:"id"`
-	TenantID                 uint64               `json:"tenant_id"`
+	SpaceID                  uint64               `json:"space_id"`
 	KnowledgeBaseID          string               `json:"knowledge_base_id"`
 	Name                     string               `json:"name"`
 	Type                     string               `json:"type"`
@@ -76,7 +76,7 @@ func NewDataSourceResponse(ds *types.DataSource) *DataSourceResponse {
 		MaintenanceRequired:      ds.HasMaintenanceRequirements(),
 		MaintenanceMissingFields: missing,
 		ID:                       ds.ID,
-		TenantID:                 ds.TenantID,
+		SpaceID:                  ds.SpaceID,
 		KnowledgeBaseID:          ds.KnowledgeBaseID,
 		Name:                     ds.Name,
 		Type:                     ds.Type,

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 )
 
-// RetrievalConfig holds the global retrieval/search configuration for a tenant.
-// Knowledge retrieval uses these parameters before optional reranking.
+// RetrievalConfig holds the global retrieval/search configuration for a space.
+// Entry retrieval uses these parameters before optional reranking.
 //
-// Stored as a JSONB column on the tenants table, managed via the settings UI
+// Stored as a JSONB column on the spaces table, managed via the settings UI
 // at /space/kv/retrieval-config.
 type RetrievalConfig struct {
 	// EmbeddingTopK is the maximum number of chunks returned by vector search (default: 50)

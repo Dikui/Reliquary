@@ -38,13 +38,13 @@ func TestSnapshotChatGPTModelDebugAuditsRealQuotaIncludingFailedCalls(t *testing
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	_, err := repository.EnsureTenantKnowledgeBase(ctx, db, types.SingleTenantID, "")
+	_, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	credential, err := utils.EncryptAESGCM(`{"access_token":"debug-access-secret","refresh_token":"debug-refresh-secret","id_token":"debug-id-secret"}`, utils.GetAESKey())
 	require.NoError(t, err)
 	accountID := uuid.NewString()
 	require.NoError(t, db.Exec(`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,credentials,status,expires_at) VALUES(?,'debug-client','https://auth.openai.com','debug-subject',?,'connected',?)`, accountID, credential, time.Now().Add(time.Hour)).Error)
-	model := &types.Model{ID: "maintenance-debug", TenantID: 1, Name: "fixture", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
+	model := &types.Model{ID: "maintenance-debug", SpaceID: 1, Name: "fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{Provider: "chatgpt", InterfaceType: "responses", ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, db.Create(model).Error)
 	limit := 10
@@ -77,8 +77,8 @@ func TestSnapshotChatGPTModelDebugAuditsRealQuotaIncludingFailedCalls(t *testing
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
-		c.Set(types.TenantIDContextKey.String(), uint64(1))
-		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.TenantIDContextKey, uint64(1)))
+		c.Set(types.SpaceIDContextKey.String(), uint64(1))
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.SpaceIDContextKey, uint64(1)))
 	})
 	router.POST("/models/:id/debug", handler.DebugModel)
 	invoke := func() bool {

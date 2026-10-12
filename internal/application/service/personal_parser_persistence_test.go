@@ -20,31 +20,31 @@ func TestPersonalPDFParserUnavailableErrorPersistsForAPI(t *testing.T) {
 		t.Skip("this test covers a binary built without the anydoc binding")
 	}
 	db := pgtest.Open(t)
-	repo := repository.NewKnowledgeRepository(db)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	source := types.SourceInfo{Author: "Ada", OriginalURL: "https://example.com/sample.pdf", PublishedAt: "2026-01-01"}
-	knowledge := &types.Knowledge{
-		ID: uuid.NewString(), TenantID: types.SingleTenantID, KnowledgeBaseID: "kb",
+	entry := &types.Entry{
+		ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: "kb",
 		Type: "file", Title: "sample.pdf", FileName: "sample.pdf", FileType: "pdf", FilePath: "input",
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled",
 	}
-	require.NoError(t, knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
+	require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
 		Source: "file", Decision: "pending", SourceInfo: source,
 	}))
-	require.NoError(t, repo.CreateKnowledge(ctx, knowledge))
+	require.NoError(t, repo.CreateEntry(ctx, entry))
 	files := &intakeFileService{saved: map[string][]byte{"input": []byte("%PDF-1.4\n")}}
-	svc := &knowledgeService{
-		db: db, repo: repo, kbService: intakeKBService{}, tenantRepo: intakeTenantRepo{}, fileSvc: files,
+	svc := &entryService{
+		db: db, repo: repo, kbService: intakeKBService{}, spaceRepo: intakeSpaceRepo{}, fileSvc: files,
 	}
 	payload, err := json.Marshal(types.DocumentProcessPayload{
-		TenantID: types.SingleTenantID, KnowledgeID: knowledge.ID, KnowledgeBaseID: knowledge.KnowledgeBaseID,
-		FilePath: knowledge.FilePath, FileName: knowledge.FileName, FileType: knowledge.FileType,
+		SpaceID: types.SingleSpaceID, EntryID: entry.ID, KnowledgeBaseID: entry.KnowledgeBaseID,
+		FilePath: entry.FilePath, FileName: entry.FileName, FileType: entry.FileType,
 	})
 	require.NoError(t, err)
 	require.NoError(t, svc.ProcessDocument(ctx, taskqueue.NewTask(types.TypeDocumentProcess, payload, taskqueue.MaxRetry(0))))
 
-	// Reload through the same service used by the knowledge detail API.
-	loaded, err := svc.GetKnowledgeByID(ctx, knowledge.ID)
+	// Reload through the same service used by the entry detail API.
+	loaded, err := svc.GetEntryByID(ctx, entry.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusFailed, loaded.ParseStatus)
 	require.Contains(t, loaded.ErrorMessage, "anydoc")

@@ -22,21 +22,21 @@ import (
 func entityFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService) {
 	t.Helper()
 	db := pgtest.Open(t)
-	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Entities"}).Error)
-	kb := types.KnowledgeBase{ID: "entity-kb", TenantID: 1, Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entities"}).Error)
+	kb := types.KnowledgeBase{ID: "entity-kb", SpaceID: 1, Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
 	require.NoError(t, db.Create(&kb).Error)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "entity-reviewer")
 	return db, ctx, NewEntityService(db, nil)
 }
-func entityArticle(t *testing.T, db *gorm.DB, id string) *types.Knowledge {
+func entityArticle(t *testing.T, db *gorm.DB, id string) *types.Entry {
 	t.Helper()
-	article := &types.Knowledge{ID: id, TenantID: 1, KnowledgeBaseID: "entity-kb", Title: id, Type: types.KnowledgeTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	article := &types.Entry{ID: id, SpaceID: 1, KnowledgeBaseID: "entity-kb", Title: id, Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	require.NoError(t, db.Create(article).Error)
 	return article
 }
 func entityRecord(id, name, kind string) types.Entity {
-	return types.Entity{ID: id, TenantID: 1, CanonicalName: name, NormalizedName: normalizeEntityName(name), EntityType: types.NormalizeEntityType(kind), CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	return types.Entity{ID: id, SpaceID: 1, CanonicalName: name, NormalizedName: normalizeEntityName(name), EntityType: types.NormalizeEntityType(kind), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 }
 
 type entityChatInterface interface{ chat.Chat }
@@ -97,7 +97,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	entities := []types.Entity{entityRecord("moonshot", "Moonshot AI", "company"), entityRecord("kimi-k2", "Kimi K2", "product"), entityRecord("different-type", "Same Name", "product")}
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistEntities(tx, entities); return err }))
-	require.NoError(t, db.Create(&types.EntityAlias{ID: "moonshot-cn", TenantID: 1, EntityType: "company", EntityID: "moonshot", Alias: "月之暗面", NormalizedAlias: "月之暗面", CreatedAt: time.Now()}).Error)
+	require.NoError(t, db.Create(&types.EntityAlias{ID: "moonshot-cn", SpaceID: 1, EntityType: "company", EntityID: "moonshot", Alias: "月之暗面", NormalizedAlias: "月之暗面", CreatedAt: time.Now()}).Error)
 	model := &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {
 		var payload struct {
 			Mention    string `json:"mention"`
@@ -200,13 +200,13 @@ func TestEntityResolutionCreatesAliasesAndIdempotentArticleMentions(t *testing.T
 	require.Equal(t, first[0].ID, second[0].ID)
 	require.ElementsMatch(t, []string{"Acme", "艾克米", "Acme Inc", "Acme Corporation"}, second[0].Aliases)
 	var count int64
-	require.NoError(t, db.Model(&types.KnowledgeEntity{}).Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, db.Model(&types.EntryEntity{}).Where("entry_id=?", article.ID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	require.Equal(t, 1, model.count(), "exact names and aliases reuse the identity without further judgment")
 	detail, err := svc.EntityDetail(ctx, first[0].ID)
 	require.NoError(t, err)
-	require.Len(t, detail.Knowledge, 1)
-	require.Equal(t, article.ID, detail.Knowledge[0].ID)
+	require.Len(t, detail.Entries, 1)
+	require.Equal(t, article.ID, detail.Entries[0].ID)
 	entities, err := svc.ListEntities(ctx, types.EntityQuery{Entity: "艾克米", EntityType: "company"})
 	require.NoError(t, err)
 	require.Len(t, entities, 1)
@@ -220,8 +220,8 @@ func TestEntityResolutionUnknownTypesBecomeOther(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entities, 1)
 	require.Equal(t, "other", entities[0].EntityType)
-	var link types.KnowledgeEntity
-	require.NoError(t, db.Where("knowledge_id=?", article.ID).First(&link).Error)
+	var link types.EntryEntity
+	require.NoError(t, db.Where("entry_id=?", article.ID).First(&link).Error)
 	require.Equal(t, entities[0].ID, link.EntityID)
 }
 
@@ -240,7 +240,7 @@ func TestEntityResolutionUncertainIdentityCreatesDecidableSuggestions(t *testing
 	suggestions, err := svc.ListMergeSuggestions(ctx, types.EntityQuery{}, "pending")
 	require.NoError(t, err)
 	require.Len(t, suggestions, 1)
-	require.Equal(t, article.ID, suggestions[0].KnowledgeID)
+	require.Equal(t, article.ID, suggestions[0].EntryID)
 	require.Equal(t, "Acme Systems Ltd", suggestions[0].NewEntityName)
 	require.Equal(t, "Acme Systems", suggestions[0].CandidateEntityName)
 	accepted, err := svc.DecideMergeSuggestion(ctx, suggestions[0].ID, true)
@@ -249,7 +249,7 @@ func TestEntityResolutionUncertainIdentityCreatesDecidableSuggestions(t *testing
 	require.Equal(t, "acme", readNameEntity(t, db, entities[0].ID).MergedIntoID)
 	other := entityRecord("other-acme", "Acme Regional", "company")
 	require.NoError(t, db.Create(&other).Error)
-	rejected := types.EntityMergeSuggestion{ID: uuid.NewString(), TenantID: 1, NewEntityID: other.ID, CandidateEntityID: "acme", KnowledgeID: article.ID, Reason: "Unclear", Status: "pending", CreatedAt: time.Now()}
+	rejected := types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: 1, NewEntityID: other.ID, CandidateEntityID: "acme", EntryID: article.ID, Reason: "Unclear", Status: "pending", CreatedAt: time.Now()}
 	require.NoError(t, db.Create(&rejected).Error)
 	decided, err := svc.DecideMergeSuggestion(ctx, rejected.ID, false)
 	require.NoError(t, err)
@@ -273,17 +273,17 @@ func TestEntityMergeTransfersAliasesArticlesAndKeepsAudit(t *testing.T) {
 	require.NoError(t, db.Model(&types.EntityAlias{}).Where("entity_id=?", merged.ID).Update("entity_type", "organization").Error)
 	require.NoError(t, saveEntityAlias(db, merged, "Shared name", "exact"))
 	require.NoError(t, saveEntityAlias(db, merged, "艾克米", "exact"))
-	links := []types.KnowledgeEntity{{TenantID: 1, KnowledgeID: one.ID, EntityID: keep.ID, CreatedAt: time.Now()}, {TenantID: 1, KnowledgeID: one.ID, EntityID: merged.ID, CreatedAt: time.Now()}, {TenantID: 1, KnowledgeID: two.ID, EntityID: merged.ID, CreatedAt: time.Now()}}
+	links := []types.EntryEntity{{SpaceID: 1, EntryID: one.ID, EntityID: keep.ID, CreatedAt: time.Now()}, {SpaceID: 1, EntryID: one.ID, EntityID: merged.ID, CreatedAt: time.Now()}, {SpaceID: 1, EntryID: two.ID, EntityID: merged.ID, CreatedAt: time.Now()}}
 	require.NoError(t, db.Create(&links).Error)
 	require.NoError(t, svc.MergeEntities(ctx, keep.ID, merged.ID))
 	detail, err := svc.EntityDetail(ctx, keep.ID)
 	require.NoError(t, err)
-	require.Len(t, detail.Knowledge, 2)
+	require.Len(t, detail.Entries, 2)
 	require.ElementsMatch(t, []string{"Acme", "Acme Inc", "Shared name", "艾克米"}, detail.Entity.Aliases)
 	var count int64
-	require.NoError(t, db.Model(&types.KnowledgeEntity{}).Where("entity_id=?", merged.ID).Count(&count).Error)
+	require.NoError(t, db.Model(&types.EntryEntity{}).Where("entity_id=?", merged.ID).Count(&count).Error)
 	require.Zero(t, count)
-	require.NoError(t, db.Model(&types.KnowledgeEntity{}).Where("entity_id=?", keep.ID).Count(&count).Error)
+	require.NoError(t, db.Model(&types.EntryEntity{}).Where("entity_id=?", keep.ID).Count(&count).Error)
 	require.EqualValues(t, 2, count)
 	records, err := svc.ListMergeRecords(ctx, keep.ID)
 	require.NoError(t, err)
@@ -378,7 +378,7 @@ func TestEntityAliasesAndCanonicalNamesAreUniqueBySpaceAndType(t *testing.T) {
 	require.Len(t, aliases, 2)
 	duplicate := entityRecord("duplicate", "Acme", "company")
 	require.Error(t, db.Create(&duplicate).Error)
-	duplicateAlias := types.EntityAlias{ID: "duplicate-alias", TenantID: 1, EntityType: "company", EntityID: entities[0].ID, Alias: "Acme", NormalizedAlias: "acme", CreatedAt: time.Now()}
+	duplicateAlias := types.EntityAlias{ID: "duplicate-alias", SpaceID: 1, EntityType: "company", EntityID: entities[0].ID, Alias: "Acme", NormalizedAlias: "acme", CreatedAt: time.Now()}
 	require.Error(t, db.Create(&duplicateAlias).Error)
 }
 
@@ -386,7 +386,7 @@ func TestEntityMergeAliasCollisionRollsBackGlobalChanges(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	entities := []types.Entity{entityRecord("keep", "Keep", "company"), entityRecord("merge", "Merged", "product"), entityRecord("third", "Third", "company")}
 	require.NoError(t, db.Create(&entities).Error)
-	aliases := []types.EntityAlias{{ID: "source-alias", TenantID: 1, EntityType: "product", EntityID: "merge", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}, {ID: "third-alias", TenantID: 1, EntityType: "company", EntityID: "third", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}}
+	aliases := []types.EntityAlias{{ID: "source-alias", SpaceID: 1, EntityType: "product", EntityID: "merge", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}, {ID: "third-alias", SpaceID: 1, EntityType: "company", EntityID: "third", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}}
 	require.NoError(t, db.Create(&aliases).Error)
 	err := svc.MergeEntities(ctx, "keep", "merge")
 	require.ErrorContains(t, err, "conflicts")
@@ -420,18 +420,18 @@ func TestEntityResolutionCannotRecreateMentionsAfterConcurrentArticleDeletion(t 
 	case <-time.After(5 * time.Second):
 		t.Fatal("entity judgment did not start")
 	}
-	repo := repository.NewKnowledgeRepository(db)
-	require.NoError(t, repo.DeleteKnowledge(ctx, 1, article.ID))
+	repo := repository.NewEntryRepository(db)
+	require.NoError(t, repo.DeleteEntry(ctx, 1, article.ID))
 	close(release)
 	require.Error(t, <-result)
 	var count int64
-	require.NoError(t, db.Model(&types.KnowledgeEntity{}).Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, db.Model(&types.EntryEntity{}).Where("entry_id=?", article.ID).Count(&count).Error)
 	require.Zero(t, count)
 	require.NoError(t, db.Model(&types.Entity{}).Where("normalized_name=?", "late entity").Count(&count).Error)
 	require.Zero(t, count, "a removed article cannot commit a new identity")
 }
 
-func TestEntityArticleDeletionWaitsForResolutionAndRemovesItsCommittedMentions(t *testing.T) {
+func TestEntityEntryDeletionWaitsForResolutionAndRemovesItsCommittedMentions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	article := entityArticle(t, db, "deleted-during-persistence")
 	svc.models = entityTestModels{model: &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}}
@@ -439,7 +439,7 @@ func TestEntityArticleDeletionWaitsForResolutionAndRemovesItsCommittedMentions(t
 	release := make(chan struct{})
 	var once sync.Once
 	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("block_entity_mention", func(tx *gorm.DB) {
-		if tx.Statement.Table == "knowledge_entities" {
+		if tx.Statement.Table == "entry_entities" {
 			once.Do(func() { close(entered); <-release })
 		}
 	}))
@@ -455,7 +455,7 @@ func TestEntityArticleDeletionWaitsForResolutionAndRemovesItsCommittedMentions(t
 		t.Fatal("entity mention persistence did not start")
 	}
 	deleted := make(chan error, 1)
-	go func() { deleted <- repository.NewKnowledgeRepository(db).DeleteKnowledge(ctx, 1, article.ID) }()
+	go func() { deleted <- repository.NewEntryRepository(db).DeleteEntry(ctx, 1, article.ID) }()
 	select {
 	case err := <-deleted:
 		t.Fatalf("deletion must wait for active resolution: %v", err)
@@ -465,7 +465,7 @@ func TestEntityArticleDeletionWaitsForResolutionAndRemovesItsCommittedMentions(t
 	require.NoError(t, <-resolved)
 	require.NoError(t, <-deleted)
 	var count int64
-	require.NoError(t, db.Model(&types.KnowledgeEntity{}).Where("knowledge_id=?", article.ID).Count(&count).Error)
+	require.NoError(t, db.Model(&types.EntryEntity{}).Where("entry_id=?", article.ID).Count(&count).Error)
 	require.Zero(t, count)
 	require.NoError(t, db.Model(&types.Entity{}).Where("normalized_name=?", "persisted identity").Count(&count).Error)
 	require.EqualValues(t, 1, count, "deleting the article preserves the committed entity")

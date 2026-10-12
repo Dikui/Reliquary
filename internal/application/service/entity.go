@@ -30,8 +30,8 @@ func (s *EntityService) SetNameEmbeddingRebuilder(r *EntityNameEmbeddingRebuilde
 func (s *EntityService) SetHeaderRefresher(r ArticleHeaderRefresher) {
 	s.headerRefresher = r
 }
-func (s *EntityService) requireTenant(ctx context.Context) (uint64, error) {
-	id, ok := types.TenantIDFromContext(ctx)
+func (s *EntityService) requireSpace(ctx context.Context) (uint64, error) {
+	id, ok := types.SpaceIDFromContext(ctx)
 	if !ok || id == 0 {
 		return 0, werrors.NewUnauthorizedError("personal space is required")
 	}
@@ -40,13 +40,13 @@ func (s *EntityService) requireTenant(ctx context.Context) (uint64, error) {
 
 // ResolveEntities resolves caller-provided candidates and records article associations.
 // It is intentionally independent from article intake.
-func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string, input []types.EntityCandidate) ([]types.Entity, error) {
-	tenantID, err := s.requireTenant(ctx)
+func (s *EntityService) ResolveEntities(ctx context.Context, entryID string, input []types.EntityCandidate) ([]types.Entity, error) {
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var article types.Knowledge
-	if err = s.db.WithContext(ctx).Where("tenant_id=? AND id=?", tenantID, knowledgeID).First(&article).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	var article types.Entry
+	if err = s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, entryID).First(&article).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, werrors.NewNotFoundError("article not found")
 	} else if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string,
 		return nil, errors.New("entity judgment model service is unavailable")
 	}
 	var kb types.KnowledgeBase
-	if err = s.db.WithContext(ctx).Where("id=? AND tenant_id=?", article.KnowledgeBaseID, tenantID).First(&kb).Error; err != nil {
+	if err = s.db.WithContext(ctx).Where("id=? AND space_id=?", article.KnowledgeBaseID, spaceID).First(&kb).Error; err != nil {
 		return nil, err
 	}
 	modelID, err := ResolveModelTier(ctx, s.db, &kb, types.ModelTierEntityResolution)
@@ -90,15 +90,15 @@ func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string,
 	if err != nil {
 		return nil, err
 	}
-	planned, _, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, tenantID, knowledgeID, candidates)
+	planned, _, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, spaceID, entryID, candidates)
 	if err != nil {
 		return nil, err
 	}
 	resolvedIDs := []string{}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Recheck the article while writing so a concurrent deletion cannot leave mentions.
-		var current types.Knowledge
-		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("id=? AND tenant_id=?", knowledgeID, tenantID).First(&current).Error; err != nil {
+		var current types.Entry
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("id=? AND space_id=?", entryID, spaceID).First(&current).Error; err != nil {
 			return err
 		}
 		ids, err := persistEntities(tx, planned)
@@ -108,8 +108,8 @@ func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string,
 		for _, entity := range planned {
 			id := ids[entity.ID]
 			resolvedIDs = appendUniqueEntityString(resolvedIDs, id)
-			link := types.KnowledgeEntity{TenantID: tenantID, KnowledgeID: knowledgeID, EntityID: id, CreatedAt: time.Now()}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "knowledge_id"}, {Name: "entity_id"}}, DoNothing: true}).Create(&link).Error; err != nil {
+			link := types.EntryEntity{SpaceID: spaceID, EntryID: entryID, EntityID: id, CreatedAt: time.Now()}
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "entry_id"}, {Name: "entity_id"}}, DoNothing: true}).Create(&link).Error; err != nil {
 				return err
 			}
 		}
@@ -119,25 +119,25 @@ func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string,
 		return nil, err
 	}
 	entities := []types.Entity{}
-	if err = s.db.WithContext(ctx).Where("tenant_id=? AND id IN ?", tenantID, resolvedIDs).Order("canonical_name,id").Find(&entities).Error; err != nil {
+	if err = s.db.WithContext(ctx).Where("space_id=? AND id IN ?", spaceID, resolvedIDs).Order("canonical_name,id").Find(&entities).Error; err != nil {
 		return nil, err
 	}
-	return entities, s.loadAliases(ctx, tenantID, entities)
+	return entities, s.loadAliases(ctx, spaceID, entities)
 }
 
 func (s *EntityService) resolveKnowledgeBase(ctx context.Context) (uint64, string, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return 0, "", err
 	}
 
 	var kb types.KnowledgeBase
-	if err := s.db.WithContext(ctx).Select("id").Where("tenant_id=?", tenantID).First(&kb).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	if err := s.db.WithContext(ctx).Select("id").Where("space_id=?", spaceID).First(&kb).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, "", werrors.NewNotFoundError("knowledge base not found")
 	} else if err != nil {
 		return 0, "", err
 	}
-	return tenantID, kb.ID, nil
+	return spaceID, kb.ID, nil
 }
 func entityQueryLimit(limit int) int {
 	if limit < 1 {
@@ -145,7 +145,7 @@ func entityQueryLimit(limit int) int {
 	}
 	return min(limit, 100)
 }
-func (s *EntityService) loadAliases(ctx context.Context, tenantID uint64, entities []types.Entity) error {
+func (s *EntityService) loadAliases(ctx context.Context, spaceID uint64, entities []types.Entity) error {
 	ids := []string{}
 	for _, entity := range entities {
 		ids = append(ids, entity.ID)
@@ -154,7 +154,7 @@ func (s *EntityService) loadAliases(ctx context.Context, tenantID uint64, entiti
 		return nil
 	}
 	var aliases []types.EntityAlias
-	if err := s.db.WithContext(ctx).Where("tenant_id=? AND entity_id IN ?", tenantID, ids).Order("alias,id").Find(&aliases).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND entity_id IN ?", spaceID, ids).Order("alias,id").Find(&aliases).Error; err != nil {
 		return err
 	}
 	for i := range entities {
@@ -168,34 +168,34 @@ func (s *EntityService) loadAliases(ctx context.Context, tenantID uint64, entiti
 	return nil
 }
 func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) ([]types.Entity, error) {
-	tenantID, kbID, err := s.resolveKnowledgeBase(ctx)
+	spaceID, kbID, err := s.resolveKnowledgeBase(ctx)
 	if err != nil {
 		return nil, err
 	}
-	query := s.db.WithContext(ctx).Model(&types.Entity{}).Where("entities.tenant_id=? AND entities.merged_into_id=''", tenantID)
+	query := s.db.WithContext(ctx).Model(&types.Entity{}).Where("entities.space_id=? AND entities.merged_into_id=''", spaceID)
 	if kbID != "" {
-		query = query.Where(`EXISTS (SELECT 1 FROM knowledge_entities links JOIN knowledges k ON k.id=links.knowledge_id AND k.tenant_id=links.tenant_id WHERE links.tenant_id=entities.tenant_id AND links.entity_id=entities.id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)`, kbID)
+		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities links JOIN entries k ON k.id=links.entry_id AND k.space_id=links.space_id WHERE links.space_id=entities.space_id AND links.entity_id=entities.id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)`, kbID)
 	}
 	if q.EntityType != "" {
 		query = query.Where("entities.entity_type=?", types.NormalizeEntityType(q.EntityType))
 	}
 	if name := normalizeEntityName(q.Entity); name != "" {
 		pattern := "%" + name + "%"
-		query = query.Where(`(entities.normalized_name LIKE ? OR EXISTS (SELECT 1 FROM entity_aliases a WHERE a.tenant_id=entities.tenant_id AND a.entity_id=entities.id AND a.normalized_alias LIKE ?))`, pattern, pattern)
+		query = query.Where(`(entities.normalized_name LIKE ? OR EXISTS (SELECT 1 FROM entity_aliases a WHERE a.space_id=entities.space_id AND a.entity_id=entities.id AND a.normalized_alias LIKE ?))`, pattern, pattern)
 	}
 	entities := []types.Entity{}
 	if err := query.Order("entities.canonical_name,entities.id").Limit(entityQueryLimit(q.Limit)).Offset(max(q.Offset, 0)).Find(&entities).Error; err != nil {
 		return nil, err
 	}
-	return entities, s.loadAliases(ctx, tenantID, entities)
+	return entities, s.loadAliases(ctx, spaceID, entities)
 }
 func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.EntityDetail, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var entity types.Entity
-	if err := s.db.WithContext(ctx).Where("tenant_id=? AND id=?", tenantID, id).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, id).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, werrors.NewNotFoundError("entity not found")
 	} else if err != nil {
 		return nil, err
@@ -204,19 +204,19 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 		return s.EntityDetail(ctx, entity.MergedIntoID)
 	}
 	entities := []types.Entity{entity}
-	if err := s.loadAliases(ctx, tenantID, entities); err != nil {
+	if err := s.loadAliases(ctx, spaceID, entities); err != nil {
 		return nil, err
 	}
-	result := &types.EntityDetail{Entity: entities[0], Knowledge: []types.Knowledge{}}
-	err = s.db.WithContext(ctx).Model(&types.Knowledge{}).Joins("JOIN knowledge_entities links ON links.knowledge_id=knowledges.id AND links.tenant_id=knowledges.tenant_id").Where("knowledges.tenant_id=? AND links.entity_id=?", tenantID, entity.ID).Order("knowledges.created_at DESC,knowledges.id").Find(&result.Knowledge).Error
+	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}}
+	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND links.entity_id=?", spaceID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
 	return result, err
 }
 func (s *EntityService) ListMergeRecords(ctx context.Context, id string) ([]types.EntityMergeRecord, error) {
-	tenantID, err := s.requireTenant(ctx)
+	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
 	items := []types.EntityMergeRecord{}
-	err = s.db.WithContext(ctx).Where("tenant_id=? AND (keep_entity_id=? OR merge_entity_id=?)", tenantID, id, id).Order("created_at DESC,id").Find(&items).Error
+	err = s.db.WithContext(ctx).Where("space_id=? AND (keep_entity_id=? OR merge_entity_id=?)", spaceID, id, id).Order("created_at DESC,id").Find(&items).Error
 	return items, err
 }

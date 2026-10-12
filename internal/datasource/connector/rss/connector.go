@@ -15,7 +15,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
 	"reliquary/internal/datasource"
-	webfetch "reliquary/internal/infrastructure/web_fetch"
+	webfetch "reliquary/internal/infrastructure/webfetch"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 )

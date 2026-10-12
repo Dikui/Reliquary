@@ -117,7 +117,7 @@ func TestSplitByHeadings_PreservesPositionRelativeToOriginal(t *testing.T) {
 
 // TestSplitByHeadings_PositionInvariant ensures End-Start == len(Content)
 // and runes[Start:End] == Content for every emitted chunk. This invariant
-// is required by knowledge.go:2278+ document reconstruction logic.
+// is required by entry.go:2278+ document reconstruction logic.
 func TestSplitByHeadings_PositionInvariant(t *testing.T) {
 	doc := `# Top
 intro paragraph here.

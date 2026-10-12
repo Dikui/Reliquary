@@ -33,7 +33,7 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 			root, uploads := t.TempDir(), t.TempDir()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			kb, err := repository.EnsureTenantKnowledgeBase(ctx, db, 1, "")
+			kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, 1, "")
 			require.NoError(t, err)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, "/v1/embeddings", r.URL.Path)
@@ -46,13 +46,13 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 				_, _ = w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0,0]}],"usage":{"total_tokens":1}}`))
 			}))
 			defer server.Close()
-			model := &types.Model{ID: "offline-reembed", TenantID: 1, Name: "fixture", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
+			model := &types.Model{ID: "offline-reembed", SpaceID: 1, Name: "fixture", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
 				Parameters: types.ModelParameters{InterfaceType: "openai", Provider: "generic", BaseURL: server.URL + "/v1", EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}
 			require.NoError(t, db.Create(model).Error)
 			kb.EmbeddingModelID, kb.ModelTiers.Embedding = model.ID, model.ID
 			require.NoError(t, db.Save(kb).Error)
 			for _, id := range []string{"first", "second"} {
-				require.NoError(t, db.Create(&types.Entity{ID: id, TenantID: 1, CanonicalName: id, NormalizedName: id, EntityType: "product", Description: "Preserve original profile", UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}).Error)
+				require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "product", Description: "Preserve original profile", UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}).Error)
 			}
 			configureOfflineReembed(t, db, root, uploads)
 			initial, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: time.Hour}})
@@ -105,7 +105,7 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 func TestOfflineReembedFailureStillFlushesAndReturnsTheOriginalError(t *testing.T) {
 	db := pgtest.Open(t)
 	root, uploads := t.TempDir(), t.TempDir()
-	_, err := repository.EnsureTenantKnowledgeBase(context.Background(), db, 1, "")
+	_, err := repository.EnsureSpaceKnowledgeBase(context.Background(), db, 1, "")
 	require.NoError(t, err)
 	configureOfflineReembed(t, db, root, uploads)
 	status, err := Reembed(context.Background(), "invalid-offline-action", "", nil)

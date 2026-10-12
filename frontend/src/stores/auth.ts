@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { UserInfo, TenantInfo } from '@/api/auth'
+import type { UserInfo, SpaceInfo } from '@/api/auth'
 import { userInfoFromApi } from '@/api/auth'
 import i18n from '@/i18n'
 import { reloadFontFromStorage } from '@/composables/useFont'
@@ -27,7 +27,7 @@ function reloadUserPreferences() {
 export const useAuthStore = defineStore('auth', () => {
   // 状态
   const user = ref<UserInfo | null>(null)
-  const tenant = ref<TenantInfo | null>(null)
+  const space = ref<SpaceInfo | null>(null)
   const token = ref<string>('')
   const refreshToken = ref<string>('')
   // 计算属性
@@ -35,21 +35,21 @@ export const useAuthStore = defineStore('auth', () => {
     return !!token.value && !!user.value
   })
 
-  const hasValidTenant = computed(() => {
-    return !!tenant.value && !!tenant.value.id
+  const hasValidSpace = computed(() => {
+    return !!space.value && !!space.value.id
   })
 
-  const currentTenantId = computed(() => {
-    return tenant.value?.id || ''
+  const currentSpaceId = computed(() => {
+    return space.value?.id || ''
   })
-  const currentTenantName = computed(() => tenant.value?.name || '')
+  const currentSpaceName = computed(() => space.value?.name || '')
 
 
   const currentUserId = computed(() => {
     return user.value?.id || ''
   })
 
-  const effectiveTenantId = computed(() => tenant.value?.id ? Number(tenant.value.id) : null)
+  const effectiveSpaceId = computed(() => space.value?.id ? Number(space.value.id) : null)
 
 
   // 操作方法
@@ -63,10 +63,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const setTenant = (tenantData: TenantInfo | null) => {
-    tenant.value = tenantData
-    if (tenantData) {
-      localStorage.setItem('reliquary_tenant', JSON.stringify(tenantData))
+  const setSpace = (spaceData: SpaceInfo | null) => {
+    space.value = spaceData
+    if (spaceData) {
+      localStorage.setItem('reliquary_tenant', JSON.stringify(spaceData))
     } else {
       localStorage.removeItem('reliquary_tenant')
     }
@@ -90,23 +90,23 @@ export const useAuthStore = defineStore('auth', () => {
       const u = response.data?.user
       if (!response.success || !u) return false
 
-      setUser(userInfoFromApi(u, response.data?.tenant?.id))
+      setUser(userInfoFromApi(u, response.data?.space?.id))
 
-      const tenantSnapshot = response.data?.tenant
-      if (tenantSnapshot) {
-        setTenant({
-          id: String(tenantSnapshot.id) || '',
-          name: tenantSnapshot.name || '',
-          owner_id: tenantSnapshot.owner_id || u.id || '',
-          description: tenantSnapshot.description,
-          status: tenantSnapshot.status,
-          business: tenantSnapshot.business,
-          storage_used: tenantSnapshot.storage_used,
-          created_at: tenantSnapshot.created_at || new Date().toISOString(),
-          updated_at: tenantSnapshot.updated_at || new Date().toISOString(),
+      const spaceSnapshot = response.data?.space
+      if (spaceSnapshot) {
+        setSpace({
+          id: String(spaceSnapshot.id) || '',
+          name: spaceSnapshot.name || '',
+          owner_id: spaceSnapshot.owner_id || u.id || '',
+          description: spaceSnapshot.description,
+          status: spaceSnapshot.status,
+          business: spaceSnapshot.business,
+          storage_used: spaceSnapshot.storage_used,
+          created_at: spaceSnapshot.created_at || new Date().toISOString(),
+          updated_at: spaceSnapshot.updated_at || new Date().toISOString(),
         })
       } else {
-        setTenant(null)
+        setSpace(null)
       }
 
       return true
@@ -118,7 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = () => {
     // 清空状态
     user.value = null
-    tenant.value = null
+    space.value = null
     token.value = ''
     refreshToken.value = ''
     clearSessionResourceCaches()
@@ -136,23 +136,29 @@ export const useAuthStore = defineStore('auth', () => {
   const initFromStorage = () => {
     // 从localStorage恢复状态
     const storedUser = localStorage.getItem('reliquary_user')
-    const storedTenant = localStorage.getItem('reliquary_tenant')
+    // The existing browser storage key survives upgrades. HTTP uses current names.
+    const storedSpace = localStorage.getItem('reliquary_tenant')
     const storedToken = localStorage.getItem('reliquary_token')
     const storedRefreshToken = localStorage.getItem('reliquary_refresh_token')
 
     if (storedUser) {
       try {
-        user.value = userInfoFromApi(JSON.parse(storedUser))
+        const cached = JSON.parse(storedUser)
+        if (cached.space_id === undefined && cached['tenant_id'] !== undefined) {
+          cached.space_id = cached['tenant_id']
+          delete cached['tenant_id']
+        }
+        user.value = userInfoFromApi(cached)
       } catch (e) {
         console.error(i18n.global.t('authStore.errors.parseUserFailed'), e)
       }
     }
 
-    if (storedTenant) {
+    if (storedSpace) {
       try {
-        tenant.value = JSON.parse(storedTenant)
+        space.value = JSON.parse(storedSpace)
       } catch (e) {
-        console.error(i18n.global.t('authStore.errors.parseTenantFailed'), e)
+        console.error(i18n.global.t('authStore.errors.parseSpaceFailed'), e)
       }
     }
 
@@ -175,21 +181,21 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     // 状态
     user,
-    tenant,
+    space,
     token,
     refreshToken,
 
     // 计算属性
     isLoggedIn,
-    hasValidTenant,
-    currentTenantId,
-    currentTenantName,
+    hasValidSpace,
+    currentSpaceId,
+    currentSpaceName,
     currentUserId,
-    effectiveTenantId,
+    effectiveSpaceId,
 
     // 方法
     setUser,
-    setTenant,
+    setSpace,
     setToken,
     setRefreshToken,
     refreshFromAuthMe,

@@ -30,38 +30,38 @@ func NewPostgresTaskInspector(client *task.Client) interfaces.TaskInspector {
 	return &postgresTaskInspector{client: client, db: client.DB()}
 }
 
-type knowledgeIDProbe struct {
-	KnowledgeID string `json:"knowledge_id,omitempty"`
+type entryIDProbe struct {
+	EntryID string `json:"knowledge_id,omitempty"`
 }
 
 type runtimeTaskPayloadProbe struct {
-	TenantID        uint64   `json:"tenant_id,omitempty"`
+	SpaceID         uint64   `json:"tenant_id,omitempty"`
 	KnowledgeBaseID string   `json:"knowledge_base_id,omitempty"`
-	KnowledgeID     string   `json:"knowledge_id,omitempty"`
+	EntryID         string   `json:"knowledge_id,omitempty"`
 	TaskID          string   `json:"task_id,omitempty"`
 	JobID           string   `json:"job_id,omitempty"`
 	DataSourceID    string   `json:"data_source_id,omitempty"`
 	SyncLogID       string   `json:"sync_log_id,omitempty"`
-	KnowledgeIDs    []string `json:"knowledge_ids,omitempty"`
+	EntryIDs        []string `json:"knowledge_ids,omitempty"`
 	EnqueuedAt      int64    `json:"enqueued_at,omitempty"`
 	CreatedAt       int64    `json:"created_at,omitempty"`
 }
 
-var taskTypesForKnowledgeCancel = map[string]struct{}{
+var taskTypesForEntryCancel = map[string]struct{}{
 	types.TypeDocumentProcess: {},
 	types.TypeManualProcess:   {},
 }
 
 const listPageSize = 100
 
-func (a *postgresTaskInspector) CancelTasksForKnowledge(ctx context.Context, knowledgeID string) (int, int, error) {
-	if knowledgeID == "" {
+func (a *postgresTaskInspector) CancelTasksForEntry(ctx context.Context, entryID string) (int, int, error) {
+	if entryID == "" {
 		return 0, 0, nil
 	}
 	var jobs []task.Job
 	err := a.db.WithContext(ctx).Where(
-		"task_type IN ? AND payload->>'knowledge_id' = ? AND state IN ?",
-		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, knowledgeID,
+		"task_type IN ? AND COALESCE(payload->>'knowledge_id',payload->>'entry_id') = ? AND state IN ?",
+		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, entryID,
 		[]string{"pending", "active", "scheduled", "retry"},
 	).Find(&jobs).Error
 	if err != nil {
@@ -84,14 +84,14 @@ func (a *postgresTaskInspector) CancelTasksForKnowledge(ctx context.Context, kno
 	return deleted, cancelled, nil
 }
 
-func (a *postgresTaskInspector) HasQueuedTasksForKnowledge(ctx context.Context, knowledgeID string) (bool, error) {
-	if knowledgeID == "" {
+func (a *postgresTaskInspector) HasQueuedTasksForEntry(ctx context.Context, entryID string) (bool, error) {
+	if entryID == "" {
 		return false, nil
 	}
 	var count int64
 	err := a.db.WithContext(ctx).Model(&task.Job{}).Where(
-		"task_type IN ? AND payload->>'knowledge_id' = ? AND state IN ?",
-		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, knowledgeID,
+		"task_type IN ? AND COALESCE(payload->>'knowledge_id',payload->>'entry_id') = ? AND state IN ?",
+		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, entryID,
 		[]string{"pending", "active", "scheduled", "retry"},
 	).Count(&count).Error
 	return count > 0, err
@@ -178,10 +178,10 @@ func runtimePayloadTime(value int64) *time.Time {
 
 func runtimeTaskActions(info types.RuntimeTaskInfo) []types.RuntimeTaskAction {
 	actions := make([]types.RuntimeTaskAction, 0, 3)
-	if info.TenantID != 0 && info.TenantID != types.SingleTenantID {
+	if info.SpaceID != 0 && info.SpaceID != types.SingleSpaceID {
 		return actions
 	}
-	if _, cancellable := taskTypesForKnowledgeCancel[info.Type]; cancellable && info.KnowledgeID != "" {
+	if _, cancellable := taskTypesForEntryCancel[info.Type]; cancellable && info.EntryID != "" {
 		switch info.State {
 		case types.RuntimeTaskPending, types.RuntimeTaskActive, types.RuntimeTaskScheduled, types.RuntimeTaskRetry:
 			actions = append(actions, types.RuntimeTaskActionCancel)
@@ -202,7 +202,7 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 		return types.RuntimeTaskInfo{}, fmt.Errorf("unsupported runtime task state %q", state)
 	}
 	probe := runtimeTaskPayloadProbe{}
-	payloadValid := json.Unmarshal(job.Payload, &probe) == nil
+	payloadValid := types.UnmarshalSpacePayload(job.Payload, &probe) == nil
 	enqueuedAt := probe.EnqueuedAt
 	if enqueuedAt == 0 {
 		enqueuedAt = probe.CreatedAt
@@ -212,9 +212,9 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 		LastError: job.LastError, LastFailedAt: job.LastFailedAt, NextProcessAt: runtimeTaskTime(job.ProcessAt),
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt, Deadline: job.Deadline,
 		EnqueuedAt: runtimePayloadTime(enqueuedAt), Retried: job.Retried, MaxRetry: job.MaxRetry,
-		Worker: job.WorkerPool, TenantID: probe.TenantID, KnowledgeBaseID: probe.KnowledgeBaseID,
-		KnowledgeID: probe.KnowledgeID, TaskID: probe.TaskID, DataSourceID: probe.DataSourceID,
-		SyncLogID: probe.SyncLogID, KnowledgeCount: len(probe.KnowledgeIDs),
+		Worker: job.WorkerPool, SpaceID: probe.SpaceID, KnowledgeBaseID: probe.KnowledgeBaseID,
+		EntryID: probe.EntryID, TaskID: probe.TaskID, DataSourceID: probe.DataSourceID,
+		SyncLogID: probe.SyncLogID, EntryCount: len(probe.EntryIDs),
 		AllowedActions: []types.RuntimeTaskAction{},
 	}
 	if job.TaskType == types.TypeTopicBackfill {
@@ -448,15 +448,15 @@ func (a *postgresTaskInspector) WorkerServerStats(ctx context.Context) ([]types.
 	return stats, true, err
 }
 
-func matchesKnowledge(taskType string, payload []byte, knowledgeID string) bool {
-	if _, ok := taskTypesForKnowledgeCancel[taskType]; !ok {
+func matchesEntry(taskType string, payload []byte, entryID string) bool {
+	if _, ok := taskTypesForEntryCancel[taskType]; !ok {
 		return false
 	}
-	var probe knowledgeIDProbe
-	if err := json.Unmarshal(payload, &probe); err != nil {
+	var probe entryIDProbe
+	if err := types.UnmarshalSpacePayload(payload, &probe); err != nil {
 		return false
 	}
-	return probe.KnowledgeID == knowledgeID
+	return probe.EntryID == entryID
 }
 
 func (a *postgresTaskInspector) QueueConnectionStatus() types.QueueConnectionStatus {

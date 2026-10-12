@@ -78,8 +78,12 @@ test('deleted and unknown settings sections fall back to the default section', (
       tab: 'embed',
     }), { section: 'general' })
   }
-  for (const section of ['general', 'tenant', 'system-global', 'runtime-queues']) {
+  for (const section of ['general', 'space', 'system-global', 'runtime-queues']) {
     assert.equal(normalizeSettingsSection(section), section)
   }
   assert.equal(normalizeSettingsSection('integrations', 'embed'), 'integration-api')
+})
+
+test('legacy knowledge settings bookmark selects the knowledge base section', () => {
+  assert.equal(normalizeSettingsSection('knowledge'), 'knowledge-base')
 })

@@ -72,10 +72,10 @@ func getJwtSecret() string {
 
 // userService implements the UserService interface
 type userService struct {
-	userRepo      interfaces.UserRepository
-	tokenRepo     interfaces.AuthTokenRepository
-	tenantService interfaces.TenantService
-	config        *config.Config
+	userRepo     interfaces.UserRepository
+	tokenRepo    interfaces.AuthTokenRepository
+	spaceService interfaces.SpaceService
+	config       *config.Config
 }
 
 // NewUserService creates a new user service instance
@@ -83,13 +83,13 @@ func NewUserService(
 	configInfo *config.Config,
 	userRepo interfaces.UserRepository,
 	tokenRepo interfaces.AuthTokenRepository,
-	tenantService interfaces.TenantService,
+	spaceService interfaces.SpaceService,
 ) interfaces.UserService {
 	return &userService{
-		userRepo:      userRepo,
-		tokenRepo:     tokenRepo,
-		tenantService: tenantService,
-		config:        configInfo,
+		userRepo:     userRepo,
+		tokenRepo:    tokenRepo,
+		spaceService: spaceService,
+		config:       configInfo,
 	}
 }
 
@@ -126,7 +126,7 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 
 	user := &types.User{
 		ID: uuid.New().String(), Username: req.Username, Email: req.Email,
-		PasswordHash: string(hashedPassword), TenantID: types.SingleTenantID,
+		PasswordHash: string(hashedPassword), SpaceID: types.SingleSpaceID,
 		IsActive: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	if err := s.userRepo.RegisterSingleUser(ctx, user); err != nil {
@@ -175,15 +175,15 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 			Message: "Invalid email or password",
 		}, nil
 	}
-	if user.TenantID != types.SingleTenantID {
+	if user.SpaceID != types.SingleSpaceID {
 		return &types.LoginResponse{Success: false, Message: "Invalid personal workspace"}, nil
 	}
 	logger.Info(ctx, "Password verification successful")
 
 	// Issue tokens for the personal workspace.
 	logger.Info(ctx, "Generating tokens")
-	resolvedTenantID := types.SingleTenantID
-	accessToken, refreshToken, err := s.generateTokensForTenant(ctx, user, resolvedTenantID)
+	resolvedSpaceID := types.SingleSpaceID
+	accessToken, refreshToken, err := s.generateTokensForSpace(ctx, user, resolvedSpaceID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to generate tokens: %v", err)
 		return &types.LoginResponse{
@@ -194,13 +194,13 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 	logger.Info(ctx, "Tokens generated successfully")
 
 	// Include team metadata in the login response.
-	var tenant *types.Tenant
-	if resolvedTenantID > 0 {
-		tenant, err = s.tenantService.GetTenantByID(ctx, resolvedTenantID)
+	var space *types.Space
+	if resolvedSpaceID > 0 {
+		space, err = s.spaceService.GetSpaceByID(ctx, resolvedSpaceID)
 		if err != nil {
-			logger.Warn(ctx, "Failed to get tenant info")
+			logger.Warn(ctx, "Failed to get space info")
 		} else {
-			logger.Info(ctx, "Tenant information retrieved successfully")
+			logger.Info(ctx, "Space information retrieved successfully")
 		}
 	}
 
@@ -209,7 +209,7 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		Success:      true,
 		Message:      "Login successful",
 		User:         user,
-		ActiveTenant: tenant,
+		ActiveSpace:  space,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 	}, nil
@@ -236,9 +236,9 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 	return s.userRepo.GetUserByUsername(ctx, username)
 }
 
-// GetUserByTenantID gets the sole user of the personal workspace
-func (s *userService) GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error) {
-	return s.userRepo.GetUserByTenantID(ctx, tenantID)
+// GetUserBySpaceID gets the sole user of the personal workspace
+func (s *userService) GetUserBySpaceID(ctx context.Context, spaceID uint64) (*types.User, error) {
+	return s.userRepo.GetUserBySpaceID(ctx, spaceID)
 }
 
 // UpdateUser updates user information
@@ -304,21 +304,21 @@ func (s *userService) GenerateTokens(
 	ctx context.Context,
 	user *types.User,
 ) (accessToken, refreshToken string, err error) {
-	return s.generateTokensForTenant(ctx, user, types.SingleTenantID)
+	return s.generateTokensForSpace(ctx, user, types.SingleSpaceID)
 }
 
-// generateTokensForTenant persists the tokens for one team identity.
-func (s *userService) generateTokensForTenant(
+// generateTokensForSpace persists the tokens for one team identity.
+func (s *userService) generateTokensForSpace(
 	ctx context.Context,
 	user *types.User,
-	activeTenantID uint64,
+	activeSpaceID uint64,
 ) (accessToken, refreshToken string, err error) {
 	// Generate access token (expires in 24 hours)
 	accessClaims := jwt.MapClaims{
 		"jti":       uuid.NewString(),
 		"user_id":   user.ID,
 		"email":     user.Email,
-		"tenant_id": activeTenantID,
+		"tenant_id": activeSpaceID,
 		"exp":       time.Now().Add(24 * time.Hour).Unix(),
 		"iat":       time.Now().Unix(),
 		"type":      "access",
@@ -423,15 +423,15 @@ func (s *userService) ValidateToken(ctx context.Context, tokenString string) (*t
 		return nil, 0, err
 	}
 
-	// Extract active tenant from the JWT. Anything missing or unparseable
-	// falls back to the user's home tenant so old tokens (and tokens issued
+	// Extract active space from the JWT. Anything missing or unparseable
+	// falls back to the user's home space so old tokens (and tokens issued
 	// by code paths that don't yet set the claim) keep working.
-	activeTenantID := tenantIDFromClaims(claims, user.TenantID)
-	if activeTenantID != types.SingleTenantID || user.TenantID != types.SingleTenantID {
+	activeSpaceID := spaceIDFromClaims(claims, user.SpaceID)
+	if activeSpaceID != types.SingleSpaceID || user.SpaceID != types.SingleSpaceID {
 		return nil, 0, errors.New("invalid personal workspace")
 	}
 
-	return user, activeTenantID, nil
+	return user, activeSpaceID, nil
 }
 
 func isRefreshTokenClaims(claims jwt.MapClaims) bool {
@@ -462,7 +462,7 @@ func userIDFromSignedToken(tokenString string) (string, error) {
 	return userID, nil
 }
 
-// tenantIDFromClaims pulls the active tenant ID out of a parsed JWT
+// spaceIDFromClaims pulls the active space ID out of a parsed JWT
 // claim map. Returns fallback when the claim is missing or has an
 // unrecognised type. Extracted as a free function so it can be unit
 // tested without standing up the full userService dependency graph.
@@ -470,7 +470,7 @@ func userIDFromSignedToken(tokenString string) (string, error) {
 // JSON numbers come back as float64 from jwt.MapClaims; the int64 /
 // uint64 branches cover legacy code paths and tests that build claims
 // directly. Negative values are treated as missing.
-func tenantIDFromClaims(claims jwt.MapClaims, fallback uint64) uint64 {
+func spaceIDFromClaims(claims jwt.MapClaims, fallback uint64) uint64 {
 	raw, ok := claims["tenant_id"]
 	if !ok {
 		return fallback

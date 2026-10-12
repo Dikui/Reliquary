@@ -15,22 +15,22 @@ import (
 
 func mcpFollowTargets(t *testing.T, f *mcpFixture) (types.Entity, types.Topic) {
 	t.Helper()
-	entity := types.Entity{ID: uuid.NewString(), TenantID: types.SingleTenantID, CanonicalName: "Follow Acme", NormalizedName: "follow acme", EntityType: "company"}
-	topic := types.Topic{ID: uuid.NewString(), TenantID: types.SingleTenantID, Name: "Follow topic", Description: "MCP follow observations"}
+	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "Follow Acme", NormalizedName: "follow acme", EntityType: "company"}
+	topic := types.Topic{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "Follow topic", Description: "MCP follow observations"}
 	require.NoError(t, f.db.Create(&entity).Error)
 	require.NoError(t, f.db.Create(&topic).Error)
 	return entity, topic
 }
 
-func mcpFollowArticle(t *testing.T, f *mcpFixture, title string, collected time.Time, entityID, topicID string) *types.Knowledge {
+func mcpFollowArticle(t *testing.T, f *mcpFixture, title string, collected time.Time, entityID, topicID string) *types.Entry {
 	t.Helper()
 	article := f.seedArticle(t, title, types.ProcessingModeFull, "# "+title+"\n\nOriginal follow evidence.\n")
 	require.NoError(t, f.db.Model(article).Updates(map[string]any{"created_at": collected, "follow_ready_at": collected}).Error)
 	if entityID != "" {
-		require.NoError(t, f.db.Create(&types.KnowledgeEntity{TenantID: types.SingleTenantID, KnowledgeID: article.ID, EntityID: entityID, CreatedAt: collected}).Error)
+		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entityID, CreatedAt: collected}).Error)
 	}
 	if topicID != "" {
-		require.NoError(t, f.db.Create(&types.KnowledgeTopic{TenantID: types.SingleTenantID, KnowledgeID: article.ID, TopicID: topicID, Source: "user", CreatedAt: collected}).Error)
+		require.NoError(t, f.db.Create(&types.EntryTopic{SpaceID: types.SingleSpaceID, EntryID: article.ID, TopicID: topicID, Source: "user", CreatedAt: collected}).Error)
 	}
 	return article
 }
@@ -38,7 +38,7 @@ func mcpFollowArticle(t *testing.T, f *mcpFixture, title string, collected time.
 func mcpFeedIDs(result *types.FollowFeedResponse) []string {
 	ids := make([]string, 0, len(result.Results))
 	for _, item := range result.Results {
-		ids = append(ids, item.ArticleID)
+		ids = append(ids, item.EntryID)
 	}
 	return ids
 }
@@ -208,9 +208,9 @@ func TestMCPFollowFeedSimilarReportsKeepTheirMatches(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	older := mcpFollowArticle(t, f, "Similar entity coverage", now.Add(-2*time.Hour), entity.ID, "")
 	newer := mcpFollowArticle(t, f, "Similar topic coverage", now.Add(-time.Hour), "", topic.ID)
-	for _, article := range []*types.Knowledge{older, newer} {
-		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(knowledge_id,tenant_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
-			VALUES (?,?,?,'mcp-embedding',3,?,'mcp-follow-fixture')`, article.ID, types.SingleTenantID, f.kb.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
+	for _, article := range []*types.Entry{older, newer} {
+		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
+			VALUES (?,?,?,'mcp-embedding',3,?,'mcp-follow-fixture')`, article.ID, types.SingleSpaceID, f.kb.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
 	}
 	var feed types.FollowFeedResponse
 	mcpCall(t, client, "follow_feed", map[string]any{"collapse_similar": true}, &feed)
@@ -218,7 +218,7 @@ func TestMCPFollowFeedSimilarReportsKeepTheirMatches(t *testing.T) {
 	require.Equal(t, []string{topic.ID}, mcpMatchedIDs(feed.Results[0]))
 	require.Len(t, feed.Results[0].SimilarReports, 1)
 	member := feed.Results[0].SimilarReports[0]
-	require.Equal(t, older.ID, member.ArticleID)
+	require.Equal(t, older.ID, member.EntryID)
 	require.Equal(t, []string{entity.ID}, mcpMatchedIDs(member))
 	require.True(t, member.IsNew)
 	require.WithinDuration(t, now.Add(-2*time.Hour), member.CollectedAt, time.Microsecond)
@@ -263,7 +263,7 @@ func TestMCPFollowToolsValidateArgumentsWithoutWrites(t *testing.T) {
 func TestMCPFollowMergedEntityIDResolvesToRetainedTarget(t *testing.T) {
 	f := newMCPFixture(t)
 	merged, _ := mcpFollowTargets(t, f)
-	retained := types.Entity{ID: uuid.NewString(), TenantID: types.SingleTenantID, CanonicalName: "Retained Acme", NormalizedName: "retained acme", EntityType: "company"}
+	retained := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "Retained Acme", NormalizedName: "retained acme", EntityType: "company"}
 	require.NoError(t, f.db.Create(&retained).Error)
 	client := f.connect(t, "2025-11-25")
 	mcpCall(t, client, "follow", map[string]any{"target_type": "entity", "target_id": merged.ID}, nil)

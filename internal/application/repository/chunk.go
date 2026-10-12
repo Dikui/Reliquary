@@ -8,9 +8,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"reliquary/internal/common"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 )
 
 // ErrChunkNotFound is returned when a chunk lookup finds no row. A typed
@@ -44,8 +44,8 @@ func (r *chunkRepository) CreateChunks(ctx context.Context, chunks []*types.Chun
 			disabledIDs = append(disabledIDs, chunk.ID)
 			disabledChunks = append(disabledChunks, chunk)
 		}
-		chunk.Content = common.CleanInvalidUTF8(chunk.Content)
-		chunk.ContextHeader = common.CleanInvalidUTF8(chunk.ContextHeader)
+		chunk.Content = utils.CleanInvalidUTF8(chunk.Content)
+		chunk.ContextHeader = utils.CleanInvalidUTF8(chunk.ContextHeader)
 	}
 
 	db := r.db.WithContext(ctx)
@@ -69,10 +69,10 @@ func (r *chunkRepository) CreateChunks(ctx context.Context, chunks []*types.Chun
 	})
 }
 
-// GetChunkByID retrieves a chunk by its ID and tenant ID
-func (r *chunkRepository) GetChunkByID(ctx context.Context, tenantID uint64, id string) (*types.Chunk, error) {
+// GetChunkByID retrieves a chunk by its ID and space ID
+func (r *chunkRepository) GetChunkByID(ctx context.Context, spaceID uint64, id string) (*types.Chunk, error) {
 	var chunk types.Chunk
-	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).First(&chunk).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("space_id = ? AND id = ?", spaceID, id).First(&chunk).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrChunkNotFound
 		}
@@ -81,7 +81,7 @@ func (r *chunkRepository) GetChunkByID(ctx context.Context, tenantID uint64, id 
 	return &chunk, nil
 }
 
-// GetChunkByIDOnly retrieves a chunk by ID without tenant filter (for permission resolution).
+// GetChunkByIDOnly retrieves a chunk by ID without space filter (for permission resolution).
 func (r *chunkRepository) GetChunkByIDOnly(ctx context.Context, id string) (*types.Chunk, error) {
 	var chunk types.Chunk
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&chunk).Error; err != nil {
@@ -93,10 +93,10 @@ func (r *chunkRepository) GetChunkByIDOnly(ctx context.Context, id string) (*typ
 	return &chunk, nil
 }
 
-// GetChunkBySeqID retrieves a chunk by its seq_id and tenant ID
-func (r *chunkRepository) GetChunkBySeqID(ctx context.Context, tenantID uint64, seqID int64) (*types.Chunk, error) {
+// GetChunkBySeqID retrieves a chunk by its seq_id and space ID
+func (r *chunkRepository) GetChunkBySeqID(ctx context.Context, spaceID uint64, seqID int64) (*types.Chunk, error) {
 	var chunk types.Chunk
-	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND seq_id = ?", tenantID, seqID).First(&chunk).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("space_id = ? AND seq_id = ?", spaceID, seqID).First(&chunk).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrChunkNotFound
 		}
@@ -107,18 +107,18 @@ func (r *chunkRepository) GetChunkBySeqID(ctx context.Context, tenantID uint64, 
 
 // ListChunksByID retrieves multiple chunks by their IDs
 func (r *chunkRepository) ListChunksByID(
-	ctx context.Context, tenantID uint64, ids []string,
+	ctx context.Context, spaceID uint64, ids []string,
 ) ([]*types.Chunk, error) {
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id IN ?", tenantID, ids).
+		Where("space_id = ? AND id IN ?", spaceID, ids).
 		Find(&chunks).Error; err != nil {
 		return nil, err
 	}
 	return chunks, nil
 }
 
-// ListChunksByIDOnly retrieves multiple chunks by their IDs without tenant filter (for shared KB resolution).
+// ListChunksByIDOnly retrieves multiple chunks by their IDs without space filter (for shared KB resolution).
 func (r *chunkRepository) ListChunksByIDOnly(ctx context.Context, ids []string) ([]*types.Chunk, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -132,27 +132,27 @@ func (r *chunkRepository) ListChunksByIDOnly(ctx context.Context, ids []string) 
 
 // ListChunksBySeqID retrieves multiple chunks by their seq_ids
 func (r *chunkRepository) ListChunksBySeqID(
-	ctx context.Context, tenantID uint64, seqIDs []int64,
+	ctx context.Context, spaceID uint64, seqIDs []int64,
 ) ([]*types.Chunk, error) {
 	if len(seqIDs) == 0 {
 		return []*types.Chunk{}, nil
 	}
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND seq_id IN ?", tenantID, seqIDs).
+		Where("space_id = ? AND seq_id IN ?", spaceID, seqIDs).
 		Find(&chunks).Error; err != nil {
 		return nil, err
 	}
 	return chunks, nil
 }
 
-// ListChunksByKnowledgeID lists all chunks for a knowledge ID
-func (r *chunkRepository) ListChunksByKnowledgeID(
-	ctx context.Context, tenantID uint64, knowledgeID string,
+// ListChunksByEntryID lists all chunks for a entry ID
+func (r *chunkRepository) ListChunksByEntryID(
+	ctx context.Context, spaceID uint64, entryID string,
 ) ([]*types.Chunk, error) {
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_id = ? and chunk_type = ?", tenantID, knowledgeID, "text").
+		Where("space_id = ? AND entry_id = ? and chunk_type = ?", spaceID, entryID, "text").
 		Order("chunk_index ASC").
 		Find(&chunks).Error; err != nil {
 		return nil, err
@@ -160,19 +160,19 @@ func (r *chunkRepository) ListChunksByKnowledgeID(
 	return chunks, nil
 }
 
-// ListChunksByKnowledgeIDAndTypes lists a knowledge's chunks restricted to the
-// given chunk types. ListChunksByKnowledgeID is text-only by design, so callers
+// ListChunksByEntryIDAndTypes lists a entry's chunks restricted to the
+// given chunk types. ListChunksByEntryID is text-only by design, so callers
 // that also need summary / parent_text / image chunks come through here rather
 // than widening that query underneath its existing callers.
-func (r *chunkRepository) ListChunksByKnowledgeIDAndTypes(
-	ctx context.Context, tenantID uint64, knowledgeID string, chunkTypes []types.ChunkType,
+func (r *chunkRepository) ListChunksByEntryIDAndTypes(
+	ctx context.Context, spaceID uint64, entryID string, chunkTypes []types.ChunkType,
 ) ([]*types.Chunk, error) {
 	if len(chunkTypes) == 0 {
 		return nil, nil
 	}
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_id = ? AND chunk_type IN ?", tenantID, knowledgeID, chunkTypes).
+		Where("space_id = ? AND entry_id = ? AND chunk_type IN ?", spaceID, entryID, chunkTypes).
 		Order("chunk_index ASC").
 		Find(&chunks).Error; err != nil {
 		return nil, err
@@ -180,10 +180,10 @@ func (r *chunkRepository) ListChunksByKnowledgeIDAndTypes(
 	return chunks, nil
 }
 
-// ListPagedChunksByKnowledgeID lists chunks for a knowledge ID with pagination
-func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
-	tenantID uint64,
-	knowledgeID string,
+// ListPagedChunksByEntryID lists chunks for a entry ID with pagination
+func (r *chunkRepository) ListPagedChunksByEntryID(ctx context.Context,
+	spaceID uint64,
+	entryID string,
 	page *types.Pagination,
 	chunkType []types.ChunkType,
 	keyword string,
@@ -194,8 +194,8 @@ func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
 	keyword = strings.TrimSpace(keyword)
 
 	baseFilter := func(db *gorm.DB) *gorm.DB {
-		db = db.Where("tenant_id = ? AND knowledge_id = ? AND chunk_type IN (?) AND status in (?)",
-			tenantID, knowledgeID, chunkType, []int{int(types.ChunkStatusIndexed), int(types.ChunkStatusDefault)})
+		db = db.Where("space_id = ? AND entry_id = ? AND chunk_type IN (?) AND status in (?)",
+			spaceID, entryID, chunkType, []int{int(types.ChunkStatusIndexed), int(types.ChunkStatusDefault)})
 		if isEnabled != nil {
 			db = db.Where("is_enabled = ?", *isEnabled)
 		}
@@ -217,7 +217,7 @@ func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
 	// Then query the paginated data
 	dataQuery := baseFilter(r.db.WithContext(ctx))
 
-	// Determine sort order based on knowledge type
+	// Determine sort order based on entry type
 	var orderClause string
 
 	// Document: sort by chunk_index
@@ -239,12 +239,12 @@ func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
 
 func (r *chunkRepository) ListChunkByParentID(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	parentID string,
 ) ([]*types.Chunk, error) {
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND parent_chunk_id = ?", tenantID, parentID).
+		Where("space_id = ? AND parent_chunk_id = ?", spaceID, parentID).
 		Find(&chunks).Error; err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func (r *chunkRepository) ListChunkByParentID(
 
 func (r *chunkRepository) ListChunksByParentIDs(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	parentIDs []string,
 ) ([]*types.Chunk, error) {
 	if len(parentIDs) == 0 {
@@ -261,7 +261,7 @@ func (r *chunkRepository) ListChunksByParentIDs(
 	}
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND parent_chunk_id IN ?", tenantID, parentIDs).
+		Where("space_id = ? AND parent_chunk_id IN ?", spaceID, parentIDs).
 		Find(&chunks).Error; err != nil {
 		return nil, err
 	}
@@ -326,7 +326,7 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 
 	for _, chunk := range chunks {
 		ids = append(ids, chunk.ID)
-		content := common.CleanInvalidUTF8(chunk.Content)
+		content := utils.CleanInvalidUTF8(chunk.Content)
 
 		contentCases = append(contentCases, "WHEN id = ? THEN ?")
 		contentArgs = append(contentArgs, chunk.ID, content)
@@ -386,13 +386,13 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 }
 
 // DeleteChunk deletes a chunk by its ID
-func (r *chunkRepository) DeleteChunk(ctx context.Context, tenantID uint64, id string) error {
-	return r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).Delete(&types.Chunk{}).Error
+func (r *chunkRepository) DeleteChunk(ctx context.Context, spaceID uint64, id string) error {
+	return r.db.WithContext(ctx).Where("space_id = ? AND id = ?", spaceID, id).Delete(&types.Chunk{}).Error
 }
 
 // DeleteChunks deletes chunks by IDs in batch.
 // To avoid MySQL Error 1390 (too many placeholders), IDs are split into batches.
-func (r *chunkRepository) DeleteChunks(ctx context.Context, tenantID uint64, ids []string) error {
+func (r *chunkRepository) DeleteChunks(ctx context.Context, spaceID uint64, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -402,69 +402,69 @@ func (r *chunkRepository) DeleteChunks(ctx context.Context, tenantID uint64, ids
 		if end > len(ids) {
 			end = len(ids)
 		}
-		if err := r.db.WithContext(ctx).Where("tenant_id = ? AND id IN ?", tenantID, ids[i:end]).Delete(&types.Chunk{}).Error; err != nil {
+		if err := r.db.WithContext(ctx).Where("space_id = ? AND id IN ?", spaceID, ids[i:end]).Delete(&types.Chunk{}).Error; err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// DeleteChunksByKnowledgeID deletes all chunks for a knowledge ID
-func (r *chunkRepository) DeleteChunksByKnowledgeID(ctx context.Context, tenantID uint64, knowledgeID string) error {
+// DeleteChunksByEntryID deletes all chunks for a entry ID
+func (r *chunkRepository) DeleteChunksByEntryID(ctx context.Context, spaceID uint64, entryID string) error {
 	return r.db.WithContext(ctx).Where(
-		"tenant_id = ? AND knowledge_id = ?", tenantID, knowledgeID,
+		"space_id = ? AND entry_id = ?", spaceID, entryID,
 	).Delete(&types.Chunk{}).Error
 }
 
-// ListImageInfoByKnowledgeIDs returns non-empty image_info values for the given knowledge IDs.
+// ListImageInfoByEntryIDs returns non-empty image_info values for the given entry IDs.
 // The cleanup scan includes all stored chunk types.
-func (r *chunkRepository) ListImageInfoByKnowledgeIDs(
-	ctx context.Context, tenantID uint64, knowledgeIDs []string,
+func (r *chunkRepository) ListImageInfoByEntryIDs(
+	ctx context.Context, spaceID uint64, entryIDs []string,
 ) ([]interfaces.ChunkImageInfo, error) {
 	var results []interfaces.ChunkImageInfo
 	err := r.db.WithContext(ctx).
 		Model(&types.Chunk{}).
-		Select("knowledge_id, image_info").
-		Where("tenant_id = ? AND knowledge_id IN ? AND image_info != ''", tenantID, knowledgeIDs).
+		Select("entry_id, image_info").
+		Where("space_id = ? AND entry_id IN ? AND image_info != ''", spaceID, entryIDs).
 		Scan(&results).Error
 	return results, err
 }
 
-// DeleteByKnowledgeList deletes all chunks for a knowledge list
-func (r *chunkRepository) DeleteByKnowledgeList(ctx context.Context, tenantID uint64, knowledgeIDs []string) error {
+// DeleteByEntryList deletes all chunks for a entry list
+func (r *chunkRepository) DeleteByEntryList(ctx context.Context, spaceID uint64, entryIDs []string) error {
 	return r.db.WithContext(ctx).Where(
-		"tenant_id = ? AND knowledge_id in ?", tenantID, knowledgeIDs,
+		"space_id = ? AND entry_id in ?", spaceID, entryIDs,
 	).Delete(&types.Chunk{}).Error
 }
 
 // CountChunksByKnowledgeBaseID counts the number of chunks in a knowledge base
 func (r *chunkRepository) CountChunksByKnowledgeBaseID(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	kbID string,
 ) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&types.Chunk{}).
-		Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).
+		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
 		Count(&count).Error
 	return count, err
 }
 
-// DeleteUnindexedChunks by knowledge id and chunk index range
+// DeleteUnindexedChunks by entry id and chunk index range
 func (r *chunkRepository) DeleteUnindexedChunks(
 	ctx context.Context,
-	tenantID uint64,
-	knowledgeID string,
+	spaceID uint64,
+	entryID string,
 ) ([]*types.Chunk, error) {
 	var chunks []*types.Chunk
 	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_id = ? AND status = ?", tenantID, knowledgeID, types.ChunkStatusStored).
+		Where("space_id = ? AND entry_id = ? AND status = ?", spaceID, entryID, types.ChunkStatusStored).
 		Find(&chunks).Error; err != nil {
 		return nil, err
 	}
 	if len(chunks) > 0 {
 		if err := r.db.WithContext(ctx).
-			Where("tenant_id = ? AND knowledge_id = ? AND status = ?", tenantID, knowledgeID, types.ChunkStatusStored).
+			Where("space_id = ? AND entry_id = ? AND status = ?", spaceID, entryID, types.ChunkStatusStored).
 			Delete(&types.Chunk{}).Error; err != nil {
 			return nil, err
 		}

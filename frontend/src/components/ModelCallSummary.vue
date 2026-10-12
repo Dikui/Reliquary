@@ -8,8 +8,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { KnowledgeModelCall } from '@/utils/modelCalls'
-const props = defineProps<{ calls: KnowledgeModelCall[] }>()
+import type { EntryModelCall } from '@/utils/modelCalls'
+const props = defineProps<{ calls: EntryModelCall[] }>()
 const { t, te } = useI18n()
 const total = computed(() => props.calls.reduce((sum, call) => sum + call.calls, 0))
 function stageLabel(stage: string) {

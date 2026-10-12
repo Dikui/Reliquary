@@ -439,8 +439,8 @@ func Warnf(c context.Context, format string, args ...interface{}) {
 type Fields = logrus.Fields
 
 // WarnWithFields emits a warning with structured fields. Use this for
-// audit-relevant events (cross-tenant probes, invariant violations) so that
-// log aggregators can index the tenant/resource identifiers without
+// audit-relevant events (cross-space probes, invariant violations) so that
+// log aggregators can index the space/resource identifiers without
 // parsing free-form text. Format-string style (Warnf) is appropriate for
 // low-stakes diagnostic messages.
 func WarnWithFields(c context.Context, fields Fields, msg string) {

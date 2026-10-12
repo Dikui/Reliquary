@@ -26,7 +26,7 @@ func TestPersonalAnydocAcceptance(t *testing.T) {
 	paragraphs := []string{
 		"Personal parser sample",
 		"Reliquary keeps personal documents on the local filesystem.",
-		"PostgreSQL holds the searchable knowledge for one user.",
+		"PostgreSQL holds the searchable entry for one user.",
 	}
 	for _, sample := range []struct {
 		name, fileType string

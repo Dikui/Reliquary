@@ -11,9 +11,9 @@ import (
 
 	ollamaapi "github.com/ollama/ollama/api"
 	"reliquary/internal/logger"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
 	secutils "reliquary/internal/utils"
+	"reliquary/internal/utils/ollama"
 )
 
 // OllamaChat 实现了基于 Ollama 的聊天

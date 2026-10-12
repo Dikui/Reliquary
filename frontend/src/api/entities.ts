@@ -7,7 +7,7 @@ export interface EntityEnvelope<T> { success: boolean; data: T; error?: string }
 export interface EntityActionEnvelope { success: boolean; error?: string }
 export interface Entity {
   id: string
-  tenant_id: number
+  space_id: number
   canonical_name: string
   entity_type: EntityType
   description?: string
@@ -16,14 +16,14 @@ export interface Entity {
   created_at: string
   updated_at: string
 }
-export interface EntityArticle {
+export interface EntityEntry {
   id: string
   knowledge_base_id: string
   title?: string
   file_name?: string
   created_at: string
 }
-export interface EntityDetail { entity: Entity; knowledge: EntityArticle[] }
+export interface EntityDetail { entity: Entity; entries: EntityEntry[] }
 export interface EntityListParams {
   entity?: string
   entity_type?: EntityType
@@ -48,7 +48,7 @@ export interface EntityMergeSuggestion {
   new_entity_name?: string
   candidate_entity_name?: string
   reason: string
-  knowledge_id?: string
+  entry_id?: string
   status: 'pending' | 'accepted' | 'rejected'
   created_at: string
   decided_at?: string

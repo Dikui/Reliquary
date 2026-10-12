@@ -87,8 +87,8 @@ func TestAnthropicProviderValidation(t *testing.T) {
 	t.Run("info", func(t *testing.T) {
 		info := p.Info()
 		assert.Equal(t, ProviderAnthropic, info.Name)
-		assert.Equal(t, AnthropicBaseURL, info.GetDefaultURL(types.ModelTypeKnowledgeQA))
-		assert.Contains(t, info.ModelTypes, types.ModelTypeKnowledgeQA)
+		assert.Equal(t, AnthropicBaseURL, info.GetDefaultURL(types.ModelTypeGeneration))
+		assert.Contains(t, info.ModelTypes, types.ModelTypeGeneration)
 		assert.True(t, info.RequiresAuth)
 	})
 }
@@ -139,7 +139,7 @@ func TestAliyunProviderValidation(t *testing.T) {
 	t.Run("info", func(t *testing.T) {
 		info := p.Info()
 		assert.Equal(t, ProviderAliyun, info.Name)
-		assert.Contains(t, info.ModelTypes, types.ModelTypeKnowledgeQA)
+		assert.Contains(t, info.ModelTypes, types.ModelTypeGeneration)
 		assert.Contains(t, info.ModelTypes, types.ModelTypeEmbedding)
 		assert.Contains(t, info.ModelTypes, types.ModelTypeRerank)
 	})
@@ -176,14 +176,14 @@ func TestZhipuProviderValidation(t *testing.T) {
 	t.Run("info", func(t *testing.T) {
 		info := p.Info()
 		assert.Equal(t, ProviderZhipu, info.Name)
-		assert.Equal(t, ZhipuChatBaseURL, info.GetDefaultURL(types.ModelTypeKnowledgeQA))
+		assert.Equal(t, ZhipuChatBaseURL, info.GetDefaultURL(types.ModelTypeGeneration))
 		assert.Equal(t, ZhipuEmbeddingBaseURL, info.GetDefaultURL(types.ModelTypeEmbedding))
 	})
 }
 
 func TestListByModelType(t *testing.T) {
 	t.Run("chat models", func(t *testing.T) {
-		providers := ListByModelType(types.ModelTypeKnowledgeQA)
+		providers := ListByModelType(types.ModelTypeGeneration)
 		assert.NotEmpty(t, providers)
 		// Multiple providers support chat
 		assert.GreaterOrEqual(t, len(providers), 9)

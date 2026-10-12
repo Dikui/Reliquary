@@ -130,7 +130,7 @@ cp .env.example .env
 | `APP_PORT`、`FRONTEND_PORT` | 宿主机 API 与网页端口，默认 `8080` 和 `80` |
 | `APP_EXTERNAL_URL` | 需要外部调用方读取限时文件链接时填写内网访问地址并代理 `/r/` |
 
-模型服务的完整地址、模型名、API Key、嵌入维度在“设置 > 模型”配置，知识库页选择具体档位。也可通过 [内置模型配置](BUILTIN_MODELS.md) 声明。迁移后需要检查数据库中保存的模型地址是否仍可访问。
+模型服务的完整地址、模型名、API Key、嵌入维度在“设置 > 模型”配置，知识库页选择具体档位。也可通过 [内置模型配置](./builtin-models.md) 声明。迁移后需要检查数据库中保存的模型地址是否仍可访问。
 
 Compose 默认使用 `vault-data` 与 `data-files` 命名卷。为便于 Obsidian 阅读与直接复制，建议将两者换为宿主机目录。先创建目录，再在 `.env` 添加实际的绝对路径：
 
@@ -161,7 +161,7 @@ services:
 mkdir -p /Users/yourname/ReliquaryData/vault /Users/yourname/ReliquaryData/files
 export COMPOSE_FILE=docker-compose.yml:compose.mac.yml
 export COMPOSE_PROJECT_NAME=reliquary
-./scripts/build_frontend_dist.sh
+./scripts/build-frontend-dist.sh
 docker compose build
 docker compose run --rm --no-deps --user root --entrypoint sh app   -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
 docker compose up -d
@@ -257,6 +257,8 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 普通备份默认不重复保存镜像。已有完整源码与固定版本镜像时，先准备新的空数据库、空文件库和空上传目录，保持目标应用停止，再在目标部署目录执行 `./reliquary-admin restore /完整备份路径`。它恢复数据并进入下文的模型及凭据等待流程，不会替换目标部署的代码。需要带代码及镜像的一体恢复包时执行 `backup /备份目录 --with-images`，再使用 `unpack` 恢复到空部署目录。
 
+个人空间命名清理之前生成的版本 1 维护副本和备份也可在当前代码上恢复。恢复结构版本 1 的数据库后，维护入口先运行新增迁移，再保持队列暂停、重建全文索引并按原备份清单核对数据和文件；副本旧表名及外层列名会映射为当前名字。未完成任务继续读取原 payload，模型及凭据检查通过后才能恢复执行。结构版本 0 的整体回退仍遵守下文的离线 helper 流程。
+
 ## 迁移到另一台 Mac mini
 
 旧机器在当前部署目录执行：
@@ -349,7 +351,7 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 如果旧部署占用默认端口，像迁移一样指定空闲的 `APP_PORT` 和 `FRONTEND_PORT`。应看到旧代码和镜像载入、数据核对通过以及重新填写凭据的清单；在回退部署目录补齐凭据、运行 `setup-models` 和 `unpack --resume`，确认 `State: ready` 后再切换使用旧版本。`restore` 只适用于已经准备好旧代码及旧镜像的空数据环境，不负责替换代码。升级以后新增的数据不在升级前备份中，先另存当前数据，不能直接覆盖。系统不支持数据库结构降级。
 
-任务 14 的数据库结构版本 0 没有维护暂停表，旧应用也没有维护子命令。首次升级会先构建独立维护 helper，停止旧应用后保存版本 0 的完整升级前备份，随后才执行新增迁移。整体回退至这种旧版本时，随包保留的 helper 执行核对和离线凭据填写，旧应用保持停止，状态为 `waiting_legacy_credentials`。不要直接启动旧网页填写凭据，否则旧 worker 可能提前处理任务。模型及订阅凭据可通过 `./reliquary-admin maintenance credentials --kind model --id 模型ID --input /权限为0600的凭据文件` 填写；订阅源使用 `--kind data-source`。解析器使用 `--kind tenant --id 1`，输入格式为 `{"parser_engine_config":{"mineru_api_key":"新填写的凭据"}}`，只允许修改秘密字段，保留原端点及解析参数。输入只在本机内存中传递，填写后删除自行准备的凭据文件。
+任务 14 的数据库结构版本 0 没有维护暂停表，旧应用也没有维护子命令。首次升级会先构建独立维护 helper，停止旧应用后保存版本 0 的完整升级前备份，随后才执行新增迁移。整体回退至这种旧版本时，随包保留的 helper 执行核对和离线凭据填写，旧应用保持停止，状态为 `waiting_legacy_credentials`。不要直接启动旧网页填写凭据，否则旧 worker 可能提前处理任务。模型及订阅凭据可通过 `./reliquary-admin maintenance credentials --kind model --id 模型ID --input /权限为0600的凭据文件` 填写；订阅源使用 `--kind data-source`。解析器使用 `--kind space --id 1`，输入格式为 `{"parser_engine_config":{"mineru_api_key":"新填写的凭据"}}`，只允许修改秘密字段，保留原端点及解析参数。输入只在本机内存中传递，填写后删除自行准备的凭据文件。
 
 
 旧版 ChatGPT 通过离线维护入口重新登录，不导入旧令牌，也不用先升级数据库：
@@ -460,7 +462,7 @@ JSON
 
 ### 图片 1
 
-![评测图示例](<图片存储地址>)
+![评测图示例](./<图片存储地址>)
 
 说明：评测图示例
 
@@ -469,7 +471,7 @@ JSON
 > 召回率 92%
 ```
 
-外部 Agent 收录经过同一模型审核，调用方的判断、agent_summary 与 agent_tags 不会替代审核。审核拒绝时返回 HTTP 201、status: "pending_review" 与 reason，文章进入收录待审，正文不会写入文件库；通过后才进入异步处理。新文章通过时返回 HTTP 201，响应为 `{"success":true,"data":{"article_id":"...","status":"pending","message":"...","image_failures":[]}}`；可用同一个 Key 请求 `GET /api/v1/knowledge/<article_id>` 查看 `parse_status`。如果任务入队失败，返回状态为 `failed`。去重命中返回 HTTP 200、已有 `article_id`、`status: "exists"` 与 `message: "已存在"`，不再次处理；本次有收藏理由且原文章没有时，补写收藏理由并刷新表头。收录操作记录在操作日志中。正文和附件最终是否保留，仍由既有内容类型与处理方式决定。
+外部 Agent 收录经过同一模型审核，调用方的判断、agent_summary 与 agent_tags 不会替代审核。审核拒绝时返回 HTTP 201、status: "pending_review" 与 reason，文章进入收录待审，正文不会写入文件库；通过后才进入异步处理。新文章通过时返回 HTTP 201，响应为 `{"success":true,"data":{"article_id":"...","status":"pending","message":"...","image_failures":[]}}`；可用同一个 Key 请求 `GET /api/v1/entries/<article_id>` 查看 `parse_status`。如果任务入队失败，返回状态为 `failed`。去重命中返回 HTTP 200、已有 `article_id`、`status: "exists"` 与 `message: "已存在"`，不再次处理；本次有收藏理由且原文章没有时，补写收藏理由并刷新表头。收录操作记录在操作日志中。正文和附件最终是否保留，仍由既有内容类型与处理方式决定。
 
 MCP 服务使用 Streamable HTTP，路径为 `/mcp`。在可访问内网的 Claude Code 终端执行以下完整命令，使用上例设置的地址与 Key：
 

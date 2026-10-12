@@ -16,7 +16,7 @@ test('loaded parser credential refill preserves null, false and absent public fi
   '@/utils/request':{get:async(path:string)=>{calls.push({method:'GET',path});return {data:path.endsWith('/parser-engine-config')?loaded:[]}},put:async(path:string,body:any)=>{calls.push({method:'PUT',path,body});return {data:body}}}
  }
  const evaluate=(code:string)=>{const module={exports:{} as any};const js=ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;new Function('require','module','exports',js)((name:string)=>name.endsWith('.vue')?{default:{}}:modules[name]??require(name),module,module.exports);return module.exports}
- modules['@/api/system']=evaluate(readFileSync(new URL('../../api/system/index.ts',import.meta.url),'utf8'))
+ modules['@/api/system']=evaluate(readFileSync(new URL('../../api/system.ts',import.meta.url),'utf8'))
  const {descriptor}=parse(readFileSync(new URL('./ParserEngineSettings.vue',import.meta.url),'utf8'))
  const component=evaluate(compileScript(descriptor,{id:'parser-refill'}).content).default
  component.render=()=>null

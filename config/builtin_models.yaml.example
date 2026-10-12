@@ -2,7 +2,9 @@
 #
 # Copy to config/builtin_models.yaml (or point BUILTIN_MODELS_CONFIG at a custom
 # path) to enable. Each entry below is inserted into the `models` table with
-# is_builtin=true and becomes visible to every tenant.
+# is_builtin=true and becomes visible to every space.
+# Optional space_id uses the current ownership name. The previous tenant_id
+# spelling remains readable with a deprecation warning; explicit space_id wins.
 #
 # How values reach the file
 # -------------------------

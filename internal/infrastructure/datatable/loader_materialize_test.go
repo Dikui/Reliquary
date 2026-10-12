@@ -15,7 +15,7 @@ import (
 )
 
 // fakeFileService implements interfaces.FileService just enough to drive
-// materializeKnowledgeFile. Every method we don't care about simply errors
+// materializeEntryFile. Every method we don't care about simply errors
 // out so accidental usage is loud.
 type fakeFileService struct {
 	readers map[string]func() (io.ReadCloser, error)
@@ -45,16 +45,16 @@ func (f *fakeFileService) CopyFile(ctx context.Context, _ string, _ uint64, _ st
 	return "", nil
 }
 
-// TestMaterializeKnowledgeFile_HandlesLocalScheme is the regression guard
+// TestMaterializeEntryFile_HandlesLocalScheme is the regression guard
 // for the dev-mode failure where DuckDB was handed a local:// URL it can't
 // resolve. The tool must pull bytes via FileService.GetFile and hand DuckDB
 // a concrete filesystem path with the right extension.
-func TestMaterializeKnowledgeFile_HandlesLocalScheme(t *testing.T) {
+func TestMaterializeEntryFile_HandlesLocalScheme(t *testing.T) {
 	payload := []byte("col1,col2\n1,2\n3,4\n")
 
 	fs := &fakeFileService{
 		readers: map[string]func() (io.ReadCloser, error){
-			"tenants/42/data.csv": func() (io.ReadCloser, error) {
+			"spaces/42/data.csv": func() (io.ReadCloser, error) {
 				return io.NopCloser(bytes.NewReader(payload)), nil
 			},
 		},
@@ -65,13 +65,13 @@ func TestMaterializeKnowledgeFile_HandlesLocalScheme(t *testing.T) {
 		jobID:       "test-materialize",
 	}
 
-	k := &types.Knowledge{
+	k := &types.Entry{
 		ID:       "k-abc",
 		FileType: "csv",
-		FilePath: "tenants/42/data.csv",
+		FilePath: "spaces/42/data.csv",
 	}
 
-	path, cleanup, err := tool.materializeKnowledgeFile(context.Background(), k)
+	path, cleanup, err := tool.materializeEntryFile(context.Background(), k)
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestMaterializeKnowledgeFile_HandlesLocalScheme(t *testing.T) {
 	cleanup()
 }
 
-func TestMaterializeKnowledgeFile_PropagatesGetFileError(t *testing.T) {
+func TestMaterializeEntryFile_PropagatesGetFileError(t *testing.T) {
 	fs := &fakeFileService{
 		readers: map[string]func() (io.ReadCloser, error){
 			"bad/path": func() (io.ReadCloser, error) {
@@ -115,9 +115,9 @@ func TestMaterializeKnowledgeFile_PropagatesGetFileError(t *testing.T) {
 
 	tool := &Loader{fileService: fs, jobID: "test-error"}
 
-	_, cleanup, err := tool.materializeKnowledgeFile(
+	_, cleanup, err := tool.materializeEntryFile(
 		context.Background(),
-		&types.Knowledge{ID: "k-err", FileType: "xlsx", FilePath: "bad/path"},
+		&types.Entry{ID: "k-err", FileType: "xlsx", FilePath: "bad/path"},
 	)
 	if err == nil {
 		defer cleanup()
@@ -128,7 +128,7 @@ func TestMaterializeKnowledgeFile_PropagatesGetFileError(t *testing.T) {
 	}
 }
 
-func TestMaterializeKnowledgeFile_PreservesExtension(t *testing.T) {
+func TestMaterializeEntryFile_PreservesExtension(t *testing.T) {
 	cases := []struct {
 		fileType string
 		wantExt  string
@@ -148,9 +148,9 @@ func TestMaterializeKnowledgeFile_PreservesExtension(t *testing.T) {
 				},
 			}
 			tool := &Loader{fileService: fs, jobID: "ext"}
-			path, cleanup, err := tool.materializeKnowledgeFile(
+			path, cleanup, err := tool.materializeEntryFile(
 				context.Background(),
-				&types.Knowledge{ID: "k", FileType: c.fileType, FilePath: "p"},
+				&types.Entry{ID: "k", FileType: c.fileType, FilePath: "p"},
 			)
 			if err != nil {
 				t.Fatalf("materialize: %v", err)

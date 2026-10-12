@@ -103,10 +103,10 @@ func VectorProfiles(ctx context.Context, db *gorm.DB) ([]VectorProfile, error) {
 		profiles[fmt.Sprint(model["id"])] = ModelProfile(model)
 	}
 	queries := map[string]string{
-		"article_embeddings": `SELECT model_id,dimension,jsonb_build_array(tenant_id,knowledge_base_id,knowledge_id,content_hash)::text AS source FROM public.article_embeddings`,
-		"image_embeddings":   `SELECT model_id,dimension,jsonb_build_array(tenant_id,knowledge_base_id,knowledge_id,attachment_path,content_hash)::text AS source FROM public.image_embeddings`,
-		"entities":           `SELECT embedding_model_id AS model_id,embedding_dimension AS dimension,jsonb_build_array(tenant_id,id,normalized_name)::text AS source FROM public.entities WHERE name_embedding IS NOT NULL AND merged_into_id=''`,
-		"embeddings":         `SELECT e.model_id,e.dimension,jsonb_build_array(e.knowledge_base_id,e.knowledge_id,e.source_type,c.chunk_index,c.content_hash)::text AS source FROM public.embeddings e LEFT JOIN public.chunks c ON c.id=e.chunk_id WHERE e.embedding IS NOT NULL AND e.is_enabled`,
+		"article_embeddings": `SELECT model_id,dimension,jsonb_build_array(space_id,knowledge_base_id,entry_id,content_hash)::text AS source FROM public.article_embeddings`,
+		"image_embeddings":   `SELECT model_id,dimension,jsonb_build_array(space_id,knowledge_base_id,entry_id,attachment_path,content_hash)::text AS source FROM public.image_embeddings`,
+		"entities":           `SELECT embedding_model_id AS model_id,embedding_dimension AS dimension,jsonb_build_array(space_id,id,normalized_name)::text AS source FROM public.entities WHERE name_embedding IS NOT NULL AND merged_into_id=''`,
+		"embeddings":         `SELECT e.model_id,e.dimension,jsonb_build_array(e.knowledge_base_id,e.entry_id,e.source_type,c.chunk_index,c.content_hash)::text AS source FROM public.embeddings e LEFT JOIN public.chunks c ON c.id=e.chunk_id WHERE e.embedding IS NOT NULL AND e.is_enabled`,
 	}
 	type source struct {
 		ModelID   string

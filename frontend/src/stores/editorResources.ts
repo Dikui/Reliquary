@@ -6,17 +6,17 @@ import {
   type ParserEngineInfo,
   type SystemInfo,
 } from '@/api/system'
-import { getTenantRetrievalConfig } from '@/api/retrieval'
+import { getSpaceRetrievalConfig } from '@/api/retrieval'
 
 const CACHE_TTL_MS = 60_000
 
 type EditorResourceKey =
-  | 'tenantRetrievalConfig'
+  | 'spaceRetrievalConfig'
   | 'parserEngines'
   | 'systemInfo'
 
 export const useEditorResourcesStore = defineStore('editorResources', () => {
-  const tenantRetrievalConfig = ref<Record<string, unknown> | null>(null)
+  const spaceRetrievalConfig = ref<Record<string, unknown> | null>(null)
   const parserEngines = ref<ParserEngineInfo[]>([])
   const systemInfo = ref<SystemInfo | null>(null)
 
@@ -37,11 +37,11 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
     return p
   }
 
-  async function ensureTenantRetrievalConfig(force = false): Promise<void> {
-    return runOnce('tenantRetrievalConfig', force, async () => {
-      const retrievalRes: any = await getTenantRetrievalConfig()
-      tenantRetrievalConfig.value = retrievalRes?.data ?? null
-      loadedAt.value.tenantRetrievalConfig = Date.now()
+  async function ensureSpaceRetrievalConfig(force = false): Promise<void> {
+    return runOnce('spaceRetrievalConfig', force, async () => {
+      const retrievalRes: any = await getSpaceRetrievalConfig()
+      spaceRetrievalConfig.value = retrievalRes?.data ?? null
+      loadedAt.value.spaceRetrievalConfig = Date.now()
     })
   }
 
@@ -64,7 +64,7 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
   function invalidate(...keys: EditorResourceKey[]) {
     if (keys.length === 0) {
       loadedAt.value = {}
-      tenantRetrievalConfig.value = null
+      spaceRetrievalConfig.value = null
       parserEngines.value = []
       systemInfo.value = null
       inflight.clear()
@@ -77,10 +77,10 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
   }
 
   return {
-    tenantRetrievalConfig,
+    spaceRetrievalConfig,
     parserEngines,
     systemInfo,
-    ensureTenantRetrievalConfig,
+    ensureSpaceRetrievalConfig,
     ensureParserEngines,
     ensureSystemInfo,
     invalidate,

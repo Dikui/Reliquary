@@ -20,7 +20,7 @@ func (s *knowledgeBaseService) persistKnowledgeBaseSettings(ctx context.Context,
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var locked types.KnowledgeBase
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&locked, "id=? AND tenant_id=?", kb.ID, kb.TenantID).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&locked, "id=? AND space_id=?", kb.ID, kb.SpaceID).Error; err != nil {
 			return err
 		}
 		var raw struct{ ChunkingConfig, ModelTiers, IndexingStrategy *string }

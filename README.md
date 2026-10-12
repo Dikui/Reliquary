@@ -35,7 +35,7 @@ git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
 # Configure database credentials, JWT_SECRET, SYSTEM_AES_KEY, and model endpoints.
-./scripts/build_frontend_dist.sh
+./scripts/build-frontend-dist.sh
 docker compose up -d --build
 ```
 
@@ -68,7 +68,7 @@ make dev-app       # Separate terminal
 make dev-frontend  # Separate terminal
 ```
 
-See [the development guide](docs/开发指南.md). Issues and specs are local Markdown files under `.scratch/<feature-slug>/`, following [the issue tracker conventions](docs/agents/issue-tracker.md).
+See [the development guide](./docs/development.md). Issues and specs are local Markdown files under `.scratch/<feature-slug>/`, following [the issue tracker conventions](docs/agents/issue-tracker.md).
 
 ```bash
 go build ./...

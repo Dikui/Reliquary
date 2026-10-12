@@ -34,7 +34,7 @@ func (r *retiredSettingRepository) Delete(context.Context, string) (bool, error)
 	return false, nil
 }
 
-func TestSystemSettingsRetireTenantCreationOptions(t *testing.T) {
+func TestSystemSettingsRetireSpaceCreationOptions(t *testing.T) {
 	retiredKeys := []string{"tenant.auto_create_api_key", "tenant.default_storage_quota_gb"}
 	for _, persisted := range []bool{false, true} {
 		name := "without_stored_values"

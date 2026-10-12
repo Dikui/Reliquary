@@ -38,45 +38,45 @@ func TestQueryEmbeddingRejectsClientFromChangedProfile(t *testing.T) {
 	require.ErrorContains(t, err, "profile changed")
 }
 
-type changingArticleSearchBases struct {
-	articleSearchFixtureBases
+type changingEntrySearchBases struct {
+	entrySearchFixtureBases
 	change func()
 }
 
-func (b changingArticleSearchBases) GetQueryEmbedding(ctx context.Context, kbID, query string) ([]float32, error) {
-	vector, err := b.articleSearchFixtureBases.GetQueryEmbedding(ctx, kbID, query)
+func (b changingEntrySearchBases) GetQueryEmbedding(ctx context.Context, kbID, query string) ([]float32, error) {
+	vector, err := b.entrySearchFixtureBases.GetQueryEmbedding(ctx, kbID, query)
 	b.change()
 	return vector, err
 }
 
-func TestArticleSearchRejectsProfileChangedBetweenQueryAndRecall(t *testing.T) {
-	h := newArticleSearchFixture(t)
+func TestEntrySearchRejectsProfileChangedBetweenQueryAndRecall(t *testing.T) {
+	h := newEntrySearchFixture(t)
 	enableImageSearchFixture(t, h)
-	base := changingArticleSearchBases{articleSearchFixtureBases: articleSearchFixtureBases{kb: h.kb}, change: func() {
+	base := changingEntrySearchBases{entrySearchFixtureBases: entrySearchFixtureBases{kb: h.kb}, change: func() {
 		var model types.Model
 		require.NoError(t, h.db.First(&model, "id='fixture-model'").Error)
 		model.Name = "A new model space during query generation"
 		svc := NewModelServiceWithRoutingDB(repository.NewModelRepository(h.db), nil, nil, nil, nil, h.db)
 		require.NoError(t, svc.UpdateModel(h.ctx, &model))
 	}}
-	svc := NewKnowledgeSearchService(base, nil, nil, h.db)
-	_, err := svc.Search(h.ctx, types.ArticleSearchRequest{Query: "othersemantic"})
+	svc := NewSearchService(base, nil, nil, h.db)
+	_, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "othersemantic"})
 	require.ErrorContains(t, err, "profile changed during query generation")
 }
 
 func TestBuiltinYAMLChangesRetireEmbeddingIdentity(t *testing.T) {
-	h := newArticleSearchFixture(t)
+	h := newEntrySearchFixture(t)
 	enableImageSearchFixture(t, h)
 	article := h.add(t, "yaml-article", "article", "2026-10-01", "research", "unrelated observations", 1)
 	addImageSearchVector(t, h, article, "../../attachments/yaml-article/chart.png", "fixture-model", []float32{0, 1, 0})
-	entity := &types.Entity{ID: "yaml-entity", TenantID: 1, CanonicalName: "YAML entity", NormalizedName: "yaml entity", EntityType: "company",
+	entity := &types.Entity{ID: "yaml-entity", SpaceID: 1, CanonicalName: "YAML entity", NormalizedName: "yaml entity", EntityType: "company",
 		NameEmbedding: types.EntityNameEmbedding{0, 1, 0}, EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, EmbeddingNeedsRebuild: false}
 	require.NoError(t, h.db.Create(entity).Error)
 	require.NoError(t, h.db.Model(&types.Model{}).Where("id='fixture-model'").Updates(map[string]any{"is_builtin": true, "managed_by": types.BuiltinModelManagedBy}).Error)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "builtin_models.yaml"), []byte(`builtin_models:
   - id: fixture-model
-    tenant_id: 1
+    space_id: 1
     name: Different YAML weights with the same dimensions
     type: Embedding
     source: remote
@@ -89,13 +89,13 @@ func TestBuiltinYAMLChangesRetireEmbeddingIdentity(t *testing.T) {
 	require.NoError(t, types.LoadBuiltinModelsConfig(h.ctx, h.db, dir))
 	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 		var identity string
-		require.NoError(t, h.db.Table(table).Where("knowledge_id=?", article.ID).Pluck("model_id", &identity).Error)
+		require.NoError(t, h.db.Table(table).Where("entry_id=?", article.ID).Pluck("model_id", &identity).Error)
 		require.True(t, strings.HasPrefix(identity, "stale:"), table)
 	}
 	require.NoError(t, h.db.First(entity, "id=?", entity.ID).Error)
 	require.True(t, entity.EmbeddingNeedsRebuild)
 	require.True(t, strings.HasPrefix(entity.EmbeddingModelID, "stale:"))
-	response := h.search(t, types.ArticleSearchRequest{Query: "othersemantic"})
+	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 	require.Empty(t, response.Results)
 }
 
@@ -153,9 +153,9 @@ func TestRunningEmbeddingClientCannotRepublishRetiredIdentity(t *testing.T) {
 				err = saveArticleImageEmbedding(h.ctx, h.db, vault, embedder, article, articleImagePaths(article)[0], true)
 			default:
 				var chunk types.Chunk
-				require.NoError(t, h.db.First(&chunk, "knowledge_id=?", article.ID).Error)
+				require.NoError(t, h.db.First(&chunk, "entry_id=?", article.ID).Error)
 				index := &types.IndexInfo{SourceID: chunk.ID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID,
-					KnowledgeID: article.ID, KnowledgeBaseID: h.kb.ID, Content: buildKnowledgeIndexContent(article, chunk.Content)}
+					EntryID: article.ID, KnowledgeBaseID: h.kb.ID, Content: buildEntryIndexContent(article, chunk.Content)}
 				if kind == "chunk" {
 					err = h.service.retrieveEngine.Index(h.ctx, embedder, index)
 				} else {
@@ -165,7 +165,7 @@ func TestRunningEmbeddingClientCannotRepublishRetiredIdentity(t *testing.T) {
 			require.ErrorContains(t, err, "profile changed")
 			for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 				var count int64
-				require.NoError(t, h.db.Table(table).Where("knowledge_id=? AND model_id=?", article.ID, model.ID).Count(&count).Error)
+				require.NoError(t, h.db.Table(table).Where("entry_id=? AND model_id=?", article.ID, model.ID).Count(&count).Error)
 				require.Zero(t, count, "old in-flight client cannot restore the active identity")
 			}
 		})
@@ -175,18 +175,18 @@ func TestRunningEmbeddingClientCannotRepublishRetiredIdentity(t *testing.T) {
 func TestModelEditInvalidatesSameIDAndDimensionVectors(t *testing.T) {
 	for _, field := range []string{"name", "base_url", "multimodal_format"} {
 		t.Run(field, func(t *testing.T) {
-			h := newArticleSearchFixture(t)
+			h := newEntrySearchFixture(t)
 			enableImageSearchFixture(t, h)
 			article := h.add(t, "profile-article", "article", "2026-10-01", "research", "unrelated measurements", 1)
 			for _, table := range []string{"embeddings", "article_embeddings"} {
-				require.NoError(t, h.db.Table(table).Where("knowledge_id=?", article.ID).Update("embedding", pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
+				require.NoError(t, h.db.Table(table).Where("entry_id=?", article.ID).Update("embedding", pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
 			}
 			path := "../../attachments/profile-article/chart.png"
 			addImageSearchVector(t, h, article, path, "fixture-model", []float32{0, 1, 0})
-			response := h.search(t, types.ArticleSearchRequest{Query: "othersemantic"})
+			response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 			require.Len(t, response.Results, 1)
 			var before pgvector.HalfVector
-			require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Pluck("embedding", &before).Error)
+			require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Pluck("embedding", &before).Error)
 			var model types.Model
 			require.NoError(t, h.db.First(&model, "id='fixture-model'").Error)
 			switch field {
@@ -202,7 +202,7 @@ func TestModelEditInvalidatesSameIDAndDimensionVectors(t *testing.T) {
 			stale := ""
 			for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 				var identity string
-				require.NoError(t, h.db.Table(table).Where("knowledge_id=?", article.ID).Pluck("model_id", &identity).Error)
+				require.NoError(t, h.db.Table(table).Where("entry_id=?", article.ID).Pluck("model_id", &identity).Error)
 				require.True(t, strings.HasPrefix(identity, "stale:"), table)
 				if stale == "" {
 					stale = identity
@@ -210,11 +210,11 @@ func TestModelEditInvalidatesSameIDAndDimensionVectors(t *testing.T) {
 				require.Equal(t, stale, identity, "the old text and images keep one retired identity")
 			}
 			var after pgvector.HalfVector
-			require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Pluck("embedding", &after).Error)
+			require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Pluck("embedding", &after).Error)
 			require.Equal(t, before.Slice(), after.Slice(), "old vector bytes remain available until successful rebuild")
-			response = h.search(t, types.ArticleSearchRequest{Query: "othersemantic"})
+			response = h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 			require.Empty(t, response.Results, "matching dimensions cannot re-enable vectors from the prior profile")
-			response = h.search(t, types.ArticleSearchRequest{Query: "Searchfixture"})
+			response = h.search(t, types.EntrySearchRequest{Query: "Searchfixture"})
 			require.Len(t, response.Results, 1, "full text continues serving while vector identity is retired")
 			for _, snippet := range response.Results[0].Snippets {
 				require.Empty(t, snippet.ImagePath, "the retired image vector does not contribute")
@@ -225,7 +225,7 @@ func TestModelEditInvalidatesSameIDAndDimensionVectors(t *testing.T) {
 }
 
 func TestModelCosmeticAndCredentialEditsKeepVectorIdentity(t *testing.T) {
-	h := newArticleSearchFixture(t)
+	h := newEntrySearchFixture(t)
 	enableImageSearchFixture(t, h)
 	article := h.add(t, "stable-article", "article", "2026-10-01", "research", "unrelated observations", 1)
 	addImageSearchVector(t, h, article, "../../attachments/stable-article/chart.png", "fixture-model", []float32{0, 1, 0})
@@ -237,9 +237,9 @@ func TestModelCosmeticAndCredentialEditsKeepVectorIdentity(t *testing.T) {
 	svc := NewModelServiceWithRoutingDB(repository.NewModelRepository(h.db), nil, nil, nil, nil, h.db)
 	require.NoError(t, svc.UpdateModel(h.ctx, &model))
 	var identity string
-	require.NoError(t, h.db.Table("image_embeddings").Where("knowledge_id=?", article.ID).Pluck("model_id", &identity).Error)
+	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Pluck("model_id", &identity).Error)
 	require.Equal(t, "fixture-model", identity)
-	response := h.search(t, types.ArticleSearchRequest{Query: "othersemantic"})
+	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 	require.Len(t, response.Results, 1)
 	require.Equal(t, "image", response.Results[0].Snippets[0].MatchType)
 }

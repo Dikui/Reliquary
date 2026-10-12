@@ -55,7 +55,7 @@ func TestEveryRegisteredTaskExecutesRetriesAndArchives(t *testing.T) {
 		for _, kind := range definition.TaskTypes {
 			count++
 			t.Run(kind, func(t *testing.T) {
-				payload := []byte(`{"tenant_id":1,"knowledge_id":"fixture","knowledge_base_id":"fixture-kb"}`)
+				payload := []byte(`{"tenant_id":1,"entry_id":"fixture","knowledge_base_id":"fixture-kb"}`)
 				i, err := c.Enqueue(NewTaskWithHeaders(kind, payload, map[string]string{"scenario": "success"}), Queue(definition.Name), MaxRetry(2), Retention(time.Hour))
 				require.NoError(t, err)
 				j := jobState(t, c, i.ID, TaskStateCompleted)
@@ -120,7 +120,7 @@ func TestQuotaDeferralPreservesBudgetAndOptionsAtFinalAttempt(t *testing.T) {
 			require.NoError(t, c.Start(context.Background(), HandlerFunc(func(context.Context, *Task) error { return fmt.Errorf("generation: %w", paused) }), config))
 			t.Cleanup(func() { require.NoError(t, c.Close()) })
 			deadline := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
-			payload := []byte(`{"tenant_id":1,"knowledge_id":"quota"}`)
+			payload := []byte(`{"tenant_id":1,"entry_id":"quota"}`)
 			headers := map[string]string{"fixture": "preserve", "trace": "trace-fixture"}
 			info, err := c.Enqueue(NewTaskWithHeaders(types.TypeDocumentProcess, payload, headers), MaxRetry(budget), Timeout(2*time.Hour), Deadline(deadline), Retention(time.Hour), Group("batch"), ProcessAt(time.Now().Add(time.Hour)))
 			require.NoError(t, err)
@@ -188,7 +188,7 @@ func TestQueueCrashChild(t *testing.T) {
 func TestKilledProcessReleasesLockAndRecoversActiveJob(t *testing.T) {
 	db := pgtest.Open(t)
 	c := NewClient(db)
-	i, err := c.Enqueue(NewTask(types.TypeDocumentProcess, []byte(`{"tenant_id":1,"knowledge_id":"crash"}`)), MaxRetry(0), Timeout(time.Hour), Retention(time.Hour))
+	i, err := c.Enqueue(NewTask(types.TypeDocumentProcess, []byte(`{"tenant_id":1,"entry_id":"crash"}`)), MaxRetry(0), Timeout(time.Hour), Retention(time.Hour))
 	require.NoError(t, err)
 	command := exec.Command(os.Args[0], "-test.run=^TestQueueCrashChild$", "-test.timeout=30s")
 	command.Env = append(os.Environ(), "RELIQUARY_QUEUE_CRASH_DSN="+db.Dialector.(*postgres.Dialector).DSN)

@@ -27,10 +27,10 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 		updated := personalRequest(t, f.router, http.MethodPut, "/api/v1/space", `{"name":"My space","description":"Personal library"}`, actor.credential, actor.apiKey)
 		require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
 		var payload struct {
-			Data types.Tenant `json:"data"`
+			Data types.Space `json:"data"`
 		}
 		require.NoError(t, json.Unmarshal(updated.Body.Bytes(), &payload))
-		require.Equal(t, types.SingleTenantID, payload.Data.ID)
+		require.Equal(t, types.SingleSpaceID, payload.Data.ID)
 		require.Equal(t, "My space", payload.Data.Name)
 		require.NotContains(t, updated.Body.String(), "storage_quota")
 		kv := personalRequest(t, f.router, http.MethodPut, "/api/v1/space/kv/retrieval-config", `{}`, actor.credential, actor.apiKey)
@@ -43,7 +43,7 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 func TestPersonalOldManagementRoutesReturnNotFound(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, path := range []string{
-		"/api/v1/space/model-tiers", "/api/v1/model-routing", "/api/v1/tenants/1", "/api/v1/tenants/1/api-keys", "/api/v1/tenants/1/api-keys/1", "/api/v1/tenants/kv/retrieval-config", "/api/v1/tenants/model-tiers",
+		"/api/v1/space/model-tiers", "/api/v1/model-routing", "/api/v1/spaces/1", "/api/v1/spaces/1/api-keys", "/api/v1/spaces/1/api-keys/1", "/api/v1/spaces/kv/retrieval-config", "/api/v1/spaces/model-tiers",
 		"/api/v1/system/admin/settings", "/api/v1/system/admin/settings/file.max_size_mb", "/api/v1/system/admin/runtime/queues",
 		"/api/v1/system/admin/runtime/queues/default/tasks", "/api/v1/system/admin/runtime/queues/default/archived",
 		"/api/v1/system/admin/runtime/queues/default/tasks/task/actions/delete",
@@ -58,9 +58,9 @@ func TestPersonalOldManagementRoutesReturnNotFound(t *testing.T) {
 func TestPersonalKnowledgeBaseExistenceGuardReturnsNotFound(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, route := range []struct{ method, path, body string }{
-		{http.MethodGet, "/api/v1/knowledge-bases/missing/knowledge", ""},
-		{http.MethodPost, "/api/v1/knowledge-bases/missing/knowledge/manual", `{}`},
-		{http.MethodPost, "/api/v1/knowledge-bases/missing/knowledge/url", `{}`},
+		{http.MethodGet, "/api/v1/knowledge-bases/missing/entries", ""},
+		{http.MethodPost, "/api/v1/knowledge-bases/missing/entries/manual", `{}`},
+		{http.MethodPost, "/api/v1/knowledge-bases/missing/entries/url", `{}`},
 	} {
 		response := personalRequest(t, f.router, route.method, route.path, route.body, f.token, false)
 		require.Equal(t, http.StatusNotFound, response.Code, response.Body.String())

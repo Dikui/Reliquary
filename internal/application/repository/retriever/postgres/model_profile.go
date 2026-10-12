@@ -15,12 +15,12 @@ func checkVectorModelProfile(ctx context.Context, tx *gorm.DB, parameters map[st
 		return nil
 	}
 	modelID, _ := parameters["model_id"].(string)
-	tenantID, ok := types.TenantIDFromContext(ctx)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
 		return fmt.Errorf("embedding model persistence requires a space")
 	}
 	var model types.Model
-	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (tenant_id=? OR is_builtin=true)", modelID, tenantID).First(&model).Error; err != nil {
+	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (space_id=? OR is_builtin=true)", modelID, spaceID).First(&model).Error; err != nil {
 		return err
 	}
 	if types.EmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, &model) != hash {

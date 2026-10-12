@@ -23,6 +23,8 @@ export type TranslationCall = {
   dynamic: boolean
   /** The literal portion before a dynamic template or concatenation. */
   prefix?: string
+  /** All static prefixes, including separate conditional branches. */
+  prefixes?: string[]
 }
 
 function sourceFiles(directory: string): string[] {
@@ -43,26 +45,49 @@ function unwrap(node: ts.Expression): ts.Expression {
   return node
 }
 
-function keyChoices(argument: ts.Expression): { literals: string[]; dynamic: boolean; prefix?: string } {
+type KeyChoices = { literals: string[]; dynamic: boolean; prefixes: string[] }
+
+function keyChoices(argument: ts.Expression, resolve: (name: string, node: ts.Node) => ts.Expression[], seen = new Set<ts.Node>()): KeyChoices {
   const node = unwrap(argument)
+  if (seen.has(node)) return { literals: [], dynamic: true, prefixes: [] }
+  const next = new Set(seen).add(node)
+  const choices = (expression: ts.Expression) => keyChoices(expression, resolve, next)
+  const merge = (items: KeyChoices[]): KeyChoices => ({
+    literals: items.flatMap((item) => item.literals),
+    dynamic: items.some((item) => item.dynamic),
+    prefixes: items.flatMap((item) => item.prefixes),
+  })
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return { literals: [node.text], dynamic: false }
+    return { literals: [node.text], dynamic: false, prefixes: [] }
+  }
+  if (ts.isIdentifier(node)) {
+    const values = resolve(node.text, node)
+    if (values.length) return merge(values.map(choices))
   }
   if (ts.isConditionalExpression(node)) {
-    const yes = keyChoices(node.whenTrue)
-    const no = keyChoices(node.whenFalse)
-    return { literals: [...yes.literals, ...no.literals], dynamic: yes.dynamic || no.dynamic }
+    return merge([choices(node.whenTrue), choices(node.whenFalse)])
   }
-  if (ts.isTemplateExpression(node)) return { literals: [], dynamic: true, prefix: node.head.text || undefined }
+  if (ts.isTemplateExpression(node)) {
+    const head = node.head.text
+    const first = choices(node.templateSpans[0]!.expression)
+    return { literals: [], dynamic: true, prefixes: head ? [head] : [...first.prefixes, ...first.literals] }
+  }
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const left = keyChoices(node.left)
-    const right = keyChoices(node.right)
+    const left = choices(node.left)
+    const right = choices(node.right)
     if (!left.dynamic && !right.dynamic) {
-      return { literals: left.literals.flatMap((a) => right.literals.map((b) => a + b)), dynamic: false }
+      return { literals: left.literals.flatMap((a) => right.literals.map((b) => a + b)), dynamic: false, prefixes: [] }
     }
-    return { literals: [], dynamic: true, prefix: left.literals[0] || left.prefix }
+    return { literals: [], dynamic: true, prefixes: [...left.literals, ...left.prefixes] }
   }
-  return { literals: [], dynamic: true }
+  if (ts.isElementAccessExpression(node)) return choices(node.expression)
+  if (ts.isObjectLiteralExpression(node)) {
+    return merge(node.properties.flatMap((property) => ts.isPropertyAssignment(property) ? [choices(property.initializer)] : []))
+  }
+  if (ts.isArrayLiteralExpression(node)) {
+    return merge(node.elements.filter(ts.isExpression).map(choices))
+  }
+  return { literals: [], dynamic: true, prefixes: [] }
 }
 
 function translationFunction(expression: ts.LeftHandSideExpression): string | undefined {
@@ -84,9 +109,34 @@ export function collectTranslationCallsFromSource(content: string, file: string)
   const calls: TranslationCall[] = []
   const completeSource = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true)
 
+  const bindings: Array<{ name: string; scope: ts.Node; value?: ts.Expression }> = []
+  function indexBindings(source: ts.SourceFile): void {
+    function visit(node: ts.Node): void {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+        let scope: ts.Node = node.parent
+        while (!ts.isBlock(scope) && !ts.isSourceFile(scope) && !ts.isFunctionLike(scope)) scope = scope.parent
+        bindings.push({ name: node.name.text, scope, value: node.initializer })
+      }
+      if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+        bindings.push({ name: node.name.text, scope: node.parent, value: node.initializer })
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(source)
+  }
+  function resolve(name: string, node: ts.Node): ts.Expression[] {
+    for (let scope: ts.Node | undefined = node; scope; scope = scope.parent) {
+      const matches = bindings.filter((binding) => binding.name === name && binding.scope === scope)
+      if (matches.length) return matches.flatMap((binding) => binding.value ? [binding.value] : [])
+    }
+    // Template expressions use script-level bindings from the same Vue file.
+    return bindings.flatMap((binding) => binding.name === name && ts.isSourceFile(binding.scope) && binding.value ? [binding.value] : [])
+  }
+
   function inspect(script: string, offset: number, expression = false): void {
     const wrapped = expression ? `(${script})` : script
     const scriptSource = ts.createSourceFile(file, wrapped, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    indexBindings(scriptSource)
     function visit(node: ts.Node): void {
       if (ts.isCallExpression(node)) {
         const functionName = translationFunction(node.expression)
@@ -94,7 +144,8 @@ export function collectTranslationCallsFromSource(content: string, file: string)
         if (functionName && argument) {
           const position = offset + node.getStart(scriptSource) - (expression ? 1 : 0)
           const { line, character } = completeSource.getLineAndCharacterOfPosition(position)
-          const choices = keyChoices(argument)
+          const choices = keyChoices(argument, resolve)
+          const prefixes = [...new Set(choices.prefixes)]
           calls.push({
             file,
             line: line + 1,
@@ -104,7 +155,7 @@ export function collectTranslationCallsFromSource(content: string, file: string)
             expression: argument.getText(scriptSource),
             literalKeys: [...new Set(choices.literals)],
             dynamic: choices.dynamic,
-            ...(choices.prefix ? { prefix: choices.prefix } : {}),
+            ...(prefixes.length ? { prefix: prefixes[0], prefixes } : {}),
           })
         }
       }
@@ -156,9 +207,22 @@ export function collectLiteralTranslationKeys(calls: TranslationCall[]): Set<str
   return new Set(calls.filter((call) => call.kind === 'message').flatMap((call) => call.literalKeys))
 }
 
-/** No literal call currently needs an exception. Dynamic keys are separately reported for manual review. */
-export const LITERAL_TRANSLATION_KEY_EXCEPTIONS: ReadonlyArray<{
-  file: string
-  key: string
-  reason: string
-}> = []
+/** Validate complete keys and the static tree before a runtime substitution. */
+export function findTranslationReferenceFailures(
+  calls: TranslationCall[],
+  locales: Record<string, ReadonlySet<string>>,
+  prefixExists?: (locale: string, key: string) => boolean,
+) {
+  return calls.flatMap((call) => {
+    const references = [
+      ...call.literalKeys.map((key) => ({ key, kind: call.kind === 'tree' ? 'prefix' : 'key' })),
+      ...(call.prefixes ?? (call.prefix ? [call.prefix] : [])).map((prefix) => ({ key: prefix.replace(/\.$/, ''), kind: 'prefix' })),
+    ]
+    return references.flatMap((reference) => Object.entries(locales).flatMap(([locale, keys]) => {
+      const exists = keys.has(reference.key) || (reference.kind === 'prefix' && (prefixExists
+        ? prefixExists(locale, reference.key)
+        : [...keys].some((key) => key.startsWith(`${reference.key}.`))))
+      return exists ? [] : [{ ...call, ...reference, locale }]
+    }))
+  })
+}

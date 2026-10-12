@@ -28,7 +28,7 @@ type vaultContentTypeChange struct {
 	wroteArticle       bool
 }
 
-func (v *VaultService) changeCorrectedArticleBody(ctx context.Context, tx *gorm.DB, k *types.Knowledge, body string, read func(context.Context, string) (io.ReadCloser, error)) (*vaultContentTypeChange, error) {
+func (v *VaultService) changeCorrectedArticleBody(ctx context.Context, tx *gorm.DB, k *types.Entry, body string, read func(context.Context, string) (io.ReadCloser, error)) (*vaultContentTypeChange, error) {
 	if (!k.ContentTypeCorrected && k.ProcessingReviewStatus != types.ProcessingReviewConfirmed) || k.SourceKind != "article" || k.ParseStatus != types.ParseStatusCompleted || k.VaultPath == "" {
 		return nil, errors.New("body conversion requires a completed user-reviewed vault article")
 	}
@@ -102,7 +102,7 @@ func (v *VaultService) changeCorrectedArticleBody(ctx context.Context, tx *gorm.
 		}
 	}
 	k.VaultBody, k.VaultOriginalPath = body, original
-	if err := tx.Model(&types.Knowledge{}).Where("id=? AND tenant_id=?", k.ID, k.TenantID).
+	if err := tx.Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).
 		Updates(map[string]any{"vault_body": body, "vault_original_path": original}).Error; err != nil {
 		return change, err
 	}

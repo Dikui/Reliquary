@@ -79,7 +79,7 @@ func credentialNeedles(ctx context.Context, db *gorm.DB) ([]string, error) {
 			collectSensitive(value, "", add)
 		}
 	}
-	for _, table := range []string{"models", "data_sources", "tenants", "system_settings", "chatgpt_accounts", "chatgpt_login_attempts", "tenant_api_keys", "auth_tokens", "resource_access_grants"} {
+	for _, table := range []string{"models", "data_sources", "spaces", "system_settings", "chatgpt_accounts", "chatgpt_login_attempts", "api_keys", "auth_tokens", "resource_access_grants"} {
 		if !present[table] {
 			continue
 		}

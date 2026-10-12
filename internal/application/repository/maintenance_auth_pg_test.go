@@ -24,7 +24,7 @@ func archivedAuthRows(t *testing.T, db *gorm.DB, table string) string {
 
 func TestAuthTokenMaintenanceArchivesSurviveExpiryAndBulkRevocation(t *testing.T) {
 	db := pgtest.Open(t)
-	require.NoError(t, db.Exec(`INSERT INTO tenants(id,name,business) VALUES(1,'Archive tenant','personal')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Archive space','personal')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO users(id,username,email,password_hash) VALUES('archive-user','Archive user','archive@example.invalid','password-hash')`).Error)
 	old := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
 	for _, token := range []types.AuthToken{
@@ -56,7 +56,7 @@ func TestAuthTokenMaintenanceArchivesSurviveExpiryAndBulkRevocation(t *testing.T
 
 func TestResourceGrantMaintenanceArchivesSurviveOrdinaryExpiryCleanup(t *testing.T) {
 	db := pgtest.Open(t)
-	require.NoError(t, db.Exec(`INSERT INTO resources(id,handle,tenant_id,provider,physical_path,location_hash,kind,mime_type,original_name) VALUES('archive-resource','archive-handle',1,'local','archive/file','archive-location','file','text/plain','archive.txt')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO resources(id,handle,space_id,provider,physical_path,location_hash,kind,mime_type,original_name) VALUES('archive-resource','archive-handle',1,'local','archive/file','archive-location','file','text/plain','archive.txt')`).Error)
 	old := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
 	for _, grant := range []types.ResourceAccessGrant{
 		{ID: "archived-expired", TokenHash: types.MaintenanceExcludedCredentialPrefix + "expired", ExpiresAt: old, RevokedAt: &old},

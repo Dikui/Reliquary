@@ -97,13 +97,13 @@ func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrie
 }
 
 func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *types.KnowledgeBase, error) {
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
-		tenantID = types.SingleTenantID
-		ctx = context.WithValue(ctx, types.TenantIDContextKey, tenantID)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
+		spaceID = types.SingleSpaceID
+		ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	}
 	var kb types.KnowledgeBase
-	if err := s.db.WithContext(ctx).Where("tenant_id = ?", tenantID).First(&kb).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&kb).Error; err != nil {
 		return ctx, nil, fmt.Errorf("vault indexing requires an initialized knowledge base: %w", err)
 	}
 	return ctx, &kb, nil
@@ -338,16 +338,16 @@ func (s *VaultDocumentService) scanDirectory(ctx context.Context, kb *types.Know
 		scanErrors = append(scanErrors, walkErr)
 	} else {
 		// Only remove missing records after a complete traversal of the directory.
-		var existing []types.Knowledge
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND source_kind = ?", kb.TenantID, kind).Find(&existing).Error; err != nil {
+		var existing []types.Entry
+		if err := s.db.WithContext(ctx).Where("space_id = ? AND source_kind = ?", kb.SpaceID, kind).Find(&existing).Error; err != nil {
 			scanErrors = append(scanErrors, err)
 		} else {
-			for _, knowledge := range existing {
-				if !seen[knowledge.VaultPath] {
-					if err := s.deleteDocument(ctx, &knowledge); err != nil {
+			for _, entry := range existing {
+				if !seen[entry.VaultPath] {
+					if err := s.deleteDocument(ctx, &entry); err != nil {
 						scanErrors = append(scanErrors, err)
 					}
-					delete(s.observations, knowledge.VaultPath)
+					delete(s.observations, entry.VaultPath)
 				}
 			}
 		}
@@ -405,35 +405,35 @@ func vaultTrimTitle(title string) string {
 	return title
 }
 
-func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.KnowledgeBase, path, kind, body string, modified time.Time) (*types.Knowledge, error) {
-	var knowledge types.Knowledge
-	err := s.db.WithContext(ctx).Where("tenant_id = ? AND vault_path = ?", kb.TenantID, path).First(&knowledge).Error
+func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.KnowledgeBase, path, kind, body string, modified time.Time) (*types.Entry, error) {
+	var entry types.Entry
+	err := s.db.WithContext(ctx).Where("space_id = ? AND vault_path = ?", kb.SpaceID, path).First(&entry).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 	hash := vaultContentHash(body)
-	if err == nil && knowledge.SourceKind != kind {
+	if err == nil && entry.SourceKind != kind {
 		return nil, fmt.Errorf("vault path already belongs to a different source kind")
 	}
-	if err == nil && knowledge.FileHash == hash && knowledge.ParseStatus == types.ParseStatusCompleted {
-		return &knowledge, nil
+	if err == nil && entry.FileHash == hash && entry.ParseStatus == types.ParseStatusCompleted {
+		return &entry, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		knowledge = types.Knowledge{ID: uuid.NewString(), TenantID: kb.TenantID, KnowledgeBaseID: kb.ID,
-			Type: types.KnowledgeTypeManual, SourceKind: kind, VaultPath: path, Source: path,
+		entry = types.Entry{ID: uuid.NewString(), SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
+			Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
 			CreatedAt: modified.UTC(), ProcessingMode: types.ProcessingModeFull}
-		if err := s.db.WithContext(ctx).Create(&knowledge).Error; err != nil {
+		if err := s.db.WithContext(ctx).Create(&entry).Error; err != nil {
 			return nil, err
 		}
 	}
-	knowledge.Title = vaultDocumentTitle(path, body, kind)
+	entry.Title = vaultDocumentTitle(path, body, kind)
 	// User documents and reports have a single original in the file library.
 	// Their text is used for indexing, never stored as a recovery copy in SQL.
-	knowledge.VaultBody = ""
-	knowledge.FileSize = int64(len(body))
-	knowledge.FileHash = hash
-	knowledge.UpdatedAt = time.Now().UTC()
+	entry.VaultBody = ""
+	entry.FileSize = int64(len(body))
+	entry.FileHash = hash
+	entry.UpdatedAt = time.Now().UTC()
 	indexBody := body
 	if kind == "report" {
 		if header, content, err := splitVaultHeader([]byte(body)); err == nil {
@@ -442,27 +442,27 @@ func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.Know
 			}
 			if yaml.Unmarshal(header, &report) == nil {
 				metadata, _ := json.Marshal(map[string]interface{}{"related_article_ids": report.RelatedArticleIDs})
-				knowledge.Metadata = types.JSON(metadata)
+				entry.Metadata = types.JSON(metadata)
 				indexBody = string(content)
 			}
 		}
 	}
-	if err := s.indexVaultChunks(ctx, kb, &knowledge, indexBody); err != nil {
-		_ = s.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND tenant_id=?", knowledge.ID, kb.TenantID).
+	if err := s.indexVaultChunks(ctx, kb, &entry, indexBody); err != nil {
+		_ = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", entry.ID, kb.SpaceID).
 			Updates(map[string]interface{}{"parse_status": types.ParseStatusFailed, "error_message": err.Error()}).Error
 		return nil, err
 	}
 	now := time.Now().UTC()
-	knowledge.ParseStatus, knowledge.ErrorMessage = types.ParseStatusCompleted, ""
-	knowledge.ProcessedAt = &now
-	if err := s.db.WithContext(ctx).Save(&knowledge).Error; err != nil {
+	entry.ParseStatus, entry.ErrorMessage = types.ParseStatusCompleted, ""
+	entry.ProcessedAt = &now
+	if err := s.db.WithContext(ctx).Save(&entry).Error; err != nil {
 		return nil, err
 	}
-	return &knowledge, nil
+	return &entry, nil
 }
 
 // indexVaultChunks matches content hashes across positions, keeping unchanged vectors.
-func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.KnowledgeBase, knowledge *types.Knowledge, body string) error {
+func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.KnowledgeBase, entry *types.Entry, body string) error {
 	var embedder embedding.Embedder
 	if kb.IndexingStrategy.VectorEnabled {
 		var err error
@@ -470,10 +470,10 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 		if err != nil {
 			return err
 		}
-		knowledge.EmbeddingModelID = embedder.GetModelID()
+		entry.EmbeddingModelID = embedder.GetModelID()
 	}
 	var previous []*types.Chunk
-	if err := s.db.WithContext(ctx).Where("tenant_id=? AND knowledge_id=?", knowledge.TenantID, knowledge.ID).Order("chunk_index, id").Find(&previous).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND entry_id=?", entry.SpaceID, entry.ID).Order("chunk_index, id").Find(&previous).Error; err != nil {
 		return err
 	}
 	byHash := make(map[string][]*types.Chunk)
@@ -490,14 +490,14 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 			continue
 		}
 		// The prefix affects the vector even when the body is unchanged.
-		hash := vaultContentHash(buildKnowledgeIndexContent(knowledge, part.Content))
+		hash := vaultContentHash(buildEntryIndexContent(entry, part.Content))
 		var chunk *types.Chunk
 		if matches := byHash[hash]; len(matches) > 0 {
 			chunk = matches[0]
 			byHash[hash] = matches[1:]
 			used[chunk.ID] = true
 		} else {
-			chunk = &types.Chunk{ID: uuid.NewString(), TenantID: knowledge.TenantID, KnowledgeID: knowledge.ID,
+			chunk = &types.Chunk{ID: uuid.NewString(), SpaceID: entry.SpaceID, EntryID: entry.ID,
 				KnowledgeBaseID: kb.ID, IsEnabled: true, ChunkType: types.ChunkTypeText,
 				ContentHash: hash, CreatedAt: now}
 			added = append(added, chunk)
@@ -534,8 +534,8 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 	if embedder != nil && len(added) > 0 {
 		indices := make([]*types.IndexInfo, 0, len(added))
 		for _, chunk := range added {
-			indices = append(indices, &types.IndexInfo{Content: buildKnowledgeIndexContent(knowledge, chunk.Content), SourceID: chunk.ID,
-				SourceType: types.ChunkSourceType, ChunkID: chunk.ID, KnowledgeID: knowledge.ID,
+			indices = append(indices, &types.IndexInfo{Content: buildEntryIndexContent(entry, chunk.Content), SourceID: chunk.ID,
+				SourceType: types.ChunkSourceType, ChunkID: chunk.ID, EntryID: entry.ID,
 				KnowledgeBaseID: kb.ID, IsEnabled: true})
 		}
 		if err := s.retrieval.BatchIndex(ctx, embedder, indices); err != nil {
@@ -544,35 +544,35 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 			for _, chunk := range added {
 				ids = append(ids, chunk.ID)
 			}
-			_ = s.retrieval.DeleteByChunkIDList(ctx, ids, 0, knowledge.Type)
-			_ = s.db.WithContext(ctx).Unscoped().Where("tenant_id=? AND id IN ?", knowledge.TenantID, ids).Delete(&types.Chunk{}).Error
+			_ = s.retrieval.DeleteByChunkIDList(ctx, ids, 0, entry.Type)
+			_ = s.db.WithContext(ctx).Unscoped().Where("space_id=? AND id IN ?", entry.SpaceID, ids).Delete(&types.Chunk{}).Error
 			return err
 		}
 	}
 	if len(removed) > 0 {
 		if s.retrieval != nil {
-			if err := s.retrieval.DeleteByChunkIDList(ctx, removed, 0, knowledge.Type); err != nil {
+			if err := s.retrieval.DeleteByChunkIDList(ctx, removed, 0, entry.Type); err != nil {
 				return err
 			}
 		}
-		if err := s.db.WithContext(ctx).Unscoped().Where("tenant_id=? AND id IN ?", knowledge.TenantID, removed).Delete(&types.Chunk{}).Error; err != nil {
+		if err := s.db.WithContext(ctx).Unscoped().Where("space_id=? AND id IN ?", entry.SpaceID, removed).Delete(&types.Chunk{}).Error; err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *VaultDocumentService) deleteDocument(ctx context.Context, knowledge *types.Knowledge) error {
+func (s *VaultDocumentService) deleteDocument(ctx context.Context, entry *types.Entry) error {
 	if s.retrieval != nil {
-		if err := s.retrieval.DeleteByKnowledgeIDList(ctx, []string{knowledge.ID}, 0, knowledge.Type); err != nil {
+		if err := s.retrieval.DeleteByEntryIDList(ctx, []string{entry.ID}, 0, entry.Type); err != nil {
 			return err
 		}
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("tenant_id=? AND knowledge_id=?", knowledge.TenantID, knowledge.ID).Delete(&types.Chunk{}).Error; err != nil {
+		if err := tx.Unscoped().Where("space_id=? AND entry_id=?", entry.SpaceID, entry.ID).Delete(&types.Chunk{}).Error; err != nil {
 			return err
 		}
-		return tx.Unscoped().Where("tenant_id=? AND id=?", knowledge.TenantID, knowledge.ID).Delete(&types.Knowledge{}).Error
+		return tx.Unscoped().Where("space_id=? AND id=?", entry.SpaceID, entry.ID).Delete(&types.Entry{}).Error
 	})
 }
 
@@ -580,16 +580,16 @@ func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) 
 	s.statusMu.RLock()
 	result := s.status
 	s.statusMu.RUnlock()
-	tenantID, ok := types.TenantIDFromContext(ctx)
+	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
-		tenantID = types.SingleTenantID
+		spaceID = types.SingleSpaceID
 	}
 	for _, target := range []struct {
 		kind  string
 		count *int64
 	}{{"mine", &result.Mine.IndexedFiles}, {"report", &result.Reports.IndexedFiles}} {
-		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).
-			Where("tenant_id=? AND source_kind=? AND parse_status=?", tenantID, target.kind, types.ParseStatusCompleted).
+		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
+			Where("space_id=? AND source_kind=? AND parse_status=?", spaceID, target.kind, types.ParseStatusCompleted).
 			Count(target.count).Error; err != nil {
 			return result, err
 		}
@@ -598,7 +598,7 @@ func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) 
 }
 
 // CreateReport is shared by the REST endpoint and future external-agent interfaces.
-func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown string, relatedIDs []string) (*types.Knowledge, error) {
+func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown string, relatedIDs []string) (*types.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	title = strings.TrimSpace(title)
@@ -611,8 +611,8 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 	}
 	selected := []string{}
 	if len(relatedIDs) > 0 {
-		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).
-			Where("tenant_id=? AND source_kind='article' AND id IN ?", kb.TenantID, relatedIDs).
+		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
+			Where("space_id=? AND source_kind='article' AND id IN ?", kb.SpaceID, relatedIDs).
 			Order("id").Pluck("id", &selected).Error; err != nil {
 			return nil, err
 		}
@@ -660,17 +660,17 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		return nil, writeErr
 	}
 	s.observations[path] = vaultObservation{hash: vaultContentHash(content), changedAt: created.Add(-s.stableWait)}
-	var knowledge *types.Knowledge
+	var entry *types.Entry
 	indexed := false
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		transactional := &VaultDocumentService{db: tx, models: s.models,
 			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
-		knowledge, err = transactional.indexDocument(ctx, kb, path, "report", content, created)
+		entry, err = transactional.indexDocument(ctx, kb, path, "report", content, created)
 		if err != nil {
 			return err
 		}
 		indexed = true
-		return NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", knowledge.ID, nil,
+		return NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", entry.ID, nil,
 			map[string]any{"title": title, "vault_path": path, "related_article_ids": selected})
 	})
 	if err != nil {
@@ -685,7 +685,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		// documents do, so a later scan can retry the same immutable file.
 		return nil, fmt.Errorf("report saved at %s but indexing failed: %w", path, err)
 	}
-	return knowledge, nil
+	return entry, nil
 }
 
 // splitVaultHeader recognizes only a frontmatter block at byte zero.

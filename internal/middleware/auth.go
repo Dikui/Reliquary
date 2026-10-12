@@ -39,7 +39,7 @@ func bearerToken(c *gin.Context) (string, bool) {
 }
 
 // Auth verifies credentials and attaches the sole user's workspace identity.
-func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys interfaces.TenantAPIKeyService) gin.HandlerFunc {
+func Auth(spaces interfaces.SpaceService, users interfaces.UserService, keys interfaces.APIKeyService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Method == http.MethodOptions || isNoAuthAPI(c.Request.URL.Path, c.Request.Method) {
 			c.Next()
@@ -51,11 +51,11 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 		var principal types.Principal
 		if token, ok := bearerToken(c); ok {
 			if !mcpRequest {
-				candidate, tenantID, err := users.ValidateToken(ctx, token)
+				candidate, spaceID, err := users.ValidateToken(ctx, token)
 				if authUnavailable(c, err) {
 					return
 				}
-				if err == nil && tenantID == types.SingleTenantID {
+				if err == nil && spaceID == types.SingleSpaceID {
 					user = candidate
 				}
 			}
@@ -64,8 +64,8 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 				if authUnavailable(c, err) {
 					return
 				}
-				if err == nil && key != nil && key.TenantIDValue() == types.SingleTenantID {
-					user, err = users.GetUserByTenantID(ctx, types.SingleTenantID)
+				if err == nil && key != nil && key.SpaceIDValue() == types.SingleSpaceID {
+					user, err = users.GetUserBySpaceID(ctx, types.SingleSpaceID)
 					if err != nil && !errors.Is(err, apprepo.ErrUserNotFound) {
 						authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
 						return
@@ -79,8 +79,8 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 			if authUnavailable(c, err) {
 				return
 			}
-			if err == nil && key != nil && key.TenantIDValue() == types.SingleTenantID {
-				user, err = users.GetUserByTenantID(ctx, types.SingleTenantID)
+			if err == nil && key != nil && key.SpaceIDValue() == types.SingleSpaceID {
+				user, err = users.GetUserBySpaceID(ctx, types.SingleSpaceID)
 				if err != nil && !errors.Is(err, apprepo.ErrUserNotFound) {
 					authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
 					return
@@ -88,30 +88,30 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 				principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10)}
 			}
 		}
-		if user == nil || !user.IsActive || user.TenantID != types.SingleTenantID {
+		if user == nil || !user.IsActive || user.SpaceID != types.SingleSpaceID {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: invalid or missing credentials"})
 			return
 		}
 		if raw := c.GetHeader("X-Tenant-ID"); raw != "" {
 			id, err := strconv.ParseUint(raw, 10, 64)
-			if err != nil || id != types.SingleTenantID {
+			if err != nil || id != types.SingleSpaceID {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "only the personal workspace is available"})
 				return
 			}
 		}
-		tenant, err := tenants.GetTenantByID(ctx, types.SingleTenantID)
-		if err != nil && !errors.Is(err, apprepo.ErrTenantNotFound) {
+		space, err := spaces.GetSpaceByID(ctx, types.SingleSpaceID)
+		if err != nil && !errors.Is(err, apprepo.ErrSpaceNotFound) {
 			authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
 			return
 		}
-		if err != nil || tenant == nil {
+		if err != nil || space == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid personal workspace"})
 			return
 		}
 		if !principal.Valid() {
 			principal = types.Principal{Type: types.PrincipalWebUser, ID: user.ID}
 		}
-		applyAuthSession(c, authSession{User: user, Principal: principal, TenantID: types.SingleTenantID, Tenant: tenant})
+		applyAuthSession(c, authSession{User: user, Principal: principal, SpaceID: types.SingleSpaceID, Space: space})
 		c.Next()
 	}
 }

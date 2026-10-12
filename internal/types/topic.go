@@ -5,8 +5,8 @@ import "time"
 // Topic describes a user-defined direction within the personal space.
 type Topic struct {
 	ID           string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID     uint64    `json:"tenant_id" gorm:"not null;uniqueIndex:idx_topics_tenant_name"`
-	Name         string    `json:"name" gorm:"type:varchar(255);not null;uniqueIndex:idx_topics_tenant_name"`
+	SpaceID      uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_topics_space_name"`
+	Name         string    `json:"name" gorm:"type:varchar(255);not null;uniqueIndex:idx_topics_space_name"`
 	Description  string    `json:"description" gorm:"type:text;not null;default:''"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -15,16 +15,16 @@ type Topic struct {
 
 func (Topic) TableName() string { return "topics" }
 
-type KnowledgeTopic struct {
-	TenantID     uint64    `json:"tenant_id" gorm:"not null;index"`
-	KnowledgeID  string    `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
-	TopicID      string    `json:"topic_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_knowledge_topics_pair"`
+type EntryTopic struct {
+	SpaceID      uint64    `json:"space_id" gorm:"not null;index"`
+	EntryID      string    `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_topics_pair"`
+	TopicID      string    `json:"topic_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_topics_pair"`
 	IsHistorical bool      `json:"is_historical"`
 	Source       string    `json:"source" gorm:"type:varchar(8);not null;default:'model'"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-func (KnowledgeTopic) TableName() string { return "knowledge_topics" }
+func (EntryTopic) TableName() string { return "entry_topics" }
 
 const (
 	TopicSourceModel = "model"
@@ -34,7 +34,7 @@ const (
 // TopicBackfillJob is a durable snapshot of one topic and its historical articles.
 type TopicBackfillJob struct {
 	ID               string               `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID         uint64               `json:"-"`
+	SpaceID          uint64               `json:"-"`
 	TopicID          string               `json:"topic_id"`
 	TopicName        string               `json:"-"`
 	TopicDescription string               `json:"-"`
@@ -55,7 +55,7 @@ type TopicBackfillBatch struct {
 	ID           string     `json:"id" gorm:"type:varchar(36);primaryKey"`
 	JobID        string     `json:"-"`
 	Ordinal      int        `json:"ordinal"`
-	KnowledgeIDs JSON       `json:"-" gorm:"type:jsonb"`
+	EntryIDs     JSON       `json:"-" gorm:"type:jsonb"`
 	ArticleCount int        `json:"article_count"`
 	Status       string     `json:"status"`
 	Attempts     int        `json:"attempts"`

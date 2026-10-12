@@ -72,13 +72,13 @@ func newStreamHandler(svc *DataSourceService, ds *types.DataSource, result *type
 // with a message — never silently lost.
 func TestStreamHandler_EmitClassifiesDeletedAndFailed(t *testing.T) {
 	ds := &types.DataSource{
-		ID: "ds-1", TenantID: 1, KnowledgeBaseID: "kb-1",
+		ID: "ds-1", SpaceID: 1, KnowledgeBaseID: "kb-1",
 		Type: types.ConnectorTypeRSS, SyncDeletions: true,
 	}
 	result := &types.SyncResult{}
-	knowledgeRepo := &deletionLookupKnowledgeRepo{knowledge: &types.Knowledge{ID: "knowledge-gone"}}
-	knowledgeSvc := &sweepFakeKS{repo: knowledgeRepo}
-	h := newStreamHandler(&DataSourceService{knowledgeService: knowledgeSvc}, ds, result, &types.SyncLog{})
+	entryRepo := &deletionLookupEntryRepo{entry: &types.Entry{ID: "entry-gone"}}
+	entrySvc := &sweepFakeKS{repo: entryRepo}
+	h := newStreamHandler(&DataSourceService{entryService: entrySvc}, ds, result, &types.SyncLog{})
 
 	require.NoError(t, h.Emit(context.Background(), types.FetchedItem{ExternalID: "gone", IsDeleted: true}))
 	require.NoError(t, h.Emit(context.Background(), types.FetchedItem{

@@ -26,7 +26,7 @@ func (v *VaultService) StartReplica() error {
 // first pauses intake and stops writes; this then persists all database headers.
 func (v *VaultService) Flush(ctx context.Context) error {
 	var ids []string
-	if err := v.db.WithContext(ctx).Model(&types.Knowledge{}).Where("source_kind='article' AND vault_path<>'' AND parse_status<>'deleting'").Pluck("id", &ids).Error; err != nil {
+	if err := v.db.WithContext(ctx).Model(&types.Entry{}).Where("source_kind='article' AND vault_path<>'' AND parse_status<>'deleting'").Pluck("id", &ids).Error; err != nil {
 		return err
 	}
 	for _, id := range ids {
@@ -43,7 +43,7 @@ func (v *VaultService) Flush(ctx context.Context) error {
 func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Verification, error) {
 	result := &maintenance.Verification{OK: true, Differences: []string{}, Repaired: []string{}}
 	var pendingImages int64
-	var articles []types.Knowledge
+	var articles []types.Entry
 	if err := v.db.WithContext(ctx).Unscoped().Where("vault_path<>'' AND deleted_at IS NULL").Find(&articles).Error; err != nil {
 		return result, err
 	}
@@ -108,7 +108,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 				result.Differences = append(result.Differences, article.VaultPath+": image content hash differs: "+reference)
 			}
 			var expected string
-			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("knowledge_id=? AND attachment_path=? AND model_id=(SELECT COALESCE(NULLIF(model_tiers->>'embedding',''),embedding_model_id) FROM knowledge_bases WHERE id=?)", article.ID, reference, article.KnowledgeBaseID).Scan(&expected).Error; err != nil {
+			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("entry_id=? AND attachment_path=? AND model_id=(SELECT COALESCE(NULLIF(model_tiers->>'embedding',''),embedding_model_id) FROM knowledge_bases WHERE id=?)", article.ID, reference, article.KnowledgeBaseID).Scan(&expected).Error; err != nil {
 				return result, err
 			}
 			if expected != "" && expected != hash {
@@ -170,11 +170,11 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		result.PendingVectors["images"] = pendingImages
 	}
 	for key, query := range map[string]string{
-		"articles": `SELECT count(*) FROM knowledges k JOIN knowledge_bases b ON b.id=k.knowledge_base_id WHERE k.deleted_at IS NULL AND k.source_kind='article' AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.knowledge_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"articles": `SELECT count(*) FROM entries k JOIN knowledge_bases b ON b.id=k.knowledge_base_id WHERE k.deleted_at IS NULL AND k.source_kind='article' AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
 		"chunks":   `SELECT count(*) FROM chunks c JOIN knowledge_bases b ON b.id=c.knowledge_base_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
 		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
  SELECT 1 FROM knowledge_bases b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
- WHERE b.tenant_id=e.tenant_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
+ WHERE b.space_id=e.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
  e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
  OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
  OR (COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0)>0
@@ -247,7 +247,7 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 	// Available-model vector rebuilding is a separate explicit maintenance step.
 	indexing := *kb
 	indexing.IndexingStrategy.VectorEnabled = false
-	var articles []types.Knowledge
+	var articles []types.Entry
 	if err := s.db.WithContext(ctx).Where("vault_path<>'' AND parse_status=?", types.ParseStatusCompleted).Find(&articles).Error; err != nil {
 		return result, err
 	}

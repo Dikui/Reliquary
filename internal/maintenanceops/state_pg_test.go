@@ -65,7 +65,7 @@ func TestDrainTimeoutResumesCollectionAndRecordsAlert(t *testing.T) {
 
 func TestSnapshotDoesNotWaitForArticleOrLongTasks(t *testing.T) {
 	db := pgtest.Open(t)
-	require.NoError(t, db.Exec("INSERT INTO task_jobs(id,task_type,queue,state) VALUES('article','document:process','default','active'),('vectors','knowledge:embedding_rebuild','entity','active'),('topics','topic:backfill','entity','active')").Error)
+	require.NoError(t, db.Exec("INSERT INTO task_jobs(id,task_type,queue,state) VALUES('article','document:process','default','active'),('vectors','entry:embedding_rebuild','entity','active'),('topics','topic:backfill','entity','active')").Error)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	require.NoError(t, Pause(ctx, db, "snapshot", "backup", nil))
@@ -153,10 +153,10 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	source, restored := pgtest.Open(t), pgtest.Open(t)
 	ctx := context.Background()
 	const original = "Exact original content admitted before the power interruption."
-	require.NoError(t, source.Exec(`INSERT INTO knowledges
-		(id,tenant_id,knowledge_base_id,type,title,source,parse_status,vault_body)
+	require.NoError(t, source.Exec(`INSERT INTO entries
+		(id,space_id,knowledge_base_id,type,title,source,parse_status,vault_body)
 		VALUES ('backup-processing',1,'backup-kb','manual','Interrupted article','','processing',?)`, original).Error)
-	payload, err := json.Marshal(map[string]any{"knowledge_id": "backup-processing", "content": original})
+	payload, err := json.Marshal(map[string]any{"entry_id": "backup-processing", "content": original})
 	require.NoError(t, err)
 	require.NoError(t, source.Exec(`INSERT INTO task_jobs
 		(id,task_type,queue,state,payload,max_retry,retried,fail_count,claim_token,lease_until,retention_ns)
@@ -165,7 +165,7 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	// records, including payload and retry budget, are exported and read back.
 	require.NoError(t, Pause(ctx, source, "snapshot", "automatic backup", nil))
 	var articleJSON, taskJSON string
-	require.NoError(t, source.Raw("SELECT jsonb_agg(to_jsonb(t))::text FROM knowledges t WHERE id='backup-processing'").Scan(&articleJSON).Error)
+	require.NoError(t, source.Raw("SELECT jsonb_agg(to_jsonb(t))::text FROM entries t WHERE id='backup-processing'").Scan(&articleJSON).Error)
 	require.NoError(t, source.Raw("SELECT jsonb_agg(to_jsonb(t))::text FROM task_jobs t WHERE id='backup-job'").Scan(&taskJSON).Error)
 	archive := struct {
 		Articles json.RawMessage `json:"articles"`
@@ -178,7 +178,7 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	readback, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(readback, &archive))
-	require.NoError(t, restored.Exec("INSERT INTO knowledges SELECT * FROM jsonb_populate_recordset(NULL::knowledges,?::jsonb)", string(archive.Articles)).Error)
+	require.NoError(t, restored.Exec("INSERT INTO entries SELECT * FROM jsonb_populate_recordset(NULL::entries,?::jsonb)", string(archive.Articles)).Error)
 	require.NoError(t, restored.Exec("INSERT INTO task_jobs SELECT * FROM jsonb_populate_recordset(NULL::task_jobs,?::jsonb)", string(archive.Tasks)).Error)
 	var restoredJob taskqueue.Job
 	require.NoError(t, restored.First(&restoredJob, "id='backup-job'").Error)
@@ -191,8 +191,8 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	completed := make(chan error, 1)
 	handler := taskqueue.HandlerFunc(func(ctx context.Context, task *taskqueue.Task) error {
 		var input struct {
-			KnowledgeID string `json:"knowledge_id"`
-			Content     string `json:"content"`
+			EntryID string `json:"entry_id"`
+			Content string `json:"content"`
 		}
 		if err := json.Unmarshal(task.Payload(), &input); err != nil {
 			return err
@@ -200,14 +200,14 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 		if input.Content != original {
 			return fmt.Errorf("original payload changed during backup")
 		}
-		var article types.Knowledge
-		if err := restored.WithContext(ctx).First(&article, "id=?", input.KnowledgeID).Error; err != nil {
+		var article types.Entry
+		if err := restored.WithContext(ctx).First(&article, "id=?", input.EntryID).Error; err != nil {
 			return err
 		}
 		if article.VaultBody != original {
 			return fmt.Errorf("original article changed during restore")
 		}
-		err := restored.WithContext(ctx).Model(&types.Knowledge{}).Where("id=?", input.KnowledgeID).Update("parse_status", "completed").Error
+		err := restored.WithContext(ctx).Model(&types.Entry{}).Where("id=?", input.EntryID).Update("parse_status", "completed").Error
 		completed <- err
 		return err
 	})
@@ -222,7 +222,7 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return restored.First(&restoredJob, "id='backup-job'").Error == nil && restoredJob.State == taskqueue.TaskStateCompleted
 	}, time.Second, 10*time.Millisecond)
-	var article types.Knowledge
+	var article types.Entry
 	require.NoError(t, restored.First(&article, "id='backup-processing'").Error)
 	require.Equal(t, "completed", article.ParseStatus)
 	require.Equal(t, original, article.VaultBody)

@@ -25,9 +25,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       put: async (path: string, payload: any) => { calls.push({ path, payload }); model = { ...model, ...payload }; return { success: true, data: model } },
     }
     const modules: Record<string, unknown> = {
-      '../../utils/request': request,
+      '../utils/request': request,
       '@/i18n': { __esModule: true, default: i18n },
-      './modelUsage': { ModelInUseError: class extends Error {} },
+      './model-usage': { ModelInUseError: class extends Error {} },
       'tdesign-vue-next': { MessagePlugin: { success() {}, error() {}, warning() {} } },
       'vue-router': { useRouter: () => ({ push: async () => {} }) },
       '@/stores/resources': { useResourcesStore: () => ({ replaceModels() {} }) },
@@ -40,7 +40,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.vue') ? { __esModule: true, default: stub } : modules[name] ?? require(name), module, module.exports)
       return module.exports
     }
-    modules['@/api/model'] = evaluate(readFileSync(new URL('../../api/model/index.ts', import.meta.url), 'utf8'))
+    modules['@/api/model'] = evaluate(readFileSync(new URL('../../api/model.ts', import.meta.url), 'utf8'))
     const { descriptor } = parse(readFileSync(new URL('./ModelSettings.vue', import.meta.url), 'utf8'), { filename: 'ModelSettings.vue' })
     const script = compileScript(descriptor, { id: 'image-model-settings' })
     const template = compileTemplate({ id: 'image-model-settings', filename: 'ModelSettings.vue', source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })

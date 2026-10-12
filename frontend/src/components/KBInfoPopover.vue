@@ -207,15 +207,15 @@ const statRows = computed<Array<{ key: string; label: string; value: number | st
   const kb: any = props.kbInfo
   if (!kb) return []
   const items: Array<{ key: string; label: string; value: number | string }> = []
-  // user-facing entry total. Document KBs use knowledge_count for the
+  // user-facing entry total. Document KBs use entry_count for the
   // file-level total (chunk_count there counts internal splits and is
   // not meaningful to surface here). Mirrors the same branching used
   // by the list card.
-  if (typeof kb.knowledge_count === 'number') {
+  if (typeof kb.entry_count === 'number') {
     items.push({
-      key: 'knowledge',
+      key: 'entry',
       label: t('knowledgeBase.infoCard.documentCount'),
-      value: kb.knowledge_count,
+      value: kb.entry_count,
     })
   }
   return items

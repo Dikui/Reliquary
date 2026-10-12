@@ -24,43 +24,43 @@ import (
 	"reliquary/internal/utils"
 )
 
-type runtimeKnowledgeCanceller interface {
-	CancelKnowledgeParse(ctx context.Context, knowledgeID string) (*types.Knowledge, error)
+type runtimeEntryCanceller interface {
+	CancelEntryParse(ctx context.Context, entryID string) (*types.Entry, error)
 }
 
 // SystemHandler handles system-related requests
 type SystemHandler struct {
 	cfg              *config.Config
-	tenantSvc        interfaces.TenantService
+	spaceSvc         interfaces.SpaceService
 	userSvc          interfaces.UserService
 	systemSettingSvc interfaces.SystemSettingService
-	apiKeySvc        interfaces.TenantAPIKeyService
+	apiKeySvc        interfaces.APIKeyService
 	taskInspector    interfaces.TaskInspector
-	// knowledgeSvc supplies the domain-level cancellation path used by the
+	// entrySvc supplies the domain-level cancellation path used by the
 	// runtime task console. It updates business state and tracing before queue
 	// records are removed, unlike a raw queue-record deletion.
-	knowledgeSvc runtimeKnowledgeCanceller
+	entrySvc runtimeEntryCanceller
 	// startup snapshot for GET /system/capabilities; bound in router.NewRouter.
 	deploymentCapabilities DeploymentCapabilitiesData
 }
 
 // NewSystemHandler creates a new system handler
 func NewSystemHandler(cfg *config.Config,
-	tenantSvc interfaces.TenantService,
+	spaceSvc interfaces.SpaceService,
 	userSvc interfaces.UserService,
 	systemSettingSvc interfaces.SystemSettingService,
-	apiKeySvc interfaces.TenantAPIKeyService,
+	apiKeySvc interfaces.APIKeyService,
 	taskInspector interfaces.TaskInspector,
-	knowledgeSvc interfaces.KnowledgeService,
+	entrySvc interfaces.EntryService,
 ) *SystemHandler {
 	return &SystemHandler{
 		cfg:              cfg,
-		tenantSvc:        tenantSvc,
+		spaceSvc:         spaceSvc,
 		userSvc:          userSvc,
 		systemSettingSvc: systemSettingSvc,
 		apiKeySvc:        apiKeySvc,
 		taskInspector:    taskInspector,
-		knowledgeSvc:     knowledgeSvc,
+		entrySvc:         entrySvc,
 	}
 }
 
@@ -151,10 +151,10 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 // Lists the four retained parser engines with their availability.
 func (h *SystemHandler) ListParserEngines(c *gin.Context) {
 	var overrides map[string]string
-	if v, exists := c.Get(types.TenantInfoContextKey.String()); exists {
-		if tenant, ok := v.(*types.Tenant); ok && tenant != nil {
-			if tenant.ParserEngineConfig != nil {
-				overrides = tenant.ParserEngineConfig.ToOverridesMap()
+	if v, exists := c.Get(types.SpaceInfoContextKey.String()); exists {
+		if space, ok := v.(*types.Space); ok && space != nil {
+			if space.ParserEngineConfig != nil {
+				overrides = space.ParserEngineConfig.ToOverridesMap()
 			}
 		}
 	}
@@ -172,8 +172,8 @@ func (h *SystemHandler) CheckParserEngines(c *gin.Context) {
 		return
 	}
 	var existing *types.ParserEngineConfig
-	if v, exists := c.Get(types.TenantInfoContextKey.String()); exists {
-		if t, ok := v.(*types.Tenant); ok && t != nil {
+	if v, exists := c.Get(types.SpaceInfoContextKey.String()); exists {
+		if t, ok := v.(*types.Space); ok && t != nil {
 			existing = t.ParserEngineConfig
 		}
 	}
@@ -409,7 +409,7 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 		c.JSON(http.StatusConflict, gin.H{"error": "Task is no longer available"})
 		return
 	}
-	if task.TenantID != 0 && task.TenantID != types.SingleTenantID {
+	if task.SpaceID != 0 && task.SpaceID != types.SingleSpaceID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Task does not belong to the personal space"})
 		return
 	}
@@ -420,16 +420,16 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 
 	switch action {
 	case types.RuntimeTaskActionCancel:
-		if h.knowledgeSvc == nil || task.KnowledgeID == "" {
+		if h.entrySvc == nil || task.EntryID == "" {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Business cancellation is unavailable"})
 			return
 		}
-		cancelCtx := context.WithValue(c.Request.Context(), types.TenantIDContextKey, types.SingleTenantID)
-		if _, err = h.knowledgeSvc.CancelKnowledgeParse(cancelCtx, task.KnowledgeID); err != nil {
-			if isKnowledgeGone(err) {
-				if h.purgeOrphanRuntimeTask(c.Request.Context(), inspector, queue, taskID, task.KnowledgeID) {
+		cancelCtx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, types.SingleSpaceID)
+		if _, err = h.entrySvc.CancelEntryParse(cancelCtx, task.EntryID); err != nil {
+			if isEntryGone(err) {
+				if h.purgeOrphanRuntimeTask(c.Request.Context(), inspector, queue, taskID, task.EntryID) {
 					logger.Warnf(c.Request.Context(),
-						"cancel runtime queue task queue=%s task=%s: knowledge gone, purged queue record",
+						"cancel runtime queue task queue=%s task=%s: entry gone, purged queue record",
 						queue, taskID)
 					break
 				}
@@ -467,25 +467,25 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-func isKnowledgeGone(err error) bool {
-	if errors.Is(err, repository.ErrKnowledgeNotFound) {
+func isEntryGone(err error) bool {
+	if errors.Is(err, repository.ErrEntryNotFound) {
 		return true
 	}
 	var appErr *apperrors.AppError
 	return errors.As(err, &appErr) && appErr.Code == apperrors.ErrNotFound
 }
 
-// purgeOrphanRuntimeTask removes queue records for a task whose knowledge row
-// is already gone. CancelTasksForKnowledge sweeps sibling tasks best-effort;
+// purgeOrphanRuntimeTask removes queue records for a task whose entry row
+// is already gone. CancelTasksForEntry sweeps sibling tasks best-effort;
 // success is reported only once the requested task ID is gone.
 func (h *SystemHandler) purgeOrphanRuntimeTask(
 	ctx context.Context,
 	inspector interfaces.RuntimeTaskInspector,
-	queue, taskID, knowledgeID string,
+	queue, taskID, entryID string,
 ) bool {
-	if h.taskInspector != nil && knowledgeID != "" {
-		if _, _, err := h.taskInspector.CancelTasksForKnowledge(ctx, knowledgeID); err != nil {
-			logger.Warnf(ctx, "purge orphan tasks for knowledge %s: %v", knowledgeID, err)
+	if h.taskInspector != nil && entryID != "" {
+		if _, _, err := h.taskInspector.CancelTasksForEntry(ctx, entryID); err != nil {
+			logger.Warnf(ctx, "purge orphan tasks for entry %s: %v", entryID, err)
 		}
 	}
 	supported, err := inspector.ForceDeleteRuntimeTask(ctx, queue, taskID)
@@ -495,7 +495,7 @@ func (h *SystemHandler) purgeOrphanRuntimeTask(
 	if err == nil {
 		return true
 	}
-	// The knowledge-wide sweep may have already removed this task ID.
+	// The entry-wide sweep may have already removed this task ID.
 	if _, available, getErr := inspector.GetRuntimeTask(ctx, queue, taskID); available && getErr != nil {
 		return true
 	}

@@ -13,10 +13,10 @@ type FileService interface {
 	// accessible to the server process.
 	CheckConnectivity(ctx context.Context) error
 	// SaveFile saves a file.
-	SaveFile(ctx context.Context, file *multipart.FileHeader, tenantID uint64, knowledgeID string) (string, error)
+	SaveFile(ctx context.Context, file *multipart.FileHeader, spaceID uint64, entryID string) (string, error)
 	// SaveBytes saves bytes data to a file and returns the file path.
 	// If temp is true, the file will be saved to a temporary storage that may auto-expire.
-	SaveBytes(ctx context.Context, data []byte, tenantID uint64, fileName string, temp bool) (string, error)
+	SaveBytes(ctx context.Context, data []byte, spaceID uint64, fileName string, temp bool) (string, error)
 	// GetFile retrieves a file.
 	GetFile(ctx context.Context, filePath string) (io.ReadCloser, error)
 	// GetFileURL returns a download URL for the file (if supported by the storage backend).
@@ -24,8 +24,8 @@ type FileService interface {
 	// DeleteFile deletes a file.
 	DeleteFile(ctx context.Context, filePath string) error
 	// CopyFile copies an existing stored object to a NEW object owned by
-	// (tenantID, knowledgeID), returning the new local path. The copy is
+	// (spaceID, entryID), returning the new local path. The copy is
 	// independent: deleting the source never affects it. Returns ErrCrossBackendCopy
 	// when srcPath uses a scheme other than local.
-	CopyFile(ctx context.Context, srcPath string, tenantID uint64, knowledgeID string) (string, error)
+	CopyFile(ctx context.Context, srcPath string, spaceID uint64, entryID string) (string, error)
 }

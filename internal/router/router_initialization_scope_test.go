@@ -25,15 +25,15 @@ func (s *stubInitializationKBLookup) GetKnowledgeBaseByID(_ context.Context, id 
 	return nil, apprepo.ErrKnowledgeBaseNotFound
 }
 
-func newInitializationRouteTestEngine(t *testing.T, callerTenantID uint64, kbLookup *stubInitializationKBLookup) *gin.Engine {
-	return newKBRouteTestEngine(t, callerTenantID, kbLookup, func(r *gin.RouterGroup, guards *accessGuards) {
+func newInitializationRouteTestEngine(t *testing.T, callerSpaceID uint64, kbLookup *stubInitializationKBLookup) *gin.Engine {
+	return newKBRouteTestEngine(t, callerSpaceID, kbLookup, func(r *gin.RouterGroup, guards *accessGuards) {
 		RegisterInitializationRoutes(r, &handler.InitializationHandler{}, guards)
 	})
 }
 
 func newKBRouteTestEngine(
 	t *testing.T,
-	callerTenantID uint64,
+	callerSpaceID uint64,
 	kbLookup *stubInitializationKBLookup,
 	register func(r *gin.RouterGroup, guards *accessGuards),
 ) *gin.Engine {
@@ -48,9 +48,9 @@ func newKBRouteTestEngine(
 	r.Use(middleware.ErrorHandler())
 	r.Use(func(c *gin.Context) {
 		ctx := c.Request.Context()
-		ctx = context.WithValue(ctx, types.TenantIDContextKey, callerTenantID)
+		ctx = context.WithValue(ctx, types.SpaceIDContextKey, callerSpaceID)
 		c.Request = c.Request.WithContext(ctx)
-		c.Set(types.TenantIDContextKey.String(), callerTenantID)
+		c.Set(types.SpaceIDContextKey.String(), callerSpaceID)
 		c.Next()
 	})
 
@@ -58,11 +58,11 @@ func newKBRouteTestEngine(
 	return r
 }
 
-func tenantKBLookupFixture() *stubInitializationKBLookup {
+func spaceKBLookupFixture() *stubInitializationKBLookup {
 	return &stubInitializationKBLookup{
 		kbs: map[string]*types.KnowledgeBase{
-			"kb-allowed": {ID: "kb-allowed", TenantID: 1, Type: types.KnowledgeBaseTypeDocument},
-			"kb-other":   {ID: "kb-other", TenantID: 1, Type: types.KnowledgeBaseTypeDocument},
+			"kb-allowed": {ID: "kb-allowed", SpaceID: 1, Type: types.KnowledgeBaseTypeDocument},
+			"kb-other":   {ID: "kb-other", SpaceID: 1, Type: types.KnowledgeBaseTypeDocument},
 		},
 	}
 }
@@ -70,7 +70,7 @@ func tenantKBLookupFixture() *stubInitializationKBLookup {
 func TestRemovedInitializationConfigRouteReturns404(t *testing.T) {
 	kbLookup := &stubInitializationKBLookup{
 		kbs: map[string]*types.KnowledgeBase{
-			"kb-victim": {ID: "kb-victim", TenantID: 999},
+			"kb-victim": {ID: "kb-victim", SpaceID: 999},
 		},
 	}
 	engine := newInitializationRouteTestEngine(t, 1, kbLookup)

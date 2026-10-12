@@ -22,12 +22,12 @@ func setupChunkTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func makeChunk(kbID, knowledgeID string, chunkType string) *types.Chunk {
+func makeChunk(kbID, entryID string, chunkType string) *types.Chunk {
 	return &types.Chunk{
 		ID:              uuid.New().String(),
-		TenantID:        1,
+		SpaceID:         1,
 		KnowledgeBaseID: kbID,
-		KnowledgeID:     knowledgeID,
+		EntryID:         entryID,
 		Content:         "test content",
 		ChunkType:       chunkType,
 		IsEnabled:       true,
@@ -53,22 +53,22 @@ func TestCreateChunks_CleansContextHeaderBeforePersistence(t *testing.T) {
 	assert.True(t, utf8.ValidString(saved.ContextHeader))
 }
 
-func TestListPagedChunksByKnowledgeID_FiltersEnabledState(t *testing.T) {
+func TestListPagedChunksByEntryID_FiltersEnabledState(t *testing.T) {
 	db := setupChunkTestDB(t)
 	repo := NewChunkRepository(db)
 	ctx := context.Background()
 
-	enabledChunk := makeChunk("kb-1", "document-knowledge", types.ChunkTypeText)
-	disabledChunk := makeChunk("kb-1", "document-knowledge", types.ChunkTypeText)
+	enabledChunk := makeChunk("kb-1", "document-entry", types.ChunkTypeText)
+	disabledChunk := makeChunk("kb-1", "document-entry", types.ChunkTypeText)
 	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{enabledChunk, disabledChunk}))
 	require.NoError(t, db.Model(&types.Chunk{}).
 		Where("id = ?", disabledChunk.ID).
 		Update("is_enabled", false).Error)
 
 	enabled := true
-	chunks, total, err := repo.ListPagedChunksByKnowledgeID(ctx,
+	chunks, total, err := repo.ListPagedChunksByEntryID(ctx,
 		1,
-		"document-knowledge",
+		"document-entry",
 		&types.Pagination{Page: 1, PageSize: 20},
 		[]types.ChunkType{types.ChunkTypeText},
 		"",
@@ -79,9 +79,9 @@ func TestListPagedChunksByKnowledgeID_FiltersEnabledState(t *testing.T) {
 	require.Len(t, chunks, 1)
 	assert.Equal(t, enabledChunk.ID, chunks[0].ID)
 
-	allChunks, allTotal, err := repo.ListPagedChunksByKnowledgeID(ctx,
+	allChunks, allTotal, err := repo.ListPagedChunksByEntryID(ctx,
 		1,
-		"document-knowledge",
+		"document-entry",
 		&types.Pagination{Page: 1, PageSize: 20},
 		[]types.ChunkType{types.ChunkTypeText},
 		"",
@@ -97,9 +97,9 @@ func TestUpdateChunkPersistsContent(t *testing.T) {
 	ctx := context.Background()
 
 	kbID := uuid.New().String()
-	knowledgeID := uuid.New().String()
+	entryID := uuid.New().String()
 
-	chunk := makeChunk(kbID, knowledgeID, "text")
+	chunk := makeChunk(kbID, entryID, "text")
 	require.NoError(t, db.WithContext(ctx).Create(chunk).Error)
 
 	// Test updating a chunk field ; verifies no NOW() related errors

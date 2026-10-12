@@ -27,7 +27,7 @@ import (
 	secutils "reliquary/internal/utils"
 )
 
-// ArticleHeaderRefresher is deliberately separate from KnowledgeService so
+// ArticleHeaderRefresher is deliberately separate from EntryService so
 // callers for field changes do not need to depend on the ingestion interface.
 type ArticleHeaderRefresher interface {
 	ScheduleRefresh(context.Context, string)
@@ -76,8 +76,8 @@ func vaultAbsolute(root, relative string) (string, error) {
 	return filepath.Join(root, clean), nil
 }
 
-func (v *VaultService) articleHeader(ctx context.Context, k *types.Knowledge) (VaultArticleHeader, error) {
-	source, err := articleSourceInfo(k)
+func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (VaultArticleHeader, error) {
+	source, err := entrySourceInfo(k)
 	if err != nil {
 		return VaultArticleHeader{}, err
 	}
@@ -97,16 +97,16 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Knowledge) (V
 	}
 	var names []string
 	if err = v.db.WithContext(ctx).Table("entities e").Select("e.canonical_name").
-		Joins("JOIN knowledge_entities links ON links.entity_id=e.id AND links.tenant_id=e.tenant_id").
-		Where("links.knowledge_id=? AND links.tenant_id=?", k.ID, k.TenantID).Pluck("e.canonical_name", &names).Error; err != nil {
+		Joins("JOIN entry_entities links ON links.entity_id=e.id AND links.space_id=e.space_id").
+		Where("links.entry_id=? AND links.space_id=?", k.ID, k.SpaceID).Pluck("e.canonical_name", &names).Error; err != nil {
 		return h, err
 	}
 	for _, name := range names {
 		h.Entities = append(h.Entities, "[["+name+"]]")
 	}
 	if err = v.db.WithContext(ctx).Table("topics t").Select("t.name").
-		Joins("JOIN knowledge_topics links ON links.topic_id=t.id AND links.tenant_id=t.tenant_id").
-		Where("links.knowledge_id=? AND links.tenant_id=?", k.ID, k.TenantID).Pluck("t.name", &h.Topics).Error; err != nil {
+		Joins("JOIN entry_topics links ON links.topic_id=t.id AND links.space_id=t.space_id").
+		Where("links.entry_id=? AND links.space_id=?", k.ID, k.SpaceID).Pluck("t.name", &h.Topics).Error; err != nil {
 		return h, err
 	}
 	return h, nil
@@ -134,7 +134,7 @@ func vaultArticleMonth(h VaultArticleHeader, collected time.Time) string {
 
 // WriteArticle writes an approved article once. Reprocessing only schedules a
 // metadata refresh, so the first body bytes remain authoritative.
-func (v *VaultService) WriteArticle(ctx context.Context, k *types.Knowledge, body string, read func(context.Context, string) (io.ReadCloser, error)) error {
+func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body string, read func(context.Context, string) (io.ReadCloser, error)) error {
 	if k == nil || (k.SourceKind != "" && k.SourceKind != "article") {
 		return errors.New("only articles can be written to articles/")
 	}
@@ -146,8 +146,8 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Knowledge, bod
 	defer lock.Unlock()
 	// Even the initial header comes from PostgreSQL. In-memory creation times
 	// may retain nanoseconds that were rounded to microseconds by PostgreSQL.
-	var persisted types.Knowledge
-	if err := v.db.WithContext(ctx).Where("id=? AND tenant_id=?", k.ID, k.TenantID).First(&persisted).Error; err != nil {
+	var persisted types.Entry
+	if err := v.db.WithContext(ctx).Where("id=? AND space_id=?", k.ID, k.SpaceID).First(&persisted).Error; err != nil {
 		return err
 	}
 	*k = persisted
@@ -209,7 +209,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Knowledge, bod
 		return err
 	}
 	values := map[string]any{"source_kind": "article", "vault_path": relative, "vault_body": body, "vault_original_path": original}
-	if err = v.db.WithContext(ctx).Model(&types.Knowledge{}).Where("id=? AND tenant_id=?", k.ID, k.TenantID).Updates(values).Error; err != nil {
+	if err = v.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(values).Error; err != nil {
 		_ = os.Remove(abs)
 		return err
 	}
@@ -244,7 +244,7 @@ func (v *VaultService) writeAttachment(relative string, data []byte) error {
 	return os.WriteFile(abs, data, 0644)
 }
 
-func (v *VaultService) copyArticleImages(ctx context.Context, k *types.Knowledge, articlePath, body string, read func(context.Context, string) (io.ReadCloser, error)) (string, error) {
+func (v *VaultService) copyArticleImages(ctx context.Context, k *types.Entry, articlePath, body string, read func(context.Context, string) (io.ReadCloser, error)) (string, error) {
 	type replacement struct {
 		start, end int
 		url        string
@@ -334,19 +334,19 @@ func vaultImageExtension(ref, mediaType string) string {
 
 // RefreshHeader reads fields from PostgreSQL and replaces only the leading
 // front matter. Missing files are rebuilt from the saved body in PostgreSQL.
-func (v *VaultService) RefreshHeader(ctx context.Context, knowledgeID string) (refreshErr error) {
+func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refreshErr error) {
 	defer func() {
 		if refreshErr != nil {
-			v.recordArticleError(ctx, knowledgeID, refreshErr)
+			v.recordArticleError(ctx, entryID, refreshErr)
 		}
 	}()
-	lock := v.articleLock(knowledgeID)
+	lock := v.articleLock(entryID)
 	lock.Lock()
 	defer lock.Unlock()
-	var k types.Knowledge
-	query := v.db.WithContext(ctx).Where("id=?", knowledgeID)
-	if tenant, ok := types.TenantIDFromContext(ctx); ok {
-		query = query.Where("tenant_id=?", tenant)
+	var k types.Entry
+	query := v.db.WithContext(ctx).Where("id=?", entryID)
+	if space, ok := types.SpaceIDFromContext(ctx); ok {
+		query = query.Where("space_id=?", space)
 	}
 	if err := query.First(&k).Error; err != nil {
 		return err
@@ -460,8 +460,8 @@ func (v *VaultService) ArticleError() string {
 }
 
 // ScheduleRefresh coalesces repeated changes per article using a trailing
-// timer. The context keeps tenant identity but outlives its HTTP request.
-func (v *VaultService) ScheduleRefresh(ctx context.Context, knowledgeID string) {
+// timer. The context keeps space identity but outlives its HTTP request.
+func (v *VaultService) ScheduleRefresh(ctx context.Context, entryID string) {
 	v.articles.mu.Lock()
 	defer v.articles.mu.Unlock()
 	if v.articles.stopped {
@@ -470,7 +470,7 @@ func (v *VaultService) ScheduleRefresh(ctx context.Context, knowledgeID string) 
 	if v.articles.timers == nil {
 		v.articles.timers = make(map[string]*time.Timer)
 	}
-	if prior := v.articles.timers[knowledgeID]; prior != nil && prior.Stop() {
+	if prior := v.articles.timers[entryID]; prior != nil && prior.Stop() {
 		v.articles.wg.Done()
 	}
 	delay := v.cfg.HeaderDebounce
@@ -483,15 +483,15 @@ func (v *VaultService) ScheduleRefresh(ctx context.Context, knowledgeID string) 
 	timer = time.AfterFunc(delay, func() {
 		defer v.articles.wg.Done()
 		v.articles.mu.Lock()
-		if v.articles.timers[knowledgeID] == timer {
-			delete(v.articles.timers, knowledgeID)
+		if v.articles.timers[entryID] == timer {
+			delete(v.articles.timers, entryID)
 		}
 		v.articles.mu.Unlock()
 		refreshCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		_ = v.RefreshHeader(refreshCtx, knowledgeID)
+		_ = v.RefreshHeader(refreshCtx, entryID)
 	})
-	v.articles.timers[knowledgeID] = timer
+	v.articles.timers[entryID] = timer
 }
 
 func (v *VaultService) Close() error {
@@ -514,7 +514,7 @@ func (v *VaultService) Close() error {
 	return nil
 }
 
-func (v *VaultService) ReadBody(k *types.Knowledge) ([]byte, error) {
+func (v *VaultService) ReadBody(k *types.Entry) ([]byte, error) {
 	abs, err := vaultAbsolute(v.root, k.VaultPath)
 	if err != nil {
 		return nil, err
@@ -530,7 +530,7 @@ func (v *VaultService) ReadBody(k *types.Knowledge) ([]byte, error) {
 	return body, err
 }
 
-func (v *VaultService) ReadOriginal(k *types.Knowledge) (io.ReadCloser, error) {
+func (v *VaultService) ReadOriginal(k *types.Entry) (io.ReadCloser, error) {
 	abs, err := vaultAbsolute(v.root, k.VaultOriginalPath)
 	if err != nil {
 		return nil, err
@@ -539,7 +539,7 @@ func (v *VaultService) ReadOriginal(k *types.Knowledge) (io.ReadCloser, error) {
 }
 
 // ReadImage resolves a body's relative attachment destination inside the vault.
-func (v *VaultService) ReadImage(k *types.Knowledge, ref string) (io.ReadCloser, error) {
+func (v *VaultService) ReadImage(k *types.Entry, ref string) (io.ReadCloser, error) {
 	relative := filepath.Join(filepath.Dir(filepath.FromSlash(k.VaultPath)), filepath.FromSlash(ref))
 	abs, err := vaultAbsolute(v.root, filepath.ToSlash(relative))
 	if err != nil {
@@ -549,7 +549,7 @@ func (v *VaultService) ReadImage(k *types.Knowledge, ref string) (io.ReadCloser,
 }
 
 // DeleteArticle never removes user-owned files under mine/ or reports/.
-func (v *VaultService) DeleteArticle(ctx context.Context, k *types.Knowledge) error {
+func (v *VaultService) DeleteArticle(ctx context.Context, k *types.Entry) error {
 	if k.SourceKind != "article" {
 		return nil
 	}

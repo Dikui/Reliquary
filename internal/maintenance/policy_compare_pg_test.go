@@ -22,7 +22,7 @@ func copyManifest(t *testing.T, manifest *Manifest) *Manifest {
 	return &result
 }
 
-func TestParserCredentialRefillAllowsOnlyItsTenantsUpdatedAt(t *testing.T) {
+func TestParserCredentialRefillAllowsOnlyItsSpacesUpdatedAt(t *testing.T) {
 	ctx := context.Background()
 	db := pgtest.Open(t)
 	seed(t, db)
@@ -31,34 +31,34 @@ func TestParserCredentialRefillAllowsOnlyItsTenantsUpdatedAt(t *testing.T) {
 	require.NoError(t, err)
 	_, err = Scrub(ctx, db)
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(`UPDATE tenants SET parser_engine_config='{"nested":{"mineru_api_key":"REFILLED_PARSER_SECRET","endpoint":"http://localhost"}}',updated_at=clock_timestamp() WHERE id=1`).Error)
+	require.NoError(t, db.Exec(`UPDATE spaces SET parser_engine_config='{"nested":{"mineru_api_key":"REFILLED_PARSER_SECRET","endpoint":"http://localhost"}}',updated_at=clock_timestamp() WHERE id=1`).Error)
 	actual, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(expected, actual))
 	withoutParserRequirement := copyManifest(t, expected)
 	for i := range withoutParserRequirement.Required {
-		if withoutParserRequirement.Required[i].Kind == "tenants" {
+		if withoutParserRequirement.Required[i].Kind == "spaces" {
 			withoutParserRequirement.Required[i].Fields = []string{"credentials"}
 		}
 	}
-	require.Contains(t, CompareManifest(withoutParserRequirement, actual), "table tenants")
-	wrongTenantRequirement := copyManifest(t, expected)
-	for i := range wrongTenantRequirement.Required {
-		if wrongTenantRequirement.Required[i].Kind == "tenants" {
-			wrongTenantRequirement.Required[i].ID = "2"
+	require.Contains(t, CompareManifest(withoutParserRequirement, actual), "table spaces")
+	wrongSpaceRequirement := copyManifest(t, expected)
+	for i := range wrongSpaceRequirement.Required {
+		if wrongSpaceRequirement.Required[i].Kind == "spaces" {
+			wrongSpaceRequirement.Required[i].ID = "2"
 		}
 	}
-	require.Contains(t, CompareManifest(wrongTenantRequirement, actual), "table tenants", "a reminder for another tenant cannot permit this timestamp")
+	require.Contains(t, CompareManifest(wrongSpaceRequirement, actual), "table spaces", "a reminder for another space cannot permit this timestamp")
 	// Re-entering a credential cannot allow a public parser endpoint or any
-	// other tenant metadata to change, even on the permitted tenant row.
+	// other space metadata to change, even on the permitted space row.
 	for _, mutation := range []struct{ Change, Undo string }{
-		{`UPDATE tenants SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,endpoint}','"http://changed-public-parser"') WHERE id=1`, `UPDATE tenants SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,endpoint}','"http://localhost"') WHERE id=1`},
-		{`UPDATE tenants SET name='Changed owner' WHERE id=1`, `UPDATE tenants SET name='Owner' WHERE id=1`},
+		{`UPDATE spaces SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,endpoint}','"http://changed-public-parser"') WHERE id=1`, `UPDATE spaces SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,endpoint}','"http://localhost"') WHERE id=1`},
+		{`UPDATE spaces SET name='Changed owner' WHERE id=1`, `UPDATE spaces SET name='Owner' WHERE id=1`},
 	} {
 		require.NoError(t, db.Exec(mutation.Change).Error)
 		changed, err := BuildManifest(ctx, db, root, "")
 		require.NoError(t, err)
-		require.Contains(t, CompareManifest(expected, changed), "table tenants")
+		require.Contains(t, CompareManifest(expected, changed), "table spaces")
 		if mutation.Undo != "" {
 			require.NoError(t, db.Exec(mutation.Undo).Error)
 		}
@@ -73,7 +73,7 @@ func TestPortableParserRemindersSurviveSanitizedFlushAndVaultOnlyRebuild(t *test
 	parserFields := func(required []Requirement) []string {
 		var fields []string
 		for _, requirement := range required {
-			if requirement.Kind == "tenants" && requirement.ID == "1" {
+			if requirement.Kind == "spaces" && requirement.ID == "1" {
 				for _, field := range requirement.Fields {
 					if parserCredentialRequirement(field) {
 						fields = append(fields, field)
@@ -118,7 +118,7 @@ func TestPortableParserRemindersSurviveSanitizedFlushAndVaultOnlyRebuild(t *test
 	portable, err = Load(root)
 	require.NoError(t, err)
 	require.Equal(t, parserFields(before.Required), parserFields(portable.Required), "the valid redundant copy preserves omitted original parser paths")
-	require.NoError(t, target.Exec(`UPDATE tenants SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,mineru_api_key}',to_jsonb(?::text)),updated_at=clock_timestamp() WHERE id=1`, "new-parser-secret-on-target").Error)
+	require.NoError(t, target.Exec(`UPDATE spaces SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,mineru_api_key}',to_jsonb(?::text)),updated_at=clock_timestamp() WHERE id=1`, "new-parser-secret-on-target").Error)
 	filled, err := Capture(ctx, target)
 	require.NoError(t, err)
 	require.Equal(t, parserFields(before.Required), parserFields(filled.Required))
@@ -146,7 +146,7 @@ func TestPortableParserRemindersSurviveSanitizedFlushAndVaultOnlyRebuild(t *test
 
 func seedProbeModel(t *testing.T, db *gorm.DB) {
 	t.Helper()
-	require.NoError(t, db.Exec(`INSERT INTO models(id,tenant_id,name,type,source,parameters) VALUES('chatgpt-probe',1,'chatgpt-probe','KnowledgeQA','chatgpt','{}')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO models(id,space_id,name,type,source,parameters) VALUES('chatgpt-probe',1,'chatgpt-probe','KnowledgeQA','chatgpt','{}')`).Error)
 }
 
 func appendPolicyTransition(t *testing.T, db *gorm.DB, statement string) {

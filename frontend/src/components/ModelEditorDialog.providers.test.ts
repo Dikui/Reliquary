@@ -74,9 +74,9 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
   }
   modules['@i18n'] = i18n
   modules['@/i18n'] = { __esModule:true,default:i18n }
-  modules['./modelUsage'] = evaluate(readFileSync(new URL('../api/model/modelUsage.ts',import.meta.url),'utf8'))
-  modules['../../utils/request'] = { put: async(path:string,body:any)=>{ if(process.env.RELIQUARY_RECOVERY_REQUESTS)appendFileSync(process.env.RELIQUARY_RECOVERY_REQUESTS,JSON.stringify({kind:'model_credentials',method:'PUT',path,body})+'\n');return {data:{fields:{api_key:{configured:true}}}} } }
-  modules['@/api/model'] = evaluate(readFileSync(new URL('../api/model/index.ts',import.meta.url),'utf8'))
+  modules['./model-usage'] = evaluate(readFileSync(new URL('../api/model-usage.ts',import.meta.url),'utf8'))
+  modules['../utils/request'] = { put: async(path:string,body:any)=>{ if(process.env.RELIQUARY_RECOVERY_REQUESTS)appendFileSync(process.env.RELIQUARY_RECOVERY_REQUESTS,JSON.stringify({kind:'model_credentials',method:'PUT',path,body})+'\n');return {data:{fields:{api_key:{configured:true}}}} } }
+  modules['@/api/model'] = evaluate(readFileSync(new URL('../api/model.ts',import.meta.url),'utf8'))
   modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../api/chatgpt.ts', import.meta.url), 'utf8'))
   const component = evaluate(script.content).default
   component.ssrRender = evaluate(template.code).ssrRender

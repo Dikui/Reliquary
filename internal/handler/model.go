@@ -76,15 +76,15 @@ func (h *ModelHandler) CreateModel(c *gin.Context) {
 		c.Error(errors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", req.Type)))
 		return
 	}
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
-		logger.Error(ctx, "Tenant ID is empty")
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if spaceID == 0 {
+		logger.Error(ctx, "Space ID is empty")
 		c.Error(errors.NewBadRequestError("Workspace ID cannot be empty"))
 		return
 	}
 
-	logger.Infof(ctx, "Creating model, Tenant ID: %d, Model name: %s, Model type: %s",
-		tenantID, secutils.SanitizeForLog(req.Name), secutils.SanitizeForLog(string(req.Type)))
+	logger.Infof(ctx, "Creating model, Space ID: %d, Model name: %s, Model type: %s",
+		spaceID, secutils.SanitizeForLog(req.Name), secutils.SanitizeForLog(string(req.Type)))
 
 	// SSRF validation for model BaseURL
 	if req.Parameters.BaseURL != "" {
@@ -96,7 +96,7 @@ func (h *ModelHandler) CreateModel(c *gin.Context) {
 	}
 
 	model := &types.Model{
-		TenantID:    tenantID,
+		SpaceID:     spaceID,
 		Name:        secutils.SanitizeForLog(req.Name),
 		DisplayName: secutils.SanitizeForLog(req.DisplayName),
 		Type:        types.ModelType(secutils.SanitizeForLog(string(req.Type))),
@@ -164,9 +164,9 @@ func (h *ModelHandler) ListModels(c *gin.Context) {
 
 	logger.Info(ctx, "Start retrieving model list")
 
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
-		logger.Error(ctx, "Tenant ID is empty")
+	spaceID := c.GetUint64(types.SpaceIDContextKey.String())
+	if spaceID == 0 {
+		logger.Error(ctx, "Space ID is empty")
 		c.Error(errors.NewBadRequestError("Workspace ID cannot be empty"))
 		return
 	}
@@ -178,7 +178,7 @@ func (h *ModelHandler) ListModels(c *gin.Context) {
 		return
 	}
 
-	logger.Infof(ctx, "Retrieved model list successfully, Tenant ID: %d, Total: %d models", tenantID, len(models))
+	logger.Infof(ctx, "Retrieved model list successfully, Space ID: %d, Total: %d models", spaceID, len(models))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -409,7 +409,7 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 	observations := gin.H{}
 
 	switch model.Type {
-	case types.ModelTypeKnowledgeQA:
+	case types.ModelTypeGeneration:
 		if strings.TrimSpace(input) == "" {
 			c.Error(errors.NewBadRequestError("query cannot be empty"))
 			return
@@ -668,7 +668,7 @@ type ModelProviderDTO struct {
 // KnowledgeQA -> chat, Embedding -> embedding, Rerank -> rerank, VLLM -> vllm
 func modelTypeToFrontend(mt types.ModelType) string {
 	switch mt {
-	case types.ModelTypeKnowledgeQA:
+	case types.ModelTypeGeneration:
 		return "chat"
 	case types.ModelTypeEmbedding:
 		return "embedding"
@@ -692,7 +692,7 @@ func (h *ModelHandler) ListModelProviders(c *gin.Context) {
 	var backendModelType types.ModelType
 	switch modelType {
 	case "chat":
-		backendModelType = types.ModelTypeKnowledgeQA
+		backendModelType = types.ModelTypeGeneration
 	case "embedding":
 		backendModelType = types.ModelTypeEmbedding
 	case "rerank":

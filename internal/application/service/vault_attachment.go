@@ -15,22 +15,22 @@ import (
 
 // OpenAttachment resolves an article-relative image inside its own attachment directory.
 func (v *VaultService) OpenAttachment(ctx context.Context, id, reference string) (*os.File, error) {
-	tenant, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenant == 0 {
+	space, ok := types.SpaceIDFromContext(ctx)
+	if !ok || space == 0 {
 		return nil, werrors.NewUnauthorizedError("authenticated attachment reader required")
 	}
-	var knowledge types.Knowledge
-	if err := v.db.WithContext(ctx).Where("id=? AND tenant_id=? AND source_kind='article'", id, tenant).First(&knowledge).Error; err != nil {
+	var entry types.Entry
+	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind='article'", id, space).First(&entry).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, werrors.NewNotFoundError("article not found")
 		}
 		return nil, err
 	}
-	if knowledge.VaultPath == "" || reference == "" || filepath.IsAbs(reference) || strings.Contains(reference, "\\") {
+	if entry.VaultPath == "" || reference == "" || filepath.IsAbs(reference) || strings.Contains(reference, "\\") {
 		return nil, werrors.NewBadRequestError("invalid article attachment path")
 	}
-	relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(knowledge.VaultPath)), filepath.FromSlash(reference))))
-	if !strings.HasPrefix(relative, "attachments/"+knowledge.ID+"/") {
+	relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(entry.VaultPath)), filepath.FromSlash(reference))))
+	if !strings.HasPrefix(relative, "attachments/"+entry.ID+"/") {
 		return nil, werrors.NewBadRequestError("attachment path must belong to the article")
 	}
 	abs, err := vaultAbsolute(v.root, relative)

@@ -8,7 +8,7 @@ import (
 
 // SystemSettingRepository is the storage layer for the platform-wide
 // system_settings table. All methods are system-scoped — there is no
-// tenant_id; rows are global to the deployment.
+// space_id; rows are global to the deployment.
 type SystemSettingRepository interface {
 	// Get fetches a row by key. Returns (nil, nil) when the key is not
 	// present — callers fall back to ENV / default at the service layer.

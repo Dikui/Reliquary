@@ -15,9 +15,9 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 	ctx := context.Background()
 	source := pgtest.Open(t)
 	seed(t, source)
-	require.NoError(t, source.Exec(`UPDATE knowledges SET vault_path='articles/materialized.md' WHERE id='article'`).Error)
-	require.NoError(t, source.Exec(`UPDATE knowledges SET structured_summary='null'::jsonb WHERE id='pending'`).Error)
-	require.NoError(t, source.Exec(`INSERT INTO operation_logs(id,tenant_id,actor,operation_type,object_id,before_value,after_value) VALUES('literal-null',1,'owner','create_topic','topic','null'::jsonb,'null'::jsonb)`).Error)
+	require.NoError(t, source.Exec(`UPDATE entries SET vault_path='articles/materialized.md' WHERE id='article'`).Error)
+	require.NoError(t, source.Exec(`UPDATE entries SET structured_summary='null'::jsonb WHERE id='pending'`).Error)
+	require.NoError(t, source.Exec(`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('literal-null',1,'owner','create_topic','topic','null'::jsonb,'null'::jsonb)`).Error)
 	root, uploads := t.TempDir(), t.TempDir()
 	article := filepath.Join(root, "articles/materialized.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(article), 0700))
@@ -29,7 +29,7 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 	require.NoError(t, WriteSnapshot(root, uploads, snapshot))
 	before, err := Files(root)
 	require.NoError(t, err)
-	for _, row := range snapshot.Tables["knowledges"] {
+	for _, row := range snapshot.Tables["entries"] {
 		if row["id"] == "article" {
 			require.NotContains(t, row, "vault_body", "published body belongs to the article file")
 		}
@@ -49,23 +49,23 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 		}
 	}
 	var body string
-	require.NoError(t, target.Raw(`SELECT vault_body FROM knowledges WHERE id='article'`).Scan(&body).Error)
+	require.NoError(t, target.Raw(`SELECT vault_body FROM entries WHERE id='article'`).Scan(&body).Error)
 	require.Equal(t, "Immutable body", body)
 	require.NoError(t, VerifyImportedReplica(ctx, target, root))
 	after, err := Files(root)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "verification must not flush or alter original files")
 
-	originalRelation, err := json.Marshal(snapshot.Tables["knowledge_topics"][0])
+	originalRelation, err := json.Marshal(snapshot.Tables["entry_topics"][0])
 	require.NoError(t, err)
 	for _, test := range []struct {
 		name, mutate, restore, expected string
 		restoreArgs                     []any
 	}{
-		{"missing_row", `DELETE FROM knowledge_topics WHERE knowledge_id='article'`, `INSERT INTO knowledge_topics SELECT * FROM jsonb_populate_record(NULL::knowledge_topics,?::jsonb)`, "table knowledge_topics", []any{string(originalRelation)}},
+		{"missing_row", `DELETE FROM entry_topics WHERE entry_id='article'`, `INSERT INTO entry_topics SELECT * FROM jsonb_populate_record(NULL::entry_topics,?::jsonb)`, "table entry_topics", []any{string(originalRelation)}},
 		{"changed_description", `UPDATE topics SET description='Changed user description' WHERE id='topic'`, `UPDATE topics SET description='User topic description' WHERE id='topic'`, "table topics", nil},
-		{"unexpected_row", `INSERT INTO topics(id,tenant_id,name,description) VALUES('unexpected',1,'Unexpected','Must not be absorbed into a fresh baseline')`, `DELETE FROM topics WHERE id='unexpected'`, "table topics", nil},
-		{"literal_null_changed_to_sql_null", `UPDATE knowledges SET structured_summary=NULL WHERE id='pending'`, `UPDATE knowledges SET structured_summary='null'::jsonb WHERE id='pending'`, "table JSONB null types knowledges", nil},
+		{"unexpected_row", `INSERT INTO topics(id,space_id,name,description) VALUES('unexpected',1,'Unexpected','Must not be absorbed into a fresh baseline')`, `DELETE FROM topics WHERE id='unexpected'`, "table topics", nil},
+		{"literal_null_changed_to_sql_null", `UPDATE entries SET structured_summary=NULL WHERE id='pending'`, `UPDATE entries SET structured_summary='null'::jsonb WHERE id='pending'`, "table JSONB null types entries", nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.NoError(t, target.Exec(test.mutate).Error)

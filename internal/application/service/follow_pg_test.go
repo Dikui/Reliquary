@@ -15,29 +15,29 @@ import (
 )
 
 type followFixture struct {
-	*articleSearchFixture
+	*entrySearchFixture
 	follows *FollowService
 }
 
 func newFollowFixture(t *testing.T) *followFixture {
 	t.Helper()
-	h := newArticleSearchFixture(t)
+	h := newEntrySearchFixture(t)
 	h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalWebUser, ID: "follow-owner"})
 	entities := []types.Entity{entityRecord("entity-follow", "Followed company", "company"), entityRecord("entity-other", "Other company", "company")}
 	require.NoError(t, h.db.Create(&entities).Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-follow", TenantID: 1, Name: "Followed research"}).Error)
-	return &followFixture{articleSearchFixture: h, follows: NewFollowService(h.db)}
+	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-follow", SpaceID: 1, Name: "Followed research"}).Error)
+	return &followFixture{entrySearchFixture: h, follows: NewFollowService(h.db)}
 }
 
 func (h *followFixture) link(t *testing.T, articleID string, entity, topic bool) {
 	t.Helper()
 	var when time.Time
-	require.NoError(t, h.db.Table("knowledges").Select("created_at").Where("id=?", articleID).Scan(&when).Error)
+	require.NoError(t, h.db.Table("entries").Select("created_at").Where("id=?", articleID).Scan(&when).Error)
 	if entity {
-		require.NoError(t, h.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: articleID, EntityID: "entity-follow", CreatedAt: when}).Error)
+		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: articleID, EntityID: "entity-follow", CreatedAt: when}).Error)
 	}
 	if topic {
-		require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: articleID, TopicID: "topic-follow", CreatedAt: when}).Error)
+		require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: articleID, TopicID: "topic-follow", CreatedAt: when}).Error)
 	}
 }
 
@@ -51,9 +51,9 @@ func (h *followFixture) followBoth(t *testing.T) {
 
 func (h *followFixture) collected(t *testing.T, id string, when time.Time) {
 	t.Helper()
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Where("id=?", id).Updates(map[string]any{"created_at": when, "follow_ready_at": when}).Error)
-	require.NoError(t, h.db.Table("knowledge_entities").Where("knowledge_id=?", id).Update("created_at", when).Error)
-	require.NoError(t, h.db.Table("knowledge_topics").Where("knowledge_id=?", id).Update("created_at", when).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Updates(map[string]any{"created_at": when, "follow_ready_at": when}).Error)
+	require.NoError(t, h.db.Table("entry_entities").Where("entry_id=?", id).Update("created_at", when).Error)
+	require.NoError(t, h.db.Table("entry_topics").Where("entry_id=?", id).Update("created_at", when).Error)
 }
 
 func (h *followFixture) feed(t *testing.T, request types.FollowFeedRequest) *types.FollowFeedResponse {
@@ -66,7 +66,7 @@ func (h *followFixture) feed(t *testing.T, request types.FollowFeedRequest) *typ
 func followFeedIDs(result *types.FollowFeedResponse) []string {
 	ids := make([]string, 0, len(result.Results))
 	for _, item := range result.Results {
-		ids = append(ids, item.ArticleID)
+		ids = append(ids, item.EntryID)
 	}
 	return ids
 }
@@ -113,7 +113,7 @@ func TestFollowsPostgresActionsIdempotencyAndLogs(t *testing.T) {
 		require.Equal(t, "api_key:follow-key", log.Actor)
 		require.JSONEq(t, "null", string(log.After))
 	}
-	otherCtx := context.WithValue(h.ctx, types.TenantIDContextKey, uint64(2))
+	otherCtx := context.WithValue(h.ctx, types.SpaceIDContextKey, uint64(2))
 	_, err = h.follows.Follow(otherCtx, "entity", "entity-follow")
 	require.Error(t, err)
 	for _, pair := range [][2]string{{"article", "entity-follow"}, {"entity", ""}, {"topic", "missing"}} {
@@ -185,7 +185,7 @@ func TestFollowsPostgresMergeTransferDeduplicationAndDeletion(t *testing.T) {
 				require.NoError(t, err)
 			}
 			article := h.add(t, "merged-article", "article", "2026-10-01", "event", "semanticlaunch", 0)
-			require.NoError(t, h.db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: article.ID, EntityID: "entity-other"}).Error)
+			require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: "entity-other"}).Error)
 			require.NoError(t, h.db.Model(&types.KnowledgeBase{}).Where("id='search-kb'").Update("summary_model_id", "entity-chat").Error)
 			entities := NewEntityService(h.db, entityTestModels{model: &entityCountingChat{}})
 			require.NoError(t, entities.MergeEntities(h.ctx, "entity-follow", "entity-other"))
@@ -221,7 +221,7 @@ func TestFollowsPostgresMergeTransferDeduplicationAndDeletion(t *testing.T) {
 	var count int64
 	require.NoError(t, h.db.Model(&types.Follow{}).Count(&count).Error)
 	require.Zero(t, count)
-	require.Error(t, h.db.Create(&types.Follow{TenantID: 1, TargetType: "entity", TargetID: "missing"}).Error)
+	require.Error(t, h.db.Create(&types.Follow{SpaceID: 1, TargetType: "entity", TargetID: "missing"}).Error)
 	require.NoError(t, h.follows.Unfollow(h.ctx, "topic", "topic-follow"))
 }
 
@@ -246,13 +246,13 @@ func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T
 		"disabled":          {"enable_status": "disabled"},
 		"deleted":           {"deleted_at": now},
 	} {
-		require.NoError(t, h.db.Model(&types.Knowledge{}).Where("id=?", id).Updates(updates).Error)
+		require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Updates(updates).Error)
 	}
 	for _, source := range []string{"mine", "report"} {
 		h.add(t, source, source, "2026-10-01", "", "semanticlaunch", 0)
 		h.link(t, source, true, true)
 	}
-	request := types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: articleSearchNoCollapse()}
+	request := types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()}
 	result := h.feed(t, request)
 	require.Equal(t, []string{"both", "topic-only", "entity-only", "old"}, followFeedIDs(result))
 	require.EqualValues(t, 4, result.Total)
@@ -286,9 +286,9 @@ func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T
 	require.True(t, result.Results[1].IsNew)
 	require.False(t, result.Results[2].IsNew, "timestamp equality is already seen")
 	require.False(t, result.Results[3].IsNew)
-	defaultFeed := h.feed(t, types.FollowFeedRequest{CollapseSimilar: articleSearchNoCollapse()})
+	defaultFeed := h.feed(t, types.FollowFeedRequest{CollapseSimilar: entrySearchNoCollapse()})
 	require.Equal(t, []string{"both", "topic-only"}, followFeedIDs(defaultFeed))
-	explicit := h.feed(t, types.FollowFeedRequest{Since: now.Add(-9 * 24 * time.Hour).Format(time.RFC3339Nano), Limit: 1, CollapseSimilar: articleSearchNoCollapse()})
+	explicit := h.feed(t, types.FollowFeedRequest{Since: now.Add(-9 * 24 * time.Hour).Format(time.RFC3339Nano), Limit: 1, CollapseSimilar: entrySearchNoCollapse()})
 	require.EqualValues(t, 4, explicit.Total)
 	require.Len(t, explicit.Results, 1)
 	state, err = h.follows.State(h.ctx)
@@ -335,31 +335,31 @@ func TestFollowFeedPostgresSimilarReportsRulesAndChildMetadata(t *testing.T) {
 			case "identical":
 				expected = 1
 			case "different-model":
-				require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id='b'").Update("model_id", "other-model").Error)
+				require.NoError(t, h.db.Table("article_embeddings").Where("entry_id='b'").Update("model_id", "other-model").Error)
 			case "different-dimension":
-				require.NoError(t, h.db.Exec("UPDATE article_embeddings SET dimension=2,embedding=? WHERE knowledge_id='b'", pgvector.NewHalfVector([]float32{1, 0})).Error)
+				require.NoError(t, h.db.Exec("UPDATE article_embeddings SET dimension=2,embedding=? WHERE entry_id='b'", pgvector.NewHalfVector([]float32{1, 0})).Error)
 			case "missing-publication":
-				require.NoError(t, h.db.Model(&types.Knowledge{}).Where("id='b'").Update("metadata", types.JSON(`{"original_url":"https://example.org/b"}`)).Error)
+				require.NoError(t, h.db.Model(&types.Entry{}).Where("id='b'").Update("metadata", types.JSON(`{"original_url":"https://example.org/b"}`)).Error)
 			case "outside-window":
-				require.NoError(t, h.db.Model(&types.Knowledge{}).Where("id='b'").Update("metadata", types.JSON(`{"published_at":"2020-01-01"}`)).Error)
+				require.NoError(t, h.db.Model(&types.Entry{}).Where("id='b'").Update("metadata", types.JSON(`{"published_at":"2020-01-01"}`)).Error)
 			case "all-pairs":
 				h.add(t, "c", "article", "2026-10-01", "event", "semanticlaunch", 0)
 				h.link(t, "c", true, true)
 				h.collected(t, "c", now.Add(-3*time.Hour))
 				config := &types.RetrievalConfig{SimilarReportsThreshold: 0.95}
-				require.NoError(t, h.db.Model(&types.Tenant{}).Where("id=1").Update("retrieval_config", config).Error)
+				require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("retrieval_config", config).Error)
 				for i, id := range []string{"a", "b", "c"} {
 					angle := float64(i) * math.Pi / 12
-					require.NoError(t, h.db.Exec("UPDATE article_embeddings SET embedding=? WHERE knowledge_id=?", pgvector.NewHalfVector([]float32{float32(math.Cos(angle)), float32(math.Sin(angle)), 0}), id).Error)
+					require.NoError(t, h.db.Exec("UPDATE article_embeddings SET embedding=? WHERE entry_id=?", pgvector.NewHalfVector([]float32{float32(math.Cos(angle)), float32(math.Sin(angle)), 0}), id).Error)
 				}
 			}
 			result := h.feed(t, types.FollowFeedRequest{IncludeSeen: true})
 			require.Len(t, result.Results, expected)
-			require.Equal(t, "a", result.Results[0].ArticleID, "newest collection represents the group")
+			require.Equal(t, "a", result.Results[0].EntryID, "newest collection represents the group")
 			if scenario == "identical" || scenario == "all-pairs" {
 				require.Len(t, result.Results[0].SimilarReports, 1)
 				child := result.Results[0].SimilarReports[0]
-				require.Equal(t, "b", child.ArticleID)
+				require.Equal(t, "b", child.EntryID)
 				require.True(t, child.IsNew)
 				require.Equal(t, "topic-follow", child.MatchedFollows[0].TargetID)
 				require.NotEmpty(t, child.CollectedAt)
@@ -375,7 +375,7 @@ func TestFollowFeedPostgresSimilarReportsRulesAndChildMetadata(t *testing.T) {
 				require.NoError(t, json.Unmarshal(raw, &serialized))
 				require.True(t, serialized.Results[0].SimilarReports[0].IsNew, "JSON preserves follow metadata in folded articles")
 			}
-			unfolded := h.feed(t, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: articleSearchNoCollapse()})
+			unfolded := h.feed(t, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()})
 			require.EqualValues(t, len(unfolded.Results), result.NewCount)
 			require.Equal(t, unfolded.Total, result.Total)
 		})
@@ -408,22 +408,22 @@ func TestFollowFeedPostgresLateEligibilityAndAssociationTimes(t *testing.T) {
 		h.collected(t, id, old)
 	}
 	h.link(t, "processing-late", true, false)
-	require.NoError(t, h.db.Table("knowledges").Where("id='processing-late'").Update("parse_status", types.ParseStatusProcessing).Error)
-	require.NoError(t, h.db.Table("knowledges").Where("id='recognized-late'").Update("parse_status", types.ParseStatusProcessing).Error)
-	opened := h.feed(t, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: articleSearchNoCollapse()})
+	require.NoError(t, h.db.Table("entries").Where("id='processing-late'").Update("parse_status", types.ParseStatusProcessing).Error)
+	require.NoError(t, h.db.Table("entries").Where("id='recognized-late'").Update("parse_status", types.ParseStatusProcessing).Error)
+	opened := h.feed(t, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()})
 	_, err := h.follows.MarkViewed(h.ctx, &opened.ViewedAt)
 	require.NoError(t, err)
-	require.NoError(t, h.db.Table("knowledges").Where("id='processing-late'").Update("parse_status", types.ParseStatusCompleted).Error)
+	require.NoError(t, h.db.Table("entries").Where("id='processing-late'").Update("parse_status", types.ParseStatusCompleted).Error)
 	require.NoError(t, h.db.Model(&types.KnowledgeBase{}).Where("id='search-kb'").Update("summary_model_id", "entity-chat").Error)
 	entities := NewEntityService(h.db, entityTestModels{model: &entityCountingChat{}})
 	_, err = entities.ResolveEntities(h.ctx, "recognized-late", []types.EntityCandidate{{Name: "Followed company", EntityType: "company"}})
 	require.NoError(t, err)
-	require.NoError(t, h.db.Table("knowledges").Where("id='recognized-late'").Update("parse_status", types.ParseStatusCompleted).Error)
+	require.NoError(t, h.db.Table("entries").Where("id='recognized-late'").Update("parse_status", types.ParseStatusCompleted).Error)
 	// A new relation can arrive after qualification, including in a reprocessing write.
 	_, err = entities.ResolveEntities(h.ctx, "association-late", []types.EntityCandidate{{Name: "Followed company", EntityType: "company"}})
 	require.NoError(t, err)
-	require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: "historical", TopicID: "topic-follow", Source: types.TopicSourceModel, IsHistorical: true}).Error)
-	result := h.feed(t, types.FollowFeedRequest{CollapseSimilar: articleSearchNoCollapse()})
+	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "historical", TopicID: "topic-follow", Source: types.TopicSourceModel, IsHistorical: true}).Error)
+	result := h.feed(t, types.FollowFeedRequest{CollapseSimilar: entrySearchNoCollapse()})
 	require.ElementsMatch(t, []string{"processing-late", "recognized-late", "association-late"}, followFeedIDs(result))
 	require.EqualValues(t, 3, result.NewCount)
 	for _, item := range result.Results {
@@ -431,17 +431,17 @@ func TestFollowFeedPostgresLateEligibilityAndAssociationTimes(t *testing.T) {
 		require.True(t, item.EnteredAt.After(opened.ViewedAt))
 		require.True(t, item.CollectedAt.Before(opened.ViewedAt))
 	}
-	all := h.feed(t, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: articleSearchNoCollapse()})
+	all := h.feed(t, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()})
 	require.Len(t, all.Results, 4)
 	for _, item := range all.Results {
-		if item.ArticleID == "historical" {
+		if item.EntryID == "historical" {
 			require.Nil(t, item.EnteredAt)
 			require.False(t, item.IsNew)
 		}
 	}
 	// Adding a follow never changes an old article's entrance time.
-	require.NoError(t, h.db.Create(&types.Topic{TenantID: 1, ID: "history-follow", Name: "New historical follow"}).Error)
-	require.NoError(t, h.db.Create(&types.KnowledgeTopic{TenantID: 1, KnowledgeID: "historical", TopicID: "history-follow", CreatedAt: old}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{SpaceID: 1, ID: "history-follow", Name: "New historical follow"}).Error)
+	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "historical", TopicID: "history-follow", CreatedAt: old}).Error)
 	_, err = h.follows.Follow(h.ctx, "topic", "history-follow")
 	require.NoError(t, err)
 	require.Empty(t, h.feed(t, types.FollowFeedRequest{TargetIDs: []string{"history-follow"}}).Results)
@@ -463,7 +463,7 @@ func TestFollowFeedPostgresCursorWindowAndFoldedPagination(t *testing.T) {
 			}
 			// Keep one pair folded and the other articles outside its publication window.
 			for _, id := range []string{"c", "d", "e"} {
-				require.NoError(t, h.db.Table("knowledges").Where("id=?", id).Update("metadata", types.JSON(`{"published_at":"2020-01-01"}`)).Error)
+				require.NoError(t, h.db.Table("entries").Where("id=?", id).Update("metadata", types.JSON(`{"published_at":"2020-01-01"}`)).Error)
 			}
 			checkpoint := date.Add(-time.Second)
 			_, err := h.follows.MarkViewed(h.ctx, &checkpoint)
@@ -481,9 +481,9 @@ func TestFollowFeedPostgresCursorWindowAndFoldedPagination(t *testing.T) {
 				require.Equal(t, cutoff, page.ViewedAt)
 				require.EqualValues(t, 5, page.Total)
 				for _, item := range page.Results {
-					ids = append(ids, item.ArticleID)
+					ids = append(ids, item.EntryID)
 					for _, child := range item.SimilarReports {
-						ids = append(ids, child.ArticleID)
+						ids = append(ids, child.EntryID)
 					}
 				}
 				if page.NextCursor == "" {
@@ -519,7 +519,7 @@ func TestFollowFeedPostgresRealTopicBackfillPreservesHistoricalLinks(t *testing.
 	for _, link := range links {
 		require.True(t, link.IsHistorical)
 	}
-	feed, err := follows.Feed(ctx, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: articleSearchNoCollapse()})
+	feed, err := follows.Feed(ctx, types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()})
 	require.NoError(t, err)
 	require.Len(t, feed.Results, 2)
 	require.Zero(t, feed.NewCount)
@@ -531,11 +531,11 @@ func TestFollowFeedPostgresRealTopicBackfillPreservesHistoricalLinks(t *testing.
 	require.NoError(t, err)
 	require.Empty(t, fresh.Results)
 	// Replacing unchanged model topics preserves their association origin and timestamp.
-	var original types.KnowledgeTopic
-	require.NoError(t, h.db.Where("knowledge_id=? AND topic_id=?", articles[0].ID, topic.ID).First(&original).Error)
-	require.NoError(t, topics.ReplaceKnowledgeTopics(ctx, articles[0].ID, []string{topic.ID}))
-	var preserved types.KnowledgeTopic
-	require.NoError(t, h.db.Where("knowledge_id=? AND topic_id=?", articles[0].ID, topic.ID).First(&preserved).Error)
+	var original types.EntryTopic
+	require.NoError(t, h.db.Where("entry_id=? AND topic_id=?", articles[0].ID, topic.ID).First(&original).Error)
+	require.NoError(t, topics.ReplaceEntryTopics(ctx, articles[0].ID, []string{topic.ID}))
+	var preserved types.EntryTopic
+	require.NoError(t, h.db.Where("entry_id=? AND topic_id=?", articles[0].ID, topic.ID).First(&preserved).Error)
 	require.True(t, preserved.IsHistorical)
 	require.Equal(t, original.CreatedAt.UnixMicro(), preserved.CreatedAt.UnixMicro())
 }

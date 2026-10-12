@@ -34,14 +34,18 @@ type maintenanceCredentialInput struct {
 func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, input io.Reader, output io.Writer) error {
 	flags := flag.NewFlagSet("maintenance credentials", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	kind := flags.String("kind", "model", "model, data-source or tenant")
+	kind := flags.String("kind", "model", "model, data-source or space")
 	id := flags.String("id", "", "existing configuration ID")
 	path := flags.String("input", "-", "owner-only JSON file or - for stdin")
 	if err := flags.Parse(args); err != nil {
 		return errors.New("invalid credential command options")
 	}
-	if *id == "" || flags.NArg() != 0 || (*kind != "model" && *kind != "data-source" && *kind != "tenant") {
-		return errors.New("credentials requires --kind model|data-source|tenant --id ID and JSON input")
+	if *kind == "tenant" {
+		fmt.Fprintln(os.Stderr, "WARN: --kind tenant is deprecated; use --kind space")
+		*kind = "space"
+	}
+	if *id == "" || flags.NArg() != 0 || (*kind != "model" && *kind != "data-source" && *kind != "space") {
+		return errors.New("credentials requires --kind model|data-source|space --id ID and JSON input")
 	}
 	if utils.GetAESKey() == nil {
 		return errors.New("credentials requires a new 32-byte SYSTEM_AES_KEY; values were not changed")
@@ -74,25 +78,25 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 	}
 	status := ""
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if *kind == "tenant" {
+		if *kind == "space" {
 			if request.APIKey != nil || request.AppSecret != nil || request.BaseURL != nil || len(request.CustomHeaders) != 0 || len(request.ExtraConfig) != 0 || len(request.Credentials) != 0 || len(request.ParserEngineConfig) != 1 {
-				return errors.New("tenant input requires only parser_engine_config.mineru_api_key")
+				return errors.New("space input requires only parser_engine_config.mineru_api_key")
 			}
 			value, ok := request.ParserEngineConfig["mineru_api_key"]
 			if !ok || strings.TrimSpace(value) == "" || value == types.RedactedSecretPlaceholder {
-				return errors.New("tenant parser credential must be a nonempty new mineru_api_key")
+				return errors.New("space parser credential must be a nonempty new mineru_api_key")
 			}
-			var tenant struct {
+			var space struct {
 				Config types.JSON `gorm:"column:parser_engine_config"`
 				Status string
 			}
-			if err := tx.Table("tenants").Select("parser_engine_config,status").Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", *id).Take(&tenant).Error; err != nil {
-				return errors.New("tenant not found or unavailable")
+			if err := tx.Table("spaces").Select("parser_engine_config,status").Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", *id).Take(&space).Error; err != nil {
+				return errors.New("space not found or unavailable")
 			}
 			config := map[string]any{}
-			if len(tenant.Config) != 0 && string(tenant.Config) != "null" {
-				if err := json.Unmarshal(tenant.Config, &config); err != nil || config == nil {
-					return errors.New("tenant parser configuration is invalid")
+			if len(space.Config) != 0 && string(space.Config) != "null" {
+				if err := json.Unmarshal(space.Config, &config); err != nil || config == nil {
+					return errors.New("space parser configuration is invalid")
 				}
 			}
 			// The existing parser adapter expects this field in its legacy
@@ -101,16 +105,16 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 			config["mineru_api_key"] = value
 			encoded, err := json.Marshal(config)
 			if err != nil {
-				return errors.New("cannot encode tenant parser configuration")
+				return errors.New("cannot encode space parser configuration")
 			}
-			if err := tx.Table("tenants").Where("id=?", *id).UpdateColumn("parser_engine_config", gorm.Expr("?::jsonb", string(encoded))).Error; err != nil {
-				return errors.New("cannot save tenant parser credential; values were not changed")
+			if err := tx.Table("spaces").Where("id=?", *id).UpdateColumn("parser_engine_config", gorm.Expr("?::jsonb", string(encoded))).Error; err != nil {
+				return errors.New("cannot save space parser credential; values were not changed")
 			}
-			status = tenant.Status
+			status = space.Status
 			return nil
 		}
 		if len(request.ParserEngineConfig) != 0 {
-			return errors.New("parser_engine_config requires --kind tenant")
+			return errors.New("parser_engine_config requires --kind space")
 		}
 		if *kind == "model" {
 			if len(request.Credentials) != 0 {

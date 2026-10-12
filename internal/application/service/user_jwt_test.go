@@ -25,16 +25,16 @@ func TestIsRefreshTokenClaims(t *testing.T) {
 	}
 }
 
-// tenantIDFromClaims is the JWT->tenant-id projection used by
+// spaceIDFromClaims is the JWT->space-id projection used by
 // userService.ValidateToken. It must:
-//   - prefer the claim when present (so /auth/switch-tenant takes effect)
+//   - prefer the claim when present (so /auth/switch-space takes effect)
 //   - fall back to the caller-supplied default when the claim is absent
-//     (backward compatibility with tokens minted before tenant-level RBAC)
+//     (backward compatibility with tokens minted before space-level RBAC)
 //   - reject zero / negative claim values rather than scoping the session
-//     to "tenant 0"
+//     to "space 0"
 //
 // These tests are pure-function so they don't need any DB/repo plumbing.
-func TestTenantIDFromClaims(t *testing.T) {
+func TestSpaceIDFromClaims(t *testing.T) {
 	cases := []struct {
 		name     string
 		claims   jwt.MapClaims
@@ -48,7 +48,7 @@ func TestTenantIDFromClaims(t *testing.T) {
 			want:     99,
 		},
 		{
-			name:     "missing claim falls back to home tenant",
+			name:     "missing claim falls back to home space",
 			claims:   jwt.MapClaims{"user_id": "u1"},
 			fallback: 7,
 			want:     7,
@@ -86,8 +86,8 @@ func TestTenantIDFromClaims(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := tenantIDFromClaims(tc.claims, tc.fallback); got != tc.want {
-				t.Fatalf("tenantIDFromClaims(%v, %d) = %d, want %d",
+			if got := spaceIDFromClaims(tc.claims, tc.fallback); got != tc.want {
+				t.Fatalf("spaceIDFromClaims(%v, %d) = %d, want %d",
 					tc.claims, tc.fallback, got, tc.want)
 			}
 		})

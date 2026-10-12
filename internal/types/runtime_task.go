@@ -69,13 +69,13 @@ type RuntimeTaskInfo struct {
 	MaxRetry        int                 `json:"max_retry"`
 	IsOrphaned      bool                `json:"is_orphaned,omitempty"`
 	Worker          string              `json:"worker,omitempty"`
-	TenantID        uint64              `json:"tenant_id,omitempty"`
+	SpaceID         uint64              `json:"space_id,omitempty"`
 	KnowledgeBaseID string              `json:"knowledge_base_id,omitempty"`
-	KnowledgeID     string              `json:"knowledge_id,omitempty"`
+	EntryID         string              `json:"entry_id,omitempty"`
 	TaskID          string              `json:"task_id,omitempty"`
 	DataSourceID    string              `json:"data_source_id,omitempty"`
 	SyncLogID       string              `json:"sync_log_id,omitempty"`
-	KnowledgeCount  int                 `json:"knowledge_count,omitempty"`
+	EntryCount      int                 `json:"entry_count,omitempty"`
 }
 
 // RuntimeTaskPage is one stable slice of the operator task list. NextCursor

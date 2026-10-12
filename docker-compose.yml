@@ -2,7 +2,7 @@ services:
   frontend:
     image: reliquary-ui:${RELIQUARY_VERSION:-0.8.0}
     pull_policy: build
-    # Requires frontend/dist — run ./scripts/build_frontend_dist.sh before --build
+    # Requires frontend/dist — run ./scripts/build-frontend-dist.sh before --build
     build:
       context: ./frontend
     ports:
@@ -44,7 +44,7 @@ services:
       - ./config/config.yaml:/app/config/config.yaml
       # Optional: declarative built-in models. Copy config/builtin_models.yaml.example
       # to config/builtin_models.yaml, edit it for your deployment, then
-      # uncomment the line below. See docs/BUILTIN_MODELS.md.
+      # uncomment the line below. See docs/builtin-models.md.
       # - ./config/builtin_models.yaml:/app/config/builtin_models.yaml:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -60,7 +60,7 @@ services:
     # (env_file: - path: .env, required: false) because the map syntax
     # requires Docker Compose v2.24+ (Jan 2024) and would break parsing on
     # older deploys. The trade-off is that Compose errors out if .env is
-    # absent — see scripts/start_all.sh for the pre-flight touch that keeps
+    # absent — see scripts/start-all.sh for the pre-flight touch that keeps
     # fresh clones working.
     env_file:
       - .env
@@ -116,7 +116,7 @@ services:
       - RELIQUARY_LLM_STREAM_RAW_DUMP=${RELIQUARY_LLM_STREAM_RAW_DUMP:-}
       - RELIQUARY_LLM_STREAM_RAW_DUMP_DIR=${RELIQUARY_LLM_STREAM_RAW_DUMP_DIR:-}
       # 数据库中 API Key 等敏感字段落盘加密的 AES-256 主密钥（必须为 32 字节）。
-      # 加密范围：tenants.api_key、模型 API key 等敏感字段。
+      # 加密范围：api_keys.api_key、模型 API key 等敏感字段。
       # 密钥不随备份或迁移包保存；新环境生成新密钥并重新填写凭据。
       # 生产环境必须显式设置且妥善保管。
       # （TENANT_AES_KEY / CRYPTO_MASTER_KEY / CRYPTO_SALT 已废弃：v0.4.0 起加密统一

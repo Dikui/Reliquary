@@ -1,7 +1,7 @@
 import { get, post, put, del } from '@/utils/request'
-import type { KnowledgeTopic } from '@/types/knowledgeClassification'
+import type { EntryTopic } from '@/types/entryClassification'
 
-export interface Topic extends KnowledgeTopic { article_count: number; created_at: string; updated_at: string }
+export interface Topic extends EntryTopic { article_count: number; created_at: string; updated_at: string }
 export interface TopicBackfill {
   id: string
   topic_id: string

@@ -13,5 +13,5 @@ func RegisterTopicRoutes(r *gin.RouterGroup, h *handler.TopicHandler, guards *ac
 	topics.DELETE("/:id", h.Delete)
 	topics.GET("/:id/backfill", h.Backfill)
 	topics.POST("/:id/backfill/retry", h.RetryBackfill)
-	r.PUT("/knowledge/:id/topics", guards.KBExistsFromKnowledgeIDParam("id"), h.CorrectKnowledgeTopics)
+	r.PUT("/entries/:id/topics", guards.KBExistsFromEntryIDParam("id"), h.CorrectEntryTopics)
 }

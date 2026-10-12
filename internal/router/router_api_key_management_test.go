@@ -27,6 +27,6 @@ func TestPersonalAPIKeyCanManageAPIKeys(t *testing.T) {
 	require.Contains(t, updated.Body.String(), "renamed")
 	removed := personalRequest(t, f.router, http.MethodDelete, path, "", f.key, true)
 	require.Equal(t, http.StatusOK, removed.Code, removed.Body.String())
-	revoked := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-domains", "", response.Data.Token, true)
+	revoked := personalRequest(t, f.router, http.MethodGet, "/api/v1/entry-domains", "", response.Data.Token, true)
 	require.Equal(t, http.StatusUnauthorized, revoked.Code, revoked.Body.String())
 }

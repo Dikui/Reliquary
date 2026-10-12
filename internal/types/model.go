@@ -19,19 +19,19 @@ type ModelType string
 
 // SupportsImageProcessing reports whether a model can view article images.
 func (m *Model) SupportsImageProcessing() bool {
-	return m != nil && (m.Type == ModelTypeKnowledgeQA && m.Parameters.SupportsVision)
+	return m != nil && (m.Type == ModelTypeGeneration && m.Parameters.SupportsVision)
 }
 
 const (
-	ModelTypeEmbedding   ModelType = "Embedding"   // Embedding model
-	ModelTypeRerank      ModelType = "Rerank"      // Rerank model
-	ModelTypeKnowledgeQA ModelType = "KnowledgeQA" // KnowledgeQA model
+	ModelTypeEmbedding  ModelType = "Embedding"   // Embedding model
+	ModelTypeRerank     ModelType = "Rerank"      // Rerank model
+	ModelTypeGeneration ModelType = "KnowledgeQA" // KnowledgeQA model
 )
 
 // IsSupported reports whether this model type is available in this deployment.
 func (t ModelType) IsSupported() bool {
 	switch t {
-	case ModelTypeKnowledgeQA, ModelTypeEmbedding, ModelTypeRerank:
+	case ModelTypeGeneration, ModelTypeEmbedding, ModelTypeRerank:
 		return true
 	default:
 		return false
@@ -72,7 +72,7 @@ type ModelUsageResource struct {
 // under-count the references that actually block deletion.
 const ModelUsageListLimit = 50
 
-// ModelUsageDetails explains every active tenant-scoped reference that blocks
+// ModelUsageDetails explains every active space-scoped reference that blocks
 // model deletion. KnowledgeBases may be truncated to
 // ModelUsageListLimit entries; KnowledgeBaseTotal is the
 // untruncated counts used by the deletion guard and UI headings.
@@ -170,12 +170,12 @@ type ModelParameters struct {
 // "value too long for type" failure at INSERT time.
 const ModelIDMaxLen = 64
 
-// DefaultBuiltinModelTenantID is the tenant id that built-in models are
+// DefaultBuiltinModelSpaceID is the space id that built-in models are
 // assigned to when YAML does not specify one. Kept in sync with the seed
-// value of tenants_id_seq in migrations/versioned/000000_init.up.sql
+// value of spaces_id_seq in migrations/versioned/000000_init.up.sql
 // Changing one without the other will
-// break visibility of built-in models for the default tenant.
-const DefaultBuiltinModelTenantID uint64 = 10000
+// break visibility of built-in models for the default space.
+const DefaultBuiltinModelSpaceID uint64 = 10000
 
 // Model represents the AI model
 type Model struct {
@@ -185,7 +185,7 @@ type Model struct {
 	// produce the same shape.
 	ID string `yaml:"id"          json:"id"          gorm:"type:varchar(64);primaryKey"`
 	// Workspace ID
-	TenantID uint64 `yaml:"tenant_id"   json:"tenant_id"`
+	SpaceID uint64 `yaml:"space_id"   json:"space_id"`
 	// Name of the model
 	Name string `yaml:"name"        json:"name"`
 	// Optional user-facing display name. Runtime calls still use Name.
@@ -200,7 +200,7 @@ type Model struct {
 	Parameters ModelParameters `yaml:"parameters"  json:"parameters"  gorm:"type:json"`
 	// Whether the model is the default model
 	IsDefault bool `yaml:"is_default"  json:"is_default"`
-	// Whether the model is a builtin model (visible to all tenants)
+	// Whether the model is a builtin model (visible to all spaces)
 	IsBuiltin bool `yaml:"is_builtin"  json:"is_builtin"  gorm:"default:false"`
 	// ManagedBy identifies which subsystem owns this row's lifecycle.
 	// Empty / "" = manually created (UI / API / hand-written SQL); the YAML

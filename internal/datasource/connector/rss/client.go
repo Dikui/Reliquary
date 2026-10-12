@@ -15,7 +15,7 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/PuerkitoBio/goquery"
-	webfetch "reliquary/internal/infrastructure/web_fetch"
+	webfetch "reliquary/internal/infrastructure/webfetch"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
 )

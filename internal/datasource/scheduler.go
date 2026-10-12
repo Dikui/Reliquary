@@ -114,10 +114,10 @@ func (s *Scheduler) addEntry(ds *types.DataSource) error {
 
 func (s *Scheduler) addEntryLocked(ds *types.DataSource) error {
 	dsID := ds.ID
-	tenantID := ds.TenantID
+	spaceID := ds.SpaceID
 
 	entryID, err := s.cron.AddFunc(ds.SyncSchedule, func() {
-		s.triggerSync(dsID, tenantID)
+		s.triggerSync(dsID, spaceID)
 	})
 	if err != nil {
 		return fmt.Errorf("invalid cron expression %q: %w", ds.SyncSchedule, err)
@@ -131,10 +131,10 @@ func (s *Scheduler) addEntryLocked(ds *types.DataSource) error {
 func (s *Scheduler) SetDatabase(db *gorm.DB) { s.db = db }
 
 // triggerSync persists one scheduled synchronization request.
-func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
+func (s *Scheduler) triggerSync(dataSourceID string, spaceID uint64) {
 	ctx := context.Background()
 	if s.db != nil {
-		if err := s.triggerSyncTx(ctx, dataSourceID, tenantID); err != nil && err != taskqueue.ErrTaskIDConflict {
+		if err := s.triggerSyncTx(ctx, dataSourceID, spaceID); err != nil && err != taskqueue.ErrTaskIDConflict {
 			logger.Errorf(ctx, "[Scheduler] sync enqueue failed for ds=%s: %v", dataSourceID, err)
 		}
 		return
@@ -158,7 +158,7 @@ func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 
 	syncLog := &types.SyncLog{
 		DataSourceID: dataSourceID,
-		TenantID:     tenantID,
+		SpaceID:      spaceID,
 		Status:       types.SyncLogStatusRunning,
 		StartedAt:    time.Now().UTC(),
 	}
@@ -169,7 +169,7 @@ func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 
 	payload := &types.DataSourceSyncPayload{
 		DataSourceID: dataSourceID,
-		TenantID:     tenantID,
+		SpaceID:      spaceID,
 		SyncLogID:    syncLog.ID,
 		ForceFull:    false,
 		Trigger:      "schedule",
@@ -216,7 +216,7 @@ func (s *Scheduler) EntryCount() int {
 	return len(s.entries)
 }
 
-func (s *Scheduler) triggerSyncTx(ctx context.Context, id string, tenantID uint64) error {
+func (s *Scheduler) triggerSyncTx(ctx context.Context, id string, spaceID uint64) error {
 	enqueuer, ok := s.taskEnqueuer.(interfaces.TransactionalTaskEnqueuer)
 	if !ok {
 		return fmt.Errorf("scheduler requires a transactional task enqueuer")
@@ -245,11 +245,11 @@ func (s *Scheduler) triggerSyncTx(ctx context.Context, id string, tenantID uint6
 		if running > 0 {
 			return nil
 		}
-		log := &types.SyncLog{DataSourceID: id, TenantID: tenantID, Status: types.SyncLogStatusRunning, StartedAt: time.Now().UTC()}
+		log := &types.SyncLog{DataSourceID: id, SpaceID: spaceID, Status: types.SyncLogStatusRunning, StartedAt: time.Now().UTC()}
 		if err := tx.Create(log).Error; err != nil {
 			return err
 		}
-		payload, err := json.Marshal(&types.DataSourceSyncPayload{DataSourceID: id, TenantID: tenantID, SyncLogID: log.ID, Trigger: "schedule"})
+		payload, err := json.Marshal(&types.DataSourceSyncPayload{DataSourceID: id, SpaceID: spaceID, SyncLogID: log.ID, Trigger: "schedule"})
 		if err != nil {
 			return err
 		}

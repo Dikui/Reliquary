@@ -170,13 +170,13 @@ func TestScheduler_StartWithActiveDataSources(t *testing.T) {
 	repo := newFakeDataSourceRepo()
 	_ = repo.Create(context.Background(), &types.DataSource{
 		ID:           "ds-1",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusActive,
 		SyncSchedule: "*/2 * * * * *", // every 2 seconds (6-field cron with seconds)
 	})
 	_ = repo.Create(context.Background(), &types.DataSource{
 		ID:           "ds-2",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusPaused, // should NOT be scheduled
 		SyncSchedule: "*/2 * * * * *",
 	})
@@ -199,7 +199,7 @@ func TestScheduler_CronFires(t *testing.T) {
 	repo := newFakeDataSourceRepo()
 	_ = repo.Create(context.Background(), &types.DataSource{
 		ID:           "ds-fire",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusActive,
 		SyncSchedule: "* * * * * *", // every second
 	})
@@ -231,7 +231,7 @@ func TestScheduler_AddOrUpdate(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:           "ds-new",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusActive,
 		SyncSchedule: "0 0 * * * *", // every hour
 	}
@@ -262,7 +262,7 @@ func TestScheduler_AddOrUpdate_PausedIsNoop(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:           "ds-paused",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusPaused,
 		SyncSchedule: "0 0 * * * *",
 	}
@@ -283,7 +283,7 @@ func TestScheduler_AddOrUpdate_EmptyScheduleIsNoop(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:           "ds-no-sched",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusActive,
 		SyncSchedule: "",
 	}
@@ -304,7 +304,7 @@ func TestScheduler_Remove(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:           "ds-rm",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusActive,
 		SyncSchedule: "0 0 * * * *",
 	}
@@ -331,7 +331,7 @@ func TestScheduler_InvalidCron(t *testing.T) {
 
 	ds := &types.DataSource{
 		ID:           "ds-bad",
-		TenantID:     1,
+		SpaceID:      1,
 		Status:       types.DataSourceStatusActive,
 		SyncSchedule: "not a cron",
 	}
@@ -349,9 +349,9 @@ func TestScheduler_TriggerSync_InactiveSkipped(t *testing.T) {
 	repo := newFakeDataSourceRepo()
 	// Create a data source that is paused
 	_ = repo.Create(context.Background(), &types.DataSource{
-		ID:       "ds-inactive",
-		TenantID: 1,
-		Status:   types.DataSourceStatusPaused,
+		ID:      "ds-inactive",
+		SpaceID: 1,
+		Status:  types.DataSourceStatusPaused,
 	})
 
 	enqueuer := &fakeTaskEnqueuer{}

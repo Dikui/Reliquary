@@ -1,38 +1,38 @@
 <template>
   <div class="login-layout">
     <div class="animated-bg">
-      <div class="knowledge-node node-1">
+      <div class="entry-node node-1">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         </svg>
       </div>
-      <div class="knowledge-node node-2">
+      <div class="entry-node node-2">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
       </div>
-      <div class="knowledge-node node-3">
+      <div class="entry-node node-3">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 2L2 7l10 5 10-5-10-5z" />
           <path d="M2 17l10 5 10-5" />
           <path d="M2 12l10 5 10-5" />
         </svg>
       </div>
-      <div class="knowledge-node node-4">
+      <div class="entry-node node-4">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <ellipse cx="12" cy="5" rx="9" ry="3" />
           <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
           <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
         </svg>
       </div>
-      <div class="knowledge-node node-5">
+      <div class="entry-node node-5">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.35-4.35" />
         </svg>
       </div>
-      <div class="knowledge-node node-6">
+      <div class="entry-node node-6">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path
             d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -40,13 +40,13 @@
           <line x1="12" y1="22.08" x2="12" y2="12" />
         </svg>
       </div>
-      <div class="knowledge-node node-7">
+      <div class="entry-node node-7">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <polyline points="14 2 14 8 20 8" />
         </svg>
       </div>
-      <div class="knowledge-node node-8">
+      <div class="entry-node node-8">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
           <circle cx="9" cy="7" r="4" />
@@ -54,32 +54,32 @@
           <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       </div>
-      <div class="knowledge-node node-9">
+      <div class="entry-node node-9">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </div>
-      <div class="knowledge-node node-10">
+      <div class="entry-node node-10">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3" />
           <path
             d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
         </svg>
       </div>
-      <div class="knowledge-node node-11">
+      <div class="entry-node node-11">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 11l3 3L22 4" />
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
       </div>
-      <div class="knowledge-node node-12">
+      <div class="entry-node node-12">
         <svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon
             points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
       </div>
 
-      <svg class="knowledge-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <svg class="entry-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
         <line class="connection-line line-1" x1="20" y1="15" x2="35" y2="25" />
         <line class="connection-line line-2" x1="35" y1="25" x2="55" y2="20" />
         <line class="connection-line line-3" x1="55" y1="20" x2="85" y2="12" />
@@ -264,7 +264,7 @@
             <div class="login-features">
               <div class="feature-item">
                 <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.independentTenant') }}</span>
+                <span class="feature-text">{{ $t('platform.independentSpace') }}</span>
               </div>
               <div class="feature-item">
                 <span class="feature-icon">✓</span>
@@ -415,24 +415,24 @@ onBeforeUnmount(() => {
 })
 
 const persistLoginResponse = async (response: any, skipRedirect = false) => {
-  const activeTenant = response.active_tenant || response.tenant
+  const activeSpace = response.active_space || response.space
   if (response.user && response.token) {
-    const homeTenantIdRaw = response.user.tenant_id ?? activeTenant?.id ?? ''
-    authStore.setUser(userInfoFromApi(response.user, homeTenantIdRaw))
+    const homeSpaceIdRaw = response.user.space_id ?? activeSpace?.id ?? ''
+    authStore.setUser(userInfoFromApi(response.user, homeSpaceIdRaw))
     authStore.setToken(response.token)
     if (response.refresh_token) {
       authStore.setRefreshToken(response.refresh_token)
     }
-    if (activeTenant) {
-      authStore.setTenant({
-        id: String(activeTenant.id) || '',
-        name: activeTenant.name || '',
+    if (activeSpace) {
+      authStore.setSpace({
+        id: String(activeSpace.id) || '',
+        name: activeSpace.name || '',
         owner_id: response.user.id || '',
-        created_at: activeTenant.created_at || new Date().toISOString(),
-        updated_at: activeTenant.updated_at || new Date().toISOString()
+        created_at: activeSpace.created_at || new Date().toISOString(),
+        updated_at: activeSpace.updated_at || new Date().toISOString()
       })
     } else {
-      authStore.setTenant(null)
+      authStore.setSpace(null)
     }
 
   }
@@ -441,7 +441,7 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
   await authStore.refreshFromAuthMe()
   await nextTick()
   if (skipRedirect) return
-  router.replace('/platform/knowledge')
+  router.replace('/platform/entries')
 }
 
 // loadAuthConfig fetches /auth/config and caches whether self-service
@@ -521,7 +521,7 @@ const handleRegister = async () => {
 
 onMounted(async () => {
   if (authStore.isLoggedIn) {
-    router.replace('/platform/knowledge')
+    router.replace('/platform/entries')
     return
   }
 
@@ -563,7 +563,7 @@ onMounted(async () => {
   contain: strict;
 }
 
-.knowledge-node {
+.entry-node {
   position: absolute;
   width: 40px;
   height: 40px;
@@ -673,7 +673,7 @@ onMounted(async () => {
   }
 }
 
-.knowledge-lines {
+.entry-lines {
   position: absolute;
   top: 0;
   left: 0;
@@ -750,7 +750,7 @@ onMounted(async () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .knowledge-node {
+  .entry-node {
     animation: none;
     opacity: 0.65;
   }
@@ -1196,7 +1196,7 @@ onMounted(async () => {
 
 /* Responsive Design */
 @media (max-width: 1024px) {
-  .knowledge-node:nth-of-type(n + 13) {
+  .entry-node:nth-of-type(n + 13) {
     display: none;
   }
 
@@ -1238,7 +1238,7 @@ onMounted(async () => {
     flex-direction: column;
   }
 
-  .knowledge-node:nth-of-type(n + 9) {
+  .entry-node:nth-of-type(n + 9) {
     display: none;
   }
 
@@ -1358,7 +1358,7 @@ onMounted(async () => {
 
 @media (prefers-reduced-motion: reduce) {
 
-  .knowledge-node,
+  .entry-node,
   .connection-line {
     animation: none !important;
     transition: none !important;
@@ -1376,7 +1376,7 @@ html[theme-mode="dark"] {
     background: linear-gradient(225deg, #011a14 0%, #032e22 15%, #043a2c 25%, #05503d 38%, #046647 50%, #038a56 65%, #049b60 78%, #06a06a 90%, #07b074 100%);
   }
 
-  .knowledge-node {
+  .entry-node {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.2);
     box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);

@@ -10,14 +10,14 @@ import (
 	"reliquary/internal/chatgpt"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
-	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils/ollama"
 )
 
 // NewModelServiceWithChatGPT shares the authorization manager with settings.
-func NewModelServiceWithChatGPT(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB, manager *chatgpt.Manager, policy *ChatGPTPolicyService) interfaces.ModelService {
-	s := NewModelServiceWithRoutingDB(repo, kbRepo, ollamaService, pooler, tenantService, db).(*modelService)
+func NewModelServiceWithChatGPT(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB, manager *chatgpt.Manager, policy *ChatGPTPolicyService) interfaces.ModelService {
+	s := NewModelServiceWithRoutingDB(repo, kbRepo, ollamaService, pooler, spaceService, db).(*modelService)
 	s.chatGPT, s.chatGPTPolicy = manager, policy
 	return s
 }
@@ -30,7 +30,7 @@ func (s *modelService) validateChatGPTModel(ctx context.Context, m *types.Model)
 	if m.Source != types.ModelSourceChatGPT {
 		return nil
 	}
-	if m.Type != types.ModelTypeKnowledgeQA {
+	if m.Type != types.ModelTypeGeneration {
 		return errors.New("ChatGPT plan supports generation models only; configure a separate embedding model")
 	}
 	if s.db == nil {
@@ -55,7 +55,7 @@ func (s *modelService) validateChatGPTModel(ctx context.Context, m *types.Model)
 }
 
 func (s *modelService) chatGPTModel(ctx context.Context, m *types.Model) (chat.Chat, error) {
-	if m.Type != types.ModelTypeKnowledgeQA {
+	if m.Type != types.ModelTypeGeneration {
 		return nil, errors.New("ChatGPT plan supports generation models only")
 	}
 	if s.db == nil {
@@ -83,11 +83,11 @@ func (s *modelService) chatGPTModel(ctx context.Context, m *types.Model) (chat.C
 		return nil, err
 	}
 	return &chatGPTBudgetChat{inner: inner, policy: policy, fallback: func(ctx context.Context, id string) (chat.Chat, error) {
-		model, err := s.repo.GetByID(ctx, types.SingleTenantID, id)
+		model, err := s.repo.GetByID(ctx, types.SingleSpaceID, id)
 		if err != nil {
 			return nil, err
 		}
-		if model == nil || model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+		if model == nil || model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeGeneration || model.Status != types.ModelStatusActive {
 			return nil, errors.New("configured fallback is not an active local generation model")
 		}
 		return s.GetChatModel(ctx, id)

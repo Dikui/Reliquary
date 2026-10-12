@@ -99,8 +99,8 @@ func sortedTables() []string {
 // These columns contain credentials, including one-way API authentication
 // hashes. The account password hash is retained to preserve owner login.
 var SecretColumns = map[string]string{
-	"auth_tokens": "token", "tenant_api_keys": "key_hash api_key", "resource_access_grants": "token_hash",
-	"tenants": "credentials", "chatgpt_accounts": "credentials", "chatgpt_login_attempts": "state nonce verifier",
+	"auth_tokens": "token", "api_keys": "key_hash api_key", "resource_access_grants": "token_hash",
+	"spaces": "credentials", "chatgpt_accounts": "credentials", "chatgpt_login_attempts": "state nonce verifier",
 }
 
 func secretColumn(table, column string) bool {
@@ -114,7 +114,7 @@ func secretColumn(table, column string) bool {
 
 func configTable(table string) bool {
 	switch table {
-	case "users", "tenants", "tenant_api_keys", "models", "data_sources", "knowledge_bases", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_policy", "maintenance_state":
+	case "users", "spaces", "api_keys", "models", "data_sources", "knowledge_bases", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_policy", "maintenance_state":
 		return true
 	}
 	return false

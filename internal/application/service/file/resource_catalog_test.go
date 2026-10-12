@@ -20,14 +20,14 @@ type catalogStub struct {
 
 func (c *catalogStub) Register(
 	_ context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	physicalPath string,
 	meta interfaces.ResourceRegistration,
 ) (string, error) {
 	c.resource = &types.StoredResource{
 		ID:           "resource-1",
 		Handle:       "AbCdEfGhIjKlMnOpQrStUv",
-		TenantID:     tenantID,
+		SpaceID:      spaceID,
 		PhysicalPath: physicalPath,
 		OriginalName: meta.OriginalName,
 	}

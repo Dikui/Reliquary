@@ -22,10 +22,10 @@ import (
 	"reliquary/internal/types"
 )
 
-func transactionKnowledgeService(s *knowledgeService, tx *gorm.DB) *knowledgeService {
+func transactionEntryService(s *entryService, tx *gorm.DB) *entryService {
 	copy := *s
 	copy.db = tx
-	copy.repo = repository.NewKnowledgeRepository(tx)
+	copy.repo = repository.NewEntryRepository(tx)
 	return &copy
 }
 func transactionJobs(t *testing.T, db *gorm.DB) []taskqueue.Job {
@@ -34,8 +34,8 @@ func transactionJobs(t *testing.T, db *gorm.DB) []taskqueue.Job {
 	require.NoError(t, db.Order("created_at,id").Find(&jobs).Error)
 	return jobs
 }
-func transactionManualPayload() *types.ManualKnowledgePayload {
-	return &types.ManualKnowledgePayload{Title: "Transactional collection", Content: "Original product announcement with durable source details.", Status: types.ManualKnowledgeStatusPublish, SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/transactional-collection", Publisher: "Fixture publisher"}}
+func transactionManualPayload() *types.ManualEntryPayload {
+	return &types.ManualEntryPayload{Title: "Transactional collection", Content: "Original product announcement with durable source details.", Status: types.ManualEntryStatusPublish, SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/transactional-collection", Publisher: "Fixture publisher"}}
 }
 
 func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
@@ -44,7 +44,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	rollback := errors.New("abort collection transaction")
 	var id string
 	require.ErrorIs(t, h.db.WithContext(h.ctx).Transaction(func(tx *gorm.DB) error {
-		article, err := transactionKnowledgeService(h.service, tx).CreateKnowledgeFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+		article, err := transactionEntryService(h.service, tx).CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 		require.NoError(t, err)
 		id = article.ID
 		jobs := transactionJobs(t, tx)
@@ -55,9 +55,9 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	}), rollback)
 	require.Empty(t, transactionJobs(t, h.db))
 	var count int64
-	require.NoError(t, h.db.Model(&types.Knowledge{}).Where("id=?", id).Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Count(&count).Error)
 	require.Zero(t, count, "article and task roll back together")
-	article, err := h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	jobs := transactionJobs(t, h.db)
 	require.Len(t, jobs, 1)
@@ -65,8 +65,8 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	require.Equal(t, 3, jobs[0].MaxRetry)
 	var payload types.ManualProcessPayload
 	require.NoError(t, json.Unmarshal(jobs[0].Payload, &payload))
-	require.Equal(t, article.ID, payload.KnowledgeID)
-	stored, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	require.Equal(t, article.ID, payload.EntryID)
+	stored, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusPending, stored.ParseStatus)
 }
@@ -74,7 +74,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	h.service.task = taskqueue.NewClient(h.db)
-	article, err := h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	require.NoError(t, h.db.Where("1=1").Delete(&taskqueue.Job{}).Error)
 	rollback := errors.New("abort approval transaction")
 	require.ErrorIs(t, h.db.WithContext(h.ctx).Transaction(func(tx *gorm.DB) error {
-		reviewed, err := transactionKnowledgeService(h.service, tx).ReviewKnowledgeIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
+		reviewed, err := transactionEntryService(h.service, tx).ReviewEntryIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
 		require.NoError(t, err)
 		require.Equal(t, types.ParseStatusPending, reviewed.ParseStatus)
 		require.Len(t, transactionJobs(t, tx), 1)
@@ -93,7 +93,7 @@ func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 		return rollback
 	}), rollback)
 	require.Empty(t, transactionJobs(t, h.db))
-	unchanged, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	unchanged, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusRejected, unchanged.ParseStatus)
 	unchangedIntake, err := unchanged.IntakeMetadata()
@@ -103,11 +103,11 @@ func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	var logs int64
 	require.NoError(t, h.db.Model(&types.OperationLog{}).Where("operation_type='review_approve'").Count(&logs).Error)
 	require.Zero(t, logs, "the user decision rolls back with its task")
-	reviewed, err := h.service.ReviewKnowledgeIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
+	reviewed, err := h.service.ReviewEntryIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusPending, reviewed.ParseStatus)
 	require.Len(t, transactionJobs(t, h.db), 1)
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	savedIntake, err := saved.IntakeMetadata()
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 			var retainedRef string
 			if kind == "manual_attachment" {
 				var err error
-				retainedRef, err = h.service.fileSvc.SaveBytes(h.ctx, []byte("existing shared attachment"), types.SingleTenantID, "attachment.txt", false)
+				retainedRef, err = h.service.fileSvc.SaveBytes(h.ctx, []byte("existing shared attachment"), types.SingleSpaceID, "attachment.txt", false)
 				require.NoError(t, err)
 				payload.Content += "\n[Shared attachment](" + retainedRef + ")"
 			}
@@ -177,11 +177,11 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 				require.Len(t, transactionJobs(t, tx), 1)
 				observed = true
 			}}
-			collect := func() (*types.Knowledge, error) {
+			collect := func() (*types.Entry, error) {
 				if kind == "manual_attachment" {
-					return h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, payload, types.ChannelWeb)
+					return h.service.CreateEntryFromManual(h.ctx, h.kb.ID, payload, types.ChannelWeb)
 				}
-				return h.service.CreateKnowledgeFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "durable.md", payload.Content),
+				return h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "durable.md", payload.Content),
 					map[string]string{"original_url": payload.SourceInfo.OriginalURL}, nil, "", types.ChannelWeb, nil)
 			}
 			article, err := collect()
@@ -191,7 +191,7 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 			var resources, bindings, articles int64
 			require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&resources).Error)
 			require.NoError(t, h.db.Model(&types.ResourceBinding{}).Count(&bindings).Error)
-			require.NoError(t, h.db.Model(&types.Knowledge{}).Count(&articles).Error)
+			require.NoError(t, h.db.Model(&types.Entry{}).Count(&articles).Error)
 			require.Equal(t, baselineResources, resources, "new resource identities roll back with the article and its task")
 			require.Zero(t, bindings, "resource ownership binds use the same transaction")
 			require.Zero(t, articles)
@@ -217,7 +217,7 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 }
 func TestTaskTransactionEnqueueFailureRollsBackApprovalAndRetainsOriginal(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article, err := h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -226,10 +226,10 @@ func TestTaskTransactionEnqueueFailureRollsBackApprovalAndRetainsOriginal(t *tes
 	require.NoError(t, article.SetIntakeMetadata(intake))
 	require.NoError(t, h.db.Save(article).Error)
 	h.service.task = taskTransactionFailure{Client: taskqueue.NewClient(h.db)}
-	_, err = h.service.ReviewKnowledgeIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
+	_, err = h.service.ReviewEntryIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
 	savedIntake, err := saved.IntakeMetadata()
@@ -261,7 +261,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	h.service.modelService = &summaryStateModelService{model: model}
 	first := taskqueue.NewClient(h.db)
 	h.service.task = first
-	article, err := h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	config := taskqueue.Config{Pools: types.WorkerPoolConcurrency{Core: 1}, CheckInterval: 10 * time.Millisecond}
 	require.NoError(t, first.Start(context.Background(), taskqueue.HandlerFunc(h.service.ProcessManualUpdate), config))
@@ -276,7 +276,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	require.Len(t, jobs, 1)
 	require.Equal(t, taskqueue.TaskStatePending, jobs[0].State)
 	require.Zero(t, jobs[0].Retried, "process interruption does not consume ordinary retries")
-	stored, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	stored, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	preserved, err := stored.IntakeMetadata()
 	require.NoError(t, err)
@@ -293,14 +293,14 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	require.NoError(t, restarted.Start(context.Background(), taskqueue.HandlerFunc(h.service.ProcessManualUpdate), config))
 	t.Cleanup(func() { require.NoError(t, restarted.Close()) })
 	require.Eventually(t, func() bool {
-		completed, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+		completed, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && len(transactionJobs(t, h.db)) == 0
 	}, 5*time.Second, 20*time.Millisecond)
 }
 
 func TestTaskTransactionManualCorrectionQueueFailureRetainsRejectedBody(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article, err := h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -310,10 +310,10 @@ func TestTaskTransactionManualCorrectionQueueFailureRetainsRejectedBody(t *testi
 	require.NoError(t, h.db.Save(article).Error)
 	originalMetadata := string(article.Metadata)
 	h.service.task = taskTransactionFailure{Client: taskqueue.NewClient(h.db)}
-	_, err = h.service.UpdateManualKnowledge(h.ctx, article.ID, &types.ManualKnowledgePayload{Title: "Corrected title", Content: "Corrected original source body.", Status: types.ManualKnowledgeStatusPublish})
+	_, err = h.service.UpdateManualEntry(h.ctx, article.ID, &types.ManualEntryPayload{Title: "Corrected title", Content: "Corrected original source body.", Status: types.ManualEntryStatusPublish})
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, article.Title, saved.Title)
 	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
@@ -333,7 +333,7 @@ func TestTaskTransactionInvalidManualCorrectionPreservesResourceAndOriginal(t *t
 	h.service.resourceCatalog = catalog
 	h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), catalog)
 	h.service.task = taskqueue.NewClient(h.db)
-	article, err := h.service.CreateKnowledgeFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -344,15 +344,15 @@ func TestTaskTransactionInvalidManualCorrectionPreservesResourceAndOriginal(t *t
 	require.NoError(t, h.db.Where("1=1").Delete(&taskqueue.Job{}).Error)
 	beforeFiles := transactionStoredFiles(t, root)
 	beforeMetadata := string(article.Metadata)
-	_, err = h.service.UpdateManualKnowledge(h.ctx, article.ID, &types.ManualKnowledgePayload{
-		Title: "Invalid correction", Content: "This body must not replace the retained original.", Status: types.ManualKnowledgeStatusPublish,
-		ProcessConfig: &types.KnowledgeProcessOverrides{ChunkingConfig: &types.ChunkingConfig{
+	_, err = h.service.UpdateManualEntry(h.ctx, article.ID, &types.ManualEntryPayload{
+		Title: "Invalid correction", Content: "This body must not replace the retained original.", Status: types.ManualEntryStatusPublish,
+		ProcessConfig: &types.EntryProcessOverrides{ChunkingConfig: &types.ChunkingConfig{
 			TableMetadataInstructions: strings.Repeat("x", types.MaxCustomPromptInstructionsLength+1),
 		}},
 	})
 	require.ErrorContains(t, err, "table metadata instructions exceeds")
 	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetKnowledgeByID(h.ctx, h.kb.TenantID, article.ID)
+	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.JSONEq(t, beforeMetadata, string(saved.Metadata))
 	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
@@ -374,7 +374,7 @@ func TestTaskTransactionEmbeddingStartAndResumeAreAtomic(t *testing.T) {
 	h := newAllRebuildFixture(t, false)
 	client := taskqueue.NewClient(h.db)
 	h.rebuilder.tasks = taskTransactionFailure{Client: client}
-	_, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleTenantID)
+	_, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleSpaceID)
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
 	var runs, items int64
@@ -383,18 +383,18 @@ func TestTaskTransactionEmbeddingStartAndResumeAreAtomic(t *testing.T) {
 	require.Zero(t, runs)
 	require.Zero(t, items, "snapshot checkpoints roll back with their task")
 	h.rebuilder.tasks = client
-	run, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleTenantID)
+	run, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleSpaceID)
 	require.NoError(t, err)
 	require.Len(t, transactionJobs(t, h.db), 1)
 	require.Equal(t, types.TypeEmbeddingRebuild, transactionJobs(t, h.db)[0].TaskType)
 	require.NoError(t, h.db.Where("1=1").Delete(&taskqueue.Job{}).Error)
-	require.NoError(t, h.rebuilder.Pause(h.ctx, types.SingleTenantID, run.ID))
+	require.NoError(t, h.rebuilder.Pause(h.ctx, types.SingleSpaceID, run.ID))
 	h.rebuilder.tasks = taskTransactionFailure{Client: client}
-	require.ErrorContains(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleTenantID, run.ID, false), "simulated failure")
+	require.ErrorContains(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleSpaceID, run.ID, false), "simulated failure")
 	require.Equal(t, "paused", h.state(t).Status)
 	require.Empty(t, transactionJobs(t, h.db))
 	h.rebuilder.tasks = client
-	require.NoError(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleTenantID, run.ID, false))
+	require.NoError(t, h.rebuilder.ContinueAndEnqueue(h.ctx, types.SingleSpaceID, run.ID, false))
 	require.Equal(t, "pending", h.state(t).Status)
 	require.Len(t, transactionJobs(t, h.db), 1)
 }

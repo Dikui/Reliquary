@@ -4,15 +4,15 @@ import "testing"
 
 func TestParseTaskID_CompoundTaskType(t *testing.T) {
 	taskID := GenerateTaskID("document_process", 42, "kb-abc-123")
-	taskType, tenantID, _, uuidPart, businessID, err := ParseTaskID(taskID)
+	taskType, spaceID, _, uuidPart, businessID, err := ParseTaskID(taskID)
 	if err != nil {
 		t.Fatalf("ParseTaskID failed: %v", err)
 	}
 	if taskType != "document_process" {
 		t.Fatalf("taskType = %q, want document_process", taskType)
 	}
-	if tenantID != 42 {
-		t.Fatalf("tenantID = %d, want 42", tenantID)
+	if spaceID != 42 {
+		t.Fatalf("spaceID = %d, want 42", spaceID)
 	}
 	if uuidPart == "" {
 		t.Fatal("expected uuid part")
@@ -22,13 +22,13 @@ func TestParseTaskID_CompoundTaskType(t *testing.T) {
 	}
 }
 
-func TestTaskTenantID(t *testing.T) {
-	taskID := GenerateTaskID("knowledge_move", 7, "source-kb")
-	got, err := TaskTenantID(taskID)
+func TestTaskSpaceID(t *testing.T) {
+	taskID := GenerateTaskID("entry_move", 7, "source-kb")
+	got, err := TaskSpaceID(taskID)
 	if err != nil {
-		t.Fatalf("TaskTenantID failed: %v", err)
+		t.Fatalf("TaskSpaceID failed: %v", err)
 	}
 	if got != 7 {
-		t.Fatalf("TaskTenantID = %d, want 7", got)
+		t.Fatalf("TaskSpaceID = %d, want 7", got)
 	}
 }

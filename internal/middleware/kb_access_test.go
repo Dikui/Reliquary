@@ -30,15 +30,15 @@ func (s *stubKBLookup) GetKnowledgeBaseByID(_ context.Context, id string) (*type
 	return nil, apprepo.ErrKnowledgeBaseNotFound
 }
 
-// TestIsResourceNotFound_RecognisesKnowledgeSentinel pins that a missing
-// *document* (knowledge) is treated as not-found, not a transient error.
-// Regression: ErrKnowledgeNotFound was absent from the predicate, so
-// GET/DELETE /knowledge/:id and chunk list resolved a missing doc into a
+// TestIsResourceNotFound_RecognisesEntrySentinel pins that a missing
+// *document* (entry) is treated as not-found, not a transient error.
+// Regression: ErrEntryNotFound was absent from the predicate, so
+// GET/DELETE /entries/:id and chunk list resolved a missing doc into a
 // raw 500 instead of a 404 — which the CLI then surfaced as a retryable
 // server.error (exit 7), looping agents on a permanently-absent doc.
-func TestIsResourceNotFound_RecognisesKnowledgeSentinel(t *testing.T) {
-	require.True(t, isResourceNotFound(apprepo.ErrKnowledgeNotFound),
-		"missing document (ErrKnowledgeNotFound) must classify as not-found")
+func TestIsResourceNotFound_RecognisesEntrySentinel(t *testing.T) {
+	require.True(t, isResourceNotFound(apprepo.ErrEntryNotFound),
+		"missing document (ErrEntryNotFound) must classify as not-found")
 	require.True(t, isResourceNotFound(apprepo.ErrKnowledgeBaseNotFound),
 		"missing KB must still classify as not-found")
 	require.True(t, isResourceNotFound(apprepo.ErrChunkNotFound),
@@ -52,30 +52,30 @@ func TestIsResourceNotFound_RecognisesKnowledgeSentinel(t *testing.T) {
 func TestRequireKBExistsWithinWorkspace(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Params = gin.Params{{Key: "id", Value: "kb"}}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	RequireKBExists(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 1}}})(c)
+	RequireKBExists(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", SpaceID: 1}}})(c)
 	require.False(t, c.IsAborted())
 	access, ok := KBAccessFromContext(c)
 	require.True(t, ok)
-	require.Equal(t, uint64(1), access.EffectiveTenantID)
+	require.Equal(t, uint64(1), access.EffectiveSpaceID)
 	require.Equal(t, "kb", access.KnowledgeBase.ID)
 }
 
 func TestRequireKBExistsRejectsOutsideWorkspace(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Params = gin.Params{{Key: "id", Value: "kb"}}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 
 	c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	RequireKBExists(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 2}}})(c)
+	RequireKBExists(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", SpaceID: 2}}})(c)
 	require.True(t, c.IsAborted())
 }
 func TestRequireKBExistsNotFoundAndLookupFailure(t *testing.T) {
 	for _, err := range []error{apprepo.ErrKnowledgeBaseNotFound, errors.New("database unavailable")} {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Params = gin.Params{{Key: "id", Value: "kb"}}
-		ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+		ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 
 		c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
 		RequireKBExists(KBIDFromParam("id"), &stubKBLookup{getErr: err})(c)

@@ -21,11 +21,11 @@ function collectStrings(value: LocaleValue, path = ''): Array<{ path: string; va
   return []
 }
 
-function withoutTechnicalTenantTokens(value: string): string {
+function withoutTechnicalSpaceTokens(value: string): string {
   return value
-    .replace(/\{tenant(?:Id)?\}/g, '')
-    .replace(/\btenant_id\b/gi, '')
-    .replace(/\bX-Tenant-ID\b/g, '')
+    .replace(/\{space(?:Id)?\}/g, '')
+    .replace(/\bspace_id\b/gi, '')
+    .replace(/\bX-Space-ID\b/g, '')
 }
 
 const localeChecks = [
@@ -36,13 +36,13 @@ const localeChecks = [
 test('user-facing locale values use workspace terminology', () => {
   for (const check of localeChecks) {
     const legacyValues = collectStrings(check.locale)
-      .filter(({ value }) => check.forbidden.test(withoutTechnicalTenantTokens(value)))
+      .filter(({ value }) => check.forbidden.test(withoutTechnicalSpaceTokens(value)))
       .map(({ path, value }) => `${check.name}:${path}=${value}`)
 
     assert.deepEqual(
       legacyValues,
       [],
-      `${check.name} still contains user-facing tenant terminology`,
+      `${check.name} still contains user-facing legacy workspace terminology`,
     )
   }
 })

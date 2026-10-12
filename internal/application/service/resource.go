@@ -44,19 +44,19 @@ func resourceLocationHash(path string) string {
 
 func (s *resourceCatalog) Register(
 	ctx context.Context,
-	tenantID uint64,
+	spaceID uint64,
 	physicalPath string,
 	meta interfaces.ResourceRegistration,
 ) (string, error) {
 	physicalPath = strings.TrimSpace(physicalPath)
-	if tenantID == 0 || physicalPath == "" {
-		return "", fmt.Errorf("resource registration requires tenant and physical path")
+	if spaceID == 0 || physicalPath == "" {
+		return "", fmt.Errorf("resource registration requires space and physical path")
 	}
 	if _, ok := types.ParseResourcePath(physicalPath); ok {
 		return physicalPath, nil
 	}
 	locationHash := resourceLocationHash(physicalPath)
-	existing, err := s.repo.GetByTenantLocation(ctx, tenantID, locationHash)
+	existing, err := s.repo.GetBySpaceLocation(ctx, spaceID, locationHash)
 	if err != nil {
 		return "", err
 	}
@@ -79,7 +79,7 @@ func (s *resourceCatalog) Register(
 		}
 		resource := &types.StoredResource{
 			Handle:       handle,
-			TenantID:     tenantID,
+			SpaceID:      spaceID,
 			Provider:     provider,
 			PhysicalPath: physicalPath,
 			LocationHash: locationHash,
@@ -95,7 +95,7 @@ func (s *resourceCatalog) Register(
 		} else if !strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return "", err
 		}
-		existing, lookupErr := s.repo.GetByTenantLocation(ctx, tenantID, locationHash)
+		existing, lookupErr := s.repo.GetBySpaceLocation(ctx, spaceID, locationHash)
 		if lookupErr == nil && existing != nil {
 			return types.BuildResourcePath(existing.Handle), nil
 		}
@@ -142,7 +142,7 @@ func (s *resourceCatalog) Bind(ctx context.Context, reference, ownerType, ownerI
 	}
 	return s.repo.CreateBinding(ctx, &types.ResourceBinding{
 		ResourceID: resource.ID,
-		TenantID:   resource.TenantID,
+		SpaceID:    resource.SpaceID,
 		OwnerType:  ownerType,
 		OwnerID:    ownerID,
 		Relation:   relation,
