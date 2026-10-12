@@ -13,6 +13,7 @@ import (
 
 	"reliquary/internal/maintenance"
 	"reliquary/internal/types"
+	"reliquary/internal/vaultpath"
 )
 
 func (v *VaultService) StartReplica() error {
@@ -51,6 +52,9 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		path, err := vaultAbsolute(v.root, article.VaultPath)
 		if err != nil {
 			return result, err
+		}
+		if article.SourceKind != "article" && vaultpath.UserMetadata(article.VaultPath) {
+			continue
 		}
 		actual, readErr := os.ReadFile(path)
 		if article.SourceKind != "article" {

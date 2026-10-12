@@ -39,16 +39,21 @@ go run ./cmd/server reset-password
 
 ## 文件库与检索
 
-`VAULT_ROOT` 指定服务器文件库，启动时创建以下目录：
+Compose 将宿主机 `RELIQUARY_VAULT_DIR` 绑定到容器内的 `VAULT_ROOT`。默认文件库为 `~/Reliquary/vault`，上传资源为 `~/Reliquary/files`，备份为 `~/Backups/Reliquary`。三者均可在 `.env` 修改为其他绝对路径。文件库内的目录结构保持如下：
 
 | 目录 | 内容与使用方式 |
 | --- | --- |
 | `articles/年-月/` | 已批准文章的 Markdown 表头与正文 |
-| `attachments/` | 全文文章的图片与原始文件 |
+| `attachments/<文章id>/` | 全文文章的图片与原始文件 |
 | `mine/` | 用户自己编辑的 Markdown 文档，程序只读并建立索引 |
 | `reports/` | 外部 AI 写入的整理结果，可被检索 |
+| `.reliquary/` | 数据库维护副本，由程序生成 |
 
-用 Obsidian 打开文件库即可阅读。正文在补全完成或用户接受缺失后定稿，表头由数据库单向生成；手动修改文章表头可能被下一次字段更新覆盖。星标、收藏理由、内容类型、实体与主题以数据库为准。上传和解析过程仍使用 `LOCAL_STORAGE_BASE_DIR` 保存通用资源，备份同时包含此目录。
+在 Obsidian 选择“打开文件夹作为仓库”，打开 `vault/` 这一层，例如 `~/Reliquary/vault`。建议在 Obsidian 设置的“文件与链接 > 排除的文件”中加入 `attachments/` 与 `.reliquary/`，避免搜索附件和维护副本。正文图片使用相对路径指向 `attachments/<文章id>/`，可直接显示。
+
+正文在补全完成或用户接受缺失后定稿，不要在 Obsidian 修改文章表头或 `.reliquary/`。表头由数据库单向生成，手动修改会被下一次字段更新覆盖。星标、收藏理由、内容类型、实体与主题以数据库为准。上传和解析过程使用容器内 `LOCAL_STORAGE_BASE_DIR`，对应宿主机 `RELIQUARY_FILES_DIR`，备份同时包含此目录。
+
+Obsidian 的 `.obsidian/` 阅读配置、`.trash/` 和 `.DS_Store` 等用户配置不会参与文件库核对、重建、`mine/` 与 `reports/` 监听或索引，程序不会修改或删除它们。备份和迁移包包含这些文件，保留阅读配置；恢复核对不比较其内容。
 
 `VAULT_HEADER_DEBOUNCE` 合并表头连续更新，默认 `5s`。`VAULT_STABLE_WAIT` 是用户文档停止变化后的索引等待时间，默认 `10m`；`VAULT_SCAN_INTERVAL` 是兜底扫描间隔，默认 `1m`。文件库状态页显示目录、最近扫描、文件数量与错误。
 
@@ -109,7 +114,7 @@ Reliquary 提供资料，不生成周报或推送通知。下面是外部 AI 通
 
 ## 部署在 Mac mini
 
-Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 环境。应用与 PostgreSQL（ParadeDB）使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
+Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。应用与 PostgreSQL（ParadeDB）使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
@@ -121,6 +126,9 @@ cp .env.example .env
 
 | 配置 | 说明 |
 | --- | --- |
+| `RELIQUARY_VAULT_DIR` | 宿主机文件库目录，默认 `${HOME}/Reliquary/vault` |
+| `RELIQUARY_FILES_DIR` | 宿主机上传资源目录，默认 `${HOME}/Reliquary/files` |
+| `BACKUP_DIR` | 宿主机备份目录默认值，默认 `${HOME}/Backups/Reliquary`；计划可在设置中修改 |
 | `VAULT_ROOT` | 容器内文件库路径，建议保持 `/data/vault` |
 | `LOCAL_STORAGE_BASE_DIR` | 容器内上传资源目录，建议保持 `/data/files` |
 | `DB_DRIVER`、`DB_HOST`、`DB_PORT` | 使用 `postgres`、Compose 服务名 `postgres` 与 `5432` |
@@ -134,42 +142,35 @@ cp .env.example .env
 
 模型服务的完整地址、模型名、API Key、嵌入维度在“设置 > 模型”配置，知识库页选择具体档位。也可通过 [内置模型配置](./builtin-models.md) 声明。迁移后需要检查数据库中保存的模型地址是否仍可访问。
 
-Compose 默认使用 `vault-data` 与 `data-files` 命名卷。为便于 Obsidian 阅读与直接复制，建议将两者换为宿主机目录。先创建目录，再在 `.env` 添加实际的绝对路径：
+Compose 默认直接绑定宿主机目录，无需另写覆盖文件。`.env` 中的默认配置如下，可按需要修改位置，路径含空格时用引号包住值：
 
 ```dotenv
-RELIQUARY_VAULT_DIR=/Users/yourname/ReliquaryData/vault
-RELIQUARY_FILES_DIR=/Users/yourname/ReliquaryData/files
+RELIQUARY_VAULT_DIR=${HOME}/Reliquary/vault
+RELIQUARY_FILES_DIR=${HOME}/Reliquary/files
+BACKUP_DIR=${HOME}/Backups/Reliquary
 VAULT_ROOT=/data/vault
 LOCAL_STORAGE_BASE_DIR=/data/files
 ```
 
-创建本地 `compose.mac.yml`，同一容器目标的卷配置会替换默认命名卷：
+启动前执行部署检查。不存在的目录会创建；目录不可写、位于项目源码内，或文件库、上传资源、备份目录相同或互相包含时拒绝启动。检查按实际路径处理符号链接。备份目录同时检查 `.env` 的默认值和数据库中已保存的设置。源码与数据应使用分开的目录，例如源码在 `~/Projects/Reliquary`，数据在 `~/Reliquary/`。
 
-```yaml
-services:
-  app:
-    volumes:
-      - type: bind
-        source: ${RELIQUARY_VAULT_DIR}
-        target: /data/vault
-      - type: bind
-        source: ${RELIQUARY_FILES_DIR}
-        target: /data/files
-```
+文件库、上传资源、备份目录不要放在“桌面”或“文稿”目录下。
 
-将 `.env` 中的目录替换为自己的路径后，执行：
+检查和启动使用以下命令；数据库启动后再检查一次，可以读取已有的备份设置：
 
 ```bash
-mkdir -p /Users/yourname/ReliquaryData/vault /Users/yourname/ReliquaryData/files
-export COMPOSE_FILE=docker-compose.yml:compose.mac.yml
 export COMPOSE_PROJECT_NAME=reliquary
+./reliquary-admin check-deployment
 ./scripts/build-frontend-dist.sh
 docker compose build
-docker compose run --rm --no-deps --user root --entrypoint sh app   -c 'chown -R appuser:appuser "$VAULT_ROOT" "$LOCAL_STORAGE_BASE_DIR"'
+docker compose up -d --wait postgres
+./reliquary-admin check-deployment
 docker compose up -d
 ```
 
-启动后访问 `.env` 配置的网页端口，注册唯一用户，配置模型并收录一篇文章。检查文件库是否产生 Markdown，知识检索是否命中。后续执行 Compose、备份或恢复时，使用相同的 `COMPOSE_FILE` 与 `COMPOSE_PROJECT_NAME`。
+`./scripts/start-all.sh --docker` 也会在应用启动前创建并检查宿主机目录，先启动数据库，再核对已保存的备份设置。应用入口随后为挂载目录设置容器用户写入权限，并以 `appuser` 运行。在 macOS 的 Docker 兼容运行环境中，宿主机登录用户仍可读取文件库供 Obsidian 使用；无需手工执行递归 `chown`。运行环境的文件共享设置应允许访问所选目录。
+
+启动后访问 `.env` 配置的网页端口，注册唯一用户，配置模型并收录一篇文章。检查宿主机文件库是否产生 Markdown 和附件，知识检索是否命中。后续执行 Compose、备份或恢复时，使用相同的 `COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。数据库仍使用原有命名卷；不迁移旧的文件库或上传资源命名卷。
 
 推荐将 Ollama 直接安装到 macOS，在宿主机运行生成和嵌入模型。Ollama 支持 Apple GPU 的 Metal 加速；其官方文档说明 macOS 上的 Docker 容器不能使用 GPU 加速。因此将模型服务放在 macOS，Compose 中只运行 Reliquary 与数据服务，不依赖 CUDA。参见 [Ollama 硬件支持](https://docs.ollama.com/gpu)与 [Ollama FAQ](https://docs.ollama.com/faq#how-do-i-use-ollama-with-gpu-acceleration-in-docker)。
 
@@ -226,7 +227,7 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 ## 每周备份和每月恢复演练
 
-备份目录配置为文件库、上传资源及项目目录之外的绝对路径。例如 `/Users/yourname/Backups/Reliquary`，以后可以改为外接硬盘路径。外接硬盘到位前，这种备份只防止误删、应用损坏和升级失败；同一台机器的硬盘损坏仍可能同时损坏原件和备份，这个风险已接受。
+备份目录默认 `~/Backups/Reliquary`。首次部署可在 `.env` 的 `BACKUP_DIR` 设置默认值；已有计划在设置中或通过 `schedule configure --backup-directory` 修改，例如改为外接硬盘路径。它必须位于项目源码之外，且与文件库、上传资源目录互不包含。修改后运行 `./reliquary-admin check-deployment` 检查。外接硬盘到位前，这种备份只防止误删、应用损坏和升级失败；同一台机器的硬盘损坏仍可能同时损坏原件和备份，这个风险已接受。
 
 在运行正常部署的同一账号终端配置计划，再安装宿主机调度：
 
@@ -241,7 +242,7 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 第一条返回保存的目录、计划和时区。五个 cron 字段依次是分钟、小时、日期、月份和星期，上例每周日 03:00 备份、每月 1 日 04:00 演练。第二条应显示调度已安装，配置和日志保存在部署目录的 `.maintenance-schedule/`；macOS 使用当前登录用户的 launchd，Linux 使用用户 systemd。Docker 必须保持可用。调度器每分钟检查一次，首次运行立即备份和演练，主机休眠错过计划后补跑一次；失败、超时或中断的自动作业十五分钟后重试。换部署目录或机器后重新安装调度，不把旧机器的计划当成新机器已安装。暂停自动运行可执行 `./reliquary-admin schedule configure --enabled false`。
 
-每份备份完整导出数据库；文件库和上传资源按增量快照复制，未变化文件用硬链接，每份目录都能单独恢复。只保留最近 4 份正常完成的定期备份，不把失败的半成品作为成功备份。系统加密密钥、JWT 密钥、数据库密码、API Key、模型和解析器凭据、ChatGPT 令牌不进入备份。唯一账号的密码哈希保留，恢复后仍用原账号密码登录。
+每份备份完整导出数据库；宿主机文件库和上传资源按增量快照复制，未变化文件用硬链接，每份目录都能单独恢复。文件库内 `.obsidian/` 等阅读配置一同保留，备份核对不比较这些用户配置。只保留最近 4 份正常完成的定期备份，不把失败的半成品作为成功备份。系统加密密钥、JWT 密钥、数据库密码、API Key、模型和解析器凭据、ChatGPT 令牌不进入备份。唯一账号的密码哈希保留，恢复后仍用原账号密码登录。
 
 备份暂停 HTTP/MCP 收录及附件上传，等待短写入事务及文件副本写入结束，再停止应用取得一致快照。它不等待主题历史归入、向量重建等长任务完成；队列和检查点一同导出。恢复后 PostgreSQL 队列重新领取中断任务，保留文章与重试预算。等待超过上限时跳过本次备份，恢复收录并记录告警，不生成假成功结果。请暂停 Obsidian 等外部编辑器写文件，程序无法锁住其他软件。
 
@@ -257,7 +258,7 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 每月演练将最近一份备份恢复到隔离的临时应用容器、空数据库和临时目录，重建全文索引并运行 `verify`。通过后应显示 `Monthly restore drill passed`，临时数据库、文件和容器已删除。失败也清理临时环境，保留设置页错误和调度日志并告警。例行演练不需要访问原模型或调用付费模型，只核对不可再生数据和文件；模型可用性由 `setup-models` 单独检查。演练清理不能影响正常部署。
 
-普通备份默认不重复保存镜像。已有完整源码与固定版本镜像时，先准备新的空数据库、空文件库和空上传目录，保持目标应用停止，再在目标部署目录执行 `./reliquary-admin restore /完整备份路径`。它恢复数据并进入下文的模型及凭据等待流程，不会替换目标部署的代码。需要带代码及镜像的一体恢复包时执行 `backup /备份目录 --with-images`，再使用 `unpack` 恢复到空部署目录。
+普通备份默认不重复保存镜像。已有完整源码与固定版本镜像时，先准备新的空数据库，在目标 `.env` 的 `RELIQUARY_VAULT_DIR` 与 `RELIQUARY_FILES_DIR` 指定空或不存在的宿主机目录，保持目标应用停止，再在目标部署目录执行 `./reliquary-admin restore /完整备份路径`。非空目标目录会被拒绝。它恢复数据和阅读配置，并进入下文的模型及凭据等待流程，不会替换目标部署的代码。需要带代码及镜像的一体恢复包时执行 `backup /备份目录 --with-images`，再使用 `unpack` 恢复到空部署目录。
 
 个人空间命名清理之前生成的版本 1 维护副本和备份也可在当前代码上恢复。恢复旧数据库后，维护入口保持暂停，先按原备份清单核对旧副本、附件和向量，再导出旧采集配置、运行新增迁移、重建全文索引和刷新当前副本；最后再次按未改写的原备份清单核对。副本旧表名及外层列名会映射为当前名字。未完成任务继续读取原 payload，模型及凭据检查通过后才能恢复执行。结构版本 0 的整体回退仍遵守下文的离线 helper 流程。
 
@@ -269,7 +270,7 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 ./reliquary-admin pack /Volumes/Transfer/Reliquary-Migration
 ```
 
-目标目录必须不存在或为空，而且不在文件库或上传资源目录内。命令暂停收录并等待普通处理队列清空，默认最多等待 300 秒，可用 `--timeout 600` 调整；主题历史归入和向量重建的检查点会保留。命令随后打包当前源码及 Git 历史、脱敏数据库导出、文件库（含 `.reliquary/`）、上传资源、脱敏配置、所有 Compose 服务的镜像文件、版本信息、表级校验、文件哈希和固定查询结果。模型权重不打包。
+目标目录必须不存在或为空，而且不在文件库或上传资源目录内。命令暂停收录并等待普通处理队列清空，默认最多等待 300 秒，可用 `--timeout 600` 调整；主题历史归入和向量重建的检查点会保留。命令随后打包当前源码及 Git 历史、脱敏数据库导出、宿主机文件库（含 `.reliquary/` 和 `.obsidian/` 阅读配置）、上传资源、脱敏配置、所有 Compose 服务的镜像文件、版本信息、表级校验、文件哈希和固定查询结果。模型权重不打包。
 
 完成前，命令读回磁盘文件并核对。只有所有核对通过才报告 `pack complete and read-back verified` 并恢复旧环境的收录；`--keep-paused` 会保留暂停并停止应用。等待超时、文件变化、磁盘不足或任何校验错误会停止并给出原因，不能把这样的目录用于迁移。打包期间暂停外部编辑器写文件。未提交的源码默认拒绝打包，需要保留经审阅的本地修改时显式加 `--include-worktree`，清单会记录提交和工作树状态。
 
@@ -279,9 +280,19 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 ./reliquary-admin unpack
 ```
 
-命令检查 Docker、Compose、端口、磁盘空间和目标目录，恢复源码与 Git 历史并载入镜像；生成新 `SYSTEM_AES_KEY`、`JWT_SECRET` 和数据库密码，写入权限受限的新 `.env`。数据库、文件库和上传资源一同恢复，并重建全文索引。宿主机目录可改变，容器中的文件库和资源路径应沿用包的配置，命令按需要映射恢复文件引用。
+命令检查 Docker、Compose、端口、磁盘空间和目标目录，恢复源码与 Git 历史并载入镜像；生成新 `SYSTEM_AES_KEY`、`JWT_SECRET` 和数据库密码，写入权限受限的新 `.env`。数据库、文件库、阅读配置和上传资源一同恢复，并重建全文索引。宿主机文件库与上传资源目录必须为空或不存在，可用 `RELIQUARY_VAULT_DIR`、`RELIQUARY_FILES_DIR` 指定新位置；非空时拒绝恢复。容器中的文件库和资源路径应沿用包的配置，命令按需要映射恢复文件引用。
 
-默认的新部署目录是迁移包同级的 `包名-deployment`，可用 `--target /Users/yourname/Reliquary --project reliquary-new` 显式指定空目录及独立 Compose project。需要更换端口时，在打包目录运行 `APP_PORT=18080 FRONTEND_PORT=18081 ./reliquary-admin unpack --target /Users/yourname/Reliquary --project reliquary-new`。后续维护命令在新部署目录执行，保留生成的 `.env` 和 Compose 映射。
+默认的新部署目录是迁移包同级的 `包名-deployment`，可用 `--target /Users/yourname/Reliquary-Deployment --project reliquary-new` 显式指定空目录及独立 Compose project。数据目录位于部署源码目录之外。需要同时更换端口和数据位置时，在打包目录运行：
+
+```bash
+RELIQUARY_VAULT_DIR=/Users/yourname/Reliquary-New/vault \
+RELIQUARY_FILES_DIR=/Users/yourname/Reliquary-New/files \
+BACKUP_DIR=/Users/yourname/Backups/Reliquary-New \
+APP_PORT=18080 FRONTEND_PORT=18081 \
+  ./reliquary-admin unpack --target /Users/yourname/Reliquary-Deployment --project reliquary-new
+```
+
+后续维护命令在新部署目录执行，保留生成的 `.env` 和 Compose 映射。
 
 接下来必须看到核对结果和 `Reconfiguration checklist`。缺少本地模型时状态为 `waiting_models`，等待模型就绪；已选择的模型缺少凭据时为 `waiting_credentials`，等待重新填写。两种状态都会启动网页供登录和修改设置，但暂停收录与领取处理任务，保留所有中断任务。命令因等待返回非零状态是预期行为；不要通过手工 `maintenance resume` 跳过检查，也不要重复执行初次 `unpack` 覆盖已恢复的数据库。
 
@@ -304,13 +315,13 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 ## 只有文件库时重建
 
-保留整个文件库，包括隐藏的 `.reliquary/` 和 `attachments/`。准备新的空数据库和空上传目录，保持应用停止，执行：
+保留整个宿主机文件库，包括隐藏的 `.reliquary/`、`attachments/` 和 Obsidian 阅读配置。准备新的空数据库和空上传目录，在 `.env` 将 `RELIQUARY_VAULT_DIR` 指向原件目录，例如 `/Users/yourname/RecoveredVault`，并设置 `RELIQUARY_FILES_DIR`，保持应用停止，执行：
 
 ```bash
 ./reliquary-admin rebuild /Users/yourname/RecoveredVault
 ```
 
-命令读取表头、正文和 `.reliquary/`，恢复文章及表头未保存的用户数据、档案、待审内容、日志、配置和任务检查点，再生成全文索引并逐表核对原副本。重建成功后自动进入 snapshot 暂停，队列不会领取任务或消耗重试预算。缺少或损坏的副本、文章、待审附件会列出错误并停止。可重建的索引和向量不作为唯一原件。
+命令读取表头、正文和 `.reliquary/`，恢复文章及表头未保存的用户数据、档案、待审内容、日志、配置和任务检查点，再生成全文索引并逐表核对原副本。`.obsidian/`、`.trash/` 和 `.DS_Store` 等用户配置保留原样，不作为文章或用户文档索引。重建成功后自动进入 snapshot 暂停，队列不会领取任务或消耗重试预算。缺少或损坏的副本、文章、待审附件会列出错误并停止。可重建的索引和向量不作为唯一原件。
 
 随后可以执行 `docker compose up -d app frontend` 启动网页，用原账号密码登录。按照程序输出的清单重新填写模型和解析器凭据，ChatGPT 重新登录；账号密码哈希保留。此时处理队列与收录仍暂停，不要手工解除暂停。完成后执行：
 
@@ -348,7 +359,10 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 退回需要用升级前快照恢复旧代码、旧镜像、旧数据库和旧文件库到新的空环境。`upgrade` 的自动备份包含这些镜像，因此可在该备份目录执行随包提供的入口：
 
 ```bash
-./reliquary-admin unpack --target /Users/yourname/Reliquary-Rollback --project reliquary-rollback
+RELIQUARY_VAULT_DIR=/Users/yourname/Reliquary-Rollback/vault \
+RELIQUARY_FILES_DIR=/Users/yourname/Reliquary-Rollback/files \
+BACKUP_DIR=/Users/yourname/Backups/Reliquary-Rollback \
+  ./reliquary-admin unpack --target /Users/yourname/Reliquary-Rollback-Deployment --project reliquary-rollback
 ```
 
 如果旧部署占用默认端口，像迁移一样指定空闲的 `APP_PORT` 和 `FRONTEND_PORT`。应看到旧代码和镜像载入、数据核对通过以及重新填写凭据的清单；在回退部署目录补齐凭据、运行 `setup-models` 和 `unpack --resume`，确认 `State: ready` 后再切换使用旧版本。`restore` 只适用于已经准备好旧代码及旧镜像的空数据环境，不负责替换代码。升级以后新增的数据不在升级前备份中，先另存当前数据，不能直接覆盖。系统不支持数据库结构降级。

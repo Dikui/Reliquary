@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"reliquary/internal/vaultpath"
 )
 
 type Snapshot struct {
@@ -488,6 +489,16 @@ func SafePath(root, relative string) (string, error) {
 }
 
 func Files(root string) ([]File, error) {
+	return files(root, nil)
+}
+
+// VaultFiles inventories managed vault content while leaving user configuration
+// available to physical backups. Upload inventories continue to include all files.
+func VaultFiles(root string) ([]File, error) {
+	return files(root, vaultpath.UserMetadata)
+}
+
+func files(root string, ignore func(string) bool) ([]File, error) {
 	result := []File{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if errors.Is(walkErr, os.ErrNotExist) && path == root {
@@ -495,6 +506,17 @@ func Files(root string) ([]File, error) {
 		}
 		if walkErr != nil {
 			return walkErr
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if ignore != nil && ignore(relative) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if entry.IsDir() {
 			return nil
@@ -502,50 +524,20 @@ func Files(root string) ([]File, error) {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("asset symlink refused: %s", path)
 		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		result = append(result, File{Path: filepath.ToSlash(relative), SHA256: sum(data), Size: int64(len(data))})
+		result = append(result, File{Path: relative, SHA256: sum(data), Size: int64(len(data))})
 		return nil
 	})
 	return result, err
 }
 
 func vaultFiles(root string) ([]File, error) {
-	result := []File{}
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if errors.Is(walkErr, os.ErrNotExist) && path == root {
-			return nil
-		}
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			if path == filepath.Join(root, ".reliquary") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("vault asset symlink refused: %s", path)
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		result = append(result, File{Path: filepath.ToSlash(relative), SHA256: sum(data), Size: int64(len(data))})
-		return nil
+	return files(root, func(relative string) bool {
+		return relative == ".reliquary" || strings.HasPrefix(relative, ".reliquary/") || vaultpath.UserMetadata(relative)
 	})
-	return result, err
 }
 
 func mirrorResources(source, destination string) error {

@@ -33,6 +33,8 @@ ROOT = Path(os.environ.get("RELIQUARY_ADMIN_ROOT", Path(__file__).resolve().pare
 FORMAT = "reliquary-maintenance-v2"
 SECRET = re.compile(r"(?:^|[_-])(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|signature|credentials?|authorization|private[_-]?key|aes[_-]?key|cookie|nonce|verifier)(?:$|[_-])|^(?:appsecret|clientsecret|accesstoken|refreshtoken|idtoken|privatekey|passwordhash|proxyauthorization|setcookie|secretaccesskey|accesskeyid)$", re.I)
 EXCLUDED = {".git", ".scratch", ".env", ".local-data", ".maintenance-tools", ".maintenance-runtime", ".maintenance-runtime.previous", ".maintenance-schedule", ".maintenance-rebuild", ".maintenance-rebuild.json", "node_modules", "dist", ".venv", "venv", "__pycache__", ".pytest_cache"}
+VAULT_USER_DIRECTORIES = {".obsidian", ".trash", ".Trashes", ".Spotlight-V100"}
+VAULT_USER_FILES = {".DS_Store", "Thumbs.db", "desktop.ini"}
 
 
 class AdminError(RuntimeError):
@@ -84,9 +86,24 @@ def digest(path):
     return h.hexdigest()
 
 
+def vault_user_path(path):
+    """Reader settings and OS metadata are preserved without content comparison."""
+    if Path(path).parts[:1] == (".reliquary",):
+        return False
+    return any(part in VAULT_USER_DIRECTORIES or part in VAULT_USER_FILES or part.startswith("._")
+               for part in Path(path).parts)
+
+
+def package_user_path(path):
+    parts = Path(path).parts
+    return len(parts) > 1 and parts[0] == "vault" and vault_user_path(Path(*parts[1:]))
+
+
 def hashes(root):
     out = {}
     for path in sorted(Path(root).rglob("*")):
+        if package_user_path(path.relative_to(root)):
+            continue
         if path.is_symlink():
             raise AdminError(f"Symlink is not a portable asset: {path}")
         if path.is_file() and path.relative_to(root) != Path("checksums.json"):
@@ -95,7 +112,8 @@ def hashes(root):
 
 
 def check_files(package):
-    expected = json.loads((package / "checksums.json").read_text())
+    expected = {name: value for name, value in json.loads((package / "checksums.json").read_text()).items()
+                if not package_user_path(name)}
     actual = hashes(package)
     if actual != expected:
         bad = sorted(k for k in actual.keys() | expected.keys() if actual.get(k) != expected.get(k))
@@ -112,12 +130,13 @@ def empty_directory(path):
     return path.resolve()
 
 
-def snapshot_tree(source, target, previous=None):
+def snapshot_tree(source, target, previous=None, *, vault=False):
     """A complete immutable tree, sharing unchanged inodes with the prior backup."""
     source, target = Path(source), Path(target)
     target.mkdir(parents=True, exist_ok=True)
     items = sorted(source.rglob("*"))
-    original_paths = sorted(str(item.relative_to(source)) for item in items)
+    original_paths = sorted(str(item.relative_to(source)) for item in items
+                            if not vault or not vault_user_path(item.relative_to(source)))
     for item in items:
         rel = item.relative_to(source)
         dest = target / rel
@@ -127,6 +146,9 @@ def snapshot_tree(source, target, previous=None):
             dest.mkdir(exist_ok=True)
         elif item.is_file():
             dest.parent.mkdir(parents=True, exist_ok=True)
+            if vault and vault_user_path(rel):
+                shutil.copy2(item, dest)
+                continue
             before = digest(item)
             before_stat = item.stat()
             old = Path(previous) / rel if previous else None
@@ -143,7 +165,8 @@ def snapshot_tree(source, target, previous=None):
                 raise AdminError(f"Storage changed during snapshot: {item}; pause external editors and retry")
         else:
             raise AdminError(f"Unsupported storage entry: {item}")
-    if sorted(str(item.relative_to(source)) for item in source.rglob("*")) != original_paths:
+    if sorted(str(item.relative_to(source)) for item in source.rglob("*")
+              if not vault or not vault_user_path(item.relative_to(source))) != original_paths:
         raise AdminError(f"Storage entries changed during snapshot: {source}; pause external editors and retry")
 
 
@@ -179,14 +202,22 @@ def read_env(path):
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.removeprefix("export ").split("=", 1)
-            key, value = key.strip(), value.strip()
-            if value[:1] == '"' and value[-1:] == '"':
+            key = key.strip()
+            if re.match(r"^\s+#", value):
+                value = ""
+            value = value.strip()
+            quoted = re.fullmatch(r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*(?:#.*)?''', value)
+            if quoted:
+                value = quoted.group(1)
+            elif value[:1] not in {"'", '"'}:
+                value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+            if quoted and value[:1] == '"':
                 try:
                     value = json.loads(value)
                 except json.JSONDecodeError:
                     value = value[1:-1]
-            elif value[:1] == "'" and value[-1:] == "'":
-                value = value[1:-1]
+            elif quoted and value[:1] == "'":
+                value = value[1:-1].replace("\\'", "'")
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
                 values[key] = value
     return values
@@ -218,6 +249,61 @@ def write_env(path, values):
     path = Path(path)
     path.write_text("".join(f"{key}={json.dumps(str(value), ensure_ascii=False)}\n" for key, value in sorted(values.items())))
     path.chmod(0o600)
+
+
+def host_path(value, env, root=ROOT):
+    """Expand the same common environment expressions accepted by Compose."""
+    home = env.get("HOME") or str(Path.home())
+    expression = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+    values = {**env, "HOME": home}
+    def expand(match):
+        key = match.group(1) or match.group(3)
+        return str(values.get(key) or match.group(2) or "")
+    value = str(value)
+    for _ in range(8):
+        expanded = expression.sub(expand, value)
+        if expanded == value:
+            break
+        value = expanded
+    if value == "~" or value.startswith("~/"):
+        value = home + value[1:]
+    if not value.strip() or "$" in value:
+        raise AdminError(f"Invalid host directory: {value!r}; use an explicit path or a defined environment variable")
+    path = Path(value)
+    return (path if path.is_absolute() else Path(root) / path).resolve()
+
+
+def default_backup_directory(env):
+    return env.get("RELIQUARY_BACKUP_DIRECTORY") or env.get("BACKUP_DIR") or "${HOME}/Backups/Reliquary"
+
+
+def check_directory_paths(root, paths, env):
+    """Validate all locations before creating any of them."""
+    root = Path(root).resolve()
+    resolved = {name: host_path(path, env, root) for name, path in paths.items()}
+    for name, path in resolved.items():
+        if path == Path("/") or path.is_relative_to(root):
+            raise AdminError(f"{name} directory must be outside the project source directory: {path}")
+    items = list(resolved.items())
+    for index, (name, path) in enumerate(items):
+        for other_name, other in items[index + 1:]:
+            # Multiple backup choices may point to the same directory.
+            if name.startswith("backup") and other_name.startswith("backup"):
+                continue
+            if path.is_relative_to(other) or other.is_relative_to(path):
+                raise AdminError(f"Storage and backup directories must not contain one another: {name}={path}, {other_name}={other}")
+    for name, path in resolved.items():
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            if not path.is_dir():
+                raise AdminError(f"{name} is not a directory: {path}")
+            if not path.stat().st_mode & 0o222 or not os.access(path, os.W_OK | os.X_OK):
+                raise AdminError(f"{name} directory is not writable: {path}")
+            with tempfile.NamedTemporaryFile(prefix=".reliquary-write-check-", dir=path):
+                pass
+        except OSError as error:
+            raise AdminError(f"{name} directory cannot be created or is not writable: {path}: {error}") from error
+    return resolved
 
 
 def sanitize_config(source, destination):
@@ -256,10 +342,21 @@ class Context:
         self.root = Path(root)
         self.env = dict(os.environ)
         self.env = {**read_env(self.root / ".env"), **self.env, **(overrides or {})}
+        # Compose does not expand expressions in values supplied through its
+        # process environment. Resolve host paths before they override .env.
+        for key in ("RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY",
+                    "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
+            if self.env.get(key):
+                self.env[key] = str(host_path(self.env[key], self.env, self.root))
         self.app = self.env.get("APP_SERVICE", "app")
         self.db = self.env.get("DB_SERVICE", "postgres")
         self.direct = self.env.get("RELIQUARY_ADMIN_DIRECT") == "1"
         self.local_server = self.env.get("RELIQUARY_ADMIN_SERVER")
+        if not self.direct and not self.local_server:
+            for legacy, key in (("RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_VAULT_DIR"),
+                                ("RELIQUARY_ADMIN_RESOURCES_DIR", "RELIQUARY_FILES_DIR")):
+                if self.env.get(legacy):
+                    self.env[key] = self.env[legacy]
         previous = self.root / ".maintenance-runtime.previous"
         if not (self.root / ".maintenance-runtime").exists() and previous.is_dir():
             previous.rename(self.root / ".maintenance-runtime")
@@ -274,6 +371,48 @@ class Context:
             config = json.loads(self.compose("config", "--format", "json"))
             values = config["services"].get(self.app, {}).get("environment", {})
         return {**read_env(self.root / ".env"), **{k: str(v) for k, v in values.items() if v is not None}}
+
+    def host_storage_path(self, name):
+        legacy = "RELIQUARY_ADMIN_VAULT_DIR" if name == "vault" else "RELIQUARY_ADMIN_RESOURCES_DIR"
+        key = "RELIQUARY_VAULT_DIR" if name == "vault" else "RELIQUARY_FILES_DIR"
+        runtime = "VAULT_ROOT" if name == "vault" else "LOCAL_STORAGE_BASE_DIR"
+        default = "${HOME}/Reliquary/vault" if name == "vault" else "${HOME}/Reliquary/files"
+        value = self.env.get(legacy) or self.env.get(key)
+        if not value and (self.direct or self.local_server):
+            value = self.env.get(runtime)
+            if not value:
+                raise AdminError(f"Set {key} or {runtime} to the host storage directory")
+        return host_path(value or default, self.env, getattr(self, "root", ROOT))
+
+    def configured_backup_directory(self):
+        if not self.direct and not self.local_server:
+            if not shutil.which("docker"):
+                return None
+            try:
+                running = self.compose("ps", "--status", "running", "--quiet", self.db).strip()
+            except AdminError as error:
+                print(f"Warning: stored backup settings could not be checked while Docker is unavailable: {error}", file=sys.stderr)
+                return None
+            if not running:
+                return None
+        if self.sql("SELECT to_regclass('public.maintenance_state') IS NOT NULL") != "t":
+            return None
+        configured = self.sql("SELECT backup_directory FROM maintenance_state WHERE id=true")
+        return default_backup_directory(self.env) if configured == "../reliquary-backups" else configured or None
+
+    def check_host_directories(self, backup_directory=None, *, settings=True, require_empty=False):
+        paths = {"vault": self.host_storage_path("vault"), "files": self.host_storage_path("resources"),
+                 "backup": backup_directory or default_backup_directory(self.env)}
+        resolved = check_directory_paths(self.root, paths, self.env)
+        if settings:
+            configured = self.configured_backup_directory()
+            if configured:
+                paths["backup settings"] = configured
+                resolved = check_directory_paths(self.root, paths, self.env)
+        if require_empty:
+            for name in ("vault", "files"):
+                empty_directory(resolved[name])
+        return resolved
 
     def server(self, *args, overrides=None, capture=True, data=None, stdin=None):
         env = {**self.env, **(overrides or {})}
@@ -351,27 +490,19 @@ class Context:
                 raise AdminError("Cannot read back the exported PostgreSQL archive: " + error.decode()[-1000:])
 
     def storage(self, name):
-        host_key = "RELIQUARY_ADMIN_VAULT_DIR" if name == "vault" else "RELIQUARY_ADMIN_RESOURCES_DIR"
-        env_key = "VAULT_ROOT" if name == "vault" else "LOCAL_STORAGE_BASE_DIR"
-        if self.direct or host_key in self.env or self.local_server:
-            path = Path(self.env.get(host_key, self.env.get(env_key, ""))).absolute()
-            if not path.is_dir() or path == Path("/"):
-                raise AdminError(f"Set {host_key} to the existing HOST storage directory")
-            return ("host", path)
-        app_id = self.compose("ps", "--all", "--quiet", self.app).decode().strip()
-        if not app_id or "\n" in app_id:
-            raise AdminError("Create exactly one app container or specify HOST storage directories")
-        info = json.loads(run(["docker", "inspect", app_id]))[0]
-        env = dict(value.split("=", 1) for value in info["Config"]["Env"] if "=" in value)
-        path = env.get(env_key, "/data/vault" if name == "vault" else "/data/files")
-        return ("container", (app_id, path))
+        path = self.host_storage_path(name)
+        if path == Path("/") or path.exists() and not path.is_dir():
+            raise AdminError(f"Invalid host storage directory: {path}")
+        return ("host", path)
 
     def copy_storage(self, name, target, previous=None):
         mode, source = self.storage(name)
         if mode == "host":
+            if not source.is_dir():
+                raise AdminError(f"Host storage directory does not exist: {source}; run check-deployment first")
             if Path(target).resolve().is_relative_to(source.resolve()):
                 raise AdminError("Backup directory must be outside the storage directory")
-            snapshot_tree(source, target, previous)
+            snapshot_tree(source, target, previous, vault=name == "vault")
         else:
             target.mkdir(parents=True, exist_ok=True)
             app_id, path = source
@@ -391,7 +522,7 @@ class Context:
         mode, destination = self.storage(name)
         if mode == "host":
             empty_directory(destination)
-            snapshot_tree(source, destination)
+            snapshot_tree(source, destination, vault=name == "vault")
         else:
             app_id, path = destination
             info = json.loads(run(["docker", "inspect", app_id]))[0]
@@ -657,7 +788,13 @@ def record(ctx, kind, result):
         print(f"Alert: maintenance result could not be recorded: {error}", file=sys.stderr)
 
 
+def check_context_directories(ctx, backup_directory=None, **options):
+    checker = getattr(ctx, "check_host_directories", None)
+    return checker(backup_directory, **options) if checker else None
+
+
 def create_package(ctx, destination, args, kind="pack", previous=None):
+    check_context_directories(ctx, Path(destination).resolve() if kind == "pack" else Path(destination).resolve().parent)
     destination = empty_directory(destination)
     result = {"status": "failed", "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "path": str(destination)}
     try:
@@ -774,8 +911,9 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
 
 
 def backup(ctx, args):
-    directory = Path(args.directory or ctx.env.get("RELIQUARY_BACKUP_DIRECTORY", ctx.env.get("BACKUP_DIR", str(Path.home() / "ReliquaryBackups")))).absolute()
+    directory = host_path(args.directory or default_backup_directory(ctx.env), ctx.env, getattr(ctx, "root", ROOT))
     try:
+        check_context_directories(ctx, directory)
         directory.mkdir(parents=True, exist_ok=True)
         existing = sorted(p for p in directory.glob("backup-*") if (p / "manifest.json").is_file())
         destination = directory / ("backup-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3))
@@ -792,14 +930,16 @@ def restored_environment(ctx, package, env_path=None):
     # Maintenance control paths describe the old host, not application data.
     # Accept destination storage overrides only from the current invocation.
     for key in list(values):
-        if key.startswith("RELIQUARY_ADMIN_"):
+        if key.startswith("RELIQUARY_ADMIN_") or key in {"RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY"}:
             values.pop(key)
     values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32), "DB_PASSWORD": secrets.token_urlsafe(32)})
-    values.update(VAULT_ROOT="/data/vault", LOCAL_STORAGE_BASE_DIR="/data/files")
+    values.setdefault("VAULT_ROOT", "/data/vault")
+    values.setdefault("LOCAL_STORAGE_BASE_DIR", "/data/files")
+    values.update(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="${HOME}/Reliquary/files", BACKUP_DIR="${HOME}/Backups/Reliquary")
     for key in ("COMPOSE_FILE", "COMPOSE_PROJECT_NAME"):
         values.pop(key, None)
     # Keep the new destination's actual connection and ports when supplied.
-    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
+    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
         if key in ctx.env:
             values[key] = ctx.env[key]
     if env_path:
@@ -822,6 +962,7 @@ def restore(ctx, package, args):
     metadata = json.loads((package / "manifest.json").read_text())
     if metadata.get("format") != FORMAT:
         raise AdminError("Unsupported maintenance package format")
+    check_context_directories(ctx, require_empty=True)
     # Existing DB credentials stay in the destination; they are never imported.
     application_tables = ctx.sql("SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename NOT IN (SELECT c.relname FROM pg_class c JOIN pg_depend d ON d.objid=c.oid WHERE d.deptype='e')")
     if int(application_tables or "0"):
@@ -1012,6 +1153,9 @@ def verify_rebuild_configuration(ctx, package, overrides):
 
 def rebuild(ctx, args):
     vault = Path(args.vault).resolve()
+    checked = check_context_directories(ctx)
+    if checked and vault != checked["vault"]:
+        raise AdminError(f"Rebuild vault must match RELIQUARY_VAULT_DIR: {checked['vault']}; configure it to {vault} before rebuilding")
     package = ctx.root / ".maintenance-rebuild"
     state_path = ctx.root / ".maintenance-rebuild.json"
     side = {"VAULT_ROOT": str(vault) if ctx.local_server or ctx.direct else "/maintenance-vault"}
@@ -1185,8 +1329,11 @@ def unpack(ctx, args):
     metadata = json.loads((package / "manifest.json").read_text())
     if not metadata["images"]:
         raise AdminError("unpack requires a pack containing all service images; use restore for data-only backups")
+    values = restored_environment(ctx, package)
+    planned = Context(target, values)
+    planned.check_host_directories(settings=False, require_empty=True)
     if not shutil.which("docker") or not shutil.which("git"):
-        raise AdminError("Install Docker Desktop/Engine with Docker Compose and git first")
+        raise AdminError("Install a Docker compatible runtime (such as OrbStack or Docker Desktop) with Docker Compose and git first")
     run(["docker", "compose", "version"])
     needed = sum(p.stat().st_size for p in package.rglob("*") if p.is_file()) * 2
     if shutil.disk_usage(target).free < needed:
@@ -1219,7 +1366,6 @@ def unpack(ctx, args):
         # live separately, with an explicit forwarding entry point.
         (target / "reliquary-admin").write_text('#!/usr/bin/env bash\nset -Eeuo pipefail\nadmin_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)\nexport RELIQUARY_ADMIN_ROOT="$admin_root"\nexec "$admin_root/.maintenance-tools/reliquary-admin" "$@"\n')
         (target / "reliquary-admin").chmod(0o755)
-    values = restored_environment(ctx, package, target / ".env")
     if helper:
         values["RELIQUARY_ADMIN_HELPER_IMAGE"] = helper["reference"]
     for key, fallback in (("APP_PORT", "8080"), ("FRONTEND_PORT", "80")):
@@ -1232,6 +1378,14 @@ def unpack(ctx, args):
     compose_files = str(target / "docker-compose.yml") + os.pathsep + str(target / "compose.images.json")
     project = args.project or ("reliquary-" + secrets.token_hex(4))
     isolate_compose_names(target / "compose.images.json", project, values.get("DB_SERVICE", "postgres"))
+    # Frozen sources can still use named volumes. Replace only these mounts by
+    # their container targets so restored images read the chosen host files.
+    image_overrides = json.loads((target / "compose.images.json").read_text())
+    image_overrides["services"].setdefault(values.get("APP_SERVICE", "app"), {})["volumes"] = [
+        {"type": "bind", "source": str(planned.host_storage_path("vault")), "target": values["VAULT_ROOT"]},
+        {"type": "bind", "source": str(planned.host_storage_path("resources")), "target": values["LOCAL_STORAGE_BASE_DIR"]},
+    ]
+    json_write(target / "compose.images.json", image_overrides)
     values.update(COMPOSE_FILE=compose_files, COMPOSE_PROJECT_NAME=project)
     write_env(target / ".env", values)
     fresh = Context(target, {**values, "COMPOSE_FILE": compose_files, "COMPOSE_PROJECT_NAME": project})
@@ -1448,7 +1602,8 @@ def prepare_multimodal(ctx, name, args):
 
 
 def drill(ctx, args):
-    directory = Path(args.directory or ctx.env.get("RELIQUARY_BACKUP_DIRECTORY", ctx.env.get("BACKUP_DIR", str(Path.home() / "ReliquaryBackups")))).absolute()
+    directory = host_path(args.directory or default_backup_directory(ctx.env), ctx.env, ctx.root)
+    check_context_directories(ctx, directory)
     packages = sorted(p for p in directory.glob("backup-*") if (p / "manifest.json").is_file())
     result = {"status": "failed", "path": "", "started_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     owner_path = ctx.root / ".maintenance-schedule/drill-active.json"
@@ -1468,7 +1623,7 @@ def drill(ctx, args):
                 container_name = database.replace("_", "-")
                 if getattr(args, "automatic", False):
                     json_write(owner_path, {"reason": "automatic:drill", "database": database, "directory": str(directory), "root": str(root), "container": container_name})
-                snapshot_tree(package / "vault", root / "vault")
+                snapshot_tree(package / "vault", root / "vault", vault=True)
                 snapshot_tree(package / "resources", root / "resources")
                 with (package / "database.dump").open("rb") as stream:
                     proc = subprocess.run(ctx.pg_command("pg_restore", database, "--clean", "--if-exists", "--no-owner", "--no-acl", "--exit-on-error"), env={**ctx.env, "PGPASSWORD": ctx.env.get("DB_PASSWORD", "")}, cwd=ctx.root, stdin=stream, stderr=subprocess.PIPE)
@@ -1509,6 +1664,8 @@ def drill(ctx, args):
 
 def schedule(ctx, args):
     if args.action == "configure":
+        if getattr(args, "backup_directory", None):
+            check_context_directories(ctx, args.backup_directory, settings=False)
         flags = []
         for option in ("backup_directory", "backup_schedule", "drill_schedule", "timezone", "enabled"):
             value = getattr(args, option, None)
@@ -1615,6 +1772,8 @@ def schedule(ctx, args):
 def parser():
     cli = argparse.ArgumentParser(description="Reliable maintenance, migration and recovery for Reliquary")
     sub = cli.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("check-deployment", help="Create and check host storage and backup directories before starting services")
+    p.add_argument("--backup-directory")
     sub.add_parser("export-sources", help="Export retired source configuration and synchronization history without credentials")
     for name in ("pack", "backup"):
         p = sub.add_parser(name)
@@ -1673,7 +1832,10 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     ctx = Context()
-    if args.command == "export-sources":
+    if args.command == "check-deployment":
+        checked = ctx.check_host_directories(args.backup_directory)
+        print(json.dumps({"ok": True, "directories": {name: str(path) for name, path in checked.items()}}, ensure_ascii=False, indent=2))
+    elif args.command == "export-sources":
         print(json.dumps(ctx.cli_json("export-sources"), ensure_ascii=False, indent=2))
     elif args.command == "pack":
         create_package(ctx, args.directory, args)
@@ -1684,6 +1846,7 @@ def main(argv=None):
     elif args.command == "unpack":
         unpack(ctx, args)
     elif args.command == "verify":
+        check_context_directories(ctx)
         flags = (["--repair"] if args.repair else []) + (["--vectors"] if args.vectors else [])
         if args.allow_model_change:
             flags += ["--allow-model-change"]

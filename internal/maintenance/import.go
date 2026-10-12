@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+	"reliquary/internal/vaultpath"
 )
 
 // Load refuses any corrupt replica before opening a database transaction.
@@ -47,6 +48,9 @@ func Load(root string) (*Snapshot, error) {
 		path, err := SafePath(root, file.Path)
 		if err != nil {
 			return nil, err
+		}
+		if vaultpath.UserMetadata(file.Path) {
+			continue
 		}
 		data, err := os.ReadFile(path)
 		if err != nil || sum(data) != file.SHA256 || int64(len(data)) != file.Size {

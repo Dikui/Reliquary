@@ -7,6 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -52,7 +55,23 @@ func (State) TableName() string { return "maintenance_state" }
 func Status(ctx context.Context, db *gorm.DB) (State, error) {
 	var state State
 	err := db.WithContext(ctx).Where("id = true").Take(&state).Error
+	state.BackupDirectory = effectiveBackupDirectory(state.BackupDirectory)
 	return state, err
+}
+
+// Resolve the historical built-in default on the deployment host without
+// changing preserved database configuration or explicit user settings.
+func effectiveBackupDirectory(directory string) string {
+	if directory != "" && directory != "../reliquary-backups" {
+		return directory
+	}
+	if configured := strings.TrimSpace(os.Getenv("BACKUP_DIR")); configured != "" {
+		return configured
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, "Backups", "Reliquary")
+	}
+	return directory
 }
 
 // SnapshotPaused also suspends automatic reconciliation while credentials or
@@ -207,7 +226,7 @@ func Due(ctx context.Context, db *gorm.DB, now time.Time, force bool) (DueResult
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=true").Take(&state).Error; err != nil {
 			return err
 		}
-		result.Directory = state.BackupDirectory
+		result.Directory = effectiveBackupDirectory(state.BackupDirectory)
 		if !state.AutomaticEnabled || state.Paused {
 			return nil
 		}

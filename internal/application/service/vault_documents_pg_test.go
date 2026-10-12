@@ -21,6 +21,7 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/vaultpath"
 )
 
 type vaultRecordingEmbedder struct {
@@ -185,6 +186,71 @@ func TestVaultMineWatcherRenameAndDeleteCleanRecordsAndVectors(t *testing.T) {
 	require.NotNil(t, status.Mine.LastScanAt)
 	require.Zero(t, status.Mine.IndexedFiles)
 	require.Empty(t, status.Mine.LastError)
+}
+
+func TestVaultWatcherAndIndexIgnoreObsidianConfigurationWithoutChangingFiles(t *testing.T) {
+	h := newVaultDocumentHarness(t, 40*time.Millisecond)
+	configuration := map[string]string{
+		".obsidian/app.json":                      `{"theme":"obsidian"}`,
+		".trash/x.md":                             "# Trashed root note\n",
+		".DS_Store":                               "Finder metadata",
+		"mine/.obsidian/app.json":                 `{"readableLineLength":true}`,
+		"mine/.trash/x.md":                        string([]byte{0xff, 0xfe}),
+		"mine/nested/._private.md":                "# AppleDouble note\n",
+		"reports/.obsidian/templates/template.md": "# Editor template\n",
+		"reports/.trash/x.md":                     "# Trashed report\n",
+		"reports/.DS_Store":                       "Report Finder metadata",
+	}
+	for relative, data := range configuration {
+		h.write(t, relative, data)
+	}
+	h.write(t, "mine/keep.md", "# Personal note\n\nobsidianfixture stays searchable")
+	require.NoError(t, h.documents.Start(h.ctx))
+	require.Eventually(t, func() bool {
+		var entry types.Entry
+		return h.db.Where("vault_path=? AND parse_status=?", "mine/keep.md", types.ParseStatusCompleted).First(&entry).Error == nil
+	}, 3*time.Second, 20*time.Millisecond)
+	// New editor directories exercise the event handler as well as startup walks.
+	configuration["mine/new/.obsidian/template.md"] = "# New hidden template\n"
+	configuration["reports/.trash/new.md"] = "# New discarded report\n"
+	configuration["mine/.obsidian/app.json"] = `{"readableLineLength":false}`
+	fixed := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	for relative, data := range configuration {
+		path := h.write(t, relative, data)
+		require.NoError(t, os.Chtimes(path, fixed, fixed))
+	}
+	h.write(t, "reports/keep.md", "# Report\n\nreportobsidianfixture remains indexed")
+	require.Eventually(t, func() bool {
+		var entry types.Entry
+		return h.db.Where("vault_path=? AND parse_status=?", "reports/keep.md", types.ParseStatusCompleted).First(&entry).Error == nil
+	}, 3*time.Second, 20*time.Millisecond)
+	require.NoError(t, h.documents.Scan(h.ctx, true))
+	for _, path := range h.documents.watcher.WatchList() {
+		relative, err := filepath.Rel(h.root, path)
+		require.NoError(t, err)
+		require.False(t, vaultpath.UserMetadata(relative), "editor directories must not receive watches")
+	}
+	require.NoError(t, h.documents.Close())
+	var indexed []string
+	require.NoError(t, h.db.Model(&types.Entry{}).Order("vault_path").Pluck("vault_path", &indexed).Error)
+	require.Equal(t, []string{"mine/keep.md", "reports/keep.md"}, indexed)
+	for relative := range h.documents.observations {
+		require.False(t, vaultpath.UserMetadata(relative), "ignored event paths must not enter indexing observations")
+	}
+	for relative, data := range configuration {
+		actual, err := os.ReadFile(filepath.Join(h.root, relative))
+		require.NoError(t, err)
+		require.Equal(t, data, string(actual))
+		info, err := os.Stat(filepath.Join(h.root, relative))
+		require.NoError(t, err)
+		require.Equal(t, fixed, info.ModTime().UTC())
+	}
+	status, err := h.documents.Status(h.ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, status.Mine.IndexedFiles)
+	require.EqualValues(t, 1, status.Reports.IndexedFiles)
+	require.Empty(t, status.Mine.LastError)
+	require.Empty(t, status.Reports.LastError)
 }
 
 func TestVaultReportImmediatelyIndexesReadOnlyBodyAndValidatesRelations(t *testing.T) {
@@ -381,6 +447,13 @@ func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T
 	h.write(t, "mine/first.md", "# 第一手\n\nindependentfixture personal note")
 	h.write(t, "mine/bad-utf8.md", string([]byte{0xff, 0xfe}))
 	h.write(t, "reports/bad-utf8.md", string([]byte{0xff, 0xfe}))
+	for relative, data := range map[string]string{
+		".obsidian/app.json": `{"readingView":true}`, ".trash/x.md": "discarded article without a header", ".DS_Store": "Finder metadata",
+		"mine/.trash/x.md": string([]byte{0xff}), "reports/.obsidian/template.md": "Editor template",
+		"articles/.trash/x.md": string(body),
+	} {
+		h.write(t, relative, data)
+	}
 	before := vaultFileHashes(t, h.root)
 	result, err := h.documents.Rebuild(h.ctx)
 	require.NoError(t, err)

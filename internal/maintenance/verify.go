@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"reliquary/internal/vaultpath"
 )
 
 type TableManifest struct {
@@ -103,7 +104,11 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 		manifest.Tables[table] = entry
 	}
 	for name, path := range map[string]string{"vault": root, "uploads": uploads} {
-		files, err := Files(path)
+		inventory := Files
+		if name == "vault" {
+			inventory = VaultFiles
+		}
+		files, err := inventory(path)
 		if err != nil {
 			return nil, err
 		}
@@ -554,9 +559,15 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	for group, wanted := range expected.Files {
 		current := map[string]File{}
 		for _, file := range actual.Files[group] {
+			if group == "vault" && vaultpath.UserMetadata(file.Path) {
+				continue
+			}
 			current[file.Path] = file
 		}
 		for _, file := range wanted {
+			if group == "vault" && vaultpath.UserMetadata(file.Path) {
+				continue
+			}
 			if group == "vault" && file.Path == ".reliquary/data/task_jobs.json" {
 				if got, present := current[file.Path]; present && matchingTaskReplicaRecovery(expected.Tables["task_jobs"], actual.Tables["task_jobs"], file, got) {
 					delete(current, file.Path)

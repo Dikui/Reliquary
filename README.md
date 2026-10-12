@@ -28,7 +28,7 @@ The Web UI provides article management and simple reading. Open the file library
 
 ## Run from source
 
-Requirements: Git, Node.js/npm, Docker, and Docker Compose. Application images are built locally; this repository does not publish installation packages or public application images.
+Requirements: Git, Node.js/npm, a runtime compatible with Docker (such as OrbStack or Docker Desktop), and Docker Compose. Application images are built locally; this repository does not publish installation packages or public application images.
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
@@ -36,10 +36,17 @@ cd Reliquary
 cp .env.example .env
 # Configure database credentials, JWT_SECRET, SYSTEM_AES_KEY, and model endpoints.
 ./scripts/build-frontend-dist.sh
+./reliquary-admin check-deployment
+docker compose up -d --wait postgres
+./reliquary-admin check-deployment
 docker compose up -d --build
 ```
 
-The frontend build helper installs dependencies with `npm ci` during a normal installation. Configure the readable file library and its permissions before starting the application, as described in [the Mac mini deployment guide](docs/personal-use.md#部署在-mac-mini).
+The frontend build helper installs dependencies with `npm ci` during a normal installation. Compose binds host directories: `RELIQUARY_VAULT_DIR` defaults to `${HOME}/Reliquary/vault`, `RELIQUARY_FILES_DIR` to `${HOME}/Reliquary/files`, and `BACKUP_DIR` to `${HOME}/Backups/Reliquary`. Change them in `.env`. `check-deployment` creates missing directories and rejects unwritable paths, paths inside the source checkout, and data or backup directories that contain one another. The PostgreSQL volume is unchanged. See [the Mac mini deployment guide](docs/personal-use.md#部署在-mac-mini).
+
+Keep the file library, uploaded resources, and backups outside the Desktop and Documents folders.
+
+Open the `vault/` directory itself in Obsidian. Exclude `attachments/` and `.reliquary/` from Obsidian search, and leave generated article headers and `.reliquary/` unchanged. Reading settings in `.obsidian/` are backed up and ignored during verification and indexing.
 
 By default the Web UI is at `http://localhost`, and the backend API is at `http://localhost:8080`. The first successful registration closes further registration. The single user and valid API keys have full access to the personal space. Deploy on your private network.
 
@@ -56,7 +63,7 @@ Use `./reliquary-admin upgrade` for upgrades. It pauses intake and creates a com
 ./reliquary-admin export-sources
 ```
 
-Backups exclude operational credentials. Restore into an empty environment and configure model and parser credentials again. See [the personal use guide](docs/personal-use.md), [migration rules](docs/database-migrations.md), and [maintenance data ownership](docs/maintenance-data.md).
+Backups retain host files and Obsidian reading settings while excluding operational credentials. `unpack` and `restore` require empty or nonexistent host file library and resource directories. Configure model and parser credentials again after restoring. See [the personal use guide](docs/personal-use.md), [migration rules](docs/database-migrations.md), and [maintenance data ownership](docs/maintenance-data.md).
 
 ## Development and validation
 

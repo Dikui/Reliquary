@@ -28,7 +28,7 @@ Reliquary 是个人信息组件，负责文章的收集、存储、去重与检�
 
 ## 从源码启动
 
-需要 Git、Node.js/npm、Docker 与 Docker Compose。应用镜像从本仓库构建，尚未发布安装包或公共应用镜像。
+需要 Git、Node.js/npm、Docker 兼容运行环境（如 OrbStack、Docker Desktop）与 Docker Compose。应用镜像从本仓库构建，尚未发布安装包或公共应用镜像。
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
@@ -36,10 +36,17 @@ cd Reliquary
 cp .env.example .env
 # 配置数据库密码、JWT_SECRET、SYSTEM_AES_KEY 与模型服务地址。
 ./scripts/build-frontend-dist.sh
+./reliquary-admin check-deployment
+docker compose up -d --wait postgres
+./reliquary-admin check-deployment
 docker compose up -d --build
 ```
 
-前端构建脚本在正常安装时通过 `npm ci` 安装依赖。启动前需配置可直接阅读的文件库目录及写入权限，见[部署在 Mac mini](docs/personal-use.md#部署在-mac-mini)。
+前端构建脚本在正常安装时通过 `npm ci` 安装依赖。Compose 直接绑定宿主机目录：`RELIQUARY_VAULT_DIR` 默认 `${HOME}/Reliquary/vault`，`RELIQUARY_FILES_DIR` 默认 `${HOME}/Reliquary/files`，`BACKUP_DIR` 默认 `${HOME}/Backups/Reliquary`，均可在 `.env` 修改。`check-deployment` 创建不存在的目录，拒绝不可写、位于源码内或数据与备份目录互相包含的配置。数据库命名卷不变。详见[部署在 Mac mini](docs/personal-use.md#部署在-mac-mini)。
+
+文件库、上传资源、备份目录不要放在“桌面”或“文稿”目录下。
+
+在 Obsidian 打开 `vault/` 这一层，将 `attachments/` 与 `.reliquary/` 排除在搜索之外，不要修改文章表头和 `.reliquary/`。`.obsidian/` 阅读配置随备份保存，核对与索引忽略其内容。
 
 默认网页地址为 `http://localhost`，后端 API 地址为 `http://localhost:8080`。首个用户注册后关闭注册，登录用户与有效 API Key 可访问个人空间全部内容。部署在内网使用。
 
@@ -56,7 +63,7 @@ Apple Silicon 可在 macOS 原生运行 Ollama，通过 Metal 运行模型。生
 ./reliquary-admin export-sources
 ```
 
-备份不包含可用凭据。恢复到空环境后重新填写模型与解析器凭据，步骤见[个人使用指南](docs/personal-use.md)、[迁移规范](docs/database-migrations.md)与[维护数据归属](docs/maintenance-data.md)。
+备份保存宿主机文件及 Obsidian 阅读配置，不包含可用凭据。`unpack` 与 `restore` 要求目标宿主机文件库和上传资源目录为空或不存在。恢复后重新填写模型与解析器凭据，步骤见[个人使用指南](docs/personal-use.md)、[迁移规范](docs/database-migrations.md)与[维护数据归属](docs/maintenance-data.md)。
 
 ## 开发与验证
 

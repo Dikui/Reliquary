@@ -5,6 +5,7 @@ import gzip
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -23,6 +24,302 @@ class AdminStorageTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def host_context(self, **overrides):
+        source = self.root / "source"
+        source.mkdir(exist_ok=True)
+        values = {"HOME": str(self.root / "home"), "RELIQUARY_VAULT_DIR": str(self.root / "vault"),
+                  "RELIQUARY_FILES_DIR": str(self.root / "files"), "BACKUP_DIR": str(self.root / "backups")}
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            return admin.Context(source, {**values, **overrides})
+
+    def reader_files(self, vault):
+        contents = {".obsidian/app.json": b'{"showLineNumber": true}\n', ".trash/x.md": b"Deleted reader note\n",
+                    ".DS_Store": b"Finder metadata", "mine/.obsidian/plugin.md": b"Plugin settings\n",
+                    "reports/.trash/report.md": b"Deleted report\n", "mine/._draft.md": b"AppleDouble metadata"}
+        for name, content in contents.items():
+            path = vault / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        return contents
+
+    def test_deployment_check_creates_missing_directories_and_expands_defaults(self):
+        ctx = self.host_context(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="~/Reliquary/files",
+                                BACKUP_DIR="${HOME}/Backups/Reliquary")
+        checked = ctx.check_host_directories(settings=False)
+        self.assertEqual(checked["vault"], (self.root / "home/Reliquary/vault").resolve())
+        self.assertEqual(checked["files"], (self.root / "home/Reliquary/files").resolve())
+        self.assertEqual(checked["backup"], (self.root / "home/Backups/Reliquary").resolve())
+        self.assertTrue(all(path.is_dir() for path in checked.values()))
+        self.assertEqual(list(checked["vault"].iterdir()), [])
+
+    @unittest.skipUnless(admin.shutil.which("docker"), "Docker Compose is required to check its interpolation")
+    def test_compose_and_admin_resolve_the_same_host_directories(self):
+        evidence = Path(__file__).resolve().parent.parent / ".scratch/ingest-only/evidence/06"
+        evidence.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="admin-compose-paths-", dir=evidence) as temporary:
+            fixture = Path(temporary)
+            source, home = fixture / "source", fixture / "home"
+            source.mkdir()
+            admin.shutil.copy2(admin.ROOT / "docker-compose.yml", source / "docker-compose.yml")
+            defaults = "RELIQUARY_VAULT_DIR=${HOME}/Reliquary/vault\nRELIQUARY_FILES_DIR=${HOME}/Reliquary/files\nBACKUP_DIR=${HOME}/Backups/Reliquary\n"
+            scenarios = [
+                ("template", defaults, {}),
+                ("invocation override", defaults, {"RELIQUARY_VAULT_DIR": "$HOME/custom-vault", "RELIQUARY_FILES_DIR": "~/custom-files", "BACKUP_DIR": "${HOME}/custom-backups"}),
+                ("unset defaults", "", {}),
+                ("dotenv comments", 'RELIQUARY_VAULT_DIR=${HOME}/vault # reading files\nRELIQUARY_FILES_DIR="${HOME}/files#images" # uploaded images\nBACKUP_DIR=\'${HOME}/backups#history\' # backups\n', {}),
+                ("legacy aliases", defaults, {"RELIQUARY_ADMIN_VAULT_DIR": "${HOME}/legacy-vault", "RELIQUARY_ADMIN_RESOURCES_DIR": "${HOME}/legacy-files"}),
+            ]
+            for name, dotenv, overrides in scenarios:
+                with self.subTest(scenario=name):
+                    (source / ".env").write_text(dotenv)
+                    process_env = {"PATH": os.environ.get("PATH", os.defpath), "HOME": str(home),
+                                   "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker")),
+                                   "COMPOSE_PROJECT_NAME": "reliquary-admin-path-test", **overrides}
+                    with mock.patch.dict(admin.os.environ, process_env, clear=True):
+                        ctx = admin.Context(source)
+                        config = json.loads(ctx.compose("config", "--format", "json"))
+                    mounts = {mount["target"]: Path(mount["source"]).resolve() for mount in config["services"]["app"]["volumes"] if mount["type"] == "bind"}
+                    self.assertEqual(mounts["/data/vault"], ctx.host_storage_path("vault"))
+                    self.assertEqual(mounts["/data/files"], ctx.host_storage_path("resources"))
+                    expected_backup = admin.host_path(admin.default_backup_directory(ctx.env), ctx.env, source)
+                    self.assertEqual(Path(config["services"]["app"]["environment"]["BACKUP_DIR"]).resolve(), expected_backup)
+                    for key in ("RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR"):
+                        if ctx.env.get(key):
+                            self.assertTrue(Path(ctx.env[key]).is_absolute())
+                            self.assertNotIn("$", ctx.env[key])
+                    self.assertFalse(home.exists())
+
+    def test_dotenv_comments_preserve_hashes_inside_values(self):
+        path = self.root / ".env"
+        path.write_text('RAW=directory#fragment # comment\nDOUBLE="directory # fragment" # comment\nSINGLE=\'directory # fragment\' # comment\nEMPTY= # comment\n')
+        self.assertEqual(admin.read_env(path), {"RAW": "directory#fragment", "DOUBLE": "directory # fragment", "SINGLE": "directory # fragment", "EMPTY": ""})
+
+    def test_deployment_check_rejects_unwritable_directory(self):
+        ctx = self.host_context()
+        vault = self.root / "vault"
+        vault.mkdir()
+        vault.chmod(0o555)
+        try:
+            with self.assertRaisesRegex(admin.AdminError, "vault directory is not writable"):
+                ctx.check_host_directories(settings=False)
+        finally:
+            vault.chmod(0o755)
+
+    def test_deployment_check_rejects_existing_file_and_source_paths(self):
+        ctx = self.host_context()
+        file = self.root / "not-a-directory"
+        file.write_text("Existing file")
+        ctx.env["RELIQUARY_VAULT_DIR"] = str(file)
+        with self.assertRaisesRegex(admin.AdminError, "cannot be created or is not writable"):
+            ctx.check_host_directories(settings=False)
+        for location in (ctx.root, ctx.root / "local-vault"):
+            with self.subTest(location=location):
+                ctx.env["RELIQUARY_VAULT_DIR"] = str(location)
+                with self.assertRaisesRegex(admin.AdminError, "outside the project source"):
+                    ctx.check_host_directories(settings=False)
+        alias = self.root / "source-alias"
+        alias.symlink_to(ctx.root, target_is_directory=True)
+        ctx.env["RELIQUARY_VAULT_DIR"] = str(alias / "vault")
+        with self.assertRaisesRegex(admin.AdminError, "outside the project source"):
+            ctx.check_host_directories(settings=False)
+
+    def test_deployment_check_rejects_all_storage_and_backup_containment_pairs(self):
+        keys = ["RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR"]
+        for first in range(len(keys)):
+            for second in range(len(keys)):
+                if first == second:
+                    continue
+                with self.subTest(parent=keys[first], child=keys[second]):
+                    ctx = self.host_context(**{keys[first]: str(self.root / "parent"), keys[second]: str(self.root / "parent/child")})
+                    with self.assertRaisesRegex(admin.AdminError, "must not contain one another"):
+                        ctx.check_host_directories(settings=False)
+        ctx = self.host_context(RELIQUARY_FILES_DIR=str(self.root / "vault"))
+        with self.assertRaisesRegex(admin.AdminError, "must not contain one another"):
+            ctx.check_host_directories(settings=False)
+        self.assertFalse((self.root / "parent").exists())
+
+    def test_deployment_check_validates_settings_backup_directory(self):
+        ctx = self.host_context()
+        with mock.patch.object(ctx, "configured_backup_directory", return_value=str(self.root / "vault/settings-backup")):
+            with self.assertRaisesRegex(admin.AdminError, "must not contain one another"):
+                ctx.check_host_directories()
+        with mock.patch.object(ctx, "configured_backup_directory", return_value=str(ctx.root / "settings-backup")):
+            with self.assertRaisesRegex(admin.AdminError, "outside the project source"):
+                ctx.check_host_directories()
+
+    def test_settings_legacy_default_resolves_to_host_backup_default_without_app(self):
+        ctx = self.host_context()
+        ctx.direct = True
+        with mock.patch.object(ctx, "sql", side_effect=["t", "../reliquary-backups"]) as sql:
+            self.assertEqual(ctx.configured_backup_directory(), str((self.root / "backups").resolve()))
+        self.assertEqual(sql.call_args.args[0], "SELECT backup_directory FROM maintenance_state WHERE id=true")
+
+    def test_obsidian_files_are_copied_restored_and_excluded_only_from_vault_checksums(self):
+        ctx = self.host_context()
+        ctx.check_host_directories(settings=False)
+        vault = self.root / "vault"
+        expected = self.reader_files(vault)
+        (vault / "articles").mkdir()
+        (vault / "articles/a.md").write_text("Preserved article\n")
+        admin.json_write(vault / ".reliquary/manifest.json", {"required": []})
+        package = self.root / "package"
+        ctx.copy_storage("vault", package / "vault")
+        ctx.copy_storage("resources", package / "resources")
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        self.assertFalse(any(admin.package_user_path(name) for name in admin.hashes(package)))
+        (package / "vault/.obsidian/app.json").write_text('{"readerChanged": true}\n')
+        admin.check_files(package)
+        # Historical packages with checksums for reader settings also remain valid.
+        checks = json.loads((package / "checksums.json").read_text())
+        checks["vault/.obsidian/app.json"] = {"sha256": "old-reader-config", "size": 1}
+        admin.json_write(package / "checksums.json", checks)
+        admin.check_files(package)
+        destination = self.host_context(RELIQUARY_VAULT_DIR=str(self.root / "restored-vault"), RELIQUARY_FILES_DIR=str(self.root / "restored-files"))
+        destination.restore_storage("vault", package / "vault")
+        destination.restore_storage("resources", package / "resources")
+        for name, original in expected.items():
+            self.assertEqual((vault / name).read_bytes(), original)
+            self.assertEqual((self.root / "restored-vault" / name).read_bytes(), (package / "vault" / name).read_bytes())
+        self.assertEqual((self.root / "restored-vault/articles/a.md").read_text(), "Preserved article\n")
+        (package / "vault/articles/a.md").write_text("Changed article\n")
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
+
+    def test_obsidian_snapshot_does_not_compare_changing_reader_configuration(self):
+        vault = self.root / "vault"
+        self.reader_files(vault)
+        copy = admin.shutil.copy2
+        def changing_reader(src, dest):
+            copy(src, dest)
+            if Path(src).name == "app.json":
+                Path(src).write_text('{"automaticallySaved": true}\n')
+        with mock.patch.object(admin.shutil, "copy2", side_effect=changing_reader):
+            admin.snapshot_tree(vault, self.root / "snapshot", vault=True)
+        self.assertEqual((self.root / "snapshot/.obsidian/app.json").read_bytes(), b'{"showLineNumber": true}\n')
+
+    def test_reliquary_internal_files_are_not_treated_as_reader_configuration(self):
+        package = self.root / "package"
+        file = package / "vault/.reliquary/exports/.DS_Store"
+        file.parent.mkdir(parents=True)
+        file.write_text("Maintenance data")
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        file.write_text("Changed maintenance data")
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
+
+    def test_unpack_rejects_nonempty_host_targets_before_cloning_or_loading_images(self):
+        package = self.root / "package"
+        package.mkdir()
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT, "images": {"app": {}}, "code": {}})
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        for name, key in (("vault", "RELIQUARY_VAULT_DIR"), ("files", "RELIQUARY_FILES_DIR")):
+            with self.subTest(target=name):
+                ctx = self.host_context(**{key: str(self.root / ("nonempty-" + name))})
+                path = self.root / ("nonempty-" + name)
+                path.mkdir()
+                (path / "existing.md").write_text("Keep existing data")
+                args = argparse.Namespace(package=str(package), target=str(self.root / ("deployment-" + name)), project="test", resume=False)
+                with mock.patch.object(admin, "run") as run:
+                    with self.assertRaisesRegex(admin.AdminError, "Destination must be empty"):
+                        admin.unpack(ctx, args)
+                    run.assert_not_called()
+                self.assertEqual((path / "existing.md").read_text(), "Keep existing data")
+
+    def test_restore_rejects_nonempty_host_targets_before_database_import(self):
+        package = self.root / "package"
+        package.mkdir()
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT})
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        for name, key in (("vault", "RELIQUARY_VAULT_DIR"), ("files", "RELIQUARY_FILES_DIR")):
+            with self.subTest(target=name):
+                path = self.root / ("nonempty-" + name)
+                path.mkdir()
+                (path / "existing.md").write_text("Keep existing data")
+                ctx = self.host_context(**{key: str(path)})
+                with mock.patch.object(ctx, "configured_backup_directory", return_value=None), mock.patch.object(ctx, "sql") as sql, mock.patch.object(admin.subprocess, "run") as run:
+                    with self.assertRaisesRegex(admin.AdminError, "Destination must be empty"):
+                        admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+                    sql.assert_not_called()
+                    run.assert_not_called()
+                self.assertEqual((path / "existing.md").read_text(), "Keep existing data")
+
+    def test_pack_backup_and_restore_use_host_storage_and_preserve_reader_files(self):
+        class HostContext(admin.Context):
+            def compose(self, *args, **kwargs):
+                return b""
+            def configured_backup_directory(self):
+                return None
+            def runtime_env(self):
+                return self.env
+            @contextlib.contextmanager
+            def stopped(self, *args):
+                yield
+            @contextlib.contextmanager
+            def cloned_database(self):
+                yield "temporary-clone"
+            def cli_json(self, *args, **kwargs):
+                if args[0] == "manifest":
+                    return {"tables": {}, "files": {}, "required_credentials": []}
+                if args[0] == "scrub":
+                    return {"required": []}
+                return {"ok": True}
+            def sql(self, query, *args):
+                return "0" if "count(*)" in query else "test-version"
+            def pg(self, *args, output=None, **kwargs):
+                if output:
+                    output.write(b"Test scrubbed database")
+            def legacy_schema(self):
+                return False
+            def scan_dump_credentials(self, *args):
+                pass
+        configured = self.host_context()
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            ctx = HostContext(configured.root, configured.env)
+        ctx.check_host_directories()
+        vault = self.root / "vault"
+        reader = self.reader_files(vault)
+        article = vault / "articles/2026-10/article-short.md"
+        article.parent.mkdir(parents=True)
+        article.write_text("![Image](../../attachments/article/image.png)\n")
+        image = vault / "attachments/article/image.png"
+        image.parent.mkdir(parents=True)
+        image.write_bytes(b"Test image")
+        admin.json_write(vault / ".reliquary/manifest.json", {"required": []})
+        (self.root / "files/upload.png").write_bytes(b"Uploaded image")
+        options = argparse.Namespace(timeout=300, keep_paused=False, include_worktree=True, automatic=False, with_images=False, directory=str(self.root / "backups"))
+        def source_copy(context, stage, *args):
+            (stage / "source").mkdir()
+            (stage / "source/application.txt").write_text("Reviewed source")
+            return {"commit": "test-commit"}
+        with mock.patch.object(admin, "source_copy", side_effect=source_copy), mock.patch.object(admin, "images_save", return_value={}), contextlib.redirect_stdout(io.StringIO()):
+            packed = admin.create_package(ctx, self.root / "packed", options)
+            backed_up = admin.backup(ctx, options)
+        for package in (packed, backed_up):
+            admin.check_files(package)
+            self.assertEqual((package / "vault/articles/2026-10/article-short.md").read_text(), article.read_text())
+            self.assertEqual((package / "vault/attachments/article/image.png").read_bytes(), image.read_bytes())
+            self.assertEqual((package / "resources/upload.png").read_bytes(), b"Uploaded image")
+            for name, content in reader.items():
+                self.assertEqual((package / "vault" / name).read_bytes(), content)
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            destination = HostContext(configured.root, {**configured.env, "RELIQUARY_VAULT_DIR": str(self.root / "restored-vault"),
+                                                       "RELIQUARY_FILES_DIR": str(self.root / "restored-files")})
+        with mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(destination, backed_up, argparse.Namespace(skip_models=True))
+        for name, content in reader.items():
+            self.assertEqual((self.root / "restored-vault" / name).read_bytes(), content)
+            self.assertEqual((vault / name).read_bytes(), content)
+        self.assertEqual((self.root / "restored-files/upload.png").read_bytes(), b"Uploaded image")
+
+    def test_verify_checks_host_directories_and_maps_the_host_manifest_for_container_cli(self):
+        ctx = self.host_context()
+        manifest = self.root / "package/snapshot.json"
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(ctx, "configured_backup_directory", return_value=None), mock.patch.object(ctx, "cli_json", return_value={"ok": True}) as verify, contextlib.redirect_stdout(io.StringIO()):
+            admin.main(["verify", "--manifest", str(manifest)])
+        verify.assert_called_once_with("verify", "--manifest", "/maintenance-package/snapshot.json", overrides={"RELIQUARY_ADMIN_CLI_PACKAGE_HOST": str(manifest.parent.resolve())})
+        self.assertTrue((self.root / "vault").is_dir())
+        self.assertTrue((self.root / "files").is_dir())
 
     def test_ingest_data_is_preserved_by_package_storage_restore_and_verify(self):
         vault, resources = self.root / "vault", self.root / "resources"

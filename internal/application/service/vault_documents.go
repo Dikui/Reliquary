@@ -29,6 +29,7 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/vaultpath"
 )
 
 // VaultDirectoryStatus describes indexing of one directory, including the last scan failure.
@@ -137,6 +138,16 @@ func (s *VaultDocumentService) watchTree(watcher *fsnotify.Watcher, root string)
 		if err != nil {
 			return err
 		}
+		relative, err := filepath.Rel(s.root, path)
+		if err != nil {
+			return err
+		}
+		if vaultpath.UserMetadata(relative) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if entry.IsDir() {
 			return watcher.Add(path)
 		}
@@ -169,6 +180,10 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 			if !ok {
 				return
 			}
+			rel, err := filepath.Rel(s.root, event.Name)
+			if err == nil && vaultpath.UserMetadata(rel) {
+				continue
+			}
 			if event.Op&fsnotify.Create != 0 {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					if err := s.watchTree(watcher, event.Name); err != nil {
@@ -177,7 +192,6 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 				}
 			}
 			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
-				rel, err := filepath.Rel(s.root, event.Name)
 				if err == nil && strings.EqualFold(filepath.Ext(rel), ".md") {
 					s.mu.Lock()
 					observation := s.observations[filepath.ToSlash(rel)]
@@ -294,13 +308,19 @@ func (s *VaultDocumentService) scanDirectory(ctx context.Context, kb *types.Know
 		if walkErr != nil {
 			return walkErr
 		}
-		// Symlinks are not followed, so indexing never leaves the local vault.
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") {
-			return nil
-		}
 		rel, err := filepath.Rel(s.root, path)
 		if err != nil {
 			return err
+		}
+		if vaultpath.UserMetadata(rel) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Symlinks are not followed, so indexing never leaves the local vault.
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") {
+			return nil
 		}
 		rel = filepath.ToSlash(rel)
 		seen[rel] = true

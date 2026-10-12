@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"reliquary/internal/types"
+	"reliquary/internal/vaultpath"
 )
 
 type VaultRebuildSkippedFile struct {
@@ -55,12 +56,18 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 		if walkErr != nil {
 			return walkErr
 		}
-		if dirEntry.IsDir() || dirEntry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") {
-			return nil
-		}
 		rel, err := filepath.Rel(s.root, path)
 		if err != nil {
 			return err
+		}
+		if vaultpath.UserMetadata(rel) {
+			if dirEntry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if dirEntry.IsDir() || dirEntry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") {
+			return nil
 		}
 		rel = filepath.ToSlash(rel)
 		content, err := os.ReadFile(path)

@@ -10,7 +10,7 @@ set -e
 
 # Directories that may be bind-mounted and need appuser access
 MOUNT_DIRS=(
-    /data/files
+    "${LOCAL_STORAGE_BASE_DIR:-/data/files}"
     "${VAULT_ROOT:-/data/vault}"
 )
 

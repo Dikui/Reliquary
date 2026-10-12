@@ -85,6 +85,17 @@ func TestVaultArticleFullWritesOrderedHeaderRelativeImagesAndOriginal(t *testing
 	require.NoError(t, err)
 	require.NoError(t, image.Close())
 	require.True(t, bytes.HasPrefix(imageData, []byte("\x89PNG")))
+	// A plain relative path is sufficient for Obsidian to load the local image.
+	for _, reference := range articleImagesInOrder(string(body), nil) {
+		require.False(t, filepath.IsAbs(reference))
+		path := filepath.Join(filepath.Dir(filepath.Join(v.root, k.VaultPath)), filepath.FromSlash(reference))
+		resolved, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, imageData, resolved)
+		relative, err := filepath.Rel(v.root, path)
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(filepath.ToSlash(relative), "attachments/"+k.ID+"/"))
+	}
 	intake, err := k.IntakeMetadata()
 	require.NoError(t, err)
 	require.Empty(t, intake.OriginalPath)

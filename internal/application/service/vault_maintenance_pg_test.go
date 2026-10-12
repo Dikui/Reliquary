@@ -30,6 +30,15 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	for path, body := range map[string]string{"mine/note.md": "# User original\n\nOnly the file and backup can recover this text.", "reports/report.md": "# Report original\n\nThis report remains user owned."} {
 		require.NoError(t, os.WriteFile(filepath.Join(v.root, path), []byte(body), 0600))
 	}
+	configuration := map[string]string{
+		".obsidian/app.json": `{"theme":"obsidian"}`, ".trash/x.md": "# Deleted note\n", ".DS_Store": "Finder metadata",
+		"mine/.trash/x.md": "# Deleted personal note\n", "reports/.obsidian/template.md": "# Editor template\n",
+	}
+	for relative, data := range configuration {
+		path := filepath.Join(v.root, relative)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+		require.NoError(t, os.WriteFile(path, []byte(data), 0644))
+	}
 	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, v.root, time.Millisecond, time.Second)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
@@ -40,6 +49,10 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 		require.NoError(t, documents.scanDirectory(h.ctx, &indexing, kind, true))
 	}
 	require.NoError(t, v.Flush(h.ctx))
+	verified, err := v.Verify(h.ctx, false)
+	require.NoError(t, err)
+	require.True(t, verified.OK, "%v", verified.Differences)
+	filesBefore := vaultFileHashes(t, v.root)
 	before, err := maintenance.BuildManifest(context.Background(), h.db, v.root, "")
 	require.NoError(t, err)
 	fresh := pgtest.Open(t)
@@ -65,6 +78,10 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	require.Len(t, personal, 2)
 	for _, document := range personal {
 		require.Empty(t, document.VaultBody)
+	}
+	require.Equal(t, filesBefore, vaultFileHashes(t, v.root), "replica rebuild preserves editor configuration and trash")
+	for relative, data := range configuration {
+		require.Equal(t, data, string(mustVaultRead(t, filepath.Join(v.root, relative))))
 	}
 }
 
