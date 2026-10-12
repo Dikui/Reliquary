@@ -2,6 +2,7 @@
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize } from '@/utils/files';
+import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
@@ -44,7 +45,7 @@ const emit = defineEmits<{
   (e: 'judgment-updated', value: ArticleJudgment): void;
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: EntryCard): void;
-  (e: 'action', action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard): void;
+  (e: 'action', action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard): void;
 }>();
 
 const { t } = useI18n();
@@ -94,7 +95,8 @@ const formatDocTime = (time?: string) => {
 
 const getEntryType = (item: EntryCard) => {
   if (item.source_kind === 'mine' || item.source_kind === 'report') return t(`knowledgeBase.sourceKinds.${item.source_kind}`);
-  if (item.channel === 'rss') return t('datasource.connector.rss');
+  if (item.channel === 'rss') return t('knowledgeBase.channelRSS');
+  if (isIngestAPIEntry(item)) return t('knowledgeBase.typeIngestAPI');
   if (item.type === 'url') return t('knowledgeBase.typeURL') || 'URL';
   if (item.type === 'manual') return t('knowledgeBase.typeManual');
   if (item.file_type) return item.file_type.toUpperCase();
@@ -105,7 +107,7 @@ const channelLabelMap: Record<string, string> = {
   web: 'knowledgeBase.channelWeb',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
-  rss: 'datasource.connector.rss',
+  rss: 'knowledgeBase.channelRSS',
 };
 
 const getChannelLabel = (channel: string) => {
@@ -233,7 +235,7 @@ watch(() => props.items, dismissCardPopover);
 onBeforeUnmount(dismissCardPopover);
 
 // --- Action handlers ---
-const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard) => {
+const handleAction = (action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard) => {
   {
     if (item.isMore !== undefined) item.isMore = false;
     activeMenuIndex.value = -1;
@@ -294,7 +296,6 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
 
                   :trace-visible="isTraceMenuVisible(item)"
                   @download="handleAction('download', item)"
-                  @edit="handleAction('edit', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"

@@ -1,12 +1,12 @@
 package pgtest
 
 import (
+	"github.com/golang-migrate/migrate/v4"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
 	"gorm.io/driver/postgres"
 )
 
@@ -21,8 +21,8 @@ func TestOpenRunsVersionedMigrations(t *testing.T) {
 	if err := db.Raw("SELECT version, dirty FROM schema_migrations").Row().Scan(&version, &dirty); err != nil {
 		t.Fatal(err)
 	}
-	if dirty || version != 4 {
-		t.Fatalf("expected the clean ingest migration at version 4, got version=%d dirty=%v", version, dirty)
+	if dirty || version != 5 {
+		t.Fatalf("expected the clean collection-removal migration at version 5, got version=%d dirty=%v", version, dirty)
 	}
 	var count int64
 	if err := db.Raw("SELECT COUNT(*) FROM pg_extension WHERE extname IN ('vector', 'pg_search', 'pg_trgm')").Scan(&count).Error; err != nil || count != 3 {

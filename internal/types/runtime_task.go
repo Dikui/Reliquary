@@ -73,8 +73,6 @@ type RuntimeTaskInfo struct {
 	KnowledgeBaseID string              `json:"knowledge_base_id,omitempty"`
 	EntryID         string              `json:"entry_id,omitempty"`
 	TaskID          string              `json:"task_id,omitempty"`
-	DataSourceID    string              `json:"data_source_id,omitempty"`
-	SyncLogID       string              `json:"sync_log_id,omitempty"`
 	EntryCount      int                 `json:"entry_count,omitempty"`
 }
 

@@ -4,19 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
+
 	"os"
 	"path/filepath"
-	"strings"
+
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 func correctionIndexCounts(t *testing.T, h *articleProcessingHarness, id string) (int64, int64, int64) {
@@ -126,129 +122,13 @@ func TestContentTypeFullToSummaryRequiresConfirmationAndRemovesBodyFiles(t *test
 	require.Equal(t, "summary_only", correctionLogValue(t, logs[0].After, "processing_mode"))
 }
 
-func localCorrectionSource(t *testing.T, status *int) *httptest.Server {
-	t.Helper()
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	utils.ResetSSRFWhitelistForTest()
-	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		if status != nil && *status != http.StatusOK {
-			w.WriteHeader(*status)
-			fmt.Fprint(w, "fixture original unavailable")
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<html><head><title>Fresh original</title></head><body><article><h1>Fresh original</h1><p>`+strings.Repeat("refetchedfullbody An original article describes measured product improvements and experimental deployment results. ", 15)+`</p></article></body></html>`)
-	}))
-	t.Cleanup(server.Close)
-	return server
-}
-
 func uploadedCorrectionSummary(t *testing.T, h *articleProcessingHarness, url string) *types.Entry {
 	t.Helper()
 	h.processor.output = validProcessingFixture("tutorial")
-	k, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "summary-original.md", "A complete original publication contains setup guidance and explains supported deployment instructions."), map[string]string{"publisher": "Fixture publisher", "original_url": url, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "summary-original.md", "A complete original publication contains setup guidance and explains supported deployment instructions."), map[string]string{"publisher": "Fixture publisher", "original_url": url, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	return h.article(t, k.ID)
-}
-
-func TestContentTypeSummaryToFullRefetchesAndPreservesUserTypeOnReprocess(t *testing.T) {
-	h, v := newVaultArticleHarness(t)
-	server := localCorrectionSource(t, nil)
-	k := uploadedCorrectionSummary(t, h, server.URL)
-	require.Empty(t, k.FilePath)
-	h.processor.output = validProcessingFixture("case")
-	updated, err := h.service.CorrectContentType(h.ctx, k.ID, "research", false)
-	require.NoError(t, err)
-	require.Equal(t, "research", updated.ContentType, "the model's case classification cannot overwrite the user correction")
-	require.Equal(t, types.ProcessingModeFull, updated.ProcessingMode)
-	require.True(t, updated.ContentTypeCorrected)
-	require.Equal(t, types.ParseStatusCompleted, updated.ParseStatus)
-	require.Equal(t, k.VaultPath, updated.VaultPath)
-	_, _, body := readVaultArticle(t, v, updated)
-	require.Contains(t, string(body), "refetchedfullbody")
-	require.Equal(t, updated.VaultBody, string(body))
-	chunks, bodyVectors, articleVectors := correctionIndexCounts(t, h, k.ID)
-	require.Positive(t, chunks)
-	require.Positive(t, bodyVectors)
-	require.EqualValues(t, 1, articleVectors)
-	require.Len(t, correctionLogs(t, h, k.ID), 1)
-	h.processor.output = validProcessingFixture("reference")
-	_, err = h.service.ReparseEntry(h.ctx, k.ID, nil)
-	require.NoError(t, err)
-	h.drain(t)
-	reprocessed := h.article(t, k.ID)
-	require.Equal(t, types.ParseStatusCompleted, reprocessed.ParseStatus)
-	require.Equal(t, "research", reprocessed.ContentType)
-	require.True(t, reprocessed.ContentTypeCorrected)
-	require.Equal(t, types.ProcessingModeFull, reprocessed.ProcessingMode)
-	_, _, afterBody := readVaultArticle(t, v, reprocessed)
-	require.Equal(t, body, afterBody)
-	require.Len(t, correctionLogs(t, h, k.ID), 1, "automatic processing must not create operation logs")
-}
-
-func TestContentTypeSummaryCorrectionSurvivesLaterRefetch(t *testing.T) {
-	h, v := newVaultArticleHarness(t)
-	server := localCorrectionSource(t, nil)
-	k := uploadedCorrectionSummary(t, h, server.URL)
-	_, err := h.service.CorrectContentType(h.ctx, k.ID, "reference", false)
-	require.NoError(t, err)
-	h.processor.output = validProcessingFixture("event")
-	_, err = h.service.ReparseEntry(h.ctx, k.ID, nil)
-	require.NoError(t, err)
-	h.drain(t)
-	reprocessed := h.article(t, k.ID)
-	require.Equal(t, "reference", reprocessed.ContentType)
-	require.Equal(t, types.ProcessingModeSummaryOnly, reprocessed.ProcessingMode)
-	require.True(t, reprocessed.ContentTypeCorrected)
-	waitCorrectionHeader(t, v, reprocessed, "reference")
-	data, header, body := readVaultArticle(t, v, reprocessed)
-	require.Equal(t, header, data)
-	require.Empty(t, body)
-	require.Len(t, correctionLogs(t, h, k.ID), 1)
-}
-
-func TestContentTypeConversionFetchModelAndIndexFailureKeepOriginalState(t *testing.T) {
-	for _, failure := range []string{"fetch", "model", "index"} {
-		t.Run(failure, func(t *testing.T) {
-			h, v := newVaultArticleHarness(t)
-			status := http.StatusOK
-			server := localCorrectionSource(t, &status)
-			k := uploadedCorrectionSummary(t, h, server.URL)
-			before, _, _ := readVaultArticle(t, v, k)
-			wantError := ""
-			switch failure {
-			case "fetch":
-				status, wantError = http.StatusServiceUnavailable, "503"
-			case "model":
-				h.processor.output, wantError = "invalid JSON", "valid JSON"
-			case "index":
-				h.processor.output = validProcessingFixture("case")
-				models := h.service.modelService.(articleProcessingModels)
-				models.embeddingErr = errors.New("fixture index unavailable")
-				h.service.modelService, wantError = models, "fixture index unavailable"
-			}
-			_, err := h.service.CorrectContentType(h.ctx, k.ID, "research", false)
-			require.ErrorContains(t, err, wantError)
-			after := h.article(t, k.ID)
-			require.Equal(t, k.ContentType, after.ContentType)
-			require.False(t, after.ContentTypeCorrected)
-			require.Equal(t, k.ProcessingMode, after.ProcessingMode)
-			require.Equal(t, k.ParseStatus, after.ParseStatus)
-			require.Equal(t, k.ErrorMessage, after.ErrorMessage)
-			require.Equal(t, k.StructuredSummary, after.StructuredSummary)
-			require.Equal(t, k.Metadata, after.Metadata)
-			require.Equal(t, k.UpdatedAt, after.UpdatedAt)
-			data, _, _ := readVaultArticle(t, v, after)
-			require.Equal(t, before, data)
-			chunks, bodyVectors, articleVectors := correctionIndexCounts(t, h, k.ID)
-			require.Zero(t, chunks)
-			require.Zero(t, bodyVectors)
-			require.EqualValues(t, 1, articleVectors)
-			require.Empty(t, correctionLogs(t, h, k.ID))
-		})
-	}
 }
 
 func TestContentTypeConversionRestoresBodyAndAttachmentsWhenLogTransactionFails(t *testing.T) {

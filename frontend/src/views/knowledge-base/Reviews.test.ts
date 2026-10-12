@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -21,7 +22,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
     ? moduleOf(component('../../components/SelectionCheckbox.vue', {}))
-    : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
+    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
   return module.exports
 }
 function source(path: string) { return readFileSync(new URL(path, import.meta.url), 'utf8') }
@@ -336,7 +337,7 @@ test('source unverified and review fields survive the API, actual Pinia store an
   const api = evaluate(source('../../api/knowledge-base.ts'), { '../utils/request': { get: async (url: string) => { requests.push(url); if (url.includes('knowledge-bases/')) return { success: true, data: records, total: 2 }; if (url.includes('/chunks/')) return { success: true, data: [], total: 0 }; return { success: true, data: records.find(record => url.endsWith(record.id)) } } } })
   const hook = evaluate(source('../../composables/useKnowledgeBase.ts'), {
     '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': { MessagePlugin: {} }, '@/api/knowledge-base': api,
-    '@/stores/entry': { entryStore: store }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, '@/stores/resources': { useResourcesStore: () => ({}) }, './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
+    '@/stores/entry': { entryStore: store }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, '@/stores/resources': { useResourcesStore: () => ({}) },
   }).default('kb-reviews')
   await hook.loadEntries()
   assert.equal(store().cardList[0].source_unverified, true)
@@ -365,7 +366,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const api = evaluate(source('../../api/knowledge-base.ts'), { '../utils/request': { get: async () => ({ success: true, data: records, total: records.length }) } })
     const hook = evaluate(source('../../composables/useKnowledgeBase.ts'), {
       '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': { MessagePlugin: {} }, '@/api/knowledge-base': api,
-      '@/stores/entry': { entryStore: store }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, '@/stores/resources': { useResourcesStore: () => ({}) }, './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
+      '@/stores/entry': { entryStore: store }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, '@/stores/resources': { useResourcesStore: () => ({}) },
     }).default('kb-reviews')
     await hook.loadEntries()
     const modules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty }

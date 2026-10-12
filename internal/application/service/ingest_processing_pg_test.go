@@ -29,8 +29,9 @@ func forbidIngestNetwork(t *testing.T, h *articleProcessingHarness) *ingestNoNet
 	utils.ResetSSRFWhitelistForTest()
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	r := &ingestNoNetworkTransport{t: t}
-	h.service.imageResolver.RemoteTransport = r
-	h.service.contentTransport = r
+	previous := http.DefaultTransport
+	http.DefaultTransport = r
+	t.Cleanup(func() { http.DefaultTransport = previous })
 	return r
 }
 
@@ -82,7 +83,8 @@ func TestIngestContentTypeCorrectionRequestsBodyWithoutFetching(t *testing.T) {
 	require.Equal(t, types.ProcessingModeSummaryOnly, article.ProcessingMode)
 	queued := len(h.queue.tasks)
 	_, err = h.service.ReparseEntry(h.ctx, article.ID, nil)
-	require.ErrorContains(t, err, "同一原文链接")
+	require.NoError(t, err)
+	require.True(t, h.article(t, article.ID).Incomplete)
 	require.Len(t, h.queue.tasks, queued)
 	calls := len(h.processor.requests)
 	updated, err := h.service.CorrectContentType(h.ctx, article.ID, "research", false)

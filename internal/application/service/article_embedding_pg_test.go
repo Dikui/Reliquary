@@ -5,18 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
+	"github.com/pgvector/pgvector-go"
+
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 // The fixture is deterministic across calls and produces different vectors
@@ -118,7 +116,7 @@ func TestArticleChunkPrefixDoesNotEnterStoredBodyOrFullText(t *testing.T) {
 
 func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
-	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
 		newMultipartFileHeader(t, "Undated article.md", "# Independent observation\n\nundatedprefixfixture exact source observations."),
 		map[string]string{"publisher": "Undated publisher", "original_url": "https://example.org/undated"},
 		nil, "", types.ChannelWeb, nil)
@@ -171,22 +169,19 @@ func TestArticleEmbeddingGeneratesForSummaryOnlyAndRecomputesAfterReprocessing(t
 	raw, err := json.Marshal(output)
 	require.NoError(t, err)
 	h.processor.output = string(raw)
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	utils.ResetSSRFWhitelistForTest()
-	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte("<html><head><title>Summary vector</title></head><body><article><p>bodyonlyfixture this tutorial body is discarded again.</p></article></body></html>"))
-	}))
-	defer server.Close()
-	intake, err := article.IntakeMetadata()
-	require.NoError(t, err)
-	intake.SourceInfo.OriginalURL = server.URL + "/tutorial"
-	require.NoError(t, article.SetIntakeMetadata(intake))
-	article.Source = intake.SourceInfo.OriginalURL
-	require.NoError(t, h.db.Save(article).Error)
 	_, err = h.service.ReparseEntry(h.ctx, article.ID, nil)
 	require.NoError(t, err)
+	h.drain(t)
+	article = h.article(t, article.ID)
+	require.True(t, article.Incomplete)
+	require.Contains(t, article.IngestMissing()[0].Reason, "重新处理需要正文")
+	intake, err := article.IntakeMetadata()
+	require.NoError(t, err)
+	h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
+	ctx := types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalWebUser, ID: "personal-user"})
+	result, err := h.service.Ingest(ctx, &types.IngestRequest{URL: intake.SourceInfo.OriginalURL, Acquisition: "verbatim", Publisher: "Acme", Content: "bodyonlyfixture this tutorial body is supplied by an external tool."})
+	require.NoError(t, err)
+	require.Equal(t, article.ID, result.EntryID)
 	h.drain(t)
 	article = h.article(t, article.ID)
 	var after struct {

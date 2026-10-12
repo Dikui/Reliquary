@@ -1,6 +1,5 @@
 import { MessagePlugin } from "tdesign-vue-next";
 import i18n from '@/i18n';
-import { shouldRejectEntryFileType } from "./fileTypeVerification";
 
 // 声明全局运行时配置类型
 declare global {
@@ -55,18 +54,4 @@ export function fileSizeVerification(file: Pick<File, 'size'>, silent = false) {
     MessagePlugin.error(i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }));
   }
   return true;
-}
-
-/**
- * Returns true when the file should be **rejected**.
- * @param validTypes - override the default extension whitelist with a dynamic set (e.g. from engine registry).
- */
-export function kbFileTypeVerification(file: any, silent = false, validTypes?: Set<string> | string[]) {
-  if (shouldRejectEntryFileType(file.name, validTypes)) {
-    if (!silent) {
-      MessagePlugin.error(i18n.global.t('error.unsupportedFileType'));
-    }
-    return true;
-  }
-  return fileSizeVerification(file, silent);
 }

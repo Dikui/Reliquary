@@ -20,7 +20,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'download'): void;
-  (e: 'edit'): void;
   (e: 'view-trace'): void;
   (e: 'reparse'): void;
   (e: 'cancel-parse'): void;
@@ -38,8 +37,6 @@ const isParseInFlight = computed(() =>
 
 const fileName = computed(() => props.item.file_name || props.item.title || props.item.id);
 const canReprocess = computed(() => !['mine', 'report'].includes(props.item.source_kind || ''));
-const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
-  && props.item.type === 'manual' && props.item.processing_mode !== 'summary_only');
 </script>
 
 <template>
@@ -51,12 +48,6 @@ const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
   >
     <t-icon class="icon" name="download" />
     <span>{{ $t('common.download') }}</span>
-  </div>
-
-  <!-- 编辑文档 -->
-  <div v-if="canEditBody" class="doc-action-menu-item" @click.stop="emit('edit')">
-    <t-icon class="icon" name="edit" />
-    <span>{{ $t('knowledgeBase.editDocument') }}</span>
   </div>
 
   <!-- 查看处理过程 -->

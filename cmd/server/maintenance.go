@@ -53,7 +53,7 @@ func maintenanceDatabase() (*gorm.DB, string, error) {
 func runMaintenance(args []string, input io.Reader, output io.Writer) error {
 	applogger.SetOutput(os.Stderr)
 	if len(args) == 0 {
-		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|reindex|migrate|rebuild|pause|resume|status|record|configure|due")
+		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|reindex|export-sources|migrate|rebuild|pause|resume|status|record|configure|due")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -278,7 +278,37 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			return err
 		}
 		return emit(map[string]bool{"reindexed": true})
+	case "export-sources":
+		result, err := maintenance.ExportSources(ctx, db, root)
+		if err != nil {
+			return err
+		}
+		return emit(result)
 	case "migrate":
+		var pending bool
+		if err := db.WithContext(ctx).Raw("SELECT to_regclass('public.data_sources') IS NOT NULL").Scan(&pending).Error; err != nil {
+			return err
+		}
+		if pending {
+			var statePresent bool
+			if err := db.WithContext(ctx).Raw("SELECT to_regclass('public.maintenance_state') IS NOT NULL").Scan(&statePresent).Error; err != nil {
+				return err
+			}
+			if statePresent {
+				state, err := maintenanceops.Status(ctx, db)
+				if err != nil {
+					return err
+				}
+				if !state.Paused {
+					if err := maintenanceops.Pause(ctx, db, "snapshot", "manual:collection-removal", nil); err != nil {
+						return err
+					}
+				}
+			}
+			if err := maintenance.WithCurrentNames(db, func(current *gorm.DB) error { _, err := maintenance.ExportSources(ctx, current, root); return err }); err != nil {
+				return err
+			}
+		}
 		if err := database.RunMigrations(dsn); err != nil {
 			return err
 		}

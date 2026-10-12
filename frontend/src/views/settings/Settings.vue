@@ -75,7 +75,6 @@
                   </div>
 
                   <div v-if="currentSection === 'knowledge-base'" class="section"><KnowledgeBaseSettings ref="kbSettingsView" :initial-section="currentSubSection || undefined" /></div>
-                  <div v-if="currentSection === 'datasource'" class="section"><DataSourceSettings /></div>
                   <div v-if="currentSection === 'vault'" class="section"><VaultStatus /></div>
                   <div v-if="currentSection === 'operation-logs'" class="section"><OperationLogs /></div>
                   <!-- 解析引擎 -->
@@ -141,7 +140,6 @@ import ParserEngineSettings from './ParserEngineSettings.vue'
 import KnowledgeBaseSettings from './KnowledgeBaseSettings.vue'
 import VaultStatus from './VaultStatus.vue'
 import OperationLogs from '@/views/knowledge-base/OperationLogs.vue'
-import DataSourceSettings from '@/views/knowledge-base/settings/DataSourceSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
@@ -228,7 +226,6 @@ const navItems = computed(() => {
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
     { key: 'knowledge-base', icon: 'file', label: t('settings.knowledgeSettings') },
-    { key: 'datasource', icon: 'rss', label: t('settings.dataSources') },
     { key: 'vault', icon: 'folder', label: t('settings.vault.title') },
     { key: 'operation-logs', icon: 'history', label: t('operationLogs.title') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
@@ -277,7 +274,7 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'knowledge-base', 'datasource', 'vault', 'parser',
+        'knowledge-base', 'vault', 'parser',
       ]),
     },
     {

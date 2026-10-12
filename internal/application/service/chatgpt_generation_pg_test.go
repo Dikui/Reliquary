@@ -275,7 +275,7 @@ func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecove
 					}
 					return chatGPTGenerationSuccess(t, request)
 				})
-				article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
+				article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
 					newMultipartFileHeader(t, "quota-original.md", "Fixture Acme published an original product announcement with measured capabilities."),
 					map[string]string{"publisher": "Fixture Acme", "original_url": "https://example.org/quota-original", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 				require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 		}
 		return chatGPTGenerationSuccess(t, request)
 	})
-	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
 		newMultipartFileHeader(t, "missing-link.md", "Fixture Acme published a complete original announcement with product measurements and documented deployment choices."),
 		map[string]string{"publisher": "Fixture Acme"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)

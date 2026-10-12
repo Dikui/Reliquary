@@ -3,7 +3,6 @@ package interfaces
 import (
 	"context"
 	"io"
-	"mime/multipart"
 
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
@@ -11,47 +10,6 @@ import (
 
 // EntryService defines the interface for entry services.
 type EntryService interface {
-	// CreateEntryFromFile creates entry from a file.
-	// channel identifies the ingestion channel (e.g. "web", "api", "rss"); empty defaults to "web".
-	CreateEntryFromFile(
-		ctx context.Context,
-		kbID string,
-		file *multipart.FileHeader,
-		metadata map[string]string,
-		enableMultimodel *bool,
-		customFileName string,
-		channel string,
-		processOverrides *types.EntryProcessOverrides,
-	) (*types.Entry, error)
-	// CreateEntryFromURL creates entry from a URL.
-	// When fileName or fileType is provided (or the URL path has a known file extension),
-	// the URL is treated as a direct file download instead of a web page crawl.
-	// channel identifies the ingestion channel; empty defaults to "web".
-	CreateEntryFromURL(
-		ctx context.Context,
-		kbID string,
-		url string,
-		fileName string,
-		fileType string,
-		enableMultimodel *bool,
-		title string,
-		channel string,
-		processOverrides *types.EntryProcessOverrides,
-		sourceInfo ...types.SourceInfo,
-	) (*types.Entry, error)
-	// CreateEntryFromPassage creates entry from text passages.
-	// channel identifies the ingestion channel; empty defaults to "web".
-	CreateEntryFromPassage(ctx context.Context, kbID string, passage []string, channel string) (*types.Entry, error)
-	// CreateEntryFromPassageSync creates entry from text passages and waits until chunks are indexed.
-	CreateEntryFromPassageSync(ctx context.Context, kbID string, passage []string, channel string) (*types.Entry, error)
-	// CreateEntryFromManual creates or saves manual Markdown entry content.
-	// channel identifies the ingestion channel; empty defaults to "web".
-	CreateEntryFromManual(
-		ctx context.Context,
-		kbID string,
-		payload *types.ManualEntryPayload,
-		channel string,
-	) (*types.Entry, error)
 	// GetEntryByID retrieves entry by ID (uses space from context).
 	GetEntryByID(ctx context.Context, id string) (*types.Entry, error)
 	// GetEntryByIDOnly retrieves entry by ID without space filter (for permission resolution).
@@ -82,12 +40,6 @@ type EntryService interface {
 	ReviewEntryIntake(ctx context.Context, id, action string, sourceInfo types.SourceInfo) (*types.Entry, error)
 	// UpdateEntry updates entry information.
 	UpdateEntry(ctx context.Context, entry *types.Entry) error
-	// UpdateManualEntry updates manual Markdown entry content.
-	UpdateManualEntry(
-		ctx context.Context,
-		entryID string,
-		payload *types.ManualEntryPayload,
-	) (*types.Entry, error)
 	// ReparseEntry deletes existing document content and re-parses the entry asynchronously.
 	// When processOverrides is non-nil, it is validated and persisted to the entry metadata
 	// before re-parsing, letting callers adjust parse config on reparse; nil keeps stored overrides.
@@ -176,22 +128,9 @@ type EntryRepository interface {
 	// fileTypes: optional list of file extensions to filter by (e.g., ["csv", "xlsx"])
 	SearchEntry(ctx context.Context, spaceID uint64, keyword string, offset, limit int, fileTypes []string) ([]*types.Entry, bool, error)
 
-	// FindByMetadataKey finds a entry item by a key-value pair in the metadata JSON column.
-	// Used by data source sync to locate existing items by external_id.
-	FindByMetadataKey(ctx context.Context, spaceID uint64, kbID string, key string, value string) (*types.Entry, error)
-	// FindByMetadataKeyPrefix finds entry items whose metadata[key] starts
-	// with the given prefix. Used to sweep an external node's attachment sub-items.
-	FindByMetadataKeyPrefix(ctx context.Context, spaceID uint64, kbID string, key string, prefix string) ([]*types.Entry, error)
-	// FindByDataSourceExternalID finds a entry item owned by one data source
-	// and identified by the source's external item ID.
-	FindByDataSourceExternalID(
-		ctx context.Context, spaceID uint64, kbID, dataSourceID, externalID string,
-	) (*types.Entry, error)
 	// HardDeleteEntry physically removes a row after DeleteEntry's soft-delete
 	// cascade. Sync-internal deletions use this so rows never become tombstones.
 	HardDeleteEntry(ctx context.Context, spaceID uint64, id string) error
-	// HardDeleteEntryList is the batch counterpart of HardDeleteEntry.
-	HardDeleteEntryList(ctx context.Context, spaceID uint64, ids []string) error
 	// SearchEntryInScopes searches articles inside explicit space and knowledge base boundaries.
 	SearchEntryInScopes(ctx context.Context, scopes []types.SearchScope, keyword string, offset, limit int, fileTypes []string) ([]*types.Entry, bool, int64, error)
 }

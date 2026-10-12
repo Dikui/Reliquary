@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reliquary/internal/utils"
 	"strings"
 	"testing"
 
@@ -110,6 +111,9 @@ func TestGetSpaceKVAllowedForNonSecretKey(t *testing.T) {
 }
 
 func TestPutSpaceParserConfigAdminPreservesRedactedSecrets(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "example.com")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	space := secretSpaceFixture()
 	engine := newSpaceHandlerTestEngine(t, space)
 

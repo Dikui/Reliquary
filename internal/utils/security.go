@@ -310,6 +310,10 @@ func isIPLikeHostname(hostname string) bool {
 // - Cloud metadata endpoints
 // - Reserved hostnames (localhost, *.local, etc.)
 func isSSRFSafeURL(rawURL string) (bool, string) {
+	return isSSRFSafeURLWithLookup(rawURL, net.LookupIP)
+}
+
+func isSSRFSafeURLWithLookup(rawURL string, lookup func(string) ([]net.IP, error)) (bool, string) {
 	if rawURL == "" {
 		return false, "URL is empty"
 	}
@@ -370,7 +374,7 @@ func isSSRFSafeURL(rawURL string) (bool, string) {
 
 	// Perform DNS resolution to check the resolved IP
 	// This prevents DNS rebinding attacks where a domain resolves to internal IPs
-	ips, err := net.LookupIP(hostname)
+	ips, err := lookup(hostname)
 	if err != nil {
 		return false, fmt.Sprintf("DNS resolution failed for hostname %s: cannot verify if it resolves to safe IP", hostname)
 	}
@@ -389,28 +393,6 @@ func isSSRFSafeURL(rawURL string) (bool, string) {
 	}
 
 	return true, ""
-}
-
-// IsValidImageURL 验证图片 URL 是否安全
-func IsValidImageURL(url string) bool {
-	if !IsValidURL(url) {
-		return false
-	}
-	if strings.HasPrefix(strings.ToLower(url), "resource://") {
-		return true
-	}
-
-	// 检查是否为图片文件
-	imageExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".ico"}
-	lowerURL := strings.ToLower(url)
-
-	for _, ext := range imageExtensions {
-		if strings.Contains(lowerURL, ext) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // CleanMarkdown 清理 Markdown 内容

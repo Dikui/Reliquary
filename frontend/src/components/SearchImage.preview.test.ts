@@ -155,3 +155,23 @@ test('thumbnail CSS confines the whole image to a fixed frame without intrinsic 
     assert.equal(styleDeclarationsAtWidth(rules, '.search-image.compact', width)['width'], '120px')
   }
 })
+
+
+test('the shared image viewer preserves remote image sources supplied by its caller', async () => {
+  const images = ['https://source.example/remote.png', '//source.example/protocol-relative.png']
+  const snapshots: { visible: boolean; images: unknown[] }[] = []
+  const viewer = defineComponent({ props: { visible: Boolean, images: Array }, setup(props) {
+    return () => { snapshots.push({ visible: props.visible, images: props.images || [] }); return null }
+  } })
+  const component = loadComponent(new URL('./ImagePreview.vue', import.meta.url), {
+    'tdesign-vue-next': { ImageViewer: viewer },
+  })
+  const app = renderer.createApp(component, { visible: true, images })
+  try {
+    app.mount(element('root')); await settle()
+    assert.ok(snapshots.some(value => value.visible))
+    assert.ok(snapshots.every(value => JSON.stringify(value.images) === JSON.stringify(images)))
+  } finally {
+    app.unmount()
+  }
+})

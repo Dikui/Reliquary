@@ -136,9 +136,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   const api=evaluate('../api/knowledge-base.ts',f.modules)
   const storeModule=evaluate('../stores/entry.ts',f.modules)
   const modules={...f.modules,pinia:require('pinia'),'@/api/knowledge-base':api,'@/stores/entry':storeModule,
-    '../utils/index': { formatStringDate:()=> '2026-10-01', kbFileTypeVerification:()=>true },
+    '../utils/index': { formatStringDate:()=> '2026-10-01' },
     'tdesign-vue-next':{MessagePlugin:{}},'vue-i18n':{useI18n:()=>({t:f.i18n.global.t})},
-    './useEntryDuplicates':{useEntryDuplicates:()=>({})}}
+    }
   const hook=evaluate('../composables/useKnowledgeBase.ts',modules).default('kb-entries')
   await hook.loadEntries()
   assert.equal(storeModule.entryStore().cardList[0].id,'loaded-entry')

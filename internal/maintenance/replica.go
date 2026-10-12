@@ -72,7 +72,7 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 			return err
 		}
 		snapshot.credentialValues = needles
-		for _, table := range sortedTables() {
+		for _, table := range sortedTables(rules) {
 			if !present[table] || table == "schema_migrations" {
 				continue
 			}
@@ -249,6 +249,7 @@ func appendLogs(path string, rows []map[string]any) error {
 				file.Close()
 				return fmt.Errorf("invalid append-only operation log: %w", err)
 			}
+			addLogDefaults(row)
 			canonical, _ := json.Marshal(row)
 			existing[fmt.Sprint(row["id"])] = canonical
 		}
@@ -327,6 +328,14 @@ func replicaFilesForFormat(snapshot *Snapshot, format int) (map[string][]byte, e
 }
 
 func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
+	retired := false
+	if _, current := snapshot.Tables["data_sources"]; !current {
+		var err error
+		retired, err = archiveCollectionReplica(root)
+		if err != nil {
+			return err
+		}
+	}
 	if uploads != "" && len(snapshot.credentialValues) > 0 {
 		if err := checkResourceCredentials(uploads, snapshot.credentialValues); err != nil {
 			return errors.New("upload contains an operational credential or cannot be checked; replica refused without changing the original")
@@ -403,6 +412,13 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	}
 	if err := AtomicWrite(filepath.Join(directory, "manifest.json"), append(data, '\n')); err != nil {
 		return err
+	}
+	if retired {
+		for _, path := range []string{"config/data_sources.json", "data/sync_logs.json"} {
+			if err := os.Remove(filepath.Join(directory, path)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
 	}
 	for _, table := range []string{"spaces", "api_keys", "entries", "entry_entities", "entry_topics", "entry_processing_spans", "entry_repost_sources"} {
 		if _, present := snapshot.Tables[table]; !present {

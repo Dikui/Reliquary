@@ -21,7 +21,6 @@ function createHook(detailsAPI: (id: string) => Promise<unknown>, list: object[]
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
-    './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
   }
   const output = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

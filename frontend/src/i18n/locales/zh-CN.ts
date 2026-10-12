@@ -173,7 +173,6 @@ export default {
   "extractedLink": "原始链接：从文件提取",
   "modelType": "模型给出的类型",
   "missingLinkHint": "缺少原始链接，尚未调用模型审核。可补链接后重新审核，也可确认无链接入库或转为本人文档。",
-  "uploadLinkHint": "原始链接可留空。程序会先从文件或正文提取；提取不到时进入收录待审。",
   "invalidLink": "请填写有效的 HTTP 或 HTTPS 原始链接。",
   "chooseType": "请选择内容类型。",
   "failed": "审核操作失败，请重试。",
@@ -555,7 +554,7 @@ export default {
       baseUrl: 'API 地址',
       baseUrlDesc: '与 REST API 路径拼接使用。',
       ingestUrl: '外部 Agent 收录接口',
-      ingestUrlDesc: '发送 JSON，url 与 content 必填。与 RSS 和上传一样经过模型收录审核；未通过时返回 pending_review 和原因，进入待审区。调用方的判断不替代审核。内网访问，使用 Authorization: Bearer API_KEY。',
+      ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。每次收录都经过模型审核，未通过的文章返回 pending_review 与原因，调用方的判断不替代审核。通过内网访问时使用 Authorization: Bearer API_KEY。",
       copyIngestUrl: '复制收录接口地址',
       mcpUrl: 'MCP 服务地址',
       mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取文章、收录、待审区、星标和写入整理结果。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
@@ -604,145 +603,6 @@ export default {
       api: 'API 集成',
       chrome: 'Chrome 插件',
     }
-  },
-  datasource: {
-    defaultContentType: "默认内容类型",
-    defaultContentTypeUnspecified: "不指定",
-    defaultContentTypeHint: "作为文章分类的参考，模型仍会根据正文判断。",
-    requiredFields: '请输入名称和至少一个订阅源地址。',
-    title: '数据源管理',
-    description: '配置外部数据源，自动同步内容到知识库',
-    add: '添加数据源',
-    empty: '暂无数据源',
-    edit: '编辑',
-    delete: '删除',
-    deleteConfirm: '确定删除该数据源？同步的知识不会被删除。',
-    deleteSuccess: '数据源已删除',
-    deleteFailed: '删除失败',
-    syncNow: '立即同步',
-    syncTriggered: '同步任务已提交',
-    syncFailed: '同步触发失败',
-    pause: '暂停',
-    resume: '恢复',
-    paused: '已暂停',
-    resumed: '已恢复',
-    pauseFailed: '暂停失败',
-    resumeFailed: '恢复失败',
-    logs: '日志',
-    syncModeLabel: '同步模式',
-    createTitle: '添加数据源',
-    editTitle: '编辑数据源',
-    nameLabel: '名称',
-    namePlaceholder: '输入数据源名称',
-    sectionBasic: '基本信息',
-    testConnection: '测试连接',
-    testSuccess: '连接成功',
-    testFailed: '连接失败',
-    connected: '已连接',
-    connectionFailed: '连接失败',
-    isRequired: '为必填项',
-    credentialsLabel: '凭证',
-
-    untitled: '无标题',
-    resourceLoadFailed: '加载资源列表失败',
-    retryLoadResources: '重新加载',
-    syncScheduleLabel: '同步频率',
-    syncDeletions: '同步删除（源端删除时同步删除知识库中的条目）',
-    createAndSync: '创建并立即同步',
-    createAndSyncSuccess: '数据源创建成功，同步任务已提交',
-    createButSyncFailed: '数据源已创建，但触发同步失败',
-    updateSuccessSyncHint: '数据源更新成功；编辑不会自动触发同步，如需重新导入请点击“同步”。',
-    saveFailed: '保存失败',
-    syncHistory: '同步历史',
-    refreshLogs: '刷新日志',
-    noLogs: '暂无同步记录',
-    comingSoon: '即将支持',
-    docHint: '在以下地址获取凭证：',
-    openDoc: '打开文档',
-    back: '上一步',
-    next: '下一步',
-    save: '保存',
-    schedule30min: '每 30 分钟',
-    schedule1h: '每小时',
-    schedule6h: '每 6 小时',
-    schedule12h: '每 12 小时',
-    schedule24h: '每天',
-    neverSynced: '未同步',
-    justNow: '刚刚',
-    minutesAgo: '{n} 分钟前',
-    hoursAgo: '{n} 小时前',
-    daysAgo: '{n} 天前',
-    scheduleHuman: {
-      '30min': '每 30 分钟',
-      '1h': '每小时',
-      '6h': '每 6 小时',
-      '12h': '每 12 小时',
-      '24h': '每天'
-    },
-    field: {
-      feedUrls: '订阅源地址',
-      feedUrlsHint: '每行一个 RSS / Atom、站点地图或文章列表地址，支持同时填写多个',
-      feedPublisher: '发布主体（订阅未提供署名时使用）',
-      articlePathPrefix: '文章路径前缀',
-      articlePathPrefixHint: '站点地图及文章列表必填，例如 /news/；普通订阅源留空。发布时间仍以文章本身为准。',
-      migrationCredentialsRequired: '迁移后需要重新填写凭据',
-      migrationHeadersLabel: '自定义请求头（必填）',
-      migrationHeadersReason: '迁移包不包含原请求头凭据，请重新填写后保存。',
-      authHeaders: '自定义请求头（可选）',
-      authHeadersHint: '用于访问私有订阅源，每行一个，格式为「名称: 值」，例如 Authorization: Bearer xxxx',
-    },
-    connectorDesc: {
-      rss: '同步 RSS / Atom、站点地图或文章列表中的文章',
-    },
-    connector: {
-      rss: 'RSS / Atom / 站点地图 / 文章列表',
-    },
-    logDetail: {
-      startTime: '开始时间',
-      endTime: '结束时间',
-      failedItems: '失败文档',
-      failedItemsMore: '还有 {n} 个失败文档未显示',
-      docsFailedSummary: '{n} 个文档同步失败'
-    },
-    logSummary: {
-      total: '总次数',
-      success: '成功',
-      failed: '失败',
-      items: '同步条目'
-    },
-    logMetric: {
-      total: '总计',
-      skipped: '跳过',
-      failed: '失败'
-    },
-    logStatus: {
-      running: '同步中',
-      success: '成功',
-      partial: '部分成功',
-      failed: '失败',
-      canceled: '已取消'
-    },
-    step: {
-      selectType: '选择类型',
-      credentials: '配置凭证',
-      resources: '选择范围',
-    },
-    status: {
-      active: '已连接',
-      paused: '已暂停',
-      error: '异常'
-    },
-    syncMode: {
-      incremental: '增量同步',
-      full: '全量同步'
-    },
-    syncError: {
-      deletion_lookup_failed: '删除前查找文档失败，请查看服务器日志',
-      deletion_failed: '删除失败，请查看服务器日志',
-      ingest_failed: '导入失败，请查看服务器日志',
-
-    source_adapter_failed: "站点适配器处理失败，请检查应用日志。",
-},
   },
   ollama: {
     unknown: '未知',
@@ -1049,12 +909,6 @@ export default {
       rerank: '重排',
     }
   },
-  upload: {
-    uploadDocument: '上传文档',
-    uploadFolder: '上传文件夹',
-    onlineEdit: '在线编辑',
-    deleteRecord: '删除记录'
-  },
   time: {
     today: '今天',
     yesterday: '昨天',
@@ -1316,7 +1170,6 @@ export default {
     tokenRefreshFailed: 'Token刷新失败',
     pleaseRelogin: '请重新登录',
     fileSizeExceeded: '文件大小不能超过 {size}M！',
-    unsupportedAudioUpload: '不支持上传音频文件。',
     unsupportedFileType: '不支持的文件类型！',
     invalidFileType: '文件类型错误！',
     invalidImageLink: '无效的图片链接',
@@ -1446,7 +1299,7 @@ export default {
         queue: {
           core_concurrency: '文档解析与手工重解析的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
           enrichment_concurrency: "实体名称向量重建、全部向量重建与主题历史归入的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
-          maintenance_concurrency: '数据源同步、批处理和清理任务的每实例并发，与用户面流水线硬隔离；修改后需重启。',
+          maintenance_concurrency: "每实例批处理与删除清理的并发数，独立于文章处理；最小为 1，修改后需重启服务。",
           shared_concurrency: '核心解析与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
         ssrf: {
@@ -1462,7 +1315,7 @@ export default {
         queue: {
           core_concurrency: '核心解析保底并发数',
           enrichment_concurrency: '内容富化保底并发数',
-          maintenance_concurrency: '维护与同步并发数',
+          maintenance_concurrency: "维护并发数",
           shared_concurrency: '共享弹性并发数',
         },
         ssrf: {
@@ -1534,8 +1387,6 @@ export default {
           spaceLabel: '空间 ID',
           sourceKBLabel: '来源知识库',
           targetKBLabel: '目标知识库',
-          dataSourceLabel: '数据源 ID',
-          syncLogLabel: '同步记录 ID',
           knowledgeCountLabel: '文档数量',
           enqueuedAt: '入队时间',
           startedAt: '开始时间',
@@ -1586,7 +1437,6 @@ export default {
           taskTypes: {
             documentProcess: '文档解析',
             manualProcess: '手工重新处理',
-            sync: '数据源同步',
             batchReparse: '批量重新解析',
             batchDelete: '批量删除',
 
@@ -1630,24 +1480,22 @@ export default {
         pools: {
           core: '核心解析',
           enrichment: '内容富化',
-          maintenance: '维护与同步',
+          maintenance: "维护",
           shared: '共享弹性',
         },
         poolDescriptions: {
           core: '文档解析与手工重解析的保底容量',
           enrichment: "实体名称向量重建、全部向量重建与主题历史归入",
-          maintenance: '数据源同步、批处理与删除清理',
+          maintenance: "批处理与删除清理",
           shared: '由核心解析与内容富化按积压借用',
         },
         queueNames: {
           default: '文档解析',
-          sync: '数据源同步',
           low: '维护与批处理',
           entity: "实体",
         },
         queueDescriptions: {
           default: '文档解析、手工重解析',
-          sync: '手动与定时同步',
           low: "批量重解析、删除清理",
           entity: "实体名称向量重建、全部向量重建与主题历史归入",
         },
@@ -1767,7 +1615,7 @@ export default {
     },
     chunking: {
       title: '分块设置',
-      description: '控制上传文档在嵌入前的切分方式。默认值适用于大多数场景，仅在检索质量异常时调整。',
+      description: "控制文档在向量化之前的分块方式。默认设置适用于多数情况，可在检索质量不佳时调整。",
       sizeLabel: '分块大小',
       sizeDescription: "每个分块的最大字符数（100 到 4000），默认 512。根据文档结构和长度调整。",
       characters: '字符',
@@ -1794,7 +1642,7 @@ export default {
       languagesPlaceholder: '自动检测',
       debug: {
         toggle: '测试分块效果',
-        toggleHint: '无需重新上传即可对示例文本运行分块器',
+        toggleHint: "使用示例文字运行分块器，无需送入新内容",
         sampleLabel: '示例文本',
         samplePlaceholder: '粘贴 Markdown / 纯文本片段以查看当前配置的分块结果…',
         presetLabel: '载入示例：',
@@ -1846,7 +1694,7 @@ export default {
         },
         auto: {
           label: '自动',
-          tooltip: '文档分析器根据内容结构自动在「按标题切分」「结构感知」「按长度切分」之间选择。'
+          tooltip: "根据每篇文档的结构，在标题、结构与长度分块之间自动选择。"
         }
       },
       separators: {
@@ -1919,7 +1767,6 @@ export default {
       models: '模型配置',
       chunking: '分块设置',
       advanced: '高级设置',
-      datasource: '数据源',
     },
     navGroups: {
       basic: '基础',
@@ -1929,100 +1776,7 @@ export default {
       management: '管理'
     },
   },
-
-  manualEditor: {
-    description: '使用 Markdown 编写知识内容，支持实时预览',
-    defaultTitlePrefix: '新建文档',
-
-    actions: {
-      cancel: '取消',
-      saveDraft: '暂存草稿',
-      publish: '发布入库'
-    },
-    loading: {
-      content: '正在加载内容',
-      preparing: '正在准备编辑器'
-    },
-    status: {
-      draftTag: '当前状态：草稿',
-      publishedTag: '当前状态：已发布',
-      lastUpdated: '最近更新：{time}'
-    },
-    form: {
-
-      titleLabel: '知识标题',
-      titlePlaceholder: '请输入标题',
-      contentPlaceholder: '支持 Markdown 语法，可使用 # 标题、列表、代码块等'
-    },
-    success: {
-      draftSaved: '草稿已保存',
-      published: '文章已提交，正在审核'
-    },
-    warning: {
-      knowledgeUnavailable: '无法加载知识库，请关闭编辑器后重试。',
-      enterTitle: '请输入知识标题',
-      enterContent: '请输入知识内容',
-      contentTooShort: '内容过短，建议补充更多信息后再发布'
-    },
-    error: {
-      fetchDetailFailed: '获取知识详情失败',
-      saveFailed: '保存失败，请稍后重试'
-    },
-
-    section: {
-      basic: '基本信息',
-      content: '知识内容'
-    },
-    title: {
-      edit: '编辑 Markdown 知识',
-      create: '在线编辑 Markdown 知识'
-    },
-    preview: {
-      empty: '暂无内容'
-    },
-    view: {
-      editLabel: '返回编辑',
-      previewLabel: '预览内容'
-    },
-    toolbar: {
-      bold: '加粗',
-      italic: '斜体',
-      strike: '删除线',
-      inlineCode: '行内代码',
-      heading1: '一级标题',
-      heading2: '二级标题',
-      heading3: '三级标题',
-      bulletList: '无序列表',
-      orderedList: '有序列表',
-      taskList: '任务列表',
-      blockquote: '引用',
-      codeBlock: '代码块',
-      link: '插入链接',
-      image: '插入图片',
-      table: '插入表格',
-      horizontalRule: '分割线'
-    },
-    table: {
-      column1: '列1',
-      column2: '列2',
-      cell: '内容'
-    },
-    placeholders: {
-      heading: '标题{level}',
-      listItem: '列表项',
-      taskItem: '任务项',
-      quote: '引用内容',
-      code: '代码内容',
-      linkText: '链接文本',
-      imageAlt: '描述',
-      bold: '加粗文本',
-      italic: '斜体文本',
-      strike: '删除线',
-      inlineCode: 'code'
-    }
-  },
   file: {
-    upload: '上传文件',
     downloadFailed: '下载文件失败，请稍后重试',
   },
   common: {
@@ -2198,7 +1952,6 @@ export default {
       loadFailed: '无法加载文件库状态，请重试。',
     },
     knowledgeSettings: '知识库设置',
-    dataSources: '订阅源',
     modelManagement: '模型管理',
     parserEngine: '解析引擎',
     versionInfo: '版本信息',
@@ -2287,36 +2040,6 @@ export default {
     totalDuration: '总耗时：{d}',
     total: '总耗时 {d}',
     errorCode: {
-      invalid_url: "网页地址无效",
-      invalid_url_SUGGESTION: "请检查网址格式，使用完整的 HTTP 或 HTTPS 地址。",
-      dns_failed: "网页域名解析失败",
-      dns_failed_SUGGESTION: "请检查网址和服务器的 DNS 配置，稍后重试。",
-      connection_timeout: "网页抓取超时",
-      connection_timeout_SUGGESTION: "请检查网站是否可访问，稍后重试，或改为上传文件。",
-      tls_failed: "网站安全连接失败",
-      tls_failed_SUGGESTION: "请检查网站证书及服务器时间，修复安全连接问题后重试。",
-      http_403: "网站拒绝访问",
-      http_403_SUGGESTION: "该站点拒绝抓取请求，请改为上传文件或使用该站点的 RSS。",
-      http_429: "网站请求频率受限",
-      http_429_SUGGESTION: "请稍后重试，并减少对该站点的抓取请求。",
-      http_5xx: "网站服务异常",
-      http_5xx_SUGGESTION: "网站返回服务器错误，请稍后重试，或改为上传文件。",
-      http_status: "网页请求失败",
-      http_status_SUGGESTION: "请确认网址和网页访问状态，或改为上传文件。",
-      ssrf_rejected: "网页地址被安全策略拦截",
-      ssrf_rejected_SUGGESTION: "请使用安全策略允许的公开网页地址，或改为上传文件。",
-      redirect_rejected: "网页重定向被拒绝",
-      redirect_rejected_SUGGESTION: "请检查重定向目标和次数，使用安全策略允许的最终网页地址。",
-      read_failed: "网页内容读取失败",
-      read_failed_SUGGESTION: "请稍后重试，或改为上传文件。",
-      html_parse_failed: "网页 HTML 解析失败",
-      html_parse_failed_SUGGESTION: "请确认网页内容有效，或改为上传文件。",
-      empty_content: "页面没有可抓取的正文",
-      empty_content_SUGGESTION: "请确认网址指向包含正文的页面，或改为上传文件。",
-      javascript_required: "页面需要 JavaScript 渲染，无法抓取正文",
-      javascript_required_SUGGESTION: "请改为上传文件或使用该站点的 RSS。",
-      connection_failed: "网页连接失败",
-      connection_failed_SUGGESTION: "请检查网站地址和服务器网络连接，稍后重试。",
       DOCREADER_TIMEOUT: '文档解析超时',
       DOCREADER_TIMEOUT_SUGGESTION: '请尝试拆分大文件，并检查解析服务负载后重新解析。',
       DOCREADER_UNAVAILABLE: '文档解析服务不可用',
@@ -2403,8 +2126,8 @@ export default {
       parentChildOff: '父子分块已关闭',
     }
   },
-  uploadConfirm: {
-    title: '上传文档确认',
+  reparseConfirm: {
+    chunking: "分块配置",
     parseConfig: '解析配置',
     configNav: '解析配置导航',
     navParserDefault: '默认',
@@ -2413,33 +2136,20 @@ export default {
     summaryParentChildShort: '父子分块',
     summaryParserForceScanned: '扫描件解析',
     navChunkingSummary: '分块 {size}',
-    statusOn: '已开启',
-    statusOff: '未开启',
-    notSet: '未设置',
-    confirm: '确认上传并解析',
     cancel: '取消',
-    noItems: '请至少添加一个文件或 URL',
-    urlItemLabel: 'URL',
-    urlAdded: '已添加 URL',
-    urlDuplicate: '该 URL 已在列表中',
-    statusNeedsSetup: '待配置',
-    continueAdd: '继续添加',
-
-    filesAdded: '已添加 {count} 个文件',
-    filesAllDuplicate: '所选文件已在列表中',
-    titleManual: '在线编辑发布确认',
-    confirmManual: '确认发布并解析',
     titleReparse: '重新解析确认',
     confirmReparse: '确认并重新解析',
     reparseSource: '待重新解析文档',
-    reparseHint: '将沿用上次解析的配置，可在此调整',
-    manualCharCount: '{count} 个字符',
+    reparseHint: "重新处理已有材料。正文缺失时，需要外部工具通过收录接口补全。",
     pdfForceScanned: {
       label: '按扫描件解析 PDF',
       description: '适用于网页打印、扫描件、图片型 PDF。开启后会逐页 OCR，解析更完整但耗时和模型调用更多。'
     }
   },
   knowledgeBase: {
+    channelRSS: "RSS",
+    emptyArticles: "暂无文章",
+    ingestOnlyHint: "请通过外部工具将完整材料送入 HTTP 或 MCP 收录接口。",
     sourceKinds: { mine: '本人文档', report: '整理结果' },
     collectReason: '收藏理由',
     vaultPath: '文件库路径',
@@ -2463,33 +2173,17 @@ export default {
     settings: '设置',
 
     searchMessageContent: '搜索文章内容',
-    uploadSuccess: '文件上传成功！',
-    uploadFailed: '文件上传失败！',
     fileExists: '文件已存在',
-    duplicateFound: '该文章已存在',
-    duplicateSimilarFound: '与已有文章高度相似',
-    viewExistingMessage: '查看已有文章',
-    dismissDuplicateNotice: '关闭重复提示',
-    uploadAllSuccess: '成功上传 {count} 个文件！',
-    uploadPartialSuccess: '上传完成：成功 {success} 个，失败 {fail} 个',
-    uploadAllFailed: '所有文件上传失败',
-
-    videosUnsupported: '已跳过 {count} 个视频文件（暂不支持视频上传）',
-    unsupportedTypesHint: '部分文件类型（{types}）暂无可用解析引擎，上传后将无法解析',
+    unsupportedTypesHint: '部分附件类型（{types}）暂无可用解析引擎。内容只能通过收录接口送入；请同时提供正文，仅提供无法解析的附件会收录失败。',
     goToParserSettings: '前往配置',
-    importURL: '导入网页',
-    addDocument: '添加文章',
-    importURLTitle: '导入网页',
     urlRequired: '请输入URL',
     invalidURL: '请输入有效的URL',
-    urlImportSuccess: 'URL导入成功！',
-    urlImportFailed: 'URL导入失败！',
     urlExists: '该URL已存在',
     urlLabel: 'URL地址',
-    urlPlaceholder: '请输入网页URL，例如：https://example.com',
-    urlTip: '支持导入各类网页内容，系统会自动提取和解析网页中的文本内容',
     typeURL: '网页',
     typeManual: '手动创建',
+    typeIngestAPI: '收录接口',
+    externalTool: '外部工具',
     typeFile: '文件',
     channelLabel: '来源渠道',
     channelWeb: '网页端',
@@ -2528,12 +2222,9 @@ export default {
     metadataKeyDuplicate: '元数据字段 {key} 重复',
     metadataNumberRequired: '元数据字段 {key} 必须是有效数字',
     noDocumentSummary: '暂无文章摘要',
-    notInitialized: '该知识库尚未完成初始化配置，请先前往设置页面配置模型信息后再上传文件',
-    getInfoFailed: '获取知识库信息失败，无法上传文件',
     missingId: '缺少知识库ID',
     deleteFailed: '删除失败，请稍后再试！',
     uploadTime: '上传时间',
-    editDocument: '编辑文章',
     rebuildDocument: '重建知识',
     rebuildConfirm: '确认重建文章"{fileName}"？该操作会清理现有分块并重新解析。',
     rebuildSubmitted: '重建任务已提交',
@@ -2594,13 +2285,7 @@ export default {
     statusCancelled: '已取消',
     statusDraft: '草稿',
     noDescription: '无描述',
-    emptyKnowledgeDragDrop: '知识为空，拖放上传',
     parserRecoveryHint: '所选文件类型暂无可用解析引擎。请使用默认包含 anydoc 的 Docker 镜像，或本地执行 make anydoc-lib 后以 -tags anydoc 启动，或在解析引擎设置中配置 MinerU。',
-    availableUploadTypes: '当前可上传：{types}',
-    uploadSizeLimit: '单个文件不超过 {size} MB',
-    pdfDocFormat: 'pdf、doc 格式文件，不超过10M',
-    textMarkdownFormat: 'text、markdown格式文件，不超过200K',
-    dragFileNotText: '请拖拽文件而不是文本或链接',
     searchPlaceholder: '搜索知识库...',
     docSearchPlaceholder: '搜索文章标题...',
     fileTypeFilter: '文件类型',
@@ -2627,11 +2312,6 @@ export default {
     noKnowledge: '暂无可用知识库',
     loadingFailed: '加载知识库失败',
     operationNotSupportedForType: '当前知识库类型不支持该操作',
-    allFilesSkippedNoEngine: '所选文件类型暂无可用解析引擎，已全部跳过',
-    filesSkippedNoEngine: '{count} 个文件因无可用解析引擎被跳过',
-    allUploadSuccess: '所有文件上传成功（{count}个）',
-    partialUploadSuccess: '部分文件上传成功（成功：{success}，失败：{fail}）',
-    allUploadFailed: '所有文件上传失败（{count}个）',
     deleteSuccess: '知识删除成功！',
     chunkLoadFailed: '分块加载失败',
     infoCard: {

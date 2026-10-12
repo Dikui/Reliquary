@@ -91,9 +91,13 @@ func ValidateClassification(ctx context.Context, db *gorm.DB) error {
 	return ValidateExtensionCatalog(ctx, db)
 }
 
-func sortedTables() []string {
-	tables := make([]string, 0, len(Rules))
-	for table := range Rules {
+func sortedTables(inventories ...map[string]Rule) []string {
+	rules := Rules
+	if len(inventories) != 0 {
+		rules = inventories[0]
+	}
+	tables := make([]string, 0, len(rules))
+	for table := range rules {
 		tables = append(tables, table)
 	}
 	sort.Strings(tables)

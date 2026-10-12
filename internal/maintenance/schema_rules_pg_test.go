@@ -3,10 +3,10 @@ package maintenance
 import (
 	"context"
 	"fmt"
+	"github.com/golang-migrate/migrate/v4"
 	"path/filepath"
 	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -14,7 +14,7 @@ import (
 )
 
 func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T) {
-	for version := uint(0); version <= 3; version++ {
+	for version := uint(0); version <= 4; version++ {
 		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
 			db := pgtest.Open(t)
 			directory, err := filepath.Abs("../../migrations/versioned")
@@ -28,18 +28,26 @@ func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T)
 			require.NoError(t, WithCurrentNames(db, func(tx *gorm.DB) error {
 				rules, err := schemaRules(context.Background(), tx)
 				require.NoError(t, err)
-				require.NotContains(t, rules, "ingest_assets")
-				require.NotContains(t, rules, "ingest_discards")
-				require.NotContains(t, rules["entries"].Columns(), "acquisition")
-				require.NotContains(t, rules["operation_logs"].Columns(), "api_key_id")
+				require.Contains(t, rules, "data_sources")
+				require.Contains(t, rules, "sync_logs")
+				if version < 4 {
+					require.NotContains(t, rules, "ingest_assets")
+					require.NotContains(t, rules, "ingest_discards")
+					require.NotContains(t, rules["entries"].Columns(), "acquisition")
+					require.NotContains(t, rules["operation_logs"].Columns(), "api_key_id")
+				}
 				require.NoError(t, ValidateClassification(context.Background(), tx))
 				snapshot, err := Capture(context.Background(), tx)
 				require.NoError(t, err)
-				require.NotContains(t, snapshot.Tables, "ingest_assets")
+				if version < 4 {
+					require.NotContains(t, snapshot.Tables, "ingest_assets")
+				}
 				manifest, err := BuildManifest(context.Background(), tx, t.TempDir(), "")
 				require.NoError(t, err)
-				require.NotContains(t, manifest.Tables["entries"].Columns, "acquisition")
-				require.NotContains(t, manifest.Tables["operation_logs"].Columns, "api_key_name")
+				if version < 4 {
+					require.NotContains(t, manifest.Tables["entries"].Columns, "acquisition")
+					require.NotContains(t, manifest.Tables["operation_logs"].Columns, "api_key_name")
+				}
 				return nil
 			}))
 			after, err := CatalogSchema(context.Background(), db)

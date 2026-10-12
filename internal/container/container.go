@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/panjf2000/ants/v2"
 	"io"
 	"net/url"
 	"os"
@@ -15,7 +16,7 @@ import (
 	"time"
 
 	_ "github.com/duckdb/duckdb-go/v2"
-	"github.com/panjf2000/ants/v2"
+
 	"go.uber.org/dig"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -26,8 +27,7 @@ import (
 	"reliquary/internal/chatgpt"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
-	"reliquary/internal/datasource"
-	rssConnector "reliquary/internal/datasource/connector/rss"
+
 	"reliquary/internal/handler"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
@@ -88,8 +88,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewUserRepository))
 	must(container.Provide(repository.NewAuthTokenRepository))
 	must(container.Provide(repository.NewSystemSettingRepository))
-	must(container.Provide(repository.NewDataSourceRepository))
-	must(container.Provide(repository.NewSyncLogRepository))
 	must(container.Provide(repository.NewTaskDeadLetterRepository))
 
 	// Business service layer
@@ -125,17 +123,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(router.NewPostgresTaskInspector))
 	must(container.Invoke(registerModelConcurrencyLimiter))
 
-	// Data source sync framework
-	logger.Debugf(ctx, "[Container] Registering data source sync framework...")
-	must(container.Provide(initConnectorRegistry))
-	must(container.Provide(func(db *gorm.DB, sources interfaces.DataSourceRepository, logs interfaces.SyncLogRepository, tasks interfaces.TaskEnqueuer) *datasource.Scheduler {
-		scheduler := datasource.NewScheduler(sources, logs, tasks)
-		scheduler.SetDatabase(db)
-		return scheduler
-	}))
-	must(container.Provide(service.NewDataSourceService))
-	must(container.Invoke(startDataSourceScheduler))
-	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
 	logger.Debugf(ctx, "[Container] Entry housekeeping runner registered")
@@ -162,10 +149,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))
 	must(container.Provide(handler.NewModelCredentialsHandler))
-	must(container.Provide(handler.NewDataSourceCredentialsHandler))
 
-	// Data source handler
-	must(container.Provide(handler.NewDataSourceHandler))
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
 	// Wire the model package's local image resolver so image inputs can read
@@ -425,52 +409,25 @@ func NewDuckDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to open duckdb: %w", err)
 	}
 
-	// Try to install and load required extensions unless explicitly disabled.
-	//   - spatial: used for st_read_meta() to enumerate layer (sheet) names from .xlsx/.xls
-	//   - excel:   used for read_xlsx() which gives proper type inference per sheet
-	//
-	// INSTALL hits extensions.duckdb.org (public internet). In locked-down
-	// runtimes with no egress, set DUCKDB_SKIP_EXTENSION_LOAD=1 to avoid a
-	// startup hang; xlsx/xls ingest may fail later without these extensions.
-	if strings.EqualFold(os.Getenv("DUCKDB_SKIP_EXTENSION_LOAD"), "true") ||
-		os.Getenv("DUCKDB_SKIP_EXTENSION_LOAD") == "1" {
-		logger.Infof(context.Background(),
-			"[DuckDB] Skipping spatial/excel extension install/load "+
-				"(DUCKDB_SKIP_EXTENSION_LOAD is set; xlsx ingest may fail without them)")
+	// Runtime parsing uses extensions prepared by the build-time download tool.
+	// Disable automatic installation so parsing cannot initiate library downloads.
+	for _, setting := range []string{"SET autoinstall_known_extensions=false", "SET autoload_known_extensions=false"} {
+		if _, err := sqlDB.ExecContext(context.Background(), setting); err != nil {
+			sqlDB.Close()
+			return nil, err
+		}
+	}
+	if strings.EqualFold(os.Getenv("DUCKDB_SKIP_EXTENSION_LOAD"), "true") || os.Getenv("DUCKDB_SKIP_EXTENSION_LOAD") == "1" {
+		logger.Infof(context.Background(), "[DuckDB] Skipping installed parsing extensions")
 	} else {
-		bgCtx := context.Background()
-		for _, ext := range []string{"spatial", "excel"} {
-			if _, err := sqlDB.ExecContext(bgCtx, fmt.Sprintf("INSTALL %s;", ext)); err != nil {
-				logger.Warnf(bgCtx, "[DuckDB] Failed to install %s extension: %v", ext, err)
-			}
-			if _, err := sqlDB.ExecContext(bgCtx, fmt.Sprintf("LOAD %s;", ext)); err != nil {
-				logger.Warnf(bgCtx, "[DuckDB] Failed to load %s extension: %v", ext, err)
+		for _, extension := range []string{"spatial", "excel"} {
+			if _, err := sqlDB.ExecContext(context.Background(), fmt.Sprintf("LOAD %s;", extension)); err != nil {
+				logger.Warnf(context.Background(), "[DuckDB] Load installed %s extension: %v", extension, err)
 			}
 		}
 	}
 
 	return sqlDB, nil
-}
-
-// initConnectorRegistry registers RSS and its site adapters.
-func initConnectorRegistry() (*datasource.ConnectorRegistry, error) {
-	registry := datasource.NewConnectorRegistry()
-	if err := registry.Register(rssConnector.NewConnector()); err != nil {
-		return nil, fmt.Errorf("register rss connector: %w", err)
-	}
-	return registry, nil
-}
-
-// startDataSourceScheduler starts the data source cron scheduler and registers cleanup.
-func startDataSourceScheduler(scheduler *datasource.Scheduler, cleaner interfaces.ResourceCleaner) {
-	if err := scheduler.Start(context.Background()); err != nil {
-		logger.Warnf(context.Background(), "[Container] data source scheduler start failed: %v", err)
-	}
-
-	cleaner.RegisterWithName("DataSourceScheduler", func() error {
-		scheduler.Stop()
-		return nil
-	})
 }
 
 // startHousekeepingService starts the entry housekeeping cron and registers

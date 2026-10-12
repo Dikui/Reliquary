@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -94,6 +95,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
   const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/knowledge-base': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  modules['@/utils/entrySourceLabels'] = entrySourceLabels
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
   modules['@/components/FollowToggle.vue'] = modules['./FollowToggle.vue'] = moduleOf(toggle)
   const classification = loadComponent(new URL('../../components/EntryClassification.vue', import.meta.url), modules)
@@ -193,7 +195,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     Object.assign(env.modules, { '@/components/MissingMaterials.vue': empty, '@/components/IncompleteActions.vue': empty })
     const detail = env.component('../../components/DocContent.vue')
     const entryStoreModule = evaluateFile('../../stores/entry.ts', {})
-    const detailHook = evaluateFile('../../composables/useKnowledgeBase.ts', { '../utils/index': { formatStringDate: () => '2026-10-11', kbFileTypeVerification: () => true }, 'tdesign-vue-next': env.modules['tdesign-vue-next'], '@/api/knowledge-base': env.modules['@/api/knowledge-base'], '@/stores/entry': entryStoreModule, '@/stores/resources': { useResourcesStore: () => ({}) }, './useEntryDuplicates': { useEntryDuplicates: () => ({}) } })
+    const detailHook = evaluateFile('../../composables/useKnowledgeBase.ts', { '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': env.modules['tdesign-vue-next'], '@/api/knowledge-base': env.modules['@/api/knowledge-base'], '@/stores/entry': entryStoreModule, '@/stores/resources': { useResourcesStore: () => ({}) } })
     const parent = defineComponent({ setup() { const hook = detailHook.default('kb-follows'); onMounted(async () => { await hook.loadEntries(); hook.getCardDetails(hook.cardList.value[0]) }); return () => hook.details.id ? h(detail, { visible: true, details: hook.details }) : null } })
     const mounted = env.mount(parent)
     try {

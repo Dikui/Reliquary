@@ -63,8 +63,8 @@ func SnapshotPaused(ctx context.Context, db *gorm.DB) (bool, error) {
 }
 
 // CheckCollectionTx must run in the same transaction as collection and enqueue.
-// A previously accepted RSS job may finish during a drain, including admitting
-// its articles. New RSS schedules and all new requests are paused.
+// A previously accepted article task may finish during a drain.
+// New intake requests stay paused.
 func CheckCollectionTx(ctx context.Context, tx *gorm.DB) error {
 	if err := tx.Exec("SELECT pg_advisory_xact_lock_shared(?)", collectionLock).Error; err != nil {
 		return err
@@ -112,7 +112,7 @@ func Pause(ctx context.Context, db *gorm.DB, mode, reason string, flush func(con
 	if mode == "drain" {
 		for {
 			var count int64
-			err = db.WithContext(ctx).Table("task_jobs").Where("task_type IN ? AND state IN ?", []string{"document:process", "manual:process", "datasource:sync", "knowledge:list_delete", "knowledge:list_reparse"}, []string{"pending", "active", "scheduled", "retry"}).Count(&count).Error
+			err = db.WithContext(ctx).Table("task_jobs").Where("task_type IN ? AND state IN ?", []string{"document:process", "manual:process", "knowledge:list_delete", "knowledge:list_reparse"}, []string{"pending", "active", "scheduled", "retry"}).Count(&count).Error
 			if err != nil || count == 0 {
 				break
 			}

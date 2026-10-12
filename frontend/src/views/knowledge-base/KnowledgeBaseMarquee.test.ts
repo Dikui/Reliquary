@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -33,23 +34,24 @@ async function mountLibrary(realCheckbox = false) {
     '@/composables/useMarqueeSelect': { useMarqueeSelect },
     '@/composables/useKnowledgeBase': { __esModule: true, default: () => ({
       cardList, total: ref(items.length), moreIndex: ref(-1), details: reactive({}),
-      duplicateNotices: ref([]), loadEntries: async () => { cardList.value = [...items] }, clearDuplicateNotices() {},
+      loadEntries: async () => { cardList.value = [...items] },
+      getCardDetails: (item: { id: string }) => opened.push(item.id),
     }) },
-    '@/stores/ui': { useUIStore: () => ({ openManualEditor: ({ entryId }: any) => opened.push(entryId) }) },
+    '@/stores/ui': { useUIStore: () => ({}) },
     '@/stores/pendingCounts': { usePendingCountsStore: () => ({ total: null, refresh: async () => {} }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
     '@/stores/resources': { useResourcesStore: () => ({ knowledgeBase: { id: 'kb' }, fetchKnowledgeBase: async () => ({ id: 'kb' }) }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },
-    '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({}) },
+    '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
     '@/types/entryClassification': { CONTENT_TYPES: [] },
     '@/api/knowledge-base': {},
     '@/utils/entryTrace': {},
+    '@/utils/entrySourceLabels': entrySourceLabels,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => '' },
     '@/assets/img/more-actions.png': { __esModule: true, default: '' },
     'tdesign-vue-next': { MessagePlugin: {} },
     './entryStatusPolling': polling,
     './entryDownloadFileName': {},
-    './utils/uploadSources': {},
   }
   for (const file of ['./KnowledgeBase.vue', './components/DocumentCardView.vue', './components/DocumentListView.vue']) {
     const url = new URL(file, import.meta.url)

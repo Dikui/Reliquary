@@ -7,7 +7,7 @@
 //   - PUT requests treat "", or RedactedSecretPlaceholder as "preserve
 //     existing"; any other value replaces the stored secret.
 //
-// Model / DataSource credentials use a dedicated /credentials subresource;
+// Model credentials use a dedicated /credentials subresource;
 // responses expose presence through internal/handler/dto/credentials.go.
 package types
 

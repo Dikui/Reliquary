@@ -32,6 +32,7 @@ import { resolveEntryDownloadFileName } from '@/views/knowledge-base/entryDownlo
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
 import { getApiBaseUrl } from '@/utils/api-base';
 import { copyWithToast } from '@/utils/clipboard';
+import { isIngestAPIEntry, getExternalToolName } from '@/utils/entrySourceLabels';
 
 const { t } = useI18n();
 
@@ -194,6 +195,7 @@ mermaid.initialize({
   }
 });
 const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "kbId"]);
+const externalToolName = computed(() => getExternalToolName(props.details));
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
@@ -725,13 +727,18 @@ renderer.code = function ({ text, lang }) {
     </div>
   `;
 };
+const isLegacyManualDraft = computed(() => props.details?.type === 'manual'
+  && props.details?.parse_status === 'draft' && !props.details?.vault_path);
+const legacyManualBody = computed(() => isLegacyManualDraft.value
+  && typeof props.details?.metadata?.content === 'string' ? props.details.metadata.content : '');
+
 // 监听 chunks 变化，自动更新合并内容（已改为 computed 属性）
 const mergedContent = computed(() => {
   const newChunks = props.details?.md;
   if (newChunks && newChunks.length > 0) {
     return mergeChunks(newChunks);
   }
-  return '';
+  return legacyManualBody.value;
 });
 
 // 计算处理后的分块数据，避免在模板中频繁调用方法和 JSON.parse
@@ -748,6 +755,7 @@ const processedChunks = computed(() => {
 });
 
 const canPreview = (): boolean => {
+  if (isLegacyManualDraft.value && !legacyManualBody.value && props.details?.metadata?.intake?.original_path) return true;
   if (props.details?.type !== 'file') return false;
   const ft = resolveFilePreviewExt(props.details?.title, props.details?.file_type);
   if (!ft) return false;
@@ -766,7 +774,7 @@ watch(() => props.details?.id, (newId) => {
   if (isAudioFile(props.details?.file_type)) {
     viewMode.value = 'merged'; // 音频默认全文视图，播放器已内嵌
     loadAudioPreview();
-  } else if (props.details?.type === 'file' && canPreview()) {
+  } else if (canPreview()) {
     viewMode.value = 'preview';
   } else {
     viewMode.value = 'merged';
@@ -968,8 +976,7 @@ const channelLabelMap: Record<string, string> = {
   web: 'knowledgeBase.channelWeb',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
-  // Drive (云盘) connectors get their own channel so Drive docs show
-  rss: 'datasource.connector.rss',
+  rss: 'knowledgeBase.channelRSS',
 };
 
 const getChannelLabel = (channel: string) => {
@@ -981,7 +988,8 @@ const getChannelLabel = (channel: string) => {
 // 获取类型标签
 const getTypeLabel = () => {
   if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return props.details.file_type?.toUpperCase() || t('knowledgeBase.typeFile');
-  if (props.details.channel === 'rss') return t('datasource.connector.rss');
+  if (isIngestAPIEntry(props.details)) return t('knowledgeBase.typeIngestAPI');
+  if (props.details.channel === 'rss') return t('knowledgeBase.channelRSS');
   switch (props.details.type) {
     case 'url':
       return t('knowledgeBase.typeURL');
@@ -1215,6 +1223,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <div v-if="details.collect_reason?.trim()" class="doc-detail-row doc-collect-reason-row">
               <span class="doc-detail-label">{{ $t('knowledgeBase.collectReason') }}</span>
               <span class="doc-detail-value">{{ details.collect_reason }}</span>
+            </div>
+            <div v-if="externalToolName" class="doc-detail-row doc-external-tool-row">
+              <span class="doc-detail-label">{{ $t('knowledgeBase.externalTool') }}</span>
+              <span class="doc-detail-value">{{ externalToolName }}</span>
             </div>
             <div v-if="details.vault_path" class="doc-detail-row doc-vault-path-row">
               <span class="doc-detail-label">{{ $t('knowledgeBase.vaultPath') }}</span>
@@ -1456,7 +1468,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
 
           <div v-else-if="viewMode === 'preview'">
-            <DocumentPreview :entryId="details.id" :fileType="details.file_type" :fileName="details.title"
+            <DocumentPreview :entryId="details.id" :fileType="isLegacyManualDraft ? 'md' : details.file_type" :fileName="details.title"
               :active="viewMode === 'preview'" />
           </div>
         </section>

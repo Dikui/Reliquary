@@ -13,7 +13,7 @@ func TestMatchesEntryPreservesPerEntryAllowList(t *testing.T) {
 	if !matchesEntry(types.TypeDocumentProcess, []byte(`{"entry_id":"entry-1"}`), "entry-1") {
 		t.Fatal("document task should remain cancellable by entry ID")
 	}
-	if matchesEntry(types.TypeDataSourceSync, []byte(`{"entry_id":"entry-1"}`), "entry-1") {
+	if matchesEntry(types.TypeEntryListReparse, []byte(`{"entry_id":"entry-1"}`), "entry-1") {
 		t.Fatal("data source sync must not be cancelled as article processing")
 	}
 	if matchesEntry(types.TypeDocumentProcess, []byte(`{"entry_id":"entry-2"}`), "entry-1") {

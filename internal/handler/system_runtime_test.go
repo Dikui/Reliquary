@@ -231,7 +231,7 @@ func TestGetRuntimeQueuesReportsIsolatedPoolCapacity(t *testing.T) {
 	}{
 		types.WorkerPoolCore:        {8, 1},
 		types.WorkerPoolEnrichment:  {12, 1},
-		types.WorkerPoolMaintenance: {4, 2},
+		types.WorkerPoolMaintenance: {4, 1},
 		types.WorkerPoolShared:      {6, 2},
 	}
 	if len(response.Pools) != len(want) {

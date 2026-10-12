@@ -1,48 +1,25 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { MAX_FILE_SIZE_MB } from '@/utils'
 const { t } = useI18n()
-defineProps<{ supportedFileTypes?: string[] }>()
 </script>
 <template>
-    <div class="empty">
-        <img class="empty-img" src="@/assets/img/upload.svg" alt="">
-        <span class="empty-txt">{{ $t('knowledgeBase.emptyKnowledgeDragDrop') }}</span>
-        <span class="empty-type-txt">{{ t('knowledgeBase.availableUploadTypes', { types: supportedFileTypes?.map(type => '.' + type).join(', ') || '' }) }}</span>
-        <span class="empty-type-txt">{{ t('knowledgeBase.uploadSizeLimit', { size: MAX_FILE_SIZE_MB }) }}</span>
-    </div>
+  <div class="empty">
+    <t-icon class="empty-icon" name="file" aria-hidden="true" />
+    <p class="empty-title">{{ t('knowledgeBase.emptyArticles') }}</p>
+    <p class="empty-hint">{{ t('knowledgeBase.ingestOnlyHint') }}</p>
+  </div>
 </template>
 <style scoped lang="less">
 .empty {
-    flex: 1;
-    display: flex;
-    flex-flow: column;
-    justify-content: center;
-    align-items: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  text-align: center;
 }
-
-.empty-txt {
-    color: var(--td-text-color-placeholder);
-    font-family: var(--app-font-family);
-    font-size: 16px;
-    font-weight: 600;
-    line-height: 26px;
-    margin: 12px 0 16px 0;
-}
-
-.empty-type-txt {
-    color: var(--td-text-color-disabled);
-    text-align: center;
-    font-family: var(--app-font-family);
-    font-size: 12px;
-    font-weight: 400;
-    max-width: 560px;
-    padding: 0 20px;
-    overflow-wrap: anywhere;
-}
-
-.empty-img {
-    width: 162px;
-    height: 162px;
-}
+.empty-icon { font-size: 64px; color: var(--td-text-color-placeholder); }
+.empty-title { margin: 16px 0 8px; color: var(--td-text-color-primary); font-size: 16px; font-weight: 600; }
+.empty-hint { margin: 0; max-width: 560px; color: var(--td-text-color-secondary); font-size: 14px; overflow-wrap: anywhere; }
 </style>

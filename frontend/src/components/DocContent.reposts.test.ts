@@ -1,5 +1,6 @@
 import { formatCountCopy } from '../i18n/countCopy'
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../utils/entrySourceLabels'
 import { safeTextareaTestModule } from './__tests__/safeTextareaStub'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -26,7 +27,7 @@ const compile = (code: string) => ts.transpileModule(code, {
 function evaluate(code: string, modules: Record<string, unknown>, environment: Record<string, unknown> = {}) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', 'window', 'localStorage', compile(code))(
-    (name: string) => name.endsWith('.css') ? {} : modules[name] ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
+    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : modules[name] ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
     environment.window, environment.localStorage,
   )
   return module.exports
@@ -162,7 +163,6 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
-    './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
   }
   const hook = evaluate(hookSource, modules).default('kb-a')
   return { hook, calls, async load(id: string) {
@@ -351,22 +351,22 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     })
   }
 
-  test(`${locale}: vault documents have no body editor and personal documents have no reprocessing action`, async () => {
+  test(`${locale}: legacy manual and vault documents have no body editor and personal documents have no reprocessing action`, async () => {
     const component = actionMenuSFC.create()
     const item = { id: 'article', type: 'manual', parse_status: 'completed', processing_mode: 'full' }
     const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
     const editable = await render({})
-    const editLabel = `<span>${messages[locale].knowledgeBase.editDocument}</span>`
+    const hasEditAction = (html: string) => /class="[^"]*doc-action-menu-item[^"]*"[^>]*>[\s\S]*?name="edit"/.test(html)
     const reprocessLabel = `<span>${messages[locale].knowledgeBase.rebuildDocument}</span>`
-    assert.ok(editable.includes(editLabel))
+    assert.equal(hasEditAction(editable), false)
     assert.ok(editable.includes(reprocessLabel))
     const article = await render({ source_kind: 'article', vault_path: 'articles/note.md' })
-    assert.ok(!article.includes(editLabel))
+    assert.equal(hasEditAction(article), false)
     assert.ok(article.includes(reprocessLabel))
     for (const source_kind of ['mine', 'report']) {
       for (const parse_status of ['completed', 'processing']) {
         const html = await render({ source_kind, parse_status })
-        assert.ok(!html.includes(editLabel))
+        assert.equal(hasEditAction(html), false)
         assert.ok(!html.includes(reprocessLabel))
       }
     }
@@ -738,5 +738,32 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(html.includes('MD'), id)
     }
     assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: historical manual drafts without chunks retain a read-only body from metadata`, async () => {
+    const body = '# Preserved draft\n\nDraft body with a source reference.'
+    const loader = createArticleDetailsLoader({ draft: { type: 'manual', parse_status: 'draft', metadata: { content: body, status: 'draft' } } })
+    const loadedDetails = await loader.load('draft')
+    const html = await renderDetails([], locale, { loadedDetails, scenario: state => {
+      assert.equal(state.mergedContent.value, body)
+      assert.equal(state.isLegacyManualDraft.value, true)
+      assert.equal(state.canPreview(), false)
+    } })
+    assert.ok(html.includes('Preserved draft'))
+    assert.ok(html.includes('Draft body with a source reference.'))
+    assert.doesNotMatch(html, /ManualEntryEditor|contenteditable/)
+    assert.equal(loadedDetails.metadata.content, body)
+  })
+
+  test(`${locale}: historical manual drafts stored in a local intake file retain the existing read-only preview`, async () => {
+    const loader = createArticleDetailsLoader({ draft: { type: 'manual', parse_status: 'draft', metadata: { intake: { source: 'manual', decision: 'pending', original_path: 'local://draft/body.md' } } } })
+    const loadedDetails = await loader.load('draft')
+    await renderDetails([], locale, { loadedDetails, scenario: state => {
+      assert.equal(state.isLegacyManualDraft.value, true)
+      assert.equal(state.canPreview(), true)
+    } })
+    assert.equal(loadedDetails.metadata.intake.original_path, 'local://draft/body.md')
   })
 }

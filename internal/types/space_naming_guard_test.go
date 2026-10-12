@@ -19,6 +19,9 @@ type namingException struct {
 // Each exception allows specific literal tokens in a specific file. Go
 // identifiers are checked separately and have no exceptions.
 var namingExceptions = map[string]namingException{
+	"cmd/server/maintenance_sources_pg_test.go":                            {Reason: "冻结基线恢复的真实离线 CLI 顺序使用旧归属列夹具", Tokens: []string{"tenant_id"}},
+	"internal/maintenance/collection_migration_pg_test.go":                 {Reason: "冻结基线备份恢复到当前版本的真实旧表与归属列夹具", Tokens: []string{"tenants", "tenant_id"}},
+	"internal/application/service/entry_reprocess_missing_pg_test.go":      {Reason: "验证旧采集任务 payload 不再联网且保留旧文章状态", Tokens: []string{"tenant_id"}},
 	"internal/testutil/pgtest/entry_migration_test.go":                     {Reason: "条目迁移夹具保留原队列归属键", Tokens: []string{"tenant_id"}},
 	"internal/router/mcp_pg_test.go":                                       {Reason: "MCP 旧响应转换为测试内部 DTO", Tokens: []string{"tenant_id"}},
 	"frontend/src/stores/auth.ts":                                          {Reason: "已持久化的浏览器会话存储键与旧用户缓存转换，HTTP 不接受旧字段", Tokens: []string{"reliquary_tenant", "tenant_id"}},
@@ -50,7 +53,6 @@ var namingExceptions = map[string]namingException{
 	"internal/testutil/pgtest/space_migration_test.go":                     {Reason: "版本 1 原结构数据夹具及无旧 schema 对象的目录断言", Tokens: []string{"tenant", "tenant_api_keys", "tenant_id", "tenants"}},
 	"internal/types/builtin_models_config.go":                              {Reason: "接受旧 YAML 配置键并打印弃用警告", Tokens: []string{"tenant_id"}},
 	"internal/types/builtin_models_space_test.go":                          {Reason: "验证旧 YAML 配置键兼容、弃用警告及新键优先级", Tokens: []string{"tenant_id"}},
-	"internal/types/datasource.go":                                         {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/types/embedding_rebuild.go":                                  {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/types/entity_name_embedding_rebuild.go":                      {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/types/space_payload.go":                                      {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},

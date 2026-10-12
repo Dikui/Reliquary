@@ -67,7 +67,6 @@ type articleProcessingInput struct {
 	PublishedAt        string                   `json:"published_at"`
 	Body               string                   `json:"body"`
 	BodyTruncated      bool                     `json:"body_truncated"`
-	DefaultContentType string                   `json:"default_content_type,omitempty"`
 	ContentTypeHint    string                   `json:"content_type_hint,omitempty"`
 	ExistingTopics     []articleProcessingTopic `json:"existing_topics"`
 }
@@ -164,25 +163,10 @@ func (s *entryService) processingImageDataURI(ctx context.Context, kb *types.Kno
 	}
 	var data []byte
 	var err error
-	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
-		if isIngestArticle(k) {
-			return "", errors.New("未提供图片文件")
-		}
-		if s.contentTransport == nil {
-			data, err = secutils.DownloadBytes(ref)
-		} else {
-			client := secutils.NewSSRFSafeHTTPClientWithTransport(secutils.SSRFSafeHTTPClientConfig{Timeout: 60 * time.Second, MaxRedirects: 10}, s.contentTransport)
-			response, requestErr := client.Get(ref)
-			if requestErr != nil {
-				return "", requestErr
-			}
-			defer response.Body.Close()
-			if response.StatusCode != http.StatusOK {
-				return "", fmt.Errorf("processing image HTTP %d", response.StatusCode)
-			}
-			data, err = io.ReadAll(response.Body)
-		}
-	} else {
+	if remoteIngestImage(ref) {
+		return "", errors.New("未提供图片文件")
+	}
+	{
 		var file io.ReadCloser
 		var readErr error
 		if s.vault != nil && k.VaultPath != "" && !strings.Contains(ref, "://") {
@@ -243,27 +227,17 @@ func (s *entryService) callArticleProcessing(ctx context.Context, kb *types.Know
 		for _, topic := range topics {
 			input.ExistingTopics = append(input.ExistingTopics, articleProcessingTopic{ID: topic.ID, Name: topic.Name, Description: topic.Description})
 		}
-		if sourceID := k.GetMetadata()["datasource_id"]; sourceID != "" {
-			var ds types.DataSource
-			if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", sourceID, k.SpaceID).First(&ds).Error; err != nil {
-				return nil, fmt.Errorf("read subscription default content type: %w", err)
-			}
-			input.DefaultContentType = types.NormalizeContentType(ds.DefaultContentType)
-		}
 	}
 	prompt := articleProcessingPrompt
 	if input.ContentTypeHint != "" {
 		prompt += "\ncontent_type_hint 是外部工具对内容类型的建议，仅作参考输入，不替代你的判断。仍须按文章内容判定主要用途。"
-	}
-	if input.DefaultContentType != "" {
-		prompt += "\n订阅源默认内容类型为 " + input.DefaultContentType + "，仅作参考，文章内容优先。"
 	}
 	bodyLimit, imageLimit, completion := s.articleProcessingLimits(model)
 	images := []string{}
 	if model != nil && model.Parameters.SupportsVision {
 		refs := articleImagesInOrder(body, stored)
 		for _, ref := range refs {
-			if isIngestArticle(k) && remoteIngestImage(ref) {
+			if remoteIngestImage(ref) {
 				continue
 			}
 			if len(images) >= imageLimit {

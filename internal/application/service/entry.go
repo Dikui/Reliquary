@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
+
 	"strings"
 
 	"gorm.io/gorm"
@@ -24,39 +24,32 @@ import (
 var (
 	// ErrInvalidFileType is returned when an unsupported file type is provided
 	ErrInvalidFileType = errors.New("unsupported file type")
-	// ErrInvalidURL is returned when an invalid URL is provided
-	ErrInvalidURL = errors.New("invalid URL")
 	// ErrChunkNotFound is returned when a requested chunk cannot be found.
 	// Aliases the repository sentinel so a chunk-not-found from the repo
 	// errors.Is-matches at the service and middleware layers (a single
 	// identity instead of two string-equal-but-distinct errors).
 	ErrChunkNotFound = repository.ErrChunkNotFound
-	// ErrDuplicateFile is returned when trying to add a file that already exists
-	ErrDuplicateFile = errors.New("file already exists")
-	// ErrDuplicateURL is returned when trying to add a URL that already exists
-	ErrDuplicateURL = errors.New("URL already exists")
 )
 
 // entryService implements the entry service interface
 // service 实现知识服务接口
 type entryService struct {
-	db               *gorm.DB
-	config           *config.Config
-	retrieveEngine   interfaces.RetrievalService
-	repo             interfaces.EntryRepository
-	kbService        interfaces.KnowledgeBaseService
-	spaceRepo        interfaces.SpaceRepository
-	spaceService     interfaces.SpaceService
-	chunkService     interfaces.ChunkService
-	chunkRepo        interfaces.ChunkRepository
-	fileSvc          interfaces.FileService
-	resourceCatalog  interfaces.ResourceCatalog
-	modelService     interfaces.ModelService
-	task             interfaces.TaskEnqueuer
-	taskInspector    interfaces.TaskInspector
-	imageResolver    *docparser.ImageResolver
-	contentTransport http.RoundTripper
-	ingestDocReader  interfaces.DocReader
+	db              *gorm.DB
+	config          *config.Config
+	retrieveEngine  interfaces.RetrievalService
+	repo            interfaces.EntryRepository
+	kbService       interfaces.KnowledgeBaseService
+	spaceRepo       interfaces.SpaceRepository
+	spaceService    interfaces.SpaceService
+	chunkService    interfaces.ChunkService
+	chunkRepo       interfaces.ChunkRepository
+	fileSvc         interfaces.FileService
+	resourceCatalog interfaces.ResourceCatalog
+	modelService    interfaces.ModelService
+	task            interfaces.TaskEnqueuer
+	taskInspector   interfaces.TaskInspector
+	imageResolver   *docparser.ImageResolver
+	ingestDocReader interfaces.DocReader
 
 	// spanTracker records the per-attempt span tree for the parsing
 	// pipeline. Best-effort: a nil tracker (test harness) is safely
@@ -263,13 +256,6 @@ func kbIDOrEmpty(kb *types.KnowledgeBase) string {
 		return ""
 	}
 	return kb.ID
-}
-
-func defaultChannel(ch string) string {
-	if ch == "" {
-		return types.ChannelWeb
-	}
-	return ch
 }
 
 // GetEntryByID retrieves a entry entry by its ID

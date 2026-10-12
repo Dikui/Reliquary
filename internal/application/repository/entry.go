@@ -541,99 +541,12 @@ func (r *entryRepository) CountEntryByStatus(
 	return count, nil
 }
 
-func (r *entryRepository) FindByMetadataKey(
-	ctx context.Context,
-	spaceID uint64,
-	kbID string,
-	key string,
-	value string,
-) (*types.Entry, error) {
-	var entry types.Entry
-	err := r.db.WithContext(ctx).
-		Where("space_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", spaceID, kbID).
-		Where("metadata->>? = ?", key, value).
-		First(&entry).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &entry, nil
-}
-
-// FindByMetadataKeyPrefix finds entry items whose metadata[key] starts with
-// the given prefix. Used to sweep an external node's attachment sub-items on re-sync.
-func (r *entryRepository) FindByMetadataKeyPrefix(
-	ctx context.Context,
-	spaceID uint64,
-	kbID string,
-	key string,
-	prefix string,
-) ([]*types.Entry, error) {
-	escaped := escapeLikeKeyword(prefix)
-	var items []*types.Entry
-	// The JSON key is embedded as a SQL literal (metadata->>'external_id'), NOT a
-	// bind parameter. PostgreSQL only uses the expression index
-	// idx_entries_kb_metadata_external_id (built on the literal expression
-	// (metadata->>'external_id')) when that exact expression appears in the query;
-	// a bound metadata->>$1 is a structurally different expression the planner
-	// cannot match, so it would silently fall back to a heap scan. key is an
-	// internal, caller-supplied field name (always "external_id"); single-quotes
-	// are doubled defensively so the literal is always well-formed.
-	//
-	// The prefix pattern stays a bind parameter: an unnamed prepared statement is
-	// custom-planned with the actual value, so LIKE 'prefix%' still extracts the
-	// prefix and drives the index. The explicit ESCAPE '\' keeps backslash-escaped
-	// wildcards (e.g. \_) literal on both PostgreSQL.
-	keyExpr := "metadata->>'" + strings.ReplaceAll(key, "'", "''") + "'"
-	err := r.db.WithContext(ctx).
-		Where("space_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", spaceID, kbID).
-		Where(keyExpr+" LIKE ? ESCAPE ?", escaped+"%", `\`).
-		Find(&items).Error
-	if err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-// FindByDataSourceExternalID locates a synced entry item without allowing
-// identical external IDs from two data sources to collide in one knowledge base.
-func (r *entryRepository) FindByDataSourceExternalID(
-	ctx context.Context,
-	spaceID uint64,
-	kbID, dataSourceID, externalID string,
-) (*types.Entry, error) {
-	var entry types.Entry
-	err := r.db.WithContext(ctx).
-		Where("space_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", spaceID, kbID).
-		Where("metadata->>'datasource_id' = ? AND metadata->>'external_id' = ?", dataSourceID, externalID).
-		First(&entry).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &entry, nil
-}
-
 // HardDeleteEntry physically removes a entry row. Call it AFTER
 // DeleteEntry's soft-delete cascade so sync-internal deletions never
 // become tombstones that block a later re-sync of the same external item.
 func (r *entryRepository) HardDeleteEntry(ctx context.Context, spaceID uint64, id string) error {
 	return r.db.Unscoped().WithContext(ctx).
 		Where("space_id = ? AND id = ?", spaceID, id).
-		Delete(&types.Entry{}).Error
-}
-
-// HardDeleteEntryList is the batch counterpart of HardDeleteEntry.
-func (r *entryRepository) HardDeleteEntryList(ctx context.Context, spaceID uint64, ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	return r.db.Unscoped().WithContext(ctx).
-		Where("space_id = ? AND id IN ?", spaceID, ids).
 		Delete(&types.Entry{}).Error
 }
 

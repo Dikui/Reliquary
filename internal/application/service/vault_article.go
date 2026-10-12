@@ -24,7 +24,6 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
-	secutils "reliquary/internal/utils"
 )
 
 // ArticleHeaderRefresher is deliberately separate from EntryService so
@@ -263,7 +262,7 @@ func (v *VaultService) copyArticleImages(ctx context.Context, k *types.Entry, ar
 		if _, ok := stored[item.url]; ok {
 			continue
 		}
-		if isIngestArticle(k) && remoteIngestImage(item.url) {
+		if remoteIngestImage(item.url) {
 			stored[item.url] = item.url
 			continue
 		}
@@ -313,7 +312,7 @@ func readVaultImage(ctx context.Context, ref string, read func(context.Context, 
 		return []byte(value), err
 	}
 	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
-		return secutils.DownloadBytes(ref)
+		return nil, errors.New("remote images must be provided through the ingest interface")
 	}
 	if read == nil {
 		return nil, errors.New("image reader is unavailable")

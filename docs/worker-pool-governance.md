@@ -11,7 +11,7 @@ database connection limits.
 | --- | ---: | --- | --- |
 | Core | 8 | `default` | Parsing, one article processing call and indexing |
 | Enrichment | 12 | `entity` | Entity and article embedding rebuilds, topic backfill |
-| Maintenance | 4 | `sync`, `low` | Source sync, batch reprocessing and deletion |
+| Maintenance | 4 | `low` | Batch reprocessing and deletion |
 | Shared | 6 | Core and enrichment queues | Elastic capacity borrowed by the side with backlog |
 
 The total is 30 workers per service instance by default.

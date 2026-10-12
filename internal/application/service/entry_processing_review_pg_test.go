@@ -306,7 +306,7 @@ func TestVaultRebuildPreservesFullTutorialForUncertainAndUnverifiedSources(t *te
 				article = h.upload(t, "rebuild-uncertain", body)
 			} else {
 				h.processor.output = validProcessingFixture(types.ContentTypeTutorial)
-				created, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
+				created, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
 					newMultipartFileHeader(t, "rebuild-unverified.md", body), map[string]string{"publisher": "Acme"}, nil, "", types.ChannelWeb, nil)
 				require.NoError(t, err)
 				h.drain(t)

@@ -29,10 +29,10 @@ func TestMaintenanceRejectsCollectionBeforeReadingUploadBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), h.CollectionGate)
-	for _, path := range []string{"/api/v1/ingest", "/api/v1/knowledge-bases/:id/entries/file", "/api/v1/knowledge-bases/:id/entries/manual", "/api/v1/data-sources/:id/sync"} {
+	for _, path := range []string{"/api/v1/ingest", "/api/v1/ingest/assets"} {
 		r.POST(path, func(c *gin.Context) { t.Error("paused collection handler executed") })
 	}
-	for _, path := range []string{"/api/v1/ingest", "/api/v1/knowledge-bases/articles/entries/file", "/api/v1/knowledge-bases/articles/entries/manual", "/api/v1/data-sources/rss/sync"} {
+	for _, path := range []string{"/api/v1/ingest", "/api/v1/ingest/assets"} {
 		body := &maintenanceCountedBody{}
 		request := httptest.NewRequest(http.MethodPost, path, nil)
 		request.Body = body

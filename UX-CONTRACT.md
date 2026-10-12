@@ -27,7 +27,6 @@ Reliquary serves a single user collecting source material and maintaining entity
 | Merge suggestions | MergeSuggestions and shared useConfirmDelete | Entity API and ADR 0002 | Pending, accepted and rejected | Backend lifecycle and frontend component tests |
 | Model call budgets | ModelCallSummary | Processing span model_calls | Processing details | Budget validation and component tests |
 | CRUD | Knowledge base editor, entity API and existing document detail | Entity profiles and knowledge base management | Entity merge refreshes the owning list | Entity lifecycle and editor tests |
-| Duplicate intake | EntryDuplicateNotice and useEntryDuplicates | Intake API 409 with optional match_method | Manual, URL and file intake | Actual SFC and hook regression tests |
 | Repost sources | RepostSources | Entry detail API | Document preview | Shared component and full SFC regression tests |
 | Article classification | EntryClassification | Article content_type, processing_mode, structured_summary, entities and topics | Compact list and complete detail | Actual SFC render, link safety and locale tests |
 | Image preview | ImagePreview wrapping TDesign ImageViewer | SearchImage and picture-preview | Authenticated search Blob and existing picture URL | Real browser Escape, opening focus and trigger focus restoration |
@@ -42,7 +41,6 @@ Reliquary serves a single user collecting source material and maintaining entity
 | Accept merge suggestion | Shared confirmation names both entities and space-wide consequences | Refresh the list, retain filter and announce success | Keep list and show inline error |
 | Reject merge suggestion | Disable duplicate requests | Keep entities separate and refresh suggestions | Keep list and show inline error |
 | Rebuild entity name embeddings | Disable duplicate starts; poll active runs every five seconds | Show status and processed/total counts | Preserve failure reason and retry controls |
-| Collect a duplicate | Existing intake busy controls | Localized notice offers an explicit view-existing-document action | Preserve manual draft and distinguish duplicate from failed batch inputs |
 
 ## Dataset and draft state
 
@@ -58,7 +56,7 @@ The settings-content container stacks rows at 720px or less. Shared settings-lay
 
 Document details fill the viewport at widths of 720px or less. Desktop drawer width remains the user's preference. Narrow details hide the desktop resize handle. Long source links wrap; code and tables may keep bounded local scrolling.
 
-Article content types filter the server list and clear hidden selections. Articles saved as a summary and link show their original link, structured summary, entities and topics; their detail view omits body preview and file download. Selecting an article entity opens its profile in the existing entity workbench. Reprocess queues the complete article processing call and polls parse_status while active, replacing the displayed classification, summary and relations on completion. Failed reprocessing keeps the readable server reason visible and allows another attempt. RSS defaults are a classification hint with six content types and an explicit unspecified option.
+Article content types filter the server list and clear hidden selections. Articles saved as a summary and link show their original link, structured summary, entities and topics; their detail view omits body preview and file download. Selecting an article entity opens its profile in the existing entity workbench. Reprocess queues the complete article processing call and polls parse_status while active, replacing the displayed classification, summary and relations on completion. Failed reprocessing keeps the readable server reason visible and allows another attempt.
 
 Source lists show publisher, original URL, publication time or a missing marker, and matching method. URLs use the shared absolute HTTP(S) URL helper; unsafe values remain escaped text. Opening a different document clears old source data and ignores earlier responses.
 
@@ -72,9 +70,9 @@ Topic management lives at /platform/topics. Creation and description edits start
 
 Article stars wait for server confirmation before updating the card, row or detail. A failed update retains the original state and exposes an inline retryable error. List, search and Playground filters support all, starred and unstarred articles; search persists this state in its URL. Changing a star removes an article from an incompatible active list filter.
 
-The article detail uses EntryArticleJudgments for content type and topic corrections. Full text to summary and link requires a second confirmation stating that body, body index and attachments will be removed. Failure keeps the dialog open. Summary and link to full text keeps the existing article on fetch failure and displays the reason; success reloads body chunks. Corrected types remain visible after reprocessing. Topic corrections save selected IDs and reload current associations. Busy corrections disable reprocessing. Review offers explicit approve, reject, retry and discard actions with shared pending and inline failure states.
+The article detail uses EntryArticleJudgments for content type and topic corrections. Full text to summary and link requires a second confirmation stating that body, body index and attachments will be removed. Failure keeps the dialog open. Summary and link to full text records missing body content for external completion when the original body is unavailable; the existing article remains readable. Corrected types remain visible after reprocessing. Topic corrections save selected IDs and reload current associations. Busy corrections disable reprocessing. Review offers explicit approve, reject, retry and discard actions with shared pending and inline failure states.
 
-The main navigation lists articles, search, entities, topics, follows and settings. The entity entry opens /platform/entries?tab=entities. Articles include the pending review area. Settings provide knowledge base, subscriptions, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
+The main navigation lists articles, search, entities, topics, follows and settings. The entity entry opens /platform/entries?tab=entities. Articles include the pending review area. Settings provide knowledge base, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
 
 Follow controls share server state in entity profiles, topic management and article detail relation labels. Successful mutations update all controls and the sidebar count; failures preserve the prior follow state and show an inline error with retry. Article stars retain their bookmark behavior. Entity merges transfer follows to the retained entity and deduplicate them; topic deletion removes its follow.
 
@@ -88,7 +86,7 @@ Pending reviews live at /platform/entries?tab=reviews. TDesign tabs divide intak
 
 ReviewActions owns intake and processing review actions in both the pending list and article detail. Missing source links show add URL and review again, collect without URL, and convert to personal document. Collecting without a URL requires confirmation of full preservation and the source unverified marker. Conversion requires confirmation of the mine/ write and intake-record deletion. Full text removal when confirming or correcting a processing suggestion uses the existing article judgment confirmation. Source unverified articles always keep their full text. Failed operations retain the inputs and confirmation with an inline error. The task 10 request and .scratch/kb-reshape/spec.md second-round decisions own these lifecycle rules.
 
-Article cards, rows, detail and the full search page share EntryClassification for the source unverified marker. The global search hook preserves the same field, and ResultItem displays its localized badge. The detail loading hook preserves that field and processing review metadata, resets them on document switches, and ignores older responses. Upload and manual collection explain optional links and the file extraction or pending review outcome. External Agent integration guidance states that model intake review applies to HTTP and MCP collection and that rejected content returns pending_review with a reason.
+Article cards, rows, detail and the full search page share EntryClassification for the source unverified marker. The global search hook preserves the same field, and ResultItem displays its localized badge. The detail loading hook preserves that field and processing review metadata, resets them on document switches, and ignores older responses. Content arrives only from external tools through HTTP and MCP ingest interfaces. The article page has no URL import, file upload, manual creation or manual editing controls. Legacy manual articles and their drafts remain readable in the detail drawer. ReparseConfirmDialog owns existing article reprocessing configuration. Legacy RSS and web channels retain their display labels. Remote image references display a localized missing-file link without loading or probing the source. Supplied attachments, inline images and same-origin images remain viewable. External Agent integration guidance states that model intake review applies to HTTP and MCP collection and that rejected content returns pending_review with a reason.
 
 ## 界面命名与样式约定
 
@@ -100,9 +98,9 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 实体列表使用显式加载更多，实体详情保持自然高度。窄屏把实体列表与档案改为上下排列，长实体名、别名和文章标题换行。实体合并前明确保留实体与相关文章影响，待合并建议通过共享确认对话框处理。
 
-模型档位只在设置中心的知识库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。每一行直接显示用途、选择和当前生效来源。唯一知识库的文章和实体页面使用 /platform/entries；订阅源在设置中心独立管理。模型调用继续使用共享 ModelCallSummary 表格。
+模型档位只在设置中心的知识库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。每一行直接显示用途、选择和当前生效来源。唯一知识库的文章和实体页面使用 /platform/entries；内容由外部工具通过收录接口送入，设置中心不再提供订阅源入口。模型调用继续使用共享 ModelCallSummary 表格。
 
-主导航依次为文章、知识检索、实体、主题、设置。文章页包含待审区；实体入口打开现有实体档案页签。设置中心提供知识库、订阅源、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
+主导航依次为文章、知识检索、实体、主题、设置。文章页包含待审区；实体入口打开现有实体档案页签。设置中心提供知识库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
 
 自动增高文本框共用 SafeTextarea，保留 TDesign 外观与输入交互，项目负责可取消的安全高度测量。API Key 有效期使用 TDesign 日期时间选择器与全局中英文语言配置，保持原本本地时间、分钟精度与 Unix 秒提交方式。
 

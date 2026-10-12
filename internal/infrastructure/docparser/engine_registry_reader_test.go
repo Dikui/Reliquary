@@ -7,11 +7,11 @@ import (
 	"reliquary/internal/infrastructure/docparser/anydoc"
 )
 
-func TestNewReaderRoutesSimpleFormatsAndURLsInProcess(t *testing.T) {
+func TestNewReaderRoutesSimpleFormatsInProcess(t *testing.T) {
 	for _, tc := range []struct {
 		fileType string
 		isURL    bool
-	}{{"md", false}, {"csv", false}, {"html", true}} {
+	}{{"md", false}, {"csv", false}} {
 		reader, err := NewReader(context.Background(), "", tc.fileType, tc.isURL, ReaderDeps{})
 		if err != nil {
 			t.Fatal(err)

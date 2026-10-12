@@ -93,7 +93,11 @@ func Load(root string) (*Snapshot, error) {
 			continue
 		}
 		table := currentTable(strings.TrimSuffix(filepath.Base(file.Path), ".json"))
-		if _, ok := Rules[table]; !ok {
+		rule, known := Rules[table]
+		if !known {
+			rule, known = collectionRules[table]
+		}
+		if !known {
 			return nil, fmt.Errorf("unknown replica table %s", table)
 		}
 		decoder := json.NewDecoder(bytes.NewReader(data))
@@ -104,7 +108,7 @@ func Load(root string) (*Snapshot, error) {
 		}
 		for _, row := range namedRows(rows, false) {
 			for column := range row {
-				if _, ok := Rules[table].Columns()[column]; !ok {
+				if _, ok := rule.Columns()[column]; !ok {
 					return nil, fmt.Errorf("unclassified replica column %s.%s", table, column)
 				}
 				if secretColumn(table, column) {
@@ -135,6 +139,9 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if err != nil {
 		return nil, err
 	}
+	if err := retireSnapshotSources(root, snapshot); err != nil {
+		return nil, err
+	}
 	missing := map[string]bool{}
 	for _, requirement := range snapshot.Required {
 		missing[requirement.Kind+":"+requirement.ID] = true
@@ -153,7 +160,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if existing != 0 {
 		return nil, errors.New("replica import requires an empty entry database")
 	}
-	order := []string{"spaces", "users", "auth_tokens", "knowledge_bases", "models", "data_sources", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "sync_logs", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
+	order := []string{"spaces", "users", "auth_tokens", "knowledge_bases", "models", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
 	covered := map[string]bool{}
 	for _, table := range order {
 		covered[table] = true
@@ -206,14 +213,6 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 						}
 					}
 					row["status"] = "needs_configuration"
-				}
-				if table == "data_sources" && missing[table+":"+fmt.Sprint(row["id"])] {
-					for _, requirement := range snapshot.Required {
-						if requirement.Kind == table && requirement.ID == fmt.Sprint(row["id"]) {
-							markSourceRequirements(row, requirement.Fields)
-						}
-					}
-					row["status"] = "paused"
 				}
 				if table == "chatgpt_accounts" {
 					row["credentials"] = ""

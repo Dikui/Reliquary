@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
-	"maps"
+
 	"net/http"
 	"path/filepath"
 	"strings"
 
-	"reliquary/internal/datasource/connector/rss"
 	"reliquary/internal/types"
 )
 
@@ -47,20 +46,6 @@ type SimpleFormatReader struct{}
 
 // Read reads simple format files and returns markdown.
 func (b *SimpleFormatReader) Read(ctx context.Context, req *types.ReadRequest) (*types.ReadResult, error) {
-	if req.URL != "" {
-		article, err := rss.FetchArticle(ctx, req.URL)
-		if err != nil {
-			return nil, fmt.Errorf("URL article import failed: %w", err)
-		}
-		metadata := maps.Clone(article.Metadata)
-		if metadata == nil {
-			metadata = map[string]string{}
-		}
-		metadata["parser"] = SimpleEngineName
-		metadata["source_url"] = req.URL
-		metadata["title"] = article.Title
-		return &types.ReadResult{MarkdownContent: string(article.Content), Metadata: metadata}, nil
-	}
 	ft := strings.ToLower(strings.TrimPrefix(req.FileType, "."))
 	if ft == "" {
 		ft = strings.TrimPrefix(strings.ToLower(filepath.Ext(req.FileName)), ".")

@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"image"
 	"image/png"
-	"net/http"
-	"net/http/httptest"
+
 	"strings"
 	"testing"
 
 	"reliquary/internal/infrastructure/docparser/anydoc"
 	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 func TestPersonalParserSamples(t *testing.T) {
@@ -110,30 +108,4 @@ func personalSamplePNG(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return b.Bytes()
-}
-
-func TestPersonalParserSpecifiedURLUsesExistingArticleFetcher(t *testing.T) {
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	utils.ResetSSRFWhitelistForTest()
-	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	article := "<html><head><title>Personal article</title></head><body><article><h1>Personal article</h1><p>" + strings.Repeat("This is original source material for a personal entry collection. ", 20) + "</p></article></body></html>"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(article))
-	}))
-	defer server.Close()
-	reader, err := NewReader(context.Background(), "", "html", true, ReaderDeps{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := reader.Read(context.Background(), &types.ReadRequest{URL: server.URL})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(result.MarkdownContent, "original source material") {
-		t.Fatalf("source body missing: %q", result.MarkdownContent)
-	}
-	if result.Metadata["source_url"] != server.URL {
-		t.Fatalf("source URL missing: %v", result.Metadata)
-	}
 }

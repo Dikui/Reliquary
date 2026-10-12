@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize, getFileIcon } from '@/utils/files';
+import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
@@ -36,7 +37,7 @@ const emit = defineEmits<{
   (e: 'judgment-updated', value: ArticleJudgment): void;
   (e: 'toggle-row', id: string, checked: boolean, shiftKey: boolean): void;
   (e: 'toggle-all', checked: boolean): void;
-  (e: 'action', action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem): void;
+  (e: 'action', action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem): void;
   (e: 'probe-trace', item: EntryItem): void;
 }>();
 
@@ -57,7 +58,8 @@ const formatTime = (time?: string) => {
 const getSourceInfo = (item: EntryItem): { icon: string; label: string } => {
   if (item.source_kind === 'mine' || item.source_kind === 'report') return { icon: 'file', label: t(`knowledgeBase.sourceKinds.${item.source_kind}`) };
   const ch = item.channel;
-  if (ch === 'rss') return { icon: 'cloud-download', label: t(`datasource.connector.${ch}`) };
+  if (ch === 'rss') return { icon: 'cloud-download', label: t('knowledgeBase.channelRSS') };
+  if (isIngestAPIEntry(item)) return { icon: 'upload', label: t('knowledgeBase.typeIngestAPI') };
   if (item.type === 'url') return { icon: 'link', label: t('knowledgeBase.channelUrl') };
   if (item.type === 'manual') return { icon: 'edit', label: t('knowledgeBase.channelManual') };
   return { icon: 'upload', label: t('knowledgeBase.channelUpload') };
@@ -143,7 +145,7 @@ onBeforeUnmount(() => {
   stickyObserver = null;
 });
 
-const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem) => {
+const handleAction = (action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem) => {
   {
     moreOpen.value = null;
   }
@@ -234,7 +236,6 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
                   :trace-visible="!!traceVisibleIds[item.id] || (item.parse_status === 'pending' || item.parse_status === 'processing' || item.parse_status === 'finalizing')"
                   @download="handleAction('download', item)"
-                  @edit="handleAction('edit', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"

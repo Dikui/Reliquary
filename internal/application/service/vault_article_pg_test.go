@@ -406,8 +406,6 @@ func TestVaultDocumentReadBodyIncludesUserFrontMatterAndDeleteKeepsFile(t *testi
 	require.Equal(t, data, actual)
 	_, err = h.service.ReparseEntry(h.ctx, doc.ID, nil)
 	require.ErrorContains(t, err, "indexed directly from their files")
-	_, err = h.service.UpdateManualEntry(h.ctx, doc.ID, &types.ManualEntryPayload{Title: "User", Content: "修改", Status: "publish"})
-	require.ErrorContains(t, err, "edited directly in their files")
 	require.Empty(t, h.queue.tasks)
 	require.Empty(t, h.processor.requests)
 	var stored types.Entry
@@ -426,8 +424,6 @@ func TestVaultPersistedArticleBodyCannotBeEditedAfterProcessingFailure(t *testin
 	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, k))
 	before, _, _ := readVaultArticle(t, v, k)
 	tasks, calls := len(h.queue.tasks), len(h.processor.requests)
-	_, err = h.service.UpdateManualEntry(h.ctx, k.ID, &types.ManualEntryPayload{Title: "替换标题", Content: "替换正文", Status: "publish"})
-	require.ErrorContains(t, err, "approved article body cannot be changed")
 	after, _, _ := readVaultArticle(t, v, k)
 	require.Equal(t, before, after)
 	require.Len(t, h.queue.tasks, tasks)

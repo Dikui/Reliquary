@@ -1,58 +1,22 @@
 package docparser
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-	"io"
-	"mime"
-	"net/http"
-	"net/url"
-	"os"
-	"path"
+
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"reliquary/internal/searchutil"
-	secutils "reliquary/internal/utils"
 
 	"github.com/google/uuid"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
-
-const (
-	// minImageDimension is the minimum width/height in pixels; images smaller
-	// than this on either axis are treated as icons and filtered out.
-	minImageDimension = 64
-	// minImageBytes is the minimum file size in bytes; very small images are
-	// almost certainly icons or decorative elements.
-	minImageBytes = 512 // 512 bytes
-)
-
-// isIconImage returns true if the image data looks like a small icon or
-// decorative element that should be filtered out. It checks pixel dimensions
-// when decodable, and falls back to raw byte size otherwise.
-func isIconImage(data []byte) bool {
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil {
-		// Cannot decode dimensions — fall back to size-only heuristic.
-		return len(data) < minImageBytes
-	}
-	if cfg.Width < minImageDimension && cfg.Height < minImageDimension {
-		return true
-	}
-	return false
-}
 
 // StoredImage describes an image that has been saved to storage.
 type StoredImage struct {
@@ -66,8 +30,6 @@ type StoredImage struct {
 type ImageResolver struct {
 	// SpaceID for storage path namespacing
 	SpaceID uint64
-	// RemoteTransport allows a caller to supply the content-request transport.
-	RemoteTransport http.RoundTripper
 }
 
 // NewImageResolver creates a resolver.
@@ -239,35 +201,6 @@ func isProviderScheme(p string) bool {
 	return resource || types.ParseProviderScheme(p) != ""
 }
 
-// isWhitelistedImageHost checks if the image URL's host is in the whitelist.
-// Whitelisted hosts are trusted (e.g. internal MinerU service) — images are
-// still downloaded for validation and OCR/caption analysis, but not uploaded
-// to object storage. The markdown keeps the original URL.
-// Configure via IMAGE_HOST_KEEP_URL env var (comma-separated hosts).
-func isWhitelistedImageHost(rawURL string) bool {
-	whitelist := strings.TrimSpace(os.Getenv("IMAGE_HOST_KEEP_URL"))
-	if whitelist == "" {
-		return false
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil || u.Host == "" {
-		return false
-	}
-	host := strings.ToLower(u.Host)
-	hostname := strings.ToLower(u.Hostname())
-	for _, h := range strings.Split(whitelist, ",") {
-		h = strings.ToLower(strings.TrimSpace(h))
-		if h == "" {
-			continue
-		}
-		// Exact host match (includes port) or hostname match (any port)
-		if host == h || hostname == h {
-			return true
-		}
-	}
-	return false
-}
-
 // ---------------------------------------------------------------------------
 // Helper functions for base64 image handling
 // ---------------------------------------------------------------------------
@@ -374,8 +307,8 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 			err = errors.Join(err, fmt.Errorf("decode HTML data URI image: %w", decErr))
 			continue
 		}
-		if len(data) > maxRemoteImageSize {
-			err = errors.Join(err, fmt.Errorf("HTML data URI image exceeds %d bytes", maxRemoteImageSize))
+		if len(data) > maxInlineImageSize {
+			err = errors.Join(err, fmt.Errorf("HTML data URI image exceeds %d bytes", maxInlineImageSize))
 			continue
 		}
 		ext := extFromMime(mimeType)
@@ -513,8 +446,8 @@ func (r *ImageResolver) resolveBareDataURIs(
 			err = errors.Join(err, fmt.Errorf("decode bare data URI image: %w", decErr))
 			continue
 		}
-		if len(data) > maxRemoteImageSize {
-			err = errors.Join(err, fmt.Errorf("bare data URI image exceeds %d bytes", maxRemoteImageSize))
+		if len(data) > maxInlineImageSize {
+			err = errors.Join(err, fmt.Errorf("bare data URI image exceeds %d bytes", maxInlineImageSize))
 			continue
 		}
 		ext := extFromMime(mimeType)
@@ -577,8 +510,8 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 			err = errors.Join(err, fmt.Errorf("decode bare base64 image: %w", decErr))
 			continue
 		}
-		if len(data) > maxRemoteImageSize {
-			err = errors.Join(err, fmt.Errorf("bare base64 image exceeds %d bytes", maxRemoteImageSize))
+		if len(data) > maxInlineImageSize {
+			err = errors.Join(err, fmt.Errorf("bare base64 image exceeds %d bytes", maxInlineImageSize))
 			continue
 		}
 		mimeType := sniffImageMime(data)
@@ -611,12 +544,10 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 // ---------------------------------------------------------------------------
 
 const (
-	// maxRemoteImageSize is the maximum allowed size for a single remote image download.
-	maxRemoteImageSize = 16 * 1024 * 1024 // 16 MB; current Qwen originals exceed 10 MB.
-	// maxInlineImages bounds embedded image decoding; remote images use request timeouts.
+	// maxInlineImageSize bounds decoded image bytes.
+	maxInlineImageSize = 16 * 1024 * 1024 // 16 MB; current Qwen originals exceed 10 MB.
+	// maxInlineImages bounds embedded image decoding.
 	maxInlineImages = 30
-	// remoteImageFetchTimeout is the per-image HTTP request timeout.
-	remoteImageFetchTimeout = 60 * time.Second
 )
 
 // reLinkedImage matches the nested [![alt](img_url)](link_url) pattern where
@@ -704,8 +635,8 @@ func (r *ImageResolver) ResolveDataURIImages(
 			err = errors.Join(err, fmt.Errorf("decode data URI image: %w", decErr))
 			continue
 		}
-		if len(data) > maxRemoteImageSize {
-			err = errors.Join(err, fmt.Errorf("data URI image exceeds %d bytes", maxRemoteImageSize))
+		if len(data) > maxInlineImageSize {
+			err = errors.Join(err, fmt.Errorf("data URI image exceeds %d bytes", maxInlineImageSize))
 			continue
 		}
 		ext := extFromMime(mimeType)
@@ -729,167 +660,6 @@ func (r *ImageResolver) ResolveDataURIImages(
 	return markdown, images, err
 }
 
-// remoteImageResult describes one image that was fetched successfully.
-type remoteImageResult struct {
-	// ServingURL is empty when KeepOriginalURL is set. The caller fills it in
-	// with the normalized request URL — NOT the raw document bytes. Later stages
-	// both search the document for this string and fetch it, so a padded or
-	// entity-encoded value satisfies neither.
-	ServingURL string
-	MimeType   string
-	// KeepOriginalURL marks a whitelisted host. Its bytes are downloaded so that
-	// OCR/caption analysis can run, but it is not uploaded: the image keeps being
-	// served from its original host, reached through the normalized URL.
-	KeepOriginalURL bool
-}
-
-// fetchAndStoreRemoteImage applies the SSRF policy, downloads the image,
-// rejects icons and uploads the bytes to storage.
-//
-// Both the Markdown and the HTML scan go through here so that the SSRF check,
-// the icon filter and the whitelist behaviour cannot drift apart between the
-// two syntaxes.
-func fetchAndStoreRemoteImage(
-	ctx context.Context,
-	client *http.Client,
-	fileSvc interfaces.FileService,
-	spaceID uint64,
-	imgURL string,
-) (*remoteImageResult, error) {
-	whitelisted := isWhitelistedImageHost(imgURL)
-
-	if !whitelisted {
-		if err := secutils.ValidateURLForSSRF(imgURL); err != nil {
-			return nil, fmt.Errorf("blocked by SSRF policy: %w", err)
-		}
-	}
-
-	data, mimeType, err := downloadImage(ctx, client, imgURL)
-	if err != nil {
-		return nil, fmt.Errorf("download: %w", err)
-	}
-
-	if whitelisted {
-		return &remoteImageResult{MimeType: mimeType, KeepOriginalURL: true}, nil
-	}
-
-	ext := extFromMime(mimeType)
-	if ext == "" {
-		ext = extFromURLPath(imgURL)
-	}
-	if ext == "" {
-		ext = ".png" // safe default
-	}
-	servingURL, err := fileSvc.SaveBytes(ctx, data, spaceID, uuid.New().String()+ext, false)
-	if err != nil {
-		return nil, fmt.Errorf("save: %w", err)
-	}
-	return &remoteImageResult{ServingURL: servingURL, MimeType: mimeType}, nil
-}
-
-// isRemoteHTTPURL reports whether raw is an absolute http(s) URL.
-//
-// The comparison is deliberately byte-exact. Downstream fetchers compare the
-// scheme the same way, so anything accepted here has to be spelled the way they
-// expect; per-syntax normalization belongs in the SrcOf of the scan that needs
-// it, not in this predicate.
-func isRemoteHTTPURL(raw string) bool {
-	return strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://")
-}
-
-// remotePassSpec describes one scan of a document: which references it matches,
-// where the URL sits inside a match, and how to turn the raw document bytes into
-// the URL to request.
-type remotePassSpec struct {
-	Pattern  *regexp.Regexp
-	URLGroup int
-	Syntax   string
-	SrcOf    func(string) string
-}
-
-type remoteImageTarget struct {
-	start int
-	end   int
-	url   string
-}
-
-// resolveRemoteImagePass rewrites every remote http(s) reference matched by
-// spec.Pattern, replacing the span of its URL capture group with the URL the
-// image will be served from: the storage URL, or the normalized original for a
-// whitelisted host. Matches are walked in reverse so the spans still to be
-// processed stay valid after each replacement.
-func resolveRemoteImagePass(
-	ctx context.Context,
-	markdown string,
-	spec remotePassSpec,
-	client func() *http.Client,
-	fileSvc interfaces.FileService,
-	spaceID uint64,
-) (string, []StoredImage, error) {
-	matches := spec.Pattern.FindAllStringSubmatchIndex(markdown, -1)
-	targets := make([]remoteImageTarget, 0, len(matches))
-	for _, match := range matches {
-		start, end := match[2*spec.URLGroup], match[2*spec.URLGroup+1]
-		if start >= 0 {
-			targets = append(targets, remoteImageTarget{start: start, end: end, url: spec.SrcOf(markdown[start:end])})
-		}
-	}
-	return resolveRemoteImageTargets(ctx, markdown, targets, spec.Syntax, client, fileSvc, spaceID)
-}
-
-func resolveRemoteImageTargets(
-	ctx context.Context,
-	markdown string,
-	targets []remoteImageTarget,
-	syntax string,
-	client func() *http.Client,
-	fileSvc interfaces.FileService,
-	spaceID uint64,
-) (string, []StoredImage, error) {
-
-	var (
-		images []StoredImage
-		err    error
-	)
-
-	for i := len(targets) - 1; i >= 0; i-- {
-		start, end, imgURL := targets[i].start, targets[i].end, targets[i].url
-		if !isRemoteHTTPURL(imgURL) {
-			continue
-		}
-
-		if ctx.Err() != nil {
-			err = errors.Join(err, fmt.Errorf("resolve %s remote images: %w", syntax, ctx.Err()))
-			break
-		}
-
-		res, fetchErr := fetchAndStoreRemoteImage(ctx, client(), fileSvc, spaceID, imgURL)
-		if fetchErr != nil {
-			err = errors.Join(err, fmt.Errorf("resolve %s image %q: %w", syntax, imgURL, fetchErr))
-			continue
-		}
-		// A whitelisted host is served from where it already lives, so the
-		// document keeps pointing there. The span is still rewritten with the
-		// normalized URL: later stages both locate the image by searching the
-		// document for its ServingURL and fetch that same string, so the two have
-		// to agree, and an entity-encoded or padded attribute value satisfies
-		// neither.
-		servingURL := res.ServingURL
-		if res.KeepOriginalURL {
-			servingURL = imgURL
-		}
-
-		images = append(images, StoredImage{
-			OriginalRef: imgURL,
-			ServingURL:  servingURL,
-			MimeType:    res.MimeType,
-		})
-		markdown = markdown[:start] + servingURL + markdown[end:]
-	}
-
-	return markdown, images, err
-}
-
 // htmlAttrSrc normalizes an HTML src attribute value into the URL to request.
 //
 // Three things are HTML-specific. An attribute value may be padded, so it is
@@ -909,53 +679,6 @@ func htmlAttrSrc(raw string) string {
 	return src
 }
 
-// ResolveRemoteImages downloads remote http(s) images into storage and points
-// the document at the stored copies. Both Markdown image syntax and HTML <img>
-// tags with a quoted src are covered.
-func (r *ImageResolver) ResolveRemoteImages(
-	ctx context.Context,
-	markdown string,
-	fileSvc interfaces.FileService,
-	spaceID uint64,
-) (updatedMarkdown string, images []StoredImage, err error) {
-	markdown = UnwrapLinkedImages(markdown)
-
-	// The client owns a dedicated transport, so it is built only once a scan
-	// actually has something to fetch.
-	var httpClient *http.Client
-	client := func() *http.Client {
-		if httpClient == nil {
-			httpClient = secutils.NewSSRFSafeHTTPClientWithTransport(secutils.SSRFSafeHTTPClientConfig{
-				Timeout:      remoteImageFetchTimeout,
-				MaxRedirects: 5,
-			}, r.RemoteTransport)
-		}
-		return httpClient
-	}
-
-	// Replace only Markdown destinations, preserving titles and angle brackets.
-	// The HTML pass continues to apply its attribute normalization rules.
-	markdownTargets := []remoteImageTarget{}
-	for _, span := range scanMarkdownImageTargets(markdown) {
-		path, start, end, ok := splitMarkdownImageTarget(markdown[span.TargetStart:span.TargetEnd], nil)
-		if ok {
-			markdownTargets = append(markdownTargets, remoteImageTarget{start: span.TargetStart + start, end: span.TargetStart + end, url: path})
-		}
-	}
-	markdown, mdImages, markdownErr := resolveRemoteImageTargets(ctx, markdown, markdownTargets, "markdown", client, fileSvc, spaceID)
-
-	markdown, htmlImages, htmlErr := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
-		Pattern:  imgHTMLSrc,
-		URLGroup: searchutil.HTMLImageSrcURLGroup,
-		Syntax:   "html",
-		SrcOf:    htmlAttrSrc,
-	}, client, fileSvc, spaceID)
-
-	images = append(images, mdImages...)
-	images = append(images, htmlImages...)
-	return markdown, images, errors.Join(markdownErr, htmlErr)
-}
-
 // HasUnstoredImages reports content image references that still point outside
 // managed storage after resolution. It lets intake callers reject incomplete
 // content while legacy callers can retain their configured original URLs.
@@ -966,83 +689,14 @@ func HasUnstoredImages(markdown string) bool {
 			return true
 		}
 	}
-	for _, spec := range []remotePassSpec{
-		{Pattern: imgHTMLSrc, URLGroup: searchutil.HTMLImageSrcURLGroup, SrcOf: htmlAttrSrc},
-	} {
-		for _, m := range spec.Pattern.FindAllStringSubmatchIndex(markdown, -1) {
-			if start := m[2*spec.URLGroup]; start >= 0 {
-				target := spec.SrcOf(markdown[start:m[2*spec.URLGroup+1]])
-				if !isProviderScheme(target) && !strings.HasPrefix(target, "/files/") {
-					return true
-				}
+	for _, m := range imgHTMLSrc.FindAllStringSubmatchIndex(markdown, -1) {
+		group := searchutil.HTMLImageSrcURLGroup * 2
+		if m[group] >= 0 {
+			target := htmlAttrSrc(markdown[m[group]:m[group+1]])
+			if !isProviderScheme(target) && !strings.HasPrefix(target, "/files/") {
+				return true
 			}
 		}
 	}
 	return false
-}
-
-// downloadImage fetches an image from remoteURL using the provided SSRF-safe
-// client. It validates Content-Type and enforces maxRemoteImageSize.
-func downloadImage(ctx context.Context, client *http.Client, remoteURL string) (data []byte, mimeType string, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, remoteURL, nil)
-	if err != nil {
-		return nil, "", fmt.Errorf("create request: %w", err)
-	}
-	// Some CDNs require a browser-like User-Agent.
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Reliquary/1.0)")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, "", fmt.Errorf("HTTP GET: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("unexpected status %d", resp.StatusCode)
-	}
-
-	// Determine MIME type from Content-Type header.
-	ct := resp.Header.Get("Content-Type")
-	mimeType, _, _ = mime.ParseMediaType(ct)
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
-
-	// Only allow image content types (or octet-stream which we sniff later).
-	if !strings.HasPrefix(mimeType, "image/") && mimeType != "application/octet-stream" {
-		return nil, "", fmt.Errorf("non-image content type: %s", mimeType)
-	}
-
-	// Read body with size limit.
-	limited := io.LimitReader(resp.Body, maxRemoteImageSize+1)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		return nil, "", fmt.Errorf("read body: %w", err)
-	}
-	if len(body) > maxRemoteImageSize {
-		return nil, "", fmt.Errorf("image exceeds %d bytes limit", maxRemoteImageSize)
-	}
-
-	// If MIME was octet-stream, sniff the real type from body.
-	if mimeType == "application/octet-stream" {
-		detected := http.DetectContentType(body)
-		if strings.HasPrefix(detected, "image/") {
-			mimeType = detected
-		} else {
-			return nil, "", fmt.Errorf("downloaded data is not an image (sniffed: %s)", detected)
-		}
-	}
-
-	return body, mimeType, nil
-}
-
-// extFromURLPath extracts the image file extension from the URL path segment.
-func extFromURLPath(rawURL string) string {
-	p := path.Ext(path.Base(rawURL))
-	switch strings.ToLower(p) {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg":
-		return strings.ToLower(p)
-	default:
-		return ""
-	}
 }

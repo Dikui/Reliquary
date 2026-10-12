@@ -9,7 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
+
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +23,6 @@ import (
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	"reliquary/internal/utils"
 )
 
 type processOverridesPGKB struct {
@@ -208,99 +207,11 @@ func (h *processOverridesPGHarness) seed(t *testing.T, kind, decision string) *t
 	return k
 }
 
-func TestProcessOverridesPGURLFetchFailure(t *testing.T) {
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	utils.ResetSSRFWhitelistForTest()
-	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		http.Error(w, "fetch failed", http.StatusBadGateway)
-	}))
-	t.Cleanup(server.Close)
-	h := newProcessOverridesPGHarness(t)
-	overrides := processOverridesPGConfig()
-	k, err := h.svc.CreateEntryFromURL(h.ctx, "kb", server.URL+"/article", "", "", nil,
-		"Source article", types.ChannelWeb, overrides)
-	require.NoError(t, err)
-	want := processOverridesPGStoredConfig(t, k)
-	require.JSONEq(t, mustProcessOverridesPGJSON(t, overrides), want)
-	require.NotNil(t, h.queue.task)
-	require.Error(t, h.svc.ProcessDocument(h.ctx, h.queue.task))
-	require.Positive(t, requests.Load(), "the real URL parser must fetch the failing HTTP server")
-	stored := h.assertTimelineConfig(t, k.ID, want)
-	require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)
-	intake, err := stored.IntakeMetadata()
-	require.NoError(t, err)
-	require.Equal(t, "error", intake.Decision)
-}
-
 func mustProcessOverridesPGJSON(t *testing.T, v any) string {
 	t.Helper()
 	encoded, err := json.Marshal(v)
 	require.NoError(t, err)
 	return string(encoded)
-}
-
-func TestProcessOverridesPGFileFailures(t *testing.T) {
-	for _, failure := range []string{"storage read", "body read", "parser error", "upload enqueue", "approved parser error"} {
-		t.Run(failure, func(t *testing.T) {
-			h := newProcessOverridesPGHarness(t)
-			var body bytes.Buffer
-			writer := multipart.NewWriter(&body)
-			part, err := writer.CreateFormFile("file", "source.json")
-			require.NoError(t, err)
-			_, err = part.Write([]byte("{invalid-json"))
-			require.NoError(t, err)
-			require.NoError(t, writer.Close())
-			form, err := multipart.NewReader(&body, writer.Boundary()).ReadForm(1024)
-			require.NoError(t, err)
-			t.Cleanup(func() { require.NoError(t, form.RemoveAll()) })
-			if failure == "upload enqueue" {
-				h.queue.err = errors.New("queue unavailable")
-			}
-			k, err := h.svc.CreateEntryFromFile(h.ctx, "kb", form.File["file"][0],
-				map[string]string{"discard_on_cleanup": "source metadata"}, nil, "", types.ChannelWeb, processOverridesPGConfig())
-			if failure == "upload enqueue" {
-				require.ErrorContains(t, err, "queue unavailable")
-				require.Nil(t, k)
-				var count int64
-				require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
-				require.Zero(t, count, "failed enqueue rolls back the uploaded article")
-				require.Empty(t, h.files.stored, "the rolled back upload must release its source file")
-				return
-			}
-			require.NoError(t, err)
-			if failure == "approved parser error" {
-				intake, err := k.IntakeMetadata()
-				require.NoError(t, err)
-				intake.Decision = "approved"
-				require.NoError(t, k.SetIntakeMetadata(intake))
-				require.NoError(t, h.repo.UpdateEntry(h.ctx, k))
-			}
-			want := mustProcessOverridesPGJSON(t, processOverridesPGConfig())
-			switch failure {
-			case "storage read":
-				h.files.getErr = errors.New("storage unavailable")
-			case "body read":
-				h.files.readErr = errors.New("read interrupted")
-			}
-			if failure != "upload enqueue" {
-				require.Error(t, h.svc.ProcessDocument(h.ctx, h.queue.task))
-			}
-			stored := h.assertTimelineConfig(t, k.ID, want)
-			require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)
-			if failure == "approved parser error" {
-				require.JSONEq(t, string(k.Metadata), string(stored.Metadata))
-				require.Equal(t, k.FilePath, stored.FilePath)
-				require.NotEmpty(t, h.files.stored)
-				return
-			}
-			require.NotContains(t, string(stored.Metadata), "discard_on_cleanup")
-			require.Empty(t, stored.FilePath)
-			require.Empty(t, h.files.stored)
-		})
-	}
 }
 
 func TestProcessOverridesPGReparseEnqueueFailure(t *testing.T) {
@@ -345,28 +256,6 @@ func TestProcessOverridesPGIntakeRetryFailure(t *testing.T) {
 	require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)
 	require.NotContains(t, string(stored.Metadata), "discard_on_cleanup")
 	require.Empty(t, h.files.stored)
-}
-
-func TestProcessOverridesPGFileURLDownloadFailure(t *testing.T) {
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	utils.ResetSSRFWhitelistForTest()
-	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		http.Error(w, "file download failed", http.StatusBadGateway)
-	}))
-	t.Cleanup(server.Close)
-	h := newProcessOverridesPGHarness(t)
-	k, err := h.svc.CreateEntryFromURL(h.ctx, "kb", server.URL+"/source.json", "", "", nil,
-		"Source file", types.ChannelWeb, processOverridesPGConfig())
-	require.NoError(t, err)
-	require.Equal(t, "file_url", k.Type)
-	want := processOverridesPGStoredConfig(t, k)
-	require.Error(t, h.svc.ProcessDocument(h.ctx, h.queue.task))
-	require.Positive(t, requests.Load())
-	stored := h.assertTimelineConfig(t, k.ID, want)
-	require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)
 }
 
 func TestProcessOverridesPGManualProcessingFailure(t *testing.T) {

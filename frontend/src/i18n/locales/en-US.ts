@@ -173,7 +173,6 @@ export default {
   "extractedLink": "Original URL: extracted from file",
   "modelType": "Model content type",
   "missingLinkHint": "The original URL is missing, so model review has not run. Add a URL to review again, confirm collection without a URL or convert to a personal document.",
-  "uploadLinkHint": "The original URL is optional. Reliquary first extracts it from the file or text. If none is found, the item waits for intake review.",
   "invalidLink": "Enter a valid HTTP or HTTPS original URL.",
   "chooseType": "Choose a content type.",
   "failed": "Review action failed. Try again.",
@@ -498,6 +497,9 @@ export default {
     spaceTooltipWithCreator: 'Created by {creator}',
   },
   knowledgeBase: {
+    channelRSS: "RSS",
+    emptyArticles: "No articles yet",
+    ingestOnlyHint: "Use an external tool to send complete content through the HTTP or MCP ingest interface.",
     sourceKinds: { mine: 'Personal document', report: 'Report' },
     collectReason: 'Collection reason',
     vaultPath: 'Vault path',
@@ -543,33 +545,17 @@ export default {
     settings: 'Settings',
 
     searchMessageContent: 'Search article content',
-    uploadSuccess: 'File uploaded successfully!',
-    uploadFailed: 'File upload failed!',
     fileExists: 'File already exists',
-    duplicateFound: 'This article already exists',
-    duplicateSimilarFound: 'This article is highly similar to an existing article',
-    viewExistingMessage: 'View existing article',
-    dismissDuplicateNotice: 'Dismiss duplicate notice',
-    uploadAllSuccess: 'Successfully uploaded {count} file! | Successfully uploaded {count} files!',
-    uploadPartialSuccess: 'Upload completed: {success} succeeded, {fail} failed',
-    uploadAllFailed: 'All files failed to upload',
-
-    videosUnsupported: 'Skipped {count} video file (video upload is not supported) | Skipped {count} video files (video upload is not supported)',
-    unsupportedTypesHint: 'Some file types ({types}) have no available parser engine and cannot be processed',
+    unsupportedTypesHint: 'Some attachment types ({types}) have no available parser engine. Content must be sent through the Ingest API; include text, as an unparseable attachment alone cannot be ingested.',
     goToParserSettings: 'Configure',
-    importURL: 'Import from URL',
-    addDocument: 'Add Article',
-    importURLTitle: 'Import from URL',
     urlRequired: 'Please enter a URL',
     invalidURL: 'Please enter a valid URL',
-    urlImportSuccess: 'URL imported successfully!',
-    urlImportFailed: 'URL import failed!',
     urlExists: 'This URL already exists',
     urlLabel: 'URL Address',
-    urlPlaceholder: 'Enter webpage URL, e.g., https://example.com',
-    urlTip: 'Supports importing various webpage contents. The system will automatically extract and parse text content from the webpage',
     typeURL: 'URL',
     typeManual: 'Manual',
+    typeIngestAPI: 'Ingest API',
+    externalTool: 'External tool',
     typeFile: 'File',
     channelLabel: 'Source Channel',
     channelWeb: 'Web',
@@ -608,12 +594,9 @@ export default {
     metadataKeyDuplicate: 'Duplicate metadata field: {key}',
     metadataNumberRequired: 'Metadata field {key} must be a valid number',
     noDocumentSummary: 'No article summary',
-    notInitialized: 'Knowledge base is not initialized. Please configure models in settings before uploading files',
-    getInfoFailed: 'Failed to get knowledge base information, file upload is not possible',
     missingId: 'Knowledge base ID is missing',
     deleteFailed: 'Delete failed. Please try again later!',
     uploadTime: 'Upload Time',
-    editDocument: 'Edit Article',
     rebuildDocument: 'Rebuild Article',
     rebuildConfirm: 'Rebuild article "{fileName}"? This will clear existing chunks and parse it again.',
     rebuildSubmitted: 'Rebuild task submitted',
@@ -674,13 +657,7 @@ export default {
     statusCancelled: 'Cancelled',
     statusDraft: 'Draft',
     noDescription: 'No description',
-    emptyKnowledgeDragDrop: 'Knowledge is empty, drag and drop to upload',
     parserRecoveryHint: 'No parser engine is available for the selected file types. Use the Docker image, which includes anydoc by default, or run make anydoc-lib locally and start with -tags anydoc, or configure MinerU in parser engine settings.',
-    availableUploadTypes: 'Available file types: {types}',
-    uploadSizeLimit: 'Maximum file size: {size} MB',
-    pdfDocFormat: 'pdf, doc format files, max 10M',
-    textMarkdownFormat: 'text, markdown format files, max 200K',
-    dragFileNotText: 'Please drag files instead of text or links',
     searchPlaceholder: 'Search knowledge bases...',
     docSearchPlaceholder: 'Search article titles...',
     fileTypeFilter: 'File Type',
@@ -707,16 +684,11 @@ export default {
     noKnowledge: 'No knowledge bases available',
     loadingFailed: 'Failed to load knowledge bases',
     operationNotSupportedForType: 'This operation is not supported for the current knowledge base type',
-    allFilesSkippedNoEngine: 'All selected files were skipped due to no available parser engine',
-    filesSkippedNoEngine: '{count} file skipped due to no available parser engine | {count} files skipped due to no available parser engine',
-    allUploadSuccess: 'The file uploaded successfully ({count} file) | All files uploaded successfully ({count} files)',
-    partialUploadSuccess: 'Partial upload success (success: {success}, failed: {fail})',
-    allUploadFailed: 'The file failed to upload ({count} file) | All files failed to upload ({count} files)',
     deleteSuccess: 'Knowledge deleted successfully!',
     chunkLoadFailed: 'Failed to load chunks'
   },
-  uploadConfirm: {
-    title: 'Confirm Upload',
+  reparseConfirm: {
+    chunking: "Chunking",
     parseConfig: 'Parse settings',
     configNav: 'Parse settings navigation',
     navParserDefault: 'Default',
@@ -725,31 +697,15 @@ export default {
     summaryParentChildShort: 'Parent-child',
     summaryParserForceScanned: 'Scanned mode',
     navChunkingSummary: 'Chunk {size}',
-    statusOn: 'On',
-    statusOff: 'Off',
-    notSet: 'Not set',
-    confirm: 'Upload and parse',
     cancel: 'Cancel',
-    noItems: 'Add at least one file or URL',
-    urlItemLabel: 'URL',
-    urlAdded: 'URL added',
-    urlDuplicate: 'This URL is already in the list',
-    statusNeedsSetup: 'Needs setup',
     pdfForceScanned: {
       label: 'Force scanned PDF parsing',
       description: 'Useful for web-print, scanned, or image-heavy PDFs. Every page will be rendered as an image and processed via OCR/VLM. May increase processing time and model costs.'
     },
-    continueAdd: 'Add more',
-
-    filesAdded: 'Added {count} file | Added {count} files',
-    filesAllDuplicate: 'Selected files are already in the list',
-    titleManual: 'Confirm online publish',
-    confirmManual: 'Publish and parse',
     titleReparse: 'Confirm reparse',
     confirmReparse: 'Confirm and reparse',
     reparseSource: 'Document to reparse',
-    reparseHint: 'Reuses the last parse settings; adjust them here',
-    manualCharCount: '{count} character | {count} characters'
+    reparseHint: "Reprocess the existing material. Missing body content must be supplied by an external tool through the ingest API.",
   },
   knowledgeStages: {
     title: 'Processing pipeline',
@@ -843,36 +799,6 @@ export default {
       cancelled: 'Cancelled'
     },
     errorCode: {
-      invalid_url: "Invalid page URL",
-      invalid_url_SUGGESTION: "Check the URL format and use a complete HTTP or HTTPS address.",
-      dns_failed: "Page DNS lookup failed",
-      dns_failed_SUGGESTION: "Check the URL and server DNS configuration, then retry later.",
-      connection_timeout: "Page fetch timed out",
-      connection_timeout_SUGGESTION: "Check whether the site is accessible, retry later, or upload a file instead.",
-      tls_failed: "Secure connection to the site failed",
-      tls_failed_SUGGESTION: "Check the site certificate and server time, then retry after fixing the secure connection.",
-      http_403: "Site access denied",
-      http_403_SUGGESTION: "The site denied the fetch request. Upload a file or use the site's RSS feed instead.",
-      http_429: "Site requests rate limited",
-      http_429_SUGGESTION: "Retry later and reduce fetch requests to this site.",
-      http_5xx: "Site server error",
-      http_5xx_SUGGESTION: "The site returned a server error. Retry later or upload a file instead.",
-      http_status: "Page request failed",
-      http_status_SUGGESTION: "Check the URL and page availability, or upload a file instead.",
-      ssrf_rejected: "Page URL blocked by security policy",
-      ssrf_rejected_SUGGESTION: "Use a public page URL allowed by the security policy, or upload a file instead.",
-      redirect_rejected: "Page redirect rejected",
-      redirect_rejected_SUGGESTION: "Check the redirect destination and count, and use the final page URL allowed by the security policy.",
-      read_failed: "Failed to read page content",
-      read_failed_SUGGESTION: "Retry later or upload a file instead.",
-      html_parse_failed: "Page HTML parsing failed",
-      html_parse_failed_SUGGESTION: "Check that the page content is valid, or upload a file instead.",
-      empty_content: "Page has no readable body text",
-      empty_content_SUGGESTION: "Check that the URL points to a page with body text, or upload a file instead.",
-      javascript_required: "Page requires JavaScript rendering; body text cannot be fetched",
-      javascript_required_SUGGESTION: "Upload a file or use the site's RSS feed instead.",
-      connection_failed: "Connection to the page failed",
-      connection_failed_SUGGESTION: "Check the site URL and server network connection, then retry later.",
       DOCREADER_TIMEOUT: 'Document parsing timed out',
       DOCREADER_TIMEOUT_SUGGESTION: 'Try splitting large files and check parser service load before retrying.',
       DOCREADER_UNAVAILABLE: 'Document parser unavailable',
@@ -932,7 +858,6 @@ export default {
       loadFailed: 'Could not load vault status. Try again.',
     },
     knowledgeSettings: 'Knowledge settings',
-    dataSources: 'Subscriptions',
     modelManagement: 'Model Management',
     parserEngine: 'Parser Engine',
     versionInfo: 'Version Info',
@@ -1130,99 +1055,7 @@ export default {
     discard: "Discard changes"
 },
   file: {
-    upload: 'Upload File',
     downloadFailed: 'Failed to download file. Please retry later.',
-  },
-  manualEditor: {
-    placeholders: {
-      heading: 'Heading {level}',
-      listItem: 'List item',
-      taskItem: 'Task item',
-      quote: 'Quoted text',
-      code: 'Code content',
-      linkText: 'Link text',
-      imageAlt: 'Description',
-      bold: 'Bold text',
-      italic: 'Italic text',
-      strike: 'Strikethrough',
-      inlineCode: 'code'
-    },
-    table: {
-      column1: 'Column 1',
-      column2: 'Column 2',
-      cell: 'Content'
-    },
-    toolbar: {
-      bold: 'Bold',
-      italic: 'Italic',
-      strike: 'Strikethrough',
-      inlineCode: 'Inline code',
-      heading1: 'Heading 1',
-      heading2: 'Heading 2',
-      heading3: 'Heading 3',
-      bulletList: 'Bullet list',
-      orderedList: 'Numbered list',
-      taskList: 'Task list',
-      blockquote: 'Blockquote',
-      codeBlock: 'Code block',
-      link: 'Insert link',
-      image: 'Insert image',
-      table: 'Insert table',
-      horizontalRule: 'Horizontal rule'
-    },
-    view: {
-      editLabel: 'Back to edit',
-      previewLabel: 'Preview content'
-    },
-    preview: {
-      empty: 'No content yet'
-    },
-    title: {
-      edit: 'Edit Markdown Knowledge',
-      create: 'Create Markdown Knowledge'
-    },
-    description: 'Write knowledge in Markdown with live preview',
-    section: {
-      basic: 'Basic Info',
-      content: 'Content'
-    },
-
-    defaultTitlePrefix: 'New Document',
-    error: {
-      fetchDetailFailed: 'Failed to fetch knowledge details',
-      saveFailed: 'Save failed, please try again later'
-    },
-    warning: {
-      knowledgeUnavailable: 'Could not load the knowledge base. Close the editor and try again.',
-      enterTitle: 'Please enter a knowledge title',
-      enterContent: 'Please enter knowledge content',
-      contentTooShort: 'Content is too short. Please add more information before publishing'
-    },
-    success: {
-      draftSaved: 'Draft saved',
-      published: 'Message submitted and under review'
-    },
-    form: {
-
-      titleLabel: 'Knowledge title',
-      titlePlaceholder: 'Enter title',
-      contentPlaceholder: 'Supports Markdown. Use # headings, lists, code blocks, etc.'
-    },
-
-    status: {
-      draftTag: 'Status: Draft',
-      publishedTag: 'Status: Published',
-      lastUpdated: 'Last updated: {time}'
-    },
-    loading: {
-      content: 'Loading content...',
-      preparing: 'Preparing editor...'
-    },
-    actions: {
-      cancel: 'Cancel',
-      saveDraft: 'Save Draft',
-      publish: 'Publish'
-    }
   },
 
   knowledgeEditor: {
@@ -1240,7 +1073,6 @@ export default {
       models: 'Model Configuration',
       chunking: 'Chunking Settings',
       advanced: 'Advanced Settings',
-      datasource: 'Data Sources',
     },
     errors: {
     },
@@ -1298,7 +1130,7 @@ export default {
     },
     chunking: {
       title: 'Chunking Settings',
-      description: 'Controls how uploaded documents are split before embedding. Defaults work for most cases — tune only when retrieval quality is off.',
+      description: "Controls how documents are split before embedding. Defaults work for most cases; tune when retrieval quality is off.",
       sizeLabel: 'Chunk Size',
       sizeDescription: "Maximum characters per chunk (100 to 4000). Default 512. Adjust for the structure and length of the document.",
       characters: 'character | characters',
@@ -1329,7 +1161,7 @@ export default {
       strategies: {
         auto: {
           label: 'Automatic',
-          tooltip: 'A document profiler picks between heading-aware, structure-aware and length-based splitting per upload.'
+          tooltip: "A document profiler picks between heading-aware, structure-aware and length-based splitting for each document."
         },
         heading: {
           label: 'Heading-aware',
@@ -1358,7 +1190,7 @@ export default {
       },
       debug: {
         toggle: 'Preview chunking',
-        toggleHint: 'Run the chunker against sample text without re-uploading',
+        toggleHint: "Run the chunker against sample text without submitting new content",
         sampleLabel: 'Sample text',
         samplePlaceholder: 'Paste a Markdown / plain-text snippet to see how the current configuration would chunk it…',
         presetLabel: 'Load sample:',
@@ -1626,8 +1458,6 @@ export default {
           spaceLabel: 'Workspace ID',
           sourceKBLabel: 'Source knowledge base',
           targetKBLabel: 'Target knowledge base',
-          dataSourceLabel: 'Data source ID',
-          syncLogLabel: 'Sync log ID',
           knowledgeCountLabel: 'Documents',
           enqueuedAt: 'Enqueued',
           startedAt: 'Started',
@@ -1678,7 +1508,6 @@ export default {
           taskTypes: {
             documentProcess: 'Document parsing',
             manualProcess: 'Manual reprocessing',
-            sync: 'Data-source sync',
             batchReparse: 'Batch reparse',
             batchDelete: 'Batch delete',
 
@@ -1710,24 +1539,22 @@ export default {
         pools: {
           core: 'Core parsing',
           enrichment: 'Enrichment',
-          maintenance: 'Maintenance & sync',
+          maintenance: "Maintenance",
           shared: 'Shared elastic',
         },
         poolDescriptions: {
           core: 'Guaranteed document and manual parsing capacity',
           enrichment: "Rebuild entity name embeddings or all embeddings, or assign historical articles to topics",
-          maintenance: 'Source sync, batch work, and deletion cleanup',
+          maintenance: "Batch work and deletion cleanup",
           shared: 'Borrowed by core or enrichment according to backlog',
         },
         queueNames: {
           default: 'Document parsing',
-          sync: 'Source sync',
           low: 'Maintenance & batch',
           entity: "Entities",
         },
         queueDescriptions: {
           default: 'Document parse, manual reparse',
-          sync: 'Manual & scheduled sync',
           low: "Batch reparse and cleanup",
           entity: "Rebuild entity name embeddings or all embeddings, or assign historical articles to topics",
         }
@@ -1741,7 +1568,7 @@ export default {
         queue: {
           core_concurrency: 'Guaranteed core parse concurrency',
           enrichment_concurrency: 'Guaranteed enrichment concurrency',
-          maintenance_concurrency: 'Maintenance concurrency',
+          maintenance_concurrency: "Maintenance concurrency",
           shared_concurrency: 'Shared elastic concurrency',
         },
         model: {
@@ -1757,7 +1584,7 @@ export default {
         queue: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual parsing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
           enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings and assigning historical articles to topics, with shared capacity available. Restart after changing.",
-          maintenance_concurrency: 'Per-process concurrency for source sync, batch work, and cleanup, hard-isolated from the user-facing pipeline. Minimum 1; requires a service restart.',
+          maintenance_concurrency: "Per-process concurrency for batch work and cleanup, isolated from article processing. Minimum 1; requires a service restart.",
           shared_concurrency: 'Per-process elastic concurrency shared by core parsing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
         model: {
@@ -1811,7 +1638,6 @@ export default {
     tokenRefreshFailed: 'Token refresh failed',
     pleaseRelogin: 'Please log in again',
     fileSizeExceeded: 'File size cannot exceed {size}MB!',
-    unsupportedAudioUpload: 'Audio file uploads are not supported.',
     unsupportedFileType: 'Unsupported file type!',
     invalidFileType: 'Invalid file type!',
     invalidImageLink: 'Invalid image link',
@@ -2097,12 +1923,6 @@ export default {
     lastYear: 'Last Year',
     earlier: 'Earlier',
 
-  },
-  upload: {
-    uploadDocument: 'Upload Document',
-    uploadFolder: 'Upload Folder',
-    onlineEdit: 'Online Edit',
-    deleteRecord: 'Delete Record'
   },
   modelSettings: {
     title: 'Model Settings',
@@ -2409,145 +2229,6 @@ export default {
     yesterday: 'Yesterday',
     daysAgo: '{days} day ago | {days} days ago'
   },
-  datasource: {
-    defaultContentType: "Default content type",
-    defaultContentTypeUnspecified: "Unspecified",
-    defaultContentTypeHint: "Used as a classification hint; the model still evaluates the article.",
-    requiredFields: 'Enter a name and at least one feed URL.',
-    title: 'Data Sources',
-    description: 'Configure external data sources to sync content into this knowledge base',
-    add: 'Add Data Source',
-    empty: 'No data sources configured',
-    edit: 'Edit',
-    delete: 'Delete',
-    deleteConfirm: 'Delete this data source? Synced knowledge will not be removed.',
-    deleteSuccess: 'Data source deleted',
-    deleteFailed: 'Failed to delete',
-    syncNow: 'Sync Now',
-    syncTriggered: 'Sync task submitted',
-    syncFailed: 'Failed to trigger sync',
-    pause: 'Pause',
-    resume: 'Resume',
-    paused: 'Paused',
-    resumed: 'Resumed',
-    pauseFailed: 'Failed to pause',
-    resumeFailed: 'Failed to resume',
-    logs: 'Logs',
-    syncModeLabel: 'Sync mode',
-    syncMode: {
-      incremental: 'Incremental',
-      full: 'Full'
-    },
-    status: {
-      active: 'Connected',
-      paused: 'Paused',
-      error: 'Error'
-    },
-    createTitle: 'Add Data Source',
-    editTitle: 'Edit Data Source',
-    nameLabel: 'Name',
-    namePlaceholder: 'Enter data source name',
-    sectionBasic: 'Basic information',
-    testConnection: 'Test Connection',
-    testSuccess: 'Connection successful',
-    testFailed: 'Connection failed',
-    connected: 'Connected',
-    connectionFailed: 'Connection failed',
-    isRequired: 'is required',
-    credentialsLabel: 'credentials',
-
-    untitled: 'Untitled',
-    resourceLoadFailed: 'Failed to load resources',
-    retryLoadResources: 'Retry',
-    syncScheduleLabel: 'Sync schedule',
-    syncDeletions: 'Sync deletions (remove knowledge when deleted at source)',
-    createAndSync: 'Create & Sync Now',
-    createAndSyncSuccess: 'Data source created and sync task submitted',
-    createButSyncFailed: 'Data source created, but failed to trigger sync',
-    updateSuccessSyncHint: 'Data source updated. Editing does not start a sync automatically; click Sync to import changes.',
-    saveFailed: 'Failed to save',
-    step: {
-      selectType: 'Select Type',
-      credentials: 'Credentials',
-      resources: 'Resources',
-    },
-    syncHistory: 'Sync History',
-    refreshLogs: 'Refresh logs',
-    noLogs: 'No sync records yet',
-    logStatus: {
-      running: 'Syncing',
-      success: 'Success',
-      partial: 'Partial',
-      failed: 'Failed',
-      canceled: 'Canceled'
-    },
-    logMetric: {
-      total: 'Total',
-      skipped: 'skipped',
-      failed: 'failed'
-    },
-    logSummary: {
-      total: 'Runs',
-      success: 'Success',
-      failed: 'Failed',
-      items: 'Items'
-    },
-    logDetail: {
-      startTime: 'Started',
-      endTime: 'Finished',
-      failedItems: 'Failed documents',
-      failedItemsMore: '{n} more failed document not shown | {n} more failed documents not shown',
-      docsFailedSummary: '{n} document failed to sync | {n} documents failed to sync'
-    },
-    connector: {
-      rss: 'RSS / Atom / Sitemap / Article listing',
-    },
-    connectorDesc: {
-      rss: 'Sync articles from RSS / Atom feeds, sitemaps or listing pages',
-    },
-    field: {
-      feedUrls: 'Feed URLs',
-      feedUrlsHint: 'One RSS / Atom feed, sitemap or article listing URL per line; multiple URLs are supported.',
-      feedPublisher: 'Publisher (when the feed has no author)',
-      articlePathPrefix: 'Article path prefix',
-      articlePathPrefixHint: 'Required for sitemaps and article listings, for example /news/; leave blank for feeds. Publication dates come from articles.',
-      migrationCredentialsRequired: 'Credentials must be entered again after migration',
-      migrationHeadersLabel: 'Custom headers (required)',
-      migrationHeadersReason: 'The migration package excludes the original header credentials. Enter them again before saving.',
-      authHeaders: 'Custom headers (optional)',
-      authHeadersHint: 'For private feeds. One per line in "Name: Value" form, e.g. Authorization: Bearer xxxx',
-    },
-    comingSoon: 'Coming soon',
-    docHint: 'Get credentials at:',
-    openDoc: 'Open documentation',
-    back: 'Back',
-    next: 'Next',
-    save: 'Save',
-    schedule30min: 'Every 30 min',
-    schedule1h: 'Every hour',
-    schedule6h: 'Every 6 hours',
-    schedule12h: 'Every 12 hours',
-    schedule24h: 'Daily',
-    scheduleHuman: {
-      '30min': 'Every 30 min',
-      '1h': 'Hourly',
-      '6h': 'Every 6 hours',
-      '12h': 'Every 12 hours',
-      '24h': 'Daily'
-    },
-    neverSynced: 'Never synced',
-    justNow: 'Just now',
-    minutesAgo: '{n}m ago',
-    hoursAgo: '{n}h ago',
-    daysAgo: '{n}d ago',
-    syncError: {
-      deletion_lookup_failed: 'Failed to look up the item before deletion; see server logs',
-      deletion_failed: 'Deletion failed; see server logs',
-      ingest_failed: 'Ingest failed; see server logs',
-
-    source_adapter_failed: "Site adapter processing failed. Check application logs.",
-}
-  },
   integrations: {
     title: 'Publish & Integrations',
     tabs: {
@@ -2584,7 +2265,7 @@ export default {
       baseUrl: 'API Base URL',
       baseUrlDesc: 'Use this base URL with REST API paths.',
       ingestUrl: 'External Agent ingest endpoint',
-      ingestUrlDesc: 'Send JSON with required url and content. Model intake review applies just as it does to RSS and uploads. Rejected articles return pending_review with a reason and enter pending reviews. The caller\'s judgment does not replace review. Access over the intranet using Authorization: Bearer API_KEY.',
+      ingestUrlDesc: "External tools submit complete content through the HTTP and MCP ingest interfaces. Reliquary does not fetch source pages or download remote files and images. Model intake review applies to every submission. Rejected articles return pending_review with a reason. The caller’s judgment does not replace review. Use Authorization: Bearer API_KEY over the intranet.",
       copyIngestUrl: 'Copy ingest endpoint',
       mcpUrl: 'MCP server URL',
       mcpUrlDesc: 'Connect via Streamable HTTP to search, read articles, ingest, review pending articles, set stars and write reports. Access over the intranet with the same API key: Authorization: Bearer API_KEY.',

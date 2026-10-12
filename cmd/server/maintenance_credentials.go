@@ -25,7 +25,6 @@ type maintenanceCredentialInput struct {
 	BaseURL            *string           `json:"base_url,omitempty"`
 	CustomHeaders      map[string]string `json:"custom_headers,omitempty"`
 	ExtraConfig        map[string]string `json:"extra_config,omitempty"`
-	Credentials        map[string]string `json:"credentials,omitempty"`
 	ParserEngineConfig map[string]string `json:"parser_engine_config,omitempty"`
 }
 
@@ -34,7 +33,7 @@ type maintenanceCredentialInput struct {
 func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, input io.Reader, output io.Writer) error {
 	flags := flag.NewFlagSet("maintenance credentials", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	kind := flags.String("kind", "model", "model, data-source or space")
+	kind := flags.String("kind", "model", "model or space")
 	id := flags.String("id", "", "existing configuration ID")
 	path := flags.String("input", "-", "owner-only JSON file or - for stdin")
 	if err := flags.Parse(args); err != nil {
@@ -44,8 +43,8 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 		fmt.Fprintln(os.Stderr, "WARN: --kind tenant is deprecated; use --kind space")
 		*kind = "space"
 	}
-	if *id == "" || flags.NArg() != 0 || (*kind != "model" && *kind != "data-source" && *kind != "space") {
-		return errors.New("credentials requires --kind model|data-source|space --id ID and JSON input")
+	if *id == "" || flags.NArg() != 0 || (*kind != "model" && *kind != "space") {
+		return errors.New("credentials requires --kind model|space --id ID and JSON input")
 	}
 	if utils.GetAESKey() == nil {
 		return errors.New("credentials requires a new 32-byte SYSTEM_AES_KEY; values were not changed")
@@ -79,7 +78,7 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 	status := ""
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if *kind == "space" {
-			if request.APIKey != nil || request.AppSecret != nil || request.BaseURL != nil || len(request.CustomHeaders) != 0 || len(request.ExtraConfig) != 0 || len(request.Credentials) != 0 || len(request.ParserEngineConfig) != 1 {
+			if request.APIKey != nil || request.AppSecret != nil || request.BaseURL != nil || len(request.CustomHeaders) != 0 || len(request.ExtraConfig) != 0 || len(request.ParserEngineConfig) != 1 {
 				return errors.New("space input requires only parser_engine_config.mineru_api_key")
 			}
 			value, ok := request.ParserEngineConfig["mineru_api_key"]
@@ -117,9 +116,6 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 			return errors.New("parser_engine_config requires --kind space")
 		}
 		if *kind == "model" {
-			if len(request.Credentials) != 0 {
-				return errors.New("model credentials must use api_key, app_secret, base_url, custom_headers or extra_config")
-			}
 			var model types.Model
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", *id).Take(&model).Error; err != nil {
 				return errors.New("model not found or unavailable")
@@ -162,41 +158,7 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 			status = string(model.Status)
 			return nil
 		}
-		if request.APIKey != nil || request.AppSecret != nil || request.BaseURL != nil || len(request.CustomHeaders) != 0 || len(request.ExtraConfig) != 0 || len(request.Credentials) == 0 {
-			return errors.New("data-source input requires a credentials object of string values")
-		}
-		var source types.DataSource
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", *id).Take(&source).Error; err != nil {
-			return errors.New("data source not found or unavailable")
-		}
-		var config map[string]any
-		if err := json.Unmarshal(source.Config, &config); err != nil || config == nil {
-			return errors.New("data source configuration is invalid")
-		}
-		credentials, ok := config["credentials"].(map[string]any)
-		if !ok {
-			credentials = map[string]any{}
-		}
-		for name, value := range request.Credentials {
-			if value == "" {
-				return errors.New("data-source credential values must be nonempty")
-			}
-			encrypted, err := utils.EncryptAESGCM(value, utils.GetAESKey())
-			if err != nil {
-				return errors.New("cannot encrypt data-source credentials")
-			}
-			credentials[name] = encrypted
-		}
-		config["credentials"] = credentials
-		encoded, err := json.Marshal(config)
-		if err != nil {
-			return errors.New("cannot encode data-source configuration")
-		}
-		if err := tx.Model(&types.DataSource{}).Where("id=?", source.ID).Updates(map[string]any{"config": types.JSON(encoded), "updated_at": time.Now().UTC()}).Error; err != nil {
-			return errors.New("cannot save data-source credentials; values were not changed")
-		}
-		status = source.Status
-		return nil
+		return errors.New("unsupported credential kind")
 	})
 	if err != nil {
 		return err

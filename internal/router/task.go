@@ -25,7 +25,6 @@ type TaskParams struct {
 	SystemSettings       interfaces.SystemSettingService
 	EntryService         interfaces.EntryService
 	KnowledgeBaseService interfaces.KnowledgeBaseService
-	DataSourceService    interfaces.DataSourceService
 	TopicService         *service.TopicService
 	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
 	EmbeddingRebuild     *service.EmbeddingRebuilder
@@ -79,7 +78,6 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.HandleFunc(types.TypeEntryListReparse, params.EntryService.ProcessEntryListReparse)
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
-	mux.HandleFunc(types.TypeDataSourceSync, params.DataSourceService.ProcessSync)
 	mux.HandleFunc(types.TypeTopicBackfill, params.TopicService.HandleBackfill)
 	if assets, ok := params.EntryService.(interface {
 		HandleIngestAssetCleanup(context.Context, *queue.Task) error

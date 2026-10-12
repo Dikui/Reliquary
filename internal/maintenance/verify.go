@@ -28,13 +28,15 @@ type Retrieval struct {
 	IDs   []string `json:"ids"`
 }
 type Manifest struct {
-	FormatVersion int                      `json:"format_version"`
-	Tables        map[string]TableManifest `json:"tables"`
-	Files         map[string][]File        `json:"files"`
-	Retrieval     []Retrieval              `json:"retrieval"`
-	Regenerated   []string                 `json:"regenerated"`
-	Vectors       []VectorProfile          `json:"vectors"`
-	Required      []Requirement            `json:"required_credentials"`
+	collectionMigrated bool
+	FormatVersion      int                      `json:"format_version"`
+	Tables             map[string]TableManifest `json:"tables"`
+	Files              map[string][]File        `json:"files"`
+	Retrieval          []Retrieval              `json:"retrieval"`
+	Regenerated        []string                 `json:"regenerated"`
+	Vectors            []VectorProfile          `json:"vectors"`
+	Required           []Requirement            `json:"required_credentials"`
+	CollectionExports  []CollectionExportProof  `json:"collection_exports,omitempty"`
 }
 type Verification struct {
 	OK             bool             `json:"ok"`
@@ -61,7 +63,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	for _, column := range columns {
 		present[column.Table] = true
 	}
-	for _, table := range sortedTables() {
+	for _, table := range sortedTables(rules) {
 		if !present[table] {
 			continue
 		}
@@ -119,6 +121,10 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			ids = []string{}
 		}
 		manifest.Retrieval = append(manifest.Retrieval, Retrieval{Query: query, IDs: ids})
+	}
+	manifest.CollectionExports, err = collectionExports(root)
+	if err != nil {
+		return nil, err
 	}
 	manifest.Vectors, err = VectorProfiles(ctx, db)
 	if err != nil {
@@ -386,6 +392,7 @@ func checkLogs(path string, expected []map[string]any) error {
 		if err != nil {
 			return err
 		}
+		addLogDefaults(row)
 		rows = append(rows, row)
 	}
 	sortRows(rows)
@@ -417,7 +424,10 @@ func CompareManifestWithOptions(expected, actual *Manifest, allowModelChange, al
 }
 
 func CompareManifestWithSettings(expected, actual *Manifest, options CompareOptions) []string {
+	legacyFormat := expected.FormatVersion
 	expected, actual = currentManifest(expected, actual)
+	expected, actual = projectRetiredTables(expected, actual)
+	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}

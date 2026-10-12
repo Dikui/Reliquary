@@ -19,6 +19,9 @@ type entryNamingException struct {
 }
 
 var entryNamingExceptions = map[string]entryNamingException{
+	"cmd/server/maintenance_sources_pg_test.go":                                {Reason: "冻结基线恢复的真实离线 CLI 顺序使用旧表夹具", Tokens: []string{"knowledges"}},
+	"internal/maintenance/collection_migration_pg_test.go":                     {Reason: "冻结基线备份恢复到当前版本的真实旧表夹具", Tokens: []string{"knowledges"}},
+	"internal/application/service/entry_reprocess_missing_pg_test.go":          {Reason: "验证旧采集任务 payload 不再联网且保留旧文章状态", Tokens: []string{"knowledge_id"}},
 	"internal/testutil/pgtest/ingest_migration_test.go":                        {Reason: "升级保全 fixture 的嵌套历史 JSON 键须逐字保留，不能随新迁移改名", Tokens: []string{"knowledge_id"}},
 	"internal/application/service/entry_create.go":                             {Reason: "无标题来源的既有下载文件名格式，文件库名称保持不变", Tokens: []string{"Knowledge"}},
 	"internal/application/repository/retriever/postgres/summary.go":            {Reason: "检索摘要命中的既有合成 ID 前缀，保持返回结果完全一致", Tokens: []string{"knowledge"}},

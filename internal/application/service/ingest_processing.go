@@ -7,16 +7,10 @@ import (
 	"reliquary/internal/types"
 )
 
-// isIngestArticle also recognizes articles collected before acquisition existed.
+// isIngestArticle covers every article, including historical web and RSS channels.
+// Local user documents and reports have their own editing and indexing rules.
 func isIngestArticle(k *types.Entry) bool {
-	if k == nil {
-		return false
-	}
-	if k.Acquisition != "" {
-		return true
-	}
-	intake, _ := k.IntakeMetadata()
-	return intake != nil && intake.Source == "ingest"
+	return k != nil && (k.SourceKind == "" || k.SourceKind == "article")
 }
 
 func remoteIngestImage(ref string) bool {
@@ -26,9 +20,6 @@ func remoteIngestImage(ref string) bool {
 // A recorded missing reference remains in the original body. This substitution
 // is only for validation, never for article storage or processing input.
 func recordedMissingImageBody(k *types.Entry, body string) string {
-	if !isIngestArticle(k) {
-		return body
-	}
 	var missing []types.IngestMissing
 	if json.Unmarshal(k.MissingMaterials, &missing) != nil {
 		return body

@@ -197,10 +197,11 @@ func TestReconfigurationAppendPreservesOldAuthenticationMetadataAndDuplicateAtte
 	}
 }
 
-func TestSubscriptionCredentialRequirementsNameEveryEncryptedLeaf(t *testing.T) {
+func TestLegacySubscriptionCredentialRequirementsNameEveryEncryptedLeaf(t *testing.T) {
 	ctx := context.Background()
-	db := pgtest.Open(t)
+	db := collectionVersionFour(t)
 	seed(t, db)
+	seedCollection(t, db)
 	key := []byte("12345678901234567890123456789012")
 	t.Setenv("SYSTEM_AES_KEY", string(key))
 	credential := func(value string) string {

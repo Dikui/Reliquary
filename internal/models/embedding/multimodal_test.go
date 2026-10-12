@@ -106,7 +106,11 @@ func TestMultimodalEmbeddingConfigurationRejectsUnsupportedTransport(t *testing.
 	require.ErrorContains(t, err, "remote HTTP")
 	_, err = NewEmbedder(Config{Source: types.ModelSourceRemote, SupportsImages: true, MultimodalFormat: "unknown"}, nil, nil)
 	require.ErrorContains(t, err, "unsupported multimodal")
-	e, err := NewOpenAIEmbedder("", "https://example.org/v1", "text-only", 0, 3, "text", nil)
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("text-only image validation must not contact a model service")
+	}))
+	t.Cleanup(server.Close)
+	e, err := NewOpenAIEmbedder("", server.URL+"/v1", "text-only", 0, 3, "text", nil)
 	require.NoError(t, err)
 	_, err = e.EmbedImage(context.Background(), "data:image/png;base64,eA==")
 	require.ErrorContains(t, err, "does not support")

@@ -392,17 +392,6 @@ func (k *Entry) SetIntakeMetadata(intake *EntryIntakeMetadata) error {
 	return nil
 }
 
-// ManualEntryPayload represents the payload for manual entry operations.
-type ManualEntryPayload struct {
-	Title          string                 `json:"title"`
-	Content        string                 `json:"content"`
-	Status         string                 `json:"status"`
-	Channel        string                 `json:"channel"`
-	ProcessConfig  *EntryProcessOverrides `json:"process_config,omitempty"`
-	SourceInfo     SourceInfo             `json:"source_info,omitempty"`
-	SourceMetadata map[string]string      `json:"-"`
-}
-
 // SearchScope keeps space and knowledge base boundaries explicit for repository queries.
 type SearchScope struct {
 	SpaceID uint64
@@ -519,11 +508,6 @@ func (k *Entry) EnsureManualDefaults() {
 	if k.Channel == "" {
 		k.Channel = ChannelWeb
 	}
-}
-
-// IsDraft returns whether the payload should be saved as draft.
-func (p ManualEntryPayload) IsDraft() bool {
-	return p.Status == "" || p.Status == ManualEntryStatusDraft
 }
 
 const metadataKeyProcessOverrides = "process_overrides"

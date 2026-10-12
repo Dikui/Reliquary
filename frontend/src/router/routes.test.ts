@@ -157,3 +157,13 @@ test('a pre-rename bookmarked entry selection reaches the current detail query',
   assert.deepEqual(router.currentRoute.value.query, { entry_id: 'original-entry' })
   assert.equal(router.currentRoute.value.hash, '#detail')
 })
+
+test('old collection page URLs redirect to the article list instead of not found', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  for (const path of ['/platform/datasource', '/platform/data-sources/old-source', '/platform/sync-logs/old-log', '/platform/import', '/platform/upload', '/platform/manual']) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.name, 'entries', path)
+    assert.equal(router.currentRoute.value.fullPath, '/platform/entries', path)
+    assert.deepEqual(router.currentRoute.value.params, {})
+  }
+})

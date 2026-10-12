@@ -16,29 +16,13 @@ import (
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
-	webfetch "reliquary/internal/infrastructure/webfetch"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
 )
-
-// processDocumentFromPassage handles asynchronous processing of text passages
-func (s *entryService) processDocumentFromPassage(ctx context.Context,
-	kb *types.KnowledgeBase, entry *types.Entry, passage []string,
-) {
-	// Update status to processing
-	entry.ParseStatus = "processing"
-	entry.UpdatedAt = time.Now()
-	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
-		return
-	}
-
-	if err := s.processArticleBody(ctx, kb, entry, strings.Join(passage, "\n\n"), nil, types.EffectiveProcessConfig{ChunkingConfig: kb.ChunkingConfig}); err != nil {
-		s.markArticleProcessingFailed(ctx, entry, err)
-	}
-}
 
 // ProcessChunksOptions contains options for processing chunks
 type ProcessChunksOptions struct {
@@ -506,19 +490,6 @@ func (s *entryService) ReparseEntry(
 		return nil, werrors.NewBadRequestError("use the intake review action for this message")
 	}
 
-	// Allocate a fresh span tree attempt up front. Doing this BEFORE
-	// the cleanup + enqueue means: (a) the UI immediately sees a new
-	// attempt with all five stages back to "pending" instead of the
-	// previous run's "failed" badge lingering; (b) the worker's
-	// fallback path won't double-allocate when payload.Attempt is
-	// already set on the queued task.
-	reparseAttempt := 0
-	if root, n, err := s.tracker().OpenAttempt(ctx, existing.ID); err == nil && root != nil {
-		reparseAttempt = n
-	} else if err != nil {
-		logger.Warnf(ctx, "[Reparse] OpenAttempt failed for %s: %v (will fall back in worker)", existing.ID, err)
-	}
-
 	// Get knowledge base configuration
 	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, existing.KnowledgeBaseID)
 	if err != nil {
@@ -544,109 +515,33 @@ func (s *entryService) ReparseEntry(
 		}
 	}
 
-	recordReparseStarted := func() {
+	if existing.ProcessingMode == types.ProcessingModeSummaryOnly {
+		return s.markReprocessContentMissing(ctx, existing)
 	}
-
-	// A summary-only file import may have its original source removed before a
-	// user later converts it to full storage. Its first vault body is then the
-	// authoritative source for reprocessing, even though its import type is file.
-	if existing.ProcessingMode == types.ProcessingModeFull && s.vault != nil && existing.VaultPath != "" && existing.FilePath == "" && !existing.IsManual() {
-		body, err := s.vault.ReadBody(existing)
-		if err != nil {
-			return nil, err
-		}
+	body, hasBody, err := s.reprocessStoredBody(ctx, existing)
+	if err != nil {
+		return nil, err
+	}
+	if !hasBody && existing.FilePath == "" {
+		return s.markReprocessContentMissing(ctx, existing)
+	}
+	reparseAttempt := 0
+	if root, n, attemptErr := s.tracker().OpenAttempt(ctx, existing.ID); attemptErr == nil && root != nil {
+		reparseAttempt = n
+	} else if attemptErr != nil {
+		logger.Warnf(ctx, "Open article reprocessing attempt: %v", attemptErr)
+	}
+	if hasBody {
 		resetEntryForReparse(existing, kb)
 		if err := s.repo.UpdateEntry(ctx, existing); err != nil {
 			return nil, err
 		}
-		if _, err := s.enqueueManualProcessing(ctx, existing, string(body), true); err != nil {
+		if _, err := s.enqueueManualProcessing(ctx, existing, body, true); err != nil {
 			s.markEntryEnqueueFailed(ctx, existing)
 			return existing, err
 		}
 		return existing, nil
 	}
-
-	if existing.ProcessingMode == "summary_only" {
-		if isIngestArticle(existing) {
-			return existing, werrors.NewBadRequestError("摘要加链接的收录文章没有可重处理的正文，请由外部工具用同一原文链接补入全文")
-		}
-		source, err := entrySourceInfo(existing)
-		if err != nil {
-			return nil, err
-		}
-		url := source.OriginalURL
-		if url == "" && (existing.Type == "url" || existing.Type == "file_url") {
-			url = existing.Source
-		}
-		if url == "" {
-			err := errors.New("cannot reprocess summary-only article: original URL is missing")
-			s.markArticleProcessingFailed(ctx, existing, err)
-			return existing, werrors.NewBadRequestError(err.Error())
-		}
-		resetEntryForReparse(existing, kb)
-		if err := s.repo.UpdateEntry(ctx, existing); err != nil {
-			return nil, err
-		}
-		payload := types.DocumentProcessPayload{SpaceID: spaceID, EntryID: existing.ID, KnowledgeBaseID: existing.KnowledgeBaseID, URL: url, Language: types.LanguageFromContextOrDefault(ctx), Attempt: reparseAttempt}
-		if existing.Type == "file_url" || (existing.Type == "file" && isFileURL(url, "", "")) {
-			payload.URL = ""
-			payload.FileURL = url
-			payload.FileName = existing.FileName
-			payload.FileType = existing.FileType
-		}
-		encoded, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		if _, err = s.task.Enqueue(taskqueue.NewTask(types.TypeDocumentProcess, encoded, documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...)); err != nil {
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, err
-		}
-		return existing, nil
-	}
-
-	// For manual entry, use async manual processing (cleanup + re-indexing in worker)
-	if existing.IsManual() {
-		meta, metaErr := existing.ManualMetadata()
-		if metaErr != nil || meta == nil {
-			logger.Errorf(ctx, "Failed to get manual metadata for reparse: %v", metaErr)
-			return nil, werrors.NewBadRequestError("无法获取手工知识内容")
-		}
-
-		if intake, _ := existing.IntakeMetadata(); intake != nil || (s.vault != nil && existing.VaultPath != "") {
-			file, _, err := s.GetEntryBody(ctx, existing.ID)
-			if err != nil {
-				return nil, err
-			}
-			body, err := io.ReadAll(file)
-			file.Close()
-			if err != nil {
-				return nil, err
-			}
-			meta.Content = string(body)
-		}
-
-		resetEntryForReparse(existing, kb)
-
-		if err := s.repo.UpdateEntry(ctx, existing); err != nil {
-			logger.Errorf(ctx, "Failed to update entry status before reparse: %v", err)
-			return nil, err
-		}
-		if err := s.repo.UpdateEntryColumn(ctx, existing.ID, "pending_subtasks_count", 0); err != nil {
-			logger.Errorf(ctx, "Failed to reset pending_subtasks_count before reparse: %v", err)
-			return nil, err
-		}
-
-		if _, err := s.enqueueManualProcessing(ctx, existing, meta.Content, true); err != nil {
-			logger.Errorf(ctx, "Failed to enqueue manual reparse task: %v", err)
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, werrors.NewInternalServerError("Failed to submit processing task")
-		} else {
-			recordReparseStarted()
-		}
-		return existing, nil
-	}
-
 	// For non-manual entry, cleanup synchronously then enqueue document processing
 	logger.Infof(ctx, "Cleaning up existing resources for entry: %s", entryID)
 	if err := s.cleanupEntryResources(ctx, existing); err != nil {
@@ -706,98 +601,11 @@ func (s *entryService) ReparseEntry(
 			return existing, werrors.NewInternalServerError("Failed to submit processing task")
 		}
 		logger.Infof(ctx, "Enqueued reparse task: id=%s queue=%s entry_id=%s", info.ID, info.Queue, existing.ID)
-		recordReparseStarted()
 
 		return existing, nil
 	}
 
-	// For file-URL-based entry, enqueue document processing task with FileURL field
-	if existing.Type == "file_url" && existing.Source != "" {
-		spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
-
-		lang := types.LanguageFromContextOrDefault(ctx)
-		taskPayload := types.DocumentProcessPayload{
-			SpaceID:         spaceID,
-			EntryID:         existing.ID,
-			KnowledgeBaseID: existing.KnowledgeBaseID,
-			FileURL:         existing.Source,
-			FileName:        existing.FileName,
-			FileType:        existing.FileType,
-			Language:        lang,
-			Attempt:         reparseAttempt,
-		}
-
-		payloadBytes, err := json.Marshal(taskPayload)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to marshal file URL reparse task payload: %v", err)
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, werrors.NewInternalServerError("Failed to submit processing task")
-		}
-
-		task := taskqueue.NewTask(
-			types.TypeDocumentProcess,
-			payloadBytes,
-			documentProcessTaskOptions(s.config)...,
-		)
-		info, err := s.task.Enqueue(task)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to enqueue file URL reparse task: %v", err)
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, werrors.NewInternalServerError("Failed to submit processing task")
-		}
-		logger.Infof(ctx, "Enqueued file URL reparse task: id=%s queue=%s entry_id=%s", info.ID, info.Queue, existing.ID)
-		recordReparseStarted()
-
-		return existing, nil
-	}
-
-	// For URL-based entry, enqueue URL processing task
-	if existing.Type == "url" && existing.Source != "" {
-		spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
-
-		lang := types.LanguageFromContextOrDefault(ctx)
-		taskPayload := types.DocumentProcessPayload{
-			SpaceID:         spaceID,
-			EntryID:         existing.ID,
-			KnowledgeBaseID: existing.KnowledgeBaseID,
-			URL:             existing.Source,
-			Language:        lang,
-			Attempt:         reparseAttempt,
-		}
-
-		payloadBytes, err := json.Marshal(taskPayload)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to marshal URL reparse task payload: %v", err)
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, werrors.NewInternalServerError("Failed to submit processing task")
-		}
-
-		task := taskqueue.NewTask(
-			types.TypeDocumentProcess,
-			payloadBytes,
-			documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
-		)
-		info, err := s.task.Enqueue(task)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to enqueue URL reparse task: %v", err)
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, werrors.NewInternalServerError("Failed to submit processing task")
-		}
-		logger.Infof(ctx, "Enqueued URL reparse task: id=%s queue=%s entry_id=%s", info.ID, info.Queue, existing.ID)
-		recordReparseStarted()
-
-		return existing, nil
-	}
-
-	logger.Warnf(ctx, "Entry %s has no parseable content (no file, URL, or manual content)", entryID)
-	s.recordTerminalMutationFailure()
-	existing.ParseStatus = types.ParseStatusFailed
-	existing.ErrorMessage = "Entry has no parseable content"
-	if err := s.repo.UpdateEntry(ctx, existing); err != nil {
-		logger.Errorf(ctx, "Failed to persist unparseable entry state for %s: %v",
-			secutils.SanitizeForLog(entryID), err)
-	}
-	return existing, werrors.NewBadRequestError("Entry has no parseable content")
+	return s.markReprocessContentMissing(ctx, existing)
 }
 
 // resetEntryForReparse makes the top-level entry state describe the
@@ -1064,11 +872,6 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		return nil
 	}
 
-	refetchingOriginal := entry.ProcessingMode == "summary_only" && (payload.URL != "" || payload.FileURL != "")
-	if isIngestArticle(entry) && (payload.URL != "" || payload.FileURL != "") {
-		return errors.New("收录文章不允许下载原文或原始文件，请通过收录接口补全")
-	}
-
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
 		if intake.Decision == "rejected" || intake.Decision == "error" {
 			return nil
@@ -1077,9 +880,6 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 			if types.IsChatGPTDeferred(returnErr) {
 				s.markArticleProcessingFailed(ctx, entry, returnErr)
 				return
-			}
-			if returnErr != nil && refetchingOriginal {
-				s.markArticleProcessingFailed(ctx, entry, fmt.Errorf("cannot refetch original article for reprocessing: %w", returnErr))
 			}
 			if returnErr != nil && entry.ErrorMessage == "" {
 				entry.ErrorMessage = returnErr.Error()
@@ -1104,6 +904,19 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	if entry.ParseStatus == types.ParseStatusCompleted {
 		logger.Infof(ctx, "Document already completed, skipping: %s", payload.EntryID)
 		return nil // 幂等：已完成的任务直接返回
+	}
+
+	if payload.URL != "" || payload.FileURL != "" {
+		body, hasBody, err := s.reprocessStoredBody(ctx, entry)
+		if err != nil {
+			return err
+		}
+		if !hasBody {
+			_, err := s.markReprocessContentMissing(ctx, entry)
+			return err
+		}
+		payload.URL, payload.FileURL = "", ""
+		payload.Passages = []string{body}
 	}
 
 	if entry.ParseStatus == types.ParseStatusFailed {
@@ -1189,97 +1002,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	// Parse, resolve body images, review intake, then process the article once.
 	var convertResult *types.ReadResult
 
-	if payload.FileURL != "" {
-		// file_url import: SSRF re-check (防 DNS 重绑定), download, persist, then delegate to convert()
-		if err := secutils.ValidateURLForSSRF(payload.FileURL); err != nil {
-			logger.Errorf(ctx, "File URL rejected for SSRF protection in ProcessDocument: %s, err: %v", payload.FileURL, err)
-			entry.ParseStatus = "failed"
-			entry.ErrorMessage = "File URL is not allowed for security reasons"
-			entry.UpdatedAt = time.Now()
-			s.repo.UpdateEntry(ctx, entry)
-			return nil
-		}
-
-		resolvedFileName := payload.FileName
-		resolvedFileType := payload.FileType
-		contentBytes, err := downloadFileFromURL(ctx, payload.FileURL, &resolvedFileName, &resolvedFileType)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to download file from URL: %s, error: %v", payload.FileURL, err)
-			if isLastRetry {
-				entry.ParseStatus = "failed"
-				entry.ErrorMessage = err.Error()
-				entry.UpdatedAt = time.Now()
-				s.repo.UpdateEntry(ctx, entry)
-			}
-			return fmt.Errorf("failed to download file from URL: %w", err)
-		}
-
-		if resolvedFileType != "" && !isSupportedImportExtension(resolvedFileType) {
-			logger.Errorf(ctx, "Unsupported file type resolved from file URL: %s", resolvedFileType)
-			entry.ParseStatus = "failed"
-			entry.ErrorMessage = fmt.Sprintf("unsupported file type: %s", resolvedFileType)
-			entry.UpdatedAt = time.Now()
-			s.repo.UpdateEntry(ctx, entry)
-			return nil
-		}
-
-		if resolvedFileName != "" && entry.FileName == "" {
-			entry.FileName = resolvedFileName
-		}
-		if resolvedFileType != "" && entry.FileType == "" {
-			entry.FileType = resolvedFileType
-			s.repo.UpdateEntry(ctx, entry)
-		}
-
-		fileSvc := s.resolveFileService(ctx, kb)
-		filePath, err := fileSvc.SaveBytes(ctx, contentBytes, payload.SpaceID, resolvedFileName, true)
-		if err != nil {
-			if isLastRetry {
-				entry.ParseStatus = "failed"
-				entry.ErrorMessage = err.Error()
-				entry.UpdatedAt = time.Now()
-				s.repo.UpdateEntry(ctx, entry)
-			}
-			return fmt.Errorf("failed to save downloaded file: %w", err)
-		}
-
-		entry.FilePath = filePath
-		if err := s.repo.UpdateEntry(ctx, entry); err != nil {
-			_ = fileSvc.DeleteFile(ctx, filePath)
-			return err
-		}
-		payload.FilePath = filePath
-		payload.FileName = resolvedFileName
-		payload.FileType = resolvedFileType
-		convertResult, err = s.convert(ctx, payload, kb, entry, eff, isLastRetry)
-		if err != nil {
-			return err
-		}
-		if convertResult == nil {
-			return nil
-		}
-	} else if payload.URL != "" {
-		// URL import
-		convertResult, err = s.convert(ctx, payload, kb, entry, eff, isLastRetry)
-		if err != nil {
-			return err
-		}
-		if convertResult == nil {
-			return nil
-		}
-		// Update entry title from extracted page title if not already set
-		if entry.Title == "" || entry.Title == payload.URL {
-			if extractedTitle := convertResult.Metadata["title"]; extractedTitle != "" {
-				entry.Title = extractedTitle
-				entry.UpdatedAt = time.Now()
-				if err := s.repo.UpdateEntry(ctx, entry); err != nil {
-					logger.Warnf(ctx, "Failed to update entry title from extracted page title: %v", err)
-				} else {
-					logger.Infof(ctx, "Updated entry title to extracted page title: %s", extractedTitle)
-				}
-			}
-		}
-	} else if len(payload.Passages) > 0 {
+	if len(payload.Passages) > 0 {
 		convertResult = &types.ReadResult{MarkdownContent: strings.Join(payload.Passages, "\n\n")}
 	} else {
 		// File import
@@ -1291,8 +1014,6 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 			return nil
 		}
 	}
-
-	refetchingOriginal = false
 
 	// Step 2: Store images and update markdown references
 	var storedImages []docparser.StoredImage
@@ -1315,30 +1036,8 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		}
 		storedImages = images
 
-		// Resolve remote http(s) images (e.g. markdown external URLs) → download + upload to storage.
-		// ResolveAndStore handles inline bytes and base64; ResolveRemoteImages handles http/https URLs.
-		if isIngestArticle(entry) {
-			if err := s.recordMissingIngestImages(ctx, entry, convertResult.MarkdownContent); err != nil {
-				return err
-			}
-		} else {
-			updatedContent, remoteImages, remoteErr := s.imageResolver.ResolveRemoteImages(ctx, convertResult.MarkdownContent, fileSvc, spaceID)
-			if err := s.recordIntakeImages(ctx, entry, remoteImages); err != nil {
-				return err
-			}
-			if remoteErr != nil {
-				logger.Warnf(ctx, "Remote image resolution partially failed: %v", remoteErr)
-				if intake, _ := entry.IntakeMetadata(); intake != nil {
-					return fmt.Errorf("resolve intake images: %w", remoteErr)
-				}
-			}
-			if updatedContent != "" {
-				convertResult.MarkdownContent = updatedContent
-			}
-			if len(remoteImages) > 0 {
-				logger.Infof(ctx, "Resolved %d remote images for entry %s", len(remoteImages), entry.ID)
-				storedImages = append(storedImages, remoteImages...)
-			}
+		if err := s.recordMissingIngestImages(ctx, entry, convertResult.MarkdownContent); err != nil {
+			return err
 		}
 		if intake, _ := entry.IntakeMetadata(); intake != nil && s.hasUnstoredArticleImages(entry, convertResult.MarkdownContent) {
 			return fmt.Errorf("intake has unstored content images")
@@ -1420,7 +1119,7 @@ func sanitizeReadResult(result *types.ReadResult) {
 	}
 }
 
-// convert handles both file and URL reading using a unified ReadRequest.
+// convert parses only files already present in local storage.
 func (s *entryService) convert(
 	ctx context.Context,
 	payload types.DocumentProcessPayload,
@@ -1437,16 +1136,8 @@ func (s *entryService) convert(
 	docInput := types.JSONMap{
 		"file_name": payload.FileName,
 		"file_type": payload.FileType,
-		"is_url":    payload.URL != "",
-	}
-	if payload.URL != "" {
-		docInput["url"] = payload.URL
 	}
 	s.beginStage(ctx, entry.ID, types.StageDocReader, docInput)
-	isURL := payload.URL != ""
-	if isIngestArticle(entry) && (isURL || payload.FileURL != "") {
-		return nil, errors.New("收录文章只能解析已经提供的文件")
-	}
 	fileType := payload.FileType
 	spaceOverrides := s.getParserEngineOverridesFromContext(ctx)
 	var uploadOverrides map[string]string
@@ -1465,59 +1156,27 @@ func (s *entryService) convert(
 		return nil, nil
 	}
 
-	if isURL {
-		if err := secutils.ValidateURLForSSRF(payload.URL); err != nil {
-			logger.Errorf(ctx, "URL rejected for SSRF protection: %s, err: %v", payload.URL, err)
-			entry.ParseStatus = "failed"
-			entry.ErrorMessage = "URL is not allowed for security reasons"
-			entry.UpdatedAt = time.Now()
-			s.repo.UpdateEntry(ctx, entry)
-			s.failStage(ctx, entry.ID, types.StageDocReader,
-				werrors.ErrCodeDocReaderParseFailed, "URL rejected for security reasons", err)
-			return nil, nil
-		}
-	}
-
 	parserEngine := eff.ChunkingConfig.ResolveParserEngine(fileType)
-	if isURL {
-		parserEngine = eff.ChunkingConfig.ResolveParserEngine("url")
-	}
-
-	logger.Infof(ctx, "[convert] kb=%s fileType=%s isURL=%v engine=%q rules=%+v",
-		kb.ID, fileType, isURL, parserEngine, eff.ChunkingConfig.ParserEngineRules)
-
-	var reader interfaces.DocReader
-	var readerErr error
-	if isIngestArticle(entry) {
-		if docparser.IsSimpleFormat(fileType) {
-			reader = &docparser.SimpleFormatReader{}
-		} else {
-			reader = docparser.NewAnydocReader(nil, nil)
-		}
-	} else {
-		reader, readerErr = docparser.NewReader(ctx, parserEngine, fileType, isURL, docparser.ReaderDeps{Overrides: mergedOverrides})
-	}
+	reader, readerErr := docparser.NewReader(ctx, parserEngine, fileType, false, docparser.ReaderDeps{Overrides: mergedOverrides})
 	if readerErr != nil {
-		logger.Errorf(ctx, "[convert] no doc reader for kb=%s entry=%s fileType=%s engine=%q isURL=%v",
-			kb.ID, entry.ID, fileType, parserEngine, isURL)
-		entry.ParseStatus = "failed"
+		entry.ParseStatus = types.ParseStatusFailed
 		entry.ErrorMessage = readerErr.Error()
 		entry.UpdatedAt = time.Now()
-		s.repo.UpdateEntry(ctx, entry)
-		s.failStage(ctx, entry.ID, types.StageDocReader,
-			werrors.ErrCodeDocReaderUnavailable, entry.ErrorMessage, nil)
+		if err := s.repo.UpdateEntry(ctx, entry); err != nil {
+			return nil, err
+		}
+		s.failStage(ctx, entry.ID, types.StageDocReader, werrors.ErrCodeDocReaderUnavailable, entry.ErrorMessage, nil)
 		return nil, nil
 	}
 
 	req := &types.ReadRequest{
-		URL:                   payload.URL,
 		Title:                 entry.Title,
 		ParserEngine:          parserEngine,
 		RequestID:             payload.RequestId,
 		ParserEngineOverrides: mergedOverrides,
 	}
 
-	if !isURL {
+	{
 		fileReader, err := s.resolveFileServiceForPath(ctx, kb, payload.FilePath).GetFile(ctx, payload.FilePath)
 		if err != nil {
 			s.failStage(ctx, entry.ID, types.StageDocReader,
@@ -1538,18 +1197,6 @@ func (s *entryService) convert(
 
 	result, err := s.callDocReaderWithTimeout(ctx, reader, req)
 	if err != nil {
-		var fetchErr *webfetch.FetchError
-		if isURL && errors.As(err, &fetchErr) &&
-			(fetchErr.Code == webfetch.ErrorJavaScriptRequired || fetchErr.Code == webfetch.ErrorEmptyContent) {
-			entry.ParseStatus = types.ParseStatusFailed
-			entry.ErrorMessage = fetchErr.Error()
-			entry.UpdatedAt = time.Now()
-			if updateErr := s.repo.UpdateEntry(ctx, entry); updateErr != nil {
-				return nil, updateErr
-			}
-			s.failStage(ctx, entry.ID, types.StageDocReader, string(fetchErr.Code), entry.ErrorMessage, err)
-			return nil, nil
-		}
 		// Distinguish DocReader timeout (a knowable user-facing
 		// failure) from generic read errors so the UI can suggest
 		// "split this large file" specifically when relevant.

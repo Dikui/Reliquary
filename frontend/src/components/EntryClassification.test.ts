@@ -1,5 +1,5 @@
-import { changedSettings } from '../utils/settingsPatch'
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -21,7 +21,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
     ? { __esModule: true, default: component('./SelectionCheckbox.vue', {}) }
-    : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
+    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
@@ -72,7 +72,6 @@ function articleLoadingHook(record: Record<string, unknown>) {
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
-    './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
   }).default('kb-articles')
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -134,44 +133,41 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.deepEqual(requests, ['article']); assert.deepEqual(notifications, [copy.reprocessQueued])
   })
 }
-test('content type filters and RSS defaults use all six types and support unclassified and unspecified', () => {
+test('content type filters retain all six types and unclassified articles', () => {
   const page = readFileSync(new URL('../views/knowledge-base/KnowledgeBase.vue', import.meta.url), 'utf8')
   const api = readFileSync(new URL('../api/knowledge-base.ts', import.meta.url), 'utf8')
-  const datasource = readFileSync(new URL('../views/knowledge-base/settings/DataSourceEditorDialog.vue', import.meta.url), 'utf8')
-  assert.match(page, /v-model="selectedContentType"/); assert.match(page, /content_type: selectedContentType\.value/); assert.match(page, /CONTENT_TYPES, 'unclassified'/)
+  assert.match(page, /v-model="selectedContentType"/)
+  assert.match(page, /content_type: selectedContentType\.value/)
+  assert.match(page, /CONTENT_TYPES, 'unclassified'/)
   assert.match(api, /query\.append\('content_type', params\.content_type\)/)
-  assert.match(datasource, /CONTENT_TYPES\.map/); assert.match(datasource, /value: '', label: t\('datasource\.defaultContentTypeUnspecified'\)/)
-  assert.match(datasource, /default_content_type: form\.value\.default_content_type/)
-  assert.match(page, /@openEntity="openArticleEntity"/); assert.match(page, /:initial-entity-id="selectedEntityId"/)
+  assert.match(page, /@openEntity="openArticleEntity"/)
+  assert.match(page, /:initial-entity-id="selectedEntityId"/)
 })
+
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: RSS editor renders all defaults and submits the selected content type`, async () => {
-    const requests: Record<string, unknown>[] = []
-    const editor = component('../views/knowledge-base/settings/DataSourceEditorDialog.vue', {
-      '@/utils/settingsPatch': { changedSettings },
-      '@/types/entryClassification': { CONTENT_TYPES }, '@/components/SafeTextarea.vue': safeTextareaTestModule,
-      '@/components/settings/SettingDrawer.vue': { __esModule: true, default: defineComponent({ setup: (_props, { slots }) => () => h('div', slots.default?.()) }) },
-      'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {} } },
-      '@/api/datasource': { createDataSource: async (payload: Record<string, unknown>) => { requests.push(payload); return { data: { id: 'rss' } } }, triggerSync: async () => ({}) },
-    })
-    const setup = editor.setup
-    editor.setup = (props: object, context: object) => {
+  test(`${locale}: historical RSS and web article channels keep their localized labels`, async () => {
+    const card = component('../views/knowledge-base/components/DocumentCardView.vue', listModules)
+    const setup = card.setup
+    card.setup = (props: object, context: object) => {
       const state = setup(props, context)
-      onServerPrefetch(async () => {
-        assert.deepEqual(state.contentTypeOptions.value.map((option: { value: string }) => option.value), ['', ...CONTENT_TYPES])
-        assert.deepEqual(state.contentTypeOptions.value.map((option: { label: string }) => option.label), [messages[locale].datasource.defaultContentTypeUnspecified, ...CONTENT_TYPES.map(type => messages[locale].knowledgeBase.contentTypes[type])])
-        state.form.value = { ...state.form.value, name: 'Updates', feedUrls: 'https://example.com/feed.xml', default_content_type: 'research' }
-        await state.save()
+      onServerPrefetch(() => {
+        assert.equal(state.getEntryType({ ...article, channel: 'rss' }), messages[locale].knowledgeBase.channelRSS)
+        assert.equal(state.getChannelLabel('rss'), messages[locale].knowledgeBase.channelRSS)
+        assert.equal(state.getChannelLabel('web'), messages[locale].knowledgeBase.channelWeb)
       })
       return state
     }
-    const app = createSSRApp(editor, { visible: true, dataSource: null })
-    app.use(createI18n({ legacy: false, locale, messages }))
-    const stub = defineComponent({ setup: (_props, { slots }) => () => h('div', slots.default?.()) })
-    for (const name of ['t-form', 't-form-item', 't-input', 't-textarea', 't-select', 't-radio-group', 't-radio', 't-switch', 't-button', 't-alert', 't-popconfirm']) app.component(name, stub)
-    const html = await renderToString(app)
-    assert.ok(html.includes(messages[locale].datasource.defaultContentType))
-    assert.equal(requests.length, 1); assert.equal(requests[0].default_content_type, 'research')
-    assert.equal(requests[0].type, 'rss')
+    await render(card, { ...props, items: [{ ...article, channel: 'rss' }, { ...article, channel: 'web' }] }, locale)
+    const row = component('../views/knowledge-base/components/DocumentListView.vue', listModules)
+    const rowSetup = row.setup
+    row.setup = (props: object, context: object) => {
+      const state = rowSetup(props, context)
+      onServerPrefetch(() => {
+        assert.equal(state.getSourceInfo({ ...article, channel: 'rss' }).label, messages[locale].knowledgeBase.channelRSS)
+        assert.equal(state.getSourceInfo({ ...article, type: 'url', channel: 'web' }).label, messages[locale].knowledgeBase.channelUrl)
+      })
+      return state
+    }
+    await render(row, { ...props, items: [{ ...article, channel: 'rss' }, { ...article, type: 'url', channel: 'web' }] }, locale)
   })
 }

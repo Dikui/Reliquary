@@ -652,7 +652,7 @@ def record(ctx, kind, result):
     args = ["record", "--kind", kind, "--status", result["status"], "--path", result.get("path", ""),
             "--size", str(result.get("size_bytes", 0)), "--error", result.get("error", "")[:1000]]
     try:
-        ctx.cli_json(*args)
+        return ctx.cli_json(*args)
     except AdminError as error:
         print(f"Alert: maintenance result could not be recorded: {error}", file=sys.stderr)
 
@@ -768,7 +768,9 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
     finally:
         result["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
         if kind == "backup":
-            record(ctx, "backup", result)
+            confirmed = record(ctx, "backup", result)
+            if getattr(args, "upgrade", False) and result["status"] == "success":
+                capture_upgrade_backup_record(ctx, destination, result, before, confirmed)
 
 
 def backup(ctx, args):
@@ -839,35 +841,48 @@ def restore(ctx, package, args):
     for name in ("vault", "resources"):
         ctx.restore_storage(name, package / name)
     legacy = ctx.legacy_schema()
-    if not legacy:
-        ctx.cli_json("migrate")
-    freeze_restored_queue(ctx)
-    ctx.cli_json("reindex")
+    preserve_version = getattr(args, "preserve_version", False)
+    ctx.preserve_version = preserve_version
+    required = metadata["required_credentials"] if preserve_version else [row for row in metadata["required_credentials"] if row.get("kind") != "data_sources"]
     expected = str(package / "snapshot.json")
     verification_overrides = {}
     # Container CLI cannot see the host package. Pipe the manifest through a mount.
     if not ctx.local_server and not ctx.direct:
         expected = "/maintenance-package/snapshot.json"
         verification_overrides["RELIQUARY_ADMIN_CLI_PACKAGE_HOST"] = str(package)
+    if not preserve_version:
+        freeze_restored_queue(ctx)
+        # Validate the untouched restored replica and files using their old
+        # schema before any current-version flush can replace those copies.
+        ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=verification_overrides)
+        ctx.cli_json("export-sources")
+        ctx.cli_json("migrate")
+        legacy = False
+    freeze_restored_queue(ctx)
+    ctx.cli_json("reindex")
+    if not preserve_version:
+        # Export succeeded and the original baseline remains in the package.
+        # Refresh current-schema copies, then compare against that same baseline.
+        ctx.cli_json("flush")
     verification = ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=verification_overrides)
     json_write(ctx.root / ".maintenance-restore.json", {"state": "waiting_models", "package": str(package), "verification": verification,
                                                         "scheduler_required": getattr(ctx, "scheduler_required", False),
-                                                        "required_credentials": metadata["required_credentials"]})
-    print_credentials(metadata["required_credentials"])
+                                                        "required_credentials": required, "preserve_version": preserve_version})
+    print_credentials(required, preserve_version)
     start_paused_environment(ctx)
     if getattr(args, "skip_models", False):
-        print("Restored and verified. State: waiting_models. Run setup-models, then unpack --resume. Host scheduler installation is checked before resuming collection.")
+        print("Restored and verified. State: waiting_models. Run setup-models, then unpack --resume. Host scheduler installation is checked before resuming task execution.")
         return
     model_args = argparse.Namespace(install=False, download=False, start=False)
     if not setup_models(ctx, model_args):
         state = "waiting_legacy_credentials" if legacy else getattr(ctx, "waiting_state", "waiting_models")
-        json_write(ctx.root / ".maintenance-restore.json", {"state": state, "package": str(package), "verification": verification, "scheduler_required": getattr(ctx, "scheduler_required", False), "required_credentials": metadata["required_credentials"]})
-        access = "The legacy application stays offline; use maintenance credentials --kind model --id ID --input FILE" if legacy else "The settings page is available; collection and task execution stay paused"
+        json_write(ctx.root / ".maintenance-restore.json", {"state": state, "package": str(package), "verification": verification, "scheduler_required": getattr(ctx, "scheduler_required", False), "required_credentials": required, "preserve_version": preserve_version})
+        access = "The legacy application stays offline; use maintenance credentials --kind model --id ID --input FILE" if legacy else "The settings page is available; task execution stays paused"
         raise AdminError(f"State: {state}. {access}. Run setup-models or enter credentials, then unpack --resume")
     finalize_restore(ctx, package)
 
 
-def print_credentials(required):
+def print_credentials(required, preserve_version=False):
     print("Reconfiguration checklist:")
     for item in required:
         name = item.get("name", item.get("id", ""))
@@ -878,7 +893,7 @@ def print_credentials(required):
     print("Confirm these retained public settings on the new machine:")
     for name, fields in (
         ("models", "remote endpoints, Ollama address and model names, multimodal embedding address; run setup-models"),
-        ("subscriptions", "source URLs, parser endpoints and public request headers; enter private headers separately"),
+        ("parsers", "parser endpoints and public service headers; enter private headers separately"),
         ("storage", "vault/uploads host paths, container mappings and filesystem permissions"),
         ("network", "app/frontend ports, SSRF allowlist and resource public URL"),
         ("ChatGPT", "new sign-in, callback URL and settings page URL"),
@@ -886,12 +901,15 @@ def print_credentials(required):
         ("intake callers", "issue new intake API keys and update every external caller"),
     ):
         print(f"  [ ] {name}: {fields}")
-    print("Credential-dependent models and subscriptions remain paused until each credential is entered and tested.")
+    if preserve_version:
+        print("  [ ] subscriptions: retained source URLs and public headers; enter credentials using the original package helper")
+    print("Credential-dependent model and parser services remain paused until each credential is entered and tested.")
 
 
 def start_paused_environment(ctx):
     if ctx.legacy_schema():
-        print("Legacy application stays offline because its task queue does not support the maintenance pause gate. Enter model, data-source or space parser credentials using maintenance credentials. For ChatGPT, use maintenance chatgpt-login, authorize its URL, then maintenance chatgpt-complete with the local redirect URL on stdin. Run unpack --resume after these steps.")
+        credential_kinds = "model, data-source or space parser" if getattr(ctx, "preserve_version", False) else "model or space parser"
+        print(f"Legacy application stays offline because its task queue does not support the maintenance pause gate. Enter {credential_kinds} credentials using maintenance credentials. For ChatGPT, use maintenance chatgpt-login, authorize its URL, then maintenance chatgpt-complete with the local redirect URL on stdin. Run unpack --resume after these steps.")
         return
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")
@@ -1004,7 +1022,7 @@ def rebuild(ctx, args):
             raise AdminError("Complete rebuild requires the .reliquary sidecar directory")
         if state_path.exists() or package.exists():
             raise AdminError("A rebuild baseline already exists. Use rebuild VAULT --resume; do not replace its original verification manifest")
-        original_required = json.loads((vault / ".reliquary/manifest.json").read_text()).get("required", [])
+        original_required = [row for row in json.loads((vault / ".reliquary/manifest.json").read_text()).get("required", []) if row.get("kind") != "data_sources"]
         application_tables = ctx.sql("SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename NOT IN (SELECT c.relname FROM pg_class c JOIN pg_depend d ON d.objid=c.oid WHERE d.deptype='e')")
         if int(application_tables or "0") == 0:
             ctx.cli_json("migrate")
@@ -1041,7 +1059,7 @@ def rebuild(ctx, args):
         raise AdminError("Original rebuild baseline is damaged or belongs to another vault; stopped without resuming")
     status = ctx.cli_json("status")
     if not status.get("paused") or status.get("pause_mode") != "snapshot":
-        raise AdminError("Rebuild resume requires the original snapshot pause; stop collection before inspecting this environment")
+        raise AdminError("Rebuild resume requires the original snapshot pause; keep task execution stopped before inspecting this environment")
     expected_path = str(package / "snapshot.json")
     checks = dict(side)
     if not ctx.local_server and not ctx.direct:
@@ -1155,6 +1173,7 @@ def unpack(ctx, args):
         state = json.loads((ctx.root / ".maintenance-restore.json").read_text())
         package = Path(state["package"])
         ctx.scheduler_required = state.get("scheduler_required", False)
+        ctx.preserve_version = state.get("preserve_version", False)
         ctx.no_scheduler = args.no_scheduler or ctx.env.get("RELIQUARY_ADMIN_NO_SCHEDULER") == "1"
         if not setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)):
             start_paused_environment(ctx)
@@ -1221,14 +1240,46 @@ def unpack(ctx, args):
     remember_runtime(fresh, package / "source", metadata["code"], metadata["images"])
     fresh.compose("up", "-d", "--wait", "--no-build", "--pull", "never", fresh.db)
     fresh.compose("create", "--no-build", "--pull", "never", fresh.app)
+    args.preserve_version = True
     restore(fresh, package, args)
     print(f"Deployment source: {target}")
+
+
+def capture_upgrade_backup_record(ctx, package, result, before, confirmed):
+    """Bind the one successful pre-upgrade backup record to its exact safe rows."""
+    original = before.get("tables", {}).get("maintenance_state")
+    if original is None:
+        return  # A schema zero backup has no maintenance history to advance.
+    if not isinstance(confirmed, dict) or confirmed.get("status") != "success" or confirmed.get("path") != result["path"] or confirmed.get("size_bytes") != result["size_bytes"] or confirmed.get("error", "") != "":
+        raise AdminError("The successful pre-upgrade backup result was not confirmed; migration was not started")
+    after = ctx.cli_json("manifest")["tables"].get("maintenance_state")
+    if after is None or original.get("rows") != 1 or after.get("rows") != 1 or len(original.get("data", [])) != 1 or len(after.get("data", [])) != 1:
+        raise AdminError("Pre-upgrade backup requires exactly one preserved maintenance history row")
+    previous, current = original["data"][0], after["data"][0]
+    backup_fields = {"backup_at", "backup_status", "backup_path", "backup_size_bytes", "backup_error"}
+    if original.get("columns") != after.get("columns") or original.get("json_nulls") != after.get("json_nulls") or previous.keys() != current.keys() or {key: value for key, value in previous.items() if key not in backup_fields} != {key: value for key, value in current.items() if key not in backup_fields}:
+        raise AdminError("Maintenance data outside this backup record changed before upgrade; migration was not started")
+    if current.get("backup_status") != "success" or current.get("backup_path") != result["path"] or current.get("backup_size_bytes") != result["size_bytes"] or current.get("backup_error") != "":
+        raise AdminError("Pre-upgrade backup history does not match this completed backup")
+    try:
+        recorded_at = dt.datetime.fromisoformat(current["backup_at"].replace("Z", "+00:00"))
+        finished_at = dt.datetime.fromisoformat(result["finished_at"].replace("Z", "+00:00"))
+        if recorded_at.tzinfo is None or finished_at.tzinfo is None or not finished_at <= recorded_at <= dt.datetime.now(dt.timezone.utc):
+            raise ValueError("backup record time is outside this completed operation")
+    except (KeyError, TypeError, ValueError) as error:
+        raise AdminError("Pre-upgrade backup history has an invalid record time") from error
+    ctx.upgrade_backup_record = {"package": str(Path(package).resolve()), "before": original, "after": after}
 
 
 def verify_upgrade(ctx, package):
     """Keep every prior table exact while allowing newly introduced tables."""
     expected = json.loads((Path(package) / "snapshot.json").read_text())
     actual = ctx.cli_json("manifest")
+    recorded = getattr(ctx, "upgrade_backup_record", None)
+    if recorded is not None:
+        if recorded["package"] != str(Path(package).resolve()) or expected["tables"].get("maintenance_state") != recorded["before"]:
+            raise AdminError("Pre-upgrade backup maintenance history no longer matches its recorded baseline")
+        expected["tables"]["maintenance_state"] = recorded["after"]
     for table, rows in actual["tables"].items():
         if table not in expected["tables"]:
             expected["tables"][table] = rows
@@ -1498,7 +1549,7 @@ def schedule(ctx, args):
                 owner = json.loads(owner_path.read_text())
                 status = ctx.cli_json("status")
                 if owner.get("reason") == "automatic:backup" and (status.get("pause_reason") == "automatic:backup" or not status.get("paused")):
-                    print("Recovering interrupted automatic backup; restoring collection and application state.")
+                    print("Recovering interrupted automatic backup; restoring task execution and application state.")
                     clone = owner.get("clone_database", "")
                     if re.fullmatch(r"reliquary_admin_[a-f0-9]{16}", clone):
                         ctx.sql(f'DROP DATABASE IF EXISTS "{clone}" WITH (FORCE)', "postgres")
@@ -1564,6 +1615,7 @@ def schedule(ctx, args):
 def parser():
     cli = argparse.ArgumentParser(description="Reliable maintenance, migration and recovery for Reliquary")
     sub = cli.add_subparsers(dest="command", required=True)
+    sub.add_parser("export-sources", help="Export retired source configuration and synchronization history without credentials")
     for name in ("pack", "backup"):
         p = sub.add_parser(name)
         p.add_argument("directory", nargs=None if name == "pack" else "?")
@@ -1621,7 +1673,9 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     ctx = Context()
-    if args.command == "pack":
+    if args.command == "export-sources":
+        print(json.dumps(ctx.cli_json("export-sources"), ensure_ascii=False, indent=2))
+    elif args.command == "pack":
         create_package(ctx, args.directory, args)
     elif args.command == "backup":
         backup(ctx, args)
@@ -1649,7 +1703,7 @@ def main(argv=None):
     elif args.command == "rebuild":
         rebuild(ctx, args)
     elif args.command == "upgrade":
-        options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True)
+        options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True, upgrade=True)
         path = backup(ctx, options)
         try:
             if not ctx.direct and not ctx.local_server:
@@ -1661,6 +1715,7 @@ def main(argv=None):
                 ctx.env["RELIQUARY_COMMIT"] = revision
                 ctx.compose("build", ctx.app, "frontend")
             ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+            ctx.cli_json("export-sources")
             ctx.cli_json("migrate")
             if not ctx.cli_json("status").get("paused"):
                 ctx.cli_json("pause", "--mode", "snapshot", "--timeout", str(args.timeout) + "s", "--reason", "manual:upgrade")

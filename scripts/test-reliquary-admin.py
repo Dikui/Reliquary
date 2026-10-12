@@ -714,5 +714,233 @@ class AdminStorageTests(unittest.TestCase):
         self.assertNotIn("--allow-model-change", ctx.flags)
 
 
+    def upgrade_context(self, fail_export=False):
+        class FakeContext:
+            direct = True
+            local_server = None
+            env = {}
+            def __init__(self, root):
+                self.root, self.calls = root, []
+            def cli_json(self, *args, **kwargs):
+                self.calls.append(args)
+                if args[0] == "export-sources" and fail_export:
+                    raise admin.AdminError("source export failed")
+                if args[0] == "status":
+                    return {"paused": True}
+                return {"ok": True}
+        return FakeContext(self.root)
+
+    def test_export_sources_command_dispatches_to_safe_go_export(self):
+        ctx = self.upgrade_context()
+        with mock.patch.object(admin, "Context", return_value=ctx), contextlib.redirect_stdout(io.StringIO()):
+            admin.main(["export-sources"])
+        self.assertEqual(ctx.calls, [("export-sources",)])
+
+    def test_upgrade_exports_after_backup_and_before_migration(self):
+        ctx = self.upgrade_context()
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup", return_value=self.root) as backup, mock.patch.object(admin, "verify_upgrade") as verify, contextlib.redirect_stdout(io.StringIO()):
+            admin.main(["upgrade"])
+        backup.assert_called_once()
+        self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
+        self.assertLess(ctx.calls.index(("migrate",)), ctx.calls.index(("resume",)))
+        verify.assert_called_once_with(ctx, self.root)
+
+    def test_upgrade_export_failure_prevents_migration_and_resume(self):
+        ctx = self.upgrade_context(fail_export=True)
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup", return_value=self.root), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(admin.AdminError, "source export failed"):
+                admin.main(["upgrade"])
+        self.assertEqual(ctx.calls, [("export-sources",)])
+
+    def old_backup_restore_context(self, legacy=False):
+        package = self.root / "package"
+        package.mkdir()
+        (package / "database.dump").write_bytes(b"old database archive")
+        required = [{"kind": "data_sources", "id": "old-source", "fields": ["config.credentials.token"]},
+                    {"kind": "models", "id": "model", "fields": ["parameters.api_key"]}]
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT, "required_credentials": required})
+        class FakeContext:
+            direct = True
+            local_server = None
+            env = {}
+            scheduler_required = False
+            def __init__(self, root):
+                self.root, self.calls = root, []
+            def sql(self, statement):
+                self.calls.append(("sql", statement))
+                return "0"
+            def storage(self, name):
+                path = self.root / ("target-" + name)
+                path.mkdir(exist_ok=True)
+                return "host", path
+            def pg_command(self, *args):
+                return ["pg_restore"]
+            def restore_storage(self, name, source):
+                self.calls.append(("restore_storage", name))
+            def legacy_schema(self):
+                return legacy and not any(call == ("migrate",) for call in self.calls)
+            def cli_json(self, *args, **kwargs):
+                self.calls.append(args)
+                return {"ok": True}
+        return FakeContext(self.root), package, required
+
+    def test_old_backup_restore_exports_before_migration_and_drops_source_credentials(self):
+        ctx, package, required = self.old_backup_restore_context()
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+        self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
+        self.assertLess(ctx.calls.index(("migrate",)), ctx.calls.index(("reindex",)))
+        self.assertLess(ctx.calls.index(("reindex",)), ctx.calls.index(("flush",)))
+        verifies = [index for index, call in enumerate(ctx.calls) if call[0] == "verify"]
+        self.assertEqual(len(verifies), 2)
+        self.assertLess(verifies[0], ctx.calls.index(("export-sources",)))
+        self.assertLess(ctx.calls.index(("flush",)), verifies[1])
+        state = json.loads((self.root / ".maintenance-restore.json").read_text())
+        self.assertEqual(state["required_credentials"], [required[1]])
+
+
+    def test_schema_zero_data_restore_exports_and_migrates_to_current_version(self):
+        ctx, package, required = self.old_backup_restore_context(legacy=True)
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+        self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
+        self.assertFalse(ctx.legacy_schema())
+
+    def test_exact_old_image_rollback_preserves_original_schema(self):
+        ctx, package, required = self.old_backup_restore_context(legacy=True)
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(ctx, package, argparse.Namespace(skip_models=True, preserve_version=True))
+        self.assertNotIn(("migrate",), ctx.calls)
+        self.assertNotIn(("export-sources",), ctx.calls)
+        self.assertNotIn(("flush",), ctx.calls)
+        self.assertEqual(len([call for call in ctx.calls if call[0] == "verify"]), 1)
+        self.assertTrue(ctx.legacy_schema())
+        state = json.loads((self.root / ".maintenance-restore.json").read_text())
+        self.assertEqual(state["required_credentials"], required)
+        self.assertTrue(state["preserve_version"])
+
+
+    def completed_upgrade_backup(self):
+        old_row = {"backup_at": "2026-10-01T00:00:00+00:00", "backup_status": "failed", "backup_path": "/old/backup",
+                   "backup_size_bytes": 17, "backup_error": "retained previous failure", "drill_at": "2026-10-02T00:00:00+00:00",
+                   "drill_status": "failed", "drill_error": "retained drill failure", "backup_schedule": "0 3 * * 0",
+                   "drill_schedule": "0 4 1 * *", "schedule_timezone": "Asia/Shanghai", "backup_directory": "/backup/root", "automatic_enabled": True}
+        class FakeContext:
+            direct = True
+            local_server = None
+            env = {}
+            def __init__(self, root):
+                self.root, self.row, self.calls = root, dict(old_row), []
+            def manifest(self):
+                row = dict(self.row)
+                table = {"rows": 1, "data": [row], "columns": sorted(row), "sha256": admin.hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()}
+                return {"tables": {"maintenance_state": table, "entries": {"rows": 1, "data": [{"id": "article", "vault_body": "retained original"}], "sha256": "original"}}, "files": {"vault": []}, "required_credentials": []}
+            @contextlib.contextmanager
+            def stopped(self, *args):
+                yield
+            @contextlib.contextmanager
+            def cloned_database(self):
+                yield "snapshot_clone"
+            def runtime_env(self):
+                return {}
+            def copy_storage(self, name, target):
+                target.mkdir(parents=True)
+                if name == "vault":
+                    admin.json_write(target / ".reliquary/manifest.json", {"required": []})
+            def pg(self, *args, output=None):
+                output.write(b"credential-free complete database")
+            def scan_dump_credentials(self, path):
+                pass
+            def sql(self, statement):
+                return "4:false" if "schema_migrations" in statement else "version"
+            def cli_json(self, *args, **kwargs):
+                self.calls.append(args)
+                if args[0] == "manifest":
+                    return self.manifest()
+                if args[0] == "record":
+                    fields = dict(zip(args[1::2], args[2::2]))
+                    self.row.update(backup_at=admin.dt.datetime.now(admin.dt.timezone.utc).isoformat(), backup_status=fields["--status"], backup_path=fields["--path"], backup_size_bytes=int(fields["--size"]), backup_error=fields["--error"])
+                    return {"status": fields["--status"], "path": fields["--path"], "size_bytes": int(fields["--size"])}
+                if args[0] == "verify" and "--manifest" in args and "previous-data.json" in str(args[args.index("--manifest") + 1]):
+                    expected = json.loads(Path(args[args.index("--manifest") + 1]).read_text())
+                    current = self.manifest()
+                    if expected["tables"]["maintenance_state"] != current["tables"]["maintenance_state"]:
+                        raise admin.AdminError("table maintenance_state")
+                    if expected["tables"]["entries"] != current["tables"]["entries"]:
+                        raise admin.AdminError("table entries")
+                return {"ok": True}
+        ctx = FakeContext(self.root)
+        package = self.root / "completed-upgrade-backup"
+        args = argparse.Namespace(timeout=30, keep_paused=True, include_worktree=True, with_images=False, automatic=False, upgrade=True)
+        def copy_source(ctx, stage, *args):
+            (stage / "source").mkdir()
+            return {"commit": "old-version"}
+        with mock.patch.object(admin, "source_copy", side_effect=copy_source), mock.patch.object(admin, "scan_secrets"), contextlib.redirect_stdout(io.StringIO()):
+            package = admin.create_package(ctx, package, args, "backup")
+        return ctx, package, old_row
+
+    def test_upgrade_verifies_complete_backup_after_its_own_success_record(self):
+        ctx, package, old_row = self.completed_upgrade_backup()
+        saved = json.loads((package / "snapshot.json").read_text())
+        self.assertEqual(saved["tables"]["maintenance_state"]["data"], [old_row], "the complete backup keeps its actual pre-record history")
+        self.assertEqual(ctx.upgrade_backup_record["before"], saved["tables"]["maintenance_state"])
+        self.assertEqual(ctx.row["backup_status"], "success")
+        self.assertEqual(ctx.row["backup_path"], str(package))
+        self.assertEqual(ctx.row["drill_error"], "retained drill failure")
+        admin.verify_upgrade(ctx, package)
+        admin.check_files(package)
+
+    def test_upgrade_backup_record_does_not_hide_later_history_or_article_changes(self):
+        for table, field, value in [("maintenance_state", "drill_error", "tampered drill history"),
+                                    ("maintenance_state", "backup_size_bytes", 999999)]:
+            with self.subTest(field=field):
+                ctx, package, old_row = self.completed_upgrade_backup()
+                ctx.row[field] = value
+                with self.assertRaisesRegex(admin.AdminError, "table maintenance_state"):
+                    admin.verify_upgrade(ctx, package)
+                admin.shutil.rmtree(package)
+        ctx, package, old_row = self.completed_upgrade_backup()
+        original = ctx.manifest
+        def modified():
+            current = original()
+            current["tables"]["entries"]["data"][0]["vault_body"] = "tampered original"
+            return current
+        ctx.manifest = modified
+        with self.assertRaisesRegex(admin.AdminError, "table entries"):
+            admin.verify_upgrade(ctx, package)
+
+    def test_upgrade_record_proof_rejects_unrelated_history_and_missing_confirmation(self):
+        ctx, package, old_row = self.completed_upgrade_backup()
+        before = {"tables": {"maintenance_state": ctx.upgrade_backup_record["before"]}}
+        result = {"path": str(package), "size_bytes": ctx.row["backup_size_bytes"], "finished_at": ctx.row["backup_at"]}
+        confirmed = {"status": "success", "path": str(package), "size_bytes": result["size_bytes"]}
+        ctx.row["drill_error"] = "unrelated change during backup record"
+        with self.assertRaisesRegex(admin.AdminError, "outside this backup record"):
+            admin.capture_upgrade_backup_record(ctx, package, result, before, confirmed)
+        ctx.row["drill_error"] = old_row["drill_error"]
+        with self.assertRaisesRegex(admin.AdminError, "not confirmed"):
+            admin.capture_upgrade_backup_record(ctx, package, result, before, None)
+        ctx.row["backup_at"] = "2026-10-01T00:00:00+00:00"
+        with self.assertRaisesRegex(admin.AdminError, "invalid record time"):
+            admin.capture_upgrade_backup_record(ctx, package, result, before, confirmed)
+
+
+    def test_old_restore_invalid_original_material_stops_before_migration_or_flush(self):
+        ctx, package, required = self.old_backup_restore_context()
+        original_cli = ctx.cli_json
+        def reject_original(*args, **kwargs):
+            if args[0] == "verify":
+                ctx.calls.append(args)
+                raise admin.AdminError("restored original checksum mismatch")
+            return original_cli(*args, **kwargs)
+        ctx.cli_json = reject_original
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"):
+            with self.assertRaisesRegex(admin.AdminError, "original checksum mismatch"):
+                admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+        self.assertNotIn(("export-sources",), ctx.calls)
+        self.assertNotIn(("migrate",), ctx.calls)
+        self.assertNotIn(("flush",), ctx.calls)
+
+
 if __name__ == "__main__":
     unittest.main()

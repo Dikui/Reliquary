@@ -35,9 +35,7 @@ func TestOfflineMaintenanceCredentialsAreEncryptedAndNeverPrinted(t *testing.T) 
 	 (1,'Offline owner','active','personal','{"mineru_endpoint":"https://parser.example.invalid","mineru_cloud_model":"pipeline","future_option":{"description":"retain every public field"}}','2026-10-01T12:00:00Z');
 	 INSERT INTO models(id,space_id,name,type,source,status,parameters)
 	 VALUES ('offline-model',1,'Offline fixture','KnowledgeQA','remote','needs_configuration',
-	 '{"interface_type":"openai","extra_config":{"maintenance_required_fields":"[\"api_key\",\"app_secret\",\"custom_headers.Authorization\"]","maintenance_original_status":"active","maintenance_original_updated_at":"2026-10-10T00:00:00+00:00"}}');
-	 INSERT INTO data_sources(id,space_id,knowledge_base_id,name,type,status,config) VALUES
-	 ('offline-source',1,'offline-kb','Offline RSS','rss','paused','{"settings":{"feed_urls":["https://example.invalid/feed"]},"_reliquary_maintenance_original_status":"paused"}');`).Error)
+	 '{"interface_type":"openai","extra_config":{"maintenance_required_fields":"[\"api_key\",\"app_secret\",\"custom_headers.Authorization\"]","maintenance_original_status":"active","maintenance_original_updated_at":"2026-10-10T00:00:00+00:00"}}');`).Error)
 	dsn, err := url.Parse(db.Dialector.(*postgres.Dialector).DSN)
 	require.NoError(t, err)
 	password, _ := dsn.User.Password()
@@ -79,18 +77,8 @@ func TestOfflineMaintenanceCredentialsAreEncryptedAndNeverPrinted(t *testing.T) 
 	require.Equal(t, "fixture-new-auth-header", model.Parameters.CustomHeaders["Authorization"])
 	require.Equal(t, "active", model.Parameters.ExtraConfig["maintenance_original_status"])
 	require.NotContains(t, model.Parameters.ExtraConfig, "maintenance_required_fields")
-	result, err = invoke("data-source", "offline-source", `{"credentials":{"auth_headers":"fixture-new-auth-header"}}`)
-	require.NoError(t, err)
-	require.Equal(t, "paused", result["status"], "credential re-entry must not silently enable a subscription")
-	var source types.DataSource
-	require.NoError(t, db.Where("id='offline-source'").Take(&source).Error)
-	require.NotContains(t, string(source.Config), "fixture-new-auth-header")
-	require.Contains(t, string(source.Config), "enc:v1:")
-	require.Contains(t, string(source.Config), "https://example.invalid/feed")
-	require.Contains(t, string(source.Config), "_reliquary_maintenance_original_status")
-	config, err := source.ParseConfig()
-	require.NoError(t, err)
-	require.Equal(t, "fixture-new-auth-header", config.Credentials["auth_headers"])
+	_, err = invoke("data-source", "deleted-source", `{}`)
+	require.ErrorContains(t, err, "model|space")
 	var spaceBefore types.Space
 	require.NoError(t, db.Where("id=1").Take(&spaceBefore).Error)
 	result, err = invoke("space", "1", `{"parser_engine_config":{"mineru_api_key":"fixture-new-parser-key"}}`)
@@ -127,7 +115,7 @@ func TestOfflineMaintenanceCredentialsAreEncryptedAndNeverPrinted(t *testing.T) 
 	require.Empty(t, table)
 	version, dirty, err := migrations.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 4, version)
+	require.EqualValues(t, 5, version)
 	require.False(t, dirty)
 }
 

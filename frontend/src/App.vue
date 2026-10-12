@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ManualEntryEditor from '@/components/ManualEntryEditor.vue'
-import UploadConfirmHost from '@/components/UploadConfirmHost.vue'
+import ReparseConfirmHost from '@/components/ReparseConfirmHost.vue'
 import ServiceAvailabilityNotice from '@/components/ServiceAvailabilityNotice.vue'
 
 // TDesign locale configs
@@ -24,8 +23,7 @@ const tdGlobalConfig = computed(() => tdLocaleMap[locale.value] || enUSConfig)
     <div id="app">
       <ServiceAvailabilityNotice />
       <RouterView />
-      <ManualEntryEditor />
-      <UploadConfirmHost />
+      <ReparseConfirmHost />
     </div>
   </t-config-provider>
 </template>

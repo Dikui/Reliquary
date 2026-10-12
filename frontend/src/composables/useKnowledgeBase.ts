@@ -1,9 +1,8 @@
 import { ref, reactive } from "vue";
 import { storeToRefs } from "pinia";
-import { formatStringDate, kbFileTypeVerification } from "../utils/index";
+import { formatStringDate } from "../utils/index";
 import { MessagePlugin } from "tdesign-vue-next";
 import {
-  uploadEntryFile,
   listEntryFiles,
   getEntryDetails,
   delEntryDetails,
@@ -13,14 +12,11 @@ import { entryStore } from "@/stores/entry";
 import { useI18n } from 'vue-i18n';
 import type { EntryRepostSource } from '@/api/knowledge-base';
 import type { ClassifiedEntry, StructuredSummary, EntryTopic } from '@/types/entryClassification';
-import { useResourcesStore } from '@/stores/resources';
-import { useEntryDuplicates } from './useEntryDuplicates';
 
 export default function (knowledgeBaseId?: string) {
   const usemenuStore = entryStore();
   const { t } = useI18n();
   const { cardList, total } = storeToRefs(usemenuStore);
-  const duplicates = useEntryDuplicates(() => knowledgeBaseId || useResourcesStore().knowledgeBase?.id);
   let moreIndex = ref(-1);
   const details = reactive({
     title: "",
@@ -40,6 +36,8 @@ export default function (knowledgeBaseId?: string) {
     starred: false,
     source_unverified: false,
     acquisition: undefined as ClassifiedEntry['acquisition'],
+    ingest_api_key_name: '',
+    last_ingest_api_key_name: '',
     incomplete: false,
     missing_materials: [] as NonNullable<ClassifiedEntry['missing_materials']>,
     external_completion_attempted: false,
@@ -154,42 +152,6 @@ export default function (knowledgeBaseId?: string) {
       moreIndex.value = -1;
     }
   };
-  const requestMethod = (file: any, uploadInput: any) => {
-    if (!(file instanceof File) || !uploadInput) {
-      MessagePlugin.error(t('error.invalidFileType'));
-      return;
-    }
-
-    if (kbFileTypeVerification(file)) {
-      return;
-    }
-
-    const currentKbId = knowledgeBaseId || useResourcesStore().knowledgeBase?.id;
-    if (!currentKbId) {
-      MessagePlugin.error(t('error.missingKbId'));
-      return;
-    }
-
-    return uploadEntryFile(currentKbId, { file })
-      .then((result: any) => {
-        if (duplicates.showDuplicate(result, file.name)) return;
-        if (result.success) {
-          MessagePlugin.info(t('knowledgeBase.uploadSuccess'));
-          loadEntries({ page: 1, page_size: 35 }, currentKbId);
-        } else {
-          const errorMessage = result.error?.message || result.message || t('knowledgeBase.uploadFailed');
-          MessagePlugin.error(errorMessage);
-        }
-      })
-      .catch((err: any) => {
-        if (duplicates.showDuplicate(err, file.name)) return;
-        const errorMessage = err.error?.message || err.message || t('knowledgeBase.uploadFailed');
-        MessagePlugin.error(errorMessage);
-      })
-      .finally(() => {
-        uploadInput.value.value = "";
-      });
-  };
   const getCardDetails = (item: any) => {
     activeEntryId = item.id;
     chunkRequestGeneration++;
@@ -210,6 +172,8 @@ export default function (knowledgeBaseId?: string) {
       starred: false,
       source_unverified: false,
       acquisition: undefined,
+      ingest_api_key_name: '',
+      last_ingest_api_key_name: '',
       incomplete: false,
       missing_materials: [],
       external_completion_attempted: false,
@@ -252,6 +216,8 @@ export default function (knowledgeBaseId?: string) {
             starred: Boolean(data.starred),
             source_unverified: Boolean(data.source_unverified),
             acquisition: data.acquisition,
+            ingest_api_key_name: data.ingest_api_key_name || '',
+            last_ingest_api_key_name: data.last_ingest_api_key_name || '',
             incomplete: Boolean(data.incomplete),
             missing_materials: Array.isArray(data.missing_materials) ? data.missing_materials : [],
             external_completion_attempted: Boolean(data.external_completion_attempted),
@@ -307,7 +273,6 @@ export default function (knowledgeBaseId?: string) {
       });
   };
   return {
-    ...duplicates,
     cardList,
     moreIndex,
     loadEntries,
@@ -315,7 +280,6 @@ export default function (knowledgeBaseId?: string) {
     delEntry,
     openMore,
     onVisibleChange,
-    requestMethod,
     getCardDetails,
     total,
     getfDetails,

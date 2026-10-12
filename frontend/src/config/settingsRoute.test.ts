@@ -71,7 +71,7 @@ test('canonical settings query skips a redundant replace', () => {
 })
 
 test('deleted and unknown settings sections fall back to the default section', () => {
-  for (const section of ['integration-embed', 'platform-api-keys', 'organizations', 'domains', 'made-up', '']) {
+  for (const section of ['datasource', 'data-sources', 'sync-logs', 'integration-embed', 'platform-api-keys', 'organizations', 'domains', 'made-up', '']) {
     assert.equal(normalizeSettingsSection(section), 'general')
     assert.deepEqual(buildSettingsRouteQuery(normalizeSettingsSection(section), {
       section,

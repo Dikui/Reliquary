@@ -110,21 +110,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.notEqual(messages[0], 'Registration is closed')
   })
 
-  test(`${locale}: read-only synchronization history exposes one close button and closes its model`, async () => {
-    const updates: boolean[] = []
-    const drawer = defineComponent({ props: ['confirmBtn', 'cancelBtn'], setup(props, { attrs, slots }) {
-      onServerPrefetch(() => {
-        assert.equal(props.confirmBtn, null)
-        assert.equal(props.cancelBtn, translator(locale)('common.close'))
-        ;(attrs.onCancel as Function)()
-      })
-      return () => h('div', slots.default?.())
-    } })
-    await componentScenario('./knowledge-base/settings/DataSourceSyncLogs.vue', locale, { '@/api/datasource': {} }, async () => {}, {
-      dataSourceId: 'rss', visible: true, 'onUpdate:visible': (value: boolean) => updates.push(value),
-    }, drawer)
-    assert.deepEqual(updates, [false])
-  })
 }
 
 test('390px login navigation reserves its own normal-flow row before the introduction', async () => {

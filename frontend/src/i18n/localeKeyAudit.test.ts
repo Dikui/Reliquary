@@ -3,7 +3,6 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { parseStatusToTimelineStatus } from '../utils/entryProcessingStatus.ts'
 import { CHUNKING_SAMPLES } from '../views/knowledge-base/settings/chunkingSamples.ts'
 import { KNOWN_MODEL_USAGE_BINDINGS, modelUsageBindingI18nKey } from '../api/model-usage.ts'
-import { entryDuplicateMessageKey } from '../utils/entryDuplicate.ts'
 import { before, test } from 'node:test'
 
 import {
@@ -93,8 +92,6 @@ test('indirect translation helpers and relative sample label maps resolve in bot
   const keys = [
     ...CHUNKING_SAMPLES.map(sample => `${sampleCall.prefix}${sample.labelKey}`),
     ...[...KNOWN_MODEL_USAGE_BINDINGS, 'unknown'].map(modelUsageBindingI18nKey),
-    entryDuplicateMessageKey({ id: 'row', knowledgeBaseId: 'kb', title: '', inputLabel: '', code: 'duplicate_manual', matchMethod: 'simhash' }),
-    entryDuplicateMessageKey({ id: 'row', knowledgeBaseId: 'kb', title: '', inputLabel: '', code: 'duplicate_manual' }),
   ]
   assert.deepEqual(findUsedKeysMissingInLocales(keys, localeKeysByName), [])
 })
@@ -116,7 +113,6 @@ const RUNTIME_WORKER_POOL_NAMES = [
 
 const RUNTIME_QUEUE_NAMES = [
   'default',
-  'sync',
   'low',
   'entity',
 ] as const
@@ -124,7 +120,6 @@ const RUNTIME_QUEUE_NAMES = [
 const RUNTIME_TASK_TYPE_KEYS = [
   'documentProcess',
   'manualProcess',
-  'sync',
   'batchReparse',
   'batchDelete',
   'indexDelete',
@@ -192,39 +187,20 @@ test('parser engine display keys exist in every locale', () => {
 test('current backend parsing statuses and error codes are localized and retained', () => {
   const parsingSource = readFileSync(new URL('../../../internal/errors/parse_error_codes.go', import.meta.url), 'utf8')
   const parsingCodes = [...parsingSource.matchAll(/ErrCode\w+\s*=\s*"([A-Z_]+)"/g)].map(match => match[1])
-  const fetchDirectory = new URL('../../../internal/infrastructure/webfetch/', import.meta.url)
-  const fetchSource = readdirSync(fetchDirectory)
-    .filter(file => file.endsWith('.go') && !file.endsWith('_test.go'))
-    .map(file => readFileSync(new URL(file, fetchDirectory), 'utf8'))
-    .join('\n')
-  const fetchCodes = [...new Set([...fetchSource.matchAll(/\bError\w+\s+ErrorCode\s*=\s*"([^"]+)"/g)].map(match => match[1]))]
-  assert.ok(fetchCodes.length, 'Web fetch error code declarations must be scanned')
-  const syncSource = readFileSync(new URL('../../../internal/application/service/datasource.go', import.meta.url), 'utf8')
-  const syncCodes = [...new Set([...syncSource.matchAll(/\bCode:\s*"([a-z_]+)"/g)].map(match => match[1]))]
-  assert.ok(parsingCodes.length, 'Parser error code declarations must be scanned')
-  assert.ok(syncCodes.length, 'Datasource error code declarations must be scanned')
   const entrySource = readFileSync(new URL('../../../internal/types/entry.go', import.meta.url), 'utf8')
   const parseStatuses = [...entrySource.matchAll(/ParseStatus\w+\s*=\s*"([a-z_]+)"/g)].map(match => match[1])
   const spanSource = readFileSync(new URL('../../../internal/types/entry_span.go', import.meta.url), 'utf8')
   const spanStatuses = [...spanSource.matchAll(/SpanStatus\w+\s*=\s*"([a-z_]+)"/g)].map(match => match[1])
-  const manualStatuses = new Map([...entrySource.matchAll(/(ManualEntryStatus\w+)\s*=\s*"([a-z_]+)"/g)].map(match => [match[1], match[2]]))
-  const createSource = readFileSync(new URL('../../../internal/application/service/entry_create.go', import.meta.url), 'utf8')
-  const manualParseStatuses = [...createSource.matchAll(/(?:ParseStatus:\s*|\.ParseStatus\s*=\s*)types\.(ManualEntryStatus\w+)/g)].map(match => {
-    const value = manualStatuses.get(match[1])
-    assert.ok(value, `Resolve the manual parse status ${match[1]}`)
-    return value
-  })
-  assert.ok(parseStatuses.length && spanStatuses.length && manualParseStatuses.length, 'Audit both spans and actual knowledge parse statuses')
-  const timelineStatuses = new Set([...spanStatuses, ...parseStatuses, ...manualParseStatuses].map(parseStatusToTimelineStatus))
+  assert.ok(parsingCodes.length && parseStatuses.length && spanStatuses.length, 'Audit parser codes and current statuses')
+  const timelineStatuses = new Set([...spanStatuses, ...parseStatuses, 'draft'].map(parseStatusToTimelineStatus))
 
   const keys = [
-    ...[...parsingCodes, ...fetchCodes].flatMap(code => [`knowledgeStages.errorCode.${code}`, `knowledgeStages.errorCode.${code}_SUGGESTION`]),
-    ...syncCodes.map(code => `datasource.syncError.${code}`),
+    ...parsingCodes.flatMap(code => [`knowledgeStages.errorCode.${code}`, `knowledgeStages.errorCode.${code}_SUGGESTION`]),
     ...[...timelineStatuses].map(status => `knowledgeStages.status.${status}`),
   ]
   assert.deepEqual(findUsedKeysMissingInLocales(keys, localeKeysByName), [])
   for (const [localeName, localeKeys] of Object.entries(localeKeysByName)) {
-    for (const code of [...parsingCodes, ...fetchCodes]) {
+    for (const code of parsingCodes) {
       for (const suffix of ['', '_SUGGESTION']) {
         const key = `knowledgeStages.errorCode.${code}${suffix}`
         const caseVariants = [...localeKeys].filter(candidate => candidate.toLowerCase() === key.toLowerCase())

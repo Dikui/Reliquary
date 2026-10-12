@@ -81,7 +81,7 @@ func TestFileSourceLinkExtractionEntersModelReview(t *testing.T) {
 				t.Cleanup(server.Close)
 				overrides = &types.EntryProcessOverrides{ParserEngineRules: []types.ParserEngineRule{{FileTypes: []string{"pdf"}, Engine: "mineru"}}, ParserEngineOverrides: map[string]string{"mineru_endpoint": server.URL}}
 			}
-			k, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, test.filename, test.body), nil, nil, "", types.ChannelWeb, overrides)
+			k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, test.filename, test.body), nil, nil, "", types.ChannelWeb, overrides)
 			require.NoError(t, err)
 			h.drain(t)
 			k = h.article(t, k.ID)
@@ -128,7 +128,7 @@ func TestOriginalSourceExtractionDoesNotTreatOrdinaryLinksAsSource(t *testing.T)
 
 func TestSupplementOriginalURLApprovalProcessesAfterModelReview(t *testing.T) {
 	h, _ := newVaultArticleHarness(t)
-	k, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "supplemented.md", "# Original research\n\nA complete new paper measures performance and reproducibility."), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "supplemented.md", "# Original research\n\nA complete new paper measures performance and reproducibility."), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	_, err = h.service.ReviewEntryIntake(h.ctx, k.ID, "supplement_url", types.SourceInfo{OriginalURL: "file:///private/file"})
@@ -146,7 +146,7 @@ func TestSupplementOriginalURLApprovalProcessesAfterModelReview(t *testing.T) {
 
 func TestMissingOriginalURLSkipsModelsAndSupplementRechecks(t *testing.T) {
 	h, _ := newVaultArticleHarness(t)
-	k, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "no-link.md", "# No source\n\nOriginal results with observations and measurements."), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "no-link.md", "# No source\n\nOriginal results with observations and measurements."), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	k = h.article(t, k.ID)
@@ -177,7 +177,7 @@ func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.processor.output = validProcessingFixture("tutorial")
 	body := "# Unlinked instructions\n\nsourceunverifiedfixture steps remain retrievable in full despite the selected tutorial type."
-	k, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, &types.ManualEntryPayload{Title: "Unlinked instructions", Content: body, Status: types.ManualEntryStatusPublish}, types.ChannelWeb)
+	k, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, &legacyManualFixturePayload{Title: "Unlinked instructions", Content: body, Status: types.ManualEntryStatusPublish}, types.ChannelWeb)
 	require.NoError(t, err)
 	h.drain(t)
 	_, err = h.service.ReviewEntryIntake(h.ctx, k.ID, "admit_unverified", types.SourceInfo{})
@@ -206,7 +206,7 @@ func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 func TestConvertMissingSourceToMinePreservesAttachmentsDeletesAndIndexes(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	body := "# My note\n\nconverttominefixture personal ideas can be indexed without model review.\n\n![chart](" + articleImageDataURI(t, 42) + ")"
-	k, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "本人笔记.md", body), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "本人笔记.md", body), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	_, err = h.service.ReviewEntryIntake(h.ctx, k.ID, "convert_to_mine", types.SourceInfo{})
@@ -260,7 +260,7 @@ func TestConvertMissingSourceToMinePreservesAttachmentsDeletesAndIndexes(t *test
 func TestConvertToMineDeleteFailurePreservesSourceAndRemovesStagedCopies(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	body := "# Retained original\n\nrollbackminefixture complete notes with supporting image.\n\n![chart](" + articleImageDataURI(t, 45) + ")"
-	k, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "保留来源.md", body), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "保留来源.md", body), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	k = h.article(t, k.ID)

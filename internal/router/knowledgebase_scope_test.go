@@ -56,9 +56,6 @@ func TestSingleKnowledgeBaseChildResourceMissingIDReturnsNotFound(t *testing.T) 
 	f := newPersonalAuthFixture(t)
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/knowledge-bases/missing/entries"},
-		{http.MethodPost, "/api/v1/knowledge-bases/missing/entries/file"},
-		{http.MethodPost, "/api/v1/knowledge-bases/missing/entries/url"},
-		{http.MethodPost, "/api/v1/knowledge-bases/missing/entries/manual"},
 		{http.MethodPost, "/api/v1/knowledge-bases/missing/hybrid-search"},
 	} {
 		got := personalRequest(t, f.router, route.method, route.path, `{}`, f.key, true)

@@ -4,15 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+
 	"strconv"
-	"strings"
-	"time"
 
 	ollamaapi "github.com/ollama/ollama/api"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
-	secutils "reliquary/internal/utils"
+
 	"reliquary/internal/utils/ollama"
 )
 
@@ -57,28 +55,9 @@ func (c *OllamaChat) convertMessages(messages []Message) []ollamaapi.Message {
 }
 
 // resolveImageForOllama resolves an image URL into raw bytes for Ollama.
-// Handles local serving paths (/files/...), data URIs, and remote HTTP URLs.
+// Handles local serving paths and data URIs.
 func resolveImageForOllama(imageURL string) ollamaapi.ImageData {
 	if data := resolveImageURLForOllama(imageURL); data != nil {
-		return data
-	}
-	if strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://") {
-		if err := secutils.ValidateURLForSSRF(imageURL); err != nil {
-			return nil
-		}
-		client := secutils.NewSSRFSafeHTTPClient(secutils.SSRFSafeHTTPClientConfig{
-			Timeout:      30 * time.Second,
-			MaxRedirects: 5,
-		})
-		resp, err := client.Get(imageURL)
-		if err != nil {
-			return nil
-		}
-		defer resp.Body.Close()
-		data, err := io.ReadAll(io.LimitReader(resp.Body, 20*1024*1024))
-		if err != nil {
-			return nil
-		}
 		return data
 	}
 	return nil

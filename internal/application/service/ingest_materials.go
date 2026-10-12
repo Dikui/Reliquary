@@ -354,9 +354,6 @@ func addRemoteIngestImageMissing(body string, items []types.IngestMissing, id ui
 // This dedicated update preserves collection-owned columns across processing
 // snapshots. It never attempts to resolve or fetch the scanned image targets.
 func (s *entryService) recordMissingIngestImages(ctx context.Context, k *types.Entry, body string) error {
-	if !isIngestArticle(k) {
-		return nil
-	}
 	old := k.IngestMissing()
 	missing := addRemoteIngestImageMissing(body, old, k.LastIngestAPIKeyID, k.LastIngestAPIKeyName)
 	if len(old) == len(missing) {
@@ -366,7 +363,7 @@ func (s *entryService) recordMissingIngestImages(ctx context.Context, k *types.E
 		return err
 	}
 	k.Incomplete = true
-	return s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(map[string]any{"missing_materials": k.MissingMaterials, "incomplete": true, "updated_at": time.Now()}).Error
+	return s.repo.UpdateEntryColumns(ctx, k.ID, map[string]any{"missing_materials": k.MissingMaterials, "incomplete": true, "updated_at": time.Now()})
 }
 
 func (s *entryService) readIngestBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry) (string, error) {

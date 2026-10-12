@@ -92,7 +92,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, err)
 			h.service.SetVault(v)
 			t.Cleanup(func() { require.NoError(t, v.Close()) })
-			a, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
+			a, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
 			require.NoError(t, err)
 			h.drain(t)
 			a = h.article(t, a.ID)
