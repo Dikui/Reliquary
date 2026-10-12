@@ -20,9 +20,6 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
-	pgretriever "reliquary/internal/application/repository/retriever/postgres"
-	"reliquary/internal/application/service/retriever"
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/logger"
 	"reliquary/internal/maintenanceops"
@@ -332,6 +329,16 @@ func (s *VaultDocumentService) scanReports(ctx context.Context, kb *types.Knowle
 			recordFileError(rel, fmt.Errorf("Markdown must be valid UTF-8"))
 			return nil
 		}
+		if !force {
+			managed, err := s.reportIndexManagedByQueue(ctx, kb.SpaceID, rel)
+			if err != nil {
+				recordFileError(rel, err)
+				return nil
+			}
+			if managed {
+				return nil
+			}
+		}
 		if _, err := s.indexReport(ctx, kb, rel, string(body), info.ModTime()); err != nil {
 			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", rel, err))
 		}
@@ -441,10 +448,12 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.Knowle
 	indexBody := body
 	if header, content, err := splitVaultHeader([]byte(body)); err == nil {
 		var report struct {
+			Title             string   `yaml:"title"`
 			RelatedArticleIDs []string `yaml:"related_article_ids"`
 		}
 		if yaml.Unmarshal(header, &report) == nil {
-			metadata, _ := json.Marshal(map[string]interface{}{"related_article_ids": report.RelatedArticleIDs})
+			metadata, _ := json.Marshal(map[string]interface{}{"related_article_ids": report.RelatedArticleIDs,
+				"report_fingerprint": reportFingerprint(report.Title, string(content))})
 			entry.Metadata = types.JSON(metadata)
 			indexBody = string(content)
 		}
@@ -597,97 +606,6 @@ func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) 
 		}
 	}
 	return result, nil
-}
-
-// CreateReport is shared by the REST endpoint and future external-agent interfaces.
-func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown string, relatedIDs []string) (*types.Entry, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	title = strings.TrimSpace(title)
-	if title == "" || len([]rune(title)) > 255 || !utf8.ValidString(title) || strings.TrimSpace(markdown) == "" || !utf8.ValidString(markdown) {
-		return nil, werrors.NewBadRequestError("report requires a title of up to 255 characters and valid Markdown")
-	}
-	ctx, kb, err := s.scope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	selected := []string{}
-	if len(relatedIDs) > 0 {
-		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
-			Where("space_id=? AND source_kind='article' AND id IN ?", kb.SpaceID, relatedIDs).
-			Order("id").Pluck("id", &selected).Error; err != nil {
-			return nil, err
-		}
-		unique := make(map[string]bool)
-		for _, id := range relatedIDs {
-			unique[id] = true
-		}
-		if len(selected) != len(unique) {
-			return nil, werrors.NewBadRequestError("related_article_ids contains an unavailable article")
-		}
-	}
-	created := time.Now().UTC()
-	id := uuid.NewString()
-	path := filepath.ToSlash(filepath.Join("reports", created.Format("2006-01"), vaultSlug(title)+"-"+id[:8]+".md"))
-	header := struct {
-		Title             string   `yaml:"title"`
-		CreatedAt         string   `yaml:"created_at"`
-		RelatedArticleIDs []string `yaml:"related_article_ids"`
-	}{title, created.Format(time.RFC3339Nano), selected}
-	raw, err := yaml.Marshal(header)
-	if err != nil {
-		return nil, err
-	}
-	content := "---\n" + string(raw) + "---\n" + markdown
-	absolutePath, err := vaultAbsolute(s.root, path)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
-		return nil, err
-	}
-	file, err := os.OpenFile(absolutePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	_, writeErr := file.WriteString(content)
-	if syncErr := file.Sync(); writeErr == nil {
-		writeErr = syncErr
-	}
-	if closeErr := file.Close(); writeErr == nil {
-		writeErr = closeErr
-	}
-	if writeErr != nil {
-		_ = os.Remove(absolutePath)
-		return nil, writeErr
-	}
-	s.observations[path] = vaultObservation{hash: vaultContentHash(content), changedAt: created.Add(-s.reportStableWait)}
-	var entry *types.Entry
-	indexed := false
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		transactional := &VaultDocumentService{db: tx, models: s.models,
-			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
-		entry, err = transactional.indexReport(ctx, kb, path, content, created)
-		if err != nil {
-			return err
-		}
-		indexed = true
-		return NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", entry.ID, nil,
-			map[string]any{"title": title, "vault_path": path, "related_article_ids": selected})
-	})
-	if err != nil {
-		if indexed {
-			delete(s.observations, path)
-			if cleanupErr := os.Remove(absolutePath); cleanupErr != nil {
-				return nil, fmt.Errorf("report transaction failed: %v; remove unsaved report: %w", err, cleanupErr)
-			}
-			return nil, err
-		}
-		// Keep the saved source on ordinary indexing failure, as other vault
-		// documents do, so a later scan can retry the same immutable file.
-		return nil, fmt.Errorf("report saved at %s but indexing failed: %w", path, err)
-	}
-	return entry, nil
 }
 
 // splitVaultHeader recognizes only a frontmatter block at byte zero.

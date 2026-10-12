@@ -28,6 +28,7 @@ type TaskParams struct {
 	TopicService         *service.TopicService
 	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
 	EmbeddingRebuild     *service.EmbeddingRebuilder
+	Reports              *service.VaultDocumentService `optional:"true"`
 	SpanTracker          service.SpanTracker
 	Cleaner              interfaces.ResourceCleaner
 }
@@ -79,6 +80,9 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
 	mux.HandleFunc(types.TypeTopicBackfill, params.TopicService.HandleBackfill)
+	if params.Reports != nil {
+		mux.HandleFunc(types.TypeReportIndex, params.Reports.HandleReportIndex)
+	}
 	if assets, ok := params.EntryService.(interface {
 		HandleIngestAssetCleanup(context.Context, *queue.Task) error
 	}); ok {
@@ -116,6 +120,7 @@ type deadLetterEntryPayload struct {
 var taskTypesAffectingEntryStatus = map[string]struct{}{
 	types.TypeDocumentProcess: {},
 	types.TypeManualProcess:   {},
+	types.TypeReportIndex:     {},
 }
 
 type deadLetterEntryListDeletePayload struct {

@@ -1523,6 +1523,7 @@ export default {
 
             entityNameEmbeddingRebuild: 'Entity name embedding rebuild',
             embeddingRebuild: 'Rebuild all embeddings',
+            reportIndex: 'Report indexing',
             topicBackfill: 'Assign historical articles to a topic',
           }
         },

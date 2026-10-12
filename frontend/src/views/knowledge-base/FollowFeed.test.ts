@@ -13,6 +13,7 @@ import en from '../../i18n/locales/en-US'
 import { CONTENT_TYPES } from '../../types/entryClassification'
 import { ENTITY_TYPES } from '../../api/entity-types'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
+import * as markdownPlainText from '../../utils/markdownPlainText'
 import { click as clickNode, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from './componentTestHarness'
 
 const require = createRequire(import.meta.url), messages = { 'zh-CN': zh, 'en-US': en }
@@ -96,6 +97,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const i18n = createI18n({ legacy: false, locale, messages })
   const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/knowledge-base': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
+  modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
   modules['@/components/FollowToggle.vue'] = modules['./FollowToggle.vue'] = moduleOf(toggle)
   const classification = loadComponent(new URL('../../components/EntryClassification.vue', import.meta.url), modules)
@@ -124,6 +126,31 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: actual follow feed API loading renders summaries and snippets as localized plain text`, async () => {
+    const env = environment(locale, [entityFollow, topicFollow])
+    const source = '# Feed heading\n\n- **bold** [read](https://example.com/private)\n\n> _quote_\n\n`code` ![chart](https://example.com/chart.png) <img src="../../attachments/a/photo.png"> <b>HTML</b>'
+    Object.assign(env.transport.articles[0], {
+      summary: { overview: '**Overview** ![chart](chart.png)', points: ['- _Point_'], key_terms: ['`Term`'] },
+      snippets: [{ chunk_id: 'feed-snippet', chunk_index: 0, content: source, match_type: 'article', score: 0 }],
+    })
+    const mounted = env.mount(env.component('./FollowFeed.vue'))
+    try {
+      await settle()
+      const result = descendants(mounted.root).find(node => node.props['data-article-id'] === 'new')!
+      const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
+      assert.ok(visibleText(result).includes(`Overview ${image}`))
+      assert.ok(visibleText(result).includes('Point'))
+      assert.ok(visibleText(result).includes('Term'))
+      const snippet = descendants(result).find(node => node.tag === 'p' && node.props.innerHTML)?.props.innerHTML
+      assert.ok(snippet.includes(`code ${image} ${image} HTML`))
+      assert.match(snippet, /Feed heading/)
+      assert.match(snippet, /bold read/)
+      assert.doesNotMatch(snippet + visibleText(result), /# Feed|\*\*bold|!\[chart\]|<img|<b>HTML|example.com\/private|attachments\/a\/photo/)
+      assert.equal((env.transport.articles[0].snippets as { content: string }[])[0].content, source)
+      assert.ok(env.calls.some(call => call.method === 'post' && call.url === '/api/v1/follows/feed'))
+      assert.deepEqual(env.errors, [])
+    } finally { mounted.close() }
+  })
   test(`${locale}: follow feed markers use API response fields and refresh without article-state requests`, async () => {
     const env = environment(locale, [entityFollow, topicFollow])
     const markedArticles = env.transport.articles.slice(0, 2)

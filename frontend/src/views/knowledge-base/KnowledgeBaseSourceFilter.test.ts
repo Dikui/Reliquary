@@ -7,6 +7,7 @@ import ts from 'typescript'
 import { CONTENT_TYPES } from '../../types/entryClassification'
 import { SEARCH_SOURCES } from '../../types/search'
 import * as entrySourceLabels from '../../utils/entrySourceLabels'
+import * as markdownPlainText from '../../utils/markdownPlainText'
 import zhCN from '../../i18n/locales/zh-CN'
 import enUS from '../../i18n/locales/en-US'
 import * as polling from './entryStatusPolling'
@@ -100,6 +101,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/api/knowledge-base': api,
     '@/utils/entryTrace': {},
     '@/utils/entrySourceLabels': entrySourceLabels,
+    '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => '' },
     '@/assets/img/more-actions.png': moduleOf(''),
     'tdesign-vue-next': { MessagePlugin: {} },

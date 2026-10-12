@@ -322,7 +322,7 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in starInput) (any, error) {
 			return services.Entries.SetStarred(ctx, in.ID, in.Starred)
 		})
-	addTool(server, "write_report", "将外部 Agent 的整理结果写入 reports/ 并立即建索引，记录操作日志。整理结果可供检索，作为综合分析资料保存。返回整理结果的 ID、路径和索引状态。",
+	addTool(server, "write_report", "将外部 Agent 的整理结果写入 reports/ 并尝试立即建索引，记录操作日志。文件与记录保存后索引失败仍返回成功，由 PostgreSQL 任务队列自动重试。相同标题与正文返回已有结果，existing=true。整理结果可供检索，作为综合分析资料保存。返回整理结果的 ID、路径和 index_status。",
 		object(map[string]any{"title": text("整理结果标题，必填，最多 255 个字符"), "markdown": text("Markdown 正文，必填"),
 			"related_article_ids": stringArray("相关的已有文章 ID，可省略")}, "title", "markdown"),
 		func(ctx context.Context, in reportInput) (any, error) {

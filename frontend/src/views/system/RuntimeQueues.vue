@@ -596,6 +596,7 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',
   'index:delete': 'indexDelete',
+  'report:index': 'reportIndex',
   'entity:name_embedding_rebuild': 'entityNameEmbeddingRebuild',
   'knowledge:embedding_rebuild': 'embeddingRebuild',
   'topic:backfill': 'topicBackfill',
@@ -1862,17 +1863,15 @@ onUnmounted(() => {
 }
 
 .rq-failed-row-refs {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: baseline;
   margin: 2px 0 0;
 }
 
 .rq-failed-ref {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 8px;
-  align-items: baseline;
+  display: contents;
   margin: 0;
 
   dt {
@@ -1880,7 +1879,8 @@ onUnmounted(() => {
     color: var(--td-text-color-placeholder);
     font-size: 12px;
     line-height: 1.45;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   dd {

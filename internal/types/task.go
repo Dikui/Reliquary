@@ -46,7 +46,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeEntryListDelete, TypeEntryListReparse,
-		TypeIngestAssetCleanup,
+		TypeIngestAssetCleanup, TypeReportIndex,
 	}},
 }
 
@@ -193,6 +193,7 @@ const (
 	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
 	TypeManualProcess              = "manual:process" // 文章正文处理任务，兼容已有持久队列名称
 	TypeIngestAssetCleanup         = "ingest:asset_cleanup"
+	TypeReportIndex                = "report:index"
 )
 
 // DocumentProcessPayload represents the document process task payload
@@ -248,4 +249,11 @@ const TypeTopicBackfill = "topic:backfill"
 type TopicBackfillPayload struct {
 	SpaceID uint64 `json:"tenant_id"`
 	JobID   string `json:"job_id"`
+}
+
+// ReportIndexPayload identifies the saved report to index without embedding its body.
+type ReportIndexPayload struct {
+	SpaceID         uint64 `json:"tenant_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	EntryID         string `json:"knowledge_id"`
 }

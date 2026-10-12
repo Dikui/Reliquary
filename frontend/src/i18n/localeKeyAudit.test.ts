@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { parseStatusToTimelineStatus } from '../utils/entryProcessingStatus.ts'
 import { CHUNKING_SAMPLES } from '../views/knowledge-base/settings/chunkingSamples.ts'
@@ -24,6 +25,7 @@ import {
   findTranslationReferenceFailures,
   type TranslationCall,
 } from './translationCallAudit.ts'
+import { DYNAMIC_TRANSLATION_ALLOWLIST, findUnlistedDynamicTranslationCalls } from './dynamicTranslationAllowlist.ts'
 
 const REFERENCE_LOCALE: LocaleName = 'en-US'
 
@@ -78,6 +80,60 @@ test('literal translation calls and conditional keys exist in both locales', () 
     }
   }
   assert.deepEqual(failures, [], failures.join('\n'))
+})
+
+test('literal translation audit fails when a currently referenced key is deliberately missing from either locale', () => {
+  const key = 'common.cancel'
+  assert.ok(translationCalls.some(call => !call.dynamic && call.literalKeys.includes(key)))
+  for (const locale of Object.keys(LOCALE_BUNDLES) as LocaleName[]) {
+    const incomplete = { ...localeKeysByName, [locale]: new Set(localeKeysByName[locale]) }
+    incomplete[locale].delete(key)
+    const failures = findTranslationReferenceFailures(translationCalls, incomplete)
+      .filter(failure => failure.kind === 'key')
+    assert.ok(failures.some(failure => failure.locale === locale && failure.key === key))
+    assert.throws(() => assert.deepEqual(failures, []), { name: 'AssertionError' })
+  }
+})
+
+test('literal translation audit process returns failure for an intentionally missing locale key', () => {
+  const auditModule = new URL('./translationCallAudit.ts', import.meta.url).href
+  const localesModule = new URL('./localeKeyAudit.ts', import.meta.url).href
+  for (const locale of Object.keys(LOCALE_BUNDLES)) {
+    const script = `
+      import assert from 'node:assert/strict'
+      import { collectTranslationCallsFromSources, findTranslationReferenceFailures } from ${JSON.stringify(auditModule)}
+      import { LOCALE_BUNDLES, collectLocaleKeys, getLocaleValueAtPath } from ${JSON.stringify(localesModule)}
+      const keys = Object.fromEntries(Object.entries(LOCALE_BUNDLES).map(([locale, bundle]) => [locale, collectLocaleKeys(bundle)]))
+      const calls = collectTranslationCallsFromSources()
+      const audit = () => findTranslationReferenceFailures(calls, keys, (locale, key) => getLocaleValueAtPath(LOCALE_BUNDLES[locale], key) !== undefined)
+      assert.deepEqual(audit(), [])
+      keys[${JSON.stringify(locale)}].delete('common.cancel')
+      assert.deepEqual(audit(), [])
+    `
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], { encoding: 'utf8' })
+    assert.equal(child.status, 1, child.stderr)
+    assert.match(child.stderr, /AssertionError/)
+    assert.match(child.stderr, /common\.cancel/)
+    assert.ok(child.stderr.includes(locale))
+  }
+})
+
+test('all runtime translation expressions are explicitly allowlisted', () => {
+  const unlisted = findUnlistedDynamicTranslationCalls(translationCalls)
+  assert.deepEqual(unlisted, [], unlisted.map(call => `${call.file}:${call.line}: ${call.expression}`).join('\n'))
+  for (const entry of DYNAMIC_TRANSLATION_ALLOWLIST) {
+    assert.ok(entry.reason.trim())
+    for (const expression of entry.expressions) {
+      assert.ok(translationCalls.some(call => call.dynamic && call.file === entry.file && call.expression === expression),
+        `Remove stale allowlist entry: ${entry.file}: ${expression}`)
+    }
+  }
+})
+
+test('runtime translation allowlist rejects a new concatenated key', () => {
+  const call = { file: 'components/Unreviewed.vue', line: 1, column: 1, functionName: 't',
+    kind: 'message' as const, expression: "'unreviewed.' + state", literalKeys: [], dynamic: true }
+  assert.deepEqual(findUnlistedDynamicTranslationCalls([call]), [call])
 })
 
 test('dynamic translation prefixes and mapped keys exist in both locales', () => {

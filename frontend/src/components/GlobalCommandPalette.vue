@@ -126,6 +126,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCmdkSearch, type CmdkFileGroup, type CmdkChunk } from './GlobalCommandPalette/useSearch'
 import { visibleFileChunks } from './GlobalCommandPalette/visibleFileChunks'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
+import { markdownToPlainText } from '@/utils/markdownPlainText'
 import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
 import ResultGroup from './GlobalCommandPalette/ResultGroup.vue'
 import ResultItem from './GlobalCommandPalette/ResultItem.vue'
@@ -307,7 +308,7 @@ const openFullSearch = () => {
   router.push({ path: '/platform/search', query: query.value.trim() ? { q: query.value.trim() } : {} })
 }
 
-const highlight = (text: string) => highlightText(text, query.value)
+const highlight = (text: string) => highlightText(markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`), query.value)
 
 // ─── Keyboard navigation ───
 

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
+import * as markdownPlainText from '../utils/markdownPlainText'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -58,6 +59,7 @@ const article = {
   entities: [{ id: 'entity-1', canonical_name: 'Example Company', entity_type: 'company' }], topics: [{ id: 'topic-1', name: 'Product releases', description: 'New product announcements' }], md: [], total: 0, metadata: {},
 }
 const listModules = {
+  '@/utils/markdownPlainText': markdownPlainText,
   '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': emptyModule, './DocumentMenuDelete.vue': emptyModule,
   '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
 }

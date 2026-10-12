@@ -3,6 +3,7 @@ import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize } from '@/utils/files';
 import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
+import { markdownToPlainText } from '@/utils/markdownPlainText';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import DocumentMenuDelete from './DocumentMenuDelete.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
@@ -421,7 +422,7 @@ const openDelete = async (item: EntryCard) => {
         </div>
         <template v-else>
           <div v-if="hoveredCardItem.description" class="card-popover-desc">
-            {{ hoveredCardItem.description }}
+            {{ markdownToPlainText(hoveredCardItem.description, `[${t('ingestStatus.missingTypes.image')}]`) }}
           </div>
           <div v-if="(hoveredCardItem as any).source" class="card-popover-source" :title="(hoveredCardItem as any).source">
             <t-icon name="link" size="12px" /> {{ (hoveredCardItem as any).source }}

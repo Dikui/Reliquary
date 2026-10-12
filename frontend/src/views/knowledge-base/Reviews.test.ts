@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../../utils/entrySourceLabels'
+import * as markdownPlainText from '../../utils/markdownPlainText'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -22,7 +23,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
     ? moduleOf(component('../../components/SelectionCheckbox.vue', {}))
-    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
+    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name === '@/utils/markdownPlainText' ? markdownPlainText : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
   return module.exports
 }
 function source(path: string) { return readFileSync(new URL(path, import.meta.url), 'utf8') }

@@ -9,6 +9,7 @@ import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
+import * as markdownPlainText from '../utils/markdownPlainText'
 
 const require = createRequire(import.meta.url)
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -55,6 +56,7 @@ async function mountFlow(path: string, props: Record<string, any>, locale: 'zh-C
     'tdesign-vue-next': { MessagePlugin: { success: (message: string) => notices.push(message), info: (message: string) => notices.push(message), warning() {}, error() {} } },
     '@/api/knowledge-base': api,
     '@/utils/entrySourceLabels': entrySourceLabels,
+    '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
     '@/assets/img/more-actions.png': 'more-actions.png',
     marked: { marked: { use() {}, Renderer: class {}, parse: passthrough } }, 'marked-katex-extension': { __esModule: true, default: () => ({}) },

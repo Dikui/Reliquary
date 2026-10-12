@@ -254,7 +254,7 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 		entry          *types.Entry
 		label          string
 		summaryVectors int64
-	}{{mine, "本人", 1}, {report, "整理结果", 0}} {
+	}{{mine, "本人", 1}, {report.Entry, "整理结果", 0}} {
 		var chunks []types.Chunk
 		require.NoError(t, h.db.Where("entry_id=?", pair.entry.ID).Find(&chunks).Error)
 		require.NotEmpty(t, chunks)

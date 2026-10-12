@@ -2,15 +2,15 @@
   <div class="api-settings">
     <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.baseUrl') }}</label><p>{{ t('integrations.api.baseUrlDesc') }}</p></div>
-      <div class="setting-control"><code>{{ apiBaseUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copy')" @click="copy(apiBaseUrl)"><t-icon name="copy" /></t-button></div>
+      <div class="setting-control"><t-tooltip :content="apiBaseUrl"><code :title="apiBaseUrl">{{ apiBaseUrl }}</code></t-tooltip><t-button variant="text" :aria-label="t('integrations.api.copy')" @click="copy(apiBaseUrl)"><t-icon name="copy" /></t-button></div>
     </div>
     <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.ingestUrl') }}</label><p>{{ t('integrations.api.ingestUrlDesc') }}</p></div>
-      <div class="setting-control"><code>POST {{ ingestUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copyIngestUrl')" @click="copy(ingestUrl)"><t-icon name="copy" /></t-button></div>
+      <div class="setting-control"><t-tooltip :content="`POST ${ingestUrl}`"><code :title="`POST ${ingestUrl}`">POST {{ ingestUrl }}</code></t-tooltip><t-button variant="text" :aria-label="t('integrations.api.copyIngestUrl')" @click="copy(ingestUrl)"><t-icon name="copy" /></t-button></div>
     </div>
     <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.mcpUrl') }}</label><p>{{ t('integrations.api.mcpUrlDesc') }}</p></div>
-      <div class="setting-control"><code>{{ mcpUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copyMcpUrl')" @click="copy(mcpUrl)"><t-icon name="copy" /></t-button></div>
+      <div class="setting-control"><t-tooltip :content="mcpUrl"><code :title="mcpUrl">{{ mcpUrl }}</code></t-tooltip><t-button variant="text" :aria-label="t('integrations.api.copyMcpUrl')" @click="copy(mcpUrl)"><t-icon name="copy" /></t-button></div>
     </div>
     <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.apiKeys') }}</label><p>{{ t('integrations.api.apiKeysDesc') }}</p></div>
@@ -198,11 +198,12 @@ onMounted(load)
 @import '../../assets/settings-layout.less';
 
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-.setting-info { min-width: 0; }
+.setting-info { flex: 1; min-width: 0; }
 .setting-info label { color: var(--td-text-color-primary); font-weight: 500; }
 .setting-info p { color: var(--td-text-color-secondary); margin: 6px 0 0; }
 .setting-control, .token-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.setting-control code { min-width: 0; }
+.setting-control { width: 360px; min-width: 280px; max-width: 100%; }
+.setting-control code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setting-control .t-button { flex-shrink: 0; }
 .api-table-shell { min-width: 0; max-width: 100%; }
 .api-key-expiry { width: 100%; min-width: 0; }

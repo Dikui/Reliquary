@@ -11,9 +11,10 @@ import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 import * as personalServerError from '../../utils/personalServerError'
 import * as searchHelpers from '../../utils/search'
+import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../../utils/sfcStyleTestHelpers'
 
 const require = createRequire(import.meta.url)
-const { Alert, DatePicker, Input, ConfigProvider } = require('tdesign-vue-next')
+const { Alert, DatePicker, Input, Tooltip, ConfigProvider } = require('tdesign-vue-next')
 const localeConfigs = {
   'zh-CN': require('tdesign-vue-next/cjs/locale/zh_CN').default,
   'en-US': require('tdesign-vue-next/cjs/locale/en_US').default,
@@ -32,6 +33,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
   const requests: Array<{ id?: number; payload: object }> = []
   const copies: Array<{ value: string; successKey: string }> = []
   const buttons: Array<{ label: unknown; click: (() => unknown) | undefined }> = []
+  const tooltips: string[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
@@ -82,14 +84,48 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
   app.component('t-table', defineComponent({ props: ['data'], setup(props, { slots }) { return () => h('section', { 'data-api-key-table': '' }, props.data?.map((row: unknown) => h('div', Object.values(slots).flatMap(slot => slot?.({ row }) ?? [])))) } }))
   app.component('t-input', Input)
   app.component('t-date-picker', picker)
+  app.component('t-tooltip', defineComponent({ props: ['content'], setup(props, { attrs, slots }) {
+    tooltips.push(props.content)
+    return () => h(Tooltip, { ...attrs, ...props }, slots)
+  } }))
   const warnings: string[] = []
   const errors: unknown[] = []
   app.config.warnHandler = warning => warnings.push(warning)
   app.config.errorHandler = error => errors.push(error)
   const html = await renderToString(app)
   assert.deepEqual(errors, [])
-  return { state, requests, copies, buttons, pickerProps, warnings, html }
+  return { state, requests, copies, buttons, tooltips, pickerProps, warnings, html }
 }
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: long API endpoint addresses keep full hover text and copy the complete address`, async () => {
+    const baseUrl = `https://${'long-host-segment-'.repeat(10)}example.test/reliquary`
+    const copyLabels = (locale === 'zh-CN' ? zh : en).integrations.api
+    const result = await scenario(locale, async () => {}, { baseUrl })
+    assert.deepEqual(result.warnings, [])
+    const addresses = [baseUrl, `${baseUrl}/api/v1/ingest`, `${baseUrl}/mcp`]
+    assert.deepEqual(result.tooltips, [addresses[0], `POST ${addresses[1]}`, addresses[2]])
+    for (const text of result.tooltips) assert.ok(result.html.includes(`title="${text}"`), text)
+    for (const label of [copyLabels.copy, copyLabels.copyIngestUrl, copyLabels.copyMcpUrl]) {
+      const button = result.buttons.find(button => button.label === label)
+      assert.ok(button?.click)
+      await button.click()
+    }
+    assert.deepEqual(result.copies.map(copy => copy.value), addresses)
+  })
+}
+
+test('API endpoint address columns reserve a minimum width and truncate long addresses beside the copy control', async () => {
+  const rules = await compiledSFCStyleRules(new URL('./ApiIntegrationSettings.vue', import.meta.url))
+  const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, 1440, { 'settings-content': 804 })
+  assert.equal(styles('.setting-control')['min-width'], '280px')
+  assert.equal(styles('.setting-control').width, '360px')
+  assert.equal(styles('.setting-control code')['min-width'], '0')
+  assert.equal(styles('.setting-control code').overflow, 'hidden')
+  assert.equal(styles('.setting-control code')['text-overflow'], 'ellipsis')
+  assert.equal(styles('.setting-control code')['white-space'], 'nowrap')
+  assert.equal(styles('.setting-control .t-button')['flex-shrink'], '0')
+})
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: API integration guidance renders the review rules and account setting limits`, async () => {

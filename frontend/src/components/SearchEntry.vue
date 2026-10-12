@@ -6,12 +6,23 @@ import type { FollowFeedArticle } from '@/types/follows'
 import EntryClassification from './EntryClassification.vue'
 import SearchImage from './SearchImage.vue'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
+import { markdownToPlainText } from '@/utils/markdownPlainText'
 
 const props = withDefaults(defineProps<{ article: SearchEntry; query: string; nested?: boolean; followFeed?: boolean }>(), { nested: false, followFeed: false })
 const emit = defineEmits<{ 'open-article': [article: SearchEntry]; 'open-entity': [id: string] }>()
 const { t, locale } = useI18n()
 const expanded = ref(false)
-const classification = computed(() => ({ ...props.article, source: props.article.original_url, structured_summary: props.article.summary }))
+const plainText = (text: string | undefined) => markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`)
+const classification = computed(() => ({
+  ...props.article,
+  source: props.article.original_url,
+  structured_summary: props.article.summary ? {
+    ...props.article.summary,
+    overview: plainText(props.article.summary.overview),
+    points: props.article.summary.points.map(plainText),
+    key_terms: props.article.summary.key_terms.map(plainText),
+  } : props.article.summary,
+}))
 const published = computed(() => props.article.published_at
   ? new Date(props.article.published_at).toLocaleDateString(locale.value)
   : t('knowledgeSearch.missingPublishedAt'))
@@ -33,7 +44,7 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
       <strong>{{ t('knowledgeSearch.snippets') }}</strong>
       <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="article-snippet">
         <SearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.entry_id" :path="snippet.image_path" :title="article.title" />
-        <p v-if="snippet.content" v-html="highlightText(snippet.content, query)" />
+        <p v-if="snippet.content" v-html="highlightText(plainText(snippet.content), query)" />
       </div>
     </div>
     <template v-if="!nested && article.similar_reports?.length">

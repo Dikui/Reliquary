@@ -10,6 +10,7 @@ import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import * as entrySourceLabels from './entrySourceLabels'
+import * as markdownPlainText from './markdownPlainText'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
@@ -57,6 +58,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
 async function renderView(name: 'DocumentCardView' | 'DocumentListView', record: Record<string, unknown>, locale: keyof typeof messages) {
   const component = createComponent(`../views/knowledge-base/components/${name}.vue`, {
     '@/utils/entrySourceLabels': entrySourceLabels,
+    '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
   })
   return renderComponent(component, {

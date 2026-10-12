@@ -11,6 +11,7 @@ import en from '../i18n/locales/en-US'
 import * as protectedAccess from '../utils/protectedFileAccess'
 import * as searchHelpers from '../utils/search'
 import * as highlight from './GlobalCommandPalette/useHighlight'
+import * as markdownPlainText from '../utils/markdownPlainText'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../utils/sfcStyleTestHelpers'
 import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from '../views/knowledge-base/componentTestHarness'
 
@@ -65,6 +66,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const article = loadComponent(new URL('./SearchEntry.vue', import.meta.url), {
       './SearchImage.vue': moduleOf(image), './EntryClassification.vue': empty,
       './GlobalCommandPalette/useHighlight': highlight,
+      '@/utils/markdownPlainText': markdownPlainText,
     })
     const route = reactive({ query: { q: 'a blue circle' } })
     const api = loadSearchAPI(async (url, body) => {

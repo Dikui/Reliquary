@@ -1445,6 +1445,7 @@ export default {
 
             entityNameEmbeddingRebuild: '实体名称向量重建',
             embeddingRebuild: '全部向量重建',
+            reportIndex: '整理结果索引',
             topicBackfill: '主题历史归入',
           }
         },
