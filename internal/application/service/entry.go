@@ -412,6 +412,9 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		return err
 	}
 	previousTitle := record.Title
+	if record.SourceKind == "mine" {
+		return fmt.Errorf("本人文档不可修改，请删除后重新导入")
+	}
 	// if need other fields update, please add here
 	if entry.Title != "" {
 		record.Title = entry.Title

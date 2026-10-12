@@ -8,7 +8,7 @@
 
 外部工具负责获取材料。包括网页全文、完整推文串、被引用的内容、原始 PDF 等文件，以及正文使用的图片文件。不要把摘要、搜索结果片段或单个链接当作全文。
 
-Reliquary 不采集、不抓取、不下载原文、文件或图片。送入后的去重、模型收录审核、处理、存储与检索由 Reliquary 完成。调用方的判断和摘要不能替代收录审核。没有正文、没有可提取的原文链接、重复或已丢弃的内容会按各自规则返回，不一定调用模型。
+Reliquary 不采集、不抓取、不下载原文、文件或图片。送入后的去重、模型收录审核、处理、存储与检索由 Reliquary 完成。调用方的判断和摘要不能替代收录审核。没有正文、文章没有可提取的原文链接、重复或已丢弃的内容会按各自规则返回，不一定调用模型。用户文档通过 `kind=mine` 导入，审核和处理标准保持一致，没有原始链接是正常的。
 
 正文用 Markdown。优先同时提供正文和原始文件。只送文件时，服务尝试本地解析；无法解析会返回 `invalid`，请外部工具提取全文后重新提交。不要声明已经提供的材料为缺失，否则它仍可能被标记待补全。
 
@@ -95,7 +95,7 @@ jq . file-asset.json image-asset.json
 ```json
 {
   "data": {
-    "asset_id": "bbace9ea-45bc-47b8-9523-ac2088e7899a",
+    "asset_id": "4b90f1db-b265-44b6-bd8d-25ae7bfbd11b",
     "type": "pdf",
     "size": 630,
     "name": "original.pdf"
@@ -136,7 +136,7 @@ jq '.data.items[] | {index,article_id,status,message,reason,completeness}' inges
     "items": [
       {
         "index": 0,
-        "article_id": "0c09653f-4b84-413b-bf1a-ef66b510f8e3",
+        "article_id": "50829c0b-fd56-40cf-b7f3-1027c22cc67f",
         "status": "accepted",
         "message": "已收录，正在处理。",
         "reason": "",
@@ -151,13 +151,74 @@ jq '.data.items[] | {index,article_id,status,message,reason,completeness}' inges
 
 `accepted` 表示已接收并排入处理，尚不保证处理完成。可以用同一 Key 请求 `GET /api/v1/entries/<article_id>` 查看 `parse_status`；`completed` 表示处理完成，`failed` 表示处理失败。不要为了等待处理而反复收录。
 
+## 导入和删除本人文档
+
+`kind=mine` 表示用户本人的文档。去重只在用户文档之间进行，不与文章归并转载。仍调用收录审核和处理模型，生成内容类型、摘要、实体和主题；没有链接时直接审核，不提取链接。审核未通过进入收录待审并标明“本人文档”，用户批准后写入 `mine/<标题>-<短id>.md`。待审区“转为本人文档”代表用户已明确批准，跳过审核，直接进入相同处理路径。
+
+本人文档一律全文保存，教程、案例、参考类型也保留正文。附件、图片、`missing`、待补全、正文定稿规则与文章一致；表头沿用文章规则，另含 `source_kind: mine`，没有值的字段省略。程序不监听 `mine/` 文件变化，不提供编辑。修改时删除后重新导入。
+
+下面提交一篇没有链接的本人文档。`acquisition` 仍必填，自己写的原文用 `verbatim`，模型整理的内容用 `model_written`。
+
+<!-- example: http-mine -->
+```bash
+curl --fail-with-body --silent --show-error \
+  "${RELIQUARY_URL}/api/v1/ingest" \
+  -H "Authorization: Bearer ${RELIQUARY_API_KEY}" \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"items":[{"kind":"mine","title":"我的设备校准记录","acquisition":"verbatim","content":"# 我的设备校准记录\n\n我在每次现场测量前核对设备编号，记录校准日期与参考读数。测量结束后比较参考值和现场读数，将偏差与环境条件一并保存。这份记录用于复查自己的测量步骤。"}]}' \
+  -o mine-result.json
+jq '.data.items[] | {article_id,status,reason}' mine-result.json
+```
+
+读取返回状态。`accepted` 表示正在处理，`pending_review` 表示需要用户决定，`exists` 表示已有本人文档。需要删除时，使用收录返回的 `article_id`：
+
+<!-- example: http-delete-document -->
+```bash
+DOCUMENT_ID="$(jq -r '.data.items[0].article_id' mine-result.json)"
+curl --fail-with-body --silent --show-error \
+  -X DELETE "${RELIQUARY_URL}/api/v1/documents/${DOCUMENT_ID}" \
+  -H "Authorization: Bearer ${RELIQUARY_API_KEY}" \
+  -o delete-document.json
+jq . delete-document.json
+```
+
+MCP 使用相同字段，请求使用后文相同的协议版本与认证。可以省略 `url`，`document_id` 为返回的 `article_id`。
+
+<!-- example: mcp-mine -->
+```bash
+curl --fail-with-body --silent --show-error \
+  "${RELIQUARY_URL}/mcp" \
+  -H "Authorization: Bearer ${RELIQUARY_API_KEY}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data-binary '{"jsonrpc":"2.0","id":70,"method":"tools/call","params":{"name":"ingest","arguments":{"items":[{"kind":"mine","title":"我的土壤采样笔记","acquisition":"verbatim","content":"# 我的土壤采样笔记\n\n我用编号袋分别保存不同深度的土壤样本，记录坐标、深度与现场含水状态。实验室分析前检查样本标签，保留取样工具清洁记录，防止样本混淆。"}]}}}' \
+  -o mcp-mine.json
+jq . mcp-mine.json
+```
+
+<!-- example: mcp-delete-document -->
+```bash
+jq -n --arg id "$(jq -r '.result.structuredContent.items[0].article_id' mcp-mine.json)" \
+  '{jsonrpc:"2.0",id:71,method:"tools/call",params:{name:"delete_document",arguments:{document_id:$id}}}' \
+  > mcp-delete-request.json
+curl --fail-with-body --silent --show-error \
+  "${RELIQUARY_URL}/mcp" \
+  -H "Authorization: Bearer ${RELIQUARY_API_KEY}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data-binary @mcp-delete-request.json -o mcp-delete-document.json
+jq . mcp-delete-document.json
+```
+
 ## HTTP 接口参考
 
 请求 JSON 使用 UTF-8。顶层未知字段、多个 JSON 对象和格式错误会失败；收录条目的未知字段会返回该条 `invalid`。成功响应含 `success: true`。鉴权错误的格式与业务错误不同，见错误表。
 
 ### POST /api/v1/ingest/check
 
-按原文链接查重，包含已登记的转载来源。这个接口不访问来源网站，也不做正文查重。
+按文章原文链接查重，包含已登记的转载来源。这个接口不访问来源网站，也不做正文查重；用户文档可直接收录，由 `kind=mine` 路径完成同类查重。
 
 | 请求字段 | 必填 | 类型 | 限制 |
 | --- | --- | --- | --- |
@@ -180,6 +241,10 @@ HTTP 200 返回 `data.items`，顺序与输入一致：
 | `discarded` | 用户丢弃过这个链接。不要再送 |
 
 任意 URL 无效会使整次查重返回 HTTP 400，不返回部分结果。
+
+### DELETE /api/v1/documents/:id
+
+按本人文档 ID 删除，不接受文章或整理结果 ID。成功返回 HTTP 200，`data` 包含 `document_id`、`status: "deleted"` 与 `message`。同步清除 `mine/` 文件、`attachments/<id>/`、检索索引与数据库记录，写入 `delete_document` 操作日志。网页列表与详情的删除遵循同一规则。删除后相同内容可以重新导入，不因去重或丢弃记录被拒绝。本人文档不提供正文编辑。
 
 ### POST /api/v1/ingest/assets
 
@@ -210,14 +275,16 @@ HTTP 201 返回 `data`：
 
 | 字段 | 必填 | 类型 | 限制与含义 |
 | --- | --- | --- | --- |
-| `url` | 是 | string | 原文绝对 HTTP/HTTPS URL，最多 2048 字节，不含用户名密码。无原文链接时显式传 `""`，不能省略或传 null |
+| `kind` | 否 | string | `article`（默认）或 `mine`（本人文档） |
+| `url` | 文章必填 | string | 原文绝对 HTTP/HTTPS URL，最多 2048 字节，不含用户名密码。文章无原文链接时显式传 `""`，不能省略或传 null；本人文档可以省略或传 `""` |
+| `document_id` | 否 | string | 仅 `kind=mine` 补全使用，填写已有本人文档 ID；不能用于编辑正文或定位文章 |
 | `acquisition` | 是 | string | `verbatim`、`extracted`、`model_written` |
 | `content` | 条件必填 | string | Markdown 全文，最多 200000 个 Unicode 字符。无全文时提供可解析的 `file`，或在 `missing` 中声明 `content` 缺失 |
 | `file` | 否 | string 或 object | 一份原始文件。HTTP 推荐附件 ID 字符串或下表的 `asset_id` 对象 |
 | `images` | 否 | object[] | 最多 100 张，下表的图片对象 |
 | `missing` | 材料缺失时必填 | object[] | 下表的缺失对象，不要隐瞒无法取得的材料 |
-| `title` | 否 | string | 最多 255 个 Unicode 字符；省略时使用链接，无链接时使用“待审文章” |
-| `author`、`publisher` | 否 | string | 原作者、发布者，无独立长度上限。应提供至少一个可核实的来源名称，缺来源证据可能进入待审 |
+| `title` | 否 | string | 最多 255 个 Unicode 字符；省略时使用链接，文章无链接时使用“待审文章”，用户文档无链接时使用“本人文档” |
+| `author`、`publisher` | 否 | string | 原作者、发布者，无独立长度上限。文章应提供至少一个可核实的来源名称，缺来源证据可能进入待审；用户文档作者为本人，这两字段可以省略 |
 | `published_at` | 否 | string | YYYY-MM-DD 或 RFC3339；无法解析会留空。未知时省略，不用采集时间替代 |
 | `content_type_hint` | 否 | string | `event`、`opinion`、`research`、`tutorial`、`case`、`reference`。只是建议，模型仍自行判定 |
 | `thread` | 否 | object[] | 推文串，按输入顺序追加；每项 `content` 为非空 string，`author`、`published_at` 为可选 string。无独立数量和长度上限 |
@@ -250,14 +317,14 @@ HTTP 201 返回 `data`：
 
 `missing` 无独立数量上限。不要提交响应中的 `api_key_id`、`api_key_name`、`submitted_at`，服务会记录本次工具身份和时间。只送文件链接时使用 `file.source_url` 并提供匹配的 `missing`；只送正文链接时仍须声明 `content` 缺失。最清楚的写法是省略拿不到的材料字段，仅在 `missing` 中给出地址和原因。
 
-无链接时，服务只从送入的正文与文件提取链接，不联网查找。仍提取不到时进入收录待审，由用户决定。当前 `x.com`、`twitter.com` 及其子域的资料即使提供全文，也会进入收录待审，需用户处理。
+文章无链接时，服务只从送入的正文与文件提取链接，不联网查找。仍提取不到时进入收录待审，由用户决定。当前 `x.com`、`twitter.com` 及其子域的资料即使提供全文，也会进入收录待审，需用户处理。
 
 HTTP 200 返回 `data.items`。单条失败不影响其他条目：
 
 | 响应字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `index` | integer | 输入数组索引，从 0 开始 |
-| `article_id` | string | 新建或已有文章 ID；`conflict` 是关联待审记录的 ID，同一冲突正文重送返回已有待审 ID，`invalid` 通常为空 |
+| `article_id` | string | 新建或已有文章、用户文档 ID；`conflict` 是关联待审记录的 ID，同一冲突正文重送返回已有待审 ID，`invalid` 通常为空 |
 | `status` | string | 下表的收录状态 |
 | `message` | string | 可直接转述给用户的中文消息 |
 | `reason` | string | 待审、冲突、丢弃或失败的具体原因；正常结果通常为空 |
@@ -287,7 +354,7 @@ HTTP 200 的 `data` 是数组，分页字段在顶层：
 
 缺失响应项还可能含 `api_key_id`（integer）、`api_key_name`（string）、`submitted_at`（RFC3339 时间 string）。这些是服务记录的来源信息。
 
-列表只包含已通过收录审核的待补全文章。正文缺失的收录待审不会出现，用原先收录结果保留的链接与 ID 跟进，或通过 MCP `list_pending` 查看。
+列表只包含已通过收录审核的待补全文章和用户文档，返回 `kind` 区分。正文缺失的收录待审不会出现，用原先收录结果保留的链接与 ID 跟进，或通过 MCP `list_pending` 查看。
 
 分页时先读取所需页的清单，再提交补全。补全会使列表缩短，不要一边删除第一页结果一边机械递增页码，否则可能跳过文章。
 
@@ -330,9 +397,9 @@ cat error.json
 
 ## 缺失与补全
 
-正文缺失时，明确提交 `missing` 的 `content` 项。结果是 `pending_review`，原因“正文缺失”，不能正常处理。以后用同一原文链接送入全文，才进入正常审核；通过时返回 `supplemented`，仍未通过时返回 `pending_review`。
+正文缺失时，明确提交 `missing` 的 `content` 项。结果是 `pending_review`，原因“正文缺失”，不能正常处理。以后文章用同一原文链接送入全文，用户文档指定 `kind=mine` 并用首次响应的 `article_id` 作为 `document_id` 送入全文，才进入正常审核；通过时返回 `supplemented`，仍未通过时返回 `pending_review`。
 
-正文完整、图片或文件缺失时，正常审核与处理，文章可检索，但标记待补全。显式传入图片链接的 `images` 项必须有匹配的缺失原因。正文 Markdown/HTML 中尚未本地保存的远程图片也会自动记录为缺失，默认原因“未提供图片文件”；尽量主动填写真实原因。
+正文完整、图片或文件缺失时，正常审核与处理，文章和本人文档可检索，但标记待补全。显式传入图片链接的 `images` 项必须有匹配的缺失原因。正文 Markdown/HTML 中尚未本地保存的远程图片也会自动记录为缺失，默认原因“未提供图片文件”；尽量主动填写真实原因。
 
 下面一次提交缺图片和缺正文的两篇演示资料：
 
@@ -362,7 +429,8 @@ jq . incomplete.json
 {
   "data": [
     {
-      "article_id": "59b84541-36da-4be3-a99e-73896cb0658f",
+      "kind": "article",
+      "article_id": "277fb045-b420-48f1-b0fa-b5d086655ad6",
       "url": "https://example.org/ingest-demo/orchard",
       "title": "果园观测记录",
       "acquisition": "verbatim",
@@ -372,8 +440,8 @@ jq . incomplete.json
           "source_url": "https://example.org/ingest-demo/orchard.png",
           "reason": "来源暂时拒绝图片下载",
           "api_key_id": 1,
-          "api_key_name": "grok-bot-demo",
-          "submitted_at": "2026-10-12T22:16:23.728646+08:00"
+          "api_key_name": "ingest07-runtime",
+          "submitted_at": "2026-10-13T00:28:13.849714+08:00"
         }
       ],
       "external_completion_attempted": false
@@ -386,7 +454,7 @@ jq . incomplete.json
 }
 ```
 
-用清单中的同一 `url` 再次收录即可补全。只送缺的材料，省略已有正文；图片 `source_url` 必须与清单完全对应。原始文件只支持一份，按 `file` 缺失类型补入，不按地址区分多份文件。下面假定已经取得本地 `orchard.png`：
+文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。文章传入清单中的 `url`；本人文档指定 `kind=mine` 并将清单中的 `article_id` 作为 `document_id`，无需提供链接或重复正文。有原文链接的本人文档也可以用同一链接定位补全。只送缺的材料，省略已有正文；图片 `source_url` 必须与清单完全对应。原始文件只支持一份，按 `file` 缺失类型补入，不按地址区分多份文件。下面假定已经取得本地 `orchard.png`：
 
 <!-- example: http-supplement -->
 ```bash
@@ -415,7 +483,7 @@ jq . supplement-result.json
     "items": [
       {
         "index": 0,
-        "article_id": "59b84541-36da-4be3-a99e-73896cb0658f",
+        "article_id": "277fb045-b420-48f1-b0fa-b5d086655ad6",
         "status": "supplemented",
         "message": "已补入可用材料。",
         "reason": "",
@@ -432,7 +500,7 @@ jq . supplement-result.json
 
 补全请求成功一次后，即使没有补到材料或仍有缺项，也不再出现在外部列表。剩余缺失交给用户，网页仍可看到。用户可以接受缺失并定稿，也可以丢弃。`accept_incomplete` 只在用户决定接受缺失时调用，不要为清空列表自动调用。
 
-`accept_incomplete` 只适用于已通过收录审核且仍待补全的文章。重复接受会报错，响应丢失时先检查当前状态。
+`accept_incomplete` 只适用于已通过收录审核且仍待补全的文章和用户文档。重复接受会报错，响应丢失时先检查当前状态。
 
 补全过程中，若新正文与已有正文明显不同，返回 `conflict`。原文章保留，新内容成为关联的收录待审，用户决定另存为新文章或丢弃。关联记录仍为待审时，同一原文章的同一冲突正文按现有正文哈希去重，重送或并发提交均返回已有待审记录，`status` 仍为 `conflict`，`article_id` 与首次一致；不同冲突正文分别创建待审。定稿后，同链接重送返回 `exists`，不会更新正文。`discarded` 表示用户丢弃过链接，应停止再次收录，包括已登记的转载链接。
 
@@ -458,8 +526,9 @@ jq . supplement-result.json
 
 | 工具 | 主要参数 | 返回与用途 |
 | --- | --- | --- |
+| `delete_document` | `document_id` | 仅删除本人文档，清除文件、附件、索引和记录并写操作日志；文章 ID 被拒绝，删除后相同内容可重新导入 |
 | `check_urls` | `urls`，1 至 100 条 | `{items:[...]}`，同 HTTP 查重结果 |
-| `ingest` | `items`，1 至 50 条 | `{items:[...]}`，同 HTTP 逐条状态；文件和图片用 base64 |
+| `ingest` | `items`，1 至 50 条；条目可用 `kind`、`document_id` | `{items:[...]}`，同 HTTP 逐条状态；`kind=mine` 导入本人文档，`document_id` 定位待补全本人文档；文件和图片用 base64 |
 | `list_incomplete` | 可选 `page`、`page_size`，默认 1、20，最多 100 | `{items,total,page,page_size}`，固定不含已尝试项，没有 `include_attempted` 参数 |
 | `accept_incomplete` | `id` | 用户接受缺失并定稿，返回单条收录结果，`status=accepted`、`completeness=[]`，保留缺失历史 |
 | `search` | `query`；可选 `content_types`、`entity_ids`、`topic_ids`、`published_from`、`published_to`、`starred`、`sources`、`collapse_similar`、`limit`（1 至 100） | 混合检索结果及片段，含 `acquisition`、`incomplete`、`source_unverified` |
@@ -522,14 +591,14 @@ MCP 收录示例的 `result.structuredContent` 实际值：
 {
   "items": [
     {
-      "article_id": "df43b1ec-69e8-4558-b87f-58214f913e18",
+      "article_id": "e66531f9-9a54-4b2d-8ccd-b794df6b4647",
       "completeness": [
         {
           "api_key_id": 1,
-          "api_key_name": "grok-bot-demo",
+          "api_key_name": "ingest07-runtime",
           "reason": "图像文件未开放下载",
           "source_url": "https://example.org/ingest-demo/telescope.png",
-          "submitted_at": "2026-10-12T22:16:25.925614+08:00",
+          "submitted_at": "2026-10-13T00:28:14.885384+08:00",
           "type": "image"
         }
       ],
@@ -562,7 +631,7 @@ jq '.result.structuredContent' mcp-accept.json
 <!-- response: mcp-accept mcp-accept.json result.structuredContent -->
 ```json
 {
-  "article_id": "df43b1ec-69e8-4558-b87f-58214f913e18",
+  "article_id": "e66531f9-9a54-4b2d-8ccd-b794df6b4647",
   "completeness": [],
   "image_failures": [],
   "index": 0,
@@ -611,4 +680,4 @@ jq '.result.structuredContent | {id,vault_path,parse_status}' mcp-report.json
 
 原始文件扩展名白名单：`pdf`、`txt`、`docx`、`doc`、`epub`、`md`、`markdown`、`png`、`jpg`、`jpeg`、`gif`、`bmp`、`tiff`、`webp`、`csv`、`xlsx`、`xls`、`pptx`、`ppt`、`json`、`docm`、`odt`、`rtf`、`pptm`、`odp`、`xlsm`、`ods`。不支持音频、视频，也不接受 SVG 原始附件。白名单表示可以提交原件，不保证该格式能够本地解析；外部工具仍应提供全文。
 
-图片附件应使用 `png`、`jpg`、`jpeg`、`gif`、`bmp`、`tiff`、`webp`，并提供真实图片字节。按收录后的内容类型，部分文章会只保留摘要和原文链接；提供完整材料是审核与处理的输入要求，不代表所有正文和附件永久全文保存。
+图片附件应使用 `png`、`jpg`、`jpeg`、`gif`、`bmp`、`tiff`、`webp`，并提供真实图片字节。按收录后的内容类型，部分文章会只保留摘要和原文链接；提供完整材料是审核与处理的输入要求，不代表所有文章正文和附件永久全文保存。用户文档一律全文保存。

@@ -510,11 +510,18 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 	}
 
 	filter := types.EntryListFilter{
+		SourceKind:  strings.TrimSpace(c.Query("source_kind")),
 		ContentType: strings.TrimSpace(c.Query("content_type")),
 		Keyword:     c.Query("keyword"),
 		FileType:    c.Query("file_type"),
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
+	}
+	switch filter.SourceKind {
+	case "", "article", "mine", "report":
+	default:
+		c.Error(errors.NewBadRequestError("invalid source_kind"))
+		return
 	}
 	if raw, supplied := c.GetQuery("starred"); supplied {
 		if raw != "true" && raw != "false" {
@@ -657,9 +664,21 @@ func (h *EntryHandler) DeleteEntry(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
+	entry, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
+		return
+	}
+	if entry.SourceKind == "mine" {
+		collector := h.ingestService(c)
+		if collector == nil {
+			return
+		}
+		if err := collector.DeleteDocument(effCtx, id); err != nil {
+			c.Error(err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"document_id": id, "status": "deleted"}})
 		return
 	}
 
@@ -1046,9 +1065,13 @@ func (h *EntryHandler) UpdateEntry(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
+	existing, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
+		return
+	}
+	if existing.SourceKind == "mine" {
+		c.Error(errors.NewBadRequestError("本人文档不可修改，请删除后重新导入"))
 		return
 	}
 

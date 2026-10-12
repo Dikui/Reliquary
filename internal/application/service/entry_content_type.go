@@ -54,7 +54,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 	if err != nil {
 		return nil, err
 	}
-	if before.SourceKind != "article" || before.ParseStatus != types.ParseStatusCompleted {
+	if !isIngestArticle(before) || before.ParseStatus != types.ParseStatusCompleted {
 		return nil, werrors.NewBadRequestError("only completed articles can have their content type corrected")
 	}
 	if reviewAction != "" && before.ProcessingReviewStatus != types.ProcessingReviewPending {
@@ -67,7 +67,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 		}
 	}
 	mode := types.ProcessingModeForContentType(contentType)
-	if before.SourceUnverified {
+	if before.SourceUnverified || before.SourceKind == "mine" {
 		mode = types.ProcessingModeFull
 	}
 	if before.ProcessingMode == types.ProcessingModeFull && mode == types.ProcessingModeSummaryOnly && !confirmRemoveBody {

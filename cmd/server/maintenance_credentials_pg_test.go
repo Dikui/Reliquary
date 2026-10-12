@@ -115,7 +115,7 @@ func TestOfflineMaintenanceCredentialsAreEncryptedAndNeverPrinted(t *testing.T) 
 	require.Empty(t, table)
 	version, dirty, err := migrations.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 5, version)
+	require.EqualValues(t, 6, version)
 	require.False(t, dirty)
 }
 

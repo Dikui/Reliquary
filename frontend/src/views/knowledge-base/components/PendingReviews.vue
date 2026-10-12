@@ -65,6 +65,7 @@ defineExpose({ refresh: load })
         <t-empty v-if="!(kind === 'incomplete' ? incompleteRecords.length : records.length) && !loading && !error" :description="t(kind === 'intake' ? 'knowledgeReview.emptyIntake' : kind === 'processing' ? 'knowledgeReview.emptyProcessing' : 'knowledgeReview.emptyIncomplete')" />
         <article v-for="item in records" :key="item.id" class="review-record" :data-review-id="item.id">
           <div class="review-record-heading"><h4>{{ item.title || item.file_name || t('knowledgeBase.untitledDocument') }}</h4><t-button variant="text" :disabled="busy" @click="emit('open-source', item.id)">{{ t('knowledgeBase.intakePreviewOriginal') }}</t-button></div>
+          <t-tag v-if="item.source_kind === 'mine'" class="acquisition-tag" size="small" variant="light-outline">{{ t('knowledgeBase.sourceKinds.mine') }}</t-tag>
           <t-tag v-if="kind === 'intake' && item.acquisition === 'model_written'" class="acquisition-tag" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
           <p v-if="kind === 'intake' && item.related_article_id">{{ t('knowledgeReview.conflictReason') }} <a :href="articleLink(item.related_article_id)" @click.prevent="emit('open-source', item.related_article_id)">{{ t('knowledgeReview.relatedArticle') }}</a></p>
           <p v-else-if="kind === 'intake' && item.metadata?.intake?.reason">{{ item.metadata.intake.reason }}</p>
@@ -74,6 +75,7 @@ defineExpose({ refresh: load })
           <ReviewActions :entry="item" @changed="reviewed" @busy-change="setBusy(item.id, $event)" />
         </article>
         <article v-for="item in incompleteRecords" :key="item.article_id" class="review-record" :data-incomplete-id="item.article_id">
+          <t-tag v-if="item.kind === 'mine'" class="acquisition-tag" size="small" variant="light-outline">{{ t('knowledgeBase.sourceKinds.mine') }}</t-tag>
           <div class="review-record-heading"><h4><a :href="articleLink(item.article_id)" @click.prevent="emit('open-source', item.article_id)">{{ item.title || t('knowledgeBase.untitledDocument') }}</a></h4><t-tag v-if="item.external_completion_attempted" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.attemptedTitle') }}</t-tag></div>
           <a v-if="safeURL(item.url)" :href="safeURL(item.url)" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
           <p>{{ t('ingestStatus.acquisitionLabel') }}: {{ item.acquisition ? t(`ingestStatus.acquisition.${item.acquisition}`) : t('ingestStatus.unknownAcquisition') }}</p>

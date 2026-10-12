@@ -29,6 +29,7 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 	r.GET("/ingest/incomplete", handler.ListIncomplete)
 	r.POST("/ingest/:id/accept-incomplete", g.KBExistsFromEntryIDParam("id"), handler.AcceptIncomplete)
 	r.POST("/ingest/:id/discard", g.KBExistsFromEntryIDParam("id"), handler.DiscardIngest)
+	r.DELETE("/documents/:id", g.KBExistsFromEntryIDParam("id"), handler.DeleteDocument)
 	kb := r.Group("/knowledge-bases/:id/entries")
 	kbRead := kb
 	{

@@ -118,7 +118,7 @@ func hydrateMessageSource(k *types.Entry, metadata map[string]string) error {
 	if intake.SourceInfo.Publisher == "" {
 		intake.SourceInfo.Publisher = metadata["publisher"]
 	}
-	if intake.SourceInfo.OriginalURL == "" {
+	if k.SourceKind != "mine" && intake.SourceInfo.OriginalURL == "" {
 		intake.SourceInfo.OriginalURL = metadata["original_url"]
 	}
 	if intake.SourceInfo.PublishedAt == "" {
@@ -128,8 +128,12 @@ func hydrateMessageSource(k *types.Entry, metadata map[string]string) error {
 }
 
 func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...bool) (*types.Entry, string, int, error) {
+	kind := "article"
+	if k.SourceKind == "mine" {
+		kind = "mine"
+	}
 	query := tx.Model(&types.Entry{}).Where("space_id = ? AND knowledge_base_id = ? AND id <> ?", k.SpaceID, k.KnowledgeBaseID, k.ID).
-		Where("source_kind = ?", "article").
+		Where("source_kind = ?", kind).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusFailed, types.ParseStatusRejected, types.ManualEntryStatusDraft, types.ParseStatusDeleting, types.ParseStatusCancelled})
 	// Parser workers can see several already-persisted pending messages. A
 	// stable owner order prevents them from choosing and then deleting each
@@ -153,10 +157,12 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 			return item, "url", 0, err
 		}
 		// A previously recorded repost URL points at the same canonical message.
-		owners := tx.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id = ? AND knowledge_base_id = ? AND normalized_url = ?", k.SpaceID, k.KnowledgeBaseID, k.NormalizedURL)
-		item, err = find(base().Where("id IN (?)", owners))
-		if item != nil || err != nil {
-			return item, "url", 0, err
+		if kind == "article" {
+			owners := tx.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id = ? AND knowledge_base_id = ? AND normalized_url = ?", k.SpaceID, k.KnowledgeBaseID, k.NormalizedURL)
+			item, err = find(base().Where("id IN (?)", owners))
+			if item != nil || err != nil {
+				return item, "url", 0, err
+			}
 		}
 	}
 	if k.Type == "file" && k.FileHash != "" {
@@ -192,6 +198,10 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 }
 
 func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Entry, method string, distance int) error {
+	if existing.SourceKind == "mine" || incoming.SourceKind == "mine" {
+		existing.DuplicateMatchMethod = method
+		return nil
+	}
 	if err := lockEntitySpaceShared(tx, existing.SpaceID); err != nil {
 		return err
 	}

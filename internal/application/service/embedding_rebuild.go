@@ -128,7 +128,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 			add(kind, chunk.ID, "")
 		}
 		var articles []types.Entry
-		if err := tx.Where("space_id=? AND source_kind='article' AND parse_status=?", spaceID, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
+		if err := tx.Where("space_id=? AND source_kind IN ('article','mine') AND parse_status=?", spaceID, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
 			return err
 		}
 		imageModel, imagesSupported := profile.embedder.(embedding.ImageEmbedder)

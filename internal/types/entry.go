@@ -86,6 +86,8 @@ const (
 // EntryListFilter aggregates optional filters for listing entry entries
 // under a knowledge base. Empty / zero fields mean "no filter on that dimension".
 type EntryListFilter struct {
+	// SourceKind selects article, mine or report independently of ingestion channel.
+	SourceKind string
 	// ContentType filters the article purpose; unclassified matches an empty classification.
 	ContentType string
 	// Starred filters the user's article marker when supplied.

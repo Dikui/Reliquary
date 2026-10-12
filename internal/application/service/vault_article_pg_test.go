@@ -401,7 +401,7 @@ func TestVaultReprocessingUpdatesHeaderAndReadsVaultBody(t *testing.T) {
 	require.Equal(t, beforeBody, served)
 }
 
-func TestVaultDocumentReadBodyIncludesUserFrontMatterAndDeleteKeepsFile(t *testing.T) {
+func TestImportedVaultDocumentReadBodyExcludesHeaderAndDeleteRemovesFile(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	doc := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		SourceKind: "mine", VaultPath: "mine/user.md", Title: "User", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted}
@@ -410,11 +410,10 @@ func TestVaultDocumentReadBodyIncludesUserFrontMatterAndDeleteKeepsFile(t *testi
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, doc.VaultPath), data, 0644))
 	body, err := v.ReadBody(doc)
 	require.NoError(t, err)
-	require.Equal(t, data, body)
+	require.Equal(t, []byte("# User\n\nBody"), body)
 	require.NoError(t, v.DeleteArticle(context.Background(), doc))
-	actual, err := os.ReadFile(filepath.Join(v.root, doc.VaultPath))
-	require.NoError(t, err)
-	require.Equal(t, data, actual)
+	_, err = os.Stat(filepath.Join(v.root, doc.VaultPath))
+	require.True(t, os.IsNotExist(err))
 	_, err = h.service.ReparseEntry(h.ctx, doc.ID, nil)
 	require.ErrorContains(t, err, "indexed directly from their files")
 	require.Empty(t, h.queue.tasks)

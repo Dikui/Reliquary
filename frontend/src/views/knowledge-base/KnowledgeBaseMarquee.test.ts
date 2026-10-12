@@ -6,6 +6,8 @@ import test from 'node:test'
 import { defineComponent, h, reactive, ref } from 'vue'
 import { useMarqueeSelect } from '../../composables/useMarqueeSelect'
 import * as polling from './entryStatusPolling'
+import * as documentListFilters from './documentListFilters'
+import { SEARCH_SOURCES } from '../../types/search'
 import { descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from './componentTestHarness'
 
 const require = createRequire(import.meta.url)
@@ -44,6 +46,7 @@ async function mountLibrary(realCheckbox = false) {
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },
     '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
     '@/types/entryClassification': { CONTENT_TYPES: [] },
+    '@/types/search': { SEARCH_SOURCES },
     '@/api/knowledge-base': {},
     '@/utils/entryTrace': {},
     '@/utils/entrySourceLabels': entrySourceLabels,
@@ -52,6 +55,7 @@ async function mountLibrary(realCheckbox = false) {
     'tdesign-vue-next': { MessagePlugin: {} },
     './entryStatusPolling': polling,
     './entryDownloadFileName': {},
+    './documentListFilters': documentListFilters,
   }
   for (const file of ['./KnowledgeBase.vue', './components/DocumentCardView.vue', './components/DocumentListView.vue']) {
     const url = new URL(file, import.meta.url)

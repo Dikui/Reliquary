@@ -342,6 +342,15 @@ class AdminStorageTests(unittest.TestCase):
         }
         for table, rows in tables.items():
             admin.json_write(vault / ".reliquary" / (table + ".json"), rows)
+        personal_body = "# Personal procedure\n\nKeep the complete tutorial text.\n"
+        personal_file = vault / "mine/personal-a1b2c3d4.md"
+        personal_file.parent.mkdir()
+        personal_file.write_text("---\nid: personal-document\nsource_kind: mine\ntitle: Personal procedure\ncontent_type: tutorial\n---\n" + personal_body)
+        attachment = vault / "attachments/personal-document/notes.txt"
+        attachment.parent.mkdir(parents=True)
+        attachment.write_bytes(b"Personal document attachment")
+        tables["entries"].append({"id": "personal-document", "source_kind": "mine", "vault_path": "mine/personal-a1b2c3d4.md", "vault_body": personal_body, "processing_mode": "full"})
+        admin.json_write(vault / ".reliquary/entries.json", tables["entries"])
         (resources / "original.pdf").write_bytes(b"%PDF original bytes")
         source = object.__new__(admin.Context)
         source.direct, source.local_server = True, None
@@ -366,6 +375,13 @@ class AdminStorageTests(unittest.TestCase):
         for table, rows in tables.items():
             self.assertEqual(json.loads((restored_vault / ".reliquary" / (table + ".json")).read_text()), rows)
         self.assertEqual((restored_resources / "original.pdf").read_bytes(), b"%PDF original bytes")
+        self.assertEqual((restored_vault / "mine/personal-a1b2c3d4.md").read_text(), personal_file.read_text())
+        self.assertEqual((restored_vault / "attachments/personal-document/notes.txt").read_bytes(), b"Personal document attachment")
+        personal_file_in_package = package / "vault/mine/personal-a1b2c3d4.md"
+        personal_file_in_package.write_text("Modified personal document")
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
+        personal_file_in_package.write_text(personal_file.read_text())
         admin.json_write(package / "vault" / ".reliquary" / "ingest_discards.json", [])
         with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
             admin.check_files(package)

@@ -84,7 +84,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
 			Acquisition:    entry.Acquisition,
-			Incomplete:     entry.SourceKind == "article" && entry.Incomplete,
+			Incomplete:     (entry.SourceKind == "article" || entry.SourceKind == "mine") && entry.Incomplete,
 			ProcessingMode: entry.ProcessingMode, Summary: entry.StructuredSummary, Starred: entry.Starred,
 			SourceUnverified: entry.SourceUnverified,
 			Entities:         entities[entry.ID], Topics: topics[entry.ID],
@@ -242,7 +242,7 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.EntrySearchResult, config *types.RetrievalConfig) ([]*types.EntrySearchResult, error) {
 	ids := []string{}
 	for _, result := range results {
-		if result.Source == "article" && result.PublishedAt != nil {
+		if (result.Source == "article" || result.Source == "mine") && result.PublishedAt != nil {
 			ids = append(ids, result.EntryID)
 		}
 	}
@@ -270,7 +270,7 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 	window := time.Duration(config.GetEffectiveSimilarReportsWindowDays()) * 24 * time.Hour
 	threshold := config.GetEffectiveSimilarReportsThreshold()
 	similar := func(a, b *types.EntrySearchResult) bool {
-		if a.Source != "article" || b.Source != "article" || a.PublishedAt == nil || b.PublishedAt == nil {
+		if a.Source == "report" || b.Source == "report" || a.PublishedAt == nil || b.PublishedAt == nil {
 			return false
 		}
 		delta := a.PublishedAt.Sub(*b.PublishedAt)

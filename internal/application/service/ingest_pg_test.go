@@ -38,6 +38,9 @@ func TestIngestRequiredFieldsAndStructuredValidation(t *testing.T) {
 		request *types.IngestRequest
 	}{
 		{"nil", nil},
+		{"unknown kind", &types.IngestRequest{Kind: "report", Acquisition: "verbatim", Content: "Original"}},
+		{"article supplement ID", &types.IngestRequest{DocumentID: "11111111-1111-4111-8111-111111111111", Acquisition: "verbatim", Content: "Original"}},
+		{"invalid document ID", &types.IngestRequest{Kind: "mine", DocumentID: "invalid", Acquisition: "verbatim", Content: "Original"}},
 		{"missing content", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/author/status/1"}},
 		{"blank content", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/author/status/1", Content: " \n "}},
 		{"empty after existing cleanup", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/author/status/1", Content: "<script>alert(1)</script>"}},

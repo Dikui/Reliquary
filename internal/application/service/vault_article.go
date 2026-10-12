@@ -88,6 +88,9 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 		PublishedAt: canonicalVaultDate(source.PublishedAt), CollectedAt: k.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
 		ContentType: k.ContentType, Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason}
 	h.SourceUnverified = k.SourceUnverified
+	if k.SourceKind == "mine" {
+		h.SourceKind = "mine"
+	}
 	h.Acquisition = k.Acquisition
 	if k.SourceUnverified {
 		h.URL = ""
@@ -135,7 +138,7 @@ func vaultArticleMonth(h VaultArticleHeader, collected time.Time) string {
 // WriteArticle publishes approved material and verifies existing body bytes.
 // A completed header-only intake may publish its first body after processing.
 func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body string, read func(context.Context, string) (io.ReadCloser, error)) error {
-	if k == nil || (k.SourceKind != "" && k.SourceKind != "article") {
+	if !isIngestArticle(k) {
 		return errors.New("only articles can be written to articles/")
 	}
 	if _, err := uuid.Parse(k.ID); err != nil {
@@ -151,7 +154,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		return err
 	}
 	*k = persisted
-	if k.SourceKind != "article" || k.ParseStatus != types.ParseStatusCompleted {
+	if !isIngestArticle(k) || k.ParseStatus != types.ParseStatusCompleted {
 		return errors.New("article must complete processing before vault write")
 	}
 	if intake, err := k.IntakeMetadata(); err != nil {
@@ -181,6 +184,9 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	}
 	shortID := k.ID[:min(8, len(k.ID))]
 	relative := filepath.ToSlash(filepath.Join("articles", vaultArticleMonth(h, k.CreatedAt), vaultSlug(k.Title)+"-"+shortID+".md"))
+	if k.SourceKind == "mine" {
+		relative = filepath.ToSlash(filepath.Join("mine", vaultSlug(k.Title)+"-"+shortID+".md"))
+	}
 	abs, err := vaultAbsolute(v.root, relative)
 	if err != nil {
 		return err
@@ -191,7 +197,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		return err
 	}
 	original := ""
-	if k.ProcessingMode == types.ProcessingModeSummaryOnly {
+	if k.SourceKind != "mine" && k.ProcessingMode == types.ProcessingModeSummaryOnly {
 		body = ""
 	} else {
 		body, original, err = v.prepareArticleMaterials(ctx, k, relative, body, read)
@@ -202,7 +208,11 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	if err = v.atomicArticleWrite(abs, RenderVaultArticleHeader(h), []byte(body), nil); err != nil {
 		return err
 	}
-	values := map[string]any{"source_kind": "article", "vault_path": relative, "vault_body": body, "vault_original_path": original}
+	kind := k.SourceKind
+	if kind == "" {
+		kind = "article"
+	}
+	values := map[string]any{"source_kind": kind, "vault_path": relative, "vault_body": body, "vault_original_path": original}
 	if isIngestArticle(k) {
 		values["ingest_attachments"] = k.IngestAttachments
 	}
@@ -210,7 +220,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		_ = os.Remove(abs)
 		return err
 	}
-	k.SourceKind, k.VaultPath, k.VaultBody, k.VaultOriginalPath = "article", relative, body, original
+	k.SourceKind, k.VaultPath, k.VaultBody, k.VaultOriginalPath = kind, relative, body, original
 	return nil
 }
 
@@ -358,10 +368,14 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 	if err := query.First(&k).Error; err != nil {
 		return err
 	}
-	if k.SourceKind != "article" || k.VaultPath == "" || k.ParseStatus == types.ParseStatusDeleting {
+	if !isIngestArticle(&k) || k.VaultPath == "" || k.ParseStatus == types.ParseStatusDeleting {
 		return nil
 	}
-	if !strings.HasPrefix(filepath.ToSlash(filepath.Clean(k.VaultPath)), "articles/") {
+	prefix := "articles/"
+	if k.SourceKind == "mine" {
+		prefix = "mine/"
+	}
+	if !strings.HasPrefix(filepath.ToSlash(filepath.Clean(k.VaultPath)), prefix) {
 		return errors.New("article file must be inside articles/")
 	}
 	abs, err := vaultAbsolute(v.root, k.VaultPath)
@@ -376,7 +390,7 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 	current, err := os.ReadFile(abs)
 	if errors.Is(err, os.ErrNotExist) {
 		body := []byte(k.VaultBody)
-		if k.ProcessingMode == types.ProcessingModeSummaryOnly {
+		if k.SourceKind != "mine" && k.ProcessingMode == types.ProcessingModeSummaryOnly {
 			body = nil
 		}
 		if err = v.atomicArticleWrite(abs, header, body, nil); err != nil {
@@ -390,7 +404,13 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 	}
 	oldHeader, body, err := SplitVaultArticle(current)
 	if err != nil {
+		if k.SourceKind == "mine" {
+			return v.atomicArticleWrite(abs, header, []byte(k.VaultBody), nil)
+		}
 		return err
+	}
+	if k.SourceKind == "mine" && !bytes.Equal(body, []byte(k.VaultBody)) {
+		return v.atomicArticleWrite(abs, header, []byte(k.VaultBody), nil)
 	}
 	if bytes.Equal(header, oldHeader) {
 		return nil
@@ -531,7 +551,7 @@ func (v *VaultService) ReadBody(k *types.Entry) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if k.SourceKind != "article" {
+	if !isIngestArticle(k) {
 		return data, nil
 	}
 	_, body, err := SplitVaultArticle(data)
@@ -556,9 +576,9 @@ func (v *VaultService) ReadImage(k *types.Entry, ref string) (io.ReadCloser, err
 	return os.Open(abs)
 }
 
-// DeleteArticle never removes user-owned files under mine/ or reports/.
+// DeleteArticle removes imported article or user document files and attachments.
 func (v *VaultService) DeleteArticle(ctx context.Context, k *types.Entry) error {
-	if k.SourceKind != "article" {
+	if !isIngestArticle(k) {
 		return nil
 	}
 	if _, err := uuid.Parse(k.ID); err != nil {
@@ -576,7 +596,11 @@ func (v *VaultService) DeleteArticle(ctx context.Context, k *types.Entry) error 
 	}
 	v.articles.mu.Unlock()
 	if k.VaultPath != "" {
-		if !strings.HasPrefix(k.VaultPath, "articles/") {
+		prefix := "articles/"
+		if k.SourceKind == "mine" {
+			prefix = "mine/"
+		}
+		if !strings.HasPrefix(k.VaultPath, prefix) {
 			return errors.New("article file must be inside articles/")
 		}
 		abs, err := vaultAbsolute(v.root, k.VaultPath)

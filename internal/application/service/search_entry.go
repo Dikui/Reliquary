@@ -206,7 +206,7 @@ func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, kbI
 	query := s.db.WithContext(ctx).Table("entries AS k").Where(`k.space_id = ? AND k.knowledge_base_id = ?
 		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID, kbID)
 	if f.request.Starred != nil {
-		query = query.Where("k.source_kind='article' AND k.starred=?", *f.request.Starred)
+		query = query.Where("k.source_kind IN ('article','mine') AND k.starred=?", *f.request.Starred)
 	}
 	if len(f.request.ContentTypes) > 0 {
 		query = query.Where("k.content_type IN ?", f.request.ContentTypes)

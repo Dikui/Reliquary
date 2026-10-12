@@ -84,7 +84,11 @@ func TestMCPFollowsListFeedAndSeenState(t *testing.T) {
 		{"Generated report", "report", types.ParseStatusCompleted, ""},
 	} {
 		article := mcpFollowArticle(t, f, excluded.title, now.Add(-20*time.Minute), entity.ID, topic.ID)
-		require.NoError(t, f.db.Model(article).Updates(map[string]any{"source_kind": excluded.source, "parse_status": excluded.parseStatus, "processing_review_status": excluded.reviewStatus}).Error)
+		changes := map[string]any{"source_kind": excluded.source, "parse_status": excluded.parseStatus, "processing_review_status": excluded.reviewStatus}
+		if excluded.source == "mine" {
+			changes["vault_path"] = ""
+		}
+		require.NoError(t, f.db.Model(article).Updates(changes).Error)
 	}
 	for _, decision := range []string{"pending", "rejected", "error"} {
 		article := mcpFollowArticle(t, f, "Unapproved intake "+decision, now.Add(-20*time.Minute), entity.ID, topic.ID)

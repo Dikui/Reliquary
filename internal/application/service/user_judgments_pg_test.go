@@ -78,8 +78,7 @@ func TestEntrySearchStarredFiltersAndMissingCount(t *testing.T) {
 	starred = false
 	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, Limit: 100})
 	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-	require.Equal(t, "plain", result.Results[0].EntryID)
+	require.Equal(t, []string{"mine", "plain"}, entrySearchIDs(result))
 }
 
 func boolPointer(v bool) *bool { return &v }

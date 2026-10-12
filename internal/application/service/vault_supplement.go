@@ -176,7 +176,7 @@ func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entr
 	if !k.Incomplete {
 		return nil, errors.New("article body is finalized; replacement refused")
 	}
-	if k.SourceKind != "article" || k.VaultPath == "" {
+	if !isIngestArticle(k) || k.VaultPath == "" {
 		return nil, errors.New("supplement requires a published article")
 	}
 	lock := v.articleLock(k.ID)

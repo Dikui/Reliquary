@@ -20,7 +20,7 @@ type OperationLog struct {
 func (OperationLog) TableName() string { return "operation_logs" }
 
 var OperationTypes = []string{
-	"ingest", "write_report",
+	"ingest", "write_report", "delete_document",
 	"ingest_supplement", "ingest_conflict", "accept_incomplete", "ingest_discard",
 	"review_approve", "review_reject", "review_retry", "review_discard",
 	"review_supplement_url", "review_admit_unverified", "review_convert_to_mine",

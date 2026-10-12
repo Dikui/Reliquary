@@ -50,26 +50,26 @@ type vaultObservation struct {
 	changedAt time.Time
 }
 
-// VaultDocumentService reads personal documents and reports without article processing.
-// File contents are never modified by indexing or rebuilding.
+// VaultDocumentService indexes reports and rebuilds imported documents.
+// Only reports are watched for file changes.
 type VaultDocumentService struct {
-	db           *gorm.DB
-	models       interfaces.ModelService
-	retrieval    interfaces.RetrievalService
-	root         string
-	stableWait   time.Duration
-	scanInterval time.Duration
-	mu           sync.Mutex
-	observations map[string]vaultObservation
-	statusMu     sync.RWMutex
-	status       VaultStatus
-	lifecycleMu  sync.Mutex
-	cancel       context.CancelFunc
-	done         chan struct{}
-	watcher      *fsnotify.Watcher
+	db                 *gorm.DB
+	models             interfaces.ModelService
+	retrieval          interfaces.RetrievalService
+	root               string
+	reportStableWait   time.Duration
+	reportScanInterval time.Duration
+	mu                 sync.Mutex
+	observations       map[string]vaultObservation
+	statusMu           sync.RWMutex
+	status             VaultStatus
+	lifecycleMu        sync.Mutex
+	cancel             context.CancelFunc
+	done               chan struct{}
+	watcher            *fsnotify.Watcher
 }
 
-func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrieval interfaces.RetrievalService, root string, wait, scan time.Duration) (*VaultDocumentService, error) {
+func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrieval interfaces.RetrievalService, root string) (*VaultDocumentService, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, fmt.Errorf("VAULT_ROOT is required")
 	}
@@ -86,14 +86,8 @@ func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrie
 			return nil, fmt.Errorf("create vault directory %s: %w", directory, err)
 		}
 	}
-	if wait <= 0 {
-		wait = 10 * time.Minute
-	}
-	if scan <= 0 {
-		scan = time.Minute
-	}
 	return &VaultDocumentService{db: db, models: models, retrieval: retrieval, root: root,
-		stableWait: wait, scanInterval: scan, observations: make(map[string]vaultObservation),
+		reportStableWait: 10 * time.Minute, reportScanInterval: time.Minute, observations: make(map[string]vaultObservation),
 		status: VaultStatus{Root: root}}, nil
 }
 
@@ -110,7 +104,7 @@ func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *typ
 	return ctx, &kb, nil
 }
 
-// Start watches both trees and schedules full scans to recover missed events.
+// Start watches reports and schedules scans to recover missed report events.
 func (s *VaultDocumentService) Start(ctx context.Context) error {
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
@@ -121,11 +115,9 @@ func (s *VaultDocumentService) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{"mine", "reports"} {
-		if err := s.watchTree(watcher, filepath.Join(s.root, name)); err != nil {
-			_ = watcher.Close()
-			return err
-		}
+	if err := s.watchTree(watcher, filepath.Join(s.root, "reports")); err != nil {
+		_ = watcher.Close()
+		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel, s.watcher, s.done = cancel, watcher, make(chan struct{})
@@ -159,7 +151,7 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 	defer close(done)
 	defer watcher.Close()
 	// A short scheduling tick handles files becoming stable between fallback scans.
-	tick := s.stableWait / 4
+	tick := s.reportStableWait / 4
 	if tick > time.Second {
 		tick = time.Second
 	}
@@ -167,10 +159,10 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 		tick = 10 * time.Millisecond
 	}
 	settled := time.NewTicker(tick)
-	fallback := time.NewTicker(s.scanInterval)
+	fallback := time.NewTicker(s.reportScanInterval)
 	defer settled.Stop()
 	defer fallback.Stop()
-	nextDue := time.Now().Add(s.stableWait)
+	nextDue := time.Now().Add(s.reportStableWait)
 	s.runScan(ctx)
 	for {
 		select {
@@ -187,7 +179,7 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 			if event.Op&fsnotify.Create != 0 {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					if err := s.watchTree(watcher, event.Name); err != nil {
-						s.recordWatchError(event.Name, err)
+						s.recordReportWatchError(ctx, err)
 					}
 				}
 			}
@@ -201,13 +193,13 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 				}
 				// Scan now to remove deleted files, then scan when the writer settles.
 				s.runScan(ctx)
-				nextDue = time.Now().Add(s.stableWait)
+				nextDue = time.Now().Add(s.reportStableWait)
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return
 			}
-			s.recordWatchError("", err)
+			s.recordReportWatchError(ctx, err)
 		case <-settled.C:
 			if !nextDue.IsZero() && !time.Now().Before(nextDue) {
 				s.runScan(ctx)
@@ -215,7 +207,7 @@ func (s *VaultDocumentService) watch(ctx context.Context, watcher *fsnotify.Watc
 			}
 		case <-fallback.C:
 			s.runScan(ctx)
-			nextDue = time.Now().Add(s.stableWait)
+			nextDue = time.Now().Add(s.reportStableWait)
 		}
 	}
 }
@@ -236,16 +228,13 @@ func (s *VaultDocumentService) runScan(ctx context.Context) {
 	}
 }
 
-func (s *VaultDocumentService) recordWatchError(path string, err error) {
+func (s *VaultDocumentService) recordReportWatchError(ctx context.Context, err error) {
 	s.statusMu.Lock()
 	defer s.statusMu.Unlock()
-	if strings.HasPrefix(path, filepath.Join(s.root, "mine")) {
-		s.status.Mine.LastError = err.Error()
-	} else if strings.HasPrefix(path, filepath.Join(s.root, "reports")) {
-		s.status.Reports.LastError = err.Error()
-	} else {
-		s.status.Mine.LastError, s.status.Reports.LastError = err.Error(), err.Error()
+	if ctx.Err() != nil {
+		return
 	}
+	s.status.Reports.LastError = err.Error()
 }
 
 func (s *VaultDocumentService) Close() error {
@@ -266,29 +255,20 @@ func (s *VaultDocumentService) Close() error {
 func (s *VaultDocumentService) Scan(ctx context.Context, force bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ctx, kb, err := s.scope(ctx)
-	if err != nil {
-		s.recordWatchError("", err)
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	var allErrors []error
-	for _, kind := range []string{"mine", "report"} {
-		if err := s.scanDirectory(ctx, kb, kind, force); err != nil {
-			allErrors = append(allErrors, err)
-		}
+	ctx, kb, err := s.scope(ctx)
+	if err != nil {
+		s.recordReportWatchError(ctx, err)
+		return err
 	}
-	return errors.Join(allErrors...)
+	return s.scanReports(ctx, kb, force)
 }
 
-func vaultDirectory(kind string) string {
-	if kind == "report" {
-		return "reports"
-	}
-	return "mine"
-}
-
-func (s *VaultDocumentService) scanDirectory(ctx context.Context, kb *types.KnowledgeBase, kind string, force bool, skipped ...*[]VaultRebuildSkippedFile) error {
-	directory := vaultDirectory(kind)
+func (s *VaultDocumentService) scanReports(ctx context.Context, kb *types.KnowledgeBase, force bool, skipped ...*[]VaultRebuildSkippedFile) error {
+	directory := "reports"
+	kind := "report"
 	seen := make(map[string]bool)
 	var scanErrors []error
 	recordFileError := func(path string, err error) {
@@ -301,10 +281,13 @@ func (s *VaultDocumentService) scanDirectory(ctx context.Context, kb *types.Know
 	now := time.Now().UTC()
 	directoryPath, directoryErr := vaultAbsolute(s.root, directory)
 	if directoryErr != nil {
-		s.recordWatchError(filepath.Join(s.root, directory), directoryErr)
+		s.recordReportWatchError(ctx, directoryErr)
 		return directoryErr
 	}
 	walkErr := filepath.WalkDir(directoryPath, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
 			return walkErr
 		}
@@ -342,14 +325,14 @@ func (s *VaultDocumentService) scanDirectory(ctx context.Context, kb *types.Know
 		}
 		observation.hash = hash
 		s.observations[rel] = observation
-		if !force && now.Sub(observation.changedAt) < s.stableWait {
+		if !force && now.Sub(observation.changedAt) < s.reportStableWait {
 			return nil
 		}
 		if !utf8.Valid(body) {
 			recordFileError(rel, fmt.Errorf("Markdown must be valid UTF-8"))
 			return nil
 		}
-		if _, err := s.indexDocument(ctx, kb, rel, kind, string(body), info.ModTime()); err != nil {
+		if _, err := s.indexReport(ctx, kb, rel, string(body), info.ModTime()); err != nil {
 			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", rel, err))
 		}
 		return nil
@@ -373,10 +356,11 @@ func (s *VaultDocumentService) scanDirectory(ctx context.Context, kb *types.Know
 		}
 	}
 	s.statusMu.Lock()
-	status := &s.status.Mine
-	if kind == "report" {
-		status = &s.status.Reports
+	if err := ctx.Err(); err != nil {
+		s.statusMu.Unlock()
+		return err
 	}
+	status := &s.status.Reports
 	status.LastScanAt = &now
 	if len(scanErrors) > 0 {
 		status.LastError = errors.Join(scanErrors...).Error()
@@ -392,7 +376,7 @@ func vaultContentHash(content string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func vaultDocumentTitle(path, body, kind string) string {
+func vaultDocumentTitle(path, body string) string {
 	// Fenced examples and optional frontmatter do not supply document headings.
 	text := body
 	if _, content, err := splitVaultHeader([]byte(body)); err == nil {
@@ -425,14 +409,14 @@ func vaultTrimTitle(title string) string {
 	return title
 }
 
-func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.KnowledgeBase, path, kind, body string, modified time.Time) (*types.Entry, error) {
+func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.KnowledgeBase, path, body string, modified time.Time) (*types.Entry, error) {
 	var entry types.Entry
 	err := s.db.WithContext(ctx).Where("space_id = ? AND vault_path = ?", kb.SpaceID, path).First(&entry).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 	hash := vaultContentHash(body)
-	if err == nil && entry.SourceKind != kind {
+	if err == nil && entry.SourceKind != "report" {
 		return nil, fmt.Errorf("vault path already belongs to a different source kind")
 	}
 	if err == nil && entry.FileHash == hash && entry.ParseStatus == types.ParseStatusCompleted {
@@ -440,31 +424,29 @@ func (s *VaultDocumentService) indexDocument(ctx context.Context, kb *types.Know
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		entry = types.Entry{ID: uuid.NewString(), SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
-			Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, Source: path,
+			Type: types.EntryTypeManual, SourceKind: "report", VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
 			CreatedAt: modified.UTC(), ProcessingMode: types.ProcessingModeFull}
 		if err := s.db.WithContext(ctx).Create(&entry).Error; err != nil {
 			return nil, err
 		}
 	}
-	entry.Title = vaultDocumentTitle(path, body, kind)
-	// User documents and reports have a single original in the file library.
-	// Their text is used for indexing, never stored as a recovery copy in SQL.
+	entry.Title = vaultDocumentTitle(path, body)
+	// Reports have a single original in the file library.
+	// Their text is used for indexing without a recovery copy in SQL.
 	entry.VaultBody = ""
 	entry.FileSize = int64(len(body))
 	entry.FileHash = hash
 	entry.UpdatedAt = time.Now().UTC()
 	indexBody := body
-	if kind == "report" {
-		if header, content, err := splitVaultHeader([]byte(body)); err == nil {
-			var report struct {
-				RelatedArticleIDs []string `yaml:"related_article_ids"`
-			}
-			if yaml.Unmarshal(header, &report) == nil {
-				metadata, _ := json.Marshal(map[string]interface{}{"related_article_ids": report.RelatedArticleIDs})
-				entry.Metadata = types.JSON(metadata)
-				indexBody = string(content)
-			}
+	if header, content, err := splitVaultHeader([]byte(body)); err == nil {
+		var report struct {
+			RelatedArticleIDs []string `yaml:"related_article_ids"`
+		}
+		if yaml.Unmarshal(header, &report) == nil {
+			metadata, _ := json.Marshal(map[string]interface{}{"related_article_ids": report.RelatedArticleIDs})
+			entry.Metadata = types.JSON(metadata)
+			indexBody = string(content)
 		}
 	}
 	if err := s.indexVaultChunks(ctx, kb, &entry, indexBody); err != nil {
@@ -679,13 +661,13 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		_ = os.Remove(absolutePath)
 		return nil, writeErr
 	}
-	s.observations[path] = vaultObservation{hash: vaultContentHash(content), changedAt: created.Add(-s.stableWait)}
+	s.observations[path] = vaultObservation{hash: vaultContentHash(content), changedAt: created.Add(-s.reportStableWait)}
 	var entry *types.Entry
 	indexed := false
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		transactional := &VaultDocumentService{db: tx, models: s.models,
 			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
-		entry, err = transactional.indexDocument(ctx, kb, path, "report", content, created)
+		entry, err = transactional.indexReport(ctx, kb, path, content, created)
 		if err != nil {
 			return err
 		}

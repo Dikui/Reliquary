@@ -50,3 +50,14 @@ func TestDecodeIngestRequiresURLFieldAndAllowsExplicitEmpty(t *testing.T) {
 	require.Empty(t, request.Items[1].URL)
 	require.Contains(t, request.Items[2].InputError, "url 必须是字符串")
 }
+
+func TestDecodeIngestMineAllowsOmittedURLAndDocumentSupplementID(t *testing.T) {
+	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"kind":"mine","acquisition":"verbatim","content":"本人原文"},{"kind":"mine","document_id":"11111111-1111-4111-8111-111111111111","url":"","acquisition":"verbatim"},{"kind":"mine","url":null,"acquisition":"verbatim"}]}`))
+	require.NoError(t, err)
+	require.Empty(t, request.Items[0].InputError)
+	require.Equal(t, "mine", request.Items[0].Kind)
+	require.Empty(t, request.Items[0].URL)
+	require.Empty(t, request.Items[1].InputError)
+	require.Equal(t, "11111111-1111-4111-8111-111111111111", request.Items[1].DocumentID)
+	require.Contains(t, request.Items[2].InputError, "url 必须是字符串")
+}

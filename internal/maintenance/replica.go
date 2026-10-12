@@ -152,9 +152,9 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 						delete(clean, name)
 					}
 				}
-				// Published original text lives in the vault. Rejected/pending text
-				// has no article file and remains in this readable replica.
-				if table == "entries" && row["vault_path"] != "" {
+				// Published article text lives in the vault. Imported personal
+				// documents retain their database recovery copy in this replica.
+				if table == "entries" && row["vault_path"] != "" && row["source_kind"] != "mine" {
 					delete(clean, "vault_body")
 				}
 				items = append(items, clean)

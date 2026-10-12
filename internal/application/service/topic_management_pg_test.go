@@ -186,7 +186,7 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 	svc, model, ctx := newTopicManagementService(t, h)
 	articles := historicalTopicArticles(t, h, 65)
 	for _, kind := range []string{"mine", "report"} {
-		require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.EntryTypeManual, SourceKind: kind, Title: "Personal document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
+		require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.EntryTypeManual, SourceKind: kind, Title: kind + " document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
 	}
 	require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: "Rejected article", Description: "Also about products", ParseStatus: types.ParseStatusRejected}).Error)
 	_, err := svc.CreateTopic(ctx, &types.Topic{Name: "Other topic", Description: "Other description"})
@@ -195,8 +195,8 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 	require.NoError(t, err)
 	job := runTopicJob(t, svc, ctx, topic.ID)
 	require.Equal(t, "completed", job.Status)
-	require.Equal(t, 65, job.Total)
-	require.Equal(t, 65, job.Processed)
+	require.Equal(t, 66, job.Total)
+	require.Equal(t, 66, job.Processed)
 	require.Zero(t, job.FailedArticles)
 	calls := model.calls()
 	require.Len(t, calls, 3)
@@ -209,14 +209,14 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 		for _, article := range call.Articles {
 			require.NotEmpty(t, article.Title)
 			require.NotEmpty(t, article.Summary)
-			require.NotEqual(t, "Personal document", article.Title)
+			require.NotEqual(t, "report document", article.Title)
 			require.NotEqual(t, "Rejected article", article.Title)
 		}
 	}
 	sort.Ints(sizes)
-	require.Equal(t, []int{5, 30, 30}, sizes)
+	require.Equal(t, []int{6, 30, 30}, sizes)
 	links := topicLinks(t, svc, topic.ID)
-	require.Len(t, links, 65)
+	require.Len(t, links, 66)
 	for _, link := range links {
 		require.Equal(t, types.TopicSourceModel, link.Source)
 	}

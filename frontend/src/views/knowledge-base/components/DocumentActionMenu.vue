@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
 
 interface EntryItem {
   id: string;
@@ -26,8 +25,6 @@ const emit = defineEmits<{
   (e: 'batch-manage'): void;
   (e: 'delete'): void;
 }>();
-
-const { t } = useI18n();
 
 const CANCELABLE_PARSE_STATUSES = new Set(['pending', 'processing', 'finalizing']);
 
@@ -93,20 +90,19 @@ const canReprocess = computed(() => !['mine', 'report'].includes(props.item.sour
   </div>
 
   <!-- 删除文档 -->
-  <t-popconfirm theme="warning"
-    :content="$t('knowledgeBase.confirmDeleteDocument', { fileName })"
-    :confirm-btn="{ content: $t('knowledgeBase.confirmDelete'), theme: 'danger' }"
-    :cancel-btn="{ content: $t('common.cancel') }" placement="left"
-    @confirm="emit('delete')">
-    <div class="doc-action-menu-item danger" @click.stop>
-      <t-icon class="icon" name="delete" />
-      <span>{{ $t('knowledgeBase.deleteDocument') }}</span>
-    </div>
-  </t-popconfirm>
+  <button type="button" class="doc-action-menu-item danger" @click.stop="emit('delete')">
+    <t-icon class="icon" name="delete" />
+    <span>{{ $t(item.source_kind === 'mine' ? 'personalDocument.delete' : 'knowledgeBase.deleteDocument') }}</span>
+  </button>
 </template>
 
 <style scoped lang="less">
 .doc-action-menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -117,6 +113,16 @@ const canReprocess = computed(() => !['mine', 'report'].includes(props.item.sour
   cursor: pointer;
   border-radius: 6px;
   transition: background-color 0.15s cubic-bezier(0.2, 0, 0, 1), transform 0.12s ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: -2px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 
   &:hover {
     background: var(--td-bg-color-container-hover);

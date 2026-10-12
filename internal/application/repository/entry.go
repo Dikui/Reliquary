@@ -108,8 +108,11 @@ func (r *entryRepository) ListEntryByKnowledgeBaseID(
 // EntryListFilter to a GORM query. Space / knowledge base scoping must be
 // applied by the caller before invoking this helper.
 func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB {
+	if filter.SourceKind != "" {
+		query = query.Where("source_kind = ?", filter.SourceKind)
+	}
 	if filter.Starred != nil {
-		query = query.Where("source_kind='article' AND starred=?", *filter.Starred)
+		query = query.Where("source_kind IN ('article','mine') AND starred=?", *filter.Starred)
 	}
 	if filter.ContentType == "unclassified" {
 		query = query.Where("(content_type IS NULL OR content_type = '')")

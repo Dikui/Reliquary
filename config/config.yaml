@@ -13,8 +13,6 @@ article_processing:
 # Markdown library. Compose binds RELIQUARY_VAULT_DIR to the required VAULT_ROOT.
 vault:
   header_debounce: 5s
-  stable_wait: 10m
-  scan_interval: 1m
 
 # Knowledge base configuration
 knowledge_base:

@@ -58,6 +58,12 @@ const emptyComponent = defineComponent({ setup: () => () => null })
 const emptyModule = { __esModule: true, default: emptyComponent }
 const envelope = (data: unknown) => Promise.resolve({ success: true, data })
 const unexpectedAPI = () => { throw new Error('The repost rendering test must not call a remote API') }
+const deleteConfirmModule = { __esModule: true, default: compileSFC('./DocumentDeleteConfirm.vue').create() }
+const personalDeleteModule = { __esModule: true, default: compileSFC('./PersonalDocumentDelete.vue').create({
+  '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
+  '@/api/knowledge-base': { deleteDocument: unexpectedAPI },
+  'tdesign-vue-next': { MessagePlugin: { success: unexpectedAPI } },
+}) }
 
 function source(overrides: Partial<EntryRepostSource> = {}): EntryRepostSource {
   return {
@@ -105,6 +111,7 @@ interface DetailRenderOptions {
   incompleteActions?: unknown
   reviewActions?: unknown
   articleJudgments?: unknown
+  personalDelete?: unknown
   onReviewChanged?: (...args: unknown[]) => void
 }
 async function renderDetails(sources: EntryRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
@@ -123,6 +130,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
     '@/components/EntryProcessingTimeline.vue': emptyModule,
+    '@/components/PersonalDocumentDelete.vue': options.personalDelete || emptyModule,
     '@/components/MissingMaterials.vue': options.missingMaterials || emptyModule, '@/components/IncompleteActions.vue': options.incompleteActions || emptyModule,
     '@/views/knowledge-base/components/RepostSources.vue': sharedRepostModule,
     '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
@@ -352,7 +360,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   }
 
   test(`${locale}: legacy manual and vault documents have no body editor and personal documents have no reprocessing action`, async () => {
-    const component = actionMenuSFC.create()
+    const component = actionMenuSFC.create({
+      '@/components/PersonalDocumentDelete.vue': personalDeleteModule,
+      '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
+    })
     const item = { id: 'article', type: 'manual', parse_status: 'completed', processing_mode: 'full' }
     const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
     const editable = await render({})
@@ -765,5 +776,17 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.canPreview(), true)
     } })
     assert.equal(loadedDetails.metadata.intake.original_path, 'local://draft/body.md')
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: personal document detail shows delete and hides metadata editing`, async () => {
+    const deletion = { __esModule: true, default: defineComponent({ props: ['documentId'], setup: props => () => h('button', { 'data-delete-document': props.documentId }, messages[locale].personalDocument.delete) }) }
+    const html = await renderDetails([], locale, { details: { source_kind: 'mine', title: 'My imported note', custom_metadata: {} }, personalDelete: deletion })
+    assert.match(html, /data-delete-document="message-a"/)
+    assert.ok(html.includes(messages[locale].personalDocument.delete))
+    assert.ok(!html.includes('metadata-empty-action'))
+    assert.ok(!html.includes('name="edit"'))
+    assert.ok(!html.includes(messages[locale].knowledgeBase.rebuildDocument))
   })
 }

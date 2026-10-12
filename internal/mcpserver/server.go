@@ -83,6 +83,10 @@ type idInput struct {
 	ID string `json:"id"`
 }
 
+type documentInput struct {
+	DocumentID string `json:"document_id"`
+}
+
 type entryInput struct {
 	ID     string `json:"id"`
 	Offset int    `json:"offset,omitempty"`
@@ -265,13 +269,21 @@ func registerTools(server *mcp.Server, services Services) {
 			return map[string]any{"target_type": in.TargetType, "target_id": in.TargetID, "following": false}, nil
 		})
 	addIngestTool(server, services.Entries)
+	addTool(server, "delete_document", "按文档 ID 删除本人文档，同时删除文件、附件、索引和记录并写入操作日志。文章和整理结果不能用此工具删除。删除后可重新导入相同内容。"+externalContentNotice,
+		object(map[string]any{"document_id": text("本人文档 ID，必填")}, "document_id"),
+		func(ctx context.Context, in documentInput) (any, error) {
+			if err := services.Entries.DeleteDocument(ctx, in.DocumentID); err != nil {
+				return nil, err
+			}
+			return map[string]any{"document_id": in.DocumentID, "status": "deleted", "message": "本人文档已删除"}, nil
+		})
 	addTool(server, "check_urls", "收录前按规范化链接查重，含转载来源。输入 1 到 100 条链接，逐条返回 url、status（in_library、pending_review、discarded、not_found）、article_id、incomplete。已丢弃的链接不会再次入库。"+completeMaterialNotice+externalContentNotice,
 		object(map[string]any{"urls": boundedArray("原文链接数组，1 到 100 条", text("原文链接"), 1, types.MaxIngestCheckURLs)}, "urls"),
 		func(ctx context.Context, in types.IngestCheckRequest) (any, error) {
 			items, err := services.Entries.CheckURLs(ctx, in.URLs)
 			return types.IngestCheckResponse{Items: items}, err
 		})
-	addTool(server, "list_incomplete", "分页列出待补全文章，返回 items、total、page、page_size；每项包含 article_id、url、title、acquisition 与 missing（type、source_url、reason）。已尝试一次外部补全后仍有缺失的文章不再列出。"+completeMaterialNotice+externalContentNotice,
+	addTool(server, "list_incomplete", "分页列出待补全条目，返回 items、total、page、page_size；每项包含 article_id、kind、url、title、acquisition 与 missing（type、source_url、reason）。已尝试一次外部补全后仍有缺失的条目不再列出。本人文档补全可将 article_id 填入 ingest 的 document_id。"+completeMaterialNotice+externalContentNotice,
 		object(map[string]any{"page": integer("页码，默认 1", 1, 0), "page_size": integer("每页条数，默认 20，最大 100", 1, 100)}),
 		func(ctx context.Context, in pendingInput) (any, error) {
 			return services.Entries.ListIncomplete(ctx, in.Page, in.PageSize, false)
@@ -286,7 +298,7 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in pendingInput) (any, error) {
 			return services.Entries.ListPending(ctx, in.Page, in.PageSize, in.Kind)
 		})
-	addTool(server, "approve_pending", "处理指定收录待审文章。默认 approve 通过有链接的内容；supplement_url 用 url 补链接并重新模型审核；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存；convert_to_mine 需 confirmed=true，将解析正文转入 mine/ 并删除收录记录。记录操作日志，返回文章和状态。"+externalContentNotice,
+	addTool(server, "approve_pending", "处理指定收录待审条目。默认 approve 批准内容，本人文档无需链接；supplement_url 用 url 补链接并重新模型审核；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存；convert_to_mine 需 confirmed=true，直接按本人文档进入处理，处理后全文写入 mine/，不再调用收录审核。记录操作日志，返回条目和状态。"+externalContentNotice,
 		object(map[string]any{"id": text("待审文章 ID，必填"), "action": enum("操作，默认 approve", "approve", "supplement_url", "admit_unverified", "convert_to_mine"), "url": text("补充的原始 HTTP/HTTPS 链接"), "confirmed": boolean("无链接入库或转本人文档必须显式确认")}, "id"),
 		func(ctx context.Context, in intakeReviewInput) (any, error) {
 			action := in.Action
@@ -355,7 +367,7 @@ func enum(description string, values ...string) map[string]any {
 // The batch tool decodes each item itself so one malformed item cannot prevent
 // valid items from being processed. The published schema still documents fields.
 func addIngestTool(server *mcp.Server, collector interfaces.IngestService) {
-	server.AddTool(&mcp.Tool{Name: "ingest", InputSchema: ingestSchema(), Description: "一次收录 1 到 50 条，逐条返回 index、status、article_id、message、reason、completeness；一条失败不影响其他条目。status 为 accepted、exists、supplemented、pending_review、conflict、discarded 或 invalid。经过模型收录审核，通过后异步处理；正文缺失进入收录待审。acquisition 必填：verbatim、extracted、model_written。MCP 不支持文件上传，file 与 images 用 base64 data 提交；每个文件解码后最多 10 MiB，整个工具参数 JSON 最多 20 MiB，内联文件解码后的合计最多 20 MiB，同时受现有上传类型与大小规则约束。agent_summary、agent_tags、source_name 仅保存数据库。" + completeMaterialNotice + externalContentNotice},
+	server.AddTool(&mcp.Tool{Name: "ingest", InputSchema: ingestSchema(), Description: "一次收录 1 到 50 条，逐条返回 index、status、article_id、message、reason、completeness；一条失败不影响其他条目。status 为 accepted、exists、supplemented、pending_review、conflict、discarded 或 invalid。kind 默认为 article，mine 表示本人文档；两类均经过模型收录审核与处理。本人文档始终全文保存，url 可省略或为空，不提取链接，不因缺链接待审。本人文档补全可提供 document_id。正文缺失进入收录待审。acquisition 必填：verbatim、extracted、model_written。MCP 不支持文件上传，file 与 images 用 base64 data 提交；每个文件解码后最多 10 MiB，整个工具参数 JSON 最多 20 MiB，内联文件解码后的合计最多 20 MiB，同时受现有上传类型与大小规则约束。agent_summary、agent_tags、source_name 仅保存数据库。" + completeMaterialNotice + externalContentNotice},
 		func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			fail := func(err error) (*mcp.CallToolResult, error) {
 				result := &mcp.CallToolResult{}
@@ -408,7 +420,9 @@ func ingestSchema() map[string]any {
 		"reason":     text("无法提供材料的原因，必填"),
 	}, "type", "source_url", "reason")
 	item := object(map[string]any{
-		"url":         text("原文链接，必填；为空时从材料提取，无法提取则进入收录待审"),
+		"kind":        enum("条目类别，默认 article；mine 表示本人文档", "article", "mine"),
+		"document_id": text("本人文档补全时可填写已有文档 ID，只用于 kind=mine"),
+		"url":         text("文章原文链接必填，可为空；本人文档可省略或为空，不提取链接"),
 		"content":     text("Markdown 正文全文；与 file 至少提供一项，否则须说明正文缺失"),
 		"file":        file,
 		"acquisition": enum("获取方式，必填：逐字原文、网页提取或模型整理", "verbatim", "extracted", "model_written"),
@@ -425,6 +439,6 @@ func ingestSchema() map[string]any {
 		"agent_summary":     text("调用方摘要，仅存数据库，不进入表头和处理调用"),
 		"agent_tags":        stringArray("调用方标签，仅存数据库，不进入表头和处理调用"),
 		"source_name":       text("调用方名称，仅存数据库，身份以经过验证的 API Key 为准"),
-	}, "url", "acquisition")
+	}, "acquisition")
 	return object(map[string]any{"items": boundedArray("收录条目，1 到 50 条；逐条返回结果", item, 1, types.MaxIngestBatchItems)}, "items")
 }

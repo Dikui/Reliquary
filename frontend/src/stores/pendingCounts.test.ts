@@ -293,7 +293,7 @@ test('actual page change handlers refresh the shared navigation badge after conf
   await f.finish([3, 2, 4])
   assert.match(await f.badge('zh-CN'), />9<\/span>/)
   const loadedBases: string[] = [], detailReads: string[] = []
-  let closed = 0, pendingRefreshes = 0
+  let closed = 0, pendingRefreshes = 0, pageResets = 0
   const handlers = pageHandlers({
     pendingCounts: f.store,
     kbId: ref('single-kb'),
@@ -302,6 +302,7 @@ test('actual page change handlers refresh the shared navigation badge after conf
     details: { id: 'article-a' },
     getCardDetails: ({ id }: { id: string }) => { detailReads.push(id) },
     closeDoc: () => { closed++ },
+    resetPage: () => { pageResets++ },
   })
   const operations = [
     { send: () => f.ingest.acceptIncomplete('article-a'), url: '/api/v1/ingest/article-a/accept-incomplete', changed: () => handlers.handlePendingChanged() },
@@ -324,6 +325,7 @@ test('actual page change handlers refresh the shared navigation badge after conf
   }
   assert.deepEqual(loadedBases, Array(5).fill('single-kb'))
   assert.equal(closed, 1)
+  assert.equal(pageResets, 1)
   assert.equal(pendingRefreshes, 3)
   assert.deepEqual(detailReads, ['article-a', 'article-a'])
 })

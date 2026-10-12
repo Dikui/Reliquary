@@ -1,7 +1,7 @@
 import { get, post, put, del, getDown } from "../utils/request";
 import type { ModelTierConfig } from '@/types/modelTiers';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
-import type { SearchRequest } from '@/types/search';
+import type { SearchRequest, SearchSource } from '@/types/search';
 
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }
 
@@ -24,6 +24,7 @@ export function listEntryFiles(
     starred?: boolean;
     parse_status?: string;
     source?: string;
+    source_kind?: SearchSource;
     start_time?: string;
     end_time?: string;
   },
@@ -37,6 +38,7 @@ export function listEntryFiles(
   if (typeof params.starred === 'boolean') query.append('starred', String(params.starred));
   if (params.parse_status) query.append('parse_status', params.parse_status);
   if (params.source) query.append('source', params.source);
+  if (params.source_kind) query.append('source_kind', params.source_kind);
   if (params.start_time) query.append('start_time', params.start_time);
   if (params.end_time) query.append('end_time', params.end_time);
   const qs = query.toString();
@@ -64,6 +66,10 @@ export function getEntrySpans(id: string, attempt?: number) {
 
 export function delEntryDetails(id: string) {
   return del(`/api/v1/entries/${id}`);
+}
+
+export function deleteDocument(documentId: string) {
+  return del<{ success: boolean; data?: { document_id: string; status: 'deleted' }; message?: string }>(`/api/v1/documents/${encodeURIComponent(documentId)}`);
 }
 
 // 批量删除（同一知识库内）。后端会校验所有 id 隶属于 kb_id 且具有编辑权限。

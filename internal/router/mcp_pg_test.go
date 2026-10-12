@@ -57,11 +57,11 @@ func (mcpFixtureEmbedder) GetDimensions() int   { return 3 }
 type mcpFixtureChat struct{}
 
 func (mcpFixtureChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
-	if strings.Contains(messages[0].Content, "Review this sourced") {
+	if strings.Contains(messages[0].Content, "Review this sourced") || strings.Contains(messages[0].Content, "Review this document written by the user") {
 		approved := !strings.Contains(messages[1].Content, "rejectfixture")
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"model fixture decision"}`, approved)}, nil
 	}
-	return &types.ChatResponse{Content: `{"content_type":"event","content_type_uncertain":false,"content_type_reason":"clear","summary":{"overview":"MCP fixture","points":["one","two","three"],"key_terms":["MCP"]},"entities":[],"topic_ids":[]}`}, nil
+	return &types.ChatResponse{Content: `{"content_type":"event","content_type_uncertain":false,"content_type_reason":"clear","summary":{"overview":"MCP fixture","points":["one","two","three"],"key_terms":["MCP"]},"entities":[],"topics":[]}`}, nil
 }
 func (mcpFixtureChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	return nil, fmt.Errorf("streaming is not used by the MCP fixture")
@@ -71,7 +71,10 @@ func (mcpFixtureChat) GetModelName() string { return "mcp-test-chat" }
 
 type mcpFixtureModels struct{ interfaces.ModelService }
 
-func (mcpFixtureModels) GetEmbeddingModel(context.Context, string) (embedding.Embedder, error) {
+func (mcpFixtureModels) GetEmbeddingModel(_ context.Context, id string) (embedding.Embedder, error) {
+	if id == "missing-embedding" {
+		return nil, fmt.Errorf("embedding model no longer exists")
+	}
 	return mcpFixtureEmbedder{}, nil
 }
 func (mcpFixtureModels) GetChatModel(context.Context, string) (chat.Chat, error) {
@@ -104,6 +107,12 @@ type mcpFixture struct {
 	queue     *mcpFixtureQueue
 	server    *httptest.Server
 	root      string
+}
+
+func (f *mcpFixture) seedProcessingModels(t *testing.T) {
+	t.Helper()
+	require.NoError(t, f.db.Create(&types.Model{ID: "mcp-chat", SpaceID: types.SingleSpaceID, Name: "mcp-test-chat", Type: types.ModelTypeGeneration, Status: types.ModelStatusActive}).Error)
+	require.NoError(t, f.db.Create(&types.Model{ID: "mcp-embedding", SpaceID: types.SingleSpaceID, Name: "mcp-test-embedding", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 }
 
 func newMCPFixture(t *testing.T) *mcpFixture {
@@ -139,7 +148,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 		nil, engine, nil, nil)
 	require.NoError(t, err)
 	entry.(interface{ SetVault(*service.VaultService) }).SetVault(vault)
-	documents, err := service.NewVaultDocumentService(f.db, models, engine, root, time.Minute, time.Minute)
+	documents, err := service.NewVaultDocumentService(f.db, models, engine, root)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
 	articles := entry.(mcpserver.EntryService)
@@ -314,7 +323,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			require.Contains(t, tool.Description, "incomplete=true 表示文章材料缺失，待补全")
 		}
 	}
-	require.ElementsMatch(t, []string{"search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "resolve_processing_review", "check_urls", "list_incomplete", "accept_incomplete"}, names)
+	require.ElementsMatch(t, []string{"search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "resolve_processing_review", "check_urls", "list_incomplete", "accept_incomplete"}, names)
 	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
 		"topic_ids": []string{topic.ID}, "sources": []string{"article"}, "starred": false,
@@ -389,7 +398,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	latest := f.connect(t, "")
 	listed, err := latest.ListTools(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 19)
+	require.Len(t, listed.Tools, 20)
 }
 
 func TestMCPArticleUnicodeSegmentsAndSummaryOnly(t *testing.T) {
@@ -663,6 +672,7 @@ func TestHTTPPendingReviewsReturnsFrontendEnvelopeAndKinds(t *testing.T) {
 
 func TestMCPMissingSourcePendingActionsRequireConfirmationAndIndexMine(t *testing.T) {
 	f := newMCPFixture(t)
+	f.seedProcessingModels(t)
 	client := f.connect(t, "2025-11-25")
 	createPending := func(title string) *types.Entry {
 		item := f.seedPending(t, title)
@@ -697,6 +707,12 @@ func TestMCPMissingSourcePendingActionsRequireConfirmationAndIndexMine(t *testin
 	var mine types.Entry
 	mcpCall(t, client, "approve_pending", map[string]any{"id": converted.ID, "action": "convert_to_mine", "confirmed": true}, &mine)
 	require.Equal(t, "mine", mine.SourceKind)
+	require.Equal(t, types.ParseStatusPending, mine.ParseStatus)
+	f.queue.mu.Lock()
+	processingTask := f.queue.tasks[len(f.queue.tasks)-1]
+	f.queue.mu.Unlock()
+	require.NoError(t, f.articles.(interfaces.EntryService).ProcessManualUpdate(f.ctx, processingTask))
+	require.NoError(t, f.db.First(&mine, "id=?", mine.ID).Error)
 	require.Equal(t, types.ParseStatusCompleted, mine.ParseStatus)
 	require.True(t, strings.HasPrefix(mine.VaultPath, "mine/"))
 	data, err := os.ReadFile(filepath.Join(f.root, mine.VaultPath))
@@ -704,7 +720,8 @@ func TestMCPMissingSourcePendingActionsRequireConfirmationAndIndexMine(t *testin
 	require.Contains(t, string(data), "Awaiting a deliberate approval")
 	var count int64
 	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", converted.ID).Count(&count).Error)
-	require.Zero(t, count)
+	require.Equal(t, int64(1), count)
+	require.Equal(t, converted.ID, mine.ID)
 	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"query": "Awaiting", "sources": []string{"mine"}, "collapse_similar": false}, &search)
 	require.Len(t, search.Results, 1)

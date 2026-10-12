@@ -49,7 +49,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   const app = createSSRApp(value, props)
   app.use(createI18n({ legacy: false, locale, messages }))
   const stub = defineComponent({ props: ['visible', 'label', 'description', 'message'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', attrs, [props.label, props.description, props.message, slots.default?.(), slots.operation?.()]) })
-  for (const name of ['t-tabs', 't-tab-panel', 't-button', 't-select', 't-input', 't-dialog', 't-empty', 't-loading', 't-pagination', 't-alert', 't-tag', 't-icon', 't-tooltip', 't-checkbox', 't-popup']) app.component(name, stub)
+  for (const name of ['t-tabs', 't-tab-panel', 't-button', 't-select', 't-input', 't-dialog', 't-empty', 't-loading', 't-pagination', 't-alert', 't-tag', 't-icon', 't-tooltip', 't-checkbox', 't-popup', 't-popconfirm']) app.component(name, stub)
   const errors: unknown[] = [], warnings: string[] = []
   app.config.errorHandler = cause => errors.push(cause)
   app.config.warnHandler = warning => warnings.push(warning)
@@ -91,6 +91,70 @@ const incomplete = {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: rejected personal documents show their source and approve without a URL`, async () => {
+    const mine = { ...intake, source_kind: 'mine', metadata: { intake: { decision: 'rejected', reason: 'Needs user decision', source_info: {} } } }
+    const { api, calls } = createReviewAPI(async call => ({ success: true, data: call.method === 'get' ? [mine] : mine, total: 1 }))
+    const html = await render(pendingComponent(api), {}, locale, async state => { await state.load() })
+    assert.ok(html.includes(messages[locale].knowledgeBase.sourceKinds.mine))
+    assert.ok(html.includes(messages[locale].articleJudgments.approveReview))
+    assert.ok(!html.includes(messages[locale].knowledgeReview.missingLinkHint))
+    assert.ok(!html.includes(messages[locale].knowledgeReview.actions.supplement_url))
+    await render(reviewComponent(api), { entry: mine }, locale, async state => { await state.submit('approve') })
+    assert.deepEqual(calls.at(-1), { method: 'post', url: '/api/v1/entries/missing-url/review', body: { action: 'approve', source_info: {} } })
+  })
+  test(`${locale}: personal document menu deletion uses an independent confirmation with full removal and reimport copy`, async () => {
+    const shared = component('../../components/DocumentDeleteConfirm.vue', {})
+    const setup = shared.setup
+    shared.setup = (props: object, context: object) => { const state = setup(props, context); onServerPrefetch(() => state.open()); return state }
+    const modal = component('./components/DocumentMenuDelete.vue', {
+      '@/components/DocumentDeleteConfirm.vue': moduleOf(shared),
+      '@/api/knowledge-base': { deleteDocument: () => assert.fail('Opening the menu never deletes its document') },
+      'tdesign-vue-next': { MessagePlugin: { success() {} } },
+    })
+    const menu = component('./components/DocumentActionMenu.vue', {})
+    const item = { id: 'mine', title: 'My source', source_kind: 'mine', parse_status: 'completed' }
+    const menuHTML = await render(menu, { item, traceVisible: false }, locale)
+    assert.ok(menuHTML.includes(messages[locale].personalDocument.delete))
+    assert.ok(!menuHTML.includes('My source'), 'the menu never embeds confirmation content')
+    assert.ok(!menuHTML.includes(`>${messages[locale].knowledgeBase.rebuildDocument}<`))
+    assert.ok(!menuHTML.includes('name="edit"'))
+    const html = await render(modal, {}, locale, async state => { await state.open(item) })
+    assert.ok(html.includes('My source'))
+    assert.ok(html.includes(locale === 'zh-CN' ? '删除后重新导入' : 'import it again'))
+  })
+  test(`${locale}: incomplete articles and personal documents load with the correct completion instructions and shared action copy`, async () => {
+    const records = [
+      { ...incomplete, kind: 'article' },
+      { ...incomplete, kind: 'mine', article_id: 'personal-files', title: 'My incomplete note', url: '', acquisition: 'verbatim' },
+    ]
+    const { api: review } = createReviewAPI(async () => ({ success: true, data: [], total: 0 }))
+    const { api: ingest, calls } = createIngestAPI(async () => ({ success: true, data: records, total: records.length }))
+    let loadedMine: typeof records[number] | undefined
+    const html = await render(pendingComponent(review, reviewComponent(review), ingest), {}, locale, async state => {
+      state.changeKind('incomplete'); await settle()
+      assert.deepEqual(state.incompleteRecords.value, records)
+      loadedMine = state.incompleteRecords.value[1]
+    })
+    assert.deepEqual(calls, [{ method: 'get', url: '/api/v1/ingest/incomplete?page=1&page_size=20&include_attempted=true' }])
+    assert.ok(html.includes(records[0].title)); assert.ok(html.includes(records[1].title))
+    assert.ok(html.includes(messages[locale].knowledgeBase.sourceKinds.mine))
+    const instructions = locale === 'zh-CN'
+      ? '文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。'
+      : 'Resubmit articles with the same original URL and personal documents with the document ID.'
+    assert.ok(html.includes(instructions))
+    assert.ok(messages[locale].ingestStatus.incompleteHint.includes(instructions))
+    assert.ok(html.includes(messages[locale].ingestStatus.attemptedHint))
+    assert.ok(!/该文章|This article/.test(messages[locale].ingestStatus.attemptedHint))
+    for (const action of ['accept', 'discard'] as const) {
+      const confirmationHTML = await render(incompleteActions(ingest), { articleId: loadedMine!.article_id, title: loadedMine!.title, allowDiscard: true }, locale, async state => { state.request(action) })
+      assert.ok(confirmationHTML.includes(loadedMine!.title))
+      assert.ok(confirmationHTML.includes(messages[locale].ingestStatus[action === 'accept' ? 'acceptDescription' : 'discardDescription']))
+      assert.ok(!confirmationHTML.includes(locale === 'zh-CN' ? '这篇文章' : 'this article'))
+    }
+    const emptyIngest = createIngestAPI(async () => ({ success: true, data: [], total: 0 })).api
+    const emptyHTML = await render(pendingComponent(review, reviewComponent(review), emptyIngest), {}, locale, async state => { state.changeKind('incomplete'); await settle() })
+    assert.ok(emptyHTML.includes(locale === 'zh-CN' ? '没有待补全的文章或本人文档。' : 'No articles or personal documents need completion.'))
+  })
   test(`${locale}: all three pending tabs switch through actual HTTP wrappers including attempted incomplete articles`, async () => {
     const { api: review, calls: reviewCalls } = createReviewAPI(async call => ({ success: true, data: call.url.includes('kind=processing') ? [processing] : [intake], total: 1 }))
     const { api: ingest, calls: ingestCalls } = createIngestAPI(async () => ({ success: true, data: [incomplete], total: 1 }))
@@ -344,7 +408,7 @@ test('source unverified and review fields survive the API, actual Pinia store an
   hook.getCardDetails({ id: processing.id }); await settle()
   for (const field of ['source_unverified', 'content_type_uncertain', 'processing_review_status', 'processing_review_content_type', 'processing_review_reason']) assert.equal(hook.details[field], records[0][field as keyof typeof records[0]], field)
   const classification = component('../../components/EntryClassification.vue', { './FollowToggle.vue': empty, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': security })
-  const listModules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/EntryClassification.vue': moduleOf(classification), '@/components/EntryStarToggle.vue': empty }
+  const listModules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, './DocumentMenuDelete.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/EntryClassification.vue': moduleOf(classification), '@/components/EntryStarToggle.vue': empty }
   for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok((await render(classification, { entry: hook.details }, locale)).includes(messages[locale].knowledgeReview.sourceUnverified))
     for (const file of ['./components/DocumentListView.vue', './components/DocumentCardView.vue']) assert.ok((await render(component(file, listModules), { items: hook.cardList.value, selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }, locale)).includes(messages[locale].knowledgeReview.sourceUnverified))
@@ -369,7 +433,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/stores/entry': { entryStore: store }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, '@/stores/resources': { useResourcesStore: () => ({}) },
     }).default('kb-reviews')
     await hook.loadEntries()
-    const modules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty }
+    const modules = { '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': empty, './DocumentMenuDelete.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty }
     for (const file of ['./components/DocumentListView.vue', './components/DocumentCardView.vue']) {
       const view = component(file, modules)
       for (const record of hook.cardList.value) {

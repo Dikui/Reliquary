@@ -107,7 +107,7 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 	if err != nil {
 		return nil, err
 	}
-	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND knowledge_base_id=? AND source_kind='article'", kb.SpaceID, kb.ID)
+	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND knowledge_base_id=? AND source_kind IN ('article','mine')", kb.SpaceID, kb.ID)
 	switch kind {
 	case "intake":
 		query = query.Where("parse_status=?", types.ParseStatusRejected)

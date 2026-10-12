@@ -71,6 +71,7 @@ export default function (knowledgeBaseId?: string) {
       starred?: boolean;
       parse_status?: string;
       source?: string;
+      source_kind?: ClassifiedEntry['source_kind'];
       start_time?: string;
       end_time?: string;
     } = { page: 1, page_size: 35 },
@@ -113,14 +114,12 @@ export default function (knowledgeBaseId?: string) {
       .catch(() => {});
   };
   const delEntry = (index: number, item: any, onSuccess?: () => void) => {
-    cardList.value[index].isMore = false;
-    moreIndex.value = -1;
     return delEntryDetails(item.id)
       .then(async (result: any) => {
         if (result.success) {
-          MessagePlugin.info(t('knowledgeBase.deleteSuccess'));
+          MessagePlugin.info(t(item.source_kind === 'mine' ? 'personalDocument.deleted' : 'knowledgeBase.deleteSuccess'));
           if (onSuccess) {
-            onSuccess();
+            await onSuccess();
           } else {
             // 后端已将单条删除放入异步队列，立即拉列表仍可能包含待删项；
             // 短轮询直到列表与后端一致或超时。

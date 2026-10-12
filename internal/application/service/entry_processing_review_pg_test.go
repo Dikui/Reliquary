@@ -331,7 +331,7 @@ func TestVaultRebuildPreservesFullTutorialForUncertainAndUnverifiedSources(t *te
 			fresh.kb.ModelTiers, fresh.kb.EmbeddingModelID, fresh.kb.IndexingStrategy = h.kb.ModelTiers, h.kb.EmbeddingModelID, h.kb.IndexingStrategy
 			require.NoError(t, fresh.db.Save(fresh.kb).Error)
 			retrieval := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(fresh.db))
-			rebuild, err := NewVaultDocumentService(fresh.db, h.service.modelService, retrieval, vault.root, time.Millisecond, time.Minute)
+			rebuild, err := NewVaultDocumentService(fresh.db, h.service.modelService, retrieval, vault.root)
 			require.NoError(t, err)
 			result, err := rebuild.Rebuild(fresh.ctx)
 			require.NoError(t, err)

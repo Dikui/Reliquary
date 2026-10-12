@@ -24,10 +24,10 @@ import (
 
 // articleImagePaths uses the saved body rather than parser output. Only images
 // copied into this article's attachment directory are eligible for indexing.
-// Personal documents and reports do not participate in image indexing.
+// Reports keep their separate indexing path.
 func articleImagePaths(article *types.Entry) []string {
 	paths := []string{}
-	if article == nil || article.SourceKind != "article" || article.ProcessingMode != types.ProcessingModeFull || article.VaultPath == "" {
+	if !isIngestArticle(article) || article.ProcessingMode != types.ProcessingModeFull || article.VaultPath == "" {
 		return paths
 	}
 	add := func(reference string) {

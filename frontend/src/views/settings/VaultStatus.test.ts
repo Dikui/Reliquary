@@ -66,7 +66,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: settings render the read-only vault root and separate directory status`, async () => {
     const html = await scenario(locale, async () => ({ success: true, data: status }), state => state.load())
     for (const value of [copy.title, copy.root, copy.rootHint, copy.mine, copy.reports, copy.lastScan, copy.indexedFiles, copy.lastError, copy.noError, copy.notScanned, status.root, status.reports.last_error!]) assert.ok(html.includes(value), value)
-    assert.ok(html.includes(new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(status.mine.last_scan_at!))))
+    assert.ok(html.includes(copy.mineImportedHint))
+    assert.ok(!html.includes(new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(status.mine.last_scan_at!))))
     assert.match(html, /<dd>12<\/dd>/)
     assert.match(html, /<dd>3<\/dd>/)
     assert.doesNotMatch(html, /<input|<textarea/)

@@ -63,12 +63,19 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, werrors.NewForbiddenError("knowledge base belongs to another space")
 	}
 	now := time.Now()
+	kind := request.Kind
+	if kind == "" {
+		kind = "article"
+	}
 	title := strings.TrimSpace(request.Title)
 	if title == "" {
 		title = strings.TrimSpace(request.URL)
 	}
 	if title == "" {
 		title = "待审文章"
+		if kind == "mine" {
+			title = "本人文档"
+		}
 	}
 	if len([]rune(title)) > 255 {
 		title = string([]rune(title)[:255])
@@ -79,7 +86,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	}
 	tagJSON, _ := json.Marshal(tags)
 	article := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, KnowledgeBaseID: kb.ID,
-		Type: types.EntryTypeManual, SourceKind: "article", Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
+		Type: types.EntryTypeManual, SourceKind: kind, Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual,
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
 		EmbeddingModelID: kb.EmbeddingModelID, CollectReason: strings.TrimSpace(request.CollectReason),
@@ -98,12 +105,28 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if err := lockMessageDeduplication(s.db.WithContext(ctx), article); err != nil {
 		return nil, err
 	}
-	if discarded, err := s.lookupIngestDiscard(ctx, article.NormalizedURL); err != nil {
+	if request.DocumentID != "" {
+		var existing types.Entry
+		if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND knowledge_base_id=? AND id=?", spaceID, kb.ID, request.DocumentID).First(&existing).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, werrors.NewBadRequestError("document_id must identify an incomplete user document")
+			}
+			return nil, err
+		}
+		if existing.SourceKind != "mine" || (!existing.Incomplete && !ingestMissingContentPending(&existing)) {
+			return nil, werrors.NewBadRequestError("document_id must identify an incomplete user document")
+		}
+		if request.URL != "" && article.NormalizedURL != existing.NormalizedURL {
+			return nil, werrors.NewBadRequestError("url must match the user document being supplemented")
+		}
+		return s.supplementIngest(ctx, kb, &existing, request, keyID, keyName)
+	}
+	if discarded, err := s.lookupIngestDiscardKind(ctx, article.NormalizedURL, kind); err != nil {
 		return nil, err
 	} else if discarded != nil {
 		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
 	}
-	if existing, err := s.findIngestURL(ctx, article.NormalizedURL, true); err != nil {
+	if existing, err := s.findIngestURL(ctx, article.NormalizedURL, true, kind); err != nil {
 		return nil, err
 	} else if existing != nil {
 		if existing.Incomplete || ingestMissingContentPending(existing) {
@@ -131,7 +154,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	intake, _ = article.IntakeMetadata()
 	setMessageFingerprint(article, canonicalBody)
 	// Source evidence extracted from a supplied file also participates in lookup.
-	if discarded, err := s.lookupIngestDiscard(ctx, article.NormalizedURL); err != nil {
+	if discarded, err := s.lookupIngestDiscardKind(ctx, article.NormalizedURL, kind); err != nil {
 		return nil, err
 	} else if discarded != nil {
 		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
@@ -141,6 +164,14 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	if duplicate != nil {
+		if kind == "mine" && duplicate.Incomplete {
+			if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {
+				if err := changes.removeUnusedStoredFiles(ctx, s.fileSvc); err != nil {
+					return nil, err
+				}
+			}
+			return s.supplementIngest(ctx, kb, duplicate, request, keyID, keyName)
+		}
 		if _, err := recordIngestDuplicate(ctx, s.db, duplicate, article, method, distance); err != nil {
 			return nil, err
 		}
@@ -168,7 +199,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", article.ID, nil, map[string]any{
-		"url": article.Source, "acquisition": article.Acquisition, "collect_reason": article.CollectReason, "missing": article.IngestMissing()}); err != nil {
+		"kind": kind, "url": article.Source, "acquisition": article.Acquisition, "collect_reason": article.CollectReason, "missing": article.IngestMissing()}); err != nil {
 		return nil, err
 	}
 	s.bindContentResources(ctx, spaceID, article.ID, body)
@@ -279,6 +310,17 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	}
 	if request.InputError != "" {
 		return bad(request.InputError)
+	}
+	if request.Kind != "" && request.Kind != "article" && request.Kind != "mine" {
+		return bad("kind must be article or mine")
+	}
+	if request.DocumentID != "" {
+		if request.Kind != "mine" {
+			return bad("document_id is only supported for kind=mine supplements")
+		}
+		if _, err := uuid.Parse(request.DocumentID); err != nil {
+			return bad("document_id must be a UUID")
+		}
 	}
 	if request.Acquisition != "verbatim" && request.Acquisition != "extracted" && request.Acquisition != "model_written" {
 		return bad("acquisition must be verbatim, extracted or model_written")

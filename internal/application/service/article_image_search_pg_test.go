@@ -74,14 +74,14 @@ func TestArticleImageSearchRejectsOldModelAndWrongDimensionAndHonorsFilters(t *t
 		addImageSearchVector(t, h, article, fmt.Sprintf("../../attachments/%s/image.png", article.ID), test.model, test.vector)
 	}
 	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchBool(false)})
-	require.Equal(t, []string{"current"}, entrySearchIDs(response))
+	require.Equal(t, []string{"current", "personal"}, entrySearchIDs(response))
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", ContentTypes: []string{"event"}})
 	require.Empty(t, response.Results)
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", Sources: []string{"mine"}})
-	require.Empty(t, response.Results)
+	require.Equal(t, []string{"personal"}, entrySearchIDs(response))
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id='current'").Update("enable_status", "disabled").Error)
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
-	require.Empty(t, response.Results)
+	require.Equal(t, []string{"personal"}, entrySearchIDs(response))
 }
 
 func TestArticleImageSearchKeepsMatchedImageAlongsideHigherScoringText(t *testing.T) {

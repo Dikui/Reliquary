@@ -114,8 +114,6 @@ services:
       - VAULT_ROOT=${VAULT_ROOT:-/data/vault}
       - BACKUP_DIR=${BACKUP_DIR:-${HOME}/Backups/Reliquary}
       - VAULT_HEADER_DEBOUNCE=${VAULT_HEADER_DEBOUNCE:-5s}
-      - VAULT_STABLE_WAIT=${VAULT_STABLE_WAIT:-10m}
-      - VAULT_SCAN_INTERVAL=${VAULT_SCAN_INTERVAL:-1m}
       - AUTO_RECOVER_DIRTY=${AUTO_RECOVER_DIRTY:-true}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       # Ollama 不可用时仅告警不阻断（true 时生效）

@@ -58,8 +58,8 @@ const article = {
   entities: [{ id: 'entity-1', canonical_name: 'Example Company', entity_type: 'company' }], topics: [{ id: 'topic-1', name: 'Product releases', description: 'New product announcements' }], md: [], total: 0, metadata: {},
 }
 const listModules = {
-  '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': emptyModule,
-  '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
+  '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': emptyModule, './DocumentMenuDelete.vue': emptyModule,
+  '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
 }
 const props = { selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }
 
@@ -113,7 +113,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/DocumentPreview.vue': emptyModule,
       '@/utils/clipboard': { copyWithToast() {} },
       '@/components/MissingMaterials.vue': emptyModule, '@/components/IncompleteActions.vue': emptyModule,
-      '@/components/ReviewActions.vue': reviewModule, '@/components/EntryArticleJudgments.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/views/knowledge-base/components/RepostSources.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+      '@/components/ReviewActions.vue': reviewModule, '@/components/EntryArticleJudgments.vue': emptyModule, '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/views/knowledge-base/components/RepostSources.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
     }
     const detail = component('./DocContent.vue', modules)
     const html = await render(detail, { visible: true, details: { ...article, processing_mode: 'summary_only', source: 'https://example.com/tutorial' } }, locale)

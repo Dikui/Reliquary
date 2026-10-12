@@ -2,7 +2,7 @@
 
 所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、960 列，其中 public 44 张表、515 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。当前维护归属以 `000005` 后的结构为准，已删除 `data_sources` 与 `sync_logs`。下表列出当前 public 的 44 张表。
 
-维护副本与核对清单的 `format_version` 为 3，表名使用 `spaces`、`api_keys`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`entry_id`、`entry_ids`。导入及核对接受版本 1 和 2：版本 1 先映射个人空间表及归属列，两个旧版本都将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 3，完成清单原子替换后才移除旧表文件。文章摘要向量 `article_embeddings` 不包含用户文档和整理结果，因此保留表名，仅外键列改为 `entry_id`。
+维护副本与核对清单的 `format_version` 为 3，表名使用 `spaces`、`api_keys`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`entry_id`、`entry_ids`。导入及核对接受版本 1 和 2：版本 1 先映射个人空间表及归属列，两个旧版本都将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 3，完成清单原子替换后才移除旧表文件。标题与摘要向量 `article_embeddings` 包含文章和导入的用户文档，不包含整理结果；表名保留，外键列为 `entry_id`。
 
 个人空间命名迁移仅改名和重建引用旧列的函数及 BM25 索引，分类数量不变，当时的目录为 82 张表、968 列，见 [命名清理证据](tasks/naming-02/evidence/schema-statistics.json)。迁移 `000004_ingest_only` 新增 2 张表与 27 列，当时为 84 张表、995 列。迁移 `000005_remove_collection` 删除采集配置与同步日志两表，表内专属列与索引随表删除；历史文章来源字段保留。
 
@@ -150,7 +150,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 表头中的文章 ID 同时作为副本各表的关联主键保存。文章 `metadata` 中的来源作者、发布者、发布时间也出现在表头，但原始的收录字段整体保留在副本，避免改写原始来源格式和精度。表头字段在副本中保留一份确定的核对值，导入时检查两份值一致。
 
-`entries.vault_body` 按来源区分：已发布文章的正文只从 `articles/` 读取并恢复到数据库；未发布、待审和处理中内容尚无文章文件时，在副本保留数据库已有原文与收录 metadata，上传原件保存在资源副本。`mine/` 与 `reports/` 的原文只在原文件和备份中，数据库与副本不另存原文。派生 chunks 用于检索，不作为恢复原文来源。文件库磁盘损坏且仅数据库尚存时，文章可恢复；用户文档与整理结果最多损失上次备份之后的修改。
+`entries.vault_body` 按来源区分：已发布文章的正文从 `articles/` 读取并恢复到数据库；用户文档正文保存在数据库与维护副本中，并与 `mine/` 的表头和正文核对。未发布、待审和处理中内容尚无文件时，在副本保留数据库已有原文与收录 metadata，上传原件保存在资源副本。`reports/` 的原文只在原文件和备份中，数据库与副本不另存原文。派生 chunks 用于检索，不作为恢复原文来源。文件库磁盘损坏且仅数据库尚存时，文章和用户文档可恢复，核对修复会从数据库补回文件；整理结果最多损失上次备份之后的修改。文件库重建按 `mine/` 表头与正文恢复用户文档，没有表头的文件跳过并列出，不报错，不迁移旧文件。pack 与 unpack 同时保存、恢复用户文档的文件、附件和维护副本。
 
 账号密码哈希选择保留在 `config/users.json`，使仅用文件库重建后仍能用原密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。账号、模型、解析器配置保留非凭据部分；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、JWT_SECRET、数据库密码等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
 
@@ -207,7 +207,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 收录附件与丢弃记录属于不可再生业务数据。未引用附件的文件随现有上传资源镜像保留，`ingest_assets` 的引用归属与过期时间进入副本并恢复；24 小时清理任务属于 `task_jobs`，按已有未完成任务恢复规则续跑。被引用附件的文章文件与本地附件按文件哈希保全。`ingest_discards` 保留规范化链接、原文章 ID、丢弃时间与原因，即使原文章已删除，重建之后仍能阻止再次收录。
 
-获取方式 `entries.acquisition` 写入文章表头并保留副本核对值；待补全状态、缺失材料的原地址与原因、提交 Key 的 ID 与名称、提交时间、外部补全尝试状态、附件清单、关联待审文章 ID 与类型参考全部进入副本。操作日志的 Key ID 与名称为调用方身份快照，保留历史名称，不包含认证 Key 或其哈希。原 API Key 的凭据仍按既有规则排除。
+获取方式 `entries.acquisition` 写入文章和用户文档表头并保留副本核对值；待补全状态、缺失材料的原地址与原因、提交 Key 的 ID 与名称、提交时间、外部补全尝试状态、附件清单、关联待审条目 ID 与类型参考全部进入副本。操作日志的 Key ID 与名称为调用方身份快照，保留历史名称，不包含认证 Key 或其哈希。原 API Key 的凭据仍按既有规则排除。
 
 ## 采集配置与同步日志归档
 

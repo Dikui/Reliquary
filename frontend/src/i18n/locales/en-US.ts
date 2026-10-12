@@ -123,7 +123,7 @@ export default {
   "modelWritten": "Model written",
   "modelWrittenHint": "The body was written by an external tool's model and may differ from the original",
   "incomplete": "Incomplete",
-  "incompleteHint": "Original files, images or body text are missing. Accept the missing materials on the Pending page, or use an external tool to complete the article with the same URL",
+  "incompleteHint": "Articles and personal documents are missing original files, images or body text. Accept the missing materials on the Pending page, or have an external tool complete them. Resubmit articles with the same original URL and personal documents with the document ID.",
   "acquisitionLabel": "Acquisition",
   "unknownAcquisition": "Not specified",
   "acquisition": {
@@ -144,21 +144,21 @@ export default {
   "unknownTool": "Tool name not recorded",
   "unknownTime": "Time not recorded",
   "attemptedTitle": "External completion attempted",
-  "attemptedHint": "An external tool has tried completion once, but materials are still missing. This article will no longer be listed for external tools. Accept the missing materials or discard it.",
+  "attemptedHint": "An external tool has tried completion once, but materials are still missing. This item will no longer be listed for external tools. Accept the missing materials or discard it.",
   "acceptIncomplete": "Accept missing materials",
   "acceptTitle": "Accept these missing materials?",
-  "acceptDescription": "The article will be finalized as it is and the incomplete badge removed. Recorded reasons will be retained.",
+  "acceptDescription": "The content will be finalized as it is and the incomplete badge removed. Recorded reasons will be retained.",
   "acceptSaved": "Missing materials accepted",
   "discard": "Discard",
-  "discardTitle": "Confirm discarding this article?",
-  "discardDescription": "The article and its exclusive attachments will be deleted. This URL will no longer be accepted for collection.",
-  "discardSaved": "Article discarded",
+  "discardTitle": "Confirm discarding this item?",
+  "discardDescription": "The content and its exclusive attachments will be deleted. When an article is discarded, its original URL will no longer be accepted for collection.",
+  "discardSaved": "Content discarded",
   "failed": "Action failed. Try again."
 },
   knowledgeReview: {
   "incomplete": "Incomplete",
-  "incompleteHint": "These articles are saved and searchable, but original files, images or body text are missing. External tools can complete them with the same URL, or you can accept the missing materials or discard the article.",
-  "emptyIncomplete": "No articles need completion.",
+  "incompleteHint": "Articles and personal documents are saved and searchable, but original files, images or body text are missing. Resubmit articles with the same original URL and personal documents with the document ID. You can also accept the missing materials or discard the content.",
+  "emptyIncomplete": "No articles or personal documents need completion.",
   "conflictReason": "The body differs from an existing article",
   "relatedArticle": "Related article",
   "saveAsNew": "Save as a new article",
@@ -194,7 +194,7 @@ export default {
     },
     "convert_to_mine": {
       "title": "Convert to a personal document?",
-      "description": "The text will be saved under mine/ and indexed as a personal document. Attachments will be retained under the file library rules. This intake record will be deleted."
+      "description": "The text will be processed as a personal document and saved in full under mine/ with summary, entities and topics. Collection review is skipped. Attachments follow the ingest rules."
     },
     "discard": {
       "title": "Discard this collection?",
@@ -290,6 +290,7 @@ export default {
     "review_supplement_url": "Add URL and review again",
     "review_admit_unverified": "Collect without URL",
     "review_convert_to_mine": "Convert to personal document",
+    "delete_document": "Delete personal document",
     "review_approve": "Approve review",
     "review_reject": "Reject review",
     "review_retry": "Retry review",
@@ -819,6 +820,12 @@ export default {
       UNKNOWN_SUGGESTION: 'Check the application logs for details.'
     }
   },
+  personalDocument: {
+    delete: 'Delete personal document',
+    deleteConfirm: 'Delete “{title}”? This removes its body, file, attachments and index. To change a document, delete it and import it again.',
+    deleted: 'Personal document deleted',
+    deleteFailed: 'The personal document was not deleted. Try again.',
+  },
   settings: {
     maintenance: {
       title: 'Backup and recovery',
@@ -849,6 +856,7 @@ export default {
       root: 'Root directory',
       rootHint: 'Configured on the server. This value is read-only.',
       mine: 'User documents',
+      mineImportedHint: 'Personal documents are imported through the ingest interface. File changes do not update the index.',
       reports: 'Reports',
       lastScan: 'Last scan',
       indexedFiles: 'Indexed files',

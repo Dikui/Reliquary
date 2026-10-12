@@ -391,11 +391,16 @@ func (s *entryService) persistIngestCompletion(ctx context.Context, k *types.Ent
 
 func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.KnowledgeBase, original *types.Entry, request *types.IngestRequest, keyID uint64, keyName string) (*types.IngestResult, error) {
 	now := time.Now()
+	noun := "文章"
+	if original.SourceKind == "mine" {
+		noun = "用户文档"
+	}
+	message := "正文与已有" + noun + "不同，已另存到关联收录待审。"
 	title := request.Title
 	if title == "" {
 		title = original.Title
 	}
-	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: original.SpaceID, KnowledgeBaseID: kb.ID, Type: types.EntryTypeManual, SourceKind: "article", Source: request.URL, Channel: types.ChannelAPI,
+	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: original.SpaceID, KnowledgeBaseID: kb.ID, Type: types.EntryTypeManual, SourceKind: original.SourceKind, Source: request.URL, Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual, ParseStatus: types.ParseStatusRejected, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
 		EmbeddingModelID: kb.EmbeddingModelID, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint, RelatedArticleID: original.ID, AgentTags: types.JSON("[]"), CollectReason: request.CollectReason, AgentSummary: request.AgentSummary, SourceName: request.SourceName,
 		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName}
@@ -406,7 +411,7 @@ func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.Knowle
 	if request.AgentTags != nil {
 		incoming.AgentTags = types.JSON(tags)
 	}
-	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "rejected", Reason: "与已有文章正文不同", SourceInfo: types.SourceInfo{OriginalURL: request.URL, Author: request.Author, Publisher: request.Publisher, PublishedAt: normalizeIntakePublicationDate(request.PublishedAt)}}
+	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "rejected", Reason: "与已有" + noun + "正文不同", SourceInfo: types.SourceInfo{OriginalURL: request.URL, Author: request.Author, Publisher: request.Publisher, PublishedAt: normalizeIntakePublicationDate(request.PublishedAt)}}
 	if err := incoming.SetIntakeMetadata(intake); err != nil {
 		return nil, err
 	}
@@ -418,8 +423,8 @@ func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.Knowle
 	// Ingest holds the knowledge base deduplication lock through this lookup
 	// and creation. Retry only an exact body hash for this original article.
 	var existing types.Entry
-	err = s.db.WithContext(ctx).Where("space_id=? AND knowledge_base_id=? AND source_kind='article' AND related_article_id=? AND content_hash=? AND parse_status=?",
-		incoming.SpaceID, incoming.KnowledgeBaseID, original.ID, incoming.ContentHash, types.ParseStatusRejected).
+	err = s.db.WithContext(ctx).Where("space_id=? AND knowledge_base_id=? AND source_kind=? AND related_article_id=? AND content_hash=? AND parse_status=?",
+		incoming.SpaceID, incoming.KnowledgeBaseID, original.SourceKind, original.ID, incoming.ContentHash, types.ParseStatusRejected).
 		Order("created_at ASC,id ASC").First(&existing).Error
 	if err == nil {
 		if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {
@@ -427,7 +432,7 @@ func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.Knowle
 				return nil, err
 			}
 		}
-		return ingestResult(&existing, "conflict", "正文与已有文章不同，已另存到关联收录待审。", intake.Reason, ""), nil
+		return ingestResult(&existing, "conflict", message, intake.Reason, ""), nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
@@ -448,5 +453,5 @@ func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.Knowle
 	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_conflict", incoming.ID, nil, map[string]any{"related_article_id": original.ID, "reason": intake.Reason}); err != nil {
 		return nil, err
 	}
-	return ingestResult(incoming, "conflict", "正文与已有文章不同，已另存到关联收录待审。", intake.Reason, ""), nil
+	return ingestResult(incoming, "conflict", message, intake.Reason, ""), nil
 }

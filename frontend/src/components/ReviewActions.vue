@@ -16,7 +16,7 @@ let disposed = false
 const urlInput = ref<{ focus: () => void }>(), invalidURL = ref(false)
 const confirmation = ref<IntakeReviewAction | ProcessingReviewAction | ''>('')
 const processing = computed(() => props.entry.processing_review_status === 'pending' || props.entry.review_kind === 'processing')
-const missingLink = computed(() => !processing.value && !props.entry.metadata?.intake?.source_info?.original_url?.trim())
+const missingLink = computed(() => !processing.value && props.entry.source_kind !== 'mine' && !props.entry.metadata?.intake?.source_info?.original_url?.trim())
 const modelType = computed(() => props.entry.processing_review_content_type || props.entry.content_type || '')
 const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })))
 const confirmationIsBodyRemoval = computed(() => ['confirm', 'correct'].includes(confirmation.value))
@@ -40,7 +40,7 @@ async function submit(action: IntakeReviewAction | ProcessingReviewAction, confi
   }
   if (action === 'correct' && !typeDraft.value) { error.value = t('knowledgeReview.chooseType'); return }
   const chosen = action === 'confirm' ? modelType.value : typeDraft.value
-  const removesBody = processing.value && ['confirm', 'correct'].includes(action) && !props.entry.source_unverified
+  const removesBody = processing.value && props.entry.source_kind !== 'mine' && ['confirm', 'correct'].includes(action) && !props.entry.source_unverified
     && props.entry.processing_mode !== 'summary_only' && ['tutorial', 'case', 'reference'].includes(chosen)
   if (!confirmed && (removesBody || ['admit_unverified', 'convert_to_mine', 'discard'].includes(action))) { confirmation.value = action; return }
   const id = props.entry.id
@@ -76,7 +76,7 @@ async function submit(action: IntakeReviewAction | ProcessingReviewAction, confi
     </template>
     <template v-else>
       <p v-if="missingLink">{{ t('knowledgeReview.missingLinkHint') }}</p>
-      <div class="review-source-fields">
+      <div v-if="entry.source_kind !== 'mine'" class="review-source-fields">
         <label v-if="!missingLink"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceDraft.author" :disabled="busy" :aria-label="t('knowledgeBase.intakeAuthor')" /></label>
         <label v-if="!missingLink"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceDraft.publisher" :disabled="busy" :aria-label="t('knowledgeBase.intakePublisher')" /></label>
         <label :for="`review-original-url-${fieldID}`"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-input :id="`review-original-url-${fieldID}`" ref="urlInput" v-model="sourceDraft.original_url" :disabled="busy" type="url" :aria-label="t('knowledgeBase.intakeOriginalUrl')" :aria-invalid="invalidURL" :aria-describedby="invalidURL ? `review-error-${fieldID}` : undefined" /></label>

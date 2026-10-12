@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { formatFileSize } from '@/utils/files';
 import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
 import DocumentActionMenu from './DocumentActionMenu.vue';
+import DocumentMenuDelete from './DocumentMenuDelete.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
@@ -37,6 +38,7 @@ const props = defineProps<{
   selectedIds: Set<string>;
   batchMode: boolean;
   traceAvailableById: Record<string, boolean>;
+  deleteEntry?: (item: EntryCard) => Promise<boolean>;
 }>();
 
 const emit = defineEmits<{
@@ -46,9 +48,11 @@ const emit = defineEmits<{
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: EntryCard): void;
   (e: 'action', action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard): void;
+  (e: 'deleted', id: string): void;
 }>();
 
 const { t } = useI18n();
+const menuDelete = ref<InstanceType<typeof DocumentMenuDelete> | null>(null);
 
 // --- Menu index tracking ---
 const activeMenuIndex = ref(-1);
@@ -236,11 +240,17 @@ onBeforeUnmount(dismissCardPopover);
 
 // --- Action handlers ---
 const handleAction = (action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard) => {
-  {
-    if (item.isMore !== undefined) item.isMore = false;
-    activeMenuIndex.value = -1;
-  }
+  if (item.isMore !== undefined) item.isMore = false;
+  activeMenuIndex.value = -1;
   emit('action', action, item);
+};
+
+const openDelete = async (item: EntryCard) => {
+  item.isMore = false;
+  activeMenuIndex.value = -1;
+  dismissCardPopover();
+  await nextTick();
+  menuDelete.value?.open(item, props.deleteEntry ? () => props.deleteEntry!(item) : undefined);
 };
 </script>
 
@@ -277,7 +287,7 @@ const handleAction = (action: 'download' | 'view-trace' | 'reparse' | 'cancel-pa
             overlayClassName="card-more"
             :on-visible-change="(v: boolean) => onMenuVisibleChange(v, item)"
             trigger="click"
-            destroy-on-close
+            :destroy-on-close="false"
             placement="bottom-right"
           >
             <div
@@ -293,14 +303,13 @@ const handleAction = (action: 'download' | 'view-trace' | 'reparse' | 'cancel-pa
               <div  class="card-menu">
                 <DocumentActionMenu
                   :item="item"
-
                   :trace-visible="isTraceMenuVisible(item)"
                   @download="handleAction('download', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"
                   @batch-manage="handleAction('batch-manage', item)"
-                  @delete="handleAction('delete', item)"
+                  @delete="openDelete(item)"
                 />
               </div>
 
@@ -379,6 +388,8 @@ const handleAction = (action: 'download' | 'view-trace' | 'reparse' | 'cancel-pa
     </div>
     </div>
   </div>
+
+  <DocumentMenuDelete ref="menuDelete" @deleted="emit('deleted', $event)" />
 
   <!-- Hover popover -->
   <Teleport to="body">

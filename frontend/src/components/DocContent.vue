@@ -28,6 +28,7 @@ import IncompleteActions from '@/components/IncompleteActions.vue';
 import ReviewActions from '@/components/ReviewActions.vue';
 import EntryArticleJudgments from '@/components/EntryArticleJudgments.vue';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
+import PersonalDocumentDelete from '@/components/PersonalDocumentDelete.vue';
 import { resolveEntryDownloadFileName } from '@/views/knowledge-base/entryDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
 import { getApiBaseUrl } from '@/utils/api-base';
@@ -75,6 +76,7 @@ const syncMetadataDraft = () => {
 };
 
 const startMetadataEdit = () => {
+  if (props.details?.source_kind === 'mine') return;
   syncMetadataDraft();
   if (!metadataDraft.value.length) metadataDraft.value.push(makeMetadataRow());
   metadataEditing.value = true;
@@ -109,6 +111,7 @@ const formatMetadataValue = (value: unknown) => {
 };
 
 const saveMetadata = async () => {
+  if (props.details?.source_kind === 'mine') return;
   try {
     const value: Record<string, unknown> = {};
     for (const row of metadataDraft.value) {
@@ -152,6 +155,7 @@ const reprocess = async () => {
 const isProcessing = computed(() => ['pending', 'processing', 'finalizing'].includes(props.details?.parse_status));
 
 const headerIconName = computed(() => {
+  if (props.details?.source_kind === 'mine') return 'file';
   switch (props.details?.type) {
     case 'url':
       return 'link';
@@ -197,6 +201,7 @@ mermaid.initialize({
 const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "kbId"]);
 const externalToolName = computed(() => getExternalToolName(props.details));
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
+const personalDocumentDeleteBusy = ref(false);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
 const intakeOriginalLoading = ref(false);
@@ -307,6 +312,7 @@ watch(() => [props.visible, props.details?.id, props.details?.parse_status], ([v
   else stopProcessingPolling();
 }, { immediate: true });
 watch(() => props.details?.id, syncMetadataDraft, { immediate: true });
+watch(() => props.details?.source_kind, value => { if (value === 'mine') metadataEditing.value = false; });
 
 const hasTimelineSpans = ref(false);
 const timelineDrawerVisible = ref(false);
@@ -671,7 +677,7 @@ const checkImage = (url) => {
     img.src = url;
   });
 };
-const resolveVaultImageSource = (href: string) => props.details?.source_kind === 'article' && props.details?.vault_path && href
+const resolveVaultImageSource = (href: string) => ['article', 'mine'].includes(props.details?.source_kind) && props.details?.vault_path && href
     && !/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(href)
     ? `vault://${encodeURIComponent(props.details.id)}/${encodeURIComponent(href)}`
     : href;
@@ -953,6 +959,7 @@ const processMarkdown = (markdownText) => {
   return result;
 };
 const handleClose = () => {
+  if (personalDocumentDeleteBusy.value) return;
   resetIntakePreview();
   emit("closeDoc", false);
   const scrollEl = document.querySelector('.doc-main-drawer .t-drawer__body') as HTMLElement | null;
@@ -1142,7 +1149,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <div class="doc-drawer-resize-line" />
       </div>
     </teleport>
-    <t-drawer :visible="visible" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="true"
+    <t-drawer :visible="visible" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="!personalDocumentDeleteBusy"
+      :closeOnOverlayClick="!personalDocumentDeleteBusy" :closeOnEscKeydown="!personalDocumentDeleteBusy"
       :footer="false" :class="['doc-main-drawer', { 'doc-main-drawer--resizing': mainDrawerResizing }]"
       @close="handleClose">
       <template #header>
@@ -1154,6 +1162,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <div class="doc-drawer-header-title">{{ getDisplayTitle() }}</div>
           </div>
           <div class="header-actions">
+
+            <PersonalDocumentDelete v-if="details.source_kind === 'mine' && details.id" :document-id="details.id" :title="getDisplayTitle()"
+              :disabled="articleJudgmentsBusy || incompleteBusy" @busy-change="personalDocumentDeleteBusy = $event"
+              @deleted="() => emit('reviewChanged', details, true)" />
 
             <t-button v-if="details.processing_mode !== 'summary_only' && (details.type === 'file' || details.type === 'manual')" class="header-action-btn" size="small"
               variant="text" shape="square" theme="default" :title="$t('common.download') || 'Download'"
@@ -1262,32 +1274,32 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <RepostSources :sources="details.repost_sources" />
         </section>
 
-        <section v-if="details.id" class="setting-drawer__section metadata-section">
+        <section v-if="details.id && (details.source_kind !== 'mine' || Object.keys(details.custom_metadata || {}).length)" class="setting-drawer__section metadata-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">
               <span>{{ $t('knowledgeBase.customMetadata') }}</span>
-              <t-tooltip :content="$t('knowledgeBase.metadataCapabilityHint')" placement="top">
+              <t-tooltip v-if="details.source_kind !== 'mine'" :content="$t('knowledgeBase.metadataCapabilityHint')" placement="top">
                 <t-icon name="info-circle" size="14px" class="metadata-capability-icon" />
               </t-tooltip>
               <span v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-count">
                 {{ Object.keys(details.custom_metadata || {}).length }}/20
               </span>
             </h4>
-            <t-tooltip v-if="!metadataEditing" :content="$t('common.edit')" placement="top">
+            <t-tooltip v-if="!metadataEditing && details.source_kind !== 'mine'" :content="$t('common.edit')" placement="top">
               <t-button class="icon-action-btn" size="small" variant="text" shape="square" @click="startMetadataEdit">
                 <template #icon><t-icon name="edit" size="15px" /></template>
               </t-button>
             </t-tooltip>
           </div>
 
-          <div v-if="!metadataEditing" class="metadata-display">
+          <div v-if="!metadataEditing || details.source_kind === 'mine'" class="metadata-display">
             <div v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-grid">
               <div v-for="(value, key) in (details.custom_metadata || {})" :key="key" class="metadata-item">
                 <span class="metadata-item-key">{{ key }}</span>
                 <span class="metadata-item-value">{{ formatMetadataValue(value) }}</span>
               </div>
             </div>
-            <button v-else type="button" class="metadata-empty-action" @click="startMetadataEdit">
+            <button v-else-if="details.source_kind !== 'mine'" type="button" class="metadata-empty-action" @click="startMetadataEdit">
               <t-icon name="add" size="15px" />
               <span>{{ $t('knowledgeBase.addMetadataField') }}</span>
             </button>

@@ -74,7 +74,7 @@ func DecodeIngestBatch(reader io.Reader) (*IngestBatchRequest, error) {
 			continue
 		}
 		url, present := fields["url"]
-		if !present {
+		if !present && request.Items[index].Kind != "mine" {
 			request.Items[index].InputError = "url 必填；缺少原文链接时请明确提供空字符串"
 		} else if bytes.Equal(bytes.TrimSpace(url), []byte("null")) {
 			request.Items[index].InputError = "url 必须是字符串；缺少原文链接时请提供空字符串"

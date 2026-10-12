@@ -12,6 +12,8 @@ const (
 // IngestRequest is sourced content collected deliberately by an external agent.
 // Agent annotations are stored separately from article metadata and processing input.
 type IngestRequest struct {
+	Kind            string             `json:"kind,omitempty"`
+	DocumentID      string             `json:"document_id,omitempty"`
 	URL             string             `json:"url"`
 	Content         string             `json:"content"`
 	Acquisition     string             `json:"acquisition"`
@@ -113,6 +115,7 @@ type IngestCheckResponse struct {
 	Items []IngestCheckResult `json:"items"`
 }
 type IncompleteArticle struct {
+	Kind                        string          `json:"kind"`
 	EntryID                     string          `json:"article_id"`
 	URL                         string          `json:"url"`
 	Title                       string          `json:"title"`

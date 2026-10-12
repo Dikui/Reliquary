@@ -123,7 +123,7 @@ export default {
   "modelWritten": "模型整理",
   "modelWrittenHint": "正文由外部工具的模型整理，可能不是原文",
   "incomplete": "待补全",
-  "incompleteHint": "缺少原始文件、图片或正文，可在待处理页面接受缺失，或由外部工具用同一链接补全",
+  "incompleteHint": "文章和本人文档缺少原始文件、图片或正文，可在待处理页面接受缺失，也可由外部工具补全。文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。",
   "acquisitionLabel": "获取方式",
   "unknownAcquisition": "未声明",
   "acquisition": {
@@ -144,21 +144,21 @@ export default {
   "unknownTool": "未记录工具名称",
   "unknownTime": "未记录时间",
   "attemptedTitle": "外部补全已尝试",
-  "attemptedHint": "外部工具已补过一次，仍有缺失。该文章不会再列给外部工具，请接受缺失或丢弃。",
+  "attemptedHint": "外部工具已补过一次，仍有缺失。该内容不会再列给外部工具，请接受缺失或丢弃。",
   "acceptIncomplete": "接受缺失",
   "acceptTitle": "接受这些缺失？",
-  "acceptDescription": "文章将保持现状并定稿，移除待补全标记。已记录的缺失原因将保留。",
+  "acceptDescription": "内容将保持现状并定稿，移除待补全标记。已记录的缺失原因将保留。",
   "acceptSaved": "已接受缺失",
   "discard": "丢弃",
-  "discardTitle": "确认丢弃这篇文章？",
-  "discardDescription": "文章与独占附件将被删除。丢弃后，该链接不会再被收录。",
-  "discardSaved": "文章已丢弃",
+  "discardTitle": "确认丢弃这条内容？",
+  "discardDescription": "内容与独占附件将被删除。丢弃文章后，其原文链接不会再被收录。",
+  "discardSaved": "内容已丢弃",
   "failed": "操作失败，请重试。"
 },
   knowledgeReview: {
   "incomplete": "待补全",
-  "incompleteHint": "文章已入库并可检索，缺少原始文件、图片或正文。外部工具可用同一链接补全，你也可以接受缺失或丢弃文章。",
-  "emptyIncomplete": "没有待补全的文章。",
+  "incompleteHint": "文章和本人文档已入库并可检索，但缺少原始文件、图片或正文。文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。你也可以接受缺失或丢弃内容。",
+  "emptyIncomplete": "没有待补全的文章或本人文档。",
   "conflictReason": "与已有文章正文不同",
   "relatedArticle": "关联文章",
   "saveAsNew": "另存为新文章",
@@ -194,7 +194,7 @@ export default {
     },
     "convert_to_mine": {
       "title": "转为本人文档",
-      "description": "正文将保存到 mine/，附件按文件库规则保留，并按用户文档索引。该收录记录会被删除。"
+      "description": "正文将按本人文档进入处理，生成摘要、实体和主题后全文保存到 mine/，不再调用收录审核。附件按收录规则保留。"
     },
     "discard": {
       "title": "确认不收录",
@@ -290,6 +290,7 @@ export default {
     "review_supplement_url": "补链接重新审核",
     "review_admit_unverified": "无链接入库",
     "review_convert_to_mine": "转为本人文档",
+    "delete_document": "删除本人文档",
     "review_approve": "审核通过",
     "review_reject": "审核拒绝",
     "review_retry": "审核重试",
@@ -1913,6 +1914,12 @@ export default {
       saveFailed: '保存配置失败: {message}'
     }
   },
+  personalDocument: {
+    delete: '删除本人文档',
+    deleteConfirm: '删除“{title}”？正文、文件、附件和索引都会删除。要修改文档，请删除后重新导入。',
+    deleted: '本人文档已删除',
+    deleteFailed: '本人文档未删除，请重试。',
+  },
   settings: {
     maintenance: {
       title: '备份与恢复',
@@ -1943,6 +1950,7 @@ export default {
       root: '根目录',
       rootHint: '由服务器配置，此处只读。',
       mine: '用户文档',
+      mineImportedHint: '用户文档通过收录接口导入。文件变动不会更新索引。',
       reports: '整理结果',
       lastScan: '最近扫描时间',
       indexedFiles: '已索引文件数',

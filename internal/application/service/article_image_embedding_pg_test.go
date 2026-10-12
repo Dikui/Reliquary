@@ -126,7 +126,7 @@ func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T
 	require.ErrorContains(t, write(h.db), "bytes changed")
 	copy := *article
 	copy.SourceKind = "mine"
-	require.Empty(t, articleImagePaths(&copy))
+	require.Equal(t, articleImagePaths(article), articleImagePaths(&copy))
 	copy.SourceKind = "report"
 	require.Empty(t, articleImagePaths(&copy))
 }

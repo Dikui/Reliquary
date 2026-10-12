@@ -7,10 +7,10 @@ import (
 	"reliquary/internal/types"
 )
 
-// isIngestArticle covers every article, including historical web and RSS channels.
-// Local user documents and reports have their own editing and indexing rules.
+// isIngestArticle covers articles and imported user documents. Reports keep
+// their separate indexing path without intake review or model processing.
 func isIngestArticle(k *types.Entry) bool {
-	return k != nil && (k.SourceKind == "" || k.SourceKind == "article")
+	return k != nil && (k.SourceKind == "" || k.SourceKind == "article" || k.SourceKind == "mine")
 }
 
 func remoteIngestImage(ref string) bool {

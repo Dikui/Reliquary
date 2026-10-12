@@ -124,7 +124,7 @@ func entrySearchIDs(response *types.EntrySearchResponse) []string {
 
 func entrySearchNoCollapse() *bool { value := false; return &value }
 
-func TestEntrySearchPostgresIncompleteStateIsOnlyForArticles(t *testing.T) {
+func TestEntrySearchPostgresIncompleteStateIncludesDocuments(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	for _, item := range []struct {
 		id         string
@@ -142,7 +142,7 @@ func TestEntrySearchPostgresIncompleteStateIsOnlyForArticles(t *testing.T) {
 	response := h.search(t, types.EntrySearchRequest{Query: "searchfixture", CollapseSimilar: entrySearchNoCollapse()})
 	require.Equal(t, []string{"complete", "incomplete", "mine", "report"}, entrySearchIDs(response))
 	for _, result := range response.Results {
-		require.Equal(t, result.EntryID == "incomplete", result.Incomplete, result.EntryID)
+		require.Equal(t, result.EntryID == "incomplete" || result.EntryID == "mine", result.Incomplete, result.EntryID)
 	}
 }
 
@@ -236,10 +236,10 @@ func TestEntrySearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 		{"entities", types.EntrySearchRequest{EntityIDs: []string{"entity-a", "entity-b"}}, []string{"a", "b"}, 0},
 		{"topics", types.EntrySearchRequest{TopicIDs: []string{"topic-b"}}, []string{"b"}, 0},
 		{"sources", types.EntrySearchRequest{Sources: []string{"mine", "report"}}, []string{"mine", "report"}, 0},
-		{"date", types.EntrySearchRequest{PublishedFrom: "2026-10-01", PublishedTo: "2026-10-03"}, []string{"a", "b"}, 1},
-		{"datetime", types.EntrySearchRequest{PublishedFrom: "2026-10-03T23:59:59Z", PublishedTo: "2026-10-03T23:59:59Z"}, []string{"b"}, 1},
+		{"date", types.EntrySearchRequest{PublishedFrom: "2026-10-01", PublishedTo: "2026-10-03"}, []string{"a", "b"}, 2},
+		{"datetime", types.EntrySearchRequest{PublishedFrom: "2026-10-03T23:59:59Z", PublishedTo: "2026-10-03T23:59:59Z"}, []string{"b"}, 2},
 		{"combined", types.EntrySearchRequest{ContentTypes: []string{"event", "tutorial"}, EntityIDs: []string{"entity-a", "entity-b"}, TopicIDs: []string{"topic-b"}, Sources: []string{"article"}, PublishedFrom: "2026-10-02", PublishedTo: "2026-10-03"}, []string{"b"}, 0},
-		{"date excludes documents without counting them", types.EntrySearchRequest{Sources: []string{"mine", "report"}, PublishedFrom: "2026-10-01"}, []string{}, 0},
+		{"date counts missing document dates", types.EntrySearchRequest{Sources: []string{"mine", "report"}, PublishedFrom: "2026-10-01"}, []string{}, 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestEntrySearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 		})
 	}
 	response := h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", PublishedFrom: "2026-10-01", Limit: 1})
-	require.EqualValues(t, 1, response.ExcludedMissingPublishedAt, "count is independent of limit and folding")
+	require.EqualValues(t, 2, response.ExcludedMissingPublishedAt, "count is independent of limit and folding")
 }
 
 func TestEntrySearchPostgresSimilarReportsAndConfiguration(t *testing.T) {

@@ -184,3 +184,15 @@ func (h *EntryHandler) DiscardIngest(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"article_id": c.Param("id"), "status": "discarded", "message": "已丢弃"}})
 }
+
+func (h *EntryHandler) DeleteDocument(c *gin.Context) {
+	collector := h.ingestService(c)
+	if collector == nil {
+		return
+	}
+	if err := collector.DeleteDocument(c.Request.Context(), c.Param("id")); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"document_id": c.Param("id"), "status": "deleted", "message": "本人文档已删除"}})
+}

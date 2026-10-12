@@ -27,17 +27,32 @@ func (s *entryService) lookupIngestDiscard(ctx context.Context, normalized strin
 	return &item, err
 }
 
+func (s *entryService) lookupIngestDiscardKind(ctx context.Context, normalized, kind string) (*types.IngestDiscard, error) {
+	if kind == "mine" {
+		return nil, nil
+	}
+	return s.lookupIngestDiscard(ctx, normalized)
+}
+
 // Pending intake is deliberately included. Repost origins resolve to their
 // canonical article in all four state checks and in later supplements.
-func (s *entryService) findIngestURL(ctx context.Context, normalized string, lock bool) (*types.Entry, error) {
+func (s *entryService) findIngestURL(ctx context.Context, normalized string, lock bool, kinds ...string) (*types.Entry, error) {
 	if normalized == "" {
 		return nil, nil
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
+	kind := "article"
+	if len(kinds) > 0 && kinds[0] == "mine" {
+		kind = "mine"
+	}
 	owners := s.db.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id=? AND normalized_url=?", spaceID, normalized)
-	query := s.db.WithContext(ctx).Where("space_id=? AND source_kind='article' AND related_article_id=''", spaceID).
-		Where("normalized_url=? OR id IN (?)", normalized, owners).
+	query := s.db.WithContext(ctx).Where("space_id=? AND source_kind=? AND related_article_id=''", spaceID, kind).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting})
+	if kind == "mine" {
+		query = query.Where("normalized_url=?", normalized)
+	} else {
+		query = query.Where("normalized_url=? OR id IN (?)", normalized, owners)
+	}
 	if lock {
 		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
@@ -95,7 +110,7 @@ func (s *entryService) ListIncomplete(ctx context.Context, page, size int, inclu
 		return nil, err
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
-	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND source_kind='article' AND incomplete=true", spaceID).
+	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND source_kind IN ('article','mine') AND incomplete=true", spaceID).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusRejected, types.ParseStatusDeleting, types.ParseStatusCancelled}).
 		Where("COALESCE(metadata::jsonb->'intake'->>'decision','approved')='approved'")
 	if !includeAttempted {
@@ -114,7 +129,7 @@ func (s *entryService) ListIncomplete(ctx context.Context, page, size int, inclu
 		if intake, _ := article.IntakeMetadata(); intake != nil && intake.SourceInfo.OriginalURL != "" {
 			url = intake.SourceInfo.OriginalURL
 		}
-		result.Items = append(result.Items, types.IncompleteArticle{EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
+		result.Items = append(result.Items, types.IncompleteArticle{Kind: article.SourceKind, EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
 	}
 	return result, nil
 }

@@ -34,6 +34,14 @@ import PendingReviews from './components/PendingReviews.vue';
 import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
 import { CONTENT_TYPES } from '@/types/entryClassification';
+import { SEARCH_SOURCES } from '@/types/search';
+import {
+  documentListFiltersFromQuery,
+  documentListFiltersToQuery,
+  documentListFilterQueriesEqual,
+  documentListFiltersEqual,
+  type DocumentListFilters,
+} from './documentListFilters';
 import type { ArticleJudgment } from '@/api/entry-judgments';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import { useReparseConfirmStore } from '@/stores/reparseConfirm';
@@ -257,10 +265,11 @@ const confirmBatchReparse = async () => {
   }
 };
 let docSearchDebounce: number | null = null;
-const docSearchKeyword = ref('');
-const selectedFileType = ref('');
-const selectedContentType = ref('');
-const selectedStarred = ref('');
+const initialDocumentFilters = documentListFiltersFromQuery(route.query);
+const docSearchKeyword = ref(initialDocumentFilters.keyword);
+const selectedFileType = ref(initialDocumentFilters.fileType);
+const selectedContentType = ref(initialDocumentFilters.contentType);
+const selectedStarred = ref(initialDocumentFilters.starred);
 const starredOptions = computed(() => [
   { value: '', label: t('articleJudgments.allStars') },
   { value: 'true', label: t('articleJudgments.starredOnly') },
@@ -288,7 +297,7 @@ const fileTypeOptions = computed(() => [
   { label: 'FLAC', value: 'flac' },
   { label: 'OGG', value: 'ogg' },
 ]);
-const selectedParseStatus = ref('');
+const selectedParseStatus = ref(initialDocumentFilters.parseStatus);
 const parseStatusOptions = computed(() => [
   { label: t('knowledgeBase.allParseStatuses'), value: '' },
   { label: t('knowledgeBase.parseStatusPending'), value: 'pending' },
@@ -300,7 +309,12 @@ const parseStatusOptions = computed(() => [
   { label: t('knowledgeBase.parseStatusDraft'), value: 'draft' },
   { label: t('knowledgeBase.intakeWaiting'), value: 'rejected' },
 ]);
-const selectedSource = ref('');
+const selectedSource = ref(initialDocumentFilters.source);
+const selectedSourceKind = ref(initialDocumentFilters.sourceKind);
+const sourceKindOptions = computed(() => [
+  { label: t('knowledgeSearch.all'), value: '' },
+  ...SEARCH_SOURCES.map(value => ({ value, label: t(`knowledgeSearch.sources.${value}`) })),
+]);
 // Source filter combines ingestion channels and the "manual"/"url" virtual
 // sources that the backend routes onto the `type` column.
 const sourceOptions = computed(() => [
@@ -313,7 +327,21 @@ const sourceOptions = computed(() => [
   { label: t('knowledgeBase.sourceBrowserExtension'), value: 'browser_extension' },
 ]);
 // Date range as [start, end] in "YYYY-MM-DD" form (t-date-range-picker default).
-const updatedTimeRange = ref<string[]>([]);
+const updatedTimeRange = ref<string[]>(
+  initialDocumentFilters.startDate || initialDocumentFilters.endDate
+    ? [initialDocumentFilters.startDate, initialDocumentFilters.endDate] : [],
+);
+const documentFilters = computed<DocumentListFilters>(() => ({
+  keyword: docSearchKeyword.value.trim(),
+  fileType: selectedFileType.value || '',
+  contentType: selectedContentType.value || '',
+  starred: selectedStarred.value || '',
+  parseStatus: selectedParseStatus.value || '',
+  source: selectedSource.value || '',
+  sourceKind: selectedSourceKind.value || '',
+  startDate: updatedTimeRange.value?.[0] || '',
+  endDate: updatedTimeRange.value?.[1] || '',
+}));
 // Disable any date after today so users cannot filter into the future.
 const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)) };
 
@@ -326,6 +354,7 @@ const filterParams = computed(() => {
     starred: selectedStarred.value === '' ? undefined : selectedStarred.value === 'true',
     parse_status: selectedParseStatus.value || undefined,
     source: selectedSource.value || undefined,
+    source_kind: selectedSourceKind.value || undefined,
     start_time: start ? `${start} 00:00:00` : undefined,
     end_time: end ? `${end} 23:59:59` : undefined,
   };
@@ -425,39 +454,48 @@ watch(() => kbId.value, (newKbId, oldKbId) => {
   loadKnowledgeBaseInfo(newKbId);
 }, { immediate: true });
 
-// 监听文档搜索关键词变化
-watch(docSearchKeyword, (newVal, oldVal) => {
-  if (newVal === oldVal) return;
-  if (docSearchDebounce) {
+// Restore all filters together before requesting the list after history navigation.
+let documentFiltersRestoredFromRoute = false;
+watch(() => route.query, query => {
+  const restored = documentListFiltersFromQuery(query);
+  if (!documentListFiltersEqual(documentFilters.value, restored)) {
+    documentFiltersRestoredFromRoute = true;
+    docSearchKeyword.value = restored.keyword;
+    selectedFileType.value = restored.fileType;
+    selectedContentType.value = restored.contentType;
+    selectedStarred.value = restored.starred;
+    selectedParseStatus.value = restored.parseStatus;
+    selectedSource.value = restored.source;
+    selectedSourceKind.value = restored.sourceKind;
+    updatedTimeRange.value = restored.startDate || restored.endDate
+      ? [restored.startDate, restored.endDate] : [];
+  }
+  const canonical = documentListFiltersToQuery(query, restored);
+  if (!documentListFilterQueriesEqual(query, canonical)) void router.replace({ query: canonical });
+}, { immediate: true });
+
+watch(documentFilters, (filters, previous) => {
+  if (documentListFiltersEqual(filters, previous)) return;
+  const restoredFromRoute = documentFiltersRestoredFromRoute;
+  documentFiltersRestoredFromRoute = false;
+  const query = documentListFiltersToQuery(route.query, filters);
+  if (!documentListFilterQueriesEqual(route.query, query)) void router.replace({ query });
+  if (docSearchDebounce !== null) {
     window.clearTimeout(docSearchDebounce);
+    docSearchDebounce = null;
   }
-  docSearchDebounce = window.setTimeout(() => {
-    if (kbId.value) {
-      resetPage();
-      loadEntryFiles(kbId.value);
-    }
-  }, 300);
-});
-
-// 监听文件类型筛选变化
-watch(selectedFileType, (newVal, oldVal) => {
-  if (newVal === oldVal) return;
-  if (kbId.value) {
-    resetPage();
-    loadEntryFiles(kbId.value);
+  resetPage();
+  if (!kbId.value) return;
+  const keywordOnly = documentListFiltersEqual({ ...filters, keyword: previous.keyword }, previous);
+  if (keywordOnly && filters.keyword && !restoredFromRoute) {
+    docSearchDebounce = window.setTimeout(() => {
+      docSearchDebounce = null;
+      void loadEntryFiles(kbId.value);
+    }, 300);
+  } else {
+    void loadEntryFiles(kbId.value);
   }
 });
-
-// 监听解析状态/来源/更新时间范围筛选变化（与文件类型行为一致）
-watch([selectedContentType, selectedStarred, selectedParseStatus, selectedSource, updatedTimeRange], () => {
-  if (kbId.value) {
-    resetPage();
-    loadEntryFiles(kbId.value);
-  }
-}, { deep: true });
-
-// 切换目录只改变列表范围，行为与其他筛选一致。浏览态与筛选态之间的切换由各筛选项
-// 自身的 watcher 触发刷新，这里不重复请求。
 
 // Auto-open document detail when navigated with ?entry_id=xxx.
 // Note: this runs both when the KB page mounts with a query param AND when a
@@ -526,6 +564,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (docSearchDebounce !== null) {
+    window.clearTimeout(docSearchDebounce);
+    docSearchDebounce = null;
+  }
   window.removeEventListener('reliquary:open-entry', handleOpenEntryEvent as EventListener);
   if (timeout !== null) {
     clearTimeout(timeout);
@@ -657,9 +699,9 @@ const closeCardMoreMenu = (index: number) => {
 };
 
 const confirmDeleteEntry = (index: number, item: EntryCard) => {
-  closeCardMoreMenu(index);
   const deletedId = item?.id;
-  delEntry(index, item, async () => {
+  return delEntry(index, item, async () => {
+    closeCardMoreMenu(index);
     resetPage();
     const maxPolls = 30;
     const delayMs = 400;
@@ -902,8 +944,14 @@ const handlePendingChanged = async () => {
   await Promise.all([loadEntryFiles(kbId.value), pendingCounts.refresh()]);
 };
 const handleReviewChanged = async (_value: unknown, removed: boolean) => {
-  if (removed) closeDoc();
+  if (removed) { closeDoc(); resetPage(); }
   else if (details.id) getCardDetails({ id: details.id });
+  await Promise.all([loadEntryFiles(kbId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
+};
+const handlePersonalDocumentDeleted = async (id: string) => {
+  if (details.id === id) closeDoc();
+  selectedIds.value.delete(id);
+  resetPage();
   await Promise.all([loadEntryFiles(kbId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
 };
 
@@ -1004,7 +1052,7 @@ const handleListAction = (
 
 // Clear selection on filter/kb change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedContentType, selectedParseStatus, selectedSource, updatedTimeRange, kbId],
+  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, kbId],
   () => {
     clearSelection();
   },
@@ -1121,8 +1169,13 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
                   </t-select>
                 </div>
                 <div class="doc-filter-field">
+                  <t-select v-model="selectedSourceKind" :options="sourceKindOptions"
+                    :placeholder="$t('knowledgeSearch.source')" :aria-label="$t('knowledgeSearch.source')"
+                    class="doc-type-select doc-filter-field__control" clearable />
+                </div>
+                <div class="doc-filter-field">
                   <t-select v-model="selectedSource" :options="sourceOptions"
-                    :placeholder="$t('knowledgeBase.sourceFilter')" class="doc-type-select doc-filter-field__control"
+                    :placeholder="$t('knowledgeBase.channelLabel')" :aria-label="$t('knowledgeBase.channelLabel')" class="doc-type-select doc-filter-field__control"
                     clearable>
                     <template #prefixIcon>
                       <t-icon name="link" size="16px" />
@@ -1201,6 +1254,8 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
                     @toggle-checkbox="onCardGridCheckboxChange"
                     @menu-visible-change="(visible: boolean, item: any) => onCardMoreVisibleChange(visible, item)"
                     @action="(action: any, item: any) => handleCardAction(action, item)"
+                    :delete-entry="(item: any) => confirmDeleteEntry(cardList.findIndex((card: any) => card.id === item.id), item)"
+                    @deleted="handlePersonalDocumentDeleted"
 
                   />
                 </template>
@@ -1213,6 +1268,8 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
                     @open="(item: any) => openEntryItem(item)" @toggle-row="toggleSelectRow"
                     @toggle-all="toggleSelectAll" @action="(action: any, item: any) => handleListAction(action, item)"
                     @probe-trace="(item: any) => probeTraceAvailable(item)"
+                    :delete-entry="(item: any) => confirmDeleteEntry(cardList.findIndex((card: any) => card.id === item.id), item)"
+                    @deleted="handlePersonalDocumentDeleted"
 
                      />
                 </template>

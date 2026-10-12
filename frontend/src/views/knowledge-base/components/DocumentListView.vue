@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize, getFileIcon } from '@/utils/files';
 import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
 import DocumentActionMenu from './DocumentActionMenu.vue';
+import DocumentMenuDelete from './DocumentMenuDelete.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
@@ -29,6 +30,7 @@ const props = defineProps<{
   selectedIds: Set<string>;
   traceVisibleIds: Record<string, boolean>;
   loading?: boolean;
+  deleteEntry?: (item: EntryItem) => Promise<boolean>;
 }>();
 
 const emit = defineEmits<{
@@ -39,9 +41,11 @@ const emit = defineEmits<{
   (e: 'toggle-all', checked: boolean): void;
   (e: 'action', action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem): void;
   (e: 'probe-trace', item: EntryItem): void;
+  (e: 'deleted', id: string): void;
 }>();
 
 const { t } = useI18n();
+const menuDelete = ref<InstanceType<typeof DocumentMenuDelete> | null>(null);
 
 const formatTime = (time?: string) => {
   if (!time) return '--';
@@ -146,11 +150,16 @@ onBeforeUnmount(() => {
 });
 
 const handleAction = (action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem) => {
-  {
-    moreOpen.value = null;
-  }
+  moreOpen.value = null;
   item.isMore = false;
   emit('action', action, item);
+};
+
+const openDelete = async (item: EntryItem) => {
+  item.isMore = false;
+  moreOpen.value = null;
+  await nextTick();
+  menuDelete.value?.open(item, props.deleteEntry ? () => props.deleteEntry!(item) : undefined);
 };
 
 </script>
@@ -222,7 +231,7 @@ const handleAction = (action: 'download' | 'reparse' | 'cancel-parse' | 'delete'
 
         <div class="cell cell-actions" @click.stop>
           <EntryStarToggle v-if="!['mine', 'report'].includes(item.source_kind || '') && item.parse_status === 'completed'" :entry="item" @updated="emit('judgment-updated', $event)" />
-          <t-popup placement="bottom-right" trigger="click" destroy-on-close overlay-class-name="card-more"
+          <t-popup v-model="item.isMore" placement="bottom-right" trigger="click" :destroy-on-close="false" overlay-class-name="card-more"
             :on-visible-change="(v: boolean) => onMoreVisible(item.id, v)">
             <button class="row-more-btn" :class="{ active: moreOpen === item.id }" type="button"
               :aria-label="t('knowledgeBase.columnActions')">
@@ -233,14 +242,13 @@ const handleAction = (action: 'download' | 'reparse' | 'cancel-parse' | 'delete'
               <div  class="card-menu">
                 <DocumentActionMenu
                   :item="item"
-
                   :trace-visible="!!traceVisibleIds[item.id] || (item.parse_status === 'pending' || item.parse_status === 'processing' || item.parse_status === 'finalizing')"
                   @download="handleAction('download', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"
                   @batch-manage="handleAction('batch-manage', item)"
-                  @delete="handleAction('delete', item)"
+                  @delete="openDelete(item)"
                 />
               </div>
 
@@ -249,6 +257,7 @@ const handleAction = (action: 'download' | 'reparse' | 'cancel-parse' | 'delete'
         </div>
       </div>
     </div>
+    <DocumentMenuDelete ref="menuDelete" @deleted="emit('deleted', $event)" />
   </div>
 </template>
 

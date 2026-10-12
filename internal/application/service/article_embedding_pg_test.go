@@ -235,19 +235,26 @@ func TestUnprocessedArticleTitleUpdateDoesNotRequireEmbedding(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestVaultDocumentChunkPrefixesHaveNoArticleVectors(t *testing.T) {
-	h := newVaultDocumentHarness(t, time.Millisecond)
+func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing.T) {
+	h, vault := newIngestHarness(t)
 	e := &indexingRecordingEmbedder{}
-	h.documents.models = indexingRecordingModels{embedder: e}
-	h.write(t, "mine/prefix.md", "# Personal notebook\n\npersonalprefixfixture preserved body")
-	require.NoError(t, h.documents.Scan(h.ctx, true))
-	mine := h.byPath(t, "mine/prefix.md")
-	report, err := h.documents.CreateReport(h.ctx, "Synthesis", "# Synthesis\n\nreportprefixfixture preserved analysis", nil)
+	models := indexingRecordingModels{articleProcessingModels: h.service.modelService.(articleProcessingModels), embedder: e}
+	h.service.modelService = models
+	h.service.chunkService.(*chunkService).modelService = models
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Kind: "mine", Acquisition: "verbatim", Title: "Personal notebook", Content: "# Personal notebook\n\npersonalprefixfixture preserved observations with complete supporting evidence."})
+	require.NoError(t, err)
+	h.drain(t)
+	mine := h.article(t, result.EntryID)
+	documents, err := NewVaultDocumentService(h.db, h.service.modelService, h.service.retrieveEngine, vault.root)
+	require.NoError(t, err)
+	defer documents.Close()
+	report, err := documents.CreateReport(h.ctx, "Synthesis", "# Synthesis\n\nreportprefixfixture preserved analysis", nil)
 	require.NoError(t, err)
 	for _, pair := range []struct {
-		entry *types.Entry
-		label string
-	}{{mine, "本人"}, {report, "整理结果"}} {
+		entry          *types.Entry
+		label          string
+		summaryVectors int64
+	}{{mine, "本人", 1}, {report, "整理结果", 0}} {
 		var chunks []types.Chunk
 		require.NoError(t, h.db.Where("entry_id=?", pair.entry.ID).Find(&chunks).Error)
 		require.NotEmpty(t, chunks)
@@ -257,7 +264,7 @@ func TestVaultDocumentChunkPrefixesHaveNoArticleVectors(t *testing.T) {
 		}
 		var count int64
 		require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", pair.entry.ID).Count(&count).Error)
-		require.Zero(t, count)
+		require.EqualValues(t, pair.summaryVectors, count)
 	}
 }
 

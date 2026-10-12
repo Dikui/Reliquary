@@ -11,6 +11,7 @@ export interface MissingMaterial {
 
 export interface IncompleteArticle {
   article_id: string
+  kind?: 'article' | 'mine'
   url: string
   title: string
   acquisition: Acquisition | ''
