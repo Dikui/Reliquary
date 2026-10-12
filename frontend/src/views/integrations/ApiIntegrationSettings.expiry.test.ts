@@ -13,7 +13,7 @@ import * as personalServerError from '../../utils/personalServerError'
 import * as searchHelpers from '../../utils/search'
 
 const require = createRequire(import.meta.url)
-const { DatePicker, Input, ConfigProvider } = require('tdesign-vue-next')
+const { Alert, DatePicker, Input, ConfigProvider } = require('tdesign-vue-next')
 const localeConfigs = {
   'zh-CN': require('tdesign-vue-next/cjs/locale/zh_CN').default,
   'en-US': require('tdesign-vue-next/cjs/locale/en_US').default,
@@ -73,7 +73,8 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     return () => h(DatePicker, { ...attrs, ...props })
   } })
   const app = createSSRApp({ render: () => h(ConfigProvider, { globalConfig: localeConfigs[locale] }, () => h(component)) })
-  for (const name of ['t-form', 't-form-item', 't-icon', 't-alert', 't-empty', 't-loading', 't-textarea', 't-select']) app.component(name, stub)
+  for (const name of ['t-form', 't-form-item', 't-icon', 't-empty', 't-loading', 't-textarea', 't-select']) app.component(name, stub)
+  app.component('t-alert', Alert)
   app.component('t-button', defineComponent({ setup(_, { attrs, slots }) {
     buttons.push({ label: attrs['aria-label'], click: attrs.onClick as (() => unknown) | undefined })
     return () => h('button', attrs, slots.default?.())
@@ -91,6 +92,37 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: API integration guidance renders the review rules and account setting limits`, async () => {
+    const result = await scenario(locale, async () => {})
+    assert.deepEqual(result.warnings, [])
+    const expected = locale === 'zh-CN' ? [
+      '新内容经过模型收录审核；重复、已丢弃、缺正文等情况按规则直接返回。',
+      'API Key 可以访问个人空间的全部内容和收录、检索等接口。',
+      '部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。',
+    ] : [
+      'New content goes through model intake review; duplicates, discarded content, missing bodies and similar cases return directly according to the rules.',
+      'API keys can access all content in your personal space and interfaces such as ingest and search.',
+      'Some account settings, including ChatGPT sign-in and maintenance schedules, still require signing in on the web.',
+    ]
+    for (const text of expected) assert.ok(result.html.includes(text), text)
+    assert.doesNotMatch(result.html, /每次收录都经过模型审核|相同的全部访问权限|applies to every submission|same full access as your signed-in account/)
+  })
+  test(`${locale}: the created key notice says the key can be viewed again and must be kept safe`, async () => {
+    const result = await scenario(locale, async state => {
+      state.form.name = 'Collector'
+      await state.save()
+    }, { keys: [{ id: 17, name: 'Collector', api_key: 'token', created_at: '2026-10-12' }] })
+    assert.deepEqual(result.warnings, [])
+    assert.equal(result.state.createdVisible.value, true)
+    assert.equal(result.state.createdToken.value, 'token')
+    const expected = locale === 'zh-CN'
+      ? '你可以在此页再次查看完整密钥。请妥善保管，避免泄露。'
+      : 'You can view the full key again on this page. Keep it safe and do not share it.'
+    assert.ok(result.html.replace(/<[^>]+>/g, '').includes(expected), 'the real TDesign alert displays the new notice as text')
+    assert.doesNotMatch(result.html, /完整密钥只显示这一次|full token is shown once/)
+    assert.deepEqual(result.requests, [{ payload: { name: 'Collector' } }])
+    assert.ok(result.html.includes('<code>token</code>'), 'the reloaded key list still displays the saved key')
+  })
   test(`${locale}: external Agent endpoints have localized guidance and copy their addresses`, async () => {
     const messages = (locale === 'zh-CN' ? zh : en).integrations.api
     const result = await scenario(locale, async () => {})

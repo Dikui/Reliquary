@@ -28,7 +28,7 @@ Reliquary 不采集、不抓取、不下载原文、文件或图片。送入后�
 
 每个外部工具使用自己的 Key，例如 `grok-bot`。Key 可以访问个人空间全部内容。每次请求都要发送 `Authorization: Bearer <完整 Key>`。HTTP API 也接受 `X-API-Key: <完整 Key>`；MCP 只接受 Bearer API Key，不接受网页登录令牌或 `X-API-Key`。
 
-撤销或到期后，后续 HTTP 和 MCP 请求返回 HTTP 401。已收录内容保留。不要反复重试失效的 Key，联系用户更换。鉴权暂时不可用时返回 HTTP 503，带 `Retry-After: 5`，可以稍后重试。
+撤销或到期后，后续 HTTP 和 MCP 请求返回 HTTP 401。已收录内容保留。不要反复重试失效的 Key，联系用户更换。请求入口或服务执行时再次查询 Key 的数据库错误均返回 HTTP 503，错误码 `1008`，带 `Retry-After: 5`，可以稍后重试；数据库查询失败不表示 Key 已失效。HTTP 和 MCP 遵循相同规则。
 
 地址必须能从调用方访问。服务按内网使用设计。通过反向代理子路径部署时，基础地址包含子路径。以下示例使用环境变量 `RELIQUARY_URL` 和 `RELIQUARY_API_KEY`，地址末尾不加 `/`。
 
@@ -257,7 +257,7 @@ HTTP 200 返回 `data.items`。单条失败不影响其他条目：
 | 响应字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `index` | integer | 输入数组索引，从 0 开始 |
-| `article_id` | string | 新建或已有文章 ID；`conflict` 是新待审记录的 ID，`invalid` 通常为空 |
+| `article_id` | string | 新建或已有文章 ID；`conflict` 是关联待审记录的 ID，同一冲突正文重送返回已有待审 ID，`invalid` 通常为空 |
 | `status` | string | 下表的收录状态 |
 | `message` | string | 可直接转述给用户的中文消息 |
 | `reason` | string | 待审、冲突、丢弃或失败的具体原因；正常结果通常为空 |
@@ -297,10 +297,10 @@ HTTP 200 的 `data` 是数组，分页字段在顶层：
 | --- | --- | --- |
 | 400 | `error.code=1000` | 整次请求的 JSON/数量/查重链接/分页错误，或附件上传缺文件、空文件、类型不支持、超限；修改请求后重试 |
 | 401 | 通常 `{"error":"Unauthorized: invalid or missing credentials"}`，无数字码 | 缺失、无效、撤销或过期的 Key；更换凭据 |
-| 401 | `error.code=1001` | 操作时身份再次校验失败；更换凭据 |
+| 401 | `error.code=1001` | 操作时再次校验确认 Key 已失效，例如撤销或过期；更换凭据 |
 | 403 | 鉴权可能返回字符串 `error`；业务错误码 `1002` | 不属于可访问的个人空间；不要重试相同请求，不需要发送 `X-Tenant-ID` |
 | 500 | `error.code=1007` | 服务器内部失败；退避重试并向用户反馈 |
-| 503 | `error.code=1008` | 鉴权暂时不可用，或维护暂停收录；有 `Retry-After` 时遵守，没有时等待维护结束 |
+| 503 | `error.code=1008` | 请求入口或服务再次查询 Key 时数据库错误，带 `Retry-After: 5`，等待后重试；维护暂停收录也返回 503，有 `Retry-After` 时遵守，没有时等待维护结束 |
 | 413 | 代理或 MCP 传输层响应，无统一业务码 | 请求体过大；缩小请求，不要原样重试 |
 | 200 | `data.items[].status=invalid` | 单条材料无效或内部处理失败，没有单条数字错误码；读取该条 `reason` |
 
@@ -434,11 +434,11 @@ jq . supplement-result.json
 
 `accept_incomplete` 只适用于已通过收录审核且仍待补全的文章。重复接受会报错，响应丢失时先检查当前状态。
 
-补全过程中，若新正文与已有正文明显不同，返回 `conflict`。原文章保留，新内容成为关联的收录待审，用户决定另存为新文章或丢弃。定稿后，同链接重送返回 `exists`，不会更新正文。`discarded` 表示用户丢弃过链接，应停止再次收录，包括已登记的转载链接。
+补全过程中，若新正文与已有正文明显不同，返回 `conflict`。原文章保留，新内容成为关联的收录待审，用户决定另存为新文章或丢弃。关联记录仍为待审时，同一原文章的同一冲突正文按现有正文哈希去重，重送或并发提交均返回已有待审记录，`status` 仍为 `conflict`，`article_id` 与首次一致；不同冲突正文分别创建待审。定稿后，同链接重送返回 `exists`，不会更新正文。`discarded` 表示用户丢弃过链接，应停止再次收录，包括已登记的转载链接。
 
 ## 重试、幂等与用户反馈
 
-正常收录按同一原文链接重复提交，文章只入库一次。服务也会识别正文相同或近似的转载，返回已有文章；重送不会更新已有正文。没有调用方自定义的幂等键。网络超时或响应丢失时，先查重，再决定重送；补全响应丢失时先检查缺失清单与文章状态。冲突请求不保证幂等，同一冲突正文重送可能新增关联待审记录，不要自动重试。
+正常收录按同一原文链接重复提交，文章只入库一次。服务也会识别正文相同或近似的转载，返回已有文章；重送不会更新已有正文。没有调用方自定义的幂等键。网络超时或响应丢失时，先查重，再决定重送；补全响应丢失时先检查缺失清单与文章状态。冲突响应丢失且关联记录仍为待审时，可以安全重送同一正文：同一原文章下正文哈希相同的关联待审只创建一条，并发重送也返回相同待审 ID。调整冲突正文后再送会创建另一条待审。
 
 | 收录 `status` | 含义 | 重试与建议转述 |
 | --- | --- | --- |
@@ -446,7 +446,7 @@ jq . supplement-result.json
 | `exists` | 已存在，可能仍是待审记录，或补全没有新增变化 | 不重试相同材料。“该文章已存在。”仍有缺失时按实际 `message` 告知用户 |
 | `supplemented` | 已记录一次补全，可能仍未补齐 | 查看 `completeness`。“已补全”或“已提交补全，仍缺以下材料，需用户处理” |
 | `pending_review` | 正文缺失、缺原文链接或模型未批准，已保存待审 | 不自动重复送相同内容。“已保存到收录待审”，附 `reason`；能取得缺正文时可补全文 |
-| `conflict` | 补全正文与原文不同，新建关联待审 | 不自动重试。“正文与已有文章不同，已保存待审，请决定是否另存” |
+| `conflict` | 补全正文与原文不同，创建或返回已有关联待审 | 响应丢失可重试同一冲突正文，返回相同待审 ID。“正文与已有文章不同，已保存待审，请决定是否另存” |
 | `discarded` | 链接被用户丢弃过 | 不重试、不重新采集。“该链接已被丢弃，未再次收录” |
 | `invalid` | 此条失败，未正常收录 | 参数错误先修正；`reason` 为“内部处理失败”时可退避重试。“此条收录失败”，附可读原因 |
 
@@ -477,7 +477,7 @@ jq . supplement-result.json
 | `follow_feed` | 可选 `since`（YYYY-MM-DD/RFC3339）、`target_ids`、`limit`（默认 20，最多 100）、`collapse_similar`、`cursor` | 关注动态，用 `next_cursor` 翻页至为空；读取不更新用户查看时间 |
 | `follow`、`unfollow` | `target_type`（entity/topic）、`target_id` | 关注或取消关注，重复操作幂等 |
 
-MCP 正常工具结果在 `result.structuredContent`，同时提供 `result.content` 文本；没有 HTTP API 的 `success/data` 封套。工具执行错误通常仍是 HTTP 200，但 `result.isError=true`，原因在 `content[].text`。还需检查 JSON-RPC 顶层 `error` 和 HTTP 状态。
+MCP 正常工具结果在 `result.structuredContent`，同时提供 `result.content` 文本；没有 HTTP API 的 `success/data` 封套。工具执行错误通常仍是 HTTP 200，但 `result.isError=true`，原因在 `content[].text`。鉴权查询的数据库错误返回 HTTP 503 与 `Retry-After: 5`，撤销或过期返回 HTTP 401。还需检查 JSON-RPC 顶层 `error` 和 HTTP 状态。
 
 MCP 没有附件上传工具。`file` 可以是 base64 字符串，也可以是 `{data,name,source_url}`；图片使用 `{data,source_url,caption,text}`。单个内联文件解码后最多 10 MiB，整批内联文件解码后合计最多 20 MiB，`ingest` 工具参数 JSON 最多 20 MiB，含 JSON-RPC 封套的 HTTP 请求体最多 21 MiB。base64 膨胀也计入 JSON 大小。
 

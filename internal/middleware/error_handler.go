@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	stderrors "errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,11 @@ func ErrorHandler() gin.HandlerFunc {
 			err := c.Errors.Last().Err
 
 			// 检查是否为应用错误
-			if appErr, ok := errors.IsAppError(err); ok {
+			var appErr *errors.AppError
+			if stderrors.As(err, &appErr) {
+				if appErr.HTTPCode == http.StatusServiceUnavailable && c.Writer.Header().Get("Retry-After") == "" {
+					c.Header("Retry-After", "5")
+				}
 				// 返回应用错误
 				c.JSON(appErr.HTTPCode, gin.H{
 					"success": false,

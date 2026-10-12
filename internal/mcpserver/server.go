@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"reliquary/internal/application/service"
+	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -20,6 +22,7 @@ const completeMaterialNotice = "送入完整材料：正文全文、原始文件
 
 type EntryService interface {
 	interfaces.IngestService
+	AuthorizeIngestRequest(context.Context) (context.Context, error)
 	ReadEntry(context.Context, string, int, int) (*service.EntryReadResult, error)
 	ListPending(context.Context, int, int, ...string) (*types.PageResult, error)
 	ReviewEntryIntake(context.Context, string, string, types.SourceInfo) (*types.Entry, error)
@@ -38,14 +41,17 @@ type Services struct {
 
 // Handler uses sessionless Streamable HTTP so every request carries its own
 // verified API key identity. It has no persistent client sessions to clean up.
-type Handler struct{ transport http.Handler }
+type Handler struct {
+	transport http.Handler
+	authorize func(context.Context) (context.Context, error)
+}
 
 func New(services Services) *Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "reliquary", Version: "1.0.0"}, nil)
 	registerTools(server, services)
 	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: types.MaxIngestInlineRequestBytes + (1 << 20)})
-	return &Handler{transport: transport}
+	return &Handler{transport: transport, authorize: services.Entries.AuthorizeIngestRequest}
 }
 
 // ServeHTTP follows the normal HTTP authentication middleware and additionally
@@ -56,7 +62,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "a valid Bearer API key is required", http.StatusUnauthorized)
 		return
 	}
-	h.transport.ServeHTTP(w, r)
+	ctx, err := h.authorize(r.Context())
+	if err != nil {
+		var appErr *werrors.AppError
+		if !errors.As(err, &appErr) {
+			appErr = werrors.NewInternalServerError("Internal server error")
+		}
+		if appErr.HTTPCode == http.StatusServiceUnavailable {
+			w.Header().Set("Retry-After", "5")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(appErr.HTTPCode)
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": appErr})
+		return
+	}
+	h.transport.ServeHTTP(w, r.WithContext(ctx))
 }
 
 type idInput struct {

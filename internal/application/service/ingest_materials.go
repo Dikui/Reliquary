@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
 	"reliquary/internal/application/service/file"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
@@ -21,34 +22,73 @@ import (
 	"reliquary/internal/utils"
 )
 
-// Recheck durable credentials at every operation, including an already open MCP
-// session. Reading only public key metadata avoids loading the secret.
+type ingestIdentityError struct{ *werrors.AppError }
+
+func (e *ingestIdentityError) Unwrap() error { return e.AppError }
+
+type verifiedIngestIdentityKey struct{}
+type verifiedIngestIdentity struct {
+	spaceID   uint64
+	principal types.Principal
+	keyID     uint64
+	keyName   string
+}
+
+// AuthorizeIngestRequest rechecks credentials before the MCP transport writes
+// its response. The returned context shares that result within this request.
+func (s *entryService) AuthorizeIngestRequest(ctx context.Context) (context.Context, error) {
+	ctx, id, name, err := s.lookupIngestIdentity(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	spaceID, _ := types.SpaceIDFromContext(ctx)
+	principal, _ := types.PrincipalFromContext(ctx)
+	return context.WithValue(ctx, verifiedIngestIdentityKey{}, verifiedIngestIdentity{spaceID, principal, id, name}), nil
+}
+
+// Recheck durable credentials for each operation unless its HTTP request has
+// already done so. Reading public key metadata avoids loading the secret.
 func (s *entryService) ingestIdentity(ctx context.Context) (context.Context, uint64, string, error) {
+	if verified, ok := ctx.Value(verifiedIngestIdentityKey{}).(verifiedIngestIdentity); ok {
+		spaceID, _ := types.SpaceIDFromContext(ctx)
+		principal, _ := types.PrincipalFromContext(ctx)
+		if verified.spaceID == spaceID && verified.principal == principal {
+			return ctx, verified.keyID, verified.keyName, nil
+		}
+	}
+	return s.lookupIngestIdentity(ctx)
+}
+
+func (s *entryService) lookupIngestIdentity(ctx context.Context) (context.Context, uint64, string, error) {
 	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok || spaceID == 0 {
-		return ctx, 0, "", werrors.NewUnauthorizedError("personal space is required")
+		return ctx, 0, "", &ingestIdentityError{werrors.NewUnauthorizedError("personal space is required")}
 	}
 	principal, ok := types.PrincipalFromContext(ctx)
 	if !ok {
-		return ctx, 0, "", werrors.NewUnauthorizedError("authenticated collector required")
+		return ctx, 0, "", &ingestIdentityError{werrors.NewUnauthorizedError("authenticated collector required")}
 	}
 	if s.db == nil {
-		return ctx, 0, "", werrors.NewInternalServerError("ingest database is unavailable")
+		return ctx, 0, "", &ingestIdentityError{werrors.NewServiceUnavailableError("Authentication is temporarily unavailable")}
 	}
 	if principal.Type != types.PrincipalAPIKey {
 		return ctx, 0, "", nil
 	}
 	id, err := strconv.ParseUint(principal.ID, 10, 64)
 	if err != nil || id == 0 {
-		return ctx, 0, "", werrors.NewUnauthorizedError("API Key is invalid or revoked")
+		return ctx, 0, "", &ingestIdentityError{werrors.NewUnauthorizedError("API Key is invalid or revoked")}
 	}
 	var key struct {
 		ID                   uint64
 		Name                 string
 		RevokedAt, ExpiresAt *time.Time
 	}
-	if err := s.db.WithContext(ctx).Table("api_keys").Select("id,name,revoked_at,expires_at").Where("id=? AND space_id=?", id, spaceID).Take(&key).Error; err != nil || key.RevokedAt != nil || (key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now())) {
-		return ctx, 0, "", werrors.NewUnauthorizedError("API Key is invalid or revoked")
+	err = s.db.WithContext(ctx).Table("api_keys").Select("id,name,revoked_at,expires_at").Where("id=? AND space_id=?", id, spaceID).Take(&key).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return ctx, 0, "", &ingestIdentityError{werrors.NewServiceUnavailableError("Authentication is temporarily unavailable")}
+	}
+	if err != nil || key.RevokedAt != nil || (key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now())) {
+		return ctx, 0, "", &ingestIdentityError{werrors.NewUnauthorizedError("API Key is invalid or revoked")}
 	}
 	principal.Name = key.Name
 	return types.WithPrincipal(ctx, principal), id, key.Name, nil

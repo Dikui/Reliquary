@@ -73,6 +73,7 @@ var allowedOutboundCalls = map[string]int{
 	"internal/handler/system.go|GetSystemSetting|h.systemSettingSvc.Get":                               1,
 	"internal/handler/system.go|ListParserEngines|c.Get":                                               1,
 	"internal/mcpserver/server.go|ServeHTTP|r.Header.Get":                                              1,
+	"internal/middleware/error_handler.go|ErrorHandler|c.Writer.Header().Get":                          1,
 	"internal/middleware/kb_access.go|KBAccessFromContext|c.Get":                                       1,
 	"internal/middleware/logger.go|Logger|c.Get":                                                       1,
 	"internal/middleware/logger.go|Logger|c.Writer.Header().Get":                                       1,

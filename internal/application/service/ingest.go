@@ -196,6 +196,10 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 	for i := range request.Items {
 		item, err := s.Ingest(ctx, &request.Items[i])
 		if err != nil {
+			var identityErr *ingestIdentityError
+			if errors.As(err, &identityErr) {
+				return nil, err
+			}
 			var app *werrors.AppError
 			reason := "内部处理失败"
 			message := "该条目收录失败，请稍后重试。"

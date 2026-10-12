@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/bits"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/types"
@@ -413,6 +415,23 @@ func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.Knowle
 		return nil, err
 	}
 	setMessageFingerprint(incoming, canonical)
+	// Ingest holds the knowledge base deduplication lock through this lookup
+	// and creation. Retry only an exact body hash for this original article.
+	var existing types.Entry
+	err = s.db.WithContext(ctx).Where("space_id=? AND knowledge_base_id=? AND source_kind='article' AND related_article_id=? AND content_hash=? AND parse_status=?",
+		incoming.SpaceID, incoming.KnowledgeBaseID, original.ID, incoming.ContentHash, types.ParseStatusRejected).
+		Order("created_at ASC,id ASC").First(&existing).Error
+	if err == nil {
+		if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {
+			if err := changes.removeUnusedStoredFiles(ctx, s.fileSvc); err != nil {
+				return nil, err
+			}
+		}
+		return ingestResult(&existing, "conflict", "正文与已有文章不同，已另存到关联收录待审。", intake.Reason, ""), nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	if err := incoming.SetManualMetadata(types.NewManualEntryMetadata("", types.ManualEntryStatusPublish, 1)); err != nil {
 		return nil, err
 	}
