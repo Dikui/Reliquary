@@ -185,7 +185,33 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
 }
 
+test('API key expiry guidance uses a full-width column below the date field at desktop and narrow widths', async () => {
+  const rules = await compiledSFCStyleRules(new URL('./ApiIntegrationSettings.vue', import.meta.url))
+  for (const width of [1440, 375]) {
+    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, width)
+    assert.equal(styles('.api-key-expiry-field').display, 'flex')
+    assert.equal(styles('.api-key-expiry-field')['flex-direction'], 'column')
+    assert.equal(styles('.api-key-expiry-field').width, '100%')
+    assert.equal(styles('.api-key-expiry-field')['min-width'], '0')
+    assert.equal(styles('.api-key-expiry').width, '100%')
+    assert.equal(styles('.api-key-expiry-hint').margin, '0')
+  }
+})
+
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: expiry guidance renders after the real date picker in its own paragraph`, async () => {
+    const result = await scenario(locale, async () => {})
+    assert.deepEqual(result.warnings, [])
+    const fieldStart = result.html.indexOf('<div class="api-key-expiry-field">')
+    const pickerStart = result.html.indexOf('t-date-picker', fieldStart)
+    const hint = `<p class="api-key-expiry-hint">${(locale === 'zh-CN' ? zh : en).integrations.api.apiKeyExpiresAtHint}</p>`
+    const hintStart = result.html.indexOf(hint, fieldStart)
+    assert.ok(fieldStart >= 0, 'the date picker and guidance have a shared layout container')
+    assert.ok(pickerStart > fieldStart, 'the container renders the real date picker')
+    assert.ok(hintStart > pickerStart, 'the localized guidance follows the date picker as a paragraph')
+    assert.ok(result.html.slice(hintStart + hint.length).startsWith('</div>'), 'the guidance ends the expiry layout container')
+  })
+
   test(`${locale}: expiry control uses real TDesign date and time picker without Vue prop warnings`, async () => {
     const result = await scenario(locale, async state => { state.form.expiresAt = '2035-01-15T08:45' })
     assert.deepEqual(result.warnings, [])

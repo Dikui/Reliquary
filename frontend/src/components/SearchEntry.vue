@@ -16,12 +16,7 @@ const plainText = (text: string | undefined) => markdownToPlainText(text, `[${t(
 const classification = computed(() => ({
   ...props.article,
   source: props.article.original_url,
-  structured_summary: props.article.summary ? {
-    ...props.article.summary,
-    overview: plainText(props.article.summary.overview),
-    points: props.article.summary.points.map(plainText),
-    key_terms: props.article.summary.key_terms.map(plainText),
-  } : props.article.summary,
+  structured_summary: props.article.summary,
 }))
 const published = computed(() => props.article.published_at
   ? new Date(props.article.published_at).toLocaleDateString(locale.value)

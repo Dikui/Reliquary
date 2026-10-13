@@ -1,6 +1,7 @@
 import { formatCountCopy } from '../i18n/countCopy'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
+import * as markdownPlainText from '../utils/markdownPlainText'
 import { safeTextareaTestModule } from './__tests__/safeTextareaStub'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -213,7 +214,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: actual detail loader displays ingest markers and missing reasons, then accepting clears its state and refresh event`, async () => {
     const missing = [{ type: 'image', source_url: 'https://example.com/image.png', reason: 'Access denied', api_key_name: 'External Collector', submitted_at: '2026-10-12T08:00:00Z' }]
     const loader = createArticleDetailsLoader({ incomplete: { acquisition: 'model_written', incomplete: true, missing_materials: missing }, complete: { acquisition: 'extracted', incomplete: false }, unspecified: { acquisition: 'extracted' } })
-    const classified = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const classified = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
     const materials = compileSFC('./MissingMaterials.vue').create({ '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
     const requests: string[] = []
     const api = evaluate(readFileSync(new URL('../api/ingest.ts', import.meta.url), 'utf8'), { '@/utils/request': { post: async (url: string) => { requests.push(url); return { success: true } } } })
@@ -260,7 +261,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
     const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
-    const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
     const flagged = await renderDetails([], locale, { loadedDetails: await loader.load('unverified'), classification: { __esModule: true, default: classification } })
     assert.ok(flagged.includes(messages[locale].knowledgeReview.sourceUnverified))
     const verified = await renderDetails([], locale, { loadedDetails: await loader.load('verified'), classification: { __esModule: true, default: classification } })

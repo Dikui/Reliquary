@@ -34,10 +34,12 @@
       <t-form ref="formRef" :data="form" :rules="rules" layout="vertical" label-align="top" @submit.prevent>
         <t-form-item :label="t('integrations.api.apiKeyName')" name="name"><t-input v-model="form.name" :disabled="saving" /></t-form-item>
         <t-form-item :label="t('integrations.api.apiKeyExpiresAt')" name="expiresAt">
-          <t-date-picker v-model="expiryPickerValue" class="api-key-expiry" enable-time-picker clearable allow-input
-            format="YYYY-MM-DD HH:mm" value-type="YYYY-MM-DD HH:mm"
-            :time-picker-props="{ format: 'HH:mm' }" :popup-props="{ zIndex: 6200 }" :disabled="saving" />
-          <p>{{ t('integrations.api.apiKeyExpiresAtHint') }}</p>
+          <div class="api-key-expiry-field">
+            <t-date-picker v-model="expiryPickerValue" class="api-key-expiry" enable-time-picker clearable allow-input
+              format="YYYY-MM-DD HH:mm" value-type="YYYY-MM-DD HH:mm"
+              :time-picker-props="{ format: 'HH:mm' }" :popup-props="{ zIndex: 6200 }" :disabled="saving" />
+            <p class="api-key-expiry-hint">{{ t('integrations.api.apiKeyExpiresAtHint') }}</p>
+          </div>
         </t-form-item>
         <t-alert v-if="formError" theme="error" :message="formError" />
       </t-form>
@@ -206,7 +208,9 @@ onMounted(load)
 .setting-control code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setting-control .t-button { flex-shrink: 0; }
 .api-table-shell { min-width: 0; max-width: 100%; }
+.api-key-expiry-field { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: 0; }
 .api-key-expiry { width: 100%; min-width: 0; }
+.api-key-expiry-hint { margin: 0; color: var(--td-text-color-secondary); }
 .token-value { margin-top: 16px; }
 code { overflow-wrap: anywhere; }
 .query-result { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -38,6 +38,7 @@ function component(path: string, modules: Record<string, unknown>) {
 }
 const classification = component('./EntryClassification.vue', {
   './FollowToggle.vue': emptyModule,
+  '@/utils/markdownPlainText': markdownPlainText,
   '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) },
 })
 const reviewModule = { __esModule: true, default: component('./ReviewActions.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, 'tdesign-vue-next': { MessagePlugin: {} } }) }

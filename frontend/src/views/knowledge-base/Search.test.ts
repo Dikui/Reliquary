@@ -59,7 +59,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   assert.deepEqual(warnings, []); assert.deepEqual(errors, [])
   return html
 }
-const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
+const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
 function articleComponent() {
   const preview = component('../../components/ImagePreview.vue', {
     'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
@@ -84,17 +84,23 @@ const markdownExcerpt = '# Launch heading\n\n- **bold** [read](https://example.c
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: API-loaded search excerpts render plain text and preserve the source Markdown`, async () => {
+    const summary = { overview: '**Overview** ![chart](chart.png)', points: ['- _Point_', '\\*literal\\*', '`**literal**`'], key_terms: ['`Term`'] }
+    let loadedSummary: SearchEntry['summary'] = null
     const api = ingestSearchAPI({
-      summary: { overview: '**Overview** ![chart](chart.png)', points: ['- _Point_'], key_terms: ['`Term`'] },
+      summary,
       snippets: [{ ...article.snippets[0], content: markdownExcerpt }],
     })
     const result = await pageScenario(async state => {
       state.query.value = 'Launch'; await state.runSearch()
       assert.equal(state.results.value[0].snippets[0].content, markdownExcerpt)
       assert.equal(state.results.value[0].summary.overview, '**Overview** ![chart](chart.png)')
+      loadedSummary = state.results.value[0].summary
     }, api.searchEntries, locale)
     const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
     assert.ok(result.html.includes(`Overview ${image}`))
+    assert.match(result.html, /<li[^>]*>\*literal\*<\/li>/)
+    assert.match(result.html, /<li[^>]*>\*\*literal\*\*<\/li>/)
+    assert.deepEqual(loadedSummary, summary)
     assert.match(result.html, /<mark class="search-highlight">Launch<\/mark> heading/)
     assert.ok(result.html.includes(`code ${image} ${image} HTML`))
     assert.match(result.html, /bold read/)
