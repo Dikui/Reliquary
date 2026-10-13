@@ -2,14 +2,14 @@ package service
 
 import (
 	"context"
-	"testing"
-
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTopicsCatalogSelectionAndArticleDisplay(t *testing.T) {
@@ -76,7 +76,7 @@ func TestArticleSummaryKeywordSearchWithoutChunksOrVectors(t *testing.T) {
 	library := &types.Library{ID: uuid.NewString(), SpaceID: 1, Name: "Entry", IndexingStrategy: types.DefaultIndexingStrategy()}
 	require.NoError(t, db.Create(library).Error)
 	summary := &types.EntrySummary{Overview: "Build a nebulaengine application.", Points: []string{"Install the tool", "Configure a project", "Run the project"}, KeyTerms: []string{"nebulaengine", "Reliquary"}}
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Type: "url", Title: "A tutorial", Source: "https://example.com/tutorial", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", ContentType: types.ContentTypeTutorial, ProcessingMode: types.ProcessingModeSummaryOnly, StructuredSummary: summary, Description: summary.RenderText()}
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Type: "url", Title: "A tutorial", Source: "https://example.com/tutorial", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", ContentType: types.ContentTypeTutorial, StructuredSummary: summary, Description: summary.RenderText()}
 	require.NoError(t, db.Create(article).Error)
 	var loaded types.Entry
 	require.NoError(t, db.First(&loaded, "id=?", article.ID).Error)

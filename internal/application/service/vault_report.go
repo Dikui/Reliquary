@@ -11,16 +11,17 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
-	"gopkg.in/yaml.v3"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/queue"
 	"reliquary/internal/types"
+
+	"github.com/google/uuid"
+	"gopkg.in/yaml.v3"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ReportWriteResult separates source persistence from index readiness.
@@ -187,7 +188,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
 			SourceKind: "report", Title: vaultDocumentTitle(path, content), VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", FileSize: int64(len(content)), FileHash: vaultContentHash(content),
-			EnableStatus: "enabled", Channel: types.ChannelAPI, ProcessingMode: types.ProcessingModeFull,
+			EnableStatus: "enabled", Channel: types.ChannelAPI,
 			ParseStatus: types.ParseStatusPending, Metadata: types.JSON(metadata), CreatedAt: created, UpdatedAt: created}
 		if err := tx.Create(entry).Error; err != nil {
 			return err

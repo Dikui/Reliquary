@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/types"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
@@ -35,7 +36,7 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 	require.Equal(t, http.StatusOK, libraryResponse.Code, libraryResponse.Body.String())
 	var library struct{ Data types.Library }
 	require.NoError(t, json.Unmarshal(libraryResponse.Body.Bytes(), &library))
-	k := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.Data.ID, Title: "API fixture", Type: "manual", ContentType: "event", ProcessingMode: "full", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+	k := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.Data.ID, Title: "API fixture", Type: "manual", ContentType: "event", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, f.db.Create(k).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, v.WriteArticle(ctx, k, "API original body.\n", nil))

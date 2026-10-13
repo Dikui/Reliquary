@@ -42,11 +42,9 @@ test('settings, runtime queues and space key values use the current API routes',
   const requests: Request[] = [], api = loadAPI('./system.ts', requests)
   await api.listSystemSettings(); await api.getSystemSetting('key/a'); await api.updateSystemSetting('key/a', true); await api.resetSystemSetting('key/a')
   await api.getRuntimeQueues(); await api.getRuntimeTasks('entity', 'pending'); await api.mutateRuntimeTask('entity', 'task/a', 'cancel'); await api.purgeArchivedRuntimeTasks('entity')
-  await api.getParserEngineConfig(); await api.updateParserEngineConfig({ mineru_endpoint: 'http://localhost' })
   assert.deepEqual(requests.map(({ url }) => url), [
     '/api/v1/system/settings', '/api/v1/system/settings/key%2Fa', '/api/v1/system/settings/key%2Fa', '/api/v1/system/settings/key%2Fa',
     '/api/v1/system/runtime/queues', '/api/v1/system/runtime/queues/entity/tasks', '/api/v1/system/runtime/queues/entity/tasks/task%2Fa/actions/cancel', '/api/v1/system/runtime/queues/entity/archived',
-    '/api/v1/space/kv/parser-engine-config', '/api/v1/space/kv/parser-engine-config',
   ])
 })
 

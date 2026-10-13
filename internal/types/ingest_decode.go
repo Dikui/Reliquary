@@ -5,37 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
-
-	"github.com/google/uuid"
 )
-
-// A file may be an HTTP asset ID, inline MCP base64, or a detailed object.
-func (file *IngestFile) UnmarshalJSON(data []byte) error {
-	if len(bytes.TrimSpace(data)) > 0 && bytes.TrimSpace(data)[0] == '"' {
-		var value string
-		if err := json.Unmarshal(data, &value); err != nil {
-			return err
-		}
-		*file = IngestFile{}
-		value = strings.TrimSpace(value)
-		if _, err := uuid.Parse(value); err == nil {
-			file.AssetID = value
-		} else {
-			file.Data = value
-		}
-		return nil
-	}
-	type plain IngestFile
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var decoded plain
-	if err := decoder.Decode(&decoded); err != nil {
-		return err
-	}
-	*file = IngestFile(decoded)
-	return nil
-}
 
 // DecodeIngestBatch rejects malformed envelopes while retaining an invalid item
 // in its original position so the shared service can return a per-item result.
@@ -65,12 +35,12 @@ func DecodeIngestBatch(reader io.Reader) (*IngestBatchRequest, error) {
 		itemDecoder := json.NewDecoder(bytes.NewReader(raw))
 		itemDecoder.DisallowUnknownFields()
 		if err := itemDecoder.Decode(&request.Items[index]); err != nil {
-			request.Items[index] = IngestRequest{InputError: "收录条目格式无效：" + err.Error()}
+			request.Items[index] = IngestRequest{InputError: "收录只接受 Markdown 正文和图片，条目字段无效：" + err.Error()}
 			continue
 		}
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &fields); err != nil {
-			request.Items[index].InputError = "收录条目格式无效：" + err.Error()
+			request.Items[index].InputError = "收录只接受 Markdown 正文和图片，条目字段无效：" + err.Error()
 			continue
 		}
 		url, present := fields["url"]

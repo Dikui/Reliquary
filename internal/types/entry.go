@@ -88,7 +88,7 @@ const (
 type EntryListFilter struct {
 	// SourceKind selects article, mine or report independently of ingestion channel.
 	SourceKind string
-	// ContentType filters the article purpose; unclassified matches an empty classification.
+	// ContentType filters the article purpose.
 	ContentType string
 	// Starred filters the user's article marker when supplied.
 	Starred *bool
@@ -126,17 +126,11 @@ type Entry struct {
 	Description                 string        `json:"description"`
 	ContentType                 string        `json:"content_type" gorm:"type:varchar(16)"`
 	ContentTypeCorrected        bool          `json:"content_type_corrected" gorm:"not null;default:false"`
-	ContentTypeUncertain        bool          `json:"content_type_uncertain" gorm:"not null;default:false"`
-	ProcessingReviewStatus      string        `json:"processing_review_status" gorm:"type:varchar(16);not null;default:''"`
-	ProcessingReviewContentType string        `json:"processing_review_content_type" gorm:"type:varchar(16);not null;default:''"`
-	ProcessingReviewReason      string        `json:"processing_review_reason" gorm:"type:text;not null;default:''"`
 	SourceUnverified            bool          `json:"source_unverified" gorm:"not null;default:false"`
 	ReviewKind                  string        `json:"review_kind,omitempty" gorm:"-"`
-	ProcessingMode              string        `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
 	SourceKind                  string        `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
 	VaultPath                   string        `json:"vault_path" gorm:"type:text;not null;default:''"`
 	VaultBody                   string        `json:"-" gorm:"type:text;not null;default:''"`
-	VaultOriginalPath           string        `json:"-" gorm:"type:text;not null;default:''"`
 	Starred                     bool          `json:"starred" gorm:"not null;default:false"`
 	CollectReason               string        `json:"collect_reason" gorm:"type:text;not null;default:''"`
 	AgentSummary                string        `json:"agent_summary" gorm:"type:text;not null;default:''"`
@@ -150,7 +144,6 @@ type Entry struct {
 	LastIngestAPIKeyID          uint64        `json:"last_ingest_api_key_id" gorm:"not null;default:0"`
 	LastIngestAPIKeyName        string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
 	MissingMaterials            JSON          `json:"missing_materials" gorm:"type:jsonb;not null"`
-	IngestAttachments           JSON          `json:"ingest_attachments" gorm:"type:jsonb;not null"`
 	ContentTypeHint             string        `json:"content_type_hint" gorm:"type:varchar(16);not null;default:''"`
 	RelatedArticleID            string        `json:"related_article_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	StructuredSummary           *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
@@ -276,9 +269,7 @@ func (k *Entry) BeforeCreate(tx *gorm.DB) (err error) {
 	if len(k.MissingMaterials) == 0 {
 		k.MissingMaterials = JSON(`[]`)
 	}
-	if len(k.IngestAttachments) == 0 {
-		k.IngestAttachments = JSON(`[]`)
-	}
+
 	return nil
 }
 
@@ -302,28 +293,7 @@ func (k *Entry) SetIngestMissing(items []IngestMissing) error {
 	}
 	return err
 }
-func (k *Entry) IngestAttachmentRecords() []IngestAttachment {
-	items := []IngestAttachment{}
-	if k != nil && len(k.IngestAttachments) != 0 {
-		_ = json.Unmarshal(k.IngestAttachments, &items)
-	}
-	if items == nil {
-		items = []IngestAttachment{}
-	}
-	return items
-}
-func (k *Entry) SetIngestAttachments(items []IngestAttachment) error {
-	if items == nil {
-		items = []IngestAttachment{}
-	}
-	data, err := json.Marshal(items)
-	if err == nil {
-		k.IngestAttachments = JSON(data)
-	}
-	return err
-}
 
-// ManualEntryMetadata stores metadata for manual Markdown entry content.
 type ManualEntryMetadata struct {
 	Content   string `json:"content"`
 	Format    string `json:"format"`

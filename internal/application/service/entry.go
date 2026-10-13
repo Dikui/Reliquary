@@ -49,7 +49,6 @@ type entryService struct {
 	task            interfaces.TaskEnqueuer
 	taskInspector   interfaces.TaskInspector
 	imageResolver   *docparser.ImageResolver
-	ingestDocReader interfaces.DocReader
 
 	// spanTracker records the per-attempt span tree for the parsing
 	// pipeline. Best-effort: a nil tracker (test harness) is safely
@@ -190,21 +189,6 @@ func (s *entryService) skipStage(ctx context.Context, kid, name, reason string) 
 	s.tracker().SkipSpan(ctx, span, reason)
 }
 
-func (s *entryService) getParserEngineOverridesFromContext(ctx context.Context) map[string]string {
-	if v := ctx.Value(types.SpaceInfoContextKey); v != nil {
-		if space, ok := v.(*types.Space); ok && space != nil {
-			return space.ParserEngineConfig.ToOverridesMap()
-		}
-	}
-	return nil
-}
-
-// GetRepository gets the entry repository
-// Parameters:
-//   - ctx: Context with authentication and request information
-//
-// Returns:
-//   - interfaces.EntryRepository: Entry repository
 func (s *entryService) GetRepository() interfaces.EntryRepository {
 	return s.repo
 }
@@ -313,29 +297,6 @@ func (s *entryService) ListPagedEntryByLibraryID(ctx context.Context,
 }
 
 // GetEntryFile retrieves the physical file associated with a entry entry
-func (s *entryService) GetEntryFile(ctx context.Context, id string) (io.ReadCloser, string, error) {
-	// Get entry record
-	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
-	entry, err := s.repo.GetEntryByID(ctx, spaceID, id)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if s.vault != nil && entry.VaultOriginalPath != "" {
-		file, err := s.vault.ReadOriginal(entry)
-		return file, entry.FileName, err
-	}
-
-	// Uploaded source bytes take precedence over the immutable parsed body.
-	if entry.FilePath != "" {
-		library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
-		file, err := s.resolveFileServiceForPath(ctx, library, entry.FilePath).GetFile(ctx, entry.FilePath)
-		return file, entry.FileName, err
-	}
-	return s.getEntryBody(ctx, entry)
-}
-
-// GetEntryBody reads the immutable parsed text rather than uploaded bytes.
 func (s *entryService) GetEntryBody(ctx context.Context, id string) (io.ReadCloser, string, error) {
 	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 	entry, err := s.repo.GetEntryByID(ctx, spaceID, id)
@@ -347,9 +308,6 @@ func (s *entryService) GetEntryBody(ctx context.Context, id string) (io.ReadClos
 
 func (s *entryService) getEntryBody(ctx context.Context, entry *types.Entry) (io.ReadCloser, string, error) {
 
-	if entry.ProcessingMode == "summary_only" {
-		return nil, "", errors.New("article stores a summary and original link; parsed body has been removed")
-	}
 	if s.vault != nil && entry.VaultPath != "" {
 		body, err := s.vault.ReadBody(entry)
 		if err != nil {
@@ -395,14 +353,7 @@ func (s *entryService) getEntryBody(ctx context.Context, entry *types.Entry) (io
 		return io.NopCloser(strings.NewReader(content)), filename, nil
 	}
 
-	// Resolve Library-level file service with FilePath fallback protection
-	library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
-	file, err := s.resolveFileServiceForPath(ctx, library, entry.FilePath).GetFile(ctx, entry.FilePath)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return file, entry.FileName, nil
+	return nil, "", werrors.NewNotFoundError("Markdown body is unavailable")
 }
 
 func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) error {

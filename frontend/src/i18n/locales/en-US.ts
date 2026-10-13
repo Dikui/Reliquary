@@ -123,7 +123,7 @@ export default {
   "modelWritten": "Model written",
   "modelWrittenHint": "The body was written by an external tool's model and may differ from the original",
   "incomplete": "Incomplete",
-  "incompleteHint": "Articles and personal documents are missing original files, images or body text. Accept the missing materials on the Pending page, or have an external tool complete them. Resubmit articles with the same original URL and personal documents with the document ID.",
+  "incompleteHint": "Articles and personal documents are missing images. Accept the missing materials on the Pending page, or have an external tool complete them. Resubmit articles with the same original URL and personal documents with the document ID.",
   "acquisitionLabel": "Acquisition",
   "unknownAcquisition": "Not specified",
   "acquisition": {
@@ -133,8 +133,6 @@ export default {
   },
   "missingMaterials": "Missing materials",
   "missingTypes": {
-    "content": "Body",
-    "file": "File",
     "image": "Image"
   },
   "missingSource": "Original address",
@@ -157,22 +155,17 @@ export default {
 },
   knowledgeReview: {
   "incomplete": "Incomplete",
-  "incompleteHint": "Articles and personal documents are saved and searchable, but original files, images or body text are missing. Resubmit articles with the same original URL and personal documents with the document ID. You can also accept the missing materials or discard the content.",
+  "incompleteHint": "Articles and personal documents are saved and searchable, but images are missing. Resubmit articles with the same original URL and personal documents with the document ID. You can also accept the missing materials or discard the content.",
   "emptyIncomplete": "No articles or personal documents need completion.",
   "conflictReason": "The body differs from an existing article",
   "relatedArticle": "Related article",
   "saveAsNew": "Save as a new article",
   "title": "Pending",
   "intake": "Intake review",
-  "processing": "Processing review",
   "intakeHint": "Articles that did not pass intake review stay here. Processing starts after approval.",
-  "processingHint": "These articles are saved in full and searchable. The model is uncertain about their content type. Confirm, correct or ignore the suggestion.",
   "emptyIntake": "No articles need intake review.",
-  "emptyProcessing": "No articles need processing review.",
   "sourceUnverified": "Source unverified",
-  "extractedLink": "Original URL: extracted from file",
-  "modelType": "Model content type",
-  "missingLinkHint": "The original URL is missing, so model review has not run. Add a URL to review again, confirm collection without a URL or convert to a personal document.",
+  "missingLinkHint": "The original URL is missing, so model review has not run. Add a URL to review again, or confirm collection without a URL.",
   "invalidLink": "Enter a valid HTTP or HTTPS original URL.",
   "chooseType": "Choose a content type.",
   "failed": "Review action failed. Try again.",
@@ -181,7 +174,6 @@ export default {
   "actions": {
     "supplement_url": "Add URL and review again",
     "admit_unverified": "Collect without URL",
-    "convert_to_mine": "Convert to personal document",
     "confirm": "Confirm model type",
     "correct": "Use selected type",
     "ignore": "Ignore and remove from list",
@@ -192,10 +184,7 @@ export default {
       "title": "Collect without an original URL?",
       "description": "This article will skip intake review, be saved in full and marked as source unverified. Its original URL will be empty."
     },
-    "convert_to_mine": {
-      "title": "Convert to a personal document?",
-      "description": "The text will be processed as a personal document and saved in full under mine/ with summary, entities and topics. Collection review is skipped. Attachments follow the ingest rules."
-    },
+
     "discard": {
       "title": "Discard this collection?",
       "description": "This intake record and its temporary content will be deleted."
@@ -217,14 +206,10 @@ export default {
   "unstarredOnly": "Unstarred articles",
   "contentType": "Content type",
   "saveContentType": "Save content type",
-  "contentTypeHint": "Your corrected type is preserved when reprocessing. Switching to full text marks the article as incomplete. An external tool must submit the body text using the same URL.",
+  "contentTypeHint": "Your corrected type is preserved when reprocessing. Changing the type preserves the full text and images.",
   "contentTypeSaved": "Content type saved",
   "contentTypeQueued": "Content type saved. Reprocessing the article",
-  "contentTypeIncomplete": "Content type saved. The article is marked as incomplete. An external tool must submit the body text using the same URL.",
   "contentTypeFailed": "The content type was not saved. Try again.",
-  "removeBodyTitle": "Switch to summary and link",
-  "confirmRemoveBody": "Delete body and change type",
-  "removeBodyDescription": "This deletes the saved body, body index and attachments. The article file will contain only its header. The summary, original link and topics remain available. Confirm to continue.",
   "topics": "Topics",
   "saveTopics": "Save topics",
   "noTopics": "No topics selected",
@@ -284,12 +269,8 @@ export default {
   "loadFailed": "Could not load the operation log. Try again.",
   "empty": "No operations match these filters.",
   "types": {
-    "processing_review_confirm": "Confirm processing type",
-    "processing_review_correct": "Correct processing type",
-    "processing_review_ignore": "Ignore processing review",
     "review_supplement_url": "Add URL and review again",
     "review_admit_unverified": "Collect without URL",
-    "review_convert_to_mine": "Convert to personal document",
     "delete_document": "Delete personal document",
     "review_approve": "Approve review",
     "review_reject": "Reject review",
@@ -505,8 +486,8 @@ export default {
     collectReason: 'Collection reason',
     vaultPath: 'Vault path',
     copyVaultPath: 'Copy vault path',
-    contentTypes: {"event":"Event","opinion":"Opinion","research":"Research","tutorial":"Tutorial","case":"Case","reference":"Reference","unclassified":"Unclassified"},
-    processingModes: {"full":"Full text","summary_only":"Summary and link"},
+    contentTypes: {"event":"Event","opinion":"Opinion","research":"Research","tutorial":"Tutorial","case":"Case","reference":"Reference","other":"Other"},
+
     contentTypeFilter: "Content type",
     summaryOverview: "Overview",
     summaryPoints: "Key points",
@@ -536,7 +517,6 @@ export default {
       enabled: 'Enabled',
       fileStorage: 'File storage',
       documentCount: 'Articles',
-      supportedFileTypes: 'Accepted formats',
       chunking: 'Chunking',
       parentShort: 'parent',
       childShort: 'child'
@@ -547,8 +527,6 @@ export default {
 
     searchMessageContent: 'Search article content',
     fileExists: 'File already exists',
-    unsupportedTypesHint: 'Some attachment types ({types}) have no available parser engine. Content must be sent through the Ingest API; include text, as an unparseable attachment alone cannot be ingested.',
-    goToParserSettings: 'Configure',
     urlRequired: 'Please enter a URL',
     invalidURL: 'Please enter a valid URL',
     urlExists: 'This URL already exists',
@@ -599,13 +577,13 @@ export default {
     deleteFailed: 'Delete failed. Please try again later!',
     uploadTime: 'Upload Time',
     rebuildDocument: 'Rebuild Article',
-    rebuildConfirm: 'Rebuild article "{fileName}"? This will clear existing chunks and parse it again.',
+    rebuildConfirm: 'Rebuild article "{fileName}"? This will clear existing chunks and process it again.',
     rebuildSubmitted: 'Rebuild task submitted',
     rebuildFailed: 'Rebuild failed. Please try again later',
-    rebuildInProgress: 'This article is currently being parsed. Please try again later',
-    cancelParse: 'Stop parsing',
-    cancelParseConfirmBody: "Stop parsing \"{title}\"? Saved chunks remain and can be rebuilt later. Pending processing tasks for this article will be cancelled.",
-    cancelParseSubmitted: 'Parsing stopped',
+    rebuildInProgress: 'This article is currently being processed. Please try again later',
+    cancelParse: 'Stop processing',
+    cancelParseConfirmBody: "Stop processing \"{title}\"? Saved chunks remain and can be rebuilt later. Pending processing tasks for this article will be cancelled.",
+    cancelParseSubmitted: 'Processing stopped',
     cancelParseFailed: 'Failed to stop, please try again later',
     draft: 'Draft',
     draftTip: 'Temporarily saved and not included in retrieval',
@@ -614,7 +592,7 @@ export default {
     intakePublisher: 'Publisher',
     intakeOriginalUrl: 'Original URL',
     intakePublishedAt: 'Published at',
-    intakePreviewOriginal: 'Preview original',
+    intakePreviewOriginal: 'Preview Markdown body',
     intakeLoadMore: 'Load more',
     intakeRetry: 'Retry review',
     intakeDiscard: 'Discard',
@@ -624,8 +602,8 @@ export default {
     moreOptions: 'More actions',
     deleteDocument: 'Delete Article',
 
-    parsingFailed: 'Parsing failed',
-    parsingInProgress: 'Parsing...',
+    parsingFailed: 'Processing failed',
+    parsingInProgress: 'Processing...',
     documentSummary: 'Summary',
     detailSectionMeta: 'Basic info',
     confirmDeleteDocument: 'Confirm deletion of article "{fileName}", recovery will be impossible after deletion',
@@ -646,11 +624,11 @@ export default {
     confirmBatchDeleteDocument: 'Delete {count} selected article? This action cannot be undone. | Delete {count} selected articles? This action cannot be undone.',
     batchDeleteSuccess: 'Deleted {count} article | Deleted {count} articles',
     batchDeleteFailed: 'Batch delete failed',
-    confirmBatchReparseDocument: 'Rebuild {count} selected article? Existing content will be cleared and the article will be re-parsed. | Rebuild {count} selected articles? Existing content will be cleared and each article will be re-parsed.',
-    confirmBatchReparse: 'Confirm and reparse',
+    confirmBatchReparseDocument: 'Rebuild {count} selected article? Existing content will be cleared and the article will be reprocessed. | Rebuild {count} selected articles? Existing content will be cleared and each article will be reprocessed.',
+    confirmBatchReparse: 'Confirm and reprocess',
     batchReparseSuccess: 'Submitted {count} rebuild task | Submitted {count} rebuild tasks',
     batchReparseFailed: 'Batch rebuild failed',
-    batchReparseSkippedInFlight: 'Skipped {count} article still being parsed | Skipped {count} articles still being parsed',
+    batchReparseSkippedInFlight: 'Skipped {count} article still being processed | Skipped {count} articles still being processed',
     statusCompleted: 'Completed',
     statusProcessing: 'Processing',
     statusFinalizing: 'Optimizing',
@@ -658,7 +636,6 @@ export default {
     statusCancelled: 'Cancelled',
     statusDraft: 'Draft',
     noDescription: 'No description',
-    parserRecoveryHint: 'No parser engine is available for the selected file types. Use the Docker image, which includes anydoc by default, or run make anydoc-lib locally and start with -tags anydoc, or configure MinerU in parser engine settings.',
     searchPlaceholder: 'Search libraries...',
     docSearchPlaceholder: 'Search article titles...',
     fileTypeFilter: 'File Type',
@@ -690,47 +667,39 @@ export default {
   },
   reparseConfirm: {
     chunking: "Chunking",
-    parseConfig: 'Parse settings',
-    configNav: 'Parse settings navigation',
-    navParserDefault: 'Default',
-    navParserCustomized: 'Customized',
+    parseConfig: 'Processing settings',
+    configNav: 'Processing settings navigation',
     moreOptions: 'More processing options',
     summaryParentChildShort: 'Parent-child',
-    summaryParserForceScanned: 'Scanned mode',
     navChunkingSummary: 'Chunk {size}',
     cancel: 'Cancel',
-    pdfForceScanned: {
-      label: 'Force scanned PDF parsing',
-      description: 'Useful for web-print, scanned, or image-heavy PDFs. Every page will be rendered as an image and processed via OCR/VLM. May increase processing time and model costs.'
-    },
-    titleReparse: 'Confirm reparse',
-    confirmReparse: 'Confirm and reparse',
-    reparseSource: 'Document to reparse',
+    titleReparse: 'Confirm reprocess',
+    confirmReparse: 'Confirm and reprocess',
+    reparseSource: 'Document to reprocess',
     reparseHint: "Reprocess the existing material. Missing body content must be supplied by an external tool through the ingest API.",
   },
   knowledgeStages: {
     title: 'Processing pipeline',
     root: 'Knowledge processing',
     processConfig: {
-      title: 'Parse config for this run',
+      title: 'Processing config for this run',
       libraryDefault: 'Using library defaults',
       chunkSize: 'Chunk size {n}',
       chunking: 'Chunking',
-      parser: 'Parser engine',
       on: 'Enabled',
       off: 'Disabled',
       parentChildOn: 'Parent-child chunking enabled',
       parentChildOff: 'Parent-child chunking disabled',
     },
     attempt: 'Attempt {n}',
-    retry: 'Retry parsing',
+    retry: 'Retry processing',
     refresh: 'Refresh now',
     copy: 'Copy',
     copyDetails: 'Copy details',
     copied: 'Copied to clipboard',
     close: 'Close',
     live: 'LIVE',
-    liveTooltip: 'Parsing in progress — auto-refreshes every 2s',
+    liveTooltip: 'Processing in progress; auto-refreshes every 2s',
     autoRefreshOn: 'Auto-refreshing',
     fetchFailedShort: 'fetch failed',
     viewTrace: 'View trace',
@@ -741,7 +710,7 @@ export default {
     justNow: 'just now',
     secondsAgo: '{n}s ago',
     minutesAgo: '{n}m ago',
-    noActivity: 'No parsing activity yet',
+    noActivity: 'No processing activity yet',
     totalDuration: 'Total: {d}',
     total: 'Total {d}',
     head: {
@@ -784,7 +753,7 @@ export default {
     },
     stage: {
     processing: "Article processing",
-      docreader: 'Document parsing',
+      docreader: 'Prepare Markdown and images',
       chunking: 'Chunking',
       embedding: 'Vectorization',},
     status: {
@@ -800,12 +769,6 @@ export default {
       cancelled: 'Cancelled'
     },
     errorCode: {
-      DOCREADER_TIMEOUT: 'Document parsing timed out',
-      DOCREADER_TIMEOUT_SUGGESTION: 'Try splitting large files and check parser service load before retrying.',
-      DOCREADER_UNAVAILABLE: 'Document parser unavailable',
-      DOCREADER_UNAVAILABLE_SUGGESTION: 'Check the parser configuration for this file type and the service connection.',
-      DOCREADER_PARSE_FAILED: 'Document parsing failed',
-      DOCREADER_PARSE_FAILED_SUGGESTION: 'Check whether the original file is damaged and review the parser service logs.',
       CHUNKING_FAILED: 'Document chunking failed',
       CHUNKING_FAILED_SUGGESTION: 'Check the chunking configuration and try splitting oversized documents before retrying.',
       EMBEDDING_RATE_LIMIT: 'Embedding requests rate limited',
@@ -813,10 +776,10 @@ export default {
       EMBEDDING_PROVIDER_FAIL: 'Embedding model call failed',
       EMBEDDING_PROVIDER_FAIL_SUGGESTION: 'Check the embedding model name, service URL and credentials.',
       VECTORSTORE_WRITE_FAILED: 'Index write failed',
-      VECTORSTORE_WRITE_FAILED_SUGGESTION: 'Check the PostgreSQL connection and database logs, then retry parsing after fixing the issue.',
+      VECTORSTORE_WRITE_FAILED_SUGGESTION: 'Check the PostgreSQL connection and database logs, then retry processing after fixing the issue.',
       TASK_TIMEOUT: 'Processing task retries exhausted',
-      TASK_TIMEOUT_SUGGESTION: 'Review the task error and application logs, fix the cause and retry parsing.',
-      UNKNOWN: 'Parsing failed',
+      TASK_TIMEOUT_SUGGESTION: 'Review the task error and application logs, fix the cause and retry processing.',
+      UNKNOWN: 'Processing failed',
       UNKNOWN_SUGGESTION: 'Check the application logs for details.'
     }
   },
@@ -856,7 +819,7 @@ export default {
       root: 'Root directory',
       rootHint: 'Configured on the server. This value is read-only.',
       mine: 'User documents',
-      mineImportedHint: 'Personal documents are imported through the ingest interface. File changes do not update the index.',
+      mineImportedHint: 'Personal documents are imported through the ingest interface. Resubmit through the ingest interface to update the content.',
       reports: 'Reports',
       lastScan: 'Last scan',
       indexedFiles: 'Indexed files',
@@ -867,7 +830,6 @@ export default {
     },
     librarySettings: 'Library settings',
     modelManagement: 'Model Management',
-    parserEngine: 'Parser Engine',
     versionInfo: 'Version Info',
     taskQueue: 'Runtime queues',
     spaceInfo: 'Workspace Info',
@@ -882,51 +844,7 @@ export default {
     },
     capabilityUnavailable: 'This feature is not supported by the current deployment. You have been returned to an available page.',
     system: 'System Settings',
-    parser: {
-      title: 'Parser Engine',
-      description: 'Document parser engine status and configuration. Settings here take priority over server environment variables. Leave empty to use environment variable defaults.',
-      supportedFileTypes: 'Supported Formats',
-      statusSection: 'Status',
-      configSection: 'Configuration',
-      featuresLabel: 'Features',
-      loading: 'Loading...',
-      retry: 'Retry',
-      noEngineDetected: 'No parser engines were detected. Retry or check the application logs.',
-      disconnected: 'Disconnected',
-      connected: 'Connected',
-      available: 'Available',
-      unavailable: 'Unavailable',
-      currentAddr: 'Current',
-      selfHostedEndpoint: 'Self-hosted Endpoint',
-      formulaRecognition: 'Formula Recognition',
-      tableRecognition: 'Table Recognition',
-      parseMethodLabel: 'PDF Parsing Method',
-      parseMethodAuto: 'Auto-detect (Recommended)',
-      parseMethodOCR: 'Force OCR',
-      parseMethodText: 'Text extraction only',
-      parseMethodHint: 'Auto mode uses OCR for scanned PDFs and extracts the native text layer from digital PDFs.',
-      sealRecognition: 'Seal Recognition',
-      checking: 'Testing connection...',
-      chartRecognition: 'Chart Recognition',
-      language: 'Language',
-      testConnection: 'Test Connection',
-      docs: 'Docs',
-      loadFailed: 'Failed to load parser engine list',
-      checkDoneStatusUpdated: 'Checked with current parameters. Status above has been updated.',
-      checkSuccess: 'Test Connection Successful',
-      checkFailed: 'Check failed',
-      saveSuccess: 'Saved successfully',
-      saveFailed: 'Save failed',
-      mineruEndpointPlaceholder: 'e.g. https://your-mineru.example.com',
-      defaultPipeline: 'Default pipeline',
-      languagePlaceholder: 'e.g. ch, en, ja (default ch)',
-      mineruCloudApiKeyPlaceholder: 'MinerU Cloud API Key',
-      vlmLabel: 'vlm (Visual Language Model)',
-      mineruHtmlLabel: 'MinerU-HTML (HTML Parsing)',
-      serverUrl: 'Server URL',
-      vlmServerUrlPlaceholder: 'e.g. http://your-vllm-server:8000',
-      vlmServerUrlHint: 'Required when Backend is vlm-http-client or hybrid-http-client',
-    },
+
   },
   retrievalSettings: {
     imageWeightLabel: 'Image retrieval weight',
@@ -1071,7 +989,7 @@ export default {
     titleEdit: 'Library Settings',
     navGroups: {
       basic: 'Basics',
-      processing: 'Indexing & Parsing',
+      processing: 'Indexing & Processing',
       data: 'Storage & Data',
       integration: 'Publishing',
       management: 'Management'
@@ -1231,14 +1149,7 @@ export default {
         }
       }
     },
-    advanced: {
-      title: 'Advanced Settings',
-      description: "Set additional instructions for table parsing summaries",
-      tableMetadataInstructions: {
-        label: 'Table Metadata Instructions',
-        description: 'Add business context and field semantics to CSV/Excel summaries for better retrieval',
-        placeholder: 'For example: this is a sales-order table, amounts are in CNY, and status uses internal codes…'
-      },}
+
   },
   space: {
     defaultName: 'Personal workspace',
@@ -1514,9 +1425,9 @@ export default {
             delete: 'Failed to clear record'
           },
           taskTypes: {
-            documentProcess: 'Document parsing',
+            documentProcess: 'Document processing',
             manualProcess: 'Manual reprocessing',
-            batchReparse: 'Batch reparse',
+            batchReparse: 'Batch reprocess',
             batchDelete: 'Batch delete',
 
             indexDelete: 'Index deletion',
@@ -1546,25 +1457,25 @@ export default {
           }
         },
         pools: {
-          core: 'Core parsing',
+          core: 'Core processing',
           enrichment: 'Enrichment',
           maintenance: "Maintenance",
           shared: 'Shared elastic',
         },
         poolDescriptions: {
-          core: 'Guaranteed document and manual parsing capacity',
+          core: 'Guaranteed document and manual processing capacity',
           enrichment: "Rebuild entity name embeddings or all embeddings, or assign historical articles to topics",
           maintenance: "Batch work and deletion cleanup",
           shared: 'Borrowed by core or enrichment according to backlog',
         },
         queueNames: {
-          default: 'Document parsing',
+          default: 'Document processing',
           low: 'Maintenance & batch',
           entity: "Entities",
         },
         queueDescriptions: {
-          default: 'Document parse, manual reparse',
-          low: "Batch reparse and cleanup",
+          default: 'Body processing, manual reprocess',
+          low: "Batch reprocess and cleanup",
           entity: "Rebuild entity name embeddings or all embeddings, or assign historical articles to topics",
         }
       },
@@ -1575,7 +1486,7 @@ export default {
           whitelist: 'SSRF protection allowlist'
         },
         queue: {
-          core_concurrency: 'Guaranteed core parse concurrency',
+          core_concurrency: 'Guaranteed core processing concurrency',
           enrichment_concurrency: 'Guaranteed enrichment concurrency',
           maintenance_concurrency: "Maintenance concurrency",
           shared_concurrency: 'Shared elastic concurrency',
@@ -1591,10 +1502,10 @@ export default {
           whitelist: 'SSRF protection allowlist. Accepts entries such as example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1. Takes effect immediately after saving. The SSRF_WHITELIST_EXTRA environment variable is still maintained by the deployer and is not overridden here.'
         },
         queue: {
-          core_concurrency: 'Guaranteed per-process concurrency for document and manual parsing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
+          core_concurrency: 'Guaranteed per-process concurrency for document and manual processing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
           enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings and assigning historical articles to topics, with shared capacity available. Restart after changing.",
           maintenance_concurrency: "Per-process concurrency for batch work and cleanup, isolated from article processing. Minimum 1; requires a service restart.",
-          shared_concurrency: 'Per-process elastic concurrency shared by core parsing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
+          shared_concurrency: 'Per-process elastic concurrency shared by core processing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
         model: {
           max_concurrency: "Default concurrent background call limit shared by model ID within this process. Read on each call and applied immediately without a restart. Zero or negative disables the default limit; each model retains its own configured limit."
@@ -1917,7 +1828,7 @@ export default {
     description: "Collect, store and retrieve your knowledge",
     rag: 'Knowledge retrieval',
     hybridSearch: 'Hybrid Search',
-    multimodalParsing: 'Multimodal Document Parsing',
+    markdownImageIngest: 'Markdown and image ingest',
     hybridSearchEngine: "Hybrid retrieval",
     ragQandA: "Knowledge retrieval",
     independentSpace: "Personal knowledge management",
@@ -2185,42 +2096,7 @@ export default {
     }
   },
   librarySettings: {
-    parser: {
-      title: 'Parser Engine',
-      description: 'Select document parser engines for different file types. PDF and Office documents use anydoc by default.',
-      loading: 'Loading...',
-      noEngineAvailable: 'No parser engine available, or the document parsing service is not configured.',
-      default: 'Default',
-      goConfig: 'Go to Config →',
-      noEngine: 'No available engine',
-      fileTypePdf: 'PDF Documents',
-      fileTypeWord: 'Word Documents',
-      fileTypePpt: 'Presentations',
-      fileTypeExcel: 'Excel Spreadsheets',
-      fileTypeEbook: 'E-books',
-      fileTypeCsv: 'CSV Files',
-      fileTypeText: 'Plain Text',
-      fileTypeJson: 'JSON Files',
-      fileTypeImage: 'Images',
-      engines: {
-        simple: {
-          name: 'Built-in parser',
-          desc: 'Simple format & image parsing (no external service required)'
-        },
-        anydoc: {
-          name: 'anydoc',
-          desc: 'In-process office document parser (no external service required)'
-        },
-        mineru: {
-          name: 'MinerU',
-          desc: 'MinerU self-hosted service'
-        },
-        mineru_cloud: {
-          name: 'MinerU Cloud',
-          desc: 'MinerU Cloud API'
-        },
-      }
-    }
+
   },
   mermaid: {
     diagram: 'Diagram',

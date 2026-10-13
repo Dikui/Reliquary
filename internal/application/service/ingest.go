@@ -12,15 +12,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var _ interfaces.IngestService = (*entryService)(nil)
@@ -113,7 +114,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 			}
 			return nil, err
 		}
-		if existing.SourceKind != "mine" || (!existing.Incomplete && !ingestMissingContentPending(&existing)) {
+		if existing.SourceKind != "mine" || (!existing.Incomplete) {
 			return nil, werrors.NewBadRequestError("document_id must identify an incomplete user document")
 		}
 		if request.URL != "" && article.NormalizedURL != existing.NormalizedURL {
@@ -129,7 +130,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if existing, err := s.findIngestURL(ctx, article.NormalizedURL, true, kind); err != nil {
 		return nil, err
 	} else if existing != nil {
-		if existing.Incomplete || ingestMissingContentPending(existing) {
+		if existing.Incomplete {
 			return s.supplementIngest(ctx, library, existing, request, keyID, keyName)
 		}
 		if _, err := recordIngestDuplicate(ctx, s.db, existing, article, "url", 0); err != nil {
@@ -140,15 +141,12 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		}
 		return ingestResult(existing, "exists", "该文章已收录。", "", ""), nil
 	}
-	if strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" && (request.File == nil || (request.File.AssetID == "" && request.File.Data == "")) && !hasIngestMissing(request.Missing, "content", "") {
-		return nil, werrors.NewBadRequestError("missing content requires a missing item explaining the reason")
-	}
 	body, canonicalBody, err := s.storeIngestMaterials(ctx, library, article, request)
 	if err != nil {
 		return nil, err
 	}
 	intake, _ = article.IntakeMetadata()
-	if err := extractIntakeOriginalLink(article, body, nil, article.FileType, nil); err != nil {
+	if err := extractIntakeOriginalLink(article, body, nil); err != nil {
 		return nil, err
 	}
 	intake, _ = article.IntakeMetadata()
@@ -183,15 +181,6 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if err := article.SetManualMetadata(types.NewManualEntryMetadata("", types.ManualEntryStatusPublish, 1)); err != nil {
 		return nil, err
 	}
-	missingContent := !hasIngestBody(request, body) || hasIngestMissing(article.IngestMissing(), "content", "")
-	if missingContent {
-		intake.Decision, intake.Reason = "rejected", "正文缺失"
-		article.ParseStatus = types.ParseStatusRejected
-		article.Incomplete = true
-		if err := article.SetIntakeMetadata(intake); err != nil {
-			return nil, err
-		}
-	}
 	if err := s.db.WithContext(ctx).Create(article).Error; err != nil {
 		return nil, err
 	}
@@ -203,9 +192,6 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	s.bindContentResources(ctx, spaceID, article.ID, body)
-	if missingContent {
-		return ingestResult(article, "pending_review", "正文缺失，已保存到收录待审。", intake.Reason, ""), nil
-	}
 	return s.finishIngestReview(ctx, library, article, body)
 }
 
@@ -218,10 +204,10 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 	}
 	var total int64
 	for _, item := range request.Items {
-		total += ingestInlineSize(item.File, item.Images)
+		total += ingestInlineSize(item.Images)
 	}
 	if total > types.MaxIngestInlineRequestBytes {
-		return nil, werrors.NewBadRequestError("inline files exceed the 20 MiB request limit")
+		return nil, werrors.NewBadRequestError("inline images exceed the 20 MiB request limit")
 	}
 	result := &types.IngestBatchResult{Items: make([]types.IngestResult, 0, len(request.Items))}
 	for i := range request.Items {
@@ -311,6 +297,9 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	if request.InputError != "" {
 		return bad(request.InputError)
 	}
+	if strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" || validIngestURL(strings.TrimSpace(request.Content)) {
+		return bad("content is required; convert the source to Markdown before ingestion")
+	}
 	if request.Kind != "" && request.Kind != "article" && request.Kind != "mine" {
 		return bad("kind must be article or mine")
 	}
@@ -334,14 +323,14 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	if len([]rune(strings.TrimSpace(request.Title))) > 255 {
 		return bad("title exceeds 255 characters")
 	}
-	if request.ContentTypeHint != "" && types.NormalizeContentType(request.ContentTypeHint) == "" {
+	if request.ContentTypeHint != "" && !types.IsContentType(request.ContentTypeHint) {
 		return bad("invalid content_type_hint")
 	}
 	if len(request.Images) > 100 {
 		return bad("images supports at most 100 items")
 	}
 	for i, missing := range request.Missing {
-		if missing.Type != "content" && missing.Type != "file" && missing.Type != "image" {
+		if missing.Type != "image" {
 			return bad(fmt.Sprintf("missing[%d] has an invalid type", i))
 		}
 		if strings.TrimSpace(missing.Reason) == "" {
@@ -349,24 +338,6 @@ func validateIngestRequest(request *types.IngestRequest) error {
 		}
 		if missing.SourceURL != "" && !validIngestURL(missing.SourceURL) {
 			return bad(fmt.Sprintf("missing[%d].source_url must be an HTTP or HTTPS URL", i))
-		}
-	}
-	if validIngestURL(strings.TrimSpace(request.Content)) && !hasIngestMissing(request.Missing, "content", "") {
-		return bad("content link requires a corresponding missing explanation")
-	}
-
-	if request.File != nil {
-		file := request.File
-		if file.AssetID != "" && file.Data != "" {
-			return bad("file requires one of asset_id or data")
-		}
-		if file.AssetID == "" && file.Data == "" && !hasIngestMissing(request.Missing, "file", file.SourceURL) {
-			return bad("file link requires a corresponding missing explanation")
-		}
-		if file.Data != "" {
-			if _, err := decodeIngestInline(file.Data); err != nil {
-				return bad(err.Error())
-			}
 		}
 	}
 	for i, image := range request.Images {

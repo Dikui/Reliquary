@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/pgtest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
@@ -25,7 +25,7 @@ func seed(t *testing.T, db *gorm.DB) {
 func seedCurrentNames(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	statements := []string{
-		`INSERT INTO spaces(id,name,business,parser_engine_config,credentials) VALUES(1,'Owner','personal','{"nested":{"mineru_api_key":"PARSER_SECRET","endpoint":"http://localhost"}}','{"app_secret":"SPACE_SECRET"}')`,
+		`INSERT INTO spaces(id,name,business,credentials) VALUES(1,'Owner','personal','{"app_secret":"SPACE_SECRET"}')`,
 		`INSERT INTO users(id,username,email,password_hash,space_id) VALUES('owner','owner','owner@example.test','$2a$10$preserved-owner-password-hash',1)`,
 		`INSERT INTO libraries(id,name,space_id,embedding_model_id,summary_model_id,chunking_config,indexing_strategy) VALUES('library','Personal',1,'embed','chat','{"chunk_size":512,"chunk_overlap":0}','{"keyword_enabled":true,"vector_enabled":true}')`,
 		`INSERT INTO models(id,space_id,name,type,source,parameters) VALUES('chat',1,'chat','KnowledgeQA','remote','{"api_key":"MODEL_SECRET","base_url":"http://user:PASSWORD@example.test/v1?api_key=QUERY_SECRET&normal=kept","nested":{"headers":{"Authorization":"Bearer HEADER_SECRET"},"ordinary":"keep"}}'),('embed',1,'embedding','Embedding','remote','{"dimension":3,"base_url":"http://localhost:19100"}')`,
@@ -34,7 +34,7 @@ func seedCurrentNames(t *testing.T, db *gorm.DB) {
 		`INSERT INTO entity_merge_records(id,space_id,keep_entity_id,merge_entity_id,actor,created_at) VALUES('merge',1,'entity-a','entity-b','owner',now())`,
 		`UPDATE entities SET merged_into_id='entity-a' WHERE id='entity-b'`,
 		`INSERT INTO topics(id,space_id,name,description) VALUES('topic',1,'Maintenance','User topic description')`,
-		`INSERT INTO entries(id,space_id,library_id,type,title,content_type,content_type_corrected,processing_review_status,processing_review_content_type,processing_review_reason,source_unverified,processing_mode,source_kind,source,parse_status,metadata,custom_metadata,collect_reason,agent_summary,agent_tags,vault_body) VALUES('pending',1,'library','manual','Pending source','research',false,'','','',false,'full','article','','rejected','{"manual":{"content":"Original review text"},"intake":{"decision":"rejected","reason":"missing link"}}','{"caller":"Grok"}','collect because useful','Caller summary','["tag"]','Pending original'),('article',1,'library','manual','Research article','research',true,'pending','research','uncertain classification',true,'full','article','','completed','{"intake":{"decision":"approved","source_info":{"publisher":"Publisher"}}}','{}','owner reason','','[]','Immutable body')`,
+		`INSERT INTO entries(id,space_id,library_id,type,title,content_type,content_type_corrected,source_unverified,source_kind,source,parse_status,metadata,custom_metadata,collect_reason,agent_summary,agent_tags,vault_body) VALUES('pending',1,'library','manual','Pending source','research',false,false,'article','','rejected','{"manual":{"content":"Original review text"},"intake":{"decision":"rejected","reason":"missing link"}}','{"caller":"Grok"}','collect because useful','Caller summary','["tag"]','Pending original'),('article',1,'library','manual','Research article','research',true,true,'article','','completed','{"intake":{"decision":"approved","source_info":{"publisher":"Publisher"}}}','{}','owner reason','','[]','Immutable body')`,
 		`INSERT INTO entry_entities(space_id,entry_id,entity_id) VALUES(1,'article','entity-a')`,
 		`INSERT INTO entry_topics(space_id,entry_id,topic_id,source,is_historical) VALUES(1,'article','topic','user',true)`,
 		`INSERT INTO entry_repost_sources(id,space_id,library_id,entry_id,original_url,source_fingerprint,match_method,created_at) VALUES('repost',1,'library','article','https://example.test/repost','abcdef','url',now())`,
@@ -134,7 +134,7 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
 	for _, file := range files {
 		data, err := os.ReadFile(filepath.Join(root, file.Path))
 		require.NoError(t, err)
-		for _, secret := range []string{"MODEL_SECRET", "PARSER_SECRET", "SPACE_SECRET", "PASSWORD", "QUERY_SECRET", "HEADER_SECRET", "RSS_SECRET", "API_HASH_SECRET", "API_SECRET", "CHATGPT_TOKEN_SECRET"} {
+		for _, secret := range []string{"MODEL_SECRET", "SPACE_SECRET", "PASSWORD", "QUERY_SECRET", "HEADER_SECRET", "RSS_SECRET", "API_HASH_SECRET", "API_SECRET", "CHATGPT_TOKEN_SECRET"} {
 			require.NotContains(t, string(data), secret, file.Path)
 		}
 	}
@@ -161,67 +161,6 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
 	require.Equal(t, "active", job.State)
 	require.Equal(t, 2, job.Retried)
 	require.Equal(t, 1, job.FailCount)
-}
-
-func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
-	db := pgtest.Open(t)
-	seed(t, db)
-	root := t.TempDir()
-	writer := NewWriter(db, root, "", 120*time.Millisecond)
-	t.Cleanup(func() { require.NoError(t, writer.Close()) })
-	require.NoError(t, writer.Flush(context.Background()))
-	topicPath := filepath.Join(root, ".reliquary/data/topics.json")
-	previousTopic := mustRead(t, topicPath)
-	require.NoError(t, db.Exec("UPDATE topics SET description=? WHERE id='topic'", strings.Repeat("changed", 8)).Error)
-	for i := 0; i < 20; i++ {
-		writer.Schedule()
-	}
-	require.Equal(t, previousTopic, mustRead(t, topicPath), "trailing debounce must defer changes")
-	require.Eventually(t, func() bool {
-		data, _ := os.ReadFile(filepath.Join(root, ".reliquary/data/topics.json"))
-		return bytes.Contains(data, []byte(strings.Repeat("changed", 8)))
-	}, 5*time.Second, 25*time.Millisecond)
-	require.NoError(t, writer.Start())
-	logPath := filepath.Join(root, ".reliquary/operation_logs.jsonl")
-	require.NoError(t, writer.Flush(context.Background()))
-	before := mustRead(t, logPath)
-	oldInfo, err := os.Stat(logPath)
-	require.NoError(t, err)
-	// Each class changes through raw SQL, exercising the periodic fallback too.
-	for _, statement := range []string{`UPDATE entities SET description='new description' WHERE id='entity-a'`, `UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`, `UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`, `UPDATE entry_topics SET source='model' WHERE topic_id='topic'`, `UPDATE follow_feed_states SET last_viewed_at=now()`, `UPDATE entries SET processing_review_reason='new review', content_type_corrected=false WHERE id='article'`, `UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`, `UPDATE entry_repost_sources SET author='new author'`, `UPDATE models SET display_name='renamed model'`, `INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`} {
-		require.NoError(t, db.Exec(statement).Error)
-	}
-	require.Eventually(t, func() bool {
-		snapshot, err := Capture(context.Background(), db)
-		if err != nil {
-			return false
-		}
-		files, err := replicaFiles(snapshot)
-		if err != nil {
-			return false
-		}
-		for path, wanted := range files {
-			actual, err := os.ReadFile(filepath.Join(root, ".reliquary", path))
-			if err != nil || !bytes.Equal(wanted, actual) {
-				return false
-			}
-		}
-		return true
-	}, 5*time.Second, 25*time.Millisecond)
-	require.NoError(t, writer.Flush(context.Background()))
-	after := mustRead(t, logPath)
-	require.True(t, bytes.HasPrefix(after, before))
-	newInfo, err := os.Stat(logPath)
-	require.NoError(t, err)
-	require.True(t, os.SameFile(oldInfo, newInfo))
-	require.NoError(t, writer.Flush(context.Background()))
-	require.Equal(t, after, mustRead(t, logPath))
-	temp, err := filepath.Glob(filepath.Join(root, ".reliquary", "data", "*.tmp"))
-	require.NoError(t, err)
-	require.Empty(t, temp)
-	require.NoError(t, db.Exec("UPDATE operation_logs SET actor='tampered' WHERE id='op-1'").Error)
-	require.ErrorContains(t, writer.Flush(context.Background()), "was modified")
-	require.NoError(t, db.Exec("UPDATE operation_logs SET actor='owner' WHERE id='op-1'").Error)
 }
 
 func TestReplicaTamperingStopsLoadAndVerify(t *testing.T) {
@@ -258,7 +197,7 @@ func TestScrubRemovesNestedSecretsPausesModelsAndKeepsOriginalDatabase(t *testin
 	require.NoError(t, err)
 	data, err := json.Marshal(snapshot)
 	require.NoError(t, err)
-	for _, secret := range []string{"MODEL_SECRET", "PARSER_SECRET", "SPACE_SECRET", "QUERY_SECRET", "RSS_SECRET", "CHATGPT_TOKEN_SECRET", "API_SECRET"} {
+	for _, secret := range []string{"MODEL_SECRET", "SPACE_SECRET", "QUERY_SECRET", "RSS_SECRET", "CHATGPT_TOKEN_SECRET", "API_SECRET"} {
 		require.NotContains(t, string(data), secret)
 	}
 	var modelStatus string
@@ -322,4 +261,65 @@ func mustRead(t *testing.T, path string) []byte {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return data
+}
+
+func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
+	db := pgtest.Open(t)
+	seed(t, db)
+	root := t.TempDir()
+	writer := NewWriter(db, root, "", 120*time.Millisecond)
+	t.Cleanup(func() { require.NoError(t, writer.Close()) })
+	require.NoError(t, writer.Flush(context.Background()))
+	topicPath := filepath.Join(root, ".reliquary/data/topics.json")
+	previousTopic := mustRead(t, topicPath)
+	require.NoError(t, db.Exec("UPDATE topics SET description=? WHERE id='topic'", strings.Repeat("changed", 8)).Error)
+	for i := 0; i < 20; i++ {
+		writer.Schedule()
+	}
+	require.Equal(t, previousTopic, mustRead(t, topicPath), "trailing debounce must defer changes")
+	require.Eventually(t, func() bool {
+		data, _ := os.ReadFile(filepath.Join(root, ".reliquary/data/topics.json"))
+		return bytes.Contains(data, []byte(strings.Repeat("changed", 8)))
+	}, 5*time.Second, 25*time.Millisecond)
+	require.NoError(t, writer.Start())
+	logPath := filepath.Join(root, ".reliquary/operation_logs.jsonl")
+	require.NoError(t, writer.Flush(context.Background()))
+	before := mustRead(t, logPath)
+	oldInfo, err := os.Stat(logPath)
+	require.NoError(t, err)
+	// Each class changes through raw SQL, exercising the periodic fallback too.
+	for _, statement := range []string{`UPDATE entities SET description='new description' WHERE id='entity-a'`, `UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`, `UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`, `UPDATE entry_topics SET source='model' WHERE topic_id='topic'`, `UPDATE follow_feed_states SET last_viewed_at=now()`, `UPDATE entries SET content_type_corrected=false WHERE id='article'`, `UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`, `UPDATE entry_repost_sources SET author='new author'`, `UPDATE models SET display_name='renamed model'`, `INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`} {
+		require.NoError(t, db.Exec(statement).Error)
+	}
+	require.Eventually(t, func() bool {
+		snapshot, err := Capture(context.Background(), db)
+		if err != nil {
+			return false
+		}
+		files, err := replicaFiles(snapshot)
+		if err != nil {
+			return false
+		}
+		for path, wanted := range files {
+			actual, err := os.ReadFile(filepath.Join(root, ".reliquary", path))
+			if err != nil || !bytes.Equal(wanted, actual) {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 25*time.Millisecond)
+	require.NoError(t, writer.Flush(context.Background()))
+	after := mustRead(t, logPath)
+	require.True(t, bytes.HasPrefix(after, before))
+	newInfo, err := os.Stat(logPath)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(oldInfo, newInfo))
+	require.NoError(t, writer.Flush(context.Background()))
+	require.Equal(t, after, mustRead(t, logPath))
+	temp, err := filepath.Glob(filepath.Join(root, ".reliquary", "data", "*.tmp"))
+	require.NoError(t, err)
+	require.Empty(t, temp)
+	require.NoError(t, db.Exec("UPDATE operation_logs SET actor='tampered' WHERE id='op-1'").Error)
+	require.ErrorContains(t, writer.Flush(context.Background()), "was modified")
+	require.NoError(t, db.Exec("UPDATE operation_logs SET actor='owner' WHERE id='op-1'").Error)
 }

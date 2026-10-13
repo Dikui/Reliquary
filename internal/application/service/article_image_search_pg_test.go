@@ -5,9 +5,10 @@ import (
 	"slices"
 	"testing"
 
+	"reliquary/internal/types"
+
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/types"
 )
 
 func enableImageSearchFixture(t *testing.T, h *entrySearchFixture) {
@@ -74,14 +75,14 @@ func TestArticleImageSearchRejectsOldModelAndWrongDimensionAndHonorsFilters(t *t
 		addImageSearchVector(t, h, article, fmt.Sprintf("../../attachments/%s/image.png", article.ID), test.model, test.vector)
 	}
 	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchBool(false)})
-	require.Equal(t, []string{"current", "personal"}, entrySearchIDs(response))
+	require.Equal(t, []string{"current", "personal", "summary"}, entrySearchIDs(response))
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", ContentTypes: []string{"event"}})
 	require.Empty(t, response.Results)
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", Sources: []string{"mine"}})
 	require.Equal(t, []string{"personal"}, entrySearchIDs(response))
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id='current'").Update("enable_status", "disabled").Error)
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
-	require.Equal(t, []string{"personal"}, entrySearchIDs(response))
+	require.Equal(t, []string{"personal", "summary"}, entrySearchIDs(response))
 }
 
 func TestArticleImageSearchKeepsMatchedImageAlongsideHigherScoringText(t *testing.T) {

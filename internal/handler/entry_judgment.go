@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (h *EntryHandler) ListPending(c *gin.Context) {
@@ -39,34 +40,6 @@ func (h *EntryHandler) ListPending(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result.Data, "total": result.Total, "page": result.Page, "page_size": result.PageSize})
 }
 
-func (h *EntryHandler) ResolveProcessingReview(c *gin.Context) {
-	var input struct {
-		Action            string `json:"action"`
-		ContentType       string `json:"content_type"`
-		ConfirmRemoveBody bool   `json:"confirm_remove_body"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(werrors.NewBadRequestError("invalid processing review request"))
-		return
-	}
-	editor, ok := h.kgService.(interface {
-		ResolveProcessingReview(context.Context, string, string, string, bool) (*types.Entry, error)
-	})
-	if !ok {
-		c.Error(werrors.NewInternalServerError("processing review unavailable"))
-		return
-	}
-	item, err := editor.ResolveProcessingReview(c.Request.Context(), c.Param("id"), input.Action, input.ContentType, input.ConfirmRemoveBody)
-	if err != nil {
-		if writeChatGPTSynchronousPause(c, err) {
-			return
-		}
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
-}
-
 func (h *EntryHandler) SetStarred(c *gin.Context) {
 	var input struct {
 		Starred *bool `json:"starred"`
@@ -92,21 +65,20 @@ func (h *EntryHandler) SetStarred(c *gin.Context) {
 
 func (h *EntryHandler) CorrectContentType(c *gin.Context) {
 	var input struct {
-		ContentType       string `json:"content_type"`
-		ConfirmRemoveBody bool   `json:"confirm_remove_body"`
+		ContentType string `json:"content_type"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.Error(werrors.NewBadRequestError("content_type is required"))
 		return
 	}
 	editor, ok := h.kgService.(interface {
-		CorrectContentType(context.Context, string, string, bool) (*types.Entry, error)
+		CorrectContentType(context.Context, string, string) (*types.Entry, error)
 	})
 	if !ok {
 		c.Error(werrors.NewInternalServerError("article editing unavailable"))
 		return
 	}
-	item, err := editor.CorrectContentType(c.Request.Context(), c.Param("id"), input.ContentType, input.ConfirmRemoveBody)
+	item, err := editor.CorrectContentType(c.Request.Context(), c.Param("id"), input.ContentType)
 	if err != nil {
 		if writeChatGPTSynchronousPause(c, err) {
 			return

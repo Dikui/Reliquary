@@ -1,14 +1,12 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/types"
 )
@@ -126,152 +124,6 @@ func TestBuildSplitterConfigFromChunking_UsesEffectiveChunkingConfig(t *testing.
 	require.Equal(t, 1500, cfg.ChunkSize)
 	require.Equal(t, 120, cfg.ChunkOverlap)
 	require.Equal(t, "character", cfg.Strategy)
-}
-
-func TestEffectiveChunkingConfig_ResolveParserEngineFromOverrides(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{
-		ChunkingConfig: types.ChunkingConfig{
-			ParserEngineRules: []types.ParserEngineRule{
-				{FileTypes: []string{"pdf"}, Engine: "anydoc"},
-			},
-		},
-	}
-	overrides := &types.EntryProcessOverrides{
-		ParserEngineRules: []types.ParserEngineRule{
-			{FileTypes: []string{"pdf"}, Engine: "mineru"},
-			{
-				FileTypes: []string{"xlsx", "xls"},
-				Engine:    "anydoc",
-			},
-		},
-	}
-	eff := ResolveProcessConfig(library, overrides)
-	require.Equal(t, "mineru", eff.ChunkingConfig.ResolveParserEngine("pdf"))
-	xlsxRule := eff.ChunkingConfig.ResolveParserEngineRule("xlsx")
-	require.NotNil(t, xlsxRule)
-	require.Equal(t, "anydoc", xlsxRule.Engine)
-}
-
-func TestResolveProcessConfig_ParserEngineRulesReplaced(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{
-		ChunkingConfig: types.ChunkingConfig{
-			ParserEngineRules: []types.ParserEngineRule{
-				{FileTypes: []string{"pdf"}, Engine: "anydoc"},
-			},
-		},
-	}
-	overrides := &types.EntryProcessOverrides{
-		ParserEngineRules: []types.ParserEngineRule{
-			{FileTypes: []string{"docx"}, Engine: "custom"},
-		},
-	}
-	eff := ResolveProcessConfig(library, overrides)
-	require.Len(t, eff.ChunkingConfig.ParserEngineRules, 1)
-	require.Equal(t, []string{"docx"}, eff.ChunkingConfig.ParserEngineRules[0].FileTypes)
-	require.Equal(t, "custom", eff.ChunkingConfig.ParserEngineRules[0].Engine)
-}
-
-func TestResolveProcessConfig_PreservesLibraryPromptInstructions(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{
-		ChunkingConfig: types.ChunkingConfig{TableMetadataInstructions: "table context"},
-	}
-	overrides := &types.EntryProcessOverrides{
-		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 256},
-	}
-
-	eff := ResolveProcessConfig(library, overrides)
-	require.Equal(t, "table context", eff.ChunkingConfig.TableMetadataInstructions)
-}
-
-func TestValidateProcessOverrides_RejectsOversizedInstructions(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{}
-	overrides := &types.EntryProcessOverrides{ChunkingConfig: &types.ChunkingConfig{TableMetadataInstructions: strings.Repeat("a", types.MaxCustomPromptInstructionsLength+1)}}
-	err := ValidateProcessOverrides(context.Background(), library, overrides, []string{"txt"})
-	require.Error(t, err)
-	var badReq *werrors.AppError
-	require.ErrorAs(t, err, &badReq)
-}
-
-func TestValidateProcessOverrides_NilOverrides(t *testing.T) {
-	t.Parallel()
-
-	err := ValidateProcessOverrides(context.Background(), &types.Library{}, nil, []string{"png"})
-	require.NoError(t, err)
-}
-
-func TestValidateProcessOverrides_NonMediaFileTypes(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{}
-	err := ValidateProcessOverrides(context.Background(), library, &types.EntryProcessOverrides{}, []string{"pdf", "txt"})
-	require.NoError(t, err)
-}
-
-func TestResolveFileImportProcessConfig_SpreadsheetAllowedWithoutOverrides(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{ChunkingConfig: types.ChunkingConfig{ChunkSize: 512}}
-	for _, ext := range []string{"xlsx", "xls", "csv"} {
-		eff, err := resolveFileImportProcessConfig(context.Background(), library, ext, nil, nil)
-		require.NoErrorf(t, err, "ext=%s", ext)
-		require.Equal(t, 512, eff.ChunkingConfig.ChunkSize)
-	}
-}
-
-func TestResolveFileImportProcessConfig_RejectsUnsupportedAndUndeterminable(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{}
-	for _, ext := range []string{"exe", "mp4", "", unknownFileType} {
-		_, err := resolveFileImportProcessConfig(context.Background(), library, ext, nil, nil)
-		require.Errorf(t, err, "ext=%s should be rejected", ext)
-	}
-}
-
-// ApplyEntryProcessOverrides stays scoped to overrides: import-time file
-// type gating belongs to resolveFileImportProcessConfig, so callers that pass
-// no overrides (reparse, connector sync) keep their existing behaviour.
-func TestApplyEntryProcessOverrides_NoOverridesSkipsImportGate(t *testing.T) {
-	t.Parallel()
-
-	library := &types.Library{}
-	entry := &types.Entry{}
-	_, err := ApplyEntryProcessOverrides(context.Background(), library, entry, nil, []string{"png"}, nil)
-	require.NoError(t, err)
-}
-
-func TestMergeParserEngineOverrides(t *testing.T) {
-	t.Parallel()
-
-	// 1. Both nil/empty
-	merged := MergeParserEngineOverrides(nil, nil)
-	require.Empty(t, merged)
-
-	// 2. Space only
-	merged = MergeParserEngineOverrides(map[string]string{"k1": "v1"}, nil)
-	require.Equal(t, map[string]string{"k1": "v1"}, merged)
-
-	// 3. Upload only
-	merged = MergeParserEngineOverrides(nil, map[string]string{"k2": "v2"})
-	require.Equal(t, map[string]string{"k2": "v2"}, merged)
-
-	// 4. Overlap priority (upload override should take priority over space config)
-	space := map[string]string{"k1": "space_val", "k2": "v2"}
-	upload := map[string]string{"k1": "upload_val", "k3": "v3"}
-	merged = MergeParserEngineOverrides(space, upload)
-	require.Equal(t, map[string]string{
-		"k1": "upload_val",
-		"k2": "v2",
-		"k3": "v3",
-	}, merged)
 }
 
 func TestBuildParentChildConfigs_PropagatesStrategy(t *testing.T) {

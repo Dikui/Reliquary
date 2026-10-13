@@ -30,7 +30,7 @@ const (
 	SpanStatusRunning   = "running"
 	SpanStatusDone      = "done"
 	SpanStatusFailed    = "failed"
-	SpanStatusSkipped   = "skipped"   // intentionally not run (e.g. embeddings for summary-only articles)
+	SpanStatusSkipped   = "skipped"   // intentionally not run (e.g. disabled embeddings)
 	SpanStatusCancelled = "cancelled" // not run because an upstream span failed
 )
 

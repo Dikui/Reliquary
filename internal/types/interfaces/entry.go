@@ -33,8 +33,6 @@ type EntryService interface {
 	DeleteEntry(ctx context.Context, id string) error
 	// DeleteEntryList deletes multiple entry entries by IDs.
 	DeleteEntryList(ctx context.Context, ids []string) error
-	// GetEntryFile retrieves the file associated with the entry.
-	GetEntryFile(ctx context.Context, id string) (io.ReadCloser, string, error)
 	// GetEntryBody retrieves the immutable parsed text.
 	GetEntryBody(ctx context.Context, id string) (io.ReadCloser, string, error)
 	ReviewEntryIntake(ctx context.Context, id, action string, sourceInfo types.SourceInfo) (*types.Entry, error)

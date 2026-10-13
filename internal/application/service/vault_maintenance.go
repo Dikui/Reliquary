@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -71,9 +70,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			return result, err
 		}
 		body := []byte(article.VaultBody)
-		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.SourceKind != "mine" {
-			body = nil
-		}
+
 		expected := append(RenderVaultArticleHeader(header), body...)
 		if readErr != nil || !bytes.Equal(actual, expected) {
 			if repair {
@@ -85,19 +82,8 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 				result.Differences = append(result.Differences, article.VaultPath+": article file differs from database")
 			}
 		}
-		if article.VaultOriginalPath != "" {
-			path, err := vaultAbsolute(v.root, article.VaultOriginalPath)
-			if err != nil {
-				return result, err
-			}
-			if original, err := os.ReadFile(path); err != nil {
-				result.Differences = append(result.Differences, article.VaultOriginalPath+": "+err.Error())
-			} else if article.Type == "file" && len(article.FileHash) == 32 && fmt.Sprintf("%x", md5.Sum(original)) != article.FileHash {
-				result.Differences = append(result.Differences, article.VaultOriginalPath+": original attachment hash differs")
-			}
-		}
+
 		if article.SourceKind == "mine" {
-			v.verifyPersonalAttachments(&article, result)
 		}
 		for _, reference := range articleImagePaths(&article) {
 			reader, err := v.ReadImage(&article, reference)
@@ -199,43 +185,6 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 	return result, nil
 }
 
-func (v *VaultService) verifyPersonalAttachments(document *types.Entry, result *maintenance.Verification) {
-	seen := map[string]bool{}
-	for _, attachment := range document.IngestAttachmentRecords() {
-		if seen[attachment.Path] {
-			continue
-		}
-		seen[attachment.Path] = true
-		if !isArticleAttachmentReference(document.ID, document.VaultPath, attachment.Path) {
-			result.Differences = append(result.Differences, document.VaultPath+": invalid personal attachment: "+attachment.Path)
-			continue
-		}
-		relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(document.VaultPath)), filepath.FromSlash(attachment.Path))))
-		path, err := vaultAbsolute(v.root, relative)
-		if err != nil {
-			result.Differences = append(result.Differences, relative+": "+err.Error())
-			continue
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			result.Differences = append(result.Differences, relative+": "+err.Error())
-			continue
-		}
-		if !info.Mode().IsRegular() {
-			result.Differences = append(result.Differences, relative+": personal attachment must be a regular file")
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			result.Differences = append(result.Differences, relative+": "+err.Error())
-			continue
-		}
-		if attachment.Size > 0 && int64(len(data)) != attachment.Size {
-			result.Differences = append(result.Differences, relative+": personal attachment size differs")
-		}
-	}
-}
-
 func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuildResult, error) {
 	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
 	_, err := maintenance.Import(ctx, s.db, s.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), func(row map[string]any) error {
@@ -280,9 +229,7 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 				return fmt.Errorf("article header %s differs from replica field %s", path, key)
 			}
 		}
-		if header.ProcessingMode == types.ProcessingModeSummaryOnly && row["source_kind"] != "mine" {
-			body = nil
-		}
+
 		if row["source_kind"] == "mine" {
 			if original, present := row["vault_body"]; present && original != string(body) {
 				return fmt.Errorf("personal document body differs from replica: %s", path)
@@ -334,9 +281,7 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		} else {
 			result.Reports++
 		}
-		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.SourceKind == "article" {
-			continue
-		}
+
 		if err := s.indexVaultChunks(ctx, &indexing, article, body); err != nil {
 			return result, err
 		}

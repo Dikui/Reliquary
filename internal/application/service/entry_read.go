@@ -15,7 +15,6 @@ type EntryReadResult struct {
 	Header           VaultArticleHeader `json:"header"`
 	Body             string             `json:"body"`
 	OriginalURL      string             `json:"original_url"`
-	ProcessingMode   string             `json:"processing_mode"`
 	ParseStatus      string             `json:"parse_status"`
 	SourceUnverified bool               `json:"source_unverified"`
 	Acquisition      string             `json:"acquisition"`
@@ -54,13 +53,7 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
 	result := &EntryReadResult{Header: header, OriginalURL: header.URL,
-		ProcessingMode: entry.ProcessingMode, ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
-	if entry.ProcessingMode == "summary_only" {
-		if offset > 0 {
-			return nil, werrors.NewBadRequestError("offset exceeds the stored body length")
-		}
-		return result, nil
-	}
+		ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
 	reader, _, err := s.GetEntryBody(ctx, id)
 	if err != nil {
 		return nil, err
@@ -100,22 +93,15 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 	if len(kinds) > 0 {
 		kind = kinds[0]
 	}
-	if kind != "" && kind != "intake" && kind != "processing" {
-		return nil, werrors.NewBadRequestError("kind must be intake or processing")
+	if kind != "" && kind != "intake" {
+		return nil, werrors.NewBadRequestError("kind must be intake")
 	}
 	library, err := s.libraryService.GetLibrary(ctx)
 	if err != nil {
 		return nil, err
 	}
 	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND library_id=? AND source_kind IN ('article','mine')", library.SpaceID, library.ID)
-	switch kind {
-	case "intake":
-		query = query.Where("parse_status=?", types.ParseStatusRejected)
-	case "processing":
-		query = query.Where("processing_review_status='pending' AND parse_status=?", types.ParseStatusCompleted)
-	default:
-		query = query.Where("parse_status=? OR (processing_review_status='pending' AND parse_status=?)", types.ParseStatusRejected, types.ParseStatusCompleted)
-	}
+	query = query.Where("parse_status=?", types.ParseStatusRejected)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err

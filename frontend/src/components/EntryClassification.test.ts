@@ -93,55 +93,16 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       }
     }
   })
-  test(`${locale}: cards and rows render the content type, mode, three summary sections and relations`, async () => {
-    for (const path of ['../views/library/components/DocumentCardView.vue', '../views/library/components/DocumentListView.vue']) {
-      const html = await render(component(path, listModules), { ...props, items: [article] }, locale)
-      for (const text of [copy.contentTypes.event, copy.processingModes.full, copy.summaryOverview, copy.summaryPoints, copy.summaryKeyTerms, article.structured_summary.overview, ...article.structured_summary.points, 'Example Company', 'Product releases']) assert.ok(html.includes(text), `${path}: ${text}`)
-      assert.match(html, /<button[^>]*type="button"[^>]*>Example Company<\/button>/)
-    }
-  })
-  test(`${locale}: unclassified summary-only articles show a safe original link`, async () => {
-    const html = await render(classification, { entry: { ...article, content_type: '', processing_mode: 'summary_only', source: 'https://example.com/tutorial' } }, locale)
-    assert.ok(html.includes(copy.contentTypes.unclassified)); assert.ok(html.includes(copy.processingModes.summary_only))
-    assert.match(html, /href="https:\/\/example.com\/tutorial"/)
-    const unsafe = await render(classification, { entry: { ...article, processing_mode: 'summary_only', source: 'javascript:alert(1)' } }, locale)
-    assert.ok(unsafe.includes(copy.originalLinkMissing)); assert.doesNotMatch(unsafe, /href="javascript:/)
-  })
-  test(`${locale}: document details hide removed body and queue reprocessing with readable errors`, async () => {
-    const requests: string[] = []; const notifications: string[] = []
-    const modules = {
-      marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } }, 'marked-katex-extension': { __esModule: true, default: () => ({}) }, 'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
-      'tdesign-vue-next': { MessagePlugin: { success: (text: string) => notifications.push(text), error: (text: string) => notifications.push(text) } },
-      '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 25, reprocessEntry: async (id: string) => { requests.push(id); return { success: true, data: { parse_status: 'pending' } } } },
-      '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/DocumentPreview.vue': emptyModule,
-      '@/utils/clipboard': { copyWithToast() {} },
-      '@/components/MissingMaterials.vue': emptyModule, '@/components/IncompleteActions.vue': emptyModule,
-      '@/components/ReviewActions.vue': reviewModule, '@/components/EntryArticleJudgments.vue': emptyModule, '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/views/library/components/RepostSources.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
-    }
-    const detail = component('./DocContent.vue', modules)
-    const html = await render(detail, { visible: true, details: { ...article, processing_mode: 'summary_only', source: 'https://example.com/tutorial' } }, locale)
-    assert.ok(html.includes(copy.reprocess)); assert.ok(html.includes(article.structured_summary.overview)); assert.ok(html.includes('https://example.com/tutorial'))
-    assert.doesNotMatch(html, /class="[^\"]*doc-content-section/)
-    const failed = await render(detail, { visible: true, details: { ...article, parse_status: 'failed', error_message: 'Cannot fetch original article: HTTP 404' } }, locale)
-    assert.match(failed, /role="alert"[^>]*>Cannot fetch original article: HTTP 404/)
-    const rejected = await render(detail, { visible: true, details: { ...article, parse_status: 'rejected', metadata: { intake: { source: 'url', decision: 'rejected', source_info: { original_url: 'https://example.com/article' } } } } }, locale)
-    for (const text of [messages[locale].articleJudgments.approveReview, messages[locale].articleJudgments.rejectReview, copy.intakeRetry, copy.intakeDiscard]) assert.ok(rejected.includes(text))
-    const setup = detail.setup
-    detail.setup = (props: object, context: object) => {
-      const state = setup(props, context)
-      onServerPrefetch(async () => { await state.reprocess(); await nextTick(); state.stopProcessingPolling() })
-      return state
-    }
-    await render(detail, { visible: true, details: { ...article } }, locale)
-    assert.deepEqual(requests, ['article']); assert.deepEqual(notifications, [copy.reprocessQueued])
-  })
+
+
+
 }
-test('content type filters retain all six types and unclassified articles', () => {
+test('content type filters retain all seven content types articles', () => {
   const page = readFileSync(new URL('../views/library/Library.vue', import.meta.url), 'utf8')
   const api = readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8')
   assert.match(page, /v-model="selectedContentType"/)
   assert.match(page, /content_type: selectedContentType\.value/)
-  assert.match(page, /CONTENT_TYPES, 'unclassified'/)
+  assert.match(page, /CONTENT_TYPES\.map/)
   assert.match(api, /query\.append\('content_type', params\.content_type\)/)
   assert.match(page, /@openEntity="openArticleEntity"/)
   assert.match(page, /:initial-entity-id="selectedEntityId"/)

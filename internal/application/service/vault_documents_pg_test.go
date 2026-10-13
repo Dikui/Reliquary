@@ -12,17 +12,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
-	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/vaultpath"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type vaultRecordingEmbedder struct {
@@ -280,141 +280,6 @@ func vaultFileHashes(t *testing.T, root string) map[string]string {
 		return nil
 	}))
 	return result
-}
-
-func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFiles(t *testing.T) {
-	h := newArticleProcessingHarness(t, false)
-	root := t.TempDir()
-	vault, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 20 * time.Millisecond}})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, vault.Close()) })
-	h.service.SetVault(vault)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "产品研究", Description: "Original topic description"})
-	require.NoError(t, err)
-	h.processor.output = articleProcessingOutput(t, "research", []types.EntityCandidate{{Name: "研究实体", EntityType: "company"}}, []string{topic.ID})
-	full := h.upload(t, "全文 中文", "# 全文中文\n\nrebuildfixture original research body")
-	require.NoError(t, h.db.Model(full).Updates(map[string]interface{}{"starred": true, "collect_reason": "保留实验结果"}).Error)
-	require.NoError(t, vault.RefreshHeader(h.ctx, full.ID))
-	full = h.article(t, full.ID)
-	h.processor.output = validProcessingFixture("tutorial")
-	summary := h.upload(t, "摘要 中文", "# 教程\n\nsummaryfixture explains reusable instructions")
-	summarySource, err := summary.IntakeMetadata()
-	require.NoError(t, err)
-	summarySource.SourceInfo.Author = summarySource.SourceInfo.Publisher
-	require.NoError(t, summary.SetIntakeMetadata(summarySource))
-	require.NoError(t, h.db.Save(summary).Error)
-	require.NoError(t, vault.RefreshHeader(h.ctx, summary.ID))
-	summary = h.article(t, summary.ID)
-	summaryFile, err := os.ReadFile(filepath.Join(root, summary.VaultPath))
-	require.NoError(t, err)
-	require.NotContains(t, string(summaryFile), "\nauthor:", "author matching the publisher is omitted")
-	documents, err := NewVaultDocumentService(h.db, h.service.modelService, h.service.retrieveEngine, root)
-	require.NoError(t, err)
-	mine := filepath.Join(root, "mine", "personal.md")
-	personalHeader := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "本人文档", CollectedAt: time.Now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano), ContentType: "tutorial", ProcessingMode: types.ProcessingModeFull, Summary: &types.EntrySummary{Overview: "Personal tutorial", Points: []string{"Personal procedure"}, KeyTerms: []string{"Document"}}}
-	personalBody := "# 本人文档\n\npersonalfixture first-hand notes"
-	require.NoError(t, os.WriteFile(mine, append(RenderVaultArticleHeader(personalHeader), []byte(personalBody)...), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "mine", "hand-placed.md"), []byte("# Hand placed personal document"), 0644))
-	report, err := documents.CreateReport(h.ctx, "汇总", "# 汇总\n\nreportrebuildfixture retained synthesis", []string{full.ID})
-	require.NoError(t, err)
-	bad := filepath.Join(root, "articles", "broken.md")
-	require.NoError(t, os.WriteFile(bad, []byte("---\nid: [unterminated\n---\nbody"), 0o644))
-	before := vaultFileHashes(t, root)
-	// Use a fresh real PostgreSQL database with the same configured infrastructure.
-	fresh := newRetainedIntakeHarness(t)
-	fresh.library.ModelTiers = h.library.ModelTiers
-	fresh.library.EmbeddingModelID = h.library.EmbeddingModelID
-	fresh.library.IndexingStrategy = h.library.IndexingStrategy
-	require.NoError(t, fresh.db.Save(fresh.library).Error)
-	r := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(fresh.db))
-	rebuild, err := NewVaultDocumentService(fresh.db, h.service.modelService, r, root)
-	require.NoError(t, err)
-	result, err := rebuild.Rebuild(fresh.ctx)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.Articles)
-	require.EqualValues(t, 1, result.Mine)
-	require.EqualValues(t, 1, result.Reports)
-	require.Len(t, result.Skipped, 2)
-	require.Equal(t, "articles/broken.md", result.Skipped[0].Path)
-	require.Equal(t, "mine/hand-placed.md", result.Skipped[1].Path)
-	var restoredPersonal types.Entry
-	require.NoError(t, fresh.db.Where("id=?", personalHeader.ID).First(&restoredPersonal).Error)
-	require.Equal(t, "mine", restoredPersonal.SourceKind)
-	require.Equal(t, types.ProcessingModeFull, restoredPersonal.ProcessingMode)
-	require.Equal(t, personalBody, restoredPersonal.VaultBody)
-	require.Equal(t, personalHeader.Summary, restoredPersonal.StructuredSummary)
-	require.Equal(t, before, vaultFileHashes(t, root))
-	freshVault, err := NewVaultService(fresh.db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 20 * time.Millisecond}})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, freshVault.Close()) })
-	require.NoError(t, freshVault.RefreshHeader(fresh.ctx, restoredPersonal.ID))
-	require.Equal(t, before, vaultFileHashes(t, root), "refreshing a restored personal header preserves every file byte")
-	for _, original := range []*types.Entry{full, summary} {
-		var restored types.Entry
-		require.NoError(t, fresh.db.Where("id=?", original.ID).First(&restored).Error)
-		require.Equal(t, original.Title, restored.Title)
-		require.Equal(t, original.ContentType, restored.ContentType)
-		require.True(t, restored.ContentTypeCorrected, "a header cannot reveal whether its type was corrected by the user")
-		require.Equal(t, original.ProcessingMode, restored.ProcessingMode)
-		require.Equal(t, original.StructuredSummary, restored.StructuredSummary)
-		require.Equal(t, original.Description, restored.Description)
-		var articleVectors int64
-		require.NoError(t, fresh.db.Table("article_embeddings").Where("entry_id=?", restored.ID).Count(&articleVectors).Error)
-		require.EqualValues(t, 1, articleVectors, "both full and summary-only articles restore their summary vector")
-		require.Equal(t, original.Starred, restored.Starred)
-		require.Equal(t, original.CollectReason, restored.CollectReason)
-		require.Equal(t, original.VaultPath, restored.VaultPath)
-		require.Equal(t, original.VaultBody, restored.VaultBody)
-		require.Equal(t, original.VaultOriginalPath, restored.VaultOriginalPath)
-		require.NotEmpty(t, restored.NormalizedURL)
-		if restored.VaultOriginalPath != "" {
-			require.Equal(t, "file", restored.Type)
-			require.Equal(t, original.FileType, restored.FileType)
-			require.Equal(t, strings.TrimPrefix(filepath.Base(restored.VaultOriginalPath), "original-"), restored.FileName)
-		}
-		if restored.ProcessingMode == types.ProcessingModeFull {
-			require.NotEmpty(t, restored.ContentHash)
-			require.Positive(t, restored.ContentRuneCount)
-		}
-		originalSource, err := original.IntakeMetadata()
-		require.NoError(t, err)
-		restoredSource, err := restored.IntakeMetadata()
-		require.NoError(t, err)
-		require.Equal(t, originalSource.SourceInfo, restoredSource.SourceInfo)
-		var chunks int64
-		require.NoError(t, fresh.db.Model(&types.Chunk{}).Where("entry_id=?", restored.ID).Count(&chunks).Error)
-		if restored.ProcessingMode == types.ProcessingModeSummaryOnly {
-			require.Zero(t, chunks)
-		} else {
-			require.Positive(t, chunks)
-		}
-		require.NoError(t, freshVault.RefreshHeader(fresh.ctx, restored.ID))
-		require.Equal(t, before, vaultFileHashes(t, root), "refreshing a rebuilt header preserves every file byte")
-	}
-	var topics []string
-	require.NoError(t, fresh.db.Table("topics").Joins("JOIN entry_topics links ON links.topic_id=topics.id").Where("links.entry_id=?", full.ID).Pluck("topics.name", &topics).Error)
-	require.Equal(t, []string{topic.Name}, topics)
-	var restoredTopicLinks []types.EntryTopic
-	require.NoError(t, fresh.db.Where("entry_id=?", full.ID).Find(&restoredTopicLinks).Error)
-	require.Len(t, restoredTopicLinks, 1)
-	require.Equal(t, types.TopicSourceUser, restoredTopicLinks[0].Source, "recovery conservatively preserves every topic selection")
-	require.NoError(t, NewTopicService(fresh.db).ReplaceEntryTopics(fresh.ctx, full.ID, nil))
-	var restoredTopicCount int64
-	require.NoError(t, fresh.db.Model(&types.EntryTopic{}).Where("entry_id=?", full.ID).Count(&restoredTopicCount).Error)
-	require.EqualValues(t, 1, restoredTopicCount, "later model output cannot erase recovered topics")
-	var entities []string
-	require.NoError(t, fresh.db.Table("entities").Joins("JOIN entry_entities links ON links.entity_id=entities.id").Where("links.entry_id=?", full.ID).Pluck("entities.canonical_name", &entities).Error)
-	require.Equal(t, []string{"研究实体"}, entities)
-	for _, query := range []struct{ id, term string }{{full.ID, "rebuildfixture"}, {summary.ID, "Original"}} {
-		hits, err := r.Retrieve(fresh.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{fresh.library.ID}, EntryIDs: []string{query.id}, Query: query.term, TopK: 10}})
-		require.NoError(t, err)
-		require.NotEmpty(t, hits)
-	}
-	var restoredReport types.Entry
-	require.NoError(t, fresh.db.Where("vault_path=?", report.VaultPath).First(&restoredReport).Error)
-	require.Contains(t, string(restoredReport.Metadata), full.ID)
-	_, err = rebuild.Rebuild(fresh.ctx)
-	require.ErrorContains(t, err, "empty entry database")
 }
 
 func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T) {

@@ -1,4 +1,4 @@
-.PHONY: help build run reset-password test clean docker-build-app docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend anydoc-lib build-anydoc
+.PHONY: help build run reset-password test clean docker-build-app docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend
 
 # Show help
 help:
@@ -10,8 +10,6 @@ help:
 	@echo "  reset-password    从标准输入重置唯一用户密码"
 	@echo "  test              运行测试"
 	@echo "  test-pg           运行含 PostgreSQL 集成用例的测试（设置 RELIQUARY_TEST_PG_DSN）"
-	@echo "  anydoc-lib        构建 anydoc 静态库（需要 Rust 工具链）"
-	@echo "  build-anydoc      构建带 anydoc 解析引擎的应用"
 	@echo "  clean             清理构建文件"
 	@echo ""
 	@echo "Docker 命令:"
@@ -30,7 +28,6 @@ help:
 	@echo "镜像构建:"
 	@echo "  build-images      从源码构建所有镜像"
 	@echo "  build-images-app  从源码构建应用镜像"
-	@echo "  从源码构建文档读取器镜像"
 	@echo "  build-images-frontend  从源码构建前端镜像"
 	@echo "  clean-images      清理本地镜像"
 	@echo ""
@@ -56,7 +53,6 @@ help:
 	@echo "  dev-logs          查看开发环境日志"
 	@echo "  dev-status        查看开发环境状态"
 	@echo "  dev-app           启动后端应用（本地运行，需先运行 dev-start）"
-	@echo "                    已 make anydoc-lib 时自动链接 anydoc 引擎"
 	@echo "  dev-frontend      启动前端（本地运行，需先运行 dev-start）"
 	@echo ""
 
@@ -82,15 +78,6 @@ endif
 # Build the application
 build:
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
-
-# Build the anydoc static archive (Rust) that the `anydoc` build tag links.
-# Override the platform with TARGET=<rust-target-triple>.
-anydoc-lib:
-	./scripts/build-anydoc-lib.sh
-
-# Build the application with the in-process anydoc parser engine linked in.
-build-anydoc: anydoc-lib
-	go build -tags anydoc -o $(BINARY_NAME) $(MAIN_PATH)
 
 # Run the application
 run: build
@@ -126,7 +113,6 @@ docker-build-app:
 		--build-arg COMMIT_ID_ARG="$$COMMIT_ID" \
 		--build-arg BUILD_TIME_ARG="$$BUILD_TIME" \
 		--build-arg GO_VERSION_ARG="$$GO_VERSION" \
-		--build-arg WITH_ANYDOC=$${WITH_ANYDOC:-1} \
 		-f docker/Dockerfile.app -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
 # Build frontend Docker image
@@ -232,8 +218,6 @@ deps:
 	go mod download
 
 # Build for production
-# GO_BUILD_TAGS adds optional build tags, e.g. GO_BUILD_TAGS=anydoc to link the
-# in-process office document parser (run `make anydoc-lib` first).
 build-prod:
 	VERSION=$$(git describe --tags --abbrev=0 2>/dev/null || echo "$${VERSION:-unknown}"); \
 	COMMIT_ID=$${COMMIT_ID:-unknown}; \
@@ -245,10 +229,6 @@ build-prod:
 	LDFLAGS="-X 'reliquary/internal/handler.Version=$$VERSION' -X 'reliquary/internal/handler.Edition=standard' -X 'reliquary/internal/handler.CommitID=$$COMMIT_ID' -X 'reliquary/internal/handler.BuildTime=$$BUILD_TIME' -X 'reliquary/internal/handler.GoVersion=$$GO_VERSION'"; \
 	go build -tags "$(GO_BUILD_TAGS)" -ldflags="-w -s $$LDFLAGS" -o $(BINARY_NAME) $(MAIN_PATH)
 
-
-# Fetch the spatial extension used to inspect Excel files during intake.
-download_spatial:
-	go run cmd/download/duckdb/duckdb.go
 
 clean-db:
 	@echo "Cleaning database..."

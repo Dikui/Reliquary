@@ -44,6 +44,7 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 	{
 		kRead.GET("/pending", handler.ListPending)
 		kRead.GET("/batch", handler.GetEntryBatch)
+		kRead.GET("/:id/body", g.LibraryExistsFromEntryIDParam("id"), handler.ReadEntryBody)
 		kRead.GET("/:id", g.LibraryExistsFromEntryIDParam("id"), handler.GetEntry)
 		kRead.GET("/:id/stages", g.LibraryExistsFromEntryIDParam("id"), handler.GetEntrySpans)
 		kRead.GET("/:id/spans", g.LibraryExistsFromEntryIDParam("id"), handler.GetEntrySpans)
@@ -55,9 +56,6 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 		k.POST("/:id/reparse", g.LibraryExistsFromEntryIDParam("id"), handler.ReparseEntry)
 		k.POST("/:id/cancel-parse", g.LibraryExistsFromEntryIDParam("id"), handler.CancelEntryParse)
 		k.POST("/:id/review", g.LibraryExistsFromEntryIDParam("id"), handler.ReviewEntryIntake)
-		k.POST("/:id/processing-review", g.LibraryExistsFromEntryIDParam("id"), handler.ResolveProcessingReview)
-		kRead.GET("/:id/download", g.LibraryExistsFromEntryIDParam("id"), handler.DownloadEntryFile)
-		kRead.GET("/:id/preview", g.LibraryExistsFromEntryIDParam("id"), handler.PreviewEntryFile)
 		kRead.GET("/search", handler.SearchEntry)
 		k.POST("/batch-reparse", handler.BatchReparseEntry)
 		k.POST("/batch-delete", handler.BatchDeleteEntry)

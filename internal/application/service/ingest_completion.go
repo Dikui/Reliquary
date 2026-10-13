@@ -5,24 +5,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"math/bits"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"gorm.io/gorm"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/types"
-)
 
-func ingestMissingContentPending(k *types.Entry) bool {
-	intake, _ := k.IntakeMetadata()
-	return intake != nil && intake.Decision == "rejected" && intake.Reason == "正文缺失"
-}
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
 
 func ingestComparableBody(body string) string {
 	if i := strings.Index(body, "\n\n## 图片\n"); i >= 0 {
@@ -54,58 +47,21 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 	if err != nil {
 		return nil, err
 	}
-	summarySupplement := article.VaultPath != "" && article.ProcessingMode == types.ProcessingModeSummaryOnly
-	replaceContent := hasIngestMissing(beforeMissing, "content", "")
 	suppliedContent := strings.TrimSpace(request.Content) != "" && !validIngestURL(strings.TrimSpace(request.Content))
-	if suppliedContent && !replaceContent && !sameIngestBody(oldBody, request.Content) {
+	if suppliedContent && !sameIngestBody(oldBody, request.Content) {
 		return s.storeIngestConflict(ctx, library, article, request, keyID, keyName)
 	}
 
 	files := s.resolveFileService(ctx, library)
 	remaining := []types.IngestMissing{}
 	mappings := map[string]string{}
-	links := []string{}
-	attachments := article.IngestAttachmentRecords()
 	intake, _ := article.IntakeMetadata()
 	newBody := oldBody
 	changed := false
 	usedImages := map[int]bool{}
-	usedFile := false
 	for _, missing := range beforeMissing {
 		resolved := false
 		switch missing.Type {
-		case "content":
-			if suppliedContent {
-				copy := *request
-				copy.Images = nil
-				copy.File = nil
-				copy.Missing = nil
-				newBody = assembleIngestBody(&copy, nil)
-				resolved, changed = true, true
-			} else if request.File != nil && (request.File.AssetID != "" || request.File.Data != "") {
-				asset, data, err := s.readIngestFile(ctx, request.File)
-				if err != nil {
-					return nil, err
-				}
-				parsed, err := s.parseIngestDocument(ctx, asset, data)
-				if err != nil {
-					return nil, werrors.NewBadRequestError("attachment could not be parsed locally: " + err.Error())
-				}
-				if parsed != nil && strings.TrimSpace(parsed.MarkdownContent) != "" {
-					body, images, err := docparser.NewImageResolver().ResolveAndStore(ctx, parsed, files, article.SpaceID)
-					if err != nil {
-						return nil, err
-					}
-					newBody = body
-					for _, image := range images {
-						intake.Images = append(intake.Images, image.ServingURL)
-						if err := rememberIngestStoredFile(ctx, files, image.ServingURL); err != nil {
-							return nil, err
-						}
-					}
-					resolved, changed = true, true
-				}
-			}
 		case "image":
 			for i, image := range request.Images {
 				if usedImages[i] || ingestImageSource(image) != missing.SourceURL || (image.AssetID == "" && image.Data == "") {
@@ -130,7 +86,7 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 					return nil, werrors.NewBadRequestError(err.Error())
 				}
 				ref := ""
-				if s.vault != nil && article.VaultPath != "" && !summarySupplement {
+				if s.vault != nil && article.VaultPath != "" {
 					ref, err = s.vault.StoreArticleAttachment(article, name, data)
 					if err != nil {
 						return nil, err
@@ -160,40 +116,6 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 				usedImages[i], resolved, changed = true, true, true
 				break
 			}
-		case "file":
-			if !usedFile && request.File != nil && (request.File.AssetID != "" || request.File.Data != "") {
-				asset, data, err := s.readIngestFile(ctx, request.File)
-				if err != nil {
-					return nil, err
-				}
-				ref := ""
-				if s.vault != nil && article.VaultPath != "" && !summarySupplement {
-					ref, err = s.vault.StoreArticleAttachment(article, asset.Name, data)
-					if err != nil {
-						return nil, err
-					}
-					if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {
-						changes.vaultFiles = append(changes.vaultFiles, ingestVaultFile{article, ref})
-					}
-				} else {
-					ref, err = files.SaveBytes(ctx, data, article.SpaceID, asset.Name, false)
-					if err != nil {
-						return nil, err
-					}
-					if err := rememberIngestStoredFile(ctx, files, ref); err != nil {
-						return nil, err
-					}
-				}
-				label := strings.NewReplacer("[", "\\[", "]", "\\]", "\n", " ").Replace(asset.Name)
-				links = append(links, fmt.Sprintf("[%s](<%s>)", label, ref))
-				attachments = append(attachments, types.IngestAttachment{AssetID: asset.ID, Name: asset.Name, Type: asset.Type, Path: ref, SourceURL: request.File.SourceURL, Size: int64(len(data))})
-				if request.File.AssetID != "" {
-					if err := s.referenceIngestAsset(ctx, request.File.AssetID, article.ID); err != nil {
-						return nil, err
-					}
-				}
-				usedFile, resolved, changed = true, true, true
-			}
 		}
 		if !resolved {
 			remaining = append(remaining, missing)
@@ -202,100 +124,10 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 	if !changed && article.ExternalCompletionAttempted {
 		return ingestResult(article, "exists", "已记录本次材料，文章仍等待用户补全。", "", ""), nil
 	}
-	// A file submitted to restore missing content is also retained as original
-	// material. Existing nonmissing attachments remain untouched.
-	if replaceContent && changed && !hasIngestMissing(remaining, "content", "") && request.File != nil && (request.File.AssetID != "" || request.File.Data != "") && !usedFile {
-		asset, data, err := s.readIngestFile(ctx, request.File)
-		if err != nil {
-			return nil, err
-		}
-		path, err := files.SaveBytes(ctx, data, article.SpaceID, asset.Name, false)
-		if err != nil {
-			return nil, err
-		}
-		if err := rememberIngestStoredFile(ctx, files, path); err != nil {
-			return nil, err
-		}
-		article.FilePath, article.FileName, article.FileType, article.FileSize = path, asset.Name, asset.Type, int64(len(data))
-		ref := path
-		if s.vault != nil && article.VaultPath != "" && !summarySupplement {
-			ref, err = s.vault.StoreArticleAttachment(article, asset.Name, data)
-			if err != nil {
-				return nil, err
-			}
-			if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {
-				changes.vaultFiles = append(changes.vaultFiles, ingestVaultFile{article, ref})
-			}
-			article.VaultOriginalPath = filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(article.VaultPath), ref)))
-			links = append(links, fmt.Sprintf("[%s](<%s>)", strings.NewReplacer("[", "\\[", "]", "\\]", "\n", " ").Replace(asset.Name), ref))
-		}
-		attachments = append(attachments, types.IngestAttachment{AssetID: asset.ID, Name: asset.Name, Type: asset.Type, Path: ref, SourceURL: request.File.SourceURL, Size: int64(len(data))})
-		if request.File.AssetID != "" {
-			if err := s.referenceIngestAsset(ctx, request.File.AssetID, article.ID); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if replaceContent && changed && !hasIngestMissing(remaining, "content", "") {
-		article.Acquisition = request.Acquisition
-		// First-body publication needs local image files before the body becomes
-		// final. Resolution uses supplied bytes exclusively.
-		resolved, stored, err := docparser.NewImageResolver().ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: newBody}, files, article.SpaceID)
-		if err != nil {
-			return nil, err
-		}
-		newBody = resolved
-		for _, image := range stored {
-			intake.Images = append(intake.Images, image.ServingURL)
-			if err := rememberIngestStoredFile(ctx, files, image.ServingURL); err != nil {
-				return nil, err
-			}
-		}
-		if s.vault != nil && article.VaultPath != "" && !summarySupplement {
-			for _, source := range articleImagesInOrder(newBody, nil) {
-				if !strings.HasPrefix(source, "local://") && !strings.HasPrefix(source, "resource://") {
-					continue
-				}
-				reader, err := s.resolveFileServiceForPath(ctx, library, source).GetFile(ctx, source)
-				if err != nil {
-					return nil, err
-				}
-				data, readErr := io.ReadAll(reader)
-				reader.Close()
-				if readErr != nil {
-					return nil, readErr
-				}
-				name := "image.png"
-				if ext := filepath.Ext(source); ext != "" {
-					name = "image" + ext
-				}
-				ref, err := s.vault.StoreArticleAttachment(article, name, data)
-				if err != nil {
-					return nil, err
-				}
-				if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {
-					changes.vaultFiles = append(changes.vaultFiles, ingestVaultFile{article, ref})
-				}
-				newBody = replaceIngestImageTargets(newBody, map[string]string{source: ref})
-			}
-		}
-		if ingestMissingContentPending(article) {
-			if intake.SourceInfo.Author == "" {
-				intake.SourceInfo.Author = request.Author
-			}
-			if intake.SourceInfo.Publisher == "" {
-				intake.SourceInfo.Publisher = request.Publisher
-			}
-			if intake.SourceInfo.PublishedAt == "" {
-				intake.SourceInfo.PublishedAt = normalizeIntakePublicationDate(request.PublishedAt)
-			}
-		}
-	}
 	newBody = replaceIngestImageTargets(newBody, mappings)
-	newBody = AppendIngestAttachmentLinks(newBody, links)
 	remaining = addRemoteIngestImageMissing(newBody, remaining, keyID, keyName)
-	if s.vault != nil && article.VaultPath != "" && !summarySupplement && changed {
-		change, err := s.vault.BeginArticleSupplement(ctx, article, newBody, mappings, links, replaceContent)
+	if s.vault != nil && article.VaultPath != "" && changed {
+		change, err := s.vault.BeginArticleSupplement(ctx, article, newBody, mappings)
 		if err != nil {
 			return nil, err
 		}
@@ -318,37 +150,14 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 		intake.OriginalPath = path
 	}
 	article.Incomplete = len(remaining) > 0
-	if summarySupplement && changed && !article.Incomplete {
-		metadata := map[string]json.RawMessage{}
-		if len(article.Metadata) > 0 {
-			if err := json.Unmarshal(article.Metadata, &metadata); err != nil {
-				return nil, err
-			}
-		}
-		metadata["completion_pending"] = json.RawMessage("true")
-		article.Metadata, err = json.Marshal(metadata)
-		if err != nil {
-			return nil, err
-		}
-	}
 	article.ExternalCompletionAttempted = article.Incomplete
 	article.LastIngestAPIKeyID, article.LastIngestAPIKeyName = keyID, keyName
 	if err := article.SetIngestMissing(remaining); err != nil {
 		return nil, err
 	}
-	if err := article.SetIngestAttachments(attachments); err != nil {
-		return nil, err
-	}
+
 	if err := article.SetIntakeMetadata(intake); err != nil {
 		return nil, err
-	}
-	pendingContent := ingestMissingContentPending(article)
-	if pendingContent && !hasIngestMissing(remaining, "content", "") {
-		intake.Decision, intake.Reason = "pending", ""
-		article.ParseStatus, article.ErrorMessage = types.ParseStatusPending, ""
-		if err := article.SetIntakeMetadata(intake); err != nil {
-			return nil, err
-		}
 	}
 	if err := s.persistIngestCompletion(ctx, article); err != nil {
 		return nil, err
@@ -357,14 +166,6 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 		return nil, err
 	}
 	s.bindContentResources(ctx, article.SpaceID, article.ID, newBody)
-	if pendingContent && !hasIngestMissing(remaining, "content", "") {
-		result, err := s.finishIngestReview(ctx, library, article, newBody)
-		if err == nil && result.Status == "accepted" {
-			result.Status = "supplemented"
-			result.Message = "已补入正文，正在处理。"
-		}
-		return result, err
-	}
 	if !article.Incomplete && changed {
 		article.ParseStatus, article.ErrorMessage = types.ParseStatusPending, ""
 		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", article.ID, article.SpaceID).Updates(map[string]any{"parse_status": article.ParseStatus, "error_message": "", "updated_at": time.Now()}).Error; err != nil {
@@ -383,9 +184,9 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 func (s *entryService) persistIngestCompletion(ctx context.Context, k *types.Entry) error {
 	return s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(map[string]any{
 		"incomplete": k.Incomplete, "external_completion_attempted": k.ExternalCompletionAttempted,
-		"missing_materials": k.MissingMaterials, "ingest_attachments": k.IngestAttachments,
+		"missing_materials":      k.MissingMaterials,
 		"last_ingest_api_key_id": k.LastIngestAPIKeyID, "last_ingest_api_key_name": k.LastIngestAPIKeyName,
-		"metadata": k.Metadata, "vault_body": k.VaultBody, "vault_original_path": k.VaultOriginalPath, "acquisition": k.Acquisition, "file_path": k.FilePath, "file_name": k.FileName, "file_type": k.FileType, "file_size": k.FileSize, "parse_status": k.ParseStatus, "error_message": k.ErrorMessage, "updated_at": time.Now(),
+		"metadata": k.Metadata, "vault_body": k.VaultBody, "acquisition": k.Acquisition, "file_path": k.FilePath, "file_name": k.FileName, "file_type": k.FileType, "file_size": k.FileSize, "parse_status": k.ParseStatus, "error_message": k.ErrorMessage, "updated_at": time.Now(),
 	}).Error
 }
 

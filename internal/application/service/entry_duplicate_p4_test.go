@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestP4MessageURLNormalization(t *testing.T) {
@@ -213,54 +214,6 @@ func TestP4SameBodyInDifferentLibrariesKeepsSeparateOwners(t *testing.T) {
 	require.EqualValues(t, 2, count)
 	require.NoError(t, db.Model(&types.EntryRepostSource{}).Count(&count).Error)
 	require.Zero(t, count)
-}
-
-func TestP4ConcurrentPendingParserDuplicatesKeepOneOwner(t *testing.T) {
-	db := pgtest.Open(t)
-	svc := &entryService{db: db, repo: repository.NewEntryRepository(db)}
-	created := time.Now().UTC().Truncate(time.Microsecond)
-	messages := []types.Entry{
-		{ID: "pending-a", SpaceID: 1, LibraryID: "library", Type: "file", ParseStatus: "pending", CreatedAt: created},
-		{ID: "pending-b", SpaceID: 1, LibraryID: "library", Type: "file", ParseStatus: "pending", CreatedAt: created},
-	}
-	for i := range messages {
-		require.NoError(t, messages[i].SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{OriginalURL: "https://example.com/report", Publisher: messages[i].ID}}))
-		setMessageFingerprint(&messages[i], "")
-		require.NoError(t, db.Create(&messages[i]).Error)
-	}
-	type result struct {
-		incoming *types.Entry
-		owner    *types.Entry
-		err      error
-	}
-	results := make(chan result, 2)
-	for i := range messages {
-		go func(message *types.Entry) {
-			owner, err := svc.checkMessageDuplicate(context.Background(), message, "A complete original body shared by the two pending parsers.")
-			results <- result{incoming: message, owner: owner, err: err}
-		}(&messages[i])
-	}
-	// Both fingerprint transactions finish before either cleanup can delete a
-	// row, reproducing the vulnerable interval between detection and deletion.
-	completed := []result{<-results, <-results}
-	duplicates := 0
-	for _, item := range completed {
-		require.NoError(t, item.err)
-		if item.owner != nil {
-			duplicates++
-			require.Equal(t, "pending-a", item.owner.ID)
-			require.Equal(t, "pending-b", item.incoming.ID)
-			require.NoError(t, svc.stopDuplicateProcessing(context.Background(), item.incoming))
-		}
-	}
-	require.Equal(t, 1, duplicates)
-	var remaining []types.Entry
-	require.NoError(t, db.Find(&remaining).Error)
-	require.Len(t, remaining, 1)
-	require.Equal(t, "pending-a", remaining[0].ID)
-	reposts, err := loadEntryRepostSources(db, 1, []string{remaining[0].ID}, nil)
-	require.NoError(t, err)
-	require.Len(t, reposts, 1)
 }
 
 func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {

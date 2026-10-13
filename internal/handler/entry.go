@@ -5,16 +5,14 @@ import (
 	"encoding/json"
 	goerrors "errors"
 	"fmt"
-	"io"
-	"mime"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	taskqueue "reliquary/internal/queue"
+
+	"github.com/gin-gonic/gin"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
@@ -531,13 +529,11 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		value := raw == "true"
 		filter.Starred = &value
 	}
-	if filter.ContentType != "" && filter.ContentType != "unclassified" && types.NormalizeContentType(filter.ContentType) == "" {
+	if filter.ContentType != "" && !types.IsContentType(filter.ContentType) {
 		c.Error(errors.NewBadRequestError("invalid content_type"))
 		return
 	}
-	if filter.ContentType != "unclassified" {
-		filter.ContentType = types.NormalizeContentType(filter.ContentType)
-	}
+
 	if raw := c.Query("start_time"); raw != "" {
 		t, err := parseFilterTime(raw)
 		if err != nil {
@@ -847,130 +843,12 @@ func (h *EntryHandler) ClearLibraryContents(c *gin.Context) {
 }
 
 // DownloadEntryFile godoc
-func (h *EntryHandler) DownloadEntryFile(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	logger.Info(ctx, "Start downloading entry file")
-
-	id := secutils.SanitizeForLog(c.Param("id"))
-	if id == "" {
-		logger.Error(ctx, "Entry ID is empty")
-		c.Error(errors.NewBadRequestError("Entry ID cannot be empty"))
-		return
-	}
-
-	_, effCtx, err := h.resolveEntryAndValidateLibraryAccess(c, id)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	logger.Infof(ctx, "Retrieving entry file, ID: %s", secutils.SanitizeForLog(id))
-
-	file, filename, err := h.kgService.GetEntryFile(effCtx, id)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError("Failed to retrieve file").WithDetails(err.Error()))
-		return
-	}
-	defer file.Close()
-
-	logger.Infof(
-		ctx,
-		"Entry file retrieved successfully, ID: %s, filename: %s",
-		secutils.SanitizeForLog(id),
-		secutils.SanitizeForLog(filename),
-	)
-
-	// Set response headers for file download
-	c.Header("Content-Description", "File Transfer")
-	c.Header("Content-Transfer-Encoding", "binary")
-	cd := mime.FormatMediaType("attachment", map[string]string{"filename": filename})
-	c.Header("Content-Disposition", cd)
-	c.Header("Content-Type", mimeTypeByExt(filename))
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("Expires", "0")
-	c.Header("Cache-Control", "must-revalidate")
-	c.Header("Pragma", "public")
-
-	// Stream file content to response
-	c.Stream(func(w io.Writer) bool {
-		if _, err := io.Copy(w, file); err != nil {
-			logger.Errorf(ctx, "Failed to send file: %v", err)
-			return false
-		}
-		logger.Debug(ctx, "File sending completed")
-		return false
-	})
-}
-
-// mimeTypeByExt returns the MIME type for a given file extension.
 func mimeTypeByExt(filename string) string {
 	ct, _ := secutils.SafeContentTypeByFilename(filename)
 	return ct
 }
 
 // PreviewEntryFile godoc
-func (h *EntryHandler) PreviewEntryFile(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	id := secutils.SanitizeForLog(c.Param("id"))
-	if id == "" {
-		c.Error(errors.NewBadRequestError("Entry ID cannot be empty"))
-		return
-	}
-
-	entry, effCtx, err := h.resolveEntryAndValidateLibraryAccess(c, id)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	file, filename, err := h.kgService.GetEntryFile(effCtx, id)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError("Failed to retrieve file").WithDetails(err.Error()))
-		return
-	}
-	defer file.Close()
-	// ServeContent needs a seeker for byte ranges. Keep the temporary copy local
-	// to this response; the stored source remains the authoritative original.
-	tmp, err := os.CreateTemp("", "reliquary-preview-*")
-	if err != nil {
-		c.Error(errors.NewInternalServerError("Failed to prepare preview").WithDetails(err.Error()))
-		return
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	defer tmp.Close()
-	if _, err := io.Copy(tmp, file); err != nil {
-		c.Error(errors.NewInternalServerError("Failed to prepare preview").WithDetails(err.Error()))
-		return
-	}
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		c.Error(errors.NewInternalServerError("Failed to prepare preview").WithDetails(err.Error()))
-		return
-	}
-
-	contentType, inline := secutils.SafeContentTypeByFilename(filename)
-	c.Header("Content-Type", contentType)
-	c.Header("X-Content-Type-Options", "nosniff")
-	disposition := "inline"
-	if !inline {
-		disposition = "attachment"
-	}
-	c.Header("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
-	c.Header("Cache-Control", "private, max-age=3600")
-	if entry.IsManual() && entry.VaultPath == "" {
-		// Editable sources share a preview URL across saves. Reopening must
-		// read the latest body instead of a previously cached draft response.
-		c.Header("Cache-Control", "no-store")
-	}
-
-	http.ServeContent(c.Writer, c.Request, filename, time.Now(), tmp)
-}
-
-// ReviewEntryIntake retries a rejected intake after correcting source
-// evidence, or removes it when the user discards it.
 func (h *EntryHandler) ReviewEntryIntake(c *gin.Context) {
 	id := secutils.SanitizeForLog(c.Param("id"))
 	if id == "" {

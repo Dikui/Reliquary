@@ -107,31 +107,31 @@ check_docker() {
         log_error "未安装Docker，请先安装Docker"
         return 1
     fi
-    
+
     if ! detect_compose_cmd; then
         log_error "未检测到 Docker Compose"
         return 1
     fi
-    
+
     if ! docker info &> /dev/null; then
         log_error "Docker服务未运行"
         return 1
     fi
-    
+
     return 0
 }
 
 # 启动基础设施服务
 start_services() {
     log_info "启动开发环境基础设施服务..."
-    
+
     check_docker
     if [ $? -ne 0 ]; then
         return 1
     fi
 
     cd "$PROJECT_ROOT"
-    
+
     # 检查 .env 文件
     if [ ! -f ".env" ]; then
         log_error ".env 文件不存在，请先创建"
@@ -149,7 +149,7 @@ start_services() {
         log_info "接下来: make dev-app（本地后端）或 make dev-frontend（前端）"
         return 0
     fi
-    
+
     # 解析额外参数
     shift  # 移除 "start" 命令本身
     while [ $# -gt 0 ]; do
@@ -169,7 +169,7 @@ start_services() {
         echo ""
         log_info "服务访问地址:"
         echo "  - PostgreSQL:    localhost:5432"
-        
+
         echo ""
         log_info "接下来的步骤:"
         printf "%b\n" "${YELLOW}1. 在新终端运行后端:${NC} make dev-app"
@@ -184,15 +184,15 @@ start_services() {
 # 停止服务
 stop_services() {
     log_info "停止开发环境服务..."
-    
+
     check_docker
     if [ $? -ne 0 ]; then
         return 1
     fi
-    
+
     cd "$PROJECT_ROOT"
     "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD -f docker-compose.dev.yml down
-    
+
     if [ $? -eq 0 ]; then
         log_success "所有服务已停止"
         return 0
@@ -271,61 +271,21 @@ check_remote_dev_connectivity() {
     return 0
 }
 
-# Host-platform path of the anydoc static archive (built by `make anydoc-lib`).
-anydoc_host_archive() {
-    case "$(uname -s)-$(uname -m)" in
-        Darwin-arm64) echo "$PROJECT_ROOT/third_party/anydoc-go/lib/darwin_arm64/libanydoc_go.a" ;;
-        Darwin-x86_64) echo "$PROJECT_ROOT/third_party/anydoc-go/lib/darwin_amd64/libanydoc_go.a" ;;
-        Linux-x86_64)
-            if [ -f "$PROJECT_ROOT/third_party/anydoc-go/lib/linux_amd64_gnu/libanydoc_go.a" ]; then
-                echo "$PROJECT_ROOT/third_party/anydoc-go/lib/linux_amd64_gnu/libanydoc_go.a"
-            else
-                echo "$PROJECT_ROOT/third_party/anydoc-go/lib/linux_amd64_musl/libanydoc_go.a"
-            fi
-            ;;
-        Linux-aarch64)
-            if [ -f "$PROJECT_ROOT/third_party/anydoc-go/lib/linux_arm64_gnu/libanydoc_go.a" ]; then
-                echo "$PROJECT_ROOT/third_party/anydoc-go/lib/linux_arm64_gnu/libanydoc_go.a"
-            else
-                echo "$PROJECT_ROOT/third_party/anydoc-go/lib/linux_arm64_musl/libanydoc_go.a"
-            fi
-            ;;
-        *) echo "" ;;
-    esac
-}
-
-# Enable the in-process anydoc engine when the archive is present, unless the
-# caller already set GO_BUILD_TAGS (including empty, which opts out).
-enable_anydoc_build_tag() {
-    if [ -n "${GO_BUILD_TAGS+x}" ]; then
-        export GO_BUILD_TAGS
-        return
-    fi
-    local archive
-    archive="$(anydoc_host_archive)"
-    if [ -n "$archive" ] && [ -f "$archive" ]; then
-        export GO_BUILD_TAGS=anydoc
-        log_info "检测到 anydoc 静态库，已启用 -tags anydoc"
-    else
-        log_info "未检测到 anydoc 静态库，解析引擎不可用。需要时先运行: make anydoc-lib"
-    fi
-}
-
 # 启动后端应用（本地）
 start_app() {
     # 保留调用方的覆盖值，包括显式空字符串，优先于 .env 和 .env.local。
     local ssrf_whitelist_extra_set="${SSRF_WHITELIST_EXTRA+x}"
     local ssrf_whitelist_extra="${SSRF_WHITELIST_EXTRA-}"
     log_info "启动后端应用（本地开发模式）..."
-    
+
     cd "$PROJECT_ROOT"
-    
+
     # 检查 Go 是否安装
     if ! command -v go &> /dev/null; then
         log_error "Go 未安装"
         return 1
     fi
-    
+
     log_info "加载环境配置..."
     if ! load_env_files; then
         log_error ".env 文件不存在，请先创建配置文件"
@@ -338,7 +298,7 @@ start_app() {
     else
         export SSRF_WHITELIST_EXTRA="${SSRF_WHITELIST_EXTRA-198.18.0.0/15}"
     fi
-    
+
     # 本地 docker-compose.dev 模式：把容器服务名映射到宿主机回环地址
     # 远程开发模式（DEV_REMOTE_HOST 或 .env.local 已设地址）则保留 .env/.env.local 中的值
     if [ -n "${DEV_REMOTE_HOST:-}" ]; then
@@ -365,22 +325,21 @@ start_app() {
         export VAULT_ROOT="$PROJECT_ROOT/.local-data/vault"
     fi
     mkdir -p "$VAULT_ROOT"
-    
+
     # 确保必要的环境变量已设置
     if [ -z "$DB_DRIVER" ]; then
         log_error "DB_DRIVER 环境变量未设置，请检查 .env 文件"
         return 1
     fi
-    
+
     log_info "环境变量已设置，启动应用..."
     log_info "数据库地址: $DB_HOST:${DB_PORT:-5432}"
-    
+
     export CGO_CFLAGS="-Wno-deprecated-declarations -Wno-gnu-folding-constant"
     if [[ "$(uname)" == "Darwin" ]]; then
       export CGO_LDFLAGS="-Wl,-no_warn_duplicate_libraries"
     fi
 
-    enable_anydoc_build_tag
 
     # 检查是否安装了 Air（热重载工具）
     if command -v air &> /dev/null; then
@@ -404,25 +363,25 @@ start_frontend() {
     if [ -f ".env" ] || [ -f ".env.local" ]; then
         load_env_files >/dev/null 2>&1 || true
     fi
-    
+
     cd "$PROJECT_ROOT/frontend"
-    
+
     # 检查 npm 是否安装
     if ! command -v npm &> /dev/null; then
         log_error "npm 未安装"
         return 1
     fi
-    
+
     # 检查依赖是否已安装
     if [ ! -d "node_modules" ]; then
         log_warning "node_modules 不存在，正在安装依赖..."
         npm install
     fi
-    
+
     log_info "启动 Vite 开发服务器..."
     log_info "前端将运行在 http://localhost:5173"
     log_info "前端 API 代理目标: ${VITE_DEV_PROXY_TARGET:-${FRONTEND_BACKEND_URL:-http://localhost:8080}}"
-    
+
     # 运行开发服务器
     npm run dev
 }

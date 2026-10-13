@@ -12,20 +12,20 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"reliquary/internal/application/service"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type maintenanceCredentialInput struct {
-	APIKey             *string           `json:"api_key,omitempty"`
-	AppSecret          *string           `json:"app_secret,omitempty"`
-	BaseURL            *string           `json:"base_url,omitempty"`
-	CustomHeaders      map[string]string `json:"custom_headers,omitempty"`
-	ExtraConfig        map[string]string `json:"extra_config,omitempty"`
-	ParserEngineConfig map[string]string `json:"parser_engine_config,omitempty"`
+	APIKey        *string           `json:"api_key,omitempty"`
+	AppSecret     *string           `json:"app_secret,omitempty"`
+	BaseURL       *string           `json:"base_url,omitempty"`
+	CustomHeaders map[string]string `json:"custom_headers,omitempty"`
+	ExtraConfig   map[string]string `json:"extra_config,omitempty"`
 }
 
 // Credentials are read only from stdin or an owner-only file. The result never
@@ -43,7 +43,7 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 		fmt.Fprintln(os.Stderr, "WARN: --kind tenant is deprecated; use --kind space")
 		*kind = "space"
 	}
-	if *id == "" || flags.NArg() != 0 || (*kind != "model" && *kind != "space") {
+	if *id == "" || flags.NArg() != 0 || (*kind != "model") {
 		return errors.New("credentials requires --kind model|space --id ID and JSON input")
 	}
 	if utils.GetAESKey() == nil {
@@ -77,44 +77,6 @@ func runMaintenanceCredentials(ctx context.Context, db *gorm.DB, args []string, 
 	}
 	status := ""
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if *kind == "space" {
-			if request.APIKey != nil || request.AppSecret != nil || request.BaseURL != nil || len(request.CustomHeaders) != 0 || len(request.ExtraConfig) != 0 || len(request.ParserEngineConfig) != 1 {
-				return errors.New("space input requires only parser_engine_config.mineru_api_key")
-			}
-			value, ok := request.ParserEngineConfig["mineru_api_key"]
-			if !ok || strings.TrimSpace(value) == "" || value == types.RedactedSecretPlaceholder {
-				return errors.New("space parser credential must be a nonempty new mineru_api_key")
-			}
-			var space struct {
-				Config types.JSON `gorm:"column:parser_engine_config"`
-				Status string
-			}
-			if err := tx.Table("spaces").Select("parser_engine_config,status").Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", *id).Take(&space).Error; err != nil {
-				return errors.New("space not found or unavailable")
-			}
-			config := map[string]any{}
-			if len(space.Config) != 0 && string(space.Config) != "null" {
-				if err := json.Unmarshal(space.Config, &config); err != nil || config == nil {
-					return errors.New("space parser configuration is invalid")
-				}
-			}
-			// The existing parser adapter expects this field in its legacy
-			// format. Only this secret changes; all public JSON and profile
-			// timestamps stay exact. Export always excludes this field.
-			config["mineru_api_key"] = value
-			encoded, err := json.Marshal(config)
-			if err != nil {
-				return errors.New("cannot encode space parser configuration")
-			}
-			if err := tx.Table("spaces").Where("id=?", *id).UpdateColumn("parser_engine_config", gorm.Expr("?::jsonb", string(encoded))).Error; err != nil {
-				return errors.New("cannot save space parser credential; values were not changed")
-			}
-			status = space.Status
-			return nil
-		}
-		if len(request.ParserEngineConfig) != 0 {
-			return errors.New("parser_engine_config requires --kind space")
-		}
 		if *kind == "model" {
 			var model types.Model
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", *id).Take(&model).Error; err != nil {

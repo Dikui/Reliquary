@@ -39,7 +39,7 @@ export function documentListFiltersFromQuery(query: LocationQuery): DocumentList
   return {
     keyword: queryString(query.keyword).trim(),
     fileType: choice(query.file_type, fileTypes),
-    contentType: choice(query.content_type, [...CONTENT_TYPES, 'unclassified']),
+    contentType: choice(query.content_type, CONTENT_TYPES),
     starred: choice(query.starred, ['true', 'false']) as DocumentListFilters['starred'],
     parseStatus: choice(query.parse_status, parseStatuses),
     source: choice(query.source, sources),

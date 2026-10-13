@@ -11,10 +11,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
-	"gorm.io/gorm"
 	"reliquary/internal/types"
 	"reliquary/internal/vaultpath"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type VaultRebuildSkippedFile struct {
@@ -99,17 +100,17 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 				return fmt.Errorf("restore article %s: %w", rel, err)
 			}
 			seenArticleIDs[header.ID] = true
-			if entry.ProcessingMode == types.ProcessingModeFull {
-				if err := s.indexVaultChunks(ctx, library, entry, entry.VaultBody); err != nil {
-					_ = s.db.WithContext(ctx).Model(entry).Updates(map[string]interface{}{
-						"parse_status": types.ParseStatusFailed, "error_message": err.Error(),
-					}).Error
-					return fmt.Errorf("index rebuilt article %s: %w", rel, err)
-				}
-				if err := s.db.WithContext(ctx).Save(entry).Error; err != nil {
-					return err
-				}
+
+			if err := s.indexVaultChunks(ctx, library, entry, entry.VaultBody); err != nil {
+				_ = s.db.WithContext(ctx).Model(entry).Updates(map[string]interface{}{
+					"parse_status": types.ParseStatusFailed, "error_message": err.Error(),
+				}).Error
+				return fmt.Errorf("index rebuilt article %s: %w", rel, err)
 			}
+			if err := s.db.WithContext(ctx).Save(entry).Error; err != nil {
+				return err
+			}
+
 			if err := indexArticleEmbedding(ctx, s.db, s.models, library, entry); err != nil {
 				return fmt.Errorf("index rebuilt article summary %s: %w", rel, err)
 			}
@@ -155,9 +156,7 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 	if header.ContentType != "" && types.NormalizeContentType(header.ContentType) != header.ContentType {
 		return fmt.Errorf("invalid content_type %q", header.ContentType)
 	}
-	if header.ProcessingMode != "" && header.ProcessingMode != types.ProcessingModeFull && header.ProcessingMode != types.ProcessingModeSummaryOnly {
-		return fmt.Errorf("invalid processing_mode %q", header.ProcessingMode)
-	}
+
 	if header.SourceUnverified && header.URL != "" {
 		return fmt.Errorf("unverified source must not contain an original URL")
 	}
@@ -185,13 +184,6 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 
 func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library *types.Library, path string, header VaultArticleHeader, body []byte) (*types.Entry, error) {
 	collected, _ := time.Parse(time.RFC3339Nano, header.CollectedAt)
-	mode := types.ProcessingModeForContentType(header.ContentType)
-	if header.SourceKind == "mine" || header.SourceUnverified || header.ProcessingMode == types.ProcessingModeFull {
-		mode = types.ProcessingModeFull
-	}
-	if mode == types.ProcessingModeSummaryOnly {
-		body = nil
-	}
 	kind := "article"
 	if header.SourceKind == "mine" {
 		kind = "mine"
@@ -199,7 +191,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 	now := time.Now().UTC()
 	entry := &types.Entry{ID: header.ID, SpaceID: library.SpaceID, LibraryID: library.ID,
 		Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, VaultBody: string(body),
-		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true, ProcessingMode: mode,
+		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
 		SourceUnverified: header.SourceUnverified,
 		Acquisition:      header.Acquisition,
@@ -218,28 +210,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 			Author: header.Author, PublishedAt: header.PublishedAt}}); err != nil {
 		return nil, err
 	}
-	if mode == types.ProcessingModeFull {
-		attachmentDirectory, err := vaultAbsolute(s.root, filepath.ToSlash(filepath.Join("attachments", header.ID)))
-		if err != nil {
-			return nil, err
-		}
-		entries, err := os.ReadDir(attachmentDirectory)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		for _, dirEntry := range entries {
-			if !dirEntry.IsDir() && dirEntry.Type()&os.ModeSymlink == 0 && strings.HasPrefix(dirEntry.Name(), "original-") {
-				entry.VaultOriginalPath = filepath.ToSlash(filepath.Join("attachments", header.ID, dirEntry.Name()))
-				entry.Type = "file"
-				entry.FileName = strings.TrimPrefix(dirEntry.Name(), "original-")
-				entry.FileType = strings.TrimPrefix(strings.ToLower(filepath.Ext(entry.FileName)), ".")
-				if info, err := dirEntry.Info(); err == nil {
-					entry.FileSize = info.Size()
-				}
-				break
-			}
-		}
-	}
+
 	setMessageFingerprint(entry, string(body))
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(entry).Error; err != nil {

@@ -10,19 +10,6 @@
 package errors
 
 const (
-	// ErrCodeDocReaderTimeout — DocReader RPC exceeded
-	// PARSER_CALL_TIMEOUT (default 30m). Suggest splitting
-	// large files or checking parser load.
-	ErrCodeDocReaderTimeout = "DOCREADER_TIMEOUT"
-
-	// ErrCodeDocReaderUnavailable — no DocReader configured for the
-	// requested file type / engine, or the service refused connection.
-	ErrCodeDocReaderUnavailable = "DOCREADER_UNAVAILABLE"
-
-	// ErrCodeDocReaderParseFailed — DocReader returned an explicit parse
-	// error (encoding, corrupted file, OCR engine crash, ...).
-	ErrCodeDocReaderParseFailed = "DOCREADER_PARSE_FAILED"
-
 	// ErrCodeChunkingFailed — text chunking step itself failed (rare;
 	// usually only on extreme-size inputs).
 	ErrCodeChunkingFailed = "CHUNKING_FAILED"
@@ -42,8 +29,7 @@ const (
 
 	// ErrCodeTaskTimeout: queue retry budget exhausted. Used by the
 	// dead-letter callback when promoting a task failure into a stage
-	// failure. Distinct from DocReaderTimeout: this is the queue-level
-	// timeout (whole task), not the parser-call-level timeout.
+	// failure for the whole task.
 	ErrCodeTaskTimeout = "TASK_TIMEOUT"
 
 	// ErrCodeUnknown — fallback when a wrapped error doesn't classify.

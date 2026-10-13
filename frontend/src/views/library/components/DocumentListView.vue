@@ -243,7 +243,6 @@ const openDelete = async (item: EntryItem) => {
                 <DocumentActionMenu
                   :item="item"
                   :trace-visible="!!traceVisibleIds[item.id] || (item.parse_status === 'pending' || item.parse_status === 'processing' || item.parse_status === 'finalizing')"
-                  @download="handleAction('download', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"

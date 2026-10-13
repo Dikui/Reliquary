@@ -1,4 +1,4 @@
-import { get, post, put, del, getDown } from "../utils/request";
+import { get, post, put, del } from "../utils/request";
 import type { ModelTierConfig } from '@/types/modelTiers';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import type { SearchRequest, SearchSource } from '@/types/search';
@@ -77,13 +77,7 @@ export function batchDeleteEntry(ids: string[]) {
   return post(`/api/v1/entries/batch-delete`, { ids });
 }
 
-export function downEntryDetails(id: string) {
-  return getDown(`/api/v1/entries/${id}/download`);
-}
 
-export function previewEntryFile(id: string) {
-  return getDown(`/api/v1/entries/${id}/preview`);
-}
 
 export function reviewEntry(id: string, data: { action: 'approve' | 'reject' | 'retry' | 'discard'; source_info?: IntakeSourceInfo }) {
   return post(`/api/v1/entries/${id}/review`, data);

@@ -17,13 +17,13 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
-	"github.com/google/uuid"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
+
+	"github.com/google/uuid"
 )
 
 // ArticleHeaderRefresher is deliberately separate from EntryService so
@@ -95,9 +95,6 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	if k.SourceUnverified {
 		h.URL = ""
 	}
-	if k.ProcessingMode == types.ProcessingModeFull && types.ProcessingModeForContentType(k.ContentType) == types.ProcessingModeSummaryOnly {
-		h.ProcessingMode = types.ProcessingModeFull
-	}
 	var names []string
 	if err = v.db.WithContext(ctx).Table("entities e").Select("e.canonical_name").
 		Joins("JOIN entry_entities links ON links.entity_id=e.id AND links.space_id=e.space_id").
@@ -163,13 +160,6 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		return errors.New("article must pass intake review before vault write")
 	}
 	if k.VaultPath != "" {
-		if isIngestArticle(k) && ingestCompletionPending(k) {
-			if err := v.publishCompletedHeaderOnlyArticle(ctx, k, body, read); err != nil {
-				v.recordArticleError(ctx, k.ID, err)
-				return err
-			}
-			return nil
-		}
 		if isIngestArticle(k) && body != k.VaultBody {
 			err := errors.New("published ingest article body differs from its stored body; replacement refused")
 			v.recordArticleError(ctx, k.ID, err)
@@ -196,14 +186,9 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	original := ""
-	if k.SourceKind != "mine" && k.ProcessingMode == types.ProcessingModeSummaryOnly {
-		body = ""
-	} else {
-		body, original, err = v.prepareArticleMaterials(ctx, k, relative, body, read)
-		if err != nil {
-			return err
-		}
+	body, err = v.prepareArticleMaterials(ctx, k, relative, body, read)
+	if err != nil {
+		return err
 	}
 	if err = v.atomicArticleWrite(abs, RenderVaultArticleHeader(h), []byte(body), nil); err != nil {
 		return err
@@ -212,32 +197,14 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	if kind == "" {
 		kind = "article"
 	}
-	values := map[string]any{"source_kind": kind, "vault_path": relative, "vault_body": body, "vault_original_path": original}
-	if isIngestArticle(k) {
-		values["ingest_attachments"] = k.IngestAttachments
-	}
+	values := map[string]any{"source_kind": kind, "vault_path": relative, "vault_body": body}
+
 	if err = v.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(values).Error; err != nil {
 		_ = os.Remove(abs)
 		return err
 	}
-	k.SourceKind, k.VaultPath, k.VaultBody, k.VaultOriginalPath = kind, relative, body, original
+	k.SourceKind, k.VaultPath, k.VaultBody = kind, relative, body
 	return nil
-}
-
-func vaultOriginalFileName(filename string) string {
-	stem, extension := filename, filepath.Ext(filename)
-	if isSupportedImportExtension(extension) {
-		stem = strings.TrimSuffix(filename, extension)
-		extension = "." + normalizeFileExtension(extension)
-	} else {
-		extension = ""
-	}
-	name := "original-" + vaultSlug(stem)
-	for len(name)+len(extension) > 255 {
-		_, size := utf8.DecodeLastRuneInString(name)
-		name = name[:len(name)-size]
-	}
-	return name + extension
 }
 
 func (v *VaultService) writeAttachment(relative string, data []byte) error {
@@ -390,9 +357,6 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 	current, err := os.ReadFile(abs)
 	if errors.Is(err, os.ErrNotExist) {
 		body := []byte(k.VaultBody)
-		if k.SourceKind != "mine" && k.ProcessingMode == types.ProcessingModeSummaryOnly {
-			body = nil
-		}
 		if err = v.atomicArticleWrite(abs, header, body, nil); err != nil {
 			return err
 		}
@@ -558,15 +522,6 @@ func (v *VaultService) ReadBody(k *types.Entry) ([]byte, error) {
 	return body, err
 }
 
-func (v *VaultService) ReadOriginal(k *types.Entry) (io.ReadCloser, error) {
-	abs, err := vaultAbsolute(v.root, k.VaultOriginalPath)
-	if err != nil {
-		return nil, err
-	}
-	return os.Open(abs)
-}
-
-// ReadImage resolves a body's relative attachment destination inside the vault.
 func (v *VaultService) ReadImage(k *types.Entry, ref string) (io.ReadCloser, error) {
 	relative := filepath.Join(filepath.Dir(filepath.FromSlash(k.VaultPath)), filepath.FromSlash(ref))
 	abs, err := vaultAbsolute(v.root, filepath.ToSlash(relative))

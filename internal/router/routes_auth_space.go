@@ -37,8 +37,6 @@ func RegisterSystemRoutes(r *gin.RouterGroup, h *handler.SystemHandler, g *acces
 	routes := r.Group("/system")
 	routes.GET("/capabilities", h.GetDeploymentCapabilities)
 	routes.GET("/info", h.GetSystemInfo)
-	routes.GET("/parser-engines", h.ListParserEngines)
-	routes.POST("/parser-engines/check", h.CheckParserEngines)
 	routes.GET("/settings", h.ListSystemSettings)
 	routes.GET("/settings/:key", h.GetSystemSetting)
 	routes.PUT("/settings/:key", h.UpdateSystemSetting)

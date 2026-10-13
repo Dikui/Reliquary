@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/config"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
+	"github.com/stretchr/testify/require"
 )
 
 type allRebuildEmbedder struct {
@@ -129,7 +130,7 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	require.Equal(t, 3, entity.EmbeddingDimension)
 	require.False(t, entity.EmbeddingNeedsRebuild)
 	var documents []types.Entry
-	require.NoError(t, h.db.Where("processing_mode='full'").Find(&documents).Error)
+	require.NoError(t, h.db.Find(&documents).Error)
 	for _, document := range documents {
 		require.Equal(t, "replacement-model", document.EmbeddingModelID)
 	}
@@ -413,7 +414,6 @@ func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *te
 	var personal types.Entry
 	require.NoError(t, h.db.Where("id='mine'").First(&personal).Error)
 	personal.ContentType = "tutorial"
-	personal.ProcessingMode = types.ProcessingModeFull
 	personal.VaultPath = "mine/personal.md"
 	personal.VaultBody = "# Personal procedure\n\n![Personal image](../attachments/mine/personal.png)"
 	personal.StructuredSummary = &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Retain the complete instructions"}, KeyTerms: []string{"Personal"}}

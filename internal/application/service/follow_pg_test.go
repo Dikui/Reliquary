@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reliquary/internal/types"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/types"
 )
 
 type followFixture struct {
@@ -223,100 +223,6 @@ func TestFollowsPostgresMergeTransferDeduplicationAndDeletion(t *testing.T) {
 	require.Zero(t, count)
 	require.Error(t, h.db.Create(&types.Follow{SpaceID: 1, TargetType: "entity", TargetID: "missing"}).Error)
 	require.NoError(t, h.follows.Unfollow(h.ctx, "topic", "topic-follow"))
-}
-
-func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T) {
-	h := newFollowFixture(t)
-	h.followBoth(t)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	for _, id := range []string{"old", "entity-only", "topic-only", "both", "unrelated", "processing", "intake-review", "processing-review", "disabled", "deleted"} {
-		h.add(t, id, "article", "2026-10-01", "event", "semanticlaunch", 0)
-		h.collected(t, id, now.Add(-time.Hour))
-		if id != "unrelated" {
-			h.link(t, id, id != "topic-only", id == "topic-only" || id == "both")
-		}
-	}
-	h.collected(t, "old", now.Add(-8*24*time.Hour))
-	h.collected(t, "both", now.Add(-30*time.Minute))
-	h.collected(t, "topic-only", now.Add(-45*time.Minute))
-	for id, updates := range map[string]map[string]any{
-		"processing":        {"parse_status": types.ParseStatusProcessing},
-		"intake-review":     {"parse_status": types.ParseStatusRejected},
-		"processing-review": {"processing_review_status": types.ProcessingReviewPending},
-		"disabled":          {"enable_status": "disabled"},
-		"deleted":           {"deleted_at": now},
-	} {
-		require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Updates(updates).Error)
-	}
-	for _, source := range []string{"mine", "report"} {
-		h.add(t, source, source, "2026-10-01", "", "semanticlaunch", 0)
-		h.link(t, source, true, true)
-	}
-	request := types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()}
-	result := h.feed(t, request)
-	require.Equal(t, []string{"both", "topic-only", "entity-only", "old"}, followFeedIDs(result))
-	require.EqualValues(t, 4, result.Total)
-	require.EqualValues(t, 4, result.NewCount)
-	require.Nil(t, result.LastViewedAt)
-	for _, item := range result.Results {
-		require.True(t, item.IsNew)
-		require.NotEmpty(t, item.CollectedAt)
-		require.Equal(t, "article", item.Source)
-		require.NotEmpty(t, item.Summary)
-		require.NotEmpty(t, item.Snippets)
-	}
-	require.Len(t, result.Results[0].MatchedFollows, 2)
-	items, err := h.follows.ListFollows(h.ctx)
-	require.NoError(t, err)
-	for _, item := range items {
-		require.EqualValues(t, 2, item.RecentArticleCount, "old, ineligible, mine and report do not contribute")
-	}
-	request.TargetIDs = []string{"topic-follow"}
-	filtered := h.feed(t, request)
-	require.Equal(t, []string{"both", "topic-only"}, followFeedIDs(filtered))
-	require.Len(t, filtered.Results[0].MatchedFollows, 2, "filtering keeps every matched follow on an article")
-	require.EqualValues(t, 4, filtered.NewCount, "sidebar new count is global")
-	request.TargetIDs = nil
-	checkpoint := now.Add(-time.Hour)
-	state, err := h.follows.MarkViewed(h.ctx, &checkpoint)
-	require.NoError(t, err)
-	require.EqualValues(t, 2, state.NewCount)
-	result = h.feed(t, request)
-	require.True(t, result.Results[0].IsNew)
-	require.True(t, result.Results[1].IsNew)
-	require.False(t, result.Results[2].IsNew, "timestamp equality is already seen")
-	require.False(t, result.Results[3].IsNew)
-	defaultFeed := h.feed(t, types.FollowFeedRequest{CollapseSimilar: entrySearchNoCollapse()})
-	require.Equal(t, []string{"both", "topic-only"}, followFeedIDs(defaultFeed))
-	explicit := h.feed(t, types.FollowFeedRequest{Since: now.Add(-9 * 24 * time.Hour).Format(time.RFC3339Nano), Limit: 1, CollapseSimilar: entrySearchNoCollapse()})
-	require.EqualValues(t, 4, explicit.Total)
-	require.Len(t, explicit.Results, 1)
-	state, err = h.follows.State(h.ctx)
-	require.NoError(t, err)
-	require.Equal(t, checkpoint.UnixMicro(), state.LastViewedAt.UnixMicro(), "all feed reads preserve the checkpoint")
-	// An article collected while the page is loading must survive acknowledging its snapshot.
-	h.add(t, "arrived-after-open", "article", "2026-10-01", "event", "semanticlaunch", 0)
-	h.link(t, "arrived-after-open", true, false)
-	state, err = h.follows.MarkViewed(h.ctx, &defaultFeed.ViewedAt)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, state.NewCount)
-	state, err = h.follows.MarkViewed(h.ctx, &checkpoint)
-	require.NoError(t, err)
-	require.Equal(t, defaultFeed.ViewedAt.UnixMicro(), state.LastViewedAt.UnixMicro(), "stale page cannot move the checkpoint backwards")
-	state, err = h.follows.MarkViewed(h.ctx, nil)
-	require.NoError(t, err)
-	require.Zero(t, state.NewCount)
-	require.Empty(t, h.feed(t, types.FollowFeedRequest{}).Results)
-	require.Len(t, h.feed(t, request).Results, 5)
-	future := time.Now().Add(time.Hour)
-	_, err = h.follows.MarkViewed(h.ctx, &future)
-	require.Error(t, err)
-	for _, invalid := range []types.FollowFeedRequest{{Since: "invalid"}, {Limit: 101}, {Limit: -1}, {TargetIDs: []string{""}}} {
-		_, err := h.follows.Feed(h.ctx, invalid)
-		require.Error(t, err)
-	}
-	_, err = h.follows.Feed(h.ctx, types.FollowFeedRequest{Since: "2026-01-01"})
-	require.NoError(t, err)
 }
 
 func TestFollowFeedPostgresSimilarReportsRulesAndChildMetadata(t *testing.T) {
@@ -538,4 +444,97 @@ func TestFollowFeedPostgresRealTopicBackfillPreservesHistoricalLinks(t *testing.
 	require.NoError(t, h.db.Where("entry_id=? AND topic_id=?", articles[0].ID, topic.ID).First(&preserved).Error)
 	require.True(t, preserved.IsHistorical)
 	require.Equal(t, original.CreatedAt.UnixMicro(), preserved.CreatedAt.UnixMicro())
+}
+
+func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T) {
+	h := newFollowFixture(t)
+	h.followBoth(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for _, id := range []string{"old", "entity-only", "topic-only", "both", "unrelated", "processing", "intake-review", "disabled", "deleted"} {
+		h.add(t, id, "article", "2026-10-01", "event", "semanticlaunch", 0)
+		h.collected(t, id, now.Add(-time.Hour))
+		if id != "unrelated" {
+			h.link(t, id, id != "topic-only", id == "topic-only" || id == "both")
+		}
+	}
+	h.collected(t, "old", now.Add(-8*24*time.Hour))
+	h.collected(t, "both", now.Add(-30*time.Minute))
+	h.collected(t, "topic-only", now.Add(-45*time.Minute))
+	for id, updates := range map[string]map[string]any{
+		"processing":    {"parse_status": types.ParseStatusProcessing},
+		"intake-review": {"parse_status": types.ParseStatusRejected},
+		"disabled":      {"enable_status": "disabled"},
+		"deleted":       {"deleted_at": now},
+	} {
+		require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Updates(updates).Error)
+	}
+	for _, source := range []string{"mine", "report"} {
+		h.add(t, source, source, "2026-10-01", "", "semanticlaunch", 0)
+		h.link(t, source, true, true)
+	}
+	request := types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()}
+	result := h.feed(t, request)
+	require.Equal(t, []string{"both", "topic-only", "entity-only", "old"}, followFeedIDs(result))
+	require.EqualValues(t, 4, result.Total)
+	require.EqualValues(t, 4, result.NewCount)
+	require.Nil(t, result.LastViewedAt)
+	for _, item := range result.Results {
+		require.True(t, item.IsNew)
+		require.NotEmpty(t, item.CollectedAt)
+		require.Equal(t, "article", item.Source)
+		require.NotEmpty(t, item.Summary)
+		require.NotEmpty(t, item.Snippets)
+	}
+	require.Len(t, result.Results[0].MatchedFollows, 2)
+	items, err := h.follows.ListFollows(h.ctx)
+	require.NoError(t, err)
+	for _, item := range items {
+		require.EqualValues(t, 2, item.RecentArticleCount, "old, ineligible, mine and report do not contribute")
+	}
+	request.TargetIDs = []string{"topic-follow"}
+	filtered := h.feed(t, request)
+	require.Equal(t, []string{"both", "topic-only"}, followFeedIDs(filtered))
+	require.Len(t, filtered.Results[0].MatchedFollows, 2, "filtering keeps every matched follow on an article")
+	require.EqualValues(t, 4, filtered.NewCount, "sidebar new count is global")
+	request.TargetIDs = nil
+	checkpoint := now.Add(-time.Hour)
+	state, err := h.follows.MarkViewed(h.ctx, &checkpoint)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, state.NewCount)
+	result = h.feed(t, request)
+	require.True(t, result.Results[0].IsNew)
+	require.True(t, result.Results[1].IsNew)
+	require.False(t, result.Results[2].IsNew, "timestamp equality is already seen")
+	require.False(t, result.Results[3].IsNew)
+	defaultFeed := h.feed(t, types.FollowFeedRequest{CollapseSimilar: entrySearchNoCollapse()})
+	require.Equal(t, []string{"both", "topic-only"}, followFeedIDs(defaultFeed))
+	explicit := h.feed(t, types.FollowFeedRequest{Since: now.Add(-9 * 24 * time.Hour).Format(time.RFC3339Nano), Limit: 1, CollapseSimilar: entrySearchNoCollapse()})
+	require.EqualValues(t, 4, explicit.Total)
+	require.Len(t, explicit.Results, 1)
+	state, err = h.follows.State(h.ctx)
+	require.NoError(t, err)
+	require.Equal(t, checkpoint.UnixMicro(), state.LastViewedAt.UnixMicro(), "all feed reads preserve the checkpoint")
+	// An article collected while the page is loading must survive acknowledging its snapshot.
+	h.add(t, "arrived-after-open", "article", "2026-10-01", "event", "semanticlaunch", 0)
+	h.link(t, "arrived-after-open", true, false)
+	state, err = h.follows.MarkViewed(h.ctx, &defaultFeed.ViewedAt)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, state.NewCount)
+	state, err = h.follows.MarkViewed(h.ctx, &checkpoint)
+	require.NoError(t, err)
+	require.Equal(t, defaultFeed.ViewedAt.UnixMicro(), state.LastViewedAt.UnixMicro(), "stale page cannot move the checkpoint backwards")
+	state, err = h.follows.MarkViewed(h.ctx, nil)
+	require.NoError(t, err)
+	require.Zero(t, state.NewCount)
+	require.Empty(t, h.feed(t, types.FollowFeedRequest{}).Results)
+	require.Len(t, h.feed(t, request).Results, 5)
+	future := time.Now().Add(time.Hour)
+	_, err = h.follows.MarkViewed(h.ctx, &future)
+	require.Error(t, err)
+	for _, invalid := range []types.FollowFeedRequest{{Since: "invalid"}, {Limit: 101}, {Limit: -1}, {TargetIDs: []string{""}}} {
+		_, err := h.follows.Feed(h.ctx, invalid)
+		require.Error(t, err)
+	}
+	_, err = h.follows.Feed(h.ctx, types.FollowFeedRequest{Since: "2026-01-01"})
+	require.NoError(t, err)
 }

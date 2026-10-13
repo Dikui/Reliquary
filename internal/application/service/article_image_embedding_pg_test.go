@@ -10,10 +10,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pgvector/pgvector-go"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
+	"github.com/stretchr/testify/require"
 )
 
 type articleImageFixtureEmbedder struct {
@@ -93,26 +94,6 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 	require.EqualValues(t, 2, count, "failed replacement keeps the prior image vector")
 }
 
-func TestArticleImagesSkipSummaryOnlyAndUnsupportedModels(t *testing.T) {
-	for _, test := range []struct {
-		name, contentType string
-		supported         bool
-	}{
-		{"summary", "tutorial", true}, {"text model", "event", false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			h, _, e := newArticleImageHarness(t, test.supported)
-			h.processor.output = validProcessingFixture(test.contentType)
-			article := h.upload(t, "Image skip", "Verifiable source measurements are illustrated below.\n\n![chart]("+articleImageDataURI(t, 42)+")")
-			require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
-			require.Empty(t, e.images)
-			var count int64
-			require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-			require.Zero(t, count)
-		})
-	}
-}
-
 func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T) {
 	h, vault, _ := newArticleImageHarness(t, true)
 	article := h.upload(t, "Fresh image", "Original illustration records verifiable source details.\n\n![chart]("+articleImageDataURI(t, 17)+")")
@@ -129,19 +110,4 @@ func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T
 	require.Equal(t, articleImagePaths(article), articleImagePaths(&copy))
 	copy.SourceKind = "report"
 	require.Empty(t, articleImagePaths(&copy))
-}
-
-func TestArticleImageVectorsCleanOnSummaryOnlyAndSoftDeletion(t *testing.T) {
-	h, _, _ := newArticleImageHarness(t, true)
-	article := h.upload(t, "Image cleanup", "Original illustration records verifiable source details.\n\n![chart]("+articleImageDataURI(t, 21)+")")
-	var count int64
-	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-	require.EqualValues(t, 1, count)
-	require.NoError(t, h.db.Model(article).Update("processing_mode", types.ProcessingModeSummaryOnly).Error)
-	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-	require.Zero(t, count)
-	article = h.upload(t, "Image delete", "Different original illustration contains complete measurements.\n\n![chart]("+articleImageDataURI(t, 67)+")")
-	require.NoError(t, h.db.Delete(article).Error)
-	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-	require.Zero(t, count)
 }

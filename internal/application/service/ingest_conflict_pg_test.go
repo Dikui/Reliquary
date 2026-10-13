@@ -1,17 +1,17 @@
 package service
 
 import (
-	"encoding/base64"
 	"math/bits"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/file"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
+
+	"github.com/stretchr/testify/require"
 )
 
 const ingestConflictBody = "An unrelated novel describes a fictional seafaring kingdom and its coastal villages. The characters navigate merchant fleets, negotiate alliances and debate narrative choices. Its chapters trace the kingdom's cultural history, maritime customs and competing dynastic traditions."
@@ -35,7 +35,6 @@ func ingestConflictingMaterialRequest(t *testing.T) *types.IngestRequest {
 	t.Helper()
 	request := ingestFixtureRequest("https://example.org/conflict-retry", ingestConflictBody)
 	request.Images = []types.IngestImage{{Data: articleImageDataURI(t, 93), SourceURL: "https://example.org/kingdom.png", Caption: "Coastal kingdom"}}
-	request.File = &types.IngestFile{Name: "original.txt", Data: base64.StdEncoding.EncodeToString([]byte(ingestConflictBody))}
 	return request
 }
 
@@ -113,8 +112,8 @@ func TestIngestConflictConcurrentSameBodyCreatesOnePending(t *testing.T) {
 	require.Equal(t, beforeJobs, transactionJobs(t, h.db))
 	var resources int64
 	require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&resources).Error)
-	require.EqualValues(t, 4, resources, "the original body and one conflict's file, image and body remain")
-	require.Len(t, transactionStoredFiles(t, root), 4)
+	require.EqualValues(t, 3, resources, "the original body and one conflict's image and body remain")
+	require.Len(t, transactionStoredFiles(t, root), 3)
 }
 
 func TestIngestConflictDifferentBodyHashesCreateSeparatePending(t *testing.T) {

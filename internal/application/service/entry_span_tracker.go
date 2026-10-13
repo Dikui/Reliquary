@@ -111,7 +111,7 @@ type SpanTracker interface {
 	FailSpan(ctx context.Context, span *Span, errorCode, errorMessage string, errorDetail error)
 
 	// SkipSpan marks an intentionally not-run span (e.g. embeddings
-	// for a summary-only article). Distinct from cancelled: skipped is
+	// when embeddings are disabled). Distinct from cancelled: skipped is
 	// "we chose not to" while cancelled is "an upstream broke".
 	SkipSpan(ctx context.Context, span *Span, reason string)
 

@@ -3,15 +3,14 @@ package service
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"time"
 
+	werrors "reliquary/internal/errors"
+	"reliquary/internal/types"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	werrors "reliquary/internal/errors"
-	"reliquary/internal/logger"
-	"reliquary/internal/types"
 )
 
 func (s *entryService) lookupIngestDiscard(ctx context.Context, normalized string) (*types.IngestDiscard, error) {
@@ -141,7 +140,6 @@ func (s *entryService) AcceptIncomplete(ctx context.Context, id string) (*types.
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
 	var article types.Entry
-	var summaryBody string
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, spaceID).First(&article).Error; err != nil {
 			return err
@@ -152,17 +150,7 @@ func (s *entryService) AcceptIncomplete(ctx context.Context, id string) (*types.
 		if intake, _ := article.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
 			return werrors.NewBadRequestError("intake must be reviewed before accepting missing material")
 		}
-		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.ParseStatus == types.ParseStatusCompleted {
-			library, err := s.libraryService.GetLibraryByID(ctx, article.LibraryID)
-			if err != nil {
-				return err
-			}
-			body, err := s.readIngestBody(ctx, library, &article)
-			if err != nil {
-				return err
-			}
-			summaryBody = body
-		}
+
 		before := article.IngestMissing()
 		article.Incomplete = false
 		article.LastIngestAPIKeyID, article.LastIngestAPIKeyName = keyID, keyName
@@ -174,11 +162,7 @@ func (s *entryService) AcceptIncomplete(ctx context.Context, id string) (*types.
 	if err != nil {
 		return nil, err
 	}
-	if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.ParseStatus == types.ParseStatusCompleted {
-		if err := s.cleanupAcceptedSummaryMaterial(ctx, &article, summaryBody); err != nil {
-			logger.Errorf(ctx, "Accepted summary article %s material cleanup failed: %v", id, err)
-		}
-	}
+
 	if s.vault != nil {
 		s.vault.ScheduleRefresh(ctx, id)
 	}
@@ -238,26 +222,3 @@ func (s *entryService) DiscardIngest(ctx context.Context, id, reason string) err
 
 // Once missing material is accepted, an already processed summary article has
 // no further need for the private bytes held while completion was possible.
-func (s *entryService) cleanupAcceptedSummaryMaterial(ctx context.Context, k *types.Entry, body string) error {
-	library, err := s.libraryService.GetLibraryByID(ctx, k.LibraryID)
-	if err != nil {
-		return err
-	}
-	attachments := k.IngestAttachmentRecords()
-	if err := s.removeSummaryOnlyBody(ctx, library, k, body, nil); err != nil {
-		return err
-	}
-	releaser := entryResourceOwners(s.resourceCatalog, k.ID)
-	for _, attachment := range attachments {
-		if (!strings.HasPrefix(attachment.Path, "local://") && !strings.HasPrefix(attachment.Path, "resource://")) || !releaser.deletable(ctx, attachment.Path) {
-			continue
-		}
-		if err := s.resolveFileServiceForPath(ctx, library, attachment.Path).DeleteFile(ctx, attachment.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	if err := k.SetIngestAttachments([]types.IngestAttachment{}); err != nil {
-		return err
-	}
-	return s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Update("ingest_attachments", k.IngestAttachments).Error
-}

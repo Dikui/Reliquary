@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/types"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	paths := []string{"/api/v1/space", "/api/v1/space/api-keys", "/api/v1/space/kv/retrieval-config", "/api/v1/space/kv/parser-engine-config"}
+	paths := []string{"/api/v1/space", "/api/v1/space/api-keys", "/api/v1/space/kv/retrieval-config"}
 	for _, path := range paths {
 		response := personalRequest(t, f.router, http.MethodGet, path, "", "", false)
 		require.Equal(t, http.StatusUnauthorized, response.Code, path+" "+response.Body.String())
@@ -24,6 +25,8 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 			response := personalRequest(t, f.router, http.MethodGet, path, "", actor.credential, actor.apiKey)
 			require.Equal(t, http.StatusOK, response.Code, path+" "+response.Body.String())
 		}
+		removed := personalRequest(t, f.router, http.MethodGet, "/api/v1/space/kv/parser-engine-config", "", actor.credential, actor.apiKey)
+		require.Equal(t, http.StatusNotFound, removed.Code)
 		updated := personalRequest(t, f.router, http.MethodPut, "/api/v1/space", `{"name":"My space","description":"Personal library"}`, actor.credential, actor.apiKey)
 		require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
 		var payload struct {

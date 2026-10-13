@@ -57,27 +57,6 @@
             <div class="config-panel">
               <div class="content-wrapper reparse-confirm-content">
 
-                  <div v-show="activeSection === 'parser'" class="section" data-section="parser">
-                    <LibraryParserSettings
-                      :relevant-extensions="batchFileExts"
-                      :parser-engine-rules="uiState.chunkingConfig.parserEngineRules"
-                      @update:parser-engine-rules="handleParserEngineRulesUpdate"
-                    />
-                    <div v-if="hasPdf" class="library-settings-block">
-                      <div class="settings-group">
-                        <div class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('reparseConfirm.pdfForceScanned.label') }}</label>
-                            <p class="desc">{{ t('reparseConfirm.pdfForceScanned.description') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <t-switch v-model="uiState.pdfForceScanned" size="medium" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   <div v-show="activeSection === 'chunking'" class="section" data-section="chunking">
                     <LibraryChunkingSettings v-model:config="uiState.chunkingConfig" embedded />
                   </div>
@@ -103,34 +82,27 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import LibraryParserSettings from '../settings/LibraryParserSettings.vue'
 import LibraryChunkingSettings from '../settings/LibraryChunkingSettings.vue'
 import type { EntryProcessOverrides } from '@/types/entryProcess'
 import type { ReparseConfirmSource, ReparseConfirmResult } from '@/stores/reparseConfirm'
 
 
-type ConfigSectionKey = 'parser' | 'chunking'
+type ConfigSectionKey = 'chunking'
 
 interface ChunkingUIConfig {
   chunkSize: number
   chunkOverlap: number
   separators: string[]
-  parserEngineRules?: Array<{
-    file_types: string[]
-    engine: string
-  }>
   enableParentChild: boolean
   parentChunkSize: number
   childChunkSize: number
   strategy?: string
   tokenLimit?: number
   languages?: string[]
-  tableMetadataInstructions?: string
 }
 
 interface ReparseUIState {
   chunkingConfig: ChunkingUIConfig
-  pdfForceScanned: boolean
 }
 
 const props = defineProps<{
@@ -147,7 +119,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const activeSection = ref<ConfigSectionKey>('parser')
+const activeSection = ref<ConfigSectionKey>('chunking')
 const uiState = ref<ReparseUIState>(createDefaultUIState())
 const dialogVisible = computed({
   get: () => props.visible,
@@ -158,12 +130,6 @@ function truncateNavText(text: string, max = 18): string {
   if (!text) return text
   if (text.length <= max) return text
   return `${text.slice(0, max - 1)}…`
-}
-
-function hasParserCustomization(): boolean {
-  const rules = uiState.value.chunkingConfig.parserEngineRules
-  if (!rules?.length) return false
-  return rules.some(rule => rule.engine)
 }
 
 const dialogTitle = computed(() => t('reparseConfirm.titleReparse'))
@@ -200,7 +166,6 @@ const navItems = computed(() => {
     })
   }
 
-  push('parser', 'file-search', t('settings.parserEngine'))
   push('chunking', 'file-copy', t('reparseConfirm.chunking'))
   return items
 })
@@ -210,14 +175,6 @@ function getSectionNavStatus(
   issue?: boolean,
 ): { status: string; statusTone?: 'warning' | 'error' | 'muted' } {
   switch (key) {
-    case 'parser':
-      if (uiState.value.pdfForceScanned && hasPdf.value) {
-        return { status: t('reparseConfirm.summaryParserForceScanned') }
-      }
-      if (hasParserCustomization()) {
-        return { status: t('reparseConfirm.navParserCustomized') }
-      }
-      return { status: t('reparseConfirm.navParserDefault'), statusTone: 'muted' }
     case 'chunking': {
       const chunking = uiState.value.chunkingConfig
       const parts = [t('reparseConfirm.navChunkingSummary', { size: chunking.chunkSize })]
@@ -237,16 +194,13 @@ function createDefaultUIState(): ReparseUIState {
       chunkSize: 512,
       chunkOverlap: 80,
       separators: ['\n\n', '\n', '。', '！', '？', ';', '；'],
-      parserEngineRules: undefined,
       enableParentChild: true,
       parentChunkSize: 4096,
       childChunkSize: 384,
       strategy: 'auto',
       tokenLimit: 0,
       languages: [],
-      tableMetadataInstructions: '',
     },
-        pdfForceScanned: false,
   }
 }
 
@@ -261,16 +215,13 @@ function initFromLibraryInfo(library: any) {
       chunkSize: library.chunking_config?.chunk_size || 512,
       chunkOverlap: library.chunking_config?.chunk_overlap ?? 80,
       separators: library.chunking_config?.separators || ['\n\n', '\n', '。', '！', '？', ';', '；'],
-      parserEngineRules: library.chunking_config?.parser_engine_rules || undefined,
       enableParentChild: library.chunking_config?.enable_parent_child ?? false,
       parentChunkSize: library.chunking_config?.parent_chunk_size || 4096,
       childChunkSize: library.chunking_config?.child_chunk_size || 384,
       strategy: library.chunking_config?.strategy || 'auto',
       tokenLimit: library.chunking_config?.token_limit || 0,
       languages: library.chunking_config?.languages || [],
-      tableMetadataInstructions: library.chunking_config?.table_metadata_instructions || '',
     },
-    pdfForceScanned: false,
   }
 }
 
@@ -279,7 +230,6 @@ function buildProcessOverrides(): EntryProcessOverrides {
   const chunking = state.chunkingConfig
 
   const overrides: EntryProcessOverrides = {
-    parser_engine_rules: chunking.parserEngineRules,
     chunking_config: {
       chunk_size: chunking.chunkSize,
       chunk_overlap: chunking.chunkOverlap,
@@ -290,14 +240,7 @@ function buildProcessOverrides(): EntryProcessOverrides {
       strategy: chunking.strategy,
       token_limit: chunking.tokenLimit,
       languages: chunking.languages,
-      table_metadata_instructions: chunking.tableMetadataInstructions,
     },
-  }
-
-  if (state.pdfForceScanned) {
-    overrides.parser_engine_overrides = {
-      pdf_force_scanned: 'true',
-    }
   }
 
   return overrides
@@ -317,15 +260,8 @@ function applyOverridesToState(o?: EntryProcessOverrides | null) {
     if (cc.strategy != null) s.chunkingConfig.strategy = cc.strategy
     if (cc.token_limit != null) s.chunkingConfig.tokenLimit = cc.token_limit
     if (cc.languages) s.chunkingConfig.languages = cc.languages
-    if (cc.table_metadata_instructions != null) s.chunkingConfig.tableMetadataInstructions = cc.table_metadata_instructions
-    if (cc.parser_engine_rules) s.chunkingConfig.parserEngineRules = cc.parser_engine_rules
   }
-  if (o.parser_engine_rules) s.chunkingConfig.parserEngineRules = o.parser_engine_rules
-  if (o.parser_engine_overrides && o.parser_engine_overrides.pdf_force_scanned === 'true') {
-    s.pdfForceScanned = true
-  } else {
-    s.pdfForceScanned = false
-  }
+
 }
 
 watch(
@@ -334,16 +270,9 @@ watch(
     if (!visible) return
     initFromLibraryInfo(props.libraryInfo)
     applyOverridesToState(props.reparsePreview?.processOverrides)
-    activeSection.value = 'parser'
+    activeSection.value = 'chunking'
   },
 )
-
-const handleParserEngineRulesUpdate = (rules: Array<{
-  file_types: string[]
-  engine: string
-}>) => {
-  uiState.value.chunkingConfig.parserEngineRules = rules
-}
 
 const handleCancel = () => {
   emit('cancel')

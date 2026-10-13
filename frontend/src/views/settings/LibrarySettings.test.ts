@@ -89,27 +89,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(requests.filter(item => item.method === 'embedding-status').length, 1)
     assert.doesNotMatch(source, /:embedding-locked=/)
   })
-  test(`${locale}: the settings page saves model tiers and chunking together on the unique library`, async () => {
-    const { requests, events } = await scenario(locale, async state => {
-      assert.equal(state.dirty.value, false)
-      assert.equal(state.formData.value.chunkingConfig.chunkOverlap, 0)
-      state.formData.value.modelTiers.generation = 'generation-new'
-      state.formData.value.chunkingConfig.chunkSize = 128
-      await state.handleSubmit()
-      assert.equal(state.dirty.value, false)
-    })
-    assert.equal(requests.filter(item => item.method === 'get').length, 1)
-    assert.equal(requests.find(item => item.articleListId)?.articleListId, 'unique-library')
-    const saves = requests.filter(item => item.method === 'put')
-    assert.equal(saves.length, 1)
-    assert.equal(saves[0].body.config.model_tiers.generation, 'generation-new')
-    assert.equal(saves[0].body.config.chunking_config.chunk_size, 128)
-    assert.equal(saves[0].body.config.chunking_config.chunk_overlap, 0)
-    assert.equal(saves[0].body.config.chunking_config.languages,null)
-    assert.equal(saves[0].body.config.chunking_config.parser_engine_rules,null)
-    assert.equal(saves[0].body.library_id, undefined)
-    assert.deepEqual(events, ['reliquary:library-settings-saved'])
-  })
+
   test(`${locale}: a failed settings save preserves the edited values and shows an inline error`, async () => {
     const { html, events } = await scenario(locale, async state => {
       state.formData.value.chunkingConfig.chunkSize = 128

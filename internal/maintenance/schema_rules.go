@@ -29,12 +29,24 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}
-	if migration.Version >= 5 {
+	if migration.Version >= 8 {
 		return Rules, nil
 	}
 	legacy := make(map[string]Rule, len(Rules))
 	for table, rule := range Rules {
 		legacy[table] = rule
+	}
+	entriesBefore := legacy["entries"]
+	entriesBefore.Sidecar += " content_type_uncertain processing_review_status processing_review_content_type processing_review_reason processing_mode vault_original_path"
+	if migration.Version >= 4 {
+		entriesBefore.Sidecar += " ingest_attachments"
+	}
+	legacy["entries"] = entriesBefore
+	spaces := legacy["spaces"]
+	spaces.Configuration += " parser_engine_config"
+	legacy["spaces"] = spaces
+	if migration.Version >= 5 {
+		return legacy, nil
 	}
 	for table, rule := range collectionRules {
 		legacy[table] = rule

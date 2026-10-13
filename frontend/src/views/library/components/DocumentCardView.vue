@@ -305,7 +305,6 @@ const openDelete = async (item: EntryCard) => {
                 <DocumentActionMenu
                   :item="item"
                   :trace-visible="isTraceMenuVisible(item)"
-                  @download="handleAction('download', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"

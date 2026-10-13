@@ -9,8 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	taskqueue "reliquary/internal/queue"
+
+	"github.com/stretchr/testify/require"
 
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -140,4 +141,8 @@ type createEntryFileLibraryServiceStub struct {
 	interfaces.LibraryService
 
 	library *types.Library
+}
+
+func (r *createEntryFileRepoStub) GetEntryByID(_ context.Context, _ uint64, _ string) (*types.Entry, error) {
+	return r.createdEntry, nil
 }

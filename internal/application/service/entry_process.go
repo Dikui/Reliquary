@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	taskqueue "reliquary/internal/queue"
+
+	"github.com/google/uuid"
 
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
@@ -20,7 +20,6 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
 )
 
@@ -498,13 +497,10 @@ func (s *entryService) ReparseEntry(
 	}
 
 	// When the caller supplies new overrides (e.g. via the reparse confirm
-	// dialog), validate them against this entry's file type, then persist
+	// dialog), persist the Markdown processing choices
 	// to metadata so both this call's enqueue and the worker re-read the same
 	// config. nil keeps whatever was stored at upload time.
 	if processOverrides != nil {
-		if err := ValidateProcessOverrides(ctx, library, processOverrides, reparseFileTypes(existing)); err != nil {
-			return nil, err
-		}
 		if err := existing.SetProcessOverrides(processOverrides); err != nil {
 			logger.Errorf(ctx, "Failed to set process overrides on reparse: %v", err)
 			return nil, err
@@ -515,20 +511,14 @@ func (s *entryService) ReparseEntry(
 		}
 	}
 
-	if existing.ProcessingMode == types.ProcessingModeSummaryOnly {
-		return s.markReprocessContentMissing(ctx, existing)
-	}
 	body, hasBody, err := s.reprocessStoredBody(ctx, existing)
 	if err != nil {
 		return nil, err
 	}
-	if !hasBody && existing.FilePath == "" {
+	if !hasBody {
 		return s.markReprocessContentMissing(ctx, existing)
 	}
-	reparseAttempt := 0
-	if root, n, attemptErr := s.tracker().OpenAttempt(ctx, existing.ID); attemptErr == nil && root != nil {
-		reparseAttempt = n
-	} else if attemptErr != nil {
+	if _, _, attemptErr := s.tracker().OpenAttempt(ctx, existing.ID); attemptErr != nil {
 		logger.Warnf(ctx, "Open article reprocessing attempt: %v", attemptErr)
 	}
 	if hasBody {
@@ -542,70 +532,7 @@ func (s *entryService) ReparseEntry(
 		}
 		return existing, nil
 	}
-	// For non-manual entry, cleanup synchronously then enqueue document processing
-	logger.Infof(ctx, "Cleaning up existing resources for entry: %s", entryID)
-	if err := s.cleanupEntryResources(ctx, existing); err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"entry_id": entryID,
-		})
-		return nil, err
-	}
-
-	// Step 2: Update entry status and metadata
-	resetEntryForReparse(existing, library)
-
-	if err := s.repo.UpdateEntry(ctx, existing); err != nil {
-		logger.Errorf(ctx, "Failed to update entry status before reparse: %v", err)
-		return nil, err
-	}
-	if err := s.repo.UpdateEntryColumn(ctx, existing.ID, "pending_subtasks_count", 0); err != nil {
-		logger.Errorf(ctx, "Failed to reset pending_subtasks_count before reparse: %v", err)
-		return nil, err
-	}
-
-	// Step 3: Trigger async re-parsing based on entry type
-	logger.Infof(ctx, "Entry status updated, scheduling async reparse, ID: %s, Type: %s", existing.ID, existing.Type)
-
-	// For file-based entry, enqueue document processing task
-	if existing.FilePath != "" {
-		spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
-
-		lang := types.LanguageFromContextOrDefault(ctx)
-		taskPayload := types.DocumentProcessPayload{
-			SpaceID:   spaceID,
-			EntryID:   existing.ID,
-			LibraryID: existing.LibraryID,
-			FilePath:  existing.FilePath,
-			FileName:  existing.FileName,
-			FileType:  getFileType(existing.FileName),
-			Language:  lang,
-			Attempt:   reparseAttempt,
-		}
-
-		payloadBytes, err := json.Marshal(taskPayload)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to marshal reparse task payload: %v", err)
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, werrors.NewInternalServerError("Failed to submit processing task")
-		}
-
-		task := taskqueue.NewTask(
-			types.TypeDocumentProcess,
-			payloadBytes,
-			documentProcessTaskOptions(s.config, taskqueue.MaxRetry(3))...,
-		)
-		info, err := s.task.Enqueue(task)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to enqueue reparse task: %v", err)
-			s.markEntryEnqueueFailed(ctx, existing)
-			return existing, werrors.NewInternalServerError("Failed to submit processing task")
-		}
-		logger.Infof(ctx, "Enqueued reparse task: id=%s queue=%s entry_id=%s", info.ID, info.Queue, existing.ID)
-
-		return existing, nil
-	}
-
-	return s.markReprocessContentMissing(ctx, existing)
+	return existing, nil
 }
 
 // resetEntryForReparse makes the top-level entry state describe the
@@ -847,9 +774,6 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	}
 
 	// 获取任务重试信息，用于判断是否是最后一次重试
-	retryCount, _ := taskqueue.GetRetryCount(ctx)
-	maxRetry, _ := taskqueue.GetMaxRetry(ctx)
-	isLastRetry := retryCount >= maxRetry
 
 	spaceInfo, err := s.spaceRepo.GetSpaceByID(ctx, payload.SpaceID)
 	if err != nil {
@@ -858,6 +782,8 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	}
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, spaceInfo)
 
+	retryCount, _ := taskqueue.GetRetryCount(ctx)
+	maxRetry, _ := taskqueue.GetMaxRetry(ctx)
 	logger.Infof(ctx, "Processing document task: entry_id=%s, file_path=%s, retry=%d/%d",
 		payload.EntryID, payload.FilePath, retryCount, maxRetry)
 
@@ -980,25 +906,6 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	}
 	ctx = withAttempt(ctx, attempt)
 
-	if payload.FilePath != "" && IsAudioType(payload.FileType) {
-		entry.ParseStatus = types.ParseStatusFailed
-		entry.ErrorMessage = fmt.Sprintf("不支持上传音频文件: %s", normalizeFileExtension(payload.FileType))
-		entry.UpdatedAt = time.Now()
-		s.repo.UpdateEntry(ctx, entry)
-		return nil
-	}
-
-	// 视频文件不再支持入库解析
-	if payload.FilePath != "" && IsVideoType(payload.FileType) {
-		logger.GetLogger(ctx).WithField("entry_id", entry.ID).
-			Errorf("processDocument video not supported")
-		entry.ParseStatus = "failed"
-		entry.ErrorMessage = "暂不支持视频文件"
-		entry.UpdatedAt = time.Now()
-		s.repo.UpdateEntry(ctx, entry)
-		return nil
-	}
-
 	// Parse, resolve body images, review intake, then process the article once.
 	var convertResult *types.ReadResult
 
@@ -1006,13 +913,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		convertResult = &types.ReadResult{MarkdownContent: strings.Join(payload.Passages, "\n\n")}
 	} else {
 		// File import
-		convertResult, err = s.convert(ctx, payload, library, entry, eff, isLastRetry)
-		if err != nil {
-			return err
-		}
-		if convertResult == nil {
-			return nil
-		}
+		return werrors.NewBadRequestError("content is required; convert the source to Markdown before ingestion")
 	}
 
 	// Step 2: Store images and update markdown references
@@ -1081,14 +982,6 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 			return nil
 		}
 	}
-	if isDataTableFileType(entry.FileType) {
-		body, err := s.prepareTableProcessingBody(ctx, library, entry)
-		if err != nil {
-			s.markArticleProcessingFailed(ctx, entry, err)
-			return err
-		}
-		convertResult.MarkdownContent = body
-	}
 	if err := s.processArticleBody(ctx, library, entry, convertResult.MarkdownContent, storedImages, eff); err != nil {
 		s.markArticleProcessingFailed(ctx, entry, err)
 		return err
@@ -1120,161 +1013,6 @@ func sanitizeReadResult(result *types.ReadResult) {
 }
 
 // convert parses only files already present in local storage.
-func (s *entryService) convert(
-	ctx context.Context,
-	payload types.DocumentProcessPayload,
-	library *types.Library,
-	entry *types.Entry,
-	eff types.EffectiveProcessConfig,
-	isLastRetry bool,
-) (*types.ReadResult, error) {
-	// Stage tracking: docreader. Mark the stage as running here so the
-	// timeline reflects "DocReader" the moment a worker picks the task
-	// up — before that, the stage stays "pending" from the initial
-	// upload. Failure/skip transitions are emitted at the specific
-	// failure points below; success is emitted at the bottom.
-	docInput := types.JSONMap{
-		"file_name": payload.FileName,
-		"file_type": payload.FileType,
-	}
-	s.beginStage(ctx, entry.ID, types.StageDocReader, docInput)
-	fileType := payload.FileType
-	spaceOverrides := s.getParserEngineOverridesFromContext(ctx)
-	var uploadOverrides map[string]string
-	if processOverrides, err := entry.ProcessOverrides(); err == nil && processOverrides != nil {
-		uploadOverrides = processOverrides.ParserEngineOverrides
-	}
-	mergedOverrides := MergeParserEngineOverrides(spaceOverrides, uploadOverrides)
-	if err := validateParserEngineOverrideURLs(mergedOverrides); err != nil {
-		logger.Errorf(ctx, "Parser endpoint rejected for SSRF protection: %v", err)
-		entry.ParseStatus = "failed"
-		entry.ErrorMessage = "Parser endpoint is not allowed for security reasons"
-		entry.UpdatedAt = time.Now()
-		s.repo.UpdateEntry(ctx, entry)
-		s.failStage(ctx, entry.ID, types.StageDocReader,
-			werrors.ErrCodeDocReaderParseFailed, entry.ErrorMessage, err)
-		return nil, nil
-	}
-
-	parserEngine := eff.ChunkingConfig.ResolveParserEngine(fileType)
-	reader, readerErr := docparser.NewReader(ctx, parserEngine, fileType, false, docparser.ReaderDeps{Overrides: mergedOverrides})
-	if readerErr != nil {
-		entry.ParseStatus = types.ParseStatusFailed
-		entry.ErrorMessage = readerErr.Error()
-		entry.UpdatedAt = time.Now()
-		if err := s.repo.UpdateEntry(ctx, entry); err != nil {
-			return nil, err
-		}
-		s.failStage(ctx, entry.ID, types.StageDocReader, werrors.ErrCodeDocReaderUnavailable, entry.ErrorMessage, nil)
-		return nil, nil
-	}
-
-	req := &types.ReadRequest{
-		Title:                 entry.Title,
-		ParserEngine:          parserEngine,
-		RequestID:             payload.RequestId,
-		ParserEngineOverrides: mergedOverrides,
-	}
-
-	{
-		fileReader, err := s.resolveFileServiceForPath(ctx, library, payload.FilePath).GetFile(ctx, payload.FilePath)
-		if err != nil {
-			s.failStage(ctx, entry.ID, types.StageDocReader,
-				werrors.ErrCodeDocReaderParseFailed, "failed to get file", err)
-			return s.failEntry(ctx, entry, isLastRetry, "failed to get file: %v", err)
-		}
-		defer fileReader.Close()
-		contentBytes, err := io.ReadAll(fileReader)
-		if err != nil {
-			s.failStage(ctx, entry.ID, types.StageDocReader,
-				werrors.ErrCodeDocReaderParseFailed, "failed to read file", err)
-			return s.failEntry(ctx, entry, isLastRetry, "failed to read file: %v", err)
-		}
-		req.FileContent = contentBytes
-		req.FileName = payload.FileName
-		req.FileType = fileType
-	}
-
-	result, err := s.callDocReaderWithTimeout(ctx, reader, req)
-	if err != nil {
-		// Distinguish DocReader timeout (a knowable user-facing
-		// failure) from generic read errors so the UI can suggest
-		// "split this large file" specifically when relevant.
-		code := werrors.ErrCodeDocReaderParseFailed
-		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "parser call timeout") {
-			code = werrors.ErrCodeDocReaderTimeout
-		}
-		s.failStage(ctx, entry.ID, types.StageDocReader,
-			code, "document read failed", err)
-		return s.failEntry(ctx, entry, isLastRetry, "document read failed: %v", err)
-	}
-	sanitizeReadResult(result)
-	if err := extractIntakeOriginalLink(entry, result.MarkdownContent, req.FileContent, fileType, result.Metadata); err != nil {
-		return nil, err
-	}
-	if result.Error != "" {
-		logger.Errorf(ctx, "[convert] parser returned error library=%s entry=%s file=%q type=%s engine=%q: %s",
-			library.ID, entry.ID, req.FileName, fileType, parserEngine, result.Error)
-		entry.ParseStatus = "failed"
-		entry.ErrorMessage = result.Error
-		entry.UpdatedAt = time.Now()
-		s.repo.UpdateEntry(ctx, entry)
-		s.failStage(ctx, entry.ID, types.StageDocReader,
-			werrors.ErrCodeDocReaderParseFailed, result.Error, nil)
-		return nil, nil
-	}
-	docOutput := types.JSONMap{
-		"text_length":  len(result.MarkdownContent),
-		"images_found": len(result.ImageRefs),
-	}
-	if pages := result.Metadata["pages"]; pages != "" {
-		docOutput["pages"] = pages
-	}
-	s.endStage(ctx, entry.ID, types.StageDocReader, docOutput)
-	return result, nil
-}
-
-// callDocReaderWithTimeout wraps the parser call in a child context whose
-// deadline is min(parent_deadline, ParserCallTimeout). Without this cap,
-// a hung parser (network partition, GC pause, OCR runaway) silently
-// burns the whole DocumentProcessTimeout budget and pins a worker for hours
-// — the #1 cause of "entry stuck in processing" reports.
-//
-// On timeout we annotate the error so retries / dead-letter consumers can
-// distinguish "parser was slow" from "parser returned an error".
-func (s *entryService) callDocReaderWithTimeout(
-	ctx context.Context, reader interfaces.DocReader, req *types.ReadRequest,
-) (*types.ReadResult, error) {
-	timeout := 30 * time.Minute
-	if s.config != nil && s.config.Library != nil && s.config.Library.ParserCallTimeout > 0 {
-		timeout = s.config.Library.ParserCallTimeout
-	}
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	start := time.Now()
-	result, err := reader.Read(callCtx, req)
-	elapsed := time.Since(start)
-	if err != nil {
-		// Promote DeadlineExceeded into a clearer message; retain underlying
-		// error via %w so errors.Is(callCtx.Err(), context.DeadlineExceeded)
-		// still works for upstream classification.
-		if errors.Is(callCtx.Err(), context.DeadlineExceeded) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			logger.Errorf(ctx, "[convert] parser call timed out after %s (limit %s) for %q",
-				elapsed, timeout, req.FileName)
-			return nil, fmt.Errorf("parser call timeout after %s: %w", timeout, err)
-		}
-		return nil, err
-	}
-	logger.Infof(ctx, "[convert] parser call ok in %s for %q", elapsed, req.FileName)
-	return result, nil
-}
-
-// isLikelyRateLimitError performs a fuzzy classification of an error as a
-// rate-limit / quota / backpressure failure. We only need a hint — the
-// caller maps to one of two error_codes so the UI can offer "retry later"
-// vs. "fix configuration" advice. False positives are harmless (the
-// detail is preserved in error_detail anyway).
 func isLikelyRateLimitError(err error) bool {
 	if err == nil {
 		return false

@@ -10,9 +10,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
@@ -20,6 +17,10 @@ import (
 	"reliquary/internal/middleware"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T) {
@@ -32,7 +33,7 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 	v, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, v.Close()) })
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.ID, Title: "Attachment", SourceKind: "article", Type: "url", Source: "https://example.org/image", ParseStatus: types.ParseStatusCompleted, ContentType: "event", ProcessingMode: "full"}
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.ID, Title: "Attachment", SourceKind: "article", Type: "url", Source: "https://example.org/image", ParseStatus: types.ParseStatusCompleted, ContentType: "event"}
 	require.NoError(t, db.Create(article).Error)
 	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="
 	body := "# Attachment\n\n![image](data:image/png;base64," + png + ")"
@@ -57,6 +58,9 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/entries/"+article.ID+"/vault-attachment?"+url.Values{"path": {path}}.Encode(), nil))
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/entries/"+article.ID+"/vault-attachment?"+url.Values{"path": {"../../attachments/" + article.ID + "/original.pdf"}}.Encode(), nil))
+	require.Equal(t, http.StatusNotFound, response.Code)
 	link := filepath.Join(root, "attachments", article.ID, "linked.png")
 	require.NoError(t, os.Symlink(filepath.Join(root, article.VaultPath), link))
 	// Remove the deliberately unsafe fixture before the vault's final flush.

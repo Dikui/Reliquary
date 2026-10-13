@@ -469,7 +469,7 @@ class Context:
             return True
         reference = "reliquary-maintenance-helper:" + secrets.token_hex(6)
         print("Preparing a maintenance helper for the frozen baseline; the running image and database structure stay unchanged.")
-        run(["docker", "build", "-f", "docker/Dockerfile.app", "--build-arg", "WITH_ANYDOC=" + self.env.get("WITH_ANYDOC", "0"),
+        run(["docker", "build", "-f", "docker/Dockerfile.app",
              "--build-arg", "VERSION_ARG=" + (self.root / "VERSION").read_text().strip(), "-t", reference, "."], env=self.env, cwd=self.root, capture=False)
         self.env["RELIQUARY_ADMIN_HELPER_IMAGE"] = reference
         return True
@@ -1437,7 +1437,7 @@ def capture_upgrade_backup_record(ctx, package, result, before, confirmed):
 
 
 def verify_upgrade(ctx, package):
-    """Keep every prior table exact while allowing newly introduced tables."""
+    """Verify prior data with the explicit server migration projections."""
     expected = json.loads((Path(package) / "snapshot.json").read_text())
     actual = ctx.cli_json("manifest")
     recorded = getattr(ctx, "upgrade_backup_record", None)

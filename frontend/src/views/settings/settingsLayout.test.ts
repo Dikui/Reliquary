@@ -90,20 +90,3 @@ test('narrow model tier forms keep their natural height', async () => {
   }
   assert.equal(styleDeclarationsAtWidth(tiers, '.model-tier-row', 1440)['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 3fr)')
 })
-
-test('model and parser grids can shrink below their preferred card width', async () => {
-  for (const [file, selector] of [
-    ['ModelSettings.vue', '.model-grid'], ['ParserEngineSettings.vue', '.engine-cards'],
-  ]) {
-    const rules = await compiledSFCStyleRules(new URL(`./${file}`, import.meta.url))
-    assert.equal(styleDeclarationsAtWidth(rules, selector, 1440)['grid-template-columns'], 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))')
-  }
-  const ollama = await compiledSFCStyleRules(new URL('./OllamaSettings.vue', import.meta.url))
-  const models = await compiledSFCStyleRules(new URL('./ModelSettings.vue', import.meta.url))
-  for (const { viewport, inner } of scenarios.filter(item => item.stacked)) {
-    const container = { 'settings-content': inner }
-    assert.equal(styleDeclarationsAtWidth(ollama, '.model-list-container', viewport, container)['grid-template-columns'], 'minmax(0, 1fr)')
-    assert.equal(styleDeclarationsAtWidth(models, '.section-header__top', viewport, container)['flex-wrap'], 'wrap')
-    assert.equal(styleDeclarationsAtWidth(models, '.model-type-tabs .t-tabs__nav-scroll', viewport, container)['scrollbar-width'], 'auto')
-  }
-})

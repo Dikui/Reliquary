@@ -38,7 +38,7 @@ async function load() {
   finally { if (current === generation) loading.value = false }
 }
 function changeKind(value: string | number) {
-  if (busy.value || !['intake', 'processing', 'incomplete'].includes(String(value))) return
+  if (busy.value || !['intake', 'incomplete'].includes(String(value))) return
   generation++; kind.value = value as PendingKind; page.value = 1; records.value = []; incompleteRecords.value = []; total.value = 0; void load()
 }
 function changePage(value: { current: number }) { page.value = value.current; void load() }
@@ -55,23 +55,20 @@ defineExpose({ refresh: load })
     <div class="review-heading"><h3>{{ t('knowledgeReview.title') }}</h3><t-button variant="outline" :loading="loading" :disabled="busy" @click="refresh">{{ t('knowledgeWorkbench.refresh') }}</t-button></div>
     <t-tabs :value="kind" @change="changeKind">
       <t-tab-panel value="intake" :label="t('knowledgeReview.intake')" :disabled="busy" />
-      <t-tab-panel value="processing" :label="t('knowledgeReview.processing')" :disabled="busy" />
       <t-tab-panel value="incomplete" :label="t('knowledgeReview.incomplete')" :disabled="busy" />
     </t-tabs>
     <p class="review-description">{{ t(`knowledgeReview.${kind}Hint`) }}</p>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" :disabled="busy" @click="refresh">{{ t('common.retry') }}</t-button></template></t-alert>
     <t-loading :loading="loading" show-overlay>
       <div class="review-list">
-        <t-empty v-if="!(kind === 'incomplete' ? incompleteRecords.length : records.length) && !loading && !error" :description="t(kind === 'intake' ? 'knowledgeReview.emptyIntake' : kind === 'processing' ? 'knowledgeReview.emptyProcessing' : 'knowledgeReview.emptyIncomplete')" />
+        <t-empty v-if="!(kind === 'incomplete' ? incompleteRecords.length : records.length) && !loading && !error" :description="t(kind === 'intake' ? 'knowledgeReview.emptyIntake' : 'knowledgeReview.emptyIncomplete')" />
         <article v-for="item in records" :key="item.id" class="review-record" :data-review-id="item.id">
           <div class="review-record-heading"><h4>{{ item.title || item.file_name || t('library.untitledDocument') }}</h4><t-button variant="text" :disabled="busy" @click="emit('open-source', item.id)">{{ t('library.intakePreviewOriginal') }}</t-button></div>
           <t-tag v-if="item.source_kind === 'mine'" class="acquisition-tag" size="small" variant="light-outline">{{ t('library.sourceKinds.mine') }}</t-tag>
           <t-tag v-if="kind === 'intake' && item.acquisition === 'model_written'" class="acquisition-tag" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
           <p v-if="kind === 'intake' && item.related_article_id">{{ t('knowledgeReview.conflictReason') }} <a :href="articleLink(item.related_article_id)" @click.prevent="emit('open-source', item.related_article_id)">{{ t('knowledgeReview.relatedArticle') }}</a></p>
           <p v-else-if="kind === 'intake' && item.metadata?.intake?.reason">{{ item.metadata.intake.reason }}</p>
-          <MissingMaterials v-if="kind === 'intake'" :items="(item.missing_materials || []).filter(material => material.type === 'content')" />
           <a v-if="originalURL(item)" :href="originalURL(item)" target="_blank" rel="noopener noreferrer">{{ originalURL(item) }}</a>
-          <p v-if="item.metadata?.intake?.source_info?.original_url_source === 'from_file'" class="review-link-source">{{ t('knowledgeReview.extractedLink') }}</p>
           <ReviewActions :entry="item" @changed="reviewed" @busy-change="setBusy(item.id, $event)" />
         </article>
         <article v-for="item in incompleteRecords" :key="item.article_id" class="review-record" :data-incomplete-id="item.article_id">

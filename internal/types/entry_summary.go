@@ -8,19 +8,18 @@ import (
 )
 
 const (
-	ContentTypeEvent          = "event"
-	ContentTypeOpinion        = "opinion"
-	ContentTypeResearch       = "research"
-	ContentTypeTutorial       = "tutorial"
-	ContentTypeCase           = "case"
-	ContentTypeReference      = "reference"
-	ProcessingModeFull        = "full"
-	ProcessingModeSummaryOnly = "summary_only"
+	ContentTypeEvent     = "event"
+	ContentTypeOpinion   = "opinion"
+	ContentTypeResearch  = "research"
+	ContentTypeTutorial  = "tutorial"
+	ContentTypeCase      = "case"
+	ContentTypeReference = "reference"
+	ContentTypeOther     = "other"
 )
 
-var ContentTypes = []string{ContentTypeEvent, ContentTypeOpinion, ContentTypeResearch, ContentTypeTutorial, ContentTypeCase, ContentTypeReference}
+var ContentTypes = []string{ContentTypeEvent, ContentTypeOpinion, ContentTypeResearch, ContentTypeTutorial, ContentTypeCase, ContentTypeReference, ContentTypeOther}
 
-// NormalizeContentType leaves an unsupported classification empty.
+// NormalizeContentType maps missing and unsupported classifications to other.
 func NormalizeContentType(value string) string {
 	value = strings.TrimSpace(value)
 	for _, allowed := range ContentTypes {
@@ -28,19 +27,9 @@ func NormalizeContentType(value string) string {
 			return value
 		}
 	}
-	return ""
+	return ContentTypeOther
 }
 
-func ProcessingModeForContentType(value string) string {
-	switch value {
-	case ContentTypeTutorial, ContentTypeCase, ContentTypeReference:
-		return ProcessingModeSummaryOnly
-	default:
-		return ProcessingModeFull
-	}
-}
-
-// EntrySummary is the common article summary contract.
 type EntrySummary struct {
 	Overview string   `json:"overview" yaml:"overview"`
 	Points   []string `json:"points" yaml:"points"`
@@ -87,3 +76,12 @@ func (s *EntrySummary) Scan(value interface{}) error {
 
 // EntrySummarySearchID identifies a summary hit without a persisted body chunk.
 func EntrySummarySearchID(entryID string) string { return "knowledge-summary:" + entryID }
+
+func IsContentType(value string) bool {
+	for _, allowed := range ContentTypes {
+		if value == allowed {
+			return true
+		}
+	}
+	return false
+}

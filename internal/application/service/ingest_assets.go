@@ -6,18 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"reliquary/internal/infrastructure/docparser"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const ingestAssetLifetime = 24 * time.Hour
@@ -55,8 +58,8 @@ func (s *entryService) UploadIngestAsset(ctx context.Context, name string, data 
 		return nil, werrors.NewBadRequestError("附件文件名不能为空")
 	}
 	fileType := normalizeFileExtension(getFileType(name))
-	if err := validateImportFileType(fileType); err != nil {
-		return nil, err
+	if !docparser.IsImageFormat(fileType) || !strings.HasPrefix(http.DetectContentType(data), "image/") {
+		return nil, werrors.NewBadRequestError("only image attachments are accepted; convert the source to Markdown before ingestion")
 	}
 	if len(data) == 0 {
 		return nil, werrors.NewBadRequestError("附件内容不能为空")
@@ -213,7 +216,7 @@ func (s *entryService) HandleIngestAssetCleanup(ctx context.Context, task *taskq
 	return s.cleanupIngestAssets(ctx, time.Now().UTC(), payload.AssetID)
 }
 
-// releaseIngestArticleAssets removes the original upload retained alongside
+// releaseIngestArticleAssets removes uploaded images retained alongside
 // article-owned copies. Other resource owners keep their shared bytes.
 func (s *entryService) releaseIngestArticleAssets(ctx context.Context, entryID string) error {
 	if s.db == nil {

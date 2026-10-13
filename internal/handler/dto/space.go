@@ -10,19 +10,18 @@ import (
 )
 
 type SpaceResponse struct {
-	ID                 uint64                    `json:"id"`
-	SpaceID            uint64                    `json:"space_id"`
-	Name               string                    `json:"name"`
-	Description        string                    `json:"description"`
-	Status             string                    `json:"status"`
-	Business           string                    `json:"business"`
-	StorageUsed        int64                     `json:"storage_used"`
-	ParserEngineConfig *types.ParserEngineConfig `json:"parser_engine_config,omitempty"`
-	Credentials        *types.CredentialsConfig  `json:"credentials,omitempty"`
-	RetrievalConfig    *types.RetrievalConfig    `json:"retrieval_config,omitempty"`
-	CreatedAt          time.Time                 `json:"created_at"`
-	UpdatedAt          time.Time                 `json:"updated_at"`
-	DeletedAt          gorm.DeletedAt            `json:"deleted_at"`
+	ID              uint64                   `json:"id"`
+	SpaceID         uint64                   `json:"space_id"`
+	Name            string                   `json:"name"`
+	Description     string                   `json:"description"`
+	Status          string                   `json:"status"`
+	Business        string                   `json:"business"`
+	StorageUsed     int64                    `json:"storage_used"`
+	Credentials     *types.CredentialsConfig `json:"credentials,omitempty"`
+	RetrievalConfig *types.RetrievalConfig   `json:"retrieval_config,omitempty"`
+	CreatedAt       time.Time                `json:"created_at"`
+	UpdatedAt       time.Time                `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt           `json:"deleted_at"`
 }
 
 // NewSpaceResponse converts a stored space into its HTTP response shape.
@@ -50,7 +49,6 @@ func NewSpaceResponseWithSecrets(space *types.Space) *SpaceResponse {
 		DeletedAt:       space.DeletedAt,
 	}
 	if includeSecrets {
-		resp.ParserEngineConfig = types.ParserEngineConfigForResponse(space.ParserEngineConfig, true)
 		resp.Credentials = types.CredentialsConfigForResponse(space.Credentials, true)
 	}
 	return resp

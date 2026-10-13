@@ -22,6 +22,13 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	if err := retireSnapshotSources(root, original); err != nil {
 		return err
 	}
+	markdownOnly, err := markdownOnlySchema(ctx, db)
+	if err != nil {
+		return err
+	}
+	if markdownOnly {
+		projectMarkdownSnapshot(original)
+	}
 	current, err := Capture(ctx, db)
 	if err != nil {
 		return fmt.Errorf("capture imported replica: %w", err)

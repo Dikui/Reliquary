@@ -9,13 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pgvector/pgvector-go"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"reliquary/internal/models/rerank"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/pgvector/pgvector-go"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type entrySearchFixtureBases struct {
@@ -77,14 +78,13 @@ func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, se
 	t.Helper()
 	article := &types.Entry{ID: id, SpaceID: 1, LibraryID: h.library.ID, Type: "manual",
 		Title: "Searchfixture " + id, Source: "https://example.org/" + id, SourceKind: source,
-		ContentType: contentType, ProcessingMode: types.ProcessingModeForContentType(contentType),
+		ContentType: contentType,
 		ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", EmbeddingModelID: "fixture-model",
 		VaultPath: source + "/" + id + ".md"}
 	if source == "article" {
 		article.StructuredSummary = &types.EntrySummary{Overview: semantic, Points: []string{"Evidence point"}, KeyTerms: []string{"Termneedle" + id}}
 		article.Description = article.StructuredSummary.RenderText()
 	} else {
-		article.ProcessingMode = types.ProcessingModeFull
 	}
 	metadata, err := json.Marshal(map[string]string{"publisher": "Publisherneedle" + id, "author": "Authorneedle" + id, "published_at": date, "original_url": article.Source})
 	require.NoError(t, err)
@@ -144,36 +144,6 @@ func TestEntrySearchPostgresIncompleteStateIncludesDocuments(t *testing.T) {
 	for _, result := range response.Results {
 		require.Equal(t, result.EntryID == "incomplete" || result.EntryID == "mine", result.Incomplete, result.EntryID)
 	}
-}
-
-func TestEntrySearchPostgresMergesChunksAndSummaryOnlyRoutes(t *testing.T) {
-	h := newEntrySearchFixture(t)
-	h.add(t, "full", "article", "2026-10-01", "event", "semanticlaunch", 80)
-	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
-	h.add(t, "another", "article", "2026-10-04", "event", "semanticlaunch", 1)
-	response := h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", CollapseSimilar: entrySearchNoCollapse(), Limit: 3})
-	require.Equal(t, []string{"another", "full", "summary"}, entrySearchIDs(response))
-	for _, result := range response.Results {
-		require.LessOrEqual(t, len(result.Snippets), 3)
-		require.NotEmpty(t, result.Title)
-		require.NotEmpty(t, result.VaultPath)
-		require.Contains(t, result.OriginalURL, result.EntryID)
-		require.NotNil(t, result.Summary)
-		if result.EntryID == "summary" {
-			require.Len(t, result.Snippets, 1)
-			require.Empty(t, result.Snippets[0].ChunkID)
-			require.Equal(t, result.Summary.RenderText(), result.Snippets[0].Content)
-		}
-	}
-	// A semantic-only query has no shared keyword and recalls summary articles.
-	h.library.IndexingStrategy.KeywordEnabled = false
-	response = h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", CollapseSimilar: entrySearchNoCollapse()})
-	require.Contains(t, entrySearchIDs(response), "summary")
-	// A body-only keyword cannot recall a summary article whose body was not kept.
-	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
-	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id='full'").Update("content", "privatebodyneedle").Error)
-	response = h.search(t, types.EntrySearchRequest{Query: "privatebodyneedle", CollapseSimilar: entrySearchNoCollapse()})
-	require.Equal(t, []string{"full"}, entrySearchIDs(response))
 }
 
 func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {

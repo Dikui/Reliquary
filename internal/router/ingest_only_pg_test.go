@@ -9,14 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/service"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/gin-gonic/gin"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
@@ -41,7 +42,7 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 	largeFile := base64.StdEncoding.EncodeToString(make([]byte, types.MaxIngestInlineAssetBytes+1))
 	mcpCall(t, client, "ingest", map[string]any{"items": []any{map[string]any{
 		"url": "https://example.org/oversized-inline", "content": "A complete source body", "acquisition": "extracted",
-		"file": map[string]any{"name": "source.pdf", "data": largeFile},
+		"images": []any{map[string]any{"source_url": "https://example.org/image.png", "data": largeFile}},
 	}}}, &batch)
 	require.Equal(t, "invalid", batch.Items[0].Status)
 	require.Contains(t, batch.Items[0].Reason, "limit")
@@ -54,7 +55,7 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 	require.NoError(t, err)
 	for _, tool := range tools.Tools {
 		if tool.Name == "ingest" || tool.Name == "check_urls" || tool.Name == "list_incomplete" {
-			require.Contains(t, tool.Description, "送入完整材料：正文全文、原始文件、图片文件")
+			require.Contains(t, tool.Description, "送入 Markdown 正文全文与图片文件")
 			require.Contains(t, tool.Description, "补全时用同一原文链接再次收录")
 		}
 		if tool.Name == "ingest" {
@@ -66,8 +67,8 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 
 func TestMCPAndHTTPIncompleteListAcceptAndAcquisition(t *testing.T) {
 	f := newMCPFixture(t)
-	first := f.seedArticle(t, "Acquisitionfixture first", types.ProcessingModeFull, "# Original\n\nUnchanged source text.\n")
-	attempted := f.seedArticle(t, "Acquisitionfixture attempted", types.ProcessingModeFull, "# Other\n\nAnother original source text.\n")
+	first := f.seedArticle(t, "Acquisitionfixture first", "full", "# Original\n\nUnchanged source text.\n")
+	attempted := f.seedArticle(t, "Acquisitionfixture attempted", "full", "# Other\n\nAnother original source text.\n")
 	for _, article := range []*types.Entry{first, attempted} {
 		article.Incomplete = true
 		article.Acquisition = "model_written"

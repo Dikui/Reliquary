@@ -12,7 +12,6 @@ export interface SearchEntry {
   source: SearchSource
   published_at: string | null
   content_type: ContentType | string
-  processing_mode: 'full' | 'summary_only'
   summary: StructuredSummary | null
   entities: SearchEntity[]
   topics: EntryTopic[]

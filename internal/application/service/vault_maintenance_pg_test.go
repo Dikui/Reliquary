@@ -2,101 +2,17 @@ package service
 
 import (
 	"context"
-	"encoding/base64"
 	"os"
 	"path/filepath"
-	"strings"
+	"reliquary/internal/maintenance"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/maintenance"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
-
-func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing.T) {
-	h, v := newVaultArticleHarness(t)
-	h.processor.output = articleProcessingOutput(t, "research", []types.EntityCandidate{{Name: "Company", EntityType: "company"}}, []string{})
-	full := h.upload(t, "Research preservation", "# Original research\n\nImmutable original measurements and reasoning.")
-	h.processor.output = articleProcessingOutput(t, "reference", nil, []string{})
-	summary := h.upload(t, "Reference preservation", "# Summary reference\n\nSource is kept as a summary and link.")
-	require.NoError(t, h.db.Model(full).Updates(map[string]any{"content_type_corrected": true, "processing_review_status": "pending", "processing_review_content_type": "research", "processing_review_reason": "model uncertainty", "collect_reason": "User reason"}).Error)
-	var entity types.Entity
-	require.NoError(t, h.db.Where("canonical_name='Company'").First(&entity).Error)
-	require.NoError(t, h.db.Model(&entity).Update("description", "User entity description").Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "maintenance-topic", SpaceID: 1, Name: "Maintenance", Description: "User authored description", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
-	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
-	require.NoError(t, h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?),(1,'topic','maintenance-topic')", entity.ID).Error)
-	require.NoError(t, h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error)
-	for path, body := range map[string]string{"reports/report.md": "# Report original\n\nThis report remains user owned."} {
-		require.NoError(t, os.WriteFile(filepath.Join(v.root, path), []byte(body), 0600))
-	}
-	configuration := map[string]string{
-		".obsidian/app.json": `{"theme":"obsidian"}`, ".trash/x.md": "# Deleted note\n", ".DS_Store": "Finder metadata",
-		"mine/.trash/x.md": "# Deleted personal note\n", "reports/.obsidian/template.md": "# Editor template\n",
-	}
-	for relative, data := range configuration {
-		path := filepath.Join(v.root, relative)
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
-		require.NoError(t, os.WriteFile(path, []byte(data), 0644))
-	}
-	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, v.root)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, documents.Close()) })
-	// Build keyword chunks without calling the configured vector fixture.
-	indexing := *h.library
-	indexing.IndexingStrategy.VectorEnabled = false
-	importedPersonal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
-	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
-	require.NoError(t, v.Flush(h.ctx))
-	snapshot, err := maintenance.Capture(h.ctx, h.db)
-	require.NoError(t, err)
-	for _, row := range snapshot.Tables["entries"] {
-		if row["source_kind"] == "mine" {
-			require.Equal(t, importedPersonal.VaultBody, row["vault_body"])
-		}
-	}
-	verified, err := v.Verify(h.ctx, false)
-	require.NoError(t, err)
-	require.True(t, verified.OK, "%v", verified.Differences)
-	filesBefore := vaultFileHashes(t, v.root)
-	before, err := maintenance.BuildManifest(context.Background(), h.db, v.root, "")
-	require.NoError(t, err)
-	fresh := pgtest.Open(t)
-	rebuilder, err := NewVaultDocumentService(fresh, nil, nil, v.root)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, rebuilder.Close()) })
-	result, err := rebuilder.RebuildReplica(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, 2, result.Articles)
-	require.EqualValues(t, 1, result.Mine)
-	require.EqualValues(t, 1, result.Reports)
-	after, err := maintenance.BuildManifest(context.Background(), fresh, v.root, "")
-	require.NoError(t, err)
-	require.Empty(t, maintenance.CompareManifest(before, after))
-	for _, original := range []*types.Entry{full, summary, importedPersonal} {
-		var rebuilt types.Entry
-		require.NoError(t, fresh.Where("id=?", original.ID).First(&rebuilt).Error)
-		require.Equal(t, original.VaultPath, rebuilt.VaultPath)
-		require.Equal(t, original.VaultBody, rebuilt.VaultBody)
-	}
-	var personal []types.Entry
-	require.NoError(t, fresh.Where("source_kind IN ('mine','report')").Find(&personal).Error)
-	require.Len(t, personal, 2)
-	for _, document := range personal {
-		if document.SourceKind == "mine" {
-			require.NotEmpty(t, document.VaultBody)
-		} else {
-			require.Empty(t, document.VaultBody)
-		}
-	}
-	require.Equal(t, filesBefore, vaultFileHashes(t, v.root), "replica rebuild preserves editor configuration and trash")
-	for relative, data := range configuration {
-		require.Equal(t, data, string(mustVaultRead(t, filepath.Join(v.root, relative))))
-	}
-}
 
 func TestVaultVerifyRepairsArticlesAndReplicaButReportsUserFileLoss(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
@@ -221,65 +137,6 @@ func TestVaultReplicaRejectsPersonalBodyDisagreementBeforeImport(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestVaultVerifyChecksCompletedPersonalNonImageAttachments(t *testing.T) {
-	for _, damage := range []string{"missing", "size"} {
-		t.Run(damage, func(t *testing.T) {
-			h, vault := newIngestHarness(t)
-			h.processor.output = validProcessingFixture("tutorial")
-			content := "# Personal calibration procedure\n\nThe full calibration procedure records instrument configuration, original measurements and the complete sequence of calibration steps."
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Kind: "mine", Acquisition: "verbatim", Title: "Personal calibration procedure", Content: content, Missing: []types.IngestMissing{{Type: "file", Reason: "Worksheet is not available yet"}}})
-			require.NoError(t, err)
-			h.drain(t)
-			document := h.article(t, result.EntryID)
-			require.True(t, document.Incomplete)
-			require.Empty(t, document.IngestAttachmentRecords())
-			require.NoError(t, vault.Flush(h.ctx))
-			verified, err := vault.Verify(h.ctx, false)
-			require.NoError(t, err)
-			require.True(t, verified.OK, "%v", verified.Differences)
-			worksheet := "Original instrument calibration worksheet.\n"
-			_, err = h.service.Ingest(h.ctx, &types.IngestRequest{Kind: "mine", DocumentID: document.ID, Acquisition: "verbatim", File: &types.IngestFile{Name: "worksheet.txt", Data: base64.StdEncoding.EncodeToString([]byte(worksheet))}})
-			require.NoError(t, err)
-			h.drain(t)
-			document = h.article(t, document.ID)
-			require.False(t, document.Incomplete)
-			require.Empty(t, document.VaultOriginalPath)
-			attachments := document.IngestAttachmentRecords()
-			require.Len(t, attachments, 1)
-			require.Equal(t, int64(len(worksheet)), attachments[0].Size)
-			require.True(t, strings.HasPrefix(filepath.Base(attachments[0].Path), "asset-"))
-			relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(document.VaultPath), attachments[0].Path)))
-			path := filepath.Join(vault.root, filepath.FromSlash(relative))
-			require.NoError(t, vault.Flush(h.ctx))
-			verified, err = vault.Verify(h.ctx, false)
-			require.NoError(t, err)
-			require.True(t, verified.OK, "%v", verified.Differences)
-			if damage == "missing" {
-				require.NoError(t, os.Remove(path))
-			} else {
-				require.NoError(t, os.WriteFile(path, []byte("Truncated worksheet"), 0600))
-			}
-			// Capture the current inventory so the attachment record, rather than
-			// an older manifest hash, must expose the missing or damaged file.
-			require.NoError(t, vault.Flush(h.ctx))
-			for _, repair := range []bool{false, true} {
-				verified, err = vault.Verify(h.ctx, repair)
-				require.NoError(t, err)
-				require.False(t, verified.OK)
-				require.Contains(t, strings.Join(verified.Differences, "\n"), relative)
-				require.NotContains(t, verified.Repaired, relative)
-			}
-			if damage == "missing" {
-				_, err = os.Stat(path)
-				require.ErrorIs(t, err, os.ErrNotExist)
-			} else {
-				require.Equal(t, "Truncated worksheet", string(mustVaultRead(t, path)))
-			}
-			require.Equal(t, document.VaultBody, h.article(t, document.ID).VaultBody)
-		})
-	}
-}
-
 func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, vault.root)
@@ -311,4 +168,86 @@ func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testin
 	require.Equal(t, personal.ID, restored[0].ID)
 	require.Equal(t, personal.VaultBody, restored[0].VaultBody)
 	require.Equal(t, before, vaultFileHashes(t, vault.root))
+}
+
+func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing.T) {
+	h, v := newVaultArticleHarness(t)
+	h.processor.output = articleProcessingOutput(t, "research", []types.EntityCandidate{{Name: "Company", EntityType: "company"}}, []string{})
+	full := h.upload(t, "Research preservation", "# Original research\n\nImmutable original measurements and reasoning.")
+	h.processor.output = articleProcessingOutput(t, "reference", nil, []string{})
+	summary := h.upload(t, "Reference preservation", "# Summary reference\n\nComplete reference text is retained.")
+	require.NoError(t, h.db.Model(full).Updates(map[string]any{"content_type_corrected": true, "collect_reason": "User reason"}).Error)
+	var entity types.Entity
+	require.NoError(t, h.db.Where("canonical_name='Company'").First(&entity).Error)
+	require.NoError(t, h.db.Model(&entity).Update("description", "User entity description").Error)
+	require.NoError(t, h.db.Create(&types.Topic{ID: "maintenance-topic", SpaceID: 1, Name: "Maintenance", Description: "User authored description", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
+	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
+	require.NoError(t, h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?),(1,'topic','maintenance-topic')", entity.ID).Error)
+	require.NoError(t, h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error)
+	for path, body := range map[string]string{"reports/report.md": "# Report original\n\nThis report remains user owned."} {
+		require.NoError(t, os.WriteFile(filepath.Join(v.root, path), []byte(body), 0600))
+	}
+	configuration := map[string]string{
+		".obsidian/app.json": `{"theme":"obsidian"}`, ".trash/x.md": "# Deleted note\n", ".DS_Store": "Finder metadata",
+		"mine/.trash/x.md": "# Deleted personal note\n", "reports/.obsidian/template.md": "# Editor template\n",
+	}
+	for relative, data := range configuration {
+		path := filepath.Join(v.root, relative)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+		require.NoError(t, os.WriteFile(path, []byte(data), 0644))
+	}
+	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, v.root)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, documents.Close()) })
+	// Build keyword chunks without calling the configured vector fixture.
+	indexing := *h.library
+	indexing.IndexingStrategy.VectorEnabled = false
+	importedPersonal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
+	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
+	require.NoError(t, v.Flush(h.ctx))
+	snapshot, err := maintenance.Capture(h.ctx, h.db)
+	require.NoError(t, err)
+	for _, row := range snapshot.Tables["entries"] {
+		if row["source_kind"] == "mine" {
+			require.Equal(t, importedPersonal.VaultBody, row["vault_body"])
+		}
+	}
+	verified, err := v.Verify(h.ctx, false)
+	require.NoError(t, err)
+	require.True(t, verified.OK, "%v", verified.Differences)
+	filesBefore := vaultFileHashes(t, v.root)
+	before, err := maintenance.BuildManifest(context.Background(), h.db, v.root, "")
+	require.NoError(t, err)
+	fresh := pgtest.Open(t)
+	rebuilder, err := NewVaultDocumentService(fresh, nil, nil, v.root)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, rebuilder.Close()) })
+	result, err := rebuilder.RebuildReplica(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Articles)
+	require.EqualValues(t, 1, result.Mine)
+	require.EqualValues(t, 1, result.Reports)
+	after, err := maintenance.BuildManifest(context.Background(), fresh, v.root, "")
+	require.NoError(t, err)
+	require.Empty(t, maintenance.CompareManifest(before, after))
+	for _, original := range []*types.Entry{full, summary, importedPersonal} {
+		var rebuilt types.Entry
+		require.NoError(t, fresh.Where("id=?", original.ID).First(&rebuilt).Error)
+		require.Equal(t, original.VaultPath, rebuilt.VaultPath)
+		require.Equal(t, original.VaultBody, rebuilt.VaultBody)
+	}
+	var personal []types.Entry
+	require.NoError(t, fresh.Where("source_kind IN ('mine','report')").Find(&personal).Error)
+	require.Len(t, personal, 2)
+	for _, document := range personal {
+		if document.SourceKind == "mine" {
+			require.NotEmpty(t, document.VaultBody)
+		} else {
+			require.Empty(t, document.VaultBody)
+		}
+	}
+	require.Equal(t, filesBefore, vaultFileHashes(t, v.root), "replica rebuild preserves editor configuration and trash")
+	for relative, data := range configuration {
+		require.Equal(t, data, string(mustVaultRead(t, filepath.Join(v.root, relative))))
+	}
 }
