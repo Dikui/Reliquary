@@ -14,30 +14,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestVaultVerifyRepairsArticlesAndReplicaButReportsUserFileLoss(t *testing.T) {
+func TestVaultVerifyRepairsAllLibraryFilesAndReplica(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	article := h.upload(t, "Verify recovery", "# Verified article\n\nDatabase can restore this original.")
-	require.NoError(t, os.WriteFile(filepath.Join(v.root, "reports/report.md"), []byte("# Report original\n\nBackup only original."), 0600))
+
 	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, v.root)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
 	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
+	var generated types.Library
+	require.NoError(t, h.db.Where("system_role=?", "ai-reports").First(&generated).Error)
+	generated.IndexingStrategy.VectorEnabled = false
+	require.NoError(t, h.db.Model(&generated).Update("indexing_strategy", generated.IndexingStrategy).Error)
+	report, err := documents.createReport(h.ctx, &generated, "Report original", "# Report original\n\nDatabase recovery copy.", nil, nil)
+	require.NoError(t, err)
 	personal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
 	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
 	require.NoError(t, v.Flush(h.ctx))
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, article.VaultPath), []byte("damaged article"), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, ".reliquary/data/topics.json"), []byte("invalid"), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, personal.VaultPath), []byte("damaged personal document"), 0600))
-	require.NoError(t, os.Remove(filepath.Join(v.root, "reports/report.md")))
+	require.NoError(t, os.Remove(filepath.Join(v.root, report.VaultPath)))
 	check, err := v.Verify(h.ctx, false)
 	require.NoError(t, err)
 	require.False(t, check.OK)
 	check, err = v.Verify(h.ctx, true)
 	require.NoError(t, err)
-	require.False(t, check.OK)
-	require.Len(t, check.Differences, 1)
-	require.Contains(t, check.Differences[0], "reports/report.md")
+	require.True(t, check.OK, check.Differences)
+	require.Empty(t, check.Differences)
+	require.Contains(t, check.Repaired, report.VaultPath)
 	require.Contains(t, check.Repaired, personal.VaultPath)
 	require.Contains(t, check.Repaired, article.VaultPath)
 	_, body, err := SplitVaultArticle(mustVaultRead(t, filepath.Join(v.root, article.VaultPath)))
@@ -46,8 +52,8 @@ func TestVaultVerifyRepairsArticlesAndReplicaButReportsUserFileLoss(t *testing.T
 	_, personalBody, err := SplitVaultArticle(mustVaultRead(t, filepath.Join(v.root, personal.VaultPath)))
 	require.NoError(t, err)
 	require.Equal(t, personal.VaultBody, string(personalBody))
-	_, err = os.Stat(filepath.Join(v.root, "reports/report.md"))
-	require.True(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(v.root, report.VaultPath))
+	require.NoError(t, err)
 	// Broken JSONL is quarantined rather than overwritten in place.
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, ".reliquary/operation_logs.jsonl"), []byte("broken log"), 0600))
 	_, err = v.Verify(h.ctx, true)
@@ -97,6 +103,13 @@ func mustVaultRead(t *testing.T, path string) []byte {
 
 func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *VaultDocumentService, vault *VaultService, library *types.Library) *types.Entry {
 	t.Helper()
+	original := library
+	var own types.Library
+	require.NoError(t, documents.db.Where("system_role=?", "mine").First(&own).Error)
+	own.IndexingStrategy = original.IndexingStrategy
+	own.ChunkingConfig = original.ChunkingConfig
+	own.ModelTiers = original.ModelTiers
+	library = &own
 	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Personal tutorial", ContentType: "tutorial", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), Summary: &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Preserve the full procedure"}, KeyTerms: []string{"Recovery"}}}
 	body := "# Personal tutorial\n\nmaintenanceminefixture full original procedure.\n"
 	path := "mine/Personal-tutorial-" + header.ID[:8] + ".md"
@@ -106,9 +119,11 @@ func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *
 	header, err = vault.articleHeader(ctx, entry)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(vault.root, path), append(RenderVaultArticleHeader(header), []byte(body)...), 0600))
-	attachment := filepath.Join(vault.root, "attachments", entry.ID, "notes.txt")
+	attachment := filepath.Join(vault.root, "attachments", entry.ID, "fixture.png")
 	require.NoError(t, os.MkdirAll(filepath.Dir(attachment), 0755))
-	require.NoError(t, os.WriteFile(attachment, []byte("Personal attachment bytes"), 0600))
+	image, err := readVaultImage(ctx, articleImageDataURI(t, 10), nil)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(attachment, image, 0600))
 	return entry
 }
 
@@ -184,12 +199,10 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
 	require.NoError(t, h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?),(1,'topic','maintenance-topic')", entity.ID).Error)
 	require.NoError(t, h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error)
-	for path, body := range map[string]string{"reports/report.md": "# Report original\n\nThis report remains user owned."} {
-		require.NoError(t, os.WriteFile(filepath.Join(v.root, path), []byte(body), 0600))
-	}
+
 	configuration := map[string]string{
 		".obsidian/app.json": `{"theme":"obsidian"}`, ".trash/x.md": "# Deleted note\n", ".DS_Store": "Finder metadata",
-		"mine/.trash/x.md": "# Deleted personal note\n", "reports/.obsidian/template.md": "# Editor template\n",
+		"mine/.trash/x.md": "# Deleted personal note\n", "ai-reports/.obsidian/template.md": "# Editor template\n",
 	}
 	for relative, data := range configuration {
 		path := filepath.Join(v.root, relative)
@@ -202,6 +215,13 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	// Build keyword chunks without calling the configured vector fixture.
 	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
+	var generated types.Library
+	require.NoError(t, h.db.Where("system_role=?", "ai-reports").First(&generated).Error)
+	generated.IndexingStrategy.VectorEnabled = false
+	require.NoError(t, h.db.Model(&generated).Update("indexing_strategy", generated.IndexingStrategy).Error)
+	report, err := documents.createReport(h.ctx, &generated, "Report original", "# Report original\n\nDatabase recovery copy.", nil, nil)
+	require.NoError(t, err)
+	_ = report
 	importedPersonal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
 	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
 	require.NoError(t, v.Flush(h.ctx))
@@ -243,7 +263,7 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 		if document.SourceKind == "mine" {
 			require.NotEmpty(t, document.VaultBody)
 		} else {
-			require.Empty(t, document.VaultBody)
+			require.NotEmpty(t, document.VaultBody)
 		}
 	}
 	require.Equal(t, filesBefore, vaultFileHashes(t, v.root), "replica rebuild preserves editor configuration and trash")

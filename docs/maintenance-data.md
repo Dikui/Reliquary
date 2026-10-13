@@ -1,8 +1,8 @@
 # 数据归属与文件库恢复格式
 
-所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、960 列，其中 public 44 张表、515 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。当前维护归属以 `000005` 后的结构为准，已删除 `data_sources` 与 `sync_logs`。下表列出当前 public 的 44 张表。
+所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，新登记表在 `internal/maintenance/registry.go` 并合入同一归属清单，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、960 列，其中 public 44 张表、515 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。当前维护归属以 `000005` 后的结构为准，已删除 `data_sources` 与 `sync_logs`。下表列出当前 public 的 44 张表。
 
-维护副本与核对清单的 `format_version` 为 5，表名使用 `spaces`、`api_keys`、`libraries`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`library_id`、`entry_id`、`entry_ids`。导入及核对接受版本 1 至 4：版本 1 先映射个人空间表及归属列，其中版本 1 和 2 将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。版本 1 至 3 的 `knowledge_bases` 表名与行外层 `knowledge_base_id` 分别映射为 `libraries`、`library_id`。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 5，完成清单原子替换后才移除旧表文件。标题与摘要向量 `article_embeddings` 包含文章和导入的用户文档，不包含整理结果；表名保留，外键列为 `entry_id`。
+维护副本与核对清单的 `format_version` 为 5，表名使用 `spaces`、`api_keys`、`libraries`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`library_id`、`entry_id`、`entry_ids`。完整数据库备份的底层导入及核对接受版本 1 至 4，当前文件库重建入口的版本限制见本文末节：版本 1 先映射个人空间表及归属列，其中版本 1 和 2 将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。版本 1 至 3 的 `knowledge_bases` 表名与行外层 `knowledge_base_id` 分别映射为 `libraries`、`library_id`。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 5，完成清单原子替换后才移除旧表文件。标题与摘要向量 `article_embeddings` 包含文章和导入的用户文档，不包含整理结果；表名保留，外键列为 `entry_id`。
 
 个人空间命名迁移仅改名和重建引用旧列的函数及 BM25 索引，分类数量不变，当时的目录为 82 张表、968 列，见 [命名清理证据](tasks/naming-02/evidence/schema-statistics.json)。迁移 `000004_ingest_only` 新增 2 张表与 27 列，当时为 84 张表、995 列。迁移 `000005_remove_collection` 删除采集配置与同步日志两表，表内专属列与索引随表删除；历史文章来源字段保留。
 
@@ -150,7 +150,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 表头中的文章 ID 同时作为副本各表的关联主键保存。文章 `metadata` 中的来源作者、发布者、发布时间也出现在表头，但原始的收录字段整体保留在副本，避免改写原始来源格式和精度。表头字段在副本中保留一份确定的核对值，导入时检查两份值一致。
 
-`entries.vault_body` 按来源区分：已发布文章的正文从 `articles/` 读取并恢复到数据库；用户文档正文保存在数据库与维护副本中，并与 `mine/` 的表头和正文核对。未发布、待审和处理中内容尚无文件时，在副本保留数据库已有原文与收录 metadata，上传原件保存在资源副本。`reports/` 的原文只在原文件和备份中，数据库与副本不另存原文。派生 chunks 用于检索，不作为恢复原文来源。文件库磁盘损坏且仅数据库尚存时，文章和用户文档可恢复，核对修复会从数据库补回文件；整理结果最多损失上次备份之后的修改。文件库重建按 `mine/` 表头与正文恢复用户文档，没有表头的文件跳过并列出，不报错，不迁移旧文件。pack 与 unpack 同时保存、恢复用户文档的文件、附件和维护副本。
+`entries.vault_body` 保存各库的完整正文。已发布普通资料的维护副本继续从资料 Markdown 读取正文；自有资料和 AI 报告的正文还保留在数据库与维护副本中，并与资料文件核对。未发布、待审和处理中的内容尚无文件时，在副本保留数据库已有原文及收录 metadata。分块不是正文恢复来源。图片由文件库及完整备份保护。文件库重建使用统一表头和按库目录，未登记的手放文件不会自动收录。
 
 账号密码哈希选择保留在 `config/users.json`，使仅用文件库重建后仍能用原密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。账号、模型、解析器配置保留非凭据部分；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、JWT_SECRET、数据库密码等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
 
@@ -167,7 +167,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
   quarantine/                明确修复操作保留的损坏日志
 ```
 
-变化通过 GORM 写入回调触发去抖导出，默认与表头相同为 5 秒；定期读取已提交的 PostgreSQL 一致快照捕捉原始 SQL 和队列更新。单文件临时写入、fsync、读回验证、原子替换，内容一致不改 inode。快照 manifest 最后替换，另存根目录除 .reliquary 以外的文章、附件、mine/ 与 reports/ 文件哈希。导入先检查副本和全部原始文件哈希、表清单及持久表的依赖恢复覆盖，有中断、遗漏或篡改时在写入数据库前停止，使用 `verify --repair` 从数据库补齐。
+变化通过 GORM 写入回调触发去抖导出，默认与表头相同为 5 秒；定期读取已提交的 PostgreSQL 一致快照捕捉原始 SQL 和队列更新。单文件临时写入、fsync、读回验证、原子替换，内容一致不改 inode。快照 manifest 最后替换，另存根目录除 .reliquary 以外的各库资料与图片文件哈希。导入先检查副本和全部原始文件哈希、表清单及持久表的依赖恢复覆盖，有中断、遗漏或篡改时在写入数据库前停止，使用 `verify --repair` 从数据库补齐。
 
 核对逐表比较非派生列的规范 JSON、行数及 JSONB null 类型。JSONB 字面值 null 与 SQL NULL 单独记录，导入后逐列保持原类型，操作日志中的空 before_value 不会误变成 SQL NULL。模型和 ChatGPT 账号的安全行与待填凭据 ID 进入核对清单，原始 status 保留供逐行核对。未剔除凭据的模型，status 与 updated_at 精确比较，任何改变都会失败。只有旧清单已列出的凭据受影响 ID 可以由原 status 转为 models.needs_configuration，再恢复清单记录的原 status；该行 updated_at 允许凭据操作改变。其他 status 不忽略。模型 parameters.extra_config 中 maintenance_required_fields、maintenance_original_status、maintenance_original_updated_at 是恢复提醒，只排除这些明确键，其他参数精确核对。ChatGPT 待重新登录账号允许 needs_login 和完成新登录的 connected，expires_at、earliest_refresh_at 与 updated_at 仅在上述待填账号行允许变化；last_error 仍精确核对。版本 4 及以前的订阅源净化与暂停规则仅用于旧备份读取及删表前导出，当前维护不恢复采集功能。
 
@@ -213,7 +213,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 迁移 `000005` 之前，`./reliquary-admin export-sources` 将两张旧表的非密钥内容写入文件库 `.reliquary/exports/`。文件名为 `sources-000005-<UTC纳秒时间>-<内容SHA256前12位>.json`，JSON 包含 `exported_at`（UTC）、`migration_version: 5`、`source_migration_version`、`tables.data_sources`、`tables.sync_logs` 与 `json_nulls`。仅旧副本重建无法确定源结构版本时可省略 `source_migration_version`。JSON 保存导出时间、目标迁移版本和源结构版本，数据源包括名称、类型、地址、调度、默认内容类型、启用状态及其他配置，同步日志保存历史结果、统计和时间。凭据、密钥、Authorization、Cookie、URL 用户信息与敏感查询参数不进入文件。
 
-`upgrade` 先暂停并完整备份旧数据库，再导出，最后迁移和核对。导出失败时不删表并保持暂停；旧版本完整备份恢复到当前结构时同样先导出再迁移。仅文件库重建读取旧副本时也先归档两表，再恢复其余数据。当前 pack、unpack、rebuild 与 verify 使用删表后的归属清单，不要求已删除的表存在；旧格式的行和原始文件须先严格核对，不能仅忽略旧表丢失。导出的历史 JSON 随文件库和备份保留，文章 `channel` 及来源记录不受删表影响。
+`upgrade` 先暂停并完整备份旧数据库，再导出，最后迁移和核对。导出失败时不删表并保持暂停；旧版本完整备份恢复到当前结构时同样先导出再迁移。历史版本的文件库重建会先归档两表，再恢复其余数据；当前入口拒绝未登记的旧副本，见本文末节。当前 pack、unpack、rebuild 与 verify 使用删表后的归属清单，不要求已删除的表存在；旧格式的行和原始文件须先严格核对，不能仅忽略旧表丢失。导出的历史 JSON 随文件库和备份保留，文章 `channel` 及来源记录不受删表影响。
 
 完整旧备份恢复到当前版本时，先按原结构核对刚恢复的副本、附件和向量，再导出与迁移；迁移成功后重建索引、刷新当前副本，并再次使用原包的 `snapshot.json` 核对。旧包快照不改写，迁移前核对失败不刷新副本，也不删表。整体退回随包的旧代码与镜像时保留旧结构，继续使用旧包 helper。
 
@@ -232,3 +232,64 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 `entries.source_ref`、`source_body_hash`、`identifier`、`graph` 均属于 sidecar 不可再生业务数据。`source_body_hash` 保留首次提交正文的规范化指纹，不因图片补全而变化。`has_update`、`latest_article_id` 为按库和来源查询的派生响应，不是数据库列。版本 10 及以前没有这四列；恢复旧副本时使用空字符串与 NULL 默认值，核对时保留对其他字段的严格比较。
 
 版本 12 的 `ingest_discards.library_id` 与 `ingest_discards.fingerprint` 属于 sidecar 持久数据。版本 11 及以前仍按原列清单核对。旧副本缺少两列时，按资料原库及链接指纹投影；无法确定原库的历史记录保存在独立历史范围，不影响当前库收录。原有行、原因、时间和链接均保留。
+
+## 按库文件与统一表头
+
+所有系统库和自建库都使用 `libraries.directory`，路径为 `<英文目录>/<标题短名>-<ID前8位>.md`。不设年月子目录，避免以不完整的发布时间决定路径，同时减少阅读时的层级。标题短名沿用最多 80 个 Unicode 字符、过滤文件系统特殊字符和空白改连字符的规则。资料的库与目录不可变。图片统一为 `attachments/<资料ID>/image-<内容哈希前16位>.<扩展名>`，正文使用相对路径；此目录只接收图片。
+
+每个库完整保存调用方提交的 Markdown 正文，表头不是正文的一部分。表头和正文均由数据库单向生成，在 Obsidian 手改不会回写数据库；刷新、核对修复或文件重建会覆盖修改。AI 报告也使用数据库正文恢复副本。星标的 false、显式 graph 的 false 是有意义的值，会输出；其他空字符串、空列表、空摘要以及无标记的 source_unverified/has_update 不输出。
+
+以下是顶层字段的固定顺序。键名固定为英文，含义不随库变化。
+
+| 顺序 | 字段 | 含义及输出条件 |
+| --- | --- | --- |
+| 1 | `id` | 资料 UUID |
+| 2 | `library_id` | 稳定的所属库 ID |
+| 3 | `library` | 所属库显示名称 |
+| 4 | `title` | 标题 |
+| 5 | `url` | 有值时输出原文链接 |
+| 6 | `publisher` | 有值时输出发布者 |
+| 7 | `author` | 有值时输出作者，即使与发布者相同 |
+| 8 | `published_at` | 有值时输出发布时间，不用收录时间代替 |
+| 9 | `collected_at` | UTC 收录时间 |
+| 10 | `content_type` | 所属库的内容类型，可为自定义值 |
+| 11 | `entities` | 非空实体链接列表，排序去重 |
+| 12 | `topics` | 非空主题列表，排序去重 |
+| 13 | `summary` | 非空结构摘要，内部按 overview、points、key_terms 排序，空项省略 |
+| 14 | `starred` | 星标布尔值 |
+| 15 | `collect_reason` | 有值时输出收录理由 |
+| 16 | `acquisition` | 有值时输出获取方式 |
+| 17 | `source_ref` | 自有型来源标识 |
+| 18 | `identifier` | 外部长效型标识 |
+| 19 | `source_unverified` | 仅 true，表示来源未核实 |
+| 20 | `has_update` | 仅 true，表示有更新的记录 |
+| 21 | `latest_article_id` | 有 source_ref 时的最新记录 ID，沿用现有接口键名 |
+| 22 | `graph` | 调用方明确设置时输出 true 或 false |
+| 23 | `related_article_ids` | 非空关联资料 ID 列表，排序去重 |
+
+各库示例见 [ikb-07 运行存证](tasks/ikb-07/evidence/runtime-headers.md)。所有示例都遵循同一字段表，无值不补 null。表头没有正文位置或向量字段。
+
+## 新持久数据的登记入口
+
+`internal/maintenance/registry.go` 的 `PersistentTables` 是新增可移植持久表的入口。一个登记项同时声明 `Columns` 逐列归属、`File` 副本文件、`After` 恢复依赖和 `Since` 首次出现的数据库结构版本。新表只需添加此登记项及对应 SQL 迁移，不再分别修改导出表名单、导入顺序或核对名单。
+
+示例结构如下，示例表没有在本任务创建：
+
+```go
+"future_relations": {
+    Columns: Rule{Sidecar: "id source_id target_id created_at"},
+    File: "data/future_relations.json",
+    After: []string{"entities", "entries"},
+    Since: 13,
+},
+```
+
+`File` 使用 `data/<表名>.json` 或 `config/<表名>.json`，一表一文件。必须列全主键、外键、业务列和历史时间列；只有确定可重算的列放在 Regenerated。敏感列沿用 SecretColumns 与净化机制。After 声明所有必须先恢复的父表；缺依赖或依赖环在写数据库前失败。登记项从 Since 指定版本进入列归属核对，新列未归类仍直接失败。已有登记项增加列时仍按数据库迁移规范维护历史版本映射。
+
+第一个登记对象为库配置：`libraries` 使用既有 `config/libraries.json`，`library_content_types` 与 `library_relation_types` 保留既有 `data/<表名>.json` 文件位置，保留完整数据库备份底层的旧映射。两个子表虽位于 data/，列归属仍为 Configuration。库在空间及账号之后恢复，子表在库之后恢复。库的名称、目录、模板、审核规则、内容类型、关系类型都参与逐列核对。
+
+副本新增 `registry.json`，自身格式版本为 1；主 manifest 的 `registry_version` 为 1，文件哈希在主 manifest 中登记。原副本主格式继续为 5，没有改变原有表文件格式。文件库重建拒绝没有受支持登记版本的旧副本，包括没有 registry_version 的旧格式 1 至 5，并提示使用匹配版本读取原文，再通过当前收录接口重新导入。不会猜测旧目录对应哪个库。底层完整数据库备份读取仍保留原有名称、默认值和结构版本映射，独立于当前文件库重建入口。没有生产数据迁移或旧目录扫描兼容。旧 schema 的维护 helper 仅导出副本并按原哈希核对，不生成库目录或改写旧表头；旧文件修复需使用匹配版本。
+
+后续关系正本、抑制记录、关系类型合并与测评集按上述方式登记。检索记录与模型调用统计只随 PostgreSQL 完整备份保存，不进 `.reliquary/`；未来建表时将其逐列登记到 `BackupOnlyTables`。Redis 临时队列和派生索引仍按现有规则处理。
+
+`./reliquary-admin maintenance rebuild-files` 从现有数据库重新生成所有库的 Markdown 和维护副本；它覆盖手改表头及正文，不调用模型。删除所有库的资料目录后可以逐文件重建；应保留 `attachments/` 中不可重算的图片，图片或整个磁盘丢失须从包含文件库的完整备份恢复。`./reliquary-admin rebuild <文件库>` 仍用于从文件库和副本恢复空数据库，导入前核对原文件，恢复后逐列核对原副本。`verify --repair` 修复数据库拥有的表头及正文。

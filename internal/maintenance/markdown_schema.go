@@ -106,6 +106,20 @@ func projectMarkdownRows(table string, rows []map[string]any) []map[string]any {
 func stringValue(value any) string { s, _ := value.(string); return s }
 
 func projectMarkdownSnapshot(snapshot *Snapshot) {
+	legacy := false
+	for table, columns := range markdownRetiredColumns {
+		for _, row := range snapshot.Tables[table] {
+			for _, column := range columns {
+				if _, present := row[column]; present {
+					legacy = true
+				}
+			}
+		}
+	}
+	if !legacy {
+		return
+	}
+
 	for table, rows := range snapshot.Tables {
 		snapshot.Tables[table] = projectMarkdownRows(table, rows)
 		for id, columns := range snapshot.JSONNulls[table] {

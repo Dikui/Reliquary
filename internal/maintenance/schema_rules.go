@@ -11,7 +11,7 @@ import (
 // schemaRules matches preservation columns to the installed migration version.
 // Offline maintenance may temporarily adapt old names, but must not introduce
 // later fields or alter its persisted structure and migration history.
-func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
+func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resultErr error) {
 	var present bool
 	if err := db.WithContext(ctx).Raw("SELECT to_regclass('public.schema_migrations') IS NOT NULL").Scan(&present).Error; err != nil {
 		return nil, err
@@ -26,6 +26,21 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 	if err := db.WithContext(ctx).Table("public.schema_migrations").Select("version,dirty").Take(&migration).Error; err != nil {
 		return nil, err
 	}
+	defer func() {
+		if resultErr != nil {
+			return
+		}
+		copy := make(map[string]Rule, len(result))
+		for table, rule := range result {
+			copy[table] = rule
+		}
+		for table, registration := range PersistentTables {
+			if migration.Version < registration.Since {
+				delete(copy, table)
+			}
+		}
+		result = copy
+	}()
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}

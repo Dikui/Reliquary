@@ -34,6 +34,9 @@ func Load(root string) (*Snapshot, error) {
 	if !supportedFormat(manifest.FormatVersion) {
 		return nil, fmt.Errorf("unsupported replica format %d", manifest.FormatVersion)
 	}
+	if manifest.RegistryVersion < 0 || manifest.RegistryVersion > RegistryVersion {
+		return nil, fmt.Errorf("unsupported persistent table registry format %d", manifest.RegistryVersion)
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return nil, err
@@ -44,7 +47,7 @@ func Load(root string) (*Snapshot, error) {
 	if err := validateActiveUploads(root, &manifest); err != nil {
 		return nil, err
 	}
-	snapshot := &Snapshot{FormatVersion: manifest.FormatVersion, storedFormat: manifest.FormatVersion, Tables: map[string][]map[string]any{}, Required: manifest.Required, ActiveUploads: manifest.ActiveUploads, JSONNulls: manifest.JSONNulls}
+	snapshot := &Snapshot{FormatVersion: manifest.FormatVersion, storedFormat: manifest.FormatVersion, registryVersion: manifest.RegistryVersion, Tables: map[string][]map[string]any{}, Required: manifest.Required, ActiveUploads: manifest.ActiveUploads, JSONNulls: manifest.JSONNulls}
 	for _, file := range manifest.VaultFiles {
 		path, err := SafePath(root, file.Path)
 		if err != nil {
@@ -126,6 +129,17 @@ func Load(root string) (*Snapshot, error) {
 		}
 		snapshot.Tables[strings.TrimSuffix(filepath.Base(file.Path), ".json")] = rows
 	}
+	if manifest.RegistryVersion > 0 {
+		found := false
+		for _, file := range manifest.Files {
+			if file.Path == "registry.json" {
+				found = true
+			}
+		}
+		if !found {
+			return nil, errors.New("missing persistent table registry")
+		}
+	}
 	for _, table := range manifest.Tables {
 		if _, found := snapshot.Tables[table]; !found {
 			return nil, fmt.Errorf("missing replica table %s", table)
@@ -134,11 +148,24 @@ func Load(root string) (*Snapshot, error) {
 	if err := currentSnapshot(snapshot); err != nil {
 		return nil, err
 	}
+	if manifest.RegistryVersion > 0 {
+		actual, err := os.ReadFile(filepath.Join(directory, "registry.json"))
+		if err != nil {
+			return nil, err
+		}
+		expected, err := registryBytes(snapshot)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(actual, expected) {
+			return nil, errors.New("persistent table registry differs from supported table and column mapping")
+		}
+	}
 	return snapshot, nil
 }
 
 // Import restores stable identities and every non-derived field. The optional
-// materializer supplies body bytes from article files, mine/ and reports/.
+// materializer supplies body bytes from files in each library directory.
 func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize func(map[string]any) error) (*Snapshot, error) {
 	if err := ValidateClassification(ctx, db); err != nil {
 		return nil, err
@@ -202,6 +229,10 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			}
 		}
 		order = filtered
+	}
+	order, err = registeredImportOrder(order, snapshot.Tables)
+	if err != nil {
+		return nil, err
 	}
 	covered := map[string]bool{}
 	for _, table := range order {

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -54,7 +53,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
 	require.Equal(t, "report", result.Data.SourceKind)
 	require.Equal(t, "测试报告", result.Data.Title)
-	require.Contains(t, result.Data.VaultPath, "reports/"+time.Now().UTC().Format("2006-01")+"/测试报告-")
+	require.Contains(t, result.Data.VaultPath, library.Directory+"/测试报告-")
 	content, err := os.ReadFile(filepath.Join(root, result.Data.VaultPath))
 	require.NoError(t, err)
 	require.Contains(t, string(content), "Reportvaultmarker")

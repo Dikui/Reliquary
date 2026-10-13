@@ -101,7 +101,7 @@ func TestMaintenanceExportFailureLeavesVersionFourPaused(t *testing.T) {
 	require.EqualValues(t, 1, logs)
 }
 
-func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *testing.T) {
+func TestMaintenanceRestoreOldSnapshotRejectsLegacyLayoutAfterOriginalVerification(t *testing.T) {
 	repository, err := filepath.Abs("../..")
 	require.NoError(t, err)
 	for _, version := range []uint{0, 4} {
@@ -135,7 +135,7 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 				if err != nil {
 					return err
 				}
-				if version == 0 {
+				{
 					article.VaultPath = "articles/2026-10/old-rss-restore.md"
 					path := filepath.Join(root, filepath.FromSlash(article.VaultPath))
 					if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -148,8 +148,6 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 					if err := current.Table("entries").Where("id=?", article.ID).UpdateColumn("vault_path", article.VaultPath).Error; err != nil {
 						return err
 					}
-				} else if err := vault.WriteArticle(ctx, &article, article.VaultBody, nil); err != nil {
-					return err
 				}
 				if err := os.WriteFile(filepath.Join(uploads, "original.bin"), []byte("Preserved original attachment"), 0600); err != nil {
 					return err
@@ -160,6 +158,8 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 				original, err = maintenance.BuildManifest(ctx, current, root, uploads)
 				return err
 			}))
+			beforeArticle, err := os.ReadFile(filepath.Join(root, article.VaultPath))
+			require.NoError(t, err)
 			baseline, err := json.Marshal(original)
 			require.NoError(t, err)
 			originalPath := filepath.Join(t.TempDir(), "snapshot.json")
@@ -189,10 +189,12 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 			require.NoError(t, invoke("migrate"))
 			require.NoError(t, invoke("reindex"))
 			require.Error(t, invoke("verify", "--manifest", originalPath, "--vectors"), "the old sync_logs sidecar cannot be accepted before the controlled current-schema refresh")
-			require.NoError(t, invoke("flush"))
-			require.NoError(t, invoke("verify", "--manifest", originalPath, "--vectors"))
-			require.NoFileExists(t, oldLogPath)
-			require.NoFileExists(t, filepath.Join(root, ".reliquary/config/data_sources.json"))
+			require.ErrorContains(t, invoke("flush"), "entry path must belong to its library directory")
+			require.FileExists(t, oldLogPath)
+			require.FileExists(t, filepath.Join(root, ".reliquary/config/data_sources.json"))
+			afterArticle, err := os.ReadFile(filepath.Join(root, article.VaultPath))
+			require.NoError(t, err)
+			require.Equal(t, beforeArticle, afterArticle, "rejecting an old layout preserves its source file")
 			unchanged, err := os.ReadFile(originalPath)
 			require.NoError(t, err)
 			require.Equal(t, baseline, unchanged, "restore keeps the original package baseline immutable")

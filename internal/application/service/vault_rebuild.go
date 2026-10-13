@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reliquary/internal/application/repository"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -50,16 +51,21 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 	}
 	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
 	seenArticleIDs := make(map[string]bool)
-	for _, directory := range []string{"articles", "mine"} {
-		library, err = repository.NewLibraryRepository(s.db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, types.SystemRoleForSource(map[string]string{"articles": "article", "mine": "mine"}[directory]))
-		if err != nil {
-			return result, err
-		}
+	var libraries []types.Library
+	if err := s.db.WithContext(ctx).Find(&libraries).Error; err != nil {
+		return result, err
+	}
+	for i := range libraries {
+		library = &libraries[i]
+		directory := library.Directory
 		articleDirectory, err := vaultAbsolute(s.root, directory)
 		if err != nil {
 			return result, err
 		}
 		err = filepath.WalkDir(articleDirectory, func(path string, dirEntry fs.DirEntry, walkErr error) error {
+			if errors.Is(walkErr, os.ErrNotExist) {
+				return nil
+			}
 			if walkErr != nil {
 				return walkErr
 			}
@@ -86,11 +92,8 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 			if err == nil {
 				err = validateVaultRebuildHeader(header, body)
 			}
-			if err == nil && directory == "mine" && header.SourceKind != "mine" {
-				err = fmt.Errorf("personal document header requires source_kind: mine")
-			}
-			if err == nil && directory == "articles" && header.SourceKind != "" && header.SourceKind != "article" {
-				err = fmt.Errorf("article directory contains a different source kind")
+			if err == nil && header.LibraryID != library.ID {
+				err = fmt.Errorf("header library_id does not match directory")
 			}
 			if err != nil {
 				result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, err.Error()})
@@ -123,7 +126,12 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 			if err := indexArticleImages(ctx, s.db, s.models, library, vault, entry); err != nil {
 				return fmt.Errorf("index rebuilt article images %s: %w", rel, err)
 			}
-			if directory == "articles" {
+			switch library.Template {
+			case types.TemplateOwn:
+				result.Mine++
+			case types.TemplateGenerated:
+				result.Reports++
+			default:
 				result.Articles++
 			}
 			return nil
@@ -132,23 +140,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 			return result, err
 		}
 	}
-	library, err = repository.NewLibraryRepository(s.db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, "ai-reports")
-	if err != nil {
-		return result, err
-	}
-	if err := s.scanReports(ctx, library, true, &result.Skipped); err != nil {
-		return result, err
-	}
-	for _, target := range []struct {
-		kind  string
-		count *int64
-	}{{"mine", &result.Mine}, {"report", &result.Reports}} {
-		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
-			Where("space_id=? AND source_kind=? AND parse_status=?", library.SpaceID, target.kind, types.ParseStatusCompleted).
-			Count(target.count).Error; err != nil {
-			return result, err
-		}
-	}
+	sort.Slice(result.Skipped, func(i, j int) bool { return result.Skipped[i].Path < result.Skipped[j].Path })
 	return result, nil
 }
 
@@ -161,9 +153,6 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 	}
 	if _, err := time.Parse(time.RFC3339Nano, header.CollectedAt); err != nil {
 		return fmt.Errorf("invalid collected_at: %w", err)
-	}
-	if header.ContentType != "" && types.NormalizeContentType(header.ContentType) != header.ContentType {
-		return fmt.Errorf("invalid content_type %q", header.ContentType)
 	}
 
 	if header.SourceUnverified && header.URL != "" {
@@ -194,17 +183,20 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library *types.Library, path string, header VaultArticleHeader, body []byte) (*types.Entry, error) {
 	collected, _ := time.Parse(time.RFC3339Nano, header.CollectedAt)
 	kind := "article"
-	if header.SourceKind == "mine" {
+	switch library.Template {
+	case types.TemplateOwn:
 		kind = "mine"
+	case types.TemplateGenerated:
+		kind = "report"
 	}
 	now := time.Now().UTC()
 	entry := &types.Entry{ID: header.ID, SpaceID: library.SpaceID, LibraryID: library.ID,
 		Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, VaultBody: string(body),
 		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
-		SourceUnverified: header.SourceUnverified,
-		Acquisition:      header.Acquisition,
-		ParseStatus:      types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
+		SourceUnverified: header.SourceUnverified, SourceRef: header.SourceRef, Identifier: header.Identifier, Graph: header.Graph,
+		Acquisition: header.Acquisition,
+		ParseStatus: types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
 		EnableStatus: "enabled", Channel: types.ChannelAPI, FileName: filepath.Base(path), FileType: "md",
 		CreatedAt: collected.UTC(), UpdatedAt: now, ProcessedAt: &now,
 		FileHash: vaultContentHash(string(body)), FileSize: int64(len(body))}
@@ -220,6 +212,10 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 		return nil, err
 	}
 
+	if kind == "report" {
+		metadata, _ := json.Marshal(map[string]any{"related_article_ids": header.RelatedArticleIDs})
+		entry.Metadata = metadata
+	}
 	setMessageFingerprint(entry, string(body))
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(entry).Error; err != nil {
