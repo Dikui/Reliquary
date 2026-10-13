@@ -1,10 +1,12 @@
 import { get, post } from '@/utils/request'
 
-export type EmbeddingRebuildStatus = 'pending' | 'running' | 'paused' | 'completed' | 'completed_with_errors' | 'failed'
+export type EmbeddingRebuildStatus = 'pending' | 'running' | 'paused' | 'completed' | 'completed_with_errors' | 'failed' | 'cancelled'
 export type EmbeddingRebuildKind = 'article_chunk' | 'article' | 'image' | 'mine_chunk' | 'report_chunk' | 'entity'
-export type EmbeddingRebuildAction = 'start' | 'pause' | 'resume' | 'retry_failed'
+export type EmbeddingRebuildAction = 'start' | 'pause' | 'resume' | 'retry_failed' | 'switch' | 'delete_old' | 'cancel'
 export interface EmbeddingRebuildRun {
   id: string
+  candidate?: boolean
+  switched_at?: string | null
   status: EmbeddingRebuildStatus
   model_id: string
   model_name: string
@@ -21,6 +23,6 @@ export interface EmbeddingRebuildData { latest_run: EmbeddingRebuildRun | null; 
 interface Envelope { success: boolean; data: EmbeddingRebuildData; message?: string }
 
 export const getEmbeddingRebuild = () => get<Envelope>('/api/v1/embeddings/rebuild')
-export const controlEmbeddingRebuild = (action: EmbeddingRebuildAction, runId?: string) => post<Envelope>('/api/v1/embeddings/rebuild', {
-  action, ...(runId ? { run_id: runId } : {}),
+export const controlEmbeddingRebuild = (action: EmbeddingRebuildAction, runId?: string, modelId?: string) => post<Envelope>('/api/v1/embeddings/rebuild', {
+  action, ...(runId ? { run_id: runId } : {}), ...(modelId ? { model_id: modelId } : {}),
 })

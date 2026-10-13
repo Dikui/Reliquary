@@ -388,3 +388,36 @@ Grok Bot、Claude Code 等外部工具需能访问 Reliquary 的内网地址。�
 ## Redis 任务调度
 
 `REDIS_ADDR` 默认 `127.0.0.1:6379`，Compose 内默认使用 `redis:6379`。`REDIS_DB` 默认 0，`REDIS_PASSWORD` 可用于连接外部 Redis。内置 Redis 仅开放本机端口，不启用持久化。PG 是任务状态、重试预算、配额延后和死信的权威；备份不需要 Redis 数据。Redis 清空或恢复备份后，后端启动会补推所有未完成操作，运行中每 `RELIQUARY_QUEUE_SWEEP_INTERVAL`（默认 1 分钟）补推；投递超过 `RELIQUARY_QUEUE_DELIVERY_TIMEOUT`（默认 2 分钟）会换投递代次重推。保留一个后端进程。
+
+## 本机文本向量与重排
+
+默认文本向量模型是 Ollama 官方库的 `qwen3-embedding:0.6b`，维度 1024。空间共享一个当前向量模型，已有明确选择保持原值。安装、下载和启动示例：
+
+```bash
+brew install ollama
+ollama serve
+# 在另一个终端下载模型，下载完成后请求会按需加载。
+ollama pull qwen3-embedding:0.6b
+```
+
+模型名依据 [Ollama 官方模型页](https://ollama.com/library/qwen3-embedding)。后端连接宿主机 `OLLAMA_BASE_URL=http://127.0.0.1:11434`；Docker 内改为 `http://host.docker.internal:11434`。无服务或模型未安装时仍可启动，收录的正文和全文索引先完成，向量待处理操作延后重试。程序不自动下载模型。Ollama 使用默认空闲卸载策略，首次请求可能包含加载时间；查询向量超过五秒时本次退回全文检索。不要用 `:latest` 代替 `:0.6b`，前者不是 0.6B 型号。
+
+Ollama 不提供本任务所需的重排接口。建议独立运行 llama.cpp server 配合 bge-reranker-v2-m3 GGUF；Qwen3-Reranker-0.6B GGUF 可作为支持该架构的 llama.cpp 版本的替代模型，需自行测评。代码只约定协议，不绑定模型名称。
+
+```bash
+brew install cmake git
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON
+cmake --build build --config Release -j --target llama-server
+mkdir -p "$HOME/models"
+curl --fail --location \
+  https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q8_0.gguf \
+  --output "$HOME/models/bge-reranker-v2-m3.gguf"
+./build/bin/llama-server -m "$HOME/models/bge-reranker-v2-m3.gguf" \
+  --host 127.0.0.1 --port 18802 --embedding --pooling rank
+```
+
+GGUF 示例来自 [GPUStack 发布的量化模型](https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/tree/main)。启动参数和协议以 [llama.cpp server 文档](https://github.com/ggml-org/llama.cpp/tree/master/tools/server) 为准。在模型设置中新建 `Rerank` 类型，来源使用通用 HTTP，`base_url=http://127.0.0.1:18802/v1`，填写实际模型名称，并选择重排模型。容器访问使用 `host.docker.internal`；仅在现有 `SSRF_WHITELIST` 中追加相应主机名或 `127.0.0.1`。无需填写虚构 API Key。
+
+客户端发送 `POST /v1/rerank`，JSON 为 `model`, `query`, `documents`, `top_n`，接收 `results` 或 `data` 中的 `index` 与 `relevance_score`，兼容 Jina/Cohere 及 llama.cpp 格式。超时或错误保留原排序并返回 `rerank_status=unavailable`；未选择模型返回 `unconfigured`。接口字段、正文位置与两套向量切换参见 [普通检索接口](search-api.md)。

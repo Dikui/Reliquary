@@ -119,7 +119,7 @@ func TestMCPAndHTTPIncompleteListAcceptAndAcquisition(t *testing.T) {
 	mcpCall(t, client, "get_article", map[string]any{"id": first.ID}, &read)
 	require.Equal(t, "model_written", read.Acquisition)
 	var search types.EntrySearchResponse
-	mcpCall(t, client, "search", map[string]any{"query": "Acquisitionfixture", "collapse_similar": false}, &search)
+	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "Acquisitionfixture", "collapse_similar": false}, &search)
 	require.Len(t, search.Results, 2)
 	for _, result := range search.Results {
 		require.Equal(t, "model_written", result.Acquisition)

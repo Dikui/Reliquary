@@ -65,18 +65,18 @@ func TestEntrySearchStarredFiltersAndMissingCount(t *testing.T) {
 	require.NoError(t, h.db.Model(a).Update("starred", true).Error)
 	require.NoError(t, h.db.Model(missing).Update("starred", true).Error)
 	starred := true
-	result, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, CollapseSimilar: boolPointer(false), Limit: 100})
+	result, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", Starred: &starred, CollapseSimilar: boolPointer(false), Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 2)
 	for _, r := range result.Results {
 		require.True(t, r.Starred)
 	}
-	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, PublishedFrom: "2026-10-01", Limit: 100})
+	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", Starred: &starred, PublishedFrom: "2026-10-01", Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)
 	starred = false
-	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, Limit: 100})
+	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", Starred: &starred, Limit: 100})
 	require.NoError(t, err)
 	require.Equal(t, []string{"mine", "plain"}, entrySearchIDs(result))
 }
@@ -96,6 +96,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			h.drain(t)
 			a = h.article(t, a.ID)
 			h.library.IndexingStrategy.KeywordEnabled = true
+			require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
 			require.NoError(t, h.db.Save(h.library).Error)
 			require.Equal(t, types.ParseStatusCompleted, a.ParseStatus)
 			intake, err := a.IntakeMetadata()
@@ -112,7 +113,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			search := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, nil, h.db)
 			space, _ := types.SpaceInfoFromContext(h.ctx)
 			space.RetrievalConfig = &types.RetrievalConfig{KeywordThreshold: .00001, RerankTopK: 20}
-			result, err := search.Search(h.ctx, types.EntrySearchRequest{Query: "Undatedfixture", PublishedFrom: "2026-10-01", Limit: 20})
+			result, err := search.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "Undatedfixture", PublishedFrom: "2026-10-01", Limit: 20})
 			require.NoError(t, err)
 			require.Empty(t, result.Results)
 			require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)

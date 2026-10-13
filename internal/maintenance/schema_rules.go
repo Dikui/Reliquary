@@ -29,12 +29,23 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}
-	if migration.Version >= 12 {
+	if migration.Version >= 14 {
 		return Rules, nil
 	}
 	current := make(map[string]Rule, len(Rules))
 	for table, rule := range Rules {
 		current[table] = rule
+	}
+	delete(current, "embedding_rebuild_vectors")
+	delete(current, "embedding_vector_archives")
+	chunks := current["chunks"]
+	chunks.Regenerated = strings.TrimSpace(strings.ReplaceAll(chunks.Regenerated, "source_locations", ""))
+	current["chunks"] = chunks
+	runs := current["embedding_rebuild_runs"]
+	runs.Sidecar = strings.TrimSpace(strings.ReplaceAll(runs.Sidecar, "candidate switched_at", ""))
+	current["embedding_rebuild_runs"] = runs
+	if migration.Version >= 12 {
+		return current, nil
 	}
 	discard := current["ingest_discards"]
 	discard.Sidecar = "space_id normalized_url article_id discarded_at reason"

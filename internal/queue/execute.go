@@ -211,10 +211,10 @@ func (c *Client) finish(ctx context.Context, j *Job, t *Task, taskErr error, int
 			updates["completed_at"] = now
 			return tx.Model(&current).Updates(updates).Error
 		}
-		var deferred *types.ChatGPTDeferredError
+		var deferred types.DeferredOperation
 		if errors.As(taskErr, &deferred) {
 			updates["state"] = TaskStateScheduled
-			updates["process_at"] = maxTime(now.Add(time.Minute), deferred.RetryAt)
+			updates["process_at"] = maxTime(now.Add(time.Minute), deferred.DeferredUntil())
 			updates["last_error"] = NormalizeError(taskErr.Error())
 			updates["delivery"] = current.Delivery + 1
 			return tx.Model(&current).Updates(updates).Error

@@ -23,6 +23,7 @@ func TestSavedModelRerankerUsesGenericClientForRemovedProviders(t *testing.T) {
 			return
 		}
 		want := map[string]any{
+			"top_n":     float64(2),
 			"model":     "test-rerank",
 			"query":     "query",
 			"documents": []any{"A", "B"},

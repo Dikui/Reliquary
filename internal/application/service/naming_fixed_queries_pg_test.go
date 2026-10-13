@@ -46,6 +46,7 @@ func TestNamingFixedQueries(t *testing.T) {
 	evidence := map[string]any{}
 	for _, c := range cases {
 		h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: c.Keyword, VectorEnabled: c.Vector}
+		require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
 		evidence[c.Name] = h.search(t, c.Request)
 	}
 

@@ -388,7 +388,9 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		return errors.New(k.ErrorMessage)
 	}
 	if err := indexArticleEmbedding(ctx, s.db, s.modelService, library, k); err != nil {
-		return err
+		if err := s.deferEntryVectors(ctx, k); err != nil {
+			return err
+		}
 	}
 	if writeFiles && s.vault != nil {
 		read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
@@ -398,12 +400,17 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 			s.vault.recordArticleError(ctx, k.ID, err)
 			return fmt.Errorf("write article to vault: %w", err)
 		}
+		if err := recalculateBodyLocations(ctx, s.db, k, body, k.VaultBody, nil); err != nil {
+			return err
+		}
 		if err := s.removeParsedBodyCopies(ctx, library, k, body, images); err != nil {
 			return err
 		}
 	}
 	if err := indexArticleImages(ctx, s.db, s.modelService, library, s.vault, k); err != nil {
-		return err
+		if err := s.deferEntryVectors(ctx, k); err != nil {
+			return err
+		}
 	}
 	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType}, "", "")
 	return nil
@@ -462,7 +469,7 @@ func (s *entryService) removeParsedBodyCopies(ctx context.Context, library *type
 
 func splitArticleBody(body string, cfg types.ChunkingConfig) ([]types.ParsedChunk, ProcessChunksOptions) {
 	base := buildSplitterConfigFromChunking(cfg)
-	options := ProcessChunksOptions{}
+	options := ProcessChunksOptions{Body: body}
 	if cfg.EnableParentChild {
 		parent, child := buildParentChildConfigs(cfg, base)
 		result := chunker.SplitParentChild(body, parent, child)

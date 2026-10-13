@@ -52,6 +52,9 @@ func (s *searchService) imageVectorQuery(ctx context.Context, spaceID uint64, li
 }
 
 func (s *searchService) imageSearchEnabled(ctx context.Context, spaceID uint64, modelID string) (bool, error) {
+	if !imageVectorsEnabled(ctx, s.db, spaceID) {
+		return false, nil
+	}
 	var model types.Model
 	query := s.db.WithContext(ctx).Where("id=? AND (space_id=? OR is_builtin=true) AND type=?", modelID, spaceID, types.ModelTypeEmbedding).Limit(1).Find(&model)
 	if query.Error != nil {

@@ -3,6 +3,7 @@ import { get, put } from '@/utils/request'
 // RetrievalConfig represents the global retrieval/search configuration for a space.
 // Shared by the full search page and command palette.
 export interface RetrievalConfig {
+  image_vector_enabled?: boolean
   embedding_top_k: number
   vector_threshold: number
   keyword_threshold: number

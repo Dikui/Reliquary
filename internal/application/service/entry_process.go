@@ -19,12 +19,14 @@ import (
 
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
+	"reliquary/internal/sourceloc"
 	"reliquary/internal/types"
 	secutils "reliquary/internal/utils"
 )
 
 // ProcessChunksOptions contains options for processing chunks
 type ProcessChunksOptions struct {
+	Body string
 	// ParentChunks holds parent chunk data when parent-child chunking is enabled.
 	// When set, the chunks passed to processChunks are child chunks, and each
 	// child's ParentIndex references an entry in this slice.
@@ -123,16 +125,17 @@ func (s *entryService) processChunks(ctx context.Context,
 
 	// Get embedding model for vectorization — only needed when vector/keyword indexing is enabled
 	var embeddingModel embedding.Embedder
+	var vectorErr error
 	if library.NeedsEmbeddingModel() {
 		var err error
 		embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, library)
 		if err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks get embedding model failed")
-			entry.ParseStatus, entry.ErrorMessage = types.ParseStatusFailed, err.Error()
-			_ = s.repo.UpdateEntry(ctx, entry)
-			return
+			vectorErr = err
 		}
-		entry.EmbeddingModelID = embeddingModel.GetModelID()
+		if embeddingModel != nil {
+			entry.EmbeddingModelID = embeddingModel.GetModelID()
+		}
 	} else {
 		logger.Infof(ctx, "Vector/keyword indexing disabled for Library %s, skipping embedding model", library.ID)
 	}
@@ -327,6 +330,7 @@ func (s *entryService) processChunks(ctx context.Context,
 	s.beginStage(ctx, entry.ID, types.StageChunking, types.JSONMap{
 		"chunks_planned": len(insertChunks),
 	})
+	sourceloc.Assign(options.Body, insertChunks)
 	if err := s.chunkService.CreateChunks(ctx, insertChunks); err != nil {
 		entry.ParseStatus = types.ParseStatusFailed
 		entry.ErrorMessage = err.Error()
@@ -394,37 +398,11 @@ func (s *entryService) processChunks(ctx context.Context,
 
 		err = retrieveEngine.BatchIndex(ctx, embeddingModel, indexInfoList)
 		if err != nil {
-			entry.ParseStatus = types.ParseStatusFailed
-			entry.ErrorMessage = err.Error()
-			entry.UpdatedAt = time.Now()
-			s.repo.UpdateEntry(ctx, entry)
-
-			// delete failed chunks
-			if err := s.chunkService.DeleteChunksByEntryID(ctx, entry.ID); err != nil {
-				logger.Errorf(ctx, "Delete chunks failed: %v", err)
-			}
-
-			// delete index
-			if err := retrieveEngine.DeleteByEntryIDList(
-				ctx, []string{entry.ID}, embeddingModel.GetDimensions(), library.Type,
-			); err != nil {
-				logger.Errorf(ctx, "Delete index failed: %v", err)
-			}
-			// Map PostgreSQL index / embedding rate-limit errors to a
-			// stable code so the UI can offer "retry later" hints.
-			code := werrors.ErrCodeIndexWriteFailed
-			if isLikelyRateLimitError(err) {
-				code = werrors.ErrCodeEmbeddingRateLimit
-			}
-			s.failStage(ctx, entry.ID, types.StageEmbedding,
-				code, "batch index failed", err)
-			return
+			vectorErr = err
+			s.skipStage(ctx, entry.ID, types.StageEmbedding, "vector_unavailable")
+		} else {
+			s.endStage(ctx, entry.ID, types.StageEmbedding, types.JSONMap{"vectors_written": len(indexInfoList), "storage_bytes": totalStorageSize})
 		}
-		logger.GetLogger(ctx).Infof("processChunks batch index successfully, with %d index", len(indexInfoList))
-		s.endStage(ctx, entry.ID, types.StageEmbedding, types.JSONMap{
-			"vectors_written": len(indexInfoList),
-			"storage_bytes":   totalStorageSize,
-		})
 
 		// Final check before marking as completed.
 		// deleting → drop chunks+index we just wrote.
@@ -445,6 +423,15 @@ func (s *entryService) processChunks(ctx context.Context,
 	} else {
 		logger.Infof(ctx, "Vector/keyword indexing disabled for Library %s, skipping BatchIndex", library.ID)
 		s.skipStage(ctx, entry.ID, types.StageEmbedding, "skipped")
+	}
+
+	if vectorErr != nil {
+		if err := s.deferEntryVectors(ctx, entry); err != nil {
+			entry.ParseStatus = types.ParseStatusFailed
+			entry.ErrorMessage = err.Error()
+			_ = s.repo.UpdateEntry(ctx, entry)
+			return
+		}
 	}
 
 	now := time.Now()

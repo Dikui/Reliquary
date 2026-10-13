@@ -495,3 +495,32 @@ func TestDisconnectedSingletonPausesWorkerStatsAndPreservesTask(t *testing.T) {
 	require.Zero(t, j.FailCount)
 	t.Log("terminated PostgreSQL singleton session cancels workers; all pool stats show stopped; interrupted job remains pending without spending retries")
 }
+
+func TestVectorDeferralRecoversWithoutOrdinaryFailures(t *testing.T) {
+	db := pgtest.Open(t)
+	addr := os.Getenv("RELIQUARY_TEST_REDIS_ADDR")
+	if addr == "" {
+		t.Skip("Redis integration endpoint required")
+	}
+	c := NewClientWithRedis(db, asynq.RedisClientOpt{Addr: addr, DB: 8})
+	t.Cleanup(func() { _ = c.Close(); cleanupRedis(t, c) })
+	var available atomic.Bool
+	require.NoError(t, c.Start(context.Background(), HandlerFunc(func(context.Context, *Task) error {
+		if !available.Load() {
+			return &types.VectorDeferredError{Cause: errors.New("Ollama unavailable"), RetryAt: time.Now().Add(time.Minute)}
+		}
+		return nil
+	}), testConfig()))
+	t.Cleanup(func() { require.NoError(t, c.Close()) })
+	info, err := c.Enqueue(NewTask(types.TypeEntryVector, []byte(`{"space_id":1,"entry_id":"retry"}`)), Queue(types.QueueEntity), MaxRetry(0))
+	require.NoError(t, err)
+	var j Job
+	require.Eventually(t, func() bool { return db.First(&j, "id=?", info.ID).Error == nil && j.State == TaskStateScheduled }, 10*time.Second, 20*time.Millisecond)
+	require.Zero(t, j.Retried)
+	require.Zero(t, j.FailCount)
+	available.Store(true)
+	require.NoError(t, db.Model(&Job{}).Where("id=?", info.ID).Update("process_at", time.Now().Add(-time.Second)).Error)
+	require.NoError(t, c.DispatchPending(context.Background()))
+	require.Eventually(t, func() bool { return db.First(&j, "id=?", info.ID).Error == nil && j.State == TaskStateCompleted }, 10*time.Second, 20*time.Millisecond)
+	require.Zero(t, j.FailCount)
+}

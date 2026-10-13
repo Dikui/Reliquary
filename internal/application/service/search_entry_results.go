@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/sourceloc"
 	"reliquary/internal/types"
 
 	"github.com/pgvector/pgvector-go"
@@ -69,6 +70,28 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 	if err != nil {
 		return nil, err
 	}
+	var libraries []types.Library
+	if err := s.db.WithContext(ctx).Where("space_id=?", spaceID).Find(&libraries).Error; err != nil {
+		return nil, err
+	}
+	var chunks []types.Chunk
+	chunkIDs := []string{}
+	for _, parts := range snippets {
+		for _, part := range parts {
+			if part.ChunkID != "" {
+				chunkIDs = append(chunkIDs, part.ChunkID)
+			}
+		}
+	}
+	if len(chunkIDs) > 0 {
+		if err := s.db.WithContext(ctx).Select("id", "source_locations").Where("space_id=? AND id IN ?", spaceID, chunkIDs).Find(&chunks).Error; err != nil {
+			return nil, err
+		}
+	}
+	locations := map[string][]types.SourceLocation{}
+	for _, c := range chunks {
+		locations[c.ID] = c.SourceLocations
+	}
 	for _, entry := range entries {
 		source, err := entrySourceInfo(&entry.Entry)
 		if err != nil {
@@ -82,6 +105,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			originalURL = ""
 		}
 		result := &types.EntrySearchResult{
+			LibraryID: entry.LibraryID,
 			SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID,
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
@@ -94,6 +118,21 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			VaultPath: entry.VaultPath, OriginalURL: originalURL,
 			Snippets: []types.EntrySearchSnippet{},
 		}
+		for _, lib := range libraries {
+			if lib.ID == entry.LibraryID {
+				result.LibraryName, result.LibraryDirectory = lib.Name, lib.Directory
+			}
+		}
+		if entry.SourceRef != "" {
+			latest, err := types.FindLatestSourceEntry(s.db.WithContext(ctx), spaceID, entry.LibraryID, entry.SourceRef)
+			if err != nil {
+				return nil, err
+			}
+			if latest != nil {
+				entry.HasUpdate, entry.LatestEntryID = latest.ID != entry.ID, latest.ID
+			}
+		}
+		result.HasUpdate, result.LatestEntryID = entry.HasUpdate, entry.LatestEntryID
 		if result.Entities == nil {
 			result.Entities = []types.EntrySearchEntity{}
 		}
@@ -101,6 +140,22 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			result.Topics = []types.EntrySearchTopic{}
 		}
 		for _, snippet := range snippets[entry.ID] {
+			snippet.Locations = locations[snippet.ChunkID]
+			if snippet.ImagePath != "" {
+				for _, ref := range bodyImageReferences(entry.VaultBody) {
+					if ref.URL != snippet.ImagePath {
+						continue
+					}
+					offset := ref.Position + strings.Index(entry.VaultBody[ref.Position:], ref.URL)
+					start := len([]rune(entry.VaultBody[:offset]))
+					c := &types.Chunk{Content: ref.URL, StartAt: start, EndAt: start + len([]rune(ref.URL))}
+					sourceloc.Assign(entry.VaultBody, []*types.Chunk{c})
+					snippet.Locations = append(snippet.Locations, c.SourceLocations...)
+				}
+			}
+			if snippet.Locations == nil {
+				snippet.Locations = []types.SourceLocation{}
+			}
 			result.Snippets = append(result.Snippets, snippet)
 		}
 		slices.SortFunc(result.Snippets, func(a, b types.EntrySearchSnippet) int {
@@ -134,7 +189,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 				text = entry.Title
 			}
 			result.Snippets = append(result.Snippets, types.EntrySearchSnippet{
-				Content: text, ChunkIndex: -1, Score: result.Score, MatchType: metadataMatch[entry.ID],
+				Locations: []types.SourceLocation{}, Content: text, ChunkIndex: -1, Score: result.Score, MatchType: metadataMatch[entry.ID],
 			})
 		}
 		results = append(results, result)

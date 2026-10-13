@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"gorm.io/gorm"
 
 	apperrors "reliquary/internal/errors"
@@ -32,6 +33,9 @@ func (s *chunkSearchService) GetQueryEmbedding(ctx context.Context, libraryID st
 	vector, err := embeddingModel.Embed(ctx, queryText)
 	if err != nil {
 		return nil, err
+	}
+	if len(vector) != embeddingModel.GetDimensions() {
+		return nil, fmt.Errorf("query embedding dimension mismatch: got %d, expected %d", len(vector), embeddingModel.GetDimensions())
 	}
 	if s.db != nil {
 		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

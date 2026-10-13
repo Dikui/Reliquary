@@ -79,6 +79,7 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.HandleFunc(types.TypeEntryListReparse, params.EntryService.ProcessEntryListReparse)
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
+	mux.HandleFunc(types.TypeEntryVector, params.EmbeddingRebuild.HandleEntryVector)
 	mux.HandleFunc(types.TypeTopicBackfill, params.TopicService.HandleBackfill)
 	if params.Reports != nil {
 		mux.HandleFunc(types.TypeReportIndex, params.Reports.HandleReportIndex)

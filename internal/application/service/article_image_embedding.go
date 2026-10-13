@@ -56,6 +56,9 @@ func indexArticleImages(ctx context.Context, db *gorm.DB, models interfaces.Mode
 	if db == nil || article == nil {
 		return nil
 	}
+	if !imageVectorsEnabled(ctx, db, article.SpaceID) {
+		return nil
+	}
 	paths := articleImagePaths(article)
 	query := db.WithContext(ctx).Table("image_embeddings").Where("space_id=? AND entry_id=?", article.SpaceID, article.ID)
 	if len(paths) == 0 || library == nil || !library.IsVectorEnabled() || vault == nil {

@@ -72,6 +72,7 @@ type VideoInfo struct {
 // and maintains its positional relationship with the original text
 // Chunks can be independently embedded as vectors and retrieved, supporting precise content localization
 type Chunk struct {
+	SourceLocations []SourceLocation `json:"source_locations" gorm:"serializer:json;type:jsonb"`
 	// Unique identifier of the chunk, using UUID format
 	ID    string `json:"id"                       gorm:"type:varchar(36);primaryKey"`
 	SeqID int64  `json:"seq_id"                   gorm:"type:bigint;uniqueIndex;autoIncrement"`
@@ -135,4 +136,21 @@ func (c *Chunk) EmbeddingContent() string {
 		return body
 	}
 	return c.ContextHeader + "\n\n" + body
+}
+
+// BeforeSave keeps absent generated-text locations as an empty JSON array.
+func (c *Chunk) BeforeSave(tx *gorm.DB) error {
+	if c.EntryID != "" && c.Content != "" && c.SourceLocations == nil {
+		var entry Entry
+		if err := tx.Session(&gorm.Session{NewDB: true, SkipHooks: true}).Select("vault_body").Where("id=? AND space_id=?", c.EntryID, c.SpaceID).Find(&entry).Error; err != nil {
+			return err
+		}
+		if entry.VaultBody != "" {
+			AssignStoredBodyLocations(entry.VaultBody, c)
+		}
+	}
+	if c.SourceLocations == nil {
+		c.SourceLocations = []SourceLocation{}
+	}
+	return nil
 }

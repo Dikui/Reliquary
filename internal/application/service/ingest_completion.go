@@ -125,8 +125,11 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 		return ingestResult(article, "exists", "已记录本次材料，文章仍等待用户补全。", "", ""), nil
 	}
 	newBody = replaceIngestImageTargets(newBody, mappings)
-	// ikb-08: recalculate body positions here after replacing image destinations,
-	// before persisting the completed body and scheduling its reprocessing.
+	if changed && s.db != nil {
+		if err := recalculateBodyLocations(ctx, s.db, article, oldBody, newBody, mappings); err != nil {
+			return nil, err
+		}
+	}
 	remaining = addRemoteIngestImageMissing(newBody, remaining, keyID, keyName)
 	if s.vault != nil && article.VaultPath != "" && changed {
 		change, err := s.vault.BeginArticleSupplement(ctx, article, newBody, mappings)

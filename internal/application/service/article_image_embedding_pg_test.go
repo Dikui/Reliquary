@@ -42,6 +42,7 @@ func (m articleImageFixtureModels) GetEmbeddingModel(context.Context, string) (e
 func newArticleImageHarness(t *testing.T, enabled bool) (*articleProcessingHarness, *VaultService, *articleImageFixtureEmbedder) {
 	t.Helper()
 	h, vault := newVaultArticleHarness(t)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("retrieval_config", &types.RetrievalConfig{ImageVectorEnabled: true}).Error)
 	e := &articleImageFixtureEmbedder{enabled: enabled}
 	h.service.modelService = articleImageFixtureModels{h.service.modelService.(articleProcessingModels), e}
 	h.service.chunkService.(*chunkService).modelService = h.service.modelService

@@ -57,7 +57,7 @@ func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t 
 		for _, collapse := range []bool{false, true} {
 			for _, endpoint := range []string{"/api/v1/search", "/api/v1/follows/feed"} {
 				t.Run(fmt.Sprintf("%s/incomplete=%t/collapse=%t", endpoint, incomplete, collapse), func(t *testing.T) {
-					body := fmt.Sprintf(`{"query":"Incompletefixture","collapse_similar":%t}`, collapse)
+					body := fmt.Sprintf(`{"libraries":[%q],"query":"Incompletefixture","collapse_similar":%t}`, base.Data.ID, collapse)
 					if endpoint == "/api/v1/follows/feed" {
 						body = fmt.Sprintf(`{"include_seen":true,"collapse_similar":%t}`, collapse)
 					}

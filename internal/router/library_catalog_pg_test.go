@@ -86,7 +86,7 @@ func TestExplicitIngestSelectsSystemLibrary(t *testing.T) {
 
 func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	f := newMCPFixture(t)
-	require.NoError(t, f.db.Model(&types.Library{}).Where("id=?", f.library.ID).Update("indexing_strategy", types.IndexingStrategy{KeywordEnabled: true}).Error)
+	require.NoError(t, f.db.Model(&types.Library{}).Where("space_id=?", types.SingleSpaceID).Update("indexing_strategy", types.IndexingStrategy{KeywordEnabled: true}).Error)
 	var libraries []types.Library
 	require.NoError(t, f.db.Find(&libraries).Error)
 	entity := types.Entity{ID: "multi-entity", SpaceID: 1, CanonicalName: "Multi entity", NormalizedName: "multi entity", EntityType: "company"}
@@ -117,7 +117,7 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	require.NoError(t, json.Unmarshal(all.Body.Bytes(), &page))
 	require.Equal(t, 5, page.Total)
 	noCollapse := false
-	search, err := service.NewSearchService(f.params.LibraryService, f.params.SpaceService, nil, f.db).Search(f.ctx, types.EntrySearchRequest{Query: "catalogneedle", Limit: 10, CollapseSimilar: &noCollapse})
+	search, err := service.NewSearchService(f.params.LibraryService, f.params.SpaceService, nil, f.db).Search(f.ctx, types.EntrySearchRequest{Libraries: []string{"mine", "ai-reports", "institutional", "opinions", "references"}, Query: "catalogneedle", Limit: 10, CollapseSimilar: &noCollapse})
 	require.NoError(t, err)
 	require.Len(t, search.Results, 5)
 	feed, err := follows.Feed(f.ctx, types.FollowFeedRequest{})

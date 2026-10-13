@@ -59,6 +59,13 @@ func (r *EntityNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id s
 func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, spaceID uint64) (entityEmbeddingProfile, error) {
 	ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	id, err := ResolveModelTier(ctx, r.db, nil, types.ModelTierEmbedding)
+	if err != nil {
+		return entityEmbeddingProfile{}, err
+	}
+	return r.profileForModel(ctx, spaceID, id, true)
+}
+func (r *EntityNameEmbeddingRebuilder) profileForModel(ctx context.Context, spaceID uint64, id string, active bool) (entityEmbeddingProfile, error) {
+	var err error
 	profile := entityEmbeddingProfile{modelID: id}
 	if err != nil {
 		return profile, err
@@ -89,7 +96,7 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, spaceID uint
 	if err != nil {
 		return profile, err
 	}
-	if currentID != id || entityEmbeddingProfileHash(id, profile.dimension, before) != entityEmbeddingProfileHash(id, profile.dimension, after) || (before != nil && after != nil && !before.UpdatedAt.Equal(after.UpdatedAt)) {
+	if (active && currentID != id) || entityEmbeddingProfileHash(id, profile.dimension, before) != entityEmbeddingProfileHash(id, profile.dimension, after) || (before != nil && after != nil && !before.UpdatedAt.Equal(after.UpdatedAt)) {
 		return profile, errors.New("embedding profile changed while constructing its provider client")
 	}
 	if after != nil && after.Parameters.EmbeddingParameters.Dimension > 0 && after.Parameters.EmbeddingParameters.Dimension != profile.dimension {

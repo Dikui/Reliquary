@@ -16,6 +16,7 @@ func enableImageSearchFixture(t *testing.T, h *entrySearchFixture) {
 	require.NoError(t, h.db.Create(&types.Model{ID: "fixture-model", SpaceID: 1, Name: "Shared image space",
 		Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3, SupportsImages: true, MultimodalFormat: "jina"}}}).Error)
+	h.config.ImageVectorEnabled = true
 	h.config.VectorThreshold = 0.9
 	var space types.Space
 	require.NoError(t, h.db.First(&space, "id=1").Error)

@@ -43,7 +43,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
-	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill}},
+	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeEntryVector, TypeTopicBackfill}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeEntryListDelete, TypeEntryListReparse,
 		TypeIngestAssetCleanup, TypeReportIndex,
@@ -191,6 +191,7 @@ const (
 	TypeEntryListDelete            = "knowledge:list_delete"  // 批量删除知识任务
 	TypeEntryListReparse           = "knowledge:list_reparse" // 批量重解析知识任务
 	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
+	TypeEntryVector                = "entry:vector"
 	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
 	TypeManualProcess              = "manual:process" // 文章正文处理任务，兼容已有持久队列名称
 	TypeIngestAssetCleanup         = "ingest:asset_cleanup"

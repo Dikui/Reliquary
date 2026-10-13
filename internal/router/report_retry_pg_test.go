@@ -113,7 +113,7 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			}, 5*time.Second, 10*time.Millisecond)
 			require.NoError(t, client.Close())
 			var search types.EntrySearchResponse
-			mcpCall(t, f.connect(t, "2025-11-25"), "search", map[string]any{"query": "reportqueueretryfixture", "sources": []string{"report"}}, &search)
+			mcpCall(t, f.connect(t, "2025-11-25"), "search", map[string]any{"libraries": []string{"ai-reports"}, "query": "reportqueueretryfixture", "sources": []string{"report"}}, &search)
 			require.Len(t, search.Results, 1)
 			require.Equal(t, report.ID, search.Results[0].EntryID)
 			completed := write("Retried report", markdown)

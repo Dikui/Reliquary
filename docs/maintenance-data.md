@@ -232,3 +232,5 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 `entries.source_ref`、`source_body_hash`、`identifier`、`graph` 均属于 sidecar 不可再生业务数据。`source_body_hash` 保留首次提交正文的规范化指纹，不因图片补全而变化。`has_update`、`latest_article_id` 为按库和来源查询的派生响应，不是数据库列。版本 10 及以前没有这四列；恢复旧副本时使用空字符串与 NULL 默认值，核对时保留对其他字段的严格比较。
 
 版本 12 的 `ingest_discards.library_id` 与 `ingest_discards.fingerprint` 属于 sidecar 持久数据。版本 11 及以前仍按原列清单核对。旧副本缺少两列时，按资料原库及链接指纹投影；无法确定原库的历史记录保存在独立历史范围，不影响当前库收录。原有行、原因、时间和链接均保留。
+
+000014 新增归属：`chunks.source_locations`、`embedding_rebuild_vectors` 全列、`embedding_vector_archives` 全列为 Regenerated；`embedding_rebuild_runs.candidate`、`switched_at` 为 Sidecar 操作状态。空间的图片向量开关位于既有 Configuration 字段 `retrieval_config` 内。候选向量、旧向量归档仅存 PostgreSQL，可从正文重新生成；合并 ikb-07 后需在副本读写与旧版默认值投影中接入两个运行字段。

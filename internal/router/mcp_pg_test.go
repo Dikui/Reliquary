@@ -286,7 +286,7 @@ func TestMCPSearchIncludesIncompleteForArticlesAndSimilarReports(t *testing.T) {
 			var result struct {
 				Results []*mcpIncompleteArticle `json:"results"`
 			}
-			mcpCall(t, client, "search", map[string]any{"query": "incompletefixture", "collapse_similar": collapse}, &result)
+			mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "incompletefixture", "collapse_similar": collapse}, &result)
 			if collapse {
 				require.Len(t, result.Results, 1)
 				require.Len(t, result.Results[0].SimilarReports, 1)
@@ -346,6 +346,7 @@ func TestMCPInvalidArgumentsAreRejectedBeforeWrites(t *testing.T) {
 		{"list_entities", map[string]any{"entity_type": "unknown"}},
 		{"write_report", map[string]any{"title": "missing Markdown"}},
 		{"search", map[string]any{"query": "text", "unknown_filter": true}},
+		{"search", map[string]any{"query": "text"}},
 	} {
 		result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: test.name, Arguments: test.args})
 		require.NoError(t, err)
@@ -373,7 +374,7 @@ func TestMCPUnverifiedSourceReadAndSearch(t *testing.T) {
 	require.True(t, read.Header.SourceUnverified)
 	require.Empty(t, read.OriginalURL)
 	var result types.EntrySearchResponse
-	mcpCall(t, client, "search", map[string]any{"query": "searchfixture", "collapse_similar": false}, &result)
+	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "searchfixture", "collapse_similar": false}, &result)
 	require.Len(t, result.Results, 1)
 	require.True(t, result.Results[0].SourceUnverified)
 	require.Empty(t, result.Results[0].OriginalURL)
@@ -488,7 +489,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"list_libraries", "search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "check_urls", "list_incomplete", "accept_incomplete"}, names)
 	var search types.EntrySearchResponse
-	mcpCall(t, client, "search", map[string]any{"query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
+	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
 		"topic_ids": []string{topic.ID}, "sources": []string{"article"}, "starred": false,
 		"published_from": "2026-10-01", "published_to": "2026-10-02", "collapse_similar": false, "limit": 5}, &search)
 	require.Len(t, search.Results, 1)

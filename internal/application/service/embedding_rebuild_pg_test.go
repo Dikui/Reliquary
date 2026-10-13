@@ -67,6 +67,8 @@ type allRebuildFixture struct {
 func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	t.Helper()
 	h := newEntrySearchFixture(t)
+	h.config.ImageVectorEnabled = images
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("retrieval_config", h.config).Error)
 	full := h.add(t, "full", "article", "2026-10-01", "event", "semanticlaunch", 2)
 	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
 	h.add(t, "mine", "mine", "", "", "personal", 1)

@@ -23,6 +23,7 @@ func TestImportedDocumentSearchUsesSummaryFiltersAndFolding(t *testing.T) {
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: mine.ID, EntityID: "document-entity"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: mine.ID, TopicID: "document-topic"}).Error)
 	h.library.IndexingStrategy.KeywordEnabled = false
+	require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
 	starred := true
 	result := h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", Sources: []string{"mine"}, ContentTypes: []string{"tutorial"}, EntityIDs: []string{"document-entity"}, TopicIDs: []string{"document-topic"}, Starred: &starred, CollapseSimilar: entrySearchNoCollapse()})
 	require.Equal(t, []string{mine.ID}, entrySearchIDs(result))

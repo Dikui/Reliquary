@@ -181,7 +181,8 @@
             "chunk_index": 0,
             "content": "Evidence",
             "match_type": "",
-            "score": 0.75
+            "score": 0.75,
+            "locations": null
           }
         ],
         "source": "mine",
@@ -190,8 +191,13 @@
         "summary": null,
         "title": "",
         "topics": null,
-        "vault_path": ""
+        "vault_path": "",
+        "library_id": "",
+        "library_name": "",
+        "library_directory": ""
       }
-    ]
+    ],
+    "vector_unavailable": false,
+    "rerank_status": ""
   }
 }

@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	search "reliquary/internal/application/service/search"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 )
@@ -23,17 +23,20 @@ type entrySearchFilters struct {
 
 func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters, error) {
 	f := entrySearchFilters{request: request}
+	if len(request.Libraries) == 0 || len(request.Libraries) > 100 {
+		return f, apperrors.NewBadRequestError("libraries requires 1 to 100 library IDs or directories")
+	}
+	for _, library := range request.Libraries {
+		if strings.TrimSpace(library) == "" {
+			return f, apperrors.NewBadRequestError("libraries cannot contain an empty value")
+		}
+	}
 	f.request.Query = strings.TrimSpace(request.Query)
 	if f.request.Query == "" {
 		return f, apperrors.NewBadRequestError("query is required")
 	}
 	if request.Limit < 0 || request.Limit > 100 {
 		return f, apperrors.NewBadRequestError("limit must be between 1 and 100, or omitted")
-	}
-	for _, contentType := range request.ContentTypes {
-		if !slices.Contains(types.ContentTypes, contentType) {
-			return f, apperrors.NewBadRequestError("unsupported content_types value: " + contentType)
-		}
 	}
 	for _, source := range request.Sources {
 		if !slices.Contains([]string{"article", "mine", "report"}, source) {
@@ -90,15 +93,39 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if !ok {
 		return nil, apperrors.NewUnauthorizedError("workspace ID not found in context")
 	}
-	library, err := s.libraryService.GetSystemLibrary(ctx, "institutional")
-	if err != nil {
-		return nil, err
-	}
-	if library == nil || library.SpaceID != spaceID {
-		return nil, apperrors.NewForbiddenError("library is outside the space")
-	}
 	if s.db == nil {
 		return nil, fmt.Errorf("article search requires PostgreSQL")
+	}
+	var selected []types.Library
+	if err := s.db.WithContext(ctx).Where("space_id=? AND (id IN ? OR directory IN ?)", spaceID, request.Libraries, request.Libraries).Find(&selected).Error; err != nil {
+		return nil, err
+	}
+	ids := []string{}
+	for _, requested := range request.Libraries {
+		found := false
+		for _, lib := range selected {
+			if requested == lib.ID || requested == lib.Directory {
+				found = true
+			}
+		}
+		if !found {
+			return nil, apperrors.NewBadRequestError("unknown library: " + requested)
+		}
+	}
+	for _, lib := range selected {
+		ids = append(ids, lib.ID)
+	}
+	f.request.Libraries = ids
+	keywordEnabled := false
+	for _, lib := range selected {
+		keywordEnabled = keywordEnabled || lib.IsKeywordEnabled()
+	}
+	library := &selected[0]
+	for i := range selected {
+		if selected[i].IsVectorEnabled() {
+			library = &selected[i]
+			break
+		}
 	}
 	var config *types.RetrievalConfig
 	if s.spaceService != nil {
@@ -119,6 +146,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	var queryVector []float32
 	modelID := ""
 	queryProfileHash := ""
+	vectorUnavailable := false
 	if library.IsVectorEnabled() {
 		modelID, err = ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 		if err != nil {
@@ -133,18 +161,34 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			if read.RowsAffected > 0 {
 				queryProfileHash = types.EmbeddingProfileHash(modelID, metadata.Parameters.EmbeddingParameters.Dimension, &metadata)
 			}
-			queryVector, err = s.libraryService.GetQueryEmbedding(ctx, library.ID, f.request.Query)
-			if err != nil {
-				return nil, err
+			queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			queryVector, err = s.libraryService.GetQueryEmbedding(queryCtx, library.ID, f.request.Query)
+			cancel()
+			invalid := len(queryVector) == 0 || (metadata.Parameters.EmbeddingParameters.Dimension > 0 && len(queryVector) != metadata.Parameters.EmbeddingParameters.Dimension)
+			norm := float64(0)
+			for _, v := range queryVector {
+				n := float64(v)
+				invalid = invalid || math.IsNaN(n) || math.IsInf(n, 0)
+				norm += n * n
 			}
+			if err != nil || invalid || norm == 0 {
+				vectorUnavailable = true
+				queryVector = nil
+			}
+		} else {
+			vectorUnavailable = true
 		}
 	}
-	response := &types.EntrySearchResponse{Results: []*types.EntrySearchResult{}}
+	response := &types.EntrySearchResponse{Results: []*types.EntrySearchResult{}, VectorUnavailable: vectorUnavailable, RerankStatus: "unconfigured"}
 	var merged []*types.EntrySearchResult
 	// Query generation happens before this short read transaction. Shared
 	// metadata locks keep every recall channel in the query's model space.
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(queryVector) > 0 {
+			var lockedSpace types.Space
+			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=?", spaceID).First(&lockedSpace).Error; err != nil {
+				return err
+			}
 			var currentLibrary types.Library
 			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND space_id=?", library.ID, spaceID).First(&currentLibrary).Error; err != nil {
 				return err
@@ -167,9 +211,10 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			}
 		}
 		reader := *s
-		// Transitional unfiltered retrieval covers every library in the space.
+		// Candidate queries share the validated library set in f.
 		retrievalLibrary := *library
 		retrievalLibrary.ID = ""
+		retrievalLibrary.IndexingStrategy.KeywordEnabled = keywordEnabled || vectorUnavailable
 		reader.db = tx
 		if f.from != nil || f.to != nil {
 			var err error
@@ -188,10 +233,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if err != nil {
 		return nil, err
 	}
-	merged, err = s.rerankEntries(ctx, library, f.request.Query, merged, config, pool)
-	if err != nil {
-		return nil, err
-	}
+	merged, response.RerankStatus = s.rerankEntryResults(ctx, library, f.request.Query, merged)
 	if f.request.CollapseSimilar == nil || *f.request.CollapseSimilar {
 		merged, err = s.collapseArticleReports(ctx, spaceID, merged, config)
 		if err != nil {
@@ -208,6 +250,9 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool) *gorm.DB {
 	query := s.db.WithContext(ctx).Table("entries AS k").Where(`k.space_id = ?
 		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID)
+	if len(f.request.Libraries) > 0 {
+		query = query.Where("k.library_id IN ?", f.request.Libraries)
+	}
 	if libraryID != "" {
 		query = query.Where("k.library_id=?", libraryID)
 	}
@@ -246,45 +291,54 @@ func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, lib
 	return query
 }
 
-func (s *searchService) rerankEntries(ctx context.Context, library *types.Library, query string, results []*types.EntrySearchResult, config *types.RetrievalConfig, pool int) ([]*types.EntrySearchResult, error) {
-	if len(results) == 0 {
-		return results, nil
-	}
+// rerankEntries retains the internal compatibility signature.
+func (s *searchService) rerankEntries(ctx context.Context, library *types.Library, query string, results []*types.EntrySearchResult, _ *types.RetrievalConfig, _ int) ([]*types.EntrySearchResult, error) {
+	out, _ := s.rerankEntryResults(ctx, library, query, results)
+	return out, nil
+}
+func (s *searchService) rerankEntryResults(ctx context.Context, library *types.Library, query string, results []*types.EntrySearchResult) ([]*types.EntrySearchResult, string) {
 	modelID, err := ResolveModelTier(ctx, s.db, library, types.ModelTierRerank)
-	if err != nil || modelID == "" {
-		return results, err
+	if err != nil {
+		return results, "unavailable"
 	}
-	state := &search.State{Request: search.Request{
-		Query: query, RerankModelID: modelID, RerankTopK: pool, RerankThreshold: config.GetEffectiveRerankThreshold(),
-	}, Results: search.Results{RewriteQuery: query}}
-	byID := make(map[string]*types.EntrySearchResult, len(results))
-	for _, result := range results {
-		text := result.Title + "\n" + result.Summary.RenderText()
+	if modelID == "" {
+		return results, "unconfigured"
+	}
+	if len(results) == 0 {
+		return results, "no_candidates"
+	}
+	if s.modelService == nil {
+		return results, "unavailable"
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	model, err := s.modelService.GetRerankModel(ctx, modelID)
+	if err != nil || model == nil {
+		return results, "unavailable"
+	}
+	documents := make([]string, len(results))
+	for i, result := range results {
+		documents[i] = result.Title + "\n" + result.Summary.RenderText()
 		for _, snippet := range result.Snippets {
-			text += "\n\n" + snippet.Content
-		}
-		state.SearchResult = append(state.SearchResult, &types.SearchResult{ID: result.EntryID, EntryID: result.EntryID, Content: text, Score: result.Score})
-		byID[result.EntryID] = result
-	}
-	if err := s.rerank.Run(ctx, state, func() *search.StageError { return nil }); err != nil {
-		if err == search.ErrSearchNothing {
-			return []*types.EntrySearchResult{}, nil
-		}
-		return nil, err.Err
-	}
-	if len(state.RerankResult) == 0 {
-		return results, nil
-	}
-	reranked := make([]*types.EntrySearchResult, 0, len(state.RerankResult))
-	for _, hit := range state.RerankResult {
-		if result := byID[hit.ID]; result != nil {
-			result.Score = hit.Score
-			reranked = append(reranked, result)
+			documents[i] += "\n\n" + snippet.Content
 		}
 	}
-	// The existing stage applies diversity selection; article display uses its scores.
-	slices.SortStableFunc(reranked, compareEntryScores)
-	return reranked, nil
+	ranks, err := model.Rerank(ctx, query, documents)
+	if err != nil || len(ranks) != len(results) {
+		return results, "unavailable"
+	}
+	seen := map[int]bool{}
+	for _, rank := range ranks {
+		if rank.Index < 0 || rank.Index >= len(results) || seen[rank.Index] || math.IsNaN(rank.RelevanceScore) || math.IsInf(rank.RelevanceScore, 0) {
+			return results, "unavailable"
+		}
+		seen[rank.Index] = true
+	}
+	for _, rank := range ranks {
+		results[rank.Index].Score = rank.RelevanceScore
+	}
+	slices.SortStableFunc(results, compareEntryScores)
+	return results, "applied"
 }
 
 func compareEntryScores(a, b *types.EntrySearchResult) int {

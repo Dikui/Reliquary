@@ -4,6 +4,8 @@ import "time"
 
 // EmbeddingRebuildRun is a durable snapshot of all vectors to rebuild.
 type EmbeddingRebuildRun struct {
+	Candidate      bool       `json:"candidate"`
+	SwitchedAt     *time.Time `json:"switched_at"`
 	ID             string     `json:"id" gorm:"primaryKey"`
 	SpaceID        uint64     `json:"space_id"`
 	Status         string     `json:"status"`

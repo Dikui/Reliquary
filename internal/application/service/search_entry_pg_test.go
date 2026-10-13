@@ -64,7 +64,7 @@ func newEntrySearchFixture(t *testing.T) *entrySearchFixture {
 	config := &types.RetrievalConfig{RerankTopK: 100, KeywordThreshold: 0.00001}
 	space := &types.Space{ID: 1, Name: "Search fixture", EmbeddingModelID: "fixture-model", RetrievalConfig: config}
 	require.NoError(t, db.Create(space).Error)
-	library := &types.Library{ID: "search-library", SpaceID: 1, Template: types.TemplateExternalTimely, SourceEvidenceRule: "link_required", Name: "Search", FeedEnabled: true, Type: types.LibraryTypeDocument,
+	library := &types.Library{ID: "search-library", Directory: "chosen", SpaceID: 1, Template: types.TemplateExternalTimely, SourceEvidenceRule: "link_required", Name: "Search", FeedEnabled: true, Type: types.LibraryTypeDocument,
 		EmbeddingModelID: "fixture-model", ModelTiers: types.ModelTierConfig{Embedding: "fixture-model"},
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}}
 	require.NoError(t, db.Create(library).Error)
@@ -112,6 +112,13 @@ func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, se
 
 func (h *entrySearchFixture) search(t *testing.T, request types.EntrySearchRequest) *types.EntrySearchResponse {
 	t.Helper()
+	if len(request.Libraries) == 0 {
+		var libraries []types.Library
+		require.NoError(t, h.db.Find(&libraries).Error)
+		for _, lib := range libraries {
+			request.Libraries = append(request.Libraries, lib.ID)
+		}
+	}
 	response, err := h.svc.Search(h.ctx, request)
 	require.NoError(t, err)
 	return response
@@ -160,6 +167,7 @@ func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-a", SpaceID: 1, Name: "Topicneedle"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "summary", TopicID: "topic-a"}).Error)
 	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
+	require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
 	for _, term := range []string{"Canonicalneedle", "Aliasneedle", "Topicneedle", "Termneedlesummary", "Publisherneedlesummary", "Authorneedlesummary"} {
 		t.Run(term, func(t *testing.T) {
 			response := h.search(t, types.EntrySearchRequest{Query: term})
@@ -200,6 +208,7 @@ func TestEntrySearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 	}
 	// Keep query recall entirely semantic so the unrelated missing article is excluded.
 	h.library.IndexingStrategy.KeywordEnabled = false
+	require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
 	tests := []struct {
 		name    string
 		req     types.EntrySearchRequest
@@ -237,7 +246,7 @@ func TestEntrySearchPostgresSimilarReportsAndConfiguration(t *testing.T) {
 	h.add(t, "missing", "article", "", "event", "semanticlaunch", 1)
 	h.add(t, "mine", "mine", "2026-10-01", "", "semanticlaunch", 1)
 	h.add(t, "report", "report", "2026-10-01", "", "semanticlaunch", 1)
-	response := h.search(t, types.EntrySearchRequest{Query: "searchfixture"})
+	response := h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "searchfixture"})
 	require.Len(t, response.Results, 6)
 	folded := 0
 	for _, result := range response.Results {
@@ -255,16 +264,16 @@ func TestEntrySearchPostgresSimilarReportsAndConfiguration(t *testing.T) {
 		require.Empty(t, result.SimilarReports)
 	}
 	h.config.SimilarReportsWindowDays = 1
-	require.Len(t, h.search(t, types.EntrySearchRequest{Query: "searchfixture"}).Results, 7)
+	require.Len(t, h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "searchfixture"}).Results, 7)
 	h.config.SimilarReportsWindowDays = 10
-	require.Len(t, h.search(t, types.EntrySearchRequest{Query: "searchfixture"}).Results, 5)
+	require.Len(t, h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "searchfixture"}).Results, 5)
 	// Threshold equality and changes use the stored article vectors, with no model call.
 	require.NoError(t, h.db.Exec("UPDATE article_embeddings SET embedding=? WHERE entry_id='b'", pgvector.NewHalfVector([]float32{0.86, 0.51, 0})).Error)
 	h.config.SimilarReportsWindowDays = 3
 	h.config.SimilarReportsThreshold = 0.9
-	require.Len(t, h.search(t, types.EntrySearchRequest{Query: "searchfixture"}).Results, 7)
+	require.Len(t, h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "searchfixture"}).Results, 7)
 	h.config.SimilarReportsThreshold = 0.85
-	require.Len(t, h.search(t, types.EntrySearchRequest{Query: "searchfixture"}).Results, 6)
+	require.Len(t, h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "searchfixture"}).Results, 6)
 }
 
 type entrySearchRerankModels struct {
@@ -286,13 +295,16 @@ func TestEntrySearchUsesConfiguredRerankTier(t *testing.T) {
 	svc := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, models, h.db)
 	for _, id := range []string{"selected-rerank", "replacement-rerank"} {
 		h.library.ModelTiers.Rerank = id
-		_, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch"})
-		require.ErrorIs(t, err, sentinel)
+		require.NoError(t, h.db.Save(h.library).Error)
+		result, err := svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch"})
+		require.NoError(t, err)
+		require.Equal(t, "unavailable", result.RerankStatus)
 		require.Equal(t, id, models.selected)
 	}
 	h.library.ModelTiers.Rerank = ""
+	require.NoError(t, h.db.Save(h.library).Error)
 	models.selected = ""
-	_, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch"})
+	_, err := svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch"})
 	require.NoError(t, err)
 	require.Empty(t, models.selected)
 }
@@ -315,7 +327,7 @@ func TestEntrySearchEmbeddingFailure(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	cause := errors.New("EmbedBatch API error: Http Status 503 <html>upstream secret</html>")
 	svc := NewSearchService(entrySearchFixtureBases{library: h.library, embeddingError: cause}, nil, nil, h.db)
-	result, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "searchfixture"})
-	require.Nil(t, result)
-	require.ErrorIs(t, err, cause)
+	result, err := svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "searchfixture"})
+	require.NoError(t, err)
+	require.True(t, result.VectorUnavailable)
 }

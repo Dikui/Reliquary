@@ -31,6 +31,7 @@ type EmbeddingRebuilder struct {
 	tasks                           interfaces.TaskEnqueuer
 	vault                           *VaultService
 	preserveEntityProfileTimestamps bool
+	targetModelID                   string
 }
 
 func NewEmbeddingRebuilder(db *gorm.DB, models interfaces.ModelService, tasks interfaces.TaskEnqueuer, vault *VaultService) *EmbeddingRebuilder {
@@ -79,12 +80,12 @@ func (r *EmbeddingRebuilder) statusForRun(ctx context.Context, spaceID uint64, r
 // Start snapshots current articles, documents, entities, and body images. It
 // does not change source files or remove vectors before replacements exist.
 func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.EmbeddingRebuildRun, error) {
-	profile, err := r.profiles.profile(ctx, spaceID)
+	profile, err := r.rebuildProfile(ctx, spaceID, r.targetModelID)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
-	run := &types.EmbeddingRebuildRun{ID: uuid.NewString(), SpaceID: spaceID, Status: "pending", ModelID: profile.modelID,
+	run := &types.EmbeddingRebuildRun{Candidate: r.targetModelID != "", ID: uuid.NewString(), SpaceID: spaceID, Status: "pending", ModelID: profile.modelID,
 		ModelName: profile.embedder.GetModelName(), Dimension: profile.dimension, ProfileHash: profile.hash, CreatedAt: now, UpdatedAt: now}
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Serialize creation in the personal library while retaining its
@@ -93,7 +94,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=?", spaceID).First(&space).Error; err != nil {
 			return err
 		}
-		if err := r.profiles.checkProfile(tx, spaceID, profile); err != nil {
+		if err := r.checkRebuildProfile(ctx, tx, spaceID, profile, run.Candidate); err != nil {
 			return err
 		}
 		if err := tx.Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND profile_hash<>? AND (status IN ('pending','paused') OR (status='running' AND (lease_until IS NULL OR lease_until<=?)))", spaceID, profile.hash, time.Now()).
@@ -138,7 +139,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 			if article.StructuredSummary != nil {
 				add("article", article.ID, "")
 			}
-			if imagesSupported && imageModel.SupportsImages() {
+			if imageVectorsEnabled(ctx, tx, spaceID) && imagesSupported && imageModel.SupportsImages() {
 				for _, path := range articleImagePaths(article) {
 					add("image", article.ID, path)
 				}
@@ -165,13 +166,18 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 // Continue validates model identity before keeping successful checkpoints and
 // optionally making only failed items pending again.
 func (r *EmbeddingRebuilder) Continue(ctx context.Context, spaceID uint64, runID string, retryFailed bool) error {
-	profile, err := r.profiles.profile(ctx, spaceID)
-	if err != nil {
-		return err
-	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var run types.EmbeddingRebuildRun
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", runID, spaceID).First(&run).Error; err != nil {
+			return err
+		}
+		profile, err := r.rebuildProfile(ctx, spaceID, func() string {
+			if run.Candidate {
+				return run.ModelID
+			}
+			return ""
+		}())
+		if err != nil {
 			return err
 		}
 		if run.ModelID != profile.modelID || run.Dimension != profile.dimension || run.ProfileHash != profile.hash {
@@ -180,7 +186,7 @@ func (r *EmbeddingRebuilder) Continue(ctx context.Context, spaceID uint64, runID
 		if run.Status == "running" && run.LeaseUntil != nil && run.LeaseUntil.After(time.Now()) {
 			return apperrors.NewBadRequestError("pause the running embedding rebuild before resuming it")
 		}
-		if run.Status == "completed" {
+		if run.Status == "completed" || run.Status == "cancelled" {
 			return apperrors.NewBadRequestError("embedding rebuild is already complete")
 		}
 		if retryFailed {
@@ -239,7 +245,7 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID stri
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", runID, spaceID).First(&run).Error; err != nil {
 			return err
 		}
-		if run.Status == "paused" || run.Status == "completed" || run.Status == "completed_with_errors" ||
+		if run.Status == "cancelled" || run.Status == "paused" || run.Status == "completed" || run.Status == "completed_with_errors" ||
 			(run.Status == "running" && run.LeaseUntil != nil && run.LeaseUntil.After(time.Now())) {
 			return nil
 		}
@@ -263,6 +269,10 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID stri
 		status, detail := "completed", ""
 		if runErr != nil {
 			status, detail = "failed", rebuildErrorText(runErr)
+			var deferred types.DeferredOperation
+			if errors.As(runErr, &deferred) {
+				status = "pending"
+			}
 			if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 				status = "paused"
 			}
@@ -279,7 +289,12 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID stri
 			runErr = nil
 		}
 	}()
-	profile, err := r.profiles.profile(ctx, spaceID)
+	profile, err := r.rebuildProfile(ctx, spaceID, func() string {
+		if run.Candidate {
+			return run.ModelID
+		}
+		return ""
+	}())
 	if err != nil {
 		return err
 	}
@@ -304,6 +319,10 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID stri
 		write, embedErr := r.prepareItem(ctx, &run, item, profile)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		var deferred types.DeferredOperation
+		if embedErr != nil && (run.Candidate || errors.As(embedErr, &deferred)) {
+			return &types.VectorDeferredError{Cause: embedErr, RetryAt: time.Now().Add(time.Minute)}
 		}
 		if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			if err := r.checkRun(ctx, tx, &run, profile, true); err != nil {
@@ -360,12 +379,15 @@ func (r *EmbeddingRebuilder) checkRun(ctx context.Context, db *gorm.DB, run *typ
 	if current.Status != "running" || current.AttemptID != run.AttemptID {
 		return errRebuildStopped
 	}
-	return r.profiles.checkProfile(db.WithContext(ctx), run.SpaceID, profile)
+	return r.checkRebuildProfile(ctx, db, run.SpaceID, profile, run.Candidate)
 }
 
 type embeddingItemWrite func(*gorm.DB) error
 
 func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.EmbeddingRebuildRun, item types.EmbeddingRebuildItem, profile entityEmbeddingProfile) (embeddingItemWrite, error) {
+	if run.Candidate {
+		return r.prepareCandidateItem(ctx, run, item, profile)
+	}
 	if item.Kind == "entity" {
 		var entity types.Entity
 		if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", run.SpaceID, item.SourceID).First(&entity).Error; err != nil {
