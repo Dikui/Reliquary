@@ -69,9 +69,9 @@ func (s *VaultDocumentService) reportWriteResult(ctx context.Context, entry *typ
 }
 
 // findExistingReport also recognizes reports written before fingerprints were recorded.
-func (s *VaultDocumentService) findExistingReport(ctx context.Context, tx *gorm.DB, spaceID uint64, fingerprint string) (*types.Entry, error) {
+func (s *VaultDocumentService) findExistingReport(ctx context.Context, tx *gorm.DB, spaceID uint64, libraryID, fingerprint string) (*types.Entry, error) {
 	var reports []types.Entry
-	if err := tx.WithContext(ctx).Where("space_id=? AND source_kind='report' AND (metadata->>'report_fingerprint'=? OR COALESCE(metadata->>'report_fingerprint','')='')", spaceID, fingerprint).
+	if err := tx.WithContext(ctx).Where("space_id=? AND library_id=? AND source_kind='report' AND (metadata->>'report_fingerprint'=? OR COALESCE(metadata->>'report_fingerprint','')='')", spaceID, libraryID, fingerprint).
 		Order("created_at,id").Find(&reports).Error; err != nil {
 		return nil, err
 	}
@@ -108,15 +108,28 @@ func (s *VaultDocumentService) findExistingReport(ctx context.Context, tx *gorm.
 }
 
 func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown string, relatedIDs []string) (*ReportWriteResult, error) {
+	return s.createReport(ctx, nil, title, markdown, relatedIDs, nil)
+}
+
+func (s *VaultDocumentService) createReport(ctx context.Context, library *types.Library, title, markdown string, relatedIDs []string, graph *bool) (*ReportWriteResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if utf8.RuneCountInString(markdown) > types.MaxIngestContentRunes {
+		return nil, werrors.NewBadRequestError("markdown exceeds 5000000 Unicode code points")
+	}
 	title = strings.TrimSpace(title)
 	if title == "" || len([]rune(title)) > 255 || !utf8.ValidString(title) || strings.TrimSpace(markdown) == "" || !utf8.ValidString(markdown) {
 		return nil, werrors.NewBadRequestError("report requires a title of up to 255 characters and valid Markdown")
 	}
-	ctx, library, err := s.scope(ctx)
+	var err error
+	if library == nil {
+		ctx, library, err = s.scope(ctx)
+	}
 	if err != nil {
 		return nil, err
+	}
+	if library.Template != types.TemplateGenerated {
+		return nil, werrors.NewBadRequestError("write_report requires the AI reports library")
 	}
 	fingerprint := reportFingerprint(title, markdown)
 	var entry *types.Entry
@@ -131,7 +144,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(library, "id=?", library.ID).Error; err != nil {
 			return err
 		}
-		entry, err = s.findExistingReport(ctx, tx, library.SpaceID, fingerprint)
+		entry, err = s.findExistingReport(ctx, tx, library.SpaceID, library.ID, fingerprint)
 		if err != nil || entry != nil {
 			existing = entry != nil
 			return err
@@ -187,7 +200,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		}
 		metadata, _ := json.Marshal(map[string]any{"related_article_ids": selected, "report_fingerprint": fingerprint})
 		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
-			SourceKind: "report", Title: vaultDocumentTitle(path, content), VaultPath: path, Source: path,
+			Graph: graph, SourceKind: "report", Title: vaultDocumentTitle(path, content), VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", FileSize: int64(len(content)), FileHash: vaultContentHash(content),
 			EnableStatus: "enabled", Channel: types.ChannelAPI,
 			ParseStatus: types.ParseStatusPending, Metadata: types.JSON(metadata), CreatedAt: created, UpdatedAt: created}

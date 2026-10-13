@@ -11,16 +11,16 @@ import (
 
 func TestIngestContractFieldSetAndExample(t *testing.T) {
 	fields := []string{}
-	typ := reflect.TypeOf(IngestRequest{})
+	typ := reflect.TypeOf(IngestRequest{Library: "institutional"})
 	for i := 0; i < typ.NumField(); i++ {
 		field := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
 		if field != "-" {
 			fields = append(fields, field)
 		}
 	}
-	require.ElementsMatch(t, []string{"kind", "document_id", "url", "content", "acquisition", "content_type_hint", "missing", "title", "author", "publisher", "published_at", "images", "thread", "quotes", "collect_reason", "agent_summary", "agent_tags", "source_name"}, fields)
+	require.ElementsMatch(t, []string{"library", "article_id", "source_ref", "identifier", "graph", "url", "content", "acquisition", "content_type_hint", "missing", "title", "author", "publisher", "published_at", "images", "thread", "quotes", "collect_reason", "agent_summary", "agent_tags", "source_name"}, fields)
 	result := IngestResult{EntryID: "article-example", Status: "pending_review", Message: "等待收录审核。", Reason: "缺少来源", ImageFailures: []IngestImageFailure{}, Completeness: []IngestMissing{}}
 	data, err := json.Marshal(result)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"index":0,"article_id":"article-example","status":"pending_review","message":"等待收录审核。","reason":"缺少来源","image_failures":[],"completeness":[]}`, string(data))
+	require.JSONEq(t, `{"library_id":"","graph":null,"has_update":false,"index":0,"article_id":"article-example","status":"pending_review","message":"等待收录审核。","reason":"缺少来源","image_failures":[],"completeness":[]}`, string(data))
 }

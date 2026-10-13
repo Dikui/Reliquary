@@ -12,6 +12,11 @@ import (
 
 // EntryReadResult exposes the database-owned header and a Unicode-safe body slice.
 type EntryReadResult struct {
+	SourceRef        string             `json:"source_ref,omitempty"`
+	Identifier       string             `json:"identifier,omitempty"`
+	Graph            *bool              `json:"graph"`
+	HasUpdate        bool               `json:"has_update"`
+	LatestEntryID    string             `json:"latest_article_id,omitempty"`
 	Header           VaultArticleHeader `json:"header"`
 	Body             string             `json:"body"`
 	OriginalURL      string             `json:"original_url"`
@@ -52,7 +57,7 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	}
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
-	result := &EntryReadResult{Header: header, OriginalURL: header.URL,
+	result := &EntryReadResult{SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID, Header: header, OriginalURL: header.URL,
 		ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
 	reader, _, err := s.GetEntryBody(ctx, id)
 	if err != nil {

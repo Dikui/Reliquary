@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"reliquary/internal/application/service/file"
 	werrors "reliquary/internal/errors"
@@ -198,6 +199,9 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.
 		}
 	}
 	body := assembleIngestBody(&copy, refs)
+	if utf8.RuneCountInString(strings.TrimSpace(body)) > types.MaxIngestContentRunes {
+		return "", "", werrors.NewBadRequestError("assembled content exceeds 5000000 Unicode code points")
+	}
 	canonical := assembleIngestBody(&copy, canonicalRefs)
 	for i, ref := range refs {
 		source := ingestImageSource(copy.Images[i])

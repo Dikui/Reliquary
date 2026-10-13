@@ -82,6 +82,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			originalURL = ""
 		}
 		result := &types.EntrySearchResult{
+			SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID,
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
 			Acquisition: entry.Acquisition,

@@ -51,6 +51,7 @@ func assertIngestConflictCount(t *testing.T, h *articleProcessingHarness, origin
 func TestIngestConflictSameBodyRetryKeepsPendingIDAndMaterials(t *testing.T) {
 	h, root, originalID := newIngestConflictHarness(t)
 	request := ingestConflictingMaterialRequest(t)
+	request.EntryID = originalID
 	image, err := decodeIngestInline(request.Images[0].Data)
 	require.NoError(t, err)
 	asset, err := h.service.UploadIngestAsset(h.ctx, "kingdom.png", image)
@@ -85,6 +86,7 @@ func TestIngestConflictSameBodyRetryKeepsPendingIDAndMaterials(t *testing.T) {
 func TestIngestConflictConcurrentSameBodyCreatesOnePending(t *testing.T) {
 	h, root, originalID := newIngestConflictHarness(t)
 	request := ingestConflictingMaterialRequest(t)
+	request.EntryID = originalID
 	beforeJobs := transactionJobs(t, h.db)
 	start := make(chan struct{})
 	var ready, done sync.WaitGroup
@@ -120,8 +122,11 @@ func TestIngestConflictDifferentBodyHashesCreateSeparatePending(t *testing.T) {
 	h, _, originalID := newIngestConflictHarness(t)
 	firstRequest := ingestFixtureRequest("https://example.org/conflict-retry", ingestConflictBody)
 	secondRequest := ingestFixtureRequest(firstRequest.URL, ingestConflictBody+".")
-	firstHash, firstSimHash, _ := messageBodyFingerprint(assembleIngestBody(firstRequest, nil))
-	secondHash, secondSimHash, _ := messageBodyFingerprint(assembleIngestBody(secondRequest, nil))
+	firstRequest.EntryID, secondRequest.EntryID = originalID, originalID
+	firstRequest.Images = []types.IngestImage{{SourceURL: "https://example.org/original-measurements.png", Data: articleImageDataURI(t, 91)}}
+	secondRequest.Images = firstRequest.Images
+	firstHash, firstSimHash, _ := messageBodyFingerprint(assembleIngestBody(firstRequest, []string{ingestCanonicalImageReference(firstRequest.Images[0])}))
+	secondHash, secondSimHash, _ := messageBodyFingerprint(assembleIngestBody(secondRequest, []string{ingestCanonicalImageReference(secondRequest.Images[0])}))
 	require.NotEqual(t, firstHash, secondHash)
 	require.LessOrEqual(t, bits.OnesCount64(uint64(firstSimHash)^uint64(secondSimHash)), messageSimHashThreshold(), "conflict retries compare exact hashes even when SimHash considers the texts similar")
 	first, err := h.service.Ingest(h.ctx, firstRequest)

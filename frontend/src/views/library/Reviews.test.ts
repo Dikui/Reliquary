@@ -126,7 +126,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: incomplete articles and personal documents load with the correct completion instructions and shared action copy`, async () => {
     const records = [
       { ...incomplete, kind: 'article' },
-      { ...incomplete, kind: 'mine', article_id: 'personal-files', title: 'My incomplete note', url: '', acquisition: 'verbatim' },
+      { ...incomplete, library_id: 'mine-library', library_template: 'own', article_id: 'personal-files', title: 'My incomplete note', url: '', acquisition: 'verbatim' },
     ]
     const { api: review } = createReviewAPI(async () => ({ success: true, data: [], total: 0 }))
     const { api: ingest, calls } = createIngestAPI(async () => ({ success: true, data: records, total: records.length }))

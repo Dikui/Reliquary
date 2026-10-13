@@ -62,10 +62,10 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	require.Equal(t, http.StatusOK, personalRequest(t, f.router, http.MethodDelete, "/api/v1/libraries/"+custom.Data.ID, "", f.key, true).Code)
 }
 
-func TestTransitionalIngestSelectsSystemRole(t *testing.T) {
+func TestExplicitIngestSelectsSystemLibrary(t *testing.T) {
 	f := newMCPFixture(t)
-	for _, kind := range []string{"article", "mine"} {
-		request := &types.IngestRequest{Kind: kind, Title: kind, Content: "# Original\n\nFull source content for the transition.", Acquisition: "verbatim", URL: "https://example.org/" + kind}
+	for _, kind := range []string{"institutional", "mine"} {
+		request := &types.IngestRequest{Library: kind, Title: kind, Content: "# Original\n\nFull source content for the transition.", Acquisition: "verbatim", URL: "https://example.org/" + kind}
 		if kind == "mine" {
 			request.URL = ""
 		}
@@ -75,7 +75,7 @@ func TestTransitionalIngestSelectsSystemRole(t *testing.T) {
 		require.NoError(t, f.db.First(&entry, "id=?", result.EntryID).Error)
 		var library types.Library
 		require.NoError(t, f.db.First(&library, "id=?", entry.LibraryID).Error)
-		require.Equal(t, types.SystemRoleForSource(kind), library.SystemRole)
+		require.Equal(t, kind, library.SystemRole)
 	}
 	report, err := f.documents.CreateReport(f.ctx, "Generated report", "# Report\n\nGenerated findings.", nil)
 	require.NoError(t, err)

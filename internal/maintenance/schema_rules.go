@@ -29,12 +29,21 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}
-	if migration.Version >= 10 {
+	if migration.Version >= 11 {
 		return Rules, nil
 	}
 	current := make(map[string]Rule, len(Rules))
 	for table, rule := range Rules {
 		current[table] = rule
+	}
+	entry := current["entries"]
+	for _, field := range []string{"source_ref", "source_body_hash", "identifier", "graph"} {
+		entry.Sidecar = strings.ReplaceAll(" "+entry.Sidecar+" ", " "+field+" ", " ")
+	}
+	entry.Sidecar = strings.TrimSpace(entry.Sidecar)
+	current["entries"] = entry
+	if migration.Version >= 10 {
+		return current, nil
 	}
 	delete(current, "library_content_types")
 	delete(current, "library_relation_types")

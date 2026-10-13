@@ -22,7 +22,7 @@ func TestMarkdownReprocessingRecordsOneFinishedAttemptPerExecution(t *testing.T)
 	mux.HandleFunc(types.TypeDocumentProcess, h.service.ProcessDocument)
 	require.NoError(t, client.Start(context.Background(), mux, queue.Config{Pools: types.WorkerPoolConcurrency{Core: 1, Enrichment: 1, Maintenance: 1, Shared: 1}, CheckInterval: 20 * time.Millisecond}))
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{URL: "https://example.org/timeline-redis", Acquisition: "verbatim", Publisher: "Fixture Journal", Title: "Markdown timeline", Content: "# Calibration record\n\nThe original research records independent pressure measurements, instrument calibration and the complete observation procedure."})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", URL: "https://example.org/timeline-redis", Acquisition: "verbatim", Publisher: "Fixture Journal", Title: "Markdown timeline", Content: "# Calibration record\n\nThe original research records independent pressure measurements, instrument calibration and the complete observation procedure."})
 	require.NoError(t, err)
 	require.Equal(t, "accepted", result.Status)
 	wait := func(attempts int) {

@@ -184,7 +184,7 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 	models := indexingRecordingModels{articleProcessingModels: h.service.modelService.(articleProcessingModels), embedder: e}
 	h.service.modelService = models
 	h.service.chunkService.(*chunkService).modelService = models
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Kind: "mine", Acquisition: "verbatim", Title: "Personal notebook", Content: "# Personal notebook\n\npersonalprefixfixture preserved observations with complete supporting evidence."})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "mine", Acquisition: "verbatim", Title: "Personal notebook", Content: "# Personal notebook\n\npersonalprefixfixture preserved observations with complete supporting evidence."})
 	require.NoError(t, err)
 	h.drain(t)
 	mine := h.article(t, result.EntryID)

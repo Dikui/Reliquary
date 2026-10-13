@@ -441,6 +441,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectQueueMigration(expected, actual)
 	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
 	expected, actual = projectMarkdownManifest(expected, actual, fileOrigin, legacyFormat)
+	expected, actual = projectIngestManifest(expected, actual)
 	expected, actual = projectLibraryManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend

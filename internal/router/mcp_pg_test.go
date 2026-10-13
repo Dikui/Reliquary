@@ -111,6 +111,7 @@ type mcpFixture struct {
 
 func (f *mcpFixture) seedProcessingModels(t *testing.T) {
 	t.Helper()
+	require.NoError(t, f.db.Model(&types.Library{}).Where("space_id=?", types.SingleSpaceID).Update("model_tiers", types.ModelTierConfig{Embedding: "mcp-embedding", Generation: "mcp-chat", Light: "mcp-chat"}).Error)
 	require.NoError(t, f.db.Create(&types.Model{ID: "mcp-chat", SpaceID: types.SingleSpaceID, Name: "mcp-test-chat", Type: types.ModelTypeGeneration, Status: types.ModelStatusActive}).Error)
 	require.NoError(t, f.db.Create(&types.Model{ID: "mcp-embedding", SpaceID: types.SingleSpaceID, Name: "mcp-test-embedding", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 }
@@ -516,7 +517,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	require.Len(t, detail.Entries, 1)
 	require.Equal(t, article.ID, detail.Entries[0].ID)
 	var ingest types.IngestBatchResult
-	mcpCall(t, client, "ingest", map[string]any{"items": []any{map[string]any{"url": "https://example.org/mcp-ingest", "content": "# Deliberate collection\n\nOriginal MCP ingress text.", "acquisition": "extracted", "title": "MCP ingress", "publisher": "MCP publisher", "source_name": "mcp-test-agent", "collect_reason": "MCP 主动收藏"}}}, &ingest)
+	mcpCall(t, client, "ingest", map[string]any{"items": []any{map[string]any{"url": "https://example.org/mcp-ingest", "content": "# Deliberate collection\n\nOriginal MCP ingress text.", "library": "institutional", "acquisition": "extracted", "title": "MCP ingress", "publisher": "MCP publisher", "source_name": "mcp-test-agent", "collect_reason": "MCP 主动收藏"}}}, &ingest)
 	require.Equal(t, "accepted", ingest.Items[0].Status)
 	require.NotEmpty(t, ingest.Items[0].EntryID)
 	var pending types.PageResult

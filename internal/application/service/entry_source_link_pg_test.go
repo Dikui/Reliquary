@@ -106,7 +106,7 @@ func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 func TestIngestModelRejectReturnsPendingReviewWithReason(t *testing.T) {
 	h, vault := newIngestHarness(t)
 	h.processor.reject = true
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Acquisition: "verbatim", URL: "https://example.org/intake-rejected", Publisher: "Acme", Content: "A complete original selected by an external agent.", AgentSummary: "The collector says this passes review."})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://example.org/intake-rejected", Publisher: "Acme", Content: "A complete original selected by an external agent.", AgentSummary: "The collector says this passes review."})
 	require.NoError(t, err)
 	require.Equal(t, "pending_review", result.Status)
 	require.Equal(t, "Fixture sourced article", result.Reason)

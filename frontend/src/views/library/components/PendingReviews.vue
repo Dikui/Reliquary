@@ -72,7 +72,7 @@ defineExpose({ refresh: load })
           <ReviewActions :entry="item" @changed="reviewed" @busy-change="setBusy(item.id, $event)" />
         </article>
         <article v-for="item in incompleteRecords" :key="item.article_id" class="review-record" :data-incomplete-id="item.article_id">
-          <t-tag v-if="item.kind === 'mine'" class="acquisition-tag" size="small" variant="light-outline">{{ t('library.sourceKinds.mine') }}</t-tag>
+          <t-tag v-if="item.library_template === 'own'" class="acquisition-tag" size="small" variant="light-outline">{{ t('library.sourceKinds.mine') }}</t-tag>
           <div class="review-record-heading"><h4><a :href="articleLink(item.article_id)" @click.prevent="emit('open-source', item.article_id)">{{ item.title || t('library.untitledDocument') }}</a></h4><t-tag v-if="item.external_completion_attempted" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.attemptedTitle') }}</t-tag></div>
           <a v-if="safeURL(item.url)" :href="safeURL(item.url)" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
           <p>{{ t('ingestStatus.acquisitionLabel') }}: {{ item.acquisition ? t(`ingestStatus.acquisition.${item.acquisition}`) : t('ingestStatus.unknownAcquisition') }}</p>

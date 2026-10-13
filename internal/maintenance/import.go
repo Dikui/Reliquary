@@ -187,6 +187,9 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			return nil, err
 		}
 	}
+	if db.Migrator().HasColumn("entries", "source_ref") {
+		projectIngestSnapshot(snapshot)
+	}
 	order := []string{"spaces", "users", "auth_tokens", "libraries", "library_content_types", "library_relation_types", "models", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", queueTable, "task_queue_counters", "maintenance_state"}
 	if !db.Migrator().HasTable("library_content_types") {
 		filtered := []string{}

@@ -221,13 +221,14 @@ func (library *Library) MarshalJSON() ([]byte, error) {
 	rules, _ := RulesForTemplate(library.Template)
 	aux := struct {
 		*alias
+		AcceptedFields    map[string]string   `json:"accepted_fields"`
 		Capabilities      LibraryCapabilities `json:"capabilities"`
 		Rules             TemplateRules       `json:"template_rules"`
 		DeduplicationRule string              `json:"deduplication_rule"`
 		CollectContent    string              `json:"collect_content"`
 		ExcludeContent    string              `json:"exclude_content"`
 	}{
-		alias:        (*alias)(library),
+		alias: (*alias)(library), AcceptedFields: library.IngestFields(),
 		Capabilities: library.Capabilities(), Rules: rules, DeduplicationRule: rules.Deduplication, CollectContent: library.Description, ExcludeContent: library.ReviewCriteria,
 	}
 	return json.Marshal(aux)
@@ -262,4 +263,16 @@ func (library *Library) BeforeCreate(_ *gorm.DB) error {
 		library.Directory = fmt.Sprintf("custom-%x", md5.Sum([]byte(library.ID)))
 	}
 	return nil
+}
+
+// IngestFields describes template-specific optional fields in the public catalog.
+func (library *Library) IngestFields() map[string]string {
+	fields := map[string]string{"library": "Required library ID or directory", "graph": "Optional boolean; null uses library and content defaults"}
+	switch library.Template {
+	case TemplateOwn:
+		fields["source_ref"] = "Optional source identity, at most 2048 Unicode code points; changed body creates a new record"
+	case TemplateExternalDurable:
+		fields["identifier"] = "Optional scheme:value, at most 2048 Unicode code points; scheme and DOI value are lowercased"
+	}
+	return fields
 }

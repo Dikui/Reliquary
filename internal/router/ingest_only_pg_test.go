@@ -25,12 +25,12 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 	client := f.connect(t, "2025-11-25")
 	var batch types.IngestBatchResult
 	mcpCall(t, client, "ingest", map[string]any{"items": []any{
-		map[string]any{"url": "https://example.org/first-batch", "content": "# Complete batch\n\nMeasured original facts for the ingestion interface.", "acquisition": "extracted", "publisher": "Fixture Journal"},
-		map[string]any{"url": "https://example.org/first-batch", "content": "# Complete batch\n\nMeasured original facts for the ingestion interface.", "acquisition": "extracted", "publisher": "Fixture Journal"},
+		map[string]any{"url": "https://example.org/first-batch", "content": "# Complete batch\n\nMeasured original facts for the ingestion interface.", "library": "institutional", "acquisition": "extracted", "publisher": "Fixture Journal"},
+		map[string]any{"url": "https://example.org/first-batch", "content": "# Complete batch\n\nMeasured original facts for the ingestion interface.", "library": "institutional", "acquisition": "extracted", "publisher": "Fixture Journal"},
 		map[string]any{"url": "https://example.org/missing-acquisition", "content": "Original text"},
-		map[string]any{"url": "https://example.org/wrong-type", "content": 42, "acquisition": "extracted"},
-		map[string]any{"url": "https://example.org/unknown-field", "content": "Original text", "acquisition": "extracted", "unknown": true},
-		map[string]any{"url": "https://example.org/rejectfixture-batch", "content": "rejectfixture source facts", "acquisition": "model_written", "publisher": "Fixture Journal"},
+		map[string]any{"url": "https://example.org/wrong-type", "content": 42, "library": "institutional", "acquisition": "extracted"},
+		map[string]any{"url": "https://example.org/unknown-field", "content": "Original text", "library": "institutional", "acquisition": "extracted", "unknown": true},
+		map[string]any{"url": "https://example.org/rejectfixture-batch", "content": "rejectfixture source facts", "library": "institutional", "acquisition": "model_written", "publisher": "Fixture Journal"},
 	}}, &batch)
 	require.Len(t, batch.Items, 6)
 	for index, status := range []string{"accepted", "exists", "invalid", "invalid", "invalid", "pending_review"} {
@@ -41,22 +41,29 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 	require.Equal(t, batch.Items[0].EntryID, batch.Items[1].EntryID)
 	largeFile := base64.StdEncoding.EncodeToString(make([]byte, types.MaxIngestInlineAssetBytes+1))
 	mcpCall(t, client, "ingest", map[string]any{"items": []any{map[string]any{
-		"url": "https://example.org/oversized-inline", "content": "A complete source body", "acquisition": "extracted",
+		"url": "https://example.org/oversized-inline", "content": "A complete source body", "library": "institutional", "acquisition": "extracted",
 		"images": []any{map[string]any{"source_url": "https://example.org/image.png", "data": largeFile}},
 	}}}, &batch)
 	require.Equal(t, "invalid", batch.Items[0].Status)
 	require.Contains(t, batch.Items[0].Reason, "limit")
-	response, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "ingest", Arguments: map[string]any{"items": []any{map[string]any{
-		"url": "https://example.org/oversized-json", "content": strings.Repeat("a", types.MaxIngestInlineRequestBytes), "acquisition": "extracted",
-	}}}})
+	oversized := map[string]any{"items": []any{map[string]any{
+		"url": "https://example.org/oversized-json", "content": strings.Repeat("a", types.MaxIngestContentRunes+1), "library": "institutional", "acquisition": "extracted",
+	}}}
+	_, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "ingest", Arguments: oversized})
+	require.ErrorContains(t, err, "Bad Request")
+	raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": map[string]any{"name": "ingest", "arguments": oversized}})
 	require.NoError(t, err)
-	require.True(t, response.IsError)
+	rejected := ingestAuthMCPRequest(f.router, f.key, string(raw))
+	require.Equal(t, http.StatusBadRequest, rejected.Code)
+	require.Contains(t, rejected.Body.String(), "5000000 Unicode code points")
+	// A transport-level rejection closes the SDK client; reconnect for discovery.
+	client = f.connect(t, "2025-11-25")
 	tools, err := client.ListTools(context.Background(), nil)
 	require.NoError(t, err)
 	for _, tool := range tools.Tools {
 		if tool.Name == "ingest" || tool.Name == "check_urls" || tool.Name == "list_incomplete" {
 			require.Contains(t, tool.Description, "送入 Markdown 正文全文与图片文件")
-			require.Contains(t, tool.Description, "补全时用同一原文链接再次收录")
+			require.Contains(t, tool.Description, "补全时提供 library、article_id 与图片")
 		}
 		if tool.Name == "ingest" {
 			require.Contains(t, tool.Description, "10 MiB")
@@ -88,7 +95,7 @@ func TestMCPAndHTTPIncompleteListAcceptAndAcquisition(t *testing.T) {
 	mcpCall(t, client, "list_incomplete", map[string]any{"page": 2, "page_size": 1}, &list)
 	require.Empty(t, list.Items)
 	var check types.IngestCheckResponse
-	mcpCall(t, client, "check_urls", map[string]any{"urls": []string{first.Source, "https://example.org/no-record"}}, &check)
+	mcpCall(t, client, "check_urls", map[string]any{"library": "institutional", "urls": []string{first.Source, "https://example.org/no-record"}}, &check)
 	require.Equal(t, "in_library", check.Items[0].Status)
 	require.True(t, check.Items[0].Incomplete)
 	require.Equal(t, "not_found", check.Items[1].Status)
@@ -146,7 +153,7 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 	discardedID := "33333333-3333-4333-8333-333333333333"
 	require.NoError(t, f.db.Create(&types.IngestDiscard{SpaceID: types.SingleSpaceID, EntryID: discardedID, NormalizedURL: "https://example.org/discarded", Reason: "旧记录已被丢弃"}).Error)
 	require.NoError(t, f.db.Create(&types.EntryRepostSource{ID: "44444444-4444-4444-8444-444444444444", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, EntryID: library.ID, OriginalURL: "https://example.org/repost", NormalizedURL: "https://example.org/repost", SourceFingerprint: strings.Repeat("a", 64), MatchMethod: "content_hash"}).Error)
-	response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"urls":["https://example.org/library?utm_campaign=fixture","https://example.org/pending","https://example.org/discarded","https://example.org/not-found","https://example.org/repost"]}`, f.key, false)
+	response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"library":"institutional","urls":["https://example.org/library?utm_campaign=fixture","https://example.org/pending","https://example.org/discarded","https://example.org/not-found","https://example.org/repost"]}`, f.key, false)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var checked struct {
 		Data types.IngestCheckResponse `json:"data"`
@@ -163,7 +170,7 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 	var ledger types.IngestDiscard
 	require.NoError(t, f.db.First(&ledger, "space_id=? AND normalized_url=?", types.SingleSpaceID, pending.Source).Error)
 	require.Equal(t, "用户丢弃原因", ledger.Reason)
-	response = personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"urls":["https://example.org/pending"]}`, f.key, false)
+	response = personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"library":"institutional","urls":["https://example.org/pending"]}`, f.key, false)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &checked))
 	require.Equal(t, "discarded", checked.Data.Items[0].Status)
@@ -174,6 +181,6 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 		require.Equal(t, "personal integration", log.APIKeyName)
 	}
 	require.NoError(t, f.db.Model(&types.APIKey{}).Where("name=?", "personal integration").Update("revoked_at", time.Now()).Error)
-	response = personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"urls":["https://example.org/library"]}`, f.key, false)
+	response = personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"library":"institutional","urls":["https://example.org/library"]}`, f.key, false)
 	require.Equal(t, http.StatusUnauthorized, response.Code, response.Body.String())
 }

@@ -26,8 +26,8 @@ func (s *entryService) lookupIngestDiscard(ctx context.Context, normalized strin
 	return &item, err
 }
 
-func (s *entryService) lookupIngestDiscardKind(ctx context.Context, normalized, kind string) (*types.IngestDiscard, error) {
-	if kind == "mine" {
+func (s *entryService) lookupIngestDiscardTemplate(ctx context.Context, normalized, template string) (*types.IngestDiscard, error) {
+	if template == types.TemplateOwn {
 		return nil, nil
 	}
 	return s.lookupIngestDiscard(ctx, normalized)
@@ -35,23 +35,19 @@ func (s *entryService) lookupIngestDiscardKind(ctx context.Context, normalized, 
 
 // Pending intake is deliberately included. Repost origins resolve to their
 // canonical article in all four state checks and in later supplements.
-func (s *entryService) findIngestURL(ctx context.Context, normalized string, lock bool, kinds ...string) (*types.Entry, error) {
+func (s *entryService) findIngestURL(ctx context.Context, normalized string, lock bool, libraries ...*types.Library) (*types.Entry, error) {
 	if normalized == "" {
 		return nil, nil
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
-	kind := "article"
-	if len(kinds) > 0 && kinds[0] == "mine" {
-		kind = "mine"
+	if len(libraries) == 0 || libraries[0].Template == types.TemplateOwn {
+		return nil, nil
 	}
+	library := libraries[0]
 	owners := s.db.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id=? AND normalized_url=?", spaceID, normalized)
-	query := s.db.WithContext(ctx).Where("space_id=? AND source_kind=? AND related_article_id=''", spaceID, kind).
+	query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND related_article_id=''", spaceID, library.ID).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting})
-	if kind == "mine" {
-		query = query.Where("normalized_url=?", normalized)
-	} else {
-		query = query.Where("normalized_url=? OR id IN (?)", normalized, owners)
-	}
+	query = query.Where("normalized_url=? OR id IN (?)", normalized, owners)
 	if lock {
 		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
@@ -63,25 +59,34 @@ func (s *entryService) findIngestURL(ctx context.Context, normalized string, loc
 	return &item, err
 }
 
-func (s *entryService) CheckURLs(ctx context.Context, urls []string) ([]types.IngestCheckResult, error) {
+func (s *entryService) CheckURLs(ctx context.Context, urls []string, selectors ...string) ([]types.IngestCheckResult, error) {
 	if len(urls) < 1 || len(urls) > types.MaxIngestCheckURLs {
 		return nil, werrors.NewBadRequestError("urls must contain between 1 and 100 links")
 	}
 	if _, _, _, err := s.ingestIdentity(ctx); err != nil {
 		return nil, err
 	}
+	selector := ""
+	if len(selectors) > 0 {
+		selector = selectors[0]
+	}
+	library, libraryErr := s.resolveIngestLibrary(ctx, selector)
 	result := make([]types.IngestCheckResult, 0, len(urls))
 	for _, raw := range urls {
+		if libraryErr != nil {
+			result = append(result, types.IngestCheckResult{URL: raw, Status: "invalid", Reason: libraryErr.Error()})
+			continue
+		}
 		if !validIngestURL(strings.TrimSpace(raw)) || len(raw) > 2048 {
 			return nil, werrors.NewBadRequestError("urls must be absolute HTTP or HTTPS links of at most 2048 bytes")
 		}
 		normalized := normalizeMessageURL(raw)
 		item := types.IngestCheckResult{URL: raw, Status: "not_found"}
-		if discarded, err := s.lookupIngestDiscard(ctx, normalized); err != nil {
+		if discarded, err := s.lookupIngestDiscardTemplate(ctx, normalized, library.Template); err != nil {
 			return nil, err
 		} else if discarded != nil {
 			item.Status, item.EntryID = "discarded", discarded.EntryID
-		} else if article, err := s.findIngestURL(ctx, normalized, false); err != nil {
+		} else if article, err := s.findIngestURL(ctx, normalized, false, library); err != nil {
 			return nil, err
 		} else if article != nil {
 			item.Status, item.EntryID, item.Incomplete = "in_library", article.ID, article.Incomplete
@@ -123,12 +128,26 @@ func (s *entryService) ListIncomplete(ctx context.Context, page, size int, inclu
 	if err := query.Order("created_at ASC,id ASC").Offset((page - 1) * size).Limit(size).Find(&articles).Error; err != nil {
 		return nil, err
 	}
+	templates := map[string]string{}
+	var libraries []types.Library
+	ids := []string{}
+	for _, article := range articles {
+		ids = append(ids, article.LibraryID)
+	}
+	if len(ids) > 0 {
+		if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&libraries).Error; err != nil {
+			return nil, err
+		}
+	}
+	for _, library := range libraries {
+		templates[library.ID] = library.Template
+	}
 	for _, article := range articles {
 		url := article.Source
 		if intake, _ := article.IntakeMetadata(); intake != nil && intake.SourceInfo.OriginalURL != "" {
 			url = intake.SourceInfo.OriginalURL
 		}
-		result.Items = append(result.Items, types.IncompleteArticle{Kind: article.SourceKind, EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
+		result.Items = append(result.Items, types.IncompleteArticle{LibraryTemplate: templates[article.LibraryID], LibraryID: article.LibraryID, EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
 	}
 	return result, nil
 }

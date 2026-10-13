@@ -7,6 +7,11 @@ export type SearchSource = typeof SEARCH_SOURCES[number]
 export interface SearchEntity { id: string; canonical_name: string; entity_type: EntityType; aliases?: string[] }
 export interface SearchSnippet { chunk_id: string; content: string; chunk_index: number; score: number; match_type: string; image_path?: string }
 export interface SearchEntry {
+  source_ref?: string
+  identifier?: string
+  graph?: boolean | null
+  has_update?: boolean
+  latest_article_id?: string
   entry_id: string
   title: string
   source: SearchSource

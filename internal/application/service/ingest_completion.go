@@ -125,6 +125,8 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 		return ingestResult(article, "exists", "已记录本次材料，文章仍等待用户补全。", "", ""), nil
 	}
 	newBody = replaceIngestImageTargets(newBody, mappings)
+	// ikb-08: recalculate body positions here after replacing image destinations,
+	// before persisting the completed body and scheduling its reprocessing.
 	remaining = addRemoteIngestImageMissing(newBody, remaining, keyID, keyName)
 	if s.vault != nil && article.VaultPath != "" && changed {
 		change, err := s.vault.BeginArticleSupplement(ctx, article, newBody, mappings)
@@ -193,7 +195,7 @@ func (s *entryService) persistIngestCompletion(ctx context.Context, k *types.Ent
 func (s *entryService) storeIngestConflict(ctx context.Context, library *types.Library, original *types.Entry, request *types.IngestRequest, keyID uint64, keyName string) (*types.IngestResult, error) {
 	now := time.Now()
 	noun := "文章"
-	if original.SourceKind == "mine" {
+	if library.Template == types.TemplateOwn {
 		noun = "用户文档"
 	}
 	message := "正文与已有" + noun + "不同，已另存到关联收录待审。"

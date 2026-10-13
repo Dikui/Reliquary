@@ -65,7 +65,7 @@ func (h *EntryHandler) CheckIngestURLs(c *gin.Context) {
 	if collector == nil {
 		return
 	}
-	items, err := collector.CheckURLs(c.Request.Context(), input.URLs)
+	items, err := collector.CheckURLs(c.Request.Context(), input.URLs, input.Library)
 	if err != nil {
 		c.Error(err)
 		return

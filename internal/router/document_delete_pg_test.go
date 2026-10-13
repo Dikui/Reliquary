@@ -22,7 +22,7 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			f.seedProcessingModels(t)
 			router := ingestAuthHTTPRouter(f)
 			body := "# Personal source\n\nMy original measurements for " + protocol + ".\n\n![photo](https://example.org/photo.png)"
-			input := map[string]any{"items": []any{map[string]any{"kind": "mine", "content": body, "acquisition": "verbatim", "title": "Personal source", "images": []any{map[string]any{"source_url": "https://example.org/photo.png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="}}}}}
+			input := map[string]any{"items": []any{map[string]any{"library": "mine", "content": body, "acquisition": "verbatim", "title": "Personal source", "images": []any{map[string]any{"source_url": "https://example.org/photo.png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="}}}}}
 			encoded, err := json.Marshal(input)
 			require.NoError(t, err)
 			var result types.IngestBatchResult

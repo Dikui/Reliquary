@@ -128,6 +128,13 @@ func hydrateMessageSource(k *types.Entry, metadata map[string]string) error {
 }
 
 func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...bool) (*types.Entry, string, int, error) {
+	var template string
+	if err := tx.Model(&types.Library{}).Select("template").Where("id=?", k.LibraryID).Scan(&template).Error; err != nil {
+		return nil, "", 0, err
+	}
+	if template == types.TemplateOwn || template == types.TemplateGenerated {
+		return nil, "", 0, nil
+	}
 	kind := "article"
 	if k.SourceKind == "mine" {
 		kind = "mine"

@@ -63,7 +63,7 @@ type entryService struct {
 func (s *entryService) SetVault(v *VaultService) { s.vault = v }
 
 const (
-	manualContentMaxLength = 200000
+	manualContentMaxLength = types.MaxIngestContentRunes
 	manualFileExtension    = ".md"
 )
 

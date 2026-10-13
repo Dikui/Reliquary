@@ -218,7 +218,7 @@ func TestOfflineChatGPTSignInUsesRealOAuthAndPreservesArchivedHistoryWithoutMain
 	require.Empty(t, output)
 	var version int
 	require.NoError(t, db.WithContext(ctx).Table("schema_migrations").Select("version").Scan(&version).Error)
-	require.Equal(t, 10, version)
+	require.Equal(t, 11, version)
 	require.False(t, db.Migrator().HasTable("maintenance_state"))
 }
 

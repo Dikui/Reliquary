@@ -60,6 +60,13 @@ func (ingestHandlerModels) GetChatModel(context.Context, string) (chat.Chat, err
 
 type ingestHandlerBases struct{ stubArticleLibraryService }
 
+func (s ingestHandlerBases) ListLibraries(ctx context.Context) ([]*types.Library, error) {
+	library, err := s.GetSystemLibrary(ctx)
+	library.Template = types.TemplateExternalTimely
+	library.Directory = "institutional"
+	return []*types.Library{library}, err
+}
+
 func (ingestHandlerBases) GetSystemLibrary(ctx context.Context, roles ...string) (*types.Library, error) {
 	library, err := (&stubArticleLibraryService{}).GetSystemLibrary(ctx)
 	library.SummaryModelID = "intake-test"
@@ -104,7 +111,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
 	invalidResponse := httptest.NewRecorder()
-	invalidRequest := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", strings.NewReader(`{"items":[{"url":"https://example.org/missing-acquisition","content":"Original"},{"url":"https://example.org/wrong-type","content":42},{"acquisition":"extracted","unknown":true},null]}`))
+	invalidRequest := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", strings.NewReader(`{"items":[{"url":"https://example.org/missing-acquisition","content":"Original"},{"url":"https://example.org/wrong-type","content":42},{"library":"institutional","acquisition":"extracted","unknown":true},null]}`))
 	router.ServeHTTP(invalidResponse, invalidRequest)
 	require.Equal(t, http.StatusOK, invalidResponse.Code, invalidResponse.Body.String())
 	var invalid struct {
@@ -118,7 +125,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	}
 	require.Empty(t, queue.tasks)
 	rejectedResponse := httptest.NewRecorder()
-	rejectedRequest := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", strings.NewReader(`{"items":[{"url":"https://example.org/rejected","content":"rejectfixture complete original","publisher":"Journal","acquisition":"extracted"}]}`))
+	rejectedRequest := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", strings.NewReader(`{"items":[{"url":"https://example.org/rejected","content":"rejectfixture complete original","publisher":"Journal","library":"institutional","acquisition":"extracted"}]}`))
 	rejectedRequest.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(rejectedResponse, rejectedRequest)
 	require.Equal(t, http.StatusOK, rejectedResponse.Code, rejectedResponse.Body.String())
@@ -133,7 +140,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	require.NoError(t, db.First(&pending, "id=?", rejected.Data.Items[0].EntryID).Error)
 	require.Equal(t, types.ParseStatusRejected, pending.ParseStatus)
 	require.Empty(t, pending.VaultPath)
-	input := types.IngestRequest{Acquisition: "extracted", URL: "https://example.org/ada/article123", Publisher: "Journal", Content: "# Complete original\n\nMeasured product capabilities.", Title: "External article", SourceName: "grok-bot", AgentSummary: "annotation-summary", AgentTags: []string{"annotation-tag"}, Thread: []types.IngestThreadItem{{Author: "Ada", PublishedAt: "2026-10-01", Content: "Supporting thread."}}, Quotes: []types.IngestQuote{{Content: "Quoted external source."}}}
+	input := types.IngestRequest{Library: "institutional", Acquisition: "extracted", URL: "https://example.org/ada/article123", Publisher: "Journal", Content: "# Complete original\n\nMeasured product capabilities.", Title: "External article", SourceName: "grok-bot", AgentSummary: "annotation-summary", AgentTags: []string{"annotation-tag"}, Thread: []types.IngestThreadItem{{Author: "Ada", PublishedAt: "2026-10-01", Content: "Supporting thread."}}, Quotes: []types.IngestQuote{{Content: "Quoted external source."}}}
 	var articleID string
 	for _, attempt := range []struct {
 		status int
@@ -239,7 +246,7 @@ func TestIngestHTTPUploadReferenceAndWhitelist(t *testing.T) {
 	require.NotEmpty(t, uploaded.Data.AssetID)
 	require.Equal(t, "png", uploaded.Data.Type)
 	require.EqualValues(t, len(png), uploaded.Data.Size)
-	body, err := json.Marshal(types.IngestBatchRequest{Items: []types.IngestRequest{{URL: "https://example.org/uploaded-chart", Acquisition: "verbatim", Content: "# Measurements\n\nOriginal source values.\n\n![Chart](https://example.org/chart.png)", Publisher: "Fixture Journal", Images: []types.IngestImage{{AssetID: uploaded.Data.AssetID, SourceURL: "https://example.org/chart.png"}}}}})
+	body, err := json.Marshal(types.IngestBatchRequest{Items: []types.IngestRequest{{Library: "institutional", URL: "https://example.org/uploaded-chart", Acquisition: "verbatim", Content: "# Measurements\n\nOriginal source values.\n\n![Chart](https://example.org/chart.png)", Publisher: "Fixture Journal", Images: []types.IngestImage{{AssetID: uploaded.Data.AssetID, SourceURL: "https://example.org/chart.png"}}}}})
 	require.NoError(t, err)
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/ingest", bytes.NewReader(body)))

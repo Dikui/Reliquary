@@ -40,7 +40,7 @@ func TestMarkdownOnlyEveryContentTypeKeepsFullBody(t *testing.T) {
 		t.Run(contentType, func(t *testing.T) {
 			h.processor.output = validProcessingFixture(contentType)
 			body := "# " + contentType + "\n\n" + strings.Repeat("Complete original body for "+contentType+". ", 20)
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{URL: "https://example.org/full-" + contentType, Content: body, Acquisition: "extracted", Publisher: "Fixture"})
+			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", URL: "https://example.org/full-" + contentType, Content: body, Acquisition: "extracted", Publisher: "Fixture"})
 			require.NoError(t, err)
 			require.Equal(t, "accepted", result.Status)
 			h.drain(t)
@@ -80,7 +80,7 @@ func TestMarkdownOnlyUnknownClassificationCompletes(t *testing.T) {
 			require.NoError(t, err)
 			h.processor.output = string(raw)
 			body := "# " + value + "\n\n" + strings.Repeat(value+" complete source observations. ", 20)
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{URL: "https://example.org/fallback/" + value, Content: body, Acquisition: "extracted", Publisher: "Fixture"})
+			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", URL: "https://example.org/fallback/" + value, Content: body, Acquisition: "extracted", Publisher: "Fixture"})
 			require.NoError(t, err)
 			require.Equal(t, "accepted", result.Status)
 			h.drain(t)
