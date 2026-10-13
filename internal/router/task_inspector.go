@@ -362,6 +362,9 @@ func (a *postgresTaskInspector) ListRuntimeTasks(ctx context.Context, queue stri
 		page.Tasks = append(page.Tasks, info)
 		anchors = append(anchors, job.ID)
 	}
+	if err := a.restrictRuntimeCancellation(ctx, page.Tasks); err != nil {
+		return types.RuntimeTaskPage{}, true, err
+	}
 	if page.HasMore {
 		page.NextCursor, err = encodeRuntimeTaskCursor(queue, state, anchors)
 	}
@@ -374,6 +377,11 @@ func (a *postgresTaskInspector) GetRuntimeTask(ctx context.Context, queue, taskI
 		return nil, true, err
 	}
 	info, err := projectRuntimeTask(&job)
+	if err == nil {
+		tasks := []types.RuntimeTaskInfo{info}
+		err = a.restrictRuntimeCancellation(ctx, tasks)
+		info = tasks[0]
+	}
 	return &info, true, err
 }
 
@@ -466,4 +474,44 @@ func matchesEntry(taskType string, payload []byte, entryID string) bool {
 
 func (a *postgresTaskInspector) QueueConnectionStatus() types.QueueConnectionStatus {
 	return a.client.ConnectionStatus()
+}
+
+// Queue state grants candidate actions; completed or deleting business rows
+// must never advertise a cancellation that the service will reject.
+func (a *postgresTaskInspector) restrictRuntimeCancellation(ctx context.Context, tasks []types.RuntimeTaskInfo) error {
+	ids := []string{}
+	for _, info := range tasks {
+		if info.Allows(types.RuntimeTaskActionCancel) {
+			ids = append(ids, info.EntryID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	var entries []struct {
+		ID          string
+		ParseStatus string
+	}
+	if err := a.db.WithContext(ctx).Table("entries").Select("id,parse_status").Where("id IN ? AND deleted_at IS NULL", ids).Scan(&entries).Error; err != nil {
+		return err
+	}
+	blocked := map[string]string{}
+	for _, entry := range entries {
+		if entry.ParseStatus == types.ParseStatusCompleted || entry.ParseStatus == types.ParseStatusDeleting {
+			blocked[entry.ID] = entry.ParseStatus
+		}
+	}
+	for i := range tasks {
+		if reason := blocked[tasks[i].EntryID]; reason != "" {
+			actions := []types.RuntimeTaskAction{}
+			for _, action := range tasks[i].AllowedActions {
+				if action != types.RuntimeTaskActionCancel {
+					actions = append(actions, action)
+				}
+			}
+			tasks[i].AllowedActions = actions
+			tasks[i].CancellationUnavailableReason = reason
+		}
+	}
+	return nil
 }

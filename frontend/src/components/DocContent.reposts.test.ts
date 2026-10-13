@@ -761,7 +761,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await renderDetails([], locale, { loadedDetails, scenario: state => {
       assert.equal(state.mergedContent.value, body)
       assert.equal(state.isLegacyManualDraft.value, true)
-      assert.equal(state.canPreview(), false)
+
     } })
     assert.ok(html.includes('Preserved draft'))
     assert.ok(html.includes('Draft body with a source reference.'))
@@ -769,15 +769,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(loadedDetails.metadata.content, body)
   })
 
-  test(`${locale}: historical manual drafts stored in a local intake file retain the existing read-only preview`, async () => {
-    const loader = createArticleDetailsLoader({ draft: { type: 'manual', parse_status: 'draft', metadata: { intake: { source: 'manual', decision: 'pending', original_path: 'local://draft/body.md' } } } })
-    const loadedDetails = await loader.load('draft')
-    await renderDetails([], locale, { loadedDetails, scenario: state => {
-      assert.equal(state.isLegacyManualDraft.value, true)
-      assert.equal(state.canPreview(), true)
-    } })
-    assert.equal(loadedDetails.metadata.intake.original_path, 'local://draft/body.md')
-  })
+
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {

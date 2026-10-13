@@ -16,10 +16,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/fsnotify/fsnotify"
-	"github.com/google/uuid"
-	"gopkg.in/yaml.v3"
-	"gorm.io/gorm"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/logger"
 	"reliquary/internal/maintenanceops"
@@ -27,6 +23,11 @@ import (
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/vaultpath"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/google/uuid"
+	"gopkg.in/yaml.v3"
+	"gorm.io/gorm"
 )
 
 // VaultDirectoryStatus describes indexing of one directory, including the last scan failure.
@@ -433,7 +434,7 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, library *types.L
 		entry = types.Entry{ID: uuid.NewString(), SpaceID: library.SpaceID, LibraryID: library.ID,
 			Type: types.EntryTypeManual, SourceKind: "report", VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
-			CreatedAt: modified.UTC(), ProcessingMode: types.ProcessingModeFull}
+			CreatedAt: modified.UTC()}
 		if err := s.db.WithContext(ctx).Create(&entry).Error; err != nil {
 			return nil, err
 		}

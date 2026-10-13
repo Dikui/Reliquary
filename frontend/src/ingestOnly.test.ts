@@ -84,28 +84,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.doesNotMatch(html, /DataSource|data-source|订阅源|Subscriptions/)
   })
 
-  test(`${locale}: reprocessing preserves parser and chunking overrides and submits only the existing article`, async () => {
-    const emitted: unknown[] = []
-    const overrides = { parser_engine_rules: [{ file_types: ['pdf'], engine: 'mineru' }], parser_engine_overrides: { pdf_force_scanned: 'true' }, chunking_config: { chunk_size: 700, chunk_overlap: 60, strategy: 'heading', enable_parent_child: false } }
-    const html = await render('views/library/components/ReparseConfirmDialog.vue', locale, {}, {
-      visible: true, libraryInfo: {}, reparsePreview: { entryId: 'old-article', fileName: 'Original.pdf', fileType: 'pdf', processOverrides: overrides },
-      onConfirm: (value: unknown) => emitted.push(value),
-    }, state => {
-      state.initFromLibraryInfo({})
-      state.applyOverridesToState(overrides)
-      state.handleConfirm()
-    })
-    assert.ok(html.includes('Original.pdf'))
-    const result = emitted[0] as any
-    assert.deepEqual(result.reparse, { entryId: 'old-article', fileName: 'Original.pdf', fileType: 'pdf', processOverrides: overrides })
-    assert.equal(result.processConfig.chunking_config.chunk_size, 700)
-    assert.equal(result.processConfig.chunking_config.chunk_overlap, 60)
-    assert.equal(result.processConfig.chunking_config.strategy, 'heading')
-    assert.deepEqual(result.processConfig.parser_engine_rules, overrides.parser_engine_rules)
-    assert.deepEqual(result.processConfig.parser_engine_overrides, overrides.parser_engine_overrides)
-    assert.deepEqual(Object.keys(result).sort(), ['processConfig', 'reparse'])
-    assert.doesNotMatch(html, /type="file"|sourceInfo|continueAdd|upload-confirm|manualPreview/)
-  })
+
 }
 
 function productionFiles(directory: string): string[] {

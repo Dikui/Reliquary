@@ -14,10 +14,8 @@ const { t } = useI18n()
 const typeDraft = ref<ContentType | ''>(''), topicDraft = ref<string[]>([])
 const topics = ref<Topic[]>([]), optionsLoading = ref(false), optionsError = ref('')
 const typeSaving = ref(false), topicsSaving = ref(false), typeError = ref(''), topicsError = ref('')
-const confirmRemoveBody = ref(false)
 const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })))
 const topicOptions = computed(() => topics.value.map(topic => ({ value: topic.id, label: topic.name })))
-const changesModeToSummary = computed(() => !props.entry.source_unverified && props.entry.processing_mode !== 'summary_only' && ['tutorial', 'case', 'reference'].includes(typeDraft.value))
 const busy = computed(() => props.disabled || typeSaving.value || topicsSaving.value)
 watch([typeSaving, topicsSaving], () => emit('busy-change', typeSaving.value || topicsSaving.value))
 onUnmounted(() => { optionsGeneration++; emit('busy-change', false) })
@@ -34,25 +32,21 @@ async function loadTopics() {
   finally { if (generation === optionsGeneration) optionsLoading.value = false }
 }
 watch(() => props.entry.id, () => {
-  typeError.value = ''; topicsError.value = ''; confirmRemoveBody.value = false
   void loadTopics()
 }, { immediate: true })
 watch(() => props.entry.content_type, value => { typeDraft.value = CONTENT_TYPES.includes(value as ContentType) ? value as ContentType : '' }, { immediate: true })
 watch(() => props.entry.topics, value => { topicDraft.value = (value || []).map(topic => topic.id) }, { immediate: true, deep: true })
-async function saveType(confirmed = false) {
+async function saveType() {
   if (!typeDraft.value || busy.value) return
-  if (changesModeToSummary.value && !confirmed) { confirmRemoveBody.value = true; return }
-  const id = props.entry.id, type = typeDraft.value, previousMode = props.entry.processing_mode
+  const id = props.entry.id, type = typeDraft.value
   typeSaving.value = true
   typeError.value = ''
   try {
-    const response = await correctEntryContentType(id, type, confirmed)
+    const response = await correctEntryContentType(id, type)
     if (!response.success) throw new Error(response.message)
     if (props.entry.id !== id) return
     emit('updated', { ...response.data, id })
-    confirmRemoveBody.value = false
-    const needsBody = previousMode === 'summary_only' && response.data?.processing_mode === 'full' && response.data?.incomplete === true
-    const message = needsBody ? 'articleJudgments.contentTypeIncomplete' : response.data?.parse_status === 'pending' ? 'articleJudgments.contentTypeQueued' : 'articleJudgments.contentTypeSaved'
+    const message = 'articleJudgments.contentTypeSaved'
     MessagePlugin.success(t(message))
   } catch (cause: any) {
     if (props.entry.id === id) typeError.value = cause?.message || t('articleJudgments.contentTypeFailed')
@@ -90,10 +84,6 @@ async function saveTopics() {
     </div>
     <div v-if="optionsError" class="judgment-error" role="alert">{{ optionsError }} <t-button size="small" variant="text" @click="loadTopics">{{ t('common.retry') }}</t-button></div>
     <p v-if="topicsError" role="alert" class="judgment-error">{{ topicsError }}</p>
-    <t-dialog v-model:visible="confirmRemoveBody" :header="t('articleJudgments.removeBodyTitle')" :confirm-btn="{ content: t('articleJudgments.confirmRemoveBody'), theme: 'danger', loading: typeSaving, disabled: typeSaving }" :cancel-btn="{ content: t('common.cancel'), disabled: typeSaving }" :close-btn="!typeSaving" :close-on-overlay-click="false" :close-on-esc-keydown="!typeSaving" :z-index="6500" @confirm="saveType(true)">
-      <p>{{ t('articleJudgments.removeBodyDescription') }}</p>
-      <p v-if="typeError" role="alert" class="judgment-error">{{ typeError }}</p>
-    </t-dialog>
   </section>
 </template>
 

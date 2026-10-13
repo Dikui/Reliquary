@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"mime/multipart"
 	"path"
@@ -17,6 +16,8 @@ import (
 	secutils "reliquary/internal/utils"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Legacy shapes let processing tests exercise already stored articles without a production creation entry point.
@@ -46,11 +47,6 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 
 	logger.Infof(ctx, "Library ID: %s, file: %s", libraryID, fileName)
 
-	if IsVideoType(getFileType(fileName)) {
-		logger.Error(ctx, "Video file upload is not supported")
-		return nil, werrors.NewBadRequestError("暂不支持上传视频文件")
-	}
-
 	// Get library configuration
 	logger.Info(ctx, "Getting library configuration")
 	library, err := s.libraryService.GetLibraryByID(ctx, libraryID)
@@ -61,9 +57,6 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 
 	// Early reject before the whole-file hash below. resolveFileImportProcessConfig
 	// gates the same extension set and provides a clear unsupported-type error.
-	if err := validateImportFileType(getFileType(fileName)); err != nil {
-		return nil, err
-	}
 
 	// Calculate file hash for deduplication
 	logger.Info(ctx, "Calculating file hash")
@@ -188,11 +181,21 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 	logger.Info(ctx, "Enqueuing document processing task to PostgreSQL")
 
 	lang := types.LanguageFromContextOrDefault(ctx)
+	sourceReader, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	sourceBody, err := io.ReadAll(sourceReader)
+	sourceReader.Close()
+	if err != nil {
+		return nil, err
+	}
 	taskPayload := types.DocumentProcessPayload{
 		SpaceID:   spaceID,
 		EntryID:   entry.ID,
 		LibraryID: libraryID,
 		FilePath:  filePath,
+		Passages:  []string{string(sourceBody)},
 		FileName:  safeFilename,
 		FileType:  getFileType(safeFilename),
 		Language:  lang,
@@ -358,7 +361,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 	}
 
 	if status == types.ManualEntryStatusPublish {
-		if _, err := ApplyEntryProcessOverrides(ctx, library, entry, payload.ProcessConfig, nil, nil); err != nil {
+		if err := entry.SetProcessOverrides(payload.ProcessConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -438,23 +441,14 @@ func resolveFileImportProcessConfig(
 	processOverrides *types.EntryProcessOverrides,
 	enableMultimodel *bool,
 ) (types.EffectiveProcessConfig, error) {
-	if err := validateImportFileType(fileType); err != nil {
-		return types.EffectiveProcessConfig{}, err
-	}
 
 	eff := ResolveProcessConfig(library, processOverrides)
-
-	if processOverrides != nil {
-		if err := ValidateProcessOverrides(ctx, library, processOverrides, []string{fileType}); err != nil {
-			return eff, err
-		}
-	}
 
 	return eff, nil
 }
 
 func isValidFileType(filename string) bool {
-	return isSupportedImportExtension(getFileType(filename))
+	return getFileType(filename) == "md"
 }
 
 func calculateStr(strList ...string) string {

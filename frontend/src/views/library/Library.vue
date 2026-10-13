@@ -23,7 +23,7 @@ import {
   batchReparseEntry,
   getEntrySpans,
   getEntryDetails,
-  downEntryDetails,
+
 } from "@/api/library";
 import { entrySpansPayloadHasTrace } from '@/utils/entryTrace';
 import DocumentListView from './components/DocumentListView.vue';
@@ -49,10 +49,8 @@ import {
   isEntryParseInFlight,
   entryNeedsStatusPolling,
 } from './entryStatusPolling';
-import { resolveEntryDownloadFileName } from './entryDownloadFileName';
 import { useI18n } from 'vue-i18n';
 import { useMarqueeSelect } from '@/composables/useMarqueeSelect';
-import type { ParserEngineInfo } from '@/api/system';
 const route = useRoute();
 const { t } = useI18n();
 const pendingCounts = usePendingCountsStore();
@@ -64,55 +62,6 @@ const validTabs = ['documents', 'reviews', 'entities'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeLibraryTab = ref<KbTab>(initTab);
-
-const parserEngines = computed<ParserEngineInfo[]>(() => editorResources.parserEngines);
-
-const supportedFileTypes = computed<Set<string>>(() => {
-  const engines = parserEngines.value
-  if (!engines.length) return new Set<string>()
-
-  const rules: { file_types: string[]; engine: string }[] =
-    libraryInfo.value?.chunking_config?.parser_engine_rules || []
-
-  const ruleMap = new Map<string, string>()
-  for (const r of rules) {
-    for (const ft of r.file_types) ruleMap.set(ft, r.engine)
-  }
-
-  const available = new Set<string>()
-  const availableEngineNames = new Set(
-    engines.filter(e => e.Available !== false).map(e => e.Name)
-  )
-
-  for (const engine of engines) {
-    for (const ft of engine.FileTypes || []) {
-      if (available.has(ft)) continue
-
-      const explicitEngine = ruleMap.get(ft)
-      if (explicitEngine) {
-        if (availableEngineNames.has(explicitEngine)) available.add(ft)
-      } else {
-        if (engine.Available !== false) available.add(ft)
-      }
-    }
-  }
-  return available
-})
-
-const unsupportedFileTypes = computed<string[]>(() => {
-  const engines = parserEngines.value
-  if (!engines.length) return []
-
-  const allTypes = new Set<string>()
-  for (const engine of engines) {
-    for (const ft of engine.FileTypes || []) allTypes.add(ft)
-  }
-
-  const supported = supportedFileTypes.value
-  return [...allTypes].filter(ft => !supported.has(ft)).sort()
-})
-
-const goToParserSettings = () => uiStore.openSettings('entry', 'parser');
 
 let { cardList, total, moreIndex, details, loadEntries, delEntry, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails } = useLibrary(libraryId.value)
 
@@ -275,7 +224,7 @@ const starredOptions = computed(() => [
   { value: 'true', label: t('articleJudgments.starredOnly') },
   { value: 'false', label: t('articleJudgments.unstarredOnly') },
 ]);
-const contentTypeOptions = computed(() => [...CONTENT_TYPES, 'unclassified'].map(value => ({ value, label: t(`library.contentTypes.${value}`) })));
+const contentTypeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })));
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
 const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };
@@ -558,7 +507,6 @@ const handleOpenEntryEvent = (e: Event) => {
 
 onMounted(() => {
   void resources.fetchLibrary();
-  editorResources.ensureParserEngines();
 
   window.addEventListener('reliquary:open-entry', handleOpenEntryEvent as EventListener);
 });
@@ -998,34 +946,12 @@ const confirmCancelParseEntry = async (item: EntryCard) => {
   }
 };
 
-const downloadEntry = async (item: EntryCard) => {
-  if (!item?.id) return;
-  try {
-    const file = await downEntryDetails(item.id);
-    const objectUrl = URL.createObjectURL(file);
-    const link = document.createElement('a');
-    const fileName = resolveEntryDownloadFileName(item);
-    link.style.display = 'none';
-    link.href = objectUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    nextTick(() => {
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-    });
-  } catch {
-    MessagePlugin.error(t('file.downloadFailed'));
-  }
-};
-
 // Bridge card-view actions back to existing per-card handlers.
 const handleCardAction = (
-  action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
+  action: 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
   item: EntryCard,
 ) => {
   const idx = (cardList.value || []).findIndex((i: EntryCard) => i.id === item.id);
-  if (action === 'download') return downloadEntry(item);
   if (action === 'reparse') {
     if (isParseInFlight(item.parse_status)) return onReparseMenuClick(idx, item);
     return confirmRebuildEntry(idx, item);
@@ -1038,11 +964,10 @@ const handleCardAction = (
 
 // Bridge list-view actions back to existing per-card handlers.
 const handleListAction = (
-  action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
+  action: 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
   item: EntryCard,
 ) => {
   const idx = (cardList.value || []).findIndex((i: EntryCard) => i.id === item.id);
-  if (action === 'download') return downloadEntry(item);
   if (action === 'reparse') return confirmRebuildEntry(idx, item);
   if (action === 'cancel-parse') return confirmCancelParseEntry(item);
   if (action === 'delete') return confirmDeleteEntry(idx, item);
@@ -1099,7 +1024,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
             <div class="library-title-actions">
 
               <LibraryInfoPopover v-if="libraryInfo" :library-info="libraryInfo"
-                :supported-file-types="[...supportedFileTypes]" />
+                />
               <t-tooltip :content="$t('library.settings')" placement="top">
                 <button type="button" class="library-settings-button" :disabled="!libraryId" @click="handleOpenLibrarySettings">
                   <t-icon name="setting" size="16px" />
@@ -1108,16 +1033,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
             </div>
           </div>
           <p v-if="activeLibraryTab === 'documents'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
-          <p v-if="unsupportedFileTypes.length" class="parser-hint entry-header-hint" @click="goToParserSettings">
-            <t-icon name="info-circle" class="parser-hint-icon" />
-            <span class="entry-header-hint__text">{{$t('library.unsupportedTypesHint', {
-              types: unsupportedFileTypes.map(t => '.' + t).join('、')
-            })
-              }}</span>
-            <button type="button" class="parser-hint-link entry-header-hint__action" @click.stop="goToParserSettings">
-              {{ $t('library.goToParserSettings') }} →
-            </button>
-          </p>
         </div>
       </div>
 
@@ -1751,37 +1666,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
     font-size: 14px;
     font-weight: 400;
     line-height: 20px;
-  }
-
-  .parser-hint {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin: 2px 0 0;
-    color: var(--td-warning-color);
-    font-size: 12px;
-    line-height: 1.4;
-    cursor: pointer;
-    transition: color 0.15s ease;
-
-    &:hover {
-      color: var(--td-warning-color-active);
-
-      .parser-hint-link {
-        text-decoration: underline;
-      }
-    }
-
-    .parser-hint-icon {
-      font-size: 12px;
-      flex-shrink: 0;
-    }
-
-    .parser-hint-link {
-      color: var(--td-brand-color);
-      margin-left: 2px;
-      white-space: nowrap;
-    }
   }
 
   .entry-header-hint__action {

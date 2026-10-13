@@ -2,15 +2,11 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"reliquary/internal/utils"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"reliquary/internal/middleware"
@@ -71,31 +67,10 @@ func newSpaceHandlerTestEngine(t *testing.T, space *types.Space) *gin.Engine {
 	return r
 }
 
-func TestGetSpaceKVReturnsRedactedSecrets(t *testing.T) {
-	space := secretSpaceFixture()
-	engine := newSpaceHandlerTestEngine(t, space)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/spaces/kv/parser-engine-config", nil)
-	engine.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	var payload struct {
-		Success bool                     `json:"success"`
-		Data    types.ParserEngineConfig `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
-	assert.Equal(t, types.RedactedSecretPlaceholder, payload.Data.MinerUAPIKey)
-	assert.NotContains(t, rec.Body.String(), "parser-secret-123")
-}
-
 func secretSpaceFixture() *types.Space {
 	return &types.Space{
 		ID:   42,
 		Name: "space",
-		ParserEngineConfig: &types.ParserEngineConfig{
-			MinerUAPIKey: "parser-secret-123",
-		},
 	}
 }
 
@@ -108,22 +83,4 @@ func TestGetSpaceKVAllowedForNonSecretKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/spaces/kv/retrieval-config", nil)
 	engine.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestPutSpaceParserConfigAdminPreservesRedactedSecrets(t *testing.T) {
-	t.Setenv("SSRF_WHITELIST", "example.com")
-	utils.ResetSSRFWhitelistForTest()
-	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	space := secretSpaceFixture()
-	engine := newSpaceHandlerTestEngine(t, space)
-
-	body := `{"mineru_api_key":"***","mineru_endpoint":"https://example.com/mineru"}`
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/spaces/kv/parser-engine-config", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.NotNil(t, space.ParserEngineConfig)
-	assert.Equal(t, "parser-secret-123", space.ParserEngineConfig.MinerUAPIKey)
-	assert.Equal(t, "https://example.com/mineru", space.ParserEngineConfig.MinerUEndpoint)
 }

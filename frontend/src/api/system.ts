@@ -38,56 +38,6 @@ export function getSystemInfo(): Promise<{ data: SystemInfo }> {
 }
 
 
-export interface ParserEngineInfo {
-  Name: string
-  Description: string
-  FileTypes: string[]
-  Available?: boolean
-  UnavailableReason?: string
-}
-
-/** 解析引擎配置（引擎连接参数存空间） */
-export type MinerUParseMethod = 'auto' | 'ocr' | 'txt'
-
-export interface ParserEngineConfig {
-  mineru_endpoint?: string
-  mineru_api_key?: string
-  // MinerU 自建参数
-  mineru_model?: string
-  mineru_vlm_server_url?: string
-  mineru_enable_formula?: boolean | null
-  mineru_enable_table?: boolean | null
-  mineru_parse_method?: MinerUParseMethod
-  mineru_enable_ocr?: boolean | null
-  mineru_language?: string
-  // MinerU 云 API 参数
-  mineru_cloud_model?: string
-  mineru_cloud_enable_formula?: boolean | null
-  mineru_cloud_enable_table?: boolean | null
-  mineru_cloud_enable_ocr?: boolean | null
-  mineru_cloud_language?: string
-}
-
-export interface ParserEnginesResponse {
-  data: ParserEngineInfo[]
-}
-
-export function getParserEngines(): Promise<ParserEnginesResponse> {
-  return get('/api/v1/system/parser-engines')
-}
-
-/** 使用当前填写的参数检测引擎可用性（不保存），用于填写新参数后即时测试 */
-export function checkParserEngines(config: ParserEngineConfig): Promise<ParserEnginesResponse> {
-  return post('/api/v1/system/parser-engines/check', config)
-}
-
-export function getParserEngineConfig(): Promise<{ data: ParserEngineConfig }> {
-  return get('/api/v1/space/kv/parser-engine-config')
-}
-
-export function updateParserEngineConfig(config: ParserEngineConfig): Promise<{ data: ParserEngineConfig }> {
-  return put('/api/v1/space/kv/parser-engine-config', config)
-}
 export interface SystemSettingItem {
   id: number
   key: string
@@ -245,6 +195,7 @@ export interface RuntimeTask {
   type: string
   state: RuntimeTaskState
   allowed_actions: RuntimeTaskAction[]
+  cancellation_unavailable_reason?: string
   last_error?: string
   last_failed_at?: string
   next_process_at?: string

@@ -14,7 +14,7 @@ import (
 )
 
 func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T) {
-	for version := uint(0); version <= 4; version++ {
+	for version := uint(0); version <= 9; version++ {
 		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
 			db := pgtest.Open(t)
 			directory, err := filepath.Abs("../../migrations/versioned")
@@ -22,14 +22,33 @@ func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T)
 			migration, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
 			require.NoError(t, err)
 			t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
-			require.NoError(t, migration.Migrate(version))
+			if version != 9 {
+				require.NoError(t, migration.Migrate(version))
+			}
 			before, err := CatalogSchema(context.Background(), db)
 			require.NoError(t, err)
 			require.NoError(t, WithCurrentNames(db, func(tx *gorm.DB) error {
 				rules, err := schemaRules(context.Background(), tx)
 				require.NoError(t, err)
-				require.Contains(t, rules, "data_sources")
-				require.Contains(t, rules, "sync_logs")
+				if version < 5 {
+					require.Contains(t, rules, "data_sources")
+					require.Contains(t, rules, "sync_logs")
+				} else {
+					require.NotContains(t, rules, "data_sources")
+					require.NotContains(t, rules, "sync_logs")
+				}
+				if version < 8 {
+					require.Contains(t, rules["entries"].Columns(), "processing_mode")
+				} else {
+					require.NotContains(t, rules["entries"].Columns(), "processing_mode")
+				}
+				if version < 9 {
+					require.Contains(t, rules, "task_jobs")
+					require.NotContains(t, rules, "task_pending_ops")
+				} else {
+					require.Contains(t, rules, "task_pending_ops")
+					require.NotContains(t, rules, "task_jobs")
+				}
 				if version < 4 {
 					require.NotContains(t, rules, "ingest_assets")
 					require.NotContains(t, rules, "ingest_discards")

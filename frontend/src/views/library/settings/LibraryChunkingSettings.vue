@@ -217,11 +217,6 @@ import { useI18n } from 'vue-i18n'
 import { ChevronRightIcon } from 'tdesign-icons-vue-next'
 import LibraryChunkingDebug from './LibraryChunkingDebug.vue'
 
-interface ParserEngineRule {
-  file_types: string[]
-  engine: string
-}
-
 // Slider ranges defined in this file (min/max props on t-slider) mirror
 // the validated bounds in the backend splitter:
 //   ChunkSize:      100–4000  (default 512). 100 = too fragmented to be
@@ -239,7 +234,6 @@ interface ChunkingConfig {
   chunkSize: number
   chunkOverlap: number
   separators: string[]
-  parserEngineRules?: ParserEngineRule[]
   enableParentChild: boolean
   parentChunkSize: number
   childChunkSize: number
@@ -382,7 +376,6 @@ const emitUpdate = () => {
     chunkSize: localChunkSize.value,
     chunkOverlap: localChunkOverlap.value,
     separators: [...localSeparators.value],
-    parserEngineRules: props.config.parserEngineRules,
     enableParentChild: localEnableParentChild.value,
     parentChunkSize: localParentChunkSize.value,
     childChunkSize: localChildChunkSize.value,

@@ -3,7 +3,7 @@
     <div class="section-header"><h2>{{ $t('settings.librarySettings') }}</h2></div>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button v-if="!formData" variant="text" :loading="loading" @click="load">{{ $t('common.retry') }}</t-button></template></t-alert>
     <t-loading :loading="loading" show-overlay>
-      <t-tabs v-model="currentSection"><t-tab-panel v-for="tab in tabs" :key="tab" :value="tab" :label="$t(tab === 'parser' ? 'settings.parserEngine' : `knowledgeEditor.sidebar.${tab}`)" /></t-tabs>
+      <t-tabs v-model="currentSection"><t-tab-panel v-for="tab in tabs" :key="tab" :value="tab" :label="$t(`knowledgeEditor.sidebar.${tab}`)" /></t-tabs>
       <div class="library-settings-body">
                 <!-- 基本信息 -->
                 <div v-show="currentSection === 'basic'" class="section">
@@ -66,33 +66,12 @@
                   <EmbeddingRebuild v-if="formData && currentSection === 'models'" :model-id="formData.modelTiers.embedding || ''" :models="allModels" :disabled="dirty || saving" />
                 </div>
 
-                <!-- 解析引擎 -->
-                <div v-if="formData && currentSection === 'parser'" class="section">
-                  <LibraryParserSettings
-                    :parser-engine-rules="formData.chunkingConfig.parserEngineRules"
-                    @update:parser-engine-rules="handleParserEngineRulesUpdate"
-                  />
-                </div>
-
-                <!-- 存储引擎 -->
-
                 <!-- 分块设置 -->
                 <div  v-show="currentSection === 'chunking'" class="section">
                   <LibraryChunkingSettings
                     v-if="formData"
                     :config="formData.chunkingConfig"
                     @update:config="handleChunkingConfigUpdate"
-                  />
-                </div>
-
-                <!-- 高级设置 -->
-                <div  v-show="currentSection === 'advanced'" class="section">
-                  <LibraryAdvancedSettings
-
-                    v-if="formData"
-
-                    :table-metadata-instructions="formData.chunkingConfig.tableMetadataInstructions"
-                    @update:table-metadata-instructions="(value: string) => { if (formData) formData.chunkingConfig.tableMetadataInstructions = value }"
                   />
                 </div>
 
@@ -114,13 +93,12 @@ import type { ResolvedModelTiers } from '@/types/modelTiers'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import EmbeddingRebuild from '@/components/EmbeddingRebuild.vue'
 import SafeTextarea from '@/components/SafeTextarea.vue'
-import LibraryParserSettings from '@/views/library/settings/LibraryParserSettings.vue'
 import LibraryChunkingSettings from '@/views/library/settings/LibraryChunkingSettings.vue'
-import LibraryAdvancedSettings from '@/views/library/settings/LibraryAdvancedSettings.vue'
+
 const { t } = useI18n()
 const props = defineProps<{ initialSection?: string }>()
 const resources = useResourcesStore(), uiStore = useUIStore()
-const tabs = ['basic', 'models', 'parser', 'chunking', 'advanced']
+const tabs = ['basic', 'models', 'chunking']
 const initialSection = props.initialSection || uiStore.settingsInitialSubSection || 'basic'
 const currentSection = ref(tabs.includes(initialSection) ? initialSection : 'basic')
 const formData = ref<any>(null), saved = ref(''), loading = ref(false), saving = ref(false), error = ref('')
@@ -157,7 +135,6 @@ async function load() {
         // Aligned with chunker.DefaultChunkOverlap on the backend.
         chunkOverlap: library.chunking_config?.chunk_overlap ?? 80,
         separators: library.chunking_config?.separators || ['\n\n', '\n', '。', '！', '？', ';', '；'],
-        parserEngineRules: library.chunking_config?.parser_engine_rules || undefined,
         enableParentChild: library.chunking_config?.enable_parent_child,
         parentChunkSize: library.chunking_config?.parent_chunk_size || 4096,
         childChunkSize: library.chunking_config?.child_chunk_size || 384,
@@ -166,7 +143,6 @@ async function load() {
         strategy: library.chunking_config?.strategy || '',
         tokenLimit: library.chunking_config?.token_limit || 0,
         languages: library.chunking_config?.languages || [],
-        tableMetadataInstructions: library.chunking_config?.table_metadata_instructions || ''
       },
       indexingStrategy: {
         vectorEnabled: library.indexing_strategy?.vector_enabled ?? true,
@@ -180,7 +156,6 @@ async function load() {
   finally { if (request === generation) loading.value = false }
 }
 function handleChunkingConfigUpdate(value: any) { formData.value.chunkingConfig = { ...value } }
-function handleParserEngineRulesUpdate(value: any) { formData.value.chunkingConfig.parserEngineRules = value }
 function toggleVectorIndexing() { if (!isIndexingLocked.value) { const enabled = !formData.value.indexingStrategy.vectorEnabled; formData.value.indexingStrategy = { vectorEnabled: enabled, keywordEnabled: enabled } } }
 const buildSubmitData = (value = formData.value) => {
   if (!value) return null
@@ -202,8 +177,6 @@ const buildSubmitData = (value = formData.value) => {
       strategy: value.chunkingConfig.strategy ?? '',
       token_limit: value.chunkingConfig.tokenLimit ?? 0,
       languages: value.chunkingConfig.languages ?? [],
-      table_metadata_instructions: value.chunkingConfig.tableMetadataInstructions || '',
-      parser_engine_rules: value.chunkingConfig.parserEngineRules || []
     },
     embedding_model_id: value.modelTiers.embedding || '',
     summary_model_id: value.modelTiers.generation || '',
@@ -259,6 +232,6 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload',
 .indexing-check-item { cursor: pointer; }
 .is-locked .indexing-check-item { cursor: default; }
 .library-settings-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 24px; }
-// 多模态配置内联样式（与子组件 LibraryAdvancedSettings 一致）
+// 库设置的内联样式
 
 </style>

@@ -11,15 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 const ingestAuthCheckBody = `{"urls":["https://example.org/auth-recheck"]}`
@@ -164,7 +165,7 @@ func TestIngestHTTPBatchDoesNotHideItemCredentialFailures(t *testing.T) {
 func TestIngestHTTPAssetAndCompletionCredentialFailures(t *testing.T) {
 	f := newMCPFixture(t)
 	router := ingestAuthHTTPRouter(f)
-	article := f.seedArticle(t, "Auth completion fixture", types.ProcessingModeFull, "# Original measurements\n\nA complete source body.\n")
+	article := f.seedArticle(t, "Auth completion fixture", "full", "# Original measurements\n\nA complete source body.\n")
 	require.NoError(t, f.db.Callback().Query().Before("gorm:query").Register("ingest_auth_asset_failure", func(tx *gorm.DB) {
 		if tx.Statement.Table == "api_keys" && len(tx.Statement.Selects) != 0 {
 			tx.Statement.Selects = append(tx.Statement.Selects, "unavailable_expires_at")

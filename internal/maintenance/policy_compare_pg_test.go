@@ -3,14 +3,13 @@ package maintenance
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"reliquary/internal/testutil/pgtest"
+
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func copyManifest(t *testing.T, manifest *Manifest) *Manifest {
@@ -20,128 +19,6 @@ func copyManifest(t *testing.T, manifest *Manifest) *Manifest {
 	var result Manifest
 	require.NoError(t, json.Unmarshal(data, &result))
 	return &result
-}
-
-func TestParserCredentialRefillAllowsOnlyItsSpacesUpdatedAt(t *testing.T) {
-	ctx := context.Background()
-	db := pgtest.Open(t)
-	seed(t, db)
-	root := t.TempDir()
-	expected, err := BuildManifest(ctx, db, root, "")
-	require.NoError(t, err)
-	_, err = Scrub(ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(`UPDATE spaces SET parser_engine_config='{"nested":{"mineru_api_key":"REFILLED_PARSER_SECRET","endpoint":"http://localhost"}}',updated_at=clock_timestamp() WHERE id=1`).Error)
-	actual, err := BuildManifest(ctx, db, root, "")
-	require.NoError(t, err)
-	require.Empty(t, CompareManifest(expected, actual))
-	withoutParserRequirement := copyManifest(t, expected)
-	for i := range withoutParserRequirement.Required {
-		if withoutParserRequirement.Required[i].Kind == "spaces" {
-			withoutParserRequirement.Required[i].Fields = []string{"credentials"}
-		}
-	}
-	require.Contains(t, CompareManifest(withoutParserRequirement, actual), "table spaces")
-	wrongSpaceRequirement := copyManifest(t, expected)
-	for i := range wrongSpaceRequirement.Required {
-		if wrongSpaceRequirement.Required[i].Kind == "spaces" {
-			wrongSpaceRequirement.Required[i].ID = "2"
-		}
-	}
-	require.Contains(t, CompareManifest(wrongSpaceRequirement, actual), "table spaces", "a reminder for another space cannot permit this timestamp")
-	// Re-entering a credential cannot allow a public parser endpoint or any
-	// other space metadata to change, even on the permitted space row.
-	for _, mutation := range []struct{ Change, Undo string }{
-		{`UPDATE spaces SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,endpoint}','"http://changed-public-parser"') WHERE id=1`, `UPDATE spaces SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,endpoint}','"http://localhost"') WHERE id=1`},
-		{`UPDATE spaces SET name='Changed owner' WHERE id=1`, `UPDATE spaces SET name='Owner' WHERE id=1`},
-	} {
-		require.NoError(t, db.Exec(mutation.Change).Error)
-		changed, err := BuildManifest(ctx, db, root, "")
-		require.NoError(t, err)
-		require.Contains(t, CompareManifest(expected, changed), "table spaces")
-		if mutation.Undo != "" {
-			require.NoError(t, db.Exec(mutation.Undo).Error)
-		}
-	}
-}
-
-func TestPortableParserRemindersSurviveSanitizedFlushAndVaultOnlyRebuild(t *testing.T) {
-	ctx := context.Background()
-	source := pgtest.Open(t)
-	seed(t, source)
-	root := t.TempDir()
-	parserFields := func(required []Requirement) []string {
-		var fields []string
-		for _, requirement := range required {
-			if requirement.Kind == "spaces" && requirement.ID == "1" {
-				for _, field := range requirement.Fields {
-					if parserCredentialRequirement(field) {
-						fields = append(fields, field)
-					}
-				}
-			}
-		}
-		return fields
-	}
-	before, err := Capture(ctx, source)
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"parser_engine_config.nested.mineru_api_key"}, parserFields(before.Required))
-	require.NoError(t, WriteSnapshot(root, "", before))
-	_, err = Scrub(ctx, source)
-	require.NoError(t, err)
-	after, err := Capture(ctx, source)
-	require.NoError(t, err)
-	require.Empty(t, parserFields(after.Required), "the actual inventory must not pretend an omitted parser key has been supplied")
-	require.NoError(t, WriteSnapshot(root, "", after))
-	portable, err := Load(root)
-	require.NoError(t, err)
-	require.Equal(t, parserFields(before.Required), parserFields(portable.Required))
-	target := pgtest.Open(t)
-	imported, err := Import(ctx, target, root, "", nil)
-	require.NoError(t, err)
-	require.Equal(t, parserFields(before.Required), parserFields(imported.Required))
-	current, err := Capture(ctx, target)
-	require.NoError(t, err)
-	require.Empty(t, parserFields(current.Required))
-	require.NoError(t, WriteSnapshot(root, "", current))
-	portable, err = Load(root)
-	require.NoError(t, err)
-	require.Equal(t, parserFields(before.Required), parserFields(portable.Required))
-	manifest, err := BuildManifest(ctx, target, root, "")
-	require.NoError(t, err)
-	require.Empty(t, parserFields(manifest.Required), "ready checks consume actual field presence, not the portable reminder")
-	path := filepath.Join(root, ".reliquary", "manifest.json")
-	require.NoError(t, os.WriteFile(path, []byte("unreadable old reminder"), 0600))
-	repaired, err := VerifyReplica(ctx, target, root, "", true)
-	require.NoError(t, err)
-	require.True(t, repaired.OK)
-	portable, err = Load(root)
-	require.NoError(t, err)
-	require.Equal(t, parserFields(before.Required), parserFields(portable.Required), "the valid redundant copy preserves omitted original parser paths")
-	require.NoError(t, target.Exec(`UPDATE spaces SET parser_engine_config=jsonb_set(parser_engine_config,'{nested,mineru_api_key}',to_jsonb(?::text)),updated_at=clock_timestamp() WHERE id=1`, "new-parser-secret-on-target").Error)
-	filled, err := Capture(ctx, target)
-	require.NoError(t, err)
-	require.Equal(t, parserFields(before.Required), parserFields(filled.Required))
-	require.NoError(t, WriteSnapshot(root, "", filled))
-	// An unreadable sole copy of provenance cannot be silently overwritten.
-	require.NoError(t, os.WriteFile(path, []byte("unreadable old reminder"), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".reliquary", "config", "required_credentials.json"), []byte("unreadable redundant reminder"), 0600))
-	require.ErrorContains(t, WriteSnapshot(root, "", filled), "restore them from backup")
-	bytes, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Equal(t, "unreadable old reminder", string(bytes))
-	// A pre-redundancy replica can still be repaired from an original database
-	// whose parser secret remains configured and exposes its field inventory.
-	legacyRoot := t.TempDir()
-	require.NoError(t, WriteSnapshot(legacyRoot, "", filled))
-	require.NoError(t, os.Remove(filepath.Join(legacyRoot, ".reliquary", "config", "required_credentials.json")))
-	require.NoError(t, os.WriteFile(filepath.Join(legacyRoot, ".reliquary", "manifest.json"), []byte("corrupt pre-redundancy manifest"), 0600))
-	repaired, err = VerifyReplica(ctx, target, legacyRoot, "", true)
-	require.NoError(t, err)
-	require.True(t, repaired.OK)
-	portable, err = Load(legacyRoot)
-	require.NoError(t, err)
-	require.Equal(t, parserFields(filled.Required), parserFields(portable.Required))
 }
 
 func seedProbeModel(t *testing.T, db *gorm.DB) {

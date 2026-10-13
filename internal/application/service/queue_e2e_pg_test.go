@@ -104,7 +104,9 @@ func TestRedisEmbeddingHandlersEndToEnd(t *testing.T) {
 func TestRedisAssetCleanupEndToEnd(t *testing.T) {
 	s, ctx, _ := newIngestAssetHarness(t, true)
 	c := s.task.(*taskqueue.Client)
-	asset, err := s.UploadIngestAsset(ctx, "cleanup.txt", []byte("expired source"))
+	data, err := decodeIngestInline(articleImageDataURI(t, 93))
+	require.NoError(t, err)
+	asset, err := s.UploadIngestAsset(ctx, "cleanup.png", data)
 	require.NoError(t, err)
 	require.NoError(t, s.db.Model(&types.IngestAsset{}).Where("id=?", asset.AssetID).Update("created_at", time.Now().Add(-48*time.Hour)).Error)
 	var op taskqueue.Job

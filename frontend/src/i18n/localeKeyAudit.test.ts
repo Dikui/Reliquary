@@ -152,13 +152,6 @@ test('indirect translation helpers and relative sample label maps resolve in bot
   assert.deepEqual(findUsedKeysMissingInLocales(keys, localeKeysByName), [])
 })
 
-const PARSER_ENGINE_NAMES = [
-  'simple',
-  'mineru',
-  'mineru_cloud',
-  'anydoc',
-] as const
-
 /** Worker pools / queues use dynamic te() paths in RuntimeQueues.vue; keep in sync with internal/types/task.go. */
 const RUNTIME_WORKER_POOL_NAMES = [
   'core',
@@ -225,20 +218,7 @@ test('runtime queue worker pool and queue labels exist in every locale', () => {
   assert.deepEqual(failures, [], failures.slice(0, 20).join('\n'))
 })
 
-test('parser engine display keys exist in every locale', () => {
-  const failures: string[] = []
 
-  for (const engineName of PARSER_ENGINE_NAMES) {
-    for (const [localeName, keys] of Object.entries(localeKeysByName) as Array<[LocaleName, Set<string>]>) {
-      for (const suffix of ['name', 'desc'] as const) {
-        const key = `librarySettings.parser.engines.${engineName}.${suffix}`
-        if (!keys.has(key)) failures.push(`${localeName}: missing ${key}`)
-      }
-    }
-  }
-
-  assert.deepEqual(failures, [], failures.join('\n'))
-})
 
 test('current backend parsing statuses and error codes are localized and retained', () => {
   const parsingSource = readFileSync(new URL('../../../internal/errors/parse_error_codes.go', import.meta.url), 'utf8')

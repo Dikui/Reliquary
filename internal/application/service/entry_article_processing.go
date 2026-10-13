@@ -29,12 +29,13 @@ const articleProcessingPrompt = `你负责为个人知识库处理一篇审核�
 - tutorial（教程）：学会怎么做，包括指南、上手教程。
 - case（案例）：看别人怎么做、结果如何。
 - reference（参考）：供查阅的资料，包括产品文档、说明页。
-content_type 选择最合适的一项。content_type_uncertain 必须是布尔值；在两种以上类型之间难以判断时设为 true，尤其是在全文保存类型（event、opinion、research）与摘要加链接类型（tutorial、case、reference）之间难以判断时。content_type_reason 说明选择的原因，拿不准时说明候选类型与疑点。content_type_uncertain 为 true 时系统会保留全文，并请用户复核类型。
+- other（其他）：无法确定或不属于以上类型。
+content_type 选择最合适的一项，拿不准时选 other。
 摘要统一包含 overview（一句话概述）、points（3 到 5 条要点）、key_terms（人名、公司、产品、工具、关键数字，可为空数组）。准确保留关键事实和数字，不虚构正文中没有的内容，使用文章的主要语言。
 entities 提取文章提到的实体，name 是名称，type 只能是 company、person、product、project、organization、other，aliases 是可选的别名数组。没有实体时返回空数组。
 topics 只能从输入 existing_topics 中选择符合名称和说明的主题 ID，可选多个，也可为空数组，禁止创建主题或编造 ID。
 如果附有图片，按正文中的出现顺序结合图片理解文章，不单独输出 OCR 或图片描述。
-输出所有字段，格式：{"content_type":"event","content_type_uncertain":false,"content_type_reason":"文章主要报道已经发生的事件","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[{"name":"名称","type":"company","aliases":["别名"]}],"topics":["已给定的主题 ID"]}`
+输出所有字段，格式：{"content_type":"event","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[{"name":"名称","type":"company","aliases":["别名"]}],"topics":["已给定的主题 ID"]}`
 
 const defaultArticleBodyChars = 24000
 const defaultArticleImages = 8
@@ -43,11 +44,9 @@ const defaultArticleCompletionTokens = 4096
 // articleProcessingResult keeps required fields nullable while decoding so an
 // omitted field is distinguishable from an intentionally empty array.
 type articleProcessingResult struct {
-	ContentType          *string             `json:"content_type"`
-	ContentTypeUncertain *bool               `json:"content_type_uncertain"`
-	ContentTypeReason    string              `json:"content_type_reason"`
-	Summary              *types.EntrySummary `json:"summary"`
-	Entities             []struct {
+	ContentType *string             `json:"content_type"`
+	Summary     *types.EntrySummary `json:"summary"`
+	Entities    []struct {
 		Name    string   `json:"name"`
 		Type    *string  `json:"type"`
 		Aliases []string `json:"aliases,omitempty"`
@@ -76,12 +75,9 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		return nil, fmt.Errorf("article processing output is not valid JSON: %w", err)
 	}
-	if result.ContentType == nil || result.ContentTypeUncertain == nil || result.Summary == nil || result.Entities == nil || result.Topics == nil ||
+	if result.Summary == nil || result.Entities == nil || result.Topics == nil ||
 		strings.TrimSpace(result.Summary.Overview) == "" || result.Summary.Points == nil || result.Summary.KeyTerms == nil {
 		return nil, errors.New("article processing output is missing required fields")
-	}
-	if *result.ContentTypeUncertain && strings.TrimSpace(result.ContentTypeReason) == "" {
-		return nil, errors.New("uncertain article processing output must explain the content type")
 	}
 	if len(result.Summary.Points) < 3 || len(result.Summary.Points) > 5 {
 		return nil, errors.New("article processing summary must contain 3 to 5 points")
@@ -96,6 +92,11 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 			return nil, errors.New("article processing entity is missing name or type")
 		}
 	}
+	value := types.ContentTypeOther
+	if result.ContentType != nil {
+		value = types.NormalizeContentType(*result.ContentType)
+	}
+	result.ContentType = &value
 	return &result, nil
 }
 
@@ -285,7 +286,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	if err != nil {
 		return nil, err
 	}
-	s.endStage(ctx, k.ID, types.StageProcessing, types.JSONMap{"body_chars": len([]rune(input.Body)), "body_truncated": input.BodyTruncated, "images": len(images), "topic_options": len(input.ExistingTopics), "model_id": modelID, "content_type": *result.ContentType, "content_type_uncertain": *result.ContentTypeUncertain, "content_type_reason": result.ContentTypeReason, "entities": len(result.Entities), "topics": len(result.Topics), "model_calls": calls.Snapshot(), "model_tier": types.ModelTierGeneration})
+	s.endStage(ctx, k.ID, types.StageProcessing, types.JSONMap{"body_chars": len([]rune(input.Body)), "body_truncated": input.BodyTruncated, "images": len(images), "topic_options": len(input.ExistingTopics), "model_id": modelID, "content_type": *result.ContentType, "entities": len(result.Entities), "topics": len(result.Topics), "model_calls": calls.Snapshot(), "model_tier": types.ModelTierGeneration})
 	return result, nil
 }
 
@@ -325,66 +326,27 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if s.db != nil {
 		if isIngestArticle(k) {
 			var latest types.Entry
-			if err := s.db.WithContext(ctx).Select("acquisition", "incomplete", "external_completion_attempted", "missing_materials", "ingest_attachments", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_article_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
+			if err := s.db.WithContext(ctx).Select("acquisition", "incomplete", "external_completion_attempted", "missing_materials", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_article_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
 				return err
 			}
 			k.Acquisition, k.Incomplete, k.ExternalCompletionAttempted = latest.Acquisition, latest.Incomplete, latest.ExternalCompletionAttempted
-			k.MissingMaterials, k.IngestAttachments = latest.MissingMaterials, latest.IngestAttachments
+			k.MissingMaterials = latest.MissingMaterials
 			k.IngestAPIKeyID, k.IngestAPIKeyName = latest.IngestAPIKeyID, latest.IngestAPIKeyName
 			k.LastIngestAPIKeyID, k.LastIngestAPIKeyName = latest.LastIngestAPIKeyID, latest.LastIngestAPIKeyName
 			k.ContentTypeHint, k.RelatedArticleID = latest.ContentTypeHint, latest.RelatedArticleID
 		}
-		var current struct {
-			ContentType                 string
-			ContentTypeCorrected        bool
-			ProcessingMode              string
-			SourceUnverified            bool
-			ProcessingReviewStatus      string
-			ProcessingReviewContentType string
-			ProcessingReviewReason      string
-		}
-		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Select("content_type", "content_type_corrected", "processing_mode", "source_unverified", "processing_review_status", "processing_review_content_type", "processing_review_reason").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&current).Error; err != nil {
+		var current types.Entry
+		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Select("content_type", "content_type_corrected", "source_unverified").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&current).Error; err != nil {
 			return err
 		}
 		k.SourceUnverified = current.SourceUnverified
-		k.ProcessingReviewStatus, k.ProcessingReviewContentType, k.ProcessingReviewReason = current.ProcessingReviewStatus, current.ProcessingReviewContentType, current.ProcessingReviewReason
-		if current.ContentTypeCorrected || current.ProcessingReviewStatus == types.ProcessingReviewConfirmed || current.ProcessingReviewStatus == types.ProcessingReviewIgnored {
-			k.ContentType, k.ContentTypeCorrected = current.ContentType, current.ContentTypeCorrected
-		}
-		if current.ProcessingReviewStatus == types.ProcessingReviewIgnored {
-			k.ProcessingMode = current.ProcessingMode
+		if current.ContentTypeCorrected {
+			k.ContentType, k.ContentTypeCorrected = current.ContentType, true
 		}
 	}
-	if !k.ContentTypeCorrected && k.ProcessingReviewStatus != types.ProcessingReviewConfirmed && k.ProcessingReviewStatus != types.ProcessingReviewIgnored {
+	if !k.ContentTypeCorrected {
 		k.ContentType = types.NormalizeContentType(*result.ContentType)
-		if k.ContentType != *result.ContentType {
-			k.ContentType = ""
-		}
 	}
-	k.ContentTypeUncertain = *result.ContentTypeUncertain
-	if k.ProcessingReviewStatus == "" || k.ProcessingReviewStatus == types.ProcessingReviewPending {
-		k.ProcessingReviewStatus = ""
-		k.ProcessingReviewContentType = types.NormalizeContentType(*result.ContentType)
-		k.ProcessingReviewReason = strings.TrimSpace(result.ContentTypeReason)
-		if k.ContentTypeUncertain && !k.ContentTypeCorrected {
-			k.ProcessingReviewStatus = types.ProcessingReviewPending
-		}
-		if s.db != nil {
-			if err := s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=? AND processing_review_status IN ?", k.ID, k.SpaceID, []string{"", types.ProcessingReviewPending}).Updates(map[string]any{
-				"content_type_uncertain":         k.ContentTypeUncertain,
-				"processing_review_status":       k.ProcessingReviewStatus,
-				"processing_review_content_type": k.ProcessingReviewContentType,
-				"processing_review_reason":       k.ProcessingReviewReason,
-			}).Error; err != nil {
-				return err
-			}
-		}
-	} else if s.db != nil {
-		if err := s.repo.UpdateEntryColumn(ctx, k.ID, "content_type_uncertain", k.ContentTypeUncertain); err != nil {
-			return err
-		}
-	}
-	k.ProcessingMode = types.ArticleProcessingMode(k)
 	k.StructuredSummary = result.Summary
 	k.Description = result.Summary.RenderText()
 	k.SummaryStatus = types.SummaryStatusCompleted
@@ -415,39 +377,18 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 			return err
 		}
 	}
-	if k.ProcessingMode == "summary_only" {
-		if err := s.removeSummaryOnlyBody(ctx, library, k, body, images); err != nil {
+	if writeFiles && s.vault == nil {
+		if err := s.storeProcessedBody(ctx, library, k, body, images); err != nil {
 			return err
-		}
-		s.skipStage(ctx, k.ID, types.StageChunking, "summary_only")
-		finalizeIndexedEntryState(k, 0, time.Now())
-		if err := s.repo.UpdateEntry(ctx, k); err != nil {
-			return err
-		}
-	} else {
-		if writeFiles && s.vault == nil {
-			if err := s.storeProcessedBody(ctx, library, k, body, images); err != nil {
-				return err
-			}
-		}
-		chunks, options := splitArticleBody(body, eff.ChunkingConfig)
-		s.processChunks(ctx, library, k, chunks, options)
-		if k.ParseStatus == types.ParseStatusFailed {
-			return errors.New(k.ErrorMessage)
 		}
 	}
-	if k.ProcessingMode == types.ProcessingModeSummaryOnly && library.IndexingStrategy.VectorEnabled {
-		s.beginStage(ctx, k.ID, types.StageEmbedding, types.JSONMap{"article_vectors": 1})
+	chunks, options := splitArticleBody(body, eff.ChunkingConfig)
+	s.processChunks(ctx, library, k, chunks, options)
+	if k.ParseStatus == types.ParseStatusFailed {
+		return errors.New(k.ErrorMessage)
 	}
 	if err := indexArticleEmbedding(ctx, s.db, s.modelService, library, k); err != nil {
 		return err
-	}
-	if k.ProcessingMode == types.ProcessingModeSummaryOnly {
-		if library.IndexingStrategy.VectorEnabled {
-			s.endStage(ctx, k.ID, types.StageEmbedding, types.JSONMap{"article_vectors": 1})
-		} else {
-			s.skipStage(ctx, k.ID, types.StageEmbedding, "vector_disabled")
-		}
 	}
 	if writeFiles && s.vault != nil {
 		read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
@@ -464,17 +405,14 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if err := indexArticleImages(ctx, s.db, s.modelService, library, s.vault, k); err != nil {
 		return err
 	}
-	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType, "processing_mode": k.ProcessingMode}, "", "")
+	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType}, "", "")
 	return nil
 }
 
 // removeParsedBodyCopies drops internal Markdown originals only after the
-// approved article is available in the vault. Uploaded source bytes and image
-// providers remain for downloads, parsing original formats and indexed images.
+// approved article is available in the vault. Image
+// providers remain available for indexed images.
 func (s *entryService) removeParsedBodyCopies(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage) error {
-	if isIngestArticle(k) && k.Incomplete && k.ProcessingMode == types.ProcessingModeSummaryOnly {
-		return nil
-	}
 	metadata := map[string]json.RawMessage{}
 	if len(k.Metadata) > 0 {
 		if err := json.Unmarshal(k.Metadata, &metadata); err != nil {
@@ -604,9 +542,9 @@ func (s *entryService) storeProcessedBody(ctx context.Context, library *types.Li
 	return nil
 }
 
-func (s *entryService) removeSummaryOnlyBody(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage) error {
+func (s *entryService) removeArticleMaterials(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage) error {
 	// Delete body vectors without resolving an embedding model. New
-	// summary-only articles must succeed even when no embedding model is configured.
+	// deletion must work even when no embedding model is configured.
 	if s.db != nil {
 		if err := s.db.WithContext(ctx).Table("embeddings").Where("library_id=? AND entry_id=?", k.LibraryID, k.ID).Delete(nil).Error; err != nil {
 			return err
@@ -619,12 +557,6 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, library *types
 		if err := s.spaceRepo.AdjustStorageUsed(ctx, k.SpaceID, -k.StorageSize); err != nil {
 			return err
 		}
-	}
-	// An incomplete summary article still needs its supplied original material
-	// for the completion processing call. It remains outside the public body.
-	if isIngestArticle(k) && k.Incomplete {
-		k.StorageSize, k.EmbeddingModelID = 0, ""
-		return s.repo.UpdateEntry(ctx, k)
 	}
 
 	metadata := map[string]json.RawMessage{}
@@ -639,13 +571,7 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, library *types
 	_ = json.Unmarshal(metadata["processed_images"], &oldImages)
 	refs := append([]string{k.FilePath, path}, oldImages...)
 	refs = append(refs, articleImagesInOrder(body, images)...)
-	if isIngestArticle(k) {
-		for _, attachment := range k.IngestAttachmentRecords() {
-			if strings.HasPrefix(attachment.Path, "local://") || strings.HasPrefix(attachment.Path, "resource://") {
-				refs = append(refs, attachment.Path)
-			}
-		}
-	}
+
 	if intake, _ := k.IntakeMetadata(); intake != nil {
 		refs = append(refs, intake.OriginalPath)
 		refs = append(refs, intake.Images...)
@@ -667,7 +593,7 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, library *types
 		seen[ref] = true
 		if releaser.deletable(ctx, ref) {
 			if err := s.resolveFileServiceForPath(ctx, library, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("delete summary-only source %s: %w", ref, err)
+				return fmt.Errorf("delete article material %s: %w", ref, err)
 			}
 		}
 	}
@@ -685,14 +611,7 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, library *types
 	k.FilePath = ""
 	k.StorageSize = 0
 	k.EmbeddingModelID = ""
-	if isIngestArticle(k) {
-		if err := k.SetIngestAttachments(nil); err != nil {
-			return err
-		}
-		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Update("ingest_attachments", k.IngestAttachments).Error; err != nil {
-			return err
-		}
-	}
+
 	return s.repo.UpdateEntry(ctx, k)
 }
 

@@ -1,7 +1,7 @@
 export type Acquisition = 'verbatim' | 'extracted' | 'model_written'
 
 export interface MissingMaterial {
-  type: 'content' | 'file' | 'image'
+  type: 'image'
   source_url: string
   reason: string
   api_key_id?: number

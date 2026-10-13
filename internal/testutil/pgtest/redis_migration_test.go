@@ -17,7 +17,7 @@ func TestRedisPendingOperationsMigrationPreservesBusinessRows(t *testing.T) {
 	m, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
 	require.NoError(t, err)
 	t.Cleanup(func() { a, b := m.Close(); require.NoError(t, a); require.NoError(t, b) })
-	require.NoError(t, m.Migrate(7))
+	require.NoError(t, m.Migrate(8))
 	require.NoError(t, db.Exec(`
  INSERT INTO spaces(id,name,business) VALUES(1,'Migration owner','personal');
  INSERT INTO libraries(id,space_id,name,embedding_model_id,summary_model_id) VALUES('library',1,'Preserved library','','');
@@ -50,7 +50,7 @@ func TestRedisPendingOperationsMigrationPreservesBusinessRows(t *testing.T) {
 			require.JSONEq(t, raw, after[table], table)
 		}
 	}
-	require.NoError(t, m.Migrate(7))
+	require.NoError(t, m.Migrate(8))
 	require.NoError(t, m.Migrate(9))
 }
 

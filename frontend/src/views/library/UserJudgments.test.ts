@@ -90,99 +90,21 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes(messages[locale].articleJudgments.starFailed))
     assert.match(html, /aria-pressed="false"/)
   })
-  test(`${locale}: content type corrections cover both same-mode changes and summary to full`, async () => {
-    for (const [mode, before, after] of [['full', 'event', 'research'], ['summary_only', 'tutorial', 'reference'], ['summary_only', 'tutorial', 'event']] as const) {
-      const calls: unknown[] = [], value = { ...article, processing_mode: mode, content_type: before }
-      const view = judgments({ correctEntryContentType: async (...input: unknown[]) => { calls.push(input); return { success: true, data: { ...value, content_type: after, processing_mode: after === 'event' || after === 'research' ? 'full' : 'summary_only' } } } })
-      const html = await render(view, { entry: value, onUpdated: (update: any) => Object.assign(value, update) }, locale, async state => { state.typeDraft.value = after; await state.saveType(); await nextTick() })
-      assert.deepEqual(calls, [['article-a', after, false]])
-      assert.equal(value.content_type, after)
-      assert.ok(html.includes(messages[locale].articleJudgments.saveContentType))
-    }
-  })
-  test(`${locale}: article type guidance explains external completion using the same URL`, async () => {
+
+  test(`${locale}: article type guidance preserves full text and images`, async () => {
     const html = await render(judgments({}), { entry: { ...article } }, locale)
     const expected = locale === 'zh-CN'
-      ? '用户修正的类型将在重新处理时保留。改为全文保存后文章会标记为待补全，需要外部工具用同一链接送入正文。'
-      : 'Your corrected type is preserved when reprocessing. Switching to full text marks the article as incomplete. An external tool must submit the body text using the same URL.'
+      ? '用户修正的类型将在重新处理时保留。修改内容类型不会删除正文或图片。'
+      : 'Your corrected type is preserved when reprocessing. Changing the type preserves the full text and images.'
     assert.equal(messages[locale].articleJudgments.contentTypeHint, expected)
     assert.ok(html.includes(expected))
     assert.doesNotMatch(html, /重新抓取|fetches the original URL again/)
   })
-  test(`${locale}: content type response selects external-completion, saved or processing notifications`, async () => {
-    const scenarios = [
-      { previousMode: 'summary_only', incomplete: true, status: 'completed', message: messages[locale].articleJudgments.contentTypeIncomplete },
-      { previousMode: 'summary_only', incomplete: false, status: 'completed', message: messages[locale].articleJudgments.contentTypeSaved },
-      { previousMode: 'full', incomplete: true, status: 'completed', message: messages[locale].articleJudgments.contentTypeSaved },
-      { previousMode: 'full', incomplete: false, status: 'pending', message: messages[locale].articleJudgments.contentTypeQueued },
-    ]
-    for (const scenario of scenarios) {
-      const calls: unknown[] = [], shown: string[] = []
-      const value = { ...article, content_type: 'tutorial', processing_mode: scenario.previousMode, incomplete: scenario.previousMode === 'full' }
-      const response = { ...value, content_type: 'event', processing_mode: 'full', parse_status: scenario.status, incomplete: scenario.incomplete }
-      const api = evaluate(readFileSync(new URL('../../api/entry-judgments.ts', import.meta.url), 'utf8'), {
-        '@/utils/request': { put: async (...input: unknown[]) => { calls.push(input); return { success: true, data: response } } },
-      })
-      const view = judgments(api, undefined, { MessagePlugin: { success: (message: string) => shown.push(message) } })
-      await render(view, { entry: value, onUpdated: (update: any) => Object.assign(value, update) }, locale, async state => {
-        state.typeDraft.value = 'event'
-        await state.saveType()
-      })
-      assert.deepEqual(calls, [['/api/v1/entries/article-a/content-type', { content_type: 'event', confirm_remove_body: false }, { timeout: 300000 }]])
-      assert.equal(value.processing_mode, 'full')
-      assert.equal(value.incomplete, scenario.incomplete)
-      assert.deepEqual(shown, [scenario.message])
-      assert.doesNotMatch(shown[0], /抓取原文|Fetching the original article/)
-    }
-  })
-  test(`${locale}: full to summary requires a second confirmation and retains it after a failed save`, async () => {
-    const calls: unknown[] = [], value = { ...article }
-    const view = judgments({ correctEntryContentType: async (...input: unknown[]) => { calls.push(input); throw new Error('Original change failed') } })
-    const html = await render(view, { entry: value }, locale, async state => {
-      state.typeDraft.value = 'tutorial'
-      await state.saveType()
-      assert.equal(calls.length, 0)
-      assert.equal(state.confirmRemoveBody.value, true)
-      await state.saveType(true)
-      assert.equal(state.confirmRemoveBody.value, true)
-      assert.equal(value.content_type, 'event')
-    })
-    assert.deepEqual(calls, [['article-a', 'tutorial', true]])
-    assert.ok(html.includes(messages[locale].articleJudgments.removeBodyDescription))
-    assert.ok(html.includes('Original change failed'))
-  })
-  test(`${locale}: confirmed full to summary updates the article and closes the dialog`, async () => {
-    const value = { ...article }, calls: unknown[] = []
-    const view = judgments({ correctEntryContentType: async (...input: unknown[]) => { calls.push(input); return { success: true, data: { ...value, content_type: 'tutorial', processing_mode: 'summary_only' } } } })
-    await render(view, { entry: value, onUpdated: (update: any) => Object.assign(value, update) }, locale, async state => {
-      state.typeDraft.value = 'tutorial'
-      await state.saveType()
-      assert.equal(calls.length, 0)
-      await state.saveType(true)
-      assert.equal(state.confirmRemoveBody.value, false)
-    })
-    assert.equal(value.processing_mode, 'summary_only')
-    assert.deepEqual(calls, [['article-a', 'tutorial', true]])
-  })
-  test(`${locale}: source unverified content type corrections keep full text without a removal dialog`, async () => {
-    const value = { ...article, source_unverified: true }, calls: unknown[] = []
-    const view = judgments({ correctEntryContentType: async (...input: unknown[]) => { calls.push(input); return { success: true, data: { ...value, content_type: 'tutorial', processing_mode: 'full' } } } })
-    await render(view, { entry: value, onUpdated: (update: any) => Object.assign(value, update) }, locale, async state => {
-      state.typeDraft.value = 'tutorial'
-      await state.saveType()
-      assert.equal(state.confirmRemoveBody.value, false)
-    })
-    assert.deepEqual(calls, [['article-a', 'tutorial', false]])
-    assert.equal(value.processing_mode, 'full')
-  })
-  test(`${locale}: summary to full fetch failure keeps the original article and visible reason`, async () => {
-    const value = { ...article, content_type: 'tutorial', processing_mode: 'summary_only' }
-    const view = judgments({ correctEntryContentType: async () => { throw new Error('Cannot fetch original article: HTTP 404') } })
-    const html = await render(view, { entry: value }, locale, async state => { state.typeDraft.value = 'event'; await state.saveType() })
-    assert.equal(value.content_type, 'tutorial')
-    assert.equal(value.processing_mode, 'summary_only')
-    assert.ok(html.includes('Cannot fetch original article: HTTP 404'))
-  })
+
+
+
+
+
   test(`${locale}: topic corrections submit selected IDs and reload the article after a success-only response`, async () => {
     const calls: unknown[] = [], updates: any[] = []
     const view = judgments({ correctEntryTopics: async (...input: unknown[]) => { calls.push(input); return { success: true } } }, { ...article, topics: [topic] })
@@ -276,29 +198,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       `${messages[locale].operationLogs.actor} API Key #4`,
     ])
   })
-  test(`${locale}: external Agent writes have localized operation labels and URL filters`, async () => {
-    const route = { query: { operation_type: 'ingest' } }, calls: unknown[] = []
-    const view = component('./OperationLogs.vue', {
-      'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {} }) },
-      '@/api/operation-logs': { OPERATION_TYPES, listOperationLogs: async (input: unknown) => { calls.push(input); return { success: true, data: {
-        items: ['ingest', 'write_report', 'processing_review_confirm', 'processing_review_correct', 'processing_review_ignore', 'review_supplement_url', 'review_admit_unverified', 'review_convert_to_mine'].map((operation_type, index) => ({ id: String(index), actor: 'api_key:2', actor_name: 'Grok Bot', operation_type, object_id: 'article-a', before: null, after: { source_name: 'grok-bot' }, created_at: '2026-10-11T04:00:00Z' })), total: 8,
-      } } } },
-    })
-    const html = await render(view, {}, locale, async state => {
-      state.readURL()
-      assert.ok(state.options.value.some((option: any) => option.value === 'ingest' && option.label === messages[locale].operationLogs.types.ingest))
-      assert.ok(state.options.value.some((option: any) => option.value === 'write_report' && option.label === messages[locale].operationLogs.types.write_report))
-      await state.load()
-    })
-    assert.deepEqual(calls, [{ operation_type: 'ingest', page: 1, page_size: 30 }])
-    assert.ok(html.includes(messages[locale].operationLogs.types.ingest))
-    assert.ok(html.includes(messages[locale].operationLogs.types.write_report))
-    for (const type of ['processing_review_confirm', 'processing_review_correct', 'processing_review_ignore', 'review_supplement_url', 'review_admit_unverified', 'review_convert_to_mine'] as const) {
-      assert.ok(html.includes(messages[locale].operationLogs.types[type]))
-      assert.ok(OPERATION_TYPES.includes(type))
-    }
-    assert.doesNotMatch(html, /operationLogs\.types\./)
-  })
+
   test(`${locale}: a duplicate topic name keeps the editor and entered text`, async () => {
     const view = component('./TopicManagement.vue', {
       '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
@@ -337,7 +237,7 @@ test('topic, judgment and operation log API wrappers use the supported routes an
   await topics.getTopicBackfill('t/a')
   await topics.retryTopicBackfill('t/a')
   await judgments.setEntryStar('k/a', false)
-  await judgments.correctEntryContentType('k/a', 'tutorial', true)
+  await judgments.correctEntryContentType('k/a', 'tutorial')
   await judgments.correctEntryTopics('k/a', [])
   await logs.listOperationLogs({ operation_type: 'unstar', page: 2, page_size: 30 })
   assert.deepEqual(calls, [
@@ -348,7 +248,7 @@ test('topic, judgment and operation log API wrappers use the supported routes an
     { method: 'get', url: '/api/v1/topics/t%2Fa/backfill' },
     { method: 'post', url: '/api/v1/topics/t%2Fa/backfill/retry', body: {} },
     { method: 'put', url: '/api/v1/entries/k%2Fa/star', body: { starred: false } },
-    { method: 'put', url: '/api/v1/entries/k%2Fa/content-type', body: { content_type: 'tutorial', confirm_remove_body: true } },
+    { method: 'put', url: '/api/v1/entries/k%2Fa/content-type', body: { content_type: 'tutorial' } },
     { method: 'put', url: '/api/v1/entries/k%2Fa/topics', body: { topic_ids: [] } },
     { method: 'get', url: '/api/v1/operation-logs?operation_type=unstar&page=2&page_size=30' },
   ])

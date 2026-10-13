@@ -28,37 +28,8 @@
               <span class="library-info-card-label">{{ t('library.accessInfo.lastUpdated') }}</span>
               <span class="library-info-card-value">{{ lastUpdatedLabel }}</span>
             </div>
-            <div v-if="supportedFileTypesSorted.length" class="library-info-card-row">
-              <span class="library-info-card-label">{{ t('library.infoCard.supportedFileTypes') }}</span>
-              <span class="library-info-card-value">
-                <span
-                  v-for="ft in supportedFileTypesSorted"
-                  :key="ft"
-                  class="library-info-card-ext"
-                >.{{ ft }}</span>
-              </span>
-            </div>
           </section>
 
-          <section v-if="capabilities.length" class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">
-              {{ t('library.infoCard.capabilities') }}
-            </h4>
-            <div class="library-info-card-row">
-              <span class="library-info-card-label">{{ t('library.infoCard.enabled') }}</span>
-              <span class="library-info-card-value">
-                <t-tag
-                  v-for="cap in capabilities"
-                  :key="cap.key"
-                  size="small"
-                  variant="light"
-                  :theme="cap.theme"
-                >
-                  {{ cap.label }}
-                </t-tag>
-              </span>
-            </div>
-          </section>
           <section v-if="chunkingRows.length" class="setting-drawer__section">
             <h4 class="setting-drawer__section-title">
               {{ t('library.infoCard.chunking') }}
@@ -109,10 +80,6 @@ const props = defineProps<{
   // backend's exhaustive shape; the popover reads optional fields and
   // falls back gracefully when they are missing.
   libraryInfo: any
-  // Optional pre-computed list of supported file extensions (e.g.
-  // ["pdf", "docx", …]). The popover does not fetch parser engines on
-  // its own — call sites that already know which formats are reachable
-  supportedFileTypes?: string[]
 }>()
 
 const { t, locale } = useI18n()
@@ -133,20 +100,6 @@ const hasDistinctUpdate = computed<boolean>(() => {
 const lastUpdatedLabel = computed<string>(() => {
   const raw = props.libraryInfo?.updated_at
   return raw ? formatStringDate(new Date(raw)) : ''
-})
-
-const supportedFileTypesSorted = computed<string[]>(() => {
-  if (!props.supportedFileTypes?.length) return []
-  return [...props.supportedFileTypes].sort()
-})
-
-type CapabilityTheme = 'primary' | 'success' | 'warning' | 'default'
-const capabilities = computed<Array<{ key: string; label: string; theme: CapabilityTheme }>>(() => {
-  const library: any = props.libraryInfo
-  if (!library) return []
-  const items: Array<{ key: string; label: string; theme: CapabilityTheme }> = []
-  {}
-  return items
 })
 
 const chunkingStrategyLabel = computed<string>(() => {

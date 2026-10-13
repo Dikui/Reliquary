@@ -75,7 +75,7 @@ function articleComponent() {
 }
 const article: SearchEntry = {
   entry_id: 'a', title: 'Launch article', source: 'article', published_at: '2026-10-11T08:00:00Z',
-  content_type: 'research', processing_mode: 'summary_only', summary: { overview: 'Launch overview', points: ['Useful point'], key_terms: ['Launch term'] },
+  content_type: 'research', summary: { overview: 'Launch overview', points: ['Useful point'], key_terms: ['Launch term'] },
   entities: [{ id: 'e1', canonical_name: 'Launch Labs', entity_type: 'company', aliases: ['LL'] }], topics: [{ id: 't1', name: 'Releases' }],
   snippets: [0, 1, 2, 3].map(index => ({ chunk_id: `c${index}`, chunk_index: index, content: `Launch snippet ${index} <script>`, score: 0.9, match_type: 'keyword' })),
   score: 0.9, similar_reports: [], vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
@@ -192,7 +192,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       state.query.value = 'red bicycle'
       await state.runSearch()
       assert.equal(state.results.value[0].snippets[0].image_path, imagePath)
-    }, async () => ({ success: true, data: { results: [{ ...article, entry_id: 'image-article', processing_mode: 'full', snippets: [{ chunk_id: 'image', chunk_index: 0, content: '', score: 0.99, match_type: 'image', image_path: imagePath }] }] } }), locale)
+    }, async () => ({ success: true, data: { results: [{ ...article, entry_id: 'image-article', snippets: [{ chunk_id: 'image', chunk_index: 0, content: '', score: 0.99, match_type: 'image', image_path: imagePath }] }] } }), locale)
     assert.ok(result.html.includes(`data-image-path="${imagePath}"`))
     assert.ok(result.html.includes(messages[locale].knowledgeSearch.imageMatch))
   })

@@ -166,7 +166,11 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 			require.NoError(t, os.WriteFile(originalPath, baseline, 0600))
 			invoke := func(arguments ...string) error {
 				var output bytes.Buffer
-				return runMaintenance(arguments, bytes.NewReader(nil), &output)
+				err := runMaintenance(arguments, bytes.NewReader(nil), &output)
+				if err != nil {
+					t.Log(output.String())
+				}
+				return err
 			}
 			require.NoError(t, invoke("verify", "--manifest", originalPath, "--vectors"))
 			oldLogPath := filepath.Join(root, ".reliquary/data/sync_logs.json")

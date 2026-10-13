@@ -11,8 +11,9 @@ import (
 	"time"
 	"unicode"
 
-	"gopkg.in/yaml.v3"
 	"reliquary/internal/types"
+
+	"gopkg.in/yaml.v3"
 )
 
 // VaultArticleHeader is the portable article metadata used by vault rebuild.
@@ -32,7 +33,6 @@ type VaultArticleHeader struct {
 	Starred          bool                `yaml:"starred" json:"starred"`
 	CollectReason    string              `yaml:"collect_reason" json:"collect_reason"`
 	SourceUnverified bool                `yaml:"source_unverified,omitempty" json:"source_unverified"`
-	ProcessingMode   string              `yaml:"processing_mode,omitempty" json:"processing_mode,omitempty"`
 	Acquisition      string              `yaml:"acquisition,omitempty" json:"acquisition,omitempty"`
 }
 
@@ -81,9 +81,7 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	if h.SourceUnverified {
 		b.WriteString("source_unverified: true\n")
 	}
-	if h.ProcessingMode != "" {
-		writeVaultScalar(&b, "processing_mode", h.ProcessingMode)
-	}
+
 	if h.Acquisition != "" {
 		writeVaultScalar(&b, "acquisition", h.Acquisition)
 	}
@@ -195,7 +193,7 @@ func ParseVaultArticle(data []byte) (VaultArticleHeader, []byte, error) {
 	if _, err = time.Parse(time.RFC3339Nano, h.CollectedAt); err != nil {
 		return h, nil, fmt.Errorf("parse collected_at: %w", err)
 	}
-	if h.ContentType != "" && types.NormalizeContentType(h.ContentType) == "" {
+	if h.ContentType != "" && !types.IsContentType(h.ContentType) {
 		return h, nil, fmt.Errorf("unsupported article content_type %q", h.ContentType)
 	}
 	return h, body, nil

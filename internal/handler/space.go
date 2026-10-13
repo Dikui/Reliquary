@@ -319,117 +319,20 @@ func validateAPIKeyRequest(ctx context.Context, libraryService interfaces.Librar
 
 // GetSpaceKV godoc
 func (h *SpaceHandler) GetSpaceKV(c *gin.Context) {
-	ctx := c.Request.Context()
-	key := secutils.SanitizeForLog(c.Param("key"))
-
-	switch key {
-	case "parser-engine-config":
-		if !dto.CanViewIntegrationSecrets(ctx) {
-			c.Error(errors.NewForbiddenError("integration configuration requires an authenticated user"))
-			return
-		}
-	}
-
-	switch key {
-	case "parser-engine-config":
-		h.GetSpaceParserEngineConfig(c)
-		return
-	case "retrieval-config":
+	if c.Param("key") == "retrieval-config" {
 		h.GetSpaceRetrievalConfig(c)
 		return
-	default:
-		logger.Info(ctx, "KV key not supported", "key", key)
-		c.Error(errors.NewBadRequestError("unsupported key"))
-		return
 	}
+	c.Error(errors.NewNotFoundError("unsupported key"))
 }
-
-// UpdateSpaceKV godoc
 func (h *SpaceHandler) UpdateSpaceKV(c *gin.Context) {
-	ctx := c.Request.Context()
-	key := secutils.SanitizeForLog(c.Param("key"))
-
-	switch key {
-	case "parser-engine-config":
-		if !dto.CanViewIntegrationSecrets(ctx) {
-			c.Error(errors.NewForbiddenError("integration configuration requires an authenticated user"))
-			return
-		}
-	}
-
-	switch key {
-	case "parser-engine-config":
-		h.updateSpaceParserEngineConfigInternal(c)
-		return
-	case "retrieval-config":
+	if c.Param("key") == "retrieval-config" {
 		h.updateSpaceRetrievalConfigInternal(c)
 		return
-	default:
-		logger.Info(ctx, "KV key not supported", "key", key)
-		c.Error(errors.NewBadRequestError("unsupported key"))
-		return
 	}
+	c.Error(errors.NewNotFoundError("unsupported key"))
 }
 
-// GetSpaceParserEngineConfig returns the space's parser engine config (MinerU endpoint, API key, etc.).
-func (h *SpaceHandler) GetSpaceParserEngineConfig(c *gin.Context) {
-	ctx := c.Request.Context()
-	space, _ := types.SpaceInfoFromContext(ctx)
-	if space == nil {
-		logger.Error(ctx, "Workspace is empty")
-		c.Error(errors.NewBadRequestError("Workspace is empty"))
-		return
-	}
-	data := types.ParserEngineConfigForResponse(space.ParserEngineConfig, true)
-	if data == nil {
-		data = &types.ParserEngineConfig{}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    data,
-	})
-}
-
-// updateSpaceParserEngineConfigInternal updates the space's parser engine config.
-func (h *SpaceHandler) updateSpaceParserEngineConfigInternal(c *gin.Context) {
-	ctx := c.Request.Context()
-	var cfg types.ParserEngineConfig
-	if err := c.ShouldBindJSON(&cfg); err != nil {
-		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
-		return
-	}
-	space, _ := types.SpaceInfoFromContext(ctx)
-	if space == nil {
-		logger.Error(ctx, "Workspace is empty")
-		c.Error(errors.NewBadRequestError("Workspace is empty"))
-		return
-	}
-	merged := types.MergeParserEngineConfigForUpdate(&cfg, space.ParserEngineConfig)
-	if err := validateParserEngineOutboundURLs(merged); err != nil {
-		c.Error(errors.NewValidationError(err.Error()))
-		return
-	}
-	space.ParserEngineConfig = merged
-	updatedSpace, err := h.service.UpdateSpace(ctx, space)
-	if err != nil {
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-		} else {
-			logger.ErrorWithFields(ctx, err, nil)
-			c.Error(errors.NewInternalServerError("Failed to update workspace parser engine config").WithDetails(err.Error()))
-		}
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    types.ParserEngineConfigForResponse(updatedSpace.ParserEngineConfig, true),
-		"message": "解析引擎配置已更新",
-	})
-}
-
-// GetPromptTemplates godoc
-// GetSpaceRetrievalConfig returns the space's global retrieval configuration.
 func (h *SpaceHandler) GetSpaceRetrievalConfig(c *gin.Context) {
 	ctx := c.Request.Context()
 	space, _ := types.SpaceInfoFromContext(ctx)
@@ -516,21 +419,4 @@ func (h *SpaceHandler) updateSpaceRetrievalConfigInternal(c *gin.Context) {
 		"data":    updatedSpace.RetrievalConfig,
 		"message": "Retrieval configuration updated successfully",
 	})
-}
-
-func validateParserEngineOutboundURLs(cfg *types.ParserEngineConfig) error {
-	if cfg == nil {
-		return nil
-	}
-	if endpoint := strings.TrimSpace(cfg.MinerUEndpoint); endpoint != "" {
-		if err := secutils.ValidateURLForSSRF(endpoint); err != nil {
-			return fmt.Errorf("mineru_endpoint failed SSRF validation: %v", err)
-		}
-	}
-	if vlmURL := strings.TrimSpace(cfg.MinerUVLMServerURL); vlmURL != "" {
-		if err := secutils.ValidateURLForSSRF(vlmURL); err != nil {
-			return fmt.Errorf("mineru_vlm_server_url failed SSRF validation: %v", err)
-		}
-	}
-	return nil
 }

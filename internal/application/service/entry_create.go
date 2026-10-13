@@ -124,6 +124,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 		return errors.New("article body is empty")
 	}
 	clean = content
+	s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "markdown", "body_chars": len([]rune(content))})
 	if err := s.recordMissingIngestImages(ctx, entry, clean); err != nil {
 		return err
 	}
@@ -131,7 +132,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	// Store embedded image bytes before chunking.
 	// Runs before chunking so chunks contain stable provider:// URLs.
 	var resolvedImages []docparser.StoredImage
-	if s.imageResolver != nil && !(s.vault != nil && entry.VaultPath != "" && entry.ProcessingMode == types.ProcessingModeFull) {
+	if s.imageResolver != nil && !(s.vault != nil && entry.VaultPath != "") {
 		fileSvc := s.resolveFileService(ctx, library)
 		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, entry.SpaceID)
 		if err := s.recordIntakeImages(ctx, entry, fromDataURI); err != nil {
@@ -159,7 +160,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			return errors.New("article processing failed")
 		}
 	}
-	if err := extractIntakeOriginalLink(entry, clean, nil, entry.FileType, nil); err != nil {
+	if err := extractIntakeOriginalLink(entry, clean, nil); err != nil {
 		entry.ParseStatus = types.ParseStatusFailed
 		return err
 	}
@@ -198,6 +199,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	// chunking preview endpoint.
 	clean = chunker.NormalizeLineEndings(clean)
 
+	s.endStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"images": len(resolvedImages), "body_chars": len([]rune(clean))})
 	processOverrides, _ := entry.ProcessOverrides()
 	eff := ResolveProcessConfig(library, processOverrides)
 

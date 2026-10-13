@@ -9,12 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 type entrySearchHandlerService struct {
@@ -34,7 +35,7 @@ func (s *entrySearchHandlerService) Search(_ context.Context, request types.Entr
 		return nil, apperrors.NewBadRequestError("query is required")
 	}
 	return &types.EntrySearchResponse{Results: []*types.EntrySearchResult{{EntryID: "article", Title: "Article",
-		Source: "article", ProcessingMode: "summary_only", Summary: &types.EntrySummary{Overview: "Summary"},
+		Source: "article", Summary: &types.EntrySummary{Overview: "Summary"},
 		Snippets: []types.EntrySearchSnippet{{Content: "Summary"}}, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{},
 		SimilarReports: []*types.EntrySearchResult{{EntryID: "similar"}}, VaultPath: "articles/article.md", OriginalURL: "https://example.org/article"}}, ExcludedMissingPublishedAt: 2}, nil
 }
@@ -83,7 +84,6 @@ func TestEntrySearchHTTPSharedRequestAndArticleResponse(t *testing.T) {
 	require.Len(t, envelope.Data.Results, 1)
 	result := envelope.Data.Results[0]
 	require.Equal(t, "article", result.EntryID)
-	require.Equal(t, "summary_only", result.ProcessingMode)
 	require.Equal(t, "Summary", result.Summary.Overview)
 	require.Len(t, result.SimilarReports, 1)
 	require.Equal(t, "similar", result.SimilarReports[0].EntryID)

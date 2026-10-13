@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
+
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"reliquary/internal/models/chat"
 
@@ -75,8 +76,7 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	space := &types.Space{ID: types.SingleSpaceID, Name: "Personal space"}
 	require.NoError(t, db.Create(space).Error)
 	library := &types.Library{ID: "library", SpaceID: space.ID, Name: "Articles", Type: types.LibraryTypeDocument,
-		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024,
-			ParserEngineRules: []types.ParserEngineRule{{FileTypes: []string{"md", "txt"}, Engine: "simple"}}}}
+		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024}}
 	require.NoError(t, db.Create(library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, space.ID)
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)

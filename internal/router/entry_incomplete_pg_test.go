@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/service"
 	"reliquary/internal/handler"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t *testing.T) {
@@ -35,8 +36,7 @@ func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t 
 		collectedAt := time.Now().UTC().Add(time.Duration(-index-1) * time.Hour)
 		article := &types.Entry{ID: id, SpaceID: types.SingleSpaceID, LibraryID: base.Data.ID,
 			Type: "manual", Title: "Incompletefixture source", SourceKind: "article", Source: "https://example.org/" + id,
-			ContentType: "event", ProcessingMode: types.ProcessingModeFull,
-			ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: collectedAt,
+			ContentType: "event", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: collectedAt,
 			StructuredSummary: &types.EntrySummary{Overview: "Incompletefixture summary"}}
 		require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved",
 			SourceInfo: types.SourceInfo{OriginalURL: article.Source, PublishedAt: "2026-10-01"}}))

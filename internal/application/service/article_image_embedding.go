@@ -12,14 +12,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pgvector/pgvector-go"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/pgvector/pgvector-go"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // articleImagePaths uses the saved body rather than parser output. Only images
@@ -27,7 +28,7 @@ import (
 // Reports keep their separate indexing path.
 func articleImagePaths(article *types.Entry) []string {
 	paths := []string{}
-	if !isIngestArticle(article) || article.ProcessingMode != types.ProcessingModeFull || article.VaultPath == "" {
+	if !isIngestArticle(article) || article.VaultPath == "" {
 		return paths
 	}
 	add := func(reference string) {

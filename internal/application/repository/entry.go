@@ -44,8 +44,8 @@ func escapeLikeKeyword(keyword string) string {
 // the column here means Save can never touch it.
 // User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
-var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified", "ContentTypeUncertain", "ProcessingReviewStatus", "ProcessingReviewContentType", "ProcessingReviewReason",
-	"Acquisition", "Incomplete", "ExternalCompletionAttempted", "MissingMaterials", "IngestAttachments", "ContentTypeHint", "RelatedArticleID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
+var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified",
+	"Acquisition", "Incomplete", "ExternalCompletionAttempted", "MissingMaterials", "ContentTypeHint", "RelatedArticleID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
 
 // entryRepository implements library and entry repository interface
 type entryRepository struct {
@@ -114,9 +114,7 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	if filter.Starred != nil {
 		query = query.Where("source_kind IN ('article','mine') AND starred=?", *filter.Starred)
 	}
-	if filter.ContentType == "unclassified" {
-		query = query.Where("(content_type IS NULL OR content_type = '')")
-	} else if filter.ContentType != "" {
+	if filter.ContentType != "" {
 		query = query.Where("content_type = ?", filter.ContentType)
 	}
 	if filter.Keyword != "" {

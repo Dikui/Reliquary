@@ -12,8 +12,9 @@ import (
 	"sort"
 	"strings"
 
-	"gorm.io/gorm"
 	"reliquary/internal/vaultpath"
+
+	"gorm.io/gorm"
 )
 
 // Load refuses any corrupt replica before opening a database transaction.
@@ -115,7 +116,7 @@ func Load(root string) (*Snapshot, error) {
 		}
 		for _, row := range namedRows(rows, false) {
 			for column := range row {
-				if _, ok := rule.Columns()[column]; !ok {
+				if _, ok := rule.Columns()[column]; !ok && !legacyMarkdownColumn(table, column) {
 					return nil, fmt.Errorf("unclassified replica column %s.%s", table, column)
 				}
 				if secretColumn(table, column) {
@@ -148,6 +149,13 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	}
 	if err := retireSnapshotSources(root, snapshot); err != nil {
 		return nil, err
+	}
+	markdownOnly, err := markdownOnlySchema(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	if markdownOnly {
+		projectMarkdownSnapshot(snapshot)
 	}
 	missing := map[string]bool{}
 	for _, requirement := range snapshot.Required {

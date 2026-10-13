@@ -130,8 +130,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/ReviewActions.vue",
     "expressions": [
-      "`library.contentTypes.${CONTENT_TYPES.includes(value as ContentType) ? value : 'unclassified'}`",
-      "`library.contentTypes.${value}`",
       "`knowledgeReview.actions.${confirmation.value}`",
       "`knowledgeReview.confirmations.${confirmation.value}.description`",
       "`knowledgeReview.confirmations.${confirmation.value}.title`"
@@ -278,13 +276,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/library/settings/LibraryParserSettings.vue",
-    "expressions": [
-      "key"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
     "file": "views/settings/GeneralSettings.vue",
     "expressions": [
       "`font.mono.${key}`",
@@ -295,7 +286,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "views/settings/LibrarySettings.vue",
     "expressions": [
-      "tab === 'parser' ? 'settings.parserEngine' : `knowledgeEditor.sidebar.${tab}`"
+      "`knowledgeEditor.sidebar.${tab}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -304,13 +295,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "expressions": [
       "key",
       "modelUsageBindingI18nKey(binding)"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/settings/ParserEngineSettings.vue",
-    "expressions": [
-      "key"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

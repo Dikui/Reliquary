@@ -144,16 +144,6 @@ func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 		}
 		req.Config.ModelTiers = req.ModelTiers
 	}
-	if req.Config != nil {
-		probe := &types.Library{}
-		if req.Config.ChunkingConfig != nil {
-			probe.ChunkingConfig = *req.Config.ChunkingConfig
-		}
-		if err := validateLibraryPromptInstructions(probe); err != nil {
-			c.Error(err)
-			return
-		}
-	}
 
 	logger.Infof(ctx, "Updating library, ID: %s, name: %s",
 		secutils.SanitizeForLog(id), secutils.SanitizeForLog(req.Name))
@@ -176,11 +166,4 @@ func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 		"success": true,
 		"data":    buildLibraryResponse(library, nil),
 	})
-}
-
-func validateLibraryPromptInstructions(library *types.Library) error {
-	if err := types.ValidateLibraryPromptInstructions(library); err != nil {
-		return apperrors.NewBadRequestError(err.Error())
-	}
-	return nil
 }

@@ -67,7 +67,7 @@ for (const width of [1440, 720]) {
   })
 }
 
-test('parser and chunking settings share the scroller while actions stay outside it', () => {
+test('chunking settings share the scroller while actions stay outside it', () => {
   const elements: ElementNode[] = []
   const parents = new Map<ElementNode, ElementNode | undefined>()
   function visit(node: RootNode | TemplateChildNode, parent?: ElementNode) {
@@ -90,7 +90,7 @@ test('parser and chunking settings share the scroller while actions stay outside
   const children = panel.children.filter((node): node is ElementNode => node.type === NodeTypes.ELEMENT)
   assert.deepEqual(children, [content, footer])
   const sections = elements.filter(node => node.props.some(prop => prop.type === NodeTypes.ATTRIBUTE && prop.name === 'data-section'))
-  assert.equal(sections.length, 2)
+  assert.equal(sections.length, 1)
   for (const section of sections) assert.equal(parents.get(section), content)
   const actions = footer.children.filter((node): node is ElementNode => node.type === NodeTypes.ELEMENT)
   assert.deepEqual(actions.map(node => node.tag), ['t-button', 't-button'])

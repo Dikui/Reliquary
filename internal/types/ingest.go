@@ -18,7 +18,6 @@ type IngestRequest struct {
 	Content         string             `json:"content"`
 	Acquisition     string             `json:"acquisition"`
 	ContentTypeHint string             `json:"content_type_hint,omitempty"`
-	File            *IngestFile        `json:"file,omitempty"`
 	Missing         []IngestMissing    `json:"missing,omitempty"`
 	InputError      string             `json:"-"`
 	Title           string             `json:"title,omitempty"`
@@ -43,13 +42,6 @@ type IngestImage struct {
 	Text      string `json:"text,omitempty"`
 }
 
-type IngestFile struct {
-	AssetID   string `json:"asset_id,omitempty"`
-	Data      string `json:"data,omitempty"`
-	Name      string `json:"name,omitempty"`
-	SourceURL string `json:"source_url,omitempty"`
-}
-
 type IngestMissing struct {
 	Type        string    `json:"type"`
 	SourceURL   string    `json:"source_url"`
@@ -57,15 +49,6 @@ type IngestMissing struct {
 	APIKeyID    uint64    `json:"api_key_id,omitempty"`
 	APIKeyName  string    `json:"api_key_name,omitempty"`
 	SubmittedAt time.Time `json:"submitted_at,omitempty"`
-}
-
-type IngestAttachment struct {
-	AssetID   string `json:"asset_id,omitempty"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Path      string `json:"path"`
-	SourceURL string `json:"source_url,omitempty"`
-	Size      int64  `json:"size"`
 }
 
 type IngestThreadItem struct {

@@ -2,12 +2,13 @@ package config
 
 import (
 	"fmt"
-	"github.com/go-viper/mapstructure/v2"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/go-viper/mapstructure/v2"
 
 	"github.com/spf13/viper"
 )
@@ -45,12 +46,6 @@ type LibraryConfig struct {
 	SplitMarkers           []string      `yaml:"split_markers"    json:"split_markers"`
 	KeepSeparator          bool          `yaml:"keep_separator"   json:"keep_separator"`
 	DocumentProcessTimeout time.Duration `yaml:"document_process_timeout"  json:"document_process_timeout"`
-	// ParserCallTimeout caps a single parser call. Without this the
-	// gRPC call inherits the queue task context (whole DocumentProcessTimeout,
-	// default 2h+), so a hung parser would block a worker for hours and
-	// leave entry in "processing". Default 30 minutes is generous enough
-	// for OCR-heavy large PDFs while ensuring forward progress.
-	ParserCallTimeout time.Duration `yaml:"parser_call_timeout"   json:"parser_call_timeout"`
 }
 
 // DefaultDocumentProcessTimeout is the ceiling for a single document:process
@@ -207,12 +202,5 @@ func applyLibraryEnvOverrides(cfg *Config) {
 			cfg.Library.DocumentProcessTimeout = d
 		}
 	}
-	if cfg.Library.ParserCallTimeout <= 0 {
-		cfg.Library.ParserCallTimeout = 30 * time.Minute
-	}
-	if value := strings.TrimSpace(os.Getenv("PARSER_CALL_TIMEOUT")); value != "" {
-		if d, err := time.ParseDuration(value); err == nil && d > 0 {
-			cfg.Library.ParserCallTimeout = d
-		}
-	}
+
 }

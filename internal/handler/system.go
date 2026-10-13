@@ -15,7 +15,6 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/database"
 	apperrors "reliquary/internal/errors"
-	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
 	modellimiter "reliquary/internal/models/limiter"
 	"reliquary/internal/runtime"
@@ -147,43 +146,7 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 	})
 }
 
-// ListParserEngines returns available document parser engines.
 // Lists the four retained parser engines with their availability.
-func (h *SystemHandler) ListParserEngines(c *gin.Context) {
-	var overrides map[string]string
-	if v, exists := c.Get(types.SpaceInfoContextKey.String()); exists {
-		if space, ok := v.(*types.Space); ok && space != nil {
-			if space.ParserEngineConfig != nil {
-				overrides = space.ParserEngineConfig.ToOverridesMap()
-			}
-		}
-	}
-
-	engines := docparser.ListAllEngines(overrides)
-	c.JSON(200, gin.H{"code": 0, "msg": "success", "data": engines})
-}
-
-// CheckParserEngines runs availability check with the given config overrides (e.g. current form values).
-// Used to test engine availability without saving; body shape matches ParserEngineConfig.
-func (h *SystemHandler) CheckParserEngines(c *gin.Context) {
-	var body types.ParserEngineConfig
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"code": 1, "msg": "请求体格式错误"})
-		return
-	}
-	var existing *types.ParserEngineConfig
-	if v, exists := c.Get(types.SpaceInfoContextKey.String()); exists {
-		if t, ok := v.(*types.Space); ok && t != nil {
-			existing = t.ParserEngineConfig
-		}
-	}
-	merged := types.MergeParserEngineConfigForUpdate(&body, existing)
-	overrides := merged.ToOverridesMap()
-	engines := docparser.ListAllEngines(overrides)
-	c.JSON(200, gin.H{"code": 0, "msg": "success", "data": engines})
-}
-
-// getKeywordIndexEngine returns the application's PostgreSQL keyword engine.
 func (h *SystemHandler) getKeywordIndexEngine() string {
 	return string(types.PostgresRetrieverEngineType)
 }

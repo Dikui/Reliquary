@@ -47,7 +47,6 @@ services:
       dockerfile: docker/Dockerfile.app
       args:
         - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
-        - WITH_ANYDOC=${WITH_ANYDOC:-1}
         - VERSION_ARG=${RELIQUARY_VERSION:-0.8.0}
         - COMMIT_ID_ARG=${RELIQUARY_COMMIT:-}
     ports:

@@ -429,6 +429,9 @@
               <p v-else class="rq-failed-row-unknown">
                 {{ t('system.globalSettings.runtime.tasks.unknownTarget') }}
               </p>
+              <p v-if="task.cancellation_unavailable_reason" class="rq-failed-guide-desc">
+                {{ t('system.globalSettings.runtime.tasks.cancelUnavailable', { state: task.cancellation_unavailable_reason === 'completed' ? t('system.globalSettings.runtime.tasks.states.completed') : t('system.globalSettings.runtime.tasks.businessDeleting') }) }}
+              </p>
               <p v-if="task.last_error" class="rq-failed-row-error">
                 {{ task.last_error }}
               </p>
@@ -475,7 +478,7 @@
               <t-popconfirm
                 v-if="task.allowed_actions.includes('delete')"
                 theme="danger"
-                :content="t('system.globalSettings.runtime.tasks.deleteConfirm')"
+                :content="t(task.state === 'cancelled' ? 'system.globalSettings.runtime.tasks.deleteCancelledConfirm' : 'system.globalSettings.runtime.tasks.deleteConfirm')"
                 @confirm="runTaskAction(task, 'delete')"
               >
                 <t-button
@@ -932,17 +935,11 @@ async function purgeArchivedTasks() {
 async function load(showSpinner: boolean) {
   if (showSpinner) loading.value = true
   try {
-    const connection = await getQueueConnectionStatus()
+    const connection = await getQueueConnectionStatus().catch(() => undefined)
     queueConnection.value = connection
-    if (connection?.state === 'reconnecting') {
-      available.value = false
-      loadedOnce.value = true
-      error.value = ''
-      return
-    }
     loadChatGPTStatus()
     const resp = await getRuntimeQueues()
-    queueConnection.value = resp.queue_connection
+    queueConnection.value = resp.queue_connection ?? connection
     available.value = resp.available
     pools.value = resp.pools || []
     queues.value = resp.queues || []

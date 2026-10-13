@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,60 +19,6 @@ import (
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 )
-
-func (v *VaultService) copyIngestArticleAttachments(ctx context.Context, k *types.Entry, articlePath, body, original string, read func(context.Context, string) (io.ReadCloser, error)) (string, error) {
-	attachments := k.IngestAttachmentRecords()
-	for i := range attachments {
-		item := &attachments[i]
-		if item.Path == k.FilePath && original != "" {
-			ref, err := filepath.Rel(filepath.Dir(filepath.FromSlash(articlePath)), filepath.FromSlash(original))
-			if err != nil {
-				return "", err
-			}
-			body, _ = replaceVaultFileTarget(body, item.Path, filepath.ToSlash(ref))
-			item.Path = filepath.ToSlash(ref)
-			continue
-		}
-		if isArticleAttachmentReference(k.ID, articlePath, item.Path) {
-			continue
-		}
-		if read == nil || (!strings.HasPrefix(item.Path, "local://") && !strings.HasPrefix(item.Path, "resource://")) {
-			return "", errors.New("ingest attachment requires a local reader")
-		}
-		file, err := read(ctx, item.Path)
-		if err != nil {
-			return "", err
-		}
-		data, err := io.ReadAll(file)
-		file.Close()
-		if err != nil {
-			return "", err
-		}
-		article := *k
-		article.VaultPath = articlePath
-		ref, err := v.StoreArticleAttachment(&article, item.Name, data)
-		if err != nil {
-			return "", err
-		}
-		var replaced bool
-		body, replaced = replaceVaultFileTarget(body, item.Path, ref)
-		item.Path = ref
-		if !replaced {
-			body = AppendIngestAttachmentLinks(body, []string{"[" + strings.ReplaceAll(item.Name, "]", "") + "](" + ref + ")"})
-		}
-	}
-	if err := k.SetIngestAttachments(attachments); err != nil {
-		return "", err
-	}
-	return body, nil
-}
-
-func replaceVaultFileTarget(body, source, destination string) (string, bool) {
-	before := body
-	body = strings.ReplaceAll(body, "](<"+source+">)", "](<"+destination+">)")
-	body = strings.ReplaceAll(body, "]("+source+")", "]("+destination+")")
-	return body, body != before
-}
 
 func isArticleAttachmentReference(id, articlePath, ref string) bool {
 	if ref == "" || filepath.IsAbs(ref) || strings.Contains(ref, "\\") || strings.Contains(ref, "://") {
@@ -89,8 +35,8 @@ func (v *VaultService) StoreArticleAttachment(k *types.Entry, name string, data 
 		return "", errors.New("article and attachment bytes are required")
 	}
 	ext := strings.ToLower(filepath.Ext(filepath.Base(name)))
-	if err := validateImportFileType(ext); err != nil {
-		return "", err
+	if !docparser.IsImageFormat(ext) || !strings.HasPrefix(http.DetectContentType(data), "image/") {
+		return "", errors.New("only image attachments are accepted")
 	}
 	hash := sha256.Sum256(data)
 	attachment := filepath.ToSlash(filepath.Join("attachments", k.ID, fmt.Sprintf("asset-%x-%s%s", hash[:8], uuid.NewString()[:8], ext)))
@@ -146,13 +92,6 @@ func replaceVaultImageTargets(body string, mappings map[string]string) string {
 	return body
 }
 
-func AppendIngestAttachmentLinks(body string, links []string) string {
-	if len(links) == 0 {
-		return body
-	}
-	return body + "\n\n" + strings.Join(links, "\n")
-}
-
 type vaultArticleSupplement struct {
 	vault    *VaultService
 	abs      string
@@ -164,7 +103,7 @@ type vaultArticleSupplement struct {
 // BeginArticleSupplement trusts the caller's locked PostgreSQL snapshot and
 // keeps the article file lock until the database transaction commits or rolls
 // back. It never reads through v.db, which would contend with that transaction.
-func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string, attachmentLinks []string, replaceMissingBody bool) (_ *vaultArticleSupplement, supplementErr error) {
+func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string) (_ *vaultArticleSupplement, supplementErr error) {
 	if k == nil {
 		return nil, errors.New("article is required")
 	}
@@ -203,13 +142,9 @@ func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entr
 		return nil, errors.New("vault body differs from the locked article snapshot; replacement refused")
 	}
 	missingImages := map[string]bool{}
-	missingBody := false
 	for _, missing := range k.IngestMissing() {
 		if missing.Type == "image" {
 			missingImages[missing.SourceURL] = true
-		}
-		if missing.Type == "content" {
-			missingBody = true
 		}
 	}
 	for source, ref := range imageMappings {
@@ -220,18 +155,9 @@ func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entr
 			return nil, errors.New("supplement image must be a local article attachment")
 		}
 	}
-	for _, link := range attachmentLinks {
-		open := strings.LastIndex(link, "](")
-		if open < 0 || !strings.HasSuffix(link, ")") || !isArticleAttachmentReference(k.ID, k.VaultPath, strings.Trim(link[open+2:len(link)-1], "<>")) {
-			return nil, errors.New("supplement file link must be a local article attachment")
-		}
-	}
-	expected := AppendIngestAttachmentLinks(replaceVaultImageTargets(string(oldBody), imageMappings), attachmentLinks)
-	if replaceMissingBody {
-		if !missingBody || len(oldBody) != 0 {
-			return nil, errors.New("first body requires recorded missing content and an empty stored body")
-		}
-	} else if newBody != expected {
+
+	expected := replaceVaultImageTargets(string(oldBody), imageMappings)
+	if newBody != expected {
 		return nil, errors.New("supplement changed article text; replacement refused")
 	}
 	header, _, err := SplitVaultArticle(previous)
@@ -246,8 +172,8 @@ func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entr
 	return &vaultArticleSupplement{vault: v, abs: abs, previous: previous, lock: lock}, nil
 }
 
-func (v *VaultService) SupplementArticle(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string, attachmentLinks []string, replaceMissingBody bool) error {
-	change, err := v.BeginArticleSupplement(ctx, k, newBody, imageMappings, attachmentLinks, replaceMissingBody)
+func (v *VaultService) SupplementArticle(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string) error {
+	change, err := v.BeginArticleSupplement(ctx, k, newBody, imageMappings)
 	if err != nil {
 		return err
 	}

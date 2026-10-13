@@ -1,11 +1,12 @@
 package pgtest
 
 import (
-	"github.com/golang-migrate/migrate/v4"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/golang-migrate/migrate/v4"
 
 	"gorm.io/driver/postgres"
 )

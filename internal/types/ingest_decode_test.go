@@ -32,15 +32,6 @@ func TestDecodeIngestBatchSeparatesEnvelopeAndItemErrors(t *testing.T) {
 	}
 }
 
-func TestDecodeIngestFileAcceptsAssetIDInlineAndObject(t *testing.T) {
-	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"url":"","file":"11111111-1111-4111-8111-111111111111"},{"url":"","file":"JVBERi0xLjQK"},{"url":"","file":{"data":"JVBERi0xLjQK","name":"original.pdf"}},{"url":"","file":{"data":"JVBERi0xLjQK","name":"original.pdf","unknown":true}}]}`))
-	require.NoError(t, err)
-	require.Equal(t, "11111111-1111-4111-8111-111111111111", request.Items[0].File.AssetID)
-	require.Equal(t, "JVBERi0xLjQK", request.Items[1].File.Data)
-	require.Equal(t, "original.pdf", request.Items[2].File.Name)
-	require.NotEmpty(t, request.Items[3].InputError)
-}
-
 func TestDecodeIngestRequiresURLFieldAndAllowsExplicitEmpty(t *testing.T) {
 	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"acquisition":"extracted","content":"原文"},{"url":"","acquisition":"extracted","content":"原文"},{"url":null,"acquisition":"extracted","content":"原文"}]}`))
 	require.NoError(t, err)

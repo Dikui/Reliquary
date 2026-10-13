@@ -30,16 +30,10 @@ CREATE TABLE IF NOT EXISTS entries (
     title VARCHAR(255) NOT NULL DEFAULT '',
     description TEXT,
     content_type VARCHAR(16),
-    content_type_uncertain BOOLEAN NOT NULL DEFAULT false,
-    processing_review_status VARCHAR(16) NOT NULL DEFAULT '',
-    processing_review_content_type VARCHAR(16) NOT NULL DEFAULT '',
-    processing_review_reason TEXT NOT NULL DEFAULT '',
     source_unverified BOOLEAN NOT NULL DEFAULT false,
-    processing_mode VARCHAR(16) NOT NULL DEFAULT 'full',
     source_kind VARCHAR(16) NOT NULL DEFAULT 'article',
     vault_path TEXT NOT NULL DEFAULT '',
     vault_body TEXT NOT NULL DEFAULT '',
-    vault_original_path TEXT NOT NULL DEFAULT '',
     starred BOOLEAN NOT NULL DEFAULT false,
     collect_reason TEXT NOT NULL DEFAULT '',
     agent_summary TEXT NOT NULL DEFAULT '',
@@ -373,38 +367,6 @@ func TestUpdateEntryPreservesCollectionReasonFromConcurrentIntake(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, "Preserve the measured result", current.CollectReason)
 	require.Equal(t, stale.Description, current.Description)
-}
-
-func TestUpdateEntryPreservesProcessingReviewDecisionAndUnverifiedSource(t *testing.T) {
-	db := pgtest.Open(t)
-	repo := NewEntryRepository(db)
-	ctx := context.Background()
-	id := insertProcessingEntry(t, db)
-	stale, err := repo.GetEntryByID(ctx, 1, id)
-	require.NoError(t, err)
-	require.NoError(t, repo.UpdateEntryColumns(ctx, id, map[string]any{
-		"source_unverified":              true,
-		"content_type_uncertain":         true,
-		"processing_review_status":       types.ProcessingReviewIgnored,
-		"processing_review_content_type": types.ContentTypeTutorial,
-		"processing_review_reason":       "User retained the original source despite the uncertain type.",
-	}))
-	for _, batch := range []bool{false, true} {
-		stale.Description = "An unrelated background update completed."
-		if batch {
-			require.NoError(t, repo.UpdateEntryBatch(ctx, []*types.Entry{stale}))
-		} else {
-			require.NoError(t, repo.UpdateEntry(ctx, stale))
-		}
-		current, err := repo.GetEntryByID(ctx, 1, id)
-		require.NoError(t, err)
-		require.True(t, current.SourceUnverified)
-		require.True(t, current.ContentTypeUncertain)
-		require.Equal(t, types.ProcessingReviewIgnored, current.ProcessingReviewStatus)
-		require.Equal(t, types.ContentTypeTutorial, current.ProcessingReviewContentType)
-		require.Contains(t, current.ProcessingReviewReason, "User retained")
-		require.Equal(t, stale.Description, current.Description)
-	}
 }
 
 func TestUpdateActiveDeletingEntryColumns_GuardsStateAndSoftDelete(t *testing.T) {

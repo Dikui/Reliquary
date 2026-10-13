@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/types"
 )
 
@@ -32,6 +33,9 @@ func (v *VaultService) OpenAttachment(ctx context.Context, id, reference string)
 	relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(entry.VaultPath)), filepath.FromSlash(reference))))
 	if !strings.HasPrefix(relative, "attachments/"+entry.ID+"/") {
 		return nil, werrors.NewBadRequestError("attachment path must belong to the article")
+	}
+	if !docparser.IsImageFormat(filepath.Ext(relative)) {
+		return nil, werrors.NewNotFoundError("image attachment not found")
 	}
 	abs, err := vaultAbsolute(v.root, relative)
 	if err != nil {

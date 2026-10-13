@@ -3,15 +3,14 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	taskqueue "reliquary/internal/queue"
 
-	"reliquary/internal/application/service/retriever"
+	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
@@ -52,9 +51,6 @@ func (s intakeLibraryService) GetLibraryByID(context.Context, string) (*types.Li
 	return &types.Library{
 		ID: "library", SpaceID: 1, CreatorID: s.creatorID, SummaryModelID: "summary", EmbeddingModelID: "embedding",
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
-		ChunkingConfig: types.ChunkingConfig{ParserEngineRules: []types.ParserEngineRule{{
-			FileTypes: []string{"txt"}, Engine: "simple",
-		}}},
 	}, nil
 }
 
@@ -95,129 +91,8 @@ func TestReviewIntakeKeepsSourcedBodyWithExplicitRejection(t *testing.T) {
 	require.Equal(t, types.ParseStatusRejected, repo.entry.ParseStatus)
 }
 
-func TestReviewEntryIntakeSourceReadFailureCleansPendingMessage(t *testing.T) {
-	for _, tt := range []struct {
-		name   string
-		getErr error
-		body   []byte
-	}{
-		{name: "storage error", getErr: errors.New("storage unavailable")},
-		{name: "empty original", body: []byte(" \n")},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			entry := &types.Entry{ID: "entry", SpaceID: 1, LibraryID: "library", Type: "file", FilePath: "input", ParseStatus: types.ParseStatusRejected}
-			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
-				Source: "manual", Decision: "rejected", OriginalPath: "original", Images: []string{"image"},
-				SourceInfo: types.SourceInfo{Author: "Ada", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"},
-			}))
-			repo := &intakeRepo{entry: entry}
-			files := &intakeFileService{getErr: tt.getErr, saved: map[string][]byte{"input": []byte("upload"), "original": tt.body, "image": []byte("image")}}
-			task := &intakeTask{}
-			svc := &entryService{repo: repo, libraryService: intakeLibraryService{creatorID: "owner"}, fileSvc: files, task: task}
-			ctx := context.WithValue(context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
-			ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
-
-			_, err := svc.ReviewEntryIntake(ctx, entry.ID, "retry", types.SourceInfo{})
-			require.Error(t, err)
-			intake, intakeErr := repo.entry.IntakeMetadata()
-			require.NoError(t, intakeErr)
-			require.Equal(t, "error", intake.Decision)
-			require.Empty(t, intake.OriginalPath)
-			require.Empty(t, intake.Images)
-			require.Equal(t, types.ParseStatusFailed, repo.entry.ParseStatus)
-			require.Empty(t, files.saved)
-			require.Zero(t, task.calls)
-		})
-	}
-}
-
 func (s intakeModelService) GetChatModel(context.Context, string) (chat.Chat, error) {
 	return s.chat, nil
-}
-
-func TestProcessDocumentIntakeQualityGate(t *testing.T) {
-	tests := []struct {
-		name       string
-		chat       intakeChat
-		wantStatus string
-		wantBody   bool
-		wantIndex  bool
-		wantErr    bool
-		source     types.SourceInfo
-		channel    string
-	}{
-		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis"}`}, "", true, true, false, types.SourceInfo{}, ""},
-		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts"}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
-
-		{"rejected", intakeChat{response: `{"approved":false,"reason":"opinion only"}`}, types.ParseStatusRejected, true, false, false, types.SourceInfo{}, ""},
-		{"model error", intakeChat{err: errors.New("model unavailable")}, types.ParseStatusFailed, false, false, true, types.SourceInfo{}, ""},
-		{"unknown source evidence", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", OriginalURL: "https://example.com/post", PublishedAt: "未知"}, ""},
-		{"placeholder author with publisher", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			entry := &types.Entry{ID: "entry", SpaceID: 1, LibraryID: "library", Type: "file", FileName: "message", FilePath: "input", ParseStatus: types.ParseStatusPending, Channel: tt.channel}
-			source := types.SourceInfo{
-				Author: "Ada", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01",
-			}
-			if tt.source.Author != "" || tt.source.Publisher != "" {
-				source = tt.source
-			}
-			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{Source: "manual", Decision: "pending", SourceInfo: source}))
-			repo := &intakeRepo{entry: entry}
-			files := &intakeFileService{}
-			chunks := &parentChildChunkService{}
-			engine := &parentChildRetrieveEngine{}
-			svc := &entryService{
-				repo: repo, libraryService: intakeLibraryService{}, spaceRepo: intakeSpaceRepo{}, spaceService: intakeSpaceService{}, fileSvc: files,
-				modelService: intakeModelService{chat: tt.chat}, chunkService: chunks,
-				retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: engine}, task: parentChildTaskEnqueuer{},
-			}
-			files.saved = map[string][]byte{"input": []byte("Full source body with analysis.")}
-			payload, err := json.Marshal(types.DocumentProcessPayload{SpaceID: 1, EntryID: entry.ID, LibraryID: "library", FilePath: "input", FileName: "message.txt", FileType: "txt"})
-			require.NoError(t, err)
-			err = svc.ProcessDocument(context.Background(), taskqueue.NewTask(types.TypeDocumentProcess, payload, taskqueue.MaxRetry(0)))
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-			if tt.wantStatus != "" {
-				require.Equalf(t, tt.wantStatus, repo.entry.ParseStatus, "error: %s", repo.entry.ErrorMessage)
-			}
-			intake, err := repo.entry.IntakeMetadata()
-			require.NoError(t, err)
-			if tt.wantBody {
-				require.NotEmpty(t, intake.OriginalPath)
-				require.NotEmpty(t, files.written)
-				require.Equal(t, []byte("Full source body with analysis."), files.saved[intake.OriginalPath])
-				body, _, getErr := svc.GetEntryFile(context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1)), entry.ID)
-				require.NoError(t, getErr)
-				defer body.Close()
-				got, readErr := io.ReadAll(body)
-				require.NoError(t, readErr)
-				require.Equal(t, "Full source body with analysis.", string(got))
-			} else {
-				require.Empty(t, intake.OriginalPath)
-				require.Empty(t, files.written)
-				require.Empty(t, files.saved)
-				require.NotEmpty(t, repo.entry.ErrorMessage)
-			}
-			if tt.wantIndex {
-				require.NotEmpty(t, chunks.created)
-				require.NotEmpty(t, engine.indexed)
-				require.NotEqual(t, types.ParseStatusPending, repo.entry.ParseStatus)
-				require.NotEqual(t, types.ParseStatusRejected, repo.entry.ParseStatus)
-				require.NotEqual(t, types.ParseStatusFailed, repo.entry.ParseStatus)
-			} else {
-				require.Empty(t, chunks.created)
-				require.Empty(t, engine.indexed)
-			}
-			if tt.wantIndex {
-				require.Equal(t, "enabled", repo.entry.EnableStatus)
-			}
-		})
-	}
 }
 
 func (s *intakeFileService) SaveBytes(_ context.Context, body []byte, _ uint64, name string, _ bool) (string, error) {

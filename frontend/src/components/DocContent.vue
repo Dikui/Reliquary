@@ -10,7 +10,7 @@ import "highlight.js/styles/github.css";
 import mermaid from "mermaid";
 import { onMounted, ref, nextTick, onUnmounted, watch, computed } from "vue";
 import {
-  downEntryDetails, getChunkByIdOnly, previewEntryFile,
+  getChunkByIdOnly,
   updateEntryMetadata,
   reprocessEntry, getEntryDetails,
   ENTRY_CHUNK_PAGE_SIZE,
@@ -20,7 +20,6 @@ import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hyd
 import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
 import { useI18n } from 'vue-i18n';
-import DocumentPreview from '@/components/DocumentPreview.vue';
 import RepostSources from '@/views/library/components/RepostSources.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import MissingMaterials from '@/components/MissingMaterials.vue';
@@ -29,8 +28,6 @@ import ReviewActions from '@/components/ReviewActions.vue';
 import EntryArticleJudgments from '@/components/EntryArticleJudgments.vue';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
 import PersonalDocumentDelete from '@/components/PersonalDocumentDelete.vue';
-import { resolveEntryDownloadFileName } from '@/views/library/entryDownloadFileName';
-import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
 import { getApiBaseUrl } from '@/utils/api-base';
 import { copyWithToast } from '@/utils/clipboard';
 import { isIngestAPIEntry, getExternalToolName } from '@/utils/entrySourceLabels';
@@ -237,7 +234,7 @@ const loadIntakeOriginal = async () => {
   intakeOriginalError.value = '';
   try {
     const start = intakeOriginalOffset.value;
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${props.details.id}/preview`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${props.details.id}/body`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('reliquary_token') || ''}`,
         Range: `bytes=${start}-${start + 65535}`,
@@ -275,12 +272,7 @@ const applyIncompleteChange = () => {
   emit('reviewChanged', props.details, false);
 };
 const applyArticleJudgment = (value: Record<string, unknown>) => {
-  const previousMode = props.details.processing_mode;
   applyProcessingState(value);
-  if (props.details.processing_mode === 'summary_only') {
-    props.details.md = [];
-    props.details.total = 0;
-  } else if (previousMode === 'summary_only' && !isProcessing.value) emit('getDoc', 1);
   emit('reviewChanged', props.details, false);
 };
 let processingPollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -300,7 +292,7 @@ const scheduleProcessingPoll = () => {
       const result: any = await getEntryDetails(id);
       if (generation === processingPollGeneration && props.details?.id === id && result?.success && result.data) {
         applyProcessingState(result.data);
-        if (!isProcessing.value && props.details.processing_mode !== 'summary_only') emit('getDoc', 1);
+        if (!isProcessing.value) emit('getDoc', 1);
       }
     } catch { /* Preserve status and retry while the drawer is visible. */ }
     if (generation === processingPollGeneration && isProcessing.value) scheduleProcessingPoll();
@@ -554,7 +546,7 @@ const getMarkdownRenderRoot = (): ParentNode | null =>
 let url = ref('')
 // 视图模式：chunks / merged / preview
 // file 类型默认「预览」，URL / 手动创建 默认「全文」
-const viewMode = ref<'chunks' | 'merged' | 'preview'>('merged');
+const viewMode = ref<'chunks' | 'merged'>('merged');
 
 // 合并后的文档内容（在下方通过 computed 定义）
 
@@ -665,9 +657,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', onTraceDrawerWindowResize);
   cleanupTraceDrawerResize();
   cleanupMainDrawerResize();
-  if (audioBlobUrl.value) {
-    URL.revokeObjectURL(audioBlobUrl.value);
-  }
+
 })
 const checkImage = (url) => {
   return new Promise((resolve) => {
@@ -760,65 +750,8 @@ const processedChunks = computed(() => {
   });
 });
 
-const canPreview = (): boolean => {
-  if (isLegacyManualDraft.value && !legacyManualBody.value && props.details?.metadata?.intake?.original_path) return true;
-  if (props.details?.type !== 'file') return false;
-  const ft = resolveFilePreviewExt(props.details?.title, props.details?.file_type);
-  if (!ft) return false;
-  if (audioExtensions.has(ft)) return false; // 音频不走预览tab，播放器已内嵌
-  return isKnownPreviewableExt(ft);
-};
+watch(() => props.details?.id, () => { viewMode.value = 'merged'; });
 
-// 当文档详情加载完成时，file 类型自动切换到「预览」；音频类型使用 merged + 播放器
-watch(() => props.details?.id, (newId) => {
-  // 清理旧音频
-  if (audioBlobUrl.value) {
-    URL.revokeObjectURL(audioBlobUrl.value);
-    audioBlobUrl.value = '';
-  }
-  if (!newId) return;
-  if (isAudioFile(props.details?.file_type)) {
-    viewMode.value = 'merged'; // 音频默认全文视图，播放器已内嵌
-    loadAudioPreview();
-  } else if (canPreview()) {
-    viewMode.value = 'preview';
-  } else {
-    viewMode.value = 'merged';
-  }
-});
-
-const isTextFile = (fileType?: string): boolean => {
-  if (!fileType) return false;
-  const textTypes = ['txt', 'md', 'markdown', 'json', 'xml', 'html', 'css', 'js', 'ts', 'py', 'java', 'go', 'cpp', 'c', 'h', 'sh', 'yaml', 'yml', 'ini', 'conf', 'log'];
-  return textTypes.includes(fileType.toLowerCase());
-};
-const isMarkdownFile = (fileType?: string): boolean => {
-  if (!fileType) return false;
-  const markdownTypes = ['md', 'markdown'];
-  return markdownTypes.includes(fileType.toLowerCase());
-};
-
-// 音频文件判断与播放器状态
-const audioExtensions = new Set(['mp3', 'wav', 'm4a', 'flac', 'ogg']);
-const isAudioFile = (fileType?: string): boolean => {
-  if (!fileType) return false;
-  return audioExtensions.has(fileType.toLowerCase());
-};
-const audioBlobUrl = ref('');
-const audioLoading = ref(false);
-
-const loadAudioPreview = async () => {
-  if (!props.details?.id || audioBlobUrl.value) return;
-  audioLoading.value = true;
-  try {
-    const blob = await previewEntryFile(props.details.id);
-    audioBlobUrl.value = URL.createObjectURL(blob);
-  } catch (err) {
-    console.error('Audio preview load failed:', err);
-  } finally {
-    audioLoading.value = false;
-  }
-};
 const runMarkdownPostRenderPipeline = async () => {
   await nextTick();
   const renderRoot = getMarkdownRenderRoot();
@@ -1110,30 +1043,6 @@ const getParentContent = (item: any) => {
   return parentContextCache.value.get(item.parent_chunk_id) || '';
 };
 
-const downloadFile = () => {
-  downEntryDetails(props.details.id)
-    .then((result) => {
-      if (result) {
-        if (url.value) {
-          URL.revokeObjectURL(url.value);
-        }
-        url.value = URL.createObjectURL(result);
-        const link = document.createElement("a");
-        link.style.display = "none";
-        link.setAttribute("href", url.value);
-        link.setAttribute("download", resolveEntryDownloadFileName(props.details));
-        document.body.appendChild(link);
-        link.click();
-        nextTick(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url.value);
-        })
-      }
-    })
-    .catch((err) => {
-      MessagePlugin.error(t('file.downloadFailed'));
-    });
-};
 const handleChunkPageChange = (pageInfo: { current: number }) => {
   if (props.details?.chunkLoading || pageInfo.current === loadedChunkPage.value) return;
   pendingChunkPage = pageInfo.current;
@@ -1167,13 +1076,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               :disabled="articleJudgmentsBusy || incompleteBusy" @busy-change="personalDocumentDeleteBusy = $event"
               @deleted="() => emit('reviewChanged', details, true)" />
 
-            <t-button v-if="details.processing_mode !== 'summary_only' && (details.type === 'file' || details.type === 'manual')" class="header-action-btn" size="small"
-              variant="text" shape="square" theme="default" :title="$t('common.download') || 'Download'"
-              @click="downloadFile()">
-              <template #icon>
-                <t-icon name="download" size="16px" />
-              </template>
-            </t-button>
             <t-button v-if="details.id && hasTimelineSpans" class="header-action-btn trace-entry-btn" size="small"
               variant="text" shape="square" :theme="traceEntryTheme" :title="traceEntryTitle" @click="openTimeline">
               <template #icon>
@@ -1257,17 +1159,11 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <p v-if="intakeSourceInfo.author">{{ $t('library.intakeAuthor') }}: {{ intakeSourceInfo.author }}</p>
           <p v-if="intakeSourceInfo.publisher">{{ $t('library.intakePublisher') }}: {{ intakeSourceInfo.publisher }}</p>
           <a v-if="intakeOriginalURL" :href="intakeOriginalURL" target="_blank" rel="noopener">{{ intakeOriginalURL }}</a>
-          <p v-if="intakeSourceInfo.original_url_source === 'from_file'">{{ $t('knowledgeReview.extractedLink') }}</p>
           <p v-if="intakeSourceInfo.published_at">{{ $t('library.intakePublishedAt') }}: {{ intakeSourceInfo.published_at }}</p>
           <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('library.intakePreviewOriginal') : $t('library.intakeLoadMore')) : $t('library.intakePreviewOriginal') }}</t-button>
           <p v-if="intakeOriginalError" class="field-hint field-hint--error">{{ intakeOriginalError }}</p>
           <div v-if="intakeOriginal" class="md-content" v-html="processMarkdown(intakeOriginal)" />
           <ReviewActions v-if="isIntakeRejected" :entry="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
-        </section>
-
-        <section v-if="details.processing_review_status === 'pending'" class="setting-drawer__section">
-          <h4 class="setting-drawer__section-title">{{ $t('knowledgeReview.processing') }}</h4>
-          <ReviewActions :entry="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
         </section>
 
         <section v-if="details.repost_sources?.length" class="setting-drawer__section doc-repost-section">
@@ -1336,7 +1232,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
         </section>
 
-        <section v-if="details.type === 'url' && details.processing_mode !== 'summary_only'" class="setting-drawer__section">
+        <section v-if="details.type === 'url'" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('library.urlSource') }}</h4>
           <div class="url_link_box">
             <a :href="isValidURL(details.source) ? details.source : 'javascript:void(0)'"
@@ -1366,7 +1262,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('library.parsingFailed') }}</p>
         </section>
 
-        <section v-if="details.processing_mode !== 'summary_only'" class="setting-drawer__section doc-content-section">
+        <section class="setting-drawer__section doc-content-section">
           <div class="doc-content-section-head">
             <div class="doc-content-section-head-left">
               <h4 class="setting-drawer__section-title">{{ getContentLabel() }}</h4>
@@ -1375,12 +1271,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               </span>
             </div>
             <div class="view-mode-buttons">
-              <t-button v-if="canPreview()" size="small" :variant="viewMode === 'preview' ? 'base' : 'outline'"
-                :theme="viewMode === 'preview' ? 'primary' : 'default'" @click="viewMode = 'preview'"
-                class="view-mode-btn">
-                {{ $t('preview.tab') }}
-              </t-button>
-              <t-button v-if="!canPreview()" size="small" :variant="viewMode === 'merged' ? 'base' : 'outline'"
+              <t-button size="small" :variant="viewMode === 'merged' ? 'base' : 'outline'"
                 :theme="viewMode === 'merged' ? 'primary' : 'default'" @click="viewMode = 'merged'"
                 class="view-mode-btn">
                 {{ $t('library.viewMerged') }}
@@ -1393,18 +1284,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             </div>
           </div>
 
-          <!-- 音频播放器（音频文件时固定显示在内容区顶部） -->
-          <div v-if="isAudioFile(details.file_type)" class="audio-player-section">
-            <div v-if="audioLoading" class="audio-loading">
-              <t-loading size="small" />
-              <span>{{ $t('preview.audioLoading') }}</span>
-            </div>
-            <audio v-else-if="audioBlobUrl" controls class="audio-player" :src="audioBlobUrl">
-              {{ $t('preview.audioNotSupported') }}
-            </audio>
-          </div>
-
-          <!-- 合并视图 -->
           <div v-if="viewMode === 'merged'">
             <div v-if="isChunkPageTransition" class="chunk-page-loading">
               <t-loading size="small" />
@@ -1479,10 +1358,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               @change="handleChunkPageChange" />
           </div>
 
-          <div v-else-if="viewMode === 'preview'">
-            <DocumentPreview :entryId="details.id" :fileType="isLegacyManualDraft ? 'md' : details.file_type" :fileName="details.title"
-              :active="viewMode === 'preview'" />
-          </div>
         </section>
       </div>
 

@@ -7,7 +7,6 @@ interface EntryItem {
   title?: string;
   type?: string;
   parse_status?: string;
-  processing_mode?: string;
   source_kind?: string;
   vault_path?: string;
 }
@@ -18,7 +17,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'download'): void;
   (e: 'view-trace'): void;
   (e: 'reparse'): void;
   (e: 'cancel-parse'): void;
@@ -37,16 +35,6 @@ const canReprocess = computed(() => !['mine', 'report'].includes(props.item.sour
 </script>
 
 <template>
-  <!-- 下载原始文档 -->
-  <div
-    v-if="item.processing_mode !== 'summary_only' && (item.type === 'file' || item.type === 'manual')"
-    class="doc-action-menu-item"
-    @click.stop="emit('download')"
-  >
-    <t-icon class="icon" name="download" />
-    <span>{{ $t('common.download') }}</span>
-  </div>
-
   <!-- 查看处理过程 -->
   <div v-if="traceVisible" class="doc-action-menu-item" @click.stop="emit('view-trace')">
     <t-icon class="icon" name="chart-bar" />

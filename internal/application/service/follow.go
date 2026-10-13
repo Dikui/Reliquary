@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type FollowService struct {
@@ -163,7 +164,7 @@ func (s *FollowService) Unfollow(ctx context.Context, targetType, targetID strin
 }
 
 const followEligibleSQL = `k.deleted_at IS NULL AND k.source_kind='article'
-    AND k.parse_status='completed' AND k.enable_status='enabled' AND k.processing_review_status<>'pending'
+    AND k.parse_status='completed' AND k.enable_status='enabled'
     AND COALESCE(k.metadata #>> '{intake,decision}','approved')='approved'`
 
 const followMatchSQL = `((f.target_type='entity' AND EXISTS (SELECT 1 FROM entry_entities ke

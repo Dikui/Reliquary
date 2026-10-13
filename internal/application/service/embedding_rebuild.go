@@ -9,15 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/pgvector/pgvector-go"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/models/embedding"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/google/uuid"
+	"github.com/pgvector/pgvector-go"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var errRebuildStopped = errors.New("embedding rebuild paused or superseded")
@@ -111,7 +112,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 		}
 		var chunks []struct{ ID, SourceKind string }
 		if err := tx.Table("chunks c").Joins("JOIN entries k ON k.id=c.entry_id AND k.space_id=c.space_id").
-			Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status=? AND k.processing_mode='full' AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column')", spaceID, types.ParseStatusCompleted).
+			Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status=? AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column')", spaceID, types.ParseStatusCompleted).
 			Select("c.id,k.source_kind").Order("c.id").Scan(&chunks).Error; err != nil {
 			return err
 		}
@@ -137,7 +138,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 			if article.StructuredSummary != nil {
 				add("article", article.ID, "")
 			}
-			if imagesSupported && imageModel.SupportsImages() && article.ProcessingMode == types.ProcessingModeFull {
+			if imagesSupported && imageModel.SupportsImages() {
 				for _, path := range articleImagePaths(article) {
 					add("image", article.ID, path)
 				}
@@ -410,9 +411,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		return nil, err
 	}
 	if item.Kind == "image" {
-		if article.ProcessingMode != types.ProcessingModeFull {
-			return nil, nil
-		}
+
 		return prepareArticleImageEmbedding(ctx, r.db, r.vault, profile.embedder, &article, item.AttachmentPath, true)
 	}
 	content := buildEntryIndexContent(&article, chunk.Content)
@@ -438,16 +437,23 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			if current.StructuredSummary == nil || vaultContentHash(strings.TrimSpace(current.Title)+"\n"+current.StructuredSummary.RenderText()) != hash {
 				return errors.New("article changed while embedding; retry this item")
 			}
-			return tx.Exec(`INSERT INTO article_embeddings (space_id,entry_id,library_id,model_id,dimension,embedding,content_hash)
+			if err := tx.Exec(`INSERT INTO article_embeddings (space_id,entry_id,library_id,model_id,dimension,embedding,content_hash)
 				VALUES (?,?,?,?,?,?::halfvec,?) ON CONFLICT (entry_id) DO UPDATE SET model_id=EXCLUDED.model_id,
 				dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,updated_at=NOW()`,
-				run.SpaceID, article.ID, article.LibraryID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), hash).Error
+				run.SpaceID, article.ID, article.LibraryID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), hash).Error; err != nil {
+				return err
+			}
+			return tx.Exec(`UPDATE entries SET embedding_model_id=? WHERE space_id=? AND id=? AND NOT EXISTS (
+			 SELECT 1 FROM chunks c LEFT JOIN embeddings e ON e.chunk_id=c.id AND e.source_type=0
+			 WHERE c.entry_id=entries.id AND c.space_id=entries.space_id AND c.deleted_at IS NULL
+			 AND c.chunk_type IN ('text','summary','table_summary','table_column')
+			 AND (e.id IS NULL OR e.model_id<>? OR e.dimension<>?))`, run.ModelID, run.SpaceID, article.ID, run.ModelID, run.Dimension).Error
 		}
 		var currentChunk types.Chunk
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, chunk.ID).First(&currentChunk).Error; err != nil {
 			return err
 		}
-		if current.ProcessingMode != types.ProcessingModeFull || vaultContentHash(buildEntryIndexContent(&current, currentChunk.Content)) != hash {
+		if vaultContentHash(buildEntryIndexContent(&current, currentChunk.Content)) != hash {
 			return errors.New("document chunk changed while embedding; retry this item")
 		}
 		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding,is_enabled)

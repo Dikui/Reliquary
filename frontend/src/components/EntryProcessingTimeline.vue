@@ -1235,21 +1235,6 @@ function getFileTypeFromName(name: string): string {
   return dot >= 0 ? clean.slice(dot + 1) : ''
 }
 
-function formatParserRulesForCurrentFile(
-  rules: Array<{ file_types?: string[]; engine?: string }>,
-): string {
-  const currentType = currentEntryFileType.value
-  if (currentType) {
-    const matched = rules.find((rule) =>
-      (rule.file_types || []).some((ft) => normalizeFileType(ft) === currentType),
-    )
-    if (matched?.engine) {
-      return `${currentType}→${matched.engine}`
-    }
-  }
-  return rules.map(r => `${(r.file_types || []).join('/')}→${r.engine}`).join(', ')
-}
-
 // Human-readable summary of the per-upload parse overrides stored in
 // entry.metadata.process_overrides. Empty overrides → Library defaults.
 const processConfigLines = computed<string[]>(() => {
@@ -1266,11 +1251,6 @@ const processConfigLines = computed<string[]>(() => {
       parts.push(cc.enable_parent_child ? t('knowledgeStages.processConfig.parentChildOn') : t('knowledgeStages.processConfig.parentChildOff'))
     }
     if (parts.length) lines.push(`${t('knowledgeStages.processConfig.chunking')}: ${parts.join(' · ')}`)
-  }
-
-  const rules = o.parser_engine_rules || cc?.parser_engine_rules
-  if (rules?.length) {
-    lines.push(`${t('knowledgeStages.processConfig.parser')}: ${formatParserRulesForCurrentFile(rules)}`)
   }
 
   return lines.length ? lines : [t('knowledgeStages.processConfig.libraryDefault')]

@@ -23,7 +23,6 @@ function evaluate(code: string, modules: Record<string, unknown>) {
 }
 const endpoints = [
   '/api/v1/entries/pending?page=1&page_size=1&kind=intake',
-  '/api/v1/entries/pending?page=1&page_size=1&kind=processing',
   '/api/v1/ingest/incomplete?page=1&page_size=1&include_attempted=true',
 ] as const
 const envelope = (total: number) => ({ success: true, data: [], total, page: 1, page_size: 1 })
@@ -175,14 +174,14 @@ test('mounting the navigation badge uses the real Vue lifecycle to load all queu
   requests.forEach((packet, index) => packet.resolve(envelope(index + 1)))
   for (let attempt = 0; attempt < 20 && f.store.loading; attempt++) await new Promise<void>(resolve => setImmediate(resolve))
   await nextTick()
-  assert.equal(f.store.total, 6)
+  assert.equal(f.store.total, 3)
   const badge = root.children.find(node => node.kind === 'span')!
   assert.ok(badge)
-  assert.equal(textOf(badge), '6')
-  assert.equal(badge.props['aria-label'], zh.ingestStatus.navCount.replace('{count}', '6'))
+  assert.equal(textOf(badge), '3')
+  assert.equal(badge.props['aria-label'], zh.ingestStatus.navCount.replace('{count}', '3'))
 })
 
-test('pending navigation loads and adds all three queues through the authenticated HTTP wrapper', async t => {
+test('pending navigation loads and adds both queues through the authenticated HTTP wrapper', async t => {
   const f = fixture(t)
   assert.equal(f.store.total, null)
   const loading = f.store.refresh()
@@ -194,24 +193,23 @@ test('pending navigation loads and adds all three queues through the authenticat
     assert.equal(packet.config.headers['Accept-Language'], 'zh-CN')
   }
   requests[0]!.resolve(envelope(4))
-  requests[1]!.resolve(envelope(6))
   assert.equal(f.store.total, null)
-  requests[2]!.resolve(envelope(9))
+  requests[1]!.resolve(envelope(9))
   await loading
-  assert.equal(f.store.total, 19)
+  assert.equal(f.store.total, 13)
   assert.equal(f.store.loading, false)
   assert.deepEqual(f.packets.map(packet => packet.config.url), [...endpoints])
   for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await f.badge(locale)
     assert.match(html, /class="pending-count"/)
-    assert.match(html, />19<\/span>/)
-    assert.ok(html.includes((locale === 'zh-CN' ? zh : en).ingestStatus.navCount.replace('{count}', '19')))
+    assert.match(html, />13<\/span>/)
+    assert.ok(html.includes((locale === 'zh-CN' ? zh : en).ingestStatus.navCount.replace('{count}', '13')))
   }
 })
 
 test('pending navigation hides the previous number while refreshing and renders a confirmed zero', async t => {
   const f = fixture(t)
-  await f.finish([1, 2, 3])
+  await f.finish([1, 5])
   assert.equal(f.store.total, 6)
   const loading = f.store.refresh()
   assert.equal(f.store.total, null)
@@ -224,8 +222,8 @@ test('pending navigation hides the previous number while refreshing and renders 
 
 test('failure in any pending queue hides the entire navigation number and permits refresh', async t => {
   const f = fixture(t)
-  for (let failedQueue = 0; failedQueue < 3; failedQueue++) {
-    await f.finish([2, 3, 4])
+  for (let failedQueue = 0; failedQueue < 2; failedQueue++) {
+    await f.finish([2, 7])
     const loading = f.store.refresh()
     const requests = await f.batch()
     requests.forEach((packet, index) => index === failedQueue ? packet.reject() : packet.resolve(envelope(20)))
@@ -234,7 +232,7 @@ test('failure in any pending queue hides the entire navigation number and permit
     assert.equal(f.store.loading, false)
     assert.ok(!(await f.badge('zh-CN')).includes('pending-count'))
   }
-  await f.finish([0, 1, 2])
+  await f.finish([0, 3])
   assert.equal(f.store.total, 3)
 })
 
@@ -244,12 +242,11 @@ test('unsuccessful or invalid HTTP envelopes never produce a partial or invalid 
     const loading = f.store.refresh()
     const requests = await f.batch()
     requests[0]!.resolve(envelope(4))
-    requests[1]!.resolve(envelope(7))
-    requests[2]!.resolve(invalid)
+        requests[1]!.resolve(invalid)
     await loading
     assert.equal(f.store.total, null)
   }
-  await f.finish([Number.MAX_SAFE_INTEGER, 1, 1])
+  await f.finish([Number.MAX_SAFE_INTEGER, 1])
   assert.equal(f.store.total, null)
 })
 
@@ -258,7 +255,7 @@ test('a delayed count snapshot or failure cannot replace a newer refresh result'
   for (const oldFails of [false, true]) {
     const old = f.store.refresh()
     const oldRequests = await f.batch()
-    await f.finish([7, 8, 9])
+    await f.finish([7, 17])
     oldRequests.forEach((packet, index) => oldFails && index === 1 ? packet.reject() : packet.resolve(envelope(100)))
     await old
     assert.equal(f.store.total, 24)
@@ -285,47 +282,5 @@ test('disposing the pending store prevents in-flight requests from restoring a n
   assert.equal(f.store.total, null)
   assert.equal(f.store.loading, false)
   await f.store.refresh()
-  assert.equal(f.packets.length, 3)
-})
-
-test('actual page change handlers refresh the shared navigation badge after confirmed queue operations', async t => {
-  const f = fixture(t)
-  await f.finish([3, 2, 4])
-  assert.match(await f.badge('zh-CN'), />9<\/span>/)
-  const loadedBases: string[] = [], detailReads: string[] = []
-  let closed = 0, pendingRefreshes = 0, pageResets = 0
-  const handlers = pageHandlers({
-    pendingCounts: f.store,
-    libraryId: ref('single-library'),
-    loadEntryFiles: async (id: string) => { loadedBases.push(id) },
-    pendingReviewsRef: ref({ refresh: async () => { pendingRefreshes++ } }),
-    details: { id: 'article-a' },
-    getCardDetails: ({ id }: { id: string }) => { detailReads.push(id) },
-    closeDoc: () => { closed++ },
-    resetPage: () => { pageResets++ },
-  })
-  const operations = [
-    { send: () => f.ingest.acceptIncomplete('article-a'), url: '/api/v1/ingest/article-a/accept-incomplete', changed: () => handlers.handlePendingChanged() },
-    { send: () => f.ingest.discardIncomplete('article-a'), url: '/api/v1/ingest/article-a/discard', changed: () => handlers.handlePendingChanged() },
-    { send: () => f.reviews.resolveIntakeReview('review-a', { action: 'approve' }), url: '/api/v1/entries/review-a/review', changed: () => handlers.handleReviewChanged({}, false) },
-    { send: () => f.reviews.resolveIntakeReview('review-a', { action: 'discard' }), url: '/api/v1/entries/review-a/review', changed: () => handlers.handleReviewChanged({}, true) },
-    { send: () => f.reviews.resolveProcessingReview('article-a', { action: 'confirm' }), url: '/api/v1/entries/article-a/processing-review', changed: () => handlers.handleReviewChanged({}, false) },
-  ]
-  for (const [index, operation] of operations.entries()) {
-    const mutation = operation.send()
-    ;(await f.next(operation.url, 'post')).resolve({ success: true, data: { article_id: 'article-a' } })
-    await mutation
-    const changed = operation.changed()
-    assert.equal(f.store.total, null)
-    const requests = await f.batch()
-    requests.forEach((packet, queue) => packet.resolve(envelope(queue === 2 ? 8 - index : 0)))
-    await changed
-    assert.equal(f.store.total, 8 - index)
-    assert.match(await f.badge('en-US'), new RegExp(`>${8 - index}<\\/span>`))
-  }
-  assert.deepEqual(loadedBases, Array(5).fill('single-library'))
-  assert.equal(closed, 1)
-  assert.equal(pageResets, 1)
-  assert.equal(pendingRefreshes, 3)
-  assert.deepEqual(detailReads, ['article-a', 'article-a'])
+  assert.equal(f.packets.length, 2)
 })

@@ -77,10 +77,6 @@
                   <div v-if="currentSection === 'library'" class="section"><LibrarySettings ref="librarySettingsView" :initial-section="currentSubSection || undefined" /></div>
                   <div v-if="currentSection === 'vault'" class="section"><VaultStatus /></div>
                   <div v-if="currentSection === 'operation-logs'" class="section"><OperationLogs /></div>
-                  <!-- 解析引擎 -->
-                  <div v-if="currentSection === 'parser'" class="section">
-                    <ParserEngineSettings />
-                  </div>
 
                   <!-- 系统信息 -->
                   <div v-if="currentSection === 'system'" class="section">
@@ -136,7 +132,7 @@ import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
-import ParserEngineSettings from './ParserEngineSettings.vue'
+
 import LibrarySettings from './LibrarySettings.vue'
 import VaultStatus from './VaultStatus.vue'
 import OperationLogs from '@/views/library/OperationLogs.vue'
@@ -228,7 +224,6 @@ const navItems = computed(() => {
     { key: 'library', icon: 'file', label: t('settings.librarySettings') },
     { key: 'vault', icon: 'folder', label: t('settings.vault.title') },
     { key: 'operation-logs', icon: 'history', label: t('operationLogs.title') },
-    { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
@@ -274,7 +269,7 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'library', 'vault', 'parser',
+        'library', 'vault',
       ]),
     },
     {

@@ -101,7 +101,7 @@ func VerifyFileURLSig(filePath string, spaceID uint64, expiresStr, sig string) b
 // libraryScopedExportsSegment is the only storage prefix served by the Library-scoped
 // file proxy. Embedded chunk images land under exports/; raw entry
 // uploads use {space}/{entryID}/... and are served via
-// /entries/{id}/download instead.
+// /entries/{id}/body instead.
 const libraryScopedExportsSegment = "exports"
 
 // ValidateStoragePathSpace ensures the space segment embedded in a provider://

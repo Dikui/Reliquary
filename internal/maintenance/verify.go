@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
 	"reliquary/internal/vaultpath"
+
+	"gorm.io/gorm"
 )
 
 type TableManifest struct {
@@ -435,9 +436,11 @@ func CompareManifestWithOptions(expected, actual *Manifest, allowModelChange, al
 func CompareManifestWithSettings(expected, actual *Manifest, options CompareOptions) []string {
 	legacyFormat := expected.FormatVersion
 	expected, actual = currentManifest(expected, actual)
+	fileOrigin := expected
 	expected, actual = projectRetiredTables(expected, actual)
 	expected, actual = projectQueueMigration(expected, actual)
 	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
+	expected, actual = projectMarkdownManifest(expected, actual, fileOrigin, legacyFormat)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}

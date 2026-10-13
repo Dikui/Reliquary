@@ -2,10 +2,11 @@ package types
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestIngestContractFieldSetAndExample(t *testing.T) {
@@ -17,7 +18,7 @@ func TestIngestContractFieldSetAndExample(t *testing.T) {
 			fields = append(fields, field)
 		}
 	}
-	require.ElementsMatch(t, []string{"kind", "document_id", "url", "content", "acquisition", "content_type_hint", "file", "missing", "title", "author", "publisher", "published_at", "images", "thread", "quotes", "collect_reason", "agent_summary", "agent_tags", "source_name"}, fields)
+	require.ElementsMatch(t, []string{"kind", "document_id", "url", "content", "acquisition", "content_type_hint", "missing", "title", "author", "publisher", "published_at", "images", "thread", "quotes", "collect_reason", "agent_summary", "agent_tags", "source_name"}, fields)
 	result := IngestResult{EntryID: "article-example", Status: "pending_review", Message: "等待收录审核。", Reason: "缺少来源", ImageFailures: []IngestImageFailure{}, Completeness: []IngestMissing{}}
 	data, err := json.Marshal(result)
 	require.NoError(t, err)

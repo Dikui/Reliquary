@@ -12,10 +12,11 @@ import (
 
 	"testing"
 
+	taskqueue "reliquary/internal/queue"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	taskqueue "reliquary/internal/queue"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
@@ -135,7 +136,6 @@ func processOverridesPGConfig() *types.EntryProcessOverrides {
 	return &types.EntryProcessOverrides{
 		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 1240, ChunkOverlap: 120,
 			EnableParentChild: true, ParentChunkSize: 2480, ChildChunkSize: 400},
-		ParserEngineOverrides: map[string]string{"mineru_parse_method": "ocr"},
 	}
 }
 

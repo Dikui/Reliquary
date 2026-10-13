@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
 )
 
 func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lanes [][]entrySearchHit, config *types.RetrievalConfig) ([]*types.EntrySearchResult, error) {
@@ -83,9 +84,9 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 		result := &types.EntrySearchResult{
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
-			Acquisition:    entry.Acquisition,
-			Incomplete:     (entry.SourceKind == "article" || entry.SourceKind == "mine") && entry.Incomplete,
-			ProcessingMode: entry.ProcessingMode, Summary: entry.StructuredSummary, Starred: entry.Starred,
+			Acquisition: entry.Acquisition,
+			Incomplete:  (entry.SourceKind == "article" || entry.SourceKind == "mine") && entry.Incomplete,
+			Summary:     entry.StructuredSummary, Starred: entry.Starred,
 			SourceUnverified: entry.SourceUnverified,
 			Entities:         entities[entry.ID], Topics: topics[entry.ID],
 			Score: scores[entry.ID], SimilarReports: []*types.EntrySearchResult{},

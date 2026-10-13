@@ -15,7 +15,6 @@ export const usePendingCountsStore = defineStore('pending-counts', () => {
     try {
       const responses = await Promise.all([
         listPendingEntry({ kind: 'intake', page: 1, page_size: 1 }),
-        listPendingEntry({ kind: 'processing', page: 1, page_size: 1 }),
         listIncompleteArticles({ page: 1, page_size: 1, include_attempted: true }),
       ])
       if (responses.some(response => !response.success || !Number.isSafeInteger(response.total) || response.total < 0)) return

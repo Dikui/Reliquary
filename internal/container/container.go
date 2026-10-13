@@ -5,9 +5,7 @@ package container
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"github.com/panjf2000/ants/v2"
 	"io"
 	"net/url"
 	"os"
@@ -15,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/duckdb/duckdb-go/v2"
+	"github.com/panjf2000/ants/v2"
 
 	"go.uber.org/dig"
 	"gorm.io/driver/postgres"
@@ -72,9 +70,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering external service clients...")
 	must(container.Provide(docparser.NewImageResolver))
 	must(container.Provide(initOllamaService))
-	logger.Debugf(ctx, "[Container] Initializing DuckDB...")
-	must(container.Provide(NewDuckDB))
-	logger.Debugf(ctx, "[Container] DuckDB registered")
 
 	// Data repositories layer
 	logger.Debugf(ctx, "[Container] Registering repositories...")
@@ -403,38 +398,6 @@ func initOllamaService() (*ollama.OllamaService, error) {
 	return ollama.GetOllamaService()
 }
 
-func NewDuckDB() (*sql.DB, error) {
-	sqlDB, err := sql.Open("duckdb", ":memory:")
-	if err != nil {
-		return nil, fmt.Errorf("failed to open duckdb: %w", err)
-	}
-
-	// Runtime parsing uses extensions prepared by the build-time download tool.
-	// Disable automatic installation so parsing cannot initiate library downloads.
-	for _, setting := range []string{"SET autoinstall_known_extensions=false", "SET autoload_known_extensions=false"} {
-		if _, err := sqlDB.ExecContext(context.Background(), setting); err != nil {
-			sqlDB.Close()
-			return nil, err
-		}
-	}
-	if strings.EqualFold(os.Getenv("DUCKDB_SKIP_EXTENSION_LOAD"), "true") || os.Getenv("DUCKDB_SKIP_EXTENSION_LOAD") == "1" {
-		logger.Infof(context.Background(), "[DuckDB] Skipping installed parsing extensions")
-	} else {
-		for _, extension := range []string{"spatial", "excel"} {
-			if _, err := sqlDB.ExecContext(context.Background(), fmt.Sprintf("LOAD %s;", extension)); err != nil {
-				logger.Warnf(context.Background(), "[DuckDB] Load installed %s extension: %v", extension, err)
-			}
-		}
-	}
-
-	return sqlDB, nil
-}
-
-// startHousekeepingService starts the entry housekeeping cron and registers
-// cleanup. This is the safety net that recovers any entry stuck in
-// "processing" past a configurable threshold (see HousekeepingService for
-// rationale). Best-effort: a startup error is logged but does NOT abort the
-// container — the rest of the system stays usable.
 func startHousekeepingService(svc *service.HousekeepingService, cleaner interfaces.ResourceCleaner) {
 	if svc == nil {
 		return

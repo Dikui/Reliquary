@@ -70,7 +70,7 @@ const renderer = createRenderer<HostNode, HostNode>({
   insertStaticContent(text, parent) { const el = { ...node(), text, parent }; parent.children.push(el); return [el, el] },
 })
 
-test('mounted detail switches articles and modes, closes and unmounts without undefined references', async () => {
+test('mounted detail switches full-text articles, closes and unmounts without undefined references', async () => {
   const previous = new Map<string, PropertyDescriptor | undefined>()
   for (const [name, value] of Object.entries({ window: { innerWidth: 1440, addEventListener() {}, removeEventListener() {} }, localStorage: { getItem: () => null, setItem() {} }, document: { body: { style: {} }, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} } })) {
     previous.set(name, Object.getOwnPropertyDescriptor(globalThis, name)); Object.defineProperty(globalThis, name, { configurable: true, value })
@@ -100,7 +100,7 @@ test('mounted detail switches articles and modes, closes and unmounts without un
     let state: any
     const setup = detail.setup
     detail.setup = (props: object, context: object) => { state = setup(props, context); return state }
-    const article = (id: string, mode = 'full') => ({ id, type: 'manual', file_type: 'md', file_name: `${id}.md`, title: id, parse_status: 'completed', processing_mode: mode, md: [], total: 0, metadata: {}, custom_metadata: {} })
+    const article = (id: string) => ({ id, type: 'manual', file_type: 'md', file_name: `${id}.md`, title: id, parse_status: 'completed', md: [], total: 0, metadata: {}, custom_metadata: {} })
     const props = reactive({ visible: true, details: article('event') })
     app = renderer.createApp(defineComponent({ setup: () => () => h(detail, props) }))
     const stub = defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible === false ? null : h('div', slots.default?.()) })
@@ -113,7 +113,7 @@ test('mounted detail switches articles and modes, closes and unmounts without un
     Object.assign(props.details, { source_kind: 'article', vault_path: 'articles/2026-10/event.md' })
     await nextTick(); await nextTick()
     assert.ok(imageHydrations > beforeVaultMetadata, 'late vault metadata hydrates images even when chunks arrived first')
-    for (const value of [article('another-event'), article('tutorial', 'summary_only'), article('research'), article('reference', 'summary_only')]) {
+    for (const value of [article('another-event'), article('tutorial'), article('research'), article('reference')]) {
       state.chunkPage.value = 3; state.loadedChunkPage.value = 3
       props.details = value; await nextTick()
       assert.deepEqual(errors, []); assert.deepEqual(warnings, [])

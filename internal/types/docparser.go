@@ -2,19 +2,6 @@ package types
 
 import "strings"
 
-// ReadRequest is the unified transport-agnostic request for document reading.
-// Set FileContent for file mode, URL for URL mode.
-type ReadRequest struct {
-	FileContent           []byte
-	FileName              string
-	FileType              string
-	URL                   string
-	Title                 string
-	ParserEngine          string
-	RequestID             string
-	ParserEngineOverrides map[string]string
-}
-
 // ReadResult is the transport-agnostic result of document reading.
 type ReadResult struct {
 	MarkdownContent string
@@ -36,15 +23,6 @@ type ImageRef struct {
 	// must not be dropped by the icon/size filter — otherwise a small image
 	// upload would be silently discarded before multimodal processing.
 	IsOriginal bool
-}
-
-// ParserEngineInfo describes a registered parser engine.
-type ParserEngineInfo struct {
-	Name              string
-	Description       string
-	FileTypes         []string
-	Available         bool
-	UnavailableReason string
 }
 
 // --- Internal types used by chunking pipeline ---

@@ -21,7 +21,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {
           get: async (url: string) => {
             calls.push(url)
-            assert.equal(url, '/health', 'database-dependent requests must wait during reconnect')
+            if (page === 'RuntimeQueues' && url === '/api/v1/system/runtime/queues') return { available: true, queues: [], pools: [] }
+            assert.equal(url, '/health')
             return { status: 'ok', queue_connection: { state: 'reconnecting', last_error: 'Task delivery connection is unavailable', alert, alert_after_seconds: 300 } }
           },
         } : require(name), api, api.exports)
@@ -32,7 +33,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           './systemSettingsEdit': require('./systemSettingsEdit'),
           './runtimeTaskPagination': require('./runtimeTaskPagination'), '@/i18n/countCopy': require('../../i18n/countCopy'),
           'tdesign-vue-next': { MessagePlugin: {} },
-          '@/api/chatgpt': {}, '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })),
+          '@/api/chatgpt': { getChatGPTAccounts: async () => ({ accounts: [] }), getChatGPTPolicy: async () => ({ paused: false }) }, '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })),
           '@/components/settings/SettingDrawer.vue': moduleOf(defineComponent({ setup: () => () => null })),
         })
         const app = renderer.createApp(component)
