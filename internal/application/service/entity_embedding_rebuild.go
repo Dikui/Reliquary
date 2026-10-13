@@ -20,7 +20,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// EntityNameEmbeddingRebuilder uses the knowledge base embedding model for entity names.
+// EntityNameEmbeddingRebuilder uses the library embedding model for entity names.
 type EntityNameEmbeddingRebuilder struct {
 	db     *gorm.DB
 	models interfaces.ModelService
@@ -51,7 +51,7 @@ func (r *EntityNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id s
 		return nil, err
 	}
 	if metadata.Type != types.ModelTypeEmbedding || metadata.Status != types.ModelStatusActive {
-		return nil, errors.New("knowledge base embedding model must be active and have Embedding type")
+		return nil, errors.New("library embedding model must be active and have Embedding type")
 	}
 	return &metadata, nil
 }
@@ -64,7 +64,7 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, spaceID uint
 		return profile, err
 	}
 	if id == "" {
-		return profile, errors.New("knowledge base embedding model is not configured")
+		return profile, errors.New("library embedding model is not configured")
 	}
 	if r.models == nil {
 		return profile, errors.New("embedding model service is unavailable")
@@ -75,7 +75,7 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, spaceID uint
 	}
 	model, err := r.models.GetEmbeddingModel(types.WithModelTier(ctx, types.ModelTierEmbedding), id)
 	if err != nil {
-		return profile, fmt.Errorf("knowledge base embedding model is unavailable: %w", err)
+		return profile, fmt.Errorf("library embedding model is unavailable: %w", err)
 	}
 	if model == nil || model.GetDimensions() < 1 {
 		return profile, errors.New("embedding model has no usable dimensions")
@@ -372,13 +372,13 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 	return nil
 }
 func (r *EntityNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, spaceID uint64, profile entityEmbeddingProfile) error {
-	var kb types.KnowledgeBase
-	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers", "embedding_model_id").Where("space_id=?", spaceID).First(&kb).Error; err != nil {
+	var library types.Library
+	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers", "embedding_model_id").Where("space_id=?", spaceID).First(&library).Error; err != nil {
 		return err
 	}
-	id, err := ResolveModelTier(context.Background(), nil, &kb, types.ModelTierEmbedding)
+	id, err := ResolveModelTier(context.Background(), nil, &library, types.ModelTierEmbedding)
 	if err != nil || id != profile.modelID {
-		return errors.New("knowledge base embedding profile changed during rebuild")
+		return errors.New("library embedding profile changed during rebuild")
 	}
 	var metadata types.Model
 	err = tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (space_id=? OR is_builtin=true)", profile.modelID, spaceID).First(&metadata).Error
@@ -407,7 +407,7 @@ func (r *EntityNameEmbeddingRebuilder) WithTransaction(ctx context.Context, tx *
 		boundModels := *models
 		boundModels.db = tx
 		boundModels.repo = repository.NewModelRepository(tx)
-		boundModels.kbRepo = repository.NewKnowledgeBaseRepository(tx)
+		boundModels.libraryRepo = repository.NewLibraryRepository(tx)
 		copy.models = &boundModels
 	}
 	copy.tasks = &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}

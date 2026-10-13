@@ -75,11 +75,11 @@ func (s *EntityService) ResolveEntities(ctx context.Context, entryID string, inp
 	if s.models == nil {
 		return nil, errors.New("entity judgment model service is unavailable")
 	}
-	var kb types.KnowledgeBase
-	if err = s.db.WithContext(ctx).Where("id=? AND space_id=?", article.KnowledgeBaseID, spaceID).First(&kb).Error; err != nil {
+	var library types.Library
+	if err = s.db.WithContext(ctx).Where("id=? AND space_id=?", article.LibraryID, spaceID).First(&library).Error; err != nil {
 		return nil, err
 	}
-	modelID, err := ResolveModelTier(ctx, s.db, &kb, types.ModelTierEntityResolution)
+	modelID, err := ResolveModelTier(ctx, s.db, &library, types.ModelTierEntityResolution)
 	if err != nil {
 		return nil, err
 	}
@@ -125,19 +125,19 @@ func (s *EntityService) ResolveEntities(ctx context.Context, entryID string, inp
 	return entities, s.loadAliases(ctx, spaceID, entities)
 }
 
-func (s *EntityService) resolveKnowledgeBase(ctx context.Context) (uint64, string, error) {
+func (s *EntityService) resolveLibrary(ctx context.Context) (uint64, string, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return 0, "", err
 	}
 
-	var kb types.KnowledgeBase
-	if err := s.db.WithContext(ctx).Select("id").Where("space_id=?", spaceID).First(&kb).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, "", werrors.NewNotFoundError("knowledge base not found")
+	var library types.Library
+	if err := s.db.WithContext(ctx).Select("id").Where("space_id=?", spaceID).First(&library).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, "", werrors.NewNotFoundError("library not found")
 	} else if err != nil {
 		return 0, "", err
 	}
-	return spaceID, kb.ID, nil
+	return spaceID, library.ID, nil
 }
 func entityQueryLimit(limit int) int {
 	if limit < 1 {
@@ -168,13 +168,13 @@ func (s *EntityService) loadAliases(ctx context.Context, spaceID uint64, entitie
 	return nil
 }
 func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) ([]types.Entity, error) {
-	spaceID, kbID, err := s.resolveKnowledgeBase(ctx)
+	spaceID, libraryID, err := s.resolveLibrary(ctx)
 	if err != nil {
 		return nil, err
 	}
 	query := s.db.WithContext(ctx).Model(&types.Entity{}).Where("entities.space_id=? AND entities.merged_into_id=''", spaceID)
-	if kbID != "" {
-		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities links JOIN entries k ON k.id=links.entry_id AND k.space_id=links.space_id WHERE links.space_id=entities.space_id AND links.entity_id=entities.id AND k.knowledge_base_id=? AND k.deleted_at IS NULL)`, kbID)
+	if libraryID != "" {
+		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities links JOIN entries k ON k.id=links.entry_id AND k.space_id=links.space_id WHERE links.space_id=entities.space_id AND links.entity_id=entities.id AND k.library_id=? AND k.deleted_at IS NULL)`, libraryID)
 	}
 	if q.EntityType != "" {
 		query = query.Where("entities.entity_type=?", types.NormalizeEntityType(q.EntityType))

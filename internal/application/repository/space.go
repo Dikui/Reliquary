@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrSpaceNotFound         = errors.New("space not found")
-	ErrSpaceHasKnowledgeBase = errors.New("space has associated knowledge bases")
+	ErrSpaceNotFound   = errors.New("space not found")
+	ErrSpaceHasLibrary = errors.New("space has associated libraries")
 )
 
 // spaceRepository implements space repository interface

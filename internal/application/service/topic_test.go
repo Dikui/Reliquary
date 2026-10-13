@@ -29,7 +29,7 @@ func TestTopicsCatalogSelectionAndArticleDisplay(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, catalog, 2)
 
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: uuid.NewString(), Type: "file", Title: "Event", Source: "manual", ParseStatus: types.ParseStatusCompleted}
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: uuid.NewString(), Type: "file", Title: "Event", Source: "manual", ParseStatus: types.ParseStatusCompleted}
 	require.NoError(t, db.Create(article).Error)
 	require.NoError(t, svc.ReplaceEntryTopics(ctx, article.ID, []string{first.ID, first.ID, "missing", other.ID}))
 	var links []types.EntryTopic
@@ -48,7 +48,7 @@ func TestTopicsCatalogSelectionAndArticleDisplay(t *testing.T) {
 	require.Equal(t, entity.ID, detail.Entities[0].ID)
 	require.Len(t, detail.Topics, 1)
 	require.Equal(t, first.ID, detail.Topics[0].ID)
-	page, err := kg.ListPagedEntryByKnowledgeBaseID(ctx, article.KnowledgeBaseID, &types.Pagination{Page: 1, PageSize: 10}, types.EntryListFilter{})
+	page, err := kg.ListPagedEntryByLibraryID(ctx, article.LibraryID, &types.Pagination{Page: 1, PageSize: 10}, types.EntryListFilter{})
 	require.NoError(t, err)
 	listed := page.Data.([]*types.Entry)
 	require.Len(t, listed[0].Entities, 1)
@@ -73,10 +73,10 @@ func TestTopicsCatalogSelectionAndArticleDisplay(t *testing.T) {
 func TestArticleSummaryKeywordSearchWithoutChunksOrVectors(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
-	kb := &types.KnowledgeBase{ID: uuid.NewString(), SpaceID: 1, Name: "Entry", IndexingStrategy: types.DefaultIndexingStrategy()}
-	require.NoError(t, db.Create(kb).Error)
+	library := &types.Library{ID: uuid.NewString(), SpaceID: 1, Name: "Entry", IndexingStrategy: types.DefaultIndexingStrategy()}
+	require.NoError(t, db.Create(library).Error)
 	summary := &types.EntrySummary{Overview: "Build a nebulaengine application.", Points: []string{"Install the tool", "Configure a project", "Run the project"}, KeyTerms: []string{"nebulaengine", "Reliquary"}}
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: kb.ID, Type: "url", Title: "A tutorial", Source: "https://example.com/tutorial", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", ContentType: types.ContentTypeTutorial, ProcessingMode: types.ProcessingModeSummaryOnly, StructuredSummary: summary, Description: summary.RenderText()}
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Type: "url", Title: "A tutorial", Source: "https://example.com/tutorial", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", ContentType: types.ContentTypeTutorial, ProcessingMode: types.ProcessingModeSummaryOnly, StructuredSummary: summary, Description: summary.RenderText()}
 	require.NoError(t, db.Create(article).Error)
 	var loaded types.Entry
 	require.NoError(t, db.First(&loaded, "id=?", article.ID).Error)
@@ -87,13 +87,13 @@ func TestArticleSummaryKeywordSearchWithoutChunksOrVectors(t *testing.T) {
 	require.NoError(t, db.Table("embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
 	require.Zero(t, count)
 	engine := pgretriever.NewPostgresRetrieveEngineRepository(db)
-	hits, err := engine.Retrieve(ctx, types.RetrieveParams{Query: "nebulaengine", KnowledgeBaseIDs: []string{kb.ID}, TopK: 10, RetrieverType: types.KeywordsRetrieverType})
+	hits, err := engine.Retrieve(ctx, types.RetrieveParams{Query: "nebulaengine", LibraryIDs: []string{library.ID}, TopK: 10, RetrieverType: types.KeywordsRetrieverType})
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
 	require.Len(t, hits[0].Results, 1)
 	require.Equal(t, article.ID, hits[0].Results[0].EntryID)
 	require.Equal(t, types.EntrySummarySearchID(article.ID), hits[0].Results[0].ChunkID)
-	search := &knowledgeBaseService{entryRepo: repository.NewEntryRepository(db), chunkRepo: repository.NewChunkRepository(db)}
+	search := &libraryService{entryRepo: repository.NewEntryRepository(db), chunkRepo: repository.NewChunkRepository(db)}
 	results, err := (&chunkSearchService{search}).processSearchResults(ctx, hits[0].Results, true)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
@@ -102,11 +102,11 @@ func TestArticleSummaryKeywordSearchWithoutChunksOrVectors(t *testing.T) {
 
 	// Overwriting processing results updates the keyword index automatically.
 	require.NoError(t, db.Model(article).Update("description", "replacementquasar").Error)
-	hits, err = engine.Retrieve(ctx, types.RetrieveParams{Query: "replacementquasar", KnowledgeBaseIDs: []string{kb.ID}, TopK: 10, RetrieverType: types.KeywordsRetrieverType})
+	hits, err = engine.Retrieve(ctx, types.RetrieveParams{Query: "replacementquasar", LibraryIDs: []string{library.ID}, TopK: 10, RetrieverType: types.KeywordsRetrieverType})
 	require.NoError(t, err)
 	require.Len(t, hits[0].Results, 1)
 	require.NoError(t, db.Model(article).Update("parse_status", types.ParseStatusFailed).Error)
-	hits, err = engine.Retrieve(ctx, types.RetrieveParams{Query: "replacementquasar", KnowledgeBaseIDs: []string{kb.ID}, TopK: 10, RetrieverType: types.KeywordsRetrieverType})
+	hits, err = engine.Retrieve(ctx, types.RetrieveParams{Query: "replacementquasar", LibraryIDs: []string{library.ID}, TopK: 10, RetrieverType: types.KeywordsRetrieverType})
 	require.NoError(t, err)
 	require.Empty(t, hits[0].Results)
 }

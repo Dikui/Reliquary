@@ -18,7 +18,7 @@ func TestLegacyArticleReprocessingMarksMissingBodyAndCompletesThroughSameLink(t 
 				h, _ := newIngestHarness(t)
 				transport := forbidIngestNetwork(t, h)
 				originalURL := "https://example.org/legacy-" + channel + "-" + kind
-				entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: kind, SourceKind: "article", Channel: channel,
+				entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: kind, SourceKind: "article", Channel: channel,
 					Source: originalURL, Title: "Legacy publication", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", ContentType: "tutorial",
 					ProcessingMode: types.ProcessingModeSummaryOnly, ExternalCompletionAttempted: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 					Metadata: types.JSON(`{"publisher":"Legacy Journal","datasource_id":"removed-feed","original_url":"` + originalURL + `"}`)}
@@ -79,10 +79,10 @@ func TestLegacyQueuedURLTasksNeverRetrieveContent(t *testing.T) {
 		t.Run(field, func(t *testing.T) {
 			h, _ := newIngestHarness(t)
 			transport := forbidIngestNetwork(t, h)
-			entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", SourceKind: "article", Channel: types.ChannelRSS,
+			entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", SourceKind: "article", Channel: types.ChannelRSS,
 				Source: "https://example.org/queued-legacy", Title: "Queued legacy article", ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 			require.NoError(t, h.db.Create(entry).Error)
-			raw, err := json.Marshal(map[string]any{"tenant_id": h.kb.SpaceID, "knowledge_id": entry.ID, "knowledge_base_id": h.kb.ID, field: entry.Source})
+			raw, err := json.Marshal(map[string]any{"tenant_id": h.library.SpaceID, "knowledge_id": entry.ID, "library_id": h.library.ID, field: entry.Source})
 			require.NoError(t, err)
 			require.NoError(t, h.service.ProcessDocument(h.ctx, taskqueue.NewTask(types.TypeDocumentProcess, raw)))
 			stored := h.article(t, entry.ID)
@@ -122,10 +122,10 @@ func TestLegacyQueuedURLTasksRespectCompletedCancelledAndDeletingArticles(t *tes
 		t.Run(status, func(t *testing.T) {
 			h, _ := newIngestHarness(t)
 			transport := forbidIngestNetwork(t, h)
-			entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", SourceKind: "article", Channel: types.ChannelRSS, Source: "https://example.org/retained-state", Title: "Retained state", ParseStatus: status, ProcessingMode: types.ProcessingModeFull, VaultBody: "Stored original body", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+			entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", SourceKind: "article", Channel: types.ChannelRSS, Source: "https://example.org/retained-state", Title: "Retained state", ParseStatus: status, ProcessingMode: types.ProcessingModeFull, VaultBody: "Stored original body", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 			require.NoError(t, h.db.Create(entry).Error)
 			before := h.article(t, entry.ID)
-			raw, err := json.Marshal(types.DocumentProcessPayload{SpaceID: h.kb.SpaceID, EntryID: entry.ID, KnowledgeBaseID: h.kb.ID, URL: entry.Source})
+			raw, err := json.Marshal(types.DocumentProcessPayload{SpaceID: h.library.SpaceID, EntryID: entry.ID, LibraryID: h.library.ID, URL: entry.Source})
 			require.NoError(t, err)
 			require.NoError(t, h.service.ProcessDocument(h.ctx, taskqueue.NewTask(types.TypeDocumentProcess, raw)))
 			after := h.article(t, entry.ID)
@@ -140,9 +140,9 @@ func TestLegacyQueuedURLTaskUsesStoredBodyWithoutFetching(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	transport := forbidIngestNetwork(t, h)
 	body := "An original experiment reports its instrument settings and complete measured research observations."
-	entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", SourceKind: "article", Channel: types.ChannelRSS, Source: "https://example.org/stored-legacy", Title: "Stored legacy", ParseStatus: types.ParseStatusPending, ProcessingMode: types.ProcessingModeFull, VaultBody: body, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", SourceKind: "article", Channel: types.ChannelRSS, Source: "https://example.org/stored-legacy", Title: "Stored legacy", ParseStatus: types.ParseStatusPending, ProcessingMode: types.ProcessingModeFull, VaultBody: body, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	require.NoError(t, h.db.Create(entry).Error)
-	raw, err := json.Marshal(types.DocumentProcessPayload{SpaceID: h.kb.SpaceID, EntryID: entry.ID, KnowledgeBaseID: h.kb.ID, FileURL: entry.Source})
+	raw, err := json.Marshal(types.DocumentProcessPayload{SpaceID: h.library.SpaceID, EntryID: entry.ID, LibraryID: h.library.ID, FileURL: entry.Source})
 	require.NoError(t, err)
 	require.NoError(t, h.service.ProcessDocument(h.ctx, taskqueue.NewTask(types.TypeDocumentProcess, raw)))
 	h.drain(t)
@@ -157,7 +157,7 @@ func TestLegacyReprocessingUsesDatabaseBodyWithoutVaultPath(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	transport := forbidIngestNetwork(t, h)
 	body := "An original paper preserves all instrument measurements and research observations."
-	entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", SourceKind: "article", Channel: types.ChannelWeb, Source: "https://example.org/database-body", Title: "Database body", ParseStatus: types.ParseStatusCompleted, ProcessingMode: types.ProcessingModeFull, VaultBody: body, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", SourceKind: "article", Channel: types.ChannelWeb, Source: "https://example.org/database-body", Title: "Database body", ParseStatus: types.ParseStatusCompleted, ProcessingMode: types.ProcessingModeFull, VaultBody: body, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	require.NoError(t, h.db.Create(entry).Error)
 	_, err := h.service.ReparseEntry(h.ctx, entry.ID, nil)
 	require.NoError(t, err)

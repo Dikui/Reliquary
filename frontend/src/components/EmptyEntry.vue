@@ -5,8 +5,8 @@ const { t } = useI18n()
 <template>
   <div class="empty">
     <t-icon class="empty-icon" name="file" aria-hidden="true" />
-    <p class="empty-title">{{ t('knowledgeBase.emptyArticles') }}</p>
-    <p class="empty-hint">{{ t('knowledgeBase.ingestOnlyHint') }}</p>
+    <p class="empty-title">{{ t('library.emptyArticles') }}</p>
+    <p class="empty-hint">{{ t('library.ingestOnlyHint') }}</p>
   </div>
 </template>
 <style scoped lang="less">

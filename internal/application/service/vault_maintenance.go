@@ -116,7 +116,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 				result.Differences = append(result.Differences, article.VaultPath+": image content hash differs: "+reference)
 			}
 			var expected string
-			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("entry_id=? AND attachment_path=? AND model_id=(SELECT COALESCE(NULLIF(model_tiers->>'embedding',''),embedding_model_id) FROM knowledge_bases WHERE id=?)", article.ID, reference, article.KnowledgeBaseID).Scan(&expected).Error; err != nil {
+			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("entry_id=? AND attachment_path=? AND model_id=(SELECT COALESCE(NULLIF(model_tiers->>'embedding',''),embedding_model_id) FROM libraries WHERE id=?)", article.ID, reference, article.LibraryID).Scan(&expected).Error; err != nil {
 				return result, err
 			}
 			if expected != "" && expected != hash {
@@ -124,7 +124,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			}
 			if expected == "" {
 				var supports bool
-				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM knowledge_bases b JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id) WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.KnowledgeBaseID).Scan(&supports).Error; err != nil {
+				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM libraries b JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id) WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.LibraryID).Scan(&supports).Error; err != nil {
 					return result, err
 				}
 				if supports {
@@ -178,10 +178,10 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		result.PendingVectors["images"] = pendingImages
 	}
 	for key, query := range map[string]string{
-		"articles": `SELECT count(*) FROM entries k JOIN knowledge_bases b ON b.id=k.knowledge_base_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
-		"chunks":   `SELECT count(*) FROM chunks c JOIN knowledge_bases b ON b.id=c.knowledge_base_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"articles": `SELECT count(*) FROM entries k JOIN libraries b ON b.id=k.library_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"chunks":   `SELECT count(*) FROM chunks c JOIN libraries b ON b.id=c.library_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
 		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
- SELECT 1 FROM knowledge_bases b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
+ SELECT 1 FROM libraries b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
  WHERE b.space_id=e.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
  e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
  OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
@@ -297,13 +297,13 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 	if err := maintenance.VerifyImportedReplica(ctx, s.db, s.root); err != nil {
 		return result, err
 	}
-	ctx, kb, err := s.scope(ctx)
+	ctx, library, err := s.scope(ctx)
 	if err != nil {
 		return result, err
 	}
 	// Keyword reconstruction works while model credentials are being entered.
 	// Available-model vector rebuilding is a separate explicit maintenance step.
-	indexing := *kb
+	indexing := *library
 	indexing.IndexingStrategy.VectorEnabled = false
 	var articles []types.Entry
 	if err := s.db.WithContext(ctx).Where("vault_path<>'' AND parse_status=?", types.ParseStatusCompleted).Find(&articles).Error; err != nil {

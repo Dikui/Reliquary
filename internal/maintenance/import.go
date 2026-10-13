@@ -164,7 +164,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if existing != 0 {
 		return nil, errors.New("replica import requires an empty entry database")
 	}
-	order := []string{"spaces", "users", "auth_tokens", "knowledge_bases", "models", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
+	order := []string{"spaces", "users", "auth_tokens", "libraries", "models", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", "task_jobs", "task_queue_counters", "maintenance_state"}
 	covered := map[string]bool{}
 	for _, table := range order {
 		covered[table] = true

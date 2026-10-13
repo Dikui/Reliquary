@@ -48,9 +48,9 @@ func sameIngestBody(before, after string) bool {
 	return bc >= minimumSimHashRunes && ac >= minimumSimHashRunes && bc >= ac*4/5 && bc <= ac*5/4 && bits.OnesCount64(uint64(bs)^uint64(as)) <= messageSimHashThreshold()
 }
 
-func (s *entryService) supplementIngest(ctx context.Context, kb *types.KnowledgeBase, article *types.Entry, request *types.IngestRequest, keyID uint64, keyName string) (*types.IngestResult, error) {
+func (s *entryService) supplementIngest(ctx context.Context, library *types.Library, article *types.Entry, request *types.IngestRequest, keyID uint64, keyName string) (*types.IngestResult, error) {
 	beforeMissing := article.IngestMissing()
-	oldBody, err := s.readIngestBody(ctx, kb, article)
+	oldBody, err := s.readIngestBody(ctx, library, article)
 	if err != nil {
 		return nil, err
 	}
@@ -58,10 +58,10 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 	replaceContent := hasIngestMissing(beforeMissing, "content", "")
 	suppliedContent := strings.TrimSpace(request.Content) != "" && !validIngestURL(strings.TrimSpace(request.Content))
 	if suppliedContent && !replaceContent && !sameIngestBody(oldBody, request.Content) {
-		return s.storeIngestConflict(ctx, kb, article, request, keyID, keyName)
+		return s.storeIngestConflict(ctx, library, article, request, keyID, keyName)
 	}
 
-	files := s.resolveFileService(ctx, kb)
+	files := s.resolveFileService(ctx, library)
 	remaining := []types.IngestMissing{}
 	mappings := map[string]string{}
 	links := []string{}
@@ -256,7 +256,7 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 				if !strings.HasPrefix(source, "local://") && !strings.HasPrefix(source, "resource://") {
 					continue
 				}
-				reader, err := s.resolveFileServiceForPath(ctx, kb, source).GetFile(ctx, source)
+				reader, err := s.resolveFileServiceForPath(ctx, library, source).GetFile(ctx, source)
 				if err != nil {
 					return nil, err
 				}
@@ -358,7 +358,7 @@ func (s *entryService) supplementIngest(ctx context.Context, kb *types.Knowledge
 	}
 	s.bindContentResources(ctx, article.SpaceID, article.ID, newBody)
 	if pendingContent && !hasIngestMissing(remaining, "content", "") {
-		result, err := s.finishIngestReview(ctx, kb, article, newBody)
+		result, err := s.finishIngestReview(ctx, library, article, newBody)
 		if err == nil && result.Status == "accepted" {
 			result.Status = "supplemented"
 			result.Message = "已补入正文，正在处理。"
@@ -389,7 +389,7 @@ func (s *entryService) persistIngestCompletion(ctx context.Context, k *types.Ent
 	}).Error
 }
 
-func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.KnowledgeBase, original *types.Entry, request *types.IngestRequest, keyID uint64, keyName string) (*types.IngestResult, error) {
+func (s *entryService) storeIngestConflict(ctx context.Context, library *types.Library, original *types.Entry, request *types.IngestRequest, keyID uint64, keyName string) (*types.IngestResult, error) {
 	now := time.Now()
 	noun := "文章"
 	if original.SourceKind == "mine" {
@@ -400,9 +400,9 @@ func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.Knowle
 	if title == "" {
 		title = original.Title
 	}
-	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: original.SpaceID, KnowledgeBaseID: kb.ID, Type: types.EntryTypeManual, SourceKind: original.SourceKind, Source: request.URL, Channel: types.ChannelAPI,
+	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: original.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual, SourceKind: original.SourceKind, Source: request.URL, Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual, ParseStatus: types.ParseStatusRejected, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
-		EmbeddingModelID: kb.EmbeddingModelID, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint, RelatedArticleID: original.ID, AgentTags: types.JSON("[]"), CollectReason: request.CollectReason, AgentSummary: request.AgentSummary, SourceName: request.SourceName,
+		EmbeddingModelID: library.EmbeddingModelID, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint, RelatedArticleID: original.ID, AgentTags: types.JSON("[]"), CollectReason: request.CollectReason, AgentSummary: request.AgentSummary, SourceName: request.SourceName,
 		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName}
 	tags, marshalErr := json.Marshal(request.AgentTags)
 	if marshalErr != nil {
@@ -415,16 +415,16 @@ func (s *entryService) storeIngestConflict(ctx context.Context, kb *types.Knowle
 	if err := incoming.SetIntakeMetadata(intake); err != nil {
 		return nil, err
 	}
-	body, canonical, err := s.storeIngestMaterials(ctx, kb, incoming, request)
+	body, canonical, err := s.storeIngestMaterials(ctx, library, incoming, request)
 	if err != nil {
 		return nil, err
 	}
 	setMessageFingerprint(incoming, canonical)
-	// Ingest holds the knowledge base deduplication lock through this lookup
+	// Ingest holds the library deduplication lock through this lookup
 	// and creation. Retry only an exact body hash for this original article.
 	var existing types.Entry
-	err = s.db.WithContext(ctx).Where("space_id=? AND knowledge_base_id=? AND source_kind=? AND related_article_id=? AND content_hash=? AND parse_status=?",
-		incoming.SpaceID, incoming.KnowledgeBaseID, original.SourceKind, original.ID, incoming.ContentHash, types.ParseStatusRejected).
+	err = s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND source_kind=? AND related_article_id=? AND content_hash=? AND parse_status=?",
+		incoming.SpaceID, incoming.LibraryID, original.SourceKind, original.ID, incoming.ContentHash, types.ParseStatusRejected).
 		Order("created_at ASC,id ASC").First(&existing).Error
 	if err == nil {
 		if changes, ok := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges); ok {

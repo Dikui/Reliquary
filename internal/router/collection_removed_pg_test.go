@@ -18,25 +18,25 @@ func TestRemovedCollectionAndManualRoutesReturnNotFound(t *testing.T) {
 		require.False(t, strings.HasPrefix(registered.Path, "/api/v1/data-sources"), registered.Path)
 		if registered.Method == http.MethodPost {
 			for _, suffix := range []string{"file", "url", "manual"} {
-				require.NotEqual(t, "/api/v1/knowledge-bases/:id/entries/"+suffix, registered.Path)
+				require.NotEqual(t, "/api/v1/libraries/:id/entries/"+suffix, registered.Path)
 			}
 		}
 		if registered.Method == http.MethodPut {
 			require.NotEqual(t, "/api/v1/entries/:id/manual", registered.Path)
 		}
 	}
-	var baseID string
-	require.NoError(t, fixture.db.Model(&types.KnowledgeBase{}).Where("space_id=?", types.SingleSpaceID).Select("id").Scan(&baseID).Error)
-	if baseID == "" {
-		baseID = uuid.NewString()
-		require.NoError(t, fixture.db.Create(&types.KnowledgeBase{ID: baseID, SpaceID: types.SingleSpaceID, Name: "Articles", Type: types.KnowledgeBaseTypeDocument}).Error)
+	var libraryID string
+	require.NoError(t, fixture.db.Model(&types.Library{}).Where("space_id=?", types.SingleSpaceID).Select("id").Scan(&libraryID).Error)
+	if libraryID == "" {
+		libraryID = uuid.NewString()
+		require.NoError(t, fixture.db.Create(&types.Library{ID: libraryID, SpaceID: types.SingleSpaceID, Name: "Articles", Type: types.LibraryTypeDocument}).Error)
 	}
 	entryID := uuid.NewString()
-	require.NoError(t, fixture.db.Create(&types.Entry{ID: entryID, SpaceID: types.SingleSpaceID, KnowledgeBaseID: baseID, Title: "Legacy article", Type: types.EntryTypeManual, Channel: types.ChannelWeb, SourceKind: "article", ParseStatus: types.ParseStatusCompleted}).Error)
+	require.NoError(t, fixture.db.Create(&types.Entry{ID: entryID, SpaceID: types.SingleSpaceID, LibraryID: libraryID, Title: "Legacy article", Type: types.EntryTypeManual, Channel: types.ChannelWeb, SourceKind: "article", ParseStatus: types.ParseStatusCompleted}).Error)
 	routes := []struct{ method, path string }{
-		{http.MethodPost, "/api/v1/knowledge-bases/kb/entries/file"},
-		{http.MethodPost, "/api/v1/knowledge-bases/kb/entries/url"},
-		{http.MethodPost, "/api/v1/knowledge-bases/kb/entries/manual"},
+		{http.MethodPost, "/api/v1/libraries/library/entries/file"},
+		{http.MethodPost, "/api/v1/libraries/library/entries/url"},
+		{http.MethodPost, "/api/v1/libraries/library/entries/manual"},
 		{http.MethodPut, "/api/v1/entries/legacy/manual"},
 		{http.MethodGet, "/api/v1/data-sources/types"},
 		{http.MethodPost, "/api/v1/data-sources/validate-credentials"},
@@ -57,7 +57,7 @@ func TestRemovedCollectionAndManualRoutesReturnNotFound(t *testing.T) {
 		{http.MethodGet, "/api/v1/data-sources/logs/legacy"},
 	}
 	for _, route := range routes {
-		route.path = strings.ReplaceAll(route.path, "/knowledge-bases/kb/", "/knowledge-bases/"+baseID+"/")
+		route.path = strings.ReplaceAll(route.path, "/libraries/library/", "/libraries/"+libraryID+"/")
 		route.path = strings.ReplaceAll(route.path, "/entries/legacy/", "/entries/"+entryID+"/")
 		for _, apiKey := range []bool{false, true} {
 			credential := fixture.token

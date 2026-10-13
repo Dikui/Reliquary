@@ -56,7 +56,7 @@ test('vault image references are protected and hydrated through the authenticate
     Object.defineProperty(globalThis, key, { configurable: true, value })
   }
   try {
-    await hydrateProtectedFileImages(root as unknown as ParentNode, { mode: 'knowledgeBase', kbId: 'kb-a' })
+    await hydrateProtectedFileImages(root as unknown as ParentNode, { mode: 'library', libraryId: 'library-a' })
     assert.equal(requests.length, 1)
     const request = requests[0]
     const url = new URL(request.url, 'http://localhost')

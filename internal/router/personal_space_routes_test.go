@@ -35,7 +35,7 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 		require.NotContains(t, updated.Body.String(), "storage_quota")
 		kv := personalRequest(t, f.router, http.MethodPut, "/api/v1/space/kv/retrieval-config", `{}`, actor.credential, actor.apiKey)
 		require.Equal(t, http.StatusOK, kv.Code, kv.Body.String())
-		tiers := personalRequest(t, f.router, http.MethodPut, "/api/v1/knowledge-base", `{"name":"知识库","model_tiers":{}}`, actor.credential, actor.apiKey)
+		tiers := personalRequest(t, f.router, http.MethodPut, "/api/v1/library", `{"name":"库","model_tiers":{}}`, actor.credential, actor.apiKey)
 		require.Equal(t, http.StatusOK, tiers.Code, tiers.Body.String())
 	}
 }
@@ -55,13 +55,13 @@ func TestPersonalOldManagementRoutesReturnNotFound(t *testing.T) {
 	}
 }
 
-func TestPersonalKnowledgeBaseExistenceGuardReturnsNotFound(t *testing.T) {
+func TestPersonalLibraryExistenceGuardReturnsNotFound(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, route := range []struct{ method, path, body string }{
-		{http.MethodGet, "/api/v1/knowledge-bases/missing/entries", ""},
+		{http.MethodGet, "/api/v1/libraries/missing/entries", ""},
 	} {
 		response := personalRequest(t, f.router, route.method, route.path, route.body, f.token, false)
 		require.Equal(t, http.StatusNotFound, response.Code, response.Body.String())
-		require.Contains(t, response.Body.String(), "knowledge base not found")
+		require.Contains(t, response.Body.String(), "library not found")
 	}
 }

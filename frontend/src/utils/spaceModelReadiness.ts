@@ -6,7 +6,7 @@ export interface SpaceModelReadiness {
   hasGeneration: boolean
   hasEmbedding: boolean
   /** 文档库默认开启向量/关键词检索时所需的模型是否齐备 */
-  isReadyForDocumentKb: boolean
+  isReadyForDocumentLibrary: boolean
 }
 
 export function evaluateSpaceModelReadiness(models: ModelConfig[]): SpaceModelReadiness {
@@ -19,7 +19,7 @@ export function evaluateSpaceModelReadiness(models: ModelConfig[]): SpaceModelRe
     embeddingCount,
     hasGeneration,
     hasEmbedding,
-    isReadyForDocumentKb: hasGeneration && hasEmbedding,
+    isReadyForDocumentLibrary: hasGeneration && hasEmbedding,
   }
 }
 

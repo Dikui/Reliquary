@@ -11,14 +11,14 @@ import (
 func TestUpdateEntryExplicitEmptyDescriptionClearsSummary(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{
-		ID:              "entry-1",
-		SpaceID:         7,
-		KnowledgeBaseID: "kb-1",
-		Description:     "old summary",
-		SummaryStatus:   types.SummaryStatusCompleted,
+		ID:            "entry-1",
+		SpaceID:       7,
+		LibraryID:     "library-1",
+		Description:   "old summary",
+		SummaryStatus: types.SummaryStatusCompleted,
 	}}
 	service := &entryService{
-		repo: repo, kbService: metadataUpdateKBService{},
+		repo: repo, libraryService: metadataUpdateLibraryService{},
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
@@ -35,14 +35,14 @@ func TestUpdateEntryExplicitEmptyDescriptionClearsSummary(t *testing.T) {
 func TestUpdateEntryOmittedDescriptionPreservesExisting(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{
-		ID:              "entry-1",
-		SpaceID:         7,
-		KnowledgeBaseID: "kb-1",
-		Description:     "keep me",
-		SummaryStatus:   types.SummaryStatusCompleted,
+		ID:            "entry-1",
+		SpaceID:       7,
+		LibraryID:     "library-1",
+		Description:   "keep me",
+		SummaryStatus: types.SummaryStatusCompleted,
 	}}
 	service := &entryService{
-		repo: repo, kbService: metadataUpdateKBService{},
+		repo: repo, libraryService: metadataUpdateLibraryService{},
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
@@ -59,13 +59,13 @@ func TestUpdateEntryOmittedDescriptionPreservesExisting(t *testing.T) {
 func TestUpdateEntryManualDescriptionSetsCompletedStatus(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{
-		ID:              "entry-1",
-		SpaceID:         7,
-		KnowledgeBaseID: "kb-1",
-		SummaryStatus:   types.SummaryStatusFailed,
+		ID:            "entry-1",
+		SpaceID:       7,
+		LibraryID:     "library-1",
+		SummaryStatus: types.SummaryStatusFailed,
 	}}
 	service := &entryService{
-		repo: repo, kbService: metadataUpdateKBService{},
+		repo: repo, libraryService: metadataUpdateLibraryService{},
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
@@ -82,15 +82,15 @@ func TestUpdateEntryManualDescriptionSetsCompletedStatus(t *testing.T) {
 func TestUpdateEntryDescriptionOnlyDoesNotTouchMetadata(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{
-		ID:              "entry-1",
-		SpaceID:         7,
-		KnowledgeBaseID: "kb-1",
-		Description:     "old summary",
-		SummaryStatus:   types.SummaryStatusCompleted,
-		CustomMetadata:  types.JSON(`{"region":"Beijing"}`),
+		ID:             "entry-1",
+		SpaceID:        7,
+		LibraryID:      "library-1",
+		Description:    "old summary",
+		SummaryStatus:  types.SummaryStatusCompleted,
+		CustomMetadata: types.JSON(`{"region":"Beijing"}`),
 	}}
 	service := &entryService{
-		repo: repo, kbService: metadataUpdateKBService{},
+		repo: repo, libraryService: metadataUpdateLibraryService{},
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 

@@ -80,7 +80,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering repositories...")
 	must(container.Provide(repository.NewSpaceRepository))
 	must(container.Provide(repository.NewAPIKeyRepository))
-	must(container.Provide(repository.NewKnowledgeBaseRepository))
+	must(container.Provide(repository.NewLibraryRepository))
 	must(container.Provide(repository.NewEntryRepository))
 	must(container.Provide(repository.NewEntrySpanRepository))
 	must(container.Provide(repository.NewChunkRepository))
@@ -94,7 +94,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering business services...")
 	must(container.Provide(service.NewSpaceService))
 	must(container.Provide(service.NewAPIKeyService))
-	must(container.Provide(service.NewKnowledgeBaseService))
+	must(container.Provide(service.NewLibraryService))
 	must(container.Provide(service.NewEntryService))
 	must(container.Provide(service.NewSearchService))
 	must(container.Provide(service.NewSpanTracker))
@@ -130,7 +130,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
 	must(container.Provide(handler.NewSpaceHandler))
-	must(container.Provide(handler.NewKnowledgeBaseHandler))
+	must(container.Provide(handler.NewLibraryHandler))
 	must(container.Provide(handler.NewEntryHandler))
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewMaintenanceHandler))
@@ -173,7 +173,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 func registerNameEmbeddingRebuildIntegration(
 	rebuilder *service.EntityNameEmbeddingRebuilder,
 	entityService *service.EntityService,
-	knowledgeBases interfaces.KnowledgeBaseService,
+	libraries interfaces.LibraryService,
 	models interfaces.ModelService,
 	entityHandler *handler.EntityHandler,
 ) error {
@@ -187,7 +187,7 @@ func registerNameEmbeddingRebuildIntegration(
 		integration.SetNameEmbeddingRebuilder(rebuilder)
 		return nil
 	}
-	if err := setter(knowledgeBases); err != nil {
+	if err := setter(libraries); err != nil {
 		return err
 	}
 	if err := setter(models); err != nil {
@@ -302,7 +302,7 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	if err := service.EnsurePersonalSpace(context.Background(), db); err != nil {
 		return nil, err
 	}
-	if err := service.EnsureSingleKnowledgeBase(context.Background(), db); err != nil {
+	if err := service.EnsureSingleLibrary(context.Background(), db); err != nil {
 		return nil, err
 	}
 	sqlDB, err := db.DB()

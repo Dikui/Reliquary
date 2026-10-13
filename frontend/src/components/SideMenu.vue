@@ -1,7 +1,7 @@
 <template>
   <aside class="aside_box" :class="{ 'aside_box--collapsed': sidebarCollapsed }">
     <div class="logo_row">
-      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.knowledgeBase')" @click="navigate('entries')">
+      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.library')" @click="navigate('entries')">
         <img class="logo" src="@/assets/img/reliquary.svg" alt="Reliquary">
       </button>
       <t-tooltip :content="t(sidebarCollapsed ? 'menu.expandSidebar' : 'menu.collapseSidebar')" placement="right">
@@ -10,7 +10,7 @@
         </button>
       </t-tooltip>
     </div>
-    <nav class="menu_top" :aria-label="t('menu.knowledgeBase')">
+    <nav class="menu_top" :aria-label="t('menu.library')">
       <t-tooltip v-for="item in visibleMenuArr" :key="item.key" :content="item.title" placement="right" :disabled="!sidebarCollapsed">
         <button type="button" :class="['menu_item', { menu_item_active: active(item.path, item.tab) }]" :aria-label="item.key === 'follows' && follows.newCount > 0 ? t('follows.navCount', { count: follows.newCount }) : item.title" :aria-current="active(item.path, item.tab) ? 'page' : undefined" @click="navigate(item.path, item.tab)">
           <t-icon :name="item.icon" size="20px" /><span v-if="!sidebarCollapsed" class="menu_title">{{ item.title }}</span><span v-if="item.key === 'follows' && (follows.newCount > 0 || follows.stateError)" class="follow-badge" :title="follows.stateError ? t('follows.countFailed') : t('follows.navCount', { count: follows.newCount })" aria-hidden="true">{{ follows.stateError ? '!' : follows.newCount }}</span>

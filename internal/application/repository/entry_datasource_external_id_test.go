@@ -16,14 +16,14 @@ func TestHardDeleteEntry(t *testing.T) {
 	ctx := context.Background()
 
 	const spaceID uint64 = 52
-	kbID := uuid.New().String()
+	libraryID := uuid.New().String()
 	id := uuid.New().String()
 	metadata := `{"datasource_id":"ds-1","external_id":"file:1"}`
 	require.NoError(t, db.Exec(`
 		INSERT INTO entries
-		  (id, space_id, knowledge_base_id, type, title, source, parse_status, metadata, deleted_at)
+		  (id, space_id, library_id, type, title, source, parse_status, metadata, deleted_at)
 		VALUES (?, ?, ?, 'document', 'file:1', 'rss', 'completed', ?, '2026-01-01 00:00:00')
-	`, id, spaceID, kbID, metadata).Error)
+	`, id, spaceID, libraryID, metadata).Error)
 
 	require.NoError(t, repo.HardDeleteEntry(ctx, spaceID, id))
 

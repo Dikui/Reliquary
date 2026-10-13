@@ -39,7 +39,7 @@ const (
 // its credentials must not receive anonymous, time-limited file URLs. Callers
 // map it to 403 rather than 400: the request is well-formed, the scope is not.
 var ErrPublicModeForbidden = errors.New(
-	"resource_urls=public is not available for a knowledge-base-restricted API key")
+	"resource_urls=public is not available for a library-restricted API key")
 
 // ParseMode validates a mode supplied by a client or by configuration. An empty
 // value yields ModeHandle so an unset parameter or setting keeps the default.

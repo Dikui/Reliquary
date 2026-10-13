@@ -26,10 +26,10 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
-	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
+	library, err := repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
-	kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
-	require.NoError(t, db.Save(kb).Error)
+	library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
+	require.NoError(t, db.Save(library).Error)
 	root := t.TempDir()
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(db))
 	documents, err := service.NewVaultDocumentService(db, nil, engine, root)
@@ -56,7 +56,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(root, result.Data.VaultPath))
 	require.NoError(t, err)
 	require.Contains(t, string(content), "Reportvaultmarker")
-	hits, err := engine.Retrieve(ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, KnowledgeBaseIDs: []string{kb.ID}, Query: "Reportvaultmarker", TopK: 10}})
+	hits, err := engine.Retrieve(ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{library.ID}, Query: "Reportvaultmarker", TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)

@@ -53,27 +53,27 @@ const (
 // Raw payloads and results are deliberately excluded because they may contain
 // document content, signed object URLs, or connector credentials.
 type RuntimeTaskInfo struct {
-	ID              string              `json:"id"`
-	Queue           string              `json:"queue"`
-	Type            string              `json:"type"`
-	State           RuntimeTaskState    `json:"state"`
-	AllowedActions  []RuntimeTaskAction `json:"allowed_actions"`
-	LastError       string              `json:"last_error,omitempty"`
-	LastFailedAt    *time.Time          `json:"last_failed_at,omitempty"`
-	NextProcessAt   *time.Time          `json:"next_process_at,omitempty"`
-	StartedAt       *time.Time          `json:"started_at,omitempty"`
-	CompletedAt     *time.Time          `json:"completed_at,omitempty"`
-	Deadline        *time.Time          `json:"deadline,omitempty"`
-	EnqueuedAt      *time.Time          `json:"enqueued_at,omitempty"`
-	Retried         int                 `json:"retried"`
-	MaxRetry        int                 `json:"max_retry"`
-	IsOrphaned      bool                `json:"is_orphaned,omitempty"`
-	Worker          string              `json:"worker,omitempty"`
-	SpaceID         uint64              `json:"space_id,omitempty"`
-	KnowledgeBaseID string              `json:"knowledge_base_id,omitempty"`
-	EntryID         string              `json:"entry_id,omitempty"`
-	TaskID          string              `json:"task_id,omitempty"`
-	EntryCount      int                 `json:"entry_count,omitempty"`
+	ID             string              `json:"id"`
+	Queue          string              `json:"queue"`
+	Type           string              `json:"type"`
+	State          RuntimeTaskState    `json:"state"`
+	AllowedActions []RuntimeTaskAction `json:"allowed_actions"`
+	LastError      string              `json:"last_error,omitempty"`
+	LastFailedAt   *time.Time          `json:"last_failed_at,omitempty"`
+	NextProcessAt  *time.Time          `json:"next_process_at,omitempty"`
+	StartedAt      *time.Time          `json:"started_at,omitempty"`
+	CompletedAt    *time.Time          `json:"completed_at,omitempty"`
+	Deadline       *time.Time          `json:"deadline,omitempty"`
+	EnqueuedAt     *time.Time          `json:"enqueued_at,omitempty"`
+	Retried        int                 `json:"retried"`
+	MaxRetry       int                 `json:"max_retry"`
+	IsOrphaned     bool                `json:"is_orphaned,omitempty"`
+	Worker         string              `json:"worker,omitempty"`
+	SpaceID        uint64              `json:"space_id,omitempty"`
+	LibraryID      string              `json:"library_id,omitempty"`
+	EntryID        string              `json:"entry_id,omitempty"`
+	TaskID         string              `json:"task_id,omitempty"`
+	EntryCount     int                 `json:"entry_count,omitempty"`
 }
 
 // RuntimeTaskPage is one stable slice of the operator task list. NextCursor

@@ -11,13 +11,13 @@ import (
 )
 
 func TestDeadLetterPreservesDiagnosticsAndPayload(t *testing.T) {
-	payload, _ := json.Marshal(map[string]any{"tenant_id": 42, "knowledge_base_id": "kb-abc", "entry_id": "k-1"})
+	payload, _ := json.Marshal(map[string]any{"tenant_id": 42, "library_id": "library-abc", "entry_id": "k-1"})
 	row := BuildDeadLetter(NewTask("knowledge:process", payload), errors.New("boom"), 3)
 	require.Equal(t, "knowledge:process", row.TaskType)
 	require.Equal(t, types.SingleSpaceID, row.SpaceID)
 	require.Equal(t, payload, []byte(row.Payload))
-	require.Equal(t, types.TaskScopeKnowledgeBase, row.Scope)
-	require.Equal(t, "kb-abc", row.ScopeID)
+	require.Equal(t, types.TaskScopeLibrary, row.Scope)
+	require.Equal(t, "library-abc", row.ScopeID)
 	require.Equal(t, "k-1", row.RelatedID)
 	require.Equal(t, "boom", row.LastError)
 	require.Equal(t, 3, row.FailCount)
@@ -47,7 +47,7 @@ func TestDeadLetterLongErrorTruncated(t *testing.T) {
 
 func TestDeadLetterScopePriority(t *testing.T) {
 	tests := []struct{ name, payload, scope, id string }{
-		{"knowledge_base_id wins over entry_id", `{"knowledge_base_id":"kb1","entry_id":"k1"}`, types.TaskScopeKnowledgeBase, "kb1"},
+		{"library_id wins over entry_id", `{"library_id":"library1","entry_id":"k1"}`, types.TaskScopeLibrary, "library1"},
 		{"entry_id only", `{"entry_id":"k-only"}`, types.TaskScopeEntry, "k-only"},
 		{"space_id fallback", `{"tenant_id":7}`, types.TaskScopeSpace, "7"},
 		{"no identifiers", `{}`, types.TaskScopeUnknown, ""},

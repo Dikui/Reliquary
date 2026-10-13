@@ -62,7 +62,7 @@ func TestIngestBatchStatesValidationLimitsAndIsolation(t *testing.T) {
 	broken := full
 	broken.URL = "https://example.org/broken"
 	broken.Content = "An independent document whose review model deliberately encounters a temporary failure."
-	h.service.modelService = articleProcessingModels{summaryStateModelService: &summaryStateModelService{model: &ingestSelectiveFailureModel{articleProcessingChat: h.processor}, metadata: &types.Model{ID: "local-fixture", SpaceID: h.kb.SpaceID}}}
+	h.service.modelService = articleProcessingModels{summaryStateModelService: &summaryStateModelService{model: &ingestSelectiveFailureModel{articleProcessingChat: h.processor}, metadata: &types.Model{ID: "local-fixture", SpaceID: h.library.SpaceID}}}
 	after := *ingestFixtureRequest("https://example.org/after-error", "The committee publishes its original housing statistics including regional totals and methodology.")
 	result, err = h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{broken, after}})
 	require.NoError(t, err)
@@ -477,7 +477,7 @@ func TestIngestSummaryOnlyIncompleteRetainsMaterialsAndCompletes(t *testing.T) {
 			intake, err := before.IntakeMetadata()
 			require.NoError(t, err)
 			require.NotEmpty(t, intake.OriginalPath)
-			raw, err := h.service.readIngestBody(h.ctx, h.kb, before)
+			raw, err := h.service.readIngestBody(h.ctx, h.library, before)
 			require.NoError(t, err)
 			require.Contains(t, raw, source)
 			h.processor.output = validProcessingFixture(nextType)

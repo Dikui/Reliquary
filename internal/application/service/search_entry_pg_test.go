@@ -19,13 +19,13 @@ import (
 )
 
 type entrySearchFixtureBases struct {
-	interfaces.KnowledgeBaseService
-	kb             *types.KnowledgeBase
+	interfaces.LibraryService
+	library        *types.Library
 	embeddingError error
 }
 
-func (b entrySearchFixtureBases) GetKnowledgeBase(context.Context) (*types.KnowledgeBase, error) {
-	return b.kb, nil
+func (b entrySearchFixtureBases) GetLibrary(context.Context) (*types.Library, error) {
+	return b.library, nil
 }
 func (b entrySearchFixtureBases) GetQueryEmbedding(_ context.Context, _ string, query string) ([]float32, error) {
 	if b.embeddingError != nil {
@@ -50,11 +50,11 @@ func entrySearchFixtureEmbedding(text string) []float32 {
 }
 
 type entrySearchFixture struct {
-	db     *gorm.DB
-	ctx    context.Context
-	kb     *types.KnowledgeBase
-	config *types.RetrievalConfig
-	svc    interfaces.SearchService
+	db      *gorm.DB
+	ctx     context.Context
+	library *types.Library
+	config  *types.RetrievalConfig
+	svc     interfaces.SearchService
 }
 
 func newEntrySearchFixture(t *testing.T) *entrySearchFixture {
@@ -63,19 +63,19 @@ func newEntrySearchFixture(t *testing.T) *entrySearchFixture {
 	config := &types.RetrievalConfig{RerankTopK: 100, KeywordThreshold: 0.00001}
 	space := &types.Space{ID: 1, Name: "Search fixture", RetrievalConfig: config}
 	require.NoError(t, db.Create(space).Error)
-	kb := &types.KnowledgeBase{ID: "search-kb", SpaceID: 1, Name: "Search", Type: types.KnowledgeBaseTypeDocument,
+	library := &types.Library{ID: "search-library", SpaceID: 1, Name: "Search", Type: types.LibraryTypeDocument,
 		EmbeddingModelID: "fixture-model", ModelTiers: types.ModelTierConfig{Embedding: "fixture-model"},
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}}
-	require.NoError(t, db.Create(kb).Error)
+	require.NoError(t, db.Create(library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
-	svc := NewSearchService(entrySearchFixtureBases{kb: kb}, nil, nil, db)
-	return &entrySearchFixture{db: db, ctx: ctx, kb: kb, config: config, svc: svc}
+	svc := NewSearchService(entrySearchFixtureBases{library: library}, nil, nil, db)
+	return &entrySearchFixture{db: db, ctx: ctx, library: library, config: config, svc: svc}
 }
 
 func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, semantic string, count int) *types.Entry {
 	t.Helper()
-	article := &types.Entry{ID: id, SpaceID: 1, KnowledgeBaseID: h.kb.ID, Type: "manual",
+	article := &types.Entry{ID: id, SpaceID: 1, LibraryID: h.library.ID, Type: "manual",
 		Title: "Searchfixture " + id, Source: "https://example.org/" + id, SourceKind: source,
 		ContentType: contentType, ProcessingMode: types.ProcessingModeForContentType(contentType),
 		ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", EmbeddingModelID: "fixture-model",
@@ -92,16 +92,16 @@ func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, se
 	require.NoError(t, h.db.Create(article).Error)
 	if source == "article" {
 		vector := pgvector.NewHalfVector(entrySearchFixtureEmbedding(article.Title + "\n" + article.Description))
-		require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
-			VALUES (?,1,?,'fixture-model',3,?,'fixture')`, article.ID, h.kb.ID, vector).Error)
+		require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
+			VALUES (?,1,?,'fixture-model',3,?,'fixture')`, article.ID, h.library.ID, vector).Error)
 	}
 	for i := 0; i < count; i++ {
-		chunk := &types.Chunk{ID: fmt.Sprintf("%s-chunk-%03d", id, i), SpaceID: 1, KnowledgeBaseID: h.kb.ID,
+		chunk := &types.Chunk{ID: fmt.Sprintf("%s-chunk-%03d", id, i), SpaceID: 1, LibraryID: h.library.ID,
 			EntryID: id, ChunkIndex: i, Content: "searchfixture " + semantic + fmt.Sprintf(" body passage %d", i),
 			ChunkType: types.ChunkTypeText, IsEnabled: true}
 		require.NoError(t, h.db.Create(chunk).Error)
-		require.NoError(t, h.db.Exec(`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,knowledge_base_id,dimension,embedding,is_enabled)
-			VALUES (?,0,?,?,?,?,?,true)`, chunk.ID, chunk.ID, article.ID, h.kb.ID, 3, pgvector.NewHalfVector(entrySearchFixtureEmbedding(chunk.Content))).Error)
+		require.NoError(t, h.db.Exec(`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,dimension,embedding,is_enabled)
+			VALUES (?,0,?,?,?,?,?,true)`, chunk.ID, chunk.ID, article.ID, h.library.ID, 3, pgvector.NewHalfVector(entrySearchFixtureEmbedding(chunk.Content))).Error)
 	}
 	return article
 }
@@ -166,11 +166,11 @@ func TestEntrySearchPostgresMergesChunksAndSummaryOnlyRoutes(t *testing.T) {
 		}
 	}
 	// A semantic-only query has no shared keyword and recalls summary articles.
-	h.kb.IndexingStrategy.KeywordEnabled = false
+	h.library.IndexingStrategy.KeywordEnabled = false
 	response = h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", CollapseSimilar: entrySearchNoCollapse()})
 	require.Contains(t, entrySearchIDs(response), "summary")
 	// A body-only keyword cannot recall a summary article whose body was not kept.
-	h.kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
+	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id='full'").Update("content", "privatebodyneedle").Error)
 	response = h.search(t, types.EntrySearchRequest{Query: "privatebodyneedle", CollapseSimilar: entrySearchNoCollapse()})
 	require.Equal(t, []string{"full"}, entrySearchIDs(response))
@@ -185,7 +185,7 @@ func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 	require.NoError(t, h.db.Create(&types.EntityAlias{ID: "alias-a", SpaceID: 1, EntityID: entity.ID, Alias: "Aliasneedle", NormalizedAlias: "aliasneedle", EntityType: "company"}).Error)
 	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-a", SpaceID: 1, Name: "Topicneedle"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "summary", TopicID: "topic-a"}).Error)
-	h.kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
+	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	for _, term := range []string{"Canonicalneedle", "Aliasneedle", "Topicneedle", "Termneedlesummary", "Publisherneedlesummary", "Authorneedlesummary"} {
 		t.Run(term, func(t *testing.T) {
 			response := h.search(t, types.EntrySearchRequest{Query: term})
@@ -225,7 +225,7 @@ func TestEntrySearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 		require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: id, TopicID: "topic-" + id}).Error)
 	}
 	// Keep query recall entirely semantic so the unrelated missing article is excluded.
-	h.kb.IndexingStrategy.KeywordEnabled = false
+	h.library.IndexingStrategy.KeywordEnabled = false
 	tests := []struct {
 		name    string
 		req     types.EntrySearchRequest
@@ -309,14 +309,14 @@ func TestEntrySearchUsesConfiguredRerankTier(t *testing.T) {
 	h.add(t, "a", "article", "2026-10-01", "event", "semanticlaunch", 1)
 	sentinel := errors.New("configured rerank unavailable")
 	models := &entrySearchRerankModels{err: sentinel}
-	svc := NewSearchService(entrySearchFixtureBases{kb: h.kb}, nil, models, h.db)
+	svc := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, models, h.db)
 	for _, id := range []string{"selected-rerank", "replacement-rerank"} {
-		h.kb.ModelTiers.Rerank = id
+		h.library.ModelTiers.Rerank = id
 		_, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch"})
 		require.ErrorIs(t, err, sentinel)
 		require.Equal(t, id, models.selected)
 	}
-	h.kb.ModelTiers.Rerank = ""
+	h.library.ModelTiers.Rerank = ""
 	models.selected = ""
 	_, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch"})
 	require.NoError(t, err)
@@ -340,7 +340,7 @@ func TestEntrySearchRejectsInvalidFilters(t *testing.T) {
 func TestEntrySearchEmbeddingFailure(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	cause := errors.New("EmbedBatch API error: Http Status 503 <html>upstream secret</html>")
-	svc := NewSearchService(entrySearchFixtureBases{kb: h.kb, embeddingError: cause}, nil, nil, h.db)
+	svc := NewSearchService(entrySearchFixtureBases{library: h.library, embeddingError: cause}, nil, nil, h.db)
 	result, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "searchfixture"})
 	require.Nil(t, result)
 	require.ErrorIs(t, err, cause)

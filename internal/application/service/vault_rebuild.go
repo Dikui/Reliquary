@@ -31,16 +31,16 @@ type VaultRebuildResult struct {
 
 // Rebuild restores an empty entry store without modifying any vault file.
 // The initialized personal space and its model choices are infrastructure rather
-// than recoverable article data. A keyword-only knowledge base needs no model.
+// than recoverable article data. A keyword-only library needs no model.
 func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ctx, kb, err := s.scope(ctx)
+	ctx, library, err := s.scope(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var count int64
-	if err := s.db.WithContext(ctx).Unscoped().Model(&types.Entry{}).Where("space_id=?", kb.SpaceID).Count(&count).Error; err != nil {
+	if err := s.db.WithContext(ctx).Unscoped().Model(&types.Entry{}).Where("space_id=?", library.SpaceID).Count(&count).Error; err != nil {
 		return nil, err
 	}
 	if count != 0 {
@@ -94,13 +94,13 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 				result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, "duplicate article id"})
 				return nil
 			}
-			entry, err := s.restoreVaultArticle(ctx, kb, rel, header, body)
+			entry, err := s.restoreVaultArticle(ctx, library, rel, header, body)
 			if err != nil {
 				return fmt.Errorf("restore article %s: %w", rel, err)
 			}
 			seenArticleIDs[header.ID] = true
 			if entry.ProcessingMode == types.ProcessingModeFull {
-				if err := s.indexVaultChunks(ctx, kb, entry, entry.VaultBody); err != nil {
+				if err := s.indexVaultChunks(ctx, library, entry, entry.VaultBody); err != nil {
 					_ = s.db.WithContext(ctx).Model(entry).Updates(map[string]interface{}{
 						"parse_status": types.ParseStatusFailed, "error_message": err.Error(),
 					}).Error
@@ -110,11 +110,11 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 					return err
 				}
 			}
-			if err := indexArticleEmbedding(ctx, s.db, s.models, kb, entry); err != nil {
+			if err := indexArticleEmbedding(ctx, s.db, s.models, library, entry); err != nil {
 				return fmt.Errorf("index rebuilt article summary %s: %w", rel, err)
 			}
 			vault := &VaultService{db: s.db, root: s.root}
-			if err := indexArticleImages(ctx, s.db, s.models, kb, vault, entry); err != nil {
+			if err := indexArticleImages(ctx, s.db, s.models, library, vault, entry); err != nil {
 				return fmt.Errorf("index rebuilt article images %s: %w", rel, err)
 			}
 			if directory == "articles" {
@@ -126,7 +126,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 			return result, err
 		}
 	}
-	if err := s.scanReports(ctx, kb, true, &result.Skipped); err != nil {
+	if err := s.scanReports(ctx, library, true, &result.Skipped); err != nil {
 		return result, err
 	}
 	for _, target := range []struct {
@@ -134,7 +134,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 		count *int64
 	}{{"mine", &result.Mine}, {"report", &result.Reports}} {
 		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
-			Where("space_id=? AND source_kind=? AND parse_status=?", kb.SpaceID, target.kind, types.ParseStatusCompleted).
+			Where("space_id=? AND source_kind=? AND parse_status=?", library.SpaceID, target.kind, types.ParseStatusCompleted).
 			Count(target.count).Error; err != nil {
 			return result, err
 		}
@@ -183,7 +183,7 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 	return nil
 }
 
-func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *types.KnowledgeBase, path string, header VaultArticleHeader, body []byte) (*types.Entry, error) {
+func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library *types.Library, path string, header VaultArticleHeader, body []byte) (*types.Entry, error) {
 	collected, _ := time.Parse(time.RFC3339Nano, header.CollectedAt)
 	mode := types.ProcessingModeForContentType(header.ContentType)
 	if header.SourceKind == "mine" || header.SourceUnverified || header.ProcessingMode == types.ProcessingModeFull {
@@ -197,7 +197,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 		kind = "mine"
 	}
 	now := time.Now().UTC()
-	entry := &types.Entry{ID: header.ID, SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
+	entry := &types.Entry{ID: header.ID, SpaceID: library.SpaceID, LibraryID: library.ID,
 		Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, VaultBody: string(body),
 		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true, ProcessingMode: mode,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
@@ -247,9 +247,9 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 		}
 		for _, name := range sortedUniqueNames(header.Topics) {
 			var topic types.Topic
-			err := tx.Where("space_id=? AND name=?", kb.SpaceID, name).First(&topic).Error
+			err := tx.Where("space_id=? AND name=?", library.SpaceID, name).First(&topic).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				topic = types.Topic{ID: uuid.NewString(), SpaceID: kb.SpaceID, Name: name, CreatedAt: now, UpdatedAt: now}
+				topic = types.Topic{ID: uuid.NewString(), SpaceID: library.SpaceID, Name: name, CreatedAt: now, UpdatedAt: now}
 				err = tx.Create(&topic).Error
 			}
 			if err != nil {
@@ -257,23 +257,23 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 			}
 			// Headers cannot distinguish model and user selections. Preserve all
 			// recovered selections against later automatic classification.
-			if err := tx.Create(&types.EntryTopic{SpaceID: kb.SpaceID, EntryID: entry.ID,
+			if err := tx.Create(&types.EntryTopic{SpaceID: library.SpaceID, EntryID: entry.ID,
 				TopicID: topic.ID, Source: types.TopicSourceUser, CreatedAt: collected.UTC()}).Error; err != nil {
 				return err
 			}
 		}
 		for _, link := range sortedUniqueNames(header.Entities) {
 			name := strings.TrimSpace(link[2 : len(link)-2])
-			entity, err := restoreVaultEntity(tx, kb.SpaceID, name, now)
+			entity, err := restoreVaultEntity(tx, library.SpaceID, name, now)
 			if err != nil {
 				return err
 			}
 			var existing int64
-			if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entry_id=? AND entity_id=?", kb.SpaceID, entry.ID, entity.ID).Count(&existing).Error; err != nil {
+			if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entry_id=? AND entity_id=?", library.SpaceID, entry.ID, entity.ID).Count(&existing).Error; err != nil {
 				return err
 			}
 			if existing == 0 {
-				if err := tx.Create(&types.EntryEntity{SpaceID: kb.SpaceID, EntryID: entry.ID,
+				if err := tx.Create(&types.EntryEntity{SpaceID: library.SpaceID, EntryID: entry.ID,
 					EntityID: entity.ID, CreatedAt: collected.UTC()}).Error; err != nil {
 					return err
 				}

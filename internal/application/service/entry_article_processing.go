@@ -62,13 +62,13 @@ type articleProcessingTopic struct {
 }
 
 type articleProcessingInput struct {
-	Title              string                   `json:"title"`
-	Publisher          string                   `json:"publisher"`
-	PublishedAt        string                   `json:"published_at"`
-	Body               string                   `json:"body"`
-	BodyTruncated      bool                     `json:"body_truncated"`
-	ContentTypeHint    string                   `json:"content_type_hint,omitempty"`
-	ExistingTopics     []articleProcessingTopic `json:"existing_topics"`
+	Title           string                   `json:"title"`
+	Publisher       string                   `json:"publisher"`
+	PublishedAt     string                   `json:"published_at"`
+	Body            string                   `json:"body"`
+	BodyTruncated   bool                     `json:"body_truncated"`
+	ContentTypeHint string                   `json:"content_type_hint,omitempty"`
+	ExistingTopics  []articleProcessingTopic `json:"existing_topics"`
 }
 
 func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) {
@@ -157,7 +157,7 @@ func articleImagesInOrder(body string, stored []docparser.StoredImage) []string 
 	return urls
 }
 
-func (s *entryService) processingImageDataURI(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, ref string) (string, error) {
+func (s *entryService) processingImageDataURI(ctx context.Context, library *types.Library, k *types.Entry, ref string) (string, error) {
 	if strings.HasPrefix(ref, "data:image/") {
 		return ref, nil
 	}
@@ -172,7 +172,7 @@ func (s *entryService) processingImageDataURI(ctx context.Context, kb *types.Kno
 		if s.vault != nil && k.VaultPath != "" && !strings.Contains(ref, "://") {
 			file, readErr = s.vault.ReadImage(k, ref)
 		} else {
-			file, readErr = s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
+			file, readErr = s.resolveFileServiceForPath(ctx, library, ref).GetFile(ctx, ref)
 		}
 		if readErr != nil {
 			return "", fmt.Errorf("read processing image %s: %w", ref, readErr)
@@ -190,11 +190,11 @@ func (s *entryService) processingImageDataURI(ctx context.Context, kb *types.Kno
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 }
 
-func (s *entryService) callArticleProcessing(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, stored []docparser.StoredImage) (*articleProcessingResult, error) {
+func (s *entryService) callArticleProcessing(ctx context.Context, library *types.Library, k *types.Entry, body string, stored []docparser.StoredImage) (*articleProcessingResult, error) {
 	ctx, calls := types.WithModelCallCollector(ctx)
 	ctx = types.WithLLMCallMetadata(ctx, "article_processing", "")
 	s.beginStage(ctx, k.ID, types.StageProcessing, types.JSONMap{"source_body_chars": len([]rune(body))})
-	modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+	modelID, err := ResolveModelTier(ctx, s.db, library, types.ModelTierGeneration)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, kb *types.Know
 	if model == nil {
 		return nil, errors.New("article processing model is unavailable")
 	}
-	modelChat, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
+	modelChat, err := GetTierChatModel(ctx, s.db, s.modelService, library, types.ModelTierGeneration)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, kb *types.Know
 			if len(images) >= imageLimit {
 				break
 			}
-			uri, err := s.processingImageDataURI(ctx, kb, k, ref)
+			uri, err := s.processingImageDataURI(ctx, library, k, ref)
 			if err != nil {
 				return nil, err
 			}
@@ -304,21 +304,21 @@ func (s *entryService) markArticleProcessingFailed(ctx context.Context, k *types
 	s.failStage(ctx, k.ID, types.StageProcessing, "ARTICLE_PROCESSING_FAILED", err.Error(), err)
 }
 
-func (s *entryService) processArticleBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig) error {
+func (s *entryService) processArticleBody(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig) error {
 	if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
 	}
-	result, err := s.callArticleProcessing(ctx, kb, k, body, images)
+	result, err := s.callArticleProcessing(ctx, library, k, body, images)
 	if err != nil {
 		return err
 	}
-	return s.persistArticleProcessingResult(ctx, kb, k, body, images, eff, result, true)
+	return s.persistArticleProcessingResult(ctx, library, k, body, images, eff, result, true)
 }
 
 // persistArticleProcessingResult is shared by ingestion and a user conversion.
 // A conversion prepares the model result before opening its database transaction
 // and owns the file write so it can restore the previous file on rollback.
-func (s *entryService) persistArticleProcessingResult(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig, result *articleProcessingResult, writeFiles bool) error {
+func (s *entryService) persistArticleProcessingResult(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig, result *articleProcessingResult, writeFiles bool) error {
 	if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
 	}
@@ -416,7 +416,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, kb *t
 		}
 	}
 	if k.ProcessingMode == "summary_only" {
-		if err := s.removeSummaryOnlyBody(ctx, kb, k, body, images); err != nil {
+		if err := s.removeSummaryOnlyBody(ctx, library, k, body, images); err != nil {
 			return err
 		}
 		s.skipStage(ctx, k.ID, types.StageChunking, "summary_only")
@@ -426,24 +426,24 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, kb *t
 		}
 	} else {
 		if writeFiles && s.vault == nil {
-			if err := s.storeProcessedBody(ctx, kb, k, body, images); err != nil {
+			if err := s.storeProcessedBody(ctx, library, k, body, images); err != nil {
 				return err
 			}
 		}
 		chunks, options := splitArticleBody(body, eff.ChunkingConfig)
-		s.processChunks(ctx, kb, k, chunks, options)
+		s.processChunks(ctx, library, k, chunks, options)
 		if k.ParseStatus == types.ParseStatusFailed {
 			return errors.New(k.ErrorMessage)
 		}
 	}
-	if k.ProcessingMode == types.ProcessingModeSummaryOnly && kb.IndexingStrategy.VectorEnabled {
+	if k.ProcessingMode == types.ProcessingModeSummaryOnly && library.IndexingStrategy.VectorEnabled {
 		s.beginStage(ctx, k.ID, types.StageEmbedding, types.JSONMap{"article_vectors": 1})
 	}
-	if err := indexArticleEmbedding(ctx, s.db, s.modelService, kb, k); err != nil {
+	if err := indexArticleEmbedding(ctx, s.db, s.modelService, library, k); err != nil {
 		return err
 	}
 	if k.ProcessingMode == types.ProcessingModeSummaryOnly {
-		if kb.IndexingStrategy.VectorEnabled {
+		if library.IndexingStrategy.VectorEnabled {
 			s.endStage(ctx, k.ID, types.StageEmbedding, types.JSONMap{"article_vectors": 1})
 		} else {
 			s.skipStage(ctx, k.ID, types.StageEmbedding, "vector_disabled")
@@ -451,17 +451,17 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, kb *t
 	}
 	if writeFiles && s.vault != nil {
 		read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
-			return s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
+			return s.resolveFileServiceForPath(ctx, library, ref).GetFile(ctx, ref)
 		}
 		if err := s.vault.WriteArticle(ctx, k, body, read); err != nil {
 			s.vault.recordArticleError(ctx, k.ID, err)
 			return fmt.Errorf("write article to vault: %w", err)
 		}
-		if err := s.removeParsedBodyCopies(ctx, kb, k, body, images); err != nil {
+		if err := s.removeParsedBodyCopies(ctx, library, k, body, images); err != nil {
 			return err
 		}
 	}
-	if err := indexArticleImages(ctx, s.db, s.modelService, kb, s.vault, k); err != nil {
+	if err := indexArticleImages(ctx, s.db, s.modelService, library, s.vault, k); err != nil {
 		return err
 	}
 	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType, "processing_mode": k.ProcessingMode}, "", "")
@@ -471,7 +471,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, kb *t
 // removeParsedBodyCopies drops internal Markdown originals only after the
 // approved article is available in the vault. Uploaded source bytes and image
 // providers remain for downloads, parsing original formats and indexed images.
-func (s *entryService) removeParsedBodyCopies(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, images []docparser.StoredImage) error {
+func (s *entryService) removeParsedBodyCopies(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage) error {
 	if isIngestArticle(k) && k.Incomplete && k.ProcessingMode == types.ProcessingModeSummaryOnly {
 		return nil
 	}
@@ -515,7 +515,7 @@ func (s *entryService) removeParsedBodyCopies(ctx context.Context, kb *types.Kno
 		if ref == k.FilePath {
 			continue
 		}
-		if err = s.resolveFileServiceForPath(ctx, kb, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err = s.resolveFileServiceForPath(ctx, library, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("delete replaced parsed body copy %s: %w", ref, err)
 		}
 	}
@@ -575,7 +575,7 @@ func (s *entryService) hasUnstoredArticleImages(k *types.Entry, body string) boo
 	return docparser.HasUnstoredImages(body)
 }
 
-func (s *entryService) storeProcessedBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, images []docparser.StoredImage) error {
+func (s *entryService) storeProcessedBody(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage) error {
 	metadata := map[string]json.RawMessage{}
 	if len(k.Metadata) > 0 {
 		if err := json.Unmarshal(k.Metadata, &metadata); err != nil {
@@ -584,7 +584,7 @@ func (s *entryService) storeProcessedBody(ctx context.Context, kb *types.Knowled
 	}
 	oldBody := ""
 	_ = json.Unmarshal(metadata["processed_body_path"], &oldBody)
-	path, err := s.resolveFileService(ctx, kb).SaveBytes(ctx, []byte(body), k.SpaceID, k.ID+"-body.md", false)
+	path, err := s.resolveFileService(ctx, library).SaveBytes(ctx, []byte(body), k.SpaceID, k.ID+"-body.md", false)
 	if err != nil {
 		return fmt.Errorf("save parsed article body: %w", err)
 	}
@@ -599,16 +599,16 @@ func (s *entryService) storeProcessedBody(ctx context.Context, kb *types.Knowled
 	}
 	s.bindContentResources(ctx, k.SpaceID, k.ID, body+" "+path)
 	if oldBody != "" && oldBody != path {
-		return s.resolveFileServiceForPath(ctx, kb, oldBody).DeleteFile(ctx, oldBody)
+		return s.resolveFileServiceForPath(ctx, library, oldBody).DeleteFile(ctx, oldBody)
 	}
 	return nil
 }
 
-func (s *entryService) removeSummaryOnlyBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, images []docparser.StoredImage) error {
+func (s *entryService) removeSummaryOnlyBody(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage) error {
 	// Delete body vectors without resolving an embedding model. New
 	// summary-only articles must succeed even when no embedding model is configured.
 	if s.db != nil {
-		if err := s.db.WithContext(ctx).Table("embeddings").Where("knowledge_base_id=? AND entry_id=?", k.KnowledgeBaseID, k.ID).Delete(nil).Error; err != nil {
+		if err := s.db.WithContext(ctx).Table("embeddings").Where("library_id=? AND entry_id=?", k.LibraryID, k.ID).Delete(nil).Error; err != nil {
 			return err
 		}
 	}
@@ -666,7 +666,7 @@ func (s *entryService) removeSummaryOnlyBody(ctx context.Context, kb *types.Know
 		}
 		seen[ref] = true
 		if releaser.deletable(ctx, ref) {
-			if err := s.resolveFileServiceForPath(ctx, kb, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err := s.resolveFileServiceForPath(ctx, library, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("delete summary-only source %s: %w", ref, err)
 			}
 		}

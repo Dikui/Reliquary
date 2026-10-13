@@ -44,7 +44,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	rollback := errors.New("abort collection transaction")
 	var id string
 	require.ErrorIs(t, h.db.WithContext(h.ctx).Transaction(func(tx *gorm.DB) error {
-		article, err := transactionEntryService(h.service, tx).createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+		article, err := transactionEntryService(h.service, tx).createLegacyManualFixture(h.ctx, h.library.ID, transactionManualPayload(), types.ChannelWeb)
 		require.NoError(t, err)
 		id = article.ID
 		jobs := transactionJobs(t, tx)
@@ -57,7 +57,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Count(&count).Error)
 	require.Zero(t, count, "article and task roll back together")
-	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	jobs := transactionJobs(t, h.db)
 	require.Len(t, jobs, 1)
@@ -66,7 +66,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	var payload types.ManualProcessPayload
 	require.NoError(t, json.Unmarshal(jobs[0].Payload, &payload))
 	require.Equal(t, article.ID, payload.EntryID)
-	stored, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
+	stored, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusPending, stored.ParseStatus)
 }
@@ -74,7 +74,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	h.service.task = taskqueue.NewClient(h.db)
-	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 		return rollback
 	}), rollback)
 	require.Empty(t, transactionJobs(t, h.db))
-	unchanged, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
+	unchanged, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusRejected, unchanged.ParseStatus)
 	unchangedIntake, err := unchanged.IntakeMetadata()
@@ -107,7 +107,7 @@ func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusPending, reviewed.ParseStatus)
 	require.Len(t, transactionJobs(t, h.db), 1)
-	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
+	saved, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
 	require.NoError(t, err)
 	savedIntake, err := saved.IntakeMetadata()
 	require.NoError(t, err)
@@ -179,9 +179,9 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 			}}
 			collect := func() (*types.Entry, error) {
 				if kind == "manual_attachment" {
-					return h.service.createLegacyManualFixture(h.ctx, h.kb.ID, payload, types.ChannelWeb)
+					return h.service.createLegacyManualFixture(h.ctx, h.library.ID, payload, types.ChannelWeb)
 				}
-				return h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "durable.md", payload.Content),
+				return h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "durable.md", payload.Content),
 					map[string]string{"original_url": payload.SourceInfo.OriginalURL}, nil, "", types.ChannelWeb, nil)
 			}
 			article, err := collect()
@@ -217,7 +217,7 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 }
 func TestTaskTransactionEnqueueFailureRollsBackApprovalAndRetainsOriginal(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -229,7 +229,7 @@ func TestTaskTransactionEnqueueFailureRollsBackApprovalAndRetainsOriginal(t *tes
 	_, err = h.service.ReviewEntryIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
+	saved, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
 	savedIntake, err := saved.IntakeMetadata()
@@ -261,7 +261,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	h.service.modelService = &summaryStateModelService{model: model}
 	first := taskqueue.NewClient(h.db)
 	h.service.task = first
-	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	config := taskqueue.Config{Pools: types.WorkerPoolConcurrency{Core: 1}, CheckInterval: 10 * time.Millisecond}
 	require.NoError(t, first.Start(context.Background(), taskqueue.HandlerFunc(h.service.ProcessManualUpdate), config))
@@ -276,7 +276,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	require.Len(t, jobs, 1)
 	require.Equal(t, taskqueue.TaskStatePending, jobs[0].State)
 	require.Zero(t, jobs[0].Retried, "process interruption does not consume ordinary retries")
-	stored, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
+	stored, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
 	require.NoError(t, err)
 	preserved, err := stored.IntakeMetadata()
 	require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	require.NoError(t, restarted.Start(context.Background(), taskqueue.HandlerFunc(h.service.ProcessManualUpdate), config))
 	t.Cleanup(func() { require.NoError(t, restarted.Close()) })
 	require.Eventually(t, func() bool {
-		completed, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
+		completed, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
 		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && len(transactionJobs(t, h.db)) == 0
 	}, 5*time.Second, 20*time.Millisecond)
 }

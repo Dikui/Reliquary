@@ -11,7 +11,7 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestSnapshotModelAndKnowledgeBaseEditsPreserveEntityAndQueueHistory(t *testing.T) {
+func TestSnapshotModelAndLibraryEditsPreserveEntityAndQueueHistory(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
 	queue := taskqueue.NewClient(db)
 	models := &nameRebuildModels{models: map[string]embedding.Embedder{
@@ -34,7 +34,7 @@ func TestSnapshotModelAndKnowledgeBaseEditsPreserveEntityAndQueueHistory(t *test
 		original[table] = value
 	}
 	require.NoError(t, db.Exec("UPDATE maintenance_state SET paused=true,pause_mode='snapshot' WHERE id=true").Error)
-	service := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), nil, nil, nil, db).(*modelService)
+	service := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewLibraryRepository(db), nil, nil, nil, db).(*modelService)
 	service.SetNameEmbeddingRebuilder(rebuilder)
 	var model types.Model
 	require.NoError(t, db.First(&model, "id='team-vector'").Error)
@@ -43,9 +43,9 @@ func TestSnapshotModelAndKnowledgeBaseEditsPreserveEntityAndQueueHistory(t *test
 	model = types.Model{}
 	require.NoError(t, db.First(&model, "id='team-vector'").Error)
 	require.Equal(t, 4, model.Parameters.EmbeddingParameters.Dimension, "model configuration must remain editable during snapshot pause")
-	kbs := &knowledgeBaseService{db: db, repo: repository.NewKnowledgeBaseRepository(db)}
-	kbs.SetNameEmbeddingRebuilder(rebuilder)
-	_, err = kbs.UpdateKnowledgeBase(ctx, "trigger-kb", "Knowledge Base", "", &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}})
+	libraries := &libraryService{db: db, repo: repository.NewLibraryRepository(db)}
+	libraries.SetNameEmbeddingRebuilder(rebuilder)
+	_, err = libraries.UpdateLibrary(ctx, "trigger-library", "Library", "", &types.LibraryConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}})
 	require.NoError(t, err)
 	for _, table := range tables {
 		var value string
@@ -53,7 +53,7 @@ func TestSnapshotModelAndKnowledgeBaseEditsPreserveEntityAndQueueHistory(t *test
 		require.JSONEq(t, original[table], value, table+" must retain every historical column while configuring models")
 	}
 	require.NoError(t, db.Exec("UPDATE maintenance_state SET paused=false,pause_mode='' WHERE id=true").Error)
-	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "knowledge_base_embedding_model_changed"))
+	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "library_embedding_model_changed"))
 	entity := readNameEntity(t, db, "historical-entity")
 	require.True(t, entity.EmbeddingNeedsRebuild)
 	require.True(t, entity.UpdatedAt.After(originalAt))

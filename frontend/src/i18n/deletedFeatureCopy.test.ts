@@ -80,6 +80,6 @@ test('both locales remove knowledge labels and retired interaction sections with
   const retired = /^(?:knowledgeStrategy|chatHeader|agent|chatHistorySettings|mentionDetail|input|createChat|chat|mcp|agentSettings|conversationSettings|mcpSettings|mcpServiceDialog|tools|agentStream|agentEditor|promptTemplate)\./
   for (const key of english) {
     assert.doesNotMatch(key, retired)
-    assert.doesNotMatch(key, /^knowledgeBase\.(?:tag|batchTag|anomalies|strategy|chunkHistory|sourceUpdate|rssUpdate)/)
+    assert.doesNotMatch(key, /^library\.(?:tag|batchTag|anomalies|strategy|chunkHistory|sourceUpdate|rssUpdate)/)
   }
 })

@@ -5,7 +5,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { CONTENT_TYPES, type ContentType } from '@/types/entryClassification'
 import { correctEntryContentType, correctEntryTopics, type ArticleJudgment } from '@/api/entry-judgments'
 import { listTopics, type Topic } from '@/api/topics'
-import { getEntryDetails } from '@/api/knowledge-base'
+import { getEntryDetails } from '@/api/library'
 import EntryStarToggle from './EntryStarToggle.vue'
 
 const props = defineProps<{ entry: ArticleJudgment; disabled?: boolean }>()
@@ -15,7 +15,7 @@ const typeDraft = ref<ContentType | ''>(''), topicDraft = ref<string[]>([])
 const topics = ref<Topic[]>([]), optionsLoading = ref(false), optionsError = ref('')
 const typeSaving = ref(false), topicsSaving = ref(false), typeError = ref(''), topicsError = ref('')
 const confirmRemoveBody = ref(false)
-const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })))
+const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })))
 const topicOptions = computed(() => topics.value.map(topic => ({ value: topic.id, label: topic.name })))
 const changesModeToSummary = computed(() => !props.entry.source_unverified && props.entry.processing_mode !== 'summary_only' && ['tutorial', 'case', 'reference'].includes(typeDraft.value))
 const busy = computed(() => props.disabled || typeSaving.value || topicsSaving.value)

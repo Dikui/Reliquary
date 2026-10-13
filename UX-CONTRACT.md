@@ -20,14 +20,14 @@ Reliquary serves a single user collecting source material and maintaining entity
 | --- | --- | --- | --- | --- |
 | Select/Listbox | TDesign Select and TagInput | Existing TDesign installation and locale provider | Filtered, multiple and tag input | Frontend type check and component tests |
 | Date | TDesign DatePicker for API Key expiry | ApiIntegrationSettings.vue and active locale | Local minute precision, Unix seconds on submission | API Key expiry tests |
-| Form | TDesign inputs and application validation | Existing knowledge base editor and settings forms | Create and edit | Editor validation tests |
+| Form | TDesign inputs and application validation | Existing library editor and settings forms | Create and edit | Editor validation tests |
 | Textarea autosize | SafeTextarea wrapping TDesign Textarea | SafeTextarea.vue and utils/textareaAutosize.ts | Boolean autosize or minRows/maxRows | Actual component mount and height regression tests |
 | Scrollbar | Global application theme stylesheet | UX-CONTRACT.md and frontend/src/assets/theme/theme.css | Stable gutter for bounded regions | Premium static audit |
 | Toast | TDesign MessagePlugin | Existing settings workflows | Success, warning, error and information | Frontend component tests |
-| Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Global default and knowledge base override | Model preview tests and frontend checks |
+| Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Global default and library override | Model preview tests and frontend checks |
 | Merge suggestions | MergeSuggestions and shared useConfirmDelete | Entity API and ADR 0002 | Pending, accepted and rejected | Backend lifecycle and frontend component tests |
 | Model call budgets | ModelCallSummary | Processing span model_calls | Processing details | Budget validation and component tests |
-| CRUD | Knowledge base editor, entity API and existing document detail | Entity profiles and knowledge base management | Entity merge refreshes the owning list | Entity lifecycle and editor tests |
+| CRUD | Library editor, entity API and existing document detail | Entity profiles and library management | Entity merge refreshes the owning list | Entity lifecycle and editor tests |
 | Repost sources | RepostSources | Entry detail API | Document preview | Shared component and full SFC regression tests |
 | Article classification | EntryClassification | Article content_type, processing_mode, structured_summary, entities and topics | Compact list and complete detail | Actual SFC render, link safety and locale tests |
 | Image preview | ImagePreview wrapping TDesign ImageViewer | SearchImage and picture-preview | Authenticated search Blob and existing picture URL | Real browser Escape, opening focus and trigger focus restoration |
@@ -36,7 +36,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 
 | Operation | Pending | Success | Failure recovery |
 | --- | --- | --- | --- |
-| View entity | Clear the previous article list and show loading | Show type, aliases and articles mentioning the entity in the single knowledge base | Keep selection, show inline error and allow refresh |
+| View entity | Clear the previous article list and show loading | Show type, aliases and articles mentioning the entity in the single library | Keep selection, show inline error and allow refresh |
 | Filter entity list | Debounce search and invalidate older requests | Show the filtered list with explicit load more | Show inline error and allow refresh |
 | Merge entity | App-owned dialog names the retained entity and space-wide consequences; disable duplicate requests | Refresh the entity list and announce success | Keep selected target and show inline error |
 | Accept merge suggestion | Shared confirmation names both entities and space-wide consequences | Refresh the list, retain filter and announce success | Keep list and show inline error |
@@ -45,9 +45,9 @@ Reliquary serves a single user collecting source material and maintaining entity
 
 ## Dataset and draft state
 
-Entity and suggestion lists use explicit load more with fifty and twenty rows per request. Filter changes invalidate older results. Entity details show the shared identity and articles in the single knowledge base. Entity workbench filters and selected section are transient within the article view; its main documents/entities tab remains in URL state. Every article list filter persists in the URL: source_kind, content_type, starred, file_type, parse_status, source, keyword, start_date and end_date. Default values are omitted. Refresh and history navigation restore the controls and results together, retaining unrelated query parameters. The source category reuses the search source values and labels. Filters combine in both cards and rows. Switching filters resets paging and clears hidden selections. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
+Entity and suggestion lists use explicit load more with fifty and twenty rows per request. Filter changes invalidate older results. Entity details show the shared identity and articles in the single library. Entity workbench filters and selected section are transient within the article view; its main documents/entities tab remains in URL state. Every article list filter persists in the URL: source_kind, content_type, starred, file_type, parse_status, source, keyword, start_date and end_date. Default values are omitted. Refresh and history navigation restore the controls and results together, retaining unrelated query parameters. The source category reuses the search source values and labels. Filters combine in both cards and rows. Switching filters resets paging and clears hidden selections. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
 
-Model tiers and article processing configuration save in the knowledge base settings page. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
+Model tiers and article processing configuration save in the library settings page. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
 
 ## Layout and interaction
 
@@ -73,7 +73,7 @@ Article stars wait for server confirmation before updating the card, row or deta
 
 The article detail uses EntryArticleJudgments for content type and topic corrections. Full text to summary and link requires a second confirmation stating that body, body index and attachments will be removed. Failure keeps the dialog open. Summary and link to full text records missing body content for external completion when the original body is unavailable; the existing article remains readable. Corrected types remain visible after reprocessing. Topic corrections save selected IDs and reload current associations. Busy corrections disable reprocessing. Review offers explicit approve, reject, retry and discard actions with shared pending and inline failure states.
 
-The main navigation lists articles, search, entities, topics, follows and settings. The entity entry opens /platform/entries?tab=entities. Articles include the pending review area. Settings provide knowledge base, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
+The main navigation lists articles, search, entities, topics, follows and settings. The entity entry opens /platform/entries?tab=entities. Articles include the pending review area. Settings provide library, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
 
 Follow controls share server state in entity profiles, topic management and article detail relation labels. Successful mutations update all controls and the sidebar count; failures preserve the prior follow state and show an inline error with retry. Article stars retain their bookmark behavior. Entity merges transfer follows to the retained entity and deduplicate them; topic deletion removes its follow.
 
@@ -81,7 +81,7 @@ The follow feed lives at /platform/follows and shows completed external articles
 
 The operation log lives at /platform/settings?section=operation-logs and lists user actions newest first, with exact local timestamps, displayed timezone, resource ID and before/after values. The previous /platform/operation-logs route redirects to settings and preserves query parameters. Operation type and page are stored in the URL. Filter changes reset the page and invalidate earlier requests. Refresh and failed-read retry preserve readable records. Log entries are read-only.
 
-Embedding model settings persist supports_images and the Jina multimodal format and send them through the model connection test. The knowledge base model tab allows changing the embedding model and exposes all-vector rebuilding. Its progress is loaded from the API and polled every two seconds while active. Pause, resume and failed-item retry preserve successful checkpoints; errors retain the latest readable progress. Changing model identity requires a new run. Retrieval uses only the current model's vectors and keeps keyword search available while replacements are built. SearchImage loads image snippets in both full and global search through the existing authenticated attachment request, cancels stale requests and releases Blob URLs on replacement or unmount.
+Embedding model settings persist supports_images and the Jina multimodal format and send them through the model connection test. The library model tab allows changing the embedding model and exposes all-vector rebuilding. Its progress is loaded from the API and polled every two seconds while active. Pause, resume and failed-item retry preserve successful checkpoints; errors retain the latest readable progress. Changing model identity requires a new run. Retrieval uses only the current model's vectors and keeps keyword search available while replacements are built. SearchImage loads image snippets in both full and global search through the existing authenticated attachment request, cancels stale requests and releases Blob URLs on replacement or unmount.
 
 Pending reviews live at /platform/entries?tab=reviews. TDesign tabs divide intake review and processing review. Each tab loads the pending API with its kind and uses twenty records per page. Switching tabs invalidates earlier responses. Refresh errors retain the current list, and mutations refresh the owning page and article list. A removed final record moves to the previous valid page.
 
@@ -93,7 +93,7 @@ Article cards, rows, detail and the full search page share EntryClassification f
 
 Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名称为 Reliquary；Go/TypeScript 导出符号按语言惯例使用 Reliquary。登录页与侧栏共用 frontend/src/assets/img/reliquary.svg。
 
-唯一知识库的根面包屑使用 knowledgeBase.title，中文显示“知识库”，英文显示“Knowledge base”，不随数据库中的知识库名称变化。文章、待处理、实体及设置背景共用此名称。
+唯一库的根面包屑使用 library.title，中文显示“库”，英文显示“Library”，不随数据库中的库名称变化。文章、待处理、实体及设置背景共用此名称。
 
 实体页面包含实体档案和待合并建议。实体详情以类型、别名和提及该实体的文章为主要信息结构，文章可通过原有文章详情入口打开。实体类型固定为公司、人物、产品、项目、组织、其他。模型配置、合并操作和名称向量重建沿用现有 TDesign 组件与中英文文案。
 
@@ -101,13 +101,13 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 实体列表使用显式加载更多，实体详情保持自然高度。窄屏把实体列表与档案改为上下排列，长实体名、别名和文章标题换行。实体合并前明确保留实体与相关文章影响，待合并建议通过共享确认对话框处理。
 
-模型档位只在设置中心的知识库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。每一行直接显示用途、选择和当前生效来源。唯一知识库的文章和实体页面使用 /platform/entries；内容由外部工具通过收录接口送入，设置中心不再提供订阅源入口。模型调用继续使用共享 ModelCallSummary 表格。
+模型档位只在设置中心的库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。每一行直接显示用途、选择和当前生效来源。唯一库的文章和实体页面使用 /platform/entries；内容由外部工具通过收录接口送入，设置中心不再提供订阅源入口。模型调用继续使用共享 ModelCallSummary 表格。
 
-主导航依次为文章、知识检索、实体、主题、设置。文章页包含待审区；实体入口打开现有实体档案页签。设置中心提供知识库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
+主导航依次为文章、知识检索、实体、主题、设置。文章页包含待审区；实体入口打开现有实体档案页签。设置中心提供库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
 
 自动增高文本框共用 SafeTextarea，保留 TDesign 外观与输入交互，项目负责可取消的安全高度测量。API Key 有效期使用 TDesign 日期时间选择器与全局中英文语言配置，保持原本本地时间、分钟精度与 Unix 秒提交方式。
 
-Embedding 模型编辑提供支持图片开关和 Jina 请求格式，模型卡显示图片能力。知识库模型页签使用 EmbeddingRebuild 展示全部向量重建的总数、完成数、失败数及暂停、继续、失败重试动作。检索结果与全局快捷搜索共用 SearchImage，沿用附件鉴权与主题变量，缩略图保留固定区域并提供加载和失败状态。大图预览共用 ImagePreview 与 TDesign ImageViewer，打开移入焦点，Esc、关闭按钮和遮罩关闭后返回触发元素。新增设置沿用现有 TDesign 行布局，不另建外观体系。
+Embedding 模型编辑提供支持图片开关和 Jina 请求格式，模型卡显示图片能力。库模型页签使用 EmbeddingRebuild 展示全部向量重建的总数、完成数、失败数及暂停、继续、失败重试动作。检索结果与全局快捷搜索共用 SearchImage，沿用附件鉴权与主题变量，缩略图保留固定区域并提供加载和失败状态。大图预览共用 ImagePreview 与 TDesign ImageViewer，打开移入焦点，Esc、关闭按钮和遮罩关闭后返回触发元素。新增设置沿用现有 TDesign 行布局，不另建外观体系。
 
 文章列表和详情共用 EntryClassification 展示内容类型、处理方式、概述、要点、关键名词、实体和主题。列表用紧凑字号保留三部分摘要，卡片随内容自然增高。实体是可聚焦的按钮，主题沿用现有轻量标签。摘要加链接的文章显示可换行的安全原文链接，详情隐藏正文区域和原始文件下载。
 

@@ -198,17 +198,17 @@ const (
 
 // DocumentProcessPayload represents the document process task payload
 type DocumentProcessPayload struct {
-	RequestId       string   `json:"request_id"`
-	SpaceID         uint64   `json:"tenant_id"`
-	EntryID         string   `json:"knowledge_id"`
-	KnowledgeBaseID string   `json:"knowledge_base_id"`
-	FilePath        string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
-	FileName        string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
-	FileType        string   `json:"file_type,omitempty"` // 文件类型（文件导入时使用）
-	URL             string   `json:"url,omitempty"`       // URL（URL导入时使用）
-	FileURL         string   `json:"file_url,omitempty"`  // 文件资源链接（file_url导入时使用）
-	Passages        []string `json:"passages,omitempty"`  // 文本段落（文本导入时使用）
-	Language        string   `json:"language,omitempty"`  // Request locale for {{language}} in prompt templates
+	RequestId string   `json:"request_id"`
+	SpaceID   uint64   `json:"tenant_id"`
+	EntryID   string   `json:"knowledge_id"`
+	LibraryID string   `json:"library_id"`
+	FilePath  string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
+	FileName  string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
+	FileType  string   `json:"file_type,omitempty"` // 文件类型（文件导入时使用）
+	URL       string   `json:"url,omitempty"`       // URL（URL导入时使用）
+	FileURL   string   `json:"file_url,omitempty"`  // 文件资源链接（file_url导入时使用）
+	Passages  []string `json:"passages,omitempty"`  // 文本段落（文本导入时使用）
+	Language  string   `json:"language,omitempty"`  // Request locale for {{language}} in prompt templates
 	// Attempt is the per-entry attempt number this task belongs to.
 	// Set on enqueue (initial parse → attempt 1; reparse → max+1) so
 	// every span recorded by this task lands on the right attempt
@@ -236,12 +236,12 @@ type EntryListReparsePayload struct {
 // ManualProcessPayload carries supplied or already stored article text.
 // Used by ingest processing and local article reprocessing.
 type ManualProcessPayload struct {
-	RequestId       string `json:"request_id"`
-	SpaceID         uint64 `json:"tenant_id"`
-	EntryID         string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	Content         string `json:"content"`      // cleaned markdown content
-	NeedCleanup     bool   `json:"need_cleanup"` // true for update, false for create
+	RequestId   string `json:"request_id"`
+	SpaceID     uint64 `json:"tenant_id"`
+	EntryID     string `json:"knowledge_id"`
+	LibraryID   string `json:"library_id"`
+	Content     string `json:"content"`      // cleaned markdown content
+	NeedCleanup bool   `json:"need_cleanup"` // true for update, false for create
 }
 
 const TypeTopicBackfill = "topic:backfill"
@@ -253,7 +253,7 @@ type TopicBackfillPayload struct {
 
 // ReportIndexPayload identifies the saved report to index without embedding its body.
 type ReportIndexPayload struct {
-	SpaceID         uint64 `json:"tenant_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	EntryID         string `json:"knowledge_id"`
+	SpaceID   uint64 `json:"tenant_id"`
+	LibraryID string `json:"library_id"`
+	EntryID   string `json:"knowledge_id"`
 }

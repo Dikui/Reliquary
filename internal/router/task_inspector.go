@@ -35,14 +35,14 @@ type entryIDProbe struct {
 }
 
 type runtimeTaskPayloadProbe struct {
-	SpaceID         uint64   `json:"tenant_id,omitempty"`
-	KnowledgeBaseID string   `json:"knowledge_base_id,omitempty"`
-	EntryID         string   `json:"knowledge_id,omitempty"`
-	TaskID          string   `json:"task_id,omitempty"`
-	JobID           string   `json:"job_id,omitempty"`
-	EntryIDs        []string `json:"knowledge_ids,omitempty"`
-	EnqueuedAt      int64    `json:"enqueued_at,omitempty"`
-	CreatedAt       int64    `json:"created_at,omitempty"`
+	SpaceID    uint64   `json:"tenant_id,omitempty"`
+	LibraryID  string   `json:"library_id,omitempty"`
+	EntryID    string   `json:"knowledge_id,omitempty"`
+	TaskID     string   `json:"task_id,omitempty"`
+	JobID      string   `json:"job_id,omitempty"`
+	EntryIDs   []string `json:"knowledge_ids,omitempty"`
+	EnqueuedAt int64    `json:"enqueued_at,omitempty"`
+	CreatedAt  int64    `json:"created_at,omitempty"`
 }
 
 var taskTypesForEntryCancel = map[string]struct{}{
@@ -210,9 +210,9 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 		LastError: job.LastError, LastFailedAt: job.LastFailedAt, NextProcessAt: runtimeTaskTime(job.ProcessAt),
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt, Deadline: job.Deadline,
 		EnqueuedAt: runtimePayloadTime(enqueuedAt), Retried: job.Retried, MaxRetry: job.MaxRetry,
-		Worker: job.WorkerPool, SpaceID: probe.SpaceID, KnowledgeBaseID: probe.KnowledgeBaseID,
+		Worker: job.WorkerPool, SpaceID: probe.SpaceID, LibraryID: probe.LibraryID,
 		EntryID: probe.EntryID, TaskID: probe.TaskID,
-		EntryCount: len(probe.EntryIDs),
+		EntryCount:     len(probe.EntryIDs),
 		AllowedActions: []types.RuntimeTaskAction{},
 	}
 	if job.TaskType == types.TypeTopicBackfill {

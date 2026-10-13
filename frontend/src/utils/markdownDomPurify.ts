@@ -81,7 +81,7 @@ export const markdownDomPurifyConfig = {
     'button',
   ],
   ALLOWED_ATTR: [
-    'href', 'title', 'target', 'rel', 'data-tooltip', 'data-url', 'data-kb-id',
+    'href', 'title', 'target', 'rel', 'data-tooltip', 'data-url', 'data-library-id',
     'data-chunk-id', 'data-doc', 'data-slug', 'class', 'role', 'tabindex', 'src', 'alt', 'data-protected-src', 'data-img-loading',
     'data-artifact-index',
     'width', 'height', 'style', 'id', 'type', 'aria-label', 'data-mermaid', 'disabled',

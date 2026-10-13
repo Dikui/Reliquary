@@ -30,7 +30,7 @@ export default {
     "openSettings": "Open ChatGPT model settings",
     "encryptionRequired": "Set a valid SYSTEM_AES_KEY in the deployment configuration before signing in with ChatGPT.",
     "browserHint": "Authorize in a browser on the computer running Reliquary, then return to this page.",
-    "noAccounts": "No ChatGPT account is connected. Sign in, add a chat model, and select it in knowledge base settings.",
+    "noAccounts": "No ChatGPT account is connected. Sign in, add a chat model, and select it in library settings.",
     "connected": "Signed in",
     "needsLogin": "Sign in again required",
     "signedOut": "Signed out",
@@ -311,7 +311,7 @@ export default {
 },
   menu: {
     batchManage: 'Batch manage',
-  "knowledgeBase": "Articles",
+  "library": "Articles",
   "settings": "Settings",
   "logout": "Logout",
   "search": "Knowledge search",
@@ -331,7 +331,7 @@ export default {
   "title": "Model tiers",
   "scopeHint": {
 
-    "knowledge_base": "All articles use the model tiers saved here."
+    "library": "All articles use the model tiers saved here."
   },
   "names": {
     "light": "Light",
@@ -350,7 +350,7 @@ export default {
   "sources": {
     "generation": "Article processing tier",
 
-    "knowledge_base": "Knowledge settings",
+    "library": "Library settings",
     "legacy": "Existing model configuration",
     "default": "System default",
     "unconfigured": "Unconfigured"
@@ -485,7 +485,7 @@ export default {
     "mergeSource": "Entity to merge",
     "mergeTarget": "Entity to keep",
     "mergeTargetPlaceholder": "Select the entity to keep",
-    "mergeWarning": "Merging changes entity references across every knowledge base in this space. It cannot be undone in this view.",
+    "mergeWarning": "Merging changes entity references across every library in this space. It cannot be undone in this view.",
     "mergeSaved": "Entities merged"
   }
 },
@@ -497,7 +497,7 @@ export default {
     spaceTooltip: 'Created in this workspace',
     spaceTooltipWithCreator: 'Created by {creator}',
   },
-  knowledgeBase: {
+  library: {
     channelRSS: "RSS",
     emptyArticles: "No articles yet",
     ingestOnlyHint: "Use an external tool to send complete content through the HTTP or MCP ingest interface.",
@@ -517,14 +517,14 @@ export default {
     originalLinkMissing: "No original link",
     reprocess: "Reprocess",
     reprocessQueued: "Reprocessing queued; results will update automatically",
-    title: 'Knowledge base',
+    title: 'Library',
     fileContent: 'File Content',
     accessInfo: {
       lastUpdated: 'Last updated'
     },
     infoCard: {
-      tooltip: 'View knowledge base info',
-      title: 'Knowledge Base Info',
+      tooltip: 'View library info',
+      title: 'Library Info',
       basic: 'Basic',
       access: 'Access',
       binding: 'Storage Binding',
@@ -595,7 +595,7 @@ export default {
     metadataKeyDuplicate: 'Duplicate metadata field: {key}',
     metadataNumberRequired: 'Metadata field {key} must be a valid number',
     noDocumentSummary: 'No article summary',
-    missingId: 'Knowledge base ID is missing',
+    missingId: 'Library ID is missing',
     deleteFailed: 'Delete failed. Please try again later!',
     uploadTime: 'Upload Time',
     rebuildDocument: 'Rebuild Article',
@@ -659,7 +659,7 @@ export default {
     statusDraft: 'Draft',
     noDescription: 'No description',
     parserRecoveryHint: 'No parser engine is available for the selected file types. Use the Docker image, which includes anydoc by default, or run make anydoc-lib locally and start with -tags anydoc, or configure MinerU in parser engine settings.',
-    searchPlaceholder: 'Search knowledge bases...',
+    searchPlaceholder: 'Search libraries...',
     docSearchPlaceholder: 'Search article titles...',
     fileTypeFilter: 'File Type',
     allFileTypes: 'All Types',
@@ -681,10 +681,10 @@ export default {
     sourceManual: 'Manual',
     updatedTimeFrom: 'From',
     updatedTimeTo: 'To',
-    noMatch: 'No matching knowledge base found',
-    noKnowledge: 'No knowledge bases available',
-    loadingFailed: 'Failed to load knowledge bases',
-    operationNotSupportedForType: 'This operation is not supported for the current knowledge base type',
+    noMatch: 'No matching library found',
+    noKnowledge: 'No libraries available',
+    loadingFailed: 'Failed to load libraries',
+    operationNotSupportedForType: 'This operation is not supported for the current library type',
     deleteSuccess: 'Knowledge deleted successfully!',
     chunkLoadFailed: 'Failed to load chunks'
   },
@@ -713,7 +713,7 @@ export default {
     root: 'Knowledge processing',
     processConfig: {
       title: 'Parse config for this run',
-      kbDefault: 'Using knowledge base defaults',
+      libraryDefault: 'Using library defaults',
       chunkSize: 'Chunk size {n}',
       chunking: 'Chunking',
       parser: 'Parser engine',
@@ -865,7 +865,7 @@ export default {
       notScanned: 'Not scanned yet',
       loadFailed: 'Could not load vault status. Try again.',
     },
-    knowledgeSettings: 'Knowledge settings',
+    librarySettings: 'Library settings',
     modelManagement: 'Model Management',
     parserEngine: 'Parser Engine',
     versionInfo: 'Version Info',
@@ -1048,7 +1048,7 @@ export default {
     saveFailed: 'Save failed',
     operationFailed: 'Operation failed',
     file: 'File',
-    knowledgeBase: 'Knowledge Base',
+    library: 'Library',
     noResult: 'No results',
     remove: 'Remove',
     avatar: 'Avatar',
@@ -1068,7 +1068,7 @@ export default {
 
   knowledgeEditor: {
 
-    titleEdit: 'Knowledge Base Settings',
+    titleEdit: 'Library Settings',
     navGroups: {
       basic: 'Basics',
       processing: 'Indexing & Parsing',
@@ -1086,12 +1086,12 @@ export default {
     },
     basic: {
       title: 'Basic Information',
-      description: 'Configure the knowledge base name and description',
+      description: 'Configure the library name and description',
 
-      nameLabel: 'Knowledge Base Name',
-      namePlaceholder: 'Enter knowledge base name',
-      descriptionLabel: 'Knowledge Base Description',
-      descriptionPlaceholder: 'Enter knowledge base description (optional)'
+      nameLabel: 'Library Name',
+      namePlaceholder: 'Enter library name',
+      descriptionLabel: 'Library Description',
+      descriptionPlaceholder: 'Enter library description (optional)'
     },
     indexing: {
       title: 'Indexing Strategy',
@@ -1100,7 +1100,7 @@ export default {
       searchDesc: 'Chunk, vectorize and keyword-index documents for hybrid retrieval',
       atLeastOne: 'At least one indexing strategy must be enabled',
       embeddingRequired: 'RAG search requires an Embedding model',
-      lockedTip: 'The indexing strategy cannot be changed once the knowledge base contains content. Please clear the knowledge base first.',
+      lockedTip: 'The indexing strategy cannot be changed once the library contains content. Please clear the library first.',
 
     },
     buttons: {
@@ -1111,12 +1111,12 @@ export default {
 
     messages: {
       loadModelsFailed: 'Failed to load model list',
-      loadDataFailed: 'Failed to load knowledge base data',
-      notFound: 'Knowledge base not found',
-      nameRequired: 'Please enter the knowledge base name',
+      loadDataFailed: 'Failed to load library data',
+      notFound: 'Library not found',
+      nameRequired: 'Please enter the library name',
       summaryRequired: "Select a generation model for article processing",
 
-      missingId: 'Knowledge base ID is missing',
+      missingId: 'Library ID is missing',
       buildDataFailed: 'Failed to construct submission data',
       updateSuccess: 'Configuration saved successfully',
     },
@@ -1126,14 +1126,14 @@ export default {
     },
     models: {
       title: 'Model Configuration',
-      description: 'Select appropriate AI models for the knowledge base',
+      description: 'Select appropriate AI models for the library',
       llmLabel: 'LLM Model',
       llmDesc: 'Large language model used for summarization and abstract generation (optional)',
       llmPlaceholder: 'Select an LLM model (optional)',
       embeddingLabel: 'Embedding Model',
       embeddingDesc: 'Embedding model used for text vectorization',
       embeddingPlaceholder: 'Select an embedding model',
-      embeddingLocked: 'Knowledge base already has files. Embedding model cannot be modified',
+      embeddingLocked: 'Library already has files. Embedding model cannot be modified',
       embeddingOptional: '(Optional)',
     },
     chunking: {
@@ -1460,12 +1460,12 @@ export default {
           loadingMore: 'Loading more…',
           attempts: 'Attempt {current}/{max}',
           unknownTarget: 'No related record identified',
-          knowledgeBaseLabel: 'Knowledge base ID',
+          libraryLabel: 'Library ID',
           knowledgeLabel: 'Document ID',
           taskIDLabel: 'Business task ID',
           spaceLabel: 'Workspace ID',
-          sourceKBLabel: 'Source knowledge base',
-          targetKBLabel: 'Target knowledge base',
+          sourceLibraryLabel: 'Source library',
+          targetLibraryLabel: 'Target library',
           knowledgeCountLabel: 'Documents',
           enqueuedAt: 'Enqueued',
           startedAt: 'Started',
@@ -1650,7 +1650,7 @@ export default {
     unsupportedFileType: 'Unsupported file type!',
     invalidFileType: 'Invalid file type!',
     invalidImageLink: 'Invalid image link',
-    missingKbId: 'Missing knowledge base ID',
+    missingLibraryId: 'Missing library ID',
     tokenNotFound: 'Login token not found, please log in again',
     streamFailed: 'Stream connection failed',
     auth: {
@@ -1922,7 +1922,7 @@ export default {
     ragQandA: "Knowledge retrieval",
     independentSpace: "Personal knowledge management",
     fullApiAccess: 'Full API Access',
-    knowledgeBaseManagement: 'Knowledge Base Management',
+    libraryManagement: 'Library Management',
   },
   time: {
     today: 'Today',
@@ -1995,7 +1995,7 @@ export default {
     usage: {
       title: 'Model cannot be deleted',
       description: 'Model "{name}" is still referenced by the following settings. Open each configuration and choose another model before deleting it.',
-      knowledgeSettings: 'Knowledge settings',
+      librarySettings: 'Library settings',
       openConfiguration: 'Open settings',
       truncated: 'Showing the first {shown} of {total}',
       bindings: {
@@ -2184,7 +2184,7 @@ export default {
       esc: 'Close'
     }
   },
-  kbSettings: {
+  librarySettings: {
     parser: {
       title: 'Parser Engine',
       description: 'Select document parser engines for different file types. PDF and Office documents use anydoc by default.',
@@ -2249,9 +2249,9 @@ export default {
       updateApiKeySuccess: 'API key saved',
       updateApiKeyFailed: 'Could not save the API key',
 
-      playgroundNeedKnowledgeBase: 'Select a knowledge base before running the query.',
-      playgroundNoKnowledgeBases: 'Create a knowledge base and add knowledge before running a query.',
-      playgroundLoadKnowledgeBasesFailed: 'Could not load knowledge bases. Close and reopen to retry.',
+      playgroundNeedLibrary: 'Select a library before running the query.',
+      playgroundNoLibraries: 'Create a library and add knowledge before running a query.',
+      playgroundLoadLibrariesFailed: 'Could not load libraries. Close and reopen to retry.',
       playgroundNeedQuestionAndKey: 'Enter an API key and a knowledge query.',
       apiKeyExpiresAt: "Expiry",
       apiKeyExpiresAtHint: "Leave empty for no expiry.",

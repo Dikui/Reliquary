@@ -70,6 +70,6 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 // These tables only belong to installations before collection was removed.
 // They remain explicit for exporting and restoring an older complete backup.
 var collectionRules = map[string]Rule{
-	"data_sources": {Configuration: "id space_id knowledge_base_id name type default_content_type config sync_schedule sync_mode status sync_deletions last_sync_at last_sync_cursor last_sync_result error_message sync_log_retention_days created_at updated_at deleted_at"},
+	"data_sources": {Configuration: "id space_id library_id name type default_content_type config sync_schedule sync_mode status sync_deletions last_sync_at last_sync_cursor last_sync_result error_message sync_log_retention_days created_at updated_at deleted_at"},
 	"sync_logs":    {Sidecar: "id data_source_id space_id status started_at finished_at items_total items_created items_updated items_deleted items_skipped items_failed error_message result created_at updated_at"},
 }

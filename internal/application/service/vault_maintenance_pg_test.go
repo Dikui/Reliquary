@@ -46,7 +46,7 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
 	// Build keyword chunks without calling the configured vector fixture.
-	indexing := *h.kb
+	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
 	importedPersonal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
 	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
@@ -105,7 +105,7 @@ func TestVaultVerifyRepairsArticlesAndReplicaButReportsUserFileLoss(t *testing.T
 	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, v.root)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
-	indexing := *h.kb
+	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
 	personal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
 	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
@@ -179,14 +179,14 @@ func mustVaultRead(t *testing.T, path string) []byte {
 	return data
 }
 
-func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *VaultDocumentService, vault *VaultService, kb *types.KnowledgeBase) *types.Entry {
+func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *VaultDocumentService, vault *VaultService, library *types.Library) *types.Entry {
 	t.Helper()
 	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Personal tutorial", ContentType: "tutorial", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), Summary: &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Preserve the full procedure"}, KeyTerms: []string{"Recovery"}}}
 	body := "# Personal tutorial\n\nmaintenanceminefixture full original procedure.\n"
 	path := "mine/Personal-tutorial-" + header.ID[:8] + ".md"
-	entry, err := documents.restoreVaultArticle(ctx, kb, path, header, []byte(body))
+	entry, err := documents.restoreVaultArticle(ctx, library, path, header, []byte(body))
 	require.NoError(t, err)
-	require.NoError(t, documents.indexVaultChunks(ctx, kb, entry, body))
+	require.NoError(t, documents.indexVaultChunks(ctx, library, entry, body))
 	header, err = vault.articleHeader(ctx, entry)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(vault.root, path), append(RenderVaultArticleHeader(header), []byte(body)...), 0600))
@@ -200,7 +200,7 @@ func TestVaultReplicaRejectsPersonalBodyDisagreementBeforeImport(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, v.root)
 	require.NoError(t, err)
-	indexing := *h.kb
+	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
 	personal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
 	snapshot, err := maintenance.Capture(h.ctx, h.db)
@@ -284,7 +284,7 @@ func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testin
 	h, vault := newVaultArticleHarness(t)
 	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, vault.root)
 	require.NoError(t, err)
-	indexing := *h.kb
+	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
 	personal := createMaintenanceMineFixture(t, h.ctx, documents, vault, &indexing)
 	plainPath := "mine/hand-placed.md"

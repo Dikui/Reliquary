@@ -162,11 +162,11 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 		Issuer: server.URL, Authorization: server.URL + "/authorize", Token: server.URL + "/token", Discovery: server.URL + "/discovery", Models: server.URL + "/v1/models",
 	}))
 	h.policy = NewChatGPTPolicyService(h.db)
-	h.models = NewModelServiceWithChatGPT(repository.NewModelRepository(h.db), repository.NewKnowledgeBaseRepository(h.db), nil, chatGPTGenerationPooler{}, nil, h.db, manager, h.policy).(*modelService)
+	h.models = NewModelServiceWithChatGPT(repository.NewModelRepository(h.db), repository.NewLibraryRepository(h.db), nil, chatGPTGenerationPooler{}, nil, h.db, manager, h.policy).(*modelService)
 	parsed, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	h.models.SetChatGPTTransport(&http.Client{Transport: chatGPTGenerationTransport{parsed, server.Client().Transport}})
-	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.kb.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT,
+	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.library.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT,
 		Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 32768, ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, h.models.CreateModel(h.ctx, model))
 	// Embeddings retain their own supported billing route and httptest fixture.
@@ -175,9 +175,9 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 	embedding.Source = types.ModelSourceRemote
 	embedding.Parameters.BaseURL, embedding.Parameters.Provider = server.URL+"/v1", "generic"
 	require.NoError(t, h.db.Save(&embedding).Error)
-	h.kb.ModelTiers = types.ModelTierConfig{Light: model.ID, Generation: model.ID, EntityResolution: model.ID, Embedding: embedding.ID}
-	h.kb.SummaryModelID, h.kb.EmbeddingModelID = model.ID, embedding.ID
-	require.NoError(t, h.db.Save(h.kb).Error)
+	h.library.ModelTiers = types.ModelTierConfig{Light: model.ID, Generation: model.ID, EntityResolution: model.ID, Embedding: embedding.ID}
+	h.library.SummaryModelID, h.library.EmbeddingModelID = model.ID, embedding.ID
+	require.NoError(t, h.db.Save(h.library).Error)
 	h.service.modelService = h.models
 	h.service.chunkService.(*chunkService).modelService = h.models
 	return h
@@ -275,7 +275,7 @@ func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecove
 					}
 					return chatGPTGenerationSuccess(t, request)
 				})
-				article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+				article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 					newMultipartFileHeader(t, "quota-original.md", "Fixture Acme published an original product announcement with measured capabilities."),
 					map[string]string{"publisher": "Fixture Acme", "original_url": "https://example.org/quota-original", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 				require.NoError(t, err)
@@ -377,8 +377,8 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 				}
 				return chatGPTGenerationSuccess(t, request)
 			})
-			h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
-			spaceID := h.kb.SpaceID
+			h.service.libraryService = ingestFixtureLibrary{retainedProcessingLibrary{library: h.library}}
+			spaceID := h.library.SpaceID
 			require.NoError(t, h.db.Create(&types.APIKey{ID: 19, SpaceID: &spaceID, Name: "ChatGPT fixture collector", KeyHash: "chatgpt-fixture-collector"}).Error)
 			h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "19"})
 			inspector := chatGPTScheduledQueue(t, h)
@@ -422,7 +422,7 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 		}
 		return chatGPTGenerationSuccess(t, request)
 	})
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 		newMultipartFileHeader(t, "missing-link.md", "Fixture Acme published a complete original announcement with product measurements and documented deployment choices."),
 		map[string]string{"publisher": "Fixture Acme"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)

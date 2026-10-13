@@ -15,17 +15,17 @@ import (
 	"reliquary/internal/types"
 )
 
-type ingestFixtureKB struct{ retainedProcessingKB }
+type ingestFixtureLibrary struct{ retainedProcessingLibrary }
 
-func (s ingestFixtureKB) GetKnowledgeBase(context.Context) (*types.KnowledgeBase, error) {
-	return s.kb, nil
+func (s ingestFixtureLibrary) GetLibrary(context.Context) (*types.Library, error) {
+	return s.library, nil
 }
 
 func newIngestHarness(t *testing.T) (*articleProcessingHarness, *VaultService) {
 	t.Helper()
 	h, vault := newVaultArticleHarness(t)
-	h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
-	space := h.kb.SpaceID
+	h.service.libraryService = ingestFixtureLibrary{retainedProcessingLibrary{library: h.library}}
+	space := h.library.SpaceID
 	require.NoError(t, h.db.Create(&types.APIKey{ID: 1, SpaceID: &space, Name: "Fixture collector", KeyHash: "fixture-ingest-key"}).Error)
 	h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "1"})
 	return h, vault
@@ -199,7 +199,7 @@ func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) 
 	require.Equal(t, "exists", duplicate.Status)
 	require.Len(t, h.queue.tasks, 1)
 	require.Len(t, h.processor.requests, 1)
-	reposts, err := loadEntryRepostSources(h.db, h.kb.SpaceID, []string{first.EntryID}, nil)
+	reposts, err := loadEntryRepostSources(h.db, h.library.SpaceID, []string{first.EntryID}, nil)
 	require.NoError(t, err)
 	require.Len(t, reposts, 1)
 	require.Equal(t, "content_hash", reposts[0].MatchMethod)

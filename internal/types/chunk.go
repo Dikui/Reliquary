@@ -67,7 +67,7 @@ type VideoInfo struct {
 
 // Chunk represents a document chunk
 // Chunks are meaningful text segments extracted from original documents
-// and are the basic units of knowledge base retrieval
+// and are the basic units of library retrieval
 // Each chunk contains a portion of the original content
 // and maintains its positional relationship with the original text
 // Chunks can be independently embedded as vectors and retrieved, supporting precise content localization
@@ -79,8 +79,8 @@ type Chunk struct {
 	SpaceID uint64 `json:"space_id"`
 	// ID of the parent entry, associated with the Entry model
 	EntryID string `json:"entry_id"`
-	// ID of the knowledge base, for quick location
-	KnowledgeBaseID string `json:"knowledge_base_id"`
+	// ID of the library, for quick location
+	LibraryID string `json:"library_id"`
 	// Actual text content of the chunk
 	Content string `json:"content"`
 	// Index position of the chunk in the original document

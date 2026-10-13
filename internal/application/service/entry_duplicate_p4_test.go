@@ -48,9 +48,9 @@ func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 	whitespaceHash, _, _ := messageBodyFingerprint(" \n" + strings.ReplaceAll(body, " ", "  \n") + "\n")
 	require.Equal(t, hash, whitespaceHash)
 	db := pgtest.Open(t)
-	k := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", ContentHash: hash, ContentSimHash: simhash, ContentRuneCount: count}
+	k := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", Source: "manual", ParseStatus: "completed", ContentHash: hash, ContentSimHash: simhash, ContentRuneCount: count}
 	require.NoError(t, db.Create(k).Error)
-	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", ContentHash: otherHash, ContentSimHash: otherSimhash, ContentRuneCount: otherCount}
+	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", ContentHash: otherHash, ContentSimHash: otherSimhash, ContentRuneCount: otherCount}
 	t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "0")
 	match, _, _, err := findMessageDuplicate(db, incoming)
 	require.NoError(t, err)
@@ -75,12 +75,12 @@ func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 func TestP4DuplicateIntakeReturnsCurrentMatchMethod(t *testing.T) {
 	db := pgtest.Open(t)
 	body := "Acme released the Orion model with improved reasoning, fast inference, multimodal input, and a context window of one million tokens. The report includes benchmark results, evaluation methodology, pricing, and deployment requirements."
-	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
 	setMessageFingerprint(owner, body)
 	require.NoError(t, db.Create(owner).Error)
 	files := &createEntryFileServiceStub{}
 	queue := &createEntryTaskEnqueuerStub{}
-	svc := &entryService{db: db, repo: repository.NewEntryRepository(db), kbService: &createEntryFileKBServiceStub{kb: &types.KnowledgeBase{ID: "kb"}}, fileSvc: files, task: queue}
+	svc := &entryService{db: db, repo: repository.NewEntryRepository(db), libraryService: &createEntryFileLibraryServiceStub{library: &types.Library{ID: "library"}}, fileSvc: files, task: queue}
 	for _, input := range []struct {
 		body, url, method string
 	}{
@@ -88,7 +88,7 @@ func TestP4DuplicateIntakeReturnsCurrentMatchMethod(t *testing.T) {
 		{body, "https://news.example/exact", "content_hash"},
 		{body, "https://news.example/exact?utm_source=feed", "url"},
 	} {
-		item, err := svc.createLegacyManualFixture(newCreateEntryFileContext(), "kb", &legacyManualFixturePayload{Title: "Reprint", Content: input.body, Status: "publish", SourceInfo: types.SourceInfo{Publisher: "News", OriginalURL: input.url}}, types.ChannelWeb)
+		item, err := svc.createLegacyManualFixture(newCreateEntryFileContext(), "library", &legacyManualFixturePayload{Title: "Reprint", Content: input.body, Status: "publish", SourceInfo: types.SourceInfo{Publisher: "News", OriginalURL: input.url}}, types.ChannelWeb)
 		var duplicate *types.DuplicateEntryError
 		require.ErrorAs(t, err, &duplicate)
 		require.Equal(t, owner.ID, item.ID)
@@ -106,19 +106,19 @@ func TestP4DuplicateIntakeDoesNotSaveOrEnqueueAndPreservesReposts(t *testing.T) 
 	db := pgtest.Open(t)
 	body := "Acme released its new research report with a complete description of the methodology and findings."
 	source := types.SourceInfo{Publisher: "Acme", OriginalURL: "https://acme.example/report", PublishedAt: time.Now().UTC().Format(time.RFC3339)}
-	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
 	require.NoError(t, owner.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved", SourceInfo: source}))
 	setMessageFingerprint(owner, body)
 	require.NoError(t, db.Create(owner).Error)
 	files := &createEntryFileServiceStub{}
 	queue := &createEntryTaskEnqueuerStub{}
-	svc := &entryService{db: db, repo: repository.NewEntryRepository(db), kbService: &createEntryFileKBServiceStub{kb: &types.KnowledgeBase{ID: "kb"}}, fileSvc: files, task: queue}
+	svc := &entryService{db: db, repo: repository.NewEntryRepository(db), libraryService: &createEntryFileLibraryServiceStub{library: &types.Library{ID: "library"}}, fileSvc: files, task: queue}
 	for index, input := range []types.SourceInfo{
 		{Publisher: "News One", OriginalURL: "https://news-one.example/story/", PublishedAt: source.PublishedAt},
 		{Publisher: "News One", OriginalURL: "https://news-one.example/story/?utm_source=rss", PublishedAt: source.PublishedAt},
 		{Publisher: "News Two", OriginalURL: "https://news-two.example/story"},
 	} {
-		item, err := svc.createLegacyManualFixture(newCreateEntryFileContext(), "kb", &legacyManualFixturePayload{Title: "Reprint", Content: body, Status: "publish", SourceInfo: input}, types.ChannelRSS)
+		item, err := svc.createLegacyManualFixture(newCreateEntryFileContext(), "library", &legacyManualFixturePayload{Title: "Reprint", Content: body, Status: "publish", SourceInfo: input}, types.ChannelRSS)
 		var duplicate *types.DuplicateEntryError
 		require.ErrorAs(t, err, &duplicate)
 		require.Equal(t, owner.ID, item.ID)
@@ -148,14 +148,14 @@ func TestP4DuplicateIntakeDoesNotSaveOrEnqueueAndPreservesReposts(t *testing.T) 
 func TestP4ParsedDuplicateStopsBeforeEnrichment(t *testing.T) {
 	db := pgtest.Open(t)
 	body := "The original article describes a sourced announcement."
-	owner := types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", ParseStatus: "completed", EnableStatus: "enabled"}
 	setMessageFingerprint(&owner, body)
 	require.NoError(t, db.Create(&owner).Error)
-	incoming := types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", ParseStatus: "pending"}
+	incoming := types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", ParseStatus: "pending"}
 	require.NoError(t, incoming.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Reprint", OriginalURL: "https://news.example/copy"}}))
 	require.NoError(t, db.Create(&incoming).Error)
 	svc := &entryService{db: db, repo: repository.NewEntryRepository(db)}
-	require.NoError(t, svc.triggerManualProcessing(context.Background(), &types.KnowledgeBase{ID: "kb"}, &incoming, body, true))
+	require.NoError(t, svc.triggerManualProcessing(context.Background(), &types.Library{ID: "library"}, &incoming, body, true))
 	var count int64
 	require.NoError(t, db.Model(&types.Entry{}).Where("id = ?", incoming.ID).Count(&count).Error)
 	require.Zero(t, count, "a duplicate parser result does not remain a separate message")
@@ -164,9 +164,9 @@ func TestP4ParsedDuplicateStopsBeforeEnrichment(t *testing.T) {
 func TestP4URLDuplicatesAndConcurrentIntakeHaveOneOwner(t *testing.T) {
 	db := pgtest.Open(t)
 	svc := &entryService{db: db}
-	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/article", CreatedAt: time.Now()}
+	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/article", CreatedAt: time.Now()}
 	require.NoError(t, db.Create(owner).Error)
-	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "pending"}
+	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", ParseStatus: "pending"}
 	require.NoError(t, incoming.SetIntakeMetadata(&types.EntryIntakeMetadata{SourceInfo: types.SourceInfo{OriginalURL: "https://EXAMPLE.COM/ARTICLE/?utm_source=one", Publisher: "News"}}))
 	existing, err := svc.createMessageWithDeduplication(context.Background(), incoming, "A revised title in a duplicate URL delivery")
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestP4URLDuplicatesAndConcurrentIntakeHaveOneOwner(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			candidate := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "concurrent", Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
+			candidate := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "concurrent", Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
 			_, err := svc.createMessageWithDeduplication(context.Background(), candidate, "Identical content received concurrently")
 			results <- err
 		}()
@@ -193,20 +193,20 @@ func TestP4URLDuplicatesAndConcurrentIntakeHaveOneOwner(t *testing.T) {
 		require.NoError(t, err)
 	}
 	var count int64
-	require.NoError(t, db.Model(&types.Entry{}).Where("knowledge_base_id = ?", "concurrent").Count(&count).Error)
+	require.NoError(t, db.Model(&types.Entry{}).Where("library_id = ?", "concurrent").Count(&count).Error)
 	require.EqualValues(t, 1, count)
 }
 
-func TestP4SameBodyInDifferentKnowledgeBasesKeepsSeparateOwners(t *testing.T) {
+func TestP4SameBodyInDifferentLibrariesKeepsSeparateOwners(t *testing.T) {
 	db := pgtest.Open(t)
 	svc := &entryService{db: db}
-	body := "The same original article remains a separate source in each knowledge base."
-	for _, kbID := range []string{"first-kb", "second-kb"} {
-		message := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: kbID, Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
+	body := "The same original article remains a separate source in each library."
+	for _, libraryID := range []string{"first-library", "second-library"} {
+		message := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: libraryID, Type: "manual", ParseStatus: "pending", CreatedAt: time.Now()}
 		require.NoError(t, message.SetIntakeMetadata(&types.EntryIntakeMetadata{SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://acme.example/report"}}))
 		existing, err := svc.createMessageWithDeduplication(context.Background(), message, body)
 		require.NoError(t, err)
-		require.Nil(t, existing, "a knowledge base keeps its own source identity")
+		require.Nil(t, existing, "a library keeps its own source identity")
 	}
 	var count int64
 	require.NoError(t, db.Model(&types.Entry{}).Count(&count).Error)
@@ -220,8 +220,8 @@ func TestP4ConcurrentPendingParserDuplicatesKeepOneOwner(t *testing.T) {
 	svc := &entryService{db: db, repo: repository.NewEntryRepository(db)}
 	created := time.Now().UTC().Truncate(time.Microsecond)
 	messages := []types.Entry{
-		{ID: "pending-a", SpaceID: 1, KnowledgeBaseID: "kb", Type: "file", ParseStatus: "pending", CreatedAt: created},
-		{ID: "pending-b", SpaceID: 1, KnowledgeBaseID: "kb", Type: "file", ParseStatus: "pending", CreatedAt: created},
+		{ID: "pending-a", SpaceID: 1, LibraryID: "library", Type: "file", ParseStatus: "pending", CreatedAt: created},
+		{ID: "pending-b", SpaceID: 1, LibraryID: "library", Type: "file", ParseStatus: "pending", CreatedAt: created},
 	}
 	for i := range messages {
 		require.NoError(t, messages[i].SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{OriginalURL: "https://example.com/report", Publisher: messages[i].ID}}))
@@ -265,12 +265,12 @@ func TestP4ConcurrentPendingParserDuplicatesKeepOneOwner(t *testing.T) {
 
 func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {
 	db := pgtest.Open(t)
-	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, KnowledgeBaseID: "kb", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/report"}
+	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", ParseStatus: "completed", NormalizedURL: "https://example.com/report"}
 	require.NoError(t, db.Create(owner).Error)
 	files := &createEntryFileServiceStub{}
 	queue := &createEntryTaskEnqueuerStub{}
-	svc := &entryService{db: db, repo: repository.NewEntryRepository(db), kbService: &createEntryFileKBServiceStub{kb: &types.KnowledgeBase{ID: "kb"}}, fileSvc: files, task: queue}
-	message, err := svc.createLegacyFileFixture(newCreateEntryFileContext(), "kb", newMultipartFileHeader(t, "article.txt", "The downloaded article body"), map[string]string{"original_url": "https://EXAMPLE.COM/REPORT/?utm_source=file", "publisher": "Reprint"}, nil, "", "", nil)
+	svc := &entryService{db: db, repo: repository.NewEntryRepository(db), libraryService: &createEntryFileLibraryServiceStub{library: &types.Library{ID: "library"}}, fileSvc: files, task: queue}
+	message, err := svc.createLegacyFileFixture(newCreateEntryFileContext(), "library", newMultipartFileHeader(t, "article.txt", "The downloaded article body"), map[string]string{"original_url": "https://EXAMPLE.COM/REPORT/?utm_source=file", "publisher": "Reprint"}, nil, "", "", nil)
 	var duplicate *types.DuplicateEntryError
 	require.ErrorAs(t, err, &duplicate)
 	require.Equal(t, owner.ID, message.ID)
@@ -285,10 +285,10 @@ func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {
 func TestP4RepostMissingRedeliveryPreservesVerifiedPublication(t *testing.T) {
 	db := pgtest.Open(t)
 	publication := time.Now().UTC().Format(time.RFC3339)
-	owner := types.Entry{ID: "dated-owner", SpaceID: 9, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := types.Entry{ID: "dated-owner", SpaceID: 9, LibraryID: "library", ParseStatus: "completed", EnableStatus: "enabled"}
 	require.NoError(t, db.Create(&owner).Error)
 	for _, date := range []string{publication, ""} {
-		incoming := types.Entry{SpaceID: 9, KnowledgeBaseID: "kb"}
+		incoming := types.Entry{SpaceID: 9, LibraryID: "library"}
 		require.NoError(t, incoming.SetIntakeMetadata(&types.EntryIntakeMetadata{SourceInfo: types.SourceInfo{Publisher: "News", OriginalURL: "https://news.example/announcement", PublishedAt: date}}))
 		require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return recordMessageRepost(tx, &owner, &incoming, "content_hash", 0) }))
 	}

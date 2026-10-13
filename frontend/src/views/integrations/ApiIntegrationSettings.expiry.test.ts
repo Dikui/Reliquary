@@ -260,7 +260,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: Playground searches the unique knowledge base without range parameters`, async () => {
+  test(`${locale}: Playground searches the unique library without range parameters`, async () => {
     const originalFetch = globalThis.fetch, calls: any[] = []
     globalThis.fetch = async (_url, options) => { calls.push(options); return { ok: true, json: async () => ({ data: [] }) } as Response }
     try {

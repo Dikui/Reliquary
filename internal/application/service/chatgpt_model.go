@@ -16,8 +16,8 @@ import (
 )
 
 // NewModelServiceWithChatGPT shares the authorization manager with settings.
-func NewModelServiceWithChatGPT(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB, manager *chatgpt.Manager, policy *ChatGPTPolicyService) interfaces.ModelService {
-	s := NewModelServiceWithRoutingDB(repo, kbRepo, ollamaService, pooler, spaceService, db).(*modelService)
+func NewModelServiceWithChatGPT(repo interfaces.ModelRepository, libraryRepo interfaces.LibraryRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB, manager *chatgpt.Manager, policy *ChatGPTPolicyService) interfaces.ModelService {
+	s := NewModelServiceWithRoutingDB(repo, libraryRepo, ollamaService, pooler, spaceService, db).(*modelService)
 	s.chatGPT, s.chatGPTPolicy = manager, policy
 	return s
 }

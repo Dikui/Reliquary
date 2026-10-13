@@ -11,16 +11,16 @@ import (
 
 func TestPickPrimary(t *testing.T) {
 	t.Parallel()
-	kbs := []*types.KnowledgeBase{
-		{ID: "kb-a"}, {ID: "kb-b"}, {ID: "kb-c"},
+	libraries := []*types.Library{
+		{ID: "library-a"}, {ID: "library-b"}, {ID: "library-c"},
 	}
-	if pickPrimary(kbs, "kb-b").ID != "kb-b" {
+	if pickPrimary(libraries, "library-b").ID != "library-b" {
 		t.Errorf("hit case failed")
 	}
-	// Miss returns nil rather than falling back to kbs[0]; the helper's
+	// Miss returns nil rather than falling back to libraries[0]; the helper's
 	// godoc explains the rationale (surface caller bugs, avoid leaking
-	// unintended KB metadata).
-	if pickPrimary(kbs, "kb-missing") != nil {
+	// unintended Library metadata).
+	if pickPrimary(libraries, "library-missing") != nil {
 		t.Errorf("miss should return nil")
 	}
 	if pickPrimary(nil, "any") != nil {
@@ -43,35 +43,35 @@ func TestTotalHits(t *testing.T) {
 	}
 }
 
-func TestAuthorizeKBAccess_SameSpaceAllPass(t *testing.T) {
+func TestAuthorizeLibraryAccess_SameSpaceAllPass(t *testing.T) {
 	t.Parallel()
 	s := &chunkSearchService{}
-	kbs := []*types.KnowledgeBase{
-		{ID: "kb-1", SpaceID: 7},
-		{ID: "kb-2", SpaceID: 7},
+	libraries := []*types.Library{
+		{ID: "library-1", SpaceID: 7},
+		{ID: "library-2", SpaceID: 7},
 	}
-	err := s.authorizeKBAccess(ctxWithSpaceForAuth(7), kbs, 7)
+	err := s.authorizeLibraryAccess(ctxWithSpaceForAuth(7), libraries, 7)
 	require.NoError(t, err)
 }
 
-func TestAuthorizeKBAccess_ForeignSpaceForbidden(t *testing.T) {
+func TestAuthorizeLibraryAccess_ForeignSpaceForbidden(t *testing.T) {
 	t.Parallel()
 	s := &chunkSearchService{}
-	kbs := []*types.KnowledgeBase{
-		{ID: "kb-foreign", SpaceID: 99},
+	libraries := []*types.Library{
+		{ID: "library-foreign", SpaceID: 99},
 	}
-	err := s.authorizeKBAccess(ctxWithSpaceForAuth(7), kbs, 7)
+	err := s.authorizeLibraryAccess(ctxWithSpaceForAuth(7), libraries, 7)
 	require.Error(t, err)
 	app, ok := apperrors.IsAppError(err)
 	require.True(t, ok, "expected typed AppError, got %T", err)
 	assert.Equal(t, apperrors.ErrForbidden, app.Code,
-		"foreign knowledge bases must be rejected")
+		"foreign libraries must be rejected")
 }
 
-func TestAuthorizeKBAccess_EmptyKBs_OK(t *testing.T) {
+func TestAuthorizeLibraryAccess_EmptyKBs_OK(t *testing.T) {
 	t.Parallel()
 	s := &chunkSearchService{}
-	err := s.authorizeKBAccess(ctxWithSpaceForAuth(7), nil, 7)
+	err := s.authorizeLibraryAccess(ctxWithSpaceForAuth(7), nil, 7)
 	require.NoError(t, err)
 }
 

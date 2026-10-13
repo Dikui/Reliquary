@@ -45,18 +45,18 @@ func TestNamingFixedQueries(t *testing.T) {
 	}
 	evidence := map[string]any{}
 	for _, c := range cases {
-		h.kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: c.Keyword, VectorEnabled: c.Vector}
+		h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: c.Keyword, VectorEnabled: c.Vector}
 		evidence[c.Name] = h.search(t, c.Request)
 	}
 
-	bases := &knowledgeBaseService{db: h.db, repo: repository.NewKnowledgeBaseRepository(h.db), entryRepo: repository.NewEntryRepository(h.db), chunkRepo: repository.NewChunkRepository(h.db), modelService: personalRetrievalModels{}, retrieveEngine: retriever.NewPostgresRetrievalService(postgres.NewPostgresRetrieveEngineRepository(h.db))}
+	bases := &libraryService{db: h.db, repo: repository.NewLibraryRepository(h.db), entryRepo: repository.NewEntryRepository(h.db), chunkRepo: repository.NewChunkRepository(h.db), modelService: personalRetrievalModels{}, retrieveEngine: retriever.NewPostgresRetrievalService(postgres.NewPostgresRetrieveEngineRepository(h.db))}
 	for _, mode := range []string{"keyword", "vector", "hybrid"} {
-		results, err := bases.HybridSearch(h.ctx, h.kb.ID, types.SearchParams{QueryText: "passage", QueryEmbedding: []float32{1, 0, 0}, KeywordThreshold: 0.00001, EntryIDs: []string{"beta"}, MatchCount: 20, DisableVectorMatch: mode == "keyword", DisableKeywordsMatch: mode == "vector", SkipContextEnrichment: true})
+		results, err := bases.HybridSearch(h.ctx, h.library.ID, types.SearchParams{QueryText: "passage", QueryEmbedding: []float32{1, 0, 0}, KeywordThreshold: 0.00001, EntryIDs: []string{"beta"}, MatchCount: 20, DisableVectorMatch: mode == "keyword", DisableKeywordsMatch: mode == "vector", SkipContextEnrichment: true})
 		require.NoError(t, err)
 		require.NotEmpty(t, results)
 		evidence["chunk-"+mode] = results
 	}
-	summaryHits, summaryErr := bases.HybridSearch(h.ctx, h.kb.ID, types.SearchParams{QueryText: "searchfixture", EntryIDs: []string{"summary"}, DisableVectorMatch: true, KeywordThreshold: 0.00001, MatchCount: 20, SkipContextEnrichment: true})
+	summaryHits, summaryErr := bases.HybridSearch(h.ctx, h.library.ID, types.SearchParams{QueryText: "searchfixture", EntryIDs: []string{"summary"}, DisableVectorMatch: true, KeywordThreshold: 0.00001, MatchCount: 20, SkipContextEnrichment: true})
 	require.NoError(t, summaryErr)
 	require.Len(t, summaryHits, 1)
 	evidence["chunk-summary"] = summaryHits

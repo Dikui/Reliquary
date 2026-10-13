@@ -7,7 +7,7 @@ import (
 )
 
 // FormatVersion is the personal-space replica and verification manifest format.
-const FormatVersion = 3
+const FormatVersion = 4
 
 func supportedFormat(version int) bool { return version >= 1 && version <= FormatVersion }
 
@@ -15,6 +15,8 @@ func supportedFormat(version int) bool { return version >= 1 && version <= Forma
 // remain byte-for-byte equivalent JSON values.
 func currentTable(table string) string {
 	switch table {
+	case "knowledge_bases":
+		return "libraries"
 	case "knowledges":
 		return "entries"
 	case "knowledge_entities":
@@ -39,6 +41,9 @@ func legacyTable(table string, versions ...int) string {
 	version := 1
 	if len(versions) > 0 {
 		version = versions[0]
+	}
+	if version < 4 && table == "libraries" {
+		return "knowledge_bases"
 	}
 	if version == 1 {
 		switch table {
@@ -75,6 +80,9 @@ func namedRows(rows []map[string]any, legacy bool, versions ...int) []map[string
 		copy := make(map[string]any, len(row))
 		for column, value := range row {
 			if legacy {
+				if version < 4 && column == "library_id" {
+					column = "knowledge_base_id"
+				}
 				if version == 1 && column == "space_id" {
 					column = "tenant_id"
 				}
@@ -88,6 +96,8 @@ func namedRows(rows []map[string]any, legacy bool, versions ...int) []map[string
 				}
 			} else {
 				switch column {
+				case "knowledge_base_id":
+					column = "library_id"
 				case "tenant_id":
 					column = "space_id"
 				case "knowledge_id":
@@ -157,6 +167,8 @@ func currentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 		entry.Columns = append([]string(nil), entry.Columns...)
 		for i, column := range entry.Columns {
 			switch column {
+			case "knowledge_base_id":
+				entry.Columns[i] = "library_id"
 			case "tenant_id":
 				entry.Columns[i] = "space_id"
 			case "knowledge_id":

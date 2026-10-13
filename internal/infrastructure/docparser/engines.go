@@ -8,7 +8,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// Engine names, as stored in knowledge base parser rules and shown in the UI.
+// Engine names, as stored in library parser rules and shown in the UI.
 const (
 	// SimpleEngineName is Go-native handling of text formats and images.
 	SimpleEngineName = "simple"

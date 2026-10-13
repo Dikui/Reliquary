@@ -35,7 +35,7 @@ func (r *closeNotifyRecorder) CloseNotify() <-chan bool {
 }
 
 func (s *previewEntryServiceStub) GetEntryByIDOnly(context.Context, string) (*types.Entry, error) {
-	return &types.Entry{ID: "k1", SpaceID: 42, KnowledgeBaseID: "kb1"}, nil
+	return &types.Entry{ID: "k1", SpaceID: 42, LibraryID: "library1"}, nil
 }
 
 func (s *previewEntryServiceStub) GetEntryFile(context.Context, string) (io.ReadCloser, string, error) {

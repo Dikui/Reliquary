@@ -116,7 +116,7 @@ func TestArticleChunkPrefixDoesNotEnterStoredBodyOrFullText(t *testing.T) {
 
 func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 		newMultipartFileHeader(t, "Undated article.md", "# Independent observation\n\nundatedprefixfixture exact source observations."),
 		map[string]string{"publisher": "Undated publisher", "original_url": "https://example.org/undated"},
 		nil, "", types.ChannelWeb, nil)
@@ -161,7 +161,7 @@ func TestArticleEmbeddingGeneratesForSummaryOnlyAndRecomputesAfterReprocessing(t
 	require.Contains(t, e.recorded(), wantInput)
 	require.Equal(t, vaultContentHash(wantInput), before.ContentHash)
 	count := len(e.recorded())
-	require.NoError(t, indexArticleEmbedding(h.ctx, h.db, h.service.modelService, h.kb, article))
+	require.NoError(t, indexArticleEmbedding(h.ctx, h.db, h.service.modelService, h.library, article))
 	require.Len(t, e.recorded(), count, "unchanged input retains the existing vector")
 	var output map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(h.processor.output), &output))
@@ -177,7 +177,7 @@ func TestArticleEmbeddingGeneratesForSummaryOnlyAndRecomputesAfterReprocessing(t
 	require.Contains(t, article.IngestMissing()[0].Reason, "重新处理需要正文")
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
-	h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
+	h.service.libraryService = ingestFixtureLibrary{retainedProcessingLibrary{library: h.library}}
 	ctx := types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalWebUser, ID: "personal-user"})
 	result, err := h.service.Ingest(ctx, &types.IngestRequest{URL: intake.SourceInfo.OriginalURL, Acquisition: "verbatim", Publisher: "Acme", Content: "bodyonlyfixture this tutorial body is supplied by an external tool."})
 	require.NoError(t, err)
@@ -222,7 +222,7 @@ func TestArticleTitleVectorChangeRollsBackWhenEmbeddingFails(t *testing.T) {
 
 func TestUnprocessedArticleTitleUpdateDoesNotRequireEmbedding(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article := &types.Entry{ID: "pending-article", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
+	article := &types.Entry{ID: "pending-article", SpaceID: h.library.SpaceID, LibraryID: h.library.ID,
 		Type: "url", SourceKind: "article", Title: "Pending title", Source: "https://example.org/pending",
 		ParseStatus: types.ParseStatusPending, EnableStatus: "enabled", ProcessingMode: types.ProcessingModeFull}
 	require.NoError(t, h.db.Create(article).Error)

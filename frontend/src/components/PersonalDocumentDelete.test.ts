@@ -31,13 +31,13 @@ async function scenario(locale: keyof typeof messages, response: () => Promise<u
     new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
     return module.exports
   }
-  const api = evaluate(readFileSync(new URL('../api/knowledge-base.ts', import.meta.url), 'utf8'), { '../utils/request': { del: async (url: string) => { calls.push(url); return response() } } })
+  const api = evaluate(readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8'), { '../utils/request': { del: async (url: string) => { calls.push(url); return response() } } })
   const sharedComponent = evaluate(sharedScript.content, { 'vue-i18n': { useI18n: () => i18n.global } }).default
   sharedComponent.ssrRender = evaluate(sharedTemplate.code).ssrRender
   const setup = sharedComponent.setup
   sharedComponent.setup = (props: object, context: object) => { const state = setup(props, context); onServerPrefetch(() => action(state)); return state }
   const component = evaluate(script.content, {
-    'vue-i18n': { useI18n: () => i18n.global }, '@/api/knowledge-base': api,
+    'vue-i18n': { useI18n: () => i18n.global }, '@/api/library': api,
     'tdesign-vue-next': { MessagePlugin: { success: (text: string) => notices.push(text) } },
     '@/components/DocumentDeleteConfirm.vue': { __esModule: true, default: sharedComponent },
   }).default

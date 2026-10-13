@@ -24,23 +24,23 @@ func AppendCustomPromptInstructions(prompt, instructions, label string) string {
 		strings.TrimSpace(prompt), label, instructions, label)
 }
 
-// NormalizeKnowledgeBasePromptInstructions trims whitespace on all KB-scoped
+// NormalizeLibraryPromptInstructions trims whitespace on all Library-scoped
 // custom instruction fields before persistence.
-func NormalizeKnowledgeBasePromptInstructions(kb *KnowledgeBase) {
-	if kb == nil {
+func NormalizeLibraryPromptInstructions(library *Library) {
+	if library == nil {
 		return
 	}
-	kb.ChunkingConfig.TableMetadataInstructions = strings.TrimSpace(kb.ChunkingConfig.TableMetadataInstructions)
+	library.ChunkingConfig.TableMetadataInstructions = strings.TrimSpace(library.ChunkingConfig.TableMetadataInstructions)
 }
 
-// ValidateKnowledgeBasePromptInstructions checks length limits on KB-scoped
+// ValidateLibraryPromptInstructions checks length limits on Library-scoped
 // custom instruction fields.
-func ValidateKnowledgeBasePromptInstructions(kb *KnowledgeBase) error {
-	if kb == nil {
+func ValidateLibraryPromptInstructions(library *Library) error {
+	if library == nil {
 		return nil
 	}
 	fields := map[string]string{
-		"table metadata instructions": kb.ChunkingConfig.TableMetadataInstructions,
+		"table metadata instructions": library.ChunkingConfig.TableMetadataInstructions,
 	}
 	return validatePromptInstructionFields(fields)
 }

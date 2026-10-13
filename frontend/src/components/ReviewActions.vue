@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { CONTENT_TYPES, type ContentType } from '@/types/entryClassification'
 import { resolveIntakeReview, resolveProcessingReview, type IntakeReviewAction, type ProcessingReviewAction, type ReviewEntry } from '@/api/entry-review'
-import type { IntakeSourceInfo } from '@/api/knowledge-base'
+import type { IntakeSourceInfo } from '@/api/library'
 import { isValidURL } from '@/utils/security'
 
 const props = defineProps<{ entry: ReviewEntry }>()
@@ -18,7 +18,7 @@ const confirmation = ref<IntakeReviewAction | ProcessingReviewAction | ''>('')
 const processing = computed(() => props.entry.processing_review_status === 'pending' || props.entry.review_kind === 'processing')
 const missingLink = computed(() => !processing.value && props.entry.source_kind !== 'mine' && !props.entry.metadata?.intake?.source_info?.original_url?.trim())
 const modelType = computed(() => props.entry.processing_review_content_type || props.entry.content_type || '')
-const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })))
+const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })))
 const confirmationIsBodyRemoval = computed(() => ['confirm', 'correct'].includes(confirmation.value))
 const confirmationTitle = computed(() => confirmationIsBodyRemoval.value ? t('articleJudgments.removeBodyTitle') : t(`knowledgeReview.confirmations.${confirmation.value}.title`))
 const confirmationDescription = computed(() => confirmationIsBodyRemoval.value ? t('articleJudgments.removeBodyDescription') : t(`knowledgeReview.confirmations.${confirmation.value}.description`))
@@ -28,7 +28,7 @@ watch(() => props.entry.metadata?.intake?.source_info, value => { sourceDraft.va
 watch(() => props.entry.content_type, value => { typeDraft.value = CONTENT_TYPES.includes(value as ContentType) ? value as ContentType : '' }, { immediate: true })
 watch(busy, value => { if (!disposed) emit('busy-change', value) }, { flush: 'sync' })
 onUnmounted(() => { disposed = true; emit('busy-change', false) })
-function typeLabel(value: string) { return t(`knowledgeBase.contentTypes.${CONTENT_TYPES.includes(value as ContentType) ? value : 'unclassified'}`) }
+function typeLabel(value: string) { return t(`library.contentTypes.${CONTENT_TYPES.includes(value as ContentType) ? value : 'unclassified'}`) }
 async function submit(action: IntakeReviewAction | ProcessingReviewAction, confirmed = false) {
   if (disposed || busy.value) return
   error.value = ''
@@ -77,10 +77,10 @@ async function submit(action: IntakeReviewAction | ProcessingReviewAction, confi
     <template v-else>
       <p v-if="missingLink">{{ t('knowledgeReview.missingLinkHint') }}</p>
       <div v-if="entry.source_kind !== 'mine'" class="review-source-fields">
-        <label v-if="!missingLink"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceDraft.author" :disabled="busy" :aria-label="t('knowledgeBase.intakeAuthor')" /></label>
-        <label v-if="!missingLink"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceDraft.publisher" :disabled="busy" :aria-label="t('knowledgeBase.intakePublisher')" /></label>
-        <label :for="`review-original-url-${fieldID}`"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-input :id="`review-original-url-${fieldID}`" ref="urlInput" v-model="sourceDraft.original_url" :disabled="busy" type="url" :aria-label="t('knowledgeBase.intakeOriginalUrl')" :aria-invalid="invalidURL" :aria-describedby="invalidURL ? `review-error-${fieldID}` : undefined" /></label>
-        <label v-if="!missingLink"><span>{{ t('knowledgeBase.intakePublishedAt') }}</span><t-input v-model="sourceDraft.published_at" :disabled="busy" :aria-label="t('knowledgeBase.intakePublishedAt')" /></label>
+        <label v-if="!missingLink"><span>{{ t('library.intakeAuthor') }}</span><t-input v-model="sourceDraft.author" :disabled="busy" :aria-label="t('library.intakeAuthor')" /></label>
+        <label v-if="!missingLink"><span>{{ t('library.intakePublisher') }}</span><t-input v-model="sourceDraft.publisher" :disabled="busy" :aria-label="t('library.intakePublisher')" /></label>
+        <label :for="`review-original-url-${fieldID}`"><span>{{ t('library.intakeOriginalUrl') }}</span><t-input :id="`review-original-url-${fieldID}`" ref="urlInput" v-model="sourceDraft.original_url" :disabled="busy" type="url" :aria-label="t('library.intakeOriginalUrl')" :aria-invalid="invalidURL" :aria-describedby="invalidURL ? `review-error-${fieldID}` : undefined" /></label>
+        <label v-if="!missingLink"><span>{{ t('library.intakePublishedAt') }}</span><t-input v-model="sourceDraft.published_at" :disabled="busy" :aria-label="t('library.intakePublishedAt')" /></label>
       </div>
       <div v-if="missingLink" class="review-buttons">
         <t-button theme="primary" :loading="busy" :disabled="busy" @click="submit('supplement_url')">{{ t('knowledgeReview.actions.supplement_url') }}</t-button>
@@ -90,9 +90,9 @@ async function submit(action: IntakeReviewAction | ProcessingReviewAction, confi
       <div v-else class="review-buttons">
         <t-button theme="primary" :loading="busy" :disabled="busy" @click="submit('approve')">{{ t(entry.related_article_id ? 'knowledgeReview.saveAsNew' : 'articleJudgments.approveReview') }}</t-button>
         <t-button variant="outline" :disabled="busy" @click="submit('reject')">{{ t('articleJudgments.rejectReview') }}</t-button>
-        <t-button variant="outline" :disabled="busy" @click="submit('retry')">{{ t('knowledgeBase.intakeRetry') }}</t-button>
+        <t-button variant="outline" :disabled="busy" @click="submit('retry')">{{ t('library.intakeRetry') }}</t-button>
       </div>
-      <t-button theme="danger" variant="text" :disabled="busy" @click="submit('discard')">{{ t('knowledgeBase.intakeDiscard') }}</t-button>
+      <t-button theme="danger" variant="text" :disabled="busy" @click="submit('discard')">{{ t('library.intakeDiscard') }}</t-button>
     </template>
     <p v-if="error" :id="`review-error-${fieldID}`" class="review-error" role="alert">{{ error }}</p>
     <t-dialog :visible="Boolean(confirmation)" :header="confirmation ? confirmationTitle : ''" :confirm-btn="{ content: confirmation ? confirmationLabel : '', theme: confirmationIsBodyRemoval || confirmation === 'discard' ? 'danger' : 'primary', loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="false" :close-on-esc-keydown="!busy" :z-index="6500" @close="confirmation = ''" @cancel="confirmation = ''" @confirm="submit(confirmation as IntakeReviewAction | ProcessingReviewAction, true)">

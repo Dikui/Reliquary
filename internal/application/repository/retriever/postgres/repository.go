@@ -194,15 +194,15 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	logger.GetLogger(ctx).Infof("[Postgres] Keywords retrieval: query=%s, topK=%d", params.Query, params.TopK)
 	conds := make([]clause.Expression, 0)
 
-	// KnowledgeBaseIDs and EntryIDs use AND logic
-	// - If only KnowledgeBaseIDs: search entire knowledge bases
+	// LibraryIDs and EntryIDs use AND logic
+	// - If only LibraryIDs: search entire libraries
 	// - If only EntryIDs: search specific documents
-	// - If both: search specific documents within the knowledge bases (AND)
-	if len(params.KnowledgeBaseIDs) > 0 {
-		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by knowledge base IDs: %v", params.KnowledgeBaseIDs)
+	// - If both: search specific documents within the libraries (AND)
+	if len(params.LibraryIDs) > 0 {
+		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by library IDs: %v", params.LibraryIDs)
 		conds = append(conds, clause.IN{
-			Column: "c.knowledge_base_id",
-			Values: utils.ToInterfaceSlice(params.KnowledgeBaseIDs),
+			Column: "c.library_id",
+			Values: utils.ToInterfaceSlice(params.LibraryIDs),
 		})
 	}
 	if len(params.EntryIDs) > 0 {
@@ -231,8 +231,8 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
 			AND c.chunk_type <> 'parent_text'
 			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column')
-			AND k.deleted_at IS NULL AND kb.deleted_at IS NULL
-			AND (kb.indexing_strategy IS NULL OR kb.indexing_strategy->>'keyword_enabled' = 'true')`,
+			AND k.deleted_at IS NULL AND library.deleted_at IS NULL
+			AND (library.indexing_strategy IS NULL OR library.indexing_strategy->>'keyword_enabled' = 'true')`,
 	})
 	conds = append(conds, clause.OrderBy{Columns: []clause.OrderByColumn{
 		{Column: clause.Column{Name: "score"}, Desc: true},
@@ -241,7 +241,7 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	var embeddingDBList []pgVectorWithScore
 	err := g.db.WithContext(ctx).Table("chunks AS c").
 		Joins("JOIN entries AS k ON k.id = c.entry_id").
-		Joins("JOIN knowledge_bases AS kb ON kb.id = c.knowledge_base_id").
+		Joins("JOIN libraries AS library ON library.id = c.library_id").
 		Clauses(conds...).
 		Select([]string{
 			"paradedb.score(c.seq_id) AS score",
@@ -251,7 +251,7 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 			"0 AS source_type",
 			"c.id AS chunk_id",
 			"c.entry_id",
-			"c.knowledge_base_id",
+			"c.library_id",
 		}).
 		Limit(int(params.TopK)).
 		Find(&embeddingDBList).Error
@@ -332,22 +332,22 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	whereParts = append(whereParts, fmt.Sprintf("dimension = $%d", len(allVars)+1))
 	allVars = append(allVars, dimension)
 
-	// KnowledgeBaseIDs and EntryIDs use AND logic
-	// - If only KnowledgeBaseIDs: search entire knowledge bases
+	// LibraryIDs and EntryIDs use AND logic
+	// - If only LibraryIDs: search entire libraries
 	// - If only EntryIDs: search specific documents
-	// - If both: search specific documents within the knowledge bases (AND)
-	if len(params.KnowledgeBaseIDs) > 0 {
+	// - If both: search specific documents within the libraries (AND)
+	if len(params.LibraryIDs) > 0 {
 		logger.GetLogger(ctx).Debugf(
-			"[Postgres] Filtering vector search by knowledge base IDs: %v",
-			params.KnowledgeBaseIDs,
+			"[Postgres] Filtering vector search by library IDs: %v",
+			params.LibraryIDs,
 		)
-		placeholders := make([]string, len(params.KnowledgeBaseIDs))
+		placeholders := make([]string, len(params.LibraryIDs))
 		paramStart := len(allVars) + 1
-		for i := range params.KnowledgeBaseIDs {
+		for i := range params.LibraryIDs {
 			placeholders[i] = fmt.Sprintf("$%d", paramStart+i)
-			allVars = append(allVars, params.KnowledgeBaseIDs[i])
+			allVars = append(allVars, params.LibraryIDs[i])
 		}
-		whereParts = append(whereParts, fmt.Sprintf("knowledge_base_id IN (%s)",
+		whereParts = append(whereParts, fmt.Sprintf("library_id IN (%s)",
 			strings.Join(placeholders, ", ")))
 	}
 	if len(params.EntryIDs) > 0 {
@@ -412,7 +412,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	querySQL := fmt.Sprintf(`
 		SELECT 
 			e.id, c.content, c.context_header, k.title, c.metadata,
-			e.source_id, e.source_type, e.chunk_id, e.entry_id, e.knowledge_base_id,
+			e.source_id, e.source_type, e.chunk_id, e.entry_id, e.library_id,
 			(1 - candidates.distance) as score
 		FROM (
 			SELECT 
@@ -462,7 +462,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 			return err
 		}
 		// pgvector >= 0.8 supports iterative scan, which keeps pulling more
-		// candidates from HNSW until the post-filter (knowledge_base_id /
+		// candidates from HNSW until the post-filter (library_id /
 		// entry_id / is_enabled) yields enough rows. Without it,
 		// HNSW returns at most ef_search candidates and the outer filter may
 		// silently lose recall when the filter is selective.

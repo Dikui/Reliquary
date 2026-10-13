@@ -60,30 +60,30 @@ const (
 )
 
 // ModelUsageResource is the minimal, non-sensitive projection returned when a
-// knowledge base prevents model deletion.
+// library prevents model deletion.
 type ModelUsageResource struct {
 	ID       string              `json:"id"`
 	Name     string              `json:"name"`
 	Bindings []ModelUsageBinding `json:"bindings"`
 }
 
-// ModelUsageListLimit caps how many knowledge bases are listed in a
+// ModelUsageListLimit caps how many libraries are listed in a
 // model-in-use error. Totals are returned separately so the cap cannot
 // under-count the references that actually block deletion.
 const ModelUsageListLimit = 50
 
 // ModelUsageDetails explains every active space-scoped reference that blocks
-// model deletion. KnowledgeBases may be truncated to
-// ModelUsageListLimit entries; KnowledgeBaseTotal is the
+// model deletion. Libraries may be truncated to
+// ModelUsageListLimit entries; LibraryTotal is the
 // untruncated counts used by the deletion guard and UI headings.
 type ModelUsageDetails struct {
-	KnowledgeBases     []ModelUsageResource `json:"knowledge_bases"`
-	KnowledgeBaseTotal int64                `json:"knowledge_base_total"`
+	Libraries    []ModelUsageResource `json:"libraries"`
+	LibraryTotal int64                `json:"library_total"`
 }
 
 // InUse reports whether at least one active object references the model.
 func (d ModelUsageDetails) InUse() bool {
-	return d.KnowledgeBaseTotal > 0 || len(d.KnowledgeBases) > 0
+	return d.LibraryTotal > 0 || len(d.Libraries) > 0
 }
 
 // ModelSource represents the source of the model

@@ -88,17 +88,17 @@ func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrie
 		status: VaultStatus{Root: root}}, nil
 }
 
-func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *types.KnowledgeBase, error) {
+func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *types.Library, error) {
 	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok || spaceID == 0 {
 		spaceID = types.SingleSpaceID
 		ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	}
-	var kb types.KnowledgeBase
-	if err := s.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&kb).Error; err != nil {
-		return ctx, nil, fmt.Errorf("vault indexing requires an initialized knowledge base: %w", err)
+	var library types.Library
+	if err := s.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&library).Error; err != nil {
+		return ctx, nil, fmt.Errorf("vault indexing requires an initialized library: %w", err)
 	}
-	return ctx, &kb, nil
+	return ctx, &library, nil
 }
 
 // Start watches reports and schedules scans to recover missed report events.
@@ -255,15 +255,15 @@ func (s *VaultDocumentService) Scan(ctx context.Context, force bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	ctx, kb, err := s.scope(ctx)
+	ctx, library, err := s.scope(ctx)
 	if err != nil {
 		s.recordReportWatchError(ctx, err)
 		return err
 	}
-	return s.scanReports(ctx, kb, force)
+	return s.scanReports(ctx, library, force)
 }
 
-func (s *VaultDocumentService) scanReports(ctx context.Context, kb *types.KnowledgeBase, force bool, skipped ...*[]VaultRebuildSkippedFile) error {
+func (s *VaultDocumentService) scanReports(ctx context.Context, library *types.Library, force bool, skipped ...*[]VaultRebuildSkippedFile) error {
 	directory := "reports"
 	kind := "report"
 	seen := make(map[string]bool)
@@ -330,7 +330,7 @@ func (s *VaultDocumentService) scanReports(ctx context.Context, kb *types.Knowle
 			return nil
 		}
 		if !force {
-			managed, err := s.reportIndexManagedByQueue(ctx, kb.SpaceID, rel)
+			managed, err := s.reportIndexManagedByQueue(ctx, library.SpaceID, rel)
 			if err != nil {
 				recordFileError(rel, err)
 				return nil
@@ -339,7 +339,7 @@ func (s *VaultDocumentService) scanReports(ctx context.Context, kb *types.Knowle
 				return nil
 			}
 		}
-		if _, err := s.indexReport(ctx, kb, rel, string(body), info.ModTime()); err != nil {
+		if _, err := s.indexReport(ctx, library, rel, string(body), info.ModTime()); err != nil {
 			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", rel, err))
 		}
 		return nil
@@ -349,7 +349,7 @@ func (s *VaultDocumentService) scanReports(ctx context.Context, kb *types.Knowle
 	} else {
 		// Only remove missing records after a complete traversal of the directory.
 		var existing []types.Entry
-		if err := s.db.WithContext(ctx).Where("space_id = ? AND source_kind = ?", kb.SpaceID, kind).Find(&existing).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("space_id = ? AND source_kind = ?", library.SpaceID, kind).Find(&existing).Error; err != nil {
 			scanErrors = append(scanErrors, err)
 		} else {
 			for _, entry := range existing {
@@ -416,9 +416,9 @@ func vaultTrimTitle(title string) string {
 	return title
 }
 
-func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.KnowledgeBase, path, body string, modified time.Time) (*types.Entry, error) {
+func (s *VaultDocumentService) indexReport(ctx context.Context, library *types.Library, path, body string, modified time.Time) (*types.Entry, error) {
 	var entry types.Entry
-	err := s.db.WithContext(ctx).Where("space_id = ? AND vault_path = ?", kb.SpaceID, path).First(&entry).Error
+	err := s.db.WithContext(ctx).Where("space_id = ? AND vault_path = ?", library.SpaceID, path).First(&entry).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
@@ -430,7 +430,7 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.Knowle
 		return &entry, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		entry = types.Entry{ID: uuid.NewString(), SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
+		entry = types.Entry{ID: uuid.NewString(), SpaceID: library.SpaceID, LibraryID: library.ID,
 			Type: types.EntryTypeManual, SourceKind: "report", VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
 			CreatedAt: modified.UTC(), ProcessingMode: types.ProcessingModeFull}
@@ -458,8 +458,8 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.Knowle
 			indexBody = string(content)
 		}
 	}
-	if err := s.indexVaultChunks(ctx, kb, &entry, indexBody); err != nil {
-		_ = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", entry.ID, kb.SpaceID).
+	if err := s.indexVaultChunks(ctx, library, &entry, indexBody); err != nil {
+		_ = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", entry.ID, library.SpaceID).
 			Updates(map[string]interface{}{"parse_status": types.ParseStatusFailed, "error_message": err.Error()}).Error
 		return nil, err
 	}
@@ -473,11 +473,11 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.Knowle
 }
 
 // indexVaultChunks matches content hashes across positions, keeping unchanged vectors.
-func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.KnowledgeBase, entry *types.Entry, body string) error {
+func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, library *types.Library, entry *types.Entry, body string) error {
 	var embedder embedding.Embedder
-	if kb.IndexingStrategy.VectorEnabled {
+	if library.IndexingStrategy.VectorEnabled {
 		var err error
-		embedder, err = GetTierEmbeddingModel(ctx, s.db, s.models, kb)
+		embedder, err = GetTierEmbeddingModel(ctx, s.db, s.models, library)
 		if err != nil {
 			return err
 		}
@@ -491,7 +491,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 	for _, chunk := range previous {
 		byHash[chunk.ContentHash] = append(byHash[chunk.ContentHash], chunk)
 	}
-	parts := chunker.Split(chunker.NormalizeLineEndings(body), buildSplitterConfig(kb))
+	parts := chunker.Split(chunker.NormalizeLineEndings(body), buildSplitterConfig(library))
 	current := make([]*types.Chunk, 0, len(parts))
 	added := make([]*types.Chunk, 0, len(parts))
 	used := make(map[string]bool)
@@ -509,7 +509,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 			used[chunk.ID] = true
 		} else {
 			chunk = &types.Chunk{ID: uuid.NewString(), SpaceID: entry.SpaceID, EntryID: entry.ID,
-				KnowledgeBaseID: kb.ID, IsEnabled: true, ChunkType: types.ChunkTypeText,
+				LibraryID: library.ID, IsEnabled: true, ChunkType: types.ChunkTypeText,
 				ContentHash: hash, CreatedAt: now}
 			added = append(added, chunk)
 		}
@@ -547,7 +547,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 		for _, chunk := range added {
 			indices = append(indices, &types.IndexInfo{Content: buildEntryIndexContent(entry, chunk.Content), SourceID: chunk.ID,
 				SourceType: types.ChunkSourceType, ChunkID: chunk.ID, EntryID: entry.ID,
-				KnowledgeBaseID: kb.ID, IsEnabled: true})
+				LibraryID: library.ID, IsEnabled: true})
 		}
 		if err := s.retrieval.BatchIndex(ctx, embedder, indices); err != nil {
 			// Failed new chunks must not be reused as if their vectors were complete.

@@ -120,10 +120,10 @@ func TestVectorDimensionsMatchActualValuesAndModelConfiguration(t *testing.T) {
 	db := pgtest.Open(t)
 	seed(t, db)
 	for _, statement := range []string{
-		`INSERT INTO chunks(id,space_id,knowledge_base_id,entry_id,content,chunk_index,start_at,end_at,content_hash) VALUES('dim-chunk',1,'kb','article','observations',0,0,12,'chunkhash')`,
-		`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,knowledge_base_id,model_id,dimension,embedding) VALUES('dim-chunk',0,'dim-chunk','article','kb','embed',3,'[1,0,0]')`,
-		`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','embed',3,'[1,0,0]','articlehash')`,
-		`INSERT INTO image_embeddings(entry_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','image.png','embed',3,'[1,0,0]','imagehash')`,
+		`INSERT INTO chunks(id,space_id,library_id,entry_id,content,chunk_index,start_at,end_at,content_hash) VALUES('dim-chunk',1,'library','article','observations',0,0,12,'chunkhash')`,
+		`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding) VALUES('dim-chunk',0,'dim-chunk','article','library','embed',3,'[1,0,0]')`,
+		`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','embed',3,'[1,0,0]','articlehash')`,
+		`INSERT INTO image_embeddings(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','image.png','embed',3,'[1,0,0]','imagehash')`,
 		`UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`,
 	} {
 		require.NoError(t, db.Exec(statement).Error)
@@ -252,7 +252,7 @@ func TestManifestExplicitModelChangeAndLogAppendStillRejectPermanentDataTamperin
 	require.Contains(t, CompareManifest(expected, actual), "table operation_logs")
 	require.Empty(t, CompareManifestWithOptions(expected, actual, false, true))
 	require.NoError(t, db.Exec(`INSERT INTO models(id,space_id,name,type,source,parameters,status) VALUES('new-embed',1,'new embedding model','Embedding','remote','{"dimension":4,"base_url":"https://embedding.example.test"}','active')`).Error)
-	require.NoError(t, db.Exec(`UPDATE knowledge_bases SET embedding_model_id='new-embed',model_tiers=jsonb_set(model_tiers,'{embedding}','"new-embed"'),updated_at=now() WHERE id='kb'`).Error)
+	require.NoError(t, db.Exec(`UPDATE libraries SET embedding_model_id='new-embed',model_tiers=jsonb_set(model_tiers,'{embedding}','"new-embed"'),updated_at=now() WHERE id='library'`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO embedding_rebuild_runs(id,space_id,model_id,model_name,dimension,profile_hash,status) VALUES('new-rebuild',1,'new-embed','new embedding model',4,'new-profile','completed')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO embedding_rebuild_items(id,run_id,kind,source_id,status) VALUES('new-rebuild-item','new-rebuild','article','article','completed')`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)

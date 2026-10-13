@@ -15,7 +15,7 @@ import * as markdownPlainText from '../utils/markdownPlainText'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
 import * as rfc3339 from '../utils/rfc3339'
 import * as highlight from './GlobalCommandPalette/useHighlight'
-import { descendants, element, hasClass, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from '../views/knowledge-base/componentTestHarness'
+import { descendants, element, hasClass, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from '../views/library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zh, 'en-US': en }
@@ -60,7 +60,7 @@ function environment(locale: keyof typeof messages) {
   async function request(method: string, url: string, requestBody?: unknown) {
     calls.push({ method, url, ...(requestBody === undefined ? {} : { body: requestBody }) })
     let response: any
-    if (method === 'get' && url.startsWith('/api/v1/knowledge-bases/summary-displays/entries?')) response = { success: true, data: [structuredClone(record)], total: 1 }
+    if (method === 'get' && url.startsWith('/api/v1/libraries/summary-displays/entries?')) response = { success: true, data: [structuredClone(record)], total: 1 }
     else if (method === 'get' && url === `/api/v1/entries/${record.id}`) response = { success: true, data: structuredClone(record) }
     else if (method === 'get' && url.startsWith(`/api/v1/chunks/${record.id}?`)) response = { success: true, data: [{ id: 'body-chunk', content: body, chunk_index: 0 }], total: 1 }
     else if (method === 'post' && url === '/api/v1/follows/feed') response = { success: true, data: { results: [structuredClone(feedArticle)], total: 1, new_count: 1, last_viewed_at: null, viewed_at: record.updated_at } }
@@ -69,7 +69,7 @@ function environment(locale: keyof typeof messages) {
     return response
   }
   const transport = { get: (url: string) => request('get', url), post: (url: string, value?: unknown) => request('post', url, value) }
-  const api = evaluateFile('../api/knowledge-base.ts', { '../utils/request': transport })
+  const api = evaluateFile('../api/library.ts', { '../utils/request': transport })
   const storeModule = evaluateFile('../stores/entry.ts', { pinia: piniaModule })
   const route = reactive({ query: {} as Record<string, unknown> })
   const parser = new Marked()
@@ -77,12 +77,12 @@ function environment(locale: keyof typeof messages) {
   const modules: Record<string, unknown> = {
     pinia: piniaModule,
     '@/utils/markdownPlainText': markdownPlainText, '@/utils/entrySourceLabels': entrySourceLabels, '@/utils/rfc3339': rfc3339,
-    '@/types/entryClassification': { CONTENT_TYPES }, '@/api/knowledge-base': api, '@/stores/entry': storeModule,
+    '@/types/entryClassification': { CONTENT_TYPES }, '@/api/library': api, '@/stores/entry': storeModule,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
     '@/utils/security': { isValidURL: () => true, isValidImageURL: () => true, safeMarkdownToHTML: identity, sanitizeHTML: identity, hydrateProtectedFileImages: async () => {}, createSafeImage: (url: string, alt: string) => `<img src="${url}" alt="${alt}">` },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: identity },
-    '@/utils/mermaidViewer': {}, '@/utils/clipboard': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {}, '@/views/knowledge-base/entryDownloadFileName': {},
+    '@/utils/mermaidViewer': {}, '@/utils/clipboard': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {}, '@/views/library/entryDownloadFileName': {},
     marked: { marked: { Renderer, use: parser.use.bind(parser), parse: parser.parse.bind(parser) } },
     'marked-katex-extension': moduleOf(() => ({})), 'highlight.js': moduleOf({}), mermaid: moduleOf({ initialize() {} }),
     'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
@@ -109,7 +109,7 @@ function environment(locale: keyof typeof messages) {
     app.mount(root)
     return { root, close: () => app.unmount() }
   }
-  return { record, feedArticle, calls, received, modules, errors, warnings, mount, hook: () => evaluateFile('../composables/useKnowledgeBase.ts', modules).default('summary-displays') }
+  return { record, feedArticle, calls, received, modules, errors, warnings, mount, hook: () => evaluateFile('../composables/useLibrary.ts', modules).default('summary-displays') }
 }
 
 function summaryFields(root: Element, localizedImage: string, structured: boolean) {
@@ -141,8 +141,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const restore = browserGlobals()
       const env = environment(locale)
       if (!structured) env.record.structured_summary = null as any
-      const card = component('../views/knowledge-base/components/DocumentCardView.vue', env.modules)
-      const list = component('../views/knowledge-base/components/DocumentListView.vue', env.modules)
+      const card = component('../views/library/components/DocumentCardView.vue', env.modules)
+      const list = component('../views/library/components/DocumentListView.vue', env.modules)
       const detail = component('./DocContent.vue', env.modules)
       let hook: any
       const mounted = env.mount(defineComponent({
@@ -171,7 +171,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         assert.equal(hook.details.description, summary)
         assert.deepEqual(hook.details.structured_summary, env.record.structured_summary)
         assert.equal(hook.details.md[0].content, body)
-        assert.deepEqual(env.calls.map(call => call.url), ['/api/v1/knowledge-bases/summary-displays/entries?page=1&page_size=35', `/api/v1/entries/${env.record.id}`, `/api/v1/chunks/${env.record.id}?page=1&page_size=25`])
+        assert.deepEqual(env.calls.map(call => call.url), ['/api/v1/libraries/summary-displays/entries?page=1&page_size=35', `/api/v1/entries/${env.record.id}`, `/api/v1/chunks/${env.record.id}?page=1&page_size=25`])
         assert.deepEqual(env.received[0].data[0], env.record)
         assert.deepEqual(env.received[1].data, env.record)
         assert.deepEqual(env.errors, [])
@@ -181,7 +181,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   }
   test(`${locale}: follow feed loads summaries through its page and API once while preserving escaped and code symbols`, async () => {
     const env = environment(locale)
-    const mounted = env.mount(component('../views/knowledge-base/FollowFeed.vue', env.modules))
+    const mounted = env.mount(component('../views/library/FollowFeed.vue', env.modules))
     try {
       await settle()
       const article = descendants(mounted.root).find(node => node.props['data-article-id'] === env.record.id)!

@@ -214,8 +214,8 @@ func TestMCPFollowFeedSimilarReportsKeepTheirMatches(t *testing.T) {
 	newer := mcpFollowArticle(t, f, "Similar topic coverage", now.Add(-time.Hour), "", topic.ID)
 	require.NoError(t, f.db.Model(older).Update("incomplete", true).Error)
 	for _, article := range []*types.Entry{older, newer} {
-		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
-			VALUES (?,?,?,'mcp-embedding',3,?,'mcp-follow-fixture')`, article.ID, types.SingleSpaceID, f.kb.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
+		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
+			VALUES (?,?,?,'mcp-embedding',3,?,'mcp-follow-fixture')`, article.ID, types.SingleSpaceID, f.library.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
 	}
 	var feed types.FollowFeedResponse
 	mcpCall(t, client, "follow_feed", map[string]any{"collapse_similar": true}, &feed)

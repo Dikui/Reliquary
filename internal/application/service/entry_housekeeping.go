@@ -327,8 +327,8 @@ func parseHeartbeatTime(s string) (time.Time, bool) {
 // buffer to absorb scheduling jitter.
 func (h *HousekeepingService) staleThreshold() time.Duration {
 	base := 1 * time.Hour
-	if h.cfg != nil && h.cfg.KnowledgeBase != nil && h.cfg.KnowledgeBase.DocumentProcessTimeout > base {
-		base = h.cfg.KnowledgeBase.DocumentProcessTimeout
+	if h.cfg != nil && h.cfg.Library != nil && h.cfg.Library.DocumentProcessTimeout > base {
+		base = h.cfg.Library.DocumentProcessTimeout
 	}
 	return base + 10*time.Minute
 }

@@ -4,7 +4,7 @@ import "reliquary/internal/types"
 
 type Request struct {
 	Query            string
-	KnowledgeBaseIDs []string
+	LibraryIDs       []string
 	EntryIDs         []string
 	SearchTargets    types.SearchTargets
 	VectorThreshold  float64
@@ -37,6 +37,6 @@ func (e *StageError) WithError(err error) *StageError {
 
 var (
 	ErrSearchNothing  = &StageError{Description: "No relevant content found", ErrorType: "search_nothing"}
-	ErrSearch         = &StageError{Description: "Failed to search knowledge base", ErrorType: "search_failed"}
+	ErrSearch         = &StageError{Description: "Failed to search library", ErrorType: "search_failed"}
 	ErrGetRerankModel = &StageError{Description: "Failed to get rerank model", ErrorType: "get_rerank_model_failed"}
 )

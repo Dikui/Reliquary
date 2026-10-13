@@ -63,10 +63,10 @@ type vaultDocumentHarness struct {
 func newVaultDocumentHarness(t *testing.T, wait time.Duration) *vaultDocumentHarness {
 	t.Helper()
 	h := newRetainedIntakeHarness(t)
-	h.kb.ModelTiers = types.ModelTierConfig{Embedding: "embedding-fixture"}
-	h.kb.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
-	h.kb.ChunkingConfig = types.ChunkingConfig{ChunkSize: 160, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: chunker.StrategyHeading}
-	require.NoError(t, h.db.Save(h.kb).Error)
+	h.library.ModelTiers = types.ModelTierConfig{Embedding: "embedding-fixture"}
+	h.library.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
+	h.library.ChunkingConfig = types.ChunkingConfig{ChunkSize: 160, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: chunker.StrategyHeading}
+	require.NoError(t, h.db.Save(h.library).Error)
 	e := &vaultRecordingEmbedder{}
 	root := t.TempDir()
 	r := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(h.db))
@@ -96,7 +96,7 @@ func (h *vaultDocumentHarness) write(t *testing.T, path, body string) string {
 func (h *vaultDocumentHarness) assertSearch(t *testing.T, id, term string) {
 	t.Helper()
 	hits, err := h.documents.retrieval.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType,
-		KnowledgeBaseIDs: []string{h.kb.ID}, EntryIDs: []string{id}, Query: term, TopK: 10}})
+		LibraryIDs: []string{h.library.ID}, EntryIDs: []string{id}, Query: term, TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 }
@@ -105,9 +105,9 @@ func TestVaultMineFileChangesAreNeverObserved(t *testing.T) {
 	h := newVaultDocumentHarness(t, 20*time.Millisecond)
 	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Imported personal document", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), ContentType: "tutorial"}
 	body := "# Imported personal document\n\noriginalminefixture remains indexed from import"
-	document, err := h.documents.restoreVaultArticle(h.ctx, h.kb, "mine/imported.md", header, []byte(body))
+	document, err := h.documents.restoreVaultArticle(h.ctx, h.library, "mine/imported.md", header, []byte(body))
 	require.NoError(t, err)
-	require.NoError(t, h.documents.indexVaultChunks(h.ctx, h.kb, document, body))
+	require.NoError(t, h.documents.indexVaultChunks(h.ctx, h.library, document, body))
 	path := h.write(t, document.VaultPath, string(RenderVaultArticleHeader(header))+body)
 	h.assertSearch(t, document.ID, "originalminefixture")
 	calls := h.embedder.inputCount()
@@ -204,7 +204,7 @@ func TestVaultWatcherAndIndexIgnoreObsidianConfigurationWithoutChangingFiles(t *
 }
 
 func TestVaultCancelledReportScanPreservesLastCompletedStatus(t *testing.T) {
-	for _, queryTable := range []string{"knowledge_bases", "entries"} {
+	for _, queryTable := range []string{"libraries", "entries"} {
 		t.Run(queryTable, func(t *testing.T) {
 			h := newVaultDocumentHarness(t, 20*time.Millisecond)
 			path := h.write(t, "reports/cancelled.md", "# Original report\n\nKeep the last completed report status.")
@@ -322,10 +322,10 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 	before := vaultFileHashes(t, root)
 	// Use a fresh real PostgreSQL database with the same configured infrastructure.
 	fresh := newRetainedIntakeHarness(t)
-	fresh.kb.ModelTiers = h.kb.ModelTiers
-	fresh.kb.EmbeddingModelID = h.kb.EmbeddingModelID
-	fresh.kb.IndexingStrategy = h.kb.IndexingStrategy
-	require.NoError(t, fresh.db.Save(fresh.kb).Error)
+	fresh.library.ModelTiers = h.library.ModelTiers
+	fresh.library.EmbeddingModelID = h.library.EmbeddingModelID
+	fresh.library.IndexingStrategy = h.library.IndexingStrategy
+	require.NoError(t, fresh.db.Save(fresh.library).Error)
 	r := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(fresh.db))
 	rebuild, err := NewVaultDocumentService(fresh.db, h.service.modelService, r, root)
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 	require.NoError(t, fresh.db.Table("entities").Joins("JOIN entry_entities links ON links.entity_id=entities.id").Where("links.entry_id=?", full.ID).Pluck("entities.canonical_name", &entities).Error)
 	require.Equal(t, []string{"研究实体"}, entities)
 	for _, query := range []struct{ id, term string }{{full.ID, "rebuildfixture"}, {summary.ID, "Original"}} {
-		hits, err := r.Retrieve(fresh.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, KnowledgeBaseIDs: []string{fresh.kb.ID}, EntryIDs: []string{query.id}, Query: query.term, TopK: 10}})
+		hits, err := r.Retrieve(fresh.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{fresh.library.ID}, EntryIDs: []string{query.id}, Query: query.term, TopK: 10}})
 		require.NoError(t, err)
 		require.NotEmpty(t, hits)
 	}
@@ -419,10 +419,10 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 
 func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Millisecond)
-	h.kb.ModelTiers = types.ModelTierConfig{}
-	h.kb.EmbeddingModelID = ""
-	h.kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
-	require.NoError(t, h.db.Save(h.kb).Error)
+	h.library.ModelTiers = types.ModelTierConfig{}
+	h.library.EmbeddingModelID = ""
+	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
+	require.NoError(t, h.db.Save(h.library).Error)
 	h.documents.models = nil
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	valid := VaultArticleHeader{ID: uuid.NewString(), Title: "无模型重建", CollectedAt: now, ContentType: "event"}

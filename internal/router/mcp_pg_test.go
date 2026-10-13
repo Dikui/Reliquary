@@ -99,7 +99,7 @@ func (q *mcpFixtureQueue) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskque
 type mcpFixture struct {
 	*personalAuthFixture
 	ctx       context.Context
-	kb        *types.KnowledgeBase
+	library   *types.Library
 	articles  mcpserver.EntryService
 	files     interfaces.FileService
 	vault     *service.VaultService
@@ -122,19 +122,19 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	var key types.APIKey
 	require.NoError(t, f.db.Where("name=?", "personal integration").First(&key).Error)
 	ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIKey, ID: fmt.Sprint(key.ID)})
-	require.NoError(t, service.EnsureSingleKnowledgeBase(ctx, f.db))
-	kbRepo, entryRepo := apprepo.NewKnowledgeBaseRepository(f.db), apprepo.NewEntryRepository(f.db)
+	require.NoError(t, service.EnsureSingleLibrary(ctx, f.db))
+	libraryRepo, entryRepo := apprepo.NewLibraryRepository(f.db), apprepo.NewEntryRepository(f.db)
 	chunkRepo := apprepo.NewChunkRepository(f.db)
-	models := mcpFixtureModels{service.NewModelService(apprepo.NewModelRepository(f.db), kbRepo, nil, nil, f.params.SpaceService)}
+	models := mcpFixtureModels{service.NewModelService(apprepo.NewModelRepository(f.db), libraryRepo, nil, nil, f.params.SpaceService)}
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(f.db))
-	bases := service.NewKnowledgeBaseService(f.db, kbRepo, entryRepo, chunkRepo, models, engine, nil)
-	kb, err := bases.GetKnowledgeBase(ctx)
+	bases := service.NewLibraryService(f.db, libraryRepo, entryRepo, chunkRepo, models, engine, nil)
+	library, err := bases.GetLibrary(ctx)
 	require.NoError(t, err)
-	kb.EmbeddingModelID = "mcp-embedding"
-	kb.SummaryModelID = "mcp-chat"
-	kb.ModelTiers = types.ModelTierConfig{Embedding: "mcp-embedding", Generation: "mcp-chat", Light: "mcp-chat"}
-	kb.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
-	require.NoError(t, f.db.Save(kb).Error)
+	library.EmbeddingModelID = "mcp-embedding"
+	library.SummaryModelID = "mcp-chat"
+	library.ModelTiers = types.ModelTierConfig{Embedding: "mcp-embedding", Generation: "mcp-chat", Light: "mcp-chat"}
+	library.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
+	require.NoError(t, f.db.Save(library).Error)
 	root := t.TempDir()
 	cfg := &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 10 * time.Millisecond}}
 	vault, err := service.NewVaultService(f.db, cfg)
@@ -142,7 +142,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	t.Cleanup(func() { require.NoError(t, vault.Close()) })
 	files := file.NewLocalFileService(t.TempDir(), "")
 	queue := &mcpFixtureQueue{}
-	chunks := service.NewChunkService(chunkRepo, entryRepo, kbRepo, models, engine)
+	chunks := service.NewChunkService(chunkRepo, entryRepo, libraryRepo, models, engine)
 	entry, err := service.NewEntryService(f.db, cfg, entryRepo, bases,
 		apprepo.NewSpaceRepository(f.db), f.params.SpaceService, chunks, chunkRepo, files, nil, models, queue,
 		nil, engine, nil, nil)
@@ -158,13 +158,13 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	f.router.Any("/mcp", gin.WrapH(adapter))
 	server := httptest.NewServer(f.router)
 	t.Cleanup(server.Close)
-	return &mcpFixture{personalAuthFixture: f, ctx: ctx, kb: kb, articles: articles, files: files,
+	return &mcpFixture{personalAuthFixture: f, ctx: ctx, library: library, articles: articles, files: files,
 		vault: vault, documents: documents, queue: queue, server: server, root: root}
 }
 
 func (f *mcpFixture) seedArticle(t *testing.T, title, mode, body string) *types.Entry {
 	t.Helper()
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID,
 		Type: "url", Title: title, SourceKind: "article", Source: "https://example.org/" + uuid.NewString(),
 		ContentType: "event", ProcessingMode: mode, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
 		StructuredSummary: &types.EntrySummary{Overview: "MCP source summary", Points: []string{"one", "two", "three"}, KeyTerms: []string{"MCP"}},
@@ -183,7 +183,7 @@ func (f *mcpFixture) seedPending(t *testing.T, title string) *types.Entry {
 	t.Helper()
 	bodyPath, err := f.files.SaveBytes(f.ctx, []byte("# "+title+"\n\nAwaiting a deliberate approval."), types.SingleSpaceID, uuid.NewString()+".md", false)
 	require.NoError(t, err)
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID,
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID,
 		Type: "manual", Title: title, SourceKind: "article", ParseStatus: types.ParseStatusRejected, EnableStatus: "disabled"}
 	require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", OriginalPath: bodyPath,
 		SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/" + article.ID, Publisher: "Pending publisher"}}))
@@ -275,8 +275,8 @@ func TestMCPSearchIncludesIncompleteForArticlesAndSimilarReports(t *testing.T) {
 	complete := f.seedArticle(t, "MCP incompletefixture complete", types.ProcessingModeFull, "# Complete source\n\nOriginal evidence.\n")
 	incomplete := f.seedArticle(t, "MCP incompletefixture missing image", types.ProcessingModeFull, "# Partial source\n\nOriginal evidence.\n")
 	for _, article := range []*types.Entry{complete, incomplete} {
-		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
-			VALUES (?,?,?,'mcp-embedding',3,?,'mcp-incomplete-fixture')`, article.ID, types.SingleSpaceID, f.kb.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
+		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
+			VALUES (?,?,?,'mcp-embedding',3,?,'mcp-incomplete-fixture')`, article.ID, types.SingleSpaceID, f.library.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
 	}
 	client := f.connect(t, "2025-11-25")
 	for _, swapped := range []bool{false, true} {

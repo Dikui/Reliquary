@@ -55,7 +55,7 @@ func TestEveryRegisteredTaskExecutesRetriesAndArchives(t *testing.T) {
 		for _, kind := range definition.TaskTypes {
 			count++
 			t.Run(kind, func(t *testing.T) {
-				payload := []byte(`{"tenant_id":1,"entry_id":"fixture","knowledge_base_id":"fixture-kb"}`)
+				payload := []byte(`{"tenant_id":1,"entry_id":"fixture","library_id":"fixture-library"}`)
 				i, err := c.Enqueue(NewTaskWithHeaders(kind, payload, map[string]string{"scenario": "success"}), Queue(definition.Name), MaxRetry(2), Retention(time.Hour))
 				require.NoError(t, err)
 				j := jobState(t, c, i.ID, TaskStateCompleted)
@@ -69,7 +69,7 @@ func TestEveryRegisteredTaskExecutesRetriesAndArchives(t *testing.T) {
 				require.NoError(t, db.Where("task_type = ?", kind).Find(&rows).Error)
 				require.Len(t, rows, 1)
 				require.Equal(t, 3, rows[0].FailCount)
-				require.Equal(t, types.TaskScopeKnowledgeBase, rows[0].Scope)
+				require.Equal(t, types.TaskScopeLibrary, rows[0].Scope)
 				require.Equal(t, "fixture", rows[0].RelatedID)
 				t.Logf("type=%s queue=%s executed=true ordinary_attempts=%d dead_letters=%d", kind, definition.Name, j.FailCount, len(rows))
 			})

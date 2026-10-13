@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { deleteDocument } from '@/api/knowledge-base'
+import { deleteDocument } from '@/api/library'
 import DocumentDeleteConfirm from '@/components/DocumentDeleteConfirm.vue'
 
 const props = defineProps<{ documentId: string; title: string; disabled?: boolean }>()

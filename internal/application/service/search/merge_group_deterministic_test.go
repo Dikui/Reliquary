@@ -21,9 +21,9 @@ func TestGroupAndMergeOverlapping_DeterministicOrdering(t *testing.T) {
 		// Same EntryID, different ChunkTypes -> separate inner-map
 		// buckets whose iteration order is randomized.
 		chunks := []*types.SearchResult{
-			{ID: "low", EntryID: "kb-001", ChunkType: "text", StartAt: 0, EndAt: 100, Score: 0.4},
-			{ID: "high", EntryID: "kb-001", ChunkType: "summary", StartAt: 200, EndAt: 300, Score: 0.9},
-			{ID: "mid", EntryID: "kb-001", ChunkType: "parent_text", StartAt: 400, EndAt: 500, Score: 0.6},
+			{ID: "low", EntryID: "library-001", ChunkType: "text", StartAt: 0, EndAt: 100, Score: 0.4},
+			{ID: "high", EntryID: "library-001", ChunkType: "summary", StartAt: 200, EndAt: 300, Score: 0.9},
+			{ID: "mid", EntryID: "library-001", ChunkType: "parent_text", StartAt: 400, EndAt: 500, Score: 0.6},
 		}
 		results := plugin.groupAndMergeCurrentContent(context.Background(), chunks)
 
@@ -37,12 +37,12 @@ func TestGroupAndMergeOverlapping_DeterministicOrdering(t *testing.T) {
 		// Different EntryIDs -> separate outer-map buckets whose
 		// iteration order is randomized.
 		chunks := []*types.SearchResult{
-			{ID: "ab", EntryID: "kb-ab", ChunkType: "text", StartAt: 0, EndAt: 50, Score: 0.8},
-			{ID: "aa", EntryID: "kb-aa", ChunkType: "text", StartAt: 0, EndAt: 50, Score: 0.8},
+			{ID: "ab", EntryID: "library-ab", ChunkType: "text", StartAt: 0, EndAt: 50, Score: 0.8},
+			{ID: "aa", EntryID: "library-aa", ChunkType: "text", StartAt: 0, EndAt: 50, Score: 0.8},
 		}
 		results := plugin.groupAndMergeCurrentContent(context.Background(), chunks)
 		require.Len(t, results, 2)
-		assert.Equal(t, "aa", results[0].ID, "same score, kb-aa < kb-ab")
+		assert.Equal(t, "aa", results[0].ID, "same score, library-aa < library-ab")
 	})
 
 	t.Run("merged chunk uses max score and is sorted among other groups", func(t *testing.T) {
@@ -50,9 +50,9 @@ func TestGroupAndMergeOverlapping_DeterministicOrdering(t *testing.T) {
 		// then the merged result competes with a higher-scored summary chunk
 		// across the inner-map boundary.
 		chunks := []*types.SearchResult{
-			{ID: "low-a", EntryID: "kb-001", ChunkType: "text", ChunkIndex: 1, Content: "first body", StartAt: 0, EndAt: 50, Score: 0.5},
-			{ID: "low-b", EntryID: "kb-001", ChunkType: "text", ChunkIndex: 2, Content: "second body", StartAt: 30, EndAt: 80, Score: 0.7},
-			{ID: "high", EntryID: "kb-001", ChunkType: "summary", StartAt: 200, EndAt: 300, Score: 0.9},
+			{ID: "low-a", EntryID: "library-001", ChunkType: "text", ChunkIndex: 1, Content: "first body", StartAt: 0, EndAt: 50, Score: 0.5},
+			{ID: "low-b", EntryID: "library-001", ChunkType: "text", ChunkIndex: 2, Content: "second body", StartAt: 30, EndAt: 80, Score: 0.7},
+			{ID: "high", EntryID: "library-001", ChunkType: "summary", StartAt: 200, EndAt: 300, Score: 0.9},
 		}
 		results := plugin.groupAndMergeCurrentContent(context.Background(), chunks)
 		require.Len(t, results, 2, "two text chunks merged into one, plus one summary")
@@ -63,12 +63,12 @@ func TestGroupAndMergeOverlapping_DeterministicOrdering(t *testing.T) {
 		// Same EntryID, different ChunkTypes -> separate inner-map
 		// buckets whose iteration order is randomized.
 		chunks := []*types.SearchResult{
-			{ID: "txt", EntryID: "kb-x", ChunkType: "text", StartAt: 0, EndAt: 50, Score: 0.8},
-			{ID: "sum", EntryID: "kb-x", ChunkType: "summary", StartAt: 100, EndAt: 150, Score: 0.8},
+			{ID: "txt", EntryID: "library-x", ChunkType: "text", StartAt: 0, EndAt: 50, Score: 0.8},
+			{ID: "sum", EntryID: "library-x", ChunkType: "summary", StartAt: 100, EndAt: 150, Score: 0.8},
 		}
 		results := plugin.groupAndMergeCurrentContent(context.Background(), chunks)
 		require.Len(t, results, 2)
-		assert.Equal(t, "sum", results[0].ID, "same kb+score, 'summary' < 'text'")
+		assert.Equal(t, "sum", results[0].ID, "same library+score, 'summary' < 'text'")
 	})
 }
 
@@ -109,12 +109,12 @@ func TestGroupAndMergeOverlapping_DoesNotMergeNonSequentialChunksFromCoordinates
 func TestGroupAndMergeOverlapping_CrossEntryPreservesMergeLogic(t *testing.T) {
 	plugin := &MergeStage{}
 	chunks := []*types.SearchResult{
-		{ID: "a-1", EntryID: "kb-a", ChunkType: "text", StartAt: 0, EndAt: 100, Score: 0.9},
-		{ID: "b-1", EntryID: "kb-b", ChunkType: "text", StartAt: 0, EndAt: 100, Score: 0.5},
+		{ID: "a-1", EntryID: "library-a", ChunkType: "text", StartAt: 0, EndAt: 100, Score: 0.9},
+		{ID: "b-1", EntryID: "library-b", ChunkType: "text", StartAt: 0, EndAt: 100, Score: 0.5},
 	}
 	results := plugin.groupAndMergeCurrentContent(context.Background(), chunks)
 
-	require.Len(t, results, 2, "chunks from different KBs must not merge")
-	assert.Equal(t, "a-1", results[0].ID, "higher score from kb-a first")
-	assert.Equal(t, "b-1", results[1].ID, "lower score from kb-b second")
+	require.Len(t, results, 2, "chunks from different Libraries must not merge")
+	assert.Equal(t, "a-1", results[0].ID, "higher score from library-a first")
+	assert.Equal(t, "b-1", results[1].ID, "lower score from library-b second")
 }

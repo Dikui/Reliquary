@@ -26,7 +26,7 @@ type SpaceHandler struct {
 	service          interfaces.SpaceService
 	apiKeyService    interfaces.APIKeyService
 	userService      interfaces.UserService
-	kbService        interfaces.KnowledgeBaseService
+	libraryService   interfaces.LibraryService
 	config           *config.Config
 	systemSettingSvc interfaces.SystemSettingService
 }
@@ -36,7 +36,7 @@ func NewSpaceHandler(
 	service interfaces.SpaceService,
 	apiKeyService interfaces.APIKeyService,
 	userService interfaces.UserService,
-	kbService interfaces.KnowledgeBaseService,
+	libraryService interfaces.LibraryService,
 	config *config.Config,
 	systemSettingSvc interfaces.SystemSettingService,
 ) *SpaceHandler {
@@ -44,7 +44,7 @@ func NewSpaceHandler(
 		service:          service,
 		apiKeyService:    apiKeyService,
 		userService:      userService,
-		kbService:        kbService,
+		libraryService:   libraryService,
 		config:           config,
 		systemSettingSvc: systemSettingSvc,
 	}
@@ -205,7 +205,7 @@ func (h *SpaceHandler) CreateAPIKey(c *gin.Context) {
 		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
 		return
 	}
-	if err := validateAPIKeyRequest(ctx, h.kbService, id, req); err != nil {
+	if err := validateAPIKeyRequest(ctx, h.libraryService, id, req); err != nil {
 		c.Error(err)
 		return
 	}
@@ -251,7 +251,7 @@ func (h *SpaceHandler) UpdateAPIKey(c *gin.Context) {
 		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
 		return
 	}
-	if appErr := validateAPIKeyRequest(ctx, h.kbService, spaceID, apiKeyCreateRequest(req)); appErr != nil {
+	if appErr := validateAPIKeyRequest(ctx, h.libraryService, spaceID, apiKeyCreateRequest(req)); appErr != nil {
 		c.Error(appErr)
 		return
 	}
@@ -310,7 +310,7 @@ func apiKeyForResponse(key *types.APIKey) apiKeyResponse {
 	}
 }
 
-func validateAPIKeyRequest(ctx context.Context, kbService interfaces.KnowledgeBaseService, spaceID uint64, req apiKeyCreateRequest) *errors.AppError {
+func validateAPIKeyRequest(ctx context.Context, libraryService interfaces.LibraryService, spaceID uint64, req apiKeyCreateRequest) *errors.AppError {
 	if strings.TrimSpace(req.Name) == "" {
 		return errors.NewValidationError("name is required")
 	}

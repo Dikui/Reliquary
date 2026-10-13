@@ -14,36 +14,36 @@ import (
 
 // SearchStage implements search functionality for entry retrieval
 type SearchStage struct {
-	knowledgeBaseService interfaces.KnowledgeBaseService
-	entryService         interfaces.EntryService
-	chunkService         interfaces.ChunkService
+	libraryService interfaces.LibraryService
+	entryService   interfaces.EntryService
+	chunkService   interfaces.ChunkService
 }
 
 func NewSearchStage(
-	knowledgeBaseService interfaces.KnowledgeBaseService,
+	libraryService interfaces.LibraryService,
 	entryService interfaces.EntryService,
 	chunkService interfaces.ChunkService,
 ) *SearchStage {
 	res := &SearchStage{
-		knowledgeBaseService: knowledgeBaseService,
-		entryService:         entryService,
-		chunkService:         chunkService,
+		libraryService: libraryService,
+		entryService:   entryService,
+		chunkService:   chunkService,
 	}
 	return res
 }
 
-// Run searches the selected knowledge bases and articles.
+// Run searches the selected libraries and articles.
 func (p *SearchStage) Run(ctx context.Context,
 	state *State, next func() *StageError,
 ) *StageError {
 	// Check if we have entry retrieval targets
-	hasKBTargets := types.HasEntryRetrievalScope(
+	hasLibraryTargets := types.HasEntryRetrievalScope(
 		state.SearchTargets,
-		state.KnowledgeBaseIDs,
+		state.LibraryIDs,
 		state.EntryIDs,
 	)
-	if !hasKBTargets {
-		pipelineError(ctx, "Search", "kb_not_found", map[string]interface{}{})
+	if !hasLibraryTargets {
+		pipelineError(ctx, "Search", "library_not_found", map[string]interface{}{})
 		return nil
 	}
 
@@ -60,16 +60,16 @@ func (p *SearchStage) Run(ctx context.Context,
 		"vector_threshold":  state.VectorThreshold,
 		"keyword_threshold": state.KeywordThreshold,
 	})
-	allResults, kbSearchErr := p.searchByTargets(ctx, state)
-	if kbSearchErr != nil && len(allResults) == 0 {
-		pipelineError(ctx, "Search", "kb_search_failed", map[string]interface{}{
-			"error": kbSearchErr.Error(),
+	allResults, librarySearchErr := p.searchByTargets(ctx, state)
+	if librarySearchErr != nil && len(allResults) == 0 {
+		pipelineError(ctx, "Search", "library_search_failed", map[string]interface{}{
+			"error": librarySearchErr.Error(),
 		})
-		return ErrSearch.WithError(kbSearchErr)
+		return ErrSearch.WithError(librarySearchErr)
 	}
-	if kbSearchErr != nil {
-		pipelineWarn(ctx, "Search", "kb_search_partial_failure", map[string]interface{}{
-			"error":        kbSearchErr.Error(),
+	if librarySearchErr != nil {
+		pipelineWarn(ctx, "Search", "library_search_partial_failure", map[string]interface{}{
+			"error":        librarySearchErr.Error(),
 			"result_count": len(allResults),
 		})
 	}
@@ -125,7 +125,7 @@ func buildContentSignature(content string) string {
 
 // removePartialOverlaps drops chunks whose content is largely contained within
 // a higher-scored chunk, even across different entry sources. This catches
-// cross-KB duplicates and near-duplicates that exact-signature dedup misses.
+// cross-Library duplicates and near-duplicates that exact-signature dedup misses.
 //
 // Two thresholds are used:
 //   - Substring containment: if the normalized short text is a literal substring
@@ -236,25 +236,25 @@ func logSearchScoreSample(ctx context.Context, action string, results []*types.S
 	}
 }
 
-// targetReportsEmbedFailure reports whether an embedding failure for a KB should
-// be recorded as a retrieval error. KBs with disabled indexing have no vector or keyword
-// index to degrade into; HybridSearch returns empty without error. When KB metadata
+// targetReportsEmbedFailure reports whether an embedding failure for a Library should
+// be recorded as a retrieval error. Libraries with disabled indexing have no vector or keyword
+// index to degrade into; HybridSearch returns empty without error. When Library metadata
 // is unavailable, callers still attempt keyword-degraded search.
-func targetReportsEmbedFailure(kb *types.KnowledgeBase) bool {
-	if kb == nil {
+func targetReportsEmbedFailure(library *types.Library) bool {
+	if library == nil {
 		return false
 	}
 
-	if kb.IsKeywordEnabled() {
+	if library.IsKeywordEnabled() {
 		return false
 	}
-	return kb.IsVectorEnabled()
+	return library.IsVectorEnabled()
 }
 
-// searchByTargets performs KB searches using pre-computed SearchTargets.
+// searchByTargets performs Library searches using pre-computed SearchTargets.
 // Targets sharing the same underlying embedding model (identified by model
 // name + endpoint, not just model ID) are grouped so the query embedding is
-// computed once per model AND all full-KB targets in a group are combined into
+// computed once per model AND all full-Library targets in a group are combined into
 // a single retrieval call, reducing both embedding API calls and DB round-trips.
 func (p *SearchStage) searchByTargets(
 	ctx context.Context,
@@ -266,35 +266,35 @@ func (p *SearchStage) searchByTargets(
 
 	queryText := strings.TrimSpace(state.RewriteQuery)
 
-	// Batch-fetch KB records to determine embedding model grouping.
+	// Batch-fetch Library records to determine embedding model grouping.
 	// On failure, all targets fall into an empty-key group and HybridSearch
-	// computes the embedding per-KB (graceful degradation).
-	kbIDs := make([]string, 0, len(state.SearchTargets))
+	// computes the embedding per-Library (graceful degradation).
+	libraryIDs := make([]string, 0, len(state.SearchTargets))
 	for _, t := range state.SearchTargets {
-		kbIDs = append(kbIDs, t.KnowledgeBaseID)
+		libraryIDs = append(libraryIDs, t.LibraryID)
 	}
-	var kbList []*types.KnowledgeBase
-	kbMap := make(map[string]*types.KnowledgeBase)
-	if kbs, err := p.knowledgeBaseService.GetKnowledgeBasesByIDsOnly(ctx, kbIDs); err == nil {
-		kbList = kbs
-		for _, kb := range kbs {
-			if kb != nil {
-				kbMap[kb.ID] = kb
+	var libraryList []*types.Library
+	libraryMap := make(map[string]*types.Library)
+	if libraries, err := p.libraryService.GetLibrariesByIDsOnly(ctx, libraryIDs); err == nil {
+		libraryList = libraries
+		for _, library := range libraries {
+			if library != nil {
+				libraryMap[library.ID] = library
 			}
 		}
 	} else {
-		pipelineWarn(ctx, "Search", "batch_kb_fetch_error", map[string]interface{}{
+		pipelineWarn(ctx, "Search", "batch_library_fetch_error", map[string]interface{}{
 			"error": err.Error(),
 		})
 	}
 
 	// Resolve actual model identities (name + endpoint) so that cross-space
-	// KBs backed by the same physical model share one embedding computation.
-	modelKeyMap := p.knowledgeBaseService.ResolveEmbeddingModelKeys(ctx, kbList)
+	// Libraries backed by the same physical model share one embedding computation.
+	modelKeyMap := p.libraryService.ResolveEmbeddingModelKeys(ctx, libraryList)
 
 	groups := make(map[string][]*types.SearchTarget)
 	for _, t := range state.SearchTargets {
-		key := modelKeyMap[t.KnowledgeBaseID] // empty string if unresolved
+		key := modelKeyMap[t.LibraryID] // empty string if unresolved
 		groups[key] = append(groups[key], t)
 	}
 
@@ -326,20 +326,20 @@ func (p *SearchStage) searchByTargets(
 			disableVector := false
 			searchableTargets := targets
 			if modelKey != "" {
-				emb, err := p.knowledgeBaseService.GetQueryEmbedding(ctx, targets[0].KnowledgeBaseID, queryText)
+				emb, err := p.libraryService.GetQueryEmbedding(ctx, targets[0].LibraryID, queryText)
 				if err != nil {
 					searchableTargets = make([]*types.SearchTarget, 0, len(targets))
 					for _, target := range targets {
-						kb := kbMap[target.KnowledgeBaseID]
-						if !targetReportsEmbedFailure(kb) {
+						library := libraryMap[target.LibraryID]
+						if !targetReportsEmbedFailure(library) {
 							searchableTargets = append(searchableTargets, target)
 							continue
 						}
-						recordError(fmt.Errorf("knowledge base %s has no keyword fallback: %w", target.KnowledgeBaseID, err))
+						recordError(fmt.Errorf("library %s has no keyword fallback: %w", target.LibraryID, err))
 					}
 					pipelineWarn(ctx, "Search", "group_embed_degrade_keyword", map[string]interface{}{
 						"model_key":        modelKey,
-						"kb_id":            targets[0].KnowledgeBaseID,
+						"library_id":       targets[0].LibraryID,
 						"error":            err.Error(),
 						"fallback_targets": len(searchableTargets),
 						"failed_targets":   len(targets) - len(searchableTargets),
@@ -350,29 +350,29 @@ func (p *SearchStage) searchByTargets(
 				}
 			}
 
-			// Separate full-KB targets (can be combined into one retrieval)
+			// Separate full-Library targets (can be combined into one retrieval)
 			// from specific-entry targets (need per-target direct loading).
-			var fullKBIDs []string
+			var fullLibraryIDs []string
 			var entryTargets []*types.SearchTarget
 			for _, t := range searchableTargets {
-				if t.Type == types.SearchTargetTypeKnowledgeBase {
-					fullKBIDs = append(fullKBIDs, t.KnowledgeBaseID)
+				if t.Type == types.SearchTargetTypeLibrary {
+					fullLibraryIDs = append(fullLibraryIDs, t.LibraryID)
 				} else {
 					entryTargets = append(entryTargets, t)
 				}
 			}
 
 			pipelineInfo(ctx, "Search", "group_plan", map[string]interface{}{
-				"model_key":          modelKey,
-				"combined_kb_count":  len(fullKBIDs),
-				"individual_targets": len(entryTargets),
-				"vector_len":         len(queryEmbedding),
+				"model_key":              modelKey,
+				"combined_library_count": len(fullLibraryIDs),
+				"individual_targets":     len(entryTargets),
+				"vector_len":             len(queryEmbedding),
 			})
 
 			var innerWg sync.WaitGroup
 
-			// Combined search: one HybridSearch call spanning all full-KB targets
-			if len(fullKBIDs) > 0 {
+			// Combined search: one HybridSearch call spanning all full-Library targets
+			if len(fullLibraryIDs) > 0 {
 				innerWg.Add(1)
 				go func() {
 					defer innerWg.Done()
@@ -386,18 +386,18 @@ func (p *SearchStage) searchByTargets(
 						SkipContextEnrichment: true,
 						DisableVectorMatch:    disableVector,
 					}
-					res, err := p.knowledgeBaseService.HybridSearch(ctx, fullKBIDs[0], params)
+					res, err := p.libraryService.HybridSearch(ctx, fullLibraryIDs[0], params)
 					if err != nil {
-						pipelineWarn(ctx, "Search", "combined_kb_search_error", map[string]interface{}{
-							"kb_ids": fullKBIDs,
-							"error":  err.Error(),
+						pipelineWarn(ctx, "Search", "combined_library_search_error", map[string]interface{}{
+							"library_ids": fullLibraryIDs,
+							"error":       err.Error(),
 						})
 						recordError(err)
 						return
 					}
-					pipelineInfo(ctx, "Search", "combined_kb_result", map[string]interface{}{
-						"kb_ids":    fullKBIDs,
-						"hit_count": len(res),
+					pipelineInfo(ctx, "Search", "combined_library_result", map[string]interface{}{
+						"library_ids": fullLibraryIDs,
+						"hit_count":   len(res),
 					})
 					mu.Lock()
 					results = append(results, res...)
@@ -422,7 +422,7 @@ func (p *SearchStage) searchByTargets(
 
 	wg.Wait()
 
-	pipelineInfo(ctx, "Search", "kb_result_summary", map[string]interface{}{
+	pipelineInfo(ctx, "Search", "library_result_summary", map[string]interface{}{
 		"total_hits": len(results),
 	})
 	return results, firstErr
@@ -449,7 +449,7 @@ func (p *SearchStage) searchSingleTarget(
 	)
 	if t.DisableRecallThresholds {
 		pipelineInfo(ctx, "Search", "explicit_scope_threshold_override", map[string]interface{}{
-			"kb_id":          t.KnowledgeBaseID,
+			"library_id":     t.LibraryID,
 			"entry_id_count": len(t.EntryIDs),
 		})
 	}
@@ -465,18 +465,18 @@ func (p *SearchStage) searchSingleTarget(
 	if t.Type == types.SearchTargetTypeEntry {
 		params.EntryIDs = t.EntryIDs
 	}
-	res, err := p.knowledgeBaseService.HybridSearch(ctx, t.KnowledgeBaseID, params)
+	res, err := p.libraryService.HybridSearch(ctx, t.LibraryID, params)
 	if err != nil {
-		pipelineWarn(ctx, "Search", "kb_search_error", map[string]interface{}{
-			"kb_id":       t.KnowledgeBaseID,
+		pipelineWarn(ctx, "Search", "library_search_error", map[string]interface{}{
+			"library_id":  t.LibraryID,
 			"target_type": t.Type,
 			"query":       params.QueryText,
 			"error":       err.Error(),
 		})
 		return err
 	}
-	pipelineInfo(ctx, "Search", "kb_result", map[string]interface{}{
-		"kb_id":       t.KnowledgeBaseID,
+	pipelineInfo(ctx, "Search", "library_result", map[string]interface{}{
+		"library_id":  t.LibraryID,
 		"target_type": t.Type,
 		"hit_count":   len(res),
 	})

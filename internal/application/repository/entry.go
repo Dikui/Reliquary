@@ -47,7 +47,7 @@ func escapeLikeKeyword(keyword string) string {
 var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified", "ContentTypeUncertain", "ProcessingReviewStatus", "ProcessingReviewContentType", "ProcessingReviewReason",
 	"Acquisition", "Incomplete", "ExternalCompletionAttempted", "MissingMaterials", "IngestAttachments", "ContentTypeHint", "RelatedArticleID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
 
-// entryRepository implements knowledge base and entry repository interface
+// entryRepository implements library and entry repository interface
 type entryRepository struct {
 	db *gorm.DB
 }
@@ -92,12 +92,12 @@ func (r *entryRepository) GetEntryByIDOnly(ctx context.Context, id string) (*typ
 	return &entry, nil
 }
 
-// ListEntryByKnowledgeBaseID lists all entry in a knowledge base
-func (r *entryRepository) ListEntryByKnowledgeBaseID(
-	ctx context.Context, spaceID uint64, kbID string,
+// ListEntryByLibraryID lists all entry in a library
+func (r *entryRepository) ListEntryByLibraryID(
+	ctx context.Context, spaceID uint64, libraryID string,
 ) ([]*types.Entry, error) {
 	var entries []*types.Entry
-	if err := r.db.WithContext(ctx).Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
+	if err := r.db.WithContext(ctx).Where("space_id = ? AND library_id = ?", spaceID, libraryID).
 		Order("created_at DESC").Find(&entries).Error; err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (r *entryRepository) ListEntryByKnowledgeBaseID(
 }
 
 // applyEntryListFilter applies the optional filter dimensions of
-// EntryListFilter to a GORM query. Space / knowledge base scoping must be
+// EntryListFilter to a GORM query. Space / library scoping must be
 // applied by the caller before invoking this helper.
 func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB {
 	if filter.SourceKind != "" {
@@ -122,7 +122,7 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	if filter.Keyword != "" {
 		// Case-insensitive (LOWER … LIKE LOWER) so keyword search matches
 		// regardless of the stored casing — consistent with the sibling
-		// LOWER() filters in this file and with the client-side `search kb`
+		// LOWER() filters in this file and with the client-side `search library`
 		// and article filters. Plain LIKE is case-sensitive in
 		// Postgres, which surprised callers searching with lowercase.
 		escaped := strings.ToLower(escapeLikeKeyword(filter.Keyword))
@@ -168,11 +168,11 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	return query
 }
 
-// ListPagedEntryByKnowledgeBaseID lists all entry in a knowledge base with pagination
-func (r *entryRepository) ListPagedEntryByKnowledgeBaseID(
+// ListPagedEntryByLibraryID lists all entry in a library with pagination
+func (r *entryRepository) ListPagedEntryByLibraryID(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 	page *types.Pagination,
 	filter types.EntryListFilter,
 ) ([]*types.Entry, int64, error) {
@@ -181,7 +181,7 @@ func (r *entryRepository) ListPagedEntryByKnowledgeBaseID(
 
 	scope := func(q *gorm.DB) *gorm.DB {
 		return applyEntryListFilter(
-			q.Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID),
+			q.Where("space_id = ? AND library_id = ?", spaceID, libraryID),
 			filter,
 		)
 	}
@@ -269,11 +269,11 @@ func (r *entryRepository) GetEntryBatch(
 func (r *entryRepository) CheckEntryExists(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 	params *types.EntryCheckParams,
 ) (bool, *types.Entry, error) {
 	query := r.db.WithContext(ctx).Model(&types.Entry{}).
-		Where("space_id = ? AND knowledge_base_id = ? AND parse_status <> ?", spaceID, kbID, "failed")
+		Where("space_id = ? AND library_id = ? AND parse_status <> ?", spaceID, libraryID, "failed")
 
 	switch params.Type {
 	case "file":
@@ -508,15 +508,15 @@ func (r *entryRepository) SetFinalizing(
 	return res.RowsAffected > 0, nil
 }
 
-// CountEntryByKnowledgeBaseID counts the number of entry items in a knowledge base
-func (r *entryRepository) CountEntryByKnowledgeBaseID(
+// CountEntryByLibraryID counts the number of entry items in a library
+func (r *entryRepository) CountEntryByLibraryID(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 ) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&types.Entry{}).
-		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
+		Where("space_id = ? AND library_id = ?", spaceID, libraryID).
 		Count(&count).Error
 	return count, err
 }
@@ -525,7 +525,7 @@ func (r *entryRepository) CountEntryByKnowledgeBaseID(
 func (r *entryRepository) CountEntryByStatus(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 	parseStatuses []string,
 ) (int64, error) {
 	if len(parseStatuses) == 0 {
@@ -534,7 +534,7 @@ func (r *entryRepository) CountEntryByStatus(
 
 	var count int64
 	query := r.db.WithContext(ctx).Model(&types.Entry{}).
-		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
+		Where("space_id = ? AND library_id = ?", spaceID, libraryID).
 		Where("parse_status IN ?", parseStatuses)
 
 	if err := query.Count(&count).Error; err != nil {
@@ -560,19 +560,19 @@ func (r *entryRepository) SearchEntry(
 	offset, limit int,
 	fileTypes []string,
 ) ([]*types.Entry, bool, error) {
-	// Use raw query to properly map knowledge_base_name
-	type EntryWithKBName struct {
+	// Use raw query to properly map library_name
+	type EntryWithLibraryName struct {
 		types.Entry
-		KnowledgeBaseName string `gorm:"column:knowledge_base_name"`
+		LibraryName string `gorm:"column:library_name"`
 	}
 
-	var results []EntryWithKBName
+	var results []EntryWithLibraryName
 	query := r.db.WithContext(ctx).
 		Table("entries").
-		Select("entries.*, knowledge_bases.name as knowledge_base_name").
-		Joins("JOIN knowledge_bases ON knowledge_bases.id = entries.knowledge_base_id").
+		Select("entries.*, libraries.name as library_name").
+		Joins("JOIN libraries ON libraries.id = entries.library_id").
 		Where("entries.space_id = ?", spaceID).
-		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
+		Where("libraries.type = ?", types.LibraryTypeDocument).
 		Where("entries.deleted_at IS NULL").
 		Where("entries.parse_status <> ?", types.ParseStatusRejected)
 
@@ -657,13 +657,13 @@ func (r *entryRepository) SearchEntry(
 	entries := make([]*types.Entry, len(results))
 	for i, r := range results {
 		k := r.Entry
-		k.KnowledgeBaseName = r.KnowledgeBaseName
+		k.LibraryName = r.LibraryName
 		entries[i] = &k
 	}
 	return entries, hasMore, nil
 }
 
-// SearchEntryInScopes searches articles inside explicit space and knowledge base boundaries.
+// SearchEntryInScopes searches articles inside explicit space and library boundaries.
 func (r *entryRepository) SearchEntryInScopes(
 	ctx context.Context,
 	scopes []types.SearchScope,
@@ -675,25 +675,25 @@ func (r *entryRepository) SearchEntryInScopes(
 		return nil, false, 0, nil
 	}
 
-	type EntryWithKBName struct {
+	type EntryWithLibraryName struct {
 		types.Entry
-		KnowledgeBaseName string `gorm:"column:knowledge_base_name"`
+		LibraryName string `gorm:"column:library_name"`
 	}
 
 	placeholders := make([]string, len(scopes))
 	args := make([]interface{}, 0, len(scopes)*2)
 	for i, s := range scopes {
 		placeholders[i] = "(?,?)"
-		args = append(args, s.SpaceID, s.KBID)
+		args = append(args, s.SpaceID, s.LibraryID)
 	}
-	scopeCondition := "(entries.space_id, entries.knowledge_base_id) IN (" + strings.Join(placeholders, ",") + ")"
+	scopeCondition := "(entries.space_id, entries.library_id) IN (" + strings.Join(placeholders, ",") + ")"
 
 	query := r.db.WithContext(ctx).
 		Table("entries").
-		Select("entries.*, knowledge_bases.name as knowledge_base_name").
-		Joins("JOIN knowledge_bases ON knowledge_bases.id = entries.knowledge_base_id AND knowledge_bases.space_id = entries.space_id").
+		Select("entries.*, libraries.name as library_name").
+		Joins("JOIN libraries ON libraries.id = entries.library_id AND libraries.space_id = entries.space_id").
 		Where(scopeCondition, args...).
-		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
+		Where("libraries.type = ?", types.LibraryTypeDocument).
 		Where("entries.deleted_at IS NULL").
 		Where("entries.parse_status <> ?", types.ParseStatusRejected)
 
@@ -761,7 +761,7 @@ func (r *entryRepository) SearchEntryInScopes(
 		return nil, false, 0, err
 	}
 
-	var results []EntryWithKBName
+	var results []EntryWithLibraryName
 	err := query.Order("entries.created_at DESC").
 		Offset(offset).
 		Limit(limit + 1).
@@ -778,7 +778,7 @@ func (r *entryRepository) SearchEntryInScopes(
 	entries := make([]*types.Entry, len(results))
 	for i, r := range results {
 		k := r.Entry
-		k.KnowledgeBaseName = r.KnowledgeBaseName
+		k.LibraryName = r.LibraryName
 		entries[i] = &k
 	}
 	return entries, hasMore, total, nil

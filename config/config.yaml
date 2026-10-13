@@ -14,8 +14,8 @@ article_processing:
 vault:
   header_debounce: 5s
 
-# Knowledge base configuration
-knowledge_base:
+# Library configuration
+library:
   chunk_size: 512
   chunk_overlap: 50
   split_markers: ["\n\n", "\n", "。"]

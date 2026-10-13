@@ -13,12 +13,12 @@ quality of the answers your LLM produces.
 
 ## Adaptive 3-tier chunking
 
-Set per knowledge base via the editor's **Chunking** sidebar (or the
-`strategy` field on the KB-config API).
+Set per library via the editor's **Chunking** sidebar (or the
+`strategy` field on the Library-config API).
 
 | Strategy | When picked | What it does |
 |----------|-------------|--------------|
-| `auto` (recommended) | Default for new KBs | Profiles the document and picks the strongest tier from the chain below. |
+| `auto` (recommended) | Default for new Libraries | Profiles the document and picks the strongest tier from the chain below. |
 | `heading` | Markdown-style structure | Splits at `#` / `##` / `###` boundaries. Each chunk gets a breadcrumb context header (`# Top > ## Section`) prepended at embedding time. |
 | `heuristic` | PDF-style structure | Splits at form-feeds (page breaks), numbered sections, multilingual chapter markers (DE / EN / ZH), all-caps titles, and visual separators. |
 | `legacy` (= `recursive`) | Anything else, or as fallback | Pure recursive separator-based splitter — newest version with priority recursion and overlap-cap fixes. |
@@ -87,10 +87,10 @@ chunks always fit even for CJK content (which is denser per character).
 
 ## Debugging in the UI
 
-The KB editor's **Chunking** sidebar has a "Test with sample text"
+The Library editor's **Chunking** sidebar has a "Test with sample text"
 collapsible at the bottom:
 
-1. Paste a Markdown / plain-text snippet (max 64 KB).
+1. Paste a Markdown / plain-text snippet (max 64 Library).
 2. Click **Run preview**.
 3. The panel shows:
    - Selected strategy tier as a colored tag
@@ -107,12 +107,12 @@ configurations against the same sample before triggering a re-upload.
 
 ## API
 
-Three endpoints can write the chunking config. The KB-config update
+Three endpoints can write the chunking config. The Library-config update
 endpoint is the one wired to the editor UI and uses **camelCase** with a
 `documentSplitting` envelope:
 
 ```http
-PUT /api/v1/initialization/config/:kbId
+PUT /api/v1/initialization/config/:libraryId
 Authorization: Bearer <jwt>
 Content-Type: application/json
 
@@ -135,7 +135,7 @@ The `strategy`, `tokenLimit`, and `languages` fields use pointer-based
 DTOs server-side: omitting them in the payload means "no change",
 sending an empty string / 0 / [] explicitly resets to default.
 
-The knowledge base settings endpoint (`PUT /api/v1/knowledge-base`) takes the same fields but in
+The library settings endpoint (`PUT /api/v1/library`) takes the same fields but in
 **snake_case** under a `chunking_config` envelope:
 `{ "chunking_config": { "chunk_size": 512, "chunk_overlap": 80,
 "strategy": "auto", "token_limit": 0, "languages": ["de", "en"], ... } }`.
@@ -146,7 +146,7 @@ form too and additionally takes a `text` field for the sample to chunk.
 ## Known trade-offs
 
 - **Strategy switches do not auto-reindex** existing documents. After
-  changing a KB's strategy, re-upload affected files (or trigger
+  changing a Library's strategy, re-upload affected files (or trigger
   re-indexing via the UI) to apply the new chunking.
 - **OCR artifacts in PDFs** (vertical layout text broken character-
   by-character into separate lines) cannot be fixed by any splitter —

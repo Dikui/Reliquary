@@ -14,7 +14,7 @@ import {
 
 test('resolveFilePreviewExt prefers explicit type and strips a leading dot', () => {
   assert.equal(resolveFilePreviewExt('chart.html', '.HTML'), 'html')
-  assert.equal(resolveFilePreviewExt('kb_stats.csv', ''), 'csv')
+  assert.equal(resolveFilePreviewExt('library_stats.csv', ''), 'csv')
   assert.equal(resolveFilePreviewExt('noext', ''), '')
 })
 

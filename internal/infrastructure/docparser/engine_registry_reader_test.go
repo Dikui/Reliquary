@@ -40,7 +40,7 @@ func TestNewReaderRejectsUnsupportedTypesAndRemovedEngines(t *testing.T) {
 
 // The anydoc engine is only linked into builds tagged `anydoc`; everywhere
 // else it must be listed as unavailable and refuse to build a reader, so a
-// knowledge base configured for it fails loudly instead of parsing with
+// library configured for it fails loudly instead of parsing with
 // something else.
 func TestAnydocEngineFollowsBuildAvailability(t *testing.T) {
 	reader, err := NewReader(context.Background(), AnydocEngineName, "docx", false, ReaderDeps{})

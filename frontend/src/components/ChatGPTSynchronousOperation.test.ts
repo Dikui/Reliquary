@@ -65,7 +65,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         '@/types/entryClassification': { CONTENT_TYPES }, 'tdesign-vue-next': { MessagePlugin: { success() { assert.fail('a paused correction cannot report success') } } },
         '@/utils/security': { isValidURL: () => true },
         '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
-        '@/api/knowledge-base': { getEntryDetails: async () => ({ success: true, data: article }) },
+        '@/api/library': { getEntryDetails: async () => ({ success: true, data: article }) },
         './EntryStarToggle.vue': moduleOf(defineComponent({ setup: () => () => null })),
         '@/api/entry-judgments': evaluate(source('../api/entry-judgments.ts'), { '@/utils/request': request }),
         '@/api/entry-review': evaluate(source('../api/entry-review.ts'), { '@/utils/request': request }),

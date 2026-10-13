@@ -19,9 +19,9 @@ func TestResetEntryForReparseClearsPreviousAttemptState(t *testing.T) {
 		EmbeddingModelID:     "old-model",
 		PendingSubtasksCount: 3,
 	}
-	kb := &types.KnowledgeBase{EmbeddingModelID: "new-model"}
+	library := &types.Library{EmbeddingModelID: "new-model"}
 
-	resetEntryForReparse(entry, kb)
+	resetEntryForReparse(entry, library)
 
 	require.Equal(t, types.ParseStatusPending, entry.ParseStatus)
 	require.Equal(t, "disabled", entry.EnableStatus)

@@ -349,13 +349,13 @@ function engineInitial(engineName: string): string {
 }
 
 function getEngineDisplayName(engineName: string): string {
-  const key = `kbSettings.parser.engines.${engineName}.name`
+  const key = `librarySettings.parser.engines.${engineName}.name`
   const translated = t(key)
   return translated !== key ? translated : engineName
 }
 
 function getEngineDisplayDesc(engineName: string, fallback: string): string {
-  const key = `kbSettings.parser.engines.${engineName}.desc`
+  const key = `librarySettings.parser.engines.${engineName}.desc`
   const translated = t(key)
   return translated !== key ? translated : fallback
 }

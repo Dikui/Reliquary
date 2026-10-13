@@ -62,7 +62,7 @@ func (m *retainedIntakeModel) Chat(ctx context.Context, messages []chat.Message,
 type retainedIntakeHarness struct {
 	db        *gorm.DB
 	ctx       context.Context
-	kb        *types.KnowledgeBase
+	library   *types.Library
 	service   *entryService
 	queue     *retainedProcessingQueue
 	model     *retainedIntakeModel
@@ -74,10 +74,10 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	db := pgtest.Open(t)
 	space := &types.Space{ID: types.SingleSpaceID, Name: "Personal space"}
 	require.NoError(t, db.Create(space).Error)
-	kb := &types.KnowledgeBase{ID: "kb", SpaceID: space.ID, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
+	library := &types.Library{ID: "library", SpaceID: space.ID, Name: "Articles", Type: types.LibraryTypeDocument,
 		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024,
 			ParserEngineRules: []types.ParserEngineRule{{FileTypes: []string{"md", "txt"}, Engine: "simple"}}}}
-	require.NoError(t, db.Create(kb).Error)
+	require.NoError(t, db.Create(library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, space.ID)
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
@@ -86,12 +86,12 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	chunks := &chunkService{chunkRepository: chunkRepo}
 	queue := &retainedProcessingQueue{}
 	model := &retainedIntakeModel{}
-	bases := retainedProcessingKB{kb: kb}
+	bases := retainedProcessingLibrary{library: library}
 	svc := &entryService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
-		kbService: bases, modelService: &summaryStateModelService{model: model}, task: queue,
+		libraryService: bases, modelService: &summaryStateModelService{model: model}, task: queue,
 		spaceRepo: repository.NewSpaceRepository(db), fileSvc: &retainedIntakeFiles{},
 		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
-	return &retainedIntakeHarness{db: db, ctx: ctx, kb: kb, service: svc, queue: queue, model: model}
+	return &retainedIntakeHarness{db: db, ctx: ctx, library: library, service: svc, queue: queue, model: model}
 }
 
 func (h *retainedIntakeHarness) drain(t *testing.T) {
@@ -113,7 +113,7 @@ func (h *retainedIntakeHarness) drain(t *testing.T) {
 
 func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Entry {
 	t.Helper()
-	article, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, id)
+	article, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, id)
 	require.NoError(t, err)
 	return article
 }
@@ -121,14 +121,14 @@ func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Entry {
 func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	body := "# Uploadfixture\n\nAcme published an original technical announcement with supported deployment capabilities and measured product improvements."
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "announcement.md", body),
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "announcement.md", body),
 		map[string]string{"publisher": "Acme", "original_url": "https://example.com/uploadfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	completed := h.article(t, article.ID)
 	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
 	require.Equal(t, types.SummaryStatusCompleted, completed.SummaryStatus)
-	chunks, err := h.service.chunkRepo.ListChunksByEntryID(h.ctx, h.kb.SpaceID, article.ID)
+	chunks, err := h.service.chunkRepo.ListChunksByEntryID(h.ctx, h.library.SpaceID, article.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, chunks)
 	require.Contains(t, chunks[0].Content, "Uploadfixture")
@@ -144,7 +144,7 @@ func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T
 func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	h.model.malformed = true
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 		newMultipartFileHeader(t, "malformed.md", "Acme published the complete original product announcement with detailed deployment options."),
 		map[string]string{"publisher": "Acme", "original_url": "https://example.com/malformedfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)

@@ -30,7 +30,7 @@ export default {
     "openSettings": "打开 ChatGPT 模型设置",
     "encryptionRequired": "先在部署配置中设置有效的 SYSTEM_AES_KEY，再使用 ChatGPT 登录。",
     "browserHint": "请在部署 Reliquary 的本机浏览器中授权，完成后返回本页。",
-    "noAccounts": "尚未连接 ChatGPT 账号。登录后添加聊天模型，并在知识库设置中选择。",
+    "noAccounts": "尚未连接 ChatGPT 账号。登录后添加聊天模型，并在库设置中选择。",
     "connected": "已登录",
     "needsLogin": "需要重新登录",
     "signedOut": "已退出登录",
@@ -311,7 +311,7 @@ export default {
 },
   menu: {
     batchManage: '批量管理',
-  "knowledgeBase": "文章",
+  "library": "文章",
   "settings": "设置",
   "logout": "退出登录",
   "search": "知识检索",
@@ -331,7 +331,7 @@ export default {
   "title": "模型档位",
   "scopeHint": {
 
-    "knowledge_base": "所有文章共用此处保存的模型档位。"
+    "library": "所有文章共用此处保存的模型档位。"
   },
   "names": {
     "light": "轻量",
@@ -350,7 +350,7 @@ export default {
   "sources": {
     "generation": "文章处理模型档位",
 
-    "knowledge_base": "知识库设置",
+    "library": "库设置",
     "legacy": "已有模型配置",
     "default": "系统默认",
     "unconfigured": "未配置"
@@ -485,7 +485,7 @@ export default {
     "mergeSource": "待合并实体",
     "mergeTarget": "保留实体",
     "mergeTargetPlaceholder": "选择保留的实体",
-    "mergeWarning": "合并会影响本空间所有知识库中的实体引用，且不能在此界面撤销。",
+    "mergeWarning": "合并会影响本空间所有库中的实体引用，且不能在此界面撤销。",
     "mergeSaved": "实体已合并"
   }
 },
@@ -530,9 +530,9 @@ export default {
       updateApiKeySuccess: 'API Key 已保存',
       updateApiKeyFailed: 'API Key 保存失败',
 
-      playgroundNeedKnowledgeBase: '请选择要查询的知识库。',
-      playgroundNoKnowledgeBases: '请先创建知识库并收录知识，再运行查询。',
-      playgroundLoadKnowledgeBasesFailed: '知识库加载失败，请关闭后重试。',
+      playgroundNeedLibrary: '请选择要查询的库。',
+      playgroundNoLibraries: '请先创建库并收录知识，再运行查询。',
+      playgroundLoadLibrariesFailed: '库加载失败，请关闭后重试。',
       playgroundNeedQuestionAndKey: '请输入 API Key 和知识查询内容。',
       apiKeyExpiresAt: "有效期",
       apiKeyExpiresAtHint: "留空表示长期有效。",
@@ -621,7 +621,7 @@ export default {
     close: '关闭',
     downloading: '下载中...'
   },
-  kbSettings: {
+  librarySettings: {
     parser: {
       title: '解析引擎',
       description: '为不同文件类型选择文档解析引擎。PDF 和 Office 文档默认使用 anydoc。',
@@ -797,7 +797,7 @@ export default {
     usage: {
       title: '模型无法删除',
       description: '模型「{name}」仍被以下配置引用。请先打开对应配置并更换模型，再重新删除。',
-      knowledgeSettings: '知识库设置',
+      librarySettings: '库设置',
       openConfiguration: '打开配置',
       truncated: '仅显示前 {shown} 个，共 {total} 个',
       bindings: {
@@ -929,7 +929,7 @@ export default {
     ragQandA: "知识检索",
     independentSpace: "个人知识管理",
     fullApiAccess: '完整 API 访问',
-    knowledgeBaseManagement: '知识库管理',
+    libraryManagement: '库管理',
   },
   font: {
     uiFont: '界面字体',
@@ -1174,7 +1174,7 @@ export default {
     unsupportedFileType: '不支持的文件类型！',
     invalidFileType: '文件类型错误！',
     invalidImageLink: '无效的图片链接',
-    missingKbId: '缺少知识库ID',
+    missingLibraryId: '缺少库ID',
     tokenNotFound: '未找到登录令牌，请重新登录',
     streamFailed: '流式连接失败',
     initialization: {
@@ -1382,12 +1382,12 @@ export default {
           loadingMore: '正在加载更多…',
           attempts: '执行 {current}/{max}',
           unknownTarget: '未识别到关联记录',
-          knowledgeBaseLabel: '知识库 ID',
+          libraryLabel: '库 ID',
           knowledgeLabel: '文档 ID',
           taskIDLabel: '业务任务 ID',
           spaceLabel: '空间 ID',
-          sourceKBLabel: '来源知识库',
-          targetKBLabel: '目标知识库',
+          sourceLibraryLabel: '来源库',
+          targetLibraryLabel: '目标库',
           knowledgeCountLabel: '文档数量',
           enqueuedAt: '入队时间',
           startedAt: '开始时间',
@@ -1605,7 +1605,7 @@ export default {
   },
   knowledgeEditor: {
 
-    titleEdit: '知识库设置',
+    titleEdit: '库设置',
     advanced: {
       title: '高级设置',
       description: "配置数据表解析摘要的补充要求",
@@ -1712,14 +1712,14 @@ export default {
     },
     models: {
       title: '模型配置',
-      description: '为知识库选择合适的 AI 模型',
+      description: '为库选择合适的 AI 模型',
       llmLabel: 'LLM 大语言模型',
       llmDesc: '用于总结和摘要的大语言模型',
       llmPlaceholder: '请选择 LLM 模型（可选）',
       embeddingLabel: 'Embedding 嵌入模型',
       embeddingDesc: '用于文本向量化的嵌入模型',
       embeddingPlaceholder: '请选择 Embedding 模型',
-      embeddingLocked: '知识库中已有文件，无法修改 Embedding 模型',
+      embeddingLocked: '库中已有文件，无法修改 Embedding 模型',
       embeddingOptional: '（可选）',
     },
     document: {
@@ -1728,12 +1728,12 @@ export default {
     },
     messages: {
       loadModelsFailed: '加载模型列表失败',
-      loadDataFailed: '加载知识库数据失败',
-      notFound: '知识库不存在',
-      nameRequired: '请输入知识库名称',
+      loadDataFailed: '加载库数据失败',
+      notFound: '库不存在',
+      nameRequired: '请输入库名称',
       summaryRequired: "请选择文章处理的生成模型",
 
-      missingId: '缺少知识库 ID',
+      missingId: '缺少库 ID',
       buildDataFailed: '数据构建失败',
       updateSuccess: '配置保存成功',
     },
@@ -1750,17 +1750,17 @@ export default {
       searchDesc: '对文档进行分块、向量化和关键词索引，支持混合检索',
       atLeastOne: '至少需要开启一种索引策略',
       embeddingRequired: 'RAG 检索需要配置 Embedding 模型',
-      lockedTip: '知识库已有内容，索引策略暂不支持调整。如需变更，请先清空知识库。',
+      lockedTip: '库已有内容，索引策略暂不支持调整。如需变更，请先清空库。',
 
     },
     basic: {
       title: '基本信息',
-      description: '设置知识库的名称和描述信息',
+      description: '设置库的名称和描述信息',
 
-      nameLabel: '知识库名称',
-      namePlaceholder: '请输入知识库名称',
-      descriptionLabel: '知识库描述',
-      descriptionPlaceholder: '请输入知识库描述（可选）'
+      nameLabel: '库名称',
+      namePlaceholder: '请输入库名称',
+      descriptionLabel: '库描述',
+      descriptionPlaceholder: '请输入库描述（可选）'
     },
     errors: {
     },
@@ -1829,7 +1829,7 @@ export default {
     saveFailed: '保存失败',
     operationFailed: '操作失败',
     file: '文件',
-    knowledgeBase: '知识库',
+    library: '库',
     noResult: '无结果',
     remove: '移除',
     avatar: '头像',
@@ -1960,7 +1960,7 @@ export default {
       notScanned: '尚未扫描',
       loadFailed: '无法加载文件库状态，请重试。',
     },
-    knowledgeSettings: '知识库设置',
+    librarySettings: '库设置',
     modelManagement: '模型管理',
     parserEngine: '解析引擎',
     versionInfo: '版本信息',
@@ -2125,7 +2125,7 @@ export default {
     },
     processConfig: {
       title: '本次解析配置',
-      kbDefault: '使用知识库默认配置',
+      libraryDefault: '使用库默认配置',
       chunkSize: '分块大小 {n}',
       chunking: '分块',
       parser: '解析引擎',
@@ -2155,7 +2155,7 @@ export default {
       description: '适用于网页打印、扫描件、图片型 PDF。开启后会逐页 OCR，解析更完整但耗时和模型调用更多。'
     }
   },
-  knowledgeBase: {
+  library: {
     channelRSS: "RSS",
     emptyArticles: "暂无文章",
     ingestOnlyHint: "请通过外部工具将完整材料送入 HTTP 或 MCP 收录接口。",
@@ -2175,7 +2175,7 @@ export default {
     originalLinkMissing: "没有原文链接",
     reprocess: "重新处理",
     reprocessQueued: "重新处理已提交，完成后会自动更新",
-    title: '知识库',
+    title: '库',
     fileContent: '文件内容',
     name: '名称',
     description: '描述',
@@ -2231,7 +2231,7 @@ export default {
     metadataKeyDuplicate: '元数据字段 {key} 重复',
     metadataNumberRequired: '元数据字段 {key} 必须是有效数字',
     noDocumentSummary: '暂无文章摘要',
-    missingId: '缺少知识库ID',
+    missingId: '缺少库ID',
     deleteFailed: '删除失败，请稍后再试！',
     uploadTime: '上传时间',
     rebuildDocument: '重建知识',
@@ -2295,7 +2295,7 @@ export default {
     statusDraft: '草稿',
     noDescription: '无描述',
     parserRecoveryHint: '所选文件类型暂无可用解析引擎。请使用默认包含 anydoc 的 Docker 镜像，或本地执行 make anydoc-lib 后以 -tags anydoc 启动，或在解析引擎设置中配置 MinerU。',
-    searchPlaceholder: '搜索知识库...',
+    searchPlaceholder: '搜索库...',
     docSearchPlaceholder: '搜索文章标题...',
     fileTypeFilter: '文件类型',
     allFileTypes: '全部类型',
@@ -2317,15 +2317,15 @@ export default {
     sourceManual: '手动创建',
     updatedTimeFrom: '起始时间',
     updatedTimeTo: '结束时间',
-    noMatch: '未找到匹配的知识库',
-    noKnowledge: '暂无可用知识库',
-    loadingFailed: '加载知识库失败',
-    operationNotSupportedForType: '当前知识库类型不支持该操作',
+    noMatch: '未找到匹配的库',
+    noKnowledge: '暂无可用库',
+    loadingFailed: '加载库失败',
+    operationNotSupportedForType: '当前库类型不支持该操作',
     deleteSuccess: '知识删除成功！',
     chunkLoadFailed: '分块加载失败',
     infoCard: {
-      tooltip: '查看知识库信息',
-      title: '知识库信息',
+      tooltip: '查看库信息',
+      title: '库信息',
       basic: '基础',
       access: '访问',
       binding: '存储绑定',

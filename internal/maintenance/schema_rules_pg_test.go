@@ -70,5 +70,5 @@ func TestLegacyRulesRejectUnexpectedFutureColumn(t *testing.T) {
 	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
 	require.NoError(t, migration.Migrate(3))
 	require.NoError(t, db.Exec("ALTER TABLE operation_logs ADD COLUMN api_key_name text").Error)
-	require.ErrorContains(t, ValidateClassification(context.Background(), db), "unclassified database column operation_logs.api_key_name")
+	require.ErrorContains(t, classifyHistoricalSchema(context.Background(), db), "unclassified database column operation_logs.api_key_name")
 }

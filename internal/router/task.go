@@ -21,16 +21,16 @@ import (
 
 type TaskParams struct {
 	dig.In
-	Client               *queue.Client
-	SystemSettings       interfaces.SystemSettingService
-	EntryService         interfaces.EntryService
-	KnowledgeBaseService interfaces.KnowledgeBaseService
-	TopicService         *service.TopicService
-	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
-	EmbeddingRebuild     *service.EmbeddingRebuilder
-	Reports              *service.VaultDocumentService `optional:"true"`
-	SpanTracker          service.SpanTracker
-	Cleaner              interfaces.ResourceCleaner
+	Client              *queue.Client
+	SystemSettings      interfaces.SystemSettingService
+	EntryService        interfaces.EntryService
+	LibraryService      interfaces.LibraryService
+	TopicService        *service.TopicService
+	EntityNameEmbedding *service.EntityNameEmbeddingRebuilder
+	EmbeddingRebuild    *service.EmbeddingRebuilder
+	Reports             *service.VaultDocumentService `optional:"true"`
+	SpanTracker         service.SpanTracker
+	Cleaner             interfaces.ResourceCleaner
 }
 
 // backgroundTaskMiddleware tags every task's context as a background worker

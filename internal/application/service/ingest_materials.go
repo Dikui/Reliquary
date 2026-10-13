@@ -221,13 +221,13 @@ func (s *entryService) parseIngestDocument(ctx context.Context, asset *types.Ing
 	return reader.Read(ctx, &types.ReadRequest{FileContent: data, FileName: asset.Name, FileType: asset.Type})
 }
 
-func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.KnowledgeBase, article *types.Entry, request *types.IngestRequest) (string, string, error) {
+func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.Library, article *types.Entry, request *types.IngestRequest) (string, string, error) {
 	copy := *request
 	if validIngestURL(strings.TrimSpace(copy.Content)) {
 		copy.Content = ""
 	}
 	intake, _ := article.IntakeMetadata()
-	files := s.resolveFileService(ctx, kb)
+	files := s.resolveFileService(ctx, library)
 	missing := stampIngestMissing(request.Missing, article.LastIngestAPIKeyID, article.LastIngestAPIKeyName)
 	canonicalRefs := make([]string, len(copy.Images))
 	imageInputs := append([]types.IngestImage(nil), copy.Images...)
@@ -406,7 +406,7 @@ func (s *entryService) recordMissingIngestImages(ctx context.Context, k *types.E
 	return s.repo.UpdateEntryColumns(ctx, k.ID, map[string]any{"missing_materials": k.MissingMaterials, "incomplete": true, "updated_at": time.Now()})
 }
 
-func (s *entryService) readIngestBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry) (string, error) {
+func (s *entryService) readIngestBody(ctx context.Context, library *types.Library, k *types.Entry) (string, error) {
 	if k.VaultPath != "" && !(k.Incomplete && k.ProcessingMode == types.ProcessingModeSummaryOnly) {
 		return k.VaultBody, nil
 	}
@@ -417,7 +417,7 @@ func (s *entryService) readIngestBody(ctx context.Context, kb *types.KnowledgeBa
 	if intake == nil || intake.OriginalPath == "" {
 		return "", nil
 	}
-	file, err := s.resolveFileServiceForPath(ctx, kb, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
+	file, err := s.resolveFileServiceForPath(ctx, library, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
 	if err != nil {
 		return "", err
 	}

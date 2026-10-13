@@ -81,7 +81,7 @@ func TestFileSourceLinkExtractionEntersModelReview(t *testing.T) {
 				t.Cleanup(server.Close)
 				overrides = &types.EntryProcessOverrides{ParserEngineRules: []types.ParserEngineRule{{FileTypes: []string{"pdf"}, Engine: "mineru"}}, ParserEngineOverrides: map[string]string{"mineru_endpoint": server.URL}}
 			}
-			k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, test.filename, test.body), nil, nil, "", types.ChannelWeb, overrides)
+			k, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, test.filename, test.body), nil, nil, "", types.ChannelWeb, overrides)
 			require.NoError(t, err)
 			h.drain(t)
 			k = h.article(t, k.ID)
@@ -128,7 +128,7 @@ func TestOriginalSourceExtractionDoesNotTreatOrdinaryLinksAsSource(t *testing.T)
 
 func TestSupplementOriginalURLApprovalProcessesAfterModelReview(t *testing.T) {
 	h, _ := newVaultArticleHarness(t)
-	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "supplemented.md", "# Original research\n\nA complete new paper measures performance and reproducibility."), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "supplemented.md", "# Original research\n\nA complete new paper measures performance and reproducibility."), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	_, err = h.service.ReviewEntryIntake(h.ctx, k.ID, "supplement_url", types.SourceInfo{OriginalURL: "file:///private/file"})
@@ -146,7 +146,7 @@ func TestSupplementOriginalURLApprovalProcessesAfterModelReview(t *testing.T) {
 
 func TestMissingOriginalURLSkipsModelsAndSupplementRechecks(t *testing.T) {
 	h, _ := newVaultArticleHarness(t)
-	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "no-link.md", "# No source\n\nOriginal results with observations and measurements."), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "no-link.md", "# No source\n\nOriginal results with observations and measurements."), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	k = h.article(t, k.ID)
@@ -177,7 +177,7 @@ func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.processor.output = validProcessingFixture("tutorial")
 	body := "# Unlinked instructions\n\nsourceunverifiedfixture steps remain retrievable in full despite the selected tutorial type."
-	k, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, &legacyManualFixturePayload{Title: "Unlinked instructions", Content: body, Status: types.ManualEntryStatusPublish}, types.ChannelWeb)
+	k, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, &legacyManualFixturePayload{Title: "Unlinked instructions", Content: body, Status: types.ManualEntryStatusPublish}, types.ChannelWeb)
 	require.NoError(t, err)
 	h.drain(t)
 	_, err = h.service.ReviewEntryIntake(h.ctx, k.ID, "admit_unverified", types.SourceInfo{})
@@ -195,7 +195,7 @@ func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 	_, header, storedBody := readVaultArticle(t, vault, k)
 	require.Contains(t, string(header), "url: null")
 	require.Contains(t, string(storedBody), "sourceunverifiedfixture")
-	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, KnowledgeBaseIDs: []string{h.kb.ID}, Query: "sourceunverifiedfixture", TopK: 10}})
+	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{h.library.ID}, Query: "sourceunverifiedfixture", TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	logs, err := NewOperationLogService(h.db).List(h.ctx, "review_admit_unverified", 1, 100)
@@ -206,7 +206,7 @@ func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 func TestConvertMissingSourceToMineProcessesPreservesAttachmentsAndIndexes(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	body := "# My note\n\nconverttominefixture personal ideas contain complete observations and supporting evidence.\n\n![chart](" + articleImageDataURI(t, 42) + ")"
-	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "本人笔记.md", body), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "本人笔记.md", body), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	_, err = h.service.ReviewEntryIntake(h.ctx, k.ID, "convert_to_mine", types.SourceInfo{})
@@ -239,7 +239,7 @@ func TestConvertMissingSourceToMineProcessesPreservesAttachmentsAndIndexes(t *te
 	attachments, err := os.ReadDir(filepath.Join(vault.root, "attachments", k.ID))
 	require.NoError(t, err)
 	require.Len(t, attachments, 2)
-	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, KnowledgeBaseIDs: []string{h.kb.ID}, EntryIDs: []string{mine.ID}, Query: "converttominefixture", TopK: 10}})
+	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{h.library.ID}, EntryIDs: []string{mine.ID}, Query: "converttominefixture", TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotContains(t, h.processor.stages, "intake_review")
@@ -252,7 +252,7 @@ func TestConvertMissingSourceToMineProcessesPreservesAttachmentsAndIndexes(t *te
 func TestConvertToMineAuditFailurePreservesSourceWithoutPublishedCopies(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	body := "# Retained original\n\nrollbackminefixture complete notes with supporting image.\n\n![chart](" + articleImageDataURI(t, 45) + ")"
-	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "保留来源.md", body), nil, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "保留来源.md", body), nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	k = h.article(t, k.ID)

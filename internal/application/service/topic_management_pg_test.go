@@ -81,7 +81,7 @@ func historicalTopicArticles(t *testing.T, h *articleProcessingHarness, count in
 	t.Helper()
 	articles := make([]types.Entry, 0, count)
 	for i := 0; i < count; i++ {
-		article := types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: fmt.Sprintf("Historical article %02d", i), Description: fmt.Sprintf("Historical summary %02d about products", i), SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+		article := types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", Title: fmt.Sprintf("Historical article %02d", i), Description: fmt.Sprintf("Historical summary %02d about products", i), SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 		require.NoError(t, h.db.Create(&article).Error)
 		articles = append(articles, article)
 	}
@@ -186,9 +186,9 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 	svc, model, ctx := newTopicManagementService(t, h)
 	articles := historicalTopicArticles(t, h, 65)
 	for _, kind := range []string{"mine", "report"} {
-		require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.EntryTypeManual, SourceKind: kind, Title: kind + " document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
+		require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: types.EntryTypeManual, SourceKind: kind, Title: kind + " document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
 	}
-	require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: "Rejected article", Description: "Also about products", ParseStatus: types.ParseStatusRejected}).Error)
+	require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", Title: "Rejected article", Description: "Also about products", ParseStatus: types.ParseStatusRejected}).Error)
 	_, err := svc.CreateTopic(ctx, &types.Topic{Name: "Other topic", Description: "Other description"})
 	require.NoError(t, err)
 	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Target topic", Description: "Product announcements"})

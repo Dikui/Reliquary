@@ -67,7 +67,7 @@ for (const component of ['palette', 'workbench']) {
     let time = 100, actions = 0
     const handler = component === 'palette'
       ? sourceHandler('../components/GlobalCommandPalette.vue', 'onKeyDown', { composing: { value: false }, primaryActionForSelected: () => actions++ })
-      : sourceHandler('../views/knowledge-base/components/EntryWorkbench.vue', 'onEntityEnter', { entityComposing: { value: false }, entitySearchTimer: null, resetEntityList: () => actions++ })
+      : sourceHandler('../views/library/components/EntryWorkbench.vue', 'onEntityEnter', { entityComposing: { value: false }, entitySearchTimer: null, resetEntityList: () => actions++ })
     const root = new EventTarget()
     const remove = installImeEnterGuard(root as unknown as Document, () => time)
     root.addEventListener('keydown', event => component === 'palette' ? handler(event) : handler('', { e: event }))

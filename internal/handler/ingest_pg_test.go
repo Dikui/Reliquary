@@ -58,12 +58,12 @@ func (ingestHandlerModels) GetChatModel(context.Context, string) (chat.Chat, err
 	return ingestHandlerChat{}, nil
 }
 
-type ingestHandlerBases struct{ stubArticleKBService }
+type ingestHandlerBases struct{ stubArticleLibraryService }
 
-func (ingestHandlerBases) GetKnowledgeBase(ctx context.Context) (*types.KnowledgeBase, error) {
-	kb, err := (&stubArticleKBService{}).GetKnowledgeBase(ctx)
-	kb.SummaryModelID = "intake-test"
-	return kb, err
+func (ingestHandlerBases) GetLibrary(ctx context.Context) (*types.Library, error) {
+	library, err := (&stubArticleLibraryService{}).GetLibrary(ctx)
+	library.SummaryModelID = "intake-test"
+	return library, err
 }
 
 func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
@@ -72,7 +72,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	spaceID := uint64(1)
 	key := &types.APIKey{SpaceID: &spaceID, Name: "HTTP 外部工具", KeyHash: "ingest-http-fixture"}
 	require.NoError(t, db.Create(key).Error)
-	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "kb-1", SpaceID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.KnowledgeBaseTypeDocument}).Error)
+	require.NoError(t, db.Create(&types.Library{ID: "library-1", SpaceID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.LibraryTypeDocument}).Error)
 	queue := &ingestHandlerQueue{}
 	bases := &ingestHandlerBases{}
 	articles, err := service.NewEntryService(db, &config.Config{}, repository.NewEntryRepository(db), bases,
@@ -194,7 +194,7 @@ func TestIngestHTTPUploadReferenceAndWhitelist(t *testing.T) {
 	spaceID := uint64(1)
 	key := &types.APIKey{SpaceID: &spaceID, Name: "HTTP 文件工具", KeyHash: "ingest-http-assets"}
 	require.NoError(t, db.Create(key).Error)
-	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "kb-1", SpaceID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.KnowledgeBaseTypeDocument}).Error)
+	require.NoError(t, db.Create(&types.Library{ID: "library-1", SpaceID: 1, Name: "Articles", SummaryModelID: "intake-test", ModelTiers: types.ModelTierConfig{Light: "intake-test"}, Type: types.LibraryTypeDocument}).Error)
 	queue := &ingestHandlerQueue{}
 	bases := &ingestHandlerBases{}
 	articles, err := service.NewEntryService(db, &config.Config{}, repository.NewEntryRepository(db), bases, repository.NewSpaceRepository(db), nil, nil, nil, file.NewLocalFileService(t.TempDir(), ""), nil, ingestHandlerModels{}, queue, nil, nil, nil, nil)

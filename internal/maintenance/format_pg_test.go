@@ -14,7 +14,7 @@ import (
 )
 
 func TestLegacyReplicasImportCurrentRowsAndPreserveOpaqueValues(t *testing.T) {
-	for _, format := range []int{1, 2} {
+	for _, format := range []int{1, 2, 3} {
 		t.Run(fmt.Sprint(format), func(t *testing.T) {
 			ctx := context.Background()
 			source := pgtest.Open(t)

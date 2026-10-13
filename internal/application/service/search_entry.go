@@ -90,12 +90,12 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if !ok {
 		return nil, apperrors.NewUnauthorizedError("workspace ID not found in context")
 	}
-	kb, err := s.knowledgeBaseService.GetKnowledgeBase(ctx)
+	library, err := s.libraryService.GetLibrary(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if kb == nil || kb.SpaceID != spaceID {
-		return nil, apperrors.NewForbiddenError("knowledge base is outside the space")
+	if library == nil || library.SpaceID != spaceID {
+		return nil, apperrors.NewForbiddenError("library is outside the space")
 	}
 	if s.db == nil {
 		return nil, fmt.Errorf("article search requires PostgreSQL")
@@ -119,8 +119,8 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	var queryVector []float32
 	modelID := ""
 	queryProfileHash := ""
-	if kb.IsVectorEnabled() {
-		modelID, err = ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
+	if library.IsVectorEnabled() {
+		modelID, err = ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +133,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			if read.RowsAffected > 0 {
 				queryProfileHash = types.EmbeddingProfileHash(modelID, metadata.Parameters.EmbeddingParameters.Dimension, &metadata)
 			}
-			queryVector, err = s.knowledgeBaseService.GetQueryEmbedding(ctx, kb.ID, f.request.Query)
+			queryVector, err = s.libraryService.GetQueryEmbedding(ctx, library.ID, f.request.Query)
 			if err != nil {
 				return nil, err
 			}
@@ -145,11 +145,11 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	// metadata locks keep every recall channel in the query's model space.
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(queryVector) > 0 {
-			var currentKB types.KnowledgeBase
-			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND space_id=?", kb.ID, spaceID).First(&currentKB).Error; err != nil {
+			var currentLibrary types.Library
+			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND space_id=?", library.ID, spaceID).First(&currentLibrary).Error; err != nil {
 				return err
 			}
-			currentID, err := ResolveModelTier(ctx, tx, &currentKB, types.ModelTierEmbedding)
+			currentID, err := ResolveModelTier(ctx, tx, &currentLibrary, types.ModelTierEmbedding)
 			if err != nil {
 				return err
 			}
@@ -170,12 +170,12 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 		reader.db = tx
 		if f.from != nil || f.to != nil {
 			var err error
-			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, spaceID, kb, f, queryVector, modelID, config)
+			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, spaceID, library, f, queryVector, modelID, config)
 			if err != nil {
 				return err
 			}
 		}
-		lanes, err := reader.retrieveEntryLanes(ctx, spaceID, kb, f, queryVector, modelID, config, pool, true)
+		lanes, err := reader.retrieveEntryLanes(ctx, spaceID, library, f, queryVector, modelID, config, pool, true)
 		if err != nil {
 			return err
 		}
@@ -185,7 +185,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if err != nil {
 		return nil, err
 	}
-	merged, err = s.rerankEntries(ctx, kb, f.request.Query, merged, config, pool)
+	merged, err = s.rerankEntries(ctx, library, f.request.Query, merged, config, pool)
 	if err != nil {
 		return nil, err
 	}
@@ -202,9 +202,9 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	return response, nil
 }
 
-func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, kbID string, f entrySearchFilters, dates bool) *gorm.DB {
-	query := s.db.WithContext(ctx).Table("entries AS k").Where(`k.space_id = ? AND k.knowledge_base_id = ?
-		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID, kbID)
+func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool) *gorm.DB {
+	query := s.db.WithContext(ctx).Table("entries AS k").Where(`k.space_id = ? AND k.library_id = ?
+		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID, libraryID)
 	if f.request.Starred != nil {
 		query = query.Where("k.source_kind IN ('article','mine') AND k.starred=?", *f.request.Starred)
 	}
@@ -240,11 +240,11 @@ func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, kbI
 	return query
 }
 
-func (s *searchService) rerankEntries(ctx context.Context, kb *types.KnowledgeBase, query string, results []*types.EntrySearchResult, config *types.RetrievalConfig, pool int) ([]*types.EntrySearchResult, error) {
+func (s *searchService) rerankEntries(ctx context.Context, library *types.Library, query string, results []*types.EntrySearchResult, config *types.RetrievalConfig, pool int) ([]*types.EntrySearchResult, error) {
 	if len(results) == 0 {
 		return results, nil
 	}
-	modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierRerank)
+	modelID, err := ResolveModelTier(ctx, s.db, library, types.ModelTierRerank)
 	if err != nil || modelID == "" {
 		return results, err
 	}

@@ -28,7 +28,7 @@ import (
 
 func TestMaintenanceModelProbeUsesLiveCredentialsAndBothModalities(t *testing.T) {
 	db := pgtest.Open(t)
-	_, err := repository.EnsureSpaceKnowledgeBase(context.Background(), db, types.SingleSpaceID, "")
+	_, err := repository.EnsureSpaceLibrary(context.Background(), db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	t.Setenv("OLLAMA_OPTIONAL", "true")
 	var calls atomic.Int32
@@ -89,7 +89,7 @@ func TestMaintenanceChatGPTProbePreservesRealQuotaAndAppendsExactAuditChain(t *t
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	_, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
+	_, err := repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	credential, err := utils.EncryptAESGCM(`{"access_token":"probe-access-token","refresh_token":"probe-refresh-token","id_token":"probe-id-token"}`, utils.GetAESKey())
 	require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestOfflineChatGPTModelProbeWithoutMaintenanceStateAuditsRealQuotaWithoutMi
 		require.NoError(t, databaseErr)
 	})
 	ctx := context.Background()
-	_, err = repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
+	_, err = repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	credential, err := utils.EncryptAESGCM(`{"access_token":"offline-probe-access","refresh_token":"offline-probe-refresh","id_token":"offline-probe-id"}`, utils.GetAESKey())
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestOfflineChatGPTModelProbeWithoutMaintenanceStateAuditsRealQuotaWithoutMi
 	}
 	version, dirty, err := migration.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 6, version)
+	require.EqualValues(t, 7, version)
 	require.False(t, dirty)
 	require.False(t, db.Migrator().HasTable("maintenance_state"))
 }

@@ -103,11 +103,11 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 	if kind != "" && kind != "intake" && kind != "processing" {
 		return nil, werrors.NewBadRequestError("kind must be intake or processing")
 	}
-	kb, err := s.kbService.GetKnowledgeBase(ctx)
+	library, err := s.libraryService.GetLibrary(ctx)
 	if err != nil {
 		return nil, err
 	}
-	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND knowledge_base_id=? AND source_kind IN ('article','mine')", kb.SpaceID, kb.ID)
+	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND library_id=? AND source_kind IN ('article','mine')", library.SpaceID, library.ID)
 	switch kind {
 	case "intake":
 		query = query.Where("parse_status=?", types.ParseStatusRejected)

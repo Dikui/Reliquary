@@ -12,10 +12,10 @@ func normalizeParserFileType(fileType string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(fileType)), ".")
 }
 
-// ResolveProcessConfig merges KB defaults with per-upload overrides for the parse pipeline.
-func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.EntryProcessOverrides) types.EffectiveProcessConfig {
+// ResolveProcessConfig merges Library defaults with per-upload overrides for the parse pipeline.
+func ResolveProcessConfig(library *types.Library, overrides *types.EntryProcessOverrides) types.EffectiveProcessConfig {
 	eff := types.EffectiveProcessConfig{
-		ChunkingConfig: kb.ChunkingConfig,
+		ChunkingConfig: library.ChunkingConfig,
 	}
 	if overrides == nil {
 		return eff
@@ -33,7 +33,7 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.EntryProcess
 // ValidateProcessOverrides validates batch overrides against file types in the upload.
 func ValidateProcessOverrides(
 	ctx context.Context,
-	kb *types.KnowledgeBase,
+	library *types.Library,
 	overrides *types.EntryProcessOverrides,
 	fileTypes []string,
 ) error {
@@ -41,7 +41,7 @@ func ValidateProcessOverrides(
 		return nil
 	}
 
-	eff := ResolveProcessConfig(kb, overrides)
+	eff := ResolveProcessConfig(library, overrides)
 	if err := types.ValidateEffectiveProcessPromptInstructions(eff); err != nil {
 		return werrors.NewBadRequestError(err.Error())
 	}
@@ -53,17 +53,17 @@ func ValidateProcessOverrides(
 // entry record, and returns the effective config for task enqueue.
 func ApplyEntryProcessOverrides(
 	ctx context.Context,
-	kb *types.KnowledgeBase,
+	library *types.Library,
 	entry *types.Entry,
 	processOverrides *types.EntryProcessOverrides,
 	fileTypes []string,
 	enableMultimodel *bool,
 ) (types.EffectiveProcessConfig, error) {
-	eff := ResolveProcessConfig(kb, processOverrides)
+	eff := ResolveProcessConfig(library, processOverrides)
 	if processOverrides == nil {
 		return eff, nil
 	}
-	if err := ValidateProcessOverrides(ctx, kb, processOverrides, fileTypes); err != nil {
+	if err := ValidateProcessOverrides(ctx, library, processOverrides, fileTypes); err != nil {
 		return eff, err
 	}
 	if err := entry.SetProcessOverrides(processOverrides); err != nil {

@@ -37,6 +37,9 @@ func UnmarshalSpacePayload(data []byte, destination any) error {
 	if err := normalizeEntryPayload(fields); err != nil {
 		return err
 	}
+	if err := normalizeLibraryPayload(fields); err != nil {
+		return err
+	}
 	normalized, err := json.Marshal(fields)
 	if err != nil {
 		return err

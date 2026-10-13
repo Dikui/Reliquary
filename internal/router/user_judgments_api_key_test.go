@@ -29,13 +29,13 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 	topics.SetOperationLogs(logs)
 	topics.SetHeaderRefresher(v)
 	group := f.router.Group("/api/v1")
-	RegisterTopicRoutes(group, handler.NewTopicHandler(topics), newAccessGuards(f.params.KBService, f.params.EntryService, nil))
+	RegisterTopicRoutes(group, handler.NewTopicHandler(topics), newAccessGuards(f.params.LibraryService, f.params.EntryService, nil))
 	group.GET("/operation-logs", handler.NewOperationLogHandler(logs).List)
-	kbResponse := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-base", "", f.key, true)
-	require.Equal(t, http.StatusOK, kbResponse.Code, kbResponse.Body.String())
-	var kb struct{ Data types.KnowledgeBase }
-	require.NoError(t, json.Unmarshal(kbResponse.Body.Bytes(), &kb))
-	k := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.Data.ID, Title: "API fixture", Type: "manual", ContentType: "event", ProcessingMode: "full", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+	libraryResponse := personalRequest(t, f.router, http.MethodGet, "/api/v1/library", "", f.key, true)
+	require.Equal(t, http.StatusOK, libraryResponse.Code, libraryResponse.Body.String())
+	var library struct{ Data types.Library }
+	require.NoError(t, json.Unmarshal(libraryResponse.Body.Bytes(), &library))
+	k := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.Data.ID, Title: "API fixture", Type: "manual", ContentType: "event", ProcessingMode: "full", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, f.db.Create(k).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, v.WriteArticle(ctx, k, "API original body.\n", nil))

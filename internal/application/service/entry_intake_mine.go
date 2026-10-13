@@ -14,11 +14,11 @@ import (
 
 // The user's explicit intake decision replaces model review. Keep the stored
 // materials and ID, then use the imported document's ordinary processing path.
-func (s *entryService) convertIntakeToMine(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, before types.EntryIntakeMetadata) (*types.Entry, error) {
+func (s *entryService) convertIntakeToMine(ctx context.Context, library *types.Library, k *types.Entry, before types.EntryIntakeMetadata) (*types.Entry, error) {
 	if s.vault == nil || s.db == nil || before.OriginalPath == "" {
 		return nil, werrors.NewBadRequestError("stored original and configured vault are required")
 	}
-	file, err := s.resolveFileServiceForPath(ctx, kb, before.OriginalPath).GetFile(ctx, before.OriginalPath)
+	file, err := s.resolveFileServiceForPath(ctx, library, before.OriginalPath).GetFile(ctx, before.OriginalPath)
 	if err != nil {
 		return nil, err
 	}

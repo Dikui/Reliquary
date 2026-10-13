@@ -13,19 +13,19 @@ import (
 
 const maxRetrievalPoolSize = 500
 
-// GetQueryEmbedding computes the query vector with the sole knowledge base model.
-func (s *chunkSearchService) GetQueryEmbedding(ctx context.Context, kbID string, queryText string) ([]float32, error) {
-	kb, err := s.repo.GetKnowledgeBaseByID(ctx, kbID)
+// GetQueryEmbedding computes the query vector with the sole library model.
+func (s *chunkSearchService) GetQueryEmbedding(ctx context.Context, libraryID string, queryText string) ([]float32, error) {
+	library, err := s.repo.GetLibraryByID(ctx, libraryID)
 	if err != nil {
 		return nil, err
 	}
 
 	var embeddingModel embedding.Embedder
 
-	embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
+	embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, library)
 
 	if err != nil {
-		logger.Errorf(ctx, "GetQueryEmbedding: failed to get embedding model %s: %v", kb.EmbeddingModelID, err)
+		logger.Errorf(ctx, "GetQueryEmbedding: failed to get embedding model %s: %v", library.EmbeddingModelID, err)
 		return nil, err
 	}
 
@@ -35,7 +35,7 @@ func (s *chunkSearchService) GetQueryEmbedding(ctx context.Context, kbID string,
 	}
 	if s.db != nil {
 		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			return checkEmbeddingProfile(ctx, tx, embeddingModel, kb.SpaceID)
+			return checkEmbeddingProfile(ctx, tx, embeddingModel, library.SpaceID)
 		}); err != nil {
 			return nil, err
 		}
@@ -44,9 +44,9 @@ func (s *chunkSearchService) GetQueryEmbedding(ctx context.Context, kbID string,
 }
 
 // ResolveEmbeddingModelKeys resolves embedding model IDs to their actual model
-// identity key (name + endpoint). KBs using the same underlying model across
+// identity key (name + endpoint). Libraries using the same underlying model across
 // different spaces will share the same key, enabling optimal grouping.
-func (s *chunkSearchService) ResolveEmbeddingModelKeys(ctx context.Context, kbs []*types.KnowledgeBase) map[string]string {
+func (s *chunkSearchService) ResolveEmbeddingModelKeys(ctx context.Context, libraries []*types.Library) map[string]string {
 	type modelRef struct {
 		ModelID string
 		SpaceID uint64
@@ -54,16 +54,16 @@ func (s *chunkSearchService) ResolveEmbeddingModelKeys(ctx context.Context, kbs 
 
 	// Deduplicate model references
 	uniqueRefs := make(map[modelRef]struct{})
-	kbRefs := make(map[string]modelRef, len(kbs))
-	for _, kb := range kbs {
-		modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
+	libraryRefs := make(map[string]modelRef, len(libraries))
+	for _, library := range libraries {
+		modelID, err := ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 		if err != nil {
-			logger.Warnf(ctx, "Cannot resolve embedding tier for %s: %v", kb.ID, err)
-			modelID = "unavailable:" + kb.ID
+			logger.Warnf(ctx, "Cannot resolve embedding tier for %s: %v", library.ID, err)
+			modelID = "unavailable:" + library.ID
 		}
-		ref := modelRef{ModelID: modelID, SpaceID: kb.SpaceID}
+		ref := modelRef{ModelID: modelID, SpaceID: library.SpaceID}
 		uniqueRefs[ref] = struct{}{}
-		kbRefs[kb.ID] = ref
+		libraryRefs[library.ID] = ref
 	}
 
 	// Resolve each unique (modelID, spaceID) to a model identity key
@@ -79,9 +79,9 @@ func (s *chunkSearchService) ResolveEmbeddingModelKeys(ctx context.Context, kbs 
 		resolvedKeys[ref] = model.Name + "|" + model.Parameters.BaseURL
 	}
 
-	result := make(map[string]string, len(kbs))
-	for _, kb := range kbs {
-		result[kb.ID] = resolvedKeys[kbRefs[kb.ID]]
+	result := make(map[string]string, len(libraries))
+	for _, library := range libraries {
+		result[library.ID] = resolvedKeys[libraryRefs[library.ID]]
 	}
 	return result
 }
@@ -94,85 +94,85 @@ func (s *chunkSearchService) HybridSearch(ctx context.Context,
 	// copy, so this stays local to the call.
 	params.MatchCount = normalizedMatchCount(params.MatchCount)
 
-	searchKBIDs := []string{id}
+	searchLibraryIDs := []string{id}
 
 	// QueryText is user-controlled; sanitize before logging to prevent
 	// CR/LF/tab log injection. Matches the handler-layer sanitization at
-	// handler/knowledgebase.go.
-	logger.Infof(ctx, "Hybrid search parameters, knowledge base IDs: %v, query text: %s",
-		searchKBIDs, secutils.SanitizeForLog(params.QueryText))
+	// handler/library.go.
+	logger.Infof(ctx, "Hybrid search parameters, library IDs: %v, query text: %s",
+		searchLibraryIDs, secutils.SanitizeForLog(params.QueryText))
 
 	spaceInfo, _ := types.SpaceInfoFromContext(ctx)
 	requestSpaceID := types.MustSpaceIDFromContext(ctx)
 
-	kbs, err := s.repo.GetKnowledgeBaseByIDs(ctx, searchKBIDs)
+	libraries, err := s.repo.GetLibraryByIDs(ctx, searchLibraryIDs)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_ids": searchKBIDs,
+			"library_ids": searchLibraryIDs,
 		})
 		return nil, err
 	}
-	if len(kbs) == 0 {
-		return nil, apperrors.NewNotFoundError("knowledge base not found")
+	if len(libraries) == 0 {
+		return nil, apperrors.NewNotFoundError("library not found")
 	}
 
-	if err := s.authorizeKBAccess(ctx, kbs, requestSpaceID); err != nil {
+	if err := s.authorizeLibraryAccess(ctx, libraries, requestSpaceID); err != nil {
 		return nil, err
 	}
-	for i, kb := range kbs {
-		if !kb.IsVectorEnabled() {
+	for i, library := range libraries {
+		if !library.IsVectorEnabled() {
 			continue
 		}
-		modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
+		modelID, err := ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 		if err != nil {
 			return nil, err
 		}
-		copy := *kb
+		copy := *library
 		copy.EmbeddingModelID = modelID
-		kbs[i] = &copy
+		libraries[i] = &copy
 	}
 
-	kb := pickPrimary(kbs, id)
-	if kb == nil {
-		return nil, apperrors.NewNotFoundError("knowledge base not found")
+	library := pickPrimary(libraries, id)
+	if library == nil {
+		return nil, apperrors.NewNotFoundError("library not found")
 	}
 
-	// Over-retrieval (existing rule, preserved): 5x per-KB matchCount,
+	// Over-retrieval (existing rule, preserved): 5x per-Library matchCount,
 	// floored at DefaultRetrievalTopK, capped at maxRetrievalPoolSize across
 	// the whole search.
-	matchCount := max(params.MatchCount*5, types.DefaultRetrievalTopK) * len(searchKBIDs)
+	matchCount := max(params.MatchCount*5, types.DefaultRetrievalTopK) * len(searchLibraryIDs)
 	if matchCount > maxRetrievalPoolSize {
 		matchCount = maxRetrievalPoolSize
 	}
 
-	// Compute the query embedding once for all selected knowledge bases.
+	// Compute the query embedding once for all selected libraries.
 	//
 	// Skip when the caller already supplied an embedding or when the primary
-	// KB has no vector indexing configured.
+	// Library has no vector indexing configured.
 	if len(params.QueryEmbedding) == 0 &&
-		kb.IsVectorEnabled() && kb.EmbeddingModelID != "" &&
+		library.IsVectorEnabled() && library.EmbeddingModelID != "" &&
 		!params.DisableVectorMatch {
-		emb, embErr := s.GetQueryEmbedding(ctx, kb.ID, params.QueryText)
+		emb, embErr := s.GetQueryEmbedding(ctx, library.ID, params.QueryText)
 		if embErr != nil {
 			return nil, embErr
 		}
 		params.QueryEmbedding = emb
 	}
 
-	baseParams, err := s.buildRetrievalParams(ctx, kb, kbs, params, matchCount)
+	baseParams, err := s.buildRetrievalParams(ctx, library, libraries, params, matchCount)
 	if err != nil {
 		return nil, err
 	}
 	if len(baseParams) == 0 {
-		logger.Infof(ctx, "No retrievable indexing pipelines across %d KBs", len(kbs))
+		logger.Infof(ctx, "No retrievable indexing pipelines across %d Libraries", len(libraries))
 		return nil, nil
 	}
 	retrieveResults, err := s.retrieveEngine.Retrieve(ctx, baseParams)
 
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_ids": searchKBIDs,
-			"query_text":         params.QueryText,
+			"library_ids": searchLibraryIDs,
+			"query_text":  params.QueryText,
 		})
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *chunkSearchService) HybridSearch(ctx context.Context,
 	}
 	deduplicatedChunks := fuseOrDeduplicate(ctx, vectorResults, keywordResults, retrievalCfg)
 
-	kb.EnsureDefaults()
+	library.EnsureDefaults()
 
 	// Truncate to the primary-match cap. MatchCount is guaranteed positive by
 	// the normalization at the top of this function; the slice bound below
@@ -211,10 +211,10 @@ func normalizedMatchCount(requested int) int {
 	return requested
 }
 
-func pickPrimary(kbs []*types.KnowledgeBase, id string) *types.KnowledgeBase {
-	for _, kb := range kbs {
-		if kb.ID == id {
-			return kb
+func pickPrimary(libraries []*types.Library, id string) *types.Library {
+	for _, library := range libraries {
+		if library.ID == id {
+			return library
 		}
 	}
 	return nil
@@ -232,32 +232,32 @@ func totalHits(rrs []*types.RetrieveResult) int {
 
 func (s *chunkSearchService) buildRetrievalParams(
 	ctx context.Context,
-	primary *types.KnowledgeBase,
-	groupKBs []*types.KnowledgeBase,
+	primary *types.Library,
+	groupLibraries []*types.Library,
 	params types.SearchParams,
 	matchCount int,
 ) ([]types.RetrieveParams, error) {
 	var retrieveParams []types.RetrieveParams
 
-	// Partition the group's KBs by index routing. A KB that does not have
-	// vector indexing enabled (e.g. KBs with disabled indexing) has no
+	// Partition the group's Libraries by index routing. A Library that does not have
+	// vector indexing enabled (e.g. Libraries with disabled indexing) has no
 	// embeddings to retrieve from, and typically has no EmbeddingModelID
-	// configured either; such KBs are skipped for vector retrieval to avoid
+	// configured either; such Libraries are skipped for vector retrieval to avoid
 	// spurious "model ID cannot be empty" errors when the retrieval scope
-	// includes an unindexed KB.
-	var docVectorKBIDs, docKeywordKBIDs []string
-	for _, kb := range groupKBs {
-		if kb.IsVectorEnabled() && kb.EmbeddingModelID != "" {
-			docVectorKBIDs = append(docVectorKBIDs, kb.ID)
+	// includes an unindexed Library.
+	var docVectorLibraryIDs, docKeywordLibraryIDs []string
+	for _, library := range groupLibraries {
+		if library.IsVectorEnabled() && library.EmbeddingModelID != "" {
+			docVectorLibraryIDs = append(docVectorLibraryIDs, library.ID)
 		}
-		if kb.IsKeywordEnabled() {
-			docKeywordKBIDs = append(docKeywordKBIDs, kb.ID)
+		if library.IsKeywordEnabled() {
+			docKeywordLibraryIDs = append(docKeywordLibraryIDs, library.ID)
 		}
 	}
 
 	// Add vector retrieval params if supported
 	if s.retrieveEngine.SupportRetriever(types.VectorRetrieverType) && !params.DisableVectorMatch &&
-		len(docVectorKBIDs) > 0 {
+		len(docVectorLibraryIDs) > 0 {
 		logger.Info(ctx, "Vector retrieval supported, preparing vector retrieval parameters")
 
 		queryEmbedding, err := s.resolveQueryEmbedding(ctx, primary, params, types.MustSpaceIDFromContext(ctx))
@@ -265,37 +265,37 @@ func (s *chunkSearchService) buildRetrievalParams(
 			return nil, err
 		}
 
-		appendVectorParams := func(kbIDs []string, entryType string) {
+		appendVectorParams := func(libraryIDs []string, entryType string) {
 			retrieveParams = append(retrieveParams, types.RetrieveParams{
-				Query:            params.QueryText,
-				Embedding:        queryEmbedding,
-				KnowledgeBaseIDs: kbIDs,
-				TopK:             matchCount,
-				Threshold:        params.VectorThreshold,
-				RetrieverType:    types.VectorRetrieverType,
-				EntryIDs:         params.EntryIDs,
-				EntryType:        entryType,
+				Query:         params.QueryText,
+				Embedding:     queryEmbedding,
+				LibraryIDs:    libraryIDs,
+				TopK:          matchCount,
+				Threshold:     params.VectorThreshold,
+				RetrieverType: types.VectorRetrieverType,
+				EntryIDs:      params.EntryIDs,
+				EntryType:     entryType,
 			})
 		}
 
-		if len(docVectorKBIDs) > 0 {
-			appendVectorParams(docVectorKBIDs, "")
+		if len(docVectorLibraryIDs) > 0 {
+			appendVectorParams(docVectorLibraryIDs, "")
 		}
 		logger.Info(ctx, "Vector retrieval parameters setup completed")
 	}
 
-	// Add keyword retrieval params if supported and any document KB has
+	// Add keyword retrieval params if supported and any document Library has
 	// keyword indexing enabled.
 	if s.retrieveEngine.SupportRetriever(types.KeywordsRetrieverType) && !params.DisableKeywordsMatch &&
-		len(docKeywordKBIDs) > 0 {
+		len(docKeywordLibraryIDs) > 0 {
 		logger.Info(ctx, "Keyword retrieval supported, preparing keyword retrieval parameters")
 		retrieveParams = append(retrieveParams, types.RetrieveParams{
-			Query:            params.QueryText,
-			KnowledgeBaseIDs: docKeywordKBIDs,
-			TopK:             matchCount,
-			Threshold:        params.KeywordThreshold,
-			RetrieverType:    types.KeywordsRetrieverType,
-			EntryIDs:         params.EntryIDs,
+			Query:         params.QueryText,
+			LibraryIDs:    docKeywordLibraryIDs,
+			TopK:          matchCount,
+			Threshold:     params.KeywordThreshold,
+			RetrieverType: types.KeywordsRetrieverType,
+			EntryIDs:      params.EntryIDs,
 		})
 		logger.Info(ctx, "Keyword retrieval parameters setup completed")
 	}
@@ -305,7 +305,7 @@ func (s *chunkSearchService) buildRetrievalParams(
 
 func (s *chunkSearchService) resolveQueryEmbedding(
 	ctx context.Context,
-	kb *types.KnowledgeBase,
+	library *types.Library,
 	params types.SearchParams,
 	currentSpaceID uint64,
 ) ([]float32, error) {
@@ -314,15 +314,15 @@ func (s *chunkSearchService) resolveQueryEmbedding(
 		return params.QueryEmbedding, nil
 	}
 
-	logger.Infof(ctx, "Getting embedding model, model ID: %s", kb.EmbeddingModelID)
+	logger.Infof(ctx, "Getting embedding model, model ID: %s", library.EmbeddingModelID)
 
 	var embeddingModel embedding.Embedder
 	var err error
 
-	embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
+	embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, library)
 
 	if err != nil {
-		logger.Errorf(ctx, "Failed to get embedding model, model ID: %s, error: %v", kb.EmbeddingModelID, err)
+		logger.Errorf(ctx, "Failed to get embedding model, model ID: %s, error: %v", library.EmbeddingModelID, err)
 		return nil, err
 	}
 	logger.Infof(ctx, "Embedding model retrieved: %v", embeddingModel)
@@ -337,10 +337,10 @@ func (s *chunkSearchService) resolveQueryEmbedding(
 	return queryEmbedding, nil
 }
 
-func (s *chunkSearchService) authorizeKBAccess(ctx context.Context, kbs []*types.KnowledgeBase, spaceID uint64) error {
-	for _, kb := range kbs {
-		if kb == nil || kb.SpaceID != spaceID {
-			return apperrors.NewForbiddenError("knowledge base is outside the space")
+func (s *chunkSearchService) authorizeLibraryAccess(ctx context.Context, libraries []*types.Library, spaceID uint64) error {
+	for _, library := range libraries {
+		if library == nil || library.SpaceID != spaceID {
+			return apperrors.NewForbiddenError("library is outside the space")
 		}
 	}
 	return nil

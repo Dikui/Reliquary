@@ -59,7 +59,7 @@ func entryTaskTransaction[T any](ctx context.Context, s *entryService, mutation 
 		copy.chunkRepo = repository.NewChunkRepository(tx)
 		copy.spaceRepo = repository.NewSpaceRepository(tx)
 		copy.retrieveEngine = s.contentTypeTransactionService(tx).retrieveEngine
-		copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewKnowledgeBaseRepository(tx), copy.modelService, copy.retrieveEngine)
+		copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewLibraryRepository(tx), copy.modelService, copy.retrieveEngine)
 		if _, ok := s.resourceCatalog.(*resourceCatalog); ok {
 			copy.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(tx))
 			copy.fileSvc = file.WithResourceCatalog(s.fileSvc, copy.resourceCatalog, func(path string) {

@@ -4,8 +4,8 @@ import { copyModelTiers, modelTypeForTier, previewModelTiers } from './modelTier
 
 test('draft model tier preview overrides only selected tiers and inherits each remaining tier', () => {
   const inherited = { light: { model_id: 'global-light', source: 'global' }, entity_resolution: { model_id: 'global-resolution', source: 'global' } }
-  const resolved = previewModelTiers({ light: ' kb-light ', entity_resolution: '' }, inherited, 'knowledge_base')
-  assert.deepEqual(resolved.light, { model_id: 'kb-light', source: 'knowledge_base' })
+  const resolved = previewModelTiers({ light: ' library-light ', entity_resolution: '' }, inherited, 'library')
+  assert.deepEqual(resolved.light, { model_id: 'library-light', source: 'library' })
   assert.deepEqual(resolved.entity_resolution, inherited.entity_resolution)
   assert.deepEqual(resolved.generation, { model_id: '', source: 'unconfigured' })
   assert.equal(inherited.light.model_id, 'global-light')
@@ -14,7 +14,7 @@ test('clearing a saved tier selects its parent and copies preserve draft isolati
   const source = { light: 'saved' }, copy = copyModelTiers(source)
   copy.light = ''
   assert.equal(source.light, 'saved')
-  assert.deepEqual(previewModelTiers(copy, { light: { model_id: 'parent', source: 'global' } }, 'knowledge_base').light, { model_id: 'parent', source: 'global' })
+  assert.deepEqual(previewModelTiers(copy, { light: { model_id: 'parent', source: 'global' } }, 'library').light, { model_id: 'parent', source: 'global' })
 })
 test('embedding and rerank tiers select compatible model types', () => {
   assert.equal(modelTypeForTier('embedding'), 'Embedding')

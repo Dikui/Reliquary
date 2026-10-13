@@ -63,11 +63,11 @@ func TestMaintenanceMigrationPreservesFrozenBaselineData(t *testing.T) {
 INSERT INTO tenants(id,name,business) VALUES(1,'upgrade fixture','personal');
 INSERT INTO users(id,username,email,password_hash) VALUES('upgrade-user','User','user@example.invalid','fixture-password-hash');
 INSERT INTO models(id,tenant_id,name,type,source,parameters) VALUES('upgrade-model',1,'fixture','embedding','ollama','{"base_url":"http://localhost:11434","dimension":3}');
-INSERT INTO knowledge_bases(id,name,tenant_id,embedding_model_id,summary_model_id) VALUES('upgrade-kb','Articles',1,'upgrade-model','upgrade-model');
+INSERT INTO knowledge_bases(id,name,tenant_id,embedding_model_id,summary_model_id) VALUES('upgrade-library','Articles',1,'upgrade-model','upgrade-model');
 INSERT INTO knowledges(id,tenant_id,knowledge_base_id,type,title,source,parse_status,content_type,source_unverified,content_type_corrected,vault_body,processing_review_status,processing_review_reason,custom_metadata)
-VALUES('upgrade-article',1,'upgrade-kb','manual','An article','', 'completed','research',true,true,'Exact original body','pending','Preserve the review reason','{"collector":"fixture","user_note":"preserve"}');
+VALUES('upgrade-article',1,'upgrade-library','manual','An article','', 'completed','research',true,true,'Exact original body','pending','Preserve the review reason','{"collector":"fixture","user_note":"preserve"}');
 INSERT INTO knowledges(id,tenant_id,knowledge_base_id,type,title,source,parse_status,metadata)
-VALUES('upgrade-intake',1,'upgrade-kb','manual','Pending original','', 'pending_review','{"intake":{"decision":"pending","original_content":"Pending original body","reason":"missing source"}}');
+VALUES('upgrade-intake',1,'upgrade-library','manual','Pending original','', 'pending_review','{"intake":{"decision":"pending","original_content":"Pending original body","reason":"missing source"}}');
 INSERT INTO entities(id,tenant_id,canonical_name,normalized_name,entity_type,description,created_at,updated_at) VALUES('upgrade-entity',1,'Entity','entity','company','Original description',now(),now());
 INSERT INTO entity_aliases(id,tenant_id,entity_id,alias,normalized_alias,created_at) VALUES('upgrade-alias',1,'upgrade-entity','Alias','alias',now());
 INSERT INTO entity_merge_records(id,tenant_id,keep_entity_id,merge_entity_id,actor,created_at) VALUES('upgrade-merge',1,'upgrade-entity','old-entity','web_user:upgrade-user',now());
@@ -77,7 +77,7 @@ INSERT INTO knowledge_topics(tenant_id,knowledge_id,topic_id,source) VALUES(1,'u
 INSERT INTO follows(tenant_id,target_type,target_id) VALUES(1,'entity','upgrade-entity'),(1,'topic','upgrade-topic');
 INSERT INTO follow_feed_states(tenant_id,last_viewed_at) VALUES(1,'2026-10-10T00:00:00Z');
 INSERT INTO operation_logs(id,tenant_id,actor,operation_type,object_id,before_value,after_value) VALUES('upgrade-log',1,'web_user:upgrade-user','follow','upgrade-entity','{}','{"followed":true}');
-INSERT INTO data_sources(id,tenant_id,knowledge_base_id,name,type,config) VALUES('upgrade-source',1,'upgrade-kb','RSS','rss','{"url":"https://example.invalid/feed"}');
+INSERT INTO data_sources(id,tenant_id,knowledge_base_id,name,type,config) VALUES('upgrade-source',1,'upgrade-library','RSS','rss','{"url":"https://example.invalid/feed"}');
 INSERT INTO task_jobs(id,task_type,queue,state,payload,retried,fail_count) VALUES('upgrade-processing','document:process','default','active','{"knowledge_id":"upgrade-article"}',1,1);
 INSERT INTO embeddings(source_id,source_type,dimension,embedding) VALUES('upgrade-article',1,3,'[1,2,3]'::halfvec);
 INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,email,status) VALUES('00000000-0000-0000-0000-000000000015','fixture-client','https://example.invalid','subject','chat@example.invalid','needs_login');

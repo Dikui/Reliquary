@@ -95,7 +95,7 @@ func TestEntrySearchHTTPSharedRequestAndArticleResponse(t *testing.T) {
 }
 
 func TestEntrySearchHTTPRejectsOldAndUnknownParameters(t *testing.T) {
-	for _, field := range []string{"knowledge_base_ids", "knowledge_base_id", "entry_ids", "query_text", "query_embedding", "match_count", "only_recommended", "unknown"} {
+	for _, field := range []string{"library_ids", "library_id", "entry_ids", "query_text", "query_embedding", "match_count", "only_recommended", "unknown"} {
 		t.Run(field, func(t *testing.T) {
 			svc := &entrySearchHandlerService{}
 			request := httptest.NewRequest(http.MethodPost, "/search", strings.NewReader(`{"query":"query","`+field+`":null}`))
@@ -119,8 +119,8 @@ func TestEntrySearchHTTPRejectsOldAndUnknownParameters(t *testing.T) {
 	}
 }
 
-func TestHybridSearchHTTPRejectsRemovedKnowledgeBaseScope(t *testing.T) {
-	for _, field := range []string{"knowledge_base_ids", "knowledge_base_id", "scope"} {
+func TestHybridSearchHTTPRejectsRemovedLibraryScope(t *testing.T) {
+	for _, field := range []string{"library_ids", "library_id", "scope"} {
 		svc := &hybridSearchTestService{}
 		response := performHybridSearchRequest(svc, `{"query_text":"query","`+field+`":[]}`)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())

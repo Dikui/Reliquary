@@ -75,7 +75,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const requests: any[] = []
     const { state } = await componentScenario('./integrations/ApiIntegrationSettings.vue', locale, {
       'tdesign-vue-next': { MessagePlugin: { success() {} } },
-      '@/api/knowledge-base': { listKnowledgeBases: async () => ({ success: true, data: [] }) },
+      '@/api/library': { listLibraries: async () => ({ success: true, data: [] }) },
       '@/api/space': {
         createAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'test-key' } } },
         listAPIKeys: async () => ({ success: true, data: [] }),

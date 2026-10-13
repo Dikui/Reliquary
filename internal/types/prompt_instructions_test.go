@@ -23,21 +23,21 @@ func TestAppendCustomPromptInstructions(t *testing.T) {
 	})
 }
 
-func TestValidateKnowledgeBasePromptInstructions(t *testing.T) {
-	kb := &KnowledgeBase{
+func TestValidateLibraryPromptInstructions(t *testing.T) {
+	library := &Library{
 		ChunkingConfig: ChunkingConfig{TableMetadataInstructions: strings.Repeat("a", MaxCustomPromptInstructionsLength+1)},
 	}
-	if err := ValidateKnowledgeBasePromptInstructions(kb); err == nil {
+	if err := ValidateLibraryPromptInstructions(library); err == nil {
 		t.Fatal("expected length validation error")
 	}
 }
 
-func TestNormalizeKnowledgeBasePromptInstructions(t *testing.T) {
-	kb := &KnowledgeBase{
+func TestNormalizeLibraryPromptInstructions(t *testing.T) {
+	library := &Library{
 		ChunkingConfig: ChunkingConfig{TableMetadataInstructions: "  focus table columns  "},
 	}
-	NormalizeKnowledgeBasePromptInstructions(kb)
-	if kb.ChunkingConfig.TableMetadataInstructions != "focus table columns" {
-		t.Fatalf("got %q", kb.ChunkingConfig.TableMetadataInstructions)
+	NormalizeLibraryPromptInstructions(library)
+	if library.ChunkingConfig.TableMetadataInstructions != "focus table columns" {
+		t.Fatalf("got %q", library.ChunkingConfig.TableMetadataInstructions)
 	}
 }

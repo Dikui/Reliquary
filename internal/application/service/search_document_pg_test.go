@@ -16,13 +16,13 @@ func TestImportedDocumentSearchUsesSummaryFiltersAndFolding(t *testing.T) {
 	mine.Incomplete, mine.Starred = true, true
 	require.NoError(t, h.db.Save(mine).Error)
 	vector := pgvector.NewHalfVector(entrySearchFixtureEmbedding(mine.Title + "\n" + mine.Description))
-	require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
-		VALUES (?,1,?,'fixture-model',3,?,'fixture')`, mine.ID, h.kb.ID, vector).Error)
+	require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
+		VALUES (?,1,?,'fixture-model',3,?,'fixture')`, mine.ID, h.library.ID, vector).Error)
 	require.NoError(t, h.db.Create(&types.Entity{ID: "document-entity", SpaceID: 1, CanonicalName: "Document entity", NormalizedName: "document entity", EntityType: "project"}).Error)
 	require.NoError(t, h.db.Create(&types.Topic{ID: "document-topic", SpaceID: 1, Name: "Document topic"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: mine.ID, EntityID: "document-entity"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: mine.ID, TopicID: "document-topic"}).Error)
-	h.kb.IndexingStrategy.KeywordEnabled = false
+	h.library.IndexingStrategy.KeywordEnabled = false
 	starred := true
 	result := h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", Sources: []string{"mine"}, ContentTypes: []string{"tutorial"}, EntityIDs: []string{"document-entity"}, TopicIDs: []string{"document-topic"}, Starred: &starred, CollapseSimilar: entrySearchNoCollapse()})
 	require.Equal(t, []string{mine.ID}, entrySearchIDs(result))

@@ -112,7 +112,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 	if title == "" || len([]rune(title)) > 255 || !utf8.ValidString(title) || strings.TrimSpace(markdown) == "" || !utf8.ValidString(markdown) {
 		return nil, werrors.NewBadRequestError("report requires a title of up to 255 characters and valid Markdown")
 	}
-	ctx, kb, err := s.scope(ctx)
+	ctx, library, err := s.scope(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -125,18 +125,18 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
 			return err
 		}
-		// The knowledge base lock serializes report writes from separate callers.
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(kb, "id=?", kb.ID).Error; err != nil {
+		// The library lock serializes report writes from separate callers.
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(library, "id=?", library.ID).Error; err != nil {
 			return err
 		}
-		entry, err = s.findExistingReport(ctx, tx, kb.SpaceID, fingerprint)
+		entry, err = s.findExistingReport(ctx, tx, library.SpaceID, fingerprint)
 		if err != nil || entry != nil {
 			existing = entry != nil
 			return err
 		}
 		selected := []string{}
 		if len(relatedIDs) > 0 {
-			if err := tx.Model(&types.Entry{}).Where("space_id=? AND source_kind='article' AND id IN ?", kb.SpaceID, relatedIDs).
+			if err := tx.Model(&types.Entry{}).Where("space_id=? AND source_kind='article' AND id IN ?", library.SpaceID, relatedIDs).
 				Order("id").Pluck("id", &selected).Error; err != nil {
 				return err
 			}
@@ -184,7 +184,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 			return writeErr
 		}
 		metadata, _ := json.Marshal(map[string]any{"related_article_ids": selected, "report_fingerprint": fingerprint})
-		entry = &types.Entry{ID: id, SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID, Type: types.EntryTypeManual,
+		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
 			SourceKind: "report", Title: vaultDocumentTitle(path, content), VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", FileSize: int64(len(content)), FileHash: vaultContentHash(content),
 			EnableStatus: "enabled", Channel: types.ChannelAPI, ProcessingMode: types.ProcessingModeFull,
@@ -196,7 +196,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 			map[string]any{"title": title, "vault_path": path, "related_article_ids": selected}); err != nil {
 			return err
 		}
-		payload, _ := json.Marshal(types.ReportIndexPayload{SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID, EntryID: id})
+		payload, _ := json.Marshal(types.ReportIndexPayload{SpaceID: library.SpaceID, LibraryID: library.ID, EntryID: id})
 		job, err := queue.NewClient(s.db).EnqueueTx(ctx, tx, queue.NewTask(types.TypeReportIndex, payload),
 			queue.Queue(types.QueueMaintenance), queue.MaxRetry(5), queue.Timeout(30*time.Minute))
 		if err == nil {
@@ -214,7 +214,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 	}
 	if !existing {
 		s.observations[entry.VaultPath] = vaultObservation{hash: entry.FileHash, changedAt: entry.CreatedAt.Add(-s.reportStableWait)}
-		if indexed, indexErr := s.retryReportIndex(ctx, kb, entry); indexErr == nil {
+		if indexed, indexErr := s.retryReportIndex(ctx, library, entry); indexErr == nil {
 			entry = indexed
 			// A worker may already have claimed the durable job. It will observe
 			// the completed hash after this method releases the report mutex.
@@ -226,7 +226,7 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 	return s.reportWriteResult(ctx, entry, existing)
 }
 
-func (s *VaultDocumentService) retryReportIndex(ctx context.Context, kb *types.KnowledgeBase, entry *types.Entry) (*types.Entry, error) {
+func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *types.Library, entry *types.Entry) (*types.Entry, error) {
 	path, err := vaultAbsolute(s.root, entry.VaultPath)
 	if err != nil {
 		return nil, err
@@ -242,11 +242,11 @@ func (s *VaultDocumentService) retryReportIndex(ctx context.Context, kb *types.K
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		transactional := &VaultDocumentService{db: tx, models: s.models,
 			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
-		indexed, err = transactional.indexReport(ctx, kb, entry.VaultPath, string(body), entry.CreatedAt)
+		indexed, err = transactional.indexReport(ctx, library, entry.VaultPath, string(body), entry.CreatedAt)
 		return err
 	})
 	if err != nil {
-		_ = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", entry.ID, kb.SpaceID).
+		_ = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", entry.ID, library.SpaceID).
 			Updates(map[string]any{"parse_status": types.ParseStatusFailed, "error_message": err.Error()}).Error
 	}
 	return indexed, err
@@ -268,10 +268,10 @@ func (s *VaultDocumentService) HandleReportIndex(ctx context.Context, task *queu
 	if err != nil {
 		return err
 	}
-	_, kb, err := s.scope(ctx)
+	_, library, err := s.scope(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = s.retryReportIndex(ctx, kb, &entry)
+	_, err = s.retryReportIndex(ctx, library, &entry)
 	return err
 }

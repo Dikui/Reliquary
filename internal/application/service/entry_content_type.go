@@ -76,7 +76,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 	if reviewAction == "" && before.ContentType == contentType && before.ContentTypeCorrected && before.ProcessingReviewStatus != types.ProcessingReviewPending {
 		return s.GetEntryByID(ctx, id)
 	}
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, before.KnowledgeBaseID)
+	library, err := s.libraryService.GetLibraryByID(ctx, before.LibraryID)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 		}
 		if s.vault != nil && before.ProcessingMode != mode && !missingBody {
 			read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
-				return s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
+				return s.resolveFileServiceForPath(ctx, library, ref).GetFile(ctx, ref)
 			}
 			fileChange, err = s.vault.changeCorrectedArticleBody(ctx, tx, &updated, "", read)
 			if err != nil {
@@ -168,7 +168,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 	if s.vault != nil {
 		s.vault.ScheduleRefresh(ctx, id)
 	}
-	s.deleteCorrectionFiles(ctx, kb, discardedRefs, id)
+	s.deleteCorrectionFiles(ctx, library, discardedRefs, id)
 	return s.GetEntryByID(ctx, id)
 }
 
@@ -179,13 +179,13 @@ func (s *entryService) contentTypeTransactionService(tx *gorm.DB) *entryService 
 	copy.chunkRepo = repository.NewChunkRepository(tx)
 	copy.spaceRepo = repository.NewSpaceRepository(tx)
 	copy.retrieveEngine = retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))
-	copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewKnowledgeBaseRepository(tx), copy.modelService, copy.retrieveEngine)
+	copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewLibraryRepository(tx), copy.modelService, copy.retrieveEngine)
 	copy.vault, copy.resourceCatalog = nil, nil
 	return &copy
 }
 
 func (s *entryService) clearCorrectedArticleBody(ctx context.Context, k *types.Entry) ([]string, error) {
-	if err := s.db.WithContext(ctx).Table("embeddings").Where("knowledge_base_id=? AND entry_id=?", k.KnowledgeBaseID, k.ID).Delete(nil).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table("embeddings").Where("library_id=? AND entry_id=?", k.LibraryID, k.ID).Delete(nil).Error; err != nil {
 		return nil, err
 	}
 	if err := s.chunkService.DeleteChunksByEntryID(ctx, k.ID); err != nil {
@@ -222,7 +222,7 @@ func (s *entryService) clearCorrectedArticleBody(ctx context.Context, k *types.E
 	return refs, s.repo.UpdateEntry(ctx, k)
 }
 
-func (s *entryService) deleteCorrectionFiles(ctx context.Context, kb *types.KnowledgeBase, refs []string, ownerIDs ...string) {
+func (s *entryService) deleteCorrectionFiles(ctx context.Context, library *types.Library, refs []string, ownerIDs ...string) {
 	seen := map[string]bool{}
 	releaser := entryResourceOwners(s.resourceCatalog, ownerIDs...)
 	for _, ref := range refs {
@@ -233,7 +233,7 @@ func (s *entryService) deleteCorrectionFiles(ctx context.Context, kb *types.Know
 		if !releaser.deletable(ctx, ref) {
 			continue
 		}
-		if err := s.resolveFileServiceForPath(ctx, kb, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := s.resolveFileServiceForPath(ctx, library, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
 			logger.Warnf(ctx, "Remove content type conversion copy %s: %v", ref, err)
 		}
 	}

@@ -11,7 +11,7 @@ import (
 
 func TestEntryContractFieldSetsAndExample(t *testing.T) {
 	value := map[string]any{
-		"entry":         types.Entry{ID: "item", SpaceID: 1, KnowledgeBaseID: "kb", SourceKind: "mine", Metadata: types.JSON(`{"knowledge_id":"opaque","entry_id":"user value"}`)},
+		"entry":         types.Entry{ID: "item", SpaceID: 1, LibraryID: "library", SourceKind: "mine", Metadata: types.JSON(`{"knowledge_id":"opaque","entry_id":"user value"}`)},
 		"entity_detail": types.EntityDetail{Entries: []types.Entry{{ID: "item", SpaceID: 1}}},
 		"search":        types.EntrySearchResponse{Results: []*types.EntrySearchResult{{EntryID: "item", Source: "mine", Snippets: []types.EntrySearchSnippet{{ChunkID: "chunk", Content: "Evidence", Score: 0.75}}, SimilarReports: []*types.EntrySearchResult{}}}},
 		"association":   types.EntryTopic{SpaceID: 1, EntryID: "item", TopicID: "topic"},
@@ -21,6 +21,9 @@ func TestEntryContractFieldSetsAndExample(t *testing.T) {
 	require.NoError(t, err)
 	data, err := json.MarshalIndent(output, "", "  ")
 	require.NoError(t, err)
+	require.Contains(t, string(data), `"library_id"`)
+	require.Contains(t, string(data), `"library_name"`)
+	require.NotContains(t, string(data), "knowledge_base")
 	if path := os.Getenv("NAMING_MCP_EVIDENCE"); path != "" {
 		require.NoError(t, os.WriteFile(path, append(data, '\n'), 0600))
 		return

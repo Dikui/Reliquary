@@ -424,7 +424,7 @@ func (h *InitializationHandler) updateTaskStatus(
 	}
 }
 
-// GetCurrentConfigByKB godoc
+// GetCurrentConfigByLibrary godoc
 // ModelTestRequest 统一的"测试连接"请求体。
 //
 // 三种模型（chat/embedding/rerank）的测试接口共享同一份结构，以便：

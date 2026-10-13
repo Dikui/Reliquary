@@ -98,16 +98,16 @@ func VerifyFileURLSig(filePath string, spaceID uint64, expiresStr, sig string) b
 	return hmac.Equal([]byte(expected), []byte(sig))
 }
 
-// kbScopedExportsSegment is the only storage prefix served by the KB-scoped
+// libraryScopedExportsSegment is the only storage prefix served by the Library-scoped
 // file proxy. Embedded chunk images land under exports/; raw entry
 // uploads use {space}/{entryID}/... and are served via
 // /entries/{id}/download instead.
-const kbScopedExportsSegment = "exports"
+const libraryScopedExportsSegment = "exports"
 
 // ValidateStoragePathSpace ensures the space segment embedded in a provider://
 // storage path matches the authenticated caller's space. Cross-space access
 // for arbitrary space paths uses /api/v1/files/presigned with an HMAC bound to
-// the resource owner; KB-scoped shared rendering uses ValidateKBScopedStoragePath.
+// the resource owner; Library-scoped shared rendering uses ValidateLibraryScopedStoragePath.
 func ValidateStoragePathSpace(filePath string, spaceID uint64) error {
 	pathSpace := ParseSpaceIDFromStoragePath(filePath)
 	if pathSpace == 0 {
@@ -119,17 +119,17 @@ func ValidateStoragePathSpace(filePath string, spaceID uint64) error {
 	return nil
 }
 
-// ValidateKBScopedStoragePath is used by GET /knowledge-bases/:id/files. It
-// requires the path to belong to the KB owner space and to live under the
+// ValidateLibraryScopedStoragePath is used by GET /libraries/:id/files. It
+// requires the path to belong to the Library owner space and to live under the
 // exports/ namespace used for embedded images (SaveBytes / multimodal output).
-// This prevents borrowers with shared-KB read access from using the proxy to
+// This prevents borrowers with shared-Library read access from using the proxy to
 // fetch arbitrary owner-space objects such as raw entry uploads.
-func ValidateKBScopedStoragePath(filePath string, spaceID uint64) error {
+func ValidateLibraryScopedStoragePath(filePath string, spaceID uint64) error {
 	if err := ValidateStoragePathSpace(filePath, spaceID); err != nil {
 		return err
 	}
 	if !storagePathHasExportsScope(filePath, spaceID) {
-		return fmt.Errorf("storage path is outside KB-scoped exports namespace")
+		return fmt.Errorf("storage path is outside Library-scoped exports namespace")
 	}
 	return nil
 }
@@ -171,10 +171,10 @@ func storagePathHasExportsScope(filePath string, spaceID uint64) bool {
 		if part != spaceSeg {
 			continue
 		}
-		if i+1 < len(parts) && parts[i+1] == kbScopedExportsSegment {
+		if i+1 < len(parts) && parts[i+1] == libraryScopedExportsSegment {
 			return true
 		}
-		if i > 0 && parts[i-1] == kbScopedExportsSegment {
+		if i > 0 && parts[i-1] == libraryScopedExportsSegment {
 			return true
 		}
 	}

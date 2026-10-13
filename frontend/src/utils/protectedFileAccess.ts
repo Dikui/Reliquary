@@ -1,7 +1,7 @@
 /**
  * 受保护文件（provider:// / resource:// 等）的访问上下文。
  *
- * 文件代理通过登录态 Bearer 鉴权，并按知识库校验访问作用域。
+ * 文件代理通过登录态 Bearer 鉴权，并按库校验访问作用域。
  * 渲染组件声明作用域，由此处统一构造代理请求。
  */
 
@@ -9,14 +9,14 @@ export const PROVIDER_SCHEME_PATTERN = 'resource|local|vault';
 
 const PROVIDER_FILE_SCHEME_RE = new RegExp(`^(${PROVIDER_SCHEME_PATTERN}):\\/\\/\\S+$`, 'i');
 
-const KB_FILE_PROXY_PATH_RE = /^\/api\/v1\/knowledge-bases\/[^/]+\/files$/;
+const LIBRARY_FILE_PROXY_PATH_RE = /^\/api\/v1\/libraries\/[^/]+\/files$/;
 const VAULT_ATTACHMENT_PROXY_PATH_RE = /^\/api\/v1\/entries\/[^/]+\/vault-attachment$/;
 
 export type ProtectedFileAccessContext =
   /** 登录用户通过 Bearer 访问文件。 */
   | { mode: 'space' }
-  /** 知识库作用域。 */
-  | { mode: 'knowledgeBase'; kbId: string };
+  /** 库作用域。 */
+  | { mode: 'library'; libraryId: string };
 
 export interface ProtectedFileRequest {
   url: string;
@@ -63,7 +63,7 @@ export function resolveProtectedFileAccess(
   const fallback = accessState.current;
 
   if (!override) return fallback;
-  if (override.mode === 'knowledgeBase' && !override.kbId.trim()) return fallback;
+  if (override.mode === 'library' && !override.libraryId.trim()) return fallback;
   return override;
 }
 
@@ -77,7 +77,7 @@ export function isProviderFileURL(url: string): boolean {
 export function isProtectedFileProxyPath(pathname: string): boolean {
   return (
     pathname === '/files'
-    || KB_FILE_PROXY_PATH_RE.test(pathname)
+    || LIBRARY_FILE_PROXY_PATH_RE.test(pathname)
     || VAULT_ATTACHMENT_PROXY_PATH_RE.test(pathname)
   );
 }
@@ -124,9 +124,9 @@ export function buildProtectedFileRequest(
 
   const query = new URLSearchParams({ file_path: filePath }).toString();
 
-  if (access.mode === 'knowledgeBase') {
+  if (access.mode === 'library') {
     return {
-      url: `/api/v1/knowledge-bases/${encodeURIComponent(access.kbId.trim())}/files?${query}`,
+      url: `/api/v1/libraries/${encodeURIComponent(access.libraryId.trim())}/files?${query}`,
       headers: spaceRequestHeaders(),
     };
   }

@@ -20,32 +20,32 @@ func TestEntryListSourceKindFiltersPostgresRowsAndPagination(t *testing.T) {
 	db := pgtest.Open(t)
 	updated := time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC)
 	for _, row := range []struct {
-		id, kind, contentType, channel, status, kb string
-		starred                                    bool
-		space                                      uint64
+		id, kind, contentType, channel, status, library string
+		starred                                         bool
+		space                                           uint64
 	}{
-		{"article", "article", "event", "api", "completed", "kb-1", true, 1},
-		{"mine-event", "mine", "event", "api", "completed", "kb-1", true, 1},
-		{"mine-tutorial", "mine", "tutorial", "web", "completed", "kb-1", false, 1},
-		{"report", "report", "", "api", "completed", "kb-1", false, 1},
-		{"mine-deleting", "mine", "event", "api", "deleting", "kb-1", true, 1},
-		{"mine-other-base", "mine", "event", "api", "completed", "kb-2", true, 1},
-		{"mine-other-space", "mine", "event", "api", "completed", "kb-1", true, 2},
+		{"article", "article", "event", "api", "completed", "library-1", true, 1},
+		{"mine-event", "mine", "event", "api", "completed", "library-1", true, 1},
+		{"mine-tutorial", "mine", "tutorial", "web", "completed", "library-1", false, 1},
+		{"report", "report", "", "api", "completed", "library-1", false, 1},
+		{"mine-deleting", "mine", "event", "api", "deleting", "library-1", true, 1},
+		{"mine-other-base", "mine", "event", "api", "completed", "library-2", true, 1},
+		{"mine-other-space", "mine", "event", "api", "completed", "library-1", true, 2},
 	} {
-		require.NoError(t, db.Create(&types.Entry{ID: row.id, SpaceID: row.space, KnowledgeBaseID: row.kb,
+		require.NoError(t, db.Create(&types.Entry{ID: row.id, SpaceID: row.space, LibraryID: row.library,
 			SourceKind: row.kind, ContentType: row.contentType, Channel: row.channel, Starred: row.starred,
 			Type: "manual", Source: "", Title: "filtertoken " + row.id, FileName: row.id + ".md", FileType: "md",
 			ParseStatus: row.status, CreatedAt: updated, UpdatedAt: updated}).Error)
 	}
 	gin.SetMode(gin.TestMode)
-	h := &EntryHandler{kbService: &stubArticleKBService{}, kgService: &classificationEntryService{repo: repository.NewEntryRepository(db)}}
+	h := &EntryHandler{libraryService: &stubArticleLibraryService{}, kgService: &classificationEntryService{repo: repository.NewEntryRepository(db)}}
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
 		c.Set(types.SpaceIDContextKey.String(), uint64(1))
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.SpaceIDContextKey, uint64(1)))
 		c.Next()
 	})
-	router.GET("/knowledge-bases/:id/entries", h.ListEntry)
+	router.GET("/libraries/:id/entries", h.ListEntry)
 	for _, test := range []struct {
 		name, query string
 		ids         []string
@@ -65,7 +65,7 @@ func TestEntryListSourceKindFiltersPostgresRowsAndPagination(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/knowledge-bases/kb-1/entries?"+test.query, nil))
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/libraries/library-1/entries?"+test.query, nil))
 			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 			var result struct {
 				Data     []types.Entry `json:"data"`
@@ -79,7 +79,7 @@ func TestEntryListSourceKindFiltersPostgresRowsAndPagination(t *testing.T) {
 			for _, row := range result.Data {
 				ids = append(ids, row.ID)
 				require.Equal(t, uint64(1), row.SpaceID)
-				require.Equal(t, "kb-1", row.KnowledgeBaseID)
+				require.Equal(t, "library-1", row.LibraryID)
 				require.NotEqual(t, types.ParseStatusDeleting, row.ParseStatus)
 			}
 			if test.ids != nil {
@@ -94,7 +94,7 @@ func TestEntryListSourceKindFiltersPostgresRowsAndPagination(t *testing.T) {
 	for _, invalid := range []string{"MINE", "unknown", "mine,article", "mine%27%20OR%201%3D1"} {
 		t.Run("invalid-"+invalid, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/knowledge-bases/kb-1/entries?source_kind="+invalid, nil))
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/libraries/library-1/entries?source_kind="+invalid, nil))
 			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 		})
 	}

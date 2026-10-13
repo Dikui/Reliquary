@@ -38,7 +38,7 @@ test('entity resources and mutations use the dedicated entity routes', async () 
     { method: 'post', url: '/api/v1/entities/name-embeddings/rebuild', body: {} },
   ])
 })
-test('entity routes do not send a knowledge base range', async () => {
+test('entity routes do not send a library range', async () => {
   const requests: Request[] = [], api = loadAPI(requests)
   await api.listEntities({ limit: 20 })
   assert.equal(requests[0]?.url, '/api/v1/entities?limit=20')

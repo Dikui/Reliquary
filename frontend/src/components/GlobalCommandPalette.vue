@@ -150,7 +150,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const scrollRef = ref<HTMLElement | null>(null)
 
 // Selection is identity-based (by item key) rather than positional, so
-// results arriving asynchronously (e.g. slow KB search) can't silently
+// results arriving asynchronously (e.g. slow Library search) can't silently
 // reassign the user's highlight to a different row. `selectedIndex` is
 // derived: it's the current position of `selectedKey` in flatItems, or 0 if
 // the selected item is gone.
@@ -287,12 +287,12 @@ const openChunk = (item: FlatChunkItem) => {
   const alreadyViewingEntry = route.name === 'entries'
   // On the articles page, router.push to the same path+query
   // is a no-op (vue-router dedupes identical navigations), so the document
-  // auto-open logic never fires. Dispatch a global event that KnowledgeBase.vue
+  // auto-open logic never fires. Dispatch a global event that Library.vue
   // listens for to open the matching article.
   if (alreadyViewingEntry) {
     window.dispatchEvent(
       new CustomEvent('reliquary:open-entry', {
-        detail: { kbId: item.file.kbId, entryId: item.file.entryId },
+        detail: { libraryId: item.file.libraryId, entryId: item.file.entryId },
       }),
     )
     return

@@ -99,18 +99,18 @@ func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHa
 	t.Helper()
 	h := newRetainedIntakeHarness(t)
 	model := &articleProcessingChat{output: validProcessingFixture("event")}
-	metadata := &types.Model{ID: "local-fixture", SpaceID: h.kb.SpaceID, Name: "Processing fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
+	metadata := &types.Model{ID: "local-fixture", SpaceID: h.library.SpaceID, Name: "Processing fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
 	require.NoError(t, h.db.Create(metadata).Error)
-	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", SpaceID: h.kb.SpaceID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
-	h.kb.ModelTiers = types.ModelTierConfig{Light: "local-fixture", Generation: "local-fixture", EntityResolution: "local-fixture", Embedding: "embedding"}
-	h.kb.EmbeddingModelID = "embedding"
-	h.kb.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
-	require.NoError(t, h.db.Save(h.kb).Error)
+	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", SpaceID: h.library.SpaceID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
+	h.library.ModelTiers = types.ModelTierConfig{Light: "local-fixture", Generation: "local-fixture", EntityResolution: "local-fixture", Embedding: "embedding"}
+	h.library.EmbeddingModelID = "embedding"
+	h.library.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
+	require.NoError(t, h.db.Save(h.library).Error)
 	h.service.modelService = articleProcessingModels{summaryStateModelService: &summaryStateModelService{model: model, metadata: metadata}}
 	h.service.retrieveEngine = retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(h.db))
 	chunks := h.service.chunkService.(*chunkService)
 	chunks.entryRepo = h.service.repo
-	chunks.kbRepository = repository.NewKnowledgeBaseRepository(h.db)
+	chunks.libraryRepository = repository.NewLibraryRepository(h.db)
 	chunks.modelService = h.service.modelService
 	chunks.retrieveEngine = h.service.retrieveEngine
 	h.service.imageResolver = docparser.NewImageResolver()
@@ -132,7 +132,7 @@ func articleImageDataURI(t *testing.T, n uint8) string {
 }
 func (h *articleProcessingHarness) upload(t *testing.T, title, body string) *types.Entry {
 	t.Helper()
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, title+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + title, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, title+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + title, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	return h.article(t, article.ID)
@@ -174,7 +174,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.EqualValues(t, 1, links)
 	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=?", article.ID).Count(&topicLinks).Error)
 	require.EqualValues(t, 1, topicLinks)
-	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, KnowledgeBaseIDs: []string{h.kb.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: .9}})
+	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, LibraryIDs: []string{h.library.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: .9}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
@@ -230,7 +230,7 @@ func TestArticleProcessingDefaultLimitsAndTableInput(t *testing.T) {
 	require.Equal(t, 6000, chars)
 	require.Equal(t, 1000, completion)
 	h.processor.output = validProcessingFixture("event")
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "measurements.csv", "product,count\nwidget,5\ngadget,8\n"), map[string]string{"publisher": "Acme", "original_url": "https://example.org/table", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "measurements.csv", "product,count\nwidget,5\ngadget,8\n"), map[string]string{"publisher": "Acme", "original_url": "https://example.org/table", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)

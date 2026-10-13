@@ -116,7 +116,7 @@ func configureNameEmbedding(t *testing.T, db *gorm.DB, id string, dimension int)
 	t.Helper()
 	record := types.Model{ID: id, SpaceID: 1, Name: id, Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Source: types.ModelSourceRemote, Parameters: types.ModelParameters{BaseURL: "https://example.com/v1", EmbeddingParameters: types.EmbeddingParameters{Dimension: dimension}}}
 	require.NoError(t, db.Save(&record).Error)
-	require.NoError(t, db.Model(&types.KnowledgeBase{}).Where("space_id=1").Update("model_tiers", types.ModelTierConfig{Embedding: id}).Error)
+	require.NoError(t, db.Model(&types.Library{}).Where("space_id=1").Update("model_tiers", types.ModelTierConfig{Embedding: id}).Error)
 }
 func nameRebuildFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService, *EntityNameEmbeddingRebuilder, *nameRebuildModels, *nameRebuildQueue) {
 	t.Helper()
@@ -144,14 +144,14 @@ func pendingNameEntity(t *testing.T, db *gorm.DB, id, name string) {
 func TestEntityNameEmbeddingRebuildAfterInitialConfiguration(t *testing.T) {
 	db, ctx, svc, rebuilder, models, queue := nameRebuildFixture(t)
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
-	resolved, _, err := svc.resolveEntities(ctx, model, 1, "entity-kb", []entityResolutionInput{{Mention: "Ready Entity", Canonical: "Ready Entity", EntityType: " COMPANY ", Description: "  Identifying detail.  "}})
+	resolved, _, err := svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{{Mention: "Ready Entity", Canonical: "Ready Entity", EntityType: " COMPANY ", Description: "  Identifying detail.  "}})
 	require.NoError(t, err)
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistEntities(tx, resolved); return err }))
 	require.True(t, readNameEntity(t, db, resolved[0].ID).EmbeddingNeedsRebuild)
 	configureNameEmbedding(t, db, "embedding-two", 2)
 	embedder := &nameRebuildEmbedder{dimension: 2, id: "embedding-two"}
 	models.models["embedding-two"] = embedder
-	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "knowledge_base_embedding_model_changed"))
+	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "library_embedding_model_changed"))
 	require.NoError(t, rebuilder.Handle(ctx, queue.last(t)))
 	status, err := rebuilder.Status(ctx, 1)
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestEntityNameEmbeddingRebuildAfterInitialConfiguration(t *testing.T) {
 	judge := &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {
 		return fmt.Sprintf(`{"decision":"match","entity_id":%q,"confidence":0.99}`, stored.ID)
 	}}
-	_, mentions, err := svc.resolveEntities(ctx, judge, 1, "entity-kb", []entityResolutionInput{{Mention: "完全不同的中文叫法", Canonical: "完全不同的中文叫法", EntityType: "company"}})
+	_, mentions, err := svc.resolveEntities(ctx, judge, 1, "entity-library", []entityResolutionInput{{Mention: "完全不同的中文叫法", Canonical: "完全不同的中文叫法", EntityType: "company"}})
 	require.NoError(t, err)
 	require.Equal(t, stored.ID, mentions["完全不同的中文叫法"].ID, "rebuilt vectors must participate in candidate recall")
 }
@@ -186,7 +186,7 @@ func TestEntityNameEmbeddingRebuildSwitchesDimensionsAndUsesBatches(t *testing.T
 	configureNameEmbedding(t, db, "new-three", 3)
 	newModel := &nameRebuildEmbedder{dimension: 3, id: "new-three"}
 	models.models["new-three"] = newModel
-	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "knowledge_base_embedding_model_changed"))
+	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "library_embedding_model_changed"))
 	before := readNameEntity(t, db, "entity-0")
 	require.True(t, before.EmbeddingNeedsRebuild)
 	require.Len(t, before.NameEmbedding, 2, "marking preserves prior vector until successful replacement")
@@ -260,7 +260,7 @@ func TestEntityNameResolutionDoesNotMarkWholeRegistry(t *testing.T) {
 	}))
 	defer db.Callback().Update().Remove("count_registry_updates")
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
-	_, _, err := svc.resolveEntities(ctx, model, 1, "entity-kb", []entityResolutionInput{{Mention: "A New Name", Canonical: "A New Name", EntityType: "company"}})
+	_, _, err := svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{{Mention: "A New Name", Canonical: "A New Name", EntityType: "company"}})
 	require.NoError(t, err)
 	require.Zero(t, updates)
 	require.False(t, readNameEntity(t, db, entity.ID).EmbeddingNeedsRebuild)
@@ -363,7 +363,7 @@ func TestEntityNameCreationDetectsProfileChangesBeforePersistence(t *testing.T) 
 	configureNameEmbedding(t, db, "configured", 2)
 	models.models["configured"] = &nameRebuildEmbedder{dimension: 2, id: "configured"}
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
-	resolved, _, err := svc.resolveEntities(ctx, model, 1, "entity-kb", []entityResolutionInput{{Mention: "Future", Canonical: " Future ", EntityType: " COMPANY ", Description: " Detail "}})
+	resolved, _, err := svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{{Mention: "Future", Canonical: " Future ", EntityType: " COMPANY ", Description: " Detail "}})
 	require.NoError(t, err)
 	var metadata types.Model
 	require.NoError(t, db.First(&metadata, "id=?", "configured").Error)

@@ -65,10 +65,10 @@ func TestQueueStatsDoesNotWarnForQueuesThatDoNotExist(t *testing.T) {
 
 func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 	payload, err := json.Marshal(map[string]any{
-		"space_id":          types.SingleSpaceID,
-		"knowledge_base_id": "kb-1",
-		"entry_id":          "entry-1",
-		"file_url":          "secret://signed-document-url",
+		"space_id":   types.SingleSpaceID,
+		"library_id": "library-1",
+		"entry_id":   "entry-1",
+		"file_url":   "secret://signed-document-url",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 		t.Fatalf("project task: %v", err)
 	}
 	if info.State != types.RuntimeTaskActive || info.SpaceID != types.SingleSpaceID ||
-		info.KnowledgeBaseID != "kb-1" || info.EntryID != "entry-1" {
+		info.LibraryID != "library-1" || info.EntryID != "entry-1" {
 		t.Fatalf("safe routing metadata missing: %+v", info)
 	}
 	if info.StartedAt == nil || !info.StartedAt.Equal(started) || info.Worker != "core" {
@@ -168,7 +168,7 @@ func TestProjectRuntimeTaskUsesAllowListedBatchMetadata(t *testing.T) {
 	payload := []byte(`{
 		"tenant_id":9,
 		"task_id":"reparse-1",
-		"knowledge_base_id":"kb",
+		"library_id":"library",
 		"entry_ids":["a","b"],
 		"created_at":1700000000,
 		"content":"must-not-be-projected"
@@ -180,7 +180,7 @@ func TestProjectRuntimeTaskUsesAllowListedBatchMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.TaskID != "reparse-1" || info.KnowledgeBaseID != "kb" || info.EntryCount != 2 || info.EnqueuedAt == nil {
+	if info.TaskID != "reparse-1" || info.LibraryID != "library" || info.EntryCount != 2 || info.EnqueuedAt == nil {
 		t.Fatalf("batch projection mismatch: %+v", info)
 	}
 	if len(info.AllowedActions) != 0 {

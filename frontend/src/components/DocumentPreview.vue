@@ -1,7 +1,7 @@
 // @ts-nocheck
 <script setup lang="ts">
 import { ref, shallowRef, watch, onUnmounted, nextTick, defineAsyncComponent } from 'vue';
-import { previewEntryFile } from '@/api/knowledge-base';
+import { previewEntryFile } from '@/api/library';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import markedKatex from 'marked-katex-extension';

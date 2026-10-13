@@ -35,17 +35,17 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 	})
 }
 
-// EnsureSingleKnowledgeBase repairs a missing knowledge base before serving requests.
-func EnsureSingleKnowledgeBase(ctx context.Context, db *gorm.DB) error {
+// EnsureSingleLibrary repairs a missing library before serving requests.
+func EnsureSingleLibrary(ctx context.Context, db *gorm.DB) error {
 	var user types.User
 	err := db.WithContext(ctx).Where("space_id = ?", types.SingleSpaceID).First(&user).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
-	// Registration creates the first knowledge base together with its owner.
+	// Registration creates the first library together with its owner.
 	if err == gorm.ErrRecordNotFound {
 		return nil
 	}
-	_, err = repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, user.ID)
+	_, err = repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, user.ID)
 	return err
 }

@@ -66,14 +66,14 @@ type metadataUpdateChunkRepo struct {
 	listCalls int
 }
 
-type metadataUpdateKBService struct {
-	interfaces.KnowledgeBaseService
+type metadataUpdateLibraryService struct {
+	interfaces.LibraryService
 }
 
-func (metadataUpdateKBService) GetKnowledgeBaseByID(
+func (metadataUpdateLibraryService) GetLibraryByID(
 	_ context.Context, id string,
-) (*types.KnowledgeBase, error) {
-	return &types.KnowledgeBase{ID: id, SummaryModelID: "summary-model"}, nil
+) (*types.Library, error) {
+	return &types.Library{ID: id, SummaryModelID: "summary-model"}, nil
 }
 
 type metadataUpdateTaskEnqueuer struct {
@@ -101,16 +101,16 @@ func (r *metadataUpdateChunkRepo) ListChunksByEntryID(
 func TestUpdateEntryMetadataDoesNotReindexChunks(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{
-		ID:              "entry-1",
-		SpaceID:         7,
-		KnowledgeBaseID: "kb-1",
-		SummaryStatus:   types.SummaryStatusCompleted,
-		CustomMetadata:  types.JSON(`{"region":"Beijing"}`),
+		ID:             "entry-1",
+		SpaceID:        7,
+		LibraryID:      "library-1",
+		SummaryStatus:  types.SummaryStatusCompleted,
+		CustomMetadata: types.JSON(`{"region":"Beijing"}`),
 	}}
 	chunkRepo := &metadataUpdateChunkRepo{}
 	taskEnqueuer := &metadataUpdateTaskEnqueuer{}
 	service := &entryService{
-		repo: repo, chunkRepo: chunkRepo, kbService: metadataUpdateKBService{}, task: taskEnqueuer,
+		repo: repo, chunkRepo: chunkRepo, libraryService: metadataUpdateLibraryService{}, task: taskEnqueuer,
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 
@@ -129,11 +129,11 @@ func TestUpdateEntryMetadataDoesNotReindexChunks(t *testing.T) {
 func TestUpdateEntryMetadataDoesNotLeaveTasklessPendingStatus(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{
-		ID: "entry-1", SpaceID: 7, KnowledgeBaseID: "kb-1",
+		ID: "entry-1", SpaceID: 7, LibraryID: "library-1",
 		SummaryStatus: types.SummaryStatusCompleted,
 	}}
 	service := &entryService{
-		repo: repo, chunkRepo: &metadataUpdateChunkRepo{}, kbService: metadataUpdateKBService{},
+		repo: repo, chunkRepo: &metadataUpdateChunkRepo{}, libraryService: metadataUpdateLibraryService{},
 		task: &metadataUpdateTaskEnqueuer{err: errors.New("queue unavailable")},
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
@@ -147,13 +147,13 @@ func TestUpdateEntryMetadataDoesNotLeaveTasklessPendingStatus(t *testing.T) {
 func TestUpdateEntryUnchangedMetadataDoesNotRefreshSummary(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{
-		ID: "entry-1", SpaceID: 7, KnowledgeBaseID: "kb-1",
+		ID: "entry-1", SpaceID: 7, LibraryID: "library-1",
 		SummaryStatus:  types.SummaryStatusCompleted,
 		CustomMetadata: types.JSON(`{"department":"R&D","region":"Shanghai"}`),
 	}}
 	taskEnqueuer := &metadataUpdateTaskEnqueuer{}
 	service := &entryService{
-		repo: repo, chunkRepo: &metadataUpdateChunkRepo{}, kbService: metadataUpdateKBService{}, task: taskEnqueuer,
+		repo: repo, chunkRepo: &metadataUpdateChunkRepo{}, libraryService: metadataUpdateLibraryService{}, task: taskEnqueuer,
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 

@@ -16,14 +16,14 @@ import (
 
 func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	response := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-base", "", f.key, true)
+	response := personalRequest(t, f.router, http.MethodGet, "/api/v1/library", "", f.key, true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var base struct{ Data types.KnowledgeBase }
+	var base struct{ Data types.Library }
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &base))
 	base.Data.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	base.Data.ModelTiers = types.ModelTierConfig{Embedding: "incomplete-fixture"}
 	require.NoError(t, f.db.Save(&base.Data).Error)
-	search := service.NewSearchService(f.params.KBService, f.params.SpaceService, nil, f.db)
+	search := service.NewSearchService(f.params.LibraryService, f.params.SpaceService, nil, f.db)
 	f.router.POST("/api/v1/search", handler.NewSearchHandler(search, nil).SearchEntry)
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(service.NewFollowService(f.db)))
 	topic := types.Topic{ID: "11111111-1111-4111-8111-111111111111", SpaceID: types.SingleSpaceID, Name: "Incomplete fixture"}
@@ -33,7 +33,7 @@ func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t 
 	ids := []string{"22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"}
 	for index, id := range ids {
 		collectedAt := time.Now().UTC().Add(time.Duration(-index-1) * time.Hour)
-		article := &types.Entry{ID: id, SpaceID: types.SingleSpaceID, KnowledgeBaseID: base.Data.ID,
+		article := &types.Entry{ID: id, SpaceID: types.SingleSpaceID, LibraryID: base.Data.ID,
 			Type: "manual", Title: "Incompletefixture source", SourceKind: "article", Source: "https://example.org/" + id,
 			ContentType: "event", ProcessingMode: types.ProcessingModeFull,
 			ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: collectedAt,
@@ -42,7 +42,7 @@ func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t 
 			SourceInfo: types.SourceInfo{OriginalURL: article.Source, PublishedAt: "2026-10-01"}}))
 		require.NoError(t, f.db.Create(article).Error)
 		require.NoError(t, f.db.Create(&types.EntryTopic{SpaceID: types.SingleSpaceID, EntryID: id, TopicID: topic.ID, CreatedAt: collectedAt}).Error)
-		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
+		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
 			VALUES (?, ?, ?, 'incomplete-fixture', 3, ?, 'fixture')`, id, types.SingleSpaceID, base.Data.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
 	}
 	type articleWire struct {

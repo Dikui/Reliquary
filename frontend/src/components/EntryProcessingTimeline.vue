@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import ModelCallSummary from './ModelCallSummary.vue'
 import { modelCallsFromSpan } from '@/utils/modelCalls'
 import { copyWithToast } from '@/utils/clipboard'
-import { getEntrySpans, reparseEntry, cancelEntryParse, getEntryDetails } from '@/api/knowledge-base'
+import { getEntrySpans, reparseEntry, cancelEntryParse, getEntryDetails } from '@/api/library'
 import {
   entrySpansPayloadHasTrace,
   type EntryTraceNode,
@@ -427,10 +427,10 @@ async function onCancelParseConfirm() {
   cancelling.value = true
   try {
     await cancelEntryParse(id)
-    MessagePlugin.success(t('knowledgeBase.cancelParseSubmitted'))
+    MessagePlugin.success(t('library.cancelParseSubmitted'))
     await fetchSpans({ manual: true })
   } catch (e: any) {
-    MessagePlugin.error(e?.message || t('knowledgeBase.cancelParseFailed'))
+    MessagePlugin.error(e?.message || t('library.cancelParseFailed'))
   } finally {
     cancelling.value = false
   }
@@ -1251,10 +1251,10 @@ function formatParserRulesForCurrentFile(
 }
 
 // Human-readable summary of the per-upload parse overrides stored in
-// entry.metadata.process_overrides. Empty overrides → KB defaults.
+// entry.metadata.process_overrides. Empty overrides → Library defaults.
 const processConfigLines = computed<string[]>(() => {
   const o = processOverrides.value
-  if (!o) return [t('knowledgeStages.processConfig.kbDefault')]
+  if (!o) return [t('knowledgeStages.processConfig.libraryDefault')]
   const onOff = (v: boolean) => (v ? t('knowledgeStages.processConfig.on') : t('knowledgeStages.processConfig.off'))
   const lines: string[] = []
 
@@ -1273,7 +1273,7 @@ const processConfigLines = computed<string[]>(() => {
     lines.push(`${t('knowledgeStages.processConfig.parser')}: ${formatParserRulesForCurrentFile(rules)}`)
   }
 
-  return lines.length ? lines : [t('knowledgeStages.processConfig.kbDefault')]
+  return lines.length ? lines : [t('knowledgeStages.processConfig.libraryDefault')]
 })
 </script>
 
@@ -1343,15 +1343,15 @@ const processConfigLines = computed<string[]>(() => {
               <t-popconfirm
                 v-if="canCancelParse"
                 theme="warning"
-                :content="t('knowledgeBase.cancelParseConfirmBody', { title: props.docTitle || props.entryId })"
-                :confirm-btn="{ content: t('knowledgeBase.cancelParse'), theme: 'danger' }"
+                :content="t('library.cancelParseConfirmBody', { title: props.docTitle || props.entryId })"
+                :confirm-btn="{ content: t('library.cancelParse'), theme: 'danger' }"
                 :cancel-btn="{ content: t('common.cancel') }"
                 placement="bottom"
                 @confirm="onCancelParseConfirm"
               >
                 <button type="button" class="kp-icon-btn kp-icon-btn-danger"
                   :class="{ 'kp-icon-btn-spin': cancelling }" :disabled="cancelling"
-                  :title="t('knowledgeBase.cancelParse')" :aria-label="t('knowledgeBase.cancelParse')"
+                  :title="t('library.cancelParse')" :aria-label="t('library.cancelParse')"
                   @click.stop>
                   <t-icon :name="cancelling ? 'loading' : 'close-circle'" size="15px" />
                 </button>

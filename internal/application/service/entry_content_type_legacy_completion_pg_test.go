@@ -17,7 +17,7 @@ func TestLegacySummaryCorrectionBackfillsOriginalLinkForSameArticleCompletion(t 
 				h, vault := newIngestHarness(t)
 				transport := forbidIngestNetwork(t, h)
 				originalURL := "https://example.org/legacy-correction-" + channel + "-" + location + "?utm_source=old"
-				article := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
+				article := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID,
 					SourceKind: "article", Type: types.EntryTypeManual, Channel: channel, Source: types.EntryTypeManual,
 					Title: "Legacy summary", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
 					ContentType: types.ContentTypeTutorial, ProcessingMode: types.ProcessingModeSummaryOnly,

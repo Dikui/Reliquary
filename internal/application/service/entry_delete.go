@@ -94,7 +94,7 @@ func (r *resourceReleaser) deletable(ctx context.Context, ref string) bool {
 }
 
 // deleteExtractedImages deletes all extracted image files from storage.
-// Standalone function — callable from both entryService and knowledgeBaseService.
+// Standalone function — callable from both entryService and libraryService.
 // Errors are logged but do not fail the overall deletion.
 //
 // releaser may be nil, in which case every file is deleted unconditionally.
@@ -155,9 +155,9 @@ func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
 		s.dequeueEntryTasks(ctx, id)
 	}
 
-	// Resolve file service for this KB before spawning goroutines
-	kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-	kbFileSvc := s.resolveFileService(ctx, kb)
+	// Resolve file service for this Library before spawning goroutines
+	library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+	libraryFileSvc := s.resolveFileService(ctx, library)
 
 	// Collect image URLs before chunks are deleted (ImageInfo references are lost after deletion)
 	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
@@ -255,19 +255,19 @@ func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
 		}
 	}
 	if entry.FilePath != "" {
-		if err := kbFileSvc.DeleteFile(ctx, entry.FilePath); err != nil {
+		if err := libraryFileSvc.DeleteFile(ctx, entry.FilePath); err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete file failed")
 		}
 	}
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
 		if intake.OriginalPath != "" && intake.OriginalPath != entry.FilePath {
-			if err := kbFileSvc.DeleteFile(ctx, intake.OriginalPath); err != nil {
+			if err := libraryFileSvc.DeleteFile(ctx, intake.OriginalPath); err != nil {
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete intake original failed")
 			}
 		}
 		imageURLs = append(imageURLs, intake.Images...)
 	}
-	deleteExtractedImages(ctx, kbFileSvc, entryResourceOwners(s.resourceCatalog, entry.ID), imageURLs)
+	deleteExtractedImages(ctx, libraryFileSvc, entryResourceOwners(s.resourceCatalog, entry.ID), imageURLs)
 	spaceInfo := ctx.Value(types.SpaceInfoContextKey).(*types.Space)
 	spaceInfo.StorageUsed -= entry.StorageSize
 	if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, -entry.StorageSize); err != nil {
@@ -324,7 +324,7 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 	if err != nil {
 		return err
 	}
-	// Rejected intake rows retain their source specifically for the KB creator's
+	// Rejected intake rows retain their source specifically for the Library creator's
 	// decision. The async worker restores the submitting user in its context,
 	// so enforce the same boundary here rather than trusting enqueue callers.
 	for _, entry := range entryList {
@@ -335,9 +335,9 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 		if intake == nil || intake.Decision != "rejected" {
 			continue
 		}
-		_, kbErr := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-		if kbErr != nil {
-			return kbErr
+		_, libraryErr := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+		if libraryErr != nil {
+			return libraryErr
 		}
 		if _, ok := types.PrincipalFromContext(ctx); !ok {
 			return errors.New("an authenticated user is required to delete rejected intake")
@@ -370,14 +370,14 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 		s.dequeueEntryTasks(ctx, kid)
 	}
 
-	// Pre-resolve KB metadata and file services so goroutines don't need DB access.
-	knowledgeBases := make(map[string]*types.KnowledgeBase)
-	kbFileServices := make(map[string]interfaces.FileService)
+	// Pre-resolve Library metadata and file services so goroutines don't need DB access.
+	libraries := make(map[string]*types.Library)
+	libraryFileServices := make(map[string]interfaces.FileService)
 	for _, entry := range entryList {
-		if _, ok := kbFileServices[entry.KnowledgeBaseID]; !ok {
-			kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-			knowledgeBases[entry.KnowledgeBaseID] = kb
-			kbFileServices[entry.KnowledgeBaseID] = s.resolveFileService(ctx, kb)
+		if _, ok := libraryFileServices[entry.LibraryID]; !ok {
+			library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+			libraries[entry.LibraryID] = library
+			libraryFileServices[entry.LibraryID] = s.resolveFileService(ctx, library)
 		}
 	}
 
@@ -386,26 +386,26 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 	if err != nil {
 		logger.Errorf(ctx, "Failed to collect image URLs for batch cleanup: %v", err)
 	}
-	entryToKB := make(map[string]string)
-	kbImageURLs := make(map[string][]string) // kbID → []imageURL
+	entryToLibrary := make(map[string]string)
+	libraryImageURLs := make(map[string][]string) // libraryID → []imageURL
 	for _, k := range entryList {
-		entryToKB[k.ID] = k.KnowledgeBaseID
-		kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], processedEntryResources(k)...)
+		entryToLibrary[k.ID] = k.LibraryID
+		libraryImageURLs[k.LibraryID] = append(libraryImageURLs[k.LibraryID], processedEntryResources(k)...)
 		if intake, _ := k.IntakeMetadata(); intake != nil {
-			kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], intake.Images...)
+			libraryImageURLs[k.LibraryID] = append(libraryImageURLs[k.LibraryID], intake.Images...)
 		}
 	}
-	kbImageInfos := make(map[string][]string) // kbID → []imageInfo JSON
+	libraryImageInfos := make(map[string][]string) // libraryID → []imageInfo JSON
 	for _, ci := range chunkImageInfos {
-		kbID := entryToKB[ci.EntryID]
-		kbImageInfos[kbID] = append(kbImageInfos[kbID], ci.ImageInfo)
+		libraryID := entryToLibrary[ci.EntryID]
+		libraryImageInfos[libraryID] = append(libraryImageInfos[libraryID], ci.ImageInfo)
 	}
-	for kbID, infos := range kbImageInfos {
-		kbImageURLs[kbID] = append(kbImageURLs[kbID], collectImageURLs(ctx, infos)...)
+	for libraryID, infos := range libraryImageInfos {
+		libraryImageURLs[libraryID] = append(libraryImageURLs[libraryID], collectImageURLs(ctx, infos)...)
 	}
-	kbEntryIDs := make(map[string][]string) // kbID → entry IDs releasing their claims
+	libraryEntryIDs := make(map[string][]string) // libraryID → entry IDs releasing their claims
 	for _, k := range entryList {
-		kbEntryIDs[k.KnowledgeBaseID] = append(kbEntryIDs[k.KnowledgeBaseID], k.ID)
+		libraryEntryIDs[k.LibraryID] = append(libraryEntryIDs[k.LibraryID], k.ID)
 	}
 
 	wg := errgroup.Group{}
@@ -535,26 +535,26 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 			}
 		}
 		if entry.FilePath != "" {
-			fSvc := kbFileServices[entry.KnowledgeBaseID]
+			fSvc := libraryFileServices[entry.LibraryID]
 			if err := fSvc.DeleteFile(ctx, entry.FilePath); err != nil {
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete file failed")
 			}
 		}
 		if intake, _ := entry.IntakeMetadata(); intake != nil && intake.OriginalPath != "" && intake.OriginalPath != entry.FilePath {
-			if err := kbFileServices[entry.KnowledgeBaseID].DeleteFile(ctx, intake.OriginalPath); err != nil {
+			if err := libraryFileServices[entry.LibraryID].DeleteFile(ctx, intake.OriginalPath); err != nil {
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete intake original failed")
 			}
 		}
 		storageAdjust -= entry.StorageSize
 	}
-	// Delete extracted images per KB
-	for kbID, urls := range kbImageURLs {
-		fSvc := kbFileServices[kbID]
+	// Delete extracted images per Library
+	for libraryID, urls := range libraryImageURLs {
+		fSvc := libraryFileServices[libraryID]
 		if fSvc == nil {
-			logger.Warnf(ctx, "No file service for KB %s, skipping %d image deletions", kbID, len(urls))
+			logger.Warnf(ctx, "No file service for Library %s, skipping %d image deletions", libraryID, len(urls))
 			continue
 		}
-		deleteExtractedImages(ctx, fSvc, entryResourceOwners(s.resourceCatalog, kbEntryIDs[kbID]...), urls)
+		deleteExtractedImages(ctx, fSvc, entryResourceOwners(s.resourceCatalog, libraryEntryIDs[libraryID]...), urls)
 	}
 	spaceInfo.StorageUsed += storageAdjust
 	if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, storageAdjust); err != nil {
@@ -590,8 +590,8 @@ func (s *entryService) cleanupEntryResources(ctx context.Context, entry *types.E
 	}
 
 	// Collect image URLs before chunks are deleted
-	kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-	fileSvc := s.resolveFileService(ctx, kb)
+	library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+	fileSvc := s.resolveFileService(ctx, library)
 	chunkImageInfos, imgErr := s.chunkService.GetRepository().ListImageInfoByEntryIDs(ctx, spaceInfo.ID, []string{entry.ID})
 	if imgErr != nil {
 		logger.GetLogger(ctx).WithField("error", imgErr).Error("Failed to collect image URLs for cleanup")

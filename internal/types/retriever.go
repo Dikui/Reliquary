@@ -23,8 +23,8 @@ type RetrieveParams struct {
 	Query string
 	// Query embedding (used for vector retrieval)
 	Embedding []float32
-	// Knowledge base IDs
-	KnowledgeBaseIDs []string
+	// Library IDs
+	LibraryIDs []string
 	// Entry IDs
 	EntryIDs []string
 	// Excluded entry IDs
@@ -56,8 +56,8 @@ type IndexWithScore struct {
 	ChunkID string
 	// Entry ID
 	EntryID string
-	// Knowledge base ID
-	KnowledgeBaseID string
+	// Library ID
+	LibraryID string
 	// Score
 	Score float64
 	// Match type

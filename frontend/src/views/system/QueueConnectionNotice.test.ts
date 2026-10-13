@@ -7,7 +7,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../knowledge-base/componentTestHarness'
+import { descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })

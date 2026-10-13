@@ -15,7 +15,7 @@ import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import { safeExternalUrl } from '../utils/externalUrl'
-import type { EntryRepostSource } from '../api/knowledge-base'
+import type { EntryRepostSource } from '../api/library'
 import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML } from '../utils/security'
 import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
 import { CONTENT_TYPES } from '../types/entryClassification'
@@ -49,10 +49,10 @@ function compileSFC(path: string) {
     return component
   } }
 }
-const repostSFC = compileSFC('../views/knowledge-base/components/RepostSources.vue')
+const repostSFC = compileSFC('../views/library/components/RepostSources.vue')
 const detailSFC = compileSFC('./DocContent.vue')
-const actionMenuSFC = compileSFC('../views/knowledge-base/components/DocumentActionMenu.vue')
-const batchBarSFC = compileSFC('../views/knowledge-base/components/DocumentBatchBar.vue')
+const actionMenuSFC = compileSFC('../views/library/components/DocumentActionMenu.vue')
+const batchBarSFC = compileSFC('../views/library/components/DocumentBatchBar.vue')
 const actualRepostSources = repostSFC.create({ '@/utils/externalUrl': { safeExternalUrl } })
 const sharedRepostModule = { __esModule: true, default: actualRepostSources }
 const emptyComponent = defineComponent({ setup: () => () => null })
@@ -62,7 +62,7 @@ const unexpectedAPI = () => { throw new Error('The repost rendering test must no
 const deleteConfirmModule = { __esModule: true, default: compileSFC('./DocumentDeleteConfirm.vue').create() }
 const personalDeleteModule = { __esModule: true, default: compileSFC('./PersonalDocumentDelete.vue').create({
   '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
-  '@/api/knowledge-base': { deleteDocument: unexpectedAPI },
+  '@/api/library': { deleteDocument: unexpectedAPI },
   'tdesign-vue-next': { MessagePlugin: { success: unexpectedAPI } },
 }) }
 
@@ -122,7 +122,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     'highlight.js': { __esModule: true, default: {} },
     mermaid: { __esModule: true, default: { initialize() {} } },
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI } },
-    '@/api/knowledge-base': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI },
+    '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI },
     '@/utils/clipboard': { copyWithToast: async (text: string, successKey: string) => { options.copyRequests?.push({ text, successKey }); return true } },
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL,
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
@@ -133,8 +133,8 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     '@/components/EntryProcessingTimeline.vue': emptyModule,
     '@/components/PersonalDocumentDelete.vue': options.personalDelete || emptyModule,
     '@/components/MissingMaterials.vue': options.missingMaterials || emptyModule, '@/components/IncompleteActions.vue': options.incompleteActions || emptyModule,
-    '@/views/knowledge-base/components/RepostSources.vue': sharedRepostModule,
-    '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+    '@/views/library/components/RepostSources.vue': sharedRepostModule,
+    '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   }, options.environment)
   if (options.scenario) {
     const setup = component.setup
@@ -145,7 +145,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     }
   }
   return renderComponent(component, {
-    visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', entryType: 'document',
+    visible: true, canEditLibrary: false, canDownloadLibrary: false, libraryId: 'library-a', entryType: 'document',
     onReviewChanged: options.onReviewChanged,
     details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
@@ -156,12 +156,12 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
 // are replaced. The resulting reactive details object is passed to the real drawer.
 function createArticleDetailsLoader(records: Record<string, Record<string, unknown>>) {
   const calls: string[] = []
-  const hookSource = readFileSync(new URL('../composables/useKnowledgeBase.ts', import.meta.url), 'utf8')
+  const hookSource = readFileSync(new URL('../composables/useLibrary.ts', import.meta.url), 'utf8')
   const modules = {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-11' },
     'tdesign-vue-next': { MessagePlugin: {} },
-    '@/api/knowledge-base': {
+    '@/api/library': {
       getEntryDetails: async (id: string) => {
         calls.push(id)
         return { success: true, data: { id, title: id, type: 'manual', source_kind: 'article',
@@ -173,7 +173,7 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
   }
-  const hook = evaluate(hookSource, modules).default('kb-a')
+  const hook = evaluate(hookSource, modules).default('library-a')
   return { hook, calls, async load(id: string) {
     hook.getCardDetails({ id })
     await new Promise<void>(resolve => setImmediate(resolve))
@@ -274,7 +274,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await renderDetails([], locale, { loadedDetails })
     assert.deepEqual(loader.calls, ['article'], 'The production hook requested article details')
     assert.match(html, /doc-collect-reason-row/, 'The API reason survives projection into drawer props')
-    assert.ok(html.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(html.includes(messages[locale].library.collectReason))
     assert.ok(html.includes(reason))
   })
 
@@ -291,7 +291,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await new Promise<void>(resolve => setImmediate(resolve))
       const html = await renderDetails([], locale, { loadedDetails: loader.hook.details })
       assert.doesNotMatch(html, /doc-collect-reason-row/)
-      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+      assert.ok(!html.includes(messages[locale].library.collectReason))
       assert.ok(!html.includes('Keep the source.'))
     }
   })
@@ -308,7 +308,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await renderDetails([], locale, { details: { collect_reason: '保存研究来源 <script>alert(1)</script>' } })
     const row = html.match(/<div class="doc-detail-row doc-collect-reason-row">([\s\S]*?)<\/div>/)?.[1]
     assert.ok(row, 'The reason is a basic-information row')
-    assert.ok(row.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(row.includes(messages[locale].library.collectReason))
     assert.ok(row.includes('保存研究来源 &lt;script&gt;alert(1)&lt;/script&gt;'))
     assert.doesNotMatch(row, /<script>/)
   })
@@ -317,7 +317,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     test(`${locale}: article basic information hides an empty collection reason ${JSON.stringify(collect_reason)}`, async () => {
       const html = await renderDetails([], locale, { details: { collect_reason } })
       assert.doesNotMatch(html, /doc-collect-reason-row/)
-      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+      assert.ok(!html.includes(messages[locale].library.collectReason))
     })
   }
 
@@ -356,7 +356,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         details: { source_kind, vault_path: `${source_kind}/note.md` },
         scenario: state => state.reprocess(),
       })
-      assert.ok(!html.includes(messages[locale].knowledgeBase.reprocess))
+      assert.ok(!html.includes(messages[locale].library.reprocess))
     })
   }
 
@@ -369,7 +369,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
     const editable = await render({})
     const hasEditAction = (html: string) => /class="[^"]*doc-action-menu-item[^"]*"[^>]*>[\s\S]*?name="edit"/.test(html)
-    const reprocessLabel = `<span>${messages[locale].knowledgeBase.rebuildDocument}</span>`
+    const reprocessLabel = `<span>${messages[locale].library.rebuildDocument}</span>`
     assert.equal(hasEditAction(editable), false)
     assert.ok(editable.includes(reprocessLabel))
     const article = await render({ source_kind: 'article', vault_path: 'articles/note.md' })
@@ -383,8 +383,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       }
     }
     const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2, reparseAllowed: false }, locale)
-    assert.ok(!mixedBatch.includes(messages[locale].knowledgeBase.rebuildDocument))
-    assert.ok(mixedBatch.includes(messages[locale].knowledgeBase.batchDelete))
+    assert.ok(!mixedBatch.includes(messages[locale].library.rebuildDocument))
+    assert.ok(mixedBatch.includes(messages[locale].library.batchDelete))
   })
 
   test(`${locale}: article detail shows the relative vault path and copies it through the shared clipboard helper`, async () => {
@@ -394,8 +394,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       details: { vault_path: path }, copyRequests,
       scenario: async state => { await state.copyWithToast(path, 'common.copySuccess') },
     })
-    assert.ok(html.includes(messages[locale].knowledgeBase.vaultPath))
-    assert.ok(html.includes(messages[locale].knowledgeBase.copyVaultPath))
+    assert.ok(html.includes(messages[locale].library.vaultPath))
+    assert.ok(html.includes(messages[locale].library.copyVaultPath))
     assert.ok(html.includes(`<code>${path}</code>`))
     assert.deepEqual(copyRequests, [{ text: path, successKey: 'common.copySuccess' }])
     assert.doesNotMatch(await renderDetails([], locale), /doc-vault-path-row/)
@@ -627,7 +627,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(drawerTag(html).includes(`data-drawer-size="${width === 390 ? '100vw' : '654px'}"`))
       const intake = html.match(/<section class="setting-drawer__section intake-review-panel">[\s\S]*?<\/section>/)?.[0]
       assert.ok(intake, 'the actual original preview panel is rendered')
-      assert.ok(intake.includes(messages[locale].knowledgeBase.intakePreviewOriginal))
+      assert.ok(intake.includes(messages[locale].library.intakePreviewOriginal))
       assert.ok(intake.includes(`<a href="${longOriginalURL}" target="_blank" rel="noopener">${longOriginalURL}</a>`),
         'the full original preview URL retains its exact href and visible text')
       const urlSource = html.match(/<div class="url_link_box">[\s\S]*?<\/a><\/div>/)?.[0]
@@ -744,9 +744,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const loader = createArticleDetailsLoader({ converted: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Converted.md' }, direct: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Direct.md' }, report: { source_kind: 'report', channel: 'api', file_type: 'md', vault_path: 'reports/Report.md' } })
     for (const [id, kind] of [['converted', 'mine'], ['direct', 'mine'], ['report', 'report']] as const) {
       const html = await renderDetails([], locale, { loadedDetails: await loader.load(id) })
-      assert.ok(html.includes(messages[locale].knowledgeBase.sourceKinds[kind]), id)
-      assert.ok(!html.includes(messages[locale].knowledgeBase.typeManual), id)
-      assert.ok(!html.includes(`>${messages[locale].knowledgeBase.channelApi}<`), id)
+      assert.ok(html.includes(messages[locale].library.sourceKinds[kind]), id)
+      assert.ok(!html.includes(messages[locale].library.typeManual), id)
+      assert.ok(!html.includes(`>${messages[locale].library.channelApi}<`), id)
       assert.ok(html.includes('MD'), id)
     }
     assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
@@ -788,6 +788,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes(messages[locale].personalDocument.delete))
     assert.ok(!html.includes('metadata-empty-action'))
     assert.ok(!html.includes('name="edit"'))
-    assert.ok(!html.includes(messages[locale].knowledgeBase.rebuildDocument))
+    assert.ok(!html.includes(messages[locale].library.rebuildDocument))
   })
 }

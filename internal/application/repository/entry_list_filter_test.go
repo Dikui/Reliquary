@@ -11,15 +11,15 @@ import (
 	"reliquary/internal/types"
 )
 
-// insertEntryInKB seeds a entry row in the given KB with the given
+// insertEntryInLibrary seeds a entry row in the given Library with the given
 // parse_status so we can assert the list filter's visibility rules.
-func insertEntryInKB(t *testing.T, db *gorm.DB, spaceID uint64, kbID, status string) string {
+func insertEntryInLibrary(t *testing.T, db *gorm.DB, spaceID uint64, libraryID, status string) string {
 	t.Helper()
 	id := uuid.New().String()
 	require.NoError(t, db.Exec(`
-		INSERT INTO entries (id, space_id, knowledge_base_id, type, title, source, parse_status)
+		INSERT INTO entries (id, space_id, library_id, type, title, source, parse_status)
 		VALUES (?, ?, ?, 'file', 'list-filter-test', 'manual', ?)
-	`, id, spaceID, kbID, status).Error)
+	`, id, spaceID, libraryID, status).Error)
 	return id
 }
 
@@ -35,17 +35,17 @@ func TestListPaged_ExcludesDeletingByDefault(t *testing.T) {
 	ctx := context.Background()
 
 	const spaceID = uint64(1)
-	kbID := uuid.New().String()
+	libraryID := uuid.New().String()
 
-	completedID := insertEntryInKB(t, db, spaceID, kbID, "completed")
-	failedID := insertEntryInKB(t, db, spaceID, kbID, "failed")
-	deletingID := insertEntryInKB(t, db, spaceID, kbID, types.ParseStatusDeleting)
+	completedID := insertEntryInLibrary(t, db, spaceID, libraryID, "completed")
+	failedID := insertEntryInLibrary(t, db, spaceID, libraryID, "failed")
+	deletingID := insertEntryInLibrary(t, db, spaceID, libraryID, types.ParseStatusDeleting)
 
 	page := &types.Pagination{Page: 1, PageSize: 100}
 
 	// Default listing (no explicit parse_status): deleting rows are hidden.
-	rows, total, err := repo.ListPagedEntryByKnowledgeBaseID(
-		ctx, spaceID, kbID, page, types.EntryListFilter{},
+	rows, total, err := repo.ListPagedEntryByLibraryID(
+		ctx, spaceID, libraryID, page, types.EntryListFilter{},
 	)
 	require.NoError(t, err)
 	ids := make([]string, 0, len(rows))
@@ -58,8 +58,8 @@ func TestListPaged_ExcludesDeletingByDefault(t *testing.T) {
 
 	// Explicit parse_status=deleting still surfaces the in-flight row so
 	// operators / tooling can inspect stuck deletes.
-	rows, total, err = repo.ListPagedEntryByKnowledgeBaseID(
-		ctx, spaceID, kbID, page,
+	rows, total, err = repo.ListPagedEntryByLibraryID(
+		ctx, spaceID, libraryID, page,
 		types.EntryListFilter{ParseStatus: types.ParseStatusDeleting},
 	)
 	require.NoError(t, err)

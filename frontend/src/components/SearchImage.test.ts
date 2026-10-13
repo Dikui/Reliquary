@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import * as protectedAccess from '../utils/protectedFileAccess'
-import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../views/knowledge-base/componentTestHarness'
+import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../views/library/componentTestHarness'
 
 const messages = { 'zh-CN': zh, 'en-US': en }
 for (const locale of ['zh-CN', 'en-US'] as const) {

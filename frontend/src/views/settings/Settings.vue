@@ -74,7 +74,7 @@
                     <ModelSettings />
                   </div>
 
-                  <div v-if="currentSection === 'knowledge-base'" class="section"><KnowledgeBaseSettings ref="kbSettingsView" :initial-section="currentSubSection || undefined" /></div>
+                  <div v-if="currentSection === 'library'" class="section"><LibrarySettings ref="librarySettingsView" :initial-section="currentSubSection || undefined" /></div>
                   <div v-if="currentSection === 'vault'" class="section"><VaultStatus /></div>
                   <div v-if="currentSection === 'operation-logs'" class="section"><OperationLogs /></div>
                   <!-- 解析引擎 -->
@@ -137,9 +137,9 @@ import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
-import KnowledgeBaseSettings from './KnowledgeBaseSettings.vue'
+import LibrarySettings from './LibrarySettings.vue'
 import VaultStatus from './VaultStatus.vue'
-import OperationLogs from '@/views/knowledge-base/OperationLogs.vue'
+import OperationLogs from '@/views/library/OperationLogs.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
@@ -166,11 +166,11 @@ const uiStore = useUIStore()
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
-const kbSettingsView = ref<InstanceType<typeof KnowledgeBaseSettings>>()
+const librarySettingsView = ref<InstanceType<typeof LibrarySettings>>()
 const spaceInfoView = ref<InstanceType<typeof SpaceInfo>>()
 const canLeaveCurrentSection = () => currentSection.value === 'space'
   ? spaceInfoView.value?.confirmLeave() ?? Promise.resolve(true)
-  : currentSection.value === 'knowledge-base' ? kbSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
+  : currentSection.value === 'library' ? librarySettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
 const expandedMenus = ref<string[]>([])
@@ -225,7 +225,7 @@ const navItems = computed(() => {
     { key: 'general', icon: 'setting', label: t('general.title') },
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
-    { key: 'knowledge-base', icon: 'file', label: t('settings.knowledgeSettings') },
+    { key: 'library', icon: 'file', label: t('settings.librarySettings') },
     { key: 'vault', icon: 'folder', label: t('settings.vault.title') },
     { key: 'operation-logs', icon: 'history', label: t('operationLogs.title') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
@@ -274,7 +274,7 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'knowledge-base', 'vault', 'parser',
+        'library', 'vault', 'parser',
       ]),
     },
     {

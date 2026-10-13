@@ -55,12 +55,12 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
-	kb, err := s.kbService.GetKnowledgeBase(ctx)
+	library, err := s.libraryService.GetLibrary(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if kb.SpaceID != spaceID {
-		return nil, werrors.NewForbiddenError("knowledge base belongs to another space")
+	if library.SpaceID != spaceID {
+		return nil, werrors.NewForbiddenError("library belongs to another space")
 	}
 	now := time.Now()
 	kind := request.Kind
@@ -85,11 +85,11 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		tags = []string{}
 	}
 	tagJSON, _ := json.Marshal(tags)
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, KnowledgeBaseID: kb.ID,
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID,
 		Type: types.EntryTypeManual, SourceKind: kind, Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual,
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
-		EmbeddingModelID: kb.EmbeddingModelID, CollectReason: strings.TrimSpace(request.CollectReason),
+		EmbeddingModelID: library.EmbeddingModelID, CollectReason: strings.TrimSpace(request.CollectReason),
 		AgentSummary: request.AgentSummary, AgentTags: types.JSON(tagJSON), SourceName: request.SourceName,
 		Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint,
 		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName}
@@ -107,7 +107,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	}
 	if request.DocumentID != "" {
 		var existing types.Entry
-		if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND knowledge_base_id=? AND id=?", spaceID, kb.ID, request.DocumentID).First(&existing).Error; err != nil {
+		if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND library_id=? AND id=?", spaceID, library.ID, request.DocumentID).First(&existing).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, werrors.NewBadRequestError("document_id must identify an incomplete user document")
 			}
@@ -119,7 +119,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		if request.URL != "" && article.NormalizedURL != existing.NormalizedURL {
 			return nil, werrors.NewBadRequestError("url must match the user document being supplemented")
 		}
-		return s.supplementIngest(ctx, kb, &existing, request, keyID, keyName)
+		return s.supplementIngest(ctx, library, &existing, request, keyID, keyName)
 	}
 	if discarded, err := s.lookupIngestDiscardKind(ctx, article.NormalizedURL, kind); err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	} else if existing != nil {
 		if existing.Incomplete || ingestMissingContentPending(existing) {
-			return s.supplementIngest(ctx, kb, existing, request, keyID, keyName)
+			return s.supplementIngest(ctx, library, existing, request, keyID, keyName)
 		}
 		if _, err := recordIngestDuplicate(ctx, s.db, existing, article, "url", 0); err != nil {
 			return nil, err
@@ -143,7 +143,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" && (request.File == nil || (request.File.AssetID == "" && request.File.Data == "")) && !hasIngestMissing(request.Missing, "content", "") {
 		return nil, werrors.NewBadRequestError("missing content requires a missing item explaining the reason")
 	}
-	body, canonicalBody, err := s.storeIngestMaterials(ctx, kb, article, request)
+	body, canonicalBody, err := s.storeIngestMaterials(ctx, library, article, request)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 					return nil, err
 				}
 			}
-			return s.supplementIngest(ctx, kb, duplicate, request, keyID, keyName)
+			return s.supplementIngest(ctx, library, duplicate, request, keyID, keyName)
 		}
 		if _, err := recordIngestDuplicate(ctx, s.db, duplicate, article, method, distance); err != nil {
 			return nil, err
@@ -206,7 +206,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if missingContent {
 		return ingestResult(article, "pending_review", "正文缺失，已保存到收录待审。", intake.Reason, ""), nil
 	}
-	return s.finishIngestReview(ctx, kb, article, body)
+	return s.finishIngestReview(ctx, library, article, body)
 }
 
 func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBatchRequest) (*types.IngestBatchResult, error) {
@@ -246,8 +246,8 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 	return result, nil
 }
 
-func (s *entryService) finishIngestReview(ctx context.Context, kb *types.KnowledgeBase, article *types.Entry, body string) (*types.IngestResult, error) {
-	rejected, err := s.reviewIntake(ctx, kb, article, body)
+func (s *entryService) finishIngestReview(ctx context.Context, library *types.Library, article *types.Entry, body string) (*types.IngestResult, error) {
+	rejected, err := s.reviewIntake(ctx, library, article, body)
 	var deferred *types.ChatGPTDeferredError
 	var options []taskqueue.Option
 	if err != nil {

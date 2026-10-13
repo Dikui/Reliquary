@@ -25,8 +25,8 @@ func enableImageSearchFixture(t *testing.T, h *entrySearchFixture) {
 func addImageSearchVector(t *testing.T, h *entrySearchFixture, article *types.Entry, path, modelID string, vector []float32) {
 	t.Helper()
 	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings
-		(entry_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
-		VALUES (?,1,?,?,?,?,?,'fixture')`, article.ID, h.kb.ID, path, modelID, len(vector), pgvector.NewHalfVector(vector)).Error)
+		(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash)
+		VALUES (?,1,?,?,?,?,?,'fixture')`, article.ID, h.library.ID, path, modelID, len(vector), pgvector.NewHalfVector(vector)).Error)
 }
 
 func TestArticleImageSearchRecallsImageOnlyInformationAndReturnsThumbnail(t *testing.T) {

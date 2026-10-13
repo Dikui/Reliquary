@@ -13,7 +13,7 @@ import * as searchHelpers from '../utils/search'
 import * as highlight from './GlobalCommandPalette/useHighlight'
 import * as markdownPlainText from '../utils/markdownPlainText'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../utils/sfcStyleTestHelpers'
-import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from '../views/knowledge-base/componentTestHarness'
+import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from '../views/library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
@@ -80,7 +80,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         }],
       }] } }
     })
-    const page = loadComponent(new URL('../views/knowledge-base/SearchView.vue', import.meta.url), {
+    const page = loadComponent(new URL('../views/library/SearchView.vue', import.meta.url), {
       // URL state supplies the query; this renderer has no native DOM input.
       vue: { ...vue, vModelText: {} },
       '@/api/search': api, '@/utils/search': searchHelpers,

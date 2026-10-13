@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { parseStatusToTimelineStatus } from '../utils/entryProcessingStatus.ts'
-import { CHUNKING_SAMPLES } from '../views/knowledge-base/settings/chunkingSamples.ts'
+import { CHUNKING_SAMPLES } from '../views/library/settings/chunkingSamples.ts'
 import { KNOWN_MODEL_USAGE_BINDINGS, modelUsageBindingI18nKey } from '../api/model-usage.ts'
 import { before, test } from 'node:test'
 
@@ -143,7 +143,7 @@ test('dynamic translation prefixes and mapped keys exist in both locales', () =>
 })
 
 test('indirect translation helpers and relative sample label maps resolve in both locales', () => {
-  const sampleCall = translationCalls.find(call => call.file.endsWith('/KBChunkingDebug.vue') && call.expression.includes('p.labelKey'))
+  const sampleCall = translationCalls.find(call => call.file.endsWith('/LibraryChunkingDebug.vue') && call.expression.includes('p.labelKey'))
   assert.ok(sampleCall?.prefix)
   const keys = [
     ...CHUNKING_SAMPLES.map(sample => `${sampleCall.prefix}${sample.labelKey}`),
@@ -231,7 +231,7 @@ test('parser engine display keys exist in every locale', () => {
   for (const engineName of PARSER_ENGINE_NAMES) {
     for (const [localeName, keys] of Object.entries(localeKeysByName) as Array<[LocaleName, Set<string>]>) {
       for (const suffix of ['name', 'desc'] as const) {
-        const key = `kbSettings.parser.engines.${engineName}.${suffix}`
+        const key = `librarySettings.parser.engines.${engineName}.${suffix}`
         if (!keys.has(key)) failures.push(`${localeName}: missing ${key}`)
       }
     }

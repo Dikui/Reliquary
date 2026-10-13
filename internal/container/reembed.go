@@ -39,7 +39,7 @@ func Reembed(ctx context.Context, action, runID string, progress func(*types.Emb
 	if err != nil {
 		return nil, err
 	}
-	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollamaClient,
+	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewLibraryRepository(db), ollamaClient,
 		embedding.NewBatchEmbedder(workers), service.NewSpaceService(repository.NewSpaceRepository(db)), db)
 	vault, err := service.NewVaultService(db, cfg)
 	if err != nil {

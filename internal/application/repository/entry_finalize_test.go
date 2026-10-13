@@ -25,7 +25,7 @@ const entriesTestDDL = `
 CREATE TABLE IF NOT EXISTS entries (
     id VARCHAR(36) PRIMARY KEY,
     space_id INTEGER NOT NULL,
-    knowledge_base_id VARCHAR(36) NOT NULL,
+    library_id VARCHAR(36) NOT NULL,
     type VARCHAR(50) NOT NULL DEFAULT '',
     title VARCHAR(255) NOT NULL DEFAULT '',
     description TEXT,
@@ -86,7 +86,7 @@ func insertProcessingEntry(t *testing.T, db *gorm.DB) string {
 	t.Helper()
 	id := uuid.New().String()
 	require.NoError(t, db.Exec(`
-		INSERT INTO entries (id, space_id, knowledge_base_id, type, title, source, parse_status, pending_subtasks_count)
+		INSERT INTO entries (id, space_id, library_id, type, title, source, parse_status, pending_subtasks_count)
 		VALUES (?, 1, ?, 'document', 'finalize-test', 'manual', 'processing', 0)
 	`, id, uuid.New().String()).Error)
 	return id
@@ -133,7 +133,7 @@ func insertEntryWithStatus(t *testing.T, db *gorm.DB, status string, deleted boo
 		deletedAt = "2026-06-16 12:00:00"
 	}
 	require.NoError(t, db.Exec(`
-		INSERT INTO entries (id, space_id, knowledge_base_id, type, title, source, parse_status, deleted_at)
+		INSERT INTO entries (id, space_id, library_id, type, title, source, parse_status, deleted_at)
 		VALUES (?, 1, ?, 'document', 'delete-test', 'manual', ?, ?)
 	`, id, uuid.New().String(), status, deletedAt).Error)
 	return id

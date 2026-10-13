@@ -38,7 +38,7 @@ test('primary navigation exposes articles, search, entities, topics, following a
     ['entries', undefined], ['search', undefined], ['entries', 'entities'], ['topics', undefined], ['follows', undefined], ['settings', undefined],
   ])
   const settings = readFileSync(new URL('../../views/settings/Settings.vue', import.meta.url), 'utf8')
-  for (const section of ['knowledge-base', 'models', 'vault', 'operation-logs', 'runtime-queues']) {
+  for (const section of ['library', 'models', 'vault', 'operation-logs', 'runtime-queues']) {
     assert.ok(settings.includes(`currentSection === '${section}'`), section)
     assert.ok(settings.includes(`key: '${section}'`), section)
   }

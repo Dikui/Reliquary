@@ -75,13 +75,13 @@ Please output in the following format (one paragraph per column):
 // It does not create article summaries, chunks or separate queue jobs.
 type DataTableSummaryService struct{}
 
-func (s *entryService) prepareTableProcessingBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry) (string, error) {
+func (s *entryService) prepareTableProcessingBody(ctx context.Context, library *types.Library, k *types.Entry) (string, error) {
 	db, err := sql.Open("duckdb", ":memory:")
 	if err != nil {
 		return "", fmt.Errorf("open table parser: %w", err)
 	}
 	defer db.Close()
-	loader := datatable.NewLoader(s.resolveFileServiceForPath(ctx, kb, k.FilePath), db, "article_table_"+k.ID)
+	loader := datatable.NewLoader(s.resolveFileServiceForPath(ctx, library, k.FilePath), db, "article_table_"+k.ID)
 	defer loader.Cleanup(ctx)
 	schema, err := loader.LoadFromEntry(ctx, k)
 	if err != nil {
@@ -91,13 +91,13 @@ func (s *entryService) prepareTableProcessingBody(ctx context.Context, kb *types
 	if err != nil {
 		return "", err
 	}
-	model, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
+	model, err := GetTierChatModel(ctx, s.db, s.modelService, library, types.ModelTierGeneration)
 	if err != nil {
 		return "", err
 	}
 	helper := &DataTableSummaryService{}
 	overrides, _ := k.ProcessOverrides()
-	instructions := ResolveProcessConfig(kb, overrides).ChunkingConfig.TableMetadataInstructions
+	instructions := ResolveProcessConfig(library, overrides).ChunkingConfig.TableMetadataInstructions
 	sample := helper.buildSampleDataDescription(ctx, rows, 10)
 	ctx = types.WithLLMCallMetadata(ctx, "table_metadata", "")
 	table, err := helper.generateTableDescription(ctx, model, schema.TableName, schema.Description(), sample, instructions)

@@ -89,7 +89,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			entry.JSONNulls = snapshot.JSONNulls[table]
 			entry.Data = rows
 			entry.legacySHA256 = map[int]string{}
-			for _, version := range []int{1, 2} {
+			for _, version := range []int{1, 2, 3} {
 				legacy, _ := json.Marshal(namedRows(portable, true, version))
 				entry.legacySHA256[version] = sum(legacy)
 			}
@@ -447,7 +447,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	currentEmbeddingIDs := map[string]bool{}
 	if allowModelChange {
 		for _, manifest := range []*Manifest{expected, actual} {
-			for _, row := range manifest.Tables["knowledge_bases"].Data {
+			for _, row := range manifest.Tables["libraries"].Data {
 				id := fmt.Sprint(row["embedding_model_id"])
 				if tiers, ok := row["model_tiers"].(map[string]any); ok && nonempty(tiers["embedding"]) {
 					id = fmt.Sprint(tiers["embedding"])
@@ -494,7 +494,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 				right = reconfiguredAPIKeyRows(left, right, expected.Required)
 				rowsMatch = len(left) == len(right)
 			}
-			if allowModelChange && table == "knowledge_bases" {
+			if allowModelChange && table == "libraries" {
 				right = normalizeEmbeddingSelection(left, right)
 			}
 			if allowModelChange && table == "models" {

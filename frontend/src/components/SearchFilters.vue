@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{ options?: SearchOptions; loading?: bool
   options: () => ({ entities: [], topics: [] }), loading: false, disabled: false,
 })
 const { t } = useI18n()
-const contentTypeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })))
+const contentTypeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })))
 const sourceOptions = computed(() => SEARCH_SOURCES.map(value => ({ value, label: t(`knowledgeSearch.sources.${value}`) })))
 const entityOptions = computed(() => props.options.entities.map(entity => ({ value: entity.id, label: entity.canonical_name })))
 const topicOptions = computed(() => props.options.topics.map(topic => ({ value: topic.id, label: topic.name })))

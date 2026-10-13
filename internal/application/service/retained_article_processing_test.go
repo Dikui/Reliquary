@@ -15,16 +15,16 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-type retainedProcessingKB struct {
-	interfaces.KnowledgeBaseService
-	kb *types.KnowledgeBase
+type retainedProcessingLibrary struct {
+	interfaces.LibraryService
+	library *types.Library
 }
 
-func (s retainedProcessingKB) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
-	return s.kb, nil
+func (s retainedProcessingLibrary) GetLibraryByID(context.Context, string) (*types.Library, error) {
+	return s.library, nil
 }
-func (s retainedProcessingKB) GetKnowledgeBaseByIDOnly(context.Context, string) (*types.KnowledgeBase, error) {
-	return s.kb, nil
+func (s retainedProcessingLibrary) GetLibraryByIDOnly(context.Context, string) (*types.Library, error) {
+	return s.library, nil
 }
 
 type retainedProcessingQueue struct{ tasks []*taskqueue.Task }
@@ -57,9 +57,9 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	db := pgtest.Open(t)
 	space := &types.Space{ID: 1, Name: "Space"}
 	require.NoError(t, db.Create(space).Error)
-	kb := &types.KnowledgeBase{ID: "kb", SpaceID: 1, Name: "Articles", Type: types.KnowledgeBaseTypeDocument,
+	library := &types.Library{ID: "library", SpaceID: 1, Name: "Articles", Type: types.LibraryTypeDocument,
 		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512}}
-	require.NoError(t, db.Create(kb).Error)
+	require.NoError(t, db.Create(library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
@@ -69,11 +69,11 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	model := &retainedProcessingChat{}
 	models := &summaryStateModelService{model: model}
 	queue := &retainedProcessingQueue{}
-	bases := retainedProcessingKB{kb: kb}
+	bases := retainedProcessingLibrary{library: library}
 	svc := &entryService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
-		kbService: bases, modelService: models, task: queue, spaceRepo: repository.NewSpaceRepository(db),
+		libraryService: bases, modelService: models, task: queue, spaceRepo: repository.NewSpaceRepository(db),
 		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
-	article, err := svc.createLegacyManualFixture(ctx, kb.ID, &legacyManualFixturePayload{
+	article, err := svc.createLegacyManualFixture(ctx, library.ID, &legacyManualFixturePayload{
 		Title: "Widget announcement", Content: "# Widget\n\nAcme released its new widget product. The original announcement describes deployment choices, supported platforms and the complete product capabilities.", Status: "publish",
 		SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/widget", PublishedAt: "2026-10-01"},
 	}, types.ChannelWeb)

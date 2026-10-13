@@ -23,12 +23,12 @@ func (s *entryService) enqueueManualProcessing(ctx context.Context,
 ) (string, error) {
 	requestID, _ := types.RequestIDFromContext(ctx)
 	payload := types.ManualProcessPayload{
-		RequestId:       requestID,
-		SpaceID:         entry.SpaceID,
-		EntryID:         entry.ID,
-		KnowledgeBaseID: entry.KnowledgeBaseID,
-		Content:         content,
-		NeedCleanup:     needCleanup,
+		RequestId:   requestID,
+		SpaceID:     entry.SpaceID,
+		EntryID:     entry.ID,
+		LibraryID:   entry.LibraryID,
+		Content:     content,
+		NeedCleanup: needCleanup,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -112,7 +112,7 @@ func (s *entryService) bindContentResources(
 }
 
 func (s *entryService) triggerManualProcessing(ctx context.Context,
-	kb *types.KnowledgeBase, entry *types.Entry, content string, _ bool,
+	library *types.Library, entry *types.Entry, content string, _ bool,
 ) error {
 	defer func() {
 		if entry.ParseStatus == types.ParseStatusFailed {
@@ -132,7 +132,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	// Runs before chunking so chunks contain stable provider:// URLs.
 	var resolvedImages []docparser.StoredImage
 	if s.imageResolver != nil && !(s.vault != nil && entry.VaultPath != "" && entry.ProcessingMode == types.ProcessingModeFull) {
-		fileSvc := s.resolveFileService(ctx, kb)
+		fileSvc := s.resolveFileService(ctx, library)
 		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, entry.SpaceID)
 		if err := s.recordIntakeImages(ctx, entry, fromDataURI); err != nil {
 			entry.ParseStatus = types.ParseStatusFailed
@@ -183,7 +183,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			entry.ParseStatus = types.ParseStatusFailed
 			return errors.New("article processing failed")
 		}
-		if err := s.saveIntakeOriginal(ctx, kb, entry, clean, nil); err != nil {
+		if err := s.saveIntakeOriginal(ctx, library, entry, clean, nil); err != nil {
 			entry.ParseStatus = types.ParseStatusFailed
 			return errors.New("article processing failed")
 		}
@@ -199,10 +199,10 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	clean = chunker.NormalizeLineEndings(clean)
 
 	processOverrides, _ := entry.ProcessOverrides()
-	eff := ResolveProcessConfig(kb, processOverrides)
+	eff := ResolveProcessConfig(library, processOverrides)
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
-		rejected, err := s.reviewIntake(ctx, kb, entry, clean)
+		rejected, err := s.reviewIntake(ctx, library, entry, clean)
 		if err != nil {
 			s.markArticleProcessingFailed(ctx, entry, err)
 			return err
@@ -211,7 +211,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			return nil
 		}
 	}
-	if err := s.processArticleBody(ctx, kb, entry, clean, resolvedImages, eff); err != nil {
+	if err := s.processArticleBody(ctx, library, entry, clean, resolvedImages, eff); err != nil {
 		s.markArticleProcessingFailed(ctx, entry, err)
 		return err
 	}

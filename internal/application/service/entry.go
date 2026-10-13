@@ -38,7 +38,7 @@ type entryService struct {
 	config          *config.Config
 	retrieveEngine  interfaces.RetrievalService
 	repo            interfaces.EntryRepository
-	kbService       interfaces.KnowledgeBaseService
+	libraryService  interfaces.LibraryService
 	spaceRepo       interfaces.SpaceRepository
 	spaceService    interfaces.SpaceService
 	chunkService    interfaces.ChunkService
@@ -73,7 +73,7 @@ func NewEntryService(
 	db *gorm.DB,
 	config *config.Config,
 	repo interfaces.EntryRepository,
-	kbService interfaces.KnowledgeBaseService,
+	libraryService interfaces.LibraryService,
 	spaceRepo interfaces.SpaceRepository,
 	spaceService interfaces.SpaceService,
 	chunkService interfaces.ChunkService,
@@ -92,7 +92,7 @@ func NewEntryService(
 		db:              db,
 		config:          config,
 		repo:            repo,
-		kbService:       kbService,
+		libraryService:  libraryService,
 		spaceRepo:       spaceRepo,
 		spaceService:    spaceService,
 		chunkService:    chunkService,
@@ -251,11 +251,11 @@ func (s *entryService) isEntryAborted(
 	return false, entry.ParseStatus
 }
 
-func kbIDOrEmpty(kb *types.KnowledgeBase) string {
-	if kb == nil {
+func libraryIDOrEmpty(library *types.Library) string {
+	if library == nil {
 		return ""
 	}
-	return kb.ID
+	return library.ID
 }
 
 // GetEntryByID retrieves a entry entry by its ID
@@ -271,7 +271,7 @@ func (s *entryService) GetEntryByID(ctx context.Context, id string) (*types.Entr
 		return nil, err
 	}
 
-	reposts, err := loadEntryRepostSources(s.db, spaceID, []string{entry.ID}, []string{entry.KnowledgeBaseID})
+	reposts, err := loadEntryRepostSources(s.db, spaceID, []string{entry.ID}, []string{entry.LibraryID})
 	if err != nil {
 		return nil, err
 	}
@@ -289,19 +289,19 @@ func (s *entryService) GetEntryByIDOnly(ctx context.Context, id string) (*types.
 	return s.repo.GetEntryByIDOnly(ctx, id)
 }
 
-// ListEntryByKnowledgeBaseID returns all entry entries in a knowledge base
-func (s *entryService) ListEntryByKnowledgeBaseID(ctx context.Context,
-	kbID string,
+// ListEntryByLibraryID returns all entry entries in a library
+func (s *entryService) ListEntryByLibraryID(ctx context.Context,
+	libraryID string,
 ) ([]*types.Entry, error) {
-	return s.repo.ListEntryByKnowledgeBaseID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), kbID)
+	return s.repo.ListEntryByLibraryID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), libraryID)
 }
 
-// ListPagedEntryByKnowledgeBaseID returns paginated entry entries in a knowledge base
-func (s *entryService) ListPagedEntryByKnowledgeBaseID(ctx context.Context,
-	kbID string, page *types.Pagination, filter types.EntryListFilter,
+// ListPagedEntryByLibraryID returns paginated entry entries in a library
+func (s *entryService) ListPagedEntryByLibraryID(ctx context.Context,
+	libraryID string, page *types.Pagination, filter types.EntryListFilter,
 ) (*types.PageResult, error) {
-	entries, total, err := s.repo.ListPagedEntryByKnowledgeBaseID(ctx,
-		ctx.Value(types.SpaceIDContextKey).(uint64), kbID, page, filter)
+	entries, total, err := s.repo.ListPagedEntryByLibraryID(ctx,
+		ctx.Value(types.SpaceIDContextKey).(uint64), libraryID, page, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -328,8 +328,8 @@ func (s *entryService) GetEntryFile(ctx context.Context, id string) (io.ReadClos
 
 	// Uploaded source bytes take precedence over the immutable parsed body.
 	if entry.FilePath != "" {
-		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-		file, err := s.resolveFileServiceForPath(ctx, kb, entry.FilePath).GetFile(ctx, entry.FilePath)
+		library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+		file, err := s.resolveFileServiceForPath(ctx, library, entry.FilePath).GetFile(ctx, entry.FilePath)
 		return file, entry.FileName, err
 	}
 	return s.getEntryBody(ctx, entry)
@@ -364,8 +364,8 @@ func (s *entryService) getEntryBody(ctx context.Context, entry *types.Entry) (io
 		return nil, "", err
 	}
 	if parsed.Path != "" {
-		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-		file, err := s.resolveFileServiceForPath(ctx, kb, parsed.Path).GetFile(ctx, parsed.Path)
+		library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+		file, err := s.resolveFileServiceForPath(ctx, library, parsed.Path).GetFile(ctx, parsed.Path)
 		return file, sanitizeManualDownloadFilename(entry.Title), err
 	}
 
@@ -376,8 +376,8 @@ func (s *entryService) getEntryBody(ctx context.Context, entry *types.Entry) (io
 		if intake.OriginalPath == "" {
 			return nil, "", fmt.Errorf("original is not available")
 		}
-		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-		file, getErr := s.resolveFileServiceForPath(ctx, kb, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
+		library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+		file, getErr := s.resolveFileServiceForPath(ctx, library, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
 		return file, sanitizeManualDownloadFilename(entry.Title), getErr
 	}
 	// Legacy manual records still keep their body in metadata.
@@ -395,9 +395,9 @@ func (s *entryService) getEntryBody(ctx context.Context, entry *types.Entry) (io
 		return io.NopCloser(strings.NewReader(content)), filename, nil
 	}
 
-	// Resolve KB-level file service with FilePath fallback protection
-	kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
-	file, err := s.resolveFileServiceForPath(ctx, kb, entry.FilePath).GetFile(ctx, entry.FilePath)
+	// Resolve Library-level file service with FilePath fallback protection
+	library, _ := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
+	file, err := s.resolveFileServiceForPath(ctx, library, entry.FilePath).GetFile(ctx, entry.FilePath)
 	if err != nil {
 		return nil, "", err
 	}
@@ -456,7 +456,7 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 
 	if s.db != nil && record.Title != previousTitle && record.SourceKind != "mine" && record.SourceKind != "report" &&
 		record.StructuredSummary != nil && record.ParseStatus == types.ParseStatusCompleted {
-		kb, err := s.kbService.GetKnowledgeBaseByID(ctx, record.KnowledgeBaseID)
+		library, err := s.libraryService.GetLibraryByID(ctx, record.LibraryID)
 		if err != nil {
 			return err
 		}
@@ -465,7 +465,7 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 			if err := repository.NewEntryRepository(tx).UpdateEntry(ctx, record); err != nil {
 				return err
 			}
-			return indexArticleEmbedding(ctx, tx, s.modelService, kb, record)
+			return indexArticleEmbedding(ctx, tx, s.modelService, library, record)
 		}); err != nil {
 			return err
 		}
@@ -512,9 +512,9 @@ func (s *entryService) SearchEntry(ctx context.Context, keyword string, offset, 
 		return nil, false, 0, werrors.NewUnauthorizedError("Workspace ID not found in context")
 	}
 
-	kb, err := s.kbService.GetKnowledgeBase(ctx)
+	library, err := s.libraryService.GetLibrary(ctx)
 	if err != nil {
 		return nil, false, 0, err
 	}
-	return s.repo.SearchEntryInScopes(ctx, []types.SearchScope{{SpaceID: spaceID, KBID: kb.ID}}, keyword, offset, limit, fileTypes)
+	return s.repo.SearchEntryInScopes(ctx, []types.SearchScope{{SpaceID: spaceID, LibraryID: library.ID}}, keyword, offset, limit, fileTypes)
 }

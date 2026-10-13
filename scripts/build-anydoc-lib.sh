@@ -96,7 +96,7 @@ prepare_patched_anydoc() {
 }
 
 # version.go is what the parser reports as `anydoc_version` on every parsed
-# document, so a bump that misses it would mislabel the whole knowledge base.
+# document, so a bump that misses it would mislabel the whole library.
 go_version=$(sed -n 's/^const Version = "\([^"]*\)".*/\1/p' "$crate_dir/version.go" | head -1)
 if [ "$go_version" != "$anydoc_version" ]; then
   echo "error: version.go says '$go_version' but Cargo.toml pins anydoc '$anydoc_version'." >&2

@@ -148,12 +148,12 @@
         </p>
 
         <div class="model-usage-dialog__content">
-          <section v-if="usageConflict.knowledge_bases.length" class="model-usage-group">
+          <section v-if="usageConflict.libraries.length" class="model-usage-group">
             <h3>
-              {{ $t('modelSettings.usage.knowledgeSettings') }}
+              {{ $t('modelSettings.usage.librarySettings') }}
             </h3>
             <ul>
-              <li v-for="resource in usageConflict.knowledge_bases" :key="resource.id">
+              <li v-for="resource in usageConflict.libraries" :key="resource.id">
                 <div class="model-usage-resource">
                   <strong>{{ resource.name || resource.id }}</strong>
                   <div class="model-usage-bindings">
@@ -171,19 +171,19 @@
                   theme="primary"
                   variant="text"
                   size="small"
-                  @click="openUsageResource('knowledge_base', resource.id, resource.bindings)"
+                  @click="openUsageResource('library', resource.id, resource.bindings)"
                 >
                   {{ $t('modelSettings.usage.openConfiguration') }}
                 </t-button>
               </li>
             </ul>
             <p
-              v-if="modelUsageListTruncated(usageConflict.knowledge_bases, usageConflict.knowledge_base_total)"
+              v-if="modelUsageListTruncated(usageConflict.libraries, usageConflict.library_total)"
               class="model-usage-truncated"
             >
               {{ $t('modelSettings.usage.truncated', {
-                shown: usageConflict.knowledge_bases.length,
-                total: modelUsageResourceCount(usageConflict.knowledge_bases, usageConflict.knowledge_base_total)
+                shown: usageConflict.libraries.length,
+                total: modelUsageResourceCount(usageConflict.libraries, usageConflict.library_total)
               }) }}
             </p>
           </section>
@@ -222,7 +222,7 @@ import {
   deleteModel as deleteModelAPI,
   ModelInUseError,
   modelUsageBindingI18nKey,
-  modelUsageKnowledgeBaseSection,
+  modelUsageLibrarySection,
   modelUsageListTruncated,
   modelUsageResourceCount,
   modelUsageResourceRoute,
@@ -256,10 +256,10 @@ const loading = ref(true)
 const activeTypeFilter = ref<FilterType>('all')
 
 const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank']
-const KNOWLEDGE_BASE_EDITOR_HOST_ROUTES = new Set([
+const LIBRARY_EDITOR_HOST_ROUTES = new Set([
   'home',
-  'knowledgeBaseList',
-  'knowledgeBaseDetail',
+  'libraryList',
+  'libraryDetail',
 ])
 watch(
   () => uiStore.settingsInitialSubSection,
@@ -409,7 +409,7 @@ const loadModels = async () => {
   try {
     const models = await listModels()
     allModels.value = models
-    // 加载后立即更新空间级模型缓存，让知识库编辑器和模型选择器读取最新配置。
+    // 加载后立即更新空间级模型缓存，让库编辑器和模型选择器读取最新配置。
     resources.replaceModels(models)
   } catch (error: any) {
     console.error('加载模型列表失败:', error)
@@ -611,8 +611,8 @@ const openUsageResource = async (
   bindings: readonly string[] = [],
 ) => {
   showUsageDialog.value = false
-  const knowledgeBaseSection = modelUsageKnowledgeBaseSection(bindings)
-  uiStore.openSettings('entry', knowledgeBaseSection)
+  const librarySection = modelUsageLibrarySection(bindings)
+  uiStore.openSettings('entry', librarySection)
 }
 
 // 获取模型操作菜单选项

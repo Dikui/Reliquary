@@ -35,8 +35,8 @@ func (h *ChunkHandler) GetChunkByIDOnly(c *gin.Context) {
 	}
 
 	// Get chunk by ID without space filter (chunk may belong to shared
-	// KB; the route-level KB-access guard already verified read
-	// permission against the parent KB before we got here).
+	// Library; the route-level Library-access guard already verified read
+	// permission against the parent Library before we got here).
 	chunk, err := h.service.GetChunkByIDOnly(ctx, chunkID)
 	if err != nil {
 		if err == service.ErrChunkNotFound {

@@ -19,20 +19,25 @@ func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
 
 func seed(t *testing.T, db *gorm.DB) {
 	t.Helper()
+	require.NoError(t, WithCurrentNames(db, func(tx *gorm.DB) error { seedCurrentNames(t, tx); return nil }))
+}
+
+func seedCurrentNames(t *testing.T, db *gorm.DB) {
+	t.Helper()
 	statements := []string{
 		`INSERT INTO spaces(id,name,business,parser_engine_config,credentials) VALUES(1,'Owner','personal','{"nested":{"mineru_api_key":"PARSER_SECRET","endpoint":"http://localhost"}}','{"app_secret":"SPACE_SECRET"}')`,
 		`INSERT INTO users(id,username,email,password_hash,space_id) VALUES('owner','owner','owner@example.test','$2a$10$preserved-owner-password-hash',1)`,
-		`INSERT INTO knowledge_bases(id,name,space_id,embedding_model_id,summary_model_id,chunking_config,indexing_strategy) VALUES('kb','Personal',1,'embed','chat','{"chunk_size":512,"chunk_overlap":0}','{"keyword_enabled":true,"vector_enabled":true}')`,
+		`INSERT INTO libraries(id,name,space_id,embedding_model_id,summary_model_id,chunking_config,indexing_strategy) VALUES('library','Personal',1,'embed','chat','{"chunk_size":512,"chunk_overlap":0}','{"keyword_enabled":true,"vector_enabled":true}')`,
 		`INSERT INTO models(id,space_id,name,type,source,parameters) VALUES('chat',1,'chat','KnowledgeQA','remote','{"api_key":"MODEL_SECRET","base_url":"http://user:PASSWORD@example.test/v1?api_key=QUERY_SECRET&normal=kept","nested":{"headers":{"Authorization":"Bearer HEADER_SECRET"},"ordinary":"keep"}}'),('embed',1,'embedding','Embedding','remote','{"dimension":3,"base_url":"http://localhost:19100"}')`,
 		`INSERT INTO entities(id,space_id,canonical_name,normalized_name,entity_type,description,created_at,updated_at) VALUES('entity-a',1,'Company A','company a','company','Owner description',now(),now()),('entity-b',1,'Company B','company b','company','Merged description',now(),now())`,
 		`INSERT INTO entity_aliases(id,space_id,entity_type,entity_id,alias,normalized_alias,resolution_method,created_at) VALUES('alias',1,'company','entity-a','A Inc','a inc','exact',now())`,
 		`INSERT INTO entity_merge_records(id,space_id,keep_entity_id,merge_entity_id,actor,created_at) VALUES('merge',1,'entity-a','entity-b','owner',now())`,
 		`UPDATE entities SET merged_into_id='entity-a' WHERE id='entity-b'`,
 		`INSERT INTO topics(id,space_id,name,description) VALUES('topic',1,'Maintenance','User topic description')`,
-		`INSERT INTO entries(id,space_id,knowledge_base_id,type,title,content_type,content_type_corrected,processing_review_status,processing_review_content_type,processing_review_reason,source_unverified,processing_mode,source_kind,source,parse_status,metadata,custom_metadata,collect_reason,agent_summary,agent_tags,vault_body) VALUES('pending',1,'kb','manual','Pending source','research',false,'','','',false,'full','article','','rejected','{"manual":{"content":"Original review text"},"intake":{"decision":"rejected","reason":"missing link"}}','{"caller":"Grok"}','collect because useful','Caller summary','["tag"]','Pending original'),('article',1,'kb','manual','Research article','research',true,'pending','research','uncertain classification',true,'full','article','','completed','{"intake":{"decision":"approved","source_info":{"publisher":"Publisher"}}}','{}','owner reason','','[]','Immutable body')`,
+		`INSERT INTO entries(id,space_id,library_id,type,title,content_type,content_type_corrected,processing_review_status,processing_review_content_type,processing_review_reason,source_unverified,processing_mode,source_kind,source,parse_status,metadata,custom_metadata,collect_reason,agent_summary,agent_tags,vault_body) VALUES('pending',1,'library','manual','Pending source','research',false,'','','',false,'full','article','','rejected','{"manual":{"content":"Original review text"},"intake":{"decision":"rejected","reason":"missing link"}}','{"caller":"Grok"}','collect because useful','Caller summary','["tag"]','Pending original'),('article',1,'library','manual','Research article','research',true,'pending','research','uncertain classification',true,'full','article','','completed','{"intake":{"decision":"approved","source_info":{"publisher":"Publisher"}}}','{}','owner reason','','[]','Immutable body')`,
 		`INSERT INTO entry_entities(space_id,entry_id,entity_id) VALUES(1,'article','entity-a')`,
 		`INSERT INTO entry_topics(space_id,entry_id,topic_id,source,is_historical) VALUES(1,'article','topic','user',true)`,
-		`INSERT INTO entry_repost_sources(id,space_id,knowledge_base_id,entry_id,original_url,source_fingerprint,match_method,created_at) VALUES('repost',1,'kb','article','https://example.test/repost','abcdef','url',now())`,
+		`INSERT INTO entry_repost_sources(id,space_id,library_id,entry_id,original_url,source_fingerprint,match_method,created_at) VALUES('repost',1,'library','article','https://example.test/repost','abcdef','url',now())`,
 		`INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity','entity-a'),(1,'topic','topic')`,
 		`INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T12:00:00Z')`,
 		`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-1',1,'owner','follow','entity-a','{}','{"followed":true}')`,
@@ -285,7 +290,7 @@ func TestVectorManifestComparesCoverageAndProfileNotValuesOrChunkIDs(t *testing.
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
-	for _, statement := range []string{`INSERT INTO chunks(id,space_id,knowledge_base_id,entry_id,content,chunk_index,start_at,end_at,content_hash) VALUES('chunk-a',1,'kb','article','observations',0,0,12,'chunkhash')`, `INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,knowledge_base_id,model_id,dimension,embedding) VALUES('chunk-a',0,'chunk-a','article','kb','embed',3,'[1,0,0]')`, `INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','embed',3,'[1,0,0]','articlehash')`, `INSERT INTO image_embeddings(entry_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'kb','../../attachments/article/image.png','embed',3,'[1,0,0]','imagehash')`, `UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`} {
+	for _, statement := range []string{`INSERT INTO chunks(id,space_id,library_id,entry_id,content,chunk_index,start_at,end_at,content_hash) VALUES('chunk-a',1,'library','article','observations',0,0,12,'chunkhash')`, `INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding) VALUES('chunk-a',0,'chunk-a','article','library','embed',3,'[1,0,0]')`, `INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','embed',3,'[1,0,0]','articlehash')`, `INSERT INTO image_embeddings(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','../../attachments/article/image.png','embed',3,'[1,0,0]','imagehash')`, `UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
 	wanted, err := BuildManifest(ctx, db, root, "")

@@ -5,20 +5,20 @@ import (
 	"reliquary/internal/types"
 )
 
-func knowledgeBaseModelUsageBindings(kb *types.KnowledgeBase, modelID string) []types.ModelUsageBinding {
-	bindings := kb.ModelTiers.UsageBindings(modelID)
-	if kb.EmbeddingModelID == modelID {
+func libraryModelUsageBindings(library *types.Library, modelID string) []types.ModelUsageBinding {
+	bindings := library.ModelTiers.UsageBindings(modelID)
+	if library.EmbeddingModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingEmbeddingModel)
 	}
-	if kb.SummaryModelID == modelID {
+	if library.SummaryModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingSummaryModel)
 	}
 	return bindings
 }
 
-// scopeKnowledgeBasesByModelID filters knowledge_bases rows that reference
+// scopeLibrariesByModelID filters libraries rows that reference
 // modelID in any model-binding field.
-func scopeKnowledgeBasesByModelID(db *gorm.DB, modelID string) *gorm.DB {
+func scopeLibrariesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 	return db.Where(
 		"embedding_model_id = ? OR summary_model_id = ? OR "+
 			"model_tiers->>'light' = ? OR model_tiers->>'entity_resolution' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?",

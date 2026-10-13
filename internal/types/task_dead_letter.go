@@ -10,7 +10,7 @@ import (
 // is populated by the queue dead-letter middleware whenever a task exhausts
 // its retry budget. Every registered task type shares this archive.
 //
-// Operators query by (Scope, ScopeID) — e.g. "all dead letters for KB
+// Operators query by (Scope, ScopeID) — e.g. "all dead letters for Library
 // abc", or by TaskType, e.g. "all document:process failures in the
 // last 24h". The table has no TTL; rows are kept until manually pruned.
 type TaskDeadLetter struct {
@@ -25,7 +25,7 @@ type TaskDeadLetter struct {
 	// "unknown" when the middleware doesn't recognize the task type's
 	// payload.
 	Scope string `json:"scope" gorm:"type:varchar(32)"`
-	// Identifier within scope, e.g. kbID for scope="knowledge_base".
+	// Identifier within scope, e.g. libraryID for a library-scoped record.
 	ScopeID string `json:"scope_id" gorm:"type:varchar(64)"`
 	// Optional secondary identifier for grouping failures by source document.
 	RelatedID string `json:"related_id" gorm:"type:varchar(64);default:''"`
@@ -50,8 +50,9 @@ func (TaskDeadLetter) TableName() string {
 // should prefer these so SQL queries (run from the ops console) don't
 // have to guess at variations.
 const (
-	TaskScopeKnowledgeBase = "knowledge_base"
-	TaskScopeEntry         = "knowledge"
-	TaskScopeSpace         = "tenant"
-	TaskScopeUnknown       = "unknown"
+	// Persisted discriminator stays stable so existing archives keep their scope.
+	TaskScopeLibrary = "knowledge_base"
+	TaskScopeEntry   = "knowledge"
+	TaskScopeSpace   = "tenant"
+	TaskScopeUnknown = "unknown"
 )

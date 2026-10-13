@@ -54,12 +54,12 @@ func markEntryProcessing(entry *types.Entry, now time.Time) {
 	entry.UpdatedAt = now
 }
 
-// buildSplitterConfig creates a SplitterConfig with fallbacks from a KnowledgeBase.
+// buildSplitterConfig creates a SplitterConfig with fallbacks from a Library.
 // Defaults mirror chunker.DefaultChunkSize / DefaultChunkOverlap so behavior is
 // identical whether callers come through this path or invoke the chunker
 // directly with a zero-value config.
-func buildSplitterConfig(kb *types.KnowledgeBase) chunker.SplitterConfig {
-	return buildSplitterConfigFromChunking(kb.ChunkingConfig)
+func buildSplitterConfig(library *types.Library) chunker.SplitterConfig {
+	return buildSplitterConfigFromChunking(library.ChunkingConfig)
 }
 
 func buildSplitterConfigFromChunking(cc types.ChunkingConfig) chunker.SplitterConfig {
@@ -86,7 +86,7 @@ func buildParentChildConfigs(cc types.ChunkingConfig, base chunker.SplitterConfi
 
 // processChunks processes chunks and creates embeddings for entry content
 func (s *entryService) processChunks(ctx context.Context,
-	kb *types.KnowledgeBase, entry *types.Entry, chunks []types.ParsedChunk,
+	library *types.Library, entry *types.Entry, chunks []types.ParsedChunk,
 	opts ...ProcessChunksOptions,
 ) {
 	ctx, _ = types.WithModelCallCollector(ctx)
@@ -124,9 +124,9 @@ func (s *entryService) processChunks(ctx context.Context,
 
 	// Get embedding model for vectorization — only needed when vector/keyword indexing is enabled
 	var embeddingModel embedding.Embedder
-	if kb.NeedsEmbeddingModel() {
+	if library.NeedsEmbeddingModel() {
 		var err error
-		embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
+		embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, library)
 		if err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks get embedding model failed")
 			entry.ParseStatus, entry.ErrorMessage = types.ParseStatusFailed, err.Error()
@@ -135,7 +135,7 @@ func (s *entryService) processChunks(ctx context.Context,
 		}
 		entry.EmbeddingModelID = embeddingModel.GetModelID()
 	} else {
-		logger.Infof(ctx, "Vector/keyword indexing disabled for KB %s, skipping embedding model", kb.ID)
+		logger.Infof(ctx, "Vector/keyword indexing disabled for Library %s, skipping embedding model", library.ID)
 	}
 
 	// 幂等性处理：清理旧的chunks和索引数据，避免重复数据
@@ -164,7 +164,7 @@ func (s *entryService) processChunks(ctx context.Context,
 
 	// ========== DocReader 解析结果日志 ==========
 	logger.Infof(ctx, "[DocReader] ========== 解析结果概览 ==========")
-	logger.Infof(ctx, "[DocReader] 知识ID: %s, 知识库ID: %s", entry.ID, entry.KnowledgeBaseID)
+	logger.Infof(ctx, "[DocReader] 知识ID: %s, 库ID: %s", entry.ID, entry.LibraryID)
 	logger.Infof(ctx, "[DocReader] 总Chunk数量: %d", len(chunks))
 
 	// 统计图片信息
@@ -218,18 +218,18 @@ func (s *entryService) processChunks(ctx context.Context,
 		parentDBChunks = make([]*types.Chunk, len(options.ParentChunks))
 		for i, pc := range options.ParentChunks {
 			parentDBChunks[i] = &types.Chunk{
-				ID:              uuid.New().String(),
-				SpaceID:         entry.SpaceID,
-				EntryID:         entry.ID,
-				KnowledgeBaseID: entry.KnowledgeBaseID,
-				Content:         pc.Content,
-				ChunkIndex:      pc.Seq,
-				IsEnabled:       true,
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
-				StartAt:         pc.Start,
-				EndAt:           pc.End,
-				ChunkType:       types.ChunkTypeParentText,
+				ID:         uuid.New().String(),
+				SpaceID:    entry.SpaceID,
+				EntryID:    entry.ID,
+				LibraryID:  entry.LibraryID,
+				Content:    pc.Content,
+				ChunkIndex: pc.Seq,
+				IsEnabled:  true,
+				CreatedAt:  time.Now(),
+				UpdatedAt:  time.Now(),
+				StartAt:    pc.Start,
+				EndAt:      pc.End,
+				ChunkType:  types.ChunkTypeParentText,
 			}
 		}
 		// Set prev/next links for parent chunks
@@ -257,19 +257,19 @@ func (s *entryService) processChunks(ctx context.Context,
 
 		// 创建主文本Chunk
 		textChunk := &types.Chunk{
-			ID:              uuid.New().String(),
-			SpaceID:         entry.SpaceID,
-			EntryID:         entry.ID,
-			KnowledgeBaseID: entry.KnowledgeBaseID,
-			Content:         chunkData.Content,
-			ContextHeader:   chunkData.ContextHeader,
-			ChunkIndex:      int(chunkData.Seq),
-			IsEnabled:       true,
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
-			StartAt:         int(chunkData.Start),
-			EndAt:           int(chunkData.End),
-			ChunkType:       types.ChunkTypeText,
+			ID:            uuid.New().String(),
+			SpaceID:       entry.SpaceID,
+			EntryID:       entry.ID,
+			LibraryID:     entry.LibraryID,
+			Content:       chunkData.Content,
+			ContextHeader: chunkData.ContextHeader,
+			ChunkIndex:    int(chunkData.Seq),
+			IsEnabled:     true,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+			StartAt:       int(chunkData.Start),
+			EndAt:         int(chunkData.End),
+			ChunkType:     types.ChunkTypeText,
 		}
 		if len(chunkData.Images) > 0 {
 			infos := make([]types.ImageInfo, 0, len(chunkData.Images))
@@ -349,10 +349,10 @@ func (s *entryService) processChunks(ctx context.Context,
 	// Create index information and perform vector indexing, only when vector/keyword is enabled.
 	// Chunks are ALWAYS saved to DB (above) because entry context needs them even without vector indexing.
 	var totalStorageSize int64
-	if kb.NeedsEmbeddingModel() && embeddingModel != nil {
+	if library.NeedsEmbeddingModel() && embeddingModel != nil {
 		embedInput := types.JSONMap{
 			"chunks_to_embed": len(textChunks),
-			"model_id":        kb.EmbeddingModelID,
+			"model_id":        library.EmbeddingModelID,
 		}
 		if dim := embeddingModel.GetDimensions(); dim > 0 {
 			embedInput["dim"] = dim
@@ -367,13 +367,13 @@ func (s *entryService) processChunks(ctx context.Context,
 			// exactly one article prefix line followed by the chunk body.
 			indexContent := buildEntryIndexContent(entry, chunk.Content)
 			indexInfoList = append(indexInfoList, &types.IndexInfo{
-				Content:         indexContent,
-				SourceID:        chunk.ID,
-				SourceType:      types.ChunkSourceType,
-				ChunkID:         chunk.ID,
-				EntryID:         entry.ID,
-				KnowledgeBaseID: entry.KnowledgeBaseID,
-				IsEnabled:       true,
+				Content:    indexContent,
+				SourceID:   chunk.ID,
+				SourceType: types.ChunkSourceType,
+				ChunkID:    chunk.ID,
+				EntryID:    entry.ID,
+				LibraryID:  entry.LibraryID,
+				IsEnabled:  true,
 			})
 		}
 
@@ -407,7 +407,7 @@ func (s *entryService) processChunks(ctx context.Context,
 
 			// delete index
 			if err := retrieveEngine.DeleteByEntryIDList(
-				ctx, []string{entry.ID}, embeddingModel.GetDimensions(), kb.Type,
+				ctx, []string{entry.ID}, embeddingModel.GetDimensions(), library.Type,
 			); err != nil {
 				logger.Errorf(ctx, "Delete index failed: %v", err)
 			}
@@ -437,14 +437,14 @@ func (s *entryService) processChunks(ctx context.Context,
 				if err := s.chunkService.DeleteChunksByEntryID(ctx, entry.ID); err != nil {
 					logger.Warnf(ctx, "Failed to cleanup chunks after deletion detected: %v", err)
 				}
-				if err := retrieveEngine.DeleteByEntryIDList(ctx, []string{entry.ID}, embeddingModel.GetDimensions(), kb.Type); err != nil {
+				if err := retrieveEngine.DeleteByEntryIDList(ctx, []string{entry.ID}, embeddingModel.GetDimensions(), library.Type); err != nil {
 					logger.Warnf(ctx, "Failed to cleanup index after deletion detected: %v", err)
 				}
 			}
 			return
 		}
 	} else {
-		logger.Infof(ctx, "Vector/keyword indexing disabled for KB %s, skipping BatchIndex", kb.ID)
+		logger.Infof(ctx, "Vector/keyword indexing disabled for Library %s, skipping BatchIndex", library.ID)
 		s.skipStage(ctx, entry.ID, types.StageEmbedding, "skipped")
 	}
 
@@ -490,10 +490,10 @@ func (s *entryService) ReparseEntry(
 		return nil, werrors.NewBadRequestError("use the intake review action for this message")
 	}
 
-	// Get knowledge base configuration
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, existing.KnowledgeBaseID)
+	// Get library configuration
+	library, err := s.libraryService.GetLibraryByID(ctx, existing.LibraryID)
 	if err != nil {
-		logger.Errorf(ctx, "Failed to get knowledge base for reparse: %v", err)
+		logger.Errorf(ctx, "Failed to get library for reparse: %v", err)
 		return nil, err
 	}
 
@@ -502,7 +502,7 @@ func (s *entryService) ReparseEntry(
 	// to metadata so both this call's enqueue and the worker re-read the same
 	// config. nil keeps whatever was stored at upload time.
 	if processOverrides != nil {
-		if err := ValidateProcessOverrides(ctx, kb, processOverrides, reparseFileTypes(existing)); err != nil {
+		if err := ValidateProcessOverrides(ctx, library, processOverrides, reparseFileTypes(existing)); err != nil {
 			return nil, err
 		}
 		if err := existing.SetProcessOverrides(processOverrides); err != nil {
@@ -532,7 +532,7 @@ func (s *entryService) ReparseEntry(
 		logger.Warnf(ctx, "Open article reprocessing attempt: %v", attemptErr)
 	}
 	if hasBody {
-		resetEntryForReparse(existing, kb)
+		resetEntryForReparse(existing, library)
 		if err := s.repo.UpdateEntry(ctx, existing); err != nil {
 			return nil, err
 		}
@@ -552,7 +552,7 @@ func (s *entryService) ReparseEntry(
 	}
 
 	// Step 2: Update entry status and metadata
-	resetEntryForReparse(existing, kb)
+	resetEntryForReparse(existing, library)
 
 	if err := s.repo.UpdateEntry(ctx, existing); err != nil {
 		logger.Errorf(ctx, "Failed to update entry status before reparse: %v", err)
@@ -572,14 +572,14 @@ func (s *entryService) ReparseEntry(
 
 		lang := types.LanguageFromContextOrDefault(ctx)
 		taskPayload := types.DocumentProcessPayload{
-			SpaceID:         spaceID,
-			EntryID:         existing.ID,
-			KnowledgeBaseID: existing.KnowledgeBaseID,
-			FilePath:        existing.FilePath,
-			FileName:        existing.FileName,
-			FileType:        getFileType(existing.FileName),
-			Language:        lang,
-			Attempt:         reparseAttempt,
+			SpaceID:   spaceID,
+			EntryID:   existing.ID,
+			LibraryID: existing.LibraryID,
+			FilePath:  existing.FilePath,
+			FileName:  existing.FileName,
+			FileType:  getFileType(existing.FileName),
+			Language:  lang,
+			Attempt:   reparseAttempt,
 		}
 
 		payloadBytes, err := json.Marshal(taskPayload)
@@ -611,7 +611,7 @@ func (s *entryService) ReparseEntry(
 // resetEntryForReparse makes the top-level entry state describe the
 // new processing attempt rather than retaining terminal state from the
 // previous one.
-func resetEntryForReparse(entry *types.Entry, kb *types.KnowledgeBase) {
+func resetEntryForReparse(entry *types.Entry, library *types.Library) {
 	entry.ParseStatus = types.ParseStatusPending
 	entry.EnableStatus = "disabled"
 	entry.Description = ""
@@ -619,7 +619,7 @@ func resetEntryForReparse(entry *types.Entry, kb *types.KnowledgeBase) {
 	entry.SummaryStatus = types.SummaryStatusPending
 	entry.ProcessedAt = nil
 	entry.ErrorMessage = ""
-	entry.EmbeddingModelID = kb.EmbeddingModelID
+	entry.EmbeddingModelID = library.EmbeddingModelID
 	// UpdateEntry deliberately omits pending_subtasks_count, so callers
 	// must still persist this reset through an explicit column update.
 	entry.PendingSubtasksCount = 0
@@ -780,11 +780,11 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 		return nil
 	}
 
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, payload.KnowledgeBaseID)
+	library, err := s.libraryService.GetLibraryByID(ctx, payload.LibraryID)
 	if err != nil {
-		logger.Errorf(ctx, "ProcessManualUpdate: failed to get knowledge base: %v", err)
+		logger.Errorf(ctx, "ProcessManualUpdate: failed to get library: %v", err)
 		entry.ParseStatus = "failed"
-		entry.ErrorMessage = fmt.Sprintf("failed to get knowledge base: %v", err)
+		entry.ErrorMessage = fmt.Sprintf("failed to get library: %v", err)
 		entry.UpdatedAt = time.Now()
 		s.repo.UpdateEntry(ctx, entry)
 		return nil
@@ -828,7 +828,7 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 	}
 
 	// Run manual processing (image resolution + chunking + embedding) synchronously within the worker
-	return s.triggerManualProcessing(ctx, kb, entry, payload.Content, true)
+	return s.triggerManualProcessing(ctx, library, entry, payload.Content, true)
 }
 
 // ProcessDocument handles PostgreSQL queue document processing tasks
@@ -938,19 +938,19 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		logger.Warnf(ctx, "Unexpected parse status: %s for entry: %s", entry.ParseStatus, payload.EntryID)
 	}
 
-	// 获取知识库信息
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, payload.KnowledgeBaseID)
+	// 获取库信息
+	library, err := s.libraryService.GetLibraryByID(ctx, payload.LibraryID)
 	if err != nil {
-		logger.Errorf(ctx, "failed to get knowledge base: %v", err)
+		logger.Errorf(ctx, "failed to get library: %v", err)
 		entry.ParseStatus = "failed"
-		entry.ErrorMessage = fmt.Sprintf("failed to get knowledge base: %v", err)
+		entry.ErrorMessage = fmt.Sprintf("failed to get library: %v", err)
 		entry.UpdatedAt = time.Now()
 		s.repo.UpdateEntry(ctx, entry)
 		return nil
 	}
 
 	processOverrides, _ := entry.ProcessOverrides()
-	eff := ResolveProcessConfig(kb, processOverrides)
+	eff := ResolveProcessConfig(library, processOverrides)
 
 	// Re-check abort status right before flipping to "processing" — closes
 	// the race where the user cancels between the entry guard above and
@@ -1006,7 +1006,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		convertResult = &types.ReadResult{MarkdownContent: strings.Join(payload.Passages, "\n\n")}
 	} else {
 		// File import
-		convertResult, err = s.convert(ctx, payload, kb, entry, eff, isLastRetry)
+		convertResult, err = s.convert(ctx, payload, library, entry, eff, isLastRetry)
 		if err != nil {
 			return err
 		}
@@ -1019,7 +1019,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	var storedImages []docparser.StoredImage
 
 	if s.imageResolver != nil && convertResult != nil {
-		fileSvc := s.resolveFileService(ctx, kb)
+		fileSvc := s.resolveFileService(ctx, library)
 		spaceID, _ := ctx.Value(types.SpaceIDContextKey).(uint64)
 		updatedMarkdown, images, resolveErr := s.imageResolver.ResolveAndStore(ctx, convertResult, fileSvc, spaceID)
 		if err := s.recordIntakeImages(ctx, entry, images); err != nil {
@@ -1067,13 +1067,13 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		if s.hasUnstoredArticleImages(entry, convertResult.MarkdownContent) {
 			return fmt.Errorf("intake has unstored content images")
 		}
-		if err := s.saveIntakeOriginal(ctx, kb, entry, convertResult.MarkdownContent, convertResult.Metadata); err != nil {
+		if err := s.saveIntakeOriginal(ctx, library, entry, convertResult.MarkdownContent, convertResult.Metadata); err != nil {
 			return err
 		}
 	}
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
-		rejected, reviewErr := s.reviewIntake(ctx, kb, entry, convertResult.MarkdownContent)
+		rejected, reviewErr := s.reviewIntake(ctx, library, entry, convertResult.MarkdownContent)
 		if reviewErr != nil {
 			return reviewErr
 		}
@@ -1082,14 +1082,14 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		}
 	}
 	if isDataTableFileType(entry.FileType) {
-		body, err := s.prepareTableProcessingBody(ctx, kb, entry)
+		body, err := s.prepareTableProcessingBody(ctx, library, entry)
 		if err != nil {
 			s.markArticleProcessingFailed(ctx, entry, err)
 			return err
 		}
 		convertResult.MarkdownContent = body
 	}
-	if err := s.processArticleBody(ctx, kb, entry, convertResult.MarkdownContent, storedImages, eff); err != nil {
+	if err := s.processArticleBody(ctx, library, entry, convertResult.MarkdownContent, storedImages, eff); err != nil {
 		s.markArticleProcessingFailed(ctx, entry, err)
 		return err
 	}
@@ -1123,7 +1123,7 @@ func sanitizeReadResult(result *types.ReadResult) {
 func (s *entryService) convert(
 	ctx context.Context,
 	payload types.DocumentProcessPayload,
-	kb *types.KnowledgeBase,
+	library *types.Library,
 	entry *types.Entry,
 	eff types.EffectiveProcessConfig,
 	isLastRetry bool,
@@ -1177,7 +1177,7 @@ func (s *entryService) convert(
 	}
 
 	{
-		fileReader, err := s.resolveFileServiceForPath(ctx, kb, payload.FilePath).GetFile(ctx, payload.FilePath)
+		fileReader, err := s.resolveFileServiceForPath(ctx, library, payload.FilePath).GetFile(ctx, payload.FilePath)
 		if err != nil {
 			s.failStage(ctx, entry.ID, types.StageDocReader,
 				werrors.ErrCodeDocReaderParseFailed, "failed to get file", err)
@@ -1213,8 +1213,8 @@ func (s *entryService) convert(
 		return nil, err
 	}
 	if result.Error != "" {
-		logger.Errorf(ctx, "[convert] parser returned error kb=%s entry=%s file=%q type=%s engine=%q: %s",
-			kb.ID, entry.ID, req.FileName, fileType, parserEngine, result.Error)
+		logger.Errorf(ctx, "[convert] parser returned error library=%s entry=%s file=%q type=%s engine=%q: %s",
+			library.ID, entry.ID, req.FileName, fileType, parserEngine, result.Error)
 		entry.ParseStatus = "failed"
 		entry.ErrorMessage = result.Error
 		entry.UpdatedAt = time.Now()
@@ -1246,8 +1246,8 @@ func (s *entryService) callDocReaderWithTimeout(
 	ctx context.Context, reader interfaces.DocReader, req *types.ReadRequest,
 ) (*types.ReadResult, error) {
 	timeout := 30 * time.Minute
-	if s.config != nil && s.config.KnowledgeBase != nil && s.config.KnowledgeBase.ParserCallTimeout > 0 {
-		timeout = s.config.KnowledgeBase.ParserCallTimeout
+	if s.config != nil && s.config.Library != nil && s.config.Library.ParserCallTimeout > 0 {
+		timeout = s.config.Library.ParserCallTimeout
 	}
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

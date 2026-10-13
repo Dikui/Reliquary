@@ -19,7 +19,7 @@ function testRoutes(): RouteRecordRaw[] {
   return createApplicationRoutes().map(stub)
 }
 
-test('removed feature routes return to knowledge bases with one notice', async () => {
+test('removed feature routes return to libraries with one notice', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   let notices = 0
   router.afterEach(to => notifyRemovedFeatureRedirect(to, () => { notices++ }))
@@ -98,7 +98,7 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   }
 })
 
-test('login and registration return to knowledge bases and removed conversation pages show not found', async () => {
+test('login and registration return to libraries and removed conversation pages show not found', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   for (const path of ['/', '/platform']) {
     await router.push(path)
@@ -116,7 +116,7 @@ test('login and registration return to knowledge bases and removed conversation 
 
 test('old knowledge list and ID routes redirect to the single article page', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const old of ['/platform/knowledge-bases', '/platform/knowledge-bases/kb-a', '/platform/knowledge-bases/kb-a/documents']) {
+  for (const old of ['/platform/libraries', '/platform/libraries/library-a', '/platform/libraries/library-a/documents']) {
     await router.push(old + '?entry_id=article-a')
     assert.equal(router.currentRoute.value.path, '/platform/entries')
     assert.equal(router.currentRoute.value.query.entry_id, 'article-a')
@@ -165,5 +165,13 @@ test('old collection page URLs redirect to the article list instead of not found
     assert.equal(router.currentRoute.value.name, 'entries', path)
     assert.equal(router.currentRoute.value.fullPath, '/platform/entries', path)
     assert.deepEqual(router.currentRoute.value.params, {})
+  }
+})
+
+ test('retired library URLs have no redirect aliases', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  for (const path of ['/platform/knowledge-bases', '/platform/knowledge-bases/old/documents']) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
   }
 })

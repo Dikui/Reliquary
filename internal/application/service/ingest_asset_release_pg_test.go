@@ -50,7 +50,7 @@ func TestDiscardReleasesOriginalIngestAssetsAndKeepsURLLedger(t *testing.T) {
 			require.Equal(t, result.EntryID, original.EntryID)
 			require.NotNil(t, original.ReferencedAt)
 			if mode == "shared_owner" {
-				other := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "file", Title: "Other retained owner", SourceKind: "mine", FilePath: original.Path, FileType: "txt"}
+				other := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "file", Title: "Other retained owner", SourceKind: "mine", FilePath: original.Path, FileType: "txt"}
 				require.NoError(t, h.db.Create(other).Error)
 				require.NoError(t, h.service.resourceCatalog.Bind(h.ctx, original.Path, types.ResourceOwnerEntry, other.ID, types.ResourceRelationSourceFile))
 			}

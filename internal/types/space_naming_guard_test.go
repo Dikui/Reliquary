@@ -19,6 +19,7 @@ type namingException struct {
 // Each exception allows specific literal tokens in a specific file. Go
 // identifiers are checked separately and have no exceptions.
 var namingExceptions = map[string]namingException{
+	"internal/types/library_payload_test.go":                               {Reason: "验证旧队列归属键可读且新写入使用库字段", Tokens: []string{"tenant_id"}},
 	"cmd/server/maintenance_sources_pg_test.go":                            {Reason: "冻结基线恢复的真实离线 CLI 顺序使用旧归属列夹具", Tokens: []string{"tenant_id"}},
 	"internal/maintenance/collection_migration_pg_test.go":                 {Reason: "冻结基线备份恢复到当前版本的真实旧表与归属列夹具", Tokens: []string{"tenants", "tenant_id"}},
 	"internal/application/service/entry_reprocess_missing_pg_test.go":      {Reason: "验证旧采集任务 payload 不再联网且保留旧文章状态", Tokens: []string{"tenant_id"}},

@@ -82,8 +82,8 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			f := newMCPFixture(t)
 			f.seedProcessingModels(t)
 			write := reportWriter(t, f, transport)
-			f.kb.ModelTiers.Embedding = "missing-embedding"
-			require.NoError(t, f.db.Save(f.kb).Error)
+			f.library.ModelTiers.Embedding = "missing-embedding"
+			require.NoError(t, f.db.Save(f.library).Error)
 			markdown := "# Retried report\n\nreportqueueretryfixture preserves verified findings."
 			report := write("Retried report", markdown)
 			require.NotEmpty(t, report.ID)
@@ -108,8 +108,8 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 				var job queue.Job
 				return f.db.First(&job, "id=?", jobs[0].ID).Error == nil && job.State == queue.TaskStateRetry && job.Retried == 1
 			}, 5*time.Second, 10*time.Millisecond)
-			f.kb.ModelTiers.Embedding = "mcp-embedding"
-			require.NoError(t, f.db.Save(f.kb).Error)
+			f.library.ModelTiers.Embedding = "mcp-embedding"
+			require.NoError(t, f.db.Save(f.library).Error)
 			require.Eventually(t, func() bool {
 				var entry types.Entry
 				return f.db.First(&entry, "id=?", report.ID).Error == nil && entry.ParseStatus == types.ParseStatusCompleted
@@ -136,8 +136,8 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	f := newMCPFixture(t)
 	f.seedProcessingModels(t)
-	f.kb.ModelTiers.Embedding = "missing-embedding"
-	require.NoError(t, f.db.Save(f.kb).Error)
+	f.library.ModelTiers.Embedding = "missing-embedding"
+	require.NoError(t, f.db.Save(f.library).Error)
 	write := reportWriter(t, f, "HTTP")
 	report := write("Exhausted report", "# Exhausted report\n\nSaved source survives exhausted retries.")
 	var job queue.Job
@@ -171,8 +171,8 @@ func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	require.Equal(t, "failed", failed.IndexStatus)
 	require.True(t, failed.Existing)
 	// Background scans leave retries and their exhausted state under queue control.
-	f.kb.ModelTiers.Embedding = "mcp-embedding"
-	require.NoError(t, f.db.Save(f.kb).Error)
+	f.library.ModelTiers.Embedding = "mcp-embedding"
+	require.NoError(t, f.db.Save(f.library).Error)
 	require.NoError(t, f.documents.Scan(f.ctx, false))
 	var entry types.Entry
 	require.NoError(t, f.db.First(&entry, "id=?", report.ID).Error)

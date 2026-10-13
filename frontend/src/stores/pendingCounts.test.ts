@@ -148,17 +148,17 @@ function fixture(t: TestContext) {
 }
 
 function pageHandlers(bindings: Record<string, unknown>) {
-  const page = source('../views/knowledge-base/KnowledgeBase.vue')
+  const page = source('../views/library/Library.vue')
   const { descriptor } = parse(page)
   assert.ok(descriptor.scriptSetup)
-  const ast = ts.createSourceFile('KnowledgeBase.ts', descriptor.scriptSetup.content, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS)
+  const ast = ts.createSourceFile('Library.ts', descriptor.scriptSetup.content, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS)
   const names = ['handlePendingChanged', 'handleReviewChanged']
   const statements = ast.statements.filter(statement => ts.isVariableStatement(statement)
     && statement.declarationList.declarations.some(declaration => ts.isIdentifier(declaration.name) && names.includes(declaration.name.text)))
   assert.equal(statements.length, names.length)
   assert.match(descriptor.template!.content, /<PendingReviews\b[^>]*@changed="handlePendingChanged"/)
   assert.match(descriptor.template!.content, /<DocContent\b[^>]*@review-changed="handleReviewChanged"/)
-  assert.match(descriptor.template!.content, /@click="activeKbTab = 'reviews'"[^>]*>[^<]*<PendingCountBadge\s*\/>[^<]*<\/button>/)
+  assert.match(descriptor.template!.content, /@click="activeLibraryTab = 'reviews'"[^>]*>[^<]*<PendingCountBadge\s*\/>[^<]*<\/button>/)
   const code = statements.map(statement => statement.getText(ast)).join('\n') + '\nexport { handlePendingChanged, handleReviewChanged }'
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const value = { exports: {} as any }
@@ -296,7 +296,7 @@ test('actual page change handlers refresh the shared navigation badge after conf
   let closed = 0, pendingRefreshes = 0, pageResets = 0
   const handlers = pageHandlers({
     pendingCounts: f.store,
-    kbId: ref('single-kb'),
+    libraryId: ref('single-library'),
     loadEntryFiles: async (id: string) => { loadedBases.push(id) },
     pendingReviewsRef: ref({ refresh: async () => { pendingRefreshes++ } }),
     details: { id: 'article-a' },
@@ -323,7 +323,7 @@ test('actual page change handlers refresh the shared navigation badge after conf
     assert.equal(f.store.total, 8 - index)
     assert.match(await f.badge('en-US'), new RegExp(`>${8 - index}<\\/span>`))
   }
-  assert.deepEqual(loadedBases, Array(5).fill('single-kb'))
+  assert.deepEqual(loadedBases, Array(5).fill('single-library'))
   assert.equal(closed, 1)
   assert.equal(pageResets, 1)
   assert.equal(pendingRefreshes, 3)

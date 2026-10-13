@@ -18,7 +18,7 @@ type Config struct {
 	ArticleProcessing      *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
 	TopicBackfillBatchSize int                      `yaml:"topic_backfill_batch_size" json:"topic_backfill_batch_size"`
 	Server                 *ServerConfig            `yaml:"server"           json:"server"`
-	KnowledgeBase          *KnowledgeBaseConfig     `yaml:"knowledge_base"   json:"knowledge_base"`
+	Library                *LibraryConfig           `yaml:"library"   json:"library"`
 
 	Models []ModelConfig `yaml:"models"           json:"models"`
 }
@@ -38,8 +38,8 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout" default:"30s"`
 }
 
-// KnowledgeBaseConfig 知识库配置
-type KnowledgeBaseConfig struct {
+// LibraryConfig 库配置
+type LibraryConfig struct {
 	ChunkSize              int           `yaml:"chunk_size"       json:"chunk_size"`
 	ChunkOverlap           int           `yaml:"chunk_overlap"    json:"chunk_overlap"`
 	SplitMarkers           []string      `yaml:"split_markers"    json:"split_markers"`
@@ -60,8 +60,8 @@ const DefaultDocumentProcessTimeout = 2 * time.Hour
 // DocumentProcessTimeout returns the effective document-process task timeout.
 // Partial configs (e.g. unit tests) receive the default when unset.
 func DocumentProcessTimeout(cfg *Config) time.Duration {
-	if cfg != nil && cfg.KnowledgeBase != nil && cfg.KnowledgeBase.DocumentProcessTimeout > 0 {
-		return cfg.KnowledgeBase.DocumentProcessTimeout
+	if cfg != nil && cfg.Library != nil && cfg.Library.DocumentProcessTimeout > 0 {
+		return cfg.Library.DocumentProcessTimeout
 	}
 	return DefaultDocumentProcessTimeout
 }
@@ -143,7 +143,7 @@ func LoadConfig() (*Config, error) {
 	resolvedConfigDir = filepath.Dir(viper.ConfigFileUsed())
 
 	// Validate configuration values
-	applyKnowledgeBaseEnvOverrides(&cfg)
+	applyLibraryEnvOverrides(&cfg)
 	if raw := os.Getenv("TOPIC_BACKFILL_BATCH_SIZE"); raw != "" {
 		if _, err := fmt.Sscan(raw, &cfg.TopicBackfillBatchSize); err != nil {
 			return nil, fmt.Errorf("invalid TOPIC_BACKFILL_BATCH_SIZE: %w", err)
@@ -171,15 +171,15 @@ func ValidateConfig(cfg *Config) error {
 		errs = append(errs, "article_processing limits must be nonnegative")
 	}
 
-	if cfg.KnowledgeBase != nil {
-		if cfg.KnowledgeBase.ChunkSize <= 0 {
-			errs = append(errs, "knowledge_base.chunk_size must be > 0")
+	if cfg.Library != nil {
+		if cfg.Library.ChunkSize <= 0 {
+			errs = append(errs, "library.chunk_size must be > 0")
 		}
-		if cfg.KnowledgeBase.ChunkOverlap < 0 {
-			errs = append(errs, "knowledge_base.chunk_overlap must be >= 0")
+		if cfg.Library.ChunkOverlap < 0 {
+			errs = append(errs, "library.chunk_overlap must be >= 0")
 		}
-		if cfg.KnowledgeBase.ChunkOverlap >= cfg.KnowledgeBase.ChunkSize {
-			errs = append(errs, "knowledge_base.chunk_overlap must be less than chunk_size")
+		if cfg.Library.ChunkOverlap >= cfg.Library.ChunkSize {
+			errs = append(errs, "library.chunk_overlap must be less than chunk_size")
 		}
 	}
 
@@ -195,24 +195,24 @@ func ValidateConfig(cfg *Config) error {
 	return nil
 }
 
-func applyKnowledgeBaseEnvOverrides(cfg *Config) {
-	if cfg.KnowledgeBase == nil {
-		cfg.KnowledgeBase = &KnowledgeBaseConfig{}
+func applyLibraryEnvOverrides(cfg *Config) {
+	if cfg.Library == nil {
+		cfg.Library = &LibraryConfig{}
 	}
-	if cfg.KnowledgeBase.DocumentProcessTimeout <= 0 {
-		cfg.KnowledgeBase.DocumentProcessTimeout = DefaultDocumentProcessTimeout
+	if cfg.Library.DocumentProcessTimeout <= 0 {
+		cfg.Library.DocumentProcessTimeout = DefaultDocumentProcessTimeout
 	}
 	if value := strings.TrimSpace(os.Getenv("RELIQUARY_DOCUMENT_PROCESS_TIMEOUT")); value != "" {
 		if d, err := time.ParseDuration(value); err == nil {
-			cfg.KnowledgeBase.DocumentProcessTimeout = d
+			cfg.Library.DocumentProcessTimeout = d
 		}
 	}
-	if cfg.KnowledgeBase.ParserCallTimeout <= 0 {
-		cfg.KnowledgeBase.ParserCallTimeout = 30 * time.Minute
+	if cfg.Library.ParserCallTimeout <= 0 {
+		cfg.Library.ParserCallTimeout = 30 * time.Minute
 	}
 	if value := strings.TrimSpace(os.Getenv("PARSER_CALL_TIMEOUT")); value != "" {
 		if d, err := time.ParseDuration(value); err == nil && d > 0 {
-			cfg.KnowledgeBase.ParserCallTimeout = d
+			cfg.Library.ParserCallTimeout = d
 		}
 	}
 }

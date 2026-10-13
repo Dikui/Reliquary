@@ -84,7 +84,7 @@ const (
 )
 
 // EntryListFilter aggregates optional filters for listing entry entries
-// under a knowledge base. Empty / zero fields mean "no filter on that dimension".
+// under a library. Empty / zero fields mean "no filter on that dimension".
 type EntryListFilter struct {
 	// SourceKind selects article, mine or report independently of ingestion channel.
 	SourceKind string
@@ -116,8 +116,8 @@ type Entry struct {
 	ID string `json:"id"                 gorm:"type:varchar(36);primaryKey"`
 	// Workspace ID
 	SpaceID uint64 `json:"space_id"`
-	// ID of the knowledge base
-	KnowledgeBaseID string `json:"knowledge_base_id"`
+	// ID of the library
+	LibraryID string `json:"library_id"`
 	// Type of the entry
 	Type string `json:"type"`
 	// Title of the entry
@@ -209,8 +209,8 @@ type Entry struct {
 	ErrorMessage string `json:"error_message"`
 	// Deletion time of the entry
 	DeletedAt gorm.DeletedAt `json:"deleted_at"         gorm:"index"`
-	// Knowledge base name (not stored in database, populated on query)
-	KnowledgeBaseName string `json:"knowledge_base_name" gorm:"-"`
+	// Library name (not stored in database, populated on query)
+	LibraryName string `json:"library_name" gorm:"-"`
 }
 
 // CustomMetadataText returns stable human-readable metadata for summaries and
@@ -394,10 +394,10 @@ func (k *Entry) SetIntakeMetadata(intake *EntryIntakeMetadata) error {
 	return nil
 }
 
-// SearchScope keeps space and knowledge base boundaries explicit for repository queries.
+// SearchScope keeps space and library boundaries explicit for repository queries.
 type SearchScope struct {
-	SpaceID uint64
-	KBID    string
+	SpaceID   uint64
+	LibraryID string
 }
 
 // NewManualEntryMetadata creates a new ManualEntryMetadata instance.

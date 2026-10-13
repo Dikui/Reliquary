@@ -84,7 +84,7 @@ func TestProcessingReviewUncertainTutorialSavesFullSourceAndRemainsSearchable(t 
 	require.Empty(t, processingReviewLogs(t, h, article.ID), "automatic classification does not emit user operation logs")
 	require.Contains(t, h.processor.requests[0][0].Content, "content_type_uncertain")
 	require.Contains(t, h.processor.requests[0][0].Content, "全文保存类型")
-	search := NewSearchService(entrySearchFixtureBases{kb: h.kb}, nil, nil, h.db)
+	search := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, nil, h.db)
 	results, err := search.Search(h.ctx, types.EntrySearchRequest{Query: "reviewbodyneedle", CollapseSimilar: entrySearchNoCollapse()})
 	require.NoError(t, err)
 	require.Contains(t, entrySearchIDs(results), article.ID)
@@ -306,7 +306,7 @@ func TestVaultRebuildPreservesFullTutorialForUncertainAndUnverifiedSources(t *te
 				article = h.upload(t, "rebuild-uncertain", body)
 			} else {
 				h.processor.output = validProcessingFixture(types.ContentTypeTutorial)
-				created, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+				created, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 					newMultipartFileHeader(t, "rebuild-unverified.md", body), map[string]string{"publisher": "Acme"}, nil, "", types.ChannelWeb, nil)
 				require.NoError(t, err)
 				h.drain(t)
@@ -328,8 +328,8 @@ func TestVaultRebuildPreservesFullTutorialForUncertainAndUnverifiedSources(t *te
 			}
 			hashes := vaultFileHashes(t, vault.root)
 			fresh := newRetainedIntakeHarness(t)
-			fresh.kb.ModelTiers, fresh.kb.EmbeddingModelID, fresh.kb.IndexingStrategy = h.kb.ModelTiers, h.kb.EmbeddingModelID, h.kb.IndexingStrategy
-			require.NoError(t, fresh.db.Save(fresh.kb).Error)
+			fresh.library.ModelTiers, fresh.library.EmbeddingModelID, fresh.library.IndexingStrategy = h.library.ModelTiers, h.library.EmbeddingModelID, h.library.IndexingStrategy
+			require.NoError(t, fresh.db.Save(fresh.library).Error)
 			retrieval := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(fresh.db))
 			rebuild, err := NewVaultDocumentService(fresh.db, h.service.modelService, retrieval, vault.root)
 			require.NoError(t, err)
@@ -351,7 +351,7 @@ func TestVaultRebuildPreservesFullTutorialForUncertainAndUnverifiedSources(t *te
 			t.Cleanup(func() { require.NoError(t, freshVault.Close()) })
 			require.NoError(t, freshVault.RefreshHeader(fresh.ctx, article.ID))
 			require.Equal(t, hashes, vaultFileHashes(t, vault.root), "recovery and header refresh must preserve body and attachment bytes")
-			search := NewSearchService(entrySearchFixtureBases{kb: fresh.kb}, nil, nil, fresh.db)
+			search := NewSearchService(entrySearchFixtureBases{library: fresh.library}, nil, nil, fresh.db)
 			results, err := search.Search(fresh.ctx, types.EntrySearchRequest{Query: "reviewbodyneedle", CollapseSimilar: entrySearchNoCollapse()})
 			require.NoError(t, err)
 			require.Contains(t, entrySearchIDs(results), article.ID)

@@ -1,6 +1,6 @@
 import { get, post } from '@/utils/request'
 import type { ContentType, ClassifiedEntry } from '@/types/entryClassification'
-import type { IntakeSourceInfo } from '@/api/knowledge-base'
+import type { IntakeSourceInfo } from '@/api/library'
 
 export type ReviewKind = 'intake' | 'processing'
 export type IntakeReviewAction = 'approve' | 'reject' | 'retry' | 'discard' | 'supplement_url' | 'admit_unverified' | 'convert_to_mine'

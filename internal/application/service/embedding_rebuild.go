@@ -86,10 +86,10 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 	run := &types.EmbeddingRebuildRun{ID: uuid.NewString(), SpaceID: spaceID, Status: "pending", ModelID: profile.modelID,
 		ModelName: profile.embedder.GetModelName(), Dimension: profile.dimension, ProfileHash: profile.hash, CreatedAt: now, UpdatedAt: now}
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Serialize creation in the personal knowledge base while retaining its
+		// Serialize creation in the personal library while retaining its
 		// normal keyword and vector queries throughout the rebuild.
-		var kb types.KnowledgeBase
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=?", spaceID).First(&kb).Error; err != nil {
+		var library types.Library
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=?", spaceID).First(&library).Error; err != nil {
 			return err
 		}
 		if err := r.profiles.checkProfile(tx, spaceID, profile); err != nil {
@@ -438,10 +438,10 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			if current.StructuredSummary == nil || vaultContentHash(strings.TrimSpace(current.Title)+"\n"+current.StructuredSummary.RenderText()) != hash {
 				return errors.New("article changed while embedding; retry this item")
 			}
-			return tx.Exec(`INSERT INTO article_embeddings (space_id,entry_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
+			return tx.Exec(`INSERT INTO article_embeddings (space_id,entry_id,library_id,model_id,dimension,embedding,content_hash)
 				VALUES (?,?,?,?,?,?::halfvec,?) ON CONFLICT (entry_id) DO UPDATE SET model_id=EXCLUDED.model_id,
 				dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,content_hash=EXCLUDED.content_hash,updated_at=NOW()`,
-				run.SpaceID, article.ID, article.KnowledgeBaseID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), hash).Error
+				run.SpaceID, article.ID, article.LibraryID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), hash).Error
 		}
 		var currentChunk types.Chunk
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, chunk.ID).First(&currentChunk).Error; err != nil {
@@ -450,10 +450,10 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		if current.ProcessingMode != types.ProcessingModeFull || vaultContentHash(buildEntryIndexContent(&current, currentChunk.Content)) != hash {
 			return errors.New("document chunk changed while embedding; retry this item")
 		}
-		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,entry_id,knowledge_base_id,model_id,dimension,embedding,is_enabled)
+		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding,is_enabled)
 			VALUES (?,0,?,?,?,?,?,?::halfvec,?) ON CONFLICT (source_id,source_type) DO UPDATE SET model_id=EXCLUDED.model_id,
 			dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,is_enabled=EXCLUDED.is_enabled,updated_at=NOW()`,
-			chunk.ID, chunk.ID, article.ID, article.KnowledgeBaseID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), chunk.IsEnabled).Error; err != nil {
+			chunk.ID, chunk.ID, article.ID, article.LibraryID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), chunk.IsEnabled).Error; err != nil {
 			return err
 		}
 		// The document marker becomes current only after all its chunk vectors

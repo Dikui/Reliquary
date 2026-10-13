@@ -135,16 +135,16 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), middleware.Auth(f.params.SpaceService, f.params.UserService, f.params.APIKeyService))
 	entries := f.articles.(interfaces.EntryService)
-	RegisterEntryRoutes(router.Group("/api/v1"), handler.NewEntryHandler(nil, entries, f.params.KBService, f.queue, nil), newAccessGuards(f.params.KBService, entries, nil))
-	library := &types.Entry{ID: "11111111-1111-4111-8111-111111111111", SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID, Type: "manual", SourceKind: "article", Source: "https://example.org/library", NormalizedURL: "https://example.org/library", Title: "In library", ParseStatus: types.ParseStatusCompleted, Incomplete: true, Acquisition: "extracted"}
+	RegisterEntryRoutes(router.Group("/api/v1"), handler.NewEntryHandler(nil, entries, f.params.LibraryService, f.queue, nil), newAccessGuards(f.params.LibraryService, entries, nil))
+	library := &types.Entry{ID: "11111111-1111-4111-8111-111111111111", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, Type: "manual", SourceKind: "article", Source: "https://example.org/library", NormalizedURL: "https://example.org/library", Title: "In library", ParseStatus: types.ParseStatusCompleted, Incomplete: true, Acquisition: "extracted"}
 	require.NoError(t, library.SetIntakeMetadata(&types.EntryIntakeMetadata{Source: "ingest", Decision: "approved", SourceInfo: types.SourceInfo{OriginalURL: library.Source}}))
 	require.NoError(t, f.db.Create(library).Error)
-	pending := &types.Entry{ID: "22222222-2222-4222-8222-222222222222", SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID, Type: "manual", SourceKind: "article", Source: "https://example.org/pending", NormalizedURL: "https://example.org/pending", Title: "Pending", ParseStatus: types.ParseStatusRejected, Acquisition: "extracted"}
+	pending := &types.Entry{ID: "22222222-2222-4222-8222-222222222222", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, Type: "manual", SourceKind: "article", Source: "https://example.org/pending", NormalizedURL: "https://example.org/pending", Title: "Pending", ParseStatus: types.ParseStatusRejected, Acquisition: "extracted"}
 	require.NoError(t, pending.SetIntakeMetadata(&types.EntryIntakeMetadata{Source: "ingest", Decision: "rejected", Reason: "正文缺失", SourceInfo: types.SourceInfo{OriginalURL: pending.Source}}))
 	require.NoError(t, f.db.Create(pending).Error)
 	discardedID := "33333333-3333-4333-8333-333333333333"
 	require.NoError(t, f.db.Create(&types.IngestDiscard{SpaceID: types.SingleSpaceID, EntryID: discardedID, NormalizedURL: "https://example.org/discarded", Reason: "旧记录已被丢弃"}).Error)
-	require.NoError(t, f.db.Create(&types.EntryRepostSource{ID: "44444444-4444-4444-8444-444444444444", SpaceID: types.SingleSpaceID, KnowledgeBaseID: f.kb.ID, EntryID: library.ID, OriginalURL: "https://example.org/repost", NormalizedURL: "https://example.org/repost", SourceFingerprint: strings.Repeat("a", 64), MatchMethod: "content_hash"}).Error)
+	require.NoError(t, f.db.Create(&types.EntryRepostSource{ID: "44444444-4444-4444-8444-444444444444", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, EntryID: library.ID, OriginalURL: "https://example.org/repost", NormalizedURL: "https://example.org/repost", SourceFingerprint: strings.Repeat("a", 64), MatchMethod: "content_hash"}).Error)
 	response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"urls":["https://example.org/library?utm_campaign=fixture","https://example.org/pending","https://example.org/discarded","https://example.org/not-found","https://example.org/repost"]}`, f.key, false)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var checked struct {

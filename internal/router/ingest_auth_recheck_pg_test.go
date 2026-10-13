@@ -54,7 +54,7 @@ func ingestAuthHTTPRouter(f *mcpFixture) *gin.Engine {
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), middleware.Auth(f.params.SpaceService, f.params.UserService, f.params.APIKeyService))
 	entries := f.articles.(interfaces.EntryService)
-	RegisterEntryRoutes(router.Group("/api/v1"), handler.NewEntryHandler(nil, entries, f.params.KBService, f.queue, nil), newAccessGuards(f.params.KBService, entries, nil))
+	RegisterEntryRoutes(router.Group("/api/v1"), handler.NewEntryHandler(nil, entries, f.params.LibraryService, f.queue, nil), newAccessGuards(f.params.LibraryService, entries, nil))
 	return router
 }
 

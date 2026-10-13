@@ -24,7 +24,7 @@ func TestPersonalPDFParserUnavailableErrorPersistsForAPI(t *testing.T) {
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	source := types.SourceInfo{Author: "Ada", OriginalURL: "https://example.com/sample.pdf", PublishedAt: "2026-01-01"}
 	entry := &types.Entry{
-		ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: "kb",
+		ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: "library",
 		Type: "file", Title: "sample.pdf", FileName: "sample.pdf", FileType: "pdf", FilePath: "input",
 		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled",
 	}
@@ -34,10 +34,10 @@ func TestPersonalPDFParserUnavailableErrorPersistsForAPI(t *testing.T) {
 	require.NoError(t, repo.CreateEntry(ctx, entry))
 	files := &intakeFileService{saved: map[string][]byte{"input": []byte("%PDF-1.4\n")}}
 	svc := &entryService{
-		db: db, repo: repo, kbService: intakeKBService{}, spaceRepo: intakeSpaceRepo{}, fileSvc: files,
+		db: db, repo: repo, libraryService: intakeLibraryService{}, spaceRepo: intakeSpaceRepo{}, fileSvc: files,
 	}
 	payload, err := json.Marshal(types.DocumentProcessPayload{
-		SpaceID: types.SingleSpaceID, EntryID: entry.ID, KnowledgeBaseID: entry.KnowledgeBaseID,
+		SpaceID: types.SingleSpaceID, EntryID: entry.ID, LibraryID: entry.LibraryID,
 		FilePath: entry.FilePath, FileName: entry.FileName, FileType: entry.FileType,
 	})
 	require.NoError(t, err)

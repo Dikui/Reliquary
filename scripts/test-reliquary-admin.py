@@ -18,6 +18,17 @@ spec.loader.exec_module(admin)
 
 
 class AdminStorageTests(unittest.TestCase):
+    def test_library_configuration_renames_only_the_legacy_table_envelope(self):
+        rows = {"data": [{"id": "library", "parameters": {"knowledge_base_id": "opaque"}}]}
+        original = {"models": {"data": []}, "knowledge_bases": rows}
+        mapped = admin.library_configuration_tables(original)
+        self.assertEqual(set(mapped), {"models", "libraries"})
+        self.assertIs(mapped["libraries"], rows)
+        self.assertIn("knowledge_bases", original)
+        self.assertEqual(admin.library_configuration_tables(mapped), mapped)
+        with self.assertRaises(admin.AdminError):
+            admin.library_configuration_tables({"libraries": rows, "knowledge_bases": rows})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="reliquary-admin-test-")
         self.root = Path(self.temp.name)
@@ -716,7 +727,7 @@ class AdminStorageTests(unittest.TestCase):
                 self.root, self.calls, self.ready_vectors, self.current_required = root, [], False, []
                 self.options, self.model_name = [], "original"
             def manifest(self):
-                return {"required_credentials": self.current_required, "tables": {"models": {"data": [{"id": "embedding", "name": self.model_name}]}, "knowledge_bases": {"data": [{"id": "kb", "embedding_model_id": "embedding"}]}, "entities": {"data": [{"id": "entity", "description": "must survive"}]}, "embedding_rebuild_runs": {"data": [{"id": "new-run"}] if self.ready_vectors else []}}, "files": {}, "vectors": []}
+                return {"required_credentials": self.current_required, "tables": {"models": {"data": [{"id": "embedding", "name": self.model_name}]}, "libraries": {"data": [{"id": "library", "embedding_model_id": "embedding"}]}, "entities": {"data": [{"id": "entity", "description": "must survive"}]}, "embedding_rebuild_runs": {"data": [{"id": "new-run"}] if self.ready_vectors else []}}, "files": {}, "vectors": []}
             def sql(self, query):
                 self.calls.append(("sql", query))
                 return "0"
@@ -737,7 +748,7 @@ class AdminStorageTests(unittest.TestCase):
                         current = self.manifest()
                         if expected["tables"].keys() != current["tables"].keys():
                             raise admin.AdminError("unexpected table entities")
-                        if any(expected["tables"][table] != current["tables"][table] for table in ("models", "knowledge_bases")):
+                        if any(expected["tables"][table] != current["tables"][table] for table in ("models", "libraries")):
                             raise admin.AdminError("table models differs")
                     return {"ok": True, "differences": [], "pending_vectors": {"articles": 0 if self.ready_vectors else 1}}
                 return {"ok": True}
@@ -840,7 +851,7 @@ class AdminStorageTests(unittest.TestCase):
     def test_rebuild_configuration_container_mount_is_temporary_and_keeps_required_fields(self):
         package = self.root / ".maintenance-rebuild"
         required = [{"kind": "models", "id": "model", "fields": ["parameters.api_key"]}]
-        original = {"models": {"data": [{"id": "model", "name": "original"}]}, "knowledge_bases": {"data": [{"id": "kb"}]}}
+        original = {"models": {"data": [{"id": "model", "name": "original"}]}, "libraries": {"data": [{"id": "library"}]}}
         admin.json_write(package / "configuration.json", {"tables": original, "required_credentials": required})
         original_hashes = admin.hashes(package)
         class Context:
@@ -850,14 +861,14 @@ class AdminStorageTests(unittest.TestCase):
                 self.root, self.mount = root, None
             def cli_json(self, *args, **kwargs):
                 if args[0] == "manifest":
-                    return {"tables": {"models": {"data": [{"id": "model", "name": "new credentials"}]}, "knowledge_bases": {"data": [{"id": "kb"}]}, "entities": {"data": [{"id": "preserved"}]}}, "required_credentials": [], "files": {"vault": []}}
+                    return {"tables": {"models": {"data": [{"id": "model", "name": "new credentials"}]}, "libraries": {"data": [{"id": "library"}]}, "entities": {"data": [{"id": "preserved"}]}}, "required_credentials": [], "files": {"vault": []}}
                 self.mount = Path(kwargs["overrides"]["RELIQUARY_ADMIN_CLI_PACKAGE_HOST"])
                 projected = json.loads((self.mount / "configuration.json").read_text())
                 self.assertions(projected, args, kwargs)
                 return {"ok": True}
         ctx = Context(self.root)
         def assertions(projected, args, kwargs):
-            self.assertEqual(set(projected["tables"]), {"models", "knowledge_bases", "entities"})
+            self.assertEqual(set(projected["tables"]), {"models", "libraries", "entities"})
             self.assertEqual(projected["tables"]["models"], original["models"])
             self.assertEqual(projected["required_credentials"], required)
             self.assertEqual(args, ("verify", "--manifest", "/maintenance-package/configuration.json"))

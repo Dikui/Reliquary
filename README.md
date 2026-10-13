@@ -4,7 +4,7 @@ Background jobs and application data persist in PostgreSQL, with transactional e
 
 [简体中文](README_CN.md)
 
-Reliquary is a personal information component for collecting, storing, deduplicating, and retrieving articles. One personal space contains one knowledge base. External AI tools perform analysis and write reports through the intake API and MCP.
+Reliquary is a personal information component for collecting, storing, deduplicating, and retrieving articles. One personal space contains one library. External AI tools perform analysis and write reports through the intake API and MCP.
 
 The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0), commit `1edcd54b43606d9079bb36650efe3f68707a79ea`. See [UPSTREAM.md](UPSTREAM.md) for provenance and retained licensing.
 
@@ -20,7 +20,7 @@ The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/W
 | Search | Hybrid full-text and vector retrieval, merged article results, filters for content type, entities, topics, publication dates, stars, and source directory; similar reporting can be collapsed |
 | Personal decisions | Star articles, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical article summaries |
 | External AI | MCP supports search, article reading, collection, pending review, stars, entity/topic lookup, and writing saved analysis |
-| Administration | Knowledge base, models, file library status, operation log, API integration, and runtime queues |
+| Administration | Library, models, file library status, operation log, API integration, and runtime queues |
 
 Article bodies become final when all missing material is supplied or you accept the missing material. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates article headers in one direction; manual header edits in Obsidian may be overwritten. Your documents are indexed without being edited by the application.
 

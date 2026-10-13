@@ -8,7 +8,7 @@ export interface CmdkChunk {
   id: string
   chunk_index: number
   entry_id: string
-  knowledge_base_id: string
+  library_id: string
   entry_title: string
   content: string
   matched_content?: string
@@ -19,7 +19,7 @@ export interface CmdkChunk {
 
 export interface CmdkFileGroup {
   entryId: string
-  kbId: string
+  libraryId: string
   title: string
   chunks: CmdkChunk[]
   source?: SearchEntry['source']
@@ -32,7 +32,7 @@ export interface CmdkFileGroup {
 
 export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
   return articles.map(article => ({
-    entryId: article.entry_id, kbId: '', title: article.title, source: article.source,
+    entryId: article.entry_id, libraryId: '', title: article.title, source: article.source,
     source_unverified: Boolean(article.source_unverified),
     acquisition: article.source === 'article' ? article.acquisition : undefined,
     incomplete: article.source === 'article' ? article.incomplete : undefined,
@@ -40,7 +40,7 @@ export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
     imagePath: article.source === 'article' ? article.snippets?.find(snippet => snippet.image_path)?.image_path : undefined,
     chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.entry_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
       id: snippet.chunk_id, chunk_index: snippet.chunk_index, entry_id: article.entry_id,
-      knowledge_base_id: '', entry_title: article.title, content: snippet.content,
+      library_id: '', entry_title: article.title, content: snippet.content,
       match_type: snippet.match_type, score: article.score,
       image_path: 'image_path' in snippet ? snippet.image_path : undefined,
     })),

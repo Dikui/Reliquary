@@ -153,11 +153,11 @@ func (s *entryService) AcceptIncomplete(ctx context.Context, id string) (*types.
 			return werrors.NewBadRequestError("intake must be reviewed before accepting missing material")
 		}
 		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.ParseStatus == types.ParseStatusCompleted {
-			kb, err := s.kbService.GetKnowledgeBaseByID(ctx, article.KnowledgeBaseID)
+			library, err := s.libraryService.GetLibraryByID(ctx, article.LibraryID)
 			if err != nil {
 				return err
 			}
-			body, err := s.readIngestBody(ctx, kb, &article)
+			body, err := s.readIngestBody(ctx, library, &article)
 			if err != nil {
 				return err
 			}
@@ -239,12 +239,12 @@ func (s *entryService) DiscardIngest(ctx context.Context, id, reason string) err
 // Once missing material is accepted, an already processed summary article has
 // no further need for the private bytes held while completion was possible.
 func (s *entryService) cleanupAcceptedSummaryMaterial(ctx context.Context, k *types.Entry, body string) error {
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, k.KnowledgeBaseID)
+	library, err := s.libraryService.GetLibraryByID(ctx, k.LibraryID)
 	if err != nil {
 		return err
 	}
 	attachments := k.IngestAttachmentRecords()
-	if err := s.removeSummaryOnlyBody(ctx, kb, k, body, nil); err != nil {
+	if err := s.removeSummaryOnlyBody(ctx, library, k, body, nil); err != nil {
 		return err
 	}
 	releaser := entryResourceOwners(s.resourceCatalog, k.ID)
@@ -252,7 +252,7 @@ func (s *entryService) cleanupAcceptedSummaryMaterial(ctx context.Context, k *ty
 		if (!strings.HasPrefix(attachment.Path, "local://") && !strings.HasPrefix(attachment.Path, "resource://")) || !releaser.deletable(ctx, attachment.Path) {
 			continue
 		}
-		if err := s.resolveFileServiceForPath(ctx, kb, attachment.Path).DeleteFile(ctx, attachment.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := s.resolveFileServiceForPath(ctx, library, attachment.Path).DeleteFile(ctx, attachment.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}

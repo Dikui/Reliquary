@@ -20,22 +20,22 @@ const originalURL = computed(() => {
 <template>
   <div class="entry-classification" :class="{ compact }">
     <div class="classification-tags">
-      <t-tag size="small" variant="light-outline">{{ t(`knowledgeBase.contentTypes.${type}`) }}</t-tag>
-      <t-tag size="small" variant="light-outline">{{ t(entry.processing_mode === 'summary_only' ? 'knowledgeBase.processingModes.summary_only' : 'knowledgeBase.processingModes.full') }}</t-tag>
+      <t-tag size="small" variant="light-outline">{{ t(`library.contentTypes.${type}`) }}</t-tag>
+      <t-tag size="small" variant="light-outline">{{ t(entry.processing_mode === 'summary_only' ? 'library.processingModes.summary_only' : 'library.processingModes.full') }}</t-tag>
       <t-tag v-if="entry.source_unverified" size="small" theme="warning" variant="light-outline">{{ t('knowledgeReview.sourceUnverified') }}</t-tag>
       <t-tag v-if="entry.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
       <t-tag v-if="entry.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>
     </div>
     <div v-if="entry.structured_summary" class="structured-summary">
-      <div class="summary-overview"><strong>{{ t('knowledgeBase.summaryOverview') }}</strong><p>{{ plainText(entry.structured_summary.overview) }}</p></div>
-      <div class="summary-points"><strong>{{ t('knowledgeBase.summaryPoints') }}</strong><ul><li v-for="(point, index) in entry.structured_summary.points" :key="index">{{ plainText(point) }}</li></ul></div>
-      <div class="summary-key-terms"><strong>{{ t('knowledgeBase.summaryKeyTerms') }}</strong><span>{{ entry.structured_summary.key_terms.map(plainText).join(' · ') }}</span></div>
+      <div class="summary-overview"><strong>{{ t('library.summaryOverview') }}</strong><p>{{ plainText(entry.structured_summary.overview) }}</p></div>
+      <div class="summary-points"><strong>{{ t('library.summaryPoints') }}</strong><ul><li v-for="(point, index) in entry.structured_summary.points" :key="index">{{ plainText(point) }}</li></ul></div>
+      <div class="summary-key-terms"><strong>{{ t('library.summaryKeyTerms') }}</strong><span>{{ entry.structured_summary.key_terms.map(plainText).join(' · ') }}</span></div>
     </div>
     <p v-else-if="entry.description" class="summary-description">{{ plainText(entry.description) }}</p>
-    <div v-if="entry.entities?.length" class="classification-relations entity-relations"><strong>{{ t('knowledgeBase.articleEntities') }}</strong><span v-for="entity in entry.entities" :key="entity.id" class="relation-target"><button type="button" @click.stop="emit('open-entity', entity.id)">{{ entity.canonical_name }}</button><FollowToggle v-if="followable" target-type="entity" :target-id="entity.id" :name="entity.canonical_name" compact /></span></div>
-    <div v-if="entry.topics?.length" class="classification-relations topic-relations"><strong>{{ t('knowledgeBase.articleTopics') }}</strong><span v-for="topic in entry.topics" :key="topic.id" class="relation-target"><span class="topic-label" :title="topic.description">{{ topic.name }}</span><FollowToggle v-if="followable" target-type="topic" :target-id="topic.id" :name="topic.name" compact /></span></div>
-    <a v-if="entry.processing_mode === 'summary_only' && originalURL" class="original-link" :href="originalURL" target="_blank" rel="noopener noreferrer" @click.stop>{{ t('knowledgeBase.originalArticle') }}: {{ originalURL }}</a>
-    <p v-else-if="entry.processing_mode === 'summary_only'" class="missing-link">{{ t('knowledgeBase.originalLinkMissing') }}</p>
+    <div v-if="entry.entities?.length" class="classification-relations entity-relations"><strong>{{ t('library.articleEntities') }}</strong><span v-for="entity in entry.entities" :key="entity.id" class="relation-target"><button type="button" @click.stop="emit('open-entity', entity.id)">{{ entity.canonical_name }}</button><FollowToggle v-if="followable" target-type="entity" :target-id="entity.id" :name="entity.canonical_name" compact /></span></div>
+    <div v-if="entry.topics?.length" class="classification-relations topic-relations"><strong>{{ t('library.articleTopics') }}</strong><span v-for="topic in entry.topics" :key="topic.id" class="relation-target"><span class="topic-label" :title="topic.description">{{ topic.name }}</span><FollowToggle v-if="followable" target-type="topic" :target-id="topic.id" :name="topic.name" compact /></span></div>
+    <a v-if="entry.processing_mode === 'summary_only' && originalURL" class="original-link" :href="originalURL" target="_blank" rel="noopener noreferrer" @click.stop>{{ t('library.originalArticle') }}: {{ originalURL }}</a>
+    <p v-else-if="entry.processing_mode === 'summary_only'" class="missing-link">{{ t('library.originalLinkMissing') }}</p>
   </div>
 </template>
 

@@ -73,7 +73,7 @@ func normalizeIntakePublicationDate(raw string) string {
 
 // reviewIntake is deliberately strict: malformed model output is an execution
 // failure, never an implicit approval.
-func (s *entryService) reviewIntake(ctx context.Context, kb *types.KnowledgeBase, entry *types.Entry, body string) (rejected bool, reviewErr error) {
+func (s *entryService) reviewIntake(ctx context.Context, library *types.Library, entry *types.Entry, body string) (rejected bool, reviewErr error) {
 	intake, err := entry.IntakeMetadata()
 	if err != nil || intake == nil {
 		return false, err
@@ -128,7 +128,7 @@ func (s *entryService) reviewIntake(ctx context.Context, kb *types.KnowledgeBase
 		}
 		return true, s.repo.UpdateEntry(ctx, entry)
 	}
-	model, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierLight)
+	model, err := GetTierChatModel(ctx, s.db, s.modelService, library, types.ModelTierLight)
 	if err != nil {
 		return false, err
 	}
@@ -186,7 +186,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 	if err != nil {
 		return nil, err
 	}
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
+	library, err := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 		if !missingLink || !source.Confirmed {
 			return nil, werrors.NewBadRequestError("converting intake without an original URL requires explicit confirmation")
 		}
-		return s.convertIntakeToMine(ctx, kb, entry, before)
+		return s.convertIntakeToMine(ctx, library, entry, before)
 	}
 	if action == "admit_unverified" {
 		if !missingLink || !source.Confirmed || strings.TrimSpace(source.OriginalURL) != "" {
@@ -313,7 +313,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 		}
 	}()
 	if intake.OriginalPath != "" {
-		file, err := s.resolveFileServiceForPath(ctx, kb, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
+		file, err := s.resolveFileServiceForPath(ctx, library, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
 		if err != nil {
 			return nil, err
 		}
@@ -326,7 +326,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 			return nil, werrors.NewBadRequestError("stored original is empty")
 		}
 		if action == "supplement_url" {
-			rejected, err := s.reviewIntake(ctx, kb, entry, string(body))
+			rejected, err := s.reviewIntake(ctx, library, entry, string(body))
 			var deferred *types.ChatGPTDeferredError
 			if errors.As(err, &deferred) {
 				s.markArticleProcessingFailed(ctx, entry, err)
@@ -389,7 +389,7 @@ func (s *entryService) recordIntakeImages(ctx context.Context, k *types.Entry, i
 	return s.repo.UpdateEntry(ctx, k)
 }
 
-func (s *entryService) saveIntakeOriginal(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, body string, metadata map[string]string) error {
+func (s *entryService) saveIntakeOriginal(ctx context.Context, library *types.Library, k *types.Entry, body string, metadata map[string]string) error {
 	intake, err := k.IntakeMetadata()
 	if err != nil || intake == nil || intake.Decision != "pending" {
 		return err
@@ -416,7 +416,7 @@ func (s *entryService) saveIntakeOriginal(ctx context.Context, kb *types.Knowled
 		return err
 	}
 	intake, _ = k.IntakeMetadata()
-	fileSvc := s.resolveFileService(ctx, kb)
+	fileSvc := s.resolveFileService(ctx, library)
 	path, err := fileSvc.SaveBytes(ctx, []byte(body), k.SpaceID, k.ID+".md", false)
 	if err != nil {
 		return err
@@ -431,7 +431,7 @@ func (s *entryService) saveIntakeOriginal(ctx context.Context, kb *types.Knowled
 		return err
 	}
 	if previous != "" && previous != path && previous != k.FilePath {
-		if err := s.resolveFileServiceForPath(ctx, kb, previous).DeleteFile(ctx, previous); err != nil {
+		if err := s.resolveFileServiceForPath(ctx, library, previous).DeleteFile(ctx, previous); err != nil {
 			return err
 		}
 	}

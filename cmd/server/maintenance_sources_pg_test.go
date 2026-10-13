@@ -35,7 +35,7 @@ func sourcesAdminFixture(t *testing.T) (*gorm.DB, string, string) {
 	require.NoError(t, a)
 	require.NoError(t, b)
 	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Export owner','personal');
- INSERT INTO data_sources(id,space_id,knowledge_base_id,name,type,config,sync_schedule,status) VALUES('old-source',1,'kb','Retained source','rss','{"url":"https://example.test/feed","credentials":{"token":"private-export-token"}}','0 * * * *','active');
+ INSERT INTO data_sources(id,space_id,knowledge_base_id,name,type,config,sync_schedule,status) VALUES('old-source',1,'library','Retained source','rss','{"url":"https://example.test/feed","credentials":{"token":"private-export-token"}}','0 * * * *','active');
  INSERT INTO sync_logs(id,data_source_id,space_id,status,result) VALUES('old-log','old-source',1,'success','{"created":3}');`).Error)
 	dsn := db.Dialector.(*postgres.Dialector).DSN
 	parsed, err := url.Parse(dsn)
@@ -69,7 +69,7 @@ func TestMaintenanceExportSourcesAndMigratePreserveHistory(t *testing.T) {
 	require.NoError(t, runMaintenanceDatabase(context.Background(), db, dsn, []string{"migrate"}, bytes.NewReader(nil), &output))
 	var version int
 	require.NoError(t, db.Table("schema_migrations").Select("version").Scan(&version).Error)
-	require.Equal(t, 6, version)
+	require.Equal(t, 7, version)
 	var paused bool
 	require.NoError(t, db.Table("maintenance_state").Select("paused").Scan(&paused).Error)
 	require.True(t, paused)
@@ -118,8 +118,8 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 				require.NoError(t, b)
 			}
 			ctx := context.Background()
-			statement := `INSERT INTO knowledge_bases(id,name,space_id,embedding_model_id,summary_model_id,indexing_strategy) VALUES('kb','Restore fixture',1,'','','{"keyword_enabled":true,"vector_enabled":false}');
- INSERT INTO entries(id,space_id,knowledge_base_id,type,source_kind,title,source,channel,content_type,processing_mode,parse_status,enable_status,vault_body,metadata) VALUES('b6cfe58c-2eb4-4cf8-99a7-5482c9c9106c',1,'kb','url','article','Old RSS article','https://example.test/restore-article','rss','research','full','completed','enabled','Original restore research observations.','{"intake":{"source":"rss","decision":"approved","source_info":{"original_url":"https://example.test/restore-article"}}}');`
+			statement := `INSERT INTO knowledge_bases(id,name,space_id,embedding_model_id,summary_model_id,indexing_strategy) VALUES('library','Restore fixture',1,'','','{"keyword_enabled":true,"vector_enabled":false}');
+ INSERT INTO entries(id,space_id,knowledge_base_id,type,source_kind,title,source,channel,content_type,processing_mode,parse_status,enable_status,vault_body,metadata) VALUES('b6cfe58c-2eb4-4cf8-99a7-5482c9c9106c',1,'library','url','article','Old RSS article','https://example.test/restore-article','rss','research','full','completed','enabled','Original restore research observations.','{"intake":{"source":"rss","decision":"approved","source_info":{"original_url":"https://example.test/restore-article"}}}');`
 			if version == 0 {
 				statement = strings.ReplaceAll(strings.ReplaceAll(statement, "space_id", "tenant_id"), "INSERT INTO entries(", "INSERT INTO knowledges(")
 			}

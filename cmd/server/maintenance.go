@@ -217,24 +217,24 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		if err != nil {
 			return err
 		}
-		var kb types.KnowledgeBase
-		if err := db.Table("knowledge_bases").Where("deleted_at IS NULL").First(&kb).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		var library types.Library
+		if err := db.Table("libraries").Where("deleted_at IS NULL").First(&library).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		selected := map[string]any{"id": kb.EmbeddingModelID}
+		selected := map[string]any{"id": library.EmbeddingModelID}
 		for _, model := range models {
-			if model["id"] == kb.EmbeddingModelID {
+			if model["id"] == library.EmbeddingModelID {
 				selected["profile_hash"] = maintenance.ModelProfile(model)
 			}
 		}
 		ids := map[string]bool{}
 		generation := map[string]bool{}
-		for _, id := range []string{kb.EmbeddingModelID, kb.SummaryModelID, kb.ModelTiers.Light, kb.ModelTiers.EntityResolution, kb.ModelTiers.Generation, kb.ModelTiers.Embedding, kb.ModelTiers.Rerank} {
+		for _, id := range []string{library.EmbeddingModelID, library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation, library.ModelTiers.Embedding, library.ModelTiers.Rerank} {
 			if id != "" {
 				ids[id] = true
 			}
 		}
-		for _, id := range []string{kb.SummaryModelID, kb.ModelTiers.Light, kb.ModelTiers.EntityResolution, kb.ModelTiers.Generation} {
+		for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation} {
 			if id != "" {
 				generation[id] = true
 			}

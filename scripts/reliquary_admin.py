@@ -1131,14 +1131,25 @@ def embedding_identity(value):
     return sorted((str(m.get("id")), m.get("name"), m.get("source"), json.dumps({k: v for k, v in m.get("parameters", {}).items() if k in {"base_url", "interface_type", "provider", "embedding_parameters"}}, sort_keys=True)) for m in rows if str(m.get("type")).lower() == "embedding")
 
 
+def library_configuration_tables(tables):
+    # A paused rebuild may retain a configuration projection from format 3.
+    # Keep that file immutable while comparing it with the current manifest.
+    result = dict(tables)
+    if "knowledge_bases" in result:
+        if "libraries" in result:
+            raise AdminError("Duplicate library configuration tables in rebuild baseline")
+        result["libraries"] = result.pop("knowledge_bases")
+    return result
+
+
 def verify_rebuild_configuration(ctx, package, overrides):
     # The verifier requires the complete table set. Use a current manifest only
-    # as the shell for this additional check, keeping the original model and KB
+    # as the shell for this additional check, keeping the original model and Library
     # rows and credential provenance immutable. The full original snapshot is
     # independently verified before and after rebuilding vectors.
     original = json.loads((package / "configuration.json").read_text())
     expected = ctx.cli_json("manifest", overrides=overrides)
-    expected["tables"].update(original["tables"])
+    expected["tables"].update(library_configuration_tables(original["tables"]))
     expected["required_credentials"] = original.get("required_credentials", [])
     expected["files"] = {}
     with tempfile.TemporaryDirectory(prefix=".rebuild-verify-", dir=ctx.root) as temp:
@@ -1182,7 +1193,7 @@ def rebuild(ctx, args):
         json_write(package / "snapshot.json", expected)
         # Keep a separate immutable projection so permitting new vector audit
         # rows cannot also permit changes to an unchanged embedding config.
-        json_write(package / "configuration.json", {**expected, "tables": {table: expected["tables"][table] for table in ("models", "knowledge_bases")}, "files": {}})
+        json_write(package / "configuration.json", {**expected, "tables": {table: expected["tables"][table] for table in ("models", "libraries")}, "files": {}})
         json_write(package / "models.json", ctx.cli_json("models"))
         json_write(package / "manifest.json", {"required_credentials": expected["required_credentials"]})
         state = {"state": "waiting_models", "vault": str(vault), "package": str(package), "verification": verification,
@@ -1226,7 +1237,7 @@ def rebuild(ctx, args):
         before = ctx.cli_json("manifest", overrides=side)
         # The existing compare flag permits new rebuild audit rows. Protect
         # selected model configuration separately across this maintenance call.
-        configuration = {table: before["tables"][table].get("data") for table in ("models", "knowledge_bases")}
+        configuration = {table: before["tables"][table].get("data") for table in ("models", "libraries")}
         state.update(state="rebuilding_vectors", vector_rebuild_started=True)
         json_write(state_path, state)
         ctx.server("reembed", "--preserve-entity-timestamps", overrides=side, capture=False)

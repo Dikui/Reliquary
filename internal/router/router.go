@@ -25,11 +25,11 @@ type RouterParams struct {
 	Config                  *config.Config
 	FileService             interfaces.FileService
 	UserService             interfaces.UserService
-	KBService               interfaces.KnowledgeBaseService
+	LibraryService          interfaces.LibraryService
 	EntryService            interfaces.EntryService
 	ChunkService            interfaces.ChunkService
 	ModelService            interfaces.ModelService
-	KBHandler               *handler.KnowledgeBaseHandler
+	LibraryHandler          *handler.LibraryHandler
 	EntryHandler            *handler.EntryHandler
 	VaultHandler            *handler.VaultHandler       `optional:"true"`
 	MaintenanceHandler      *handler.MaintenanceHandler `optional:"true"`
@@ -127,12 +127,12 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 需要认证的API路由
 	v1 := r.Group("/api/v1")
 	{
-		accessGuards := newAccessGuards(params.KBService, params.EntryService, params.ChunkService)
+		accessGuards := newAccessGuards(params.LibraryService, params.EntryService, params.ChunkService)
 
 		RegisterAuthRoutes(v1, params.AuthHandler, accessGuards)
 		RegisterSpaceRoutes(v1, params.SpaceHandler, accessGuards)
-		RegisterKnowledgeBaseRoutes(v1, params.KBHandler, accessGuards)
-		serveKBScopedFiles(
+		RegisterLibraryRoutes(v1, params.LibraryHandler, accessGuards)
+		serveLibraryScopedFiles(
 			v1,
 			accessGuards,
 			params.SpaceService,
@@ -142,7 +142,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		if params.VaultHandler != nil {
 			v1.GET("/vault/status", params.VaultHandler.Status)
 			v1.POST("/reports", params.VaultHandler.CreateReport)
-			v1.GET("/entries/:id/vault-attachment", accessGuards.KBExistsFromEntryIDParam("id"), params.VaultHandler.Attachment)
+			v1.GET("/entries/:id/vault-attachment", accessGuards.LibraryExistsFromEntryIDParam("id"), params.VaultHandler.Attachment)
 		}
 		if params.MaintenanceHandler != nil {
 			v1.GET("/maintenance/status", params.MaintenanceHandler.Status)

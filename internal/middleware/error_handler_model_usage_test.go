@@ -19,16 +19,16 @@ func TestErrorHandler_PreservesStructuredModelUsageDetails(t *testing.T) {
 	router.Use(ErrorHandler())
 	router.DELETE("/models/:id", func(c *gin.Context) {
 		_ = c.Error(apperrors.NewModelInUseError(
-			"model is used by 2 knowledge base(s); reconfigure or remove those references before deleting",
+			"model is used by 2 library(s); reconfigure or remove those references before deleting",
 			types.ModelUsageDetails{
-				KnowledgeBases: []types.ModelUsageResource{
+				Libraries: []types.ModelUsageResource{
 					{
-						ID:       "kb-1",
+						ID:       "library-1",
 						Name:     "Product docs",
 						Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")},
 					},
 					{
-						ID:   "kb-2",
+						ID:   "library-2",
 						Name: "Engineering",
 						Bindings: []types.ModelUsageBinding{
 							types.ModelUsageBindingEmbeddingModel,
@@ -57,10 +57,10 @@ func TestErrorHandler_PreservesStructuredModelUsageDetails(t *testing.T) {
 	assert.False(t, body.Success)
 	assert.Equal(t, apperrors.ErrModelInUse, body.Error.Code)
 	assert.NotEmpty(t, body.Error.Message)
-	require.Len(t, body.Error.Details.KnowledgeBases, 2)
-	assert.Equal(t, "Product docs", body.Error.Details.KnowledgeBases[0].Name)
+	require.Len(t, body.Error.Details.Libraries, 2)
+	assert.Equal(t, "Product docs", body.Error.Details.Libraries[0].Name)
 	assert.Equal(t,
 		[]types.ModelUsageBinding{types.ModelUsageBindingEmbeddingModel, types.ModelUsageBindingSummaryModel},
-		body.Error.Details.KnowledgeBases[1].Bindings,
+		body.Error.Details.Libraries[1].Bindings,
 	)
 }

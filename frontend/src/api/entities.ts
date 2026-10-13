@@ -18,7 +18,7 @@ export interface Entity {
 }
 export interface EntityEntry {
   id: string
-  knowledge_base_id: string
+  library_id: string
   title?: string
   file_name?: string
   created_at: string

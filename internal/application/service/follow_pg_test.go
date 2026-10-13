@@ -186,7 +186,7 @@ func TestFollowsPostgresMergeTransferDeduplicationAndDeletion(t *testing.T) {
 			}
 			article := h.add(t, "merged-article", "article", "2026-10-01", "event", "semanticlaunch", 0)
 			require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: "entity-other"}).Error)
-			require.NoError(t, h.db.Model(&types.KnowledgeBase{}).Where("id='search-kb'").Update("summary_model_id", "entity-chat").Error)
+			require.NoError(t, h.db.Model(&types.Library{}).Where("id='search-library'").Update("summary_model_id", "entity-chat").Error)
 			entities := NewEntityService(h.db, entityTestModels{model: &entityCountingChat{}})
 			require.NoError(t, entities.MergeEntities(h.ctx, "entity-follow", "entity-other"))
 			items, err := h.follows.ListFollows(h.ctx)
@@ -414,7 +414,7 @@ func TestFollowFeedPostgresLateEligibilityAndAssociationTimes(t *testing.T) {
 	_, err := h.follows.MarkViewed(h.ctx, &opened.ViewedAt)
 	require.NoError(t, err)
 	require.NoError(t, h.db.Table("entries").Where("id='processing-late'").Update("parse_status", types.ParseStatusCompleted).Error)
-	require.NoError(t, h.db.Model(&types.KnowledgeBase{}).Where("id='search-kb'").Update("summary_model_id", "entity-chat").Error)
+	require.NoError(t, h.db.Model(&types.Library{}).Where("id='search-library'").Update("summary_model_id", "entity-chat").Error)
 	entities := NewEntityService(h.db, entityTestModels{model: &entityCountingChat{}})
 	_, err = entities.ResolveEntities(h.ctx, "recognized-late", []types.EntityCandidate{{Name: "Followed company", EntityType: "company"}})
 	require.NoError(t, err)

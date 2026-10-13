@@ -80,11 +80,11 @@ func getFileType(filename string) string {
 	return ext[len(ext)-1]
 }
 
-func (s *entryService) resolveFileService(ctx context.Context, kb *types.KnowledgeBase) interfaces.FileService {
+func (s *entryService) resolveFileService(ctx context.Context, library *types.Library) interfaces.FileService {
 	return s.fileSvc
 }
 
-func (s *entryService) resolveFileServiceForPath(ctx context.Context, kb *types.KnowledgeBase, filePath string) interfaces.FileService {
+func (s *entryService) resolveFileServiceForPath(ctx context.Context, library *types.Library, filePath string) interfaces.FileService {
 	return s.fileSvc
 }
 

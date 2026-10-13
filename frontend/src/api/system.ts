@@ -256,11 +256,11 @@ export interface RuntimeTask {
   is_orphaned?: boolean
   worker?: string
   space_id?: number
-  knowledge_base_id?: string
+  library_id?: string
   entry_id?: string
   task_id?: string
-  source_kb_id?: string
-  target_kb_id?: string
+  source_library_id?: string
+  target_library_id?: string
   entry_count?: number
 }
 

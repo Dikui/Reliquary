@@ -9,7 +9,7 @@ import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import { translatePersonalServerMessage } from './personalServerError'
-import { element, loadComponent, renderer, settle, visibleText } from '../views/knowledge-base/componentTestHarness'
+import { element, loadComponent, renderer, settle, visibleText } from '../views/library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 function evaluate(path: string, modules: Record<string, any>) {
@@ -39,7 +39,7 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = 
    const status = Number(mode)
    throw new AxiosError('failed', AxiosError.ERR_BAD_RESPONSE, packet, undefined, { status, statusText: 'Unavailable', headers: {}, config: packet, data: { success: false, error: { code: status === 503 ? 1008 : 1001, message: 'Authentication temporarily unavailable' } } })
   }
-  if (packet.url?.startsWith('/api/v1/knowledge-bases/kb-entries/entries')) {
+  if (packet.url?.startsWith('/api/v1/libraries/library-entries/entries')) {
     return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: [{ id: 'loaded-entry', source_kind: 'mine', title: 'Original document', updated_at: '2026-10-01T00:00:00Z' }], total: 1 } }
   }
   if (packet.url === '/api/v1/entries/loaded-entry/spans') {
@@ -133,19 +133,19 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
  test(`${locale}: entry requests load through Axios interceptors and the actual Pinia store`, async t => {
   const f=fixture(t,locale)
   f.modules['../utils/request']=f.request
-  const api=evaluate('../api/knowledge-base.ts',f.modules)
+  const api=evaluate('../api/library.ts',f.modules)
   const storeModule=evaluate('../stores/entry.ts',f.modules)
-  const modules={...f.modules,pinia:require('pinia'),'@/api/knowledge-base':api,'@/stores/entry':storeModule,
+  const modules={...f.modules,pinia:require('pinia'),'@/api/library':api,'@/stores/entry':storeModule,
     '../utils/index': { formatStringDate:()=> '2026-10-01' },
     'tdesign-vue-next':{MessagePlugin:{}},'vue-i18n':{useI18n:()=>({t:f.i18n.global.t})},
     }
-  const hook=evaluate('../composables/useKnowledgeBase.ts',modules).default('kb-entries')
+  const hook=evaluate('../composables/useLibrary.ts',modules).default('library-entries')
   await hook.loadEntries()
   assert.equal(storeModule.entryStore().cardList[0].id,'loaded-entry')
   assert.equal(hook.total.value,1)
   const spans=await api.getEntrySpans('loaded-entry')
   assert.equal(spans.data.entry_id,'loaded-entry')
-  const list=f.calls.find(packet=>packet.url?.startsWith('/api/v1/knowledge-bases/kb-entries/entries'))
+  const list=f.calls.find(packet=>packet.url?.startsWith('/api/v1/libraries/library-entries/entries'))
   assert.ok(list)
   assert.equal(list.headers.Authorization,'Bearer valid-session')
   assert.equal(f.calls.at(-1)?.url,'/api/v1/entries/loaded-entry/spans')

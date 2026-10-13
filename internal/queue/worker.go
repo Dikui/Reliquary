@@ -406,14 +406,14 @@ func BuildDeadLetter(t *Task, taskErr error, attempts int) *types.TaskDeadLetter
 		return nil
 	}
 	var p struct {
-		SpaceID         uint64 `json:"tenant_id"`
-		KnowledgeBaseID string `json:"knowledge_base_id"`
-		EntryID         string `json:"knowledge_id"`
+		SpaceID   uint64 `json:"tenant_id"`
+		LibraryID string `json:"library_id"`
+		EntryID   string `json:"knowledge_id"`
 	}
 	_ = types.UnmarshalSpacePayload(t.Payload(), &p)
 	scope, id := types.TaskScopeUnknown, ""
-	if p.KnowledgeBaseID != "" {
-		scope, id = types.TaskScopeKnowledgeBase, p.KnowledgeBaseID
+	if p.LibraryID != "" {
+		scope, id = types.TaskScopeLibrary, p.LibraryID
 	} else if p.EntryID != "" {
 		scope, id = types.TaskScopeEntry, p.EntryID
 	} else if p.SpaceID != 0 {

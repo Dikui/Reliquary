@@ -125,7 +125,7 @@ func TestContentTypeFullToSummaryRequiresConfirmationAndRemovesBodyFiles(t *test
 func uploadedCorrectionSummary(t *testing.T, h *articleProcessingHarness, url string) *types.Entry {
 	t.Helper()
 	h.processor.output = validProcessingFixture("tutorial")
-	k, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "summary-original.md", "A complete original publication contains setup guidance and explains supported deployment instructions."), map[string]string{"publisher": "Fixture publisher", "original_url": url, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+	k, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "summary-original.md", "A complete original publication contains setup guidance and explains supported deployment instructions."), map[string]string{"publisher": "Fixture publisher", "original_url": url, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	return h.article(t, k.ID)

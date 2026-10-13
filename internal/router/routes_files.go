@@ -247,24 +247,24 @@ func serveResourceGrants(
 	r.HEAD("/r/:token", handler)
 }
 
-func serveKBScopedFiles(
+func serveLibraryScopedFiles(
 	r *gin.RouterGroup,
 	g *accessGuards,
 	spaceService interfaces.SpaceService,
 	globalFileService interfaces.FileService,
 	resourceCatalogs ...interfaces.ResourceCatalog) {
-	logger.Infof(context.Background(), "[Router] Serving KB-scoped files from /knowledge-bases/:id/files")
-	r.Handle(http.MethodGet, "/knowledge-bases/:id/files", g.KBExists("id"), newKBScopedFileServeHandlerWithResources(
+	logger.Infof(context.Background(), "[Router] Serving Library-scoped files from /libraries/:id/files")
+	r.Handle(http.MethodGet, "/libraries/:id/files", g.LibraryExists("id"), newLibraryScopedFileServeHandlerWithResources(
 		spaceService,
 		globalFileService,
 		firstResourceCatalog(resourceCatalogs)))
 }
 
-func newKBScopedFileServeHandler(
+func newLibraryScopedFileServeHandler(
 	spaceService interfaces.SpaceService,
 	globalFileService interfaces.FileService,
 ) gin.HandlerFunc {
-	return newKBScopedFileServeHandlerWithResources(spaceService, globalFileService, nil)
+	return newLibraryScopedFileServeHandlerWithResources(spaceService, globalFileService, nil)
 }
 
 func firstResourceCatalog(catalogs []interfaces.ResourceCatalog) interfaces.ResourceCatalog {
@@ -274,7 +274,7 @@ func firstResourceCatalog(catalogs []interfaces.ResourceCatalog) interfaces.Reso
 	return catalogs[0]
 }
 
-func newKBScopedFileServeHandlerWithResources(
+func newLibraryScopedFileServeHandlerWithResources(
 	spaceService interfaces.SpaceService,
 	globalFileService interfaces.FileService,
 	resourceCatalog interfaces.ResourceCatalog) gin.HandlerFunc {
@@ -298,8 +298,8 @@ func newKBScopedFileServeHandlerWithResources(
 			return
 		}
 
-		if err := secutils.ValidateKBScopedStoragePath(filePath, ownerSpaceID); err != nil {
-			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files denied path not allowed for KB proxy: owner_space_id=%d file_path=%q err=%v",
+		if err := secutils.ValidateLibraryScopedStoragePath(filePath, ownerSpaceID); err != nil {
+			logger.Warnf(ctx, "[Router] /libraries/:id/files denied path not allowed for Library proxy: owner_space_id=%d file_path=%q err=%v",
 				ownerSpaceID, filePath, err)
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
 			return
@@ -307,7 +307,7 @@ func newKBScopedFileServeHandlerWithResources(
 
 		space, err := spaceService.GetSpaceByID(ctx, ownerSpaceID)
 		if err != nil || space == nil {
-			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files owner space lookup failed: owner_space_id=%d err=%v",
+			logger.Warnf(ctx, "[Router] /libraries/:id/files owner space lookup failed: owner_space_id=%d err=%v",
 				ownerSpaceID, err)
 			c.Status(http.StatusNotFound)
 			return
@@ -321,7 +321,7 @@ func newKBScopedFileServeHandlerWithResources(
 
 		reader, err := fileSvc.GetFile(ctx, filePath)
 		if err != nil {
-			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files get file failed: owner_space_id=%d provider=%s path=%q err=%v",
+			logger.Warnf(ctx, "[Router] /libraries/:id/files get file failed: owner_space_id=%d provider=%s path=%q err=%v",
 				ownerSpaceID, "local", filePath, err)
 			c.Status(http.StatusNotFound)
 			return
@@ -330,7 +330,7 @@ func newKBScopedFileServeHandlerWithResources(
 		contentType, inline := secutils.SafeContentTypeByFilename(filePath)
 		// Cross-space shared content — keep it private so shared proxies /
 		// CDNs do not cache one space's view for another.
-		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "/knowledge-bases/:id/files")
+		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "/libraries/:id/files")
 	}
 }
 

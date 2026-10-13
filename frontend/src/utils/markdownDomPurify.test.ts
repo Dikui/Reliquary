@@ -19,7 +19,7 @@ test('ALLOWED_URI_REGEXP allows local:// and vault:// and rejects javascript:', 
 });
 
 test('markdown links always open in a new tab', () => {
-  const attributes = new Map([['href', '/platform/knowledge-bases/kb-1']]);
+  const attributes = new Map([['href', '/platform/libraries/library-1']]);
   const anchor = {
     tagName: 'A',
     getAttribute: (name: string) => attributes.get(name) ?? null,

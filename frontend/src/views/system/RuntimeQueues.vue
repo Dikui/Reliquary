@@ -702,11 +702,11 @@ function formatTaskTime(value?: string): string {
 
 function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   const refs: RuntimeTaskMeta[] = []
-  if (task.knowledge_base_id) {
+  if (task.library_id) {
     refs.push({
-      key: 'kb',
-      label: t('system.globalSettings.runtime.tasks.knowledgeBaseLabel'),
-      value: task.knowledge_base_id,
+      key: 'library',
+      label: t('system.globalSettings.runtime.tasks.libraryLabel'),
+      value: task.library_id,
     })
   }
   if (task.entry_id) {
@@ -723,8 +723,8 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
       value: task.task_id,
     })
   }
-  if (task.source_kb_id) refs.push({ key: 'source-kb', label: t('system.globalSettings.runtime.tasks.sourceKBLabel'), value: task.source_kb_id })
-  if (task.target_kb_id) refs.push({ key: 'target-kb', label: t('system.globalSettings.runtime.tasks.targetKBLabel'), value: task.target_kb_id })
+  if (task.source_library_id) refs.push({ key: 'source-library', label: t('system.globalSettings.runtime.tasks.sourceLibraryLabel'), value: task.source_library_id })
+  if (task.target_library_id) refs.push({ key: 'target-library', label: t('system.globalSettings.runtime.tasks.targetLibraryLabel'), value: task.target_library_id })
   if (task.entry_count) {
     refs.push({ key: 'entry-count', label: t('system.globalSettings.runtime.tasks.knowledgeCountLabel'), value: String(task.entry_count) })
   }

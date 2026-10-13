@@ -132,7 +132,7 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 	if k.SourceKind == "mine" {
 		kind = "mine"
 	}
-	query := tx.Model(&types.Entry{}).Where("space_id = ? AND knowledge_base_id = ? AND id <> ?", k.SpaceID, k.KnowledgeBaseID, k.ID).
+	query := tx.Model(&types.Entry{}).Where("space_id = ? AND library_id = ? AND id <> ?", k.SpaceID, k.LibraryID, k.ID).
 		Where("source_kind = ?", kind).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusFailed, types.ParseStatusRejected, types.ManualEntryStatusDraft, types.ParseStatusDeleting, types.ParseStatusCancelled})
 	// Parser workers can see several already-persisted pending messages. A
@@ -158,7 +158,7 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 		}
 		// A previously recorded repost URL points at the same canonical message.
 		if kind == "article" {
-			owners := tx.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id = ? AND knowledge_base_id = ? AND normalized_url = ?", k.SpaceID, k.KnowledgeBaseID, k.NormalizedURL)
+			owners := tx.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id = ? AND library_id = ? AND normalized_url = ?", k.SpaceID, k.LibraryID, k.NormalizedURL)
 			item, err = find(base().Where("id IN (?)", owners))
 			if item != nil || err != nil {
 				return item, "url", 0, err
@@ -217,7 +217,7 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Entry, method st
 	}
 	hash := sha256.Sum256([]byte(origin))
 	repost := types.EntryRepostSource{
-		ID: uuid.NewString(), SpaceID: existing.SpaceID, KnowledgeBaseID: incoming.KnowledgeBaseID, EntryID: existing.ID,
+		ID: uuid.NewString(), SpaceID: existing.SpaceID, LibraryID: incoming.LibraryID, EntryID: existing.ID,
 		OriginalURL: source.OriginalURL, NormalizedURL: normalizedURL, SourceFingerprint: hex.EncodeToString(hash[:]),
 		Author: source.Author, Publisher: source.Publisher, PublishedAt: source.PublishedAt, PublishedAtMissing: parsePublicationTime(source.PublishedAt) == nil,
 		MatchMethod: method, SimHashDistance: distance, CreatedAt: time.Now(),
@@ -254,12 +254,12 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Entry, method st
 	return nil
 }
 
-func (s *entryService) recordKnownMessageRepost(ctx context.Context, existing *types.Entry, kbID string, source types.SourceInfo, method string) error {
+func (s *entryService) recordKnownMessageRepost(ctx context.Context, existing *types.Entry, libraryID string, source types.SourceInfo, method string) error {
 	if s.db == nil || (source.OriginalURL == "" && source.Publisher == "" && source.Author == "") {
 		existing.DuplicateMatchMethod = method
 		return nil
 	}
-	incoming := &types.Entry{SpaceID: existing.SpaceID, KnowledgeBaseID: kbID}
+	incoming := &types.Entry{SpaceID: existing.SpaceID, LibraryID: libraryID}
 	if err := incoming.SetIntakeMetadata(&types.EntryIntakeMetadata{SourceInfo: source}); err != nil {
 		return err
 	}
@@ -272,7 +272,7 @@ func (s *entryService) recordKnownMessageRepost(ctx context.Context, existing *t
 }
 
 func lockMessageDeduplication(tx *gorm.DB, k *types.Entry) error {
-	return tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", fmt.Sprintf("message-dedup:%d:%s", k.SpaceID, k.KnowledgeBaseID)).Error
+	return tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", fmt.Sprintf("message-dedup:%d:%s", k.SpaceID, k.LibraryID)).Error
 }
 
 // checkMessageDuplicate is also called before parser output reaches any model.
@@ -326,14 +326,14 @@ func (s *entryService) createMessageWithDeduplication(ctx context.Context, incom
 	return existing, err
 }
 
-func loadEntryRepostSources(db *gorm.DB, spaceID uint64, entryIDs, kbIDs []string) ([]types.EntryRepostSource, error) {
+func loadEntryRepostSources(db *gorm.DB, spaceID uint64, entryIDs, libraryIDs []string) ([]types.EntryRepostSource, error) {
 	items := []types.EntryRepostSource{}
 	if db == nil || len(entryIDs) == 0 {
 		return items, nil
 	}
 	query := db.Where("space_id = ? AND entry_id IN ?", spaceID, uniqueEntryIDs(entryIDs))
-	if len(kbIDs) > 0 {
-		query = query.Where("knowledge_base_id IN ?", kbIDs)
+	if len(libraryIDs) > 0 {
+		query = query.Where("library_id IN ?", libraryIDs)
 	}
 	err := query.Order("created_at ASC, id ASC").Find(&items).Error
 	return items, err

@@ -84,11 +84,11 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, "data:image/png;base64,"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "attachments", full.ID, "photo.png"), data, 0644))
-	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,entry_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
-		VALUES(1,?, ?, ?, 'fixture-model',3,?,'old')`, full.ID, h.kb.ID, imagePath, pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
+	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,entry_id,library_id,attachment_path,model_id,dimension,embedding,content_hash)
+		VALUES(1,?, ?, ?, 'fixture-model',3,?,'old')`, full.ID, h.library.ID, imagePath, pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
 	configureNameEmbedding(t, h.db, "replacement-model", 3)
-	h.kb.EmbeddingModelID, h.kb.ModelTiers.Embedding = "replacement-model", "replacement-model"
-	require.NoError(t, h.db.Save(h.kb).Error)
+	h.library.EmbeddingModelID, h.library.ModelTiers.Embedding = "replacement-model", "replacement-model"
+	require.NoError(t, h.db.Save(h.library).Error)
 	embedder := &allRebuildEmbedder{nameRebuildEmbedder: nameRebuildEmbedder{id: "replacement-model", dimension: 3}, supportImages: images}
 	models := &nameRebuildModels{models: map[string]embedding.Embedder{"replacement-model": embedder}}
 	queue := &nameRebuildQueue{}

@@ -421,7 +421,7 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 			}
 		}
 	}
-	for _, table := range []string{"spaces", "api_keys", "entries", "entry_entities", "entry_topics", "entry_processing_spans", "entry_repost_sources"} {
+	for _, table := range []string{"spaces", "api_keys", "libraries", "entries", "entry_entities", "entry_topics", "entry_processing_spans", "entry_repost_sources"} {
 		if _, present := snapshot.Tables[table]; !present {
 			continue
 		}
