@@ -22,7 +22,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           get: async (url: string) => {
             calls.push(url)
             assert.equal(url, '/health', 'database-dependent requests must wait during reconnect')
-            return { status: 'ok', queue_connection: { state: 'reconnecting', last_error: 'PostgreSQL queue connection is unavailable', alert, alert_after_seconds: 300 } }
+            return { status: 'ok', queue_connection: { state: 'reconnecting', last_error: 'Task delivery connection is unavailable', alert, alert_after_seconds: 300 } }
           },
         } : require(name), api, api.exports)
         const notice = loadComponent(new URL('./QueueConnectionNotice.vue', import.meta.url), { '@/api/system': api.exports })
@@ -48,7 +48,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           const text = messages[locale].system.globalSettings.runtime
           assert.ok(visibleText(banner).includes(alert ? text.reconnectAlert : text.reconnecting))
           assert.ok(visibleText(banner).includes(text.latestConnectionError))
-          assert.ok(visibleText(banner).includes('PostgreSQL queue connection is unavailable'))
+          assert.ok(visibleText(banner).includes('Task delivery connection is unavailable'))
           assert.ok(calls.includes('/health'))
           assert.deepEqual(errors, [])
         } finally { app.unmount() }

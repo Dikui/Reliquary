@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -121,6 +122,9 @@ func deleteExtractedImages(
 
 // DeleteEntry deletes a entry entry and all related resources
 func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
+	return s.withTaskObject(ctx, id, func(held context.Context) error { return s.deleteEntry(held, id) })
+}
+func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 	// Get the entry entry
 	entry, err := s.repo.GetEntryByID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), id)
 	if err != nil {
@@ -315,6 +319,18 @@ func buildEntryVectorDeleteGroups(
 
 // DeleteEntryList deletes a entry entry and all related resources
 func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error {
+	ordered := append([]string(nil), ids...)
+	sort.Strings(ordered)
+	var lockNext func(context.Context, int) error
+	lockNext = func(held context.Context, n int) error {
+		if n == len(ordered) {
+			return s.deleteEntryList(held, ids)
+		}
+		return s.withTaskObject(held, ordered[n], func(next context.Context) error { return lockNext(next, n+1) })
+	}
+	return lockNext(ctx, 0)
+}
+func (s *entryService) deleteEntryList(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}

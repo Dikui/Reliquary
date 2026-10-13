@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"strings"
 	"testing"
 
@@ -15,7 +16,6 @@ import (
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/file"
 	"reliquary/internal/models/chat"
-	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -38,7 +38,7 @@ func (m *ingestRollbackModel) Chat(ctx context.Context, messages []chat.Message,
 func ingestRollbackCounts(t *testing.T, db *gorm.DB) map[string]int64 {
 	t.Helper()
 	counts := make(map[string]int64)
-	for _, table := range []string{"entries", "resources", "resource_bindings", "entry_repost_sources", "operation_logs", "task_jobs", "ingest_assets"} {
+	for _, table := range []string{"entries", "resources", "resource_bindings", "entry_repost_sources", "operation_logs", "task_pending_ops", "ingest_assets"} {
 		var count int64
 		require.NoError(t, db.Table(table).Count(&count).Error)
 		counts[table] = count
@@ -75,7 +75,7 @@ func TestIngestInternalErrorRollsBackCatalogFilesAssetsAndJobs(t *testing.T) {
 			catalog := NewResourceCatalog(repository.NewResourceRepository(h.db))
 			h.service.resourceCatalog = catalog
 			h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), catalog)
-			h.service.task = taskqueue.NewClient(h.db)
+			h.service.task = redistest.NewClient(t, h.db)
 			asset, err := h.service.UploadIngestAsset(h.ctx, "retained-original.txt", []byte("Original source attachment retained across an unsuccessful delivery."))
 			require.NoError(t, err)
 			var uploaded types.IngestAsset
@@ -85,7 +85,7 @@ func TestIngestInternalErrorRollsBackCatalogFilesAssetsAndJobs(t *testing.T) {
 			baselineCounts := ingestRollbackCounts(t, h.db)
 			baselineFiles := ingestRollbackBytes(t, root, vault.root)
 			require.EqualValues(t, 1, baselineCounts["resources"])
-			require.EqualValues(t, 1, baselineCounts["task_jobs"])
+			require.EqualValues(t, 1, baselineCounts["task_pending_ops"])
 			require.Len(t, baselineFiles, 1)
 
 			request := types.IngestRequest{URL: "https://example.org/rollback-internal-" + failure, Acquisition: "model_written", Publisher: "Acme", Title: "失败后材料与任务回滚",
@@ -149,7 +149,7 @@ CREATE TRIGGER fail_ingest_rollback_audit BEFORE INSERT ON operation_logs FOR EA
 			counts := ingestRollbackCounts(t, h.db)
 			require.EqualValues(t, 1, counts["entries"])
 			require.EqualValues(t, 1, counts["operation_logs"])
-			require.EqualValues(t, 2, counts["task_jobs"])
+			require.EqualValues(t, 2, counts["task_pending_ops"])
 			t.Logf("recovered result: %+v; committed counts: %+v", result.Items[0], counts)
 		})
 	}
@@ -179,7 +179,7 @@ func TestIngestDuplicateCleanupErrorRollsBackAndRetrySucceeds(t *testing.T) {
 	catalog := NewResourceCatalog(repository.NewResourceRepository(h.db))
 	h.service.resourceCatalog = catalog
 	h.service.fileSvc = file.NewResourceCatalogFileService(physical, catalog)
-	h.service.task = taskqueue.NewClient(h.db)
+	h.service.task = redistest.NewClient(t, h.db)
 	original := types.IngestRequest{URL: "https://example.org/rollback-canonical", Acquisition: "verbatim", Publisher: "Acme",
 		Content: "The observatory publishes original stellar measurements, instrument configuration, exposure durations and the calibration process applied to its independently recorded observations."}
 	accepted, err := h.service.Ingest(h.ctx, &original)
@@ -194,7 +194,7 @@ func TestIngestDuplicateCleanupErrorRollsBackAndRetrySucceeds(t *testing.T) {
 	baselineFiles := ingestRollbackBytes(t, root, vault.root)
 	require.EqualValues(t, 1, baselineCounts["entries"])
 	require.EqualValues(t, 2, baselineCounts["resources"])
-	require.EqualValues(t, 2, baselineCounts["task_jobs"])
+	require.EqualValues(t, 2, baselineCounts["task_pending_ops"])
 	require.Len(t, baselineFiles, 2)
 	beforeArticle := h.article(t, accepted.EntryID)
 
@@ -231,7 +231,7 @@ func TestIngestDuplicateCleanupErrorRollsBackAndRetrySucceeds(t *testing.T) {
 	require.Equal(t, uploaded, retained, "a duplicate must not claim the uploaded source asset")
 	counts := ingestRollbackCounts(t, h.db)
 	require.Equal(t, baselineCounts["entries"], counts["entries"])
-	require.Equal(t, baselineCounts["task_jobs"], counts["task_jobs"])
+	require.Equal(t, baselineCounts["task_pending_ops"], counts["task_pending_ops"])
 	require.Equal(t, baselineCounts["entry_repost_sources"]+1, counts["entry_repost_sources"])
 	require.Equal(t, baselineCounts["operation_logs"]+1, counts["operation_logs"])
 	t.Logf("duplicate cleanup recovery result: %+v; committed counts: %+v", result.Items[0], counts)

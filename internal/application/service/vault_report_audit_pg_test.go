@@ -92,7 +92,7 @@ BEGIN
   IF NEW.task_type = 'report:index' THEN RAISE EXCEPTION 'fixture refuses report queue'; END IF;
   RETURN NEW;
 END $$`).Error)
-	require.NoError(t, h.db.Exec(`CREATE TRIGGER reject_report_queue BEFORE INSERT ON task_jobs FOR EACH ROW EXECUTE FUNCTION reject_report_queue()`).Error)
+	require.NoError(t, h.db.Exec(`CREATE TRIGGER reject_report_queue BEFORE INSERT ON task_pending_ops FOR EACH ROW EXECUTE FUNCTION reject_report_queue()`).Error)
 	_, err := h.documents.CreateReport(h.ctx, "Unqueued report", "# Unqueued report\n\nA saved report must have durable recovery.", nil)
 	require.ErrorContains(t, err, "fixture refuses report queue")
 	require.Equal(t, before, vaultFileHashes(t, h.root))

@@ -366,7 +366,7 @@ class Context:
 
     def runtime_env(self):
         if self.direct or self.local_server:
-            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "JWT_SECRET", "APP_PORT", "FRONTEND_PORT", "TZ"}}
+            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "REDIS_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "JWT_SECRET", "APP_PORT", "FRONTEND_PORT", "TZ"}}
         else:
             config = json.loads(self.compose("config", "--format", "json"))
             values = config["services"].get(self.app, {}).get("environment", {})
@@ -939,7 +939,7 @@ def restored_environment(ctx, package, env_path=None):
     for key in ("COMPOSE_FILE", "COMPOSE_PROJECT_NAME"):
         values.pop(key, None)
     # Keep the new destination's actual connection and ports when supplied.
-    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
+    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PORT", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
         if key in ctx.env:
             values[key] = ctx.env[key]
     if env_path:
@@ -950,7 +950,7 @@ def restored_environment(ctx, package, env_path=None):
 def freeze_restored_queue(ctx):
     if not ctx.legacy_schema():
         # A pack drains old workers, but every new destination must freeze
-        # claims until verification and configuration have both finished.
+        # pending operation dispatch until verification and configuration finish.
         ctx.sql("UPDATE maintenance_state SET paused=true,pause_mode='snapshot',"
                 "pause_reason='restored environment awaiting configuration',"
                 "paused_at=COALESCE(paused_at,NOW()),updated_at=NOW() WHERE id=true")

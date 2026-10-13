@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"reliquary/internal/testutil/redistest"
 
 	"path/filepath"
 
@@ -34,13 +35,28 @@ func transactionJobs(t *testing.T, db *gorm.DB) []taskqueue.Job {
 	require.NoError(t, db.Order("created_at,id").Find(&jobs).Error)
 	return jobs
 }
+
+func assertSamePendingOperations(t *testing.T, before, after []taskqueue.Job) {
+	t.Helper()
+	require.Len(t, after, len(before))
+	after = append([]taskqueue.Job(nil), after...)
+	for i := range before {
+		if before[i].State == taskqueue.TaskStatePending && after[i].State == taskqueue.TaskStateDispatched {
+			require.NotNil(t, after[i].DispatchedAt)
+			after[i].State = before[i].State
+			after[i].DispatchedAt = before[i].DispatchedAt
+			after[i].UpdatedAt = before[i].UpdatedAt
+		}
+	}
+	require.Equal(t, before, after, "duplicate intake preserves the durable operation apart from asynchronous delivery")
+}
 func transactionManualPayload() *legacyManualFixturePayload {
 	return &legacyManualFixturePayload{Title: "Transactional collection", Content: "Original product announcement with durable source details.", Status: types.ManualEntryStatusPublish, SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/transactional-collection", Publisher: "Fixture publisher"}}
 }
 
 func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	h.service.task = taskqueue.NewClient(h.db)
+	h.service.task = redistest.NewClient(t, h.db)
 	rollback := errors.New("abort collection transaction")
 	var id string
 	require.ErrorIs(t, h.db.WithContext(h.ctx).Transaction(func(tx *gorm.DB) error {
@@ -73,7 +89,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 
 func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	h.service.task = taskqueue.NewClient(h.db)
+	h.service.task = redistest.NewClient(t, h.db)
 	article, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
@@ -166,7 +182,7 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 			baselineFiles := transactionStoredFiles(t, root)
 			var baselineResources int64
 			require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&baselineResources).Error)
-			client := taskqueue.NewClient(h.db)
+			client := redistest.NewClient(t, h.db)
 			observed := false
 			h.service.task = taskTransactionFailure{Client: client, onEnqueue: func(tx *gorm.DB) {
 				var resources, bindings int64
@@ -225,7 +241,7 @@ func TestTaskTransactionEnqueueFailureRollsBackApprovalAndRetainsOriginal(t *tes
 	article.ParseStatus = types.ParseStatusRejected
 	require.NoError(t, article.SetIntakeMetadata(intake))
 	require.NoError(t, h.db.Save(article).Error)
-	h.service.task = taskTransactionFailure{Client: taskqueue.NewClient(h.db)}
+	h.service.task = taskTransactionFailure{Client: redistest.NewClient(t, h.db)}
 	_, err = h.service.ReviewEntryIntake(h.ctx, article.ID, "approve", types.SourceInfo{})
 	require.ErrorContains(t, err, "simulated failure")
 	require.Empty(t, transactionJobs(t, h.db))
@@ -259,7 +275,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	h := newRetainedIntakeHarness(t)
 	model := &taskTransactionInterruptedChat{entered: make(chan struct{})}
 	h.service.modelService = &summaryStateModelService{model: model}
-	first := taskqueue.NewClient(h.db)
+	first := redistest.NewClient(t, h.db)
 	h.service.task = first
 	article, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
@@ -288,19 +304,19 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, transactionManualPayload().Content, string(body), "interrupted intake must retain the original article body")
 	require.NoError(t, source.Close())
-	restarted := taskqueue.NewClient(h.db)
+	restarted := redistest.NewClient(t, h.db)
 	h.service.task = restarted
 	require.NoError(t, restarted.Start(context.Background(), taskqueue.HandlerFunc(h.service.ProcessManualUpdate), config))
 	t.Cleanup(func() { require.NoError(t, restarted.Close()) })
 	require.Eventually(t, func() bool {
 		completed, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
-		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && len(transactionJobs(t, h.db)) == 0
+		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && len(transactionJobs(t, h.db)) == 1 && transactionJobs(t, h.db)[0].State == taskqueue.TaskStateCompleted
 	}, 5*time.Second, 20*time.Millisecond)
 }
 
 func TestTaskTransactionEmbeddingStartAndResumeAreAtomic(t *testing.T) {
 	h := newAllRebuildFixture(t, false)
-	client := taskqueue.NewClient(h.db)
+	client := redistest.NewClient(t, h.db)
 	h.rebuilder.tasks = taskTransactionFailure{Client: client}
 	_, err := h.rebuilder.StartAndEnqueue(h.ctx, types.SingleSpaceID)
 	require.ErrorContains(t, err, "simulated failure")

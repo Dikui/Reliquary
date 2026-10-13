@@ -270,12 +270,12 @@ func (h *SystemHandler) GetRuntimeQueues(c *gin.Context) {
 		status := provider.QueueConnectionStatus()
 		resp.QueueConnection = &status
 	}
-	if h.taskInspector != nil && (resp.QueueConnection == nil || resp.QueueConnection.State != "reconnecting") {
+	if h.taskInspector != nil {
 		stats, supported, err := h.taskInspector.QueueStats(ctx)
 		if err != nil {
 			logger.Errorf(ctx, "get queue stats failed: %v", err)
 		}
-		resp.Available = supported
+		resp.Available = supported && err == nil
 		if stats != nil {
 			resp.Queues = stats
 		}
@@ -717,7 +717,7 @@ func (h *SystemHandler) QueueConnectionHealth() *types.QueueConnectionStatus {
 	status := provider.QueueConnectionStatus()
 	raw := status.LastError
 	if raw != "" {
-		status.LastError = "PostgreSQL queue connection is unavailable"
+		status.LastError = "Task delivery connection is unavailable"
 		if strings.Contains(raw, "another task worker") {
 			status.LastError = "Another session holds the queue advisory lock"
 		}

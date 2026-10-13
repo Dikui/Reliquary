@@ -38,10 +38,10 @@ func reportFingerprint(title, markdown string) string {
 
 func (s *VaultDocumentService) reportIndexManagedByQueue(ctx context.Context, spaceID uint64, path string) (bool, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Table("task_jobs j").
+	err := s.db.WithContext(ctx).Table("task_pending_ops j").
 		Joins("JOIN entries e ON e.id=j.payload->>'knowledge_id'").
 		Where("e.space_id=? AND e.vault_path=? AND e.deleted_at IS NULL AND j.task_type=? AND j.state IN ?",
-			spaceID, path, types.TypeReportIndex, []string{"pending", "active", "scheduled", "retry", "archived"}).Count(&count).Error
+			spaceID, path, types.TypeReportIndex, []string{"pending", "dispatched", "active", "scheduled", "retry", "archived"}).Count(&count).Error
 	return count > 0, err
 }
 
@@ -51,7 +51,7 @@ func (s *VaultDocumentService) reportWriteResult(ctx context.Context, entry *typ
 		var queued int64
 		if err := s.db.WithContext(ctx).Model(&queue.Job{}).
 			Where("task_type=? AND payload->>'knowledge_id'=? AND state IN ?", types.TypeReportIndex, entry.ID,
-				[]string{"pending", "active", "scheduled", "retry"}).Count(&queued).Error; err != nil {
+				[]string{"pending", "dispatched", "active", "scheduled", "retry"}).Count(&queued).Error; err != nil {
 			return nil, err
 		}
 		status = "failed"

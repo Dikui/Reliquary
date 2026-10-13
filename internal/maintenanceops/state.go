@@ -129,9 +129,14 @@ func Pause(ctx context.Context, db *gorm.DB, mode, reason string, flush func(con
 		return err
 	}
 	if mode == "drain" {
+		table := "task_pending_ops"
+		// Offline maintenance may inspect a backup before its queue migration.
+		if !db.Migrator().HasTable(table) {
+			table = "task_jobs"
+		}
 		for {
 			var count int64
-			err = db.WithContext(ctx).Table("task_jobs").Where("task_type IN ? AND state IN ?", []string{"document:process", "manual:process", "knowledge:list_delete", "knowledge:list_reparse"}, []string{"pending", "active", "scheduled", "retry"}).Count(&count).Error
+			err = db.WithContext(ctx).Table(table).Where("task_type IN ? AND state IN ?", []string{"document:process", "manual:process", "knowledge:list_delete", "knowledge:list_reparse"}, []string{"pending", "dispatched", "active", "scheduled", "retry"}).Count(&count).Error
 			if err != nil || count == 0 {
 				break
 			}

@@ -1,7 +1,7 @@
 package types
 
 // Worker-pool names are part of the runtime observability API. Each pool is
-// backed by an independent PostgreSQL worker pool, so concurrency is hard-isolated
+// backed by an independent asynq server, so concurrency is hard-isolated
 // between pools instead of being only a weighted dequeue preference.
 const (
 	WorkerPoolCore        = "core"
@@ -165,6 +165,7 @@ type QueueStat struct {
 	Retry     int `json:"retry"`
 	Archived  int `json:"archived"`
 	Completed int `json:"completed"`
+	Cancelled int `json:"cancelled"`
 	// Processed / Failed are today's counters (reset daily).
 	Processed int `json:"processed"`
 	Failed    int `json:"failed"`
@@ -174,7 +175,7 @@ type QueueStat struct {
 	LatencyMs int64 `json:"latency_ms"`
 }
 
-// WorkerServerStat is one live PostgreSQL worker pool snapshot. Queue weights identify
+// WorkerServerStat is one live asynq worker pool snapshot. Queue weights identify
 // which logical pool the server belongs to; the runtime handler aggregates
 // these records across pools so configured per-instance capacity is not
 // confused with actual cluster capacity.

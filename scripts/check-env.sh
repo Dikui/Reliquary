@@ -80,6 +80,7 @@ check_var "DB_PORT"
 check_var "DB_USER"
 check_var "DB_PASSWORD"
 check_var "DB_NAME"
+check_var "REDIS_ADDR"
 
 echo ""
 log_info "存储配置:"

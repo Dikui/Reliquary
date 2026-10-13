@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestDiscardReleasesOriginalIngestAssetsAndKeepsURLLedger(t *testing.T) {
 			h.service.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(h.db))
 			h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(uploads, ""), h.service.resourceCatalog)
 			queue := h.service.task
-			h.service.task = taskqueue.NewClient(h.db)
+			h.service.task = redistest.NewClient(t, h.db)
 			body := "# Collected evidence\n\nAcme reports the original measurements and documented instrument calibration procedure."
 			asset, err := h.service.UploadIngestAsset(h.ctx, "original.txt", []byte(body))
 			require.NoError(t, err)

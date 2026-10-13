@@ -43,13 +43,16 @@ func seedCurrentNames(t *testing.T, db *gorm.DB) {
 		`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-1',1,'owner','follow','entity-a','{}','{"followed":true}')`,
 		`INSERT INTO resources(id,handle,space_id,provider,physical_path,location_hash) VALUES('resource','1234567890123456789012',1,'local','local://1/pending/raw.txt','location')`,
 		`INSERT INTO resource_bindings(id,resource_id,space_id,owner_type,owner_id) VALUES('binding','resource',1,'entry','pending')`,
-		`INSERT INTO task_jobs(id,task_type,queue,payload,state,retried,fail_count,claim_token,worker_pool) VALUES('job','manual:process','default','{"entry_id":"pending"}','active',2,1,'old-claim','core')`,
+		`INSERT INTO task_pending_ops(id,task_type,queue,payload,state,retried,fail_count,worker_pool) VALUES('job','manual:process','default','{"entry_id":"pending"}','active',2,1,'core')`,
 		`INSERT INTO api_keys(id,space_id,name,key_hash,api_key) VALUES(1,1,'external caller','API_HASH_SECRET','API_SECRET')`,
 		`INSERT INTO chatgpt_hosts(id,ext_agent_host_id) VALUES(1,'host-preserved')`,
 		`INSERT INTO chatgpt_accounts(id,client_id,issuer,subject,email,credentials,status) VALUES('00000000-0000-0000-0000-000000000001','client-preserved','https://auth.openai.com','subject-preserved','chatgpt@example.test','CHATGPT_TOKEN_SECRET','connected')`,
 		`UPDATE maintenance_state SET backup_at='2026-10-01T12:00:00Z',backup_status='success',backup_path='/old-machine/backup',backup_size_bytes=1234,backup_error='',drill_at='2026-10-02T12:00:00Z',drill_status='failed',drill_error='retained historical failure' WHERE id=true`,
 	}
 	for _, statement := range statements {
+		if !db.Migrator().HasTable("task_pending_ops") {
+			statement = strings.ReplaceAll(statement, "task_pending_ops", "task_jobs")
+		}
 		require.NoError(t, db.Exec(statement).Error)
 	}
 }
@@ -91,7 +94,7 @@ func TestManifestOnlyAllowsCredentialPauseAndLiveTaskLeaseChanges(t *testing.T) 
 	ctx := context.Background()
 	db := pgtest.Open(t)
 	seed(t, db)
-	require.NoError(t, db.Exec(`INSERT INTO task_jobs(id,task_type,queue,payload,state,started_at,completed_at,updated_at) VALUES('completed-job','manual:process','default','{}','completed','2026-10-01T12:00:00Z','2026-10-01T12:01:00Z','2026-10-01T12:01:00Z')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO task_pending_ops(id,task_type,queue,payload,state,started_at,completed_at,updated_at) VALUES('completed-job','manual:process','default','{}','completed','2026-10-01T12:00:00Z','2026-10-01T12:01:00Z','2026-10-01T12:01:00Z')`).Error)
 	root, uploads := t.TempDir(), t.TempDir()
 	expected, err := BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)
@@ -101,7 +104,7 @@ func TestManifestOnlyAllowsCredentialPauseAndLiveTaskLeaseChanges(t *testing.T) 
 	require.Contains(t, CompareManifest(expected, actual), "table models")
 	require.NoError(t, db.Exec(`UPDATE models SET status='active' WHERE id='embed'`).Error)
 	require.NoError(t, db.Exec(`UPDATE models SET status='needs_configuration',updated_at=now() WHERE id='chat'`).Error)
-	require.NoError(t, db.Exec(`UPDATE task_jobs SET state='pending',started_at=NULL,updated_at=now(),claim_token='',worker_pool='' WHERE id='job'`).Error)
+	require.NoError(t, db.Exec(`UPDATE task_pending_ops SET state='pending',delivery=delivery+1,started_at=NULL,updated_at=now(),worker_pool='' WHERE id='job'`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(expected, actual))
@@ -109,10 +112,10 @@ func TestManifestOnlyAllowsCredentialPauseAndLiveTaskLeaseChanges(t *testing.T) 
 	actual, err = BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)
 	require.Contains(t, CompareManifest(expected, actual), "table models")
-	require.NoError(t, db.Exec(`UPDATE task_jobs SET started_at='2026-10-01T11:59:00Z' WHERE id='completed-job'`).Error)
+	require.NoError(t, db.Exec(`UPDATE task_pending_ops SET started_at='2026-10-01T11:59:00Z' WHERE id='completed-job'`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)
-	require.Contains(t, CompareManifest(expected, actual), "table task_jobs")
+	require.Contains(t, CompareManifest(expected, actual), "table task_pending_ops")
 }
 
 func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
@@ -157,7 +160,7 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
 		Retried   int
 		FailCount int
 	}
-	require.NoError(t, target.Table("task_jobs").Where("id='job'").First(&job).Error)
+	require.NoError(t, target.Table("task_pending_ops").Where("id='job'").First(&job).Error)
 	require.Equal(t, "active", job.State)
 	require.Equal(t, 2, job.Retried)
 	require.Equal(t, 1, job.FailCount)

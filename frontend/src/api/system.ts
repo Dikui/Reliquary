@@ -186,6 +186,7 @@ export interface QueueStat {
   retry: number
   archived: number
   completed: number
+  cancelled?: number
   processed: number
   failed: number
   paused: boolean
@@ -235,7 +236,7 @@ export interface RuntimeQueuesResponse {
   timestamp: number
 }
 
-export type RuntimeTaskState = 'pending' | 'active' | 'scheduled' | 'retry' | 'archived' | 'completed'
+export type RuntimeTaskState = 'pending' | 'active' | 'scheduled' | 'retry' | 'archived' | 'completed' | 'cancelled'
 export type RuntimeTaskAction = 'cancel' | 'run_now' | 'delete'
 
 export interface RuntimeTask {

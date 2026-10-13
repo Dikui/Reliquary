@@ -13,7 +13,7 @@ import (
 
 func TestReconnectWaitsForLockDrainsOldWorkersAndResumes(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	config := testConfig()
 	config.Pools = types.WorkerPoolConcurrency{Core: 1}
 	config.ReconnectInitialDelay = 20 * time.Millisecond
@@ -49,9 +49,9 @@ func TestReconnectWaitsForLockDrainsOldWorkersAndResumes(t *testing.T) {
 	lock := c.lock
 	c.mu.Unlock()
 	var pid int
-	c.lockMu.Lock()
+	c.mu.Lock()
 	pidErr := lock.QueryRowContext(context.Background(), "SELECT pg_backend_pid()").Scan(&pid)
-	c.lockMu.Unlock()
+	c.mu.Unlock()
 	require.NoError(t, pidErr)
 	_, err = blocker.ExecContext(context.Background(), "SELECT pg_terminate_backend($1)", pid)
 	require.NoError(t, err)
@@ -65,10 +65,19 @@ func TestReconnectWaitsForLockDrainsOldWorkersAndResumes(t *testing.T) {
 	second, err := c.Enqueue(NewTask(types.TypeDocumentProcess, nil), Retention(time.Hour))
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return c.ConnectionStatus().Alert }, time.Second, 10*time.Millisecond)
-	jobState(t, c, first.ID, TaskStatePending)
+	var interrupted Job
+	// A producer may publish the recovered operation while consumption is locked.
+	require.Eventually(t, func() bool {
+		return db.First(&interrupted, "id=?", first.ID).Error == nil &&
+			(interrupted.State == TaskStatePending || interrupted.State == TaskStateDispatched)
+	}, 15*time.Second, 10*time.Millisecond)
+	require.Zero(t, interrupted.Retried)
+	require.Zero(t, interrupted.FailCount)
 	time.Sleep(250 * time.Millisecond)
 	require.EqualValues(t, 1, calls.Load(), "no task is claimed while another session owns the lock")
-	jobState(t, c, second.ID, TaskStatePending)
+	var waiting Job
+	require.NoError(t, db.First(&waiting, "id=?", second.ID).Error)
+	require.Contains(t, []TaskState{TaskStatePending, TaskStateDispatched}, waiting.State)
 	require.Contains(t, c.ConnectionStatus().LastError, "another task worker")
 	_, err = blocker.ExecContext(context.Background(), "SELECT pg_advisory_unlock(714140014)")
 	require.NoError(t, err)
@@ -81,23 +90,4 @@ func TestReconnectWaitsForLockDrainsOldWorkersAndResumes(t *testing.T) {
 	require.Empty(t, c.ConnectionStatus().LastError)
 	require.False(t, c.ConnectionStatus().Alert)
 	t.Log("terminated singleton session; reconnect status and alert visible; other lock owner prevents claims; release resumes old and new jobs without retry or overlap")
-}
-
-func TestReconnectRejectsStaleClaimToken(t *testing.T) {
-	db := pgtest.Open(t)
-	c := NewClient(db)
-	info, err := c.Enqueue(NewTask(types.TypeDocumentProcess, nil), Retention(time.Hour))
-	require.NoError(t, err)
-	c.config = testConfig().withDefaults()
-	old, err := c.claim(context.Background(), c.config.workerPools()[0])
-	require.NoError(t, err)
-	require.NoError(t, c.recoverJobs(context.Background(), true))
-	current, err := c.claim(context.Background(), c.config.workerPools()[0])
-	require.NoError(t, err)
-	require.NotEqual(t, old.ClaimToken, current.ClaimToken)
-	require.NoError(t, c.finish(context.Background(), old, NewTask(old.TaskType, old.Payload), nil, false))
-	job := jobState(t, c, info.ID, TaskStateActive)
-	require.Equal(t, current.ClaimToken, job.ClaimToken)
-	require.NoError(t, c.finish(context.Background(), current, NewTask(current.TaskType, current.Payload), nil, false))
-	jobState(t, c, info.ID, TaskStateCompleted)
 }

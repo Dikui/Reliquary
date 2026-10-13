@@ -29,11 +29,20 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}
-	if migration.Version >= 5 {
+	if migration.Version >= 9 {
 		return Rules, nil
 	}
-	legacy := make(map[string]Rule, len(Rules))
+	current := make(map[string]Rule, len(Rules))
 	for table, rule := range Rules {
+		current[table] = rule
+	}
+	delete(current, "task_pending_ops")
+	current["task_jobs"] = legacyQueueRule
+	if migration.Version >= 5 {
+		return current, nil
+	}
+	legacy := make(map[string]Rule, len(Rules))
+	for table, rule := range current {
 		legacy[table] = rule
 	}
 	for table, rule := range collectionRules {
@@ -73,3 +82,5 @@ var collectionRules = map[string]Rule{
 	"data_sources": {Configuration: "id space_id library_id name type default_content_type config sync_schedule sync_mode status sync_deletions last_sync_at last_sync_cursor last_sync_result error_message sync_log_retention_days created_at updated_at deleted_at"},
 	"sync_logs":    {Sidecar: "id data_source_id space_id status started_at finished_at items_total items_created items_updated items_deleted items_skipped items_failed error_message result created_at updated_at"},
 }
+
+var legacyQueueRule = Rule{Sidecar: "id task_type queue payload headers state max_retry retried fail_count timeout_ns retention_ns deadline group_name created_at updated_at process_at started_at completed_at last_failed_at last_error lease_until claim_token worker_pool cancel_requested"}

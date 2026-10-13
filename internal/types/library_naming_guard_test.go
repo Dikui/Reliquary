@@ -12,8 +12,9 @@ import (
 // The historical migrations and offline adapters must spell the old schema
 // names to read old backups and to undo the naming migration.
 var libraryNamingExceptions = map[string]string{
-	"internal/types/task_dead_letter.go":                           "The persisted scope discriminator remains unchanged to preserve existing task archives.",
-	"internal/types/library_payload.go":                            "Only persisted queue envelopes accept the old key; HTTP and MCP use library_id.",
+	"internal/maintenance/queue_migration.go":                      "Historical backup projection converts the archived scope across migration 000009.",
+	"migrations/versioned/000009_redis_pending_ops.up.sql":         "Converts historical dead-letter scope during migration.",
+	"migrations/versioned/000009_redis_pending_ops.down.sql":       "Restores historical dead-letter scope for temporary down tests.",
 	"internal/maintenance/format.go":                               "Replica formats 1 through 3 are read and hashed in their original naming vocabulary.",
 	"internal/maintenance/schema_compat.go":                        "Offline maintenance temporarily renames old schemas and restores them in the same transaction.",
 	"migrations/versioned/000000_init.down.sql":                    "Frozen history used by offline backup restoration and version-specific fixtures.",
@@ -37,9 +38,8 @@ var libraryNamingExceptions = map[string]string{
 // Only these exact compatibility literals are allowed in current Go sources.
 // New identifiers and unrelated literals in the same files remain checked.
 var libraryNamingAllowedLiterals = map[string][]string{
-	"internal/types/task_dead_letter.go": {`"knowledge_base"`},
-	"internal/types/library_payload.go":  {`"knowledge_base_id"`},
-	"internal/maintenance/format.go":     {`"knowledge_bases"`, `"knowledge_base_id"`},
+	"internal/maintenance/queue_migration.go": {`"knowledge_base"`},
+	"internal/maintenance/format.go":          {`"knowledge_bases"`, `"knowledge_base_id"`},
 	"internal/maintenance/schema_compat.go": {
 		`"SELECT to_regclass('public.knowledge_bases') IS NOT NULL"`,
 		`"SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='data_sources' AND column_name='knowledge_base_id')"`,

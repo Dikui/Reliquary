@@ -45,7 +45,7 @@ func TestRuntimeHTTPReportsReconnectAndAlertUntilLockReleased(t *testing.T) {
 	require.Equal(t, "reconnecting", response.QueueConnection.State)
 	require.NotEmpty(t, response.QueueConnection.LastError)
 	require.True(t, response.QueueConnection.Alert)
-	require.False(t, response.Available)
+	require.True(t, response.Available, "PostgreSQL inspection remains available while delivery reconnects")
 	require.Equal(t, "reconnecting", h.QueueConnectionHealth().State)
 	_, err = blocker.ExecContext(context.Background(), "SELECT pg_advisory_unlock(714140014)")
 	require.NoError(t, err)

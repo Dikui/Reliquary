@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reliquary/internal/testutil/redistest"
 	"strconv"
 	"strings"
 	"testing"
@@ -24,16 +25,16 @@ import (
 
 func newPostgresInspectorTest(t *testing.T) *postgresTaskInspector {
 	t.Helper()
-	client := task.NewClient(pgtest.Open(t))
+	client := redistest.NewClient(t, pgtest.Open(t))
 	t.Cleanup(func() { _ = client.Close() })
 	return NewPostgresTaskInspector(client).(*postgresTaskInspector)
 }
 
 func insertRuntimeJob(t *testing.T, inspector *postgresTaskInspector, id, payload, queue string, state types.RuntimeTaskState, orderTime time.Time) {
 	t.Helper()
-	_, err := inspector.client.Enqueue(task.NewTask(types.TypeDocumentProcess, []byte(payload)), task.Queue(queue), task.TaskID(id), task.MaxRetry(3))
+	err := inspector.db.Create(&task.Job{ID: id, TaskType: types.TypeDocumentProcess, Queue: queue, Payload: []byte(payload), Headers: []byte("{}"), State: task.TaskState(state), MaxRetry: 3, Generation: 1, Delivery: 1, CreatedAt: orderTime, UpdatedAt: orderTime, ProcessAt: orderTime}).Error
 	if err != nil {
-		t.Fatalf("enqueue %s: %v", id, err)
+		t.Fatalf("insert %s: %v", id, err)
 	}
 	updates := map[string]any{"state": string(state), "created_at": orderTime, "process_at": orderTime, "last_failed_at": orderTime, "completed_at": orderTime, "started_at": orderTime}
 	if err := inspector.db.Model(&task.Job{}).Where("id = ?", id).Updates(updates).Error; err != nil {

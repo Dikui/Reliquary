@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"sync"
 	"testing"
 	"time"
@@ -61,7 +62,7 @@ func reportWriter(t *testing.T, f *mcpFixture, transport string) func(string, st
 
 func startReportQueue(t *testing.T, f *mcpFixture) *queue.Client {
 	t.Helper()
-	client := queue.NewClient(f.db)
+	client := redistest.NewClient(t, f.db)
 	mux := queue.NewServeMux()
 	mux.HandleFunc(types.TypeReportIndex, f.documents.HandleReportIndex)
 	require.NoError(t, client.Start(context.Background(), mux, queue.Config{

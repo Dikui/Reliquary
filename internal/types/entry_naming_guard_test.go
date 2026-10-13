@@ -131,7 +131,6 @@ var entryNamingExceptions = map[string]entryNamingException{
 	"internal/mcpserver/entry_contract_test.go":                             {Reason: "固定原契约或持久值的兼容断言；历史迁移夹具使用对应旧结构", Tokens: []string{"knowledge_id"}},
 	"internal/mcpserver/server.go":                                          {Reason: "MCP 输出适配原条目与关联行字段，任意 JSON 不转换", Tokens: []string{"knowledge", "knowledge_", "knowledge_id", "knowledge_ids"}},
 	"internal/queue/dead_letter_test.go":                                    {Reason: "固定原契约或持久值的兼容断言；历史迁移夹具使用对应旧结构", Tokens: []string{"knowledge"}},
-	"internal/queue/worker.go":                                              {Reason: "死信读取旧队列 payload 键", Tokens: []string{"knowledge_id"}},
 	"internal/router/mcp_pg_test.go":                                        {Reason: "固定原契约或持久值的兼容断言；历史迁移夹具使用对应旧结构", Tokens: []string{"knowledge", "knowledge_id", "knowledge_ids"}},
 	"internal/router/personal_auth_test.go":                                 {Reason: "固定原契约或持久值的兼容断言；历史迁移夹具使用对应旧结构", Tokens: []string{"KnowledgeQA"}},
 	"internal/router/router_files_test.go":                                  {Reason: "文件库路径的既有目录值保持不变，验证旧资源仍可访问", Tokens: []string{"knowledge"}},

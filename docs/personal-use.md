@@ -59,7 +59,7 @@ Obsidian 的 `.obsidian/` 阅读配置、`.trash/` 和 `.DS_Store` 等用户配�
 
 知识检索覆盖文章表头、全文正文、用户文档和整理结果，使用 PostgreSQL 全文与向量混合检索，按文章合并命中片段。可按内容类型、实体、主题、发布时间、星标及来源目录筛选。按发布时间筛选会排除缺少发布时间的文章并说明数量，采集时间不会代替发布时间。相似报道按摘要向量和时间窗口折叠，可以展开。
 
-只运行一个后端进程。模型并发、速率和接口限流由该进程维护；后台任务与业务数据在同一 PostgreSQL 事务中持久化，设置保存后立即刷新进程内缓存。数据库备份同时包含未完成任务，恢复后任务可继续执行。文件库与数据库仍需一致性备份，迁移前应停止写入并等待运行队列完成。详见 [ADR 0010](adr/0010-postgres-task-queue.md)。
+只运行一个后端进程。模型并发、速率和接口限流由该进程维护；待处理操作与业务数据在同一 PostgreSQL 事务中持久化，Redis（asynq）只负责调度唤醒，设置保存后立即刷新进程内缓存。数据库备份同时包含未完成任务，恢复后任务可继续执行。文件库与数据库仍需一致性备份，迁移前应停止写入并等待运行队列完成。详见 [ADR 0014](adr/0014-internal-knowledge-base.md)。
 
 ## 使用 ChatGPT 订阅
 
@@ -114,7 +114,7 @@ Reliquary 提供资料，不生成周报或推送通知。下面是外部 AI 通
 
 ## 部署在 Mac mini
 
-Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。应用与 PostgreSQL（ParadeDB）使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
+Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。应用、PostgreSQL（ParadeDB）与 Redis 使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
@@ -163,7 +163,7 @@ export COMPOSE_PROJECT_NAME=reliquary
 ./reliquary-admin check-deployment
 ./scripts/build-frontend-dist.sh
 docker compose build
-docker compose up -d --wait postgres
+docker compose up -d --wait postgres redis
 ./reliquary-admin check-deployment
 docker compose up -d
 ```
@@ -244,7 +244,7 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 每份备份完整导出数据库；宿主机文件库和上传资源按增量快照复制，未变化文件用硬链接，每份目录都能单独恢复。文件库内 `.obsidian/` 等阅读配置一同保留，备份核对不比较这些用户配置。只保留最近 4 份正常完成的定期备份，不把失败的半成品作为成功备份。系统加密密钥、JWT 密钥、数据库密码、API Key、模型和解析器凭据、ChatGPT 令牌不进入备份。唯一账号的密码哈希保留，恢复后仍用原账号密码登录。
 
-备份暂停 HTTP/MCP 收录及附件上传，等待短写入事务及文件副本写入结束，再停止应用取得一致快照。它不等待主题历史归入、向量重建等长任务完成；队列和检查点一同导出。恢复后 PostgreSQL 队列重新领取中断任务，保留文章与重试预算。等待超过上限时跳过本次备份，恢复收录并记录告警，不生成假成功结果。请暂停 Obsidian 等外部编辑器写文件，程序无法锁住其他软件。
+备份暂停 HTTP/MCP 收录及附件上传，等待短写入事务及文件副本写入结束，再停止应用取得一致快照。它不等待主题历史归入、向量重建等长任务完成；队列和检查点一同导出。恢复后从 PostgreSQL 待处理操作重推 Redis 唤醒任务，保留文章与重试预算。等待超过上限时跳过本次备份，恢复收录并记录告警，不生成假成功结果。请暂停 Obsidian 等外部编辑器写文件，程序无法锁住其他软件。
 
 手动触发和检查自动计划使用以下命令。手动备份的目录参数明确指定位置，避免与 `.env` 中的 `BACKUP_DIR` 默认值混淆：
 
@@ -389,3 +389,7 @@ BACKUP_DIR=/Users/yourname/Backups/Reliquary-Rollback \
 Grok Bot、Claude Code 等外部工具需能访问 Reliquary 的内网地址。登录网页后，在“设置 > API 集成”为每个工具创建自己的 API Key，复制完整令牌和连接地址。同页可查看 Key、修改名称与有效期或撤销 Key。
 
 将 [收录接口说明](ingest-api.md) 提供给外部工具开发者或 Agent。该文档包含完整材料要求、认证、查重与收录顺序、可执行示例、HTTP 与 MCP 接口、补全、重试和用户反馈。外部工具负责取得原始资料，Reliquary 负责去重、模型审核、处理、存储与检索。收录结果和待处理页面供用户确认后续操作。
+
+## Redis 任务调度
+
+`REDIS_ADDR` 默认 `127.0.0.1:6379`，Compose 内默认使用 `redis:6379`。`REDIS_DB` 默认 0，`REDIS_PASSWORD` 可用于连接外部 Redis。内置 Redis 仅开放本机端口，不启用持久化。PG 是任务状态、重试预算、配额延后和死信的权威；备份不需要 Redis 数据。Redis 清空或恢复备份后，后端启动会补推所有未完成操作，运行中每 `RELIQUARY_QUEUE_SWEEP_INTERVAL`（默认 1 分钟）补推；投递超过 `RELIQUARY_QUEUE_DELIVERY_TIMEOUT`（默认 2 分钟）会换投递代次重推。保留一个后端进程。

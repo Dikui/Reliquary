@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reliquary/internal/testutil/redistest"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestSpaceHTTPNamesAndAPIKeySettingsRoundtrip(t *testing.T) {
 
 func TestQueuedLegacyPayloadExecutesWithCurrentSpaceContext(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	client := queue.NewClient(f.db)
+	client := redistest.NewClient(t, f.db)
 	defer client.Close()
 	mux := queue.NewServeMux()
 	mux.Use(backgroundTaskMiddleware())

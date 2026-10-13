@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reliquary/internal/testutil/redistest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func TestChatGPTPauseRetriesWithoutConsumingBudgetIncludingFinalAttempt(t *testi
 	for _, budget := range []int{0, 2} {
 		t.Run(fmt.Sprint(budget), func(t *testing.T) {
 			db := pgtest.Open(t)
-			client := queue.NewClient(db)
+			client := redistest.NewClient(t, db)
 			pause := &types.ChatGPTDeferredError{Reason: "daily_limit", RetryAt: time.Now().Add(5 * time.Minute)}
 			handler := chatGPTPermanentFailureMiddleware()(queue.HandlerFunc(func(context.Context, *queue.Task) error { return fmt.Errorf("processing: %w", pause) }))
 			require.NoError(t, client.Start(context.Background(), handler, chatGPTQueueConfig()))
@@ -59,7 +60,7 @@ func TestChatGPTPauseRetriesWithoutConsumingBudgetIncludingFinalAttempt(t *testi
 func TestChatGPTPermanentFailureArchivesFirstAttemptAndRecordsDeadLetter(t *testing.T) {
 	db := pgtest.Open(t)
 	repo := repository.NewTaskDeadLetterRepository(db)
-	client := queue.NewClient(db)
+	client := redistest.NewClient(t, db)
 	var calls, callbacks atomic.Int32
 	upstream := &types.ChatGPTError{Kind: "failed", Status: 403, Code: "subscription_sharing_user_not_eligible", Param: "model", RequestID: "req_permanent", Body: `{"error":{"code":"subscription_sharing_user_not_eligible"}}`, Message: "subscription restriction"}
 	callbackErrors := make(chan error, 1)
@@ -101,7 +102,7 @@ func TestChatGPTPermanentFailureArchivesFirstAttemptAndRecordsDeadLetter(t *test
 func TestChatGPTOrdinaryFailureRetainsRetryBudgetWithoutDeadLetter(t *testing.T) {
 	db := pgtest.Open(t)
 	repo := repository.NewTaskDeadLetterRepository(db)
-	client := queue.NewClient(db)
+	client := redistest.NewClient(t, db)
 	var calls, callbacks atomic.Int32
 	config := chatGPTQueueConfig()
 	config.OnDeadLetter = func(context.Context, *queue.Task, error) { callbacks.Add(1) }

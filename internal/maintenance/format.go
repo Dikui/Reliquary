@@ -7,7 +7,7 @@ import (
 )
 
 // FormatVersion is the personal-space replica and verification manifest format.
-const FormatVersion = 4
+const FormatVersion = 5
 
 func supportedFormat(version int) bool { return version >= 1 && version <= FormatVersion }
 

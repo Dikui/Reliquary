@@ -463,7 +463,12 @@ func (s *entryService) processChunks(ctx context.Context,
 	logger.GetLogger(ctx).Infof("processChunks successfully")
 }
 
-func (s *entryService) ReparseEntry(
+func (s *entryService) ReparseEntry(ctx context.Context, entryID string, overrides *types.EntryProcessOverrides) (entry *types.Entry, err error) {
+	err = s.withTaskObject(ctx, entryID, func(held context.Context) error { entry, err = s.reparseEntry(held, entryID, overrides); return err })
+	return entry, err
+}
+
+func (s *entryService) reparseEntry(
 	ctx context.Context,
 	entryID string,
 	processOverrides *types.EntryProcessOverrides,
@@ -643,7 +648,12 @@ func resetEntryForReparse(entry *types.Entry, library *types.Library) {
 // Errors:
 //   - ParseStatusCompleted / ParseStatusFailed: the parse has already finished.
 //   - ParseStatusDeleting: a delete is in progress; cancel cannot supersede it.
-func (s *entryService) CancelEntryParse(
+func (s *entryService) CancelEntryParse(ctx context.Context, entryID string) (entry *types.Entry, err error) {
+	err = s.withTaskObject(ctx, entryID, func(held context.Context) error { entry, err = s.cancelEntryParse(held, entryID); return err })
+	return entry, err
+}
+
+func (s *entryService) cancelEntryParse(
 	ctx context.Context, entryID string,
 ) (*types.Entry, error) {
 	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)

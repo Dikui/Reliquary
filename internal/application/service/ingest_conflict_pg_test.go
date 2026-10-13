@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/base64"
 	"math/bits"
+	"reliquary/internal/testutil/redistest"
 	"strings"
 	"sync"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/file"
-	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -22,7 +22,7 @@ func newIngestConflictHarness(t *testing.T) (*articleProcessingHarness, string, 
 	root := t.TempDir()
 	h.service.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(h.db))
 	h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), h.service.resourceCatalog)
-	h.service.task = taskqueue.NewClient(h.db)
+	h.service.task = redistest.NewClient(t, h.db)
 	const url = "https://example.org/conflict-retry"
 	first, err := h.service.Ingest(h.ctx, ingestMissingImageRequest(url, "https://example.org/original-measurements.png"))
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestIngestConflictSameBodyRetryKeepsPendingIDAndMaterials(t *testing.T) {
 	var afterResources int64
 	require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&afterResources).Error)
 	require.Equal(t, beforeResources, afterResources)
-	require.Equal(t, beforeJobs, transactionJobs(t, h.db))
+	assertSamePendingOperations(t, beforeJobs, transactionJobs(t, h.db))
 	var referenced types.IngestAsset
 	require.NoError(t, h.db.Where("id=?", asset.AssetID).First(&referenced).Error)
 	require.Equal(t, first.EntryID, referenced.EntryID)
@@ -110,7 +110,7 @@ func TestIngestConflictConcurrentSameBodyCreatesOnePending(t *testing.T) {
 	}
 	require.Equal(t, results[0].EntryID, results[1].EntryID)
 	assertIngestConflictCount(t, h, originalID, 1)
-	require.Equal(t, beforeJobs, transactionJobs(t, h.db))
+	assertSamePendingOperations(t, beforeJobs, transactionJobs(t, h.db))
 	var resources int64
 	require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&resources).Error)
 	require.EqualValues(t, 4, resources, "the original body and one conflict's file, image and body remain")

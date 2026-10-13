@@ -60,7 +60,7 @@ func (a *postgresTaskInspector) CancelTasksForEntry(ctx context.Context, entryID
 	err := a.db.WithContext(ctx).Where(
 		"task_type IN ? AND COALESCE(payload->>'knowledge_id',payload->>'entry_id') = ? AND state IN ?",
 		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, entryID,
-		[]string{"pending", "active", "scheduled", "retry"},
+		[]string{"pending", "dispatched", "active", "scheduled", "retry"},
 	).Find(&jobs).Error
 	if err != nil {
 		return 0, 0, err
@@ -90,7 +90,7 @@ func (a *postgresTaskInspector) HasQueuedTasksForEntry(ctx context.Context, entr
 	err := a.db.WithContext(ctx).Model(&task.Job{}).Where(
 		"task_type IN ? AND COALESCE(payload->>'knowledge_id',payload->>'entry_id') = ? AND state IN ?",
 		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, entryID,
-		[]string{"pending", "active", "scheduled", "retry"},
+		[]string{"pending", "dispatched", "active", "scheduled", "retry"},
 	).Count(&count).Error
 	return count > 0, err
 }
@@ -104,7 +104,7 @@ func (a *postgresTaskInspector) QueueStats(ctx context.Context) ([]types.QueueSt
 	}
 	err := a.db.WithContext(ctx).Raw(`SELECT queue, state, count(*) AS count,
 		CASE WHEN state = 'pending' THEN GREATEST(0, EXTRACT(EPOCH FROM (now() - min(created_at))) * 1000)::bigint ELSE 0 END AS latency_ms
-		FROM task_jobs GROUP BY queue, state`).Scan(&counts).Error
+		FROM (SELECT queue, CASE WHEN state='dispatched' THEN 'pending' ELSE state END AS state, created_at FROM task_pending_ops) ops GROUP BY queue,state`).Scan(&counts).Error
 	if err != nil {
 		return nil, true, err
 	}
@@ -136,6 +136,8 @@ func (a *postgresTaskInspector) QueueStats(ctx context.Context) ([]types.QueueSt
 				stat.Archived = row.Count
 			case "completed":
 				stat.Completed = row.Count
+			case "cancelled":
+				stat.Cancelled = row.Count
 			}
 		}
 		stat.Size = stat.Pending + stat.Active + stat.Scheduled + stat.Retry + stat.Archived
@@ -188,6 +190,8 @@ func runtimeTaskActions(info types.RuntimeTaskInfo) []types.RuntimeTaskAction {
 	switch info.State {
 	case types.RuntimeTaskScheduled, types.RuntimeTaskRetry:
 		actions = append(actions, types.RuntimeTaskActionRunNow)
+	case types.RuntimeTaskCancelled:
+		actions = append(actions, types.RuntimeTaskActionDelete)
 	case types.RuntimeTaskArchived:
 		actions = append(actions, types.RuntimeTaskActionRunNow, types.RuntimeTaskActionDelete)
 	}
@@ -196,6 +200,9 @@ func runtimeTaskActions(info types.RuntimeTaskInfo) []types.RuntimeTaskAction {
 
 func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 	state := types.RuntimeTaskState(job.State)
+	if job.State == task.TaskStateDispatched {
+		state = types.RuntimeTaskPending
+	}
 	if !state.Valid() {
 		return types.RuntimeTaskInfo{}, fmt.Errorf("unsupported runtime task state %q", state)
 	}
@@ -220,9 +227,6 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 	}
 	if info.EnqueuedAt == nil {
 		info.EnqueuedAt = runtimeTaskTime(job.CreatedAt)
-	}
-	if state == types.RuntimeTaskActive && job.LeaseUntil != nil {
-		info.IsOrphaned = job.LeaseUntil.Before(time.Now())
 	}
 	if payloadValid {
 		info.AllowedActions = runtimeTaskActions(info)
@@ -311,8 +315,8 @@ func (a *postgresTaskInspector) ListRuntimeTasks(ctx context.Context, queue stri
 	}
 	// One statement resolves the surviving anchor and reads its following rows
 	// from one PostgreSQL snapshot, avoiding page shifts during concurrent work.
-	query := `WITH ordered AS (SELECT task_jobs.*, row_number() OVER (ORDER BY ` + runtimeTaskOrder(state) + `) AS position
-		FROM task_jobs WHERE queue = ? AND state = ?), anchor AS (
+	query := `WITH ordered AS (SELECT task_pending_ops.*, row_number() OVER (ORDER BY ` + runtimeTaskOrder(state) + `) AS position
+		FROM task_pending_ops WHERE queue = ? AND (state = ? OR (? = 'pending' AND state='dispatched'))), anchor AS (
 		SELECT position FROM ordered JOIN jsonb_array_elements_text(?::jsonb) WITH ORDINALITY AS anchors(id, ordinal) USING (id)
 		ORDER BY ordinal DESC LIMIT 1)
 		SELECT ordered.* FROM ordered WHERE position > COALESCE((SELECT position FROM anchor), 0)
@@ -328,7 +332,7 @@ func (a *postgresTaskInspector) ListRuntimeTasks(ctx context.Context, queue stri
 	if err != nil {
 		return types.RuntimeTaskPage{}, true, err
 	}
-	err = a.db.WithContext(ctx).Raw(query, queue, string(state), string(anchorJSON), pageSize+1).Scan(&jobs).Error
+	err = a.db.WithContext(ctx).Raw(query, queue, string(state), string(state), string(anchorJSON), pageSize+1).Scan(&jobs).Error
 	if err != nil {
 		return types.RuntimeTaskPage{}, true, err
 	}
@@ -336,7 +340,7 @@ func (a *postgresTaskInspector) ListRuntimeTasks(ctx context.Context, queue stri
 		// Empty can also mean the anchor is the last task. Check that case
 		// explicitly before declaring the cursor stale.
 		var count int64
-		if err = a.db.WithContext(ctx).Model(&task.Job{}).Where("queue = ? AND state = ? AND id IN ?", queue, string(state), anchors).Count(&count).Error; err != nil {
+		if err = a.db.WithContext(ctx).Model(&task.Job{}).Where("queue = ? AND (state = ? OR (? = 'pending' AND state='dispatched')) AND id IN ?", queue, string(state), string(state), anchors).Count(&count).Error; err != nil {
 			return types.RuntimeTaskPage{}, true, err
 		}
 		if count == 0 {
@@ -396,6 +400,9 @@ func (a *postgresTaskInspector) DeleteRuntimeTask(ctx context.Context, queue, ta
 	if !info.Allows(types.RuntimeTaskActionDelete) {
 		return true, fmt.Errorf("task %s in queue %s cannot be deleted", taskID, queue)
 	}
+	if info.State == types.RuntimeTaskCancelled {
+		return true, a.client.Delete(ctx, taskID)
+	}
 	count, err := a.deleteArchivedRuntimeTask(ctx, queue, taskID, job.Payload)
 	if err == nil && count == 0 {
 		err = task.ErrTaskState
@@ -417,7 +424,7 @@ func (a *postgresTaskInspector) ForceDeleteRuntimeTask(ctx context.Context, queu
 // A state and payload comparison makes archived deletion safe against a
 // concurrent run-now or metadata update after the operator snapshot.
 func (a *postgresTaskInspector) deleteArchivedRuntimeTask(ctx context.Context, queue, taskID string, payload []byte) (int, error) {
-	result := a.db.WithContext(ctx).Exec(`DELETE FROM task_jobs WHERE queue = ? AND id = ? AND state = 'archived' AND payload = ?::jsonb`, queue, taskID, string(payload))
+	result := a.db.WithContext(ctx).Exec(`DELETE FROM task_pending_ops WHERE queue = ? AND id = ? AND state = 'archived' AND payload = ?::jsonb`, queue, taskID, string(payload))
 	return int(result.RowsAffected), result.Error
 }
 

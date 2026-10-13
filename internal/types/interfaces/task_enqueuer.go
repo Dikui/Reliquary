@@ -16,3 +16,9 @@ type TransactionalTaskEnqueuer interface {
 	TaskEnqueuer
 	EnqueueTx(ctx context.Context, tx *gorm.DB, task *queue.Task, opts ...queue.Option) (*queue.TaskInfo, error)
 }
+
+// TaskObjectCoordinator serializes a user mutation with an operation already
+// executing for the same object. Draining does not spend ordinary retries.
+type TaskObjectCoordinator interface {
+	WithObject(context.Context, string, func(context.Context) error) error
+}

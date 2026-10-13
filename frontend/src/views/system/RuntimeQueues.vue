@@ -248,6 +248,16 @@
               >{{ row.completed }}<t-icon name="chevron-right" /></t-button>
               <span v-else class="rq-number">0</span>
             </template>
+            <template #cancelled="{ row }">
+              <t-button
+                v-if="row.cancelled > 0"
+                variant="text"
+                size="small"
+                class="rq-task-count"
+                @click="openRuntimeTasks(row, 'cancelled')"
+              >{{ row.cancelled }}<t-icon name="chevron-right" /></t-button>
+              <span v-else class="rq-number">0</span>
+            </template>
             <template #latency_ms="{ row }">
               <span class="rq-latency">{{ formatLatency(row.latency_ms) }}</span>
             </template>
@@ -589,7 +599,7 @@ const taskAction = ref<RuntimeTaskAction | ''>('')
 const purging = ref(false)
 
 const TASK_PAGE_SIZE = 20
-const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry', 'archived', 'completed']
+const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry', 'archived', 'completed', 'cancelled']
 const runtimeTaskTypeKeys: Record<string, string> = {
   'document:process': 'documentProcess',
   'manual:process': 'manualProcess',
@@ -613,6 +623,7 @@ const columns = computed(() => [
   { colKey: 'retry', title: t('system.globalSettings.runtime.columns.retry'), width: 68, align: 'center' as const },
   { colKey: 'archived', title: t('system.globalSettings.runtime.columns.archived'), width: 96, align: 'center' as const },
   { colKey: 'completed', title: t('system.globalSettings.runtime.columns.completed'), width: 84, align: 'center' as const },
+  { colKey: 'cancelled', title: t('system.globalSettings.runtime.tasks.states.cancelled'), width: 84, align: 'center' as const },
   { colKey: 'latency_ms', title: t('system.globalSettings.runtime.columns.latency'), width: 104, align: 'center' as const },
   { colKey: 'status', title: t('system.globalSettings.runtime.columns.status'), width: 96 },
 ])

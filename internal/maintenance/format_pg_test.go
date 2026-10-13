@@ -14,12 +14,12 @@ import (
 )
 
 func TestLegacyReplicasImportCurrentRowsAndPreserveOpaqueValues(t *testing.T) {
-	for _, format := range []int{1, 2, 3} {
+	for _, format := range []int{1, 2, 3, 4} {
 		t.Run(fmt.Sprint(format), func(t *testing.T) {
 			ctx := context.Background()
 			source := pgtest.Open(t)
 			seed(t, source)
-			require.NoError(t, source.Exec(`UPDATE entries SET custom_metadata='{"tenant_id":"keep opaque"}'::jsonb WHERE id='article'; UPDATE task_jobs SET payload='{"tenant_id":1,"entry_id":"article"}'::jsonb`).Error)
+			require.NoError(t, source.Exec(`UPDATE entries SET custom_metadata='{"tenant_id":"keep opaque"}'::jsonb WHERE id='article'; UPDATE task_pending_ops SET payload='{"tenant_id":1,"entry_id":"article"}'::jsonb`).Error)
 			snapshot, err := Capture(ctx, source)
 			require.NoError(t, err)
 			root := t.TempDir()

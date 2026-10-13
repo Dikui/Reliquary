@@ -155,3 +155,17 @@ func (s *entryService) removeRolledBackCollectionSource(ctx context.Context, k *
 	}
 	return err
 }
+
+// Coordinate user mutations with the operation executor without changing the
+// business handler or its checkpoints.
+func (s *entryService) withTaskObject(ctx context.Context, id string, mutation func(context.Context) error) error {
+	if q, ok := s.task.(interfaces.TaskObjectCoordinator); ok {
+		return q.WithObject(ctx, id, mutation)
+	}
+	if bound, ok := s.task.(*transactionTaskEnqueuer); ok {
+		if q, ok := bound.queue.(interfaces.TaskObjectCoordinator); ok {
+			return q.WithObject(ctx, id, mutation)
+		}
+	}
+	return mutation(ctx)
+}

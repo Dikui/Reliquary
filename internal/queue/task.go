@@ -1,4 +1,4 @@
-// Package queue implements the PostgreSQL background task queue.
+// Package queue stores durable operations in PostgreSQL and dispatches them through asynq.
 package queue
 
 import (
@@ -80,12 +80,14 @@ func (t *Task) Headers() map[string]string { return t.headers }
 type TaskState string
 
 const (
-	TaskStatePending   TaskState = "pending"
-	TaskStateActive    TaskState = "active"
-	TaskStateScheduled TaskState = "scheduled"
-	TaskStateRetry     TaskState = "retry"
-	TaskStateArchived  TaskState = "archived"
-	TaskStateCompleted TaskState = "completed"
+	TaskStatePending    TaskState = "pending"
+	TaskStateDispatched TaskState = "dispatched"
+	TaskStateCancelled  TaskState = "cancelled"
+	TaskStateActive     TaskState = "active"
+	TaskStateScheduled  TaskState = "scheduled"
+	TaskStateRetry      TaskState = "retry"
+	TaskStateArchived   TaskState = "archived"
+	TaskStateCompleted  TaskState = "completed"
 )
 
 type TaskInfo struct {

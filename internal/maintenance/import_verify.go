@@ -26,6 +26,11 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	if err != nil {
 		return fmt.Errorf("capture imported replica: %w", err)
 	}
+	if _, modern := current.Tables["task_pending_ops"]; modern {
+		if err := migrateQueueSnapshot(original); err != nil {
+			return err
+		}
+	}
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]

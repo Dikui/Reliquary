@@ -89,6 +89,15 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 		mux.HandleFunc(types.TypeIngestAssetCleanup, assets.HandleIngestAssetCleanup)
 	}
 	config := queue.Config{Pools: resolveWorkerPoolConcurrency(params.SystemSettings), OnDeadLetter: newDeadLetterEntryFailer(params.EntryService, params.SpanTracker)}
+	for name, target := range map[string]*time.Duration{"RELIQUARY_QUEUE_SWEEP_INTERVAL": &config.CheckInterval, "RELIQUARY_QUEUE_DELIVERY_TIMEOUT": &config.DeliveryTimeout} {
+		if raw := os.Getenv(name); raw != "" {
+			d, err := time.ParseDuration(raw)
+			if err != nil || d <= 0 {
+				panic(name + " must be a positive Go duration")
+			}
+			*target = d
+		}
+	}
 	if raw := os.Getenv("RELIQUARY_QUEUE_RECONNECT_ALERT_AFTER"); raw != "" {
 		duration, err := time.ParseDuration(raw)
 		if err != nil || duration <= 0 {
@@ -97,10 +106,10 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 		config.ReconnectAlertAfter = duration
 	}
 	if err := params.Client.Start(context.Background(), mux, config); err != nil {
-		panic(fmt.Errorf("start PostgreSQL task workers: %w", err))
+		panic(fmt.Errorf("start durable operation workers: %w", err))
 	}
-	params.Cleaner.RegisterWithName("PostgresTaskQueue", params.Client.Close)
-	log.Printf("PostgreSQL task workers started: core=%d enrichment=%d maintenance=%d shared=%d", config.Pools.Core, config.Pools.Enrichment, config.Pools.Maintenance, config.Pools.Shared)
+	params.Cleaner.RegisterWithName("RedisTaskQueue", params.Client.Close)
+	log.Printf("Redis task workers started: core=%d enrichment=%d maintenance=%d shared=%d", config.Pools.Core, config.Pools.Enrichment, config.Pools.Maintenance, config.Pools.Shared)
 	return mux
 }
 

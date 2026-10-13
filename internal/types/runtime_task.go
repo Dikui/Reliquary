@@ -21,6 +21,7 @@ var (
 type RuntimeTaskState string
 
 const (
+	RuntimeTaskCancelled RuntimeTaskState = "cancelled"
 	RuntimeTaskPending   RuntimeTaskState = "pending"
 	RuntimeTaskActive    RuntimeTaskState = "active"
 	RuntimeTaskScheduled RuntimeTaskState = "scheduled"
@@ -31,7 +32,7 @@ const (
 
 func (s RuntimeTaskState) Valid() bool {
 	switch s {
-	case RuntimeTaskPending, RuntimeTaskActive, RuntimeTaskScheduled,
+	case RuntimeTaskCancelled, RuntimeTaskPending, RuntimeTaskActive, RuntimeTaskScheduled,
 		RuntimeTaskRetry, RuntimeTaskArchived, RuntimeTaskCompleted:
 		return true
 	default:

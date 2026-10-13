@@ -252,7 +252,7 @@ func TestOfflineChatGPTModelProbeWithoutMaintenanceStateAuditsRealQuotaWithoutMi
 	}
 	version, dirty, err := migration.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 7, version)
+	require.EqualValues(t, 9, version)
 	require.False(t, dirty)
 	require.False(t, db.Migrator().HasTable("maintenance_state"))
 }

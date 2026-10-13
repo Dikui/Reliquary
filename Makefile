@@ -9,6 +9,7 @@ help:
 	@echo "  run               运行应用"
 	@echo "  reset-password    从标准输入重置唯一用户密码"
 	@echo "  test              运行测试"
+	@echo "  test-integration  运行 PostgreSQL 与 Redis 集成测试"
 	@echo "  test-pg           运行含 PostgreSQL 集成用例的测试（设置 RELIQUARY_TEST_PG_DSN）"
 	@echo "  anydoc-lib        构建 anydoc 静态库（需要 Rust 工具链）"
 	@echo "  build-anydoc      构建带 anydoc 解析引擎的应用"
@@ -94,7 +95,7 @@ build-anydoc: anydoc-lib
 
 # Run the application
 run: build
-	VAULT_ROOT="$${VAULT_ROOT:-$(CURDIR)/.local-data/vault}" SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
+	REDIS_ADDR="$${REDIS_ADDR:-127.0.0.1:6379}" VAULT_ROOT="$${VAULT_ROOT:-$(CURDIR)/.local-data/vault}" SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
 
 reset-password:
 	go run ./cmd/server reset-password
@@ -104,7 +105,7 @@ test:
 	go test -v ./...
 
 .PHONY: test-pg
-export RELIQUARY_TEST_PG_DSN
+export RELIQUARY_TEST_PG_DSN RELIQUARY_TEST_REDIS_ADDR
 
 # Run PostgreSQL integration tests against an explicitly configured test server.
 test-pg:
@@ -295,3 +296,9 @@ dev-app:
 dev-frontend:
 	./scripts/dev.sh frontend
 
+
+.PHONY: test-integration
+test-integration:
+	@test -n "$$RELIQUARY_TEST_PG_DSN" || (echo "Set RELIQUARY_TEST_PG_DSN"; exit 1)
+	@test -n "$$RELIQUARY_TEST_REDIS_ADDR" || (echo "Set RELIQUARY_TEST_REDIS_ADDR"; exit 1)
+	go test -count=1 ./...

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func newIngestAssetHarness(t *testing.T, catalog bool) (*entryService, context.C
 	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Assets fixture','personal'); INSERT INTO api_keys(id,space_id,name,key_hash) VALUES(1,1,'Asset collector','asset-fixture-key-hash')`).Error)
 	root := t.TempDir()
 	files := file.NewLocalFileService(root, "")
-	s := &entryService{db: db, fileSvc: files, task: taskqueue.NewClient(db)}
+	s := &entryService{db: db, fileSvc: files, task: redistest.NewClient(t, db)}
 	if catalog {
 		s.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(db))
 		s.fileSvc = file.NewResourceCatalogFileService(files, s.resourceCatalog)

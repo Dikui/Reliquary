@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -182,7 +183,7 @@ func canonicalRows(table string, rows []map[string]any) []map[string]any {
 				}
 			}
 		case "task_jobs":
-			if (copy["state"] == "active" || copy["state"] == "pending") && copy["completed_at"] == nil {
+			if (copy["state"] == "active" || copy["state"] == "pending" || copy["state"] == "dispatched") && copy["completed_at"] == nil {
 				for _, key := range []string{"claim_token", "worker_pool", "lease_until", "started_at", "updated_at"} {
 					delete(copy, key)
 				}
@@ -204,7 +205,7 @@ func comparableTaskRows(expected, actual []map[string]any) ([]map[string]any, []
 	left, right := canonicalRows("task_jobs", expected), canonicalRows("task_jobs", actual)
 	interrupted := map[string]map[string]any{}
 	for _, row := range expected {
-		if row["state"] == "active" && row["completed_at"] == nil {
+		if (row["state"] == "active" || row["state"] == "dispatched") && row["completed_at"] == nil {
 			interrupted[fmt.Sprint(row["id"])] = row
 		}
 	}
@@ -227,6 +228,9 @@ func comparableTaskRows(expected, actual []map[string]any) ([]map[string]any, []
 // Credential exclusions permit only the documented pause and the restoration
 // of that row's recorded original status. All other business fields stay exact.
 func comparableCredentialRows(table string, expected, actual []map[string]any, requirements []Requirement) ([]map[string]any, []map[string]any) {
+	if table == "task_pending_ops" {
+		return comparableOperationRows(expected, actual)
+	}
 	if table == "task_jobs" {
 		return comparableTaskRows(expected, actual)
 	}
@@ -432,6 +436,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	legacyFormat := expected.FormatVersion
 	expected, actual = currentManifest(expected, actual)
 	expected, actual = projectRetiredTables(expected, actual)
+	expected, actual = projectQueueMigration(expected, actual)
 	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
@@ -568,8 +573,9 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 			if group == "vault" && vaultpath.UserMetadata(file.Path) {
 				continue
 			}
-			if group == "vault" && file.Path == ".reliquary/data/task_jobs.json" {
-				if got, present := current[file.Path]; present && matchingTaskReplicaRecovery(expected.Tables["task_jobs"], actual.Tables["task_jobs"], file, got) {
+			if group == "vault" && (file.Path == ".reliquary/data/task_jobs.json" || file.Path == ".reliquary/data/task_pending_ops.json") {
+				table := strings.TrimSuffix(filepath.Base(file.Path), ".json")
+				if got, present := current[file.Path]; present && matchingTaskReplicaRecovery(expected.Tables[table], actual.Tables[table], file, got) {
 					delete(current, file.Path)
 					continue
 				}
@@ -621,6 +627,11 @@ func matchingTaskReplicaRecovery(expected, actual TableManifest, before, after F
 		}
 	}
 	left, right := comparableTaskRows(expected.Data, actual.Data)
+	if len(expected.Data) > 0 {
+		if _, modern := expected.Data[0]["delivery"]; modern {
+			left, right = comparableOperationRows(expected.Data, actual.Data)
+		}
+	}
 	leftJSON, _ := json.Marshal(left)
 	rightJSON, _ := json.Marshal(right)
 	return bytes.Equal(leftJSON, rightJSON)
@@ -741,4 +752,31 @@ func normalizeRebuildAppend(table string, expected, actual []map[string]any, mod
 	}
 	sortRows(result)
 	return result
+}
+
+// Only a proven startup transition may change delivery metadata. Pending,
+// delayed and terminal rows retain every persisted field exactly.
+func comparableOperationRows(expected, actual []map[string]any) ([]map[string]any, []map[string]any) {
+	left, right := canonicalRows("task_pending_ops", expected), canonicalRows("task_pending_ops", actual)
+	originals := map[string]map[string]any{}
+	for _, row := range left {
+		originals[fmt.Sprint(row["id"])] = row
+	}
+	for _, row := range right {
+		before := originals[fmt.Sprint(row["id"])]
+		if before == nil {
+			continue
+		}
+		if (before["state"] == "active" || before["state"] == "dispatched") && row["state"] == "pending" && before["completed_at"] == nil && row["completed_at"] == nil {
+			oldN, e1 := strconv.ParseInt(fmt.Sprint(before["delivery"]), 10, 64)
+			newN, e2 := strconv.ParseInt(fmt.Sprint(row["delivery"]), 10, 64)
+			if e1 == nil && e2 == nil && newN == oldN+1 {
+				for _, key := range []string{"state", "delivery", "dispatched_at", "worker_pool", "updated_at"} {
+					row[key] = before[key]
+				}
+			}
+		}
+	}
+	sortRows(right)
+	return left, right
 }

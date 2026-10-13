@@ -1396,10 +1396,10 @@ export default {
         loading: 'Loading...',
         retry: 'Retry',
         reconnecting: 'Queue paused, reconnecting',
-        reconnectAlert: 'Queue paused, reconnecting. Reconnect keeps failing; check the database connection.',
+        reconnectAlert: 'Queue paused, reconnecting. Reconnect keeps failing; check Redis and PostgreSQL.',
         latestConnectionError: 'Latest error',
         unavailableTitle: 'Task queues unavailable',
-        unavailable: 'The task queue is currently unavailable. Check the database connection.',
+        unavailable: 'Task inspection is unavailable. Check PostgreSQL.',
         empty: 'No queue data available',
         detailsTitle: 'Queue details',
         detailsDescription: 'Live load and wait time for every processing lane. “Failed (stopped)” means the task exceeded its retry limit and will not run automatically again.',
@@ -1493,7 +1493,8 @@ export default {
             scheduled: 'Scheduled',
             retry: 'Retrying',
             archived: 'Failed',
-            completed: 'Completed'
+            completed: 'Completed',
+            cancelled: 'Cancelled'
           },
           guides: {
             active: 'Inspect the worker pool, start time, deadline, and orphan status. Cancel is offered only when the business state can be updated safely.',
@@ -1501,7 +1502,8 @@ export default {
             scheduled: 'Scheduled tasks can run early; document pipeline tasks can also use safe business cancellation.',
             retry: 'Use the last error, attempt count, and next run time to decide whether to run now or cancel.',
             archived: 'Fix the root cause before running again. Clearing a record does not complete the original business task.',
-            completed: 'Only recently completed tasks with result retention are shown. No management actions are available.'
+            completed: 'Completed tasks retain their processing time and retry history.',
+            cancelled: 'Cancelled tasks do not retry automatically. Removing the record does not undo completed work.'
           },
           actionSuccess: {
             cancel: 'Task cancelled',

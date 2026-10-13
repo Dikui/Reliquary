@@ -38,8 +38,8 @@ func TestPostgresEntryCancellationRemovesAllQueuedStatesAndSignalsActive(t *test
 		t.Fatalf("cancel deleted=%d signaled=%d err=%v", deleted, cancelled, err)
 	}
 	for _, state := range states[:3] {
-		if _, _, err := inspector.GetRuntimeTask(ctx, types.QueueDefault, string(state)); err == nil {
-			t.Fatalf("%s task survived", state)
+		if info, _, err := inspector.GetRuntimeTask(ctx, types.QueueDefault, string(state)); err != nil || info.State != types.RuntimeTaskCancelled {
+			t.Fatalf("%s task was not durably cancelled: %v", state, err)
 		}
 	}
 	var active task.Job
@@ -54,7 +54,7 @@ func TestPostgresEntryCancellationRemovesAllQueuedStatesAndSignalsActive(t *test
 	// The durable active marker stays live until the worker acknowledges it,
 	// preventing orphan housekeeping from failing an article during that gap.
 	exists, err = inspector.HasQueuedTasksForEntry(ctx, "entry-1")
-	if err != nil || !exists {
-		t.Fatalf("active cancellation marker lost: exists=%v err=%v", exists, err)
+	if err != nil || exists {
+		t.Fatalf("cancelled operations must not count as queued: exists=%v err=%v", exists, err)
 	}
 }

@@ -66,9 +66,7 @@ class AdminStorageTests(unittest.TestCase):
 
     @unittest.skipUnless(admin.shutil.which("docker"), "Docker Compose is required to check its interpolation")
     def test_compose_and_admin_resolve_the_same_host_directories(self):
-        evidence = Path(__file__).resolve().parent.parent / ".scratch/ingest-only/evidence/06"
-        evidence.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="admin-compose-paths-", dir=evidence) as temporary:
+        with tempfile.TemporaryDirectory(prefix="admin-compose-paths-", dir=self.root) as temporary:
             fixture = Path(temporary)
             source, home = fixture / "source", fixture / "home"
             source.mkdir()
@@ -897,12 +895,16 @@ class AdminStorageTests(unittest.TestCase):
     def test_unpack_discards_source_host_control_paths_and_keeps_destination_overrides(self):
         admin.write_env(self.root / ".env.template", {"RELIQUARY_ADMIN_VAULT_DIR": "/old-host/vault", "RELIQUARY_ADMIN_RESOURCES_DIR": "/old-host/uploads", "RELIQUARY_ADMIN_SERVER": "/old-host/server", "FEATURE_CONFIG": "preserved"})
         class FakeContext:
-            env = {"RELIQUARY_ADMIN_VAULT_DIR": "/new-host/vault"}
+            env = {"RELIQUARY_ADMIN_VAULT_DIR": "/new-host/vault", "REDIS_ADDR": "destination:6379", "REDIS_DB": "4", "REDIS_PASSWORD": "destination-password"}
         values = admin.restored_environment(FakeContext(), self.root)
         self.assertEqual(values["RELIQUARY_ADMIN_VAULT_DIR"], "/new-host/vault")
         self.assertNotIn("RELIQUARY_ADMIN_RESOURCES_DIR", values)
         self.assertNotIn("RELIQUARY_ADMIN_SERVER", values)
         self.assertEqual(values["FEATURE_CONFIG"], "preserved")
+        runtime = self.host_context(RELIQUARY_ADMIN_DIRECT="1", **FakeContext.env).runtime_env()
+        for key in ("REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD"):
+            self.assertEqual(values[key], FakeContext.env[key])
+            self.assertEqual(runtime[key], FakeContext.env[key])
 
     def test_unpack_overrides_legacy_fixed_names_without_modifying_old_source(self):
         path = self.root / "compose.images.json"

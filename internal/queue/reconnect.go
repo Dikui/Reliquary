@@ -5,8 +5,9 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"github.com/hibiken/asynq"
+	"gorm.io/gorm"
 	"log"
-	"sync"
 	"time"
 
 	"reliquary/internal/types"
@@ -31,7 +32,7 @@ func (c *Client) acquire(ctx context.Context) (*sql.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		return nil, errors.New("another task worker process owns the PostgreSQL queue")
+		return nil, errors.New("another task worker process owns the operation executor")
 	}
 	return conn, nil
 }
@@ -48,63 +49,73 @@ func (c *Client) supervise(root context.Context, handler Handler, conn *sql.Conn
 		if conn != nil {
 			releaseLock(conn)
 		}
-		c.mu.Lock()
-		c.connection.State = "stopped"
-		c.mu.Unlock()
 	}()
 	for root.Err() == nil {
 		generation, cancel := context.WithCancel(root)
 		c.mu.Lock()
-		c.workerCtx, c.lock = generation, conn
-		c.connection = types.QueueConnectionStatus{State: "active"}
+		c.workerCtx = generation
+		c.lock = conn
 		c.mu.Unlock()
-		var workers sync.WaitGroup
-		for _, p := range c.pools {
-			for i := 0; i < p.concurrency; i++ {
-				workers.Add(1)
-				go func(p *workerPool) { defer workers.Done(); c.work(generation, handler, p) }(p)
+		servers := make([]*asynq.Server, 0, len(c.pools))
+		for _, pool := range c.pools {
+			if pool.concurrency <= 0 {
+				continue
+			}
+			p := pool
+			server := asynq.NewServer(c.redisOpt, asynq.Config{Concurrency: p.concurrency, Queues: c.redisWeights(p.weights), BaseContext: func() context.Context { return generation }, ShutdownTimeout: 5 * time.Second, TaskCheckInterval: 100 * time.Millisecond, RetryDelayFunc: func(int, error, *asynq.Task) time.Duration { return time.Second }, LogLevel: asynq.ErrorLevel})
+			if err := server.Start(asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error { return c.consume(ctx, handler, p, t) })); err != nil {
+				log.Printf("start Redis consumer: %v", err)
+			} else {
+				servers = append(servers, server)
 			}
 		}
 		err := c.maintain(generation, conn)
 		cancel()
-		if root.Err() == nil {
-			c.reconnecting(err, c.config.ReconnectInitialDelay)
-			log.Printf("task queue paused; reconnecting after singleton connection lost: %v", err)
+		for _, server := range servers {
+			server.Shutdown()
 		}
-		// Drain the preceding generation before recovering its active rows or
-		// starting new slots. Handlers and result writes cannot overlap rounds.
-		workers.Wait()
-		releaseLock(conn)
-		conn = nil
+		// Shutdown can reach its timeout while a handler is unwinding. Do not recover
+		// that generation or relinquish the singleton until its business writes end.
+		for {
+			busy := false
+			for _, p := range c.pools {
+				if p.active.Load() > 0 {
+					busy = true
+				}
+			}
+			if !busy {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 		if root.Err() != nil {
 			return
 		}
+		c.reconnecting(err, c.config.ReconnectInitialDelay)
+		releaseLock(conn)
+		conn = nil
 		delay := c.config.ReconnectInitialDelay
 		for root.Err() == nil {
 			if !waitContext(root, delay) {
 				return
 			}
-			conn, err = c.acquire(root)
-			if err == nil {
-				recoverCtx, stop := context.WithTimeout(root, 5*time.Second)
-				err = c.recoverJobs(recoverCtx, true)
-				stop()
-				if err != nil {
+			var acquireErr error
+			conn, acquireErr = c.acquire(root)
+			if acquireErr == nil {
+				acquireErr = c.recoverJobs(root, true)
+				if acquireErr != nil {
 					releaseLock(conn)
 					conn = nil
 				}
 			}
-			if err == nil {
-				log.Printf("task queue PostgreSQL connection and advisory lock restored; resuming workers")
+			if acquireErr == nil {
 				break
 			}
 			delay = min(delay*2, c.config.ReconnectMaxDelay)
-			c.reconnecting(err, delay)
-			log.Printf("task queue reconnect failed; retrying in %s: %v", delay, err)
+			c.reconnecting(acquireErr, delay)
 		}
 	}
 }
-
 func (c *Client) reconnecting(err error, delay time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -113,7 +124,77 @@ func (c *Client) reconnecting(err error, delay time.Duration) {
 		c.connection.Since = &now
 	}
 	c.connection.State = "reconnecting"
-	c.connection.LastError = NormalizeError(err.Error())
+	if err != nil {
+		c.connection.LastError = NormalizeError(err.Error())
+	}
 	next := time.Now().UTC().Add(delay)
 	c.connection.NextRetryAt = &next
+}
+func (c *Client) recoverJobs(ctx context.Context, all bool) error {
+	if !all {
+		return nil
+	}
+	return c.db.WithContext(ctx).Model(&Job{}).Where("state IN ?", []TaskState{TaskStateActive, TaskStateDispatched}).Updates(map[string]any{"state": TaskStatePending, "delivery": gorm.Expr("delivery+1"), "dispatched_at": nil, "worker_pool": "", "updated_at": time.Now().UTC()}).Error
+}
+func (c *Client) maintenanceCycle(ctx context.Context) error {
+	return c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var paused bool
+		if err := tx.Raw("SELECT paused AND pause_mode='snapshot' FROM maintenance_state WHERE id=true FOR SHARE").Scan(&paused).Error; err != nil {
+			return err
+		}
+		if paused {
+			return nil
+		}
+		return tx.Exec(`DELETE FROM task_pending_ops WHERE state='completed' AND retention_ns>0 AND completed_at + retention_ns / 1000.0 * interval '1 microsecond' < now()`).Error
+	})
+}
+func (c *Client) maintain(ctx context.Context, conn *sql.Conn) error {
+	dispatch := func() {
+		call, stop := context.WithTimeout(ctx, 5*time.Second)
+		defer stop()
+		err := c.DispatchPending(call)
+		if err == nil {
+			err = c.transport.Ping()
+		}
+		if err != nil {
+			c.reconnecting(err, c.config.CheckInterval)
+		} else {
+			c.mu.Lock()
+			c.connection = types.QueueConnectionStatus{State: "active"}
+			c.mu.Unlock()
+		}
+	}
+	dispatch()
+	sweep := time.NewTicker(c.config.CheckInterval)
+	defer sweep.Stop()
+	ping := time.NewTicker(time.Second)
+	defer ping.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.wake:
+			dispatch()
+		case <-sweep.C:
+			dispatch()
+			if err := c.maintenanceCycle(ctx); err != nil {
+				log.Printf("operation maintenance: %v", err)
+			}
+		case <-ping.C:
+			check, stop := context.WithTimeout(ctx, 5*time.Second)
+			err := conn.PingContext(check)
+			stop()
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (c *Client) redisWeights(weights map[string]int) map[string]int {
+	out := map[string]int{}
+	for q, w := range weights {
+		out[c.redisQueue(q)] = w
+	}
+	return out
 }

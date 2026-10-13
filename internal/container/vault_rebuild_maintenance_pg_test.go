@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"reliquary/internal/testutil/redistest"
 	"testing"
 	"time"
 
@@ -23,11 +24,11 @@ func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTas
 	_, err := repository.EnsureSpaceLibrary(ctx, source, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	require.NoError(t, source.Create(&types.Entity{ID: "preserved-profile", SpaceID: 1, CanonicalName: "Preserved owner profile", NormalizedName: "preserved owner profile", EntityType: "product", Description: "Keep user information while configuring recovery"}).Error)
-	jobs := queue.NewClient(source)
+	jobs := redistest.NewClient(t, source)
 	for _, state := range []string{"active", "pending"} {
 		_, err := jobs.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"entry_id":"preserved-article","original":"accepted original"}`)), queue.TaskID(state), queue.MaxRetry(7))
 		require.NoError(t, err)
-		require.NoError(t, source.Exec(`UPDATE task_jobs SET state=?,retried=2,fail_count=1,last_error='preserved previous failure' WHERE id=?`, state, state).Error)
+		require.NoError(t, source.Exec(`UPDATE task_pending_ops SET state=?,retried=2,fail_count=1,last_error='preserved previous failure' WHERE id=?`, state, state).Error)
 	}
 	snapshot, err := maintenance.Capture(ctx, source)
 	require.NoError(t, err)
@@ -51,7 +52,7 @@ func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTas
 	require.Empty(t, maintenance.CompareManifest(expected, actual), "pause changes only regenerated maintenance fields")
 
 	started := make(chan struct{}, 1)
-	client := queue.NewClient(target)
+	client := redistest.NewClient(t, target)
 	require.NoError(t, client.Start(ctx, queue.HandlerFunc(func(context.Context, *queue.Task) error {
 		started <- struct{}{}
 		return nil

@@ -1422,10 +1422,11 @@ export default {
           guides: {
             active: '运行中任务可查看执行池、开始时间和截止时间。只有具备完整业务取消语义的任务才允许终止。',
             pending: '排队任务尚未被执行程序领取。终止操作会同步更新文章状态并取消相关任务。',
-            scheduled: '定时任务可提前立即执行；支持业务取消的文档任务也可以安全终止。',
+            scheduled: '延后任务可提前立即执行；支持业务取消的文档任务也可以安全终止。',
             retry: '请结合最后错误、重试次数和下次执行时间判断是否立即执行或终止。',
             archived: '请先修复失败原因再立即执行。清除记录不会完成原业务任务。',
-            completed: '这里只展示设置了结果保留时间的近期完成任务，不提供管理动作。'
+            completed: '已完成任务可查看处理时间与重试记录。',
+            cancelled: '已终止任务不会自动重试；清除记录不会撤销已经完成的处理。'
           },
           states: {
             active: '运行中',
@@ -1433,7 +1434,8 @@ export default {
             scheduled: '定时执行',
             retry: '重试中',
             archived: '最终失败',
-            completed: '已完成'
+            completed: '已完成',
+            cancelled: '已取消'
           },
           taskTypes: {
             documentProcess: '文档解析',

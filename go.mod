@@ -37,9 +37,12 @@ require (
 )
 
 require (
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/hibiken/asynq v0.26.0
 	github.com/moby/term v0.5.2 // indirect
+	github.com/redis/go-redis/v9 v9.14.1
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect

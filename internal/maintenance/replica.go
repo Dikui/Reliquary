@@ -414,6 +414,11 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	if err := AtomicWrite(filepath.Join(directory, "manifest.json"), append(data, '\n')); err != nil {
 		return err
 	}
+	if _, currentQueue := snapshot.Tables["task_pending_ops"]; currentQueue {
+		if err := os.Remove(filepath.Join(directory, "data/task_jobs.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
 	if retired {
 		for _, path := range []string{"config/data_sources.json", "data/sync_logs.json"} {
 			if err := os.Remove(filepath.Join(directory, path)); err != nil && !errors.Is(err, os.ErrNotExist) {

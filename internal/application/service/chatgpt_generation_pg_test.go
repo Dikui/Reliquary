@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reliquary/internal/testutil/redistest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -351,7 +352,7 @@ func TestChatGPTQuotaDefersHistoricalTopicBatchWithoutOrdinaryFailureAttempt(t *
 
 func chatGPTScheduledQueue(t *testing.T, h *chatGPTGenerationHarness) *taskqueue.Client {
 	t.Helper()
-	client := taskqueue.NewClient(h.db)
+	client := redistest.NewClient(t, h.db)
 	h.service.task = client
 	return client
 }

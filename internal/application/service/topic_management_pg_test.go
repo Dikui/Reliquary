@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"sort"
 	"strings"
 	"sync"
@@ -275,7 +276,7 @@ func TestTopicHistoricalBackfillConfiguredBatchesFailureAndRetry(t *testing.T) {
 func TestTopicHistoricalBackfillWorkerRestartsPersistedRunningBatch(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	svc, _, ctx := newTopicManagementService(t, h)
-	queue := taskqueue.NewClient(h.db)
+	queue := redistest.NewClient(t, h.db)
 	svc.SetTaskEnqueuer(queue)
 	historicalTopicArticles(t, h, 3)
 	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Restart topic", Description: "Product announcements"})
@@ -284,7 +285,7 @@ func TestTopicHistoricalBackfillWorkerRestartsPersistedRunningBatch(t *testing.T
 	require.NoError(t, err)
 	require.NoError(t, h.db.Model(&types.TopicBackfillJob{}).Where("id=?", job.ID).Update("status", "running").Error)
 	require.NoError(t, h.db.Model(&types.TopicBackfillBatch{}).Where("job_id=?", job.ID).Update("status", "running").Error)
-	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("task_type=?", types.TypeTopicBackfill).Updates(map[string]any{"state": taskqueue.TaskStateActive, "lease_until": time.Now().Add(time.Hour), "claim_token": "crashed-process"}).Error)
+	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("task_type=?", types.TypeTopicBackfill).Updates(map[string]any{"state": taskqueue.TaskStateActive, "dispatched_at": time.Now().Add(time.Hour), "worker_pool": "crashed-process"}).Error)
 	require.NoError(t, queue.Start(context.Background(), taskqueue.HandlerFunc(svc.HandleBackfill), taskqueue.Config{}))
 	t.Cleanup(func() { require.NoError(t, queue.Close()) })
 	require.Eventually(t, func() bool {

@@ -39,7 +39,7 @@ var Rules = map[string]Rule{
 	"spatial_ref_sys":               {Regenerated: "srid auth_name auth_srid srtext proj4text"},
 	"system_settings":               {Configuration: "id key value value_type category description is_secret requires_restart last_modified_by created_at updated_at"},
 	"task_dead_letters":             {Sidecar: "id space_id task_type scope scope_id related_id payload last_error fail_count failed_at"},
-	"task_jobs":                     {Sidecar: "id task_type queue payload headers state max_retry retried fail_count timeout_ns retention_ns deadline group_name created_at updated_at process_at started_at completed_at last_failed_at last_error lease_until claim_token worker_pool cancel_requested"},
+	"task_pending_ops":              {Sidecar: "id task_type queue payload headers state max_retry retried fail_count timeout_ns retention_ns deadline group_name created_at updated_at process_at started_at completed_at last_failed_at last_error dispatched_at object_id generation delivery worker_pool cancel_requested"},
 	"task_queue_counters":           {Sidecar: "queue day processed failed"},
 	"api_keys":                      {Configuration: "id space_id name key_hash api_key last_used_at expires_at revoked_at created_at updated_at"},
 	"spaces":                        {Configuration: "id name description status business storage_used created_at updated_at deleted_at parser_engine_config retrieval_config credentials"},

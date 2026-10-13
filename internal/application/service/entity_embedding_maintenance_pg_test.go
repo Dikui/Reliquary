@@ -1,6 +1,7 @@
 package service
 
 import (
+	"reliquary/internal/testutil/redistest"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 
 func TestSnapshotModelAndLibraryEditsPreserveEntityAndQueueHistory(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
-	queue := taskqueue.NewClient(db)
+	queue := redistest.NewClient(t, db)
 	models := &nameRebuildModels{models: map[string]embedding.Embedder{
 		"team-vector":     &nameRebuildEmbedder{id: "team-vector", dimension: 4},
 		"override-vector": &nameRebuildEmbedder{id: "override-vector", dimension: 3},
@@ -24,16 +25,17 @@ func TestSnapshotModelAndLibraryEditsPreserveEntityAndQueueHistory(t *testing.T)
 		Description: "Original profile", NameEmbedding: types.EntityNameEmbedding{1, 0, 0}, EmbeddingModelID: "team-vector", EmbeddingDimension: 3, CreatedAt: originalAt, UpdatedAt: originalAt}).Error)
 	require.NoError(t, db.Create(&types.EntityNameEmbeddingRebuildRun{ID: "historical-run", SpaceID: 1, Status: "completed", Reason: "original", ModelID: "team-vector", Dimension: 3,
 		ProfileHash: "historical-profile", TotalCount: 1, ProcessedCount: 1, CreatedAt: originalAt, UpdatedAt: originalAt}).Error)
+	// Freeze delivery before recording the snapshot that model edits must preserve.
+	require.NoError(t, db.Exec("UPDATE maintenance_state SET paused=true,pause_mode='snapshot' WHERE id=true").Error)
 	_, err := queue.Enqueue(taskqueue.NewTask(types.TypeEntityNameEmbeddingRebuild, []byte(`{"tenant_id":1,"run_id":"historical-run"}`)), taskqueue.Retention(time.Hour))
 	require.NoError(t, err)
-	tables := []string{"entities", "task_jobs", "entity_embedding_rebuild_runs"}
+	tables := []string{"entities", "task_pending_ops", "entity_embedding_rebuild_runs"}
 	original := map[string]string{}
 	for _, table := range tables {
 		var value string
 		require.NoError(t, db.Raw("SELECT jsonb_agg(to_jsonb(row) ORDER BY id)::text FROM "+table+" row").Scan(&value).Error)
 		original[table] = value
 	}
-	require.NoError(t, db.Exec("UPDATE maintenance_state SET paused=true,pause_mode='snapshot' WHERE id=true").Error)
 	service := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewLibraryRepository(db), nil, nil, nil, db).(*modelService)
 	service.SetNameEmbeddingRebuilder(rebuilder)
 	var model types.Model
@@ -58,7 +60,7 @@ func TestSnapshotModelAndLibraryEditsPreserveEntityAndQueueHistory(t *testing.T)
 	require.True(t, entity.EmbeddingNeedsRebuild)
 	require.True(t, entity.UpdatedAt.After(originalAt))
 	var jobs, runs int64
-	require.NoError(t, db.Table("task_jobs").Count(&jobs).Error)
+	require.NoError(t, db.Table("task_pending_ops").Count(&jobs).Error)
 	require.NoError(t, db.Table("entity_embedding_rebuild_runs").Count(&runs).Error)
 	require.EqualValues(t, 2, jobs)
 	require.EqualValues(t, 2, runs)

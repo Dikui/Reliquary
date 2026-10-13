@@ -13,7 +13,9 @@ make dev-start
 ```
 
 这将启动以下服务的 Docker 容器：
+
 - PostgreSQL（数据库）
+- Redis（任务唤醒）
 
 #### 2. 启动后端应用（新终端）
 
@@ -89,6 +91,7 @@ make test-pg
 - **前端开发服务器**: http://localhost:5173
 - **后端 API**: http://localhost:8080
 - **PostgreSQL**: localhost:5432
+- **Redis**: localhost:6379
 
 ## 开发工作流对比
 
@@ -235,3 +238,15 @@ A: 检查前端的代理配置，确保 `vite.config.ts` 中配置了正确的�
 新内容只由外部工具经 HTTP 收录接口或 MCP 送入，网页没有 RSS、网址导入、文件上传或手动录入创建入口。接口说明由任务 4 编写于 `docs/ingest-api.md`。模型、embedding 与解析服务调用继续保留。
 
 开发库升级到 `000005` 前先在相同数据库与 `VAULT_ROOT` 配置下执行 `./reliquary-admin export-sources`，再执行直接迁移；生产使用 `./reliquary-admin upgrade` 自动完成升级前完整备份和导出。导出位于文件库 `.reliquary/exports/`，不含凭据。失败时保持暂停并停止迁移，不能跳过失败删表。
+
+## Redis 集成测试
+
+开发 Compose 同时启动 PostgreSQL 和 Redis，原生后端使用 `REDIS_ADDR=127.0.0.1:6379`。远程开发时指定可达的 `REDIS_ADDR`；内置 Redis 端口默认只绑定本机，也可以通过 SSH 转发使用。测试 Redis 与开发实例分离：
+
+```bash
+docker run -d --name reliquary-test-redis -p 127.0.0.1:56379:6379 redis:7-alpine
+export RELIQUARY_TEST_REDIS_ADDR=127.0.0.1:56379
+make test-integration
+```
+
+同时设置上文的 `RELIQUARY_TEST_PG_DSN`。已有 `reliquary-test-redis` 时复用，不重复创建。未提供 Redis 测试地址时，依赖 Redis 的用例会跳过并提示。每个测试按独立 PG 数据库名隔离 Redis 队列，结束时清理自身键，保留容器供后续测试。严禁对共用 Redis 的 DB 0 执行 `FLUSHDB`；清空恢复用例使用独立 DB。前端编译缓存写入 worktree 的 `.cache`，不会修改共享 `node_modules`。

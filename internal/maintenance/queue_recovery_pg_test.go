@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"testing"
 	"time"
 
@@ -18,14 +19,14 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 	ctx := context.Background()
 	db := pgtest.Open(t)
 	require.NoError(t, db.Exec(`UPDATE maintenance_state SET paused=true,pause_mode='snapshot',pause_reason='restoring backup' WHERE id=true`).Error)
-	client := queue.NewClient(db)
+	client := redistest.NewClient(t, db)
 	for _, state := range []string{"active", "pending", "scheduled", "completed"} {
 		_, err := client.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"entry_id":"preserved-article","original":"preserve entire payload"}`)), queue.TaskID(state), queue.MaxRetry(5), queue.Retention(time.Hour), queue.Deadline(time.Now().Add(24*time.Hour)))
 		require.NoError(t, err)
-		require.NoError(t, db.Exec(`UPDATE task_jobs SET state=?,process_at='2026-10-01T12:00:00Z',created_at='2026-10-01T10:00:00Z',updated_at='2026-10-01T12:00:00Z',retried=2,fail_count=1,last_failed_at='2026-10-01T11:00:00Z',last_error='preserved previous error',group_name='preserved-group' WHERE id=?`, state, state).Error)
+		require.NoError(t, db.Exec(`UPDATE task_pending_ops SET state=?,process_at='2026-10-01T12:00:00Z',created_at='2026-10-01T10:00:00Z',updated_at='2026-10-01T12:00:00Z',retried=2,fail_count=1,last_failed_at='2026-10-01T11:00:00Z',last_error='preserved previous error',group_name='preserved-group' WHERE id=?`, state, state).Error)
 	}
-	require.NoError(t, db.Exec(`UPDATE task_jobs SET claim_token='previous-process',worker_pool='core',lease_until='2030-01-01T00:00:00Z',started_at='2026-10-01T12:00:00Z' WHERE id='active'`).Error)
-	require.NoError(t, db.Exec(`UPDATE task_jobs SET started_at='2026-10-01T12:00:00Z',completed_at='2026-10-01T12:01:00Z' WHERE id='completed'`).Error)
+	require.NoError(t, db.Exec(`UPDATE task_pending_ops SET worker_pool='core',started_at='2026-10-01T12:00:00Z' WHERE id='active'`).Error)
+	require.NoError(t, db.Exec(`UPDATE task_pending_ops SET started_at='2026-10-01T12:00:00Z',completed_at='2026-10-01T12:01:00Z' WHERE id='completed'`).Error)
 	root := t.TempDir()
 	flush := func() {
 		snapshot, err := Capture(ctx, db)
@@ -47,7 +48,7 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 	var recovered queue.Job
 	require.NoError(t, db.First(&recovered, "id='active'").Error)
 	require.Equal(t, queue.TaskStatePending, recovered.State)
-	require.NotEqual(t, original.ProcessAt, recovered.ProcessAt, "actual startup recovery reschedules the interrupted task")
+	require.Equal(t, original.ProcessAt, recovered.ProcessAt, "startup retains the durable runnable time")
 	require.Equal(t, original.Payload, recovered.Payload)
 	require.Equal(t, original.Retried, recovered.Retried)
 	require.Equal(t, original.FailCount, recovered.FailCount)
@@ -66,12 +67,12 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 
 	for _, state := range []string{"pending", "scheduled", "completed"} {
 		t.Run("preserve_"+state+"_schedule", func(t *testing.T) {
-			require.NoError(t, db.Exec(`UPDATE task_jobs SET process_at=process_at+interval '1 hour' WHERE id=?`, state).Error)
+			require.NoError(t, db.Exec(`UPDATE task_pending_ops SET process_at=process_at+interval '1 hour' WHERE id=?`, state).Error)
 			changed := manifest()
 			differences := CompareManifest(expected, changed)
-			require.Contains(t, differences, "table task_jobs")
-			require.Contains(t, differences, "vault file .reliquary/data/task_jobs.json")
-			require.NoError(t, db.Exec(`UPDATE task_jobs SET process_at=process_at-interval '1 hour' WHERE id=?`, state).Error)
+			require.Contains(t, differences, "table task_pending_ops")
+			require.Contains(t, differences, "vault file .reliquary/data/task_pending_ops.json")
+			require.NoError(t, db.Exec(`UPDATE task_pending_ops SET process_at=process_at-interval '1 hour' WHERE id=?`, state).Error)
 		})
 	}
 	for _, mutation := range []struct{ name, change, restore string }{
@@ -83,9 +84,9 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 		{"history", `last_error='changed previous error'`, `last_error='preserved previous error'`},
 	} {
 		t.Run("preserve_active_"+mutation.name, func(t *testing.T) {
-			require.NoError(t, db.Exec(`UPDATE task_jobs SET `+mutation.change+` WHERE id='active'`).Error)
-			require.Contains(t, CompareManifest(expected, manifest()), "table task_jobs")
-			require.NoError(t, db.Exec(`UPDATE task_jobs SET `+mutation.restore+` WHERE id='active'`).Error)
+			require.NoError(t, db.Exec(`UPDATE task_pending_ops SET `+mutation.change+` WHERE id='active'`).Error)
+			require.Contains(t, CompareManifest(expected, manifest()), "table task_pending_ops")
+			require.NoError(t, db.Exec(`UPDATE task_pending_ops SET `+mutation.restore+` WHERE id='active'`).Error)
 		})
 	}
 	actual = manifest()
@@ -95,11 +96,11 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 	for table, entry := range expected.Tables {
 		legacy.Tables[table] = entry
 	}
-	legacyJobs := legacy.Tables["task_jobs"]
+	legacyJobs := legacy.Tables["task_pending_ops"]
 	legacyJobs.Data = nil
-	legacy.Tables["task_jobs"] = legacyJobs
-	require.Contains(t, CompareManifest(&legacy, actual), "table task_jobs", "no raw provenance means no recovered schedule exception")
-	path := filepath.Join(root, ".reliquary/data/task_jobs.json")
+	legacy.Tables["task_pending_ops"] = legacyJobs
+	require.Contains(t, CompareManifest(&legacy, actual), "table task_pending_ops", "no raw provenance means no recovered schedule exception")
+	path := filepath.Join(root, ".reliquary/data/task_pending_ops.json")
 	var tampered []map[string]any
 	require.NoError(t, json.Unmarshal(mustRead(t, path), &tampered))
 	for _, row := range tampered {
@@ -112,5 +113,5 @@ func TestManifestAcceptsActualPausedWorkerStartupRecoveryOnlyForInterruptedTasks
 	require.NoError(t, os.WriteFile(path, append(bytes, '\n'), 0600))
 	actual, err = BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
-	require.Contains(t, CompareManifest(expected, actual), "vault file .reliquary/data/task_jobs.json", "valid database recovery cannot conceal altered replica bytes")
+	require.Contains(t, CompareManifest(expected, actual), "vault file .reliquary/data/task_pending_ops.json", "valid database recovery cannot conceal altered replica bytes")
 }

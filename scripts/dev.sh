@@ -55,7 +55,7 @@ show_help() {
     echo "用法: $0 [命令] [选项]"
     echo ""
     echo "命令:"
-    echo "  start      启动基础设施服务（postgres）"
+    echo "  start      启动基础设施服务（postgres、redis）"
     echo "  stop       停止所有服务"
     echo "  restart    重启所有服务"
     echo "  logs       查看服务日志"
@@ -169,6 +169,7 @@ start_services() {
         echo ""
         log_info "服务访问地址:"
         echo "  - PostgreSQL:    localhost:5432"
+        echo "  - Redis:         localhost:${REDIS_PORT:-6379}"
         
         echo ""
         log_info "接下来的步骤:"
@@ -241,7 +242,7 @@ check_remote_dev_connectivity() {
     local db_port="${DB_PORT:-5432}"
     log_info "检查远程基础设施连通性 (${host})..."
     local failed=0
-    for spec in "PostgreSQL:${host}:${db_port}"; do
+    for spec in "PostgreSQL:${host}:${db_port}" "Redis:${REDIS_ADDR:-${host}:${REDIS_PORT:-6379}}"; do
         local name="${spec%%:*}"
         local rest="${spec#*:}"
         local h="${rest%%:*}"
@@ -262,7 +263,7 @@ check_remote_dev_connectivity() {
         echo ""
         log_error "无法连接远程开发环境 ${host}"
         log_info "排查建议:"
-        echo "  1. 确认远程机器 Docker 容器在运行 (postgres)"
+        echo "  1. 确认远程机器 Docker 容器在运行 (postgres、redis)"
         echo "  2. 确认本机与 ${host} 在同一局域网 (本机: $(ipconfig getifaddr en0 2>/dev/null || echo '未知'))"
         echo "  3. 在远程检查端口映射: docker ps --format 'table {{.Names}}\t{{.Ports}}'"
         echo "  4. 检查远程防火墙是否放行 5432"
@@ -344,8 +345,14 @@ start_app() {
     if [ -n "${DEV_REMOTE_HOST:-}" ]; then
         log_info "远程开发模式: 基础设施 → ${DEV_REMOTE_HOST}"
         export DB_HOST="${DB_HOST:-$DEV_REMOTE_HOST}"
+        if [ -z "${REDIS_ADDR:-}" ] || [ "$REDIS_ADDR" = "redis:6379" ]; then
+            export REDIS_ADDR="${DEV_REMOTE_HOST}:${REDIS_PORT:-6379}"
+        fi
     else
         export DB_HOST=127.0.0.1
+        if [ -z "${REDIS_ADDR:-}" ] || [ "$REDIS_ADDR" = "redis:6379" ]; then
+            export REDIS_ADDR="127.0.0.1:${REDIS_PORT:-6379}"
+        fi
     fi
 
     if ! check_remote_dev_connectivity; then

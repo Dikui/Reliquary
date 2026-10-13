@@ -50,8 +50,7 @@ func (TaskDeadLetter) TableName() string {
 // should prefer these so SQL queries (run from the ops console) don't
 // have to guess at variations.
 const (
-	// Persisted discriminator stays stable so existing archives keep their scope.
-	TaskScopeLibrary = "knowledge_base"
+	TaskScopeLibrary = "library"
 	TaskScopeEntry   = "knowledge"
 	TaskScopeSpace   = "tenant"
 	TaskScopeUnknown = "unknown"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"math/bits"
+	"reliquary/internal/testutil/redistest"
 	"strings"
 	"testing"
 
@@ -12,7 +13,6 @@ import (
 	"gorm.io/gorm/logger"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/file"
-	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -28,7 +28,7 @@ func TestIngestResourceDuplicateCleanupWithinTransaction(t *testing.T) {
 			root := t.TempDir()
 			h.service.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(h.db))
 			h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), h.service.resourceCatalog)
-			h.service.task = taskqueue.NewClient(h.db)
+			h.service.task = redistest.NewClient(t, h.db)
 			t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "3")
 
 			missing := []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/ui02/materials/existing.png", Reason: "外部工具未取得原图"}}
@@ -67,7 +67,7 @@ func TestIngestResourceDuplicateCleanupWithinTransaction(t *testing.T) {
 			var activeResources int64
 			require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&activeResources).Error)
 			require.Equal(t, beforeResources, activeResources, "unused duplicate resources cannot remain active")
-			require.Equal(t, beforeJobs, transactionJobs(t, h.db), "duplicates do not schedule processing")
+			assertSamePendingOperations(t, beforeJobs, transactionJobs(t, h.db))
 		})
 	}
 }
@@ -89,7 +89,7 @@ func TestIngestResourceDuplicateParsedImageAliasesCleanedOnce(t *testing.T) {
 	root := t.TempDir()
 	h.service.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(h.db))
 	h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), h.service.resourceCatalog)
-	h.service.task = taskqueue.NewClient(h.db)
+	h.service.task = redistest.NewClient(t, h.db)
 	image, err := decodeIngestInline(articleImageDataURI(t, 91))
 	require.NoError(t, err)
 	h.service.ingestDocReader = ingestAliasImageReader{data: image}
@@ -116,7 +116,7 @@ func TestIngestResourceDiscardedExtractedURLCleansUnusedMaterials(t *testing.T) 
 	root := t.TempDir()
 	h.service.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(h.db))
 	h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), h.service.resourceCatalog)
-	h.service.task = taskqueue.NewClient(h.db)
+	h.service.task = redistest.NewClient(t, h.db)
 	const source = "https://example.org/discarded-extracted-origin"
 	first, err := h.service.Ingest(h.ctx, &types.IngestRequest{URL: source, Acquisition: "model_written", Missing: []types.IngestMissing{{Type: "content", Reason: "暂无正文"}}})
 	require.NoError(t, err)
