@@ -1087,7 +1087,7 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
         <div class="document-header-title">
           <div class="document-title-row">
             <h2 class="document-breadcrumb">
-              <span>{{ kbInfo?.name || $t('menu.knowledgeBase') }}</span>
+              <span>{{ $t('knowledgeBase.title') }}</span>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
                 <button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]" :aria-pressed="activeKbTab === 'documents'"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>

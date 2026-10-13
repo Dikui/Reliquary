@@ -517,7 +517,7 @@ export default {
     originalLinkMissing: "No original link",
     reprocess: "Reprocess",
     reprocessQueued: "Reprocessing queued; results will update automatically",
-    title: 'Knowledge Base',
+    title: 'Knowledge base',
     fileContent: 'File Content',
     accessInfo: {
       lastUpdated: 'Last updated'

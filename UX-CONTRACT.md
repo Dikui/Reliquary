@@ -93,6 +93,8 @@ Article cards, rows, detail and the full search page share EntryClassification f
 
 Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名称为 Reliquary；Go/TypeScript 导出符号按语言惯例使用 Reliquary。登录页与侧栏共用 frontend/src/assets/img/reliquary.svg。
 
+唯一知识库的根面包屑使用 knowledgeBase.title，中文显示“知识库”，英文显示“Knowledge base”，不随数据库中的知识库名称变化。文章、待处理、实体及设置背景共用此名称。
+
 实体页面包含实体档案和待合并建议。实体详情以类型、别名和提及该实体的文章为主要信息结构，文章可通过原有文章详情入口打开。实体类型固定为公司、人物、产品、项目、组织、其他。模型配置、合并操作和名称向量重建沿用现有 TDesign 组件与中英文文案。
 
 运行时样式以 frontend/src/assets/theme/theme.css 为唯一色彩与圆角来源，经 frontend/src/main.ts 加载后供 TDesign 组件及 var(--td-*) 使用。字体由 frontend/src/composables/useFont.ts 管理，保留既有中文与英文选择。新增区域不另建色彩、字体或阴影体系。滚动条使用全局主题变量，所有新增溢出区域自动继承。
