@@ -57,7 +57,7 @@ func (mcpFixtureEmbedder) GetDimensions() int   { return 3 }
 type mcpFixtureChat struct{}
 
 func (mcpFixtureChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
-	if strings.Contains(messages[0].Content, "Review this sourced") || strings.Contains(messages[0].Content, "Review this document written by the user") {
+	if strings.HasPrefix(messages[0].Content, "Review this document for admission") {
 		approved := !strings.Contains(messages[1].Content, "rejectfixture")
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"model fixture decision"}`, approved)}, nil
 	}

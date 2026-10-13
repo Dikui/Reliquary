@@ -131,7 +131,7 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 		return err
 	}
 
-	if intake, _ := entry.IntakeMetadata(); entry.SourceKind != "mine" && intake != nil && intake.Decision == "rejected" {
+	if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
 		_, err := s.ReviewEntryIntake(ctx, id, "discard", types.SourceInfo{})
 		return err
 	}

@@ -89,7 +89,7 @@ func TestIngestLibrarySourceIdentityAndCompletion(t *testing.T) {
 	require.NoError(t, err)
 	b, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
-	require.NotEqual(t, a.EntryID, b.EntryID)
+	require.Equal(t, a.EntryID, b.EntryID)
 	custom := &types.Library{ID: "own-library", SpaceID: h.library.SpaceID, Name: "Other own", Directory: "other-own", Template: types.TemplateOwn, ModelTiers: h.library.ModelTiers}
 	require.NoError(t, h.db.Create(custom).Error)
 	req.Library, req.SourceRef = "other-own", "work/measurements"

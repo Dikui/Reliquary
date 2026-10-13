@@ -2,7 +2,9 @@ package router
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -151,7 +153,8 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 	require.NoError(t, pending.SetIntakeMetadata(&types.EntryIntakeMetadata{Source: "ingest", Decision: "rejected", Reason: "正文缺失", SourceInfo: types.SourceInfo{OriginalURL: pending.Source}}))
 	require.NoError(t, f.db.Create(pending).Error)
 	discardedID := "33333333-3333-4333-8333-333333333333"
-	require.NoError(t, f.db.Create(&types.IngestDiscard{SpaceID: types.SingleSpaceID, EntryID: discardedID, NormalizedURL: "https://example.org/discarded", Reason: "旧记录已被丢弃"}).Error)
+	fingerprint := sha256.Sum256([]byte("url:https://example.org/discarded"))
+	require.NoError(t, f.db.Create(&types.IngestDiscard{SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, Fingerprint: hex.EncodeToString(fingerprint[:]), EntryID: discardedID, NormalizedURL: "https://example.org/discarded", Reason: "旧记录已被丢弃"}).Error)
 	require.NoError(t, f.db.Create(&types.EntryRepostSource{ID: "44444444-4444-4444-8444-444444444444", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, EntryID: library.ID, OriginalURL: "https://example.org/repost", NormalizedURL: "https://example.org/repost", SourceFingerprint: strings.Repeat("a", 64), MatchMethod: "content_hash"}).Error)
 	response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest/check", `{"library":"institutional","urls":["https://example.org/library?utm_campaign=fixture","https://example.org/pending","https://example.org/discarded","https://example.org/not-found","https://example.org/repost"]}`, f.key, false)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

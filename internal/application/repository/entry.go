@@ -195,11 +195,11 @@ func (r *entryRepository) ListPagedEntryByLibraryID(
 		return nil, 0, err
 	}
 
-	if err := scope(r.db.WithContext(ctx)).
-		Order("created_at DESC").
-		Offset(page.Offset()).
-		Limit(page.Limit()).
-		Find(&entries).Error; err != nil {
+	query := scope(r.db.WithContext(ctx)).Order("created_at DESC, id DESC")
+	if page != nil {
+		query = query.Offset(page.Offset()).Limit(page.Limit())
+	}
+	if err := query.Find(&entries).Error; err != nil {
 		return nil, 0, err
 	}
 

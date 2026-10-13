@@ -29,12 +29,18 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}
-	if migration.Version >= 11 {
+	if migration.Version >= 12 {
 		return Rules, nil
 	}
 	current := make(map[string]Rule, len(Rules))
 	for table, rule := range Rules {
 		current[table] = rule
+	}
+	discard := current["ingest_discards"]
+	discard.Sidecar = "space_id normalized_url article_id discarded_at reason"
+	current["ingest_discards"] = discard
+	if migration.Version >= 11 {
+		return current, nil
 	}
 	entry := current["entries"]
 	for _, field := range []string{"source_ref", "source_body_hash", "identifier", "graph"} {

@@ -53,7 +53,7 @@ func TestMissingOriginalURLSkipsModelsAndSupplementRechecks(t *testing.T) {
 	k = h.article(t, k.ID)
 	intake, err := k.IntakeMetadata()
 	require.NoError(t, err)
-	require.Equal(t, "缺少原始链接", intake.Reason)
+	require.Equal(t, "缺少原文链接", intake.Reason)
 	require.Equal(t, types.ParseStatusRejected, k.ParseStatus)
 	require.Empty(t, h.processor.stages)
 	require.Empty(t, k.VaultPath)

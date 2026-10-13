@@ -33,7 +33,7 @@ var Rules = map[string]Rule{
 	"models":                        {Configuration: "id space_id name display_name type source description parameters is_default status created_at updated_at deleted_at is_builtin managed_by"},
 	"operation_logs":                {Sidecar: "id space_id actor api_key_id api_key_name operation_type object_id before_value after_value created_at"},
 	"ingest_assets":                 {Sidecar: "id space_id name file_type size path created_at referenced_at entry_id"},
-	"ingest_discards":               {Sidecar: "space_id normalized_url article_id discarded_at reason"},
+	"ingest_discards":               {Sidecar: "space_id library_id fingerprint normalized_url article_id discarded_at reason"},
 	"resource_access_grants":        {Sidecar: "id resource_id access_scope expires_at revoked_at created_at", Configuration: "token_hash"},
 	"resource_bindings":             {Sidecar: "id resource_id space_id owner_type owner_id relation created_at"},
 	"resources":                     {Sidecar: "id handle space_id provider physical_path location_hash kind mime_type original_name size content_hash lifecycle expires_at state created_at updated_at deleted_at"},

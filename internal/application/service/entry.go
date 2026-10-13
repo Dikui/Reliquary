@@ -284,15 +284,34 @@ func (s *entryService) ListEntryByLibraryID(ctx context.Context,
 func (s *entryService) ListPagedEntryByLibraryID(ctx context.Context,
 	libraryID string, page *types.Pagination, filter types.EntryListFilter,
 ) (*types.PageResult, error) {
-	entries, total, err := s.repo.ListPagedEntryByLibraryID(ctx,
-		ctx.Value(types.SpaceIDContextKey).(uint64), libraryID, page, filter)
+	queryPage := page
+	collapse := s.db != nil && (filter.CollapseSimilar == nil || *filter.CollapseSimilar)
+	if collapse {
+		queryPage = nil
+	}
+	entries, total, err := s.repo.ListPagedEntryByLibraryID(ctx, types.MustSpaceIDFromContext(ctx), libraryID, queryPage, filter)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := s.loadEntryAssociations(ctx, types.MustSpaceIDFromContext(ctx), entries); err != nil {
+	if collapse {
+		entries, err = s.collapseListedEntries(ctx, entries)
+		if err != nil {
+			return nil, err
+		}
+		total = int64(len(entries))
+		start := min(page.Offset(), len(entries))
+		end := min(start+page.Limit(), len(entries))
+		entries = entries[start:end]
+	}
+	flattened := []*types.Entry{}
+	for _, entry := range entries {
+		flattened = append(flattened, entry)
+		flattened = append(flattened, entry.SimilarReports...)
+	}
+	if err := s.loadEntryAssociations(ctx, types.MustSpaceIDFromContext(ctx), flattened); err != nil {
 		return nil, err
 	}
+
 	return types.NewPageResult(total, page, entries), nil
 }
 

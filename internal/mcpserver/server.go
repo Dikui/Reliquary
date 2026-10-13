@@ -245,7 +245,7 @@ func registerTools(server *mcp.Server, services Services) {
 			return map[string]any{"libraries": libraries}, err
 		})
 	}
-	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示用户确认无链接入库，来源尚未核实。incomplete=true 表示文章材料缺失，待补全；相似报道中的文章也包含该字段。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。incomplete=true 表示文章材料缺失，待补全；相似报道中的文章也包含该字段。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
 		object(map[string]any{
 			"query":         text("查询文本，必填"),
 			"content_types": stringArray("内容类型：event、opinion、research、tutorial、case、reference"),
@@ -259,7 +259,7 @@ func registerTools(server *mcp.Server, services Services) {
 		}, "query"), func(ctx context.Context, in types.EntrySearchRequest) (any, error) {
 			return services.Search.Search(ctx, in)
 		})
-	addTool(server, "get_article", "按 ID 读取数据库表头字段和正文。source_unverified=true 表示用户确认无链接入库，来源尚未核实。摘要加链接文章返回表头摘要与 original_url，body 为空。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
+	addTool(server, "get_article", "按 ID 读取数据库表头字段和正文。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。摘要加链接文章返回表头摘要与 original_url，body 为空。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
 		object(map[string]any{"id": text("文章 ID，必填"), "offset": integer("正文起始 Unicode 字符偏移，默认 0", 0, 0),
 			"length": integer("读取 Unicode 字符数，默认 20000，最大 100000", 1, 100000)}, "id"),
 		func(ctx context.Context, in entryInput) (any, error) {

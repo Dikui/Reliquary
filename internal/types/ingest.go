@@ -81,19 +81,20 @@ type IngestImageFailure struct {
 }
 
 type IngestResult struct {
-	LibraryID     string               `json:"library_id"`
-	SourceRef     string               `json:"source_ref,omitempty"`
-	Identifier    string               `json:"identifier,omitempty"`
-	Graph         *bool                `json:"graph"`
-	HasUpdate     bool                 `json:"has_update"`
-	LatestEntryID string               `json:"latest_article_id,omitempty"`
-	Index         int                  `json:"index"`
-	EntryID       string               `json:"article_id"`
-	Status        string               `json:"status"`
-	Message       string               `json:"message"`
-	Reason        string               `json:"reason"`
-	ImageFailures []IngestImageFailure `json:"image_failures"`
-	Completeness  []IngestMissing      `json:"completeness"`
+	SourceUnverified bool                 `json:"source_unverified"`
+	LibraryID        string               `json:"library_id"`
+	SourceRef        string               `json:"source_ref,omitempty"`
+	Identifier       string               `json:"identifier,omitempty"`
+	Graph            *bool                `json:"graph"`
+	HasUpdate        bool                 `json:"has_update"`
+	LatestEntryID    string               `json:"latest_article_id,omitempty"`
+	Index            int                  `json:"index"`
+	EntryID          string               `json:"article_id"`
+	Status           string               `json:"status"`
+	Message          string               `json:"message"`
+	Reason           string               `json:"reason"`
+	ImageFailures    []IngestImageFailure `json:"image_failures"`
+	Completeness     []IngestMissing      `json:"completeness"`
 }
 
 type IngestBatchRequest struct {
@@ -117,6 +118,7 @@ type IngestCheckResponse struct {
 	Items []IngestCheckResult `json:"items"`
 }
 type IncompleteArticle struct {
+	SourceUnverified            bool            `json:"source_unverified"`
 	LibraryTemplate             string          `json:"library_template"`
 	LibraryID                   string          `json:"library_id"`
 	EntryID                     string          `json:"article_id"`
@@ -154,7 +156,9 @@ func (IngestAsset) TableName() string { return "ingest_assets" }
 
 type IngestDiscard struct {
 	SpaceID       uint64    `json:"space_id" gorm:"primaryKey"`
-	NormalizedURL string    `json:"normalized_url" gorm:"primaryKey"`
+	LibraryID     string    `json:"library_id" gorm:"primaryKey"`
+	Fingerprint   string    `json:"fingerprint" gorm:"primaryKey"`
+	NormalizedURL string    `json:"normalized_url"`
 	EntryID       string    `json:"article_id" gorm:"column:article_id"`
 	DiscardedAt   time.Time `json:"discarded_at"`
 	Reason        string    `json:"reason"`

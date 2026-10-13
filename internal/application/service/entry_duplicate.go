@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -128,24 +129,20 @@ func hydrateMessageSource(k *types.Entry, metadata map[string]string) error {
 }
 
 func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...bool) (*types.Entry, string, int, error) {
-	var template string
-	if err := tx.Model(&types.Library{}).Select("template").Where("id=?", k.LibraryID).Scan(&template).Error; err != nil {
+	rules, err := messageTemplateRules(tx, k)
+	if err != nil {
 		return nil, "", 0, err
 	}
-	if template == types.TemplateOwn || template == types.TemplateGenerated {
+	if !rules.Identity.Body || (rules.Identity.SourceRef && k.SourceRef != "") {
 		return nil, "", 0, nil
 	}
-	kind := "article"
-	if k.SourceKind == "mine" {
-		kind = "mine"
-	}
 	query := tx.Model(&types.Entry{}).Where("space_id = ? AND library_id = ? AND id <> ?", k.SpaceID, k.LibraryID, k.ID).
-		Where("source_kind = ?", kind).
-		Where("parse_status NOT IN ?", []string{types.ParseStatusFailed, types.ParseStatusRejected, types.ManualEntryStatusDraft, types.ParseStatusDeleting, types.ParseStatusCancelled})
+		Where("parse_status NOT IN ?", []string{types.ParseStatusFailed, types.ManualEntryStatusDraft, types.ParseStatusDeleting, types.ParseStatusCancelled})
 	// Parser workers can see several already-persisted pending messages. A
 	// stable owner order prevents them from choosing and then deleting each
 	// other while duplicate cleanup happens outside the fingerprint transaction.
 	if len(earlierPendingOnly) > 0 && earlierPendingOnly[0] && k.ID != "" && !k.CreatedAt.IsZero() {
+		query = query.Where("parse_status <> ?", types.ParseStatusRejected)
 		query = query.Where("(parse_status IN ? OR created_at < ? OR (created_at = ? AND id < ?))",
 			[]string{types.ParseStatusCompleted, types.ParseStatusFinalizing}, k.CreatedAt, k.CreatedAt, k.ID)
 	}
@@ -158,13 +155,13 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 		}
 		return &existing, err
 	}
-	if k.NormalizedURL != "" {
+	if rules.Identity.URL && k.NormalizedURL != "" {
 		item, err := find(base().Where("normalized_url = ?", k.NormalizedURL))
 		if item != nil || err != nil {
 			return item, "url", 0, err
 		}
 		// A previously recorded repost URL points at the same canonical message.
-		if kind == "article" {
+		if rules.MergeReposts {
 			owners := tx.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id = ? AND library_id = ? AND normalized_url = ?", k.SpaceID, k.LibraryID, k.NormalizedURL)
 			item, err = find(base().Where("id IN (?)", owners))
 			if item != nil || err != nil {
@@ -172,19 +169,34 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 			}
 		}
 	}
-	if k.Type == "file" && k.FileHash != "" {
-		item, err := find(base().Where("type = 'file' AND file_hash = ? AND LOWER(file_type) = ?", k.FileHash, strings.ToLower(k.FileType)))
+	if rules.Identity.Identifier && k.Identifier != "" {
+		item, err := find(base().Where("identifier<>'' AND md5(identifier)=md5(?) AND identifier=?", k.Identifier, k.Identifier))
 		if item != nil || err != nil {
-			return item, "file_hash", 0, err
+			return item, "identifier", 0, err
 		}
 	}
-	if k.ContentHash != "" {
+	if rules.Identity.PublisherDate && k.NormalizedURL == "" {
+		key := timelySourceIdentity(k)
+		if key != "" {
+			var candidates []types.Entry
+			if err := base().Select("id, title, metadata").Where("normalized_url=''").Order("created_at ASC,id ASC").Find(&candidates).Error; err != nil {
+				return nil, "", 0, err
+			}
+			for i := range candidates {
+				if timelySourceIdentity(&candidates[i]) == key {
+					item, err := find(base().Where("id=?", candidates[i].ID))
+					return item, "publisher_date", 0, err
+				}
+			}
+		}
+	}
+	if strings.TrimSpace(k.ContentHash) != "" {
 		item, err := find(base().Where("content_hash = ?", k.ContentHash))
 		if item != nil || err != nil {
 			return item, "content_hash", 0, err
 		}
 	}
-	if k.ContentRuneCount >= minimumSimHashRunes {
+	if rules.Identity.NearDuplicate && k.ContentRuneCount >= minimumSimHashRunes {
 		var candidate struct {
 			types.Entry
 			Distance int
@@ -205,7 +217,14 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 }
 
 func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Entry, method string, distance int) error {
-	if existing.SourceKind == "mine" || incoming.SourceKind == "mine" {
+	if existing.SpaceID != incoming.SpaceID || existing.LibraryID != incoming.LibraryID {
+		return fmt.Errorf("repost entries must belong to the same library")
+	}
+	rules, err := messageTemplateRules(tx, incoming)
+	if err != nil {
+		return err
+	}
+	if !rules.MergeReposts {
 		existing.DuplicateMatchMethod = method
 		return nil
 	}
@@ -237,22 +256,22 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Entry, method st
 		"published_at":         gorm.Expr("CASE WHEN EXCLUDED.published_at_missing AND NOT entry_repost_sources.published_at_missing THEN entry_repost_sources.published_at ELSE EXCLUDED.published_at END"),
 		"published_at_missing": gorm.Expr("entry_repost_sources.published_at_missing AND EXCLUDED.published_at_missing"),
 	})
-	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entry_id"}, {Name: "source_fingerprint"}}, DoUpdates: updates}).Create(&repost).Error; err != nil {
+	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entry_id"}, {Name: "source_fingerprint"}}, DoUpdates: updates}).Create(&repost).Error; err != nil {
 		return err
 	}
 	// A URL may have collected repost provenance before its parser discovered
 	// that the body belongs to another message. Keep those sources on the owner.
 	if incoming.ID != "" && incoming.ID != existing.ID {
 		var previous []types.EntryRepostSource
-		if err := tx.Where("space_id = ? AND entry_id = ?", existing.SpaceID, incoming.ID).Find(&previous).Error; err != nil {
+		if err := tx.Where("space_id = ? AND library_id = ? AND entry_id = ?", existing.SpaceID, existing.LibraryID, incoming.ID).Find(&previous).Error; err != nil {
 			return err
 		}
 		for _, source := range previous {
-			if err := tx.Where("space_id = ? AND id = ?", existing.SpaceID, source.ID).Delete(&types.EntryRepostSource{}).Error; err != nil {
+			if err := tx.Where("space_id = ? AND library_id = ? AND id = ?", existing.SpaceID, existing.LibraryID, source.ID).Delete(&types.EntryRepostSource{}).Error; err != nil {
 				return err
 			}
 			source.EntryID = existing.ID
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entry_id"}, {Name: "source_fingerprint"}}, DoNothing: true}).Create(&source).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entry_id"}, {Name: "source_fingerprint"}}, DoNothing: true}).Create(&source).Error; err != nil {
 				return err
 			}
 		}
@@ -301,7 +320,7 @@ func (s *entryService) checkMessageDuplicate(ctx context.Context, incoming *type
 		if existing != nil {
 			return recordMessageRepost(tx, existing, incoming, method, distance)
 		}
-		return tx.Model(&types.Entry{}).Where("space_id = ? AND id = ?", incoming.SpaceID, incoming.ID).Updates(map[string]any{
+		return tx.Model(&types.Entry{}).Where("space_id = ? AND library_id = ? AND id = ?", incoming.SpaceID, incoming.LibraryID, incoming.ID).Updates(map[string]any{
 			"normalized_url": incoming.NormalizedURL, "content_hash": incoming.ContentHash, "content_sim_hash": incoming.ContentSimHash, "content_rune_count": incoming.ContentRuneCount,
 		}).Error
 	})
@@ -338,7 +357,8 @@ func loadEntryRepostSources(db *gorm.DB, spaceID uint64, entryIDs, libraryIDs []
 	if db == nil || len(entryIDs) == 0 {
 		return items, nil
 	}
-	query := db.Where("space_id = ? AND entry_id IN ?", spaceID, uniqueEntryIDs(entryIDs))
+	owners := db.Model(&types.Entry{}).Select("library_id").Where("space_id=? AND id IN ?", spaceID, uniqueEntryIDs(entryIDs))
+	query := db.Where("space_id = ? AND library_id IN (?) AND entry_id IN ?", spaceID, owners, uniqueEntryIDs(entryIDs))
 	if len(libraryIDs) > 0 {
 		query = query.Where("library_id IN ?", libraryIDs)
 	}
@@ -374,4 +394,31 @@ func uniqueEntryIDs(ids []string) []string {
 		}
 	}
 	return result
+}
+
+// messageTemplateRules resolves behavior from the owning library, including legacy fixtures.
+func messageTemplateRules(db *gorm.DB, entry *types.Entry) (types.TemplateRules, error) {
+	var library types.Library
+	if err := db.Model(&types.Library{}).Select("template").Where("space_id=? AND id=?", entry.SpaceID, entry.LibraryID).Scan(&library).Error; err != nil {
+		return types.TemplateRules{}, err
+	}
+	return intakeTemplateRules(&library), nil
+}
+
+func identityFingerprint(kind, value string) string {
+	hash := sha256.Sum256([]byte(kind + ":" + value))
+	return hex.EncodeToString(hash[:])
+}
+
+func timelySourceIdentity(entry *types.Entry) string {
+	source, err := entrySourceInfo(entry)
+	if err != nil || missingSourceValue(source.Publisher) || strings.TrimSpace(entry.Title) == "" {
+		return ""
+	}
+	date := parsePublicationTime(source.PublishedAt)
+	if date == nil {
+		return ""
+	}
+	value, _ := json.Marshal([]string{normalizeRepostName(source.Publisher), normalizeRepostName(entry.Title), date.UTC().Format(time.DateOnly)})
+	return identityFingerprint("publisher_date", string(value))
 }

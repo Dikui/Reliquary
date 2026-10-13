@@ -68,45 +68,6 @@ func (s *VaultDocumentService) reportWriteResult(ctx context.Context, entry *typ
 	return &ReportWriteResult{Entry: entry, IndexStatus: status, Existing: existing, Message: message}, nil
 }
 
-// findExistingReport also recognizes reports written before fingerprints were recorded.
-func (s *VaultDocumentService) findExistingReport(ctx context.Context, tx *gorm.DB, spaceID uint64, libraryID, fingerprint string) (*types.Entry, error) {
-	var reports []types.Entry
-	if err := tx.WithContext(ctx).Where("space_id=? AND library_id=? AND source_kind='report' AND (metadata->>'report_fingerprint'=? OR COALESCE(metadata->>'report_fingerprint','')='')", spaceID, libraryID, fingerprint).
-		Order("created_at,id").Find(&reports).Error; err != nil {
-		return nil, err
-	}
-	for i := range reports {
-		report := &reports[i]
-		var metadata map[string]any
-		_ = json.Unmarshal(report.Metadata, &metadata)
-		if metadata["report_fingerprint"] == fingerprint {
-			return report, nil
-		}
-		path, err := vaultAbsolute(s.root, report.VaultPath)
-		if err != nil {
-			return nil, err
-		}
-		content, err := os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		header, body, err := splitVaultHeader(content)
-		if err != nil {
-			continue
-		}
-		var fields struct {
-			Title string `yaml:"title"`
-		}
-		if yaml.Unmarshal(header, &fields) == nil && reportFingerprint(fields.Title, string(body)) == fingerprint {
-			return report, nil
-		}
-	}
-	return nil, nil
-}
-
 func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown string, relatedIDs []string) (*ReportWriteResult, error) {
 	return s.createReport(ctx, nil, title, markdown, relatedIDs, nil)
 }
@@ -131,22 +92,15 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 	if library.Template != types.TemplateGenerated {
 		return nil, werrors.NewBadRequestError("write_report requires the AI reports library")
 	}
-	fingerprint := reportFingerprint(title, markdown)
 	var entry *types.Entry
 	var absolutePath string
 	var jobID string
-	var existing bool
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
 			return err
 		}
 		// The library lock serializes report writes from separate callers.
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(library, "id=?", library.ID).Error; err != nil {
-			return err
-		}
-		entry, err = s.findExistingReport(ctx, tx, library.SpaceID, library.ID, fingerprint)
-		if err != nil || entry != nil {
-			existing = entry != nil
 			return err
 		}
 		selected := []string{}
@@ -198,7 +152,7 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 		if writeErr != nil {
 			return writeErr
 		}
-		metadata, _ := json.Marshal(map[string]any{"related_article_ids": selected, "report_fingerprint": fingerprint})
+		metadata, _ := json.Marshal(map[string]any{"related_article_ids": selected})
 		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
 			Graph: graph, SourceKind: "report", Title: vaultDocumentTitle(path, content), VaultPath: path, Source: path,
 			FileName: filepath.Base(path), FileType: "md", FileSize: int64(len(content)), FileHash: vaultContentHash(content),
@@ -227,7 +181,7 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 		}
 		return nil, err
 	}
-	if !existing {
+	{
 		s.observations[entry.VaultPath] = vaultObservation{hash: entry.FileHash, changedAt: entry.CreatedAt.Add(-s.reportStableWait)}
 		if indexed, indexErr := s.retryReportIndex(ctx, library, entry); indexErr == nil {
 			entry = indexed
@@ -238,7 +192,7 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 			entry.ParseStatus, entry.ErrorMessage = types.ParseStatusFailed, indexErr.Error()
 		}
 	}
-	return s.reportWriteResult(ctx, entry, existing)
+	return s.reportWriteResult(ctx, entry, false)
 }
 
 func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *types.Library, entry *types.Entry) (*types.Entry, error) {

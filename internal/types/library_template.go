@@ -13,30 +13,66 @@ const (
 	TemplateGenerated       = "generated"
 )
 
+// IdentityRules define the independent matching keys available to a template.
+type IdentityRules struct {
+	URL, Body, NearDuplicate, PublisherDate, Identifier, SourceRef bool
+}
+
 // TemplateRules are code-owned behavior, never per-library configuration.
 type TemplateRules struct {
-	Deduplication   string `json:"deduplication"`
-	SourceEvidence  string `json:"source_evidence"`
-	Review          bool   `json:"review"`
-	Process         bool   `json:"process"`
-	MergeReposts    bool   `json:"merge_reposts"`
-	CollapseSimilar bool   `json:"collapse_similar"`
-	FactSource      bool   `json:"fact_source"`
+	Identity        IdentityRules `json:"-"`
+	EvidenceMode    string        `json:"-"`
+	Deduplication   string        `json:"deduplication"`
+	SourceEvidence  string        `json:"source_evidence"`
+	Review          bool          `json:"review"`
+	Process         bool          `json:"process"`
+	MergeReposts    bool          `json:"merge_reposts"`
+	CollapseSimilar bool          `json:"collapse_similar"`
+	FactSource      bool          `json:"fact_source"`
 }
 
 func RulesForTemplate(template string) (TemplateRules, bool) {
 	switch template {
 	case TemplateExternalTimely:
-		return TemplateRules{"按链接与正文识别同一份资料；无链接时按正文及机构、标题、发布日期识别。", "链接必填，或按库配置接受机构名称加发布日期，后者标记来源未核实。", true, true, true, true, true}, true
+		return TemplateRules{Deduplication: "仅在本库按规范化链接、正文哈希或近似正文识别；无链接时还按机构、标题、发布日期识别。", SourceEvidence: "链接必填，或按库配置接受机构名称加发布日期，后者标记来源未核实。", Review: true, Process: true, MergeReposts: true, CollapseSimilar: true, FactSource: true, Identity: IdentityRules{URL: true, Body: true, NearDuplicate: true, PublisherDate: true}, EvidenceMode: "configured"}, true
 	case TemplateExternalDurable:
-		return TemplateRules{"按链接、标识与正文识别同一份资料。", "链接或标识至少提供一项。", true, true, false, false, true}, true
+		return TemplateRules{Deduplication: "仅在本库按规范化链接、identifier 或正文哈希识别；不做近似去重、转载归并或相似折叠。", SourceEvidence: "链接或 identifier 至少提供一项。", Review: true, Process: true, FactSource: true, Identity: IdentityRules{URL: true, Body: true, Identifier: true}, EvidenceMode: "link_or_identifier"}, true
 	case TemplateOwn:
-		return TemplateRules{"按可选来源标识与正文识别；同一来源正文变化时新增记录，旧记录保留。", "不需要来源证据。", true, true, false, false, true}, true
+		return TemplateRules{Deduplication: "仅在本库去重；有 source_ref 时只与同来源最新记录比较正文，相同返回最新记录，变化新增并保留旧记录；无 source_ref 时按正文哈希识别。", SourceEvidence: "不需要来源证据。", Review: true, Process: true, FactSource: true, Identity: IdentityRules{Body: true, SourceRef: true}}, true
 	case TemplateGenerated:
-		return TemplateRules{"不去重；同一写报告请求的重试按内容指纹幂等。", "不需要来源证据。", false, false, false, false, false}, true
+		return TemplateRules{Deduplication: "不去重。", SourceEvidence: "不需要来源证据。"}, true
 	default:
 		return TemplateRules{}, false
 	}
+}
+
+// SourceEvidenceDecision runs after the caller normalizes the publication date.
+// Its first result is a pending-review reason; the second marks unverified provenance.
+func (r TemplateRules) SourceEvidenceDecision(configured string, source SourceInfo, identifier string) (string, bool) {
+	if r.EvidenceMode == "" {
+		return "", false
+	}
+	if strings.TrimSpace(source.OriginalURL) != "" {
+		return "", false
+	}
+	if r.EvidenceMode == "link_or_identifier" {
+		if strings.TrimSpace(identifier) != "" {
+			return "", false
+		}
+		return "缺少原文链接或 identifier", false
+	}
+	if configured == "link_or_publisher_date" && evidencePublisherPresent(source.Publisher) && strings.TrimSpace(source.PublishedAt) != "" {
+		return "", true
+	}
+	return "缺少原文链接", false
+}
+
+func evidencePublisherPresent(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "unknown", "n/a", "null", "none", "未知", "不详", "未提供":
+		return false
+	}
+	return true
 }
 
 type LibraryContentType struct {

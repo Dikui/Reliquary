@@ -95,12 +95,6 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			content, err := os.ReadFile(filepath.Join(f.root, report.VaultPath))
 			require.NoError(t, err)
 			require.Contains(t, string(content), markdown)
-			duplicate := write("Retried report", markdown)
-			require.Equal(t, report.ID, duplicate.ID)
-			require.Equal(t, report.VaultPath, duplicate.VaultPath)
-			require.True(t, duplicate.Existing)
-			require.Contains(t, duplicate.Message, "existing report")
-			require.Equal(t, "pending_retry", duplicate.IndexStatus)
 			var jobs []queue.Job
 			require.NoError(t, f.db.Find(&jobs).Error)
 			require.Len(t, jobs, 1)
@@ -123,15 +117,15 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			require.Len(t, search.Results, 1)
 			require.Equal(t, report.ID, search.Results[0].EntryID)
 			completed := write("Retried report", markdown)
-			require.Equal(t, report.ID, completed.ID)
-			require.True(t, completed.Existing)
+			require.NotEqual(t, report.ID, completed.ID)
+			require.False(t, completed.Existing)
 			require.Equal(t, "completed", completed.IndexStatus)
 			var count int64
 			require.NoError(t, f.db.Model(&types.Entry{}).Where("source_kind='report'").Count(&count).Error)
-			require.EqualValues(t, 1, count)
+			require.EqualValues(t, 2, count)
 			require.NoError(t, f.db.Model(&types.OperationLog{}).Where("operation_type='write_report'").Count(&count).Error)
-			require.EqualValues(t, 1, count)
-			t.Logf("%s saved report %s despite indexing failure; queued retry recovered search; identical write returned the same ID", transport, report.ID)
+			require.EqualValues(t, 2, count)
+			t.Logf("%s saved report %s despite indexing failure; queued retry recovered search; identical write created an independent report", transport, report.ID)
 		})
 	}
 }
@@ -171,9 +165,6 @@ func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	var deadLetters int64
 	require.NoError(t, f.db.Model(&types.TaskDeadLetter{}).Count(&deadLetters).Error)
 	require.EqualValues(t, 1, deadLetters)
-	failed := write("Exhausted report", "# Exhausted report\n\nSaved source survives exhausted retries.")
-	require.Equal(t, "failed", failed.IndexStatus)
-	require.True(t, failed.Existing)
 	// Background scans leave retries and their exhausted state under queue control.
 	f.library.ModelTiers.Embedding = "mcp-embedding"
 	require.NoError(t, f.db.Save(f.library).Error)
@@ -204,11 +195,12 @@ func TestWriteReportConcurrentDuplicateAndLegacyFingerprint(t *testing.T) {
 	wait.Wait()
 	require.NoError(t, errs[0])
 	require.NoError(t, errs[1])
-	require.Equal(t, results[0].ID, results[1].ID)
-	require.NotEqual(t, results[0].Existing, results[1].Existing)
+	require.NotEqual(t, results[0].ID, results[1].ID)
+	require.False(t, results[0].Existing)
+	require.False(t, results[1].Existing)
 	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", results[0].ID).Update("metadata", types.JSON(`{"related_article_ids":[]}`)).Error)
 	legacy, err := f.documents.CreateReport(f.ctx, "Concurrent report", "# Different displayed heading\n\nconcurrentreportfixture", nil)
 	require.NoError(t, err)
-	require.True(t, legacy.Existing)
-	require.Equal(t, results[0].ID, legacy.ID)
+	require.False(t, legacy.Existing)
+	require.NotEqual(t, results[0].ID, legacy.ID)
 }

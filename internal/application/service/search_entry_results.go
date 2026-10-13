@@ -253,6 +253,7 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 	}
 	type vectorRow struct {
 		LibraryID string
+		Template  string
 		EntryID   string
 		ModelID   string
 		Dimension int
@@ -263,12 +264,17 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 	if err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Table("article_embeddings").Where("space_id=? AND entry_id IN ? AND model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table("article_embeddings ae").Select("ae.*, l.template").
+		Joins("JOIN libraries l ON l.space_id=ae.space_id AND l.id=ae.library_id").
+		Joins("JOIN entries e ON e.space_id=ae.space_id AND e.library_id=ae.library_id AND e.id=ae.entry_id").
+		Where("ae.space_id=? AND ae.entry_id IN ? AND ae.model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	vectors := map[string]vectorRow{}
 	for _, row := range rows {
-		vectors[row.EntryID] = row
+		if rules, ok := types.RulesForTemplate(row.Template); ok && rules.CollapseSimilar {
+			vectors[row.EntryID] = row
+		}
 	}
 	window := time.Duration(config.GetEffectiveSimilarReportsWindowDays()) * 24 * time.Hour
 	threshold := config.GetEffectiveSimilarReportsThreshold()

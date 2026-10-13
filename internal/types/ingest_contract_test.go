@@ -22,5 +22,5 @@ func TestIngestContractFieldSetAndExample(t *testing.T) {
 	result := IngestResult{EntryID: "article-example", Status: "pending_review", Message: "等待收录审核。", Reason: "缺少来源", ImageFailures: []IngestImageFailure{}, Completeness: []IngestMissing{}}
 	data, err := json.Marshal(result)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"library_id":"","graph":null,"has_update":false,"index":0,"article_id":"article-example","status":"pending_review","message":"等待收录审核。","reason":"缺少来源","image_failures":[],"completeness":[]}`, string(data))
+	require.JSONEq(t, `{"source_unverified":false,"library_id":"","graph":null,"has_update":false,"index":0,"article_id":"article-example","status":"pending_review","message":"等待收录审核。","reason":"缺少来源","image_failures":[],"completeness":[]}`, string(data))
 }

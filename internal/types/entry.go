@@ -86,6 +86,8 @@ const (
 // EntryListFilter aggregates optional filters for listing entry entries
 // under a library. Empty / zero fields mean "no filter on that dimension".
 type EntryListFilter struct {
+	CollapseSimilar *bool
+
 	// SourceKind selects article, mine or report independently of ingestion channel.
 	SourceKind string
 	// ContentType filters the article purpose.
@@ -112,6 +114,8 @@ type EntryListFilter struct {
 // It contains metadata about the entry source, its processing status,
 // and references to the physical file if applicable.
 type Entry struct {
+	SimilarReports []*Entry `json:"similar_reports,omitempty" gorm:"-"`
+
 	SourceRef      string `json:"source_ref,omitempty" gorm:"not null;default:''"`
 	SourceBodyHash string `json:"-" gorm:"not null;default:''"`
 	Identifier     string `json:"identifier,omitempty" gorm:"not null;default:''"`

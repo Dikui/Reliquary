@@ -515,6 +515,14 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
 	}
+	if raw, supplied := c.GetQuery("collapse_similar"); supplied {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			c.Error(errors.NewBadRequestError("collapse_similar must be true or false"))
+			return
+		}
+		filter.CollapseSimilar = &value
+	}
 	switch filter.SourceKind {
 	case "", "article", "mine", "report":
 	default:

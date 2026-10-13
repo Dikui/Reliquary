@@ -46,6 +46,9 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(original)
 	}
+	if db.Migrator().HasColumn("ingest_discards", "library_id") {
+		projectDiscardSnapshot(original)
+	}
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]

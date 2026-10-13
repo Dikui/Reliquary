@@ -13,41 +13,73 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func (s *entryService) lookupIngestDiscard(ctx context.Context, normalized string) (*types.IngestDiscard, error) {
-	if normalized == "" {
+type discardKey struct{ fingerprint, url string }
+
+func entryDiscardKeys(entry *types.Entry, rules types.TemplateRules) []discardKey {
+	keys := []discardKey{}
+	if rules.Identity.SourceRef && entry.SourceRef != "" {
+		hash := entry.SourceBodyHash
+		if hash == "" {
+			hash = strings.TrimSpace(entry.ContentHash)
+		}
+		if hash != "" {
+			keys = append(keys, discardKey{fingerprint: identityFingerprint("source_ref", entry.SourceRef+"\x00"+hash)})
+		}
+		return keys
+	}
+	if rules.Identity.URL && entry.NormalizedURL != "" {
+		keys = append(keys, discardKey{identityFingerprint("url", entry.NormalizedURL), entry.NormalizedURL})
+	}
+	if hash := strings.TrimSpace(entry.ContentHash); rules.Identity.Body && hash != "" {
+		keys = append(keys, discardKey{fingerprint: identityFingerprint("body", hash)})
+	}
+	if rules.Identity.Identifier && entry.Identifier != "" {
+		keys = append(keys, discardKey{fingerprint: identityFingerprint("identifier", entry.Identifier)})
+	}
+	if rules.Identity.PublisherDate && entry.NormalizedURL == "" {
+		if key := timelySourceIdentity(entry); key != "" {
+			keys = append(keys, discardKey{fingerprint: key})
+		}
+	}
+	return keys
+}
+
+func (s *entryService) lookupIngestDiscard(ctx context.Context, libraryID string, keys []discardKey) (*types.IngestDiscard, error) {
+	if len(keys) == 0 {
 		return nil, nil
+	}
+	fingerprints := []string{}
+	for _, key := range keys {
+		fingerprints = append(fingerprints, key.fingerprint)
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
 	var item types.IngestDiscard
-	err := s.db.WithContext(ctx).Where("space_id=? AND normalized_url=?", spaceID, normalized).First(&item).Error
+	err := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND fingerprint IN ?", spaceID, libraryID, fingerprints).Order("discarded_at DESC").First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	return &item, err
 }
 
-func (s *entryService) lookupIngestDiscardTemplate(ctx context.Context, normalized, template string) (*types.IngestDiscard, error) {
-	if template == types.TemplateOwn {
-		return nil, nil
-	}
-	return s.lookupIngestDiscard(ctx, normalized)
-}
-
 // Pending intake is deliberately included. Repost origins resolve to their
 // canonical article in all four state checks and in later supplements.
-func (s *entryService) findIngestURL(ctx context.Context, normalized string, lock bool, libraries ...*types.Library) (*types.Entry, error) {
+func (s *entryService) findIngestURL(ctx context.Context, normalized string, lock bool, library *types.Library) (*types.Entry, error) {
 	if normalized == "" {
 		return nil, nil
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
-	if len(libraries) == 0 || libraries[0].Template == types.TemplateOwn {
+	rules := intakeTemplateRules(library)
+	if !rules.Identity.URL {
 		return nil, nil
 	}
-	library := libraries[0]
-	owners := s.db.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id=? AND normalized_url=?", spaceID, normalized)
+	owners := s.db.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id=? AND library_id=? AND normalized_url=?", spaceID, library.ID, normalized)
 	query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND related_article_id=''", spaceID, library.ID).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting})
-	query = query.Where("normalized_url=? OR id IN (?)", normalized, owners)
+	if rules.MergeReposts {
+		query = query.Where("normalized_url=? OR id IN (?)", normalized, owners)
+	} else {
+		query = query.Where("normalized_url=?", normalized)
+	}
 	if lock {
 		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
@@ -82,7 +114,7 @@ func (s *entryService) CheckURLs(ctx context.Context, urls []string, selectors .
 		}
 		normalized := normalizeMessageURL(raw)
 		item := types.IngestCheckResult{URL: raw, Status: "not_found"}
-		if discarded, err := s.lookupIngestDiscardTemplate(ctx, normalized, library.Template); err != nil {
+		if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(&types.Entry{NormalizedURL: normalized}, intakeTemplateRules(library))); err != nil {
 			return nil, err
 		} else if discarded != nil {
 			item.Status, item.EntryID = "discarded", discarded.EntryID
@@ -147,7 +179,7 @@ func (s *entryService) ListIncomplete(ctx context.Context, page, size int, inclu
 		if intake, _ := article.IntakeMetadata(); intake != nil && intake.SourceInfo.OriginalURL != "" {
 			url = intake.SourceInfo.OriginalURL
 		}
-		result.Items = append(result.Items, types.IncompleteArticle{LibraryTemplate: templates[article.LibraryID], LibraryID: article.LibraryID, EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
+		result.Items = append(result.Items, types.IncompleteArticle{LibraryTemplate: templates[article.LibraryID], LibraryID: article.LibraryID, EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, SourceUnverified: article.SourceUnverified, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
 	}
 	return result, nil
 }
@@ -193,29 +225,36 @@ func (s *entryService) AcceptIncomplete(ctx context.Context, id string) (*types.
 // Record every canonical and repost link before destructive deletion. The
 // ledger has no FK because it intentionally survives article removal.
 func (s *entryService) rememberIngestDiscard(ctx context.Context, k *types.Entry, reason string) error {
-	if s.db == nil || k == nil || k.SourceKind != "article" || k.RelatedArticleID != "" {
+	if s.db == nil || k == nil || k.RelatedArticleID != "" {
 		return nil
 	}
-	links := []string{k.NormalizedURL, normalizeMessageURL(k.Source)}
-	if intake, _ := k.IntakeMetadata(); intake != nil {
-		links = append(links, normalizeMessageURL(intake.SourceInfo.OriginalURL))
-	}
-	var reposts []types.EntryRepostSource
-	if err := s.db.WithContext(ctx).Where("space_id=? AND entry_id=?", k.SpaceID, k.ID).Find(&reposts).Error; err != nil {
+	rules, err := messageTemplateRules(s.db.WithContext(ctx), k)
+	if err != nil {
 		return err
 	}
-	for _, source := range reposts {
-		links = append(links, source.NormalizedURL)
+	setMessageFingerprint(k, "")
+	keys := entryDiscardKeys(k, rules)
+	if rules.MergeReposts {
+		var reposts []types.EntryRepostSource
+		if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND entry_id=?", k.SpaceID, k.LibraryID, k.ID).Find(&reposts).Error; err != nil {
+			return err
+		}
+		for _, source := range reposts {
+			if source.NormalizedURL != "" {
+				keys = append(keys, discardKey{identityFingerprint("url", source.NormalizedURL), source.NormalizedURL})
+			}
+		}
 	}
 	if strings.TrimSpace(reason) == "" {
 		reason = "用户丢弃"
 	}
-	for _, normalized := range uniqueEntryIDs(links) {
-		row := types.IngestDiscard{SpaceID: k.SpaceID, NormalizedURL: normalized, EntryID: k.ID, DiscardedAt: time.Now(), Reason: reason}
-		if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "normalized_url"}}, DoUpdates: clause.AssignmentColumns([]string{"article_id", "discarded_at", "reason"})}).Create(&row).Error; err != nil {
+	for _, key := range keys {
+		row := types.IngestDiscard{SpaceID: k.SpaceID, LibraryID: k.LibraryID, Fingerprint: key.fingerprint, NormalizedURL: key.url, EntryID: k.ID, DiscardedAt: time.Now(), Reason: reason}
+		if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "fingerprint"}}, DoUpdates: clause.AssignmentColumns([]string{"article_id", "discarded_at", "reason"})}).Create(&row).Error; err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 

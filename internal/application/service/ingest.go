@@ -49,7 +49,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if err := validateLibraryIngest(request, library); err != nil {
 		return nil, err
 	}
-	if library.Template == types.TemplateGenerated {
+	if !intakeTemplateRules(library).Process {
 		if s.vault == nil {
 			return nil, werrors.NewBadRequestError("report vault is unavailable")
 		}
@@ -87,7 +87,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return result, err
 	}
 	kind := "article"
-	if library.Template == types.TemplateOwn {
+	if intakeTemplateRules(library).Identity.SourceRef {
 		kind = "mine"
 	}
 	now := time.Now()
@@ -97,7 +97,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	}
 	if title == "" {
 		title = "待审文章"
-		if library.Template == types.TemplateOwn {
+		if intakeTemplateRules(library).Identity.SourceRef {
 			title = "本人文档"
 		}
 	}
@@ -148,7 +148,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		}
 		return s.supplementIngest(ctx, library, &existing, request, keyID, keyName)
 	}
-	if discarded, err := s.lookupIngestDiscardTemplate(ctx, article.NormalizedURL, library.Template); err != nil {
+	if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(article, intakeTemplateRules(library))); err != nil {
 		return nil, err
 	} else if discarded != nil {
 		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
@@ -168,7 +168,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if err != nil {
 		return nil, err
 	}
-	if library.Template == types.TemplateOwn && request.SourceRef != "" {
+	if intakeTemplateRules(library).Identity.SourceRef && request.SourceRef != "" {
 		// The transaction holds the library lock, including when no prior row exists.
 		article.SourceBodyHash = sourceBodyHash(canonicalBody)
 		latest, err := types.FindLatestSourceEntry(s.db.WithContext(ctx), spaceID, library.ID, request.SourceRef)
@@ -189,7 +189,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	intake, _ = article.IntakeMetadata()
 	setMessageFingerprint(article, canonicalBody)
 	// Source evidence extracted from a supplied file also participates in lookup.
-	if discarded, err := s.lookupIngestDiscardTemplate(ctx, article.NormalizedURL, library.Template); err != nil {
+	if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(article, intakeTemplateRules(library))); err != nil {
 		return nil, err
 	} else if discarded != nil {
 		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
@@ -197,9 +197,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	var duplicate *types.Entry
 	var method string
 	var distance int
-	if library.Template != types.TemplateOwn {
-		duplicate, method, distance, err = findMessageDuplicate(s.db.WithContext(ctx), article)
-	}
+	duplicate, method, distance, err = findMessageDuplicate(s.db.WithContext(ctx), article)
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +289,7 @@ func ingestResult(article *types.Entry, status, message, reason, id string) *typ
 	result := &types.IngestResult{EntryID: id, Status: status, Message: message, Reason: reason, Completeness: []types.IngestMissing{}, ImageFailures: []types.IngestImageFailure{}}
 	if article != nil {
 		result.EntryID = article.ID
+		result.SourceUnverified = article.SourceUnverified
 		result.LibraryID, result.SourceRef, result.Identifier, result.Graph = article.LibraryID, article.SourceRef, article.Identifier, article.Graph
 		result.HasUpdate, result.LatestEntryID = article.HasUpdate, article.LatestEntryID
 		if article.SourceRef != "" && result.LatestEntryID == "" {

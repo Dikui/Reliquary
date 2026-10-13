@@ -22,9 +22,7 @@ func TestIntakeXSourceEvidence(t *testing.T) {
 		require.True(t, blockedIntakeURL(raw), raw)
 	}
 	require.False(t, blockedIntakeURL("https://example.com/article"))
-	source := types.SourceInfo{Author: "@bcherny", OriginalURL: "https://x.com/bcherny/status/123", PublishedAt: "2026-09-24T08:30:00Z"}
-	entry := &types.Entry{Type: types.EntryTypeManual, Channel: types.ChannelRSS}
-	require.True(t, invalidIntakeEvidence("Post body", source, entry))
+	require.True(t, blockedIntakeURL("https://x.com/bcherny/status/123"))
 }
 
 type intakeRepo struct {

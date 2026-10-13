@@ -64,7 +64,7 @@ func newEntrySearchFixture(t *testing.T) *entrySearchFixture {
 	config := &types.RetrievalConfig{RerankTopK: 100, KeywordThreshold: 0.00001}
 	space := &types.Space{ID: 1, Name: "Search fixture", EmbeddingModelID: "fixture-model", RetrievalConfig: config}
 	require.NoError(t, db.Create(space).Error)
-	library := &types.Library{ID: "search-library", SpaceID: 1, Name: "Search", FeedEnabled: true, Type: types.LibraryTypeDocument,
+	library := &types.Library{ID: "search-library", SpaceID: 1, Template: types.TemplateExternalTimely, SourceEvidenceRule: "link_required", Name: "Search", FeedEnabled: true, Type: types.LibraryTypeDocument,
 		EmbeddingModelID: "fixture-model", ModelTiers: types.ModelTierConfig{Embedding: "fixture-model"},
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}}
 	require.NoError(t, db.Create(library).Error)

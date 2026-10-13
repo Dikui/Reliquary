@@ -12,7 +12,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `content` | 新收录必填，非空 Markdown 全文，不能只有一个链接。上限 5,000,000 Unicode 码点；补全时可省略 |
 | `acquisition` | 新收录必填：`verbatim` 逐字原文、`extracted` 提取、`model_written` 模型整理 |
 | `source_ref` | 仅自有型库接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库同来源按最新记录的正文判断重复 |
-| `identifier` | 仅外部长效型库接受。可选 `scheme:value`，最多 2048 Unicode 码点。去两部分首尾空白，scheme 小写，DOI 的 value 也小写。其他 scheme 的值保留大小写。本阶段保存和返回，尚不参与去重 |
+| `identifier` | 仅外部长效型库接受。可选 `scheme:value`，最多 2048 Unicode 码点。去两部分首尾空白，scheme 小写，DOI 的 value 也小写。其他 scheme 的值保留大小写。在所属库内参与去重 |
 | `graph` | 可选布尔值，保存在资料上；未提供或 null 表示按库和内容类型默认。本阶段不执行图谱抽取 |
 | `article_id` | 仅补全使用，已有资料 ID。Go 字段名为 `EntryID`，JSON 沿用收录结果及 MCP 的 `article_id`，避免同时出现两套 ID 名称 |
 | `url` | 可选来源链接，可为空；非空必须为 HTTP 或 HTTPS，最多 2048 字节。现有外部来源审核仍可能要求链接 |
@@ -35,7 +35,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `mine`，我的资料 | `own` | `source_ref` |
 | `ai-reports`，AI 报告 | `generated` | 无 |
 
-自建库按模板接受相同字段。`graph` 五个库都可保存。除生成型外，沿用现有审核和处理流程；本阶段未实施新的库级审核、来源证据与转载归并规则。生成型收录调用报告保存与索引流程，不审核、不调用处理模型。推荐外部 Agent 通过 `write_report` 写报告。
+自建库按模板接受相同字段。`graph` 五个库都可保存。除生成型外，均按所属库的审核标准审核，并按模板验证来源证据、去重和处理。生成型收录调用报告保存与索引流程，不审核、不调用处理模型。推荐外部 Agent 通过 `write_report` 写报告。
 
 ## 五个系统库示例
 
@@ -71,11 +71,31 @@ AI 报告：
 {"items":[{"library":"ai-reports","title":"研究报告","content":"# 研究报告\n\n综合分析内容。","acquisition":"model_written","graph":false}]}
 ```
 
+## 审核、去重和补全
+
+审核提示词使用资料所属库的 `review_criteria`，结果与原因写入收录审核记录。生成型不调用审核或处理模型，只保存并建立索引。本文规则适用于系统库和用户按模板新建的库；显示名称与目录名不决定行为。
+
+| 模板 | 来源证据 | 本库内识别同一份资料 |
+| --- | --- | --- |
+| 外部时效型，`link_required` | 必须有原文链接；缺失进入收录待审，原因“缺少原文链接” | 规范化 URL、正文哈希、近似正文；没有链接时，还按机构、标题、有效发布日期识别 |
+| 外部时效型，`link_or_publisher_date` | 有链接正常审核；无链接但有发布者和有效发布日期可审核入库，并标记 `source_unverified=true`；缺少任一项进入收录待审 | 同上 |
+| 外部长效型 | 链接或 `identifier` 至少一个，否则进入收录待审 | 规范化 URL、规范化 `identifier`、正文哈希；不做近似去重 |
+| 自有型 | 不要求来源证据 | `source_ref` 优先，按最新同来源正文比较；没有 `source_ref` 时按正文哈希 |
+| 生成型 | 不要求来源证据 | 不去重 |
+
+同一链接或正文可以收入不同库。确认不收录后，仅在原库保存链接、正文、标识或来源身份的适用指纹，再次提交相同指纹返回 `discarded`。自有型有 `source_ref` 时，丢弃指纹同时包含该来源与正文，正文变化仍可重新收录。
+
+只有外部时效型归并转载来源和折叠相似报道。检索、资料列表及关注动态仅折叠同库、同向量模型且满足时间窗口和相似度阈值的报道；外部长效型、自有型、生成型不折叠。资料列表可用 `collapse_similar=false` 展开；默认返回代表资料和 `similar_reports`，先折叠再分页。
+
+来源未核实标记在 HTTP/MCP 收录结果、资料列表、详情、正文读取、检索和关注动态返回中保留。网页沿用已有标记位置。缺链接的待审条目继续支持补链接并重新审核、明确确认无链接入库、确认不收录。补上链接后清除未核实标记；无链接手工入库仍标记未核实。
+
+图片缺失继续进入待补全。调用方按 `library` 与 `article_id` 定位原资料，补全成功后重新处理；缺少图片与来源证据不足分别处理。长文审核仍沿用当前长度处理，分段审核由 ikb-10 实现。
+
 ## 来源标识与结果
 
-自有型库同一 `source_ref` 的正文，按规范 Markdown（含追加片段、引用和图片稳定标识）去首尾空白、统一空白后计算 SHA-256，与最新一条比较。相同则返回 `exists` 和已有 `article_id`；不同则保存新资料，保留旧记录。再次提交较早的正文也会产生新记录。无 `source_ref` 每次独立收录；不同库互不影响。
+自有型库同一 `source_ref` 的正文，按规范 Markdown（含追加片段、引用和图片稳定标识）去首尾空白、统一空白后计算 SHA-256，与最新一条比较。相同则返回 `exists` 和已有 `article_id`；不同则保存新资料，保留旧记录。再次提交较早的正文也会产生新记录。无 `source_ref` 时按正文哈希去重；不同库互不影响。
 
-资料详情、HTTP 收录结果、MCP 收录与 `get_article` 返回 `source_ref`、`identifier`、`graph`、`has_update`、`latest_article_id`。`has_update=true` 表示存在更新记录，`latest_article_id` 指向同库同来源最新的未删除记录。最新记录本身返回 false 与自己的 ID；无来源标识时不提供最新 ID。历史记录的查询、正文与时间保持不变。
+资料详情、HTTP 收录结果、MCP 收录与 `get_article` 返回 `source_ref`、`identifier`、`graph`、`source_unverified`、`has_update`、`latest_article_id`。`has_update=true` 表示存在更新记录，`latest_article_id` 指向同库同来源最新的未删除记录。最新记录本身返回 false 与自己的 ID；无来源标识时不提供最新 ID。历史记录的查询、正文与时间保持不变。
 
 逐项结果另含 `index`、`library_id`、`article_id`、`status`、`message`、`reason`、`image_failures`、`completeness`。状态包括 `accepted`、`exists`、`supplemented`、`pending_review`、`conflict`、`discarded`、`invalid`。无效项原因可包含：
 
@@ -87,7 +107,7 @@ AI 报告：
 | 正文缺失或超长、标识格式无效 | 对应项 `invalid`，或流式读取时立即拒绝超长请求；给出具体字段与上限 |
 | JSON 语法、批量包络或字节上限错误 | HTTP 400，应用错误码 `1000`；MCP 返回工具错误，流式读取超限为带具体原因的 HTTP 400 |
 
-`POST /api/v1/ingest/check` 接收 `{"library":"institutional","urls":["https://example.org/release"]}`。每次 1 至 100 个链接；缺库或库不存在时每个链接返回 `invalid` 和原因。已存在结果为 `in_library` 或 `pending_review`；其他状态为 `not_found`、`discarded`。自有型资料不按链接判重。外部来源完整去重规则的库内化由 ikb-06 完成。
+`POST /api/v1/ingest/check` 接收 `{"library":"institutional","urls":["https://example.org/release"]}`。每次 1 至 100 个链接；缺库或库不存在时每个链接返回 `invalid` 和原因。已存在结果为 `in_library` 或 `pending_review`；其他状态为 `not_found`、`discarded`。自有型资料不按链接判重。生成型也不按链接判重。所有查询仅在指定库生效。
 
 ## 图片与按资料 ID 补全
 
@@ -138,4 +158,4 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_report","arguments":{"library":"ai-reports","title":"研究报告","markdown":"# 研究报告\n\n综合分析内容。"}}}
 ```
 
-报告不审核、不进行模型处理，只保存并索引。同标题与正文的请求重试返回已有报告。保存后索引失败仍返回已保存结果及索引状态，待处理操作负责重试。
+报告不审核、不进行模型处理，只保存并索引。每次调用创建独立报告，不按标题或正文去重；接口幂等扩展留待 ikb-15。保存后索引失败仍返回已保存结果及索引状态，待处理操作负责重试。

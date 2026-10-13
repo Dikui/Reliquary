@@ -230,3 +230,5 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 ### 收录契约列（结构版本 11）
 
 `entries.source_ref`、`source_body_hash`、`identifier`、`graph` 均属于 sidecar 不可再生业务数据。`source_body_hash` 保留首次提交正文的规范化指纹，不因图片补全而变化。`has_update`、`latest_article_id` 为按库和来源查询的派生响应，不是数据库列。版本 10 及以前没有这四列；恢复旧副本时使用空字符串与 NULL 默认值，核对时保留对其他字段的严格比较。
+
+版本 12 的 `ingest_discards.library_id` 与 `ingest_discards.fingerprint` 属于 sidecar 持久数据。版本 11 及以前仍按原列清单核对。旧副本缺少两列时，按资料原库及链接指纹投影；无法确定原库的历史记录保存在独立历史范围，不影响当前库收录。原有行、原因、时间和链接均保留。

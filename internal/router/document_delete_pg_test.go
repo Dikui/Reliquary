@@ -102,7 +102,7 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			}
 			var discards int64
 			require.NoError(t, f.db.Table("ingest_discards").Where("article_id=?", id).Count(&discards).Error)
-			require.Zero(t, discards)
+			require.EqualValues(t, 1, discards)
 			var log types.OperationLog
 			require.NoError(t, f.db.Where("operation_type=? AND object_id=?", "delete_document", id).First(&log).Error)
 			require.Contains(t, string(log.Before), "mine")
@@ -111,8 +111,8 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 			var reimport struct{ Data types.IngestBatchResult }
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &reimport))
-			require.Equal(t, "accepted", reimport.Data.Items[0].Status)
-			require.NotEqual(t, id, reimport.Data.Items[0].EntryID)
+			require.Equal(t, "discarded", reimport.Data.Items[0].Status)
+			require.Equal(t, id, reimport.Data.Items[0].EntryID)
 		})
 	}
 }

@@ -22,6 +22,10 @@ type ingestFixtureLibrary struct {
 	db *gorm.DB
 }
 
+func (s ingestFixtureLibrary) GetLibraryByID(ctx context.Context, id string) (*types.Library, error) {
+	return repository.NewLibraryRepository(s.db).GetLibraryByID(ctx, id)
+}
+
 func (s ingestFixtureLibrary) ListLibraries(ctx context.Context) ([]*types.Library, error) {
 	return repository.NewLibraryRepository(s.db).ListLibraries(ctx, s.library.SpaceID)
 }
