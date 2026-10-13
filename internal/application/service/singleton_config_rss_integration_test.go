@@ -2,22 +2,17 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
+
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
-	"reliquary/internal/datasource"
-	"reliquary/internal/datasource/connector/rss"
+
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 type singletonIngestionModels struct{ *summaryStateModelService }
@@ -65,7 +60,7 @@ func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testin
 			text = "Researchers published original experimental measurements on telescope optics, detector sensitivity and observatory calibration. "
 		}
 		body := "# " + marker + "\n\n" + strings.Repeat(text, 28)
-		article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, marker+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + marker, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+		article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, marker+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + marker, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 		require.NoError(t, err)
 		h.drain(t)
 		require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
@@ -106,51 +101,4 @@ func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testin
 	require.NoError(t, err)
 	require.Empty(t, cleared.SummaryModelID)
 	require.Empty(t, cleared.EmbeddingModelID)
-}
-
-func TestGlobalRSSSourceAutomaticallyWritesToKnowledgeBaseAndKeepsSyncLogs(t *testing.T) {
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	utils.ResetSSRFWhitelistForTest()
-	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	h := newRetainedIntakeHarness(t)
-	bases := singletonIntakeSettings(t, h)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/feed.xml" {
-			w.Header().Set("Content-Type", "application/rss+xml")
-			fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>Fixture publisher</title><link>http://%s</link><description>Original publications</description><item><title>Globalrssfixture</title><link>http://%s/article</link><guid>global-article</guid><pubDate>%s</pubDate></item></channel></rss>`, r.Host, r.Host, time.Now().Add(time.Minute).UTC().Format(time.RFC1123Z))
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<html><head><title>Globalrssfixture</title></head><body><article><h1>Globalrssfixture</h1><p>`+strings.Repeat("Acme publishes original measurements documenting widget deployment choices and measured capabilities. ", 12)+`</p></article></body></html>`)
-	}))
-	defer server.Close()
-	registry := datasource.NewConnectorRegistry()
-	require.NoError(t, registry.Register(rss.NewConnector()))
-	dsRepo, logs := repository.NewDataSourceRepository(h.db), repository.NewSyncLogRepository(h.db)
-	syncQueue := &retainedProcessingQueue{}
-	scheduler := datasource.NewScheduler(dsRepo, logs, syncQueue)
-	t.Cleanup(scheduler.Stop)
-	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, entryService: h.service, kbService: bases, taskEnqueuer: syncQueue, connectorRegistry: registry, scheduler: scheduler, spaceRepo: h.service.spaceRepo}
-	cfg, err := (&types.DataSourceConfig{Type: types.ConnectorTypeRSS, Settings: map[string]interface{}{"feed_urls": server.URL + "/feed.xml", "publisher": "Fixture publisher"}}).ToJSON()
-	require.NoError(t, err)
-	created, err := syncer.CreateDataSource(h.ctx, &types.DataSource{ID: "global-feed", SpaceID: h.kb.SpaceID, Name: "Fixture publisher", Type: types.ConnectorTypeRSS, Config: cfg, Status: types.DataSourceStatusActive, CreatedAt: time.Now().Add(-24 * time.Hour)})
-	require.NoError(t, err)
-	require.Equal(t, h.kb.ID, created.KnowledgeBaseID, "callers do not choose a destination knowledge base")
-	log, err := syncer.ManualSync(h.ctx, created.ID)
-	require.NoError(t, err)
-	require.Len(t, syncQueue.tasks, 1)
-	require.NoError(t, syncer.ProcessSync(h.ctx, syncQueue.tasks[0]))
-	h.drain(t)
-	var articles []types.Entry
-	require.NoError(t, h.db.Find(&articles).Error)
-	require.Len(t, articles, 1)
-	require.Equal(t, h.kb.ID, articles[0].KnowledgeBaseID)
-	require.Equal(t, types.ChannelRSS, articles[0].Channel)
-	require.Equal(t, types.ParseStatusCompleted, articles[0].ParseStatus)
-	history, err := syncer.GetSyncLogs(h.ctx, created.ID, 10, 0)
-	require.NoError(t, err)
-	require.Len(t, history, 1)
-	require.Equal(t, log.ID, history[0].ID)
-	require.Equal(t, types.SyncLogStatusSuccess, history[0].Status)
-	require.Equal(t, 1, history[0].ItemsCreated)
 }

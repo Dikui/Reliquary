@@ -22,38 +22,36 @@ import (
 type RouterParams struct {
 	dig.In
 
-	Config                       *config.Config
-	FileService                  interfaces.FileService
-	UserService                  interfaces.UserService
-	KBService                    interfaces.KnowledgeBaseService
-	EntryService                 interfaces.EntryService
-	ChunkService                 interfaces.ChunkService
-	ModelService                 interfaces.ModelService
-	KBHandler                    *handler.KnowledgeBaseHandler
-	EntryHandler                 *handler.EntryHandler
-	VaultHandler                 *handler.VaultHandler       `optional:"true"`
-	MaintenanceHandler           *handler.MaintenanceHandler `optional:"true"`
-	SearchHandler                *handler.SearchHandler
-	EntityHandler                *handler.EntityHandler
-	EmbeddingRebuildHandler      *handler.EmbeddingRebuildHandler `optional:"true"`
-	TopicHandler                 *handler.TopicHandler            `optional:"true"`
-	FollowHandler                *handler.FollowHandler           `optional:"true"`
-	OperationLogHandler          *handler.OperationLogHandler     `optional:"true"`
-	MCPHandler                   *mcpserver.Handler               `optional:"true"`
-	SpaceHandler                 *handler.SpaceHandler
-	SpaceService                 interfaces.SpaceService
-	APIKeyService                interfaces.APIKeyService
-	ChunkHandler                 *handler.ChunkHandler
-	ChatGPTHandler               *handler.ChatGPTHandler       `optional:"true"`
-	ChatGPTPolicyHandler         *handler.ChatGPTPolicyHandler `optional:"true"`
-	ModelHandler                 *handler.ModelHandler
-	ModelCredentialsHandler      *handler.ModelCredentialsHandler
-	AuthHandler                  *handler.AuthHandler
-	InitializationHandler        *handler.InitializationHandler
-	SystemHandler                *handler.SystemHandler
-	ResourceCatalog              interfaces.ResourceCatalog
-	DataSourceHandler            *handler.DataSourceHandler
-	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
+	Config                  *config.Config
+	FileService             interfaces.FileService
+	UserService             interfaces.UserService
+	KBService               interfaces.KnowledgeBaseService
+	EntryService            interfaces.EntryService
+	ChunkService            interfaces.ChunkService
+	ModelService            interfaces.ModelService
+	KBHandler               *handler.KnowledgeBaseHandler
+	EntryHandler            *handler.EntryHandler
+	VaultHandler            *handler.VaultHandler       `optional:"true"`
+	MaintenanceHandler      *handler.MaintenanceHandler `optional:"true"`
+	SearchHandler           *handler.SearchHandler
+	EntityHandler           *handler.EntityHandler
+	EmbeddingRebuildHandler *handler.EmbeddingRebuildHandler `optional:"true"`
+	TopicHandler            *handler.TopicHandler            `optional:"true"`
+	FollowHandler           *handler.FollowHandler           `optional:"true"`
+	OperationLogHandler     *handler.OperationLogHandler     `optional:"true"`
+	MCPHandler              *mcpserver.Handler               `optional:"true"`
+	SpaceHandler            *handler.SpaceHandler
+	SpaceService            interfaces.SpaceService
+	APIKeyService           interfaces.APIKeyService
+	ChunkHandler            *handler.ChunkHandler
+	ChatGPTHandler          *handler.ChatGPTHandler       `optional:"true"`
+	ChatGPTPolicyHandler    *handler.ChatGPTPolicyHandler `optional:"true"`
+	ModelHandler            *handler.ModelHandler
+	ModelCredentialsHandler *handler.ModelCredentialsHandler
+	AuthHandler             *handler.AuthHandler
+	InitializationHandler   *handler.InitializationHandler
+	SystemHandler           *handler.SystemHandler
+	ResourceCatalog         interfaces.ResourceCatalog
 }
 
 // NewRouter 创建新的路由
@@ -169,7 +167,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
-		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, accessGuards)
 		RegisterChunkerDebugRoutes(v1, accessGuards)
 
 		// Fail fast if any declared API-key policy points at a route

@@ -30,32 +30,6 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.EntryProcess
 	return eff
 }
 
-// resolveFileImportProcessConfig is the single gate every file import passes
-// through: it rejects unsupported extensions and returns the effective processing
-// config for task enqueue. Persisting overrides onto the entry record stays
-// with the caller, which owns the record's lifecycle.
-func resolveFileImportProcessConfig(
-	ctx context.Context,
-	kb *types.KnowledgeBase,
-	fileType string,
-	processOverrides *types.EntryProcessOverrides,
-	enableMultimodel *bool,
-) (types.EffectiveProcessConfig, error) {
-	if err := validateImportFileType(fileType); err != nil {
-		return types.EffectiveProcessConfig{}, err
-	}
-
-	eff := ResolveProcessConfig(kb, processOverrides)
-
-	if processOverrides != nil {
-		if err := ValidateProcessOverrides(ctx, kb, processOverrides, []string{fileType}); err != nil {
-			return eff, err
-		}
-	}
-
-	return eff, nil
-}
-
 // ValidateProcessOverrides validates batch overrides against file types in the upload.
 func ValidateProcessOverrides(
 	ctx context.Context,

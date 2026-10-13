@@ -5,6 +5,7 @@ import gzip
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -23,6 +24,367 @@ class AdminStorageTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def host_context(self, **overrides):
+        source = self.root / "source"
+        source.mkdir(exist_ok=True)
+        values = {"HOME": str(self.root / "home"), "RELIQUARY_VAULT_DIR": str(self.root / "vault"),
+                  "RELIQUARY_FILES_DIR": str(self.root / "files"), "BACKUP_DIR": str(self.root / "backups")}
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            return admin.Context(source, {**values, **overrides})
+
+    def reader_files(self, vault):
+        contents = {".obsidian/app.json": b'{"showLineNumber": true}\n', ".trash/x.md": b"Deleted reader note\n",
+                    ".DS_Store": b"Finder metadata", "mine/.obsidian/plugin.md": b"Plugin settings\n",
+                    "reports/.trash/report.md": b"Deleted report\n", "mine/._draft.md": b"AppleDouble metadata"}
+        for name, content in contents.items():
+            path = vault / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        return contents
+
+    def test_deployment_check_creates_missing_directories_and_expands_defaults(self):
+        ctx = self.host_context(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="~/Reliquary/files",
+                                BACKUP_DIR="${HOME}/Backups/Reliquary")
+        checked = ctx.check_host_directories(settings=False)
+        self.assertEqual(checked["vault"], (self.root / "home/Reliquary/vault").resolve())
+        self.assertEqual(checked["files"], (self.root / "home/Reliquary/files").resolve())
+        self.assertEqual(checked["backup"], (self.root / "home/Backups/Reliquary").resolve())
+        self.assertTrue(all(path.is_dir() for path in checked.values()))
+        self.assertEqual(list(checked["vault"].iterdir()), [])
+
+    @unittest.skipUnless(admin.shutil.which("docker"), "Docker Compose is required to check its interpolation")
+    def test_compose_and_admin_resolve_the_same_host_directories(self):
+        evidence = Path(__file__).resolve().parent.parent / ".scratch/ingest-only/evidence/06"
+        evidence.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="admin-compose-paths-", dir=evidence) as temporary:
+            fixture = Path(temporary)
+            source, home = fixture / "source", fixture / "home"
+            source.mkdir()
+            admin.shutil.copy2(admin.ROOT / "docker-compose.yml", source / "docker-compose.yml")
+            defaults = "RELIQUARY_VAULT_DIR=${HOME}/Reliquary/vault\nRELIQUARY_FILES_DIR=${HOME}/Reliquary/files\nBACKUP_DIR=${HOME}/Backups/Reliquary\n"
+            scenarios = [
+                ("template", defaults, {}),
+                ("invocation override", defaults, {"RELIQUARY_VAULT_DIR": "$HOME/custom-vault", "RELIQUARY_FILES_DIR": "~/custom-files", "BACKUP_DIR": "${HOME}/custom-backups"}),
+                ("unset defaults", "", {}),
+                ("dotenv comments", 'RELIQUARY_VAULT_DIR=${HOME}/vault # reading files\nRELIQUARY_FILES_DIR="${HOME}/files#images" # uploaded images\nBACKUP_DIR=\'${HOME}/backups#history\' # backups\n', {}),
+                ("legacy aliases", defaults, {"RELIQUARY_ADMIN_VAULT_DIR": "${HOME}/legacy-vault", "RELIQUARY_ADMIN_RESOURCES_DIR": "${HOME}/legacy-files"}),
+            ]
+            for name, dotenv, overrides in scenarios:
+                with self.subTest(scenario=name):
+                    (source / ".env").write_text(dotenv)
+                    process_env = {"PATH": os.environ.get("PATH", os.defpath), "HOME": str(home),
+                                   "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker")),
+                                   "COMPOSE_PROJECT_NAME": "reliquary-admin-path-test", **overrides}
+                    with mock.patch.dict(admin.os.environ, process_env, clear=True):
+                        ctx = admin.Context(source)
+                        config = json.loads(ctx.compose("config", "--format", "json"))
+                    mounts = {mount["target"]: Path(mount["source"]).resolve() for mount in config["services"]["app"]["volumes"] if mount["type"] == "bind"}
+                    self.assertEqual(mounts["/data/vault"], ctx.host_storage_path("vault"))
+                    self.assertEqual(mounts["/data/files"], ctx.host_storage_path("resources"))
+                    expected_backup = admin.host_path(admin.default_backup_directory(ctx.env), ctx.env, source)
+                    self.assertEqual(Path(config["services"]["app"]["environment"]["BACKUP_DIR"]).resolve(), expected_backup)
+                    for key in ("RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR"):
+                        if ctx.env.get(key):
+                            self.assertTrue(Path(ctx.env[key]).is_absolute())
+                            self.assertNotIn("$", ctx.env[key])
+                    self.assertFalse(home.exists())
+
+    def test_dotenv_comments_preserve_hashes_inside_values(self):
+        path = self.root / ".env"
+        path.write_text('RAW=directory#fragment # comment\nDOUBLE="directory # fragment" # comment\nSINGLE=\'directory # fragment\' # comment\nEMPTY= # comment\n')
+        self.assertEqual(admin.read_env(path), {"RAW": "directory#fragment", "DOUBLE": "directory # fragment", "SINGLE": "directory # fragment", "EMPTY": ""})
+
+    def test_deployment_check_rejects_unwritable_directory(self):
+        ctx = self.host_context()
+        vault = self.root / "vault"
+        vault.mkdir()
+        vault.chmod(0o555)
+        try:
+            with self.assertRaisesRegex(admin.AdminError, "vault directory is not writable"):
+                ctx.check_host_directories(settings=False)
+        finally:
+            vault.chmod(0o755)
+
+    def test_deployment_check_rejects_existing_file_and_source_paths(self):
+        ctx = self.host_context()
+        file = self.root / "not-a-directory"
+        file.write_text("Existing file")
+        ctx.env["RELIQUARY_VAULT_DIR"] = str(file)
+        with self.assertRaisesRegex(admin.AdminError, "cannot be created or is not writable"):
+            ctx.check_host_directories(settings=False)
+        for location in (ctx.root, ctx.root / "local-vault"):
+            with self.subTest(location=location):
+                ctx.env["RELIQUARY_VAULT_DIR"] = str(location)
+                with self.assertRaisesRegex(admin.AdminError, "outside the project source"):
+                    ctx.check_host_directories(settings=False)
+        alias = self.root / "source-alias"
+        alias.symlink_to(ctx.root, target_is_directory=True)
+        ctx.env["RELIQUARY_VAULT_DIR"] = str(alias / "vault")
+        with self.assertRaisesRegex(admin.AdminError, "outside the project source"):
+            ctx.check_host_directories(settings=False)
+
+    def test_deployment_check_rejects_all_storage_and_backup_containment_pairs(self):
+        keys = ["RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR"]
+        for first in range(len(keys)):
+            for second in range(len(keys)):
+                if first == second:
+                    continue
+                with self.subTest(parent=keys[first], child=keys[second]):
+                    ctx = self.host_context(**{keys[first]: str(self.root / "parent"), keys[second]: str(self.root / "parent/child")})
+                    with self.assertRaisesRegex(admin.AdminError, "must not contain one another"):
+                        ctx.check_host_directories(settings=False)
+        ctx = self.host_context(RELIQUARY_FILES_DIR=str(self.root / "vault"))
+        with self.assertRaisesRegex(admin.AdminError, "must not contain one another"):
+            ctx.check_host_directories(settings=False)
+        self.assertFalse((self.root / "parent").exists())
+
+    def test_deployment_check_validates_settings_backup_directory(self):
+        ctx = self.host_context()
+        with mock.patch.object(ctx, "configured_backup_directory", return_value=str(self.root / "vault/settings-backup")):
+            with self.assertRaisesRegex(admin.AdminError, "must not contain one another"):
+                ctx.check_host_directories()
+        with mock.patch.object(ctx, "configured_backup_directory", return_value=str(ctx.root / "settings-backup")):
+            with self.assertRaisesRegex(admin.AdminError, "outside the project source"):
+                ctx.check_host_directories()
+
+    def test_settings_legacy_default_resolves_to_host_backup_default_without_app(self):
+        ctx = self.host_context()
+        ctx.direct = True
+        with mock.patch.object(ctx, "sql", side_effect=["t", "../reliquary-backups"]) as sql:
+            self.assertEqual(ctx.configured_backup_directory(), str((self.root / "backups").resolve()))
+        self.assertEqual(sql.call_args.args[0], "SELECT backup_directory FROM maintenance_state WHERE id=true")
+
+    def test_obsidian_files_are_copied_restored_and_excluded_only_from_vault_checksums(self):
+        ctx = self.host_context()
+        ctx.check_host_directories(settings=False)
+        vault = self.root / "vault"
+        expected = self.reader_files(vault)
+        (vault / "articles").mkdir()
+        (vault / "articles/a.md").write_text("Preserved article\n")
+        admin.json_write(vault / ".reliquary/manifest.json", {"required": []})
+        package = self.root / "package"
+        ctx.copy_storage("vault", package / "vault")
+        ctx.copy_storage("resources", package / "resources")
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        self.assertFalse(any(admin.package_user_path(name) for name in admin.hashes(package)))
+        (package / "vault/.obsidian/app.json").write_text('{"readerChanged": true}\n')
+        admin.check_files(package)
+        # Historical packages with checksums for reader settings also remain valid.
+        checks = json.loads((package / "checksums.json").read_text())
+        checks["vault/.obsidian/app.json"] = {"sha256": "old-reader-config", "size": 1}
+        admin.json_write(package / "checksums.json", checks)
+        admin.check_files(package)
+        destination = self.host_context(RELIQUARY_VAULT_DIR=str(self.root / "restored-vault"), RELIQUARY_FILES_DIR=str(self.root / "restored-files"))
+        destination.restore_storage("vault", package / "vault")
+        destination.restore_storage("resources", package / "resources")
+        for name, original in expected.items():
+            self.assertEqual((vault / name).read_bytes(), original)
+            self.assertEqual((self.root / "restored-vault" / name).read_bytes(), (package / "vault" / name).read_bytes())
+        self.assertEqual((self.root / "restored-vault/articles/a.md").read_text(), "Preserved article\n")
+        (package / "vault/articles/a.md").write_text("Changed article\n")
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
+
+    def test_obsidian_snapshot_does_not_compare_changing_reader_configuration(self):
+        vault = self.root / "vault"
+        self.reader_files(vault)
+        copy = admin.shutil.copy2
+        def changing_reader(src, dest):
+            copy(src, dest)
+            if Path(src).name == "app.json":
+                Path(src).write_text('{"automaticallySaved": true}\n')
+        with mock.patch.object(admin.shutil, "copy2", side_effect=changing_reader):
+            admin.snapshot_tree(vault, self.root / "snapshot", vault=True)
+        self.assertEqual((self.root / "snapshot/.obsidian/app.json").read_bytes(), b'{"showLineNumber": true}\n')
+
+    def test_reliquary_internal_files_are_not_treated_as_reader_configuration(self):
+        package = self.root / "package"
+        file = package / "vault/.reliquary/exports/.DS_Store"
+        file.parent.mkdir(parents=True)
+        file.write_text("Maintenance data")
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        file.write_text("Changed maintenance data")
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
+
+    def test_unpack_rejects_nonempty_host_targets_before_cloning_or_loading_images(self):
+        package = self.root / "package"
+        package.mkdir()
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT, "images": {"app": {}}, "code": {}})
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        for name, key in (("vault", "RELIQUARY_VAULT_DIR"), ("files", "RELIQUARY_FILES_DIR")):
+            with self.subTest(target=name):
+                ctx = self.host_context(**{key: str(self.root / ("nonempty-" + name))})
+                path = self.root / ("nonempty-" + name)
+                path.mkdir()
+                (path / "existing.md").write_text("Keep existing data")
+                args = argparse.Namespace(package=str(package), target=str(self.root / ("deployment-" + name)), project="test", resume=False)
+                with mock.patch.object(admin, "run") as run:
+                    with self.assertRaisesRegex(admin.AdminError, "Destination must be empty"):
+                        admin.unpack(ctx, args)
+                    run.assert_not_called()
+                self.assertEqual((path / "existing.md").read_text(), "Keep existing data")
+
+    def test_restore_rejects_nonempty_host_targets_before_database_import(self):
+        package = self.root / "package"
+        package.mkdir()
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT})
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        for name, key in (("vault", "RELIQUARY_VAULT_DIR"), ("files", "RELIQUARY_FILES_DIR")):
+            with self.subTest(target=name):
+                path = self.root / ("nonempty-" + name)
+                path.mkdir()
+                (path / "existing.md").write_text("Keep existing data")
+                ctx = self.host_context(**{key: str(path)})
+                with mock.patch.object(ctx, "configured_backup_directory", return_value=None), mock.patch.object(ctx, "sql") as sql, mock.patch.object(admin.subprocess, "run") as run:
+                    with self.assertRaisesRegex(admin.AdminError, "Destination must be empty"):
+                        admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+                    sql.assert_not_called()
+                    run.assert_not_called()
+                self.assertEqual((path / "existing.md").read_text(), "Keep existing data")
+
+    def test_pack_backup_and_restore_use_host_storage_and_preserve_reader_files(self):
+        class HostContext(admin.Context):
+            def compose(self, *args, **kwargs):
+                return b""
+            def configured_backup_directory(self):
+                return None
+            def runtime_env(self):
+                return self.env
+            @contextlib.contextmanager
+            def stopped(self, *args):
+                yield
+            @contextlib.contextmanager
+            def cloned_database(self):
+                yield "temporary-clone"
+            def cli_json(self, *args, **kwargs):
+                if args[0] == "manifest":
+                    return {"tables": {}, "files": {}, "required_credentials": []}
+                if args[0] == "scrub":
+                    return {"required": []}
+                return {"ok": True}
+            def sql(self, query, *args):
+                return "0" if "count(*)" in query else "test-version"
+            def pg(self, *args, output=None, **kwargs):
+                if output:
+                    output.write(b"Test scrubbed database")
+            def legacy_schema(self):
+                return False
+            def scan_dump_credentials(self, *args):
+                pass
+        configured = self.host_context()
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            ctx = HostContext(configured.root, configured.env)
+        ctx.check_host_directories()
+        vault = self.root / "vault"
+        reader = self.reader_files(vault)
+        article = vault / "articles/2026-10/article-short.md"
+        article.parent.mkdir(parents=True)
+        article.write_text("![Image](../../attachments/article/image.png)\n")
+        image = vault / "attachments/article/image.png"
+        image.parent.mkdir(parents=True)
+        image.write_bytes(b"Test image")
+        admin.json_write(vault / ".reliquary/manifest.json", {"required": []})
+        (self.root / "files/upload.png").write_bytes(b"Uploaded image")
+        options = argparse.Namespace(timeout=300, keep_paused=False, include_worktree=True, automatic=False, with_images=False, directory=str(self.root / "backups"))
+        def source_copy(context, stage, *args):
+            (stage / "source").mkdir()
+            (stage / "source/application.txt").write_text("Reviewed source")
+            return {"commit": "test-commit"}
+        with mock.patch.object(admin, "source_copy", side_effect=source_copy), mock.patch.object(admin, "images_save", return_value={}), contextlib.redirect_stdout(io.StringIO()):
+            packed = admin.create_package(ctx, self.root / "packed", options)
+            backed_up = admin.backup(ctx, options)
+        for package in (packed, backed_up):
+            admin.check_files(package)
+            self.assertEqual((package / "vault/articles/2026-10/article-short.md").read_text(), article.read_text())
+            self.assertEqual((package / "vault/attachments/article/image.png").read_bytes(), image.read_bytes())
+            self.assertEqual((package / "resources/upload.png").read_bytes(), b"Uploaded image")
+            for name, content in reader.items():
+                self.assertEqual((package / "vault" / name).read_bytes(), content)
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            destination = HostContext(configured.root, {**configured.env, "RELIQUARY_VAULT_DIR": str(self.root / "restored-vault"),
+                                                       "RELIQUARY_FILES_DIR": str(self.root / "restored-files")})
+        with mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(destination, backed_up, argparse.Namespace(skip_models=True))
+        for name, content in reader.items():
+            self.assertEqual((self.root / "restored-vault" / name).read_bytes(), content)
+            self.assertEqual((vault / name).read_bytes(), content)
+        self.assertEqual((self.root / "restored-files/upload.png").read_bytes(), b"Uploaded image")
+
+    def test_verify_checks_host_directories_and_maps_the_host_manifest_for_container_cli(self):
+        ctx = self.host_context()
+        manifest = self.root / "package/snapshot.json"
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(ctx, "configured_backup_directory", return_value=None), mock.patch.object(ctx, "cli_json", return_value={"ok": True}) as verify, contextlib.redirect_stdout(io.StringIO()):
+            admin.main(["verify", "--manifest", str(manifest)])
+        verify.assert_called_once_with("verify", "--manifest", "/maintenance-package/snapshot.json", overrides={"RELIQUARY_ADMIN_CLI_PACKAGE_HOST": str(manifest.parent.resolve())})
+        self.assertTrue((self.root / "vault").is_dir())
+        self.assertTrue((self.root / "files").is_dir())
+
+    def test_ingest_data_is_preserved_by_package_storage_restore_and_verify(self):
+        vault, resources = self.root / "vault", self.root / "resources"
+        (vault / ".reliquary").mkdir(parents=True)
+        resources.mkdir()
+        tables = {
+            "entries": [{"id": "article", "acquisition": "model_written", "incomplete": True,
+                         "external_completion_attempted": True, "ingest_api_key_id": 7,
+                         "ingest_api_key_name": "Original collector", "last_ingest_api_key_id": 8,
+                         "last_ingest_api_key_name": "Completion collector", "content_type_hint": "research",
+                         "related_article_id": "original", "missing_materials": [{"type": "image",
+                         "source_url": "https://example.test/missing.png", "reason": "Image unavailable"}],
+                         "ingest_attachments": [{"asset_id": "asset", "path": "local://original.pdf"}]}],
+            "ingest_assets": [{"id": "asset", "space_id": 1, "name": "original.pdf", "file_type": "pdf",
+                              "size": len(b"%PDF original bytes"), "path": "local://original.pdf", "created_at": "2026-10-12T00:00:00Z",
+                              "referenced_at": "2026-10-12T01:00:00Z", "entry_id": "article"}],
+            "ingest_discards": [{"space_id": 1, "normalized_url": "https://example.test/discarded",
+                                "article_id": "discarded", "discarded_at": "2026-10-12T02:00:00Z", "reason": "User discarded"}],
+            "operation_logs": [{"id": "operation", "api_key_id": 8, "api_key_name": "Completion collector"}],
+        }
+        for table, rows in tables.items():
+            admin.json_write(vault / ".reliquary" / (table + ".json"), rows)
+        personal_body = "# Personal procedure\n\nKeep the complete tutorial text.\n"
+        personal_file = vault / "mine/personal-a1b2c3d4.md"
+        personal_file.parent.mkdir()
+        personal_file.write_text("---\nid: personal-document\nsource_kind: mine\ntitle: Personal procedure\ncontent_type: tutorial\n---\n" + personal_body)
+        attachment = vault / "attachments/personal-document/notes.txt"
+        attachment.parent.mkdir(parents=True)
+        attachment.write_bytes(b"Personal document attachment")
+        tables["entries"].append({"id": "personal-document", "source_kind": "mine", "vault_path": "mine/personal-a1b2c3d4.md", "vault_body": personal_body, "processing_mode": "full"})
+        admin.json_write(vault / ".reliquary/entries.json", tables["entries"])
+        (resources / "original.pdf").write_bytes(b"%PDF original bytes")
+        source = object.__new__(admin.Context)
+        source.direct, source.local_server = True, None
+        source.env = {"VAULT_ROOT": str(vault), "LOCAL_STORAGE_BASE_DIR": str(resources)}
+        package = self.root / "package"
+        package.mkdir()
+        # These are the production copy and restore methods used by pack,
+        # unpack, and the storage stage preceding the Go rebuild importer.
+        source.copy_storage("vault", package / "vault")
+        source.copy_storage("resources", package / "resources")
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT})
+        admin.json_write(package / "checksums.json", admin.hashes(package))
+        admin.check_files(package)
+        restored_vault, restored_resources = self.root / "restored-vault", self.root / "restored-resources"
+        restored_vault.mkdir()
+        restored_resources.mkdir()
+        target = object.__new__(admin.Context)
+        target.direct, target.local_server = True, None
+        target.env = {"VAULT_ROOT": str(restored_vault), "LOCAL_STORAGE_BASE_DIR": str(restored_resources)}
+        target.restore_storage("vault", package / "vault")
+        target.restore_storage("resources", package / "resources")
+        for table, rows in tables.items():
+            self.assertEqual(json.loads((restored_vault / ".reliquary" / (table + ".json")).read_text()), rows)
+        self.assertEqual((restored_resources / "original.pdf").read_bytes(), b"%PDF original bytes")
+        self.assertEqual((restored_vault / "mine/personal-a1b2c3d4.md").read_text(), personal_file.read_text())
+        self.assertEqual((restored_vault / "attachments/personal-document/notes.txt").read_bytes(), b"Personal document attachment")
+        personal_file_in_package = package / "vault/mine/personal-a1b2c3d4.md"
+        personal_file_in_package.write_text("Modified personal document")
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
+        personal_file_in_package.write_text(personal_file.read_text())
+        admin.json_write(package / "vault" / ".reliquary" / "ingest_discards.json", [])
+        with self.assertRaisesRegex(admin.AdminError, "checksum mismatch"):
+            admin.check_files(package)
 
     def test_incremental_snapshots_share_only_previous_immutable_files(self):
         source = self.root / "source"
@@ -663,6 +1025,234 @@ class AdminStorageTests(unittest.TestCase):
         self.assertEqual(ctx.expected["tables"]["maintenance_state"], {"sha256": "new", "rows": 1})
         self.assertIn("--vectors", ctx.flags)
         self.assertNotIn("--allow-model-change", ctx.flags)
+
+
+    def upgrade_context(self, fail_export=False):
+        class FakeContext:
+            direct = True
+            local_server = None
+            env = {}
+            def __init__(self, root):
+                self.root, self.calls = root, []
+            def cli_json(self, *args, **kwargs):
+                self.calls.append(args)
+                if args[0] == "export-sources" and fail_export:
+                    raise admin.AdminError("source export failed")
+                if args[0] == "status":
+                    return {"paused": True}
+                return {"ok": True}
+        return FakeContext(self.root)
+
+    def test_export_sources_command_dispatches_to_safe_go_export(self):
+        ctx = self.upgrade_context()
+        with mock.patch.object(admin, "Context", return_value=ctx), contextlib.redirect_stdout(io.StringIO()):
+            admin.main(["export-sources"])
+        self.assertEqual(ctx.calls, [("export-sources",)])
+
+    def test_upgrade_exports_after_backup_and_before_migration(self):
+        ctx = self.upgrade_context()
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup", return_value=self.root) as backup, mock.patch.object(admin, "verify_upgrade") as verify, contextlib.redirect_stdout(io.StringIO()):
+            admin.main(["upgrade"])
+        backup.assert_called_once()
+        self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
+        self.assertLess(ctx.calls.index(("migrate",)), ctx.calls.index(("resume",)))
+        verify.assert_called_once_with(ctx, self.root)
+
+    def test_upgrade_export_failure_prevents_migration_and_resume(self):
+        ctx = self.upgrade_context(fail_export=True)
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup", return_value=self.root), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(admin.AdminError, "source export failed"):
+                admin.main(["upgrade"])
+        self.assertEqual(ctx.calls, [("export-sources",)])
+
+    def old_backup_restore_context(self, legacy=False):
+        package = self.root / "package"
+        package.mkdir()
+        (package / "database.dump").write_bytes(b"old database archive")
+        required = [{"kind": "data_sources", "id": "old-source", "fields": ["config.credentials.token"]},
+                    {"kind": "models", "id": "model", "fields": ["parameters.api_key"]}]
+        admin.json_write(package / "manifest.json", {"format": admin.FORMAT, "required_credentials": required})
+        class FakeContext:
+            direct = True
+            local_server = None
+            env = {}
+            scheduler_required = False
+            def __init__(self, root):
+                self.root, self.calls = root, []
+            def sql(self, statement):
+                self.calls.append(("sql", statement))
+                return "0"
+            def storage(self, name):
+                path = self.root / ("target-" + name)
+                path.mkdir(exist_ok=True)
+                return "host", path
+            def pg_command(self, *args):
+                return ["pg_restore"]
+            def restore_storage(self, name, source):
+                self.calls.append(("restore_storage", name))
+            def legacy_schema(self):
+                return legacy and not any(call == ("migrate",) for call in self.calls)
+            def cli_json(self, *args, **kwargs):
+                self.calls.append(args)
+                return {"ok": True}
+        return FakeContext(self.root), package, required
+
+    def test_old_backup_restore_exports_before_migration_and_drops_source_credentials(self):
+        ctx, package, required = self.old_backup_restore_context()
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+        self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
+        self.assertLess(ctx.calls.index(("migrate",)), ctx.calls.index(("reindex",)))
+        self.assertLess(ctx.calls.index(("reindex",)), ctx.calls.index(("flush",)))
+        verifies = [index for index, call in enumerate(ctx.calls) if call[0] == "verify"]
+        self.assertEqual(len(verifies), 2)
+        self.assertLess(verifies[0], ctx.calls.index(("export-sources",)))
+        self.assertLess(ctx.calls.index(("flush",)), verifies[1])
+        state = json.loads((self.root / ".maintenance-restore.json").read_text())
+        self.assertEqual(state["required_credentials"], [required[1]])
+
+
+    def test_schema_zero_data_restore_exports_and_migrates_to_current_version(self):
+        ctx, package, required = self.old_backup_restore_context(legacy=True)
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+        self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
+        self.assertFalse(ctx.legacy_schema())
+
+    def test_exact_old_image_rollback_preserves_original_schema(self):
+        ctx, package, required = self.old_backup_restore_context(legacy=True)
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(io.StringIO()):
+            admin.restore(ctx, package, argparse.Namespace(skip_models=True, preserve_version=True))
+        self.assertNotIn(("migrate",), ctx.calls)
+        self.assertNotIn(("export-sources",), ctx.calls)
+        self.assertNotIn(("flush",), ctx.calls)
+        self.assertEqual(len([call for call in ctx.calls if call[0] == "verify"]), 1)
+        self.assertTrue(ctx.legacy_schema())
+        state = json.loads((self.root / ".maintenance-restore.json").read_text())
+        self.assertEqual(state["required_credentials"], required)
+        self.assertTrue(state["preserve_version"])
+
+
+    def completed_upgrade_backup(self):
+        old_row = {"backup_at": "2026-10-01T00:00:00+00:00", "backup_status": "failed", "backup_path": "/old/backup",
+                   "backup_size_bytes": 17, "backup_error": "retained previous failure", "drill_at": "2026-10-02T00:00:00+00:00",
+                   "drill_status": "failed", "drill_error": "retained drill failure", "backup_schedule": "0 3 * * 0",
+                   "drill_schedule": "0 4 1 * *", "schedule_timezone": "Asia/Shanghai", "backup_directory": "/backup/root", "automatic_enabled": True}
+        class FakeContext:
+            direct = True
+            local_server = None
+            env = {}
+            def __init__(self, root):
+                self.root, self.row, self.calls = root, dict(old_row), []
+            def manifest(self):
+                row = dict(self.row)
+                table = {"rows": 1, "data": [row], "columns": sorted(row), "sha256": admin.hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()}
+                return {"tables": {"maintenance_state": table, "entries": {"rows": 1, "data": [{"id": "article", "vault_body": "retained original"}], "sha256": "original"}}, "files": {"vault": []}, "required_credentials": []}
+            @contextlib.contextmanager
+            def stopped(self, *args):
+                yield
+            @contextlib.contextmanager
+            def cloned_database(self):
+                yield "snapshot_clone"
+            def runtime_env(self):
+                return {}
+            def copy_storage(self, name, target):
+                target.mkdir(parents=True)
+                if name == "vault":
+                    admin.json_write(target / ".reliquary/manifest.json", {"required": []})
+            def pg(self, *args, output=None):
+                output.write(b"credential-free complete database")
+            def scan_dump_credentials(self, path):
+                pass
+            def sql(self, statement):
+                return "4:false" if "schema_migrations" in statement else "version"
+            def cli_json(self, *args, **kwargs):
+                self.calls.append(args)
+                if args[0] == "manifest":
+                    return self.manifest()
+                if args[0] == "record":
+                    fields = dict(zip(args[1::2], args[2::2]))
+                    self.row.update(backup_at=admin.dt.datetime.now(admin.dt.timezone.utc).isoformat(), backup_status=fields["--status"], backup_path=fields["--path"], backup_size_bytes=int(fields["--size"]), backup_error=fields["--error"])
+                    return {"status": fields["--status"], "path": fields["--path"], "size_bytes": int(fields["--size"])}
+                if args[0] == "verify" and "--manifest" in args and "previous-data.json" in str(args[args.index("--manifest") + 1]):
+                    expected = json.loads(Path(args[args.index("--manifest") + 1]).read_text())
+                    current = self.manifest()
+                    if expected["tables"]["maintenance_state"] != current["tables"]["maintenance_state"]:
+                        raise admin.AdminError("table maintenance_state")
+                    if expected["tables"]["entries"] != current["tables"]["entries"]:
+                        raise admin.AdminError("table entries")
+                return {"ok": True}
+        ctx = FakeContext(self.root)
+        package = self.root / "completed-upgrade-backup"
+        args = argparse.Namespace(timeout=30, keep_paused=True, include_worktree=True, with_images=False, automatic=False, upgrade=True)
+        def copy_source(ctx, stage, *args):
+            (stage / "source").mkdir()
+            return {"commit": "old-version"}
+        with mock.patch.object(admin, "source_copy", side_effect=copy_source), mock.patch.object(admin, "scan_secrets"), contextlib.redirect_stdout(io.StringIO()):
+            package = admin.create_package(ctx, package, args, "backup")
+        return ctx, package, old_row
+
+    def test_upgrade_verifies_complete_backup_after_its_own_success_record(self):
+        ctx, package, old_row = self.completed_upgrade_backup()
+        saved = json.loads((package / "snapshot.json").read_text())
+        self.assertEqual(saved["tables"]["maintenance_state"]["data"], [old_row], "the complete backup keeps its actual pre-record history")
+        self.assertEqual(ctx.upgrade_backup_record["before"], saved["tables"]["maintenance_state"])
+        self.assertEqual(ctx.row["backup_status"], "success")
+        self.assertEqual(ctx.row["backup_path"], str(package))
+        self.assertEqual(ctx.row["drill_error"], "retained drill failure")
+        admin.verify_upgrade(ctx, package)
+        admin.check_files(package)
+
+    def test_upgrade_backup_record_does_not_hide_later_history_or_article_changes(self):
+        for table, field, value in [("maintenance_state", "drill_error", "tampered drill history"),
+                                    ("maintenance_state", "backup_size_bytes", 999999)]:
+            with self.subTest(field=field):
+                ctx, package, old_row = self.completed_upgrade_backup()
+                ctx.row[field] = value
+                with self.assertRaisesRegex(admin.AdminError, "table maintenance_state"):
+                    admin.verify_upgrade(ctx, package)
+                admin.shutil.rmtree(package)
+        ctx, package, old_row = self.completed_upgrade_backup()
+        original = ctx.manifest
+        def modified():
+            current = original()
+            current["tables"]["entries"]["data"][0]["vault_body"] = "tampered original"
+            return current
+        ctx.manifest = modified
+        with self.assertRaisesRegex(admin.AdminError, "table entries"):
+            admin.verify_upgrade(ctx, package)
+
+    def test_upgrade_record_proof_rejects_unrelated_history_and_missing_confirmation(self):
+        ctx, package, old_row = self.completed_upgrade_backup()
+        before = {"tables": {"maintenance_state": ctx.upgrade_backup_record["before"]}}
+        result = {"path": str(package), "size_bytes": ctx.row["backup_size_bytes"], "finished_at": ctx.row["backup_at"]}
+        confirmed = {"status": "success", "path": str(package), "size_bytes": result["size_bytes"]}
+        ctx.row["drill_error"] = "unrelated change during backup record"
+        with self.assertRaisesRegex(admin.AdminError, "outside this backup record"):
+            admin.capture_upgrade_backup_record(ctx, package, result, before, confirmed)
+        ctx.row["drill_error"] = old_row["drill_error"]
+        with self.assertRaisesRegex(admin.AdminError, "not confirmed"):
+            admin.capture_upgrade_backup_record(ctx, package, result, before, None)
+        ctx.row["backup_at"] = "2026-10-01T00:00:00+00:00"
+        with self.assertRaisesRegex(admin.AdminError, "invalid record time"):
+            admin.capture_upgrade_backup_record(ctx, package, result, before, confirmed)
+
+
+    def test_old_restore_invalid_original_material_stops_before_migration_or_flush(self):
+        ctx, package, required = self.old_backup_restore_context()
+        original_cli = ctx.cli_json
+        def reject_original(*args, **kwargs):
+            if args[0] == "verify":
+                ctx.calls.append(args)
+                raise admin.AdminError("restored original checksum mismatch")
+            return original_cli(*args, **kwargs)
+        ctx.cli_json = reject_original
+        with mock.patch.object(admin, "check_files"), mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), mock.patch.object(admin, "start_paused_environment"):
+            with self.assertRaisesRegex(admin.AdminError, "original checksum mismatch"):
+                admin.restore(ctx, package, argparse.Namespace(skip_models=True))
+        self.assertNotIn(("export-sources",), ctx.calls)
+        self.assertNotIn(("migrate",), ctx.calls)
+        self.assertNotIn(("flush",), ctx.calls)
 
 
 if __name__ == "__main__":

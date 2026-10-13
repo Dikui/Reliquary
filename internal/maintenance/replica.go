@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"reliquary/internal/vaultpath"
 )
 
 type Snapshot struct {
@@ -49,6 +50,10 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 	if err := ValidateClassification(ctx, db); err != nil {
 		return nil, err
 	}
+	rules, err := schemaRules(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	snapshot := &Snapshot{FormatVersion: FormatVersion, Tables: map[string][]map[string]any{}, Required: []Requirement{}, JSONNulls: map[string]map[string][]string{}}
 	columns, err := Schema(ctx, db)
 	if err != nil {
@@ -58,7 +63,7 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 	jsonColumns := map[string][]string{}
 	for _, column := range columns {
 		present[column.Table] = true
-		if column.DataType == "jsonb" && Rules[column.Table].Columns()[column.Name] != Regenerated && !secretColumn(column.Table, column.Name) {
+		if column.DataType == "jsonb" && rules[column.Table].Columns()[column.Name] != Regenerated && !secretColumn(column.Table, column.Name) {
 			jsonColumns[column.Table] = append(jsonColumns[column.Table], column.Name)
 		}
 	}
@@ -68,11 +73,11 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 			return err
 		}
 		snapshot.credentialValues = needles
-		for _, table := range sortedTables() {
+		for _, table := range sortedTables(rules) {
 			if !present[table] || table == "schema_migrations" {
 				continue
 			}
-			rule := Rules[table].Columns()
+			rule := rules[table].Columns()
 			persistent := false
 			for _, category := range rule {
 				if category != Regenerated {
@@ -147,9 +152,9 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 						delete(clean, name)
 					}
 				}
-				// Published original text lives in the vault. Rejected/pending text
-				// has no article file and remains in this readable replica.
-				if table == "entries" && row["vault_path"] != "" {
+				// Published article text lives in the vault. Imported personal
+				// documents retain their database recovery copy in this replica.
+				if table == "entries" && row["vault_path"] != "" && row["source_kind"] != "mine" {
 					delete(clean, "vault_body")
 				}
 				items = append(items, clean)
@@ -245,6 +250,7 @@ func appendLogs(path string, rows []map[string]any) error {
 				file.Close()
 				return fmt.Errorf("invalid append-only operation log: %w", err)
 			}
+			addLogDefaults(row)
 			canonical, _ := json.Marshal(row)
 			existing[fmt.Sprint(row["id"])] = canonical
 		}
@@ -323,6 +329,14 @@ func replicaFilesForFormat(snapshot *Snapshot, format int) (map[string][]byte, e
 }
 
 func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
+	retired := false
+	if _, current := snapshot.Tables["data_sources"]; !current {
+		var err error
+		retired, err = archiveCollectionReplica(root)
+		if err != nil {
+			return err
+		}
+	}
 	if uploads != "" && len(snapshot.credentialValues) > 0 {
 		if err := checkResourceCredentials(uploads, snapshot.credentialValues); err != nil {
 			return errors.New("upload contains an operational credential or cannot be checked; replica refused without changing the original")
@@ -400,6 +414,13 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	if err := AtomicWrite(filepath.Join(directory, "manifest.json"), append(data, '\n')); err != nil {
 		return err
 	}
+	if retired {
+		for _, path := range []string{"config/data_sources.json", "data/sync_logs.json"} {
+			if err := os.Remove(filepath.Join(directory, path)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
 	for _, table := range []string{"spaces", "api_keys", "entries", "entry_entities", "entry_topics", "entry_processing_spans", "entry_repost_sources"} {
 		if _, present := snapshot.Tables[table]; !present {
 			continue
@@ -468,6 +489,16 @@ func SafePath(root, relative string) (string, error) {
 }
 
 func Files(root string) ([]File, error) {
+	return files(root, nil)
+}
+
+// VaultFiles inventories managed vault content while leaving user configuration
+// available to physical backups. Upload inventories continue to include all files.
+func VaultFiles(root string) ([]File, error) {
+	return files(root, vaultpath.UserMetadata)
+}
+
+func files(root string, ignore func(string) bool) ([]File, error) {
 	result := []File{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if errors.Is(walkErr, os.ErrNotExist) && path == root {
@@ -475,6 +506,17 @@ func Files(root string) ([]File, error) {
 		}
 		if walkErr != nil {
 			return walkErr
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if ignore != nil && ignore(relative) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if entry.IsDir() {
 			return nil
@@ -482,50 +524,20 @@ func Files(root string) ([]File, error) {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("asset symlink refused: %s", path)
 		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		result = append(result, File{Path: filepath.ToSlash(relative), SHA256: sum(data), Size: int64(len(data))})
+		result = append(result, File{Path: relative, SHA256: sum(data), Size: int64(len(data))})
 		return nil
 	})
 	return result, err
 }
 
 func vaultFiles(root string) ([]File, error) {
-	result := []File{}
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if errors.Is(walkErr, os.ErrNotExist) && path == root {
-			return nil
-		}
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			if path == filepath.Join(root, ".reliquary") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("vault asset symlink refused: %s", path)
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		result = append(result, File{Path: filepath.ToSlash(relative), SHA256: sum(data), Size: int64(len(data))})
-		return nil
+	return files(root, func(relative string) bool {
+		return relative == ".reliquary" || strings.HasPrefix(relative, ".reliquary/") || vaultpath.UserMetadata(relative)
 	})
-	return result, err
 }
 
 func mirrorResources(source, destination string) error {

@@ -13,10 +13,6 @@ func (q failingReparseTaskEnqueuer) EnqueueTx(_ context.Context, _ *gorm.DB, tas
 	return q.Enqueue(task, opts...)
 }
 
-func (q kbDeleteTaskEnqueuer) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
-	return q.Enqueue(task, opts...)
-}
-
 func (q *intakeTask) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	return q.Enqueue(task, opts...)
 }

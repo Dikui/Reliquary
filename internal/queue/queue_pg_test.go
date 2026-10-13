@@ -99,9 +99,9 @@ func TestEnqueueSharesCommitAndRollback(t *testing.T) {
 	require.EqualValues(t, 1, count)
 	// A duplicate deterministic schedule ID leaves the outer transaction usable.
 	tx = db.Begin()
-	_, err = c.EnqueueTx(context.Background(), tx, NewTask(types.TypeDataSourceSync, nil), TaskID("schedule:minute"))
+	_, err = c.EnqueueTx(context.Background(), tx, NewTask(types.TypeEntryListReparse, nil), TaskID("schedule:minute"))
 	require.NoError(t, err)
-	_, err = c.EnqueueTx(context.Background(), tx, NewTask(types.TypeDataSourceSync, nil), TaskID("schedule:minute"))
+	_, err = c.EnqueueTx(context.Background(), tx, NewTask(types.TypeEntryListReparse, nil), TaskID("schedule:minute"))
 	require.ErrorIs(t, err, ErrTaskIDConflict)
 	require.NoError(t, tx.Exec("SELECT 1").Error)
 	require.NoError(t, tx.Commit().Error)

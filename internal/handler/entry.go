@@ -22,7 +22,7 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	"reliquary/internal/utils"
+
 	secutils "reliquary/internal/utils"
 )
 
@@ -124,32 +124,6 @@ func (h *EntryHandler) resolveEntryAndValidateKBAccess(c *gin.Context, entryID s
 	return nil, ctx, errors.NewForbiddenError("Permission denied to access this entry")
 }
 
-// handleDuplicateEntryError handles cases where duplicate entry is detected
-// Returns true if the error was a duplicate error and was handled, false otherwise
-func (h *EntryHandler) handleDuplicateEntryError(c *gin.Context,
-	err error, entry *types.Entry, duplicateType string,
-) bool {
-	if dupErr, ok := err.(*types.DuplicateEntryError); ok {
-		ctx := c.Request.Context()
-		logger.Warnf(ctx, "Detected duplicate %s: %s", duplicateType, secutils.SanitizeForLog(dupErr.Error()))
-		if entry == nil {
-			entry = dupErr.Entry
-		}
-		response := gin.H{
-			"success": false,
-			"message": dupErr.Error(),
-			"data":    entry, // entry contains the existing document
-			"code":    fmt.Sprintf("duplicate_%s", duplicateType),
-		}
-		if entry != nil && entry.DuplicateMatchMethod != "" {
-			response["match_method"] = entry.DuplicateMatchMethod
-		}
-		c.JSON(http.StatusConflict, response)
-		return true
-	}
-	return false
-}
-
 // enqueueEntryListDelete enqueues an async batch-delete task for the
 // given entry IDs and returns the background task ID.
 func (h *EntryHandler) enqueueEntryListDelete(
@@ -217,249 +191,6 @@ func (h *EntryHandler) enqueueEntryListReparse(
 		return "", fmt.Errorf("enqueue task: %w", err)
 	}
 	return info.ID, nil
-}
-
-// CreateEntryFromFile godoc
-func (h *EntryHandler) CreateEntryFromFile(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start creating entry from file")
-
-	// Validate that the knowledge base belongs to the current workspace.
-	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
-
-	// Check write permission
-
-	// Validate file size — read MAX_FILE_SIZE_MB env (50MB default).
-	// Deliberately not a runtime system_setting; see filesize.go for the
-	// rationale (nginx / browser bundle all cache this at
-	// container startup, so a UI knob would silently mismatch).
-	maxSizeMB := utils.GetMaxFileSizeMB()
-	maxSize := maxSizeMB * 1024 * 1024
-	// Capped before the multipart parse, not after: FormFile buffers the whole
-	// body first, so the size check below only ever sees an upload we already
-	// accepted. nginx location /api/ still enforces MAX_FILE_SIZE; this is the
-	// same cap for requests that reach the app without that proxy.
-	limitUploadBody(c, maxSize)
-
-	// Get the uploaded file
-	file, err := c.FormFile("file")
-	if err != nil {
-		if isRequestBodyTooLarge(err) {
-			logger.Error(ctx, "File size too large")
-			c.Error(errors.NewBadRequestError(fmt.Sprintf("文件大小不能超过%dMB", maxSizeMB)))
-			return
-		}
-		logger.Error(ctx, "File upload failed", err)
-		c.Error(errors.NewBadRequestError("File upload failed").WithDetails(err.Error()))
-		return
-	}
-	if file.Size > maxSize {
-		logger.Error(ctx, "File size too large")
-		c.Error(errors.NewBadRequestError(fmt.Sprintf("文件大小不能超过%dMB", maxSizeMB)))
-		return
-	}
-
-	// Get custom filename if provided
-	customFileName := c.PostForm("fileName")
-	customFileName = secutils.SanitizeForLog(customFileName)
-	displayFileName := file.Filename
-	displayFileName = secutils.SanitizeForLog(displayFileName)
-	if customFileName != "" {
-		displayFileName = customFileName
-		logger.Infof(ctx, "Using custom filename: %s (original: %s)", customFileName, displayFileName)
-	}
-
-	logger.Infof(ctx, "File upload successful, filename: %s, size: %.2f KB", displayFileName, float64(file.Size)/1024)
-	logger.Infof(ctx, "Creating entry, knowledge base ID: %s, filename: %s", kbID, displayFileName)
-
-	var metadata map[string]string
-	if raw := c.PostForm("metadata"); raw != "" {
-		if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
-			c.Error(errors.NewBadRequestError("Invalid metadata format"))
-			return
-		}
-	}
-	if raw := c.PostForm("source_info"); raw != "" {
-		var source types.SourceInfo
-		if err := json.Unmarshal([]byte(raw), &source); err != nil {
-			c.Error(errors.NewBadRequestError("Invalid source_info format"))
-			return
-		}
-		if metadata == nil {
-			metadata = make(map[string]string)
-		}
-		metadata["author"], metadata["publisher"], metadata["original_url"], metadata["published_at"] = source.Author, source.Publisher, source.OriginalURL, source.PublishedAt
-	}
-
-	var processOverrides *types.EntryProcessOverrides
-	if raw := c.PostForm("process_config"); raw != "" {
-		processOverrides = &types.EntryProcessOverrides{}
-		if err := json.Unmarshal([]byte(raw), processOverrides); err != nil {
-			logger.Error(ctx, "Failed to parse process_config", err)
-			c.Error(errors.NewBadRequestError("Invalid process_config format").WithDetails(err.Error()))
-			return
-		}
-	}
-
-	channel := c.PostForm("channel")
-
-	// Create entry entry from the file
-	entry, err := h.kgService.CreateEntryFromFile(ctx, kbID, file, metadata, nil, customFileName, channel, processOverrides)
-	// Check for duplicate entry error
-	if err != nil {
-		if h.handleDuplicateEntryError(c, err, entry, "file") {
-			return
-		}
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-			return
-		}
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	logger.Infof(
-		ctx,
-		"Entry created successfully, ID: %s, title: %s",
-		secutils.SanitizeForLog(entry.ID),
-		secutils.SanitizeForLog(entry.Title),
-	)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    entry,
-	})
-}
-
-// CreateEntryFromURL godoc
-func (h *EntryHandler) CreateEntryFromURL(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start creating entry from URL")
-
-	// Validate that the knowledge base belongs to the current workspace.
-	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
-
-	// Check write permission
-
-	// Parse URL from request body
-	var req struct {
-		URL           string                       `json:"url" binding:"required"`
-		FileName      string                       `json:"file_name"`
-		FileType      string                       `json:"file_type"`
-		Title         string                       `json:"title"`
-		Channel       string                       `json:"channel"`
-		ProcessConfig *types.EntryProcessOverrides `json:"process_config"`
-		SourceInfo    types.SourceInfo             `json:"source_info"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse URL request", err)
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Received URL request: %s, file_name: %s, file_type: %s",
-		secutils.SanitizeForLog(req.URL),
-		secutils.SanitizeForLog(req.FileName),
-		secutils.SanitizeForLog(req.FileType),
-	)
-
-	// SSRF validation for user-supplied URL
-	if err := secutils.ValidateURLForSSRF(req.URL); err != nil {
-		logger.Warnf(ctx, "SSRF validation failed for entry URL: %v", err)
-		c.Error(errors.NewBadRequestError(secutils.FormatSSRFError("URL", req.URL, err)))
-		return
-	}
-
-	logger.Infof(ctx,
-		"Creating entry from URL, knowledge base ID: %s, URL: %s",
-		secutils.SanitizeForLog(kbID),
-		secutils.SanitizeForLog(req.URL),
-	)
-
-	// Create entry entry from the URL
-	entry, err := h.kgService.CreateEntryFromURL(
-		ctx, kbID, req.URL, req.FileName, req.FileType, nil, req.Title, req.Channel, req.ProcessConfig, req.SourceInfo,
-	)
-	// Check for duplicate entry error
-	if err != nil {
-		if h.handleDuplicateEntryError(c, err, entry, "url") {
-			return
-		}
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-			return
-		}
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	logger.Infof(
-		ctx,
-		"Entry created successfully from URL, ID: %s, title: %s",
-		secutils.SanitizeForLog(entry.ID),
-		secutils.SanitizeForLog(entry.Title),
-	)
-	c.JSON(http.StatusCreated, gin.H{
-		"success": true,
-		"data":    entry,
-	})
-}
-
-// CreateManualEntry godoc
-func (h *EntryHandler) CreateManualEntry(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start creating manual entry")
-
-	// Validate that the knowledge base belongs to the current workspace.
-	_, kbID, effectiveSpaceID, err := h.validateKnowledgeBaseAccess(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	ctx = context.WithValue(ctx, types.SpaceIDContextKey, effectiveSpaceID)
-
-	// Check write permission
-
-	var req types.ManualEntryPayload
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse manual entry request", err)
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-
-	entry, err := h.kgService.CreateEntryFromManual(ctx, kbID, &req, req.Channel)
-	if err != nil {
-		if h.handleDuplicateEntryError(c, err, entry, "manual") {
-			return
-		}
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-			return
-		}
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"kb_id": kbID,
-		})
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Manual entry created successfully, entry ID: %s",
-		secutils.SanitizeForLog(entry.ID))
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    entry,
-	})
 }
 
 // GetEntry godoc
@@ -779,11 +510,18 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 	}
 
 	filter := types.EntryListFilter{
+		SourceKind:  strings.TrimSpace(c.Query("source_kind")),
 		ContentType: strings.TrimSpace(c.Query("content_type")),
 		Keyword:     c.Query("keyword"),
 		FileType:    c.Query("file_type"),
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
+	}
+	switch filter.SourceKind {
+	case "", "article", "mine", "report":
+	default:
+		c.Error(errors.NewBadRequestError("invalid source_kind"))
+		return
 	}
 	if raw, supplied := c.GetQuery("starred"); supplied {
 		if raw != "true" && raw != "false" {
@@ -926,9 +664,21 @@ func (h *EntryHandler) DeleteEntry(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
+	entry, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
+		return
+	}
+	if entry.SourceKind == "mine" {
+		collector := h.ingestService(c)
+		if collector == nil {
+			return
+		}
+		if err := collector.DeleteDocument(effCtx, id); err != nil {
+			c.Error(err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"document_id": id, "status": "deleted"}})
 		return
 	}
 
@@ -1315,9 +1065,13 @@ func (h *EntryHandler) UpdateEntry(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
+	existing, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
+		return
+	}
+	if existing.SourceKind == "mine" {
+		c.Error(errors.NewBadRequestError("本人文档不可修改，请删除后重新导入"))
 		return
 	}
 
@@ -1351,51 +1105,6 @@ func (h *EntryHandler) UpdateEntry(c *gin.Context) {
 		"success": true,
 		"message": "Entry updated successfully",
 		"data":    updated,
-	})
-}
-
-// UpdateManualEntry godoc
-func (h *EntryHandler) UpdateManualEntry(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start updating manual entry")
-
-	id := secutils.SanitizeForLog(c.Param("id"))
-	if id == "" {
-		logger.Error(ctx, "Entry ID is empty")
-		c.Error(errors.NewBadRequestError("Entry ID cannot be empty"))
-		return
-	}
-
-	_, effCtx, err := h.resolveEntryAndValidateKBAccess(c, id)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	var req types.ManualEntryPayload
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse manual entry update request", err)
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-
-	entry, err := h.kgService.UpdateManualEntry(effCtx, id, &req)
-	if err != nil {
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-			return
-		}
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"entry_id": id,
-		})
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Manual entry updated successfully, entry ID: %s", id)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    entry,
 	})
 }
 

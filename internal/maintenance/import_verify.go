@@ -19,6 +19,9 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	if err != nil {
 		return fmt.Errorf("validate original vault replica: %w", err)
 	}
+	if err := retireSnapshotSources(root, original); err != nil {
+		return err
+	}
 	current, err := Capture(ctx, db)
 	if err != nil {
 		return fmt.Errorf("capture imported replica: %w", err)

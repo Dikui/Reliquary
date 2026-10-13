@@ -70,7 +70,7 @@ func Auth(spaces interfaces.SpaceService, users interfaces.UserService, keys int
 						authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
 						return
 					}
-					principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10)}
+					principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10), Name: key.Name}
 				}
 			}
 		}
@@ -85,7 +85,7 @@ func Auth(spaces interfaces.SpaceService, users interfaces.UserService, keys int
 					authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
 					return
 				}
-				principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10)}
+				principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10), Name: key.Name}
 			}
 		}
 		if user == nil || !user.IsActive || user.SpaceID != types.SingleSpaceID {

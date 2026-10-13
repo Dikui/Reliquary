@@ -593,10 +593,10 @@ const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry
 const runtimeTaskTypeKeys: Record<string, string> = {
   'document:process': 'documentProcess',
   'manual:process': 'manualProcess',
-  'datasource:sync': 'sync',
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',
   'index:delete': 'indexDelete',
+  'report:index': 'reportIndex',
   'entity:name_embedding_rebuild': 'entityNameEmbeddingRebuild',
   'knowledge:embedding_rebuild': 'embeddingRebuild',
   'topic:backfill': 'topicBackfill',
@@ -725,8 +725,6 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   }
   if (task.source_kb_id) refs.push({ key: 'source-kb', label: t('system.globalSettings.runtime.tasks.sourceKBLabel'), value: task.source_kb_id })
   if (task.target_kb_id) refs.push({ key: 'target-kb', label: t('system.globalSettings.runtime.tasks.targetKBLabel'), value: task.target_kb_id })
-  if (task.data_source_id) refs.push({ key: 'datasource', label: t('system.globalSettings.runtime.tasks.dataSourceLabel'), value: task.data_source_id })
-  if (task.sync_log_id) refs.push({ key: 'sync-log', label: t('system.globalSettings.runtime.tasks.syncLogLabel'), value: task.sync_log_id })
   if (task.entry_count) {
     refs.push({ key: 'entry-count', label: t('system.globalSettings.runtime.tasks.knowledgeCountLabel'), value: String(task.entry_count) })
   }
@@ -1865,17 +1863,15 @@ onUnmounted(() => {
 }
 
 .rq-failed-row-refs {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: baseline;
   margin: 2px 0 0;
 }
 
 .rq-failed-ref {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 8px;
-  align-items: baseline;
+  display: contents;
   margin: 0;
 
   dt {
@@ -1883,7 +1879,8 @@ onUnmounted(() => {
     color: var(--td-text-color-placeholder);
     font-size: 12px;
     line-height: 1.45;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   dd {

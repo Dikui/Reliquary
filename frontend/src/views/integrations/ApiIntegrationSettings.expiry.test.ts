@@ -11,9 +11,10 @@ import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 import * as personalServerError from '../../utils/personalServerError'
 import * as searchHelpers from '../../utils/search'
+import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../../utils/sfcStyleTestHelpers'
 
 const require = createRequire(import.meta.url)
-const { DatePicker, Input, ConfigProvider } = require('tdesign-vue-next')
+const { Alert, DatePicker, Input, Tooltip, ConfigProvider } = require('tdesign-vue-next')
 const localeConfigs = {
   'zh-CN': require('tdesign-vue-next/cjs/locale/zh_CN').default,
   'en-US': require('tdesign-vue-next/cjs/locale/en_US').default,
@@ -32,6 +33,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
   const requests: Array<{ id?: number; payload: object }> = []
   const copies: Array<{ value: string; successKey: string }> = []
   const buttons: Array<{ label: unknown; click: (() => unknown) | undefined }> = []
+  const tooltips: string[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
@@ -73,7 +75,8 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     return () => h(DatePicker, { ...attrs, ...props })
   } })
   const app = createSSRApp({ render: () => h(ConfigProvider, { globalConfig: localeConfigs[locale] }, () => h(component)) })
-  for (const name of ['t-form', 't-form-item', 't-icon', 't-alert', 't-empty', 't-loading', 't-textarea', 't-select']) app.component(name, stub)
+  for (const name of ['t-form', 't-form-item', 't-icon', 't-empty', 't-loading', 't-textarea', 't-select']) app.component(name, stub)
+  app.component('t-alert', Alert)
   app.component('t-button', defineComponent({ setup(_, { attrs, slots }) {
     buttons.push({ label: attrs['aria-label'], click: attrs.onClick as (() => unknown) | undefined })
     return () => h('button', attrs, slots.default?.())
@@ -81,16 +84,81 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
   app.component('t-table', defineComponent({ props: ['data'], setup(props, { slots }) { return () => h('section', { 'data-api-key-table': '' }, props.data?.map((row: unknown) => h('div', Object.values(slots).flatMap(slot => slot?.({ row }) ?? [])))) } }))
   app.component('t-input', Input)
   app.component('t-date-picker', picker)
+  app.component('t-tooltip', defineComponent({ props: ['content'], setup(props, { attrs, slots }) {
+    tooltips.push(props.content)
+    return () => h(Tooltip, { ...attrs, ...props }, slots)
+  } }))
   const warnings: string[] = []
   const errors: unknown[] = []
   app.config.warnHandler = warning => warnings.push(warning)
   app.config.errorHandler = error => errors.push(error)
   const html = await renderToString(app)
   assert.deepEqual(errors, [])
-  return { state, requests, copies, buttons, pickerProps, warnings, html }
+  return { state, requests, copies, buttons, tooltips, pickerProps, warnings, html }
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: long API endpoint addresses keep full hover text and copy the complete address`, async () => {
+    const baseUrl = `https://${'long-host-segment-'.repeat(10)}example.test/reliquary`
+    const copyLabels = (locale === 'zh-CN' ? zh : en).integrations.api
+    const result = await scenario(locale, async () => {}, { baseUrl })
+    assert.deepEqual(result.warnings, [])
+    const addresses = [baseUrl, `${baseUrl}/api/v1/ingest`, `${baseUrl}/mcp`]
+    assert.deepEqual(result.tooltips, [addresses[0], `POST ${addresses[1]}`, addresses[2]])
+    for (const text of result.tooltips) assert.ok(result.html.includes(`title="${text}"`), text)
+    for (const label of [copyLabels.copy, copyLabels.copyIngestUrl, copyLabels.copyMcpUrl]) {
+      const button = result.buttons.find(button => button.label === label)
+      assert.ok(button?.click)
+      await button.click()
+    }
+    assert.deepEqual(result.copies.map(copy => copy.value), addresses)
+  })
+}
+
+test('API endpoint address columns reserve a minimum width and truncate long addresses beside the copy control', async () => {
+  const rules = await compiledSFCStyleRules(new URL('./ApiIntegrationSettings.vue', import.meta.url))
+  const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, 1440, { 'settings-content': 804 })
+  assert.equal(styles('.setting-control')['min-width'], '280px')
+  assert.equal(styles('.setting-control').width, '360px')
+  assert.equal(styles('.setting-control code')['min-width'], '0')
+  assert.equal(styles('.setting-control code').overflow, 'hidden')
+  assert.equal(styles('.setting-control code')['text-overflow'], 'ellipsis')
+  assert.equal(styles('.setting-control code')['white-space'], 'nowrap')
+  assert.equal(styles('.setting-control .t-button')['flex-shrink'], '0')
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: API integration guidance renders the review rules and account setting limits`, async () => {
+    const result = await scenario(locale, async () => {})
+    assert.deepEqual(result.warnings, [])
+    const expected = locale === 'zh-CN' ? [
+      '新内容经过模型收录审核；重复、已丢弃、缺正文等情况按规则直接返回。',
+      'API Key 可以访问个人空间的全部内容和收录、检索等接口。',
+      '部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。',
+    ] : [
+      'New content goes through model intake review; duplicates, discarded content, missing bodies and similar cases return directly according to the rules.',
+      'API keys can access all content in your personal space and interfaces such as ingest and search.',
+      'Some account settings, including ChatGPT sign-in and maintenance schedules, still require signing in on the web.',
+    ]
+    for (const text of expected) assert.ok(result.html.includes(text), text)
+    assert.doesNotMatch(result.html, /每次收录都经过模型审核|相同的全部访问权限|applies to every submission|same full access as your signed-in account/)
+  })
+  test(`${locale}: the created key notice says the key can be viewed again and must be kept safe`, async () => {
+    const result = await scenario(locale, async state => {
+      state.form.name = 'Collector'
+      await state.save()
+    }, { keys: [{ id: 17, name: 'Collector', api_key: 'token', created_at: '2026-10-12' }] })
+    assert.deepEqual(result.warnings, [])
+    assert.equal(result.state.createdVisible.value, true)
+    assert.equal(result.state.createdToken.value, 'token')
+    const expected = locale === 'zh-CN'
+      ? '你可以在此页再次查看完整密钥。请妥善保管，避免泄露。'
+      : 'You can view the full key again on this page. Keep it safe and do not share it.'
+    assert.ok(result.html.replace(/<[^>]+>/g, '').includes(expected), 'the real TDesign alert displays the new notice as text')
+    assert.doesNotMatch(result.html, /完整密钥只显示这一次|full token is shown once/)
+    assert.deepEqual(result.requests, [{ payload: { name: 'Collector' } }])
+    assert.ok(result.html.includes('<code>token</code>'), 'the reloaded key list still displays the saved key')
+  })
   test(`${locale}: external Agent endpoints have localized guidance and copy their addresses`, async () => {
     const messages = (locale === 'zh-CN' ? zh : en).integrations.api
     const result = await scenario(locale, async () => {})
@@ -117,7 +185,33 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
 }
 
+test('API key expiry guidance uses a full-width column below the date field at desktop and narrow widths', async () => {
+  const rules = await compiledSFCStyleRules(new URL('./ApiIntegrationSettings.vue', import.meta.url))
+  for (const width of [1440, 375]) {
+    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, width)
+    assert.equal(styles('.api-key-expiry-field').display, 'flex')
+    assert.equal(styles('.api-key-expiry-field')['flex-direction'], 'column')
+    assert.equal(styles('.api-key-expiry-field').width, '100%')
+    assert.equal(styles('.api-key-expiry-field')['min-width'], '0')
+    assert.equal(styles('.api-key-expiry').width, '100%')
+    assert.equal(styles('.api-key-expiry-hint').margin, '0')
+  }
+})
+
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: expiry guidance renders after the real date picker in its own paragraph`, async () => {
+    const result = await scenario(locale, async () => {})
+    assert.deepEqual(result.warnings, [])
+    const fieldStart = result.html.indexOf('<div class="api-key-expiry-field">')
+    const pickerStart = result.html.indexOf('t-date-picker', fieldStart)
+    const hint = `<p class="api-key-expiry-hint">${(locale === 'zh-CN' ? zh : en).integrations.api.apiKeyExpiresAtHint}</p>`
+    const hintStart = result.html.indexOf(hint, fieldStart)
+    assert.ok(fieldStart >= 0, 'the date picker and guidance have a shared layout container')
+    assert.ok(pickerStart > fieldStart, 'the container renders the real date picker')
+    assert.ok(hintStart > pickerStart, 'the localized guidance follows the date picker as a paragraph')
+    assert.ok(result.html.slice(hintStart + hint.length).startsWith('</div>'), 'the guidance ends the expiry layout container')
+  })
+
   test(`${locale}: expiry control uses real TDesign date and time picker without Vue prop warnings`, async () => {
     const result = await scenario(locale, async state => { state.form.expiresAt = '2035-01-15T08:45' })
     assert.deepEqual(result.warnings, [])

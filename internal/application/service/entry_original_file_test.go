@@ -38,7 +38,7 @@ func TestUploadedOriginalIsSeparateFromParsedBody(t *testing.T) {
 			files := filesvc.NewLocalFileService(t.TempDir(), "")
 			svc := &entryService{repo: repo, fileSvc: files, task: &createEntryTaskEnqueuerStub{}, kbService: &createEntryFileKBServiceStub{kb: &types.KnowledgeBase{ID: "kb-1"}}}
 			ctx := newCreateEntryFileContext()
-			k, err := svc.CreateEntryFromFile(ctx, "kb-1", newMultipartFileHeader(t, sample.name, string(sample.data)), nil, nil, "", "", nil)
+			k, err := svc.createLegacyFileFixture(ctx, "kb-1", newMultipartFileHeader(t, sample.name, string(sample.data)), nil, nil, "", "", nil)
 			require.NoError(t, err)
 			bodyText := "# Parsed body\n![image](resource://rewritten)"
 			parsedPath, err := files.SaveBytes(ctx, []byte(bodyText), k.SpaceID, k.ID+".md", false)

@@ -134,6 +134,7 @@
             <t-select v-model="formData.modelName" :loading="loadingOllamaModels" :class="{ 'downloading': downloading }"
               :style="downloading ? `--progress: ${downloadProgress}%` : ''" filterable :filter="handleModelFilter"
               :placeholder="$t('model.searchPlaceholder')" @focus="loadOllamaModels"
+              @input-change="handleModelInputChange"
               @visible-change="handleDropdownVisibleChange">
               <!-- 已下载的模型 -->
               <t-option v-for="model in filteredOllamaModels" :key="model.name" :value="model.name" :label="model.name">
@@ -996,11 +997,11 @@ const showDownloadOption = computed(() => {
   return !exists
 })
 
-// 自定义过滤逻辑（捕获搜索关键词）
-const handleModelFilter = (filterWords: string) => {
+// 输入事件在本地列表为空时也会触发。
+const handleModelInputChange = (filterWords: string) => {
   searchKeyword.value = filterWords
-  return true // 让 TDesign 使用我们的 filteredOllamaModels
 }
+const handleModelFilter = () => true // 让 TDesign 使用我们的 filteredOllamaModels
 
 // 加载 Ollama 模型列表
 const loadOllamaModels = async () => {

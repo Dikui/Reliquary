@@ -24,12 +24,15 @@ func RegisterChunkRoutes(r *gin.RouterGroup, handler *handler.ChunkHandler, g *a
 
 func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *accessGuards) {
 	r.POST("/ingest", handler.Ingest)
+	r.POST("/ingest/check", handler.CheckIngestURLs)
+	r.POST("/ingest/assets", handler.UploadIngestAsset)
+	r.GET("/ingest/incomplete", handler.ListIncomplete)
+	r.POST("/ingest/:id/accept-incomplete", g.KBExistsFromEntryIDParam("id"), handler.AcceptIncomplete)
+	r.POST("/ingest/:id/discard", g.KBExistsFromEntryIDParam("id"), handler.DiscardIngest)
+	r.DELETE("/documents/:id", g.KBExistsFromEntryIDParam("id"), handler.DeleteDocument)
 	kb := r.Group("/knowledge-bases/:id/entries")
 	kbRead := kb
 	{
-		kb.POST("/file", g.KBExists("id"), handler.CreateEntryFromFile)
-		kb.POST("/url", g.KBExists("id"), handler.CreateEntryFromURL)
-		kb.POST("/manual", g.KBExists("id"), handler.CreateManualEntry)
 		kbRead.GET("", g.KBExists("id"), handler.ListEntry)
 		kb.DELETE("", g.KBExists("id"), handler.ClearKnowledgeBaseContents)
 	}
@@ -49,7 +52,6 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 		k.PUT("/:id/star", g.KBExistsFromEntryIDParam("id"), handler.SetStarred)
 		k.PUT("/:id/content-type", g.KBExistsFromEntryIDParam("id"), handler.CorrectContentType)
 		k.POST("/:id/reprocess", g.KBExistsFromEntryIDParam("id"), handler.ReparseEntry)
-		k.PUT("/:id/manual", g.KBExistsFromEntryIDParam("id"), handler.UpdateManualEntry)
 		k.POST("/:id/reparse", g.KBExistsFromEntryIDParam("id"), handler.ReparseEntry)
 		k.POST("/:id/cancel-parse", g.KBExistsFromEntryIDParam("id"), handler.CancelEntryParse)
 		k.POST("/:id/review", g.KBExistsFromEntryIDParam("id"), handler.ReviewEntryIntake)

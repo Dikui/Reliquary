@@ -1,5 +1,7 @@
 import { formatCountCopy } from '../i18n/countCopy'
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../utils/entrySourceLabels'
+import * as markdownPlainText from '../utils/markdownPlainText'
 import { safeTextareaTestModule } from './__tests__/safeTextareaStub'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -26,7 +28,7 @@ const compile = (code: string) => ts.transpileModule(code, {
 function evaluate(code: string, modules: Record<string, unknown>, environment: Record<string, unknown> = {}) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', 'window', 'localStorage', compile(code))(
-    (name: string) => name.endsWith('.css') ? {} : modules[name] ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
+    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : modules[name] ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
     environment.window, environment.localStorage,
   )
   return module.exports
@@ -57,6 +59,12 @@ const emptyComponent = defineComponent({ setup: () => () => null })
 const emptyModule = { __esModule: true, default: emptyComponent }
 const envelope = (data: unknown) => Promise.resolve({ success: true, data })
 const unexpectedAPI = () => { throw new Error('The repost rendering test must not call a remote API') }
+const deleteConfirmModule = { __esModule: true, default: compileSFC('./DocumentDeleteConfirm.vue').create() }
+const personalDeleteModule = { __esModule: true, default: compileSFC('./PersonalDocumentDelete.vue').create({
+  '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
+  '@/api/knowledge-base': { deleteDocument: unexpectedAPI },
+  'tdesign-vue-next': { MessagePlugin: { success: unexpectedAPI } },
+}) }
 
 function source(overrides: Partial<EntryRepostSource> = {}): EntryRepostSource {
   return {
@@ -80,7 +88,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
       return () => props.visible === false ? null : h('div', { ...attrs, 'data-drawer-size': props.size }, [props.message, props.description, slots.header?.(), slots.default?.()])
     },
   })
-  for (const name of ['t-drawer', 't-button', 't-icon', 't-tag', 't-tooltip', 't-loading', 't-empty', 't-select', 't-input', 't-input-number', 't-textarea', 't-checkbox', 't-alert', 't-pagination', 't-popup', 't-popconfirm', 't-switch']) app.component(name, stub)
+  for (const name of ['t-drawer', 't-dialog', 't-button', 't-icon', 't-tag', 't-tooltip', 't-loading', 't-empty', 't-select', 't-input', 't-input-number', 't-textarea', 't-checkbox', 't-alert', 't-pagination', 't-popup', 't-popconfirm', 't-switch']) app.component(name, stub)
   const errors: unknown[] = []
   const warnings: string[] = []
   app.config.errorHandler = error => errors.push(error)
@@ -100,6 +108,12 @@ interface DetailRenderOptions {
   details?: Record<string, unknown>
   loadedDetails?: Record<string, unknown>
   classification?: unknown
+  missingMaterials?: unknown
+  incompleteActions?: unknown
+  reviewActions?: unknown
+  articleJudgments?: unknown
+  personalDelete?: unknown
+  onReviewChanged?: (...args: unknown[]) => void
 }
 async function renderDetails(sources: EntryRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
   const component = detailSFC.create({
@@ -114,9 +128,11 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/ReviewActions.vue': emptyModule, '@/components/EntryArticleJudgments.vue': emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule,
+    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
     '@/components/EntryProcessingTimeline.vue': emptyModule,
+    '@/components/PersonalDocumentDelete.vue': options.personalDelete || emptyModule,
+    '@/components/MissingMaterials.vue': options.missingMaterials || emptyModule, '@/components/IncompleteActions.vue': options.incompleteActions || emptyModule,
     '@/views/knowledge-base/components/RepostSources.vue': sharedRepostModule,
     '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   }, options.environment)
@@ -130,6 +146,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
   }
   return renderComponent(component, {
     visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', entryType: 'document',
+    onReviewChanged: options.onReviewChanged,
     details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
   }, locale, options.ssrContext)
@@ -155,7 +172,6 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
-    './useEntryDuplicates': { useEntryDuplicates: () => ({}) },
   }
   const hook = evaluate(hookSource, modules).default('kb-a')
   return { hook, calls, async load(id: string) {
@@ -166,9 +182,86 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: detail conflict keeps its approval label after loading the actual related article field`, async () => {
+    const loader = createArticleDetailsLoader({ conflict: { related_article_id: 'original-article', parse_status: 'rejected', metadata: { intake: { source: 'api', decision: 'rejected', source_info: { original_url: 'https://example.com/conflict' } } } } })
+    const review = compileSFC('./ReviewActions.vue').create({ '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) }, 'tdesign-vue-next': { MessagePlugin: {} } })
+    const loadedDetails = await loader.load('conflict')
+    const html = await renderDetails([], locale, { loadedDetails, reviewActions: { __esModule: true, default: review } })
+    assert.equal(loadedDetails.related_article_id, 'original-article')
+    assert.ok(html.includes(messages[locale].knowledgeReview.saveAsNew))
+  })
+  test(`${locale}: details prevent cross-action submissions and refresh review counts only on article judgments`, async () => {
+    const loader = createArticleDetailsLoader({ article: { incomplete: true } })
+    const loadedDetails = await loader.load('article')
+    const events: unknown[][] = []
+    const disabled: boolean[] = []
+    const judgments = defineComponent({ props: ['disabled'], setup(props) { disabled.push(Boolean(props.disabled)); return () => null } })
+    await renderDetails([], locale, { loadedDetails, articleJudgments: { __esModule: true, default: judgments }, onReviewChanged: (...args: unknown[]) => events.push(args), async scenario(state) {
+      state.incompleteBusy.value = true
+      await state.reprocess()
+      state.applyProcessingState({ parse_status: 'completed' })
+      assert.equal(events.length, 0, 'processing polls do not refresh pending counts')
+      state.applyArticleJudgment({ content_type: 'research' })
+      assert.equal(events.length, 1)
+    } })
+    assert.deepEqual(disabled, [true])
+    assert.equal(events[0]![1], false)
+    const accepts: boolean[] = []
+    const action = defineComponent({ props: ['disabled'], setup(props) { accepts.push(Boolean(props.disabled)); return () => null } })
+    await renderDetails([], locale, { loadedDetails, incompleteActions: { __esModule: true, default: action }, scenario(state) { state.articleJudgmentsBusy.value = true } })
+    assert.deepEqual(accepts, [true])
+  })
+  test(`${locale}: actual detail loader displays ingest markers and missing reasons, then accepting clears its state and refresh event`, async () => {
+    const missing = [{ type: 'image', source_url: 'https://example.com/image.png', reason: 'Access denied', api_key_name: 'External Collector', submitted_at: '2026-10-12T08:00:00Z' }]
+    const loader = createArticleDetailsLoader({ incomplete: { acquisition: 'model_written', incomplete: true, missing_materials: missing }, complete: { acquisition: 'extracted', incomplete: false }, unspecified: { acquisition: 'extracted' } })
+    const classified = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const materials = compileSFC('./MissingMaterials.vue').create({ '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const requests: string[] = []
+    const api = evaluate(readFileSync(new URL('../api/ingest.ts', import.meta.url), 'utf8'), { '@/utils/request': { post: async (url: string) => { requests.push(url); return { success: true } } } })
+    const action = () => compileSFC('./IncompleteActions.vue').create({ '@/api/ingest': api, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
+    const modules = { classification: { __esModule: true, default: classified }, missingMaterials: { __esModule: true, default: materials } }
+    const details = await loader.load('incomplete')
+    const initial = await renderDetails([], locale, { ...modules, loadedDetails: details, incompleteActions: { __esModule: true, default: action() } })
+    assert.ok(initial.includes(messages[locale].ingestStatus.modelWritten))
+    assert.ok(initial.includes(`title="${messages[locale].ingestStatus.modelWrittenHint.replaceAll("'", "&#39;")}"`))
+    assert.ok(initial.includes(messages[locale].ingestStatus.incomplete))
+    assert.ok(initial.includes(`title="${messages[locale].ingestStatus.incompleteHint.replaceAll("'", "&#39;")}"`))
+    for (const text of ['Access denied', 'External Collector', 'https://example.com/image.png', messages[locale].ingestStatus.acceptIncomplete]) assert.ok(initial.includes(text), text)
+    assert.equal(requests.length, 0, 'opening article details never accepts automatically')
+    const events: unknown[][] = []
+    const accepting = action(), setup = accepting.setup
+    accepting.setup = (props: object, context: object) => {
+      const state = setup(props, context)
+      onServerPrefetch(async () => {
+        state.request('accept'); state.cancel(); await state.confirm()
+        assert.equal(requests.length, 0, 'cancel confirmation does not call the endpoint')
+        state.request('accept'); await state.confirm()
+      })
+      return state
+    }
+    await renderDetails([], locale, { ...modules, loadedDetails: details, incompleteActions: { __esModule: true, default: accepting }, onReviewChanged: (...args: unknown[]) => events.push(args) })
+    assert.deepEqual(requests, ['/api/v1/ingest/incomplete/accept-incomplete'])
+    assert.equal(details.incomplete, false)
+    assert.deepEqual(details.missing_materials, [])
+    assert.equal(events.length, 1)
+    assert.equal(events[0]![1], false)
+    const after = await renderDetails([], locale, { ...modules, loadedDetails: details })
+    assert.doesNotMatch(after, /class="[^"]*incomplete-materials|Access denied/)
+    assert.ok(after.includes(messages[locale].ingestStatus.modelWritten))
+    assert.ok(after.includes(`title="${messages[locale].ingestStatus.modelWrittenHint.replaceAll("'", "&#39;")}"`))
+    assert.ok(!after.includes(`title="${messages[locale].ingestStatus.incompleteHint.replaceAll("'", "&#39;")}"`))
+    for (const id of ['complete', 'unspecified']) {
+      const complete = await renderDetails([], locale, { ...modules, loadedDetails: await loader.load(id) })
+      assert.ok(!complete.includes(messages[locale].ingestStatus.modelWritten))
+      assert.doesNotMatch(complete, /class="[^"]*incomplete-materials/)
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.ok(!complete.includes(`title="${hint.replaceAll("'", "&#39;")}"`), `${id}: ${hint}`)
+      }
+    }
+  })
   test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
     const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
-    const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
     const flagged = await renderDetails([], locale, { loadedDetails: await loader.load('unverified'), classification: { __esModule: true, default: classification } })
     assert.ok(flagged.includes(messages[locale].knowledgeReview.sourceUnverified))
     const verified = await renderDetails([], locale, { loadedDetails: await loader.load('verified'), classification: { __esModule: true, default: classification } })
@@ -267,22 +360,25 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     })
   }
 
-  test(`${locale}: vault documents have no body editor and personal documents have no reprocessing action`, async () => {
-    const component = actionMenuSFC.create()
+  test(`${locale}: legacy manual and vault documents have no body editor and personal documents have no reprocessing action`, async () => {
+    const component = actionMenuSFC.create({
+      '@/components/PersonalDocumentDelete.vue': personalDeleteModule,
+      '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
+    })
     const item = { id: 'article', type: 'manual', parse_status: 'completed', processing_mode: 'full' }
     const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
     const editable = await render({})
-    const editLabel = `<span>${messages[locale].knowledgeBase.editDocument}</span>`
+    const hasEditAction = (html: string) => /class="[^"]*doc-action-menu-item[^"]*"[^>]*>[\s\S]*?name="edit"/.test(html)
     const reprocessLabel = `<span>${messages[locale].knowledgeBase.rebuildDocument}</span>`
-    assert.ok(editable.includes(editLabel))
+    assert.equal(hasEditAction(editable), false)
     assert.ok(editable.includes(reprocessLabel))
     const article = await render({ source_kind: 'article', vault_path: 'articles/note.md' })
-    assert.ok(!article.includes(editLabel))
+    assert.equal(hasEditAction(article), false)
     assert.ok(article.includes(reprocessLabel))
     for (const source_kind of ['mine', 'report']) {
       for (const parse_status of ['completed', 'processing']) {
         const html = await render({ source_kind, parse_status })
-        assert.ok(!html.includes(editLabel))
+        assert.equal(hasEditAction(html), false)
         assert.ok(!html.includes(reprocessLabel))
       }
     }
@@ -654,5 +750,44 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(html.includes('MD'), id)
     }
     assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: historical manual drafts without chunks retain a read-only body from metadata`, async () => {
+    const body = '# Preserved draft\n\nDraft body with a source reference.'
+    const loader = createArticleDetailsLoader({ draft: { type: 'manual', parse_status: 'draft', metadata: { content: body, status: 'draft' } } })
+    const loadedDetails = await loader.load('draft')
+    const html = await renderDetails([], locale, { loadedDetails, scenario: state => {
+      assert.equal(state.mergedContent.value, body)
+      assert.equal(state.isLegacyManualDraft.value, true)
+      assert.equal(state.canPreview(), false)
+    } })
+    assert.ok(html.includes('Preserved draft'))
+    assert.ok(html.includes('Draft body with a source reference.'))
+    assert.doesNotMatch(html, /ManualEntryEditor|contenteditable/)
+    assert.equal(loadedDetails.metadata.content, body)
+  })
+
+  test(`${locale}: historical manual drafts stored in a local intake file retain the existing read-only preview`, async () => {
+    const loader = createArticleDetailsLoader({ draft: { type: 'manual', parse_status: 'draft', metadata: { intake: { source: 'manual', decision: 'pending', original_path: 'local://draft/body.md' } } } })
+    const loadedDetails = await loader.load('draft')
+    await renderDetails([], locale, { loadedDetails, scenario: state => {
+      assert.equal(state.isLegacyManualDraft.value, true)
+      assert.equal(state.canPreview(), true)
+    } })
+    assert.equal(loadedDetails.metadata.intake.original_path, 'local://draft/body.md')
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: personal document detail shows delete and hides metadata editing`, async () => {
+    const deletion = { __esModule: true, default: defineComponent({ props: ['documentId'], setup: props => () => h('button', { 'data-delete-document': props.documentId }, messages[locale].personalDocument.delete) }) }
+    const html = await renderDetails([], locale, { details: { source_kind: 'mine', title: 'My imported note', custom_metadata: {} }, personalDelete: deletion })
+    assert.match(html, /data-delete-document="message-a"/)
+    assert.ok(html.includes(messages[locale].personalDocument.delete))
+    assert.ok(!html.includes('metadata-empty-action'))
+    assert.ok(!html.includes('name="edit"'))
+    assert.ok(!html.includes(messages[locale].knowledgeBase.rebuildDocument))
   })
 }

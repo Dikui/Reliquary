@@ -88,7 +88,7 @@ func TestP4DuplicateIntakeReturnsCurrentMatchMethod(t *testing.T) {
 		{body, "https://news.example/exact", "content_hash"},
 		{body, "https://news.example/exact?utm_source=feed", "url"},
 	} {
-		item, err := svc.CreateEntryFromManual(newCreateEntryFileContext(), "kb", &types.ManualEntryPayload{Title: "Reprint", Content: input.body, Status: "publish", SourceInfo: types.SourceInfo{Publisher: "News", OriginalURL: input.url}}, types.ChannelWeb)
+		item, err := svc.createLegacyManualFixture(newCreateEntryFileContext(), "kb", &legacyManualFixturePayload{Title: "Reprint", Content: input.body, Status: "publish", SourceInfo: types.SourceInfo{Publisher: "News", OriginalURL: input.url}}, types.ChannelWeb)
 		var duplicate *types.DuplicateEntryError
 		require.ErrorAs(t, err, &duplicate)
 		require.Equal(t, owner.ID, item.ID)
@@ -118,7 +118,7 @@ func TestP4DuplicateIntakeDoesNotSaveOrEnqueueAndPreservesReposts(t *testing.T) 
 		{Publisher: "News One", OriginalURL: "https://news-one.example/story/?utm_source=rss", PublishedAt: source.PublishedAt},
 		{Publisher: "News Two", OriginalURL: "https://news-two.example/story"},
 	} {
-		item, err := svc.CreateEntryFromManual(newCreateEntryFileContext(), "kb", &types.ManualEntryPayload{Title: "Reprint", Content: body, Status: "publish", SourceInfo: input}, types.ChannelRSS)
+		item, err := svc.createLegacyManualFixture(newCreateEntryFileContext(), "kb", &legacyManualFixturePayload{Title: "Reprint", Content: body, Status: "publish", SourceInfo: input}, types.ChannelRSS)
 		var duplicate *types.DuplicateEntryError
 		require.ErrorAs(t, err, &duplicate)
 		require.Equal(t, owner.ID, item.ID)
@@ -270,7 +270,7 @@ func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {
 	files := &createEntryFileServiceStub{}
 	queue := &createEntryTaskEnqueuerStub{}
 	svc := &entryService{db: db, repo: repository.NewEntryRepository(db), kbService: &createEntryFileKBServiceStub{kb: &types.KnowledgeBase{ID: "kb"}}, fileSvc: files, task: queue}
-	message, err := svc.CreateEntryFromFile(newCreateEntryFileContext(), "kb", newMultipartFileHeader(t, "article.txt", "The downloaded article body"), map[string]string{"original_url": "https://EXAMPLE.COM/REPORT/?utm_source=file", "publisher": "Reprint"}, nil, "", "", nil)
+	message, err := svc.createLegacyFileFixture(newCreateEntryFileContext(), "kb", newMultipartFileHeader(t, "article.txt", "The downloaded article body"), map[string]string{"original_url": "https://EXAMPLE.COM/REPORT/?utm_source=file", "publisher": "Reprint"}, nil, "", "", nil)
 	var duplicate *types.DuplicateEntryError
 	require.ErrorAs(t, err, &duplicate)
 	require.Equal(t, owner.ID, message.ID)

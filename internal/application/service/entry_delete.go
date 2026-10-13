@@ -127,7 +127,7 @@ func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
 		return err
 	}
 
-	if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
+	if intake, _ := entry.IntakeMetadata(); entry.SourceKind != "mine" && intake != nil && intake.Decision == "rejected" {
 		_, err := s.ReviewEntryIntake(ctx, id, "discard", types.SourceInfo{})
 		return err
 	}
@@ -177,7 +177,11 @@ func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
 	// Skip entirely when the entry has no embedding model (disabled indexing):
 	// nothing was ever written to the PostgreSQL index, so there is nothing to delete,
 	// and GetEmbeddingModel would fail with "model ID cannot be empty".
-	if strings.TrimSpace(entry.EmbeddingModelID) != "" {
+	if s.db != nil && entry.SourceKind == "mine" {
+		wg.Go(func() error {
+			return s.db.WithContext(ctx).Table("embeddings").Where("entry_id=?", entry.ID).Delete(nil).Error
+		})
+	} else if strings.TrimSpace(entry.EmbeddingModelID) != "" {
 		wg.Go(func() error {
 			retrieveEngine := s.retrieveEngine
 			embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, entry.EmbeddingModelID)
@@ -215,11 +219,32 @@ func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
 	// row could leave a "file missing but row present" zombie that can neither be
 	// reparsed nor cleanly re-deleted (issue #2192). Orphaning a file after the
 	// row is gone is the tolerable failure mode instead.
+	if err := s.rememberIngestDiscard(ctx, entry, ingestDiscardReason(ctx)); err != nil {
+		return err
+	}
+	if s.db != nil && entry.SourceKind == "article" {
+		if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_discard", id, map[string]any{"url": entry.Source, "missing": entry.IngestMissing()}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+			return err
+		}
+	}
+	if s.db != nil && entry.SourceKind == "mine" {
+		if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "delete_document", id, map[string]any{"title": entry.Title, "source_kind": "mine", "vault_path": entry.VaultPath}, nil); err != nil {
+			return err
+		}
+	}
 	if err := deleteEntryAssociations(ctx, s.db, spaceID, []string{id}); err != nil {
+		return err
+	}
+	if err := s.releaseIngestArticleAssets(ctx, id); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteEntry(ctx, spaceID, id); err != nil {
 		return err
+	}
+	if entry.SourceKind == "mine" {
+		if err := s.removeDocumentRecords(ctx, entry); err != nil {
+			return err
+		}
 	}
 
 	// Best-effort physical cleanup. Errors here only leak storage; they must not
@@ -386,7 +411,24 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 	wg := errgroup.Group{}
 	// 2. Delete entry embeddings from PostgreSQL index
 	wg.Go(func() error {
+		documentIDs := make(map[string]bool)
+		for _, entry := range entryList {
+			documentIDs[entry.ID] = entry.SourceKind == "mine"
+		}
 		for _, group := range buildEntryVectorDeleteGroups(entryList) {
+			var modelEntries []string
+			for _, entryID := range group.EntryIDs {
+				if documentIDs[entryID] && s.db != nil {
+					if err := s.db.WithContext(ctx).Table("embeddings").Where("entry_id=?", entryID).Delete(nil).Error; err != nil {
+						return err
+					}
+				} else {
+					modelEntries = append(modelEntries, entryID)
+				}
+			}
+			if len(modelEntries) == 0 {
+				continue
+			}
 			// Entry with disabled indexing never had embeddings written to the PostgreSQL index,
 			// and its EmbeddingModelID is intentionally empty. Skip the whole group
 			// to avoid the spurious "model ID cannot be empty" failure.
@@ -401,7 +443,7 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry get embedding model failed")
 				return err
 			}
-			if err := retrieveEngine.DeleteByEntryIDList(ctx, group.EntryIDs, embeddingModel.GetDimensions(), group.Type); err != nil {
+			if err := retrieveEngine.DeleteByEntryIDList(ctx, modelEntries, embeddingModel.GetDimensions(), group.Type); err != nil {
 				logger.GetLogger(ctx).
 					WithField("error", err).
 					Errorf("DeleteEntry delete entry embedding failed")
@@ -430,19 +472,47 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 	// only orphans storage.
 	deleteRows := func(svc *entryService) error {
 		for _, entry := range entryList {
+			if svc.db != nil && entry.SourceKind == "mine" {
+				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "delete_document", entry.ID, map[string]any{"title": entry.Title, "source_kind": "mine", "vault_path": entry.VaultPath}, nil); err != nil {
+					return err
+				}
+			}
+			if err := svc.rememberIngestDiscard(ctx, entry, "用户丢弃"); err != nil {
+				return err
+			}
+			if svc.db != nil && entry.SourceKind == "article" {
+				if intake, _ := entry.IntakeMetadata(); intake == nil || intake.Decision != "rejected" {
+					if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "ingest_discard", entry.ID, map[string]any{"url": entry.Source, "missing": entry.IngestMissing()}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+						return err
+					}
+				}
+			}
 			if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
 				if svc.db == nil {
 					continue
 				}
-				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", entry.ID, intake, nil); err != nil {
+				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", entry.ID, intake, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
 					return err
 				}
+			}
+			if err := svc.releaseIngestArticleAssets(ctx, entry.ID); err != nil {
+				return err
 			}
 		}
 		if err := deleteEntryAssociations(ctx, svc.db, spaceInfo.ID, ids); err != nil {
 			return err
 		}
-		return svc.repo.DeleteEntryList(ctx, spaceInfo.ID, ids)
+		if err := svc.repo.DeleteEntryList(ctx, spaceInfo.ID, ids); err != nil {
+			return err
+		}
+		for _, entry := range entryList {
+			if entry.SourceKind == "mine" {
+				if err := svc.removeDocumentRecords(ctx, entry); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}
 	if s.db == nil {
 		if err := deleteRows(s); err != nil {

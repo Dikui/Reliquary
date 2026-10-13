@@ -12,8 +12,6 @@ import (
 type VaultConfig struct {
 	Root           string        `yaml:"root" json:"root"`
 	HeaderDebounce time.Duration `yaml:"header_debounce" json:"header_debounce"`
-	StableWait     time.Duration `yaml:"stable_wait" json:"stable_wait"`
-	ScanInterval   time.Duration `yaml:"scan_interval" json:"scan_interval"`
 }
 
 func applyVaultEnvOverrides(cfg *Config) error {
@@ -38,8 +36,6 @@ func applyVaultEnvOverrides(cfg *Config) error {
 		fallback time.Duration
 	}{
 		{"VAULT_HEADER_DEBOUNCE", &v.HeaderDebounce, 5 * time.Second},
-		{"VAULT_STABLE_WAIT", &v.StableWait, 10 * time.Minute},
-		{"VAULT_SCAN_INTERVAL", &v.ScanInterval, time.Minute},
 	} {
 		if raw, ok := os.LookupEnv(item.name); ok {
 			d, err := time.ParseDuration(raw)

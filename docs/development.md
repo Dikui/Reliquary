@@ -229,3 +229,9 @@ A: 检查前端的代理配置，确保 `vite.config.ts` 中配置了正确的�
 | `scripts/start-all.sh` | 管理生产 Compose 容器及本地或远程 Ollama，支持拉取、重启、诊断与容器列表 | `--stop` 停止生产容器及本地 Ollama；Ctrl+C 只退出持续日志 |
 
 三者分别服务开发命令、交互式开发编排及容器部署，均保留。开发和生产模式的架构对比见[快速开发模式](quick-development.md)，通用排障见[常见问题](faq.md)。
+
+## 收录接口与采集表升级
+
+新内容只由外部工具经 HTTP 收录接口或 MCP 送入，网页没有 RSS、网址导入、文件上传或手动录入创建入口。接口说明由任务 4 编写于 `docs/ingest-api.md`。模型、embedding 与解析服务调用继续保留。
+
+开发库升级到 `000005` 前先在相同数据库与 `VAULT_ROOT` 配置下执行 `./reliquary-admin export-sources`，再执行直接迁移；生产使用 `./reliquary-admin upgrade` 自动完成升级前完整备份和导出。导出位于文件库 `.reliquary/exports/`，不含凭据。失败时保持暂停并停止迁移，不能跳过失败删表。

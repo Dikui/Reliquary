@@ -24,7 +24,6 @@ func seed(t *testing.T, db *gorm.DB) {
 		`INSERT INTO users(id,username,email,password_hash,space_id) VALUES('owner','owner','owner@example.test','$2a$10$preserved-owner-password-hash',1)`,
 		`INSERT INTO knowledge_bases(id,name,space_id,embedding_model_id,summary_model_id,chunking_config,indexing_strategy) VALUES('kb','Personal',1,'embed','chat','{"chunk_size":512,"chunk_overlap":0}','{"keyword_enabled":true,"vector_enabled":true}')`,
 		`INSERT INTO models(id,space_id,name,type,source,parameters) VALUES('chat',1,'chat','KnowledgeQA','remote','{"api_key":"MODEL_SECRET","base_url":"http://user:PASSWORD@example.test/v1?api_key=QUERY_SECRET&normal=kept","nested":{"headers":{"Authorization":"Bearer HEADER_SECRET"},"ordinary":"keep"}}'),('embed',1,'embedding','Embedding','remote','{"dimension":3,"base_url":"http://localhost:19100"}')`,
-		`INSERT INTO data_sources(id,space_id,knowledge_base_id,name,type,config) VALUES('rss',1,'kb','RSS','rss','{"url":"http://example.test/feed","nested":{"password":"RSS_SECRET"}}')`,
 		`INSERT INTO entities(id,space_id,canonical_name,normalized_name,entity_type,description,created_at,updated_at) VALUES('entity-a',1,'Company A','company a','company','Owner description',now(),now()),('entity-b',1,'Company B','company b','company','Merged description',now(),now())`,
 		`INSERT INTO entity_aliases(id,space_id,entity_type,entity_id,alias,normalized_alias,resolution_method,created_at) VALUES('alias',1,'company','entity-a','A Inc','a inc','exact',now())`,
 		`INSERT INTO entity_merge_records(id,space_id,keep_entity_id,merge_entity_id,actor,created_at) VALUES('merge',1,'entity-a','entity-b','owner',now())`,
@@ -87,7 +86,6 @@ func TestManifestOnlyAllowsCredentialPauseAndLiveTaskLeaseChanges(t *testing.T) 
 	ctx := context.Background()
 	db := pgtest.Open(t)
 	seed(t, db)
-	require.NoError(t, db.Exec(`INSERT INTO data_sources(id,space_id,knowledge_base_id,name,type,config,status) VALUES('public-rss',1,'kb','Public feed','rss','{"url":"https://example.test/feed"}','active')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO task_jobs(id,task_type,queue,payload,state,started_at,completed_at,updated_at) VALUES('completed-job','manual:process','default','{}','completed','2026-10-01T12:00:00Z','2026-10-01T12:01:00Z','2026-10-01T12:01:00Z')`).Error)
 	root, uploads := t.TempDir(), t.TempDir()
 	expected, err := BuildManifest(ctx, db, root, uploads)
@@ -97,12 +95,6 @@ func TestManifestOnlyAllowsCredentialPauseAndLiveTaskLeaseChanges(t *testing.T) 
 	require.NoError(t, err)
 	require.Contains(t, CompareManifest(expected, actual), "table models")
 	require.NoError(t, db.Exec(`UPDATE models SET status='active' WHERE id='embed'`).Error)
-	require.NoError(t, db.Exec(`UPDATE data_sources SET status='paused' WHERE id='public-rss'`).Error)
-	actual, err = BuildManifest(ctx, db, root, uploads)
-	require.NoError(t, err)
-	require.Contains(t, CompareManifest(expected, actual), "table data_sources")
-	require.NoError(t, db.Exec(`UPDATE data_sources SET status='active' WHERE id='public-rss'`).Error)
-	require.NoError(t, db.Exec(`UPDATE data_sources SET status='paused',updated_at=now() WHERE id='rss'`).Error)
 	require.NoError(t, db.Exec(`UPDATE models SET status='needs_configuration',updated_at=now() WHERE id='chat'`).Error)
 	require.NoError(t, db.Exec(`UPDATE task_jobs SET state='pending',started_at=NULL,updated_at=now(),claim_token='',worker_pool='' WHERE id='job'`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)
@@ -191,7 +183,7 @@ func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
 	oldInfo, err := os.Stat(logPath)
 	require.NoError(t, err)
 	// Each class changes through raw SQL, exercising the periodic fallback too.
-	for _, statement := range []string{`UPDATE entities SET description='new description' WHERE id='entity-a'`, `UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`, `UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`, `UPDATE entry_topics SET source='model' WHERE topic_id='topic'`, `UPDATE follow_feed_states SET last_viewed_at=now()`, `UPDATE entries SET processing_review_reason='new review', content_type_corrected=false WHERE id='article'`, `UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`, `UPDATE entry_repost_sources SET author='new author'`, `UPDATE data_sources SET name='renamed RSS'`, `UPDATE models SET display_name='renamed model'`, `INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`} {
+	for _, statement := range []string{`UPDATE entities SET description='new description' WHERE id='entity-a'`, `UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`, `UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`, `UPDATE entry_topics SET source='model' WHERE topic_id='topic'`, `UPDATE follow_feed_states SET last_viewed_at=now()`, `UPDATE entries SET processing_review_reason='new review', content_type_corrected=false WHERE id='article'`, `UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`, `UPDATE entry_repost_sources SET author='new author'`, `UPDATE models SET display_name='renamed model'`, `INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
 	require.Eventually(t, func() bool {
@@ -255,7 +247,7 @@ func TestScrubRemovesNestedSecretsPausesModelsAndKeepsOriginalDatabase(t *testin
 	result, err := Scrub(ctx, db)
 	require.NoError(t, err)
 	require.Contains(t, result.PausedModels, "chat")
-	require.Contains(t, result.PausedSources, "rss")
+	require.Empty(t, result.PausedSources)
 	require.NotEmpty(t, result.Required)
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)

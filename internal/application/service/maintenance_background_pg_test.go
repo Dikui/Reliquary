@@ -26,18 +26,18 @@ func TestSnapshotPauseSkipsAutomaticHousekeepingUntilResume(t *testing.T) {
 	require.Equal(t, types.ParseStatusFailed, status)
 }
 
-func TestSnapshotPauseSkipsAutomaticVaultDocumentScanUntilResume(t *testing.T) {
+func TestSnapshotPauseSkipsAutomaticReportScanUntilResume(t *testing.T) {
 	h := newVaultDocumentHarness(t, 25*time.Millisecond)
-	h.write(t, "mine/paused.md", "# Waiting for credentials\n\nKeep this exact original document.")
+	h.write(t, "reports/paused.md", "# Waiting for credentials\n\nKeep this exact original document.")
 	require.NoError(t, h.db.Exec("UPDATE maintenance_state SET paused=true,pause_mode='snapshot' WHERE id=true").Error)
 	require.NoError(t, h.documents.Start(h.ctx))
 	time.Sleep(125 * time.Millisecond)
 	var count int64
-	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='mine'").Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report'").Count(&count).Error)
 	require.Zero(t, count)
 	require.Zero(t, h.embedder.inputCount())
 	require.NoError(t, h.db.Exec("UPDATE maintenance_state SET paused=false,pause_mode='' WHERE id=true").Error)
 	require.Eventually(t, func() bool {
-		return h.db.Model(&types.Entry{}).Where("source_kind='mine' AND vault_path='mine/paused.md'").Count(&count).Error == nil && count == 1 && h.embedder.inputCount() > 0
+		return h.db.Model(&types.Entry{}).Where("source_kind='report' AND vault_path='reports/paused.md'").Count(&count).Error == nil && count == 1 && h.embedder.inputCount() > 0
 	}, 2*time.Second, 25*time.Millisecond)
 }

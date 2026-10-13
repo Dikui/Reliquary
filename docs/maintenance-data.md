@@ -1,10 +1,12 @@
 # 数据归属与文件库恢复格式
 
-所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、968 列，其中 public 44 张表、523 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。下表列出 public 的 44 张表。
+所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、960 列，其中 public 44 张表、515 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。当前维护归属以 `000005` 后的结构为准，已删除 `data_sources` 与 `sync_logs`。下表列出当前 public 的 44 张表。
 
-维护副本与核对清单的 `format_version` 为 3，表名使用 `spaces`、`api_keys`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`entry_id`、`entry_ids`。导入及核对接受版本 1 和 2：版本 1 先映射个人空间表及归属列，两个旧版本都将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 3，完成清单原子替换后才移除旧表文件。文章摘要向量 `article_embeddings` 不包含用户文档和整理结果，因此保留表名，仅外键列改为 `entry_id`。
+维护副本与核对清单的 `format_version` 为 3，表名使用 `spaces`、`api_keys`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`entry_id`、`entry_ids`。导入及核对接受版本 1 和 2：版本 1 先映射个人空间表及归属列，两个旧版本都将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 3，完成清单原子替换后才移除旧表文件。标题与摘要向量 `article_embeddings` 包含文章和导入的用户文档，不包含整理结果；表名保留，外键列为 `entry_id`。
 
-个人空间命名迁移仅改名和重建引用旧列的函数及 BM25 索引，分类数量不变。迁移后的真实 PostgreSQL 目录核对仍为上述 82 张表、968 列，见 [命名清理证据](tasks/naming-02/evidence/schema-statistics.json)。
+个人空间命名迁移仅改名和重建引用旧列的函数及 BM25 索引，分类数量不变，当时的目录为 82 张表、968 列，见 [命名清理证据](tasks/naming-02/evidence/schema-statistics.json)。迁移 `000004_ingest_only` 新增 2 张表与 27 列，当时为 84 张表、995 列。迁移 `000005_remove_collection` 删除采集配置与同步日志两表，表内专属列与索引随表删除；历史文章来源字段保留。
+
+离线维护按数据库记录的迁移版本选择归属清单。版本 0 至 3 使用 `000004` 之前的严格列集合，仍核对未知表与未知列；不会为了读取新增字段而升级旧数据库，也不更改旧迁移历史。旧命名适配仍只在同一事务内临时转换并恢复，版本 4 使用删表前的完整清单，版本 5 使用当前清单。旧结构完整备份仍包括两张采集表，恢复后在迁移前导出。
 
 | 表 | 在表头 | 在 `.reliquary/` | 可重新生成 | 属于配置或密钥 |
 | --- | --- | --- | --- | --- |
@@ -15,7 +17,6 @@
 | `chatgpt_login_attempts` | 无 | `callback_url`、`client_id`、`account_id`、`expires_at` | 无 | `state`、`nonce`、`verifier` |
 | `chatgpt_policy` | 无 | 无 | 无 | `id`、`daily_limit`、`daily_used`、`day`、`paused`、`reason`、`retry_at`、`fallback_model_id`、`updated_at` |
 | `chunks` | 无 | 无 | `id`、`space_id`、`knowledge_base_id`、`entry_id`、`content`、`chunk_index`、`is_enabled`、`start_at`、`end_at`、`pre_chunk_id`、`next_chunk_id`、`chunk_type`、`parent_chunk_id`、`image_info`、`relation_chunks`、`indirect_relation_chunks`、`created_at`、`updated_at`、`deleted_at`、`metadata`、`status`、`content_hash`、`flags`、`seq_id`、`video_info`、`context_header`、`search_title` | 无 |
-| `data_sources` | 无 | 无 | 无 | `id`、`space_id`、`knowledge_base_id`、`name`、`type`、`default_content_type`、`config`、`sync_schedule`、`sync_mode`、`status`、`sync_deletions`、`last_sync_at`、`last_sync_cursor`、`last_sync_result`、`error_message`、`sync_log_retention_days`、`created_at`、`updated_at`、`deleted_at` |
 | `embedding_rebuild_items` | 无 | `id`、`run_id`、`kind`、`source_id`、`attachment_path`、`status`、`attempts`、`error`、`created_at`、`updated_at` | 无 | 无 |
 | `embedding_rebuild_runs` | 无 | `id`、`space_id`、`status`、`model_id`、`model_name`、`dimension`、`profile_hash`、`total_count`、`completed_count`、`failed_count`、`error`、`attempt_id`、`lease_until`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
 | `embeddings` | 无 | 无 | `id`、`created_at`、`updated_at`、`source_id`、`source_type`、`chunk_id`、`entry_id`、`knowledge_base_id`、`model_id`、`dimension`、`embedding`、`is_enabled` | 无 |
@@ -27,21 +28,22 @@
 | `follow_feed_states` | 无 | `space_id`、`last_viewed_at` | 无 | 无 |
 | `follows` | 无 | `space_id`、`target_type`、`target_id`、`created_at` | `entity_id`、`topic_id` | 无 |
 | `image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`knowledge_base_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
+| `ingest_assets` | 无 | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 |
+| `ingest_discards` | 无 | `space_id`、`normalized_url`、`article_id`、`discarded_at`、`reason` | 无 | 无 |
 | `knowledge_bases` | 无 | 无 | 无 | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id` |
 | `entry_entities` | 无 | `space_id`、`entry_id`、`entity_id`、`created_at` | 无 | 无 |
 | `entry_processing_spans` | 无 | `id`、`entry_id`、`attempt`、`span_id`、`parent_span_id`、`name`、`kind`、`status`、`input`、`output`、`metadata`、`error_code`、`error_message`、`error_detail`、`started_at`、`finished_at`、`duration_ms`、`created_at`、`updated_at` | 无 | 无 |
 | `entry_repost_sources` | 无 | `id`、`space_id`、`knowledge_base_id`、`entry_id`、`original_url`、`normalized_url`、`source_fingerprint`、`author`、`publisher`、`published_at`、`published_at_missing`、`match_method`、`sim_hash_distance`、`created_at` | 无 | 无 |
 | `entry_topics` | 无 | `space_id`、`entry_id`、`topic_id`、`source`、`is_historical`、`created_at` | 无 | 无 |
-| `entries` | `title`、`content_type`、`source_unverified`、`starred`、`collect_reason`、`structured_summary`、`created_at` | `id`、`space_id`、`knowledge_base_id`、`type`、`description`、`content_type_uncertain`、`processing_review_status`、`processing_review_content_type`、`processing_review_reason`、`processing_mode`、`source_kind`、`vault_path`、`vault_body`、`vault_original_path`、`agent_summary`、`agent_tags`、`source_name`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`storage_size`、`metadata`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count` | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
+| `entries` | `title`、`content_type`、`source_unverified`、`starred`、`collect_reason`、`structured_summary`、`created_at`、`acquisition` | `id`、`space_id`、`knowledge_base_id`、`type`、`description`、`content_type_uncertain`、`processing_review_status`、`processing_review_content_type`、`processing_review_reason`、`processing_mode`、`source_kind`、`vault_path`、`vault_body`、`vault_original_path`、`agent_summary`、`agent_tags`、`source_name`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`storage_size`、`metadata`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count`、`incomplete`、`external_completion_attempted`、`ingest_api_key_id`、`ingest_api_key_name`、`last_ingest_api_key_id`、`last_ingest_api_key_name`、`missing_materials`、`ingest_attachments`、`content_type_hint`、`related_article_id` | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
 | `maintenance_state` | 无 | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error` | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | `backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` |
 | `models` | 无 | 无 | 无 | `id`、`space_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` |
-| `operation_logs` | 无 | `id`、`space_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at` | 无 | 无 |
+| `operation_logs` | 无 | `id`、`space_id`、`actor`、`api_key_id`、`api_key_name`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at` | 无 | 无 |
 | `resource_access_grants` | 无 | `id`、`resource_id`、`access_scope`、`expires_at`、`revoked_at`、`created_at` | 无 | `token_hash` |
 | `resource_bindings` | 无 | `id`、`resource_id`、`space_id`、`owner_type`、`owner_id`、`relation`、`created_at` | 无 | 无 |
 | `resources` | 无 | `id`、`handle`、`space_id`、`provider`、`physical_path`、`location_hash`、`kind`、`mime_type`、`original_name`、`size`、`content_hash`、`lifecycle`、`expires_at`、`state`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 |
 | `schema_migrations` | 无 | 无 | `version`、`dirty` | 无 |
 | `spatial_ref_sys` | 无 | 无 | `srid`、`auth_name`、`auth_srid`、`srtext`、`proj4text` | 无 |
-| `sync_logs` | 无 | `id`、`data_source_id`、`space_id`、`status`、`started_at`、`finished_at`、`items_total`、`items_created`、`items_updated`、`items_deleted`、`items_skipped`、`items_failed`、`error_message`、`result`、`created_at`、`updated_at` | 无 | 无 |
 | `system_settings` | 无 | 无 | 无 | `id`、`key`、`value`、`value_type`、`category`、`description`、`is_secret`、`requires_restart`、`last_modified_by`、`created_at`、`updated_at` |
 | `task_dead_letters` | 无 | `id`、`space_id`、`task_type`、`scope`、`scope_id`、`related_id`、`payload`、`last_error`、`fail_count`、`failed_at` | 无 | 无 |
 | `task_jobs` | 无 | `id`、`task_type`、`queue`、`payload`、`headers`、`state`、`max_retry`、`retried`、`fail_count`、`timeout_ns`、`retention_ns`、`deadline`、`group_name`、`created_at`、`updated_at`、`process_at`、`started_at`、`completed_at`、`last_failed_at`、`last_error`、`lease_until`、`claim_token`、`worker_pool`、`cancel_requested` | 无 | 无 |
@@ -144,20 +146,20 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 | `topology.layer` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | `topology.topology` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 
-扩展目录完整性测试遍历全部非系统表和列，验证 82 张表、968 列都有四类归属；另外验证未知 schema 表、零列表、新列、缺列、改变扩展拥有者、同列物化视图替换，以及各类非默认扩展内容都会失败，失败后原始行不变。扩展默认行不进入应用副本导入事务，新环境由固定版本镜像的扩展安装重新建立，再按同一清单核对。
+扩展目录完整性测试遍历全部非系统表和列，验证当前全部表及列都有四类归属；另外验证未知 schema 表、零列表、新列、缺列、改变扩展拥有者、同列物化视图替换，以及各类非默认扩展内容都会失败，失败后原始行不变。扩展默认行不进入应用副本导入事务，新环境由固定版本镜像的扩展安装重新建立，再按同一清单核对。
 
 表头中的文章 ID 同时作为副本各表的关联主键保存。文章 `metadata` 中的来源作者、发布者、发布时间也出现在表头，但原始的收录字段整体保留在副本，避免改写原始来源格式和精度。表头字段在副本中保留一份确定的核对值，导入时检查两份值一致。
 
-`entries.vault_body` 按来源区分：已发布文章的正文只从 `articles/` 读取并恢复到数据库；未发布、待审和处理中内容尚无文章文件时，在副本保留数据库已有原文与收录 metadata，上传原件保存在资源副本。`mine/` 与 `reports/` 的原文只在原文件和备份中，数据库与副本不另存原文。派生 chunks 用于检索，不作为恢复原文来源。文件库磁盘损坏且仅数据库尚存时，文章可恢复；用户文档与整理结果最多损失上次备份之后的修改。
+`entries.vault_body` 按来源区分：已发布文章的正文从 `articles/` 读取并恢复到数据库；用户文档正文保存在数据库与维护副本中，并与 `mine/` 的表头和正文核对。未发布、待审和处理中内容尚无文件时，在副本保留数据库已有原文与收录 metadata，上传原件保存在资源副本。`reports/` 的原文只在原文件和备份中，数据库与副本不另存原文。派生 chunks 用于检索，不作为恢复原文来源。文件库磁盘损坏且仅数据库尚存时，文章和用户文档可恢复，核对修复会从数据库补回文件；整理结果最多损失上次备份之后的修改。文件库重建按 `mine/` 表头与正文恢复用户文档，没有表头的文件跳过并列出，不报错，不迁移旧文件。pack 与 unpack 同时保存、恢复用户文档的文件、附件和维护副本。
 
-账号密码哈希选择保留在 `config/users.json`，使仅用文件库重建后仍能用原密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。账号、模型、订阅源、解析器配置保留非凭据部分；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、JWT_SECRET、数据库密码等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、订阅源暂停、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
+账号密码哈希选择保留在 `config/users.json`，使仅用文件库重建后仍能用原密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。账号、模型、解析器配置保留非凭据部分；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、JWT_SECRET、数据库密码等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
 
 `.reliquary/` 是数据库的实时可读副本，不反向同步外部编辑。普通表和配置使用 UTF-8 JSON 数组，每行保留原始主键、时间戳和非派生字段；JSON 键稳定排序。操作日志每条一行 JSON，正常变化只追加，不改写既有条目。`verify --repair` 遇到损坏日志时，把坏原件移到 `quarantine/`，保留坏原件，再从数据库建立完整的新日志。这是显式修复操作，正常同步不会做这件事。
 
 ```text
 .reliquary/
   manifest.json               格式版本、文件及正文哈希、当前上传清单、表清单、凭据待填字段、JSONB null 类型
-  config/<table>.json         账号、模型、订阅源和其他非密钥配置
+  config/<table>.json         账号、模型和其他非密钥配置
   config/required_credentials.json  待填字段名的冗余清单与 SHA256，不保存字段值
   data/<table>.json           实体、主题、关注、待审、复核、转载、任务与诊断等
   operation_logs.jsonl        只追加的操作日志
@@ -167,7 +169,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 变化通过 GORM 写入回调触发去抖导出，默认与表头相同为 5 秒；定期读取已提交的 PostgreSQL 一致快照捕捉原始 SQL 和队列更新。单文件临时写入、fsync、读回验证、原子替换，内容一致不改 inode。快照 manifest 最后替换，另存根目录除 .reliquary 以外的文章、附件、mine/ 与 reports/ 文件哈希。导入先检查副本和全部原始文件哈希、表清单及持久表的依赖恢复覆盖，有中断、遗漏或篡改时在写入数据库前停止，使用 `verify --repair` 从数据库补齐。
 
-核对逐表比较非派生列的规范 JSON、行数及 JSONB null 类型。JSONB 字面值 null 与 SQL NULL 单独记录，导入后逐列保持原类型，操作日志中的空 before_value 不会误变成 SQL NULL。模型、订阅源和 ChatGPT 账号的安全行与待填凭据 ID 也进入核对清单，原始 status 保留供逐行核对。未剔除凭据的模型和订阅源，status 与 updated_at 精确比较，任何改变都会失败。只有旧清单已列出的凭据受影响 ID 可以由原 status 转为 models.needs_configuration 或 data_sources.paused，再恢复清单记录的原 status；该行 updated_at 允许凭据操作改变。其他 status 不忽略。模型 parameters.extra_config 中 maintenance_required_fields、maintenance_original_status、maintenance_original_updated_at 是恢复提醒，订阅源 config 对应三个 _reliquary_maintenance_* 键记录同样信息，只排除这些明确键，其他参数精确核对。ChatGPT 待重新登录账号允许 needs_login 和完成新登录的 connected，expires_at、earliest_refresh_at 与 updated_at 仅在上述待填账号行允许变化；last_error 仍精确核对。
+核对逐表比较非派生列的规范 JSON、行数及 JSONB null 类型。JSONB 字面值 null 与 SQL NULL 单独记录，导入后逐列保持原类型，操作日志中的空 before_value 不会误变成 SQL NULL。模型和 ChatGPT 账号的安全行与待填凭据 ID 进入核对清单，原始 status 保留供逐行核对。未剔除凭据的模型，status 与 updated_at 精确比较，任何改变都会失败。只有旧清单已列出的凭据受影响 ID 可以由原 status 转为 models.needs_configuration，再恢复清单记录的原 status；该行 updated_at 允许凭据操作改变。其他 status 不忽略。模型 parameters.extra_config 中 maintenance_required_fields、maintenance_original_status、maintenance_original_updated_at 是恢复提醒，只排除这些明确键，其他参数精确核对。ChatGPT 待重新登录账号允许 needs_login 和完成新登录的 connected，expires_at、earliest_refresh_at 与 updated_at 仅在上述待填账号行允许变化；last_error 仍精确核对。版本 4 及以前的订阅源净化与暂停规则仅用于旧备份读取及删表前导出，当前维护不恢复采集功能。
 
 未完成且状态为 active 或 pending 的任务允许 active 恢复为 pending，claim_token、worker_pool、lease_until、started_at 和 updated_at 随重新领取变化。核对清单另存 task_jobs 的安全原始行，保留原 active 状态；只有同 ID 原 active 且未完成的任务恢复为 pending 且仍未完成时，允许启动恢复重新设置 process_at。原 pending、scheduled 和已完成任务的 process_at 始终精确比较，旧清单缺少原始状态证明时也不放宽。task_jobs.json 发生此正常恢复变化时，两边文件须分别精确匹配各自原始行序列化的哈希和大小，并通过相同配对比较，不能跳过副本文件核对。payload、重试次数、失败次数、deadline、已完成时间等仍精确核对。已完成任务的所有上述历史时间戳也精确比较。维护暂停标记与定时 due_at 可重新生成，最近备份和恢复演练的时间、状态、目录、大小及错误属于不可再生历史，进入副本并恢复；只有 backup_directory 是目标机器可调整的配置路径。全文索引、分块、向量和搜索 sequence ID 可重新生成，向量值与检索分数不做字节比较。固定检索使用真实 ParadeDB BM25 查询 maintenancearchive、observations、reference，核对排序后的文章 ID，忽略分数。文件仍按字节哈希核对，副本 config 文件由其规范数据库内容核对。正常恢复先与旧清单严格核对，再开放凭据填写；填写过程可以追加新的操作日志，完成凭据配置前再次按旧清单核对。该步骤显式使用 --allow-reconfiguration-append；只允许追加日志的场合使用 --allow-operation-log-append。旧日志按 ID 保留逐行完整内容与 JSONB null 类型，只接受新的日志 ID。--allow-model-change 显式允许知识库 embedding_model_id 和 model_tiers.embedding 变更，以及旧、新选中 embedding 模型的名称、展示名、说明、来源、参数和 updated_at 变化；原有模型的 ID、租户、类型和创建时间、其他未选模型及全部不可再生业务表仍严格比较。新加模型只允许新选中的 Embedding 行，不允许删掉旧模型。新模型的全部向量生成完整后再开放使用。后续日常 verify 检查当前数据库与副本一致。
 
@@ -193,7 +195,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 初始恢复仍逐表严格核对这些认证元信息。凭据配置期间重新登录或生成新临时访问会新增记录，只有显式 --allow-reconfiguration-append 才接受上述三张表与操作日志的新安全行；auth_tokens 与 resource_access_grants 的旧 ID 行逐列保持，OAuth 尝试按安全元信息多重集合核对旧行和重复次数。新增行不会放宽旧行修改、删除或其他业务表的核对。原 --allow-operation-log-append 仍只允许新日志，未扩大到认证表。
 
-订阅源 credentials 容器不留原值，待填清单逐个记录原先非空字段，包括 token、app_secret 及 auth_headers 中每个原头名称。加密 auth_headers 只在内存解密以取得字段名称；不会把原密文或解密值写进清单。未能解码的字段以原字段整体标记。填入一个字段不能代替其他原必填字段，未补全时订阅源继续暂停。
+读取版本 4 及以前备份时，旧订阅源的 credentials、鉴权头与配置中的秘密仍递归剔除，导出文件不含可用凭据。当前版本不提供订阅源凭据填写或连接验证入口。
 
 恢复后的无效认证占位值不加入凭据核对集合，否则第二次备份会误判自身占位值为密钥。例外只接受 auth_tokens.token 与 resource_access_grants.token_hash 精确等于 reliquary-excluded- 加该行原 ID；OAuth 必须 nonce、verifier 都为空，state 与该行安全元信息规范哈希及完整重复序号一致。api_keys 只有 api_key 为空且 key_hash 精确等于 disabled- 加该行 ID 才视为无效占位。任何相似前缀、不同 ID、非空 verifier、错误重复序号或仍有 API Key 的记录都继续按真实凭据扫描，原凭据核对不放宽。
 
@@ -202,3 +204,15 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 待填字段名同时保存在 manifest.json 与 config/required_credentials.json，冗余文件内记录规范清单 SHA256，外层 manifest 也记录其文件哈希。主 manifest 损坏而冗余文件有效时，verify --repair 可恢复主清单并保留尚未填写的解析器字段名。两个副本都损坏、数据库又无法推断原缺失字段时，程序拒绝覆盖坏原件，要求从备份恢复清单。旧格式没有冗余文件且原数据库仍含解析器凭据时，可从当前数据库字段重新生成；清单始终只保存字段名，不保存任何凭据值。
 
 维护期间真实 ChatGPT 模型试调用会消耗实际配额，不撤销消耗。配额行有变化时追加 actor=maintenance、operation_type=maintenance_model_probe、object_id=模型 ID 的操作日志，before_value 与 after_value 分别保存完整安全 chatgpt_policy 行数组，原来没有行时保存空数组。默认核对仍拒绝配额变化；仅 --allow-reconfiguration-append 按日志时间顺序核对完整审计链，第一份 before 必须等于旧完整行，下一份 before 必须等于上一份 after，最后 after 必须等于当前完整行。id、daily_limit、fallback_model_id 始终保持旧配置，原无配额行时只接受默认的无限制及空备用模型配置；只有 day、daily_used、paused、reason、retry_at、updated_at 可沿真实试调用的记录变化。旧日志逐行保持，缺审计、缺一条记录、不连续、字段不完整、模型或 actor 不符、日限及备用模型改变均拒绝核对，不用恢复备份清零实际调用消耗。
+
+收录附件与丢弃记录属于不可再生业务数据。未引用附件的文件随现有上传资源镜像保留，`ingest_assets` 的引用归属与过期时间进入副本并恢复；24 小时清理任务属于 `task_jobs`，按已有未完成任务恢复规则续跑。被引用附件的文章文件与本地附件按文件哈希保全。`ingest_discards` 保留规范化链接、原文章 ID、丢弃时间与原因，即使原文章已删除，重建之后仍能阻止再次收录。
+
+获取方式 `entries.acquisition` 写入文章和用户文档表头并保留副本核对值；待补全状态、缺失材料的原地址与原因、提交 Key 的 ID 与名称、提交时间、外部补全尝试状态、附件清单、关联待审条目 ID 与类型参考全部进入副本。操作日志的 Key ID 与名称为调用方身份快照，保留历史名称，不包含认证 Key 或其哈希。原 API Key 的凭据仍按既有规则排除。
+
+## 采集配置与同步日志归档
+
+迁移 `000005` 之前，`./reliquary-admin export-sources` 将两张旧表的非密钥内容写入文件库 `.reliquary/exports/`。文件名为 `sources-000005-<UTC纳秒时间>-<内容SHA256前12位>.json`，JSON 包含 `exported_at`（UTC）、`migration_version: 5`、`source_migration_version`、`tables.data_sources`、`tables.sync_logs` 与 `json_nulls`。仅旧副本重建无法确定源结构版本时可省略 `source_migration_version`。JSON 保存导出时间、目标迁移版本和源结构版本，数据源包括名称、类型、地址、调度、默认内容类型、启用状态及其他配置，同步日志保存历史结果、统计和时间。凭据、密钥、Authorization、Cookie、URL 用户信息与敏感查询参数不进入文件。
+
+`upgrade` 先暂停并完整备份旧数据库，再导出，最后迁移和核对。导出失败时不删表并保持暂停；旧版本完整备份恢复到当前结构时同样先导出再迁移。仅文件库重建读取旧副本时也先归档两表，再恢复其余数据。当前 pack、unpack、rebuild 与 verify 使用删表后的归属清单，不要求已删除的表存在；旧格式的行和原始文件须先严格核对，不能仅忽略旧表丢失。导出的历史 JSON 随文件库和备份保留，文章 `channel` 及来源记录不受删表影响。
+
+完整旧备份恢复到当前版本时，先按原结构核对刚恢复的副本、附件和向量，再导出与迁移；迁移成功后重建索引、刷新当前副本，并再次使用原包的 `snapshot.json` 核对。旧包快照不改写，迁移前核对失败不刷新副本，也不删表。整体退回随包的旧代码与镜像时保留旧结构，继续使用旧包 helper。

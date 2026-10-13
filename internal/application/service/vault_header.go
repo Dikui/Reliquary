@@ -18,6 +18,7 @@ import (
 // VaultArticleHeader is the portable article metadata used by vault rebuild.
 type VaultArticleHeader struct {
 	ID               string              `yaml:"id" json:"id"`
+	SourceKind       string              `yaml:"source_kind,omitempty" json:"source_kind,omitempty"`
 	URL              string              `yaml:"url" json:"url"`
 	Title            string              `yaml:"title" json:"title"`
 	Publisher        string              `yaml:"publisher" json:"publisher"`
@@ -32,6 +33,7 @@ type VaultArticleHeader struct {
 	CollectReason    string              `yaml:"collect_reason" json:"collect_reason"`
 	SourceUnverified bool                `yaml:"source_unverified,omitempty" json:"source_unverified"`
 	ProcessingMode   string              `yaml:"processing_mode,omitempty" json:"processing_mode,omitempty"`
+	Acquisition      string              `yaml:"acquisition,omitempty" json:"acquisition,omitempty"`
 }
 
 // RenderVaultArticleHeader uses a fixed field order and JSON double quoted
@@ -40,32 +42,50 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
 	writeVaultScalar(&b, "id", h.ID)
-	writeVaultScalar(&b, "url", h.URL)
-	writeVaultScalar(&b, "title", h.Title)
-	writeVaultScalar(&b, "publisher", h.Publisher)
-	if h.Author != h.Publisher {
-		writeVaultScalar(&b, "author", h.Author)
+	mine := h.SourceKind == "mine"
+	if mine {
+		writeVaultScalar(&b, "source_kind", h.SourceKind)
 	}
-	writeVaultScalar(&b, "published_at", h.PublishedAt)
+	writeScalar := func(key, value string) {
+		if !mine || value != "" {
+			writeVaultScalar(&b, key, value)
+		}
+	}
+	writeScalar("url", h.URL)
+	writeVaultScalar(&b, "title", h.Title)
+	writeScalar("publisher", h.Publisher)
+	if h.Author != h.Publisher {
+		writeScalar("author", h.Author)
+	}
+	writeScalar("published_at", h.PublishedAt)
 	writeVaultScalar(&b, "collected_at", h.CollectedAt)
-	writeVaultScalar(&b, "content_type", h.ContentType)
+	writeScalar("content_type", h.ContentType)
 	if h.Summary == nil {
-		b.WriteString("summary: null\n")
+		if !mine {
+			b.WriteString("summary: null\n")
+		}
 	} else {
 		b.WriteString("summary:\n")
 		writeVaultScalar(&b, "  overview", h.Summary.Overview)
 		writeVaultList(&b, "  points", h.Summary.Points, false)
 		writeVaultList(&b, "  key_terms", h.Summary.KeyTerms, false)
 	}
-	writeVaultList(&b, "entities", h.Entities, true)
-	writeVaultList(&b, "topics", h.Topics, true)
+	if !mine || len(h.Entities) > 0 {
+		writeVaultList(&b, "entities", h.Entities, true)
+	}
+	if !mine || len(h.Topics) > 0 {
+		writeVaultList(&b, "topics", h.Topics, true)
+	}
 	fmt.Fprintf(&b, "starred: %t\n", h.Starred)
-	writeVaultScalar(&b, "collect_reason", h.CollectReason)
+	writeScalar("collect_reason", h.CollectReason)
 	if h.SourceUnverified {
 		b.WriteString("source_unverified: true\n")
 	}
 	if h.ProcessingMode != "" {
 		writeVaultScalar(&b, "processing_mode", h.ProcessingMode)
+	}
+	if h.Acquisition != "" {
+		writeVaultScalar(&b, "acquisition", h.Acquisition)
 	}
 	b.WriteString("---\n")
 	return []byte(b.String())
@@ -168,6 +188,9 @@ func ParseVaultArticle(data []byte) (VaultArticleHeader, []byte, error) {
 	}
 	if h.ID == "" || h.Title == "" || h.CollectedAt == "" {
 		return h, nil, errors.New("article header requires id, title and collected_at")
+	}
+	if h.SourceKind != "" && h.SourceKind != "article" && h.SourceKind != "mine" {
+		return h, nil, fmt.Errorf("unsupported source_kind %q", h.SourceKind)
 	}
 	if _, err = time.Parse(time.RFC3339Nano, h.CollectedAt); err != nil {
 		return h, nil, fmt.Errorf("parse collected_at: %w", err)

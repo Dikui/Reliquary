@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 import { renderToString } from '@vue/server-renderer'
-import { createSSRApp, defineComponent, h, onServerPrefetch } from 'vue'
+import { createSSRApp, defineComponent, h, onServerPrefetch, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
@@ -14,6 +14,9 @@ import { SEARCH_SOURCES, type SearchEntry, type SearchRequest } from '../../type
 import * as helpers from '../../utils/search'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
 import * as protectedAccess from '../../utils/protectedFileAccess'
+import * as markdownPlainText from '../../utils/markdownPlainText'
+import * as paletteCommands from '../../components/GlobalCommandPalette/commands'
+import * as visibleFileChunks from '../../components/GlobalCommandPalette/visibleFileChunks'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zh, 'en-US': en }
@@ -48,7 +51,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   const app = createSSRApp(value, props)
   app.use(createI18n({ legacy: false, locale, messages }))
   app.component('SearchEntry', value)
-  for (const name of ['t-tag', 't-icon', 't-button', 't-select', 't-switch', 't-date-picker', 't-input-number', 't-alert', 't-loading', 't-empty']) app.component(name, controls?.[name] || stub)
+  for (const name of ['t-tag', 't-icon', 't-button', 't-select', 't-switch', 't-date-picker', 't-input-number', 't-alert', 't-loading', 't-empty', 't-dialog', 't-tooltip', 't-drawer']) app.component(name, controls?.[name] || stub)
   const warnings: string[] = [], errors: unknown[] = []
   app.config.warnHandler = warning => warnings.push(warning)
   app.config.errorHandler = error => errors.push(error)
@@ -56,7 +59,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   assert.deepEqual(warnings, []); assert.deepEqual(errors, [])
   return html
 }
-const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
+const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
 function articleComponent() {
   const preview = component('../../components/ImagePreview.vue', {
     'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
@@ -67,6 +70,7 @@ function articleComponent() {
       '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
     })),
     './GlobalCommandPalette/useHighlight': highlight,
+    '@/utils/markdownPlainText': markdownPlainText,
   })
 }
 const article: SearchEntry = {
@@ -75,6 +79,72 @@ const article: SearchEntry = {
   entities: [{ id: 'e1', canonical_name: 'Launch Labs', entity_type: 'company', aliases: ['LL'] }], topics: [{ id: 't1', name: 'Releases' }],
   snippets: [0, 1, 2, 3].map(index => ({ chunk_id: `c${index}`, chunk_index: index, content: `Launch snippet ${index} <script>`, score: 0.9, match_type: 'keyword' })),
   score: 0.9, similar_reports: [], vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
+}
+const markdownExcerpt = '# Launch heading\n\n- **bold** [read](https://example.com/private)\n\n> _quote_\n\n`code` ![remote](https://example.com/chart.png) <img src="../../attachments/a/photo.png"> <b>HTML</b>'
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: API-loaded search excerpts render plain text and preserve the source Markdown`, async () => {
+    const summary = { overview: '**Overview** ![chart](chart.png)', points: ['- _Point_', '\\*literal\\*', '`**literal**`'], key_terms: ['`Term`'] }
+    let loadedSummary: SearchEntry['summary'] = null
+    const api = ingestSearchAPI({
+      summary,
+      snippets: [{ ...article.snippets[0], content: markdownExcerpt }],
+    })
+    const result = await pageScenario(async state => {
+      state.query.value = 'Launch'; await state.runSearch()
+      assert.equal(state.results.value[0].snippets[0].content, markdownExcerpt)
+      assert.equal(state.results.value[0].summary.overview, '**Overview** ![chart](chart.png)')
+      loadedSummary = state.results.value[0].summary
+    }, api.searchEntries, locale)
+    const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
+    assert.ok(result.html.includes(`Overview ${image}`))
+    assert.match(result.html, /<li[^>]*>\*literal\*<\/li>/)
+    assert.match(result.html, /<li[^>]*>\*\*literal\*\*<\/li>/)
+    assert.deepEqual(loadedSummary, summary)
+    assert.match(result.html, /<mark class="search-highlight">Launch<\/mark> heading/)
+    assert.ok(result.html.includes(`code ${image} ${image} HTML`))
+    assert.match(result.html, /bold read/)
+    assert.doesNotMatch(result.html, /# Launch|\*\*bold|!\[remote\]|<img|<b>HTML|example.com\/private|attachments\/a\/photo/)
+  })
+  test(`${locale}: actual command palette renders API-loaded Markdown snippets as localized plain text`, async () => {
+    const api = ingestSearchAPI({ snippets: [{ ...article.snippets[0], content: markdownExcerpt }] })
+    const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), { '@/utils/search': helpers, '@/api/search': api })
+    const store = { open: ref(true), initialQuery: ref('Launch'), recentQueries: ref([]), closePalette() {}, pushRecent() {} }
+    const palette = component('../../components/GlobalCommandPalette.vue', {
+      pinia: { storeToRefs: (value: unknown) => value },
+      '@/stores/commandPalette': { useCommandPaletteStore: () => store },
+      '@/stores/auth': { useAuthStore: () => ({}) },
+      'vue-router': { useRoute: () => ({ name: 'search' }), useRouter: () => ({ push() {} }) },
+      './GlobalCommandPalette/useSearch': hook,
+      './GlobalCommandPalette/visibleFileChunks': visibleFileChunks,
+      './GlobalCommandPalette/useHighlight': highlight,
+      './GlobalCommandPalette/commands': paletteCommands,
+      '@/utils/markdownPlainText': markdownPlainText,
+      './GlobalCommandPalette/ResultGroup.vue': moduleOf(component('../../components/GlobalCommandPalette/ResultGroup.vue', {})),
+      './GlobalCommandPalette/ResultItem.vue': moduleOf(component('../../components/GlobalCommandPalette/ResultItem.vue', {})),
+      './SearchImage.vue': moduleOf(defineComponent({ setup: () => () => null })),
+      '@/views/settings/RetrievalSettings.vue': moduleOf(defineComponent({ setup: () => () => null })),
+    })
+    const html = await render(palette, {}, locale, async state => {
+      state.query.value = 'Launch'; await state.retry()
+      assert.equal(state.fileGroups.value[0].chunks[0].content, markdownExcerpt)
+    })
+    const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
+    assert.match(html, /<mark class="search-highlight">Launch<\/mark> heading/)
+    assert.ok(html.includes(`code ${image} ${image} HTML`))
+    assert.doesNotMatch(html, /# Launch|\*\*bold|!\[remote\]|<img|<b>HTML|example.com\/private|attachments\/a\/photo/)
+  })
+}
+
+function ingestSearchAPI(fields: Record<string, unknown>) {
+  return evaluate(readFileSync(new URL('../../api/search.ts', import.meta.url), 'utf8'), {
+    '@/utils/request': {
+      post: async (url: string) => {
+        assert.equal(url, '/api/v1/search')
+        return { success: true, data: { results: structuredClone([{ ...article, ...fields }]), excluded_missing_published_at: 0 } }
+      },
+    },
+  })
 }
 
 test('search requests and URL state preserve all filters without old scope parameters', () => {
@@ -87,6 +157,30 @@ test('search requests and URL state preserve all filters without old scope param
   assert.deepEqual(invalid.filters.content_types, ['event']); assert.deepEqual(invalid.filters.sources, ['mine']); assert.equal(invalid.filters.limit, 20)
 })
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: search markers show and hide using fields loaded through the real search API`, async () => {
+    for (const flagged of [true, false, undefined]) {
+      const api = ingestSearchAPI({ acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) })
+      const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, api.searchEntries, locale)
+      assert.equal(result.html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(result.html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.equal(result.html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
+      }
+    }
+  })
+  test(`${locale}: folded results use ingest fields through the real API loading path`, async () => {
+    for (const flagged of [true, false, undefined]) {
+      const api = ingestSearchAPI({ similar_reports: [{ ...article, entry_id: 'nested', acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) }] })
+      const result = await api.searchEntries({ query: 'Launch' })
+      const html = await render(articleComponent(), { article: result.data.results[0], query: 'Launch' }, locale, async state => { state.expanded.value = true })
+      const nested = html.slice(html.indexOf('data-article-id="nested"'))
+      assert.equal(nested.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(nested.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.equal(nested.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
+      }
+    }
+  })
   test(`${locale}: source unverified marker reaches search results through the page API loading path`, async () => {
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }], excluded_missing_published_at: 0 } }), locale)
     assert.ok(result.html.includes(messages[locale].knowledgeReview.sourceUnverified))
@@ -106,7 +200,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
     for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
     assert.match(html, /href="https:\/\/example.com\/a"/)
-    assert.match(html, /<mark class="search-highlight">Launch<\/mark> snippet 0 &lt;script&gt;/)
+    assert.match(html, /<mark class="search-highlight">Launch<\/mark> snippet 0/)
     assert.doesNotMatch(html, /snippet 3|<script>/)
   })
   test(`${locale}: similar reports start collapsed and the disclosure exposes its expanded state and nested articles`, async () => {
@@ -181,6 +275,27 @@ test('search page rejects invalid date order and ignores an older response after
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: command palette markers use response fields through the real search API and hook`, async () => {
+    for (const flagged of [true, false, undefined]) {
+      const api = ingestSearchAPI({ acquisition: flagged ? 'model_written' : 'verbatim', ...(flagged !== undefined ? { incomplete: flagged } : {}) })
+      const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), { '@/utils/search': helpers, '@/api/search': api })
+      const item = component('../../components/GlobalCommandPalette/ResultItem.vue', {})
+      const palette = defineComponent({ setup() {
+        const state = hook.useCmdkSearch({})
+        onServerPrefetch(async () => { state.query.value = 'Launch'; await state.retry() })
+        return () => state.fileGroups.value.length ? h(item, { index: 0, title: state.fileGroups.value[0].title, acquisition: state.fileGroups.value[0].acquisition, incomplete: state.fileGroups.value[0].incomplete }) : null
+      } })
+      const html = await render(palette, {}, locale)
+      assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.equal(html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
+      }
+    }
+    const template = readFileSync(new URL('../../components/GlobalCommandPalette.vue', import.meta.url), 'utf8')
+    assert.match(template, /:acquisition="item.file.acquisition"/)
+    assert.match(template, /:incomplete="item.file.incomplete"/)
+  })
   test(`${locale}: dependency failures render a localized message and retain retry without upstream text`, async () => {
     let attempts = 0
     const result = await pageScenario(async state => {

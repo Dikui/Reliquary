@@ -12,6 +12,22 @@ NC='\033[0m' # 无颜色
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
+# Keep explicitly supplied host directories ahead of values loaded from .env.
+HOST_DIRECTORY_OVERRIDES=()
+for directory_var in RELIQUARY_VAULT_DIR RELIQUARY_FILES_DIR BACKUP_DIR RELIQUARY_BACKUP_DIRECTORY VAULT_ROOT LOCAL_STORAGE_BASE_DIR; do
+    if printenv "$directory_var" > /dev/null; then
+        HOST_DIRECTORY_OVERRIDES+=("$directory_var=${!directory_var}")
+    fi
+done
+
+load_env_file() {
+    source "$PROJECT_ROOT/.env" || return 1
+    local directory_override
+    for directory_override in "${HOST_DIRECTORY_OVERRIDES[@]}"; do
+        export "$directory_override"
+    done
+}
+
 # 版本信息
 VERSION="1.0.1" # 版本更新
 SCRIPT_NAME=$(basename "$0")
@@ -100,7 +116,7 @@ check_env_file() {
     fi
     
     # 检查必要的环境变量是否已设置
-    source "$PROJECT_ROOT/.env"
+    load_env_file || return 1
     local missing_vars=()
     
     # 检查基础变量
@@ -108,6 +124,11 @@ check_env_file() {
     if [ -z "$STORAGE_TYPE" ]; then missing_vars+=("STORAGE_TYPE"); fi
     
     return 0
+}
+
+check_host_directories() {
+    log_info "检查宿主机文件库、上传资源与备份目录..."
+    (cd "$PROJECT_ROOT" && ./reliquary-admin check-deployment)
 }
 
 # 安装Ollama（根据平台不同采用不同方法）
@@ -321,16 +342,42 @@ start_docker() {
     fi
     
     # 检查.env文件
-    check_env_file
+    check_env_file || return 1
+
+    # Check host paths before Compose creates any application bind mounts.
+    check_host_directories || return 1
     
     # 读取.env文件
-    source "$PROJECT_ROOT/.env"
+    load_env_file || return 1
     storage_type=${STORAGE_TYPE:-local}
     
     check_platform
     
     # 进入项目根目录再执行docker-compose命令
     cd "$PROJECT_ROOT"
+
+    # Start only PostgreSQL so saved backup settings can be checked before the app.
+    log_info "启动数据库并核对已保存的备份目录..."
+    if [ "$NO_PULL" = true ]; then
+        "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD up -d postgres || return 1
+    else
+        "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD up --pull always -d postgres || return 1
+    fi
+    local database_ready=false
+    local database_attempt
+    for database_attempt in {1..30}; do
+        if "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD exec -T postgres \
+            pg_isready -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" > /dev/null 2>&1; then
+            database_ready=true
+            break
+        fi
+        sleep 2
+    done
+    if [ "$database_ready" != true ]; then
+        log_error "数据库未就绪，无法核对已保存的备份目录"
+        return 1
+    fi
+    check_host_directories || return 1
     
     # 启动基本服务
     log_info "启动核心服务容器..."
@@ -418,7 +465,7 @@ pull_images() {
     check_env_file
     
     # 读取.env文件
-    source "$PROJECT_ROOT/.env"
+    load_env_file || return 1
     storage_type=${STORAGE_TYPE:-local}
     
     check_platform
@@ -461,6 +508,9 @@ restart_container() {
     if [ $? -ne 0 ]; then
         return 1
     fi
+
+    check_env_file || return 1
+    check_host_directories || return 1
     
     check_platform
     
@@ -503,10 +553,11 @@ check_environment() {
     log_info "操作系统: $OS"
     
     # 检查Docker
-    check_docker
+    check_docker || return 1
     
     # 检查.env文件
-    check_env_file
+    check_env_file || return 1
+    check_host_directories || return 1
     
     get_ollama_base_url
     
@@ -725,4 +776,12 @@ else
     fi
 fi
 
+if [ "$STOP_SERVICES" != true ]; then
+    if [ "$START_DOCKER" = true ] && [ "$DOCKER_RESULT" -ne 0 ]; then
+        exit 1
+    fi
+    if [ "$START_OLLAMA" = true ] && [ "$OLLAMA_RESULT" -ne 0 ]; then
+        exit 1
+    fi
+fi
 exit 0

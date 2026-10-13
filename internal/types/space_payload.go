@@ -64,10 +64,7 @@ func (p *TopicBackfillPayload) UnmarshalJSON(data []byte) error {
 	type plain TopicBackfillPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
-func (p *DataSourceSyncPayload) UnmarshalJSON(data []byte) error {
-	type plain DataSourceSyncPayload
-	return UnmarshalSpacePayload(data, (*plain)(p))
-}
+
 func (p *EmbeddingRebuildPayload) UnmarshalJSON(data []byte) error {
 	type plain EmbeddingRebuildPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))

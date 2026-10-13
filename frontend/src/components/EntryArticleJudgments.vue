@@ -42,7 +42,7 @@ watch(() => props.entry.topics, value => { topicDraft.value = (value || []).map(
 async function saveType(confirmed = false) {
   if (!typeDraft.value || busy.value) return
   if (changesModeToSummary.value && !confirmed) { confirmRemoveBody.value = true; return }
-  const id = props.entry.id, type = typeDraft.value
+  const id = props.entry.id, type = typeDraft.value, previousMode = props.entry.processing_mode
   typeSaving.value = true
   typeError.value = ''
   try {
@@ -51,7 +51,9 @@ async function saveType(confirmed = false) {
     if (props.entry.id !== id) return
     emit('updated', { ...response.data, id })
     confirmRemoveBody.value = false
-    MessagePlugin.success(t(response.data?.parse_status === 'pending' ? 'articleJudgments.contentTypeQueued' : 'articleJudgments.contentTypeSaved'))
+    const needsBody = previousMode === 'summary_only' && response.data?.processing_mode === 'full' && response.data?.incomplete === true
+    const message = needsBody ? 'articleJudgments.contentTypeIncomplete' : response.data?.parse_status === 'pending' ? 'articleJudgments.contentTypeQueued' : 'articleJudgments.contentTypeSaved'
+    MessagePlugin.success(t(message))
   } catch (cause: any) {
     if (props.entry.id === id) typeError.value = cause?.message || t('articleJudgments.contentTypeFailed')
   } finally { typeSaving.value = false }

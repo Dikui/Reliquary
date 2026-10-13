@@ -3,9 +3,7 @@ module reliquary
 go 1.26.0
 
 require (
-	codeberg.org/readeck/go-readability/v2 v2.1.2
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.1
-	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/duckdb/duckdb-go/v2 v2.10502.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-contrib/cors v1.7.7
@@ -15,7 +13,6 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/mmcdole/gofeed v1.3.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.23.2
 	github.com/panjf2000/ants/v2 v2.12.0
@@ -57,7 +54,6 @@ require (
 
 require (
 	github.com/JohannesKaufmann/dom v0.2.0 // indirect
-	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/apache/arrow-go/v18 v18.5.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
@@ -80,12 +76,9 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
-	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
-	github.com/itlightning/dateparse v0.2.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -98,7 +91,6 @@ require (
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/mmcdole/goxpp v1.1.1-0.20240225020742-a0c311522b23 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect

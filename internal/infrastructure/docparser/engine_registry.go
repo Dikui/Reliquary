@@ -41,21 +41,16 @@ func lookupEngine(name string) (EngineRegistration, bool) {
 func NewReader(ctx context.Context, engine, fileType string, isURL bool, deps ReaderDeps) (interfaces.DocReader, error) {
 	fileType = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(fileType), "."))
 	if engine == "" || engine == "auto" {
-		if isURL {
-			engine = SimpleEngineName
-		} else {
-			engine = types.DefaultParserEngine(fileType)
-		}
+		engine = types.DefaultParserEngine(fileType)
 	}
 	registration, ok := lookupEngine(engine)
 	if !ok {
 		return nil, fmt.Errorf("unsupported parser engine %q for file type %q", engine, fileType)
 	}
 	if isURL {
-		if engine != SimpleEngineName {
-			return nil, fmt.Errorf("parser engine %q does not support URL imports", engine)
-		}
-	} else if !slices.Contains(registration.FileTypes(), fileType) {
+		return nil, fmt.Errorf("URL content acquisition is unavailable")
+	}
+	if !slices.Contains(registration.FileTypes(), fileType) {
 		return nil, fmt.Errorf("parser engine %q does not support file type %q", engine, fileType)
 	}
 	return registration.NewReader(ctx, deps)

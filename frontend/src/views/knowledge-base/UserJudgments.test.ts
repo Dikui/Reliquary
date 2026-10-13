@@ -59,12 +59,12 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
 const notifications = { MessagePlugin: { success() {} } }
 const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions and research', article_count: 3, created_at: '', updated_at: '' }
 const article = { id: 'article-a', content_type: 'event', processing_mode: 'full', starred: false, topics: [{ id: 'old-topic', name: 'Old topic' }], parse_status: 'completed' }
-function judgments(api: Record<string, unknown>, details?: unknown) {
+function judgments(api: Record<string, unknown>, details?: unknown, notificationModule: { MessagePlugin: { success: (message: string) => unknown } } = notifications) {
   return component('../../components/EntryArticleJudgments.vue', {
     '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-judgments': api,
     '@/api/topics': { listTopics: async () => ({ success: true, data: [topic] }) },
     '@/api/knowledge-base': { getEntryDetails: async () => ({ success: true, data: details }) },
-    './EntryStarToggle.vue': empty, 'tdesign-vue-next': notifications,
+    './EntryStarToggle.vue': empty, 'tdesign-vue-next': notificationModule,
   })
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -98,6 +98,41 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.deepEqual(calls, [['article-a', after, false]])
       assert.equal(value.content_type, after)
       assert.ok(html.includes(messages[locale].articleJudgments.saveContentType))
+    }
+  })
+  test(`${locale}: article type guidance explains external completion using the same URL`, async () => {
+    const html = await render(judgments({}), { entry: { ...article } }, locale)
+    const expected = locale === 'zh-CN'
+      ? '用户修正的类型将在重新处理时保留。改为全文保存后文章会标记为待补全，需要外部工具用同一链接送入正文。'
+      : 'Your corrected type is preserved when reprocessing. Switching to full text marks the article as incomplete. An external tool must submit the body text using the same URL.'
+    assert.equal(messages[locale].articleJudgments.contentTypeHint, expected)
+    assert.ok(html.includes(expected))
+    assert.doesNotMatch(html, /重新抓取|fetches the original URL again/)
+  })
+  test(`${locale}: content type response selects external-completion, saved or processing notifications`, async () => {
+    const scenarios = [
+      { previousMode: 'summary_only', incomplete: true, status: 'completed', message: messages[locale].articleJudgments.contentTypeIncomplete },
+      { previousMode: 'summary_only', incomplete: false, status: 'completed', message: messages[locale].articleJudgments.contentTypeSaved },
+      { previousMode: 'full', incomplete: true, status: 'completed', message: messages[locale].articleJudgments.contentTypeSaved },
+      { previousMode: 'full', incomplete: false, status: 'pending', message: messages[locale].articleJudgments.contentTypeQueued },
+    ]
+    for (const scenario of scenarios) {
+      const calls: unknown[] = [], shown: string[] = []
+      const value = { ...article, content_type: 'tutorial', processing_mode: scenario.previousMode, incomplete: scenario.previousMode === 'full' }
+      const response = { ...value, content_type: 'event', processing_mode: 'full', parse_status: scenario.status, incomplete: scenario.incomplete }
+      const api = evaluate(readFileSync(new URL('../../api/entry-judgments.ts', import.meta.url), 'utf8'), {
+        '@/utils/request': { put: async (...input: unknown[]) => { calls.push(input); return { success: true, data: response } } },
+      })
+      const view = judgments(api, undefined, { MessagePlugin: { success: (message: string) => shown.push(message) } })
+      await render(view, { entry: value, onUpdated: (update: any) => Object.assign(value, update) }, locale, async state => {
+        state.typeDraft.value = 'event'
+        await state.saveType()
+      })
+      assert.deepEqual(calls, [['/api/v1/entries/article-a/content-type', { content_type: 'event', confirm_remove_body: false }, { timeout: 300000 }]])
+      assert.equal(value.processing_mode, 'full')
+      assert.equal(value.incomplete, scenario.incomplete)
+      assert.deepEqual(shown, [scenario.message])
+      assert.doesNotMatch(shown[0], /抓取原文|Fetching the original article/)
     }
   })
   test(`${locale}: full to summary requires a second confirmation and retains it after a failed save`, async () => {

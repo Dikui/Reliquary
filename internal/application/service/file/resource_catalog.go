@@ -54,6 +54,17 @@ func WithResourceCatalog(svc interfaces.FileService, catalog interfaces.Resource
 	return svc
 }
 
+// PhysicalFile resolves a stored reference while its catalog is still usable.
+// The returned provider and path can remove new bytes after a rollback without
+// retaining the catalog's database transaction.
+func PhysicalFile(ctx context.Context, svc interfaces.FileService, path string) (interfaces.FileService, string, error) {
+	if decorated, ok := svc.(*resourceCatalogFileService); ok {
+		physical, _, err := decorated.resolve(ctx, path)
+		return decorated.inner, physical, err
+	}
+	return svc, path, nil
+}
+
 func (s *resourceCatalogFileService) CheckConnectivity(ctx context.Context) error {
 	return s.inner.CheckConnectivity(ctx)
 }

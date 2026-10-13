@@ -44,6 +44,8 @@ type EntrySearchResult struct {
 	Source           string               `json:"source"`
 	PublishedAt      *time.Time           `json:"published_at"`
 	ContentType      string               `json:"content_type"`
+	Acquisition      string               `json:"acquisition"`
+	Incomplete       bool                 `json:"incomplete"`
 	ProcessingMode   string               `json:"processing_mode"`
 	SourceUnverified bool                 `json:"source_unverified"`
 	Starred          bool                 `json:"starred"`

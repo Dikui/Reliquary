@@ -16,6 +16,10 @@ func Scrub(ctx context.Context, db *gorm.DB) (*Requirements, error) {
 	if err := ValidateClassification(ctx, db); err != nil {
 		return nil, err
 	}
+	rules, err := schemaRules(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return nil, err
@@ -30,7 +34,7 @@ func Scrub(ctx context.Context, db *gorm.DB) (*Requirements, error) {
 		if err != nil {
 			return err
 		}
-		for _, table := range sortedTables() {
+		for _, table := range sortedTables(rules) {
 			if !present[table] {
 				continue
 			}

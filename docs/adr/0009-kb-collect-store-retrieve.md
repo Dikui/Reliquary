@@ -1,6 +1,6 @@
 # 0009 知识库收窄为收集、存储、检索组件
 
-Status: accepted
+Status: accepted；收录入口、订阅源与正文定稿部分被 [0012](0012-ingest-only-no-collection.md) 取代
 日期：2026-10-11
 取代 [0004](0004-domain-templates-open-fields.md)、[0005](0005-event-layer-bounds.md)、[0006](0006-on-demand-structured-extraction.md)、[0008](0008-focus-precheck-and-backfill.md)；部分取代 [0007](0007-personal-single-user.md)
 
@@ -33,7 +33,7 @@ Status: accepted
 - 实体识别后归一到实体档案（[0002](0002-global-entity-registry.md) 的全局身份保留）。
 - 收录时不抽取关系、事实、事件。这些由外部 AI 在检索、整理、总结时读正文现场分析，引用指向正文。
 - 主题由用户定义，一篇文章可属于多个主题。新建主题时用历史摘要批量归入。
-- 订阅源（RSS）改为全局配置，可设默认内容类型。
+- ~~订阅源（RSS）改为全局配置，可设默认内容类型。~~ 已由 [0012](0012-ingest-only-no-collection.md) 取代：Reliquary 不负责采集。
 
 ### 检索
 
@@ -44,7 +44,7 @@ Status: accepted
 ### 入口
 
 - 恢复对外接口：收录接口（供内网的 Grok Bot 等调用）和 MCP 服务（检索、读取文章、收录、待审区、星标等）。取代 [0007](0007-personal-single-user.md) 中“只保留 Web 界面一个入口”和删除 MCP 服务端的部分。
-- Obsidian 只用于阅读；审核、星标、修正、实体合并、主题和订阅源管理在精简后的网页界面完成。
+- Obsidian 只用于阅读；审核、星标、修正、实体合并和主题管理在精简后的网页界面完成（订阅源管理已由 [0012](0012-ingest-only-no-collection.md) 删除）。
 - 网页不再提供问答。问答、整理、写报告由外部 Agent 通过收录接口和 MCP 完成。
 
 ### 删除

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"reliquary/internal/vaultpath"
 )
 
 type TableManifest struct {
@@ -28,13 +29,15 @@ type Retrieval struct {
 	IDs   []string `json:"ids"`
 }
 type Manifest struct {
-	FormatVersion int                      `json:"format_version"`
-	Tables        map[string]TableManifest `json:"tables"`
-	Files         map[string][]File        `json:"files"`
-	Retrieval     []Retrieval              `json:"retrieval"`
-	Regenerated   []string                 `json:"regenerated"`
-	Vectors       []VectorProfile          `json:"vectors"`
-	Required      []Requirement            `json:"required_credentials"`
+	collectionMigrated bool
+	FormatVersion      int                      `json:"format_version"`
+	Tables             map[string]TableManifest `json:"tables"`
+	Files              map[string][]File        `json:"files"`
+	Retrieval          []Retrieval              `json:"retrieval"`
+	Regenerated        []string                 `json:"regenerated"`
+	Vectors            []VectorProfile          `json:"vectors"`
+	Required           []Requirement            `json:"required_credentials"`
+	CollectionExports  []CollectionExportProof  `json:"collection_exports,omitempty"`
 }
 type Verification struct {
 	OK             bool             `json:"ok"`
@@ -44,6 +47,10 @@ type Verification struct {
 }
 
 func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Manifest, error) {
+	rules, err := schemaRules(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	snapshot, err := Capture(ctx, db)
 	if err != nil {
 		return nil, err
@@ -57,7 +64,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	for _, column := range columns {
 		present[column.Table] = true
 	}
-	for _, table := range sortedTables() {
+	for _, table := range sortedTables(rules) {
 		if !present[table] {
 			continue
 		}
@@ -69,7 +76,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 		if !ok {
 			entry.Regenerated = true
 		} else {
-			for column, category := range Rules[table].Columns() {
+			for column, category := range rules[table].Columns() {
 				if category != Regenerated && !secretColumn(table, column) {
 					entry.Columns = append(entry.Columns, column)
 				}
@@ -97,7 +104,11 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 		manifest.Tables[table] = entry
 	}
 	for name, path := range map[string]string{"vault": root, "uploads": uploads} {
-		files, err := Files(path)
+		inventory := Files
+		if name == "vault" {
+			inventory = VaultFiles
+		}
+		files, err := inventory(path)
 		if err != nil {
 			return nil, err
 		}
@@ -115,6 +126,10 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			ids = []string{}
 		}
 		manifest.Retrieval = append(manifest.Retrieval, Retrieval{Query: query, IDs: ids})
+	}
+	manifest.CollectionExports, err = collectionExports(root)
+	if err != nil {
+		return nil, err
 	}
 	manifest.Vectors, err = VectorProfiles(ctx, db)
 	if err != nil {
@@ -382,6 +397,7 @@ func checkLogs(path string, expected []map[string]any) error {
 		if err != nil {
 			return err
 		}
+		addLogDefaults(row)
 		rows = append(rows, row)
 	}
 	sortRows(rows)
@@ -413,7 +429,10 @@ func CompareManifestWithOptions(expected, actual *Manifest, allowModelChange, al
 }
 
 func CompareManifestWithSettings(expected, actual *Manifest, options CompareOptions) []string {
+	legacyFormat := expected.FormatVersion
 	expected, actual = currentManifest(expected, actual)
+	expected, actual = projectRetiredTables(expected, actual)
+	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
@@ -540,9 +559,15 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	for group, wanted := range expected.Files {
 		current := map[string]File{}
 		for _, file := range actual.Files[group] {
+			if group == "vault" && vaultpath.UserMetadata(file.Path) {
+				continue
+			}
 			current[file.Path] = file
 		}
 		for _, file := range wanted {
+			if group == "vault" && vaultpath.UserMetadata(file.Path) {
+				continue
+			}
 			if group == "vault" && file.Path == ".reliquary/data/task_jobs.json" {
 				if got, present := current[file.Path]; present && matchingTaskReplicaRecovery(expected.Tables["task_jobs"], actual.Tables["task_jobs"], file, got) {
 					delete(current, file.Path)

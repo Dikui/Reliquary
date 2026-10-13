@@ -2,7 +2,6 @@
 import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
 import { MessagePlugin } from "tdesign-vue-next";
 import DocContent from "@/components/DocContent.vue";
-import EntryDuplicateNotice from '@/components/EntryDuplicateNotice.vue';
 import useKnowledgeBase from '@/composables/useKnowledgeBase';
 import { useRoute, useRouter } from 'vue-router';
 import EmptyEntry from '@/components/EmptyEntry.vue';
@@ -18,8 +17,6 @@ const editorResources = useEditorResourcesStore();
 const router = useRouter();
 import {
   batchQueryEntry,
-  uploadEntryFile,
-  createEntryFromURL,
   reparseEntry,
   cancelEntryParse,
   batchDeleteEntry,
@@ -32,13 +29,22 @@ import { entrySpansPayloadHasTrace } from '@/utils/entryTrace';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
-import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
+import PendingCountBadge from '@/components/PendingCountBadge.vue';
+import { usePendingCountsStore } from '@/stores/pendingCounts';
 import { CONTENT_TYPES } from '@/types/entryClassification';
+import { SEARCH_SOURCES } from '@/types/search';
+import {
+  documentListFiltersFromQuery,
+  documentListFiltersToQuery,
+  documentListFilterQueriesEqual,
+  documentListFiltersEqual,
+  type DocumentListFilters,
+} from './documentListFilters';
 import type { ArticleJudgment } from '@/api/entry-judgments';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
-import { useUploadConfirmStore, type UploadConfirmResult, type IntakeSourceInfo } from '@/stores/uploadConfirm';
+import { useReparseConfirmStore } from '@/stores/reparseConfirm';
 import {
   isEntryParseInFlight,
   entryNeedsStatusPolling,
@@ -47,13 +53,11 @@ import { resolveEntryDownloadFileName } from './entryDownloadFileName';
 import { useI18n } from 'vue-i18n';
 import { useMarqueeSelect } from '@/composables/useMarqueeSelect';
 import type { ParserEngineInfo } from '@/api/system';
-import { getUploadFileKey, filterUnsupportedAudioFiles } from './utils/uploadSources';
 const route = useRoute();
 const { t } = useI18n();
+const pendingCounts = usePendingCountsStore();
 const kbId = computed(() => resources.knowledgeBase?.id || '');
 const kbInfo = ref<any>(null);
-const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(null);
-const uploading = ref(false);
 const kbLoading = ref(false);
 const docListLoading = ref(true);
 const validTabs = ['documents', 'reviews', 'entities'] as const
@@ -95,10 +99,6 @@ const supportedFileTypes = computed<Set<string>>(() => {
   return available
 })
 
-const acceptFileTypes = computed(() =>
-  [...supportedFileTypes.value].map(t => '.' + t).join(',')
-)
-
 const unsupportedFileTypes = computed<string[]>(() => {
   const engines = parserEngines.value
   if (!engines.length) return []
@@ -114,8 +114,7 @@ const unsupportedFileTypes = computed<string[]>(() => {
 
 const goToParserSettings = () => uiStore.openSettings('entry', 'parser');
 
-let { cardList, total, moreIndex, details, loadEntries, delEntry, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails,
-  duplicateNotices, showDuplicate, dismissDuplicate, clearDuplicateNotices, openDuplicate } = useKnowledgeBase(kbId.value)
+let { cardList, total, moreIndex, details, loadEntries, delEntry, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails } = useKnowledgeBase(kbId.value)
 
 /** Per-entry cache: whether /spans has a real trace (see entrySpansPayloadHasTrace). */
 const traceAvailableById = reactive<Record<string, boolean>>({});
@@ -266,10 +265,11 @@ const confirmBatchReparse = async () => {
   }
 };
 let docSearchDebounce: number | null = null;
-const docSearchKeyword = ref('');
-const selectedFileType = ref('');
-const selectedContentType = ref('');
-const selectedStarred = ref('');
+const initialDocumentFilters = documentListFiltersFromQuery(route.query);
+const docSearchKeyword = ref(initialDocumentFilters.keyword);
+const selectedFileType = ref(initialDocumentFilters.fileType);
+const selectedContentType = ref(initialDocumentFilters.contentType);
+const selectedStarred = ref(initialDocumentFilters.starred);
 const starredOptions = computed(() => [
   { value: '', label: t('articleJudgments.allStars') },
   { value: 'true', label: t('articleJudgments.starredOnly') },
@@ -297,7 +297,7 @@ const fileTypeOptions = computed(() => [
   { label: 'FLAC', value: 'flac' },
   { label: 'OGG', value: 'ogg' },
 ]);
-const selectedParseStatus = ref('');
+const selectedParseStatus = ref(initialDocumentFilters.parseStatus);
 const parseStatusOptions = computed(() => [
   { label: t('knowledgeBase.allParseStatuses'), value: '' },
   { label: t('knowledgeBase.parseStatusPending'), value: 'pending' },
@@ -309,7 +309,12 @@ const parseStatusOptions = computed(() => [
   { label: t('knowledgeBase.parseStatusDraft'), value: 'draft' },
   { label: t('knowledgeBase.intakeWaiting'), value: 'rejected' },
 ]);
-const selectedSource = ref('');
+const selectedSource = ref(initialDocumentFilters.source);
+const selectedSourceKind = ref(initialDocumentFilters.sourceKind);
+const sourceKindOptions = computed(() => [
+  { label: t('knowledgeSearch.all'), value: '' },
+  ...SEARCH_SOURCES.map(value => ({ value, label: t(`knowledgeSearch.sources.${value}`) })),
+]);
 // Source filter combines ingestion channels and the "manual"/"url" virtual
 // sources that the backend routes onto the `type` column.
 const sourceOptions = computed(() => [
@@ -317,12 +322,26 @@ const sourceOptions = computed(() => [
   { label: t('knowledgeBase.sourceUpload'), value: 'web' },
   { label: t('knowledgeBase.sourceUrl'), value: 'url' },
   { label: t('knowledgeBase.sourceManual'), value: 'manual' },
-  { label: t('datasource.connector.rss'), value: 'rss' },
+  { label: t('knowledgeBase.channelRSS'), value: 'rss' },
   { label: t('knowledgeBase.sourceApi'), value: 'api' },
   { label: t('knowledgeBase.sourceBrowserExtension'), value: 'browser_extension' },
 ]);
 // Date range as [start, end] in "YYYY-MM-DD" form (t-date-range-picker default).
-const updatedTimeRange = ref<string[]>([]);
+const updatedTimeRange = ref<string[]>(
+  initialDocumentFilters.startDate || initialDocumentFilters.endDate
+    ? [initialDocumentFilters.startDate, initialDocumentFilters.endDate] : [],
+);
+const documentFilters = computed<DocumentListFilters>(() => ({
+  keyword: docSearchKeyword.value.trim(),
+  fileType: selectedFileType.value || '',
+  contentType: selectedContentType.value || '',
+  starred: selectedStarred.value || '',
+  parseStatus: selectedParseStatus.value || '',
+  source: selectedSource.value || '',
+  sourceKind: selectedSourceKind.value || '',
+  startDate: updatedTimeRange.value?.[0] || '',
+  endDate: updatedTimeRange.value?.[1] || '',
+}));
 // Disable any date after today so users cannot filter into the future.
 const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)) };
 
@@ -335,6 +354,7 @@ const filterParams = computed(() => {
     starred: selectedStarred.value === '' ? undefined : selectedStarred.value === 'true',
     parse_status: selectedParseStatus.value || undefined,
     source: selectedSource.value || undefined,
+    source_kind: selectedSourceKind.value || undefined,
     start_time: start ? `${start} 00:00:00` : undefined,
     end_time: end ? `${end} 23:59:59` : undefined,
   };
@@ -415,7 +435,7 @@ watch(activeKbTab, (tab) => {
 })
 
 watch(() => kbId.value, (newKbId, oldKbId) => {
-  if (newKbId !== oldKbId) clearDuplicateNotices();
+  if (newKbId !== oldKbId)
   if (!newKbId) {
     kbInfo.value = null;
     cardList.value = [];
@@ -434,73 +454,48 @@ watch(() => kbId.value, (newKbId, oldKbId) => {
   loadKnowledgeBaseInfo(newKbId);
 }, { immediate: true });
 
-// 监听文档搜索关键词变化
-watch(docSearchKeyword, (newVal, oldVal) => {
-  if (newVal === oldVal) return;
-  if (docSearchDebounce) {
+// Restore all filters together before requesting the list after history navigation.
+let documentFiltersRestoredFromRoute = false;
+watch(() => route.query, query => {
+  const restored = documentListFiltersFromQuery(query);
+  if (!documentListFiltersEqual(documentFilters.value, restored)) {
+    documentFiltersRestoredFromRoute = true;
+    docSearchKeyword.value = restored.keyword;
+    selectedFileType.value = restored.fileType;
+    selectedContentType.value = restored.contentType;
+    selectedStarred.value = restored.starred;
+    selectedParseStatus.value = restored.parseStatus;
+    selectedSource.value = restored.source;
+    selectedSourceKind.value = restored.sourceKind;
+    updatedTimeRange.value = restored.startDate || restored.endDate
+      ? [restored.startDate, restored.endDate] : [];
+  }
+  const canonical = documentListFiltersToQuery(query, restored);
+  if (!documentListFilterQueriesEqual(query, canonical)) void router.replace({ query: canonical });
+}, { immediate: true });
+
+watch(documentFilters, (filters, previous) => {
+  if (documentListFiltersEqual(filters, previous)) return;
+  const restoredFromRoute = documentFiltersRestoredFromRoute;
+  documentFiltersRestoredFromRoute = false;
+  const query = documentListFiltersToQuery(route.query, filters);
+  if (!documentListFilterQueriesEqual(route.query, query)) void router.replace({ query });
+  if (docSearchDebounce !== null) {
     window.clearTimeout(docSearchDebounce);
+    docSearchDebounce = null;
   }
-  docSearchDebounce = window.setTimeout(() => {
-    if (kbId.value) {
-      resetPage();
-      loadEntryFiles(kbId.value);
-    }
-  }, 300);
-});
-
-// 监听文件类型筛选变化
-watch(selectedFileType, (newVal, oldVal) => {
-  if (newVal === oldVal) return;
-  if (kbId.value) {
-    resetPage();
-    loadEntryFiles(kbId.value);
+  resetPage();
+  if (!kbId.value) return;
+  const keywordOnly = documentListFiltersEqual({ ...filters, keyword: previous.keyword }, previous);
+  if (keywordOnly && filters.keyword && !restoredFromRoute) {
+    docSearchDebounce = window.setTimeout(() => {
+      docSearchDebounce = null;
+      void loadEntryFiles(kbId.value);
+    }, 300);
+  } else {
+    void loadEntryFiles(kbId.value);
   }
 });
-
-// 监听解析状态/来源/更新时间范围筛选变化（与文件类型行为一致）
-watch([selectedContentType, selectedStarred, selectedParseStatus, selectedSource, updatedTimeRange], () => {
-  if (kbId.value) {
-    resetPage();
-    loadEntryFiles(kbId.value);
-  }
-}, { deep: true });
-
-// 切换目录只改变列表范围，行为与其他筛选一致。浏览态与筛选态之间的切换由各筛选项
-// 自身的 watcher 触发刷新，这里不重复请求。
-
-// 监听文件上传事件
-const handleFileUploaded = (event: CustomEvent) => {
-  const uploadedKbId = event.detail.kbId;
-  console.log('接收到文件上传事件，上传的知识库ID:', uploadedKbId, '当前知识库ID:', kbId.value);
-  if (uploadedKbId && uploadedKbId === kbId.value) {
-    console.log('匹配当前知识库，开始刷新文件列表');
-    // 如果上传的文件属于当前知识库，使用 loadEntryFiles 刷新文件列表
-    resetPage(); // Reset page counter when reloading files after upload
-    loadEntryFiles(uploadedKbId);
-    // 启动几次探测，尽快让面包屑的"索引中"亮起。
-  }
-};
-
-// 监听从菜单触发的URL导入事件
-const handleOpenURLImportDialog = (event: CustomEvent) => {
-  const eventKbId = event.detail.kbId;
-  console.log('接收到URL导入对话框打开事件，知识库ID:', eventKbId, '当前知识库ID:', kbId.value);
-  if (eventKbId && eventKbId === kbId.value) {
-    if (ensureDocumentKbReady()) {
-      uploadSourceRef.value?.openUrlDialog();
-    }
-  }
-};
-
-// Global file drops are captured by the platform shell. Route them back into
-// the same confirmation flow as the page upload button so per-batch
-// processing settings are never skipped.
-const handleEntryFileDrop = (event: CustomEvent) => {
-  const eventKbId = event.detail?.kbId;
-  const files = Array.isArray(event.detail?.files) ? event.detail.files : [];
-  if (eventKbId !== kbId.value || files.length === 0) return;
-  handleUploadSourceFiles(files);
-};
 
 // Auto-open document detail when navigated with ?entry_id=xxx.
 // Note: this runs both when the KB page mounts with a query param AND when a
@@ -565,16 +560,14 @@ onMounted(() => {
   void resources.fetchKnowledgeBase();
   editorResources.ensureParserEngines();
 
-  window.addEventListener('entryFileUploaded', handleFileUploaded as EventListener);
-  window.addEventListener('openURLImportDialog', handleOpenURLImportDialog as EventListener);
-  window.addEventListener('reliquary:entry-file-drop', handleEntryFileDrop as EventListener);
   window.addEventListener('reliquary:open-entry', handleOpenEntryEvent as EventListener);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('entryFileUploaded', handleFileUploaded as EventListener);
-  window.removeEventListener('openURLImportDialog', handleOpenURLImportDialog as EventListener);
-  window.removeEventListener('reliquary:entry-file-drop', handleEntryFileDrop as EventListener);
+  if (docSearchDebounce !== null) {
+    window.clearTimeout(docSearchDebounce);
+    docSearchDebounce = null;
+  }
   window.removeEventListener('reliquary:open-entry', handleOpenEntryEvent as EventListener);
   if (timeout !== null) {
     clearTimeout(timeout);
@@ -706,9 +699,9 @@ const closeCardMoreMenu = (index: number) => {
 };
 
 const confirmDeleteEntry = (index: number, item: EntryCard) => {
-  closeCardMoreMenu(index);
   const deletedId = item?.id;
-  delEntry(index, item, async () => {
+  return delEntry(index, item, async () => {
+    closeCardMoreMenu(index);
     resetPage();
     const maxPolls = 30;
     const delayMs = 400;
@@ -718,6 +711,7 @@ const confirmDeleteEntry = (index: number, item: EntryCard) => {
       if (!stillPresent) break;
       await new Promise<void>((r) => setTimeout(r, delayMs));
     }
+    await pendingCounts.refresh();
   });
 };
 
@@ -727,259 +721,8 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
   }
 };
 
-const manualEditorSuccess = ({ kbId: savedKbId }: { kbId: string; entryId: string; status: 'draft' | 'publish' }) => {
-  if (savedKbId === kbId.value) {
-    resetPage(); // Reset page counter when reloading files after manual edit
-    loadEntryFiles(savedKbId);
-  }
-};
-
-const documentTitle = computed(() => {
-  if (kbInfo.value?.name) {
-    return `${kbInfo.value.name} · ${t('knowledgeEditor.document.title')}`;
-  }
-  return t('knowledgeEditor.document.title');
-});
-
-const ensureDocumentKbReady = () => {
-
-  if (!kbId.value) {
-    MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
-    return false;
-  }
-  if (!kbInfo.value || !kbInfo.value.summary_model_id) {
-    MessagePlugin.warning(t('knowledgeBase.notInitialized'));
-    return false;
-  }
-  // Embedding model only required when RAG indexing is enabled
-  const strategy = (kbInfo.value as any).indexing_strategy
-  const needsEmbedding = !strategy || strategy.vector_enabled || strategy.keyword_enabled
-  if (needsEmbedding && !kbInfo.value.embedding_model_id) {
-    MessagePlugin.warning(t('knowledgeBase.notInitialized'));
-    return false;
-  }
-  return true;
-};
-
-const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-
-const uploadConfirmStore = useUploadConfirmStore();
-
-const showUploadResultMessages = (
-  successCount: number,
-  failCount: number,
-  totalCount: number,
-) => {
-  if (totalCount === 1) {
-    if (successCount === 1) {
-      MessagePlugin.success(t('knowledgeBase.uploadSuccess'));
-    }
-    return;
-  }
-
-  if (failCount === 0) {
-    MessagePlugin.success(t('knowledgeBase.allUploadSuccess', { count: successCount }));
-  } else if (successCount > 0) {
-    MessagePlugin.warning(t('knowledgeBase.partialUploadSuccess', { success: successCount, fail: failCount }));
-  } else {
-    MessagePlugin.error(t('knowledgeBase.allUploadFailed', { count: failCount }));
-  }
-};
-
-const executeUploadBatch = async (
-  files: File[],
-  options: {
-    processConfig?: EntryProcessOverrides;
-    sourceInfoByItem?: Record<string, IntakeSourceInfo>;
-  } = {},
-) => {
-  const targetKbId = kbId.value;
-  if (!targetKbId || files.length === 0) {
-    return { successCount: 0, failCount: files.length, duplicateCount: 0 };
-  }
-
-  let successCount = 0;
-  let failCount = 0;
-  let duplicateCount = 0;
-  const totalCount = files.length;
-
-  for (const file of files) {
-    try {
-      const uploadData: {
-        file: File
-        fileName?: string
-        process_config?: EntryProcessOverrides
-        source_info?: IntakeSourceInfo
-      } = { file };
-
-      if (options.processConfig) {
-        uploadData.process_config = options.processConfig;
-      }
-      const sourceInfo = options.sourceInfoByItem?.[`file:${getUploadFileKey(file)}`]
-      if (sourceInfo && Object.values(sourceInfo).some(Boolean)) uploadData.source_info = sourceInfo
-
-      const responseData: any = await uploadEntryFile(targetKbId, uploadData);
-      if (showDuplicate(responseData, file.name)) {
-        duplicateCount++;
-        continue;
-      }
-      const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (responseData?.success !== false && !responseData?.error && responseData);
-      if (isSuccess) {
-        successCount++;
-      } else {
-        failCount++;
-        if (totalCount === 1) {
-          let errorMessage = t('knowledgeBase.uploadFailed');
-          if (responseData?.error?.message) {
-            errorMessage = responseData.error.message;
-          } else if (responseData?.message) {
-            errorMessage = responseData.message;
-          }
-          MessagePlugin.error(errorMessage);
-        }
-      }
-    } catch (error: any) {
-      if (showDuplicate(error, file.name)) {
-        duplicateCount++;
-        continue;
-      }
-      failCount++;
-      if (totalCount === 1) {
-        let errorMessage = error?.error?.message || error?.message || t('knowledgeBase.uploadFailed');
-        MessagePlugin.error(errorMessage);
-      }
-    }
-  }
-
-  if (successCount > 0) {
-    window.dispatchEvent(new CustomEvent('entryFileUploaded', {
-      detail: { kbId: targetKbId },
-    }));
-  }
-
-  if (successCount > 0 || failCount > 0) {
-    showUploadResultMessages(successCount, failCount, totalCount);
-  }
-  return { successCount, failCount, duplicateCount };
-};
-
-const executeUrlImport = async (
-  url: string,
-  processConfig?: EntryProcessOverrides,
-  sourceInfo?: IntakeSourceInfo,
-) => {
-  const targetKbId = kbId.value;
-  if (!targetKbId) {
-    MessagePlugin.error(t('error.missingKbId'));
-    return;
-  }
-
-  try {
-    const responseData: any = await createEntryFromURL(targetKbId, {
-      url,
-      process_config: processConfig,
-      source_info: sourceInfo,
-    });
-    if (showDuplicate(responseData, url)) return;
-    window.dispatchEvent(new CustomEvent('entryFileUploaded', {
-      detail: { kbId: targetKbId },
-    }));
-    const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (responseData?.success !== false && !responseData?.error && responseData);
-    if (isSuccess) {
-      MessagePlugin.success(t('knowledgeBase.urlImportSuccess'));
-    } else {
-      let errorMessage = t('knowledgeBase.urlImportFailed');
-      if (responseData?.error?.message) {
-        errorMessage = responseData.error.message;
-      } else if (responseData?.message) {
-        errorMessage = responseData.message;
-      }
-      MessagePlugin.error(errorMessage);
-    }
-  } catch (error: any) {
-    if (showDuplicate(error, url)) return;
-    let errorMessage = error?.error?.message || error?.message || t('knowledgeBase.urlImportFailed');
-    MessagePlugin.error(errorMessage);
-  }
-};
-
-const handleUploadConfirmResult = async (result: UploadConfirmResult) => {
-  if (result.mode === 'manual') {
-    return;
-  }
-
-  const files = result.files || [];
-  const urls = result.urls || [];
-  const processConfig = result.processConfig;
-
-  if (files.length > 0) {
-      await executeUploadBatch(files, {
-      processConfig,
-      sourceInfoByItem: result.sourceInfoByItem,
-    });
-  }
-
-  for (const url of urls) {
-    await executeUrlImport(url, processConfig, result.sourceInfoByItem?.[`url:${url}`]);
-  }
-};
-
-const openUploadConfirmDialog = async (files: File[], urls: string[] = []) => {
-  if (!kbInfo.value) return;
-  if (files.length === 0 && urls.length === 0) return;
-  try {
-    const result = await uploadConfirmStore.open({
-      mode: 'file',
-      kbInfo: kbInfo.value,
-      files,
-      urls,
-      acceptFileTypes: acceptFileTypes.value,
-      supportedFileTypes: [...supportedFileTypes.value],
-    });
-    await handleUploadConfirmResult(result);
-  } catch {
-    // cancelled
-  }
-};
-
-const handleUploadSourceFiles = (files: File[]) => {
-  const result = filterUnsupportedAudioFiles(files);
-  if (result.audioFilteredCount > 0) {
-    MessagePlugin.warning(t('error.unsupportedAudioUpload'));
-  }
-  if (result.validFiles.length === 0 || !ensureDocumentKbReady()) return;
-  openUploadConfirmDialog(result.validFiles);
-};
-
-const handleUploadSourceUrl = (url: string) => {
-  if (!ensureDocumentKbReady()) return;
-  openUploadConfirmDialog([], [url]);
-};
-
-const handleManualCreate = () => {
-  if (!ensureDocumentKbReady()) return;
-  uiStore.openManualEditor({
-    mode: 'create',
-    kbId: kbId.value,
-    status: 'draft',
-    onSuccess: manualEditorSuccess,
-  });
-};
-
-const handleOpenKBSettings = () => uiStore.openSettings('entry');
-
-const handleManualEdit = (index: number, item: EntryCard) => {
-  if (item.vault_path || ['mine', 'report'].includes(item.source_kind || '')) return;
-  if (cardList.value[index]) {
-    cardList.value[index].isMore = false;
-  }
-  uiStore.openManualEditor({
-    mode: 'edit',
-    kbId: item.knowledge_base_id || kbId.value,
-    entryId: item.id,
-    onSuccess: manualEditorSuccess,
-  });
-};
+const handleOpenKBSettings = () => uiStore.openSettings('knowledge-base');
+const reparseConfirmStore = useReparseConfirmStore();
 
 // Opens ONLY the trace drawer for this card — does NOT pop the
 // document detail drawer behind it. The trace drawer attaches to
@@ -1038,14 +781,11 @@ const confirmRebuildEntry = async (index: number, item: EntryCard) => {
   }
 
   try {
-    const result = await uploadConfirmStore.open({
-      mode: 'reparse',
+    const result = await reparseConfirmStore.open({
       kbInfo: kbInfo.value,
       reparse: { entryId: item.id, fileName, fileType, processOverrides },
     });
-    if (result.mode === 'reparse' && result.reparse) {
-      await submitReparse(result.reparse.entryId, result.processConfig);
-    }
+    await submitReparse(result.reparse.entryId, result.processConfig);
   } catch {
     // cancelled
   }
@@ -1104,6 +844,7 @@ const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknow
 const syncArticleJudgment = (state: ArticleJudgment) => {
   syncDocumentProcessingState({ ...state });
   if (details.id === state.id) Object.assign(details, state);
+  void pendingCounts.refresh();
 };
 
 const toggleSelectRow = (id: string, checked: boolean, shiftKey?: boolean) => {
@@ -1188,10 +929,6 @@ const {
   },
 });
 
-const isManualDraftEntry = (item: EntryCard) =>
-  item.type === 'manual' && item.parse_status === 'draft' && !item.vault_path
-  && !['mine', 'report'].includes(item.source_kind || '');
-
 const selectedDocumentsReprocessable = computed(() => Array.from(selectedIds.value).every(id => {
   const item = cardList.value.find((card: EntryCard) => card.id === id);
   return item && !['mine', 'report'].includes(item.source_kind || '');
@@ -1199,21 +936,23 @@ const selectedDocumentsReprocessable = computed(() => Array.from(selectedIds.val
 
 const openEntryItem = (item: EntryCard) => {
   if (shouldSuppressDocClick()) return;
-  if (isManualDraftEntry(item)) {
-    const index = cardList.value.findIndex((c) => c.id === item.id);
-    if (index >= 0) {
-      handleManualEdit(index, item);
-      return;
-    }
-  }
   openCardDetails(item);
 };
 
 const pendingReviewsRef = ref<InstanceType<typeof PendingReviews>>();
+const handlePendingChanged = async () => {
+  await Promise.all([loadEntryFiles(kbId.value), pendingCounts.refresh()]);
+};
 const handleReviewChanged = async (_value: unknown, removed: boolean) => {
-  if (removed) closeDoc();
+  if (removed) { closeDoc(); resetPage(); }
   else if (details.id) getCardDetails({ id: details.id });
-  await Promise.all([loadEntryFiles(kbId.value), pendingReviewsRef.value?.refresh()]);
+  await Promise.all([loadEntryFiles(kbId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
+};
+const handlePersonalDocumentDeleted = async (id: string) => {
+  if (details.id === id) closeDoc();
+  selectedIds.value.delete(id);
+  resetPage();
+  await Promise.all([loadEntryFiles(kbId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
 };
 
 const confirmBatchDelete = async () => {
@@ -1237,6 +976,7 @@ const confirmBatchDelete = async () => {
         if (!stillPresent) break;
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }
+      await pendingCounts.refresh();
     } else {
       MessagePlugin.error(res?.message || t('knowledgeBase.batchDeleteFailed'));
     }
@@ -1281,12 +1021,11 @@ const downloadEntry = async (item: EntryCard) => {
 
 // Bridge card-view actions back to existing per-card handlers.
 const handleCardAction = (
-  action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
+  action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
   item: EntryCard,
 ) => {
   const idx = (cardList.value || []).findIndex((i: EntryCard) => i.id === item.id);
   if (action === 'download') return downloadEntry(item);
-  if (action === 'edit') return handleManualEdit(idx, item);
   if (action === 'reparse') {
     if (isParseInFlight(item.parse_status)) return onReparseMenuClick(idx, item);
     return confirmRebuildEntry(idx, item);
@@ -1299,12 +1038,11 @@ const handleCardAction = (
 
 // Bridge list-view actions back to existing per-card handlers.
 const handleListAction = (
-  action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
+  action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
   item: EntryCard,
 ) => {
   const idx = (cardList.value || []).findIndex((i: EntryCard) => i.id === item.id);
   if (action === 'download') return downloadEntry(item);
-  if (action === 'edit') return handleManualEdit(idx, item);
   if (action === 'reparse') return confirmRebuildEntry(idx, item);
   if (action === 'cancel-parse') return confirmCancelParseEntry(item);
   if (action === 'delete') return confirmDeleteEntry(idx, item);
@@ -1314,7 +1052,7 @@ const handleListAction = (
 
 // Clear selection on filter/kb change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedContentType, selectedParseStatus, selectedSource, updatedTimeRange, kbId],
+  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, kbId],
   () => {
     clearSelection();
   },
@@ -1345,19 +1083,15 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
 
 <template>
   <div class="entry-layout">
-      <div v-if="duplicateNotices.length" class="entry-duplicate-notices">
-        <EntryDuplicateNotice v-for="duplicate in duplicateNotices" :key="duplicate.id || duplicate.inputLabel"
-          :duplicate="duplicate" @open="openDuplicate" @dismiss="dismissDuplicate" />
-      </div>
       <div class="document-header">
         <div class="document-header-title">
           <div class="document-title-row">
             <h2 class="document-breadcrumb">
-              <span>{{ kbInfo?.name || $t('menu.knowledgeBase') }}</span>
+              <span>{{ $t('knowledgeBase.title') }}</span>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
                 <button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]" :aria-pressed="activeKbTab === 'documents'"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'reviews' }]" :aria-pressed="activeKbTab === 'reviews'" @click="activeKbTab = 'reviews'">{{ $t('knowledgeReview.title') }}</button>
+                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'reviews' }]" :aria-pressed="activeKbTab === 'reviews'" @click="activeKbTab = 'reviews'">{{ $t('knowledgeReview.title') }} <PendingCountBadge /></button>
                 <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'entities' }]" :aria-pressed="activeKbTab === 'entities'"
                     @click="activeKbTab = 'entities'">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
             </h2>
@@ -1392,7 +1126,7 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
           @open-source="openSourceDoc" />
       </div>
 
-      <PendingReviews v-if="activeKbTab === 'reviews' && kbId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="loadEntryFiles(kbId)" />
+      <PendingReviews v-if="activeKbTab === 'reviews' && kbId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
 
       <template v-if="activeKbTab === 'documents'">
         <div class="entry-main">
@@ -1435,8 +1169,13 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
                   </t-select>
                 </div>
                 <div class="doc-filter-field">
+                  <t-select v-model="selectedSourceKind" :options="sourceKindOptions"
+                    :placeholder="$t('knowledgeSearch.source')" :aria-label="$t('knowledgeSearch.source')"
+                    class="doc-type-select doc-filter-field__control" clearable />
+                </div>
+                <div class="doc-filter-field">
                   <t-select v-model="selectedSource" :options="sourceOptions"
-                    :placeholder="$t('knowledgeBase.sourceFilter')" class="doc-type-select doc-filter-field__control"
+                    :placeholder="$t('knowledgeBase.channelLabel')" :aria-label="$t('knowledgeBase.channelLabel')" class="doc-type-select doc-filter-field__control"
                     clearable>
                     <template #prefixIcon>
                       <t-icon name="link" size="16px" />
@@ -1473,11 +1212,6 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
                     </t-tooltip>
                   </div>
                   <div class="doc-filter-actions">
-                    <KbUploadSourceDropdown ref="uploadSourceRef" :accept-file-types="acceptFileTypes"
-                      :supported-file-types="[...supportedFileTypes]" include-manual trigger-icon="file-add"
-                      trigger-class="content-bar-icon-btn"
-                      :tooltip="t('knowledgeBase.addDocument')" placement="bottom-right" @files="handleUploadSourceFiles"
-                      @url="handleUploadSourceUrl" @manual="handleManualCreate" />
                   </div>
                 </div>
               </div>
@@ -1520,6 +1254,8 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
                     @toggle-checkbox="onCardGridCheckboxChange"
                     @menu-visible-change="(visible: boolean, item: any) => onCardMoreVisibleChange(visible, item)"
                     @action="(action: any, item: any) => handleCardAction(action, item)"
+                    :delete-entry="(item: any) => confirmDeleteEntry(cardList.findIndex((card: any) => card.id === item.id), item)"
+                    @deleted="handlePersonalDocumentDeleted"
 
                   />
                 </template>
@@ -1532,13 +1268,15 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
                     @open="(item: any) => openEntryItem(item)" @toggle-row="toggleSelectRow"
                     @toggle-all="toggleSelectAll" @action="(action: any, item: any) => handleListAction(action, item)"
                     @probe-trace="(item: any) => probeTraceAvailable(item)"
+                    :delete-entry="(item: any) => confirmDeleteEntry(cardList.findIndex((card: any) => card.id === item.id), item)"
+                    @deleted="handlePersonalDocumentDeleted"
 
                      />
                 </template>
                 <template v-else-if="!docListLoading">
                   <div class="doc-empty-state">
 
-                    <EmptyEntry :supported-file-types="[...supportedFileTypes]" />
+                    <EmptyEntry />
                   </div>
                 </template>
               </div>
@@ -1577,15 +1315,6 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
   min-width: 0;
   padding: 24px 32px 0px;
   box-sizing: border-box;
-}
-
-.entry-duplicate-notices {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex-shrink: 0;
-  max-height: 30vh;
-  overflow-y: auto;
 }
 
 // Breadcrumb tab switch
@@ -2099,10 +1828,6 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
       white-space: nowrap;
     }
   }
-}
-
-.document-upload-input {
-  display: none;
 }
 
 .kb-settings-button {
@@ -2711,58 +2436,6 @@ const refreshKnowledgeBaseSettings = () => { if (kbId.value) void loadKnowledgeB
     font-size: 11px;
     color: var(--td-text-color-secondary);
   }
-}
-
-.url-import-form {
-  padding: 8px 0;
-
-  .url-input-label {
-    color: var(--td-text-color-primary);
-    font-size: 14px;
-    font-weight: 500;
-    margin-bottom: 8px;
-  }
-
-  .url-input-tip {
-    color: var(--td-text-color-secondary);
-    font-size: 12px;
-    margin-top: 8px;
-    line-height: 1.5;
-  }
-}
-
-.entry-card-upload {
-  color: var(--td-text-color-primary);
-  font-family: var(--app-font-family);
-  font-size: 14px;
-  font-weight: 400;
-  cursor: pointer;
-
-  .btn-upload {
-    margin: 33px auto 0;
-    width: 112px;
-    height: 32px;
-    border: 1px solid var(--td-component-border);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-bottom: 24px;
-  }
-
-  .svg-icon-download {
-    margin-right: 8px;
-  }
-}
-
-.upload-described {
-  color: var(--td-text-color-disabled);
-  font-family: var(--app-font-family);
-  font-size: 12px;
-  font-weight: 400;
-  text-align: center;
-  display: block;
-  width: 188px;
-  margin: 0 auto;
 }
 
 .del-card {

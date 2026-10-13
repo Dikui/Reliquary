@@ -7,12 +7,14 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"reliquary/internal/maintenance"
 	"reliquary/internal/types"
+	"reliquary/internal/vaultpath"
 )
 
 func (v *VaultService) StartReplica() error {
@@ -26,7 +28,7 @@ func (v *VaultService) StartReplica() error {
 // first pauses intake and stops writes; this then persists all database headers.
 func (v *VaultService) Flush(ctx context.Context) error {
 	var ids []string
-	if err := v.db.WithContext(ctx).Model(&types.Entry{}).Where("source_kind='article' AND vault_path<>'' AND parse_status<>'deleting'").Pluck("id", &ids).Error; err != nil {
+	if err := v.db.WithContext(ctx).Model(&types.Entry{}).Where("source_kind IN ('article','mine') AND vault_path<>'' AND parse_status<>'deleting'").Pluck("id", &ids).Error; err != nil {
 		return err
 	}
 	for _, id := range ids {
@@ -52,8 +54,11 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		if err != nil {
 			return result, err
 		}
+		if article.SourceKind == "report" && vaultpath.UserMetadata(article.VaultPath) {
+			continue
+		}
 		actual, readErr := os.ReadFile(path)
-		if article.SourceKind != "article" {
+		if article.SourceKind != "article" && article.SourceKind != "mine" {
 			if readErr != nil {
 				result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
 			} else if article.FileHash != "" && vaultContentHash(string(actual)) != article.FileHash {
@@ -66,7 +71,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			return result, err
 		}
 		body := []byte(article.VaultBody)
-		if article.ProcessingMode == types.ProcessingModeSummaryOnly {
+		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.SourceKind != "mine" {
 			body = nil
 		}
 		expected := append(RenderVaultArticleHeader(header), body...)
@@ -90,6 +95,9 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			} else if article.Type == "file" && len(article.FileHash) == 32 && fmt.Sprintf("%x", md5.Sum(original)) != article.FileHash {
 				result.Differences = append(result.Differences, article.VaultOriginalPath+": original attachment hash differs")
 			}
+		}
+		if article.SourceKind == "mine" {
+			v.verifyPersonalAttachments(&article, result)
 		}
 		for _, reference := range articleImagePaths(&article) {
 			reader, err := v.ReadImage(&article, reference)
@@ -170,7 +178,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		result.PendingVectors["images"] = pendingImages
 	}
 	for key, query := range map[string]string{
-		"articles": `SELECT count(*) FROM entries k JOIN knowledge_bases b ON b.id=k.knowledge_base_id WHERE k.deleted_at IS NULL AND k.source_kind='article' AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"articles": `SELECT count(*) FROM entries k JOIN knowledge_bases b ON b.id=k.knowledge_base_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
 		"chunks":   `SELECT count(*) FROM chunks c JOIN knowledge_bases b ON b.id=c.knowledge_base_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
 		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
  SELECT 1 FROM knowledge_bases b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
@@ -191,6 +199,43 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 	return result, nil
 }
 
+func (v *VaultService) verifyPersonalAttachments(document *types.Entry, result *maintenance.Verification) {
+	seen := map[string]bool{}
+	for _, attachment := range document.IngestAttachmentRecords() {
+		if seen[attachment.Path] {
+			continue
+		}
+		seen[attachment.Path] = true
+		if !isArticleAttachmentReference(document.ID, document.VaultPath, attachment.Path) {
+			result.Differences = append(result.Differences, document.VaultPath+": invalid personal attachment: "+attachment.Path)
+			continue
+		}
+		relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(document.VaultPath)), filepath.FromSlash(attachment.Path))))
+		path, err := vaultAbsolute(v.root, relative)
+		if err != nil {
+			result.Differences = append(result.Differences, relative+": "+err.Error())
+			continue
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			result.Differences = append(result.Differences, relative+": "+err.Error())
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			result.Differences = append(result.Differences, relative+": personal attachment must be a regular file")
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			result.Differences = append(result.Differences, relative+": "+err.Error())
+			continue
+		}
+		if attachment.Size > 0 && int64(len(data)) != attachment.Size {
+			result.Differences = append(result.Differences, relative+": personal attachment size differs")
+		}
+	}
+}
+
 func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuildResult, error) {
 	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
 	_, err := maintenance.Import(ctx, s.db, s.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), func(row map[string]any) error {
@@ -206,7 +251,7 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		if err != nil {
 			return fmt.Errorf("restore original %s: %w", path, err)
 		}
-		if row["source_kind"] != "article" {
+		if row["source_kind"] != "article" && row["source_kind"] != "mine" {
 			row["vault_body"] = ""
 			return nil
 		}
@@ -217,18 +262,31 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		if err := validateVaultRebuildHeader(header, body); err != nil {
 			return err
 		}
+		if (row["source_kind"] == "mine" && header.SourceKind != "mine") || (header.SourceKind != "" && header.SourceKind != row["source_kind"]) {
+			return fmt.Errorf("document source kind differs from replica: %s", path)
+		}
 		if fmt.Sprint(row["id"]) != header.ID {
 			return fmt.Errorf("article ID differs from replica: %s", path)
 		}
 		// Both readable copies must agree before any row is inserted.
 		checks := map[string]any{"title": header.Title, "content_type": header.ContentType, "source_unverified": header.SourceUnverified, "starred": header.Starred, "collect_reason": header.CollectReason}
+		if _, present := row["acquisition"]; present {
+			checks["acquisition"] = header.Acquisition
+		} else if header.Acquisition != "" {
+			return fmt.Errorf("article acquisition differs from replica: %s", path)
+		}
 		for key, value := range checks {
 			if row[key] != value {
 				return fmt.Errorf("article header %s differs from replica field %s", path, key)
 			}
 		}
-		if header.ProcessingMode == types.ProcessingModeSummaryOnly {
+		if header.ProcessingMode == types.ProcessingModeSummaryOnly && row["source_kind"] != "mine" {
 			body = nil
+		}
+		if row["source_kind"] == "mine" {
+			if original, present := row["vault_body"]; present && original != string(body) {
+				return fmt.Errorf("personal document body differs from replica: %s", path)
+			}
 		}
 		row["vault_body"] = string(body)
 		return nil
@@ -262,15 +320,17 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 			return result, err
 		}
 		body := string(data)
-		if article.SourceKind == "article" {
+		if article.SourceKind == "article" || article.SourceKind == "mine" {
 			_, content, err := SplitVaultArticle(data)
 			if err != nil {
 				return result, err
 			}
 			body = string(content)
-			result.Articles++
-		} else if article.SourceKind == "mine" {
-			result.Mine++
+			if article.SourceKind == "mine" {
+				result.Mine++
+			} else {
+				result.Articles++
+			}
 		} else {
 			result.Reports++
 		}
@@ -281,7 +341,59 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 			return result, err
 		}
 	}
+	if err := s.listReplicaUnmanagedPersonalFiles(ctx, result); err != nil {
+		return result, err
+	}
 	return result, nil
+}
+
+func (s *VaultDocumentService) listReplicaUnmanagedPersonalFiles(ctx context.Context, result *VaultRebuildResult) error {
+	var paths []string
+	if err := s.db.WithContext(ctx).Unscoped().Model(&types.Entry{}).
+		Where("source_kind='mine' AND vault_path<>''").Pluck("vault_path", &paths).Error; err != nil {
+		return err
+	}
+	managed := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		managed[path] = true
+	}
+	directory, err := vaultAbsolute(s.root, "mine")
+	if err != nil {
+		return err
+	}
+	return filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(s.root, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if vaultpath.UserMetadata(relative) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") || managed[relative] {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err == nil {
+			var header VaultArticleHeader
+			var body []byte
+			header, body, err = ParseVaultArticle(data)
+			if err == nil {
+				err = validateVaultRebuildHeader(header, body)
+			}
+			if err == nil {
+				err = fmt.Errorf("personal document is not recorded in the vault replica")
+			}
+		}
+		result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{Path: relative, Error: err.Error()})
+		return nil
+	})
 }
 
 func HasVaultReplica(root string) bool {

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -12,10 +13,13 @@ import en from '../../i18n/locales/en-US'
 import { CONTENT_TYPES } from '../../types/entryClassification'
 import { ENTITY_TYPES } from '../../api/entity-types'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
-import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle, visibleText, type Element } from './componentTestHarness'
+import * as markdownPlainText from '../../utils/markdownPlainText'
+import { click as clickNode, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from './componentTestHarness'
 
 const require = createRequire(import.meta.url), messages = { 'zh-CN': zh, 'en-US': en }
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
+async function settle() { await settleNodes(); await new Promise<void>(resolve => setImmediate(resolve)); await settleNodes() }
+async function click(node: Element) { await clickNode(node); await settle() }
 const empty = moduleOf(defineComponent({ setup: () => () => null }))
 const entity = { id: 'entity-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
 const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions', article_count: 2, created_at: '', updated_at: '' }
@@ -92,6 +96,8 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
   const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/knowledge-base': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  modules['@/utils/entrySourceLabels'] = entrySourceLabels
+  modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
   modules['@/components/FollowToggle.vue'] = modules['./FollowToggle.vue'] = moduleOf(toggle)
   const classification = loadComponent(new URL('../../components/EntryClassification.vue', import.meta.url), modules)
@@ -120,6 +126,66 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: actual follow feed API loading renders summaries and snippets as localized plain text`, async () => {
+    const env = environment(locale, [entityFollow, topicFollow])
+    const source = '# Feed heading\n\n- **bold** [read](https://example.com/private)\n\n> _quote_\n\n`code` ![chart](https://example.com/chart.png) <img src="../../attachments/a/photo.png"> <b>HTML</b>'
+    Object.assign(env.transport.articles[0], {
+      summary: { overview: '**Overview** ![chart](chart.png)', points: ['- _Point_'], key_terms: ['`Term`'] },
+      snippets: [{ chunk_id: 'feed-snippet', chunk_index: 0, content: source, match_type: 'article', score: 0 }],
+    })
+    const mounted = env.mount(env.component('./FollowFeed.vue'))
+    try {
+      await settle()
+      const result = descendants(mounted.root).find(node => node.props['data-article-id'] === 'new')!
+      const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
+      assert.ok(visibleText(result).includes(`Overview ${image}`))
+      assert.ok(visibleText(result).includes('Point'))
+      assert.ok(visibleText(result).includes('Term'))
+      const snippet = descendants(result).find(node => node.tag === 'p' && node.props.innerHTML)?.props.innerHTML
+      assert.ok(snippet.includes(`code ${image} ${image} HTML`))
+      assert.match(snippet, /Feed heading/)
+      assert.match(snippet, /bold read/)
+      assert.doesNotMatch(snippet + visibleText(result), /# Feed|\*\*bold|!\[chart\]|<img|<b>HTML|example.com\/private|attachments\/a\/photo/)
+      assert.equal((env.transport.articles[0].snippets as { content: string }[])[0].content, source)
+      assert.ok(env.calls.some(call => call.method === 'post' && call.url === '/api/v1/follows/feed'))
+      assert.deepEqual(env.errors, [])
+    } finally { mounted.close() }
+  })
+  test(`${locale}: follow feed markers use API response fields and refresh without article-state requests`, async () => {
+    const env = environment(locale, [entityFollow, topicFollow])
+    const markedArticles = env.transport.articles.slice(0, 2)
+    for (const item of markedArticles) Object.assign(item, { acquisition: 'model_written', incomplete: true })
+    const mounted = env.mount(env.component('./FollowFeed.vue'))
+    try {
+      for (const flagged of [true, false, undefined]) {
+        if (flagged === true) await settle()
+        else {
+          for (const item of markedArticles) {
+            Object.assign(item, { acquisition: 'extracted', incomplete: flagged })
+            if (flagged === undefined) delete (item as any).incomplete
+          }
+          await click(env.button(mounted.root, messages[locale].follows.refresh))
+        }
+        const disclosure = descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'similar-toggle'))!
+        if (!disclosure.props['aria-expanded']) await click(disclosure)
+        for (const id of ['new', 'similar', 'old']) {
+          const result = descendants(mounted.root).find(node => node.props['data-article-id'] === id)!
+          assert.ok(result, `loaded feed article: ${id}`)
+          const tags = descendants(result).find(node => hasClass(node, 'classification-tags'))!
+          for (const [label, hint] of [
+            [messages[locale].ingestStatus.modelWritten, messages[locale].ingestStatus.modelWrittenHint],
+            [messages[locale].ingestStatus.incomplete, messages[locale].ingestStatus.incompleteHint],
+          ]) {
+            const marker = tags.children.find(node => visibleText(node) === label)
+            assert.equal(Boolean(marker), id !== 'old' && Boolean(flagged), `${id}: ${label}`)
+            if (marker) assert.equal(marker.props.title, hint, `${id}: ${label}`)
+          }
+        }
+      }
+      assert.ok(!env.calls.some(call => call.method === 'get' && call.url.startsWith('/api/v1/entries/')))
+      assert.deepEqual(env.errors, [])
+    } finally { mounted.close() }
+  })
   test(`${locale}: entity and topic follow buttons load through their actual APIs and shared store`, async () => {
     const env = environment(locale)
     const workbench = env.mount(env.component('./components/EntryWorkbench.vue'))
@@ -152,10 +218,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     globalThis.window = { innerWidth: 1200, addEventListener() {}, removeEventListener() {} } as any
     globalThis.document = { body: { style: {} }, addEventListener() {}, removeEventListener() {}, querySelector: () => null } as any
     Object.defineProperty(globalThis, 'localStorage', { value: { getItem: () => null, setItem() {} }, configurable: true })
-    Object.assign(env.modules, { marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } }, 'marked-katex-extension': moduleOf(() => ({})), 'katex/dist/katex.min.css': {}, 'highlight.js': moduleOf({}), 'highlight.js/styles/github.css': {}, mermaid: moduleOf({ initialize() {} }), '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/components/DocumentPreview.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/views/knowledge-base/components/RepostSources.vue': empty, '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {}, '@/utils/clipboard': {} })
+    Object.assign(env.modules, { marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } }, 'marked-katex-extension': moduleOf(() => ({})), 'katex/dist/katex.min.css': {}, 'highlight.js': moduleOf({}), 'highlight.js/styles/github.css': {}, mermaid: moduleOf({ initialize() {} }), '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/components/DocumentPreview.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/PersonalDocumentDelete.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/views/knowledge-base/components/RepostSources.vue': empty, '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {}, '@/utils/clipboard': {} })
+    Object.assign(env.modules, { '@/components/MissingMaterials.vue': empty, '@/components/IncompleteActions.vue': empty })
     const detail = env.component('../../components/DocContent.vue')
     const entryStoreModule = evaluateFile('../../stores/entry.ts', {})
-    const detailHook = evaluateFile('../../composables/useKnowledgeBase.ts', { '../utils/index': { formatStringDate: () => '2026-10-11', kbFileTypeVerification: () => true }, 'tdesign-vue-next': env.modules['tdesign-vue-next'], '@/api/knowledge-base': env.modules['@/api/knowledge-base'], '@/stores/entry': entryStoreModule, '@/stores/resources': { useResourcesStore: () => ({}) }, './useEntryDuplicates': { useEntryDuplicates: () => ({}) } })
+    const detailHook = evaluateFile('../../composables/useKnowledgeBase.ts', { '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': env.modules['tdesign-vue-next'], '@/api/knowledge-base': env.modules['@/api/knowledge-base'], '@/stores/entry': entryStoreModule, '@/stores/resources': { useResourcesStore: () => ({}) } })
     const parent = defineComponent({ setup() { const hook = detailHook.default('kb-follows'); onMounted(async () => { await hook.loadEntries(); hook.getCardDetails(hook.cardList.value[0]) }); return () => hook.details.id ? h(detail, { visible: true, details: hook.details }) : null } })
     const mounted = env.mount(parent)
     try {

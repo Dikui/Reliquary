@@ -19,7 +19,6 @@ func initializeRuntimeData(ctx context.Context, db *gorm.DB, configDirectory str
 		logger.Infof(ctx, "Automatic data reconciliation is paused for maintenance")
 		return nil
 	}
-	resetPendingTasks(db)
 	if err := types.LoadBuiltinModelsConfig(ctx, db, configDirectory); err != nil {
 		logger.Warnf(ctx, "Load builtin models config failed: %v", err)
 	}

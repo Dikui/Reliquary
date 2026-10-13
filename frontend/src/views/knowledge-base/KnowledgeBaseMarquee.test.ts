@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
+import * as entrySourceLabels from '../../utils/entrySourceLabels'
+import * as markdownPlainText from '../../utils/markdownPlainText'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
 import { defineComponent, h, reactive, ref } from 'vue'
 import { useMarqueeSelect } from '../../composables/useMarqueeSelect'
 import * as polling from './entryStatusPolling'
+import * as documentListFilters from './documentListFilters'
+import { SEARCH_SOURCES } from '../../types/search'
 import { descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from './componentTestHarness'
 
 const require = createRequire(import.meta.url)
@@ -33,22 +37,27 @@ async function mountLibrary(realCheckbox = false) {
     '@/composables/useMarqueeSelect': { useMarqueeSelect },
     '@/composables/useKnowledgeBase': { __esModule: true, default: () => ({
       cardList, total: ref(items.length), moreIndex: ref(-1), details: reactive({}),
-      duplicateNotices: ref([]), loadEntries: async () => { cardList.value = [...items] }, clearDuplicateNotices() {},
+      loadEntries: async () => { cardList.value = [...items] },
+      getCardDetails: (item: { id: string }) => opened.push(item.id),
     }) },
-    '@/stores/ui': { useUIStore: () => ({ openManualEditor: ({ entryId }: any) => opened.push(entryId) }) },
+    '@/stores/ui': { useUIStore: () => ({}) },
+    '@/stores/pendingCounts': { usePendingCountsStore: () => ({ total: null, refresh: async () => {} }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
     '@/stores/resources': { useResourcesStore: () => ({ knowledgeBase: { id: 'kb' }, fetchKnowledgeBase: async () => ({ id: 'kb' }) }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },
-    '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({}) },
+    '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
     '@/types/entryClassification': { CONTENT_TYPES: [] },
+    '@/types/search': { SEARCH_SOURCES },
     '@/api/knowledge-base': {},
     '@/utils/entryTrace': {},
+    '@/utils/entrySourceLabels': entrySourceLabels,
+    '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => '' },
     '@/assets/img/more-actions.png': { __esModule: true, default: '' },
     'tdesign-vue-next': { MessagePlugin: {} },
     './entryStatusPolling': polling,
     './entryDownloadFileName': {},
-    './utils/uploadSources': {},
+    './documentListFilters': documentListFilters,
   }
   for (const file of ['./KnowledgeBase.vue', './components/DocumentCardView.vue', './components/DocumentListView.vue']) {
     const url = new URL(file, import.meta.url)

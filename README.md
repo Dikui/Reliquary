@@ -12,23 +12,23 @@ The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/W
 
 | Capability | Current behavior |
 | --- | --- |
-| Collection | Global RSS subscriptions, file uploads, URL import, and an authenticated intake API for external collectors |
-| Intake review | Subscription content passes intake review; rejected content remains in the pending area until you approve or discard it |
+| Intake | External tools send complete content through the authenticated HTTP intake API or MCP; Reliquary does not fetch source content |
+| Intake review | Submitted content passes intake review; rejected content and missing bodies remain pending until you approve, supplement, or discard them |
 | Article processing | One processing call produces a content type, a common summary, entities, and user-defined topics; processing models with vision can read article images in the same call |
 | Storage modes | Events, opinions, and research retain their full text, images, and original files; tutorials, cases, and references retain a summary and original link |
 | File library | Approved articles become Markdown files with generated headers; `mine/` contains your documents and `reports/` contains saved analysis |
 | Search | Hybrid full-text and vector retrieval, merged article results, filters for content type, entities, topics, publication dates, stars, and source directory; similar reporting can be collapsed |
 | Personal decisions | Star articles, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical article summaries |
 | External AI | MCP supports search, article reading, collection, pending review, stars, entity/topic lookup, and writing saved analysis |
-| Administration | Knowledge base, subscriptions, models, file library status, operation log, API integration, and runtime queues |
+| Administration | Knowledge base, models, file library status, operation log, API integration, and runtime queues |
 
-Article bodies remain unchanged after their first write. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates article headers in one direction; manual header edits in Obsidian may be overwritten. Your documents are indexed without being edited by the application.
+Article bodies become final when all missing material is supplied or you accept the missing material. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates article headers in one direction; manual header edits in Obsidian may be overwritten. Your documents are indexed without being edited by the application.
 
-The Web UI provides article management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. See [CONTEXT.md](CONTEXT.md) and [ADR 0009](docs/adr/0009-kb-collect-store-retrieve.md) for terminology and design.
+The Web UI provides article management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. Content enters only through external tools using HTTP intake or MCP, including original files and images. When reading articles, the browser still loads images directly from the original website. The backend does not download or proxy them, and missing material records remain unchanged. RSS subscriptions, URL imports, browser uploads, and manual entry are removed. Existing articles and their RSS or Web source labels remain readable. See [ADR 0012](docs/adr/0012-ingest-only-no-collection.md), [CONTEXT.md](CONTEXT.md), and the intake API reference planned for task 4 at `docs/ingest-api.md`.
 
 ## Run from source
 
-Requirements: Git, Node.js/npm, Docker, and Docker Compose. Application images are built locally; this repository does not publish installation packages or public application images.
+Requirements: Git, Node.js/npm, a runtime compatible with Docker (such as OrbStack or Docker Desktop), and Docker Compose. Application images are built locally; this repository does not publish installation packages or public application images.
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
@@ -36,10 +36,17 @@ cd Reliquary
 cp .env.example .env
 # Configure database credentials, JWT_SECRET, SYSTEM_AES_KEY, and model endpoints.
 ./scripts/build-frontend-dist.sh
+./reliquary-admin check-deployment
+docker compose up -d --wait postgres
+./reliquary-admin check-deployment
 docker compose up -d --build
 ```
 
-The frontend build helper installs dependencies with `npm ci` during a normal installation. Configure the readable file library and its permissions before starting the application, as described in [the Mac mini deployment guide](docs/personal-use.md#部署在-mac-mini).
+The frontend build helper installs dependencies with `npm ci` during a normal installation. Compose binds host directories: `RELIQUARY_VAULT_DIR` defaults to `${HOME}/Reliquary/vault`, `RELIQUARY_FILES_DIR` to `${HOME}/Reliquary/files`, and `BACKUP_DIR` to `${HOME}/Backups/Reliquary`. Change them in `.env`. `check-deployment` creates missing directories and rejects unwritable paths, paths inside the source checkout, and data or backup directories that contain one another. The PostgreSQL volume is unchanged. See [the Mac mini deployment guide](docs/personal-use.md#部署在-mac-mini).
+
+Keep the file library, uploaded resources, and backups outside the Desktop and Documents folders.
+
+Open the `vault/` directory itself in Obsidian. Exclude `attachments/` and `.reliquary/` from Obsidian search, and leave generated article headers and `.reliquary/` unchanged. Reading settings in `.obsidian/` are backed up and ignored during verification and indexing.
 
 By default the Web UI is at `http://localhost`, and the backend API is at `http://localhost:8080`. The first successful registration closes further registration. The single user and valid API keys have full access to the personal space. Deploy on your private network.
 
@@ -47,18 +54,16 @@ Apple Silicon model serving can run natively on macOS with Ollama and Metal. Mod
 
 ## Backup and migration
 
-Back up PostgreSQL, the file library, and uploaded resources together while application writes and file edits are paused. Copy deployment configuration and encryption keys separately. The [migration guide](docs/personal-use.md#迁移到另一台-mac-mini) describes restoring onto another Mac mini, checking articles and search, and rebuilding from the file library when a database backup is unavailable.
+Use `./reliquary-admin upgrade` for upgrades. It pauses intake and creates a complete backup of the old code, images, database, file library, and resources. Before migration `000005` drops collection tables, it exports source configuration without credentials and sync logs to `.reliquary/exports/` inside the file library. Export failure stops the upgrade and leaves intake paused. Old backups still restore through the same export and migration steps.
 
 ```bash
-docker compose stop app frontend
-./scripts/backup.sh /path/to/new-backup
-# On the destination, start PostgreSQL and create the stopped app container first.
-./scripts/restore.sh /path/to/new-backup
+./reliquary-admin backup /path/to/backups
+./reliquary-admin upgrade
+# Before running development migrations directly:
+./reliquary-admin export-sources
 ```
 
-Both scripts accept a backup directory and honor `COMPOSE_FILE` and `COMPOSE_PROJECT_NAME`. Run `--help` for host directory overrides and empty destination requirements.
-
-This release requires a new installation when replacing older WeKnora or Reliquary schemas. The migration described above transfers the current schema between machines; it does not upgrade older schemas. See [database baseline rebuild guidance](docs/migration-troubleshooting.md#single-baseline-and-database-rebuild).
+Backups retain host files and Obsidian reading settings while excluding operational credentials. `unpack` and `restore` require empty or nonexistent host file library and resource directories. Configure model and parser credentials again after restoring. See [the personal use guide](docs/personal-use.md), [migration rules](docs/database-migrations.md), and [maintenance data ownership](docs/maintenance-data.md).
 
 ## Development and validation
 

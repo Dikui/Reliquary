@@ -49,7 +49,7 @@ func RebuildVaultWithDatabase(ctx context.Context, db *gorm.DB) (*service.VaultR
 
 func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Config) (*service.VaultRebuildResult, error) {
 	if service.HasVaultReplica(cfg.Vault.Root) {
-		documents, err := service.NewVaultDocumentService(db, nil, NewPostgresRetrievalService(db), cfg.Vault.Root, cfg.Vault.StableWait, cfg.Vault.ScanInterval)
+		documents, err := service.NewVaultDocumentService(db, nil, NewPostgresRetrievalService(db), cfg.Vault.Root)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +89,7 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 		return nil, err
 	}
 	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollamaClient, embedding.NewBatchEmbedder(workers), service.NewSpaceService(repository.NewSpaceRepository(db)), db)
-	documents, err := service.NewVaultDocumentService(db, models, NewPostgresRetrievalService(db), cfg.Vault.Root, cfg.Vault.StableWait, cfg.Vault.ScanInterval)
+	documents, err := service.NewVaultDocumentService(db, models, NewPostgresRetrievalService(db), cfg.Vault.Root)
 	if err != nil {
 		return nil, err
 	}

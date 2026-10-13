@@ -23,13 +23,17 @@ import { useI18n } from 'vue-i18n';
 import DocumentPreview from '@/components/DocumentPreview.vue';
 import RepostSources from '@/views/knowledge-base/components/RepostSources.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import MissingMaterials from '@/components/MissingMaterials.vue';
+import IncompleteActions from '@/components/IncompleteActions.vue';
 import ReviewActions from '@/components/ReviewActions.vue';
 import EntryArticleJudgments from '@/components/EntryArticleJudgments.vue';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
+import PersonalDocumentDelete from '@/components/PersonalDocumentDelete.vue';
 import { resolveEntryDownloadFileName } from '@/views/knowledge-base/entryDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
 import { getApiBaseUrl } from '@/utils/api-base';
 import { copyWithToast } from '@/utils/clipboard';
+import { isIngestAPIEntry, getExternalToolName } from '@/utils/entrySourceLabels';
 
 const { t } = useI18n();
 
@@ -72,6 +76,7 @@ const syncMetadataDraft = () => {
 };
 
 const startMetadataEdit = () => {
+  if (props.details?.source_kind === 'mine') return;
   syncMetadataDraft();
   if (!metadataDraft.value.length) metadataDraft.value.push(makeMetadataRow());
   metadataEditing.value = true;
@@ -106,6 +111,7 @@ const formatMetadataValue = (value: unknown) => {
 };
 
 const saveMetadata = async () => {
+  if (props.details?.source_kind === 'mine') return;
   try {
     const value: Record<string, unknown> = {};
     for (const row of metadataDraft.value) {
@@ -133,9 +139,10 @@ const saveMetadata = async () => {
 
 const reprocessing = ref(false);
 const articleJudgmentsBusy = ref(false);
+const incompleteBusy = ref(false);
 const canReprocess = computed(() => !['mine', 'report'].includes(props.details?.source_kind || ''));
 const reprocess = async () => {
-  if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value) return;
+  if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value || incompleteBusy.value) return;
   reprocessing.value = true;
   try {
     const result: any = await reprocessEntry(props.details.id);
@@ -148,6 +155,7 @@ const reprocess = async () => {
 const isProcessing = computed(() => ['pending', 'processing', 'finalizing'].includes(props.details?.parse_status));
 
 const headerIconName = computed(() => {
+  if (props.details?.source_kind === 'mine') return 'file';
   switch (props.details?.type) {
     case 'url':
       return 'link';
@@ -191,7 +199,9 @@ mermaid.initialize({
   }
 });
 const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "kbId"]);
+const externalToolName = computed(() => getExternalToolName(props.details));
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
+const personalDocumentDeleteBusy = ref(false);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
 const intakeOriginalLoading = ref(false);
@@ -260,6 +270,10 @@ const applyProcessingState = (value: Record<string, unknown>) => {
   Object.assign(props.details, value);
   if (props.details?.id) emit('processingStateChange', { ...value, id: props.details.id });
 };
+const applyIncompleteChange = () => {
+  applyProcessingState({ incomplete: false, missing_materials: [] });
+  emit('reviewChanged', props.details, false);
+};
 const applyArticleJudgment = (value: Record<string, unknown>) => {
   const previousMode = props.details.processing_mode;
   applyProcessingState(value);
@@ -267,6 +281,7 @@ const applyArticleJudgment = (value: Record<string, unknown>) => {
     props.details.md = [];
     props.details.total = 0;
   } else if (previousMode === 'summary_only' && !isProcessing.value) emit('getDoc', 1);
+  emit('reviewChanged', props.details, false);
 };
 let processingPollTimer: ReturnType<typeof setTimeout> | null = null;
 let processingPollGeneration = 0;
@@ -297,6 +312,7 @@ watch(() => [props.visible, props.details?.id, props.details?.parse_status], ([v
   else stopProcessingPolling();
 }, { immediate: true });
 watch(() => props.details?.id, syncMetadataDraft, { immediate: true });
+watch(() => props.details?.source_kind, value => { if (value === 'mine') metadataEditing.value = false; });
 
 const hasTimelineSpans = ref(false);
 const timelineDrawerVisible = ref(false);
@@ -661,7 +677,7 @@ const checkImage = (url) => {
     img.src = url;
   });
 };
-const resolveVaultImageSource = (href: string) => props.details?.source_kind === 'article' && props.details?.vault_path && href
+const resolveVaultImageSource = (href: string) => ['article', 'mine'].includes(props.details?.source_kind) && props.details?.vault_path && href
     && !/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(href)
     ? `vault://${encodeURIComponent(props.details.id)}/${encodeURIComponent(href)}`
     : href;
@@ -717,13 +733,18 @@ renderer.code = function ({ text, lang }) {
     </div>
   `;
 };
+const isLegacyManualDraft = computed(() => props.details?.type === 'manual'
+  && props.details?.parse_status === 'draft' && !props.details?.vault_path);
+const legacyManualBody = computed(() => isLegacyManualDraft.value
+  && typeof props.details?.metadata?.content === 'string' ? props.details.metadata.content : '');
+
 // 监听 chunks 变化，自动更新合并内容（已改为 computed 属性）
 const mergedContent = computed(() => {
   const newChunks = props.details?.md;
   if (newChunks && newChunks.length > 0) {
     return mergeChunks(newChunks);
   }
-  return '';
+  return legacyManualBody.value;
 });
 
 // 计算处理后的分块数据，避免在模板中频繁调用方法和 JSON.parse
@@ -740,6 +761,7 @@ const processedChunks = computed(() => {
 });
 
 const canPreview = (): boolean => {
+  if (isLegacyManualDraft.value && !legacyManualBody.value && props.details?.metadata?.intake?.original_path) return true;
   if (props.details?.type !== 'file') return false;
   const ft = resolveFilePreviewExt(props.details?.title, props.details?.file_type);
   if (!ft) return false;
@@ -758,7 +780,7 @@ watch(() => props.details?.id, (newId) => {
   if (isAudioFile(props.details?.file_type)) {
     viewMode.value = 'merged'; // 音频默认全文视图，播放器已内嵌
     loadAudioPreview();
-  } else if (props.details?.type === 'file' && canPreview()) {
+  } else if (canPreview()) {
     viewMode.value = 'preview';
   } else {
     viewMode.value = 'merged';
@@ -937,6 +959,7 @@ const processMarkdown = (markdownText) => {
   return result;
 };
 const handleClose = () => {
+  if (personalDocumentDeleteBusy.value) return;
   resetIntakePreview();
   emit("closeDoc", false);
   const scrollEl = document.querySelector('.doc-main-drawer .t-drawer__body') as HTMLElement | null;
@@ -960,8 +983,7 @@ const channelLabelMap: Record<string, string> = {
   web: 'knowledgeBase.channelWeb',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
-  // Drive (云盘) connectors get their own channel so Drive docs show
-  rss: 'datasource.connector.rss',
+  rss: 'knowledgeBase.channelRSS',
 };
 
 const getChannelLabel = (channel: string) => {
@@ -973,7 +995,8 @@ const getChannelLabel = (channel: string) => {
 // 获取类型标签
 const getTypeLabel = () => {
   if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return props.details.file_type?.toUpperCase() || t('knowledgeBase.typeFile');
-  if (props.details.channel === 'rss') return t('datasource.connector.rss');
+  if (isIngestAPIEntry(props.details)) return t('knowledgeBase.typeIngestAPI');
+  if (props.details.channel === 'rss') return t('knowledgeBase.channelRSS');
   switch (props.details.type) {
     case 'url':
       return t('knowledgeBase.typeURL');
@@ -1126,7 +1149,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <div class="doc-drawer-resize-line" />
       </div>
     </teleport>
-    <t-drawer :visible="visible" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="true"
+    <t-drawer :visible="visible" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="!personalDocumentDeleteBusy"
+      :closeOnOverlayClick="!personalDocumentDeleteBusy" :closeOnEscKeydown="!personalDocumentDeleteBusy"
       :footer="false" :class="['doc-main-drawer', { 'doc-main-drawer--resizing': mainDrawerResizing }]"
       @close="handleClose">
       <template #header>
@@ -1138,6 +1162,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <div class="doc-drawer-header-title">{{ getDisplayTitle() }}</div>
           </div>
           <div class="header-actions">
+
+            <PersonalDocumentDelete v-if="details.source_kind === 'mine' && details.id" :document-id="details.id" :title="getDisplayTitle()"
+              :disabled="articleJudgmentsBusy || incompleteBusy" @busy-change="personalDocumentDeleteBusy = $event"
+              @deleted="() => emit('reviewChanged', details, true)" />
 
             <t-button v-if="details.processing_mode !== 'summary_only' && (details.type === 'file' || details.type === 'manual')" class="header-action-btn" size="small"
               variant="text" shape="square" theme="default" :title="$t('common.download') || 'Download'"
@@ -1208,6 +1236,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               <span class="doc-detail-label">{{ $t('knowledgeBase.collectReason') }}</span>
               <span class="doc-detail-value">{{ details.collect_reason }}</span>
             </div>
+            <div v-if="externalToolName" class="doc-detail-row doc-external-tool-row">
+              <span class="doc-detail-label">{{ $t('knowledgeBase.externalTool') }}</span>
+              <span class="doc-detail-value">{{ externalToolName }}</span>
+            </div>
             <div v-if="details.vault_path" class="doc-detail-row doc-vault-path-row">
               <span class="doc-detail-label">{{ $t('knowledgeBase.vaultPath') }}</span>
               <span class="doc-detail-value doc-vault-path-value">
@@ -1242,32 +1274,32 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <RepostSources :sources="details.repost_sources" />
         </section>
 
-        <section v-if="details.id" class="setting-drawer__section metadata-section">
+        <section v-if="details.id && (details.source_kind !== 'mine' || Object.keys(details.custom_metadata || {}).length)" class="setting-drawer__section metadata-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">
               <span>{{ $t('knowledgeBase.customMetadata') }}</span>
-              <t-tooltip :content="$t('knowledgeBase.metadataCapabilityHint')" placement="top">
+              <t-tooltip v-if="details.source_kind !== 'mine'" :content="$t('knowledgeBase.metadataCapabilityHint')" placement="top">
                 <t-icon name="info-circle" size="14px" class="metadata-capability-icon" />
               </t-tooltip>
               <span v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-count">
                 {{ Object.keys(details.custom_metadata || {}).length }}/20
               </span>
             </h4>
-            <t-tooltip v-if="!metadataEditing" :content="$t('common.edit')" placement="top">
+            <t-tooltip v-if="!metadataEditing && details.source_kind !== 'mine'" :content="$t('common.edit')" placement="top">
               <t-button class="icon-action-btn" size="small" variant="text" shape="square" @click="startMetadataEdit">
                 <template #icon><t-icon name="edit" size="15px" /></template>
               </t-button>
             </t-tooltip>
           </div>
 
-          <div v-if="!metadataEditing" class="metadata-display">
+          <div v-if="!metadataEditing || details.source_kind === 'mine'" class="metadata-display">
             <div v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-grid">
               <div v-for="(value, key) in (details.custom_metadata || {})" :key="key" class="metadata-item">
                 <span class="metadata-item-key">{{ key }}</span>
                 <span class="metadata-item-value">{{ formatMetadataValue(value) }}</span>
               </div>
             </div>
-            <button v-else type="button" class="metadata-empty-action" @click="startMetadataEdit">
+            <button v-else-if="details.source_kind !== 'mine'" type="button" class="metadata-empty-action" @click="startMetadataEdit">
               <t-icon name="add" size="15px" />
               <span>{{ $t('knowledgeBase.addMetadataField') }}</span>
             </button>
@@ -1319,13 +1351,17 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.documentSummary') }}</h4>
-            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy" @click="reprocess">
+            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy || incompleteBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
               {{ $t('knowledgeBase.reprocess') }}
             </t-button>
           </div>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
-          <EntryArticleJudgments v-if="canReprocess && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
+            <MissingMaterials :items="details.missing_materials || []" />
+            <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />
+          </section>
+          <EntryArticleJudgments v-if="canReprocess && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('knowledgeBase.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('knowledgeBase.parsingFailed') }}</p>
         </section>
@@ -1444,7 +1480,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
 
           <div v-else-if="viewMode === 'preview'">
-            <DocumentPreview :entryId="details.id" :fileType="details.file_type" :fileName="details.title"
+            <DocumentPreview :entryId="details.id" :fileType="isLegacyManualDraft ? 'md' : details.file_type" :fileName="details.title"
               :active="viewMode === 'preview'" />
           </div>
         </section>

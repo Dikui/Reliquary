@@ -16,11 +16,9 @@ import (
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/infrastructure/chunker"
-	"reliquary/internal/infrastructure/docparser"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
-	secutils "reliquary/internal/utils"
 )
 
 // ArticleContentTypeCorrector is a separate management capability so ingestion
@@ -56,7 +54,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 	if err != nil {
 		return nil, err
 	}
-	if before.SourceKind != "article" || before.ParseStatus != types.ParseStatusCompleted {
+	if !isIngestArticle(before) || before.ParseStatus != types.ParseStatusCompleted {
 		return nil, werrors.NewBadRequestError("only completed articles can have their content type corrected")
 	}
 	if reviewAction != "" && before.ProcessingReviewStatus != types.ProcessingReviewPending {
@@ -69,7 +67,7 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 		}
 	}
 	mode := types.ProcessingModeForContentType(contentType)
-	if before.SourceUnverified {
+	if before.SourceUnverified || before.SourceKind == "mine" {
 		mode = types.ProcessingModeFull
 	}
 	if before.ProcessingMode == types.ProcessingModeFull && mode == types.ProcessingModeSummaryOnly && !confirmRemoveBody {
@@ -82,37 +80,8 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 	if err != nil {
 		return nil, err
 	}
-	overrides, err := before.ProcessOverrides()
-	if err != nil {
-		return nil, err
-	}
-	eff := ResolveProcessConfig(kb, overrides)
-	fetched := *before
 	corrected := reviewAction != "confirm"
-	fetched.ContentType, fetched.ContentTypeCorrected, fetched.ProcessingMode = contentType, corrected, mode
-	var body string
-	var images []docparser.StoredImage
-	var result *articleProcessingResult
-	var temporaryRefs []string
-	committed := false
-	defer func() {
-		if !committed {
-			s.deleteCorrectionFiles(context.WithoutCancel(ctx), kb, temporaryRefs)
-		}
-	}()
-	if before.ProcessingMode == types.ProcessingModeSummaryOnly && mode == types.ProcessingModeFull {
-		body, images, temporaryRefs, err = s.fetchCorrectedArticle(ctx, kb, &fetched, eff)
-		if err != nil {
-			return before, werrors.NewBadRequestError("could not save the full article: " + err.Error())
-		}
-		result, err = s.callArticleProcessing(ctx, kb, &fetched, body, images)
-		if err != nil {
-			if types.IsChatGPTDeferred(err) {
-				return before, err
-			}
-			return before, werrors.NewBadRequestError("could not process the full article: " + err.Error())
-		}
-	}
+	missingBody := before.ProcessingMode == types.ProcessingModeSummaryOnly && mode == types.ProcessingModeFull
 	var updated types.Entry
 	var fileChange *vaultContentTypeChange
 	var discardedRefs []string
@@ -124,49 +93,54 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 			return werrors.NewConflictError("the article changed during conversion; reload it and try again")
 		}
 		updated.ContentType, updated.ContentTypeCorrected, updated.ProcessingMode, updated.UpdatedAt = contentType, corrected, mode, time.Now()
+		if missingBody {
+			originalURL, err := prepareMissingContentOriginalURL(&updated)
+			if err != nil {
+				return err
+			}
+			missing := updated.IngestMissing()
+			hasContent := false
+			for i := range missing {
+				if missing[i].Type == "content" {
+					hasContent = true
+					missing[i].Reason = "修正为全文保存，需要正文"
+					if !validIngestURL(missing[i].SourceURL) {
+						missing[i].SourceURL = originalURL
+					}
+				}
+			}
+			if !hasContent {
+				missing = append(missing, types.IngestMissing{Type: "content", SourceURL: originalURL,
+					Reason: "修正为全文保存，需要正文", APIKeyID: updated.IngestAPIKeyID, APIKeyName: updated.IngestAPIKeyName, SubmittedAt: time.Now()})
+			}
+			if err := updated.SetIngestMissing(missing); err != nil {
+				return err
+			}
+			updated.Incomplete, updated.ExternalCompletionAttempted = true, false
+		}
 		if reviewAction == "confirm" {
 			updated.ProcessingReviewStatus = types.ProcessingReviewConfirmed
 		} else if before.ProcessingReviewStatus == types.ProcessingReviewPending || reviewAction == "correct" {
 			updated.ProcessingReviewStatus = types.ProcessingReviewCorrected
 		}
-		if result != nil {
-			updated.FilePath, updated.FileName, updated.FileType = fetched.FilePath, fetched.FileName, fetched.FileType
-		}
 		if err := tx.Save(&updated).Error; err != nil {
 			return err
 		}
 		transactional := s.contentTypeTransactionService(tx)
-		transactionCtx := ctx
-		if space, ok := ctx.Value(types.SpaceInfoContextKey).(*types.Space); ok && space != nil {
-			copy := *space
-			transactionCtx = context.WithValue(ctx, types.SpaceInfoContextKey, &copy)
-		}
-		if result != nil {
-			if err := transactional.persistArticleProcessingResult(transactionCtx, kb, &updated, body, images, eff, result, false); err != nil {
-				return err
-			}
-			if updated.ParseStatus != types.ParseStatusCompleted {
-				return errors.New("article conversion did not finish")
-			}
-		} else if before.ProcessingMode == types.ProcessingModeFull && mode == types.ProcessingModeSummaryOnly {
-			discardedRefs, err = transactional.clearCorrectedArticleBody(transactionCtx, &updated)
+		if before.ProcessingMode == types.ProcessingModeFull && mode == types.ProcessingModeSummaryOnly {
+			discardedRefs, err = transactional.clearCorrectedArticleBody(ctx, &updated)
 			if err != nil {
 				return err
 			}
 		}
-		if s.vault != nil && before.ProcessingMode != mode {
+		if s.vault != nil && before.ProcessingMode != mode && !missingBody {
 			read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
 				return s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
 			}
-			fileChange, err = s.vault.changeCorrectedArticleBody(ctx, tx, &updated, body, read)
+			fileChange, err = s.vault.changeCorrectedArticleBody(ctx, tx, &updated, "", read)
 			if err != nil {
 				return err
 			}
-		} else if result != nil {
-			if err := transactional.storeProcessedBody(ctx, kb, &updated, body, images); err != nil {
-				return err
-			}
-			temporaryRefs = append(temporaryRefs, updated.GetMetadata()["processed_body_path"])
 		}
 		operationType := "correct_content_type"
 		if reviewAction != "" {
@@ -186,23 +160,12 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 		}
 		return before, werrors.NewBadRequestError("could not correct the article content type: " + err.Error())
 	}
-	committed = true
-	if result != nil {
-		s.bindContentResources(ctx, updated.SpaceID, updated.ID, body+" "+updated.FilePath)
-	}
 	if fileChange != nil {
 		if err := fileChange.finish(); err != nil {
 			s.vault.recordArticleError(ctx, id, err)
 		}
 	}
 	if s.vault != nil {
-		if result != nil {
-			// Copies in the original storage are removed only after both the
-			// database and the first vault body have been written successfully.
-			if err := s.removeParsedBodyCopies(ctx, kb, &updated, body, images); err != nil {
-				s.vault.recordArticleError(ctx, id, err)
-			}
-		}
 		s.vault.ScheduleRefresh(ctx, id)
 	}
 	s.deleteCorrectionFiles(ctx, kb, discardedRefs, id)
@@ -219,107 +182,6 @@ func (s *entryService) contentTypeTransactionService(tx *gorm.DB) *entryService 
 	copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewKnowledgeBaseRepository(tx), copy.modelService, copy.retrieveEngine)
 	copy.vault, copy.resourceCatalog = nil, nil
 	return &copy
-}
-
-// fetchCorrectedArticle reuses the reprocessing reader and image resolver but
-// does not write processing status or source metadata before conversion succeeds.
-func (s *entryService) fetchCorrectedArticle(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry, eff types.EffectiveProcessConfig) (body string, images []docparser.StoredImage, refs []string, err error) {
-	source, err := entrySourceInfo(k)
-	if err != nil {
-		return "", nil, nil, err
-	}
-	url := source.OriginalURL
-	if url == "" && (k.Type == "url" || k.Type == "file_url") {
-		url = k.Source
-	}
-	if url == "" {
-		return "", nil, nil, errors.New("original URL is missing")
-	}
-	if err := secutils.ValidateURLForSSRF(url); err != nil {
-		return "", nil, nil, err
-	}
-	var parserOverrides map[string]string
-	if overrides, e := k.ProcessOverrides(); e != nil {
-		return "", nil, nil, e
-	} else if overrides != nil {
-		parserOverrides = overrides.ParserEngineOverrides
-	}
-	parserOverrides = MergeParserEngineOverrides(s.getParserEngineOverridesFromContext(ctx), parserOverrides)
-	if err := validateParserEngineOverrideURLs(parserOverrides); err != nil {
-		return "", nil, nil, err
-	}
-	isFile := k.Type == "file_url" || isFileURL(url, "", "")
-	fileType := k.FileType
-	req := &types.ReadRequest{URL: url, Title: k.Title, ParserEngineOverrides: parserOverrides}
-	if isFile {
-		name, kind := k.FileName, k.FileType
-		data, e := downloadFileFromURL(ctx, url, &name, &kind)
-		if e != nil {
-			return "", nil, nil, e
-		}
-		if err := validateImportFileType(kind); err != nil {
-			return "", nil, nil, err
-		}
-		path, e := s.resolveFileService(ctx, kb).SaveBytes(ctx, data, k.SpaceID, name, true)
-		if e != nil {
-			return "", nil, nil, e
-		}
-		refs = append(refs, path)
-		k.FilePath, k.FileName, k.FileType, fileType = path, name, kind, kind
-		req.URL, req.FileName, req.FileType, req.FileContent = "", name, kind, data
-	}
-	engine := eff.ChunkingConfig.ResolveParserEngine("url")
-	if isFile {
-		engine = eff.ChunkingConfig.ResolveParserEngine(fileType)
-	}
-	req.ParserEngine = engine
-	reader, err := docparser.NewReader(ctx, engine, fileType, !isFile, docparser.ReaderDeps{Overrides: parserOverrides})
-	if err != nil {
-		return "", nil, refs, err
-	}
-	parsed, err := s.callDocReaderWithTimeout(ctx, reader, req)
-	if err != nil {
-		return "", nil, refs, fmt.Errorf("fetch original article: %w", err)
-	}
-	if parsed == nil {
-		return "", nil, refs, errors.New("original reader returned no content")
-	}
-	sanitizeReadResult(parsed)
-	if parsed.Error != "" {
-		return "", nil, refs, errors.New(parsed.Error)
-	}
-	if strings.TrimSpace(parsed.MarkdownContent) == "" {
-		return "", nil, refs, errors.New("original article body is empty")
-	}
-	if s.imageResolver != nil {
-		fileSvc := s.resolveFileService(ctx, kb)
-		markdown, stored, e := s.imageResolver.ResolveAndStore(ctx, parsed, fileSvc, k.SpaceID)
-		images = append(images, stored...)
-		for _, image := range stored {
-			refs = append(refs, image.ServingURL)
-		}
-		if e != nil {
-			return "", images, refs, e
-		}
-		if markdown != "" {
-			parsed.MarkdownContent = markdown
-		}
-		markdown, stored, e = s.imageResolver.ResolveRemoteImages(ctx, parsed.MarkdownContent, fileSvc, k.SpaceID)
-		images = append(images, stored...)
-		for _, image := range stored {
-			refs = append(refs, image.ServingURL)
-		}
-		if e != nil {
-			return "", images, refs, e
-		}
-		if markdown != "" {
-			parsed.MarkdownContent = markdown
-		}
-	}
-	if docparser.HasUnstoredImages(parsed.MarkdownContent) {
-		return "", images, refs, errors.New("original article has unstored images")
-	}
-	return chunker.NormalizeLineEndings(parsed.MarkdownContent), images, refs, nil
 }
 
 func (s *entryService) clearCorrectedArticleBody(ctx context.Context, k *types.Entry) ([]string, error) {

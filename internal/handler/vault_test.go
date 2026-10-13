@@ -32,7 +32,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	require.NoError(t, db.Save(kb).Error)
 	root := t.TempDir()
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(db))
-	documents, err := service.NewVaultDocumentService(db, nil, engine, root, time.Millisecond, time.Second)
+	documents, err := service.NewVaultDocumentService(db, nil, engine, root)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
 	router := gin.New()

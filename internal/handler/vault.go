@@ -10,12 +10,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"reliquary/internal/application/service"
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 type vaultDocuments interface {
 	Status(context.Context) (service.VaultStatus, error)
-	CreateReport(context.Context, string, string, []string) (*types.Entry, error)
+	CreateReport(context.Context, string, string, []string) (*service.ReportWriteResult, error)
 }
 
 type VaultHandler struct {
@@ -82,5 +81,9 @@ func (h *VaultHandler) CreateReport(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"success": true, "data": report})
+	status := http.StatusCreated
+	if report.Existing {
+		status = http.StatusOK
+	}
+	c.JSON(status, gin.H{"success": true, "data": report})
 }

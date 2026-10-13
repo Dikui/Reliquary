@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
 	"strings"
 
 	"gorm.io/gorm"
@@ -23,17 +24,11 @@ import (
 var (
 	// ErrInvalidFileType is returned when an unsupported file type is provided
 	ErrInvalidFileType = errors.New("unsupported file type")
-	// ErrInvalidURL is returned when an invalid URL is provided
-	ErrInvalidURL = errors.New("invalid URL")
 	// ErrChunkNotFound is returned when a requested chunk cannot be found.
 	// Aliases the repository sentinel so a chunk-not-found from the repo
 	// errors.Is-matches at the service and middleware layers (a single
 	// identity instead of two string-equal-but-distinct errors).
 	ErrChunkNotFound = repository.ErrChunkNotFound
-	// ErrDuplicateFile is returned when trying to add a file that already exists
-	ErrDuplicateFile = errors.New("file already exists")
-	// ErrDuplicateURL is returned when trying to add a URL that already exists
-	ErrDuplicateURL = errors.New("URL already exists")
 )
 
 // entryService implements the entry service interface
@@ -54,6 +49,7 @@ type entryService struct {
 	task            interfaces.TaskEnqueuer
 	taskInspector   interfaces.TaskInspector
 	imageResolver   *docparser.ImageResolver
+	ingestDocReader interfaces.DocReader
 
 	// spanTracker records the per-attempt span tree for the parsing
 	// pipeline. Best-effort: a nil tracker (test harness) is safely
@@ -262,13 +258,6 @@ func kbIDOrEmpty(kb *types.KnowledgeBase) string {
 	return kb.ID
 }
 
-func defaultChannel(ch string) string {
-	if ch == "" {
-		return types.ChannelWeb
-	}
-	return ch
-}
-
 // GetEntryByID retrieves a entry entry by its ID
 func (s *entryService) GetEntryByID(ctx context.Context, id string) (*types.Entry, error) {
 	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
@@ -423,6 +412,9 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		return err
 	}
 	previousTitle := record.Title
+	if record.SourceKind == "mine" {
+		return fmt.Errorf("本人文档不可修改，请删除后重新导入")
+	}
 	// if need other fields update, please add here
 	if entry.Title != "" {
 		record.Title = entry.Title

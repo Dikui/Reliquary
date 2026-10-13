@@ -24,7 +24,6 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
-	secutils "reliquary/internal/utils"
 )
 
 // ArticleHeaderRefresher is deliberately separate from EntryService so
@@ -89,6 +88,10 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 		PublishedAt: canonicalVaultDate(source.PublishedAt), CollectedAt: k.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
 		ContentType: k.ContentType, Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason}
 	h.SourceUnverified = k.SourceUnverified
+	if k.SourceKind == "mine" {
+		h.SourceKind = "mine"
+	}
+	h.Acquisition = k.Acquisition
 	if k.SourceUnverified {
 		h.URL = ""
 	}
@@ -132,10 +135,10 @@ func vaultArticleMonth(h VaultArticleHeader, collected time.Time) string {
 	return collected.UTC().Format("2006-01")
 }
 
-// WriteArticle writes an approved article once. Reprocessing only schedules a
-// metadata refresh, so the first body bytes remain authoritative.
+// WriteArticle publishes approved material and verifies existing body bytes.
+// A completed header-only intake may publish its first body after processing.
 func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body string, read func(context.Context, string) (io.ReadCloser, error)) error {
-	if k == nil || (k.SourceKind != "" && k.SourceKind != "article") {
+	if !isIngestArticle(k) {
 		return errors.New("only articles can be written to articles/")
 	}
 	if _, err := uuid.Parse(k.ID); err != nil {
@@ -151,7 +154,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		return err
 	}
 	*k = persisted
-	if k.SourceKind != "article" || k.ParseStatus != types.ParseStatusCompleted {
+	if !isIngestArticle(k) || k.ParseStatus != types.ParseStatusCompleted {
 		return errors.New("article must complete processing before vault write")
 	}
 	if intake, err := k.IntakeMetadata(); err != nil {
@@ -160,6 +163,18 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		return errors.New("article must pass intake review before vault write")
 	}
 	if k.VaultPath != "" {
+		if isIngestArticle(k) && ingestCompletionPending(k) {
+			if err := v.publishCompletedHeaderOnlyArticle(ctx, k, body, read); err != nil {
+				v.recordArticleError(ctx, k.ID, err)
+				return err
+			}
+			return nil
+		}
+		if isIngestArticle(k) && body != k.VaultBody {
+			err := errors.New("published ingest article body differs from its stored body; replacement refused")
+			v.recordArticleError(ctx, k.ID, err)
+			return err
+		}
 		v.ScheduleRefresh(ctx, k.ID)
 		return nil
 	}
@@ -169,6 +184,9 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	}
 	shortID := k.ID[:min(8, len(k.ID))]
 	relative := filepath.ToSlash(filepath.Join("articles", vaultArticleMonth(h, k.CreatedAt), vaultSlug(k.Title)+"-"+shortID+".md"))
+	if k.SourceKind == "mine" {
+		relative = filepath.ToSlash(filepath.Join("mine", vaultSlug(k.Title)+"-"+shortID+".md"))
+	}
 	abs, err := vaultAbsolute(v.root, relative)
 	if err != nil {
 		return err
@@ -179,41 +197,30 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		return err
 	}
 	original := ""
-	if k.ProcessingMode == types.ProcessingModeSummaryOnly {
+	if k.SourceKind != "mine" && k.ProcessingMode == types.ProcessingModeSummaryOnly {
 		body = ""
 	} else {
-		body, err = v.copyArticleImages(ctx, k, relative, body, read)
+		body, original, err = v.prepareArticleMaterials(ctx, k, relative, body, read)
 		if err != nil {
 			return err
-		}
-		if k.FilePath != "" {
-			if read == nil {
-				return errors.New("original file reader is unavailable")
-			}
-			file, err := read(ctx, k.FilePath)
-			if err != nil {
-				return fmt.Errorf("read original article file: %w", err)
-			}
-			original = filepath.ToSlash(filepath.Join("attachments", k.ID, vaultOriginalFileName(k.FileName)))
-			data, readErr := io.ReadAll(file)
-			file.Close()
-			if readErr != nil {
-				return readErr
-			}
-			if err = v.writeAttachment(original, data); err != nil {
-				return err
-			}
 		}
 	}
 	if err = v.atomicArticleWrite(abs, RenderVaultArticleHeader(h), []byte(body), nil); err != nil {
 		return err
 	}
-	values := map[string]any{"source_kind": "article", "vault_path": relative, "vault_body": body, "vault_original_path": original}
+	kind := k.SourceKind
+	if kind == "" {
+		kind = "article"
+	}
+	values := map[string]any{"source_kind": kind, "vault_path": relative, "vault_body": body, "vault_original_path": original}
+	if isIngestArticle(k) {
+		values["ingest_attachments"] = k.IngestAttachments
+	}
 	if err = v.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(values).Error; err != nil {
 		_ = os.Remove(abs)
 		return err
 	}
-	k.SourceKind, k.VaultPath, k.VaultBody, k.VaultOriginalPath = "article", relative, body, original
+	k.SourceKind, k.VaultPath, k.VaultBody, k.VaultOriginalPath = kind, relative, body, original
 	return nil
 }
 
@@ -265,6 +272,16 @@ func (v *VaultService) copyArticleImages(ctx context.Context, k *types.Entry, ar
 		if _, ok := stored[item.url]; ok {
 			continue
 		}
+		if remoteIngestImage(item.url) {
+			stored[item.url] = item.url
+			continue
+		}
+		// A supplement may retain images already copied into this article's
+		// own attachment directory. Those bytes are already authoritative.
+		if isArticleAttachmentReference(k.ID, articlePath, item.url) {
+			stored[item.url] = item.url
+			continue
+		}
 		data, err := readVaultImage(ctx, item.url, read)
 		if err != nil {
 			return "", fmt.Errorf("copy vault image %s: %w", item.url, err)
@@ -305,7 +322,7 @@ func readVaultImage(ctx context.Context, ref string, read func(context.Context, 
 		return []byte(value), err
 	}
 	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
-		return secutils.DownloadBytes(ref)
+		return nil, errors.New("remote images must be provided through the ingest interface")
 	}
 	if read == nil {
 		return nil, errors.New("image reader is unavailable")
@@ -351,10 +368,14 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 	if err := query.First(&k).Error; err != nil {
 		return err
 	}
-	if k.SourceKind != "article" || k.VaultPath == "" || k.ParseStatus == types.ParseStatusDeleting {
+	if !isIngestArticle(&k) || k.VaultPath == "" || k.ParseStatus == types.ParseStatusDeleting {
 		return nil
 	}
-	if !strings.HasPrefix(filepath.ToSlash(filepath.Clean(k.VaultPath)), "articles/") {
+	prefix := "articles/"
+	if k.SourceKind == "mine" {
+		prefix = "mine/"
+	}
+	if !strings.HasPrefix(filepath.ToSlash(filepath.Clean(k.VaultPath)), prefix) {
 		return errors.New("article file must be inside articles/")
 	}
 	abs, err := vaultAbsolute(v.root, k.VaultPath)
@@ -369,7 +390,7 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 	current, err := os.ReadFile(abs)
 	if errors.Is(err, os.ErrNotExist) {
 		body := []byte(k.VaultBody)
-		if k.ProcessingMode == types.ProcessingModeSummaryOnly {
+		if k.SourceKind != "mine" && k.ProcessingMode == types.ProcessingModeSummaryOnly {
 			body = nil
 		}
 		if err = v.atomicArticleWrite(abs, header, body, nil); err != nil {
@@ -383,7 +404,13 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 	}
 	oldHeader, body, err := SplitVaultArticle(current)
 	if err != nil {
+		if k.SourceKind == "mine" {
+			return v.atomicArticleWrite(abs, header, []byte(k.VaultBody), nil)
+		}
 		return err
+	}
+	if k.SourceKind == "mine" && !bytes.Equal(body, []byte(k.VaultBody)) {
+		return v.atomicArticleWrite(abs, header, []byte(k.VaultBody), nil)
 	}
 	if bytes.Equal(header, oldHeader) {
 		return nil
@@ -433,7 +460,8 @@ func (v *VaultService) atomicArticleWrite(abs string, header, body, previous []b
 			return err
 		}
 		_, currentBody, err := SplitVaultArticle(current)
-		if err != nil || sha256.Sum256(currentBody) != sha256.Sum256(body) {
+		_, previousBody, previousErr := SplitVaultArticle(previous)
+		if err != nil || previousErr != nil || sha256.Sum256(currentBody) != sha256.Sum256(previousBody) {
 			return errors.New("vault body changed concurrently; replacement refused")
 		}
 	}
@@ -523,7 +551,7 @@ func (v *VaultService) ReadBody(k *types.Entry) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if k.SourceKind != "article" {
+	if !isIngestArticle(k) {
 		return data, nil
 	}
 	_, body, err := SplitVaultArticle(data)
@@ -548,9 +576,9 @@ func (v *VaultService) ReadImage(k *types.Entry, ref string) (io.ReadCloser, err
 	return os.Open(abs)
 }
 
-// DeleteArticle never removes user-owned files under mine/ or reports/.
+// DeleteArticle removes imported article or user document files and attachments.
 func (v *VaultService) DeleteArticle(ctx context.Context, k *types.Entry) error {
-	if k.SourceKind != "article" {
+	if !isIngestArticle(k) {
 		return nil
 	}
 	if _, err := uuid.Parse(k.ID); err != nil {
@@ -568,7 +596,11 @@ func (v *VaultService) DeleteArticle(ctx context.Context, k *types.Entry) error 
 	}
 	v.articles.mu.Unlock()
 	if k.VaultPath != "" {
-		if !strings.HasPrefix(k.VaultPath, "articles/") {
+		prefix := "articles/"
+		if k.SourceKind == "mine" {
+			prefix = "mine/"
+		}
+		if !strings.HasPrefix(k.VaultPath, prefix) {
 			return errors.New("article file must be inside articles/")
 		}
 		abs, err := vaultAbsolute(v.root, k.VaultPath)

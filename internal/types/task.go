@@ -24,7 +24,6 @@ const (
 const (
 	QueueDefault     = "default"
 	QueueEntity      = "entity"
-	QueueSync        = "sync"
 	QueueMaintenance = "low"
 )
 
@@ -45,9 +44,9 @@ var queueDefinitions = []QueueDefinition{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
 	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill}},
-	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeEntryListDelete, TypeEntryListReparse,
+		TypeIngestAssetCleanup, TypeReportIndex,
 	}},
 }
 
@@ -192,8 +191,9 @@ const (
 	TypeEntryListReparse           = "knowledge:list_reparse" // 批量重解析知识任务
 	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
 	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
-	TypeManualProcess              = "manual:process"  // 手工知识更新任务（cleanup + 重新索引）
-	TypeDataSourceSync             = "datasource:sync" // 数据源同步任务
+	TypeManualProcess              = "manual:process" // 文章正文处理任务，兼容已有持久队列名称
+	TypeIngestAssetCleanup         = "ingest:asset_cleanup"
+	TypeReportIndex                = "report:index"
 )
 
 // DocumentProcessPayload represents the document process task payload
@@ -233,8 +233,8 @@ type EntryListReparsePayload struct {
 	Initiator     TaskInitiator          `json:"initiator,omitempty"`
 }
 
-// ManualProcessPayload represents the manual entry processing task payload.
-// Used for both create (publish) and update operations.
+// ManualProcessPayload carries supplied or already stored article text.
+// Used by ingest processing and local article reprocessing.
 type ManualProcessPayload struct {
 	RequestId       string `json:"request_id"`
 	SpaceID         uint64 `json:"tenant_id"`
@@ -249,4 +249,11 @@ const TypeTopicBackfill = "topic:backfill"
 type TopicBackfillPayload struct {
 	SpaceID uint64 `json:"tenant_id"`
 	JobID   string `json:"job_id"`
+}
+
+// ReportIndexPayload identifies the saved report to index without embedding its body.
+type ReportIndexPayload struct {
+	SpaceID         uint64 `json:"tenant_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	EntryID         string `json:"knowledge_id"`
 }

@@ -39,8 +39,17 @@ services:
     ports:
       - "${APP_PORT:-8080}:8080"
     volumes:
-      - data-files:/data/files
-      - vault-data:${VAULT_ROOT:-/data/vault}
+      # Run ./reliquary-admin check-deployment before starting the containers.
+      - type: bind
+        source: ${RELIQUARY_FILES_DIR:-${HOME}/Reliquary/files}
+        target: ${LOCAL_STORAGE_BASE_DIR:-/data/files}
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${RELIQUARY_VAULT_DIR:-${HOME}/Reliquary/vault}
+        target: ${VAULT_ROOT:-/data/vault}
+        bind:
+          create_host_path: false
       - ./config/config.yaml:/app/config/config.yaml
       # Optional: declarative built-in models. Copy config/builtin_models.yaml.example
       # to config/builtin_models.yaml, edit it for your deployment, then
@@ -103,9 +112,8 @@ services:
       # ========== 文件存储 ==========
       - LOCAL_STORAGE_BASE_DIR=${LOCAL_STORAGE_BASE_DIR:-/data/files}
       - VAULT_ROOT=${VAULT_ROOT:-/data/vault}
+      - BACKUP_DIR=${BACKUP_DIR:-${HOME}/Backups/Reliquary}
       - VAULT_HEADER_DEBOUNCE=${VAULT_HEADER_DEBOUNCE:-5s}
-      - VAULT_STABLE_WAIT=${VAULT_STABLE_WAIT:-10m}
-      - VAULT_SCAN_INTERVAL=${VAULT_SCAN_INTERVAL:-1m}
       - AUTO_RECOVER_DIRTY=${AUTO_RECOVER_DIRTY:-true}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       # Ollama 不可用时仅告警不阻断（true 时生效）
@@ -182,6 +190,4 @@ networks:
     driver: bridge
 
 volumes:
-  vault-data:
   postgres-data:
-  data-files:

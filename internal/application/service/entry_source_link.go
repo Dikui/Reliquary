@@ -27,6 +27,9 @@ var (
 // extractIntakeOriginalLink only inspects supplied bytes and parser output.
 // The extracted URL is provenance; this function performs no network requests.
 func extractIntakeOriginalLink(k *types.Entry, body string, raw []byte, fileType string, metadata map[string]string) error {
+	if k.SourceKind == "mine" {
+		return nil
+	}
 	intake, err := k.IntakeMetadata()
 	if err != nil || intake == nil || strings.TrimSpace(intake.SourceInfo.OriginalURL) != "" {
 		return err

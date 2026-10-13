@@ -261,8 +261,6 @@ export interface RuntimeTask {
   task_id?: string
   source_kb_id?: string
   target_kb_id?: string
-  data_source_id?: string
-  sync_log_id?: string
   entry_count?: number
 }
 

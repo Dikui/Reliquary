@@ -78,8 +78,7 @@ func TestEntrySearchStarredFiltersAndMissingCount(t *testing.T) {
 	starred = false
 	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, Limit: 100})
 	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-	require.Equal(t, "plain", result.Results[0].EntryID)
+	require.Equal(t, []string{"mine", "plain"}, entrySearchIDs(result))
 }
 
 func boolPointer(v bool) *bool { return &v }
@@ -92,7 +91,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, err)
 			h.service.SetVault(v)
 			t.Cleanup(func() { require.NoError(t, v.Close()) })
-			a, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
+			a, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
 			require.NoError(t, err)
 			h.drain(t)
 			a = h.article(t, a.ID)

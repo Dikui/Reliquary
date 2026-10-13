@@ -73,7 +73,7 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	svc := &entryService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		kbService: bases, modelService: models, task: queue, spaceRepo: repository.NewSpaceRepository(db),
 		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
-	article, err := svc.CreateEntryFromManual(ctx, kb.ID, &types.ManualEntryPayload{
+	article, err := svc.createLegacyManualFixture(ctx, kb.ID, &legacyManualFixturePayload{
 		Title: "Widget announcement", Content: "# Widget\n\nAcme released its new widget product. The original announcement describes deployment choices, supported platforms and the complete product capabilities.", Status: "publish",
 		SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/widget", PublishedAt: "2026-10-01"},
 	}, types.ChannelWeb)

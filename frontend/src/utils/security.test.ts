@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { hydrateProtectedFileImages, isValidImageURL, protectProviderImageSrcInHTML } from './security.ts'
+import { createSafeImage, hydrateProtectedFileImages, isValidImageURL, protectProviderImageSrcInHTML } from './security.ts'
+import { domPurifySecurityHooks } from './markdownDomPurify.ts'
 
 test('protectProviderImageSrcInHTML uses a placeholder src for provider images', () => {
   const html = '<p><img alt="preview" src="local://10000/exports/a.jpg"></p>'
@@ -74,4 +75,20 @@ test('vault image references are protected and hydrated through the authenticate
       else Reflect.deleteProperty(globalThis, key)
     }
   }
+})
+
+test('historical remote images retain their image element and source URL', () => {
+  const source = 'https://source.example/chart.png?size=2&version=1'
+  assert.equal(isValidImageURL(source), true)
+  assert.equal(createSafeImage(source, 'Chart', 'Original image'), `<img src="${source}" alt="Chart" title="Original image" class="markdown-image" style="max-width: 100%; height: auto;">`)
+  const html = `<img src="${source}" srcset="https://source.example/large.png 2x"><svg><image href="https://source.example/vector.svg"/><path fill="url(https://source.example/fill.svg#pattern)"/></svg><p style="background: image-set('https://source.example/background.png' 1x)">Body</p>`
+  assert.equal(protectProviderImageSrcInHTML(html), html)
+})
+
+test('existing HTML safety hooks preserve remote resource attributes while removing event handlers', () => {
+  const original = { src: 'https://source.example/image.png', srcset: 'https://source.example/large.png 2x', style: 'background: url(https://source.example/background.png)', onerror: 'unsafe()' }
+  const attributes = new Map(Object.entries(original))
+  const element = { tagName: 'IMG', hasAttribute: (name: string) => attributes.has(name), getAttribute: (name: string) => attributes.get(name) || null, removeAttribute: (name: string) => attributes.delete(name), setAttribute: (name: string, value: string) => attributes.set(name, value) }
+  domPurifySecurityHooks.beforeSanitizeElements(element as unknown as Node)
+  assert.deepEqual(Object.fromEntries(attributes), { src: original.src, srcset: original.srcset, style: original.style })
 })

@@ -18,7 +18,6 @@ const pages = [
   '../views/settings/Settings.vue',
   '../views/settings/KnowledgeBaseSettings.vue',
   '../views/settings/SpaceInfo.vue',
-  '../views/knowledge-base/settings/DataSourceEditorDialog.vue',
   '../components/DocContent.vue',
   '../components/SideMenu.vue',
   '../components/UserMenu.vue',

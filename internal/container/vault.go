@@ -12,7 +12,7 @@ import (
 )
 
 func newVaultDocumentService(db *gorm.DB, cfg *config.Config, models interfaces.ModelService, retrieval interfaces.RetrievalService) (*service.VaultDocumentService, error) {
-	return service.NewVaultDocumentService(db, models, retrieval, cfg.Vault.Root, cfg.Vault.StableWait, cfg.Vault.ScanInterval)
+	return service.NewVaultDocumentService(db, models, retrieval, cfg.Vault.Root)
 }
 
 func registerVaultIntegration(v *service.VaultService, documents *service.VaultDocumentService, entry interfaces.EntryService, entities *service.EntityService, h *handler.VaultHandler, cleaner interfaces.ResourceCleaner) error {
@@ -24,7 +24,7 @@ func registerVaultIntegration(v *service.VaultService, documents *service.VaultD
 	entities.SetHeaderRefresher(v)
 	h.SetArticles(v)
 	cleaner.RegisterWithName("Vault article headers", v.Close)
-	cleaner.RegisterWithName("Vault directory watcher", documents.Close)
+	cleaner.RegisterWithName("Vault report watcher", documents.Close)
 	if err := v.StartReplica(); err != nil {
 		return err
 	}

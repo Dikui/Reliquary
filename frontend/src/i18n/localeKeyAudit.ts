@@ -58,7 +58,6 @@ const EXTRA_PREFIXES = [
   'system.globalSettings.keyDescriptions.',
   'system.globalSettings.enumLabels.',
   'system.globalSettings.audit.actorRole.',
-  'datasource.syncError.',
   'kbSettings.parser.engines.',
   'model.editor.description.',
   'integrations.tabs.',

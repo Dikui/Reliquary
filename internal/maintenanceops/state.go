@@ -7,6 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -52,7 +55,23 @@ func (State) TableName() string { return "maintenance_state" }
 func Status(ctx context.Context, db *gorm.DB) (State, error) {
 	var state State
 	err := db.WithContext(ctx).Where("id = true").Take(&state).Error
+	state.BackupDirectory = effectiveBackupDirectory(state.BackupDirectory)
 	return state, err
+}
+
+// Resolve the historical built-in default on the deployment host without
+// changing preserved database configuration or explicit user settings.
+func effectiveBackupDirectory(directory string) string {
+	if directory != "" && directory != "../reliquary-backups" {
+		return directory
+	}
+	if configured := strings.TrimSpace(os.Getenv("BACKUP_DIR")); configured != "" {
+		return configured
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, "Backups", "Reliquary")
+	}
+	return directory
 }
 
 // SnapshotPaused also suspends automatic reconciliation while credentials or
@@ -63,8 +82,8 @@ func SnapshotPaused(ctx context.Context, db *gorm.DB) (bool, error) {
 }
 
 // CheckCollectionTx must run in the same transaction as collection and enqueue.
-// A previously accepted RSS job may finish during a drain, including admitting
-// its articles. New RSS schedules and all new requests are paused.
+// A previously accepted article task may finish during a drain.
+// New intake requests stay paused.
 func CheckCollectionTx(ctx context.Context, tx *gorm.DB) error {
 	if err := tx.Exec("SELECT pg_advisory_xact_lock_shared(?)", collectionLock).Error; err != nil {
 		return err
@@ -112,7 +131,7 @@ func Pause(ctx context.Context, db *gorm.DB, mode, reason string, flush func(con
 	if mode == "drain" {
 		for {
 			var count int64
-			err = db.WithContext(ctx).Table("task_jobs").Where("task_type IN ? AND state IN ?", []string{"document:process", "manual:process", "datasource:sync", "knowledge:list_delete", "knowledge:list_reparse"}, []string{"pending", "active", "scheduled", "retry"}).Count(&count).Error
+			err = db.WithContext(ctx).Table("task_jobs").Where("task_type IN ? AND state IN ?", []string{"document:process", "manual:process", "knowledge:list_delete", "knowledge:list_reparse"}, []string{"pending", "active", "scheduled", "retry"}).Count(&count).Error
 			if err != nil || count == 0 {
 				break
 			}
@@ -207,7 +226,7 @@ func Due(ctx context.Context, db *gorm.DB, now time.Time, force bool) (DueResult
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=true").Take(&state).Error; err != nil {
 			return err
 		}
-		result.Directory = state.BackupDirectory
+		result.Directory = effectiveBackupDirectory(state.BackupDirectory)
 		if !state.AutomaticEnabled || state.Paused {
 			return nil
 		}

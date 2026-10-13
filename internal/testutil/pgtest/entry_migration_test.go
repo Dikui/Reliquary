@@ -36,7 +36,7 @@ func TestEntryNamingMigrationPreservesDataConstraintsAndRetrieval(t *testing.T) 
  INSERT INTO task_jobs(id,task_type,queue,state,payload) VALUES('old-task','manual:process','default','pending','{"tenant_id":1,"knowledge_id":"mine"}');
  `).Error)
 	before := baselineContents(t, db)
-	require.NoError(t, m.Up())
+	require.NoError(t, m.Migrate(3))
 	after := baselineContents(t, db)
 	names := map[string]string{"knowledges": "entries", "knowledge_entities": "entry_entities", "knowledge_topics": "entry_topics", "knowledge_processing_spans": "entry_processing_spans", "knowledge_repost_sources": "entry_repost_sources"}
 	for table, raw := range before {
@@ -78,7 +78,7 @@ func TestEntryNamingMigrationPreservesDataConstraintsAndRetrieval(t *testing.T) 
 	require.Equal(t, "space_id", id)
 	require.NoError(t, m.Migrate(2))
 	require.Equal(t, before, baselineContents(t, db))
-	require.NoError(t, m.Up())
+	require.NoError(t, m.Migrate(3))
 	require.NoError(t, db.Raw(obsoleteEntrySchemaObjects).Scan(&leftovers).Error)
 	require.Empty(t, leftovers)
 }

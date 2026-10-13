@@ -85,6 +85,17 @@ func TestVaultArticleFullWritesOrderedHeaderRelativeImagesAndOriginal(t *testing
 	require.NoError(t, err)
 	require.NoError(t, image.Close())
 	require.True(t, bytes.HasPrefix(imageData, []byte("\x89PNG")))
+	// A plain relative path is sufficient for Obsidian to load the local image.
+	for _, reference := range articleImagesInOrder(string(body), nil) {
+		require.False(t, filepath.IsAbs(reference))
+		path := filepath.Join(filepath.Dir(filepath.Join(v.root, k.VaultPath)), filepath.FromSlash(reference))
+		resolved, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, imageData, resolved)
+		relative, err := filepath.Rel(v.root, path)
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(filepath.ToSlash(relative), "attachments/"+k.ID+"/"))
+	}
 	intake, err := k.IntakeMetadata()
 	require.NoError(t, err)
 	require.Empty(t, intake.OriginalPath)
@@ -390,7 +401,7 @@ func TestVaultReprocessingUpdatesHeaderAndReadsVaultBody(t *testing.T) {
 	require.Equal(t, beforeBody, served)
 }
 
-func TestVaultDocumentReadBodyIncludesUserFrontMatterAndDeleteKeepsFile(t *testing.T) {
+func TestImportedVaultDocumentReadBodyExcludesHeaderAndDeleteRemovesFile(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	doc := &types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
 		SourceKind: "mine", VaultPath: "mine/user.md", Title: "User", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted}
@@ -399,15 +410,12 @@ func TestVaultDocumentReadBodyIncludesUserFrontMatterAndDeleteKeepsFile(t *testi
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, doc.VaultPath), data, 0644))
 	body, err := v.ReadBody(doc)
 	require.NoError(t, err)
-	require.Equal(t, data, body)
+	require.Equal(t, []byte("# User\n\nBody"), body)
 	require.NoError(t, v.DeleteArticle(context.Background(), doc))
-	actual, err := os.ReadFile(filepath.Join(v.root, doc.VaultPath))
-	require.NoError(t, err)
-	require.Equal(t, data, actual)
+	_, err = os.Stat(filepath.Join(v.root, doc.VaultPath))
+	require.True(t, os.IsNotExist(err))
 	_, err = h.service.ReparseEntry(h.ctx, doc.ID, nil)
 	require.ErrorContains(t, err, "indexed directly from their files")
-	_, err = h.service.UpdateManualEntry(h.ctx, doc.ID, &types.ManualEntryPayload{Title: "User", Content: "修改", Status: "publish"})
-	require.ErrorContains(t, err, "edited directly in their files")
 	require.Empty(t, h.queue.tasks)
 	require.Empty(t, h.processor.requests)
 	var stored types.Entry
@@ -426,8 +434,6 @@ func TestVaultPersistedArticleBodyCannotBeEditedAfterProcessingFailure(t *testin
 	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, k))
 	before, _, _ := readVaultArticle(t, v, k)
 	tasks, calls := len(h.queue.tasks), len(h.processor.requests)
-	_, err = h.service.UpdateManualEntry(h.ctx, k.ID, &types.ManualEntryPayload{Title: "替换标题", Content: "替换正文", Status: "publish"})
-	require.ErrorContains(t, err, "approved article body cannot be changed")
 	after, _, _ := readVaultArticle(t, v, k)
 	require.Equal(t, before, after)
 	require.Len(t, h.queue.tasks, tasks)

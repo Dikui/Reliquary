@@ -20,7 +20,7 @@ func (v *VaultService) OpenAttachment(ctx context.Context, id, reference string)
 		return nil, werrors.NewUnauthorizedError("authenticated attachment reader required")
 	}
 	var entry types.Entry
-	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind='article'", id, space).First(&entry).Error; err != nil {
+	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind IN ('article','mine')", id, space).First(&entry).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, werrors.NewNotFoundError("article not found")
 		}

@@ -9,6 +9,7 @@ import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 import * as countCopy from '../../i18n/countCopy'
 import * as pagination from './runtimeTaskPagination'
+import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../../utils/sfcStyleTestHelpers'
 import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../knowledge-base/componentTestHarness'
 
 const require = createRequire(import.meta.url)
@@ -34,6 +35,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         return { available: true, has_more: false, tasks: [{
           id: 'full-rebuild-task', queue: 'entity', type: kind === 'embeddingRebuild' ? 'knowledge:embedding_rebuild' : 'topic:backfill', state: 'active',
           retried: 0, max_retry: 3, allowed_actions: [],
+          knowledge_base_id: 'knowledge-base-12345678-1234-1234-1234-123456789012',
+          entry_id: 'article-12345678-1234-1234-1234-123456789012',
           task_id: kind === 'topicBackfill' ? 'topic-history-job' : undefined,
         }] }
       },
@@ -74,6 +77,12 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const taskType = descendants(dialog).find(node => hasClass(node, 'rq-failed-row-type'))!
       assert.equal(visibleText(taskType), runtime.tasks.taskTypes[kind])
       assert.doesNotMatch(visibleText(dialog), /knowledge:embedding_rebuild|topic:backfill/)
+      for (const [label, value] of [[runtime.tasks.knowledgeBaseLabel, 'knowledge-base-12345678-1234-1234-1234-123456789012'], [runtime.tasks.knowledgeLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
+        const reference: ReturnType<typeof descendants>[number] | undefined = descendants(dialog).find(node => hasClass(node, 'rq-failed-ref') && descendants(node).some(child => child.tag === 'dt' && visibleText(child) === label))
+        assert.ok(reference, label)
+        assert.equal(visibleText(descendants(reference).find(child => child.tag === 'dd')!), value)
+        assert.equal(descendants(reference).find(child => child.tag === 'dd')!.props.title, value)
+      }
       if (kind === 'topicBackfill') {
         assert.ok(visibleText(dialog).includes(runtime.tasks.taskIDLabel))
         assert.ok(visibleText(dialog).includes('topic-history-job'))
@@ -87,6 +96,19 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   }
 }
+
+test('runtime task detail labels share a content sized column and wrap without entering the value column', async () => {
+  const rules = await compiledSFCStyleRules(new URL('./RuntimeQueues.vue', import.meta.url))
+  const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, 1440)
+  assert.equal(styles('.rq-failed-row-refs').display, 'grid')
+  assert.equal(styles('.rq-failed-row-refs')['grid-template-columns'], 'fit-content(40%) minmax(0, 1fr)')
+  assert.equal(styles('.rq-failed-row-refs').gap, '4px 8px')
+  assert.equal(styles('.rq-failed-ref').display, 'contents')
+  assert.equal(styles('.rq-failed-ref dt')['white-space'], 'normal')
+  assert.equal(styles('.rq-failed-ref dt')['overflow-wrap'], 'anywhere')
+  assert.equal(styles('.rq-failed-ref dd').overflow, 'hidden')
+  assert.equal(styles('.rq-failed-ref dd')['text-overflow'], 'ellipsis')
+})
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   for (const action of ['run_now', 'delete'] as const) {

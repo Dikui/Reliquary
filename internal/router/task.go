@@ -25,10 +25,10 @@ type TaskParams struct {
 	SystemSettings       interfaces.SystemSettingService
 	EntryService         interfaces.EntryService
 	KnowledgeBaseService interfaces.KnowledgeBaseService
-	DataSourceService    interfaces.DataSourceService
 	TopicService         *service.TopicService
 	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
 	EmbeddingRebuild     *service.EmbeddingRebuilder
+	Reports              *service.VaultDocumentService `optional:"true"`
 	SpanTracker          service.SpanTracker
 	Cleaner              interfaces.ResourceCleaner
 }
@@ -79,8 +79,15 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.HandleFunc(types.TypeEntryListReparse, params.EntryService.ProcessEntryListReparse)
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
-	mux.HandleFunc(types.TypeDataSourceSync, params.DataSourceService.ProcessSync)
 	mux.HandleFunc(types.TypeTopicBackfill, params.TopicService.HandleBackfill)
+	if params.Reports != nil {
+		mux.HandleFunc(types.TypeReportIndex, params.Reports.HandleReportIndex)
+	}
+	if assets, ok := params.EntryService.(interface {
+		HandleIngestAssetCleanup(context.Context, *queue.Task) error
+	}); ok {
+		mux.HandleFunc(types.TypeIngestAssetCleanup, assets.HandleIngestAssetCleanup)
+	}
 	config := queue.Config{Pools: resolveWorkerPoolConcurrency(params.SystemSettings), OnDeadLetter: newDeadLetterEntryFailer(params.EntryService, params.SpanTracker)}
 	if raw := os.Getenv("RELIQUARY_QUEUE_RECONNECT_ALERT_AFTER"); raw != "" {
 		duration, err := time.ParseDuration(raw)
@@ -113,6 +120,7 @@ type deadLetterEntryPayload struct {
 var taskTypesAffectingEntryStatus = map[string]struct{}{
 	types.TypeDocumentProcess: {},
 	types.TypeManualProcess:   {},
+	types.TypeReportIndex:     {},
 }
 
 type deadLetterEntryListDeletePayload struct {

@@ -38,7 +38,7 @@ func (s *searchService) articleVectorQuery(ctx context.Context, spaceID uint64, 
 	expression := fmt.Sprintf("a.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
 	return s.eligibleEntries(ctx, spaceID, kbID, f, dates).
 		Joins("JOIN article_embeddings a ON a.entry_id=k.id AND a.space_id=k.space_id").
-		Where("k.source_kind='article' AND a.dimension=? AND a.model_id=?", len(vector), modelID).
+		Where("k.source_kind IN ('article','mine') AND a.dimension=? AND a.model_id=?", len(vector), modelID).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 
@@ -46,7 +46,7 @@ func (s *searchService) imageVectorQuery(ctx context.Context, spaceID uint64, kb
 	expression := fmt.Sprintf("i.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
 	return s.eligibleEntries(ctx, spaceID, kbID, f, dates).
 		Joins("JOIN image_embeddings i ON i.entry_id=k.id AND i.space_id=k.space_id").
-		Where("k.source_kind='article' AND k.processing_mode='full' AND i.dimension=? AND i.model_id=?", len(vector), modelID).
+		Where("k.source_kind IN ('article','mine') AND k.processing_mode='full' AND i.dimension=? AND i.model_id=?", len(vector), modelID).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 
@@ -160,7 +160,7 @@ func poolLimit(pool int) int {
 }
 
 // Count query matches before publication filtering, ranking limits, and folding.
-// Documents in mine/reports have no article publication date and are not counted.
+// Imported documents use their recorded publication date; reports are not counted.
 func (s *searchService) countMissingArticleDates(ctx context.Context, spaceID uint64, kb *types.KnowledgeBase, f entrySearchFilters, vector []float32, modelID string, config *types.RetrievalConfig) (int64, error) {
 	lanes, err := s.retrieveEntryLanes(ctx, spaceID, kb, f, vector, modelID, config, 0, false)
 	if err != nil {
@@ -180,6 +180,6 @@ func (s *searchService) countMissingArticleDates(ctx context.Context, spaceID ui
 		return 0, nil
 	}
 	var count int64
-	err = s.db.WithContext(ctx).Table("entries").Where("space_id=? AND id IN ? AND source_kind='article' AND search_published_at IS NULL", spaceID, ids).Count(&count).Error
+	err = s.db.WithContext(ctx).Table("entries").Where("space_id=? AND id IN ? AND source_kind IN ('article','mine') AND search_published_at IS NULL", spaceID, ids).Count(&count).Error
 	return count, err
 }

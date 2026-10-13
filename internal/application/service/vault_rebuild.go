@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"reliquary/internal/types"
+	"reliquary/internal/vaultpath"
 )
 
 type VaultRebuildSkippedFile struct {
@@ -47,74 +48,86 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 	}
 	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
 	seenArticleIDs := make(map[string]bool)
-	articleDirectory, err := vaultAbsolute(s.root, "articles")
-	if err != nil {
-		return result, err
-	}
-	err = filepath.WalkDir(articleDirectory, func(path string, dirEntry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if dirEntry.IsDir() || dirEntry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") {
-			return nil
-		}
-		rel, err := filepath.Rel(s.root, path)
+	for _, directory := range []string{"articles", "mine"} {
+		articleDirectory, err := vaultAbsolute(s.root, directory)
 		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		content, err := os.ReadFile(path)
-		if err != nil {
-			result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, err.Error()})
-			return nil
-		}
-		header, body, err := ParseVaultArticle(content)
-		if err == nil {
-			err = validateVaultRebuildHeader(header, body)
-		}
-		if err != nil {
-			result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, err.Error()})
-			return nil
-		}
-		if seenArticleIDs[header.ID] {
-			result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, "duplicate article id"})
-			return nil
-		}
-		entry, err := s.restoreVaultArticle(ctx, kb, rel, header, body)
-		if err != nil {
-			return fmt.Errorf("restore article %s: %w", rel, err)
-		}
-		seenArticleIDs[header.ID] = true
-		if entry.ProcessingMode == types.ProcessingModeFull {
-			if err := s.indexVaultChunks(ctx, kb, entry, entry.VaultBody); err != nil {
-				_ = s.db.WithContext(ctx).Model(entry).Updates(map[string]interface{}{
-					"parse_status": types.ParseStatusFailed, "error_message": err.Error(),
-				}).Error
-				return fmt.Errorf("index rebuilt article %s: %w", rel, err)
-			}
-			if err := s.db.WithContext(ctx).Save(entry).Error; err != nil {
-				return err
-			}
-		}
-		if err := indexArticleEmbedding(ctx, s.db, s.models, kb, entry); err != nil {
-			return fmt.Errorf("index rebuilt article summary %s: %w", rel, err)
-		}
-		vault := &VaultService{db: s.db, root: s.root}
-		if err := indexArticleImages(ctx, s.db, s.models, kb, vault, entry); err != nil {
-			return fmt.Errorf("index rebuilt article images %s: %w", rel, err)
-		}
-		result.Articles++
-		return nil
-	})
-	if err != nil {
-		return result, err
-	}
-	// Personal documents and reports use the same hash-based indexer, bypassing
-	// the stabilization delay because rebuild reads a stopped file library.
-	for _, kind := range []string{"mine", "report"} {
-		if err := s.scanDirectory(ctx, kb, kind, true, &result.Skipped); err != nil {
 			return result, err
 		}
+		err = filepath.WalkDir(articleDirectory, func(path string, dirEntry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			rel, err := filepath.Rel(s.root, path)
+			if err != nil {
+				return err
+			}
+			if vaultpath.UserMetadata(rel) {
+				if dirEntry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if dirEntry.IsDir() || dirEntry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") {
+				return nil
+			}
+			rel = filepath.ToSlash(rel)
+			content, err := os.ReadFile(path)
+			if err != nil {
+				result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, err.Error()})
+				return nil
+			}
+			header, body, err := ParseVaultArticle(content)
+			if err == nil {
+				err = validateVaultRebuildHeader(header, body)
+			}
+			if err == nil && directory == "mine" && header.SourceKind != "mine" {
+				err = fmt.Errorf("personal document header requires source_kind: mine")
+			}
+			if err == nil && directory == "articles" && header.SourceKind != "" && header.SourceKind != "article" {
+				err = fmt.Errorf("article directory contains a different source kind")
+			}
+			if err != nil {
+				result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, err.Error()})
+				return nil
+			}
+			if seenArticleIDs[header.ID] {
+				result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, "duplicate article id"})
+				return nil
+			}
+			entry, err := s.restoreVaultArticle(ctx, kb, rel, header, body)
+			if err != nil {
+				return fmt.Errorf("restore article %s: %w", rel, err)
+			}
+			seenArticleIDs[header.ID] = true
+			if entry.ProcessingMode == types.ProcessingModeFull {
+				if err := s.indexVaultChunks(ctx, kb, entry, entry.VaultBody); err != nil {
+					_ = s.db.WithContext(ctx).Model(entry).Updates(map[string]interface{}{
+						"parse_status": types.ParseStatusFailed, "error_message": err.Error(),
+					}).Error
+					return fmt.Errorf("index rebuilt article %s: %w", rel, err)
+				}
+				if err := s.db.WithContext(ctx).Save(entry).Error; err != nil {
+					return err
+				}
+			}
+			if err := indexArticleEmbedding(ctx, s.db, s.models, kb, entry); err != nil {
+				return fmt.Errorf("index rebuilt article summary %s: %w", rel, err)
+			}
+			vault := &VaultService{db: s.db, root: s.root}
+			if err := indexArticleImages(ctx, s.db, s.models, kb, vault, entry); err != nil {
+				return fmt.Errorf("index rebuilt article images %s: %w", rel, err)
+			}
+			if directory == "articles" {
+				result.Articles++
+			}
+			return nil
+		})
+		if err != nil {
+			return result, err
+		}
+	}
+	if err := s.scanReports(ctx, kb, true, &result.Skipped); err != nil {
+		return result, err
 	}
 	for _, target := range []struct {
 		kind  string
@@ -148,6 +161,9 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 	if header.SourceUnverified && header.URL != "" {
 		return fmt.Errorf("unverified source must not contain an original URL")
 	}
+	if header.Acquisition != "" && header.Acquisition != "verbatim" && header.Acquisition != "extracted" && header.Acquisition != "model_written" {
+		return fmt.Errorf("invalid acquisition %q", header.Acquisition)
+	}
 	if !utf8.Valid(body) {
 		return fmt.Errorf("article body must be valid UTF-8")
 	}
@@ -170,18 +186,23 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *types.KnowledgeBase, path string, header VaultArticleHeader, body []byte) (*types.Entry, error) {
 	collected, _ := time.Parse(time.RFC3339Nano, header.CollectedAt)
 	mode := types.ProcessingModeForContentType(header.ContentType)
-	if header.SourceUnverified || header.ProcessingMode == types.ProcessingModeFull {
+	if header.SourceKind == "mine" || header.SourceUnverified || header.ProcessingMode == types.ProcessingModeFull {
 		mode = types.ProcessingModeFull
 	}
 	if mode == types.ProcessingModeSummaryOnly {
 		body = nil
 	}
+	kind := "article"
+	if header.SourceKind == "mine" {
+		kind = "mine"
+	}
 	now := time.Now().UTC()
 	entry := &types.Entry{ID: header.ID, SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
-		Type: types.EntryTypeManual, SourceKind: "article", VaultPath: path, VaultBody: string(body),
+		Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, VaultBody: string(body),
 		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true, ProcessingMode: mode,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
 		SourceUnverified: header.SourceUnverified,
+		Acquisition:      header.Acquisition,
 		ParseStatus:      types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
 		EnableStatus: "enabled", Channel: types.ChannelAPI, FileName: filepath.Base(path), FileType: "md",
 		CreatedAt: collected.UTC(), UpdatedAt: now, ProcessedAt: &now,

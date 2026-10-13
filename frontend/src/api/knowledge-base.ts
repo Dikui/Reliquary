@@ -1,21 +1,9 @@
-import { get, post, put, del, postUpload, getDown } from "../utils/request";
+import { get, post, put, del, getDown } from "../utils/request";
 import type { ModelTierConfig } from '@/types/modelTiers';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
-import type { SearchRequest } from '@/types/search';
+import type { SearchRequest, SearchSource } from '@/types/search';
 
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }
-
-export type EntryDuplicateCode = 'duplicate_manual' | 'duplicate_file' | 'duplicate_url';
-export type EntryDuplicateMatchMethod = 'url' | 'file_hash' | 'content_hash' | 'simhash';
-
-/** The method describes this intake attempt, independently of older repost sources. */
-export interface EntryDuplicateResponse {
-  success: false;
-  code: EntryDuplicateCode;
-  match_method?: EntryDuplicateMatchMethod;
-  message?: string;
-  data?: { id: string; knowledge_base_id?: string; title?: string; file_name?: string };
-}
 
 export function getKnowledgeBase() {
   return get('/api/v1/knowledge-base');
@@ -23,53 +11,6 @@ export function getKnowledgeBase() {
 
 export function updateKnowledgeBase(data: { name: string; description?: string; config?: Record<string, unknown> }) {
   return put('/api/v1/knowledge-base', data);
-}
-
-// 知识文件 API（基于具体知识库）
-export function uploadEntryFile(
-  kbId: string,
-  data: {
-    file: File
-    fileName?: string
-    process_config?: EntryProcessOverrides | string
-    source_info?: IntakeSourceInfo | string
-    [key: string]: any
-  } = { file: new File([], '') },
-  onProgress?: (progressEvent: any) => void,
-) {
-  const formData = new FormData();
-  Object.keys(data).forEach(key => {
-    const value = data[key];
-    if (value === undefined) return;
-    if (key === 'source_info' || key === 'process_config') {
-      formData.append(key, typeof value === 'string' ? value : JSON.stringify(value));
-      return;
-    }
-    formData.append(key, value);
-  });
-  return postUpload(`/api/v1/knowledge-bases/${kbId}/entries/file`, formData, onProgress);
-}
-
-// 从URL创建知识
-export function createEntryFromURL(
-  kbId: string,
-  data: { url: string; process_config?: EntryProcessOverrides; source_info?: IntakeSourceInfo },
-) {
-  return post(`/api/v1/knowledge-bases/${kbId}/entries/url`, data);
-}
-
-// 手工创建知识
-export function createManualEntry(
-  kbId: string,
-  data: {
-    title: string
-    content: string
-    status: string
-    process_config?: EntryProcessOverrides
-    source_info?: IntakeSourceInfo
-  },
-) {
-  return post(`/api/v1/knowledge-bases/${kbId}/entries/manual`, data);
 }
 
 export function listEntryFiles(
@@ -83,6 +24,7 @@ export function listEntryFiles(
     starred?: boolean;
     parse_status?: string;
     source?: string;
+    source_kind?: SearchSource;
     start_time?: string;
     end_time?: string;
   },
@@ -96,6 +38,7 @@ export function listEntryFiles(
   if (typeof params.starred === 'boolean') query.append('starred', String(params.starred));
   if (params.parse_status) query.append('parse_status', params.parse_status);
   if (params.source) query.append('source', params.source);
+  if (params.source_kind) query.append('source_kind', params.source_kind);
   if (params.start_time) query.append('start_time', params.start_time);
   if (params.end_time) query.append('end_time', params.end_time);
   const qs = query.toString();
@@ -106,13 +49,6 @@ export function getEntryDetails(id: string) {
   const query = new URLSearchParams();
   const qs = query.toString();
   return get(qs ? `/api/v1/entries/${id}?${qs}` : `/api/v1/entries/${id}`);
-}
-
-export function updateManualEntry(
-  id: string,
-  data: { title: string; content: string; status: string; process_config?: EntryProcessOverrides },
-) {
-  return put(`/api/v1/entries/${id}/manual`, data);
 }
 
 export function reparseEntry(id: string, data?: { process_config?: EntryProcessOverrides }) {
@@ -130,6 +66,10 @@ export function getEntrySpans(id: string, attempt?: number) {
 
 export function delEntryDetails(id: string) {
   return del(`/api/v1/entries/${id}`);
+}
+
+export function deleteDocument(documentId: string) {
+  return del<{ success: boolean; data?: { document_id: string; status: 'deleted' }; message?: string }>(`/api/v1/documents/${encodeURIComponent(documentId)}`);
 }
 
 // 批量删除（同一知识库内）。后端会校验所有 id 隶属于 kb_id 且具有编辑权限。

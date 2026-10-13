@@ -2,24 +2,20 @@ package service
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+
 	"io"
 	"mime/multipart"
-	"net/http"
-	"net/http/httptest"
+
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
-	"reliquary/internal/datasource"
-	"reliquary/internal/datasource/connector/rss"
+
 	"reliquary/internal/models/chat"
-	taskqueue "reliquary/internal/queue"
+
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
@@ -125,7 +121,7 @@ func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Entry {
 func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	body := "# Uploadfixture\n\nAcme published an original technical announcement with supported deployment capabilities and measured product improvements."
-	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "announcement.md", body),
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "announcement.md", body),
 		map[string]string{"publisher": "Acme", "original_url": "https://example.com/uploadfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
@@ -145,34 +141,10 @@ func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T
 	require.NotContains(t, string(completed.Metadata), "classification")
 }
 
-func TestLocalURLArticleCompletes(t *testing.T) {
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<html><head><title>URLfixture original publication</title></head><body><article><h1>URLfixture</h1><p>`+
-			strings.Repeat("URLfixture Acme documents original deployment choices and measured widget product capabilities. ", 12)+`</p></article></body></html>`)
-	}))
-	defer server.Close()
-	h := newRetainedIntakeHarness(t)
-	article, err := h.service.CreateEntryFromURL(h.ctx, h.kb.ID, server.URL+"/article", "", "", nil, "URLfixture", types.ChannelWeb, nil,
-		types.SourceInfo{Publisher: "Acme", PublishedAt: "2026-10-01", OriginalURL: server.URL + "/article"})
-	require.NoError(t, err)
-	h.drain(t)
-	completed := h.article(t, article.ID)
-	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
-	require.Equal(t, types.SummaryStatusCompleted, completed.SummaryStatus)
-	reader, _, err := h.service.GetEntryBody(h.ctx, article.ID)
-	require.NoError(t, err)
-	defer reader.Close()
-	body, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	require.Contains(t, string(body), "URLfixture")
-}
-
 func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	h.model.malformed = true
-	article, err := h.service.CreateEntryFromFile(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
 		newMultipartFileHeader(t, "malformed.md", "Acme published the complete original product announcement with detailed deployment options."),
 		map[string]string{"publisher": "Acme", "original_url": "https://example.com/malformedfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
@@ -186,110 +158,4 @@ func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	require.Empty(t, intake.OriginalPath)
 	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
 	require.Equal(t, []string{intakeReviewPrompt()}, h.model.prompts)
-}
-
-func TestRSSLocalFeedReviewRetryDiscardAndChangedURLSkip(t *testing.T) {
-	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
-	h := newRetainedIntakeHarness(t)
-	changed := false
-	date := time.Now().UTC().Format(time.RFC1123Z)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/feed.xml" {
-			w.Header().Set("Content-Type", "application/rss+xml")
-			fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>Fixture publisher</title><link>http://%s</link><description>Original articles</description>`, r.Host)
-			for _, marker := range []string{"approvedfixture", "rejectfixture", "discardfixture"} {
-				fmt.Fprintf(w, `<item><title>%s</title><link>http://%s/%s</link><guid>%s</guid><pubDate>%s</pubDate><description>Read the complete original</description></item>`, marker, r.Host, marker, marker, date)
-			}
-			fmt.Fprint(w, `</channel></rss>`)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		text := "Acme publishes an original article explaining new widget features and deployment choices. "
-		if r.URL.Path == "/rejectfixture" {
-			text = "Independent commentators express unsupported opinions about the future of electric transportation and urban planning. "
-		} else if r.URL.Path == "/discardfixture" {
-			text = "A hobbyist discusses personal preferences about gardening herbs and the aesthetic qualities of seasonal flower arrangements. "
-		}
-		if changed {
-			text = "Acme revised the source article to describe later product changes and fresh deployment options. "
-		}
-		fmt.Fprintf(w, `<html><head><title>%s</title><meta name="author" content="Ada"></head><body><article><h1>%s</h1><p>%s</p></article></body></html>`, r.URL.Path, r.URL.Path, strings.Repeat(text, 10))
-	}))
-	defer server.Close()
-	registry := datasource.NewConnectorRegistry()
-	require.NoError(t, registry.Register(rss.NewConnector()))
-	dsRepo, logs := repository.NewDataSourceRepository(h.db), repository.NewSyncLogRepository(h.db)
-	cfg := &types.DataSourceConfig{Type: types.ConnectorTypeRSS, Settings: map[string]interface{}{"feed_urls": server.URL + "/feed.xml", "publisher": "Fixture publisher"}}
-	encoded, err := cfg.ToJSON()
-	require.NoError(t, err)
-	ds := &types.DataSource{ID: "feed", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.ConnectorTypeRSS, Name: "Fixture publisher", Config: encoded,
-		SyncMode: types.SyncModeFull, Status: types.DataSourceStatusActive, CreatedAt: time.Now().Add(-24 * time.Hour)}
-	require.NoError(t, dsRepo.Create(h.ctx, ds))
-	syncer := &DataSourceService{dsRepo: dsRepo, syncLogRepo: logs, entryService: h.service, kbService: h.service.kbService,
-		connectorRegistry: registry, spaceRepo: h.service.spaceRepo}
-	sync := func(id string) *types.SyncLog {
-		log := &types.SyncLog{ID: id, SpaceID: h.kb.SpaceID, DataSourceID: ds.ID, Status: types.SyncLogStatusRunning}
-		require.NoError(t, logs.Create(h.ctx, log))
-		payload, err := json.Marshal(types.DataSourceSyncPayload{SpaceID: h.kb.SpaceID, DataSourceID: ds.ID, SyncLogID: log.ID, ForceFull: true})
-		require.NoError(t, err)
-		require.NoError(t, syncer.ProcessSync(h.ctx, taskqueue.NewTask(types.TypeDataSourceSync, payload)))
-		h.drain(t)
-		log, err = logs.FindByID(h.ctx, id)
-		require.NoError(t, err)
-		return log
-	}
-	first := sync("first-sync")
-	require.Equal(t, 3, first.ItemsCreated)
-	var articles []types.Entry
-	require.NoError(t, h.db.Order("title").Find(&articles).Error)
-	require.Len(t, articles, 3)
-	byTitle := make(map[string]types.Entry)
-	for _, article := range articles {
-		byTitle[article.Title] = article
-	}
-	approved, rejected, discarded := byTitle["approvedfixture"], byTitle["rejectfixture"], byTitle["discardfixture"]
-	require.Equal(t, types.ParseStatusCompleted, approved.ParseStatus)
-	require.Equal(t, types.ParseStatusRejected, rejected.ParseStatus)
-	require.Equal(t, types.ParseStatusRejected, discarded.ParseStatus)
-	waiting, err := h.service.ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.ID, &types.Pagination{Page: 1, PageSize: 10}, types.EntryListFilter{ParseStatus: types.ParseStatusRejected})
-	require.NoError(t, err)
-	require.EqualValues(t, 2, waiting.Total)
-	original, _, err := h.service.GetEntryBody(h.ctx, approved.ID)
-	require.NoError(t, err)
-	originalBody, err := io.ReadAll(original)
-	require.NoError(t, err)
-	require.NoError(t, original.Close())
-	changed = true
-	second := sync("second-sync")
-	require.Equal(t, 3, second.ItemsSkipped)
-	require.Zero(t, second.ItemsCreated)
-	require.Zero(t, second.ItemsUpdated)
-	var count int64
-	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
-	require.EqualValues(t, 3, count, "changed originals must not create review candidates")
-	reader, _, err := h.service.GetEntryBody(h.ctx, approved.ID)
-	require.NoError(t, err)
-	unchanged, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	require.NoError(t, reader.Close())
-	require.Equal(t, originalBody, unchanged)
-	// A changed feed entry identifier still resolves the existing normalized link.
-	result := &types.SyncResult{}
-	syncer.applyFetchedItem(h.ctx, ds, &types.FetchedItem{ExternalID: "different-guid", Title: "Changed original", Content: []byte(strings.Repeat("Changed complete original. ", 10)),
-		URL: server.URL + "/approvedfixture?utm_source=feed", Metadata: map[string]string{"publisher": "Fixture publisher", "published_at": "2026-10-01"}}, result)
-	require.Equal(t, 1, result.Skipped)
-	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
-	require.EqualValues(t, 3, count)
-	h.model.approveRetry = true
-	_, err = h.service.ReviewEntryIntake(h.ctx, rejected.ID, "retry", types.SourceInfo{})
-	require.NoError(t, err)
-	h.drain(t)
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, rejected.ID).ParseStatus)
-	_, err = h.service.ReviewEntryIntake(h.ctx, discarded.ID, "discard", types.SourceInfo{})
-	require.NoError(t, err)
-	_, err = h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, discarded.ID)
-	require.ErrorIs(t, err, repository.ErrEntryNotFound)
-	waiting, err = h.service.ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.ID, &types.Pagination{Page: 1, PageSize: 10}, types.EntryListFilter{ParseStatus: types.ParseStatusRejected})
-	require.NoError(t, err)
-	require.Zero(t, waiting.Total)
 }

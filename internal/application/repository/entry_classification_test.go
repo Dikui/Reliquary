@@ -33,19 +33,3 @@ func TestEntryContentTypeFilterIncludesUnclassifiedAndRespectsScope(t *testing.T
 		require.Empty(t, row.ContentType)
 	}
 }
-
-func TestDataSourceDefaultContentTypeCanBeCleared(t *testing.T) {
-	db := pgtest.Open(t)
-	repo := NewDataSourceRepository(db)
-	ctx := context.Background()
-	source := &types.DataSource{SpaceID: types.SingleSpaceID, KnowledgeBaseID: uuid.NewString(), Name: "RSS", Type: types.ConnectorTypeRSS, DefaultContentType: types.ContentTypeResearch}
-	require.NoError(t, repo.Create(ctx, source))
-	loaded, err := repo.FindByID(ctx, source.ID)
-	require.NoError(t, err)
-	require.Equal(t, types.ContentTypeResearch, loaded.DefaultContentType)
-	source.DefaultContentType = ""
-	require.NoError(t, repo.Update(ctx, source))
-	loaded, err = repo.FindByID(ctx, source.ID)
-	require.NoError(t, err)
-	require.Empty(t, loaded.DefaultContentType)
-}

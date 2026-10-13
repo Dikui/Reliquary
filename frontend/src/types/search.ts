@@ -1,5 +1,6 @@
 import type { EntityType } from '@/api/entity-types'
 import type { ContentType, EntryTopic, StructuredSummary } from './entryClassification'
+import type { Acquisition } from './ingest'
 
 export const SEARCH_SOURCES = ['article', 'mine', 'report'] as const
 export type SearchSource = typeof SEARCH_SOURCES[number]
@@ -22,6 +23,8 @@ export interface SearchEntry {
   original_url: string
   starred?: boolean
   source_unverified?: boolean
+  acquisition?: Acquisition | ''
+  incomplete?: boolean
 }
 export interface SearchFilters {
   content_types: ContentType[]

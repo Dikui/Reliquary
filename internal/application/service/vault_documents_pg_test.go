@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/config"
@@ -21,6 +22,7 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/vaultpath"
 )
 
 type vaultRecordingEmbedder struct {
@@ -68,8 +70,10 @@ func newVaultDocumentHarness(t *testing.T, wait time.Duration) *vaultDocumentHar
 	e := &vaultRecordingEmbedder{}
 	root := t.TempDir()
 	r := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(h.db))
-	s, err := NewVaultDocumentService(h.db, vaultDocumentModels{embedder: e}, r, root, wait, 25*time.Millisecond)
+	s, err := NewVaultDocumentService(h.db, vaultDocumentModels{embedder: e}, r, root)
 	require.NoError(t, err)
+	s.reportStableWait = wait
+	s.reportScanInterval = 25 * time.Millisecond
 	t.Cleanup(func() { require.NoError(t, s.Close()) })
 	return &vaultDocumentHarness{h, s, e, root}
 }
@@ -97,94 +101,137 @@ func (h *vaultDocumentHarness) assertSearch(t *testing.T, id, term string) {
 	require.NotEmpty(t, hits)
 }
 
-func TestVaultMineSettlesAndOnlyChangedChunkIsEmbedded(t *testing.T) {
-	h := newVaultDocumentHarness(t, 70*time.Millisecond)
-	body := "# 私人笔记\n\n## Alpha\n\n" + strings.Repeat("alpha ", 14) + "\n\n## Bravo\n\n" + strings.Repeat("bravo ", 14) + "\n\n## Charlie\n\n" + strings.Repeat("charlie ", 14)
-	path := h.write(t, "mine/nested/note.md", body)
-	require.NoError(t, h.documents.Scan(h.ctx, false))
-	var count int64
-	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
-	require.Zero(t, count, "an actively edited document must not be indexed")
-	time.Sleep(90 * time.Millisecond)
-	require.NoError(t, h.documents.Scan(h.ctx, false))
-	document := h.byPath(t, "mine/nested/note.md")
-	require.Equal(t, "私人笔记", document.Title)
-	require.Equal(t, "mine", document.SourceKind)
-	require.Empty(t, document.ContentType)
-	require.Nil(t, document.StructuredSummary)
-	var old []*types.Chunk
-	require.NoError(t, h.db.Where("entry_id=?", document.ID).Order("chunk_index").Find(&old).Error)
-	require.Len(t, old, 3, "heading boundaries should isolate the changed paragraph")
-	require.Equal(t, len(old), h.embedder.inputCount())
-	h.assertSearch(t, document.ID, "bravo")
-	modified := strings.ReplaceAll(body, "bravo ", "delta ")
-	require.NoError(t, os.WriteFile(path, []byte(modified), 0o644))
-	require.NoError(t, h.documents.Scan(h.ctx, false))
-	require.Equal(t, len(old), h.embedder.inputCount(), "wait applies to updates as well")
-	time.Sleep(90 * time.Millisecond)
-	require.NoError(t, h.documents.Scan(h.ctx, false))
-	var current []*types.Chunk
-	require.NoError(t, h.db.Where("entry_id=?", document.ID).Order("chunk_index").Find(&current).Error)
-	require.Len(t, current, 3)
-	require.Equal(t, len(old)+1, h.embedder.inputCount(), "only the changed hash needs a new vector")
-	kept := 0
-	for _, after := range current {
-		for _, before := range old {
-			if before.ID == after.ID {
-				kept++
-			}
-		}
-	}
-	require.Equal(t, 2, kept)
-	h.assertSearch(t, document.ID, "delta")
-	actual, err := os.ReadFile(path)
+func TestVaultMineFileChangesAreNeverObserved(t *testing.T) {
+	h := newVaultDocumentHarness(t, 20*time.Millisecond)
+	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Imported personal document", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), ContentType: "tutorial"}
+	body := "# Imported personal document\n\noriginalminefixture remains indexed from import"
+	document, err := h.documents.restoreVaultArticle(h.ctx, h.kb, "mine/imported.md", header, []byte(body))
 	require.NoError(t, err)
-	require.Equal(t, modified, string(actual), "indexing is read-only")
-	require.NoError(t, h.documents.Scan(h.ctx, false))
-	require.Equal(t, len(old)+1, h.embedder.inputCount(), "unchanged files do not invoke the model")
-	var relations int64
-	require.NoError(t, h.db.Model(&types.EntryEntity{}).Count(&relations).Error)
-	require.Zero(t, relations)
-	require.NoError(t, h.db.Model(&types.EntryTopic{}).Count(&relations).Error)
-	require.Zero(t, relations)
-}
-
-func TestVaultMineWatcherRenameAndDeleteCleanRecordsAndVectors(t *testing.T) {
-	h := newVaultDocumentHarness(t, 60*time.Millisecond)
-	// The preexisting file verifies startup schedules stabilization without an event.
-	path := h.write(t, "mine/start.md", "# First heading\n\nwatchfixture searchable paragraph")
+	require.NoError(t, h.documents.indexVaultChunks(h.ctx, h.kb, document, body))
+	path := h.write(t, document.VaultPath, string(RenderVaultArticleHeader(header))+body)
+	h.assertSearch(t, document.ID, "originalminefixture")
+	calls := h.embedder.inputCount()
 	require.NoError(t, h.documents.Start(h.ctx))
-	var first types.Entry
-	require.Eventually(t, func() bool {
-		return h.db.Where("vault_path=? AND parse_status=?", "mine/start.md", types.ParseStatusCompleted).First(&first).Error == nil
-	}, 3*time.Second, 20*time.Millisecond)
-	renamed := filepath.Join(h.root, "mine", "renamed.md")
-	require.NoError(t, os.Rename(path, renamed))
-	var second types.Entry
-	require.Eventually(t, func() bool {
-		var count int64
-		if h.db.Model(&types.Entry{}).Where("id=?", first.ID).Count(&count).Error != nil || count != 0 {
-			return false
-		}
-		return h.db.Where("vault_path=? AND parse_status=?", "mine/renamed.md", types.ParseStatusCompleted).First(&second).Error == nil
-	}, 3*time.Second, 20*time.Millisecond)
-	require.NotEqual(t, first.ID, second.ID)
+	h.write(t, "mine/hand-placed.md", "# Hand placed\n\nmanualminefixture must stay unindexed")
+	require.NoError(t, os.WriteFile(path, []byte("# Modified\n\nmodifiedminefixture must stay unindexed"), 0644))
+	time.Sleep(120 * time.Millisecond)
+	require.NoError(t, h.documents.Scan(h.ctx, true))
 	var count int64
-	require.NoError(t, h.db.Table("embeddings").Where("entry_id=?", first.ID).Count(&count).Error)
-	require.Zero(t, count)
-	require.NoError(t, os.Remove(renamed))
-	require.Eventually(t, func() bool {
-		return h.db.Unscoped().Model(&types.Entry{}).Where("id=?", second.ID).Count(&count).Error == nil && count == 0
-	}, 3*time.Second, 20*time.Millisecond)
-	require.NoError(t, h.db.Unscoped().Model(&types.Chunk{}).Where("entry_id IN ?", []string{first.ID, second.ID}).Count(&count).Error)
-	require.Zero(t, count)
-	require.NoError(t, h.db.Table("embeddings").Where("entry_id IN ?", []string{first.ID, second.ID}).Count(&count).Error)
-	require.Zero(t, count)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='mine'").Count(&count).Error)
+	require.EqualValues(t, 1, count)
+	require.Equal(t, calls, h.embedder.inputCount())
+	require.Equal(t, body, h.byPath(t, document.VaultPath).VaultBody)
+	h.assertSearch(t, document.ID, "originalminefixture")
+	var modifiedChunks int64
+	require.NoError(t, h.db.Model(&types.Chunk{}).Where("content LIKE '%modifiedminefixture%'").Count(&modifiedChunks).Error)
+	require.Zero(t, modifiedChunks)
+	require.NoError(t, os.Remove(path))
+	require.NoError(t, h.documents.Scan(h.ctx, true))
+	require.Equal(t, body, h.byPath(t, document.VaultPath).VaultBody)
+	for _, watched := range h.documents.watcher.WatchList() {
+		require.False(t, strings.HasPrefix(watched, filepath.Join(h.root, "mine")))
+	}
 	status, err := h.documents.Status(h.ctx)
 	require.NoError(t, err)
-	require.NotNil(t, status.Mine.LastScanAt)
+	require.Nil(t, status.Mine.LastScanAt)
+	require.EqualValues(t, 1, status.Mine.IndexedFiles)
+}
+
+func TestVaultWatcherAndIndexIgnoreObsidianConfigurationWithoutChangingFiles(t *testing.T) {
+	h := newVaultDocumentHarness(t, 40*time.Millisecond)
+	configuration := map[string]string{
+		".obsidian/app.json":                      `{"theme":"obsidian"}`,
+		".trash/x.md":                             "# Trashed root note\n",
+		".DS_Store":                               "Finder metadata",
+		"mine/.obsidian/app.json":                 `{"readableLineLength":true}`,
+		"mine/.trash/x.md":                        string([]byte{0xff, 0xfe}),
+		"mine/nested/._private.md":                "# AppleDouble note\n",
+		"reports/.obsidian/templates/template.md": "# Editor template\n",
+		"reports/.trash/x.md":                     "# Trashed report\n",
+		"reports/.DS_Store":                       "Report Finder metadata",
+	}
+	for relative, data := range configuration {
+		h.write(t, relative, data)
+	}
+	h.write(t, "mine/keep.md", "# Personal note\n\nobsidianfixture is not imported")
+	h.write(t, "reports/keep.md", "# Report\n\nreportobsidianfixture remains indexed")
+	require.NoError(t, h.documents.Start(h.ctx))
+	require.Eventually(t, func() bool {
+		var entry types.Entry
+		return h.db.Where("vault_path=? AND parse_status=?", "reports/keep.md", types.ParseStatusCompleted).First(&entry).Error == nil
+	}, 3*time.Second, 20*time.Millisecond)
+	// New editor directories exercise the event handler as well as startup walks.
+	configuration["mine/new/.obsidian/template.md"] = "# New hidden template\n"
+	configuration["reports/.trash/new.md"] = "# New discarded report\n"
+	configuration["mine/.obsidian/app.json"] = `{"readableLineLength":false}`
+	fixed := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	for relative, data := range configuration {
+		path := h.write(t, relative, data)
+		require.NoError(t, os.Chtimes(path, fixed, fixed))
+	}
+	h.write(t, "reports/keep.md", "# Report\n\nreportobsidianfixture remains indexed")
+	require.Eventually(t, func() bool {
+		var entry types.Entry
+		return h.db.Where("vault_path=? AND parse_status=?", "reports/keep.md", types.ParseStatusCompleted).First(&entry).Error == nil
+	}, 3*time.Second, 20*time.Millisecond)
+	require.NoError(t, h.documents.Scan(h.ctx, true))
+	for _, path := range h.documents.watcher.WatchList() {
+		relative, err := filepath.Rel(h.root, path)
+		require.NoError(t, err)
+		require.False(t, vaultpath.UserMetadata(relative), "editor directories must not receive watches")
+	}
+	require.NoError(t, h.documents.Close())
+	var indexed []string
+	require.NoError(t, h.db.Model(&types.Entry{}).Order("vault_path").Pluck("vault_path", &indexed).Error)
+	require.Equal(t, []string{"reports/keep.md"}, indexed)
+	for relative := range h.documents.observations {
+		require.False(t, vaultpath.UserMetadata(relative), "ignored event paths must not enter indexing observations")
+	}
+	for relative, data := range configuration {
+		actual, err := os.ReadFile(filepath.Join(h.root, relative))
+		require.NoError(t, err)
+		require.Equal(t, data, string(actual))
+		info, err := os.Stat(filepath.Join(h.root, relative))
+		require.NoError(t, err)
+		require.Equal(t, fixed, info.ModTime().UTC())
+	}
+	status, err := h.documents.Status(h.ctx)
+	require.NoError(t, err)
 	require.Zero(t, status.Mine.IndexedFiles)
+	require.EqualValues(t, 1, status.Reports.IndexedFiles)
 	require.Empty(t, status.Mine.LastError)
+	require.Empty(t, status.Reports.LastError)
+}
+
+func TestVaultCancelledReportScanPreservesLastCompletedStatus(t *testing.T) {
+	for _, queryTable := range []string{"knowledge_bases", "entries"} {
+		t.Run(queryTable, func(t *testing.T) {
+			h := newVaultDocumentHarness(t, 20*time.Millisecond)
+			path := h.write(t, "reports/cancelled.md", "# Original report\n\nKeep the last completed report status.")
+			require.NoError(t, h.documents.Scan(h.ctx, true))
+			before, err := h.documents.Status(h.ctx)
+			require.NoError(t, err)
+			require.NotNil(t, before.Reports.LastScanAt)
+			calls := h.embedder.inputCount()
+			require.NoError(t, os.WriteFile(path, []byte("# Changed report\n\nInterrupt this scan during shutdown."), 0644))
+			ctx, cancel := context.WithCancel(h.ctx)
+			defer cancel()
+			callback := "reliquary:test_cancel_report_scan"
+			require.NoError(t, h.db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+				if tx.Statement.Table == queryTable {
+					cancel()
+				}
+			}))
+			t.Cleanup(func() { require.NoError(t, h.db.Callback().Query().Remove(callback)) })
+			err = h.documents.Scan(ctx, true)
+			require.ErrorIs(t, err, context.Canceled)
+			require.ErrorIs(t, ctx.Err(), context.Canceled)
+			after, err := h.documents.Status(h.ctx)
+			require.NoError(t, err)
+			require.Equal(t, before.Reports, after.Reports)
+			require.Equal(t, calls, h.embedder.inputCount())
+		})
+	}
 }
 
 func TestVaultReportImmediatelyIndexesReadOnlyBodyAndValidatesRelations(t *testing.T) {
@@ -261,10 +308,13 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 	summaryFile, err := os.ReadFile(filepath.Join(root, summary.VaultPath))
 	require.NoError(t, err)
 	require.NotContains(t, string(summaryFile), "\nauthor:", "author matching the publisher is omitted")
-	documents, err := NewVaultDocumentService(h.db, h.service.modelService, h.service.retrieveEngine, root, 20*time.Millisecond, time.Minute)
+	documents, err := NewVaultDocumentService(h.db, h.service.modelService, h.service.retrieveEngine, root)
 	require.NoError(t, err)
 	mine := filepath.Join(root, "mine", "personal.md")
-	require.NoError(t, os.WriteFile(mine, []byte("# 本人文档\n\npersonalfixture first-hand notes"), 0o644))
+	personalHeader := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "本人文档", CollectedAt: time.Now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano), ContentType: "tutorial", ProcessingMode: types.ProcessingModeFull, Summary: &types.EntrySummary{Overview: "Personal tutorial", Points: []string{"Personal procedure"}, KeyTerms: []string{"Document"}}}
+	personalBody := "# 本人文档\n\npersonalfixture first-hand notes"
+	require.NoError(t, os.WriteFile(mine, append(RenderVaultArticleHeader(personalHeader), []byte(personalBody)...), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "mine", "hand-placed.md"), []byte("# Hand placed personal document"), 0644))
 	report, err := documents.CreateReport(h.ctx, "汇总", "# 汇总\n\nreportrebuildfixture retained synthesis", []string{full.ID})
 	require.NoError(t, err)
 	bad := filepath.Join(root, "articles", "broken.md")
@@ -277,19 +327,28 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 	fresh.kb.IndexingStrategy = h.kb.IndexingStrategy
 	require.NoError(t, fresh.db.Save(fresh.kb).Error)
 	r := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(fresh.db))
-	rebuild, err := NewVaultDocumentService(fresh.db, h.service.modelService, r, root, 20*time.Millisecond, time.Minute)
+	rebuild, err := NewVaultDocumentService(fresh.db, h.service.modelService, r, root)
 	require.NoError(t, err)
 	result, err := rebuild.Rebuild(fresh.ctx)
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Articles)
 	require.EqualValues(t, 1, result.Mine)
 	require.EqualValues(t, 1, result.Reports)
-	require.Len(t, result.Skipped, 1)
+	require.Len(t, result.Skipped, 2)
 	require.Equal(t, "articles/broken.md", result.Skipped[0].Path)
+	require.Equal(t, "mine/hand-placed.md", result.Skipped[1].Path)
+	var restoredPersonal types.Entry
+	require.NoError(t, fresh.db.Where("id=?", personalHeader.ID).First(&restoredPersonal).Error)
+	require.Equal(t, "mine", restoredPersonal.SourceKind)
+	require.Equal(t, types.ProcessingModeFull, restoredPersonal.ProcessingMode)
+	require.Equal(t, personalBody, restoredPersonal.VaultBody)
+	require.Equal(t, personalHeader.Summary, restoredPersonal.StructuredSummary)
 	require.Equal(t, before, vaultFileHashes(t, root))
 	freshVault, err := NewVaultService(fresh.db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 20 * time.Millisecond}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, freshVault.Close()) })
+	require.NoError(t, freshVault.RefreshHeader(fresh.ctx, restoredPersonal.ID))
+	require.Equal(t, before, vaultFileHashes(t, root), "refreshing a restored personal header preserves every file byte")
 	for _, original := range []*types.Entry{full, summary} {
 		var restored types.Entry
 		require.NoError(t, fresh.db.Where("id=?", original.ID).First(&restored).Error)
@@ -378,14 +437,23 @@ func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T
 	} {
 		h.write(t, fmt.Sprintf("articles/2026-10/bad-%d.md", index), string(RenderVaultArticleHeader(invalid)))
 	}
-	h.write(t, "mine/first.md", "# 第一手\n\nindependentfixture personal note")
+	h.write(t, "mine/first.md", "# 第一手\n\nindependentfixture legacy note")
+	personal := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Imported tutorial", CollectedAt: now, ContentType: "tutorial"}
+	h.write(t, "mine/imported.md", string(RenderVaultArticleHeader(personal))+"# Imported tutorial\n\npersonaltutorialfixture full text")
 	h.write(t, "mine/bad-utf8.md", string([]byte{0xff, 0xfe}))
 	h.write(t, "reports/bad-utf8.md", string([]byte{0xff, 0xfe}))
+	for relative, data := range map[string]string{
+		".obsidian/app.json": `{"readingView":true}`, ".trash/x.md": "discarded article without a header", ".DS_Store": "Finder metadata",
+		"mine/.trash/x.md": string([]byte{0xff}), "reports/.obsidian/template.md": "Editor template",
+		"articles/.trash/x.md": string(body),
+	} {
+		h.write(t, relative, data)
+	}
 	before := vaultFileHashes(t, h.root)
 	result, err := h.documents.Rebuild(h.ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Articles)
-	require.Len(t, result.Skipped, 7)
+	require.Len(t, result.Skipped, 8)
 	require.EqualValues(t, 1, result.Mine)
 	require.Zero(t, h.embedder.inputCount())
 	require.Equal(t, before, vaultFileHashes(t, h.root))
@@ -400,17 +468,15 @@ func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T
 
 func TestVaultDirectorySymlinkDoesNotDeleteExistingIndexOrWriteReport(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Millisecond)
-	h.write(t, "mine/first.md", "# First\n\nsymlinkfixture retained index")
+	h.write(t, "reports/first.md", "# First\n\nsymlinkfixture retained index")
 	require.NoError(t, h.documents.Scan(h.ctx, true))
-	document := h.byPath(t, "mine/first.md")
+	document := h.byPath(t, "reports/first.md")
 	external := t.TempDir()
-	require.NoError(t, os.RemoveAll(filepath.Join(h.root, "mine")))
-	require.NoError(t, os.Symlink(external, filepath.Join(h.root, "mine")))
+	require.NoError(t, os.RemoveAll(filepath.Join(h.root, "reports")))
+	require.NoError(t, os.Symlink(external, filepath.Join(h.root, "reports")))
 	require.ErrorContains(t, h.documents.Scan(h.ctx, true), "symbolic link")
 	var saved types.Entry
 	require.NoError(t, h.db.Where("id=?", document.ID).First(&saved).Error)
-	require.NoError(t, os.RemoveAll(filepath.Join(h.root, "reports")))
-	require.NoError(t, os.Symlink(external, filepath.Join(h.root, "reports")))
 	_, err := h.documents.CreateReport(h.ctx, "outside", "report body", nil)
 	require.ErrorContains(t, err, "symbolic link")
 	entries, err := os.ReadDir(external)

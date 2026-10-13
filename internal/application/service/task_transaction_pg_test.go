@@ -6,9 +6,9 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"os"
+
 	"path/filepath"
-	"strings"
+
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,8 +34,8 @@ func transactionJobs(t *testing.T, db *gorm.DB) []taskqueue.Job {
 	require.NoError(t, db.Order("created_at,id").Find(&jobs).Error)
 	return jobs
 }
-func transactionManualPayload() *types.ManualEntryPayload {
-	return &types.ManualEntryPayload{Title: "Transactional collection", Content: "Original product announcement with durable source details.", Status: types.ManualEntryStatusPublish, SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/transactional-collection", Publisher: "Fixture publisher"}}
+func transactionManualPayload() *legacyManualFixturePayload {
+	return &legacyManualFixturePayload{Title: "Transactional collection", Content: "Original product announcement with durable source details.", Status: types.ManualEntryStatusPublish, SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/transactional-collection", Publisher: "Fixture publisher"}}
 }
 
 func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
@@ -44,7 +44,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	rollback := errors.New("abort collection transaction")
 	var id string
 	require.ErrorIs(t, h.db.WithContext(h.ctx).Transaction(func(tx *gorm.DB) error {
-		article, err := transactionEntryService(h.service, tx).CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+		article, err := transactionEntryService(h.service, tx).createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 		require.NoError(t, err)
 		id = article.ID
 		jobs := transactionJobs(t, tx)
@@ -57,7 +57,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Count(&count).Error)
 	require.Zero(t, count, "article and task roll back together")
-	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	jobs := transactionJobs(t, h.db)
 	require.Len(t, jobs, 1)
@@ -74,7 +74,7 @@ func TestTaskTransactionCollectionRollbackAndCommit(t *testing.T) {
 func TestTaskTransactionApproveRollbackAndCommit(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	h.service.task = taskqueue.NewClient(h.db)
-	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -179,9 +179,9 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 			}}
 			collect := func() (*types.Entry, error) {
 				if kind == "manual_attachment" {
-					return h.service.CreateEntryFromManual(h.ctx, h.kb.ID, payload, types.ChannelWeb)
+					return h.service.createLegacyManualFixture(h.ctx, h.kb.ID, payload, types.ChannelWeb)
 				}
-				return h.service.CreateEntryFromFile(h.ctx, h.kb.ID, newMultipartFileHeader(t, "durable.md", payload.Content),
+				return h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "durable.md", payload.Content),
 					map[string]string{"original_url": payload.SourceInfo.OriginalURL}, nil, "", types.ChannelWeb, nil)
 			}
 			article, err := collect()
@@ -217,7 +217,7 @@ func TestTaskTransactionCollectionResourcesRollBackAndNewFilesAreRemoved(t *test
 }
 func TestTaskTransactionEnqueueFailureRollsBackApprovalAndRetainsOriginal(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	h.service.modelService = &summaryStateModelService{model: model}
 	first := taskqueue.NewClient(h.db)
 	h.service.task = first
-	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
+	article, err := h.service.createLegacyManualFixture(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
 	require.NoError(t, err)
 	config := taskqueue.Config{Pools: types.WorkerPoolConcurrency{Core: 1}, CheckInterval: 10 * time.Millisecond}
 	require.NoError(t, first.Start(context.Background(), taskqueue.HandlerFunc(h.service.ProcessManualUpdate), config))
@@ -296,78 +296,6 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 		completed, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
 		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && len(transactionJobs(t, h.db)) == 0
 	}, 5*time.Second, 20*time.Millisecond)
-}
-
-func TestTaskTransactionManualCorrectionQueueFailureRetainsRejectedBody(t *testing.T) {
-	h := newRetainedIntakeHarness(t)
-	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
-	require.NoError(t, err)
-	intake, err := article.IntakeMetadata()
-	require.NoError(t, err)
-	intake.Decision = "rejected"
-	article.ParseStatus = types.ParseStatusRejected
-	require.NoError(t, article.SetIntakeMetadata(intake))
-	require.NoError(t, h.db.Save(article).Error)
-	originalMetadata := string(article.Metadata)
-	h.service.task = taskTransactionFailure{Client: taskqueue.NewClient(h.db)}
-	_, err = h.service.UpdateManualEntry(h.ctx, article.ID, &types.ManualEntryPayload{Title: "Corrected title", Content: "Corrected original source body.", Status: types.ManualEntryStatusPublish})
-	require.ErrorContains(t, err, "simulated failure")
-	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
-	require.NoError(t, err)
-	require.Equal(t, article.Title, saved.Title)
-	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
-	require.JSONEq(t, originalMetadata, string(saved.Metadata))
-	source, err := h.service.fileSvc.GetFile(h.ctx, intake.OriginalPath)
-	require.NoError(t, err)
-	body, err := io.ReadAll(source)
-	require.NoError(t, err)
-	require.NoError(t, source.Close())
-	require.Equal(t, transactionManualPayload().Content, string(body), "queue failure cannot replace the rejected original body")
-}
-
-func TestTaskTransactionInvalidManualCorrectionPreservesResourceAndOriginal(t *testing.T) {
-	h := newRetainedIntakeHarness(t)
-	root := t.TempDir()
-	catalog := NewResourceCatalog(repository.NewResourceRepository(h.db))
-	h.service.resourceCatalog = catalog
-	h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), catalog)
-	h.service.task = taskqueue.NewClient(h.db)
-	article, err := h.service.CreateEntryFromManual(h.ctx, h.kb.ID, transactionManualPayload(), types.ChannelWeb)
-	require.NoError(t, err)
-	intake, err := article.IntakeMetadata()
-	require.NoError(t, err)
-	intake.Decision = "rejected"
-	article.ParseStatus = types.ParseStatusRejected
-	require.NoError(t, article.SetIntakeMetadata(intake))
-	require.NoError(t, h.db.Save(article).Error)
-	require.NoError(t, h.db.Where("1=1").Delete(&taskqueue.Job{}).Error)
-	beforeFiles := transactionStoredFiles(t, root)
-	beforeMetadata := string(article.Metadata)
-	_, err = h.service.UpdateManualEntry(h.ctx, article.ID, &types.ManualEntryPayload{
-		Title: "Invalid correction", Content: "This body must not replace the retained original.", Status: types.ManualEntryStatusPublish,
-		ProcessConfig: &types.EntryProcessOverrides{ChunkingConfig: &types.ChunkingConfig{
-			TableMetadataInstructions: strings.Repeat("x", types.MaxCustomPromptInstructionsLength+1),
-		}},
-	})
-	require.ErrorContains(t, err, "table metadata instructions exceeds")
-	require.Empty(t, transactionJobs(t, h.db))
-	saved, err := h.service.repo.GetEntryByID(h.ctx, h.kb.SpaceID, article.ID)
-	require.NoError(t, err)
-	require.JSONEq(t, beforeMetadata, string(saved.Metadata))
-	require.Equal(t, types.ParseStatusRejected, saved.ParseStatus)
-	require.Equal(t, beforeFiles, transactionStoredFiles(t, root))
-	resource, err := catalog.Resolve(h.ctx, intake.OriginalPath)
-	require.NoError(t, err)
-	require.Equal(t, types.ResourceStateActive, resource.State)
-	source, err := h.service.fileSvc.GetFile(h.ctx, intake.OriginalPath)
-	require.NoError(t, err)
-	body, err := io.ReadAll(source)
-	require.NoError(t, err)
-	require.NoError(t, source.Close())
-	require.Equal(t, transactionManualPayload().Content, string(body))
-	_, err = os.Stat(beforeFiles[0])
-	require.NoError(t, err)
 }
 
 func TestTaskTransactionEmbeddingStartAndResumeAreAtomic(t *testing.T) {

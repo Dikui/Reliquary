@@ -2,7 +2,10 @@
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize } from '@/utils/files';
+import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
+import { markdownToPlainText } from '@/utils/markdownPlainText';
 import DocumentActionMenu from './DocumentActionMenu.vue';
+import DocumentMenuDelete from './DocumentMenuDelete.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
@@ -36,6 +39,7 @@ const props = defineProps<{
   selectedIds: Set<string>;
   batchMode: boolean;
   traceAvailableById: Record<string, boolean>;
+  deleteEntry?: (item: EntryCard) => Promise<boolean>;
 }>();
 
 const emit = defineEmits<{
@@ -44,10 +48,12 @@ const emit = defineEmits<{
   (e: 'judgment-updated', value: ArticleJudgment): void;
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: EntryCard): void;
-  (e: 'action', action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard): void;
+  (e: 'action', action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard): void;
+  (e: 'deleted', id: string): void;
 }>();
 
 const { t } = useI18n();
+const menuDelete = ref<InstanceType<typeof DocumentMenuDelete> | null>(null);
 
 // --- Menu index tracking ---
 const activeMenuIndex = ref(-1);
@@ -94,7 +100,8 @@ const formatDocTime = (time?: string) => {
 
 const getEntryType = (item: EntryCard) => {
   if (item.source_kind === 'mine' || item.source_kind === 'report') return t(`knowledgeBase.sourceKinds.${item.source_kind}`);
-  if (item.channel === 'rss') return t('datasource.connector.rss');
+  if (item.channel === 'rss') return t('knowledgeBase.channelRSS');
+  if (isIngestAPIEntry(item)) return t('knowledgeBase.typeIngestAPI');
   if (item.type === 'url') return t('knowledgeBase.typeURL') || 'URL';
   if (item.type === 'manual') return t('knowledgeBase.typeManual');
   if (item.file_type) return item.file_type.toUpperCase();
@@ -105,7 +112,7 @@ const channelLabelMap: Record<string, string> = {
   web: 'knowledgeBase.channelWeb',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
-  rss: 'datasource.connector.rss',
+  rss: 'knowledgeBase.channelRSS',
 };
 
 const getChannelLabel = (channel: string) => {
@@ -233,12 +240,18 @@ watch(() => props.items, dismissCardPopover);
 onBeforeUnmount(dismissCardPopover);
 
 // --- Action handlers ---
-const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard) => {
-  {
-    if (item.isMore !== undefined) item.isMore = false;
-    activeMenuIndex.value = -1;
-  }
+const handleAction = (action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard) => {
+  if (item.isMore !== undefined) item.isMore = false;
+  activeMenuIndex.value = -1;
   emit('action', action, item);
+};
+
+const openDelete = async (item: EntryCard) => {
+  item.isMore = false;
+  activeMenuIndex.value = -1;
+  dismissCardPopover();
+  await nextTick();
+  menuDelete.value?.open(item, props.deleteEntry ? () => props.deleteEntry!(item) : undefined);
 };
 </script>
 
@@ -275,7 +288,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
             overlayClassName="card-more"
             :on-visible-change="(v: boolean) => onMenuVisibleChange(v, item)"
             trigger="click"
-            destroy-on-close
+            :destroy-on-close="false"
             placement="bottom-right"
           >
             <div
@@ -291,20 +304,23 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
               <div  class="card-menu">
                 <DocumentActionMenu
                   :item="item"
-
                   :trace-visible="isTraceMenuVisible(item)"
                   @download="handleAction('download', item)"
-                  @edit="handleAction('edit', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
                   @cancel-parse="handleAction('cancel-parse', item)"
                   @batch-manage="handleAction('batch-manage', item)"
-                  @delete="handleAction('delete', item)"
+                  @delete="openDelete(item)"
                 />
               </div>
 
             </template>
           </t-popup>
+        </div>
+
+        <div v-if="item.parse_status !== 'completed' && (item.acquisition === 'model_written' || item.incomplete)" class="card-ingest-status">
+          <t-tag v-if="item.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
+          <t-tag v-if="item.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>
         </div>
 
         <!-- Parse status display -->
@@ -374,6 +390,8 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
     </div>
   </div>
 
+  <DocumentMenuDelete ref="menuDelete" @deleted="emit('deleted', $event)" />
+
   <!-- Hover popover -->
   <Teleport to="body">
     <div
@@ -404,7 +422,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
         </div>
         <template v-else>
           <div v-if="hoveredCardItem.description" class="card-popover-desc">
-            {{ hoveredCardItem.description }}
+            {{ markdownToPlainText(hoveredCardItem.description, `[${t('ingestStatus.missingTypes.image')}]`) }}
           </div>
           <div v-if="(hoveredCardItem as any).source" class="card-popover-source" :title="(hoveredCardItem as any).source">
             <t-icon name="link" size="12px" /> {{ (hoveredCardItem as any).source }}
@@ -584,6 +602,8 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
     letter-spacing: 0.01em;
     margin-right: 8px;
   }
+
+  .card-ingest-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 
   .more-wrap {
     flex-shrink: 0;

@@ -55,6 +55,7 @@
                 :badge="item.chunk.image_path ? t('knowledgeSearch.imageMatch') : item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
                 :badge-variant="item.chunk.image_path || item.chunk.match_type === 'vector' ? 'vector' : 'keyword'" :score="item.chunk.score"
                 :source-unverified="item.file.source_unverified"
+                :acquisition="item.file.acquisition" :incomplete="item.file.incomplete"
                 @primary="openChunk(item)" @hover="selectItemAt($event)">
                 <template #title>
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>
@@ -125,6 +126,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCmdkSearch, type CmdkFileGroup, type CmdkChunk } from './GlobalCommandPalette/useSearch'
 import { visibleFileChunks } from './GlobalCommandPalette/visibleFileChunks'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
+import { markdownToPlainText } from '@/utils/markdownPlainText'
 import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
 import ResultGroup from './GlobalCommandPalette/ResultGroup.vue'
 import ResultItem from './GlobalCommandPalette/ResultItem.vue'
@@ -306,7 +308,7 @@ const openFullSearch = () => {
   router.push({ path: '/platform/search', query: query.value.trim() ? { q: query.value.trim() } : {} })
 }
 
-const highlight = (text: string) => highlightText(text, query.value)
+const highlight = (text: string) => highlightText(markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`), query.value)
 
 // ─── Keyboard navigation ───
 

@@ -55,9 +55,12 @@ onBeforeUnmount(() => { generation++ })
       <div class="vault-directories">
         <section v-for="kind in (['mine', 'reports'] as const)" :key="kind" class="vault-directory">
           <h4>{{ t(kind === 'mine' ? 'settings.vault.mine' : 'settings.vault.reports') }} <code>{{ kind }}/</code></h4>
+          <p v-if="kind === 'mine'" class="vault-readonly-hint">{{ t('settings.vault.mineImportedHint') }}</p>
           <dl>
-            <dt>{{ t('settings.vault.lastScan') }}</dt>
-            <dd>{{ formatScanTime(status[kind].last_scan_at) }}</dd>
+            <template v-if="kind === 'reports'">
+              <dt>{{ t('settings.vault.lastScan') }}</dt>
+              <dd>{{ formatScanTime(status[kind].last_scan_at) }}</dd>
+            </template>
             <dt>{{ t('settings.vault.indexedFiles') }}</dt>
             <dd>{{ new Intl.NumberFormat(locale).format(status[kind].indexed_files) }}</dd>
             <dt>{{ t('settings.vault.lastError') }}</dt>

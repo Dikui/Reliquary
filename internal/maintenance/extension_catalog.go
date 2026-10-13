@@ -36,6 +36,10 @@ ORDER BY n.nspname,c.relname,a.attnum`).Scan(&columns).Error
 // fingerprints. Data outside that condition stops maintenance without dropping,
 // rewriting, or treating the custom data as a cache.
 func CatalogClassification(column CatalogColumn) (Category, bool) {
+	return catalogClassification(column, Rules)
+}
+
+func catalogClassification(column CatalogColumn, rules map[string]Rule) (Category, bool) {
 	if rule, found := ExtensionCatalogRegistry[column.Schema+"."+column.Table]; found {
 		for _, name := range strings.Fields(rule.Columns) {
 			if name == column.Name {
@@ -45,13 +49,17 @@ func CatalogClassification(column CatalogColumn) (Category, bool) {
 		return "", false
 	}
 	if column.Schema == "public" {
-		category, found := Rules[column.Table].Columns()[column.Name]
+		category, found := rules[column.Table].Columns()[column.Name]
 		return category, found
 	}
 	return "", false
 }
 
 func ValidateExtensionCatalog(ctx context.Context, db *gorm.DB) error {
+	rules, err := schemaRules(ctx, db)
+	if err != nil {
+		return err
+	}
 	columns, err := CatalogSchema(ctx, db)
 	if err != nil {
 		return err
@@ -64,14 +72,14 @@ func ValidateExtensionCatalog(ctx context.Context, db *gorm.DB) error {
 			if column.Schema != "public" || column.Extension != "" {
 				return fmt.Errorf("unclassified database table %s", key)
 			}
-			if _, found := Rules[column.Table]; !found {
+			if _, found := rules[column.Table]; !found {
 				return fmt.Errorf("unclassified database table %s", key)
 			}
 			if column.Kind != "r" {
 				return fmt.Errorf("unreviewed application relation kind for %s", key)
 			}
 		}
-		if _, found := CatalogClassification(column); !found {
+		if _, found := catalogClassification(column, rules); !found {
 			return fmt.Errorf("unclassified database column %s.%s", key, column.Name)
 		}
 		if knownExtension && (column.Extension != rule.Extension || column.Version != rule.Version || column.Kind != "r") {

@@ -54,7 +54,7 @@ func (s *TopicService) ListTopics(ctx context.Context) ([]types.Topic, error) {
 	result := []types.Topic{}
 	err = s.db.WithContext(ctx).Table("topics t").Select(`t.*, (SELECT count(*) FROM entry_topics kt
 		JOIN entries k ON k.id=kt.entry_id AND k.space_id=kt.space_id
-		WHERE kt.space_id=t.space_id AND kt.topic_id=t.id AND k.deleted_at IS NULL AND k.source_kind='article') AS article_count`).
+		WHERE kt.space_id=t.space_id AND kt.topic_id=t.id AND k.deleted_at IS NULL AND k.source_kind IN ('article','mine')) AS article_count`).
 		Where("t.space_id = ?", spaceID).Order("t.name, t.id").Find(&result).Error
 	return result, err
 }
@@ -249,7 +249,7 @@ func (s *TopicService) replaceEntryTopics(ctx context.Context, entryID string, i
 			}
 			return err
 		}
-		if article.SourceKind != "article" {
+		if !isIngestArticle(&article) {
 			return werrors.NewBadRequestError("only articles can have topics")
 		}
 		var selected []types.Topic

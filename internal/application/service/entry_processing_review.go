@@ -55,7 +55,7 @@ func (s *entryService) ResolveProcessingReview(ctx context.Context, id, action, 
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, spaceID).First(&current).Error; err != nil {
 			return err
 		}
-		if current.SourceKind != "article" || current.ParseStatus != types.ParseStatusCompleted || current.ProcessingReviewStatus != types.ProcessingReviewPending {
+		if !isIngestArticle(&current) || current.ParseStatus != types.ParseStatusCompleted || current.ProcessingReviewStatus != types.ProcessingReviewPending {
 			return werrors.NewBadRequestError("the article is not pending processing review")
 		}
 		before := processingReviewLogValue(&current)

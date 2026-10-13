@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
 
 interface EntryItem {
   id: string;
@@ -20,15 +19,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'download'): void;
-  (e: 'edit'): void;
   (e: 'view-trace'): void;
   (e: 'reparse'): void;
   (e: 'cancel-parse'): void;
   (e: 'batch-manage'): void;
   (e: 'delete'): void;
 }>();
-
-const { t } = useI18n();
 
 const CANCELABLE_PARSE_STATUSES = new Set(['pending', 'processing', 'finalizing']);
 
@@ -38,8 +34,6 @@ const isParseInFlight = computed(() =>
 
 const fileName = computed(() => props.item.file_name || props.item.title || props.item.id);
 const canReprocess = computed(() => !['mine', 'report'].includes(props.item.source_kind || ''));
-const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
-  && props.item.type === 'manual' && props.item.processing_mode !== 'summary_only');
 </script>
 
 <template>
@@ -51,12 +45,6 @@ const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
   >
     <t-icon class="icon" name="download" />
     <span>{{ $t('common.download') }}</span>
-  </div>
-
-  <!-- 编辑文档 -->
-  <div v-if="canEditBody" class="doc-action-menu-item" @click.stop="emit('edit')">
-    <t-icon class="icon" name="edit" />
-    <span>{{ $t('knowledgeBase.editDocument') }}</span>
   </div>
 
   <!-- 查看处理过程 -->
@@ -102,20 +90,19 @@ const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
   </div>
 
   <!-- 删除文档 -->
-  <t-popconfirm theme="warning"
-    :content="$t('knowledgeBase.confirmDeleteDocument', { fileName })"
-    :confirm-btn="{ content: $t('knowledgeBase.confirmDelete'), theme: 'danger' }"
-    :cancel-btn="{ content: $t('common.cancel') }" placement="left"
-    @confirm="emit('delete')">
-    <div class="doc-action-menu-item danger" @click.stop>
-      <t-icon class="icon" name="delete" />
-      <span>{{ $t('knowledgeBase.deleteDocument') }}</span>
-    </div>
-  </t-popconfirm>
+  <button type="button" class="doc-action-menu-item danger" @click.stop="emit('delete')">
+    <t-icon class="icon" name="delete" />
+    <span>{{ $t(item.source_kind === 'mine' ? 'personalDocument.delete' : 'knowledgeBase.deleteDocument') }}</span>
+  </button>
 </template>
 
 <style scoped lang="less">
 .doc-action-menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -126,6 +113,16 @@ const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
   cursor: pointer;
   border-radius: 6px;
   transition: background-color 0.15s cubic-bezier(0.2, 0, 0, 1), transform 0.12s ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: -2px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 
   &:hover {
     background: var(--td-bg-color-container-hover);

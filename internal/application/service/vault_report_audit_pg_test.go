@@ -59,9 +59,11 @@ func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Minute)
 	models := h.documents.models
 	h.documents.models = reportFailedEmbeddingModels{}
-	_, err := h.documents.CreateReport(h.ctx, "Retained report", "# Retained report\n\nSource retained for a later indexing retry.", nil)
-	require.ErrorContains(t, err, "report saved at")
-	require.ErrorContains(t, err, "fixture embedding is unavailable")
+	report, err := h.documents.CreateReport(h.ctx, "Retained report", "# Retained report\n\nSource retained for a later indexing retry.", nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, report.ID)
+	require.Equal(t, "pending_retry", report.IndexStatus)
+	require.Contains(t, report.ErrorMessage, "fixture embedding is unavailable")
 	files := []string{}
 	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "reports"), func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -80,4 +82,24 @@ func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report' AND parse_status='completed'").Count(&count).Error)
 	require.EqualValues(t, 1, count)
+}
+
+func TestVaultReportQueueEnqueueFailureRollsBackSavedSource(t *testing.T) {
+	h := newVaultDocumentHarness(t, time.Minute)
+	before := vaultFileHashes(t, h.root)
+	require.NoError(t, h.db.Exec(`CREATE FUNCTION reject_report_queue() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.task_type = 'report:index' THEN RAISE EXCEPTION 'fixture refuses report queue'; END IF;
+  RETURN NEW;
+END $$`).Error)
+	require.NoError(t, h.db.Exec(`CREATE TRIGGER reject_report_queue BEFORE INSERT ON task_jobs FOR EACH ROW EXECUTE FUNCTION reject_report_queue()`).Error)
+	_, err := h.documents.CreateReport(h.ctx, "Unqueued report", "# Unqueued report\n\nA saved report must have durable recovery.", nil)
+	require.ErrorContains(t, err, "fixture refuses report queue")
+	require.Equal(t, before, vaultFileHashes(t, h.root))
+	var count int64
+	for _, model := range []any{&types.Entry{}, &types.OperationLog{}, &types.Chunk{}} {
+		require.NoError(t, h.db.Model(model).Count(&count).Error)
+		require.Zero(t, count)
+	}
+	require.Empty(t, h.documents.observations)
 }

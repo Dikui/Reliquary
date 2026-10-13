@@ -40,8 +40,6 @@ type runtimeTaskPayloadProbe struct {
 	EntryID         string   `json:"knowledge_id,omitempty"`
 	TaskID          string   `json:"task_id,omitempty"`
 	JobID           string   `json:"job_id,omitempty"`
-	DataSourceID    string   `json:"data_source_id,omitempty"`
-	SyncLogID       string   `json:"sync_log_id,omitempty"`
 	EntryIDs        []string `json:"knowledge_ids,omitempty"`
 	EnqueuedAt      int64    `json:"enqueued_at,omitempty"`
 	CreatedAt       int64    `json:"created_at,omitempty"`
@@ -213,8 +211,8 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt, Deadline: job.Deadline,
 		EnqueuedAt: runtimePayloadTime(enqueuedAt), Retried: job.Retried, MaxRetry: job.MaxRetry,
 		Worker: job.WorkerPool, SpaceID: probe.SpaceID, KnowledgeBaseID: probe.KnowledgeBaseID,
-		EntryID: probe.EntryID, TaskID: probe.TaskID, DataSourceID: probe.DataSourceID,
-		SyncLogID: probe.SyncLogID, EntryCount: len(probe.EntryIDs),
+		EntryID: probe.EntryID, TaskID: probe.TaskID,
+		EntryCount: len(probe.EntryIDs),
 		AllowedActions: []types.RuntimeTaskAction{},
 	}
 	if job.TaskType == types.TypeTopicBackfill {

@@ -14,9 +14,9 @@ import (
 )
 
 // indexArticleEmbedding is also used when rebuilding from the vault. Documents
-// in mine and reports only have chunk vectors; they have no article summary.
+// in reports only have chunk vectors; imported user documents also have summaries.
 func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, article *types.Entry) error {
-	if db == nil || article == nil || article.SourceKind == "mine" || article.SourceKind == "report" {
+	if db == nil || article == nil || article.SourceKind == "report" {
 		return nil
 	}
 	if article.StructuredSummary == nil || kb == nil || !kb.IndexingStrategy.VectorEnabled {

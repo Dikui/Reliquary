@@ -84,7 +84,11 @@ func TestMCPFollowsListFeedAndSeenState(t *testing.T) {
 		{"Generated report", "report", types.ParseStatusCompleted, ""},
 	} {
 		article := mcpFollowArticle(t, f, excluded.title, now.Add(-20*time.Minute), entity.ID, topic.ID)
-		require.NoError(t, f.db.Model(article).Updates(map[string]any{"source_kind": excluded.source, "parse_status": excluded.parseStatus, "processing_review_status": excluded.reviewStatus}).Error)
+		changes := map[string]any{"source_kind": excluded.source, "parse_status": excluded.parseStatus, "processing_review_status": excluded.reviewStatus}
+		if excluded.source == "mine" {
+			changes["vault_path"] = ""
+		}
+		require.NoError(t, f.db.Model(article).Updates(changes).Error)
 	}
 	for _, decision := range []string{"pending", "rejected", "error"} {
 		article := mcpFollowArticle(t, f, "Unapproved intake "+decision, now.Add(-20*time.Minute), entity.ID, topic.ID)
@@ -208,6 +212,7 @@ func TestMCPFollowFeedSimilarReportsKeepTheirMatches(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	older := mcpFollowArticle(t, f, "Similar entity coverage", now.Add(-2*time.Hour), entity.ID, "")
 	newer := mcpFollowArticle(t, f, "Similar topic coverage", now.Add(-time.Hour), "", topic.ID)
+	require.NoError(t, f.db.Model(older).Update("incomplete", true).Error)
 	for _, article := range []*types.Entry{older, newer} {
 		require.NoError(t, f.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,knowledge_base_id,model_id,dimension,embedding,content_hash)
 			VALUES (?,?,?,'mcp-embedding',3,?,'mcp-follow-fixture')`, article.ID, types.SingleSpaceID, f.kb.ID, pgvector.NewHalfVector([]float32{1, 0, 0})).Error)
@@ -216,9 +221,11 @@ func TestMCPFollowFeedSimilarReportsKeepTheirMatches(t *testing.T) {
 	mcpCall(t, client, "follow_feed", map[string]any{"collapse_similar": true}, &feed)
 	require.Equal(t, []string{newer.ID}, mcpFeedIDs(&feed))
 	require.Equal(t, []string{topic.ID}, mcpMatchedIDs(feed.Results[0]))
+	require.False(t, feed.Results[0].Incomplete)
 	require.Len(t, feed.Results[0].SimilarReports, 1)
 	member := feed.Results[0].SimilarReports[0]
 	require.Equal(t, older.ID, member.EntryID)
+	require.True(t, member.Incomplete)
 	require.Equal(t, []string{entity.ID}, mcpMatchedIDs(member))
 	require.True(t, member.IsNew)
 	require.WithinDuration(t, now.Add(-2*time.Hour), member.CollectedAt, time.Microsecond)
@@ -227,6 +234,25 @@ func TestMCPFollowFeedSimilarReportsKeepTheirMatches(t *testing.T) {
 	require.Equal(t, []string{newer.ID, older.ID}, mcpFeedIDs(&feed))
 	require.Empty(t, feed.Results[0].SimilarReports)
 	require.Empty(t, feed.Results[1].SimilarReports)
+	require.False(t, feed.Results[0].Incomplete)
+	require.True(t, feed.Results[1].Incomplete)
+	for _, swapped := range []bool{false, true} {
+		require.NoError(t, f.db.Model(newer).Update("incomplete", swapped).Error)
+		require.NoError(t, f.db.Model(older).Update("incomplete", !swapped).Error)
+		for _, collapse := range []bool{false, true} {
+			var wire struct {
+				Results []*mcpIncompleteArticle `json:"results"`
+			}
+			mcpCall(t, client, "follow_feed", map[string]any{"collapse_similar": collapse}, &wire)
+			if collapse {
+				require.Len(t, wire.Results, 1)
+				require.Len(t, wire.Results[0].SimilarReports, 1)
+			} else {
+				require.Len(t, wire.Results, 2)
+			}
+			require.Equal(t, map[string]bool{newer.ID: swapped, older.ID: !swapped}, mcpIncompleteValues(t, wire.Results))
+		}
+	}
 	state, err := service.NewFollowService(f.db).State(f.ctx)
 	require.NoError(t, err)
 	require.Nil(t, state.LastViewedAt)

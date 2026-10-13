@@ -407,3 +407,34 @@ func TestAllEmbeddingRebuildRejectsBadVectorAndRetriesOnlyFailures(t *testing.T)
 	require.Equal(t, "completed", h.state(t).Status)
 	require.EqualValues(t, 7, h.state(t).CompletedCount)
 }
+
+func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *testing.T) {
+	h := newAllRebuildFixture(t, true)
+	var personal types.Entry
+	require.NoError(t, h.db.Where("id='mine'").First(&personal).Error)
+	personal.ContentType = "tutorial"
+	personal.ProcessingMode = types.ProcessingModeFull
+	personal.VaultPath = "mine/personal.md"
+	personal.VaultBody = "# Personal procedure\n\n![Personal image](../attachments/mine/personal.png)"
+	personal.StructuredSummary = &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Retain the complete instructions"}, KeyTerms: []string{"Personal"}}
+	personal.Description = personal.StructuredSummary.RenderText()
+	require.NoError(t, h.db.Save(&personal).Error)
+	dataURL := articleImageDataURI(t, 53)
+	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, "data:image/png;base64,"))
+	require.NoError(t, err)
+	path := filepath.Join(h.rebuilder.vault.root, "attachments", personal.ID, "personal.png")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+	require.NoError(t, os.WriteFile(path, data, 0644))
+	run, err := h.rebuilder.Start(h.ctx, 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 10, run.TotalCount)
+	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
+	require.Equal(t, "completed", h.state(t).Status)
+	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
+		var count int64
+		require.NoError(t, h.db.Table(table).Where("entry_id=? AND model_id=? AND dimension=3", personal.ID, "replacement-model").Count(&count).Error)
+		require.EqualValues(t, 1, count, table)
+	}
+	require.Equal(t, 2, h.embedder.imageCalls)
+	require.Contains(t, strings.Join(h.embedder.texts, "\n"), "Personal operating procedure")
+}

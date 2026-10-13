@@ -14,6 +14,12 @@ export const removedRootRoutes: RouteRecordRaw[] = [
 ].map(removedRoute)
 
 export const removedPlatformRoutes: RouteRecordRaw[] = [
+  'datasource/:pathMatch(.*)*',
+  'data-sources/:pathMatch(.*)*',
+  'sync-logs/:pathMatch(.*)*',
+  'import/:pathMatch(.*)*',
+  'upload/:pathMatch(.*)*',
+  'manual/:pathMatch(.*)*',
   'organizations/:pathMatch(.*)*',
   'shared-spaces/:pathMatch(.*)*',
 ].map(removedRoute)

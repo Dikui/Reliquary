@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"net"
 	"os"
 	"strings"
@@ -110,7 +111,7 @@ func TestSSRFSafeURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ok, reason := isSSRFSafeURL(tt.rawURL)
+			ok, reason := isSSRFSafeURLWithLookup(tt.rawURL, func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("93.184.216.34")}, nil })
 			if ok != tt.wantOK {
 				t.Fatalf("isSSRFSafeURL(%q) ok = %v, want %v, reason = %q", tt.rawURL, ok, tt.wantOK, reason)
 			}
@@ -124,7 +125,7 @@ func TestSSRFSafeURL(t *testing.T) {
 func TestSSRFSafeURL_AllowPublicDomain(t *testing.T) {
 	t.Parallel()
 
-	ok, reason := isSSRFSafeURL("https://example.com/path")
+	ok, reason := isSSRFSafeURLWithLookup("https://example.com/path", func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("93.184.216.34")}, nil })
 	if !ok {
 		// This path depends on runtime DNS/network. If DNS is unavailable, skip to keep CI stable.
 		if strings.Contains(reason, "DNS resolution failed") {
@@ -299,4 +300,31 @@ func parseIPForTest(t *testing.T, s string) net.IP {
 		t.Fatalf("invalid test IP: %s", s)
 	}
 	return ip
+}
+
+func TestSSRFSafeURLResolvedAddressesAndDNSFailure(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct {
+		name        string
+		ips         []net.IP
+		lookupError error
+		reason      string
+	}{
+		{name: "private address", ips: []net.IP{net.ParseIP("10.0.0.1")}, reason: "restricted IP"},
+		{name: "mixed public and private", ips: []net.IP{net.ParseIP("93.184.216.34"), net.ParseIP("127.0.0.1")}, reason: "restricted IP"},
+		{name: "DNS failure", lookupError: errors.New("fixture DNS unavailable"), reason: "DNS resolution failed"},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			allowed, reason := isSSRFSafeURLWithLookup("https://example.com/path", func(host string) ([]net.IP, error) {
+				if host != "example.com" {
+					t.Errorf("unexpected DNS host: %s", host)
+				}
+				return fixture.ips, fixture.lookupError
+			})
+			if allowed || !strings.Contains(reason, fixture.reason) {
+				t.Fatalf("unsafe result allowed=%v reason=%q", allowed, reason)
+			}
+		})
+	}
 }
