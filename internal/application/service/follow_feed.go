@@ -16,14 +16,14 @@ import (
 )
 
 func (s *FollowService) eligibleFeed(ctx context.Context, spaceID uint64, cutoff time.Time, targetIDs []string) *gorm.DB {
-	query := s.db.WithContext(ctx).Table("entries k").Where("k.space_id=? AND k.created_at<=? AND k.follow_ready_at<=?", spaceID, cutoff, cutoff).Where(followEligibleSQL)
+	query := s.db.WithContext(ctx).Table("entries k").Joins("JOIN libraries feed_library ON feed_library.id=k.library_id AND feed_library.deleted_at IS NULL AND feed_library.feed_enabled=true").Where("k.space_id=? AND k.created_at<=? AND COALESCE(k.follow_ready_at,k.processed_at,k.created_at)<=?", spaceID, cutoff, cutoff).Where(followEligibleSQL)
 	query = query.Joins(`JOIN LATERAL (
  SELECT MAX(matches.entered_at) AS entered_at, COUNT(*) AS match_count, ARRAY_AGG(matches.target_id) AS target_ids FROM (
- SELECT GREATEST(k.follow_ready_at,ke.created_at) AS entered_at, f.target_id
+ SELECT GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),ke.created_at) AS entered_at, f.target_id
  FROM entry_entities ke JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
  WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.created_at<=? AND f.created_at<=?
  UNION ALL
- SELECT CASE WHEN kt.is_historical THEN NULL ELSE GREATEST(k.follow_ready_at,kt.created_at) END, f.target_id
+ SELECT CASE WHEN kt.is_historical THEN NULL ELSE GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),kt.created_at) END, f.target_id
  FROM entry_topics kt JOIN follows f ON f.space_id=kt.space_id AND f.target_type='topic' AND f.target_id=kt.topic_id
  WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.created_at<=? AND f.created_at<=?
  ) matches) entry ON entry.match_count>0`, cutoff, cutoff, cutoff, cutoff)

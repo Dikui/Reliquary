@@ -18,6 +18,6 @@ func (s *stubArticleLibraryService) GetLibraryByID(_ context.Context, id string)
 	return &types.Library{ID: "library-1", SpaceID: 1, Type: types.LibraryTypeDocument}, nil
 }
 
-func (s *stubArticleLibraryService) GetLibrary(ctx context.Context) (*types.Library, error) {
+func (s *stubArticleLibraryService) GetSystemLibrary(ctx context.Context, roles ...string) (*types.Library, error) {
 	return s.GetLibraryByID(ctx, "library-1")
 }

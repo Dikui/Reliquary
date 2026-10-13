@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
@@ -269,7 +270,7 @@ func (s *VaultDocumentService) HandleReportIndex(ctx context.Context, task *queu
 	if err != nil {
 		return err
 	}
-	_, library, err := s.scope(ctx)
+	library, err := repository.NewLibraryRepository(s.db).GetLibraryByID(ctx, entry.LibraryID)
 	if err != nil {
 		return err
 	}

@@ -27,7 +27,7 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
-	library, err := repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, "")
+	library, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	root := t.TempDir()
 	v, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})

@@ -47,7 +47,7 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 	return nil
 }
 
-// ResolveModelTier reads the model choices stored on the only library.
+// ResolveModelTier uses the space embedding model and explicit library processing settings.
 func ResolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, tier types.ModelTier) (string, error) {
 	resolved, err := resolveModelTier(ctx, db, library, tier)
 	return resolved.ModelID, err
@@ -63,10 +63,23 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 	if !valid {
 		return ResolvedModelTier{}, fmt.Errorf("unknown model tier %q", tier)
 	}
+	if tier == types.ModelTierEmbedding && db != nil {
+		spaceID, ok := types.SpaceIDFromContext(ctx)
+		if !ok && library != nil {
+			spaceID = library.SpaceID
+		}
+		var space types.Space
+		if err := db.WithContext(ctx).Select("id", "embedding_model_id").Where("id=?", spaceID).Find(&space).Error; err != nil {
+			return ResolvedModelTier{}, err
+		}
+		if space.ID != 0 {
+			return ResolvedModelTier{space.EmbeddingModelID, "space"}, nil
+		}
+	}
 	if library == nil && db != nil {
 		spaceID := types.MustSpaceIDFromContext(ctx)
 		library = &types.Library{}
-		if err := db.WithContext(ctx).Where("space_id = ?", spaceID).First(library).Error; err != nil {
+		if err := db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "institutional").First(library).Error; err != nil {
 			return ResolvedModelTier{}, fmt.Errorf("read library model tiers: %w", err)
 		}
 	}
@@ -89,6 +102,15 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 		}
 		if id = strings.TrimSpace(id); id != "" {
 			return ResolvedModelTier{id, "library"}, nil
+		}
+	}
+	if db != nil && library != nil && library.SystemRole != "institutional" && tier != types.ModelTierEmbedding {
+		var defaults types.Library
+		if err := db.WithContext(ctx).Where("space_id=? AND system_role=?", library.SpaceID, "institutional").Find(&defaults).Error; err != nil {
+			return ResolvedModelTier{}, err
+		}
+		if defaults.ID != "" {
+			return resolveModelTier(ctx, nil, &defaults, tier)
 		}
 	}
 	return ResolvedModelTier{Source: "unconfigured"}, nil

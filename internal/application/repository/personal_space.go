@@ -32,7 +32,7 @@ func (r *userRepository) RegisterSingleUser(ctx context.Context, user *types.Use
 		if err := tx.Create(user).Error; err != nil {
 			return err
 		}
-		_, err := EnsureSpaceLibrary(ctx, tx, user.SpaceID, user.ID)
+		_, err := EnsureSystemLibraries(ctx, tx, user.SpaceID, user.ID)
 		return err
 	})
 }

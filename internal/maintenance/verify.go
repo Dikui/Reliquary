@@ -441,6 +441,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectQueueMigration(expected, actual)
 	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
 	expected, actual = projectMarkdownManifest(expected, actual, fileOrigin, legacyFormat)
+	expected, actual = projectLibraryManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
@@ -455,7 +456,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	currentEmbeddingIDs := map[string]bool{}
 	if allowModelChange {
 		for _, manifest := range []*Manifest{expected, actual} {
-			for _, row := range manifest.Tables["libraries"].Data {
+			for _, row := range append(append([]map[string]any{}, manifest.Tables["libraries"].Data...), manifest.Tables["spaces"].Data...) {
 				id := fmt.Sprint(row["embedding_model_id"])
 				if tiers, ok := row["model_tiers"].(map[string]any); ok && nonempty(tiers["embedding"]) {
 					id = fmt.Sprint(tiers["embedding"])
@@ -502,7 +503,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 				right = reconfiguredAPIKeyRows(left, right, expected.Required)
 				rowsMatch = len(left) == len(right)
 			}
-			if allowModelChange && table == "libraries" {
+			if allowModelChange && (table == "libraries" || table == "spaces") {
 				right = normalizeEmbeddingSelection(left, right)
 			}
 			if allowModelChange && table == "models" {

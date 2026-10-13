@@ -159,7 +159,7 @@ func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 	t.Helper()
 	now := time.Now().UTC()
-	library, err := f.params.LibraryService.GetLibrary(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
+	library, err := f.params.LibraryService.GetSystemLibrary(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
 	require.NoError(t, err)
 	for i := 1; i <= 2; i++ {
 		libraryID := library.ID

@@ -30,6 +30,7 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 	r.POST("/ingest/:id/accept-incomplete", g.LibraryExistsFromEntryIDParam("id"), handler.AcceptIncomplete)
 	r.POST("/ingest/:id/discard", g.LibraryExistsFromEntryIDParam("id"), handler.DiscardIngest)
 	r.DELETE("/documents/:id", g.LibraryExistsFromEntryIDParam("id"), handler.DeleteDocument)
+	r.GET("/entries", handler.ListEntry)
 	library := r.Group("/libraries/:id/entries")
 	libraryRead := library
 	{
@@ -64,6 +65,12 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 
 // RegisterLibraryRoutes exposes one settings resource and ID-based child resources.
 func RegisterLibraryRoutes(r *gin.RouterGroup, h *handler.LibraryHandler, g *accessGuards) {
+	r.GET("/libraries", h.ListLibraries)
+	r.POST("/libraries", h.CreateLibrary)
+	r.GET("/libraries/:id", g.LibraryExists("id"), h.GetLibrary)
+	r.PUT("/libraries/:id", g.LibraryExists("id"), h.ConfigureLibrary)
+	r.PATCH("/libraries/:id", g.LibraryExists("id"), h.ConfigureLibrary)
+	r.DELETE("/libraries/:id", g.LibraryExists("id"), h.DeleteLibrary)
 	r.GET("/library", h.GetLibrary)
 	r.PUT("/library", h.UpdateLibrary)
 	r.POST("/libraries/:id/hybrid-search", g.LibraryExists("id"), h.HybridSearch)

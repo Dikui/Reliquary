@@ -25,7 +25,7 @@ func (r *fakeLibraryRepo) CreateLibrary(_ context.Context, library *types.Librar
 	r.rows[library.ID] = library
 	return nil
 }
-func (r *fakeLibraryRepo) GetLibraryBySpaceID(ctx context.Context, spaceID uint64) (*types.Library, error) {
+func (r *fakeLibraryRepo) GetSystemLibraryByRole(ctx context.Context, spaceID uint64, roles ...string) (*types.Library, error) {
 	for _, library := range r.rows {
 		if library.SpaceID == spaceID {
 			return library, nil
@@ -60,3 +60,13 @@ func (r *fakeLibraryRepo) ListModelUsages(_ context.Context, _ uint64, _ string)
 // Force compile-time conformance check so any future interface change
 // surfaces as a build error here rather than at usage site.
 var _ interfaces.LibraryRepository = (*fakeLibraryRepo)(nil)
+
+func (r *fakeLibraryRepo) ListLibraries(ctx context.Context, spaceID uint64) ([]*types.Library, error) {
+	result := []*types.Library{}
+	for _, l := range r.rows {
+		if l.SpaceID == spaceID {
+			result = append(result, l)
+		}
+	}
+	return result, nil
+}

@@ -67,7 +67,7 @@ func (h *LibraryHandler) validateAndGetLibrary(c *gin.Context) (*types.Library, 
 	var library *types.Library
 	var err error
 	if id == "" {
-		library, err = h.service.GetLibrary(ctx)
+		library, err = h.service.GetSystemLibrary(ctx, "institutional")
 	} else {
 		library, err = h.service.GetLibraryByID(ctx, id)
 	}
@@ -106,7 +106,7 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 	if fillErr := h.service.FillLibraryCounts(c.Request.Context(), library); fillErr != nil {
 		logger.Warnf(c.Request.Context(), "Failed to fill Library counts for %s: %v", library.ID, fillErr)
 	}
-	var extras map[string]interface{}
+	extras := map[string]interface{}{"display_name": library.DisplayName(types.LanguageFromContextOrDefault(c.Request.Context()))}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": buildLibraryResponse(library, extras)})
 }
@@ -115,6 +115,9 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 type UpdateLibraryRequest struct {
 	Name        string                 `json:"name"        binding:"required"`
 	Description string                 `json:"description"`
+	Template    *string                `json:"template"`
+	Directory   *string                `json:"directory"`
+	SystemRole  *string                `json:"system_role"`
 	Config      *types.LibraryConfig   `json:"config"`
 	ModelTiers  *types.ModelTierConfig `json:"model_tiers"`
 }
@@ -136,6 +139,10 @@ func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		logger.Error(ctx, "Failed to parse request parameters", err)
 		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
+		return
+	}
+	if req.Template != nil || req.Directory != nil || req.SystemRole != nil {
+		c.Error(apperrors.NewBadRequestError("template, directory and system_role are immutable"))
 		return
 	}
 	if req.ModelTiers != nil {

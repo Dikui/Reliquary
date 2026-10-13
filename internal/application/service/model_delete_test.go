@@ -30,7 +30,7 @@ func (s *stubLibraryRepoForModelDelete) GetLibraryByIDAndSpace(context.Context, 
 func (s *stubLibraryRepoForModelDelete) GetLibraryByIDs(context.Context, []string) ([]*types.Library, error) {
 	return nil, nil
 }
-func (s *stubLibraryRepoForModelDelete) GetLibraryBySpaceID(context.Context, uint64) (*types.Library, error) {
+func (s *stubLibraryRepoForModelDelete) GetSystemLibraryByRole(context.Context, uint64, ...string) (*types.Library, error) {
 	return nil, nil
 }
 func (s *stubLibraryRepoForModelDelete) UpdateLibrary(context.Context, *types.Library) error {
@@ -247,4 +247,8 @@ func TestFormatModelInUseMessage(t *testing.T) {
 
 func (r *stubLibraryRepoForModelDelete) UpdateLibraryPin(context.Context, *types.Library) error {
 	return nil
+}
+
+func (s *stubLibraryRepoForModelDelete) ListLibraries(context.Context, uint64) ([]*types.Library, error) {
+	return nil, nil
 }

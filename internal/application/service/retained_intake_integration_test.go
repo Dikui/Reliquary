@@ -75,12 +75,13 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	db := pgtest.Open(t)
 	space := &types.Space{ID: types.SingleSpaceID, Name: "Personal space"}
 	require.NoError(t, db.Create(space).Error)
-	library := &types.Library{ID: "library", SpaceID: space.ID, Name: "Articles", Type: types.LibraryTypeDocument,
+	library := &types.Library{ID: "library", SpaceID: space.ID, SystemRole: "institutional", FeedEnabled: true, Template: types.TemplateExternalTimely, Directory: "institutional", SourceEvidenceRule: "link_required", Name: "Articles", Type: types.LibraryTypeDocument,
 		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024}}
 	require.NoError(t, db.Create(library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, space.ID)
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
+	require.NoError(t, EnsureSystemLibraries(ctx, db))
 	repo := repository.NewEntryRepository(db)
 	chunkRepo := repository.NewChunkRepository(db)
 	chunks := &chunkService{chunkRepository: chunkRepo}

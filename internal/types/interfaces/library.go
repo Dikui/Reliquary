@@ -5,9 +5,13 @@ import (
 	"reliquary/internal/types"
 )
 
-// LibraryService provides settings and retrieval for the sole library.
+// LibraryService provides settings and retrieval for libraries.
 type LibraryService interface {
-	GetLibrary(ctx context.Context) (*types.Library, error)
+	ListLibraries(context.Context) ([]*types.Library, error)
+	CreateLibrary(context.Context, types.CreateLibraryRequest) (*types.Library, error)
+	ConfigureLibrary(context.Context, string, types.LibraryPatch) (*types.Library, error)
+	DeleteLibrary(context.Context, string) error
+	GetSystemLibrary(ctx context.Context, roles ...string) (*types.Library, error)
 	GetLibraryByID(ctx context.Context, id string) (*types.Library, error)
 	GetLibraryByIDOnly(ctx context.Context, id string) (*types.Library, error)
 	GetLibrariesByIDsOnly(ctx context.Context, ids []string) ([]*types.Library, error)
@@ -20,8 +24,9 @@ type LibraryService interface {
 
 // LibraryRepository preserves the internal library identity and model bindings.
 type LibraryRepository interface {
+	ListLibraries(context.Context, uint64) ([]*types.Library, error)
 	CreateLibrary(ctx context.Context, library *types.Library) error
-	GetLibraryBySpaceID(ctx context.Context, spaceID uint64) (*types.Library, error)
+	GetSystemLibraryByRole(ctx context.Context, spaceID uint64, roles ...string) (*types.Library, error)
 	GetLibraryByID(ctx context.Context, id string) (*types.Library, error)
 	GetLibraryByIDAndSpace(ctx context.Context, id string, spaceID uint64) (*types.Library, error)
 	GetLibraryByIDs(ctx context.Context, ids []string) ([]*types.Library, error)

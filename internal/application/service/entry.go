@@ -362,6 +362,9 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		logger.Errorf(ctx, "Failed to get entry record: %v", err)
 		return err
 	}
+	if entry.LibraryID != "" && entry.LibraryID != record.LibraryID {
+		return werrors.NewBadRequestError("entry library_id is immutable")
+	}
 	previousTitle := record.Title
 	if record.SourceKind == "mine" {
 		return fmt.Errorf("本人文档不可修改，请删除后重新导入")
@@ -463,9 +466,13 @@ func (s *entryService) SearchEntry(ctx context.Context, keyword string, offset, 
 		return nil, false, 0, werrors.NewUnauthorizedError("Workspace ID not found in context")
 	}
 
-	library, err := s.libraryService.GetLibrary(ctx)
+	libraries, err := s.libraryService.ListLibraries(ctx)
 	if err != nil {
 		return nil, false, 0, err
 	}
-	return s.repo.SearchEntryInScopes(ctx, []types.SearchScope{{SpaceID: spaceID, LibraryID: library.ID}}, keyword, offset, limit, fileTypes)
+	scopes := make([]types.SearchScope, 0, len(libraries))
+	for _, library := range libraries {
+		scopes = append(scopes, types.SearchScope{SpaceID: spaceID, LibraryID: library.ID})
+	}
+	return s.repo.SearchEntryInScopes(ctx, scopes, keyword, offset, limit, fileTypes)
 }

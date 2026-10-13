@@ -19,6 +19,11 @@ func (s *libraryService) persistLibrarySettings(ctx context.Context, library, be
 		return s.persistLibrary(ctx, library)
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if config != nil && config.ModelTiers != nil {
+			if err := tx.Model(&types.Space{}).Where("id=?", library.SpaceID).Update("embedding_model_id", config.ModelTiers.Embedding).Error; err != nil {
+				return err
+			}
+		}
 		var locked types.Library
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&locked, "id=? AND space_id=?", library.ID, library.SpaceID).Error; err != nil {
 			return err

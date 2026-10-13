@@ -218,3 +218,11 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 完整旧备份恢复到当前版本时，先按原结构核对刚恢复的副本、附件和向量，再导出与迁移；迁移成功后重建索引、刷新当前副本，并再次使用原包的 `snapshot.json` 核对。旧包快照不改写，迁移前核对失败不刷新副本，也不删表。整体退回随包的旧代码与镜像时保留旧结构，继续使用旧包 helper。
 
 迁移 000008 删除原件附件记录、原件路径、保存模式、处理复核字段与空间解析器配置。版本 0 至 7 的离线维护仍按原结构归类这些列；版本 8 起只保存 Markdown 正文与图片。
+
+### 五库配置（迁移 000010）
+
+`libraries` 的 `system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` 属于配置正本。`library_content_types` 的 `library_id name position enabled extract_graph`，`library_relation_types` 的 `library_id name position enabled` 同样属于配置，必须完整备份与恢复。子表在库之后恢复。
+
+`spaces.embedding_model_id` 是空间共享向量模型的配置正本。旧 `libraries.embedding_model_id` 和 `model_tiers.embedding` 保留用于旧副本兼容，运行读取投影为空间选择，不能作为各库独立的模型选择。模型设置的旧 HTTP 入口写入空间值。维护核对允许向量配置变更时一并检查空间选择；重建配置副本包含空间和两个库配置子表。
+
+版本 10 之前的维护使用原有列归属，不要求新列或新表。迁移 000010 将原库保留为机构发布，新增其余系统库，按原来源类别迁移资料及索引归属；原正文、文件路径和业务字段保留。开发用 down 将资料归回原库，生产退回仍必须恢复升级前完整备份。

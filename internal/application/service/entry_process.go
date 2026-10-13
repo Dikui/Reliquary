@@ -727,7 +727,7 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 		return nil
 	}
 
-	library, err := s.libraryService.GetLibraryByID(ctx, payload.LibraryID)
+	library, err := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
 	if err != nil {
 		logger.Errorf(ctx, "ProcessManualUpdate: failed to get library: %v", err)
 		entry.ParseStatus = "failed"
@@ -885,7 +885,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	}
 
 	// 获取库信息
-	library, err := s.libraryService.GetLibraryByID(ctx, payload.LibraryID)
+	library, err := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
 	if err != nil {
 		logger.Errorf(ctx, "failed to get library: %v", err)
 		entry.ParseStatus = "failed"

@@ -90,6 +90,7 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	configureNameEmbedding(t, h.db, "replacement-model", 3)
 	h.library.EmbeddingModelID, h.library.ModelTiers.Embedding = "replacement-model", "replacement-model"
 	require.NoError(t, h.db.Save(h.library).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", h.library.EmbeddingModelID).Error)
 	embedder := &allRebuildEmbedder{nameRebuildEmbedder: nameRebuildEmbedder{id: "replacement-model", dimension: 3}, supportImages: images}
 	models := &nameRebuildModels{models: map[string]embedding.Embedder{"replacement-model": embedder}}
 	queue := &nameRebuildQueue{}

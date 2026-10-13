@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -179,7 +180,13 @@ func (r *entryRepository) ListPagedEntryByLibraryID(
 
 	scope := func(q *gorm.DB) *gorm.DB {
 		return applyEntryListFilter(
-			q.Where("space_id = ? AND library_id = ?", spaceID, libraryID),
+			func() *gorm.DB {
+				q = q.Where("space_id=?", spaceID)
+				if libraryID != "" {
+					q = q.Where("library_id=?", libraryID)
+				}
+				return q
+			}(),
 			filter,
 		)
 	}
@@ -201,6 +208,9 @@ func (r *entryRepository) ListPagedEntryByLibraryID(
 
 // UpdateEntry updates entry
 func (r *entryRepository) UpdateEntry(ctx context.Context, entry *types.Entry) error {
+	if err := r.checkEntryLibrary(ctx, entry); err != nil {
+		return err
+	}
 	entry.ErrorMessage = utils.CleanInvalidUTF8(entry.ErrorMessage)
 	omit := omitFieldsOnUpdate
 	// Legacy/unit-test schemas created before custom_metadata should continue
@@ -219,6 +229,9 @@ func (r *entryRepository) UpdateEntryBatch(ctx context.Context, entryList []*typ
 	}
 	for _, entry := range entryList {
 		if entry != nil {
+			if err := r.checkEntryLibrary(ctx, entry); err != nil {
+				return err
+			}
 			entry.ErrorMessage = utils.CleanInvalidUTF8(entry.ErrorMessage)
 		}
 	}
@@ -349,6 +362,9 @@ func (r *entryRepository) UpdateEntryColumn(
 	column string,
 	value interface{},
 ) error {
+	if column == "library_id" || column == "LibraryID" {
+		return fmt.Errorf("entry library_id is immutable")
+	}
 	if column == "error_message" {
 		switch v := value.(type) {
 		case string:
@@ -370,6 +386,12 @@ func (r *entryRepository) UpdateEntryColumns(
 	id string,
 	values map[string]interface{},
 ) error {
+	if _, ok := values["library_id"]; ok {
+		return fmt.Errorf("entry library_id is immutable")
+	}
+	if _, ok := values["LibraryID"]; ok {
+		return fmt.Errorf("entry library_id is immutable")
+	}
 	if len(values) == 0 {
 		return nil
 	}
@@ -391,6 +413,12 @@ func (r *entryRepository) UpdateActiveDeletingEntryColumns(
 	id string,
 	values map[string]interface{},
 ) (bool, error) {
+	if _, ok := values["library_id"]; ok {
+		return false, fmt.Errorf("entry library_id is immutable")
+	}
+	if _, ok := values["LibraryID"]; ok {
+		return false, fmt.Errorf("entry library_id is immutable")
+	}
 	if len(values) == 0 {
 		return false, nil
 	}
@@ -780,4 +808,15 @@ func (r *entryRepository) SearchEntryInScopes(
 		entries[i] = &k
 	}
 	return entries, hasMore, total, nil
+}
+
+func (r *entryRepository) checkEntryLibrary(ctx context.Context, entry *types.Entry) error {
+	var previous types.Entry
+	if err := r.db.WithContext(ctx).Unscoped().Select("id", "library_id").First(&previous, "id=?", entry.ID).Error; err != nil {
+		return err
+	}
+	if entry.LibraryID != previous.LibraryID {
+		return fmt.Errorf("entry library_id is immutable")
+	}
+	return nil
 }

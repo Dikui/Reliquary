@@ -33,7 +33,7 @@ func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *librarySer
 	chunks.modelService = models
 	chunks.retrieveEngine = h.service.retrieveEngine
 	require.NoError(t, h.db.Create(&types.Model{ID: "saved-embedding", SpaceID: h.library.SpaceID, Name: "Fixture embedding", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
-	require.NoError(t, h.db.Model(h.library).Update("embedding_model_id", "saved-embedding").Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", "saved-embedding").Error)
 	bases := &libraryService{db: h.db, repo: repository.NewLibraryRepository(h.db), entryRepo: h.service.repo}
 	h.service.libraryService = bases
 	return bases
@@ -46,7 +46,7 @@ func TestSavedLibraryConfigurationControlsUploadedMarkdownChunks(t *testing.T) {
 	config := &types.LibraryConfig{ModelTiers: &types.ModelTierConfig{Light: "saved-light", Generation: "saved-light", Embedding: "saved-embedding"}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: "recursive", Separators: []string{"\n\n", "\n", " "}}}
 	_, err := bases.UpdateLibrary(h.ctx, h.library.ID, h.library.Name, "", config)
 	require.NoError(t, err)
-	persisted, err := bases.GetLibrary(h.ctx)
+	persisted, err := bases.GetSystemLibrary(h.ctx)
 	require.NoError(t, err)
 	require.Equal(t, "saved-light", persisted.ModelTiers.Light)
 	require.Equal(t, "saved-light", persisted.SummaryModelID)
@@ -91,13 +91,13 @@ func TestSavedLibraryConfigurationControlsUploadedMarkdownChunks(t *testing.T) {
 	// Saving model choices alone must preserve the ingestion settings.
 	_, err = bases.UpdateLibrary(h.ctx, h.library.ID, h.library.Name, "", &types.LibraryConfig{ModelTiers: config.ModelTiers})
 	require.NoError(t, err)
-	persisted, err = bases.GetLibrary(h.ctx)
+	persisted, err = bases.GetSystemLibrary(h.ctx)
 	require.NoError(t, err)
 	require.Equal(t, 128, persisted.ChunkingConfig.ChunkSize)
 	require.Zero(t, persisted.ChunkingConfig.ChunkOverlap)
 	_, err = bases.UpdateLibrary(h.ctx, h.library.ID, h.library.Name, "", &types.LibraryConfig{ModelTiers: &types.ModelTierConfig{}})
 	require.NoError(t, err)
-	cleared, err := bases.GetLibrary(h.ctx)
+	cleared, err := bases.GetSystemLibrary(h.ctx)
 	require.NoError(t, err)
 	require.Empty(t, cleared.SummaryModelID)
 	require.Empty(t, cleared.EmbeddingModelID)

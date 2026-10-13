@@ -1193,7 +1193,7 @@ def rebuild(ctx, args):
         json_write(package / "snapshot.json", expected)
         # Keep a separate immutable projection so permitting new vector audit
         # rows cannot also permit changes to an unchanged embedding config.
-        json_write(package / "configuration.json", {**expected, "tables": {table: expected["tables"][table] for table in ("models", "libraries")}, "files": {}})
+        json_write(package / "configuration.json", {**expected, "tables": {table: expected["tables"][table] for table in ("models", "libraries", "spaces", "library_content_types", "library_relation_types") if table in expected["tables"]}, "files": {}})
         json_write(package / "models.json", ctx.cli_json("models"))
         json_write(package / "manifest.json", {"required_credentials": expected["required_credentials"]})
         state = {"state": "waiting_models", "vault": str(vault), "package": str(package), "verification": verification,
@@ -1237,7 +1237,7 @@ def rebuild(ctx, args):
         before = ctx.cli_json("manifest", overrides=side)
         # The existing compare flag permits new rebuild audit rows. Protect
         # selected model configuration separately across this maintenance call.
-        configuration = {table: before["tables"][table].get("data") for table in ("models", "libraries")}
+        configuration = {table: before["tables"][table].get("data") for table in ("models", "libraries", "spaces", "library_content_types", "library_relation_types") if table in before["tables"]}
         state.update(state="rebuilding_vectors", vector_rebuild_started=True)
         json_write(state_path, state)
         ctx.server("reembed", "--preserve-entity-timestamps", overrides=side, capture=False)

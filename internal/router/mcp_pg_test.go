@@ -122,19 +122,20 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	var key types.APIKey
 	require.NoError(t, f.db.Where("name=?", "personal integration").First(&key).Error)
 	ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIKey, ID: fmt.Sprint(key.ID)})
-	require.NoError(t, service.EnsureSingleLibrary(ctx, f.db))
+	require.NoError(t, service.EnsureSystemLibraries(ctx, f.db))
 	libraryRepo, entryRepo := apprepo.NewLibraryRepository(f.db), apprepo.NewEntryRepository(f.db)
 	chunkRepo := apprepo.NewChunkRepository(f.db)
 	models := mcpFixtureModels{service.NewModelService(apprepo.NewModelRepository(f.db), libraryRepo, nil, nil, f.params.SpaceService)}
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(f.db))
 	bases := service.NewLibraryService(f.db, libraryRepo, entryRepo, chunkRepo, models, engine, nil)
-	library, err := bases.GetLibrary(ctx)
+	library, err := bases.GetSystemLibrary(ctx)
 	require.NoError(t, err)
 	library.EmbeddingModelID = "mcp-embedding"
 	library.SummaryModelID = "mcp-chat"
 	library.ModelTiers = types.ModelTierConfig{Embedding: "mcp-embedding", Generation: "mcp-chat", Light: "mcp-chat"}
 	library.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
 	require.NoError(t, f.db.Save(library).Error)
+	require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", types.SingleSpaceID).Update("embedding_model_id", "mcp-embedding").Error)
 	root := t.TempDir()
 	cfg := &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 10 * time.Millisecond}}
 	vault, err := service.NewVaultService(f.db, cfg)
@@ -152,7 +153,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
 	articles := entry.(mcpserver.EntryService)
-	adapter := mcpserver.New(mcpserver.Services{Entries: articles,
+	adapter := mcpserver.New(mcpserver.Services{Libraries: bases, Entries: articles,
 		Search: service.NewSearchService(bases, f.params.SpaceService, models, f.db),
 		Topics: service.NewTopicService(f.db), Entities: service.NewEntityService(f.db, models), Reports: documents, Follows: service.NewFollowService(f.db)})
 	f.router.Any("/mcp", gin.WrapH(adapter))
@@ -484,7 +485,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			require.Contains(t, tool.Description, "incomplete=true 表示文章材料缺失，待补全")
 		}
 	}
-	require.ElementsMatch(t, []string{"search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "check_urls", "list_incomplete", "accept_incomplete"}, names)
+	require.ElementsMatch(t, []string{"list_libraries", "search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "check_urls", "list_incomplete", "accept_incomplete"}, names)
 	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
 		"topic_ids": []string{topic.ID}, "sources": []string{"article"}, "starred": false,
@@ -559,5 +560,5 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	latest := f.connect(t, "")
 	listed, err := latest.ListTools(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 19)
+	require.Len(t, listed.Tools, 20)
 }

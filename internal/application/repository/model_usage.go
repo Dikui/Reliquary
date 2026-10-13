@@ -20,8 +20,8 @@ func libraryModelUsageBindings(library *types.Library, modelID string) []types.M
 // modelID in any model-binding field.
 func scopeLibrariesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 	return db.Where(
-		"embedding_model_id = ? OR summary_model_id = ? OR "+
-			"model_tiers->>'light' = ? OR model_tiers->>'entity_resolution' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?",
-		modelID, modelID, modelID, modelID, modelID, modelID, modelID,
+		"EXISTS (SELECT 1 FROM spaces WHERE spaces.id=libraries.space_id AND spaces.embedding_model_id=?) OR summary_model_id = ? OR "+
+			"model_tiers->>'light' = ? OR model_tiers->>'entity_resolution' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'rerank' = ?",
+		modelID, modelID, modelID, modelID, modelID, modelID,
 	)
 }

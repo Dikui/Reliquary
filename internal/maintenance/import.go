@@ -175,6 +175,11 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if existing != 0 {
 		return nil, errors.New("replica import requires an empty entry database")
 	}
+	if db.Migrator().HasTable("library_content_types") {
+		if err := migrateLibrarySnapshot(snapshot, nil); err != nil {
+			return nil, err
+		}
+	}
 	queueTable := "task_jobs"
 	if db.Migrator().HasTable("task_pending_ops") {
 		queueTable = "task_pending_ops"
@@ -182,7 +187,16 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			return nil, err
 		}
 	}
-	order := []string{"spaces", "users", "auth_tokens", "libraries", "models", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", queueTable, "task_queue_counters", "maintenance_state"}
+	order := []string{"spaces", "users", "auth_tokens", "libraries", "library_content_types", "library_relation_types", "models", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", queueTable, "task_queue_counters", "maintenance_state"}
+	if !db.Migrator().HasTable("library_content_types") {
+		filtered := []string{}
+		for _, table := range order {
+			if table != "library_content_types" && table != "library_relation_types" {
+				filtered = append(filtered, table)
+			}
+		}
+		order = filtered
+	}
 	covered := map[string]bool{}
 	for _, table := range order {
 		covered[table] = true

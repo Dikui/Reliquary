@@ -3,11 +3,12 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -32,10 +33,13 @@ func (r *libraryRepository) CreateLibrary(ctx context.Context, library *types.Li
 // GetLibraryByID gets a library by id within the personal space
 func (r *libraryRepository) GetLibraryByID(ctx context.Context, id string) (*types.Library, error) {
 	var library types.Library
-	if err := r.db.WithContext(ctx).Where("id = ? AND space_id = ?", id, types.SingleSpaceID).First(&library).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Preload("RelationTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Where("id = ? AND space_id = ?", id, types.SingleSpaceID).First(&library).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrLibraryNotFound
 		}
+		return nil, err
+	}
+	if err := r.hydrate(ctx, &library); err != nil {
 		return nil, err
 	}
 	return &library, nil
@@ -44,10 +48,13 @@ func (r *libraryRepository) GetLibraryByID(ctx context.Context, id string) (*typ
 // GetLibraryByIDAndSpace gets a library by id only if it belongs to the given space (enforces space isolation)
 func (r *libraryRepository) GetLibraryByIDAndSpace(ctx context.Context, id string, spaceID uint64) (*types.Library, error) {
 	var library types.Library
-	if err := r.db.WithContext(ctx).Where("id = ? AND space_id = ?", id, spaceID).First(&library).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Preload("RelationTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Where("id = ? AND space_id = ?", id, spaceID).First(&library).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrLibraryNotFound
 		}
+		return nil, err
+	}
+	if err := r.hydrate(ctx, &library); err != nil {
 		return nil, err
 	}
 	return &library, nil
@@ -59,19 +66,31 @@ func (r *libraryRepository) GetLibraryByIDs(ctx context.Context, ids []string) (
 		return []*types.Library{}, nil
 	}
 	var libraries []*types.Library
-	if err := r.db.WithContext(ctx).Where("id IN ? AND space_id = ?", ids, types.SingleSpaceID).Find(&libraries).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Preload("RelationTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Where("id IN ? AND space_id = ?", ids, types.SingleSpaceID).Find(&libraries).Error; err != nil {
 		return nil, err
+	}
+	for _, library := range libraries {
+		if err := r.hydrate(ctx, library); err != nil {
+			return nil, err
+		}
 	}
 	return libraries, nil
 }
 
-// GetLibraryBySpaceID returns the active library for one space.
-func (r *libraryRepository) GetLibraryBySpaceID(ctx context.Context, spaceID uint64) (*types.Library, error) {
+// GetSystemLibraryByRole returns the active library for one space.
+func (r *libraryRepository) GetSystemLibraryByRole(ctx context.Context, spaceID uint64, roles ...string) (*types.Library, error) {
+	role := "institutional"
+	if len(roles) > 0 {
+		role = roles[0]
+	}
 	var library types.Library
-	if err := r.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&library).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Preload("RelationTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Where("space_id = ? AND system_role = ?", spaceID, role).First(&library).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrLibraryNotFound
 		}
+		return nil, err
+	}
+	if err := r.hydrate(ctx, &library); err != nil {
 		return nil, err
 	}
 	return &library, nil
@@ -79,7 +98,45 @@ func (r *libraryRepository) GetLibraryBySpaceID(ctx context.Context, spaceID uin
 
 // UpdateLibrary updates a library
 func (r *libraryRepository) UpdateLibrary(ctx context.Context, library *types.Library) error {
-	return r.db.WithContext(ctx).Save(library).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var previous types.Library
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&previous, "id=? AND space_id=?", library.ID, library.SpaceID).Error; err != nil {
+			return err
+		}
+		if previous.Template != library.Template || previous.Directory != library.Directory || previous.SystemRole != library.SystemRole {
+			return fmt.Errorf("library identity is immutable")
+		}
+		if err := tx.Omit("ContentTypes", "RelationTypes", "EmbeddingModelID").Save(library).Error; err != nil {
+			return err
+		}
+		if library.ContentTypes != nil {
+			if err := tx.Where("library_id=?", library.ID).Delete(&types.LibraryContentType{}).Error; err != nil {
+				return err
+			}
+			for i := range library.ContentTypes {
+				library.ContentTypes[i].LibraryID = library.ID
+			}
+			if len(library.ContentTypes) > 0 {
+				if err := tx.Create(&library.ContentTypes).Error; err != nil {
+					return err
+				}
+			}
+		}
+		if library.RelationTypes != nil {
+			if err := tx.Where("library_id=?", library.ID).Delete(&types.LibraryRelationType{}).Error; err != nil {
+				return err
+			}
+			for i := range library.RelationTypes {
+				library.RelationTypes[i].LibraryID = library.ID
+			}
+			if len(library.RelationTypes) > 0 {
+				if err := tx.Create(&library.RelationTypes).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // CountByModelID counts active libraries that reference modelID in any
@@ -106,7 +163,7 @@ func (r *libraryRepository) ListModelUsages(
 	query := r.db.WithContext(ctx).
 		Model(&types.Library{}).
 		Select(
-			"id", "name", "embedding_model_id", "summary_model_id",
+			"id", "name", "space_id", "embedding_model_id", "summary_model_id",
 			"model_tiers",
 		).
 		Where("space_id = ?", spaceID)
@@ -117,6 +174,9 @@ func (r *libraryRepository) ListModelUsages(
 
 	usages := make([]types.ModelUsageResource, 0, len(rows))
 	for _, row := range rows {
+		if err := r.hydrate(ctx, row); err != nil {
+			return nil, err
+		}
 		bindings := libraryModelUsageBindings(row, modelID)
 		if len(bindings) == 0 {
 			continue
@@ -130,34 +190,81 @@ func (r *libraryRepository) ListModelUsages(
 	return usages, nil
 }
 
-// EnsureSpaceLibrary creates the settings resource once. Callers may pass
-// an existing registration transaction so the user and library commit together.
-func EnsureSpaceLibrary(ctx context.Context, db *gorm.DB, spaceID uint64, creatorID string) (*types.Library, error) {
+// EnsureSystemLibraries creates each missing role without overwriting user settings.
+func EnsureSystemLibraries(ctx context.Context, db *gorm.DB, spaceID uint64, creatorID string) (*types.Library, error) {
 	if spaceID != types.SingleSpaceID {
 		return nil, errors.New("invalid personal space")
 	}
-	var library *types.Library
+	var first *types.Library
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", int64(72651002)).Error; err != nil {
 			return err
 		}
 		repo := NewLibraryRepository(tx)
-		existing, err := repo.GetLibraryBySpaceID(ctx, spaceID)
-		if err == nil {
-			library = existing
-			return nil
+		for _, library := range types.SystemLibraryDefaults() {
+			existing, err := repo.GetSystemLibraryByRole(ctx, spaceID, library.SystemRole)
+			if err == nil {
+				if existing.CreatorID == "" && creatorID != "" {
+					if err := tx.Model(existing).Update("creator_id", creatorID).Error; err != nil {
+						return err
+					}
+					existing.CreatorID = creatorID
+				}
+				if library.SystemRole == "institutional" {
+					first = existing
+				}
+				continue
+			}
+			if !errors.Is(err, ErrLibraryNotFound) {
+				return err
+			}
+			library.ID = uuid.NewString()
+			library.SpaceID = spaceID
+			library.CreatorID = creatorID
+			library.CreatedAt = time.Now().UTC()
+			library.UpdatedAt = library.CreatedAt
+			if err := repo.CreateLibrary(ctx, library); err != nil {
+				return err
+			}
+			if library.SystemRole == "institutional" {
+				first, err = repo.GetLibraryByID(ctx, library.ID)
+				if err != nil {
+					return err
+				}
+			}
 		}
-		if !errors.Is(err, ErrLibraryNotFound) {
-			return err
-		}
-		name := "Library"
-		if strings.HasPrefix(strings.ToLower(types.LanguageFromContextOrDefault(ctx)), "zh") {
-			name = "库"
-		}
-		now := time.Now().UTC()
-		library = &types.Library{ID: uuid.NewString(), SpaceID: spaceID, CreatorID: creatorID, Name: name, Type: types.LibraryTypeDocument, CreatedAt: now, UpdatedAt: now}
-		library.EnsureDefaults()
-		return repo.CreateLibrary(ctx, library)
+		return nil
 	})
-	return library, err
+	return first, err
+}
+
+func (r *libraryRepository) ListLibraries(ctx context.Context, spaceID uint64) ([]*types.Library, error) {
+	libraries := []*types.Library{}
+	err := r.db.WithContext(ctx).Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Preload("RelationTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Where("space_id=?", spaceID).Order("created_at,id").Find(&libraries).Error
+	for _, library := range libraries {
+		if err := r.hydrate(ctx, library); err != nil {
+			return nil, err
+		}
+	}
+	return libraries, err
+}
+
+// EmbeddingModelID in library payloads is a compatibility projection. Space is authoritative.
+func (r *libraryRepository) hydrate(ctx context.Context, library *types.Library) error {
+	var space types.Space
+	if err := r.db.WithContext(ctx).Select("id", "embedding_model_id").Where("id=?", library.SpaceID).Find(&space).Error; err != nil {
+		return err
+	}
+	if space.ID != 0 {
+		library.EmbeddingModelID = space.EmbeddingModelID
+		library.ModelTiers.Embedding = space.EmbeddingModelID
+	}
+	if library.ContentTypes == nil {
+		library.ContentTypes = []types.LibraryContentType{}
+	}
+	if library.RelationTypes == nil {
+		library.RelationTypes = []types.LibraryRelationType{}
+	}
+	library.EnsureDefaults()
+	return nil
 }

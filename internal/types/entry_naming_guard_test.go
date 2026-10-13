@@ -19,6 +19,7 @@ type entryNamingException struct {
 }
 
 var entryNamingExceptions = map[string]entryNamingException{
+	"internal/maintenance/library_schema.go":                                {Reason: "五库迁移按既有队列载荷键定位资料，保留历史载荷契约", Tokens: []string{"knowledge_id"}},
 	"internal/testutil/pgtest/library_migration_test.go":                    {Reason: "库改名迁移保留历史队列 payload 的条目键", Tokens: []string{"knowledge_id"}},
 	"internal/types/library_payload_test.go":                                {Reason: "验证旧队列归属键可读且新写入使用库字段", Tokens: []string{"knowledge_id"}},
 	"cmd/server/maintenance_sources_pg_test.go":                             {Reason: "冻结基线恢复的真实离线 CLI 顺序使用旧表夹具", Tokens: []string{"knowledges"}},

@@ -179,6 +179,7 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 	h.library.ModelTiers = types.ModelTierConfig{Light: model.ID, Generation: model.ID, EntityResolution: model.ID, Embedding: embedding.ID}
 	h.library.SummaryModelID, h.library.EmbeddingModelID = model.ID, embedding.ID
 	require.NoError(t, h.db.Save(h.library).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", h.library.EmbeddingModelID).Error)
 	h.service.modelService = h.models
 	h.service.chunkService.(*chunkService).modelService = h.models
 	return h

@@ -53,9 +53,9 @@ func NewLibraryService(db *gorm.DB, repo interfaces.LibraryRepository,
 	}
 }
 
-// GetLibrary returns the only active library in the personal space.
-func (s *libraryService) GetLibrary(ctx context.Context) (*types.Library, error) {
-	library, err := s.repo.GetLibraryBySpaceID(ctx, types.MustSpaceIDFromContext(ctx))
+// GetSystemLibrary selects a stable role. The no-argument legacy settings endpoint selects institutional.
+func (s *libraryService) GetSystemLibrary(ctx context.Context, roles ...string) (*types.Library, error) {
+	library, err := s.repo.GetSystemLibraryByRole(ctx, types.MustSpaceIDFromContext(ctx), roles...)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (s *libraryService) UpdateLibrary(ctx context.Context,
 	original := *library
 	current := *library
 	library = &current
-	previousEmbeddingModelID, _ := ResolveModelTier(ctx, nil, library, types.ModelTierEmbedding)
+	previousEmbeddingModelID, _ := ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 	// Update the library properties
 	library.Name = name
 	library.Description = description
@@ -241,7 +241,7 @@ func (s *libraryService) UpdateLibrary(ctx context.Context,
 		})
 		return nil, err
 	}
-	currentEmbeddingModelID, _ := ResolveModelTier(ctx, nil, library, types.ModelTierEmbedding)
+	currentEmbeddingModelID, _ := ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 	if s.nameEmbeddingRebuilder != nil && previousEmbeddingModelID != currentEmbeddingModelID {
 		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, library.SpaceID, "library_embedding_model_changed"); err != nil {
 			return library, fmt.Errorf("library update could not enqueue name embedding rebuild: %w", err)

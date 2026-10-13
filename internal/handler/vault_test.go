@@ -26,7 +26,9 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
-	library, err := repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, "")
+	library, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
+	require.NoError(t, err)
+	library, err = repository.NewLibraryRepository(db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, "ai-reports")
 	require.NoError(t, err)
 	library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, db.Save(library).Error)

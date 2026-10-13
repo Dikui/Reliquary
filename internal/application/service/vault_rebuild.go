@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/repository"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -50,6 +51,10 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
 	seenArticleIDs := make(map[string]bool)
 	for _, directory := range []string{"articles", "mine"} {
+		library, err = repository.NewLibraryRepository(s.db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, types.SystemRoleForSource(map[string]string{"articles": "article", "mine": "mine"}[directory]))
+		if err != nil {
+			return result, err
+		}
 		articleDirectory, err := vaultAbsolute(s.root, directory)
 		if err != nil {
 			return result, err
@@ -126,6 +131,10 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 		if err != nil {
 			return result, err
 		}
+	}
+	library, err = repository.NewLibraryRepository(s.db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, "ai-reports")
+	if err != nil {
+		return result, err
 	}
 	if err := s.scanReports(ctx, library, true, &result.Skipped); err != nil {
 		return result, err

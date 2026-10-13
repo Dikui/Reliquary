@@ -85,6 +85,7 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			write := reportWriter(t, f, transport)
 			f.library.ModelTiers.Embedding = "missing-embedding"
 			require.NoError(t, f.db.Save(f.library).Error)
+			require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", f.library.SpaceID).Update("embedding_model_id", f.library.ModelTiers.Embedding).Error)
 			markdown := "# Retried report\n\nreportqueueretryfixture preserves verified findings."
 			report := write("Retried report", markdown)
 			require.NotEmpty(t, report.ID)
@@ -111,6 +112,7 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			}, 5*time.Second, 10*time.Millisecond)
 			f.library.ModelTiers.Embedding = "mcp-embedding"
 			require.NoError(t, f.db.Save(f.library).Error)
+			require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", f.library.SpaceID).Update("embedding_model_id", f.library.ModelTiers.Embedding).Error)
 			require.Eventually(t, func() bool {
 				var entry types.Entry
 				return f.db.First(&entry, "id=?", report.ID).Error == nil && entry.ParseStatus == types.ParseStatusCompleted
@@ -139,6 +141,7 @@ func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	f.seedProcessingModels(t)
 	f.library.ModelTiers.Embedding = "missing-embedding"
 	require.NoError(t, f.db.Save(f.library).Error)
+	require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", f.library.SpaceID).Update("embedding_model_id", f.library.ModelTiers.Embedding).Error)
 	write := reportWriter(t, f, "HTTP")
 	report := write("Exhausted report", "# Exhausted report\n\nSaved source survives exhausted retries.")
 	var job queue.Job
@@ -174,6 +177,7 @@ func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	// Background scans leave retries and their exhausted state under queue control.
 	f.library.ModelTiers.Embedding = "mcp-embedding"
 	require.NoError(t, f.db.Save(f.library).Error)
+	require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", f.library.SpaceID).Update("embedding_model_id", f.library.ModelTiers.Embedding).Error)
 	require.NoError(t, f.documents.Scan(f.ctx, false))
 	var entry types.Entry
 	require.NoError(t, f.db.First(&entry, "id=?", report.ID).Error)

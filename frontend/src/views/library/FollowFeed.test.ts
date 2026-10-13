@@ -77,7 +77,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
     if (method === 'get' && url.startsWith('/api/v1/entities?')) return envelope([entity])
     if (method === 'get' && url === `/api/v1/entities/${entity.id}`) return envelope({ entity, entry: [{ id: 'new', title: 'Article new', created_at: openedAt }] })
     if (method === 'post' && url === '/api/v1/entities/merge') { transport.targets = transport.targets.filter((value: any) => value.target_id !== body.merge_entity_id); transport.targets.push(follow('entity', body.keep_entity_id, 'Retained entity')); return envelope(null) }
-    if (method === 'get' && url.startsWith('/api/v1/libraries/library-follows/entries?')) return { ...envelope([{ ...transport.articles[0], id: 'new', file_name: 'Article new', type: 'manual', parse_status: 'completed', updated_at: openedAt }]), total: 1 }
+    if (method === 'get' && url.startsWith('/api/v1/entries?')) return { ...envelope([{ ...transport.articles[0], id: 'new', file_name: 'Article new', type: 'manual', parse_status: 'completed', updated_at: openedAt }]), total: 1 }
     if (method === 'get' && url.startsWith('/api/v1/chunks/new?')) return { ...envelope([]), total: 0 }
     if (method === 'get' && url === '/api/v1/entries/new') return envelope({ ...transport.articles[0], id: 'new', title: 'Article new', file_name: 'Article new', updated_at: openedAt, type: 'manual', parse_status: 'completed', structured_summary: transport.articles[0].summary, source: 'https://example.com/new', md: [], total: 0, metadata: {}, source_kind: 'article' })
     throw new Error(`Unexpected request ${method} ${url}`)
@@ -228,7 +228,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await settle()
       assert.ok(env.calls.some(call => call.method === 'get' && call.url === '/api/v1/entries/new'))
-      assert.ok(env.calls.some(call => call.url === '/api/v1/libraries/library-follows/entries?page=1&page_size=35'))
+      assert.ok(env.calls.some(call => call.url === '/api/v1/entries?page=1&page_size=35'))
       assert.ok(env.calls.some(call => call.url.startsWith('/api/v1/chunks/new?')))
       assert.equal(entryStoreModule.entryStore().cardList[0].id, 'new')
       await click(env.followButton(mounted.root, 'entity'))

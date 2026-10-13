@@ -13,6 +13,7 @@ import (
 
 // Space represents the space
 type Space struct {
+	EmbeddingModelID string `json:"embedding_model_id"`
 	// ID
 	ID uint64 `yaml:"id"                  json:"id"                  gorm:"primaryKey"`
 	// Name

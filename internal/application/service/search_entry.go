@@ -90,7 +90,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if !ok {
 		return nil, apperrors.NewUnauthorizedError("workspace ID not found in context")
 	}
-	library, err := s.libraryService.GetLibrary(ctx)
+	library, err := s.libraryService.GetSystemLibrary(ctx, "institutional")
 	if err != nil {
 		return nil, err
 	}
@@ -167,15 +167,18 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			}
 		}
 		reader := *s
+		// Transitional unfiltered retrieval covers every library in the space.
+		retrievalLibrary := *library
+		retrievalLibrary.ID = ""
 		reader.db = tx
 		if f.from != nil || f.to != nil {
 			var err error
-			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, spaceID, library, f, queryVector, modelID, config)
+			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, spaceID, &retrievalLibrary, f, queryVector, modelID, config)
 			if err != nil {
 				return err
 			}
 		}
-		lanes, err := reader.retrieveEntryLanes(ctx, spaceID, library, f, queryVector, modelID, config, pool, true)
+		lanes, err := reader.retrieveEntryLanes(ctx, spaceID, &retrievalLibrary, f, queryVector, modelID, config, pool, true)
 		if err != nil {
 			return err
 		}
@@ -203,8 +206,11 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 }
 
 func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool) *gorm.DB {
-	query := s.db.WithContext(ctx).Table("entries AS k").Where(`k.space_id = ? AND k.library_id = ?
-		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID, libraryID)
+	query := s.db.WithContext(ctx).Table("entries AS k").Where(`k.space_id = ?
+		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID)
+	if libraryID != "" {
+		query = query.Where("k.library_id=?", libraryID)
+	}
 	if f.request.Starred != nil {
 		query = query.Where("k.source_kind IN ('article','mine') AND k.starred=?", *f.request.Starred)
 	}

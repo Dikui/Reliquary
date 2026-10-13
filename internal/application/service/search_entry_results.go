@@ -251,6 +251,7 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 		return results, nil
 	}
 	type vectorRow struct {
+		LibraryID string
 		EntryID   string
 		ModelID   string
 		Dimension int
@@ -280,7 +281,7 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 		}
 		av, aok := vectors[a.EntryID]
 		bv, bok := vectors[b.EntryID]
-		return aok && bok && av.ModelID == bv.ModelID && av.Dimension == bv.Dimension &&
+		return aok && bok && av.LibraryID == bv.LibraryID && av.ModelID == bv.ModelID && av.Dimension == bv.Dimension &&
 			articleCosineSimilarity(av.Embedding.Slice(), bv.Embedding.Slice()) >= threshold
 	}
 	groups := []*types.EntrySearchResult{}

@@ -13,23 +13,28 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func TestModelTiersUseOnlyLibrarySettings(t *testing.T) {
+func TestModelTiersUseSpaceEmbeddingAndLibraryProcessingSettings(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
-	library := &types.Library{ID: "library", SpaceID: 1, Name: "Library", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
+	library := &types.Library{ID: "library", SpaceID: 1, SystemRole: "institutional", Template: types.TemplateExternalTimely, Directory: "institutional", SourceEvidenceRule: "link_required", Name: "Library", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Space", EmbeddingModelID: "chosen-embedding"}).Error)
 	require.NoError(t, db.Create(library).Error)
 	for _, tier := range types.ModelTiers {
 		resolved, err := resolveModelTier(ctx, db, nil, tier)
 		require.NoError(t, err)
 		require.Equal(t, library.ModelTiers.ModelID(tier), resolved.ModelID)
-		require.Equal(t, "library", resolved.Source)
+		if tier == types.ModelTierEmbedding {
+			require.Equal(t, "space", resolved.Source)
+		} else {
+			require.Equal(t, "library", resolved.Source)
+		}
 	}
 	library.ModelTiers = types.ModelTierConfig{}
 	require.NoError(t, db.Save(library).Error)
 	id, err := ResolveModelTier(ctx, db, nil, types.ModelTierLight)
 	require.NoError(t, err)
 	require.Equal(t, "summary", id)
-	require.NoError(t, db.Delete(library).Error)
+	require.NoError(t, db.Unscoped().Delete(library).Error)
 	_, err = ResolveModelTier(ctx, db, nil, types.ModelTierLight)
 	require.Error(t, err, "missing library must remain visible")
 }

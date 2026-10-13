@@ -469,7 +469,10 @@ func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T
 		require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", id).Updates(updates).Error)
 	}
 	for _, source := range []string{"mine", "report"} {
-		h.add(t, source, source, "2026-10-01", "", "semanticlaunch", 0)
+		// Own and generated libraries are excluded by their default feed switch.
+		library := &types.Library{ID: "disabled-" + source, SpaceID: 1, Name: source, Template: types.TemplateOwn}
+		require.NoError(t, h.db.Create(library).Error)
+		h.add(t, source, source, "2026-10-01", "", "semanticlaunch", 0, library.ID)
 		h.link(t, source, true, true)
 	}
 	request := types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()}

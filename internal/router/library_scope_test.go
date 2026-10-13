@@ -32,11 +32,7 @@ func TestSingleLibrarySettingsAndRemovedRoutes(t *testing.T) {
 			{http.MethodGet, "/api/v1/knowledge-base"},
 			{http.MethodPut, "/api/v1/knowledge-base"},
 			{http.MethodGet, "/api/v1/knowledge-bases/" + response.Data.ID + "/entries"},
-			{http.MethodGet, "/api/v1/libraries"},
-			{http.MethodPost, "/api/v1/libraries"},
-			{http.MethodGet, "/api/v1/libraries/" + response.Data.ID},
-			{http.MethodPut, "/api/v1/libraries/" + response.Data.ID},
-			{http.MethodDelete, "/api/v1/libraries/" + response.Data.ID},
+
 			{http.MethodPost, "/api/v1/libraries/" + response.Data.ID + "/duplicate"},
 			{http.MethodGet, "/api/v1/libraries/" + response.Data.ID + "/move-targets"},
 			{http.MethodPut, "/api/v1/libraries/" + response.Data.ID + "/pin"},

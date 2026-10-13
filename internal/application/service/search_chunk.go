@@ -13,7 +13,7 @@ import (
 
 const maxRetrievalPoolSize = 500
 
-// GetQueryEmbedding computes the query vector with the sole library model.
+// GetQueryEmbedding computes the query vector with the shared space model.
 func (s *chunkSearchService) GetQueryEmbedding(ctx context.Context, libraryID string, queryText string) ([]float32, error) {
 	library, err := s.repo.GetLibraryByID(ctx, libraryID)
 	if err != nil {

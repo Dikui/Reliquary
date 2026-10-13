@@ -31,12 +31,13 @@ type EntryService interface {
 }
 
 type Services struct {
-	Entries  EntryService
-	Search   interfaces.SearchService
-	Topics   *service.TopicService
-	Entities *service.EntityService
-	Reports  *service.VaultDocumentService
-	Follows  *service.FollowService
+	Libraries interfaces.LibraryService
+	Entries   EntryService
+	Search    interfaces.SearchService
+	Topics    *service.TopicService
+	Entities  *service.EntityService
+	Reports   *service.VaultDocumentService
+	Follows   *service.FollowService
 }
 
 // Handler uses sessionless Streamable HTTP so every request carries its own
@@ -197,6 +198,12 @@ func contractFields(value any) any {
 }
 
 func registerTools(server *mcp.Server, services Services) {
+	if services.Libraries != nil {
+		addTool(server, "list_libraries", "列出全部库的 ID、目录、名称、模板、说明、该收与不该收的内容、审核标准、去重规则、内容类型和关注动态配置。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
+			libraries, err := services.Libraries.ListLibraries(ctx)
+			return map[string]any{"libraries": libraries}, err
+		})
+	}
 	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示用户确认无链接入库，来源尚未核实。incomplete=true 表示文章材料缺失，待补全；相似报道中的文章也包含该字段。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
 		object(map[string]any{
 			"query":         text("查询文本，必填"),

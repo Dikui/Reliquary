@@ -38,7 +38,7 @@ func TestSnapshotChatGPTModelDebugAuditsRealQuotaIncludingFailedCalls(t *testing
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	_, err := repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, "")
+	_, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	credential, err := utils.EncryptAESGCM(`{"access_token":"debug-access-secret","refresh_token":"debug-refresh-secret","id_token":"debug-id-secret"}`, utils.GetAESKey())
 	require.NoError(t, err)

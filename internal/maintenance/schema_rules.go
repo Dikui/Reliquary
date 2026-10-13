@@ -29,12 +29,26 @@ func schemaRules(ctx context.Context, db *gorm.DB) (map[string]Rule, error) {
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}
-	if migration.Version >= 9 {
+	if migration.Version >= 10 {
 		return Rules, nil
 	}
 	current := make(map[string]Rule, len(Rules))
 	for table, rule := range Rules {
 		current[table] = rule
+	}
+	delete(current, "library_content_types")
+	delete(current, "library_relation_types")
+	library := current["libraries"]
+	for _, field := range []string{"system_role", "template", "directory", "review_criteria", "source_evidence_rule", "feed_enabled"} {
+		library.Configuration = strings.ReplaceAll(" "+library.Configuration+" ", " "+field+" ", " ")
+	}
+	library.Configuration = strings.TrimSpace(library.Configuration)
+	current["libraries"] = library
+	space := current["spaces"]
+	space.Configuration = strings.TrimSpace(strings.ReplaceAll(" "+space.Configuration+" ", " embedding_model_id ", " "))
+	current["spaces"] = space
+	if migration.Version >= 9 {
+		return current, nil
 	}
 	delete(current, "task_pending_ops")
 	current["task_jobs"] = legacyQueueRule

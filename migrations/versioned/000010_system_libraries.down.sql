@@ -1,0 +1,24 @@
+BEGIN;
+DROP TRIGGER protect_entry_library ON entries;
+DROP FUNCTION protect_entry_library();
+DROP TRIGGER protect_library_identity ON libraries;
+DROP FUNCTION protect_library_identity();
+DROP TRIGGER library_default_directory ON libraries;
+DROP FUNCTION library_default_directory();
+-- Development rollback keeps all entries, merging them into the institutional library.
+UPDATE entries e SET library_id=l.id FROM libraries l WHERE l.space_id=e.space_id AND l.system_role='institutional' AND l.deleted_at IS NULL;
+UPDATE chunks c SET library_id=e.library_id FROM entries e WHERE c.entry_id=e.id;
+UPDATE article_embeddings c SET library_id=e.library_id FROM entries e WHERE c.entry_id=e.id;
+UPDATE image_embeddings c SET library_id=e.library_id FROM entries e WHERE c.entry_id=e.id;
+UPDATE entry_repost_sources c SET library_id=e.library_id FROM entries e WHERE c.entry_id=e.id;
+UPDATE embeddings c SET library_id=e.library_id FROM entries e WHERE c.entry_id=e.id;
+DROP TABLE library_relation_types;
+DROP TABLE library_content_types;
+DELETE FROM libraries WHERE system_role<>'institutional' AND deleted_at IS NULL;
+UPDATE libraries l SET embedding_model_id=s.embedding_model_id, model_tiers=jsonb_set(COALESCE(l.model_tiers,'{}'),'{embedding}',to_jsonb(s.embedding_model_id)) FROM spaces s WHERE s.id=l.space_id;
+DROP INDEX idx_libraries_system_role;
+DROP INDEX idx_libraries_directory;
+ALTER TABLE libraries DROP COLUMN system_role,DROP COLUMN template,DROP COLUMN directory,DROP COLUMN review_criteria,DROP COLUMN source_evidence_rule,DROP COLUMN feed_enabled;
+ALTER TABLE spaces DROP COLUMN embedding_model_id;
+CREATE UNIQUE INDEX idx_libraries_active_space ON libraries(space_id) WHERE deleted_at IS NULL;
+COMMIT;

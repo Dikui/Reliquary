@@ -59,7 +59,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const api = evaluate(readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8'), {
       '../utils/request': { get: async (url: string) => {
         requests.push(url)
-        if (url.startsWith('/api/v1/libraries/excerpts/entries?')) return { success: true, data: [structuredClone(record)], total: 1 }
+        if (url.startsWith('/api/v1/entries?')) return { success: true, data: [structuredClone(record)], total: 1 }
         if (url === '/api/v1/entries/excerpt-article') return { success: true, data: structuredClone(record) }
         if (url.startsWith('/api/v1/chunks/excerpt-article?')) return { success: true, data: [{ id: 'body', content: source, chunk_index: 0 }], total: 1 }
         throw new Error(`Unexpected request: ${url}`)

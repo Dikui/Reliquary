@@ -58,7 +58,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const transport = {
     async get(path: string) {
       const url = new URL(path, 'http://localhost')
-      assert.equal(url.pathname, '/api/v1/libraries/library-source/entries')
+      assert.equal(url.pathname, '/api/v1/entries')
       const query = new URLSearchParams(url.searchParams)
       requests.push(query)
       const filtered = records.filter(record => {

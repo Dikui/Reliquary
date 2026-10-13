@@ -47,7 +47,7 @@ func (e *rebuildRouteEmbedder) BatchEmbedWithPool(context.Context, embedding.Emb
 
 func TestEmbeddingRebuildHTTPProgressPauseResumeAndRetry(t *testing.T) {
 	db := entityFixtureDB(t)
-	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Embedding owner"}).Error)
+	require.NoError(t, db.Create(&types.Space{ID: 1, EmbeddingModelID: "http-embedding", Name: "Embedding owner"}).Error)
 	require.NoError(t, db.Create(&types.Library{ID: "http-library", SpaceID: 1, Name: "HTTP", ModelTiers: types.ModelTierConfig{Embedding: "http-embedding"}}).Error)
 	require.NoError(t, db.Create(&types.Model{ID: "http-embedding", SpaceID: 1, Name: "HTTP embedding", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 2}}}).Error)

@@ -15,6 +15,8 @@ import (
 const librariesTestDDL = `
 CREATE TABLE IF NOT EXISTS libraries (
     id VARCHAR(36) PRIMARY KEY,
+    system_role TEXT NOT NULL DEFAULT '', template TEXT NOT NULL DEFAULT 'own', directory TEXT NOT NULL DEFAULT '',
+    review_criteria TEXT NOT NULL DEFAULT '', source_evidence_rule TEXT NOT NULL DEFAULT '', feed_enabled BOOLEAN NOT NULL DEFAULT false,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     space_id INTEGER NOT NULL,
@@ -36,6 +38,7 @@ func setupLibraryTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.Exec(librariesTestDDL).Error)
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Fixture"}).Error)
 	return db
 }
 

@@ -131,13 +131,7 @@ func (s *EntityService) resolveLibrary(ctx context.Context) (uint64, string, err
 		return 0, "", err
 	}
 
-	var library types.Library
-	if err := s.db.WithContext(ctx).Select("id").Where("space_id=?", spaceID).First(&library).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, "", werrors.NewNotFoundError("library not found")
-	} else if err != nil {
-		return 0, "", err
-	}
-	return spaceID, library.ID, nil
+	return spaceID, "", nil
 }
 func entityQueryLimit(limit int) int {
 	if limit < 1 {

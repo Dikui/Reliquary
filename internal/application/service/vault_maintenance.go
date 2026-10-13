@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/repository"
 	"strings"
 
 	"reliquary/internal/maintenance"
@@ -43,6 +44,11 @@ func (v *VaultService) Flush(ctx context.Context) error {
 
 func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Verification, error) {
 	result := &maintenance.Verification{OK: true, Differences: []string{}, Repaired: []string{}}
+	// Historical offline verification must not assume migration 10 has run.
+	embeddingModelSQL := "(SELECT s.embedding_model_id FROM spaces s WHERE s.id=b.space_id)"
+	if !v.db.Migrator().HasColumn("spaces", "embedding_model_id") {
+		embeddingModelSQL = "COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)"
+	}
 	var pendingImages int64
 	var articles []types.Entry
 	if err := v.db.WithContext(ctx).Unscoped().Where("vault_path<>'' AND deleted_at IS NULL").Find(&articles).Error; err != nil {
@@ -102,7 +108,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 				result.Differences = append(result.Differences, article.VaultPath+": image content hash differs: "+reference)
 			}
 			var expected string
-			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("entry_id=? AND attachment_path=? AND model_id=(SELECT COALESCE(NULLIF(model_tiers->>'embedding',''),embedding_model_id) FROM libraries WHERE id=?)", article.ID, reference, article.LibraryID).Scan(&expected).Error; err != nil {
+			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("entry_id=? AND attachment_path=? AND model_id=(SELECT "+embeddingModelSQL+" FROM libraries b WHERE b.id=?)", article.ID, reference, article.LibraryID).Scan(&expected).Error; err != nil {
 				return result, err
 			}
 			if expected != "" && expected != hash {
@@ -110,7 +116,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			}
 			if expected == "" {
 				var supports bool
-				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM libraries b JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id) WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.LibraryID).Scan(&supports).Error; err != nil {
+				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM libraries b JOIN models m ON m.id=`+embeddingModelSQL+` WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.LibraryID).Scan(&supports).Error; err != nil {
 					return result, err
 				}
 				if supports {
@@ -164,10 +170,10 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		result.PendingVectors["images"] = pendingImages
 	}
 	for key, query := range map[string]string{
-		"articles": `SELECT count(*) FROM entries k JOIN libraries b ON b.id=k.library_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
-		"chunks":   `SELECT count(*) FROM chunks c JOIN libraries b ON b.id=c.library_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"articles": `SELECT count(*) FROM entries k JOIN libraries b ON b.id=k.library_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
+		"chunks":   `SELECT count(*) FROM chunks c JOIN libraries b ON b.id=c.library_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
 		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
- SELECT 1 FROM libraries b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
+ SELECT 1 FROM libraries b LEFT JOIN models m ON m.id=EMBEDDING_MODEL_SQL
  WHERE b.space_id=e.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
  e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
  OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
@@ -175,7 +181,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
  AND e.embedding_dimension<>COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0))))`,
 	} {
 		var count int64
-		if err := v.db.WithContext(ctx).Raw(query).Scan(&count).Error; err != nil {
+		if err := v.db.WithContext(ctx).Raw(strings.ReplaceAll(query, "EMBEDDING_MODEL_SQL", embeddingModelSQL)).Scan(&count).Error; err != nil {
 			return result, err
 		}
 		if count > 0 {
@@ -244,20 +250,20 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 	if err := maintenance.VerifyImportedReplica(ctx, s.db, s.root); err != nil {
 		return result, err
 	}
-	ctx, library, err := s.scope(ctx)
-	if err != nil {
-		return result, err
-	}
-	// Keyword reconstruction works while model credentials are being entered.
-	// Available-model vector rebuilding is a separate explicit maintenance step.
-	indexing := *library
-	indexing.IndexingStrategy.VectorEnabled = false
+	// Keyword reconstruction uses each entry's library while model credentials
+	// are being entered. Vector rebuilding is a separate maintenance step.
 	var articles []types.Entry
 	if err := s.db.WithContext(ctx).Where("vault_path<>'' AND parse_status=?", types.ParseStatusCompleted).Find(&articles).Error; err != nil {
 		return result, err
 	}
 	for i := range articles {
 		article := &articles[i]
+		actual, err := repository.NewLibraryRepository(s.db).GetLibraryByID(ctx, article.LibraryID)
+		if err != nil {
+			return result, err
+		}
+		indexing := *actual
+		indexing.IndexingStrategy.VectorEnabled = false
 		path, err := vaultAbsolute(s.root, article.VaultPath)
 		if err != nil {
 			return result, err

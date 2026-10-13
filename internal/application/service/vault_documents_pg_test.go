@@ -67,6 +67,8 @@ func newVaultDocumentHarness(t *testing.T, wait time.Duration) *vaultDocumentHar
 	h.library.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
 	h.library.ChunkingConfig = types.ChunkingConfig{ChunkSize: 160, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: chunker.StrategyHeading}
 	require.NoError(t, h.db.Save(h.library).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", h.library.ModelTiers.Embedding).Error)
+	require.NoError(t, h.db.Model(&types.Library{}).Where("space_id=1").Updates(map[string]any{"chunking_config": h.library.ChunkingConfig, "indexing_strategy": h.library.IndexingStrategy}).Error)
 	e := &vaultRecordingEmbedder{}
 	root := t.TempDir()
 	r := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(h.db))
@@ -95,8 +97,10 @@ func (h *vaultDocumentHarness) write(t *testing.T, path, body string) string {
 
 func (h *vaultDocumentHarness) assertSearch(t *testing.T, id, term string) {
 	t.Helper()
+	var entry types.Entry
+	require.NoError(t, h.db.First(&entry, "id=?", id).Error)
 	hits, err := h.documents.retrieval.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType,
-		LibraryIDs: []string{h.library.ID}, EntryIDs: []string{id}, Query: term, TopK: 10}})
+		LibraryIDs: []string{entry.LibraryID}, EntryIDs: []string{id}, Query: term, TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 }
@@ -288,6 +292,8 @@ func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T
 	h.library.EmbeddingModelID = ""
 	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, h.db.Save(h.library).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", h.library.ModelTiers.Embedding).Error)
+	require.NoError(t, h.db.Model(&types.Library{}).Where("space_id=1").Updates(map[string]any{"chunking_config": h.library.ChunkingConfig, "indexing_strategy": h.library.IndexingStrategy}).Error)
 	h.documents.models = nil
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	valid := VaultArticleHeader{ID: uuid.NewString(), Title: "无模型重建", CollectedAt: now, ContentType: "event"}

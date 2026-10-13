@@ -3,6 +3,19 @@ import type { ModelTierConfig } from '@/types/modelTiers';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import type { SearchRequest, SearchSource } from '@/types/search';
 
+export type LibraryTemplate = 'external_timely' | 'external_durable' | 'own' | 'generated';
+export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
+export interface LibraryRelationType { name: string; position: number; enabled: boolean }
+export interface LibraryCatalogItem {
+  id: string; directory: string; name: string; display_name: string; system_role: string;
+  template: LibraryTemplate; description: string; review_criteria: string;
+  source_evidence_rule: '' | 'link_required' | 'link_or_publisher_date';
+  collect_content: string; exclude_content: string; deduplication_rule: string;
+  content_types: LibraryContentType[]; relation_types: LibraryRelationType[]; feed_enabled: boolean;
+  template_rules: { deduplication: string; source_evidence: string; review: boolean; process: boolean; merge_reposts: boolean; collapse_similar: boolean; fact_source: boolean };
+}
+export function listLibraries() { return get('/api/v1/libraries'); }
+
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }
 
 export function getLibrary() {
@@ -42,7 +55,7 @@ export function listEntryFiles(
   if (params.start_time) query.append('start_time', params.start_time);
   if (params.end_time) query.append('end_time', params.end_time);
   const qs = query.toString();
-  return get(`/api/v1/libraries/${libraryId}/entries?${qs}`);
+  return get(`/api/v1/entries?${qs}`);
 }
 
 export function getEntryDetails(id: string) {

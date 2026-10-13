@@ -9,7 +9,7 @@
     >
       <template #content>
       <div class="library-info-card" :lang="locale">
-        <div class="library-info-card-header">{{ t('library.infoCard.title') }}</div>
+        <div class="library-info-card-header">{{ libraryInfo.display_name || t('library.infoCard.title') }}</div>
         <div class="library-info-card-body">
           <section class="setting-drawer__section">
             <h4 class="setting-drawer__section-title">

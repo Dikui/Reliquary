@@ -65,7 +65,7 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 		}
 		return result, nil
 	}
-	library, err := repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, "")
+	library, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,12 @@ func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, library *t
 	if id == "" {
 		if library.EmbeddingModelID == "" && library.ModelTiers.Embedding == "" {
 			library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true, VectorEnabled: false}
-			return db.WithContext(ctx).Save(library).Error
+			return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				if err := tx.Save(library).Error; err != nil {
+					return err
+				}
+				return tx.Model(&types.Library{}).Where("space_id=?", library.SpaceID).Update("indexing_strategy", library.IndexingStrategy).Error
+			})
 		}
 		return nil
 	}
@@ -125,8 +130,16 @@ func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, library *t
 	if err := db.WithContext(ctx).Where("id=? AND space_id=? AND type=?", id, types.SingleSpaceID, types.ModelTypeEmbedding).First(&model).Error; err != nil {
 		return fmt.Errorf("rebuild embedding model: %w", err)
 	}
+	if err := db.WithContext(ctx).Model(&types.Space{}).Where("id=?", library.SpaceID).Update("embedding_model_id", id).Error; err != nil {
+		return err
+	}
 	library.EmbeddingModelID = id
 	library.ModelTiers.Embedding = id
 	library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true, VectorEnabled: true}
-	return db.WithContext(ctx).Save(library).Error
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(library).Error; err != nil {
+			return err
+		}
+		return tx.Model(&types.Library{}).Where("space_id=?", library.SpaceID).Update("indexing_strategy", library.IndexingStrategy).Error
+	})
 }

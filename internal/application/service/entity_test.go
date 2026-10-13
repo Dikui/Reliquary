@@ -23,7 +23,7 @@ func entityFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService) {
 	t.Helper()
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entities"}).Error)
-	library := types.Library{ID: "entity-library", SpaceID: 1, Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
+	library := types.Library{ID: "entity-library", SpaceID: 1, SystemRole: "institutional", Template: types.TemplateExternalTimely, Directory: "institutional", SourceEvidenceRule: "link_required", Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
 	require.NoError(t, db.Create(&library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "entity-reviewer")
@@ -132,7 +132,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 
 func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
-	require.NoError(t, db.Model(&types.Library{}).Where("id='entity-library'").Update("model_tiers", types.ModelTierConfig{Embedding: "entity-embedding"}).Error)
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", "entity-embedding").Error)
 	records := []types.Entity{entityRecord("vector-good", "Unique unrelated canonical", "product"), entityRecord("vector-wrong-dimension", "Foreign vector dimension", "product"), entityRecord("vector-stale-model", "Obsolete model vector", "product")}
 	records[0].NameEmbedding = types.EntityNameEmbedding{1, 0}
 	records[0].EmbeddingModelID = "entity-embedding"

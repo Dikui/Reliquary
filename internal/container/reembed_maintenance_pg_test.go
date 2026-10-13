@@ -33,7 +33,8 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 			root, uploads := t.TempDir(), t.TempDir()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			library, err := repository.EnsureSpaceLibrary(ctx, db, 1, "")
+			require.NoError(t, service.EnsurePersonalSpace(ctx, db))
+			library, err := repository.EnsureSystemLibraries(ctx, db, 1, "")
 			require.NoError(t, err)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, "/v1/embeddings", r.URL.Path)
@@ -51,6 +52,7 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 			require.NoError(t, db.Create(model).Error)
 			library.EmbeddingModelID, library.ModelTiers.Embedding = model.ID, model.ID
 			require.NoError(t, db.Save(library).Error)
+			require.NoError(t, db.Model(&types.Space{}).Where("id=?", library.SpaceID).Update("embedding_model_id", model.ID).Error)
 			for _, id := range []string{"first", "second"} {
 				require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "product", Description: "Preserve original profile", UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}).Error)
 			}
@@ -105,7 +107,7 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 func TestOfflineReembedFailureStillFlushesAndReturnsTheOriginalError(t *testing.T) {
 	db := pgtest.Open(t)
 	root, uploads := t.TempDir(), t.TempDir()
-	_, err := repository.EnsureSpaceLibrary(context.Background(), db, 1, "")
+	_, err := repository.EnsureSystemLibraries(context.Background(), db, 1, "")
 	require.NoError(t, err)
 	configureOfflineReembed(t, db, root, uploads)
 	status, err := Reembed(context.Background(), "invalid-offline-action", "", nil)

@@ -51,7 +51,7 @@ func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 	t.Helper()
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
-	team := types.Space{ID: 1, Name: "Rebuild triggers"}
+	team := types.Space{ID: 1, Name: "Rebuild triggers", EmbeddingModelID: "team-vector"}
 	require.NoError(t, db.Create(&team).Error)
 	require.NoError(t, db.Create(&types.Library{ID: "trigger-library", SpaceID: 1, Name: "Library", EmbeddingModelID: "team-vector"}).Error)
 	for _, id := range []string{"team-vector", "override-vector"} {

@@ -116,7 +116,7 @@ func configureNameEmbedding(t *testing.T, db *gorm.DB, id string, dimension int)
 	t.Helper()
 	record := types.Model{ID: id, SpaceID: 1, Name: id, Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Source: types.ModelSourceRemote, Parameters: types.ModelParameters{BaseURL: "https://example.com/v1", EmbeddingParameters: types.EmbeddingParameters{Dimension: dimension}}}
 	require.NoError(t, db.Save(&record).Error)
-	require.NoError(t, db.Model(&types.Library{}).Where("space_id=1").Update("model_tiers", types.ModelTierConfig{Embedding: id}).Error)
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", id).Error)
 }
 func nameRebuildFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService, *EntityNameEmbeddingRebuilder, *nameRebuildModels, *nameRebuildQueue) {
 	t.Helper()

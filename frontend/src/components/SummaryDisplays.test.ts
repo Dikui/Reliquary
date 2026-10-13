@@ -60,7 +60,7 @@ function environment(locale: keyof typeof messages) {
   async function request(method: string, url: string, requestBody?: unknown) {
     calls.push({ method, url, ...(requestBody === undefined ? {} : { body: requestBody }) })
     let response: any
-    if (method === 'get' && url.startsWith('/api/v1/libraries/summary-displays/entries?')) response = { success: true, data: [structuredClone(record)], total: 1 }
+    if (method === 'get' && url.startsWith('/api/v1/entries?')) response = { success: true, data: [structuredClone(record)], total: 1 }
     else if (method === 'get' && url === `/api/v1/entries/${record.id}`) response = { success: true, data: structuredClone(record) }
     else if (method === 'get' && url.startsWith(`/api/v1/chunks/${record.id}?`)) response = { success: true, data: [{ id: 'body-chunk', content: body, chunk_index: 0 }], total: 1 }
     else if (method === 'post' && url === '/api/v1/follows/feed') response = { success: true, data: { results: [structuredClone(feedArticle)], total: 1, new_count: 1, last_viewed_at: null, viewed_at: record.updated_at } }
@@ -171,7 +171,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         assert.equal(hook.details.description, summary)
         assert.deepEqual(hook.details.structured_summary, env.record.structured_summary)
         assert.equal(hook.details.md[0].content, body)
-        assert.deepEqual(env.calls.map(call => call.url), ['/api/v1/libraries/summary-displays/entries?page=1&page_size=35', `/api/v1/entries/${env.record.id}`, `/api/v1/chunks/${env.record.id}?page=1&page_size=25`])
+        assert.deepEqual(env.calls.map(call => call.url), ['/api/v1/entries?page=1&page_size=35', `/api/v1/entries/${env.record.id}`, `/api/v1/chunks/${env.record.id}?page=1&page_size=25`])
         assert.deepEqual(env.received[0].data[0], env.record)
         assert.deepEqual(env.received[1].data, env.record)
         assert.deepEqual(env.errors, [])

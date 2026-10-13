@@ -24,6 +24,7 @@ func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t 
 	base.Data.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	base.Data.ModelTiers = types.ModelTierConfig{Embedding: "incomplete-fixture"}
 	require.NoError(t, f.db.Save(&base.Data).Error)
+	require.NoError(t, f.db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", base.Data.ModelTiers.Embedding).Error)
 	search := service.NewSearchService(f.params.LibraryService, f.params.SpaceService, nil, f.db)
 	f.router.POST("/api/v1/search", handler.NewSearchHandler(search, nil).SearchEntry)
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(service.NewFollowService(f.db)))

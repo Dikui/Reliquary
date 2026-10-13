@@ -96,7 +96,7 @@ func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *typ
 		ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	}
 	var library types.Library
-	if err := s.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&library).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "ai-reports").First(&library).Error; err != nil {
 		return ctx, nil, fmt.Errorf("vault indexing requires an initialized library: %w", err)
 	}
 	return ctx, &library, nil

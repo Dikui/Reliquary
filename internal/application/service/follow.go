@@ -163,7 +163,7 @@ func (s *FollowService) Unfollow(ctx context.Context, targetType, targetID strin
 	})
 }
 
-const followEligibleSQL = `k.deleted_at IS NULL AND k.source_kind='article'
+const followEligibleSQL = `k.deleted_at IS NULL AND EXISTS (SELECT 1 FROM libraries fl WHERE fl.id=k.library_id AND fl.deleted_at IS NULL AND fl.feed_enabled=true)
     AND k.parse_status='completed' AND k.enable_status='enabled'
     AND COALESCE(k.metadata #>> '{intake,decision}','approved')='approved'`
 

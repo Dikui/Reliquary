@@ -1,8 +1,11 @@
 package types
 
 import (
+	"crypto/md5"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
+	"github.com/google/uuid"
 	"strings"
 	"time"
 
@@ -17,7 +20,15 @@ const (
 
 // Library represents a library entity
 type Library struct {
-	ModelTiers ModelTierConfig `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
+	SystemRole         string                `json:"system_role"`
+	Template           string                `json:"template" gorm:"default:own"`
+	Directory          string                `json:"directory"`
+	ReviewCriteria     string                `json:"review_criteria"`
+	SourceEvidenceRule string                `json:"source_evidence_rule"`
+	FeedEnabled        bool                  `json:"feed_enabled"`
+	ContentTypes       []LibraryContentType  `json:"content_types" gorm:"foreignKey:LibraryID"`
+	RelationTypes      []LibraryRelationType `json:"relation_types" gorm:"foreignKey:LibraryID"`
+	ModelTiers         ModelTierConfig       `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	// Unique identifier of the library
 	ID string `yaml:"id"                      json:"id"                      gorm:"type:varchar(36);primaryKey"`
 	// Name of the library
@@ -207,12 +218,17 @@ func (library *Library) Capabilities() LibraryCapabilities {
 // It preserves all existing fields verbatim.
 func (library *Library) MarshalJSON() ([]byte, error) {
 	type alias Library
+	rules, _ := RulesForTemplate(library.Template)
 	aux := struct {
 		*alias
-		Capabilities LibraryCapabilities `json:"capabilities"`
+		Capabilities      LibraryCapabilities `json:"capabilities"`
+		Rules             TemplateRules       `json:"template_rules"`
+		DeduplicationRule string              `json:"deduplication_rule"`
+		CollectContent    string              `json:"collect_content"`
+		ExcludeContent    string              `json:"exclude_content"`
 	}{
 		alias:        (*alias)(library),
-		Capabilities: library.Capabilities(),
+		Capabilities: library.Capabilities(), Rules: rules, DeduplicationRule: rules.Deduplication, CollectContent: library.Description, ExcludeContent: library.ReviewCriteria,
 	}
 	return json.Marshal(aux)
 }
@@ -231,4 +247,19 @@ func (library *Library) IsKeywordEnabled() bool {
 // Currently only vector and keyword search need embeddings.
 func (library *Library) NeedsEmbeddingModel() bool {
 	return library != nil && library.IndexingStrategy.NeedsEmbedding()
+}
+
+// BeforeCreate keeps internal constructors and SQL directory defaults aligned.
+// Public creation validates the caller's template and directory before this hook.
+func (library *Library) BeforeCreate(_ *gorm.DB) error {
+	if library.ID == "" {
+		library.ID = uuid.NewString()
+	}
+	if library.Template == "" {
+		library.Template = TemplateOwn
+	}
+	if library.Directory == "" {
+		library.Directory = fmt.Sprintf("custom-%x", md5.Sum([]byte(library.ID)))
+	}
+	return nil
 }

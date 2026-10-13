@@ -56,7 +56,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
-	library, err := s.libraryService.GetLibrary(ctx)
+	library, err := s.libraryService.GetSystemLibrary(ctx, types.SystemRoleForSource(request.Kind))
 	if err != nil {
 		return nil, err
 	}

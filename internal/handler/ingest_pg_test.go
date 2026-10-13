@@ -60,8 +60,8 @@ func (ingestHandlerModels) GetChatModel(context.Context, string) (chat.Chat, err
 
 type ingestHandlerBases struct{ stubArticleLibraryService }
 
-func (ingestHandlerBases) GetLibrary(ctx context.Context) (*types.Library, error) {
-	library, err := (&stubArticleLibraryService{}).GetLibrary(ctx)
+func (ingestHandlerBases) GetSystemLibrary(ctx context.Context, roles ...string) (*types.Library, error) {
+	library, err := (&stubArticleLibraryService{}).GetSystemLibrary(ctx)
 	library.SummaryModelID = "intake-test"
 	return library, err
 }

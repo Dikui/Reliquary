@@ -39,7 +39,7 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = 
    const status = Number(mode)
    throw new AxiosError('failed', AxiosError.ERR_BAD_RESPONSE, packet, undefined, { status, statusText: 'Unavailable', headers: {}, config: packet, data: { success: false, error: { code: status === 503 ? 1008 : 1001, message: 'Authentication temporarily unavailable' } } })
   }
-  if (packet.url?.startsWith('/api/v1/libraries/library-entries/entries')) {
+  if (packet.url?.startsWith('/api/v1/entries?')) {
     return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: [{ id: 'loaded-entry', source_kind: 'mine', title: 'Original document', updated_at: '2026-10-01T00:00:00Z' }], total: 1 } }
   }
   if (packet.url === '/api/v1/entries/loaded-entry/spans') {
@@ -145,7 +145,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   assert.equal(hook.total.value,1)
   const spans=await api.getEntrySpans('loaded-entry')
   assert.equal(spans.data.entry_id,'loaded-entry')
-  const list=f.calls.find(packet=>packet.url?.startsWith('/api/v1/libraries/library-entries/entries'))
+  const list=f.calls.find(packet=>packet.url?.startsWith('/api/v1/entries?'))
   assert.ok(list)
   assert.equal(list.headers.Authorization,'Bearer valid-session')
   assert.equal(f.calls.at(-1)?.url,'/api/v1/entries/loaded-entry/spans')

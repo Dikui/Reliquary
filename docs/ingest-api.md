@@ -112,3 +112,15 @@ MCP 接入点为 `/mcp`，每次请求携带 Bearer API Key。工具 `ingest` �
 `get_article` 的正文位置使用 Unicode 字符偏移，`offset` 非负，`length` 默认 20000、最多 100000，结果含 `next_offset`。读取全文后再引用资料，避免把检索片段当作完整上下文。
 
 `write_report` 接受标题、Markdown 正文及可选的关联文章 ID。同一标题与正文可幂等重试。报告写入 `reports/`，不进行收录审核或模型处理，索引失败由现有后台任务重试。调用方应将自己的综合分析与收录的原始资料区分。
+
+## 库目录与过渡收录
+
+`GET /api/v1/libraries` 返回当前空间全部库，`GET /api/v1/libraries/:id` 返回单库及内容类型、关系类型。MCP `list_libraries` 无参数，返回 `libraries` 数组。每项包含 `id`、`directory`、`name`、`system_role`、`template`、`description`、`collect_content`、`exclude_content`、`review_criteria`、`source_evidence_rule`、`deduplication_rule`、`template_rules`、`content_types`、`relation_types`、`feed_enabled`。`collect_content` 取说明，`exclude_content` 取审核标准。去重说明和处理规则由模板统一生成。
+
+系统库为机构发布（`institutional`）、人物观点（`opinions`）、参考文献（`references`）、我的资料（`mine`）、AI 报告（`ai-reports`）。角色、目录和模板创建后不可修改，资料也不能换库。HTTP 另返回 `display_name`，默认系统名称按请求语言本地化，用户改名后保留用户名称；`name` 始终是存储值。
+
+`POST /api/v1/libraries` 必填 `template`、`directory`、`name`，可选 `description`。模板为 `external_timely`、`external_durable`、`own`、`generated`。目录只允许小写字母、数字和分隔用的连字符，在空间内唯一。自建库的内容类型和关系类型初始为空；外部时效型默认要求链接，其余来源证据规则由模板固定。
+
+`PATCH /api/v1/libraries/:id` 或 `PUT` 修改 `name`、`description`、`review_criteria`、`source_evidence_rule`、`content_types`、`relation_types`、`feed_enabled`。两个类型数组整体替换，元素包含 `name`、`enabled`；内容类型另含 `extract_graph`，排序按数组顺序保存。只有外部时效型接受 `source_evidence_rule`，值为 `link_required` 或 `link_or_publisher_date`。提交 `template`、`directory`、`system_role` 返回校验错误。`DELETE /api/v1/libraries/:id` 仅接受没有资料记录的自建库。
+
+本阶段收录契约仍使用原来源类别：文章进入机构发布，本人文档进入我的资料，`write_report` 进入 AI 报告；尚不接受指定库、`source_ref` 或 `identifier`。模板规则现阶段只提供配置与读取，后续再接入收录审核和去重。`GET /api/v1/entries` 和未指定库的搜索读取空间全部资料。旧 `/api/v1/library` 是机构发布设置的兼容入口，其中向量模型设置写入空间配置；所有库共用空间向量模型。

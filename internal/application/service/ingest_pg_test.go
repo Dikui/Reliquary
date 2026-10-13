@@ -17,7 +17,7 @@ import (
 
 type ingestFixtureLibrary struct{ retainedProcessingLibrary }
 
-func (s ingestFixtureLibrary) GetLibrary(context.Context) (*types.Library, error) {
+func (s ingestFixtureLibrary) GetSystemLibrary(context.Context, ...string) (*types.Library, error) {
 	return s.library, nil
 }
 

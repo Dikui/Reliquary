@@ -16,6 +16,7 @@ func TestCountByModelID_Library(t *testing.T) {
 	db := setupLibraryTestDB(t)
 	repo := NewLibraryRepository(db)
 	modelID := "embed-model-1"
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", modelID).Error)
 
 	library := makeLibrary()
 	library.EmbeddingModelID = modelID
@@ -49,6 +50,7 @@ func TestListModelUsages_Library(t *testing.T) {
 	db := setupLibraryTestDB(t)
 	repo := NewLibraryRepository(db)
 	modelID := "all-library-bindings"
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", modelID).Error)
 
 	allBindings := makeLibrary()
 	allBindings.Name = "Zulu Library"
@@ -79,11 +81,12 @@ func TestListModelUsages_Library(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, usages, 2)
 	assert.Equal(t, "Alpha Library", usages[0].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, usages[0].Bindings)
+	assert.Equal(t, []types.ModelUsageBinding{"generation_model_tier", "embedding_model_tier", types.ModelUsageBindingEmbeddingModel}, usages[0].Bindings)
 	assert.Equal(t, "Zulu Library", usages[1].Name)
 	assert.Equal(t, []types.ModelUsageBinding{
 		types.ModelUsageBinding("light_model_tier"),
 		types.ModelUsageBinding("generation_model_tier"),
+		"embedding_model_tier",
 		types.ModelUsageBindingEmbeddingModel,
 		types.ModelUsageBindingSummaryModel,
 	}, usages[1].Bindings)
@@ -94,6 +97,7 @@ func TestListModelUsages_LibraryRespectsLimit(t *testing.T) {
 	db := setupLibraryTestDB(t)
 	repo := NewLibraryRepository(db)
 	modelID := "shared-embed"
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", modelID).Error)
 
 	for i := 0; i < types.ModelUsageListLimit+3; i++ {
 		library := makeLibrary()

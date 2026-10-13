@@ -89,8 +89,8 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Serialize creation in the personal library while retaining its
 		// normal keyword and vector queries throughout the rebuild.
-		var library types.Library
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=?", spaceID).First(&library).Error; err != nil {
+		var space types.Space
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=?", spaceID).First(&space).Error; err != nil {
 			return err
 		}
 		if err := r.profiles.checkProfile(tx, spaceID, profile); err != nil {

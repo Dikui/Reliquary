@@ -22,7 +22,8 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 			return err
 		}
 		if len(spaces) == 1 && spaces[0].ID == types.SingleSpaceID {
-			return nil
+			_, err := repository.EnsureSystemLibraries(ctx, tx, types.SingleSpaceID, "")
+			return err
 		}
 		if len(spaces) != 0 {
 			return fmt.Errorf("expected only personal workspace %d, found %d workspaces", types.SingleSpaceID, len(spaces))
@@ -31,12 +32,16 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 		_, err = svc.CreateSpace(ctx, &types.Space{
 			ID: types.SingleSpaceID, Name: "Personal workspace", Description: "Personal entry", Status: "active",
 		})
+		if err != nil {
+			return err
+		}
+		_, err = repository.EnsureSystemLibraries(ctx, tx, types.SingleSpaceID, "")
 		return err
 	})
 }
 
-// EnsureSingleLibrary repairs a missing library before serving requests.
-func EnsureSingleLibrary(ctx context.Context, db *gorm.DB) error {
+// EnsureSystemLibraries repairs a missing library before serving requests.
+func EnsureSystemLibraries(ctx context.Context, db *gorm.DB) error {
 	var user types.User
 	err := db.WithContext(ctx).Where("space_id = ?", types.SingleSpaceID).First(&user).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
@@ -44,8 +49,9 @@ func EnsureSingleLibrary(ctx context.Context, db *gorm.DB) error {
 	}
 	// Registration creates the first library together with its owner.
 	if err == gorm.ErrRecordNotFound {
-		return nil
+		_, err = repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
+		return err
 	}
-	_, err = repository.EnsureSpaceLibrary(ctx, db, types.SingleSpaceID, user.ID)
+	_, err = repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, user.ID)
 	return err
 }

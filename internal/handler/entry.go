@@ -72,7 +72,7 @@ func (h *EntryHandler) validateLibraryAccessWithLibraryID(c *gin.Context, librar
 	var library *types.Library
 	var err error
 	if libraryID == "" {
-		library, err = h.libraryService.GetLibrary(ctx)
+		return nil, "", spaceID, nil
 	} else {
 		library, err = h.libraryService.GetLibraryByID(ctx, libraryID)
 	}
@@ -638,7 +638,7 @@ func (h *EntryHandler) requireEntryInLibrary(
 		return errors.NewBadRequestError("One or more entry entries not found")
 	}
 	for _, k := range entryList {
-		if k.LibraryID != libraryID {
+		if libraryID != "" && k.LibraryID != libraryID {
 			return errors.NewBadRequestError(
 				fmt.Sprintf("Entry %s does not belong to library %s",
 					secutils.SanitizeForLog(k.ID), secutils.SanitizeForLog(libraryID)))
@@ -732,7 +732,7 @@ func (h *EntryHandler) BatchDeleteEntry(c *gin.Context) {
 		return
 	}
 
-	// Resolve the sole library before applying the batch operation.
+	// Batch operations resolve each entry in the authenticated space.
 	_, libraryID, effectiveSpaceID, err := h.validateLibraryAccessWithLibraryID(c, "")
 	if err != nil {
 		c.Error(err)
@@ -755,7 +755,7 @@ func (h *EntryHandler) BatchDeleteEntry(c *gin.Context) {
 		return
 	}
 	for _, k := range entryList {
-		if k.LibraryID != libraryID {
+		if libraryID != "" && k.LibraryID != libraryID {
 			c.Error(errors.NewBadRequestError(
 				fmt.Sprintf("Entry %s does not belong to library %s",
 					secutils.SanitizeForLog(k.ID), secutils.SanitizeForLog(libraryID))))
@@ -907,7 +907,9 @@ func (h *EntryHandler) GetEntryBatch(c *gin.Context) {
 		return
 	}
 	entries, err := h.kgService.GetEntryBatch(ctx, effectiveSpaceID, req.IDs)
-	entries = filterEntriesByLibraryAllowSet(entries, map[string]bool{libraryID: true})
+	if libraryID != "" {
+		entries = filterEntriesByLibraryAllowSet(entries, map[string]bool{libraryID: true})
+	}
 
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
@@ -927,6 +929,7 @@ func (h *EntryHandler) GetEntryBatch(c *gin.Context) {
 // UpdateEntryRequest defines the partial-update body for PUT /entries/:id.
 // Omitted fields are left unchanged; an explicit empty description clears the summary.
 type UpdateEntryRequest struct {
+	LibraryID      *string         `json:"library_id"`
 	Title          *string         `json:"title"`
 	Description    *string         `json:"description"`
 	CustomMetadata json.RawMessage `json:"custom_metadata"`
@@ -957,6 +960,10 @@ func (h *EntryHandler) UpdateEntry(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		logger.Error(ctx, "Failed to parse request parameters", err)
 		c.Error(errors.NewBadRequestError(err.Error()))
+		return
+	}
+	if req.LibraryID != nil {
+		c.Error(errors.NewBadRequestError("entry library_id is immutable"))
 		return
 	}
 	entry := types.Entry{ID: id, CustomMetadata: types.JSON(req.CustomMetadata)}
@@ -1210,7 +1217,7 @@ func (h *EntryHandler) BatchReparseEntry(c *gin.Context) {
 		return
 	}
 	for _, k := range entryList {
-		if k.LibraryID != libraryID {
+		if libraryID != "" && k.LibraryID != libraryID {
 			c.Error(errors.NewBadRequestError(
 				fmt.Sprintf("Entry %s does not belong to library %s",
 					secutils.SanitizeForLog(k.ID), secutils.SanitizeForLog(libraryID))))

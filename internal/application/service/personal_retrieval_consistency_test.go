@@ -24,7 +24,7 @@ type personalRetrievalHit struct {
 
 func TestPersonalPostgresRetrievalResults(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
-	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business) VALUES (?, ?, 'personal')", types.SingleSpaceID, "Retrieval fixture").Error)
+	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business,embedding_model_id) VALUES (?, ?, 'personal','chunk-search-fixed')", types.SingleSpaceID, "Retrieval fixture").Error)
 	first := f.createLibrary(t, true, true)
 	second := first
 	definitions := []struct {
@@ -97,7 +97,7 @@ func TestPersonalPostgresRetrievalResults(t *testing.T) {
 
 func TestPersonalLibraryPostgresSchemaAndEmbedding(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
-	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business) VALUES (?, ?, 'personal')", types.SingleSpaceID, "Personal fixture").Error)
+	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business,embedding_model_id) VALUES (?, ?, 'personal','chunk-search-fixed')", types.SingleSpaceID, "Personal fixture").Error)
 	service := &libraryService{db: f.db, repo: f.libraries}
 	created := &types.Library{ID: "personal-library", SpaceID: types.SingleSpaceID, Name: "Personal library", EmbeddingModelID: "chunk-search-fixed"}
 	created.EnsureDefaults()

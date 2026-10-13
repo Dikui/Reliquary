@@ -217,26 +217,46 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		if err != nil {
 			return err
 		}
-		var library types.Library
-		if err := db.Table("libraries").Where("deleted_at IS NULL").First(&library).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		var libraries []types.Library
+		if err := db.Table("libraries").Where("deleted_at IS NULL").Find(&libraries).Error; err != nil {
 			return err
 		}
-		selected := map[string]any{"id": library.EmbeddingModelID}
+		embeddingID := ""
+		if db.Migrator().HasColumn("spaces", "embedding_model_id") {
+			if err := db.Table("spaces").Where("id=?", types.SingleSpaceID).Pluck("embedding_model_id", &embeddingID).Error; err != nil {
+				return err
+			}
+		} else {
+			// Historical schemas enforce one library. This offline compatibility branch
+			// only runs before migration 10; current selection always comes from space.
+			for _, library := range libraries {
+				embeddingID = library.EmbeddingModelID
+				if library.ModelTiers.Embedding != "" {
+					embeddingID = library.ModelTiers.Embedding
+				}
+			}
+		}
+		selected := map[string]any{"id": embeddingID}
 		for _, model := range models {
-			if model["id"] == library.EmbeddingModelID {
+			if model["id"] == embeddingID {
 				selected["profile_hash"] = maintenance.ModelProfile(model)
 			}
 		}
 		ids := map[string]bool{}
 		generation := map[string]bool{}
-		for _, id := range []string{library.EmbeddingModelID, library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation, library.ModelTiers.Embedding, library.ModelTiers.Rerank} {
-			if id != "" {
-				ids[id] = true
-			}
+		if embeddingID != "" {
+			ids[embeddingID] = true
 		}
-		for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation} {
-			if id != "" {
-				generation[id] = true
+		for _, library := range libraries {
+			for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation, library.ModelTiers.Rerank} {
+				if id != "" {
+					ids[id] = true
+				}
+			}
+			for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation} {
+				if id != "" {
+					generation[id] = true
+				}
 			}
 		}
 		var fallback string

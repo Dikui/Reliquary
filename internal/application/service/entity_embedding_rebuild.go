@@ -372,16 +372,15 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 	return nil
 }
 func (r *EntityNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, spaceID uint64, profile entityEmbeddingProfile) error {
-	var library types.Library
-	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers", "embedding_model_id").Where("space_id=?", spaceID).First(&library).Error; err != nil {
+	var space types.Space
+	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "embedding_model_id").Where("id=?", spaceID).First(&space).Error; err != nil {
 		return err
 	}
-	id, err := ResolveModelTier(context.Background(), nil, &library, types.ModelTierEmbedding)
-	if err != nil || id != profile.modelID {
-		return errors.New("library embedding profile changed during rebuild")
+	if space.EmbeddingModelID != profile.modelID {
+		return errors.New("space embedding profile changed during rebuild")
 	}
 	var metadata types.Model
-	err = tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (space_id=? OR is_builtin=true)", profile.modelID, spaceID).First(&metadata).Error
+	err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (space_id=? OR is_builtin=true)", profile.modelID, spaceID).First(&metadata).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}

@@ -25,7 +25,7 @@ type entrySearchFixtureBases struct {
 	embeddingError error
 }
 
-func (b entrySearchFixtureBases) GetLibrary(context.Context) (*types.Library, error) {
+func (b entrySearchFixtureBases) GetSystemLibrary(context.Context, ...string) (*types.Library, error) {
 	return b.library, nil
 }
 func (b entrySearchFixtureBases) GetQueryEmbedding(_ context.Context, _ string, query string) ([]float32, error) {
@@ -62,9 +62,9 @@ func newEntrySearchFixture(t *testing.T) *entrySearchFixture {
 	t.Helper()
 	db := pgtest.Open(t)
 	config := &types.RetrievalConfig{RerankTopK: 100, KeywordThreshold: 0.00001}
-	space := &types.Space{ID: 1, Name: "Search fixture", RetrievalConfig: config}
+	space := &types.Space{ID: 1, Name: "Search fixture", EmbeddingModelID: "fixture-model", RetrievalConfig: config}
 	require.NoError(t, db.Create(space).Error)
-	library := &types.Library{ID: "search-library", SpaceID: 1, Name: "Search", Type: types.LibraryTypeDocument,
+	library := &types.Library{ID: "search-library", SpaceID: 1, Name: "Search", FeedEnabled: true, Type: types.LibraryTypeDocument,
 		EmbeddingModelID: "fixture-model", ModelTiers: types.ModelTierConfig{Embedding: "fixture-model"},
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}}
 	require.NoError(t, db.Create(library).Error)
@@ -74,9 +74,13 @@ func newEntrySearchFixture(t *testing.T) *entrySearchFixture {
 	return &entrySearchFixture{db: db, ctx: ctx, library: library, config: config, svc: svc}
 }
 
-func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, semantic string, count int) *types.Entry {
+func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, semantic string, count int, libraries ...string) *types.Entry {
 	t.Helper()
-	article := &types.Entry{ID: id, SpaceID: 1, LibraryID: h.library.ID, Type: "manual",
+	libraryID := h.library.ID
+	if len(libraries) > 0 {
+		libraryID = libraries[0]
+	}
+	article := &types.Entry{ID: id, SpaceID: 1, LibraryID: libraryID, Type: "manual",
 		Title: "Searchfixture " + id, Source: "https://example.org/" + id, SourceKind: source,
 		ContentType: contentType,
 		ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", EmbeddingModelID: "fixture-model",
@@ -93,15 +97,15 @@ func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, se
 	if source == "article" {
 		vector := pgvector.NewHalfVector(entrySearchFixtureEmbedding(article.Title + "\n" + article.Description))
 		require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
-			VALUES (?,1,?,'fixture-model',3,?,'fixture')`, article.ID, h.library.ID, vector).Error)
+			VALUES (?,1,?,'fixture-model',3,?,'fixture')`, article.ID, libraryID, vector).Error)
 	}
 	for i := 0; i < count; i++ {
-		chunk := &types.Chunk{ID: fmt.Sprintf("%s-chunk-%03d", id, i), SpaceID: 1, LibraryID: h.library.ID,
+		chunk := &types.Chunk{ID: fmt.Sprintf("%s-chunk-%03d", id, i), SpaceID: 1, LibraryID: libraryID,
 			EntryID: id, ChunkIndex: i, Content: "searchfixture " + semantic + fmt.Sprintf(" body passage %d", i),
 			ChunkType: types.ChunkTypeText, IsEnabled: true}
 		require.NoError(t, h.db.Create(chunk).Error)
 		require.NoError(t, h.db.Exec(`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,dimension,embedding,is_enabled)
-			VALUES (?,0,?,?,?,?,?,true)`, chunk.ID, chunk.ID, article.ID, h.library.ID, 3, pgvector.NewHalfVector(entrySearchFixtureEmbedding(chunk.Content))).Error)
+			VALUES (?,0,?,?,?,?,?,true)`, chunk.ID, chunk.ID, article.ID, libraryID, 3, pgvector.NewHalfVector(entrySearchFixtureEmbedding(chunk.Content))).Error)
 	}
 	return article
 }

@@ -38,6 +38,11 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 			return err
 		}
 	}
+	if _, modern := current.Tables["library_content_types"]; modern {
+		if err := migrateLibrarySnapshot(original, current.Tables["libraries"]); err != nil {
+			return err
+		}
+	}
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]

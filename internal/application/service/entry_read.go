@@ -96,11 +96,7 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 	if kind != "" && kind != "intake" {
 		return nil, werrors.NewBadRequestError("kind must be intake")
 	}
-	library, err := s.libraryService.GetLibrary(ctx)
-	if err != nil {
-		return nil, err
-	}
-	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND library_id=? AND source_kind IN ('article','mine')", library.SpaceID, library.ID)
+	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND source_kind IN ('article','mine')", types.MustSpaceIDFromContext(ctx))
 	query = query.Where("parse_status=?", types.ParseStatusRejected)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
