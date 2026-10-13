@@ -2,6 +2,7 @@
 
 Status: accepted
 日期：2026-10-07（2026-10-09 按 [0007](0007-personal-single-user.md) 的个人单用户场景改写）
+部分被 [0014](0014-internal-knowledge-base.md) 取代（2026-10-14）。
 
 ## 背景
 
