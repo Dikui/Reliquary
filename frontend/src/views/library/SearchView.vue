@@ -3,6 +3,10 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getSearchOptions, searchEntries } from '@/api/search'
+import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
+import { useLibraryScope } from '@/composables/useLibraryScope'
+import { referenceQuery } from '@/utils/bodyReference'
+import type { SourceLocation } from '@/types/search'
 import SearchFilters from '@/components/SearchFilters.vue'
 import SearchEntry from '@/components/SearchEntry.vue'
 import type { SearchEntry as Article, SearchOptions } from '@/types/search'
@@ -10,6 +14,8 @@ import { buildSearchRequest, searchErrorMessage, defaultSearchFilters, searchSta
 
 const { t } = useI18n()
 const router = useRouter(), route = useRoute()
+const libraryScope = useLibraryScope()
+const filtersExpanded = ref(false)
 const query = ref('')
 const filters = ref(defaultSearchFilters())
 const options = ref<SearchOptions>({ entities: [], topics: [] })
@@ -40,7 +46,7 @@ function scheduleSearch() {
 async function runSearch(updateURL = true) {
   invalidate()
   if (composing.value) return
-  const request = buildSearchRequest(query.value, filters.value)
+  const request = { ...buildSearchRequest(query.value, filters.value), libraries: libraryScope.value }
   if (updateURL) void router.replace({ query: searchStateToURL(query.value, filters.value) })
   if (!request.query) { results.value = []; hasSearched.value = false; error.value = ''; return }
   if (filters.value.published_from && filters.value.published_to && filters.value.published_from > filters.value.published_to) {
@@ -86,8 +92,9 @@ function clearQuery() {
   inputRef.value?.focus()
 }
 function finishComposition() { composing.value = false; scheduleSearch() }
-function openArticle(article: Article) { void router.push({ path: '/platform/entries', query: { entry_id: article.entry_id } }) }
+function openArticle(article: Article, location?: SourceLocation) { void router.push({ path: '/platform/entries', query: referenceQuery(article.entry_id, location) }) }
 function filterEntity(id: string) { filters.value.entity_ids = [id] }
+watch(libraryScope, scheduleSearch, { deep: true })
 watch(stateKey, () => { if (!synchronizing) scheduleSearch() })
 watch(() => route.query, incoming => {
   const state = searchStateFromURL(incoming)
@@ -113,8 +120,12 @@ onUnmounted(invalidate)
         </div>
         <t-button type="submit" :loading="loading">{{ t('knowledgeSearch.search') }}</t-button>
       </div>
+      <LibraryScopeSelect v-model="libraryScope" />
+<t-button class="filter-toggle" variant="outline" :aria-expanded="filtersExpanded" aria-controls="advanced-search-filters" @click="filtersExpanded = !filtersExpanded">{{ t('ikb18.moreFilters') }}</t-button>
+      <div id="advanced-search-filters" class="advanced-filter-controls" :class="{ expanded: filtersExpanded }">
       <SearchFilters v-model="filters" :options="options" :loading="optionsLoading" />
       <t-button variant="text" type="button" @click="filters = defaultSearchFilters()">{{ t('knowledgeSearch.resetFilters') }}</t-button>
+      </div>
     </form>
     <t-alert v-if="optionsError" theme="error" :message="optionsError"><template #operation><t-button variant="text" @click="loadOptions">{{ t('common.retry') }}</t-button></template></t-alert>
     <section class="search-results" :aria-label="t('knowledgeSearch.results')" :aria-busy="loading">
@@ -148,4 +159,7 @@ onUnmounted(invalidate)
 .search-results { display: grid; gap: 16px; min-height: 120px; padding-top: 24px; }
 .excluded-count, .result-count { color: var(--td-text-color-secondary); font-size: 13px; margin: 0; }
 @media (max-width: 640px) { .search-page { padding: 20px 12px; } .search-form { padding: 14px; } }
+.filter-toggle { display: none; }
+.advanced-filter-controls { display: grid; gap: 12px; min-width: 0; }
+@media (max-width: 560px) { .filter-toggle { display: inline-flex; } .advanced-filter-controls { display: none; } .advanced-filter-controls.expanded { display: grid; } }
 </style>

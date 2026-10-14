@@ -1,5 +1,5 @@
 <template>
-  <t-dialog v-model:visible="dialogVisible" :footer="false" :header="false" :close-btn="false" width="640px" top="10vh"
+  <t-dialog attach="body" :z-index="2400" v-model:visible="dialogVisible" :footer="false" :header="false" :close-btn="false" width="640px" top="10vh"
     destroy-on-close class="cmdk-dialog" @close="handleClose" @opened="onDialogOpened">
     <div class="cmdk" @keydown="onKeyDown">
       <!-- Input row -->
@@ -23,6 +23,7 @@
         </button>
       </div>
 
+      <LibraryScopeSelect v-model="libraryScope" class="cmdk-library-scope" />
       <!-- Results -->
       <div ref="scrollRef" class="cmdk__results">
         <!-- Empty idle state: recent + quick actions -->
@@ -62,7 +63,7 @@
                 </template>
                 <template #subtitle>
                   <span v-if="item.file.libraryName" class="result-library">{{ item.file.libraryName }}</span>
-                  <SearchImage v-if="item.file.imagePath" :article-id="item.file.entryId" :path="item.file.imagePath" :title="item.file.title" compact />
+                  <span @click.stop @keydown.enter.stop @keydown.space.stop><SearchImage v-if="item.file.imagePath" :article-id="item.file.entryId" :path="item.file.imagePath" :title="item.file.title" compact interactive /></span>
                   <span v-html="highlight(item.chunk.matched_content || item.chunk.content)" />
                 </template>
               </ResultItem>
@@ -110,7 +111,7 @@
     </div>
 
     <!-- Retrieval settings drawer (layered on top of the palette) -->
-    <t-drawer v-model:visible="drawerVisible" :header="t('retrievalSettings.title')" size="420px" :footer="false"
+    <t-drawer attach="body" :z-index="2450" v-model:visible="drawerVisible" :header="t('retrievalSettings.title')" size="420px" :footer="false"
       :close-on-overlay-click="true" class="cmdk-retrieval-drawer">
       <RetrievalSettings />
     </t-drawer>
@@ -131,6 +132,8 @@ import { markdownToPlainText } from '@/utils/markdownPlainText'
 import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
 import ResultGroup from './GlobalCommandPalette/ResultGroup.vue'
 import ResultItem from './GlobalCommandPalette/ResultItem.vue'
+import LibraryScopeSelect from './LibraryScopeSelect.vue'
+import { referenceQuery } from '@/utils/bodyReference'
 import SearchImage from './SearchImage.vue'
 import RetrievalSettings from '@/views/settings/RetrievalSettings.vue'
 
@@ -144,7 +147,7 @@ const { open, initialQuery, recentQueries } = storeToRefs(commandPaletteStore)
 // Per-group display caps — keep the palette compact.
 const CHUNK_LIMIT = 5
 
-const { query, composing, loading, hasSearched, fileGroups, clearResults, searchError, retry } = useCmdkSearch({})
+const { libraryScope, query, composing, loading, hasSearched, fileGroups, clearResults, searchError, retry } = useCmdkSearch({})
 
 const drawerVisible = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -293,14 +296,14 @@ const openChunk = (item: FlatChunkItem) => {
   if (alreadyViewingEntry) {
     window.dispatchEvent(
       new CustomEvent('reliquary:open-entry', {
-        detail: { libraryId: item.file.libraryId, entryId: item.file.entryId },
+        detail: { libraryId: item.file.libraryId, entryId: item.file.entryId, location: item.chunk.locations?.[0] },
       }),
     )
     return
   }
   router.push({
     path: '/platform/entries',
-    query: { entry_id: item.file.entryId },
+    query: referenceQuery(item.file.entryId, item.chunk.locations?.[0]),
   })
 }
 
@@ -369,6 +372,8 @@ const onKeyDown = (e: KeyboardEvent) => {
     e.preventDefault()
     primaryActionForSelected({ cmd: e.metaKey || e.ctrlKey })
   } else if (e.key === 'Escape') {
+    // This event has been handled here; document/window drawer listeners must not see it.
+    e.stopPropagation()
     e.preventDefault()
     handleClose()
   }
@@ -458,6 +463,8 @@ onUnmounted(() => {
 </script>
 
 <style lang="less" scoped>
+.cmdk-library-scope { padding: 8px 16px; box-sizing: border-box; max-width: 100%; }
+.result-library { display: block; margin-bottom: 8px; }
 .cmdk {
   display: flex;
   flex-direction: column;

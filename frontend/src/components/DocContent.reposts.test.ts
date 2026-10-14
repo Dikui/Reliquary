@@ -28,7 +28,7 @@ const compile = (code: string) => ts.transpileModule(code, {
 function evaluate(code: string, modules: Record<string, unknown>, environment: Record<string, unknown> = {}) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', 'window', 'localStorage', compile(code))(
-    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : modules[name] ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
+    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : (name === './BodyReference.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
     environment.window, environment.localStorage,
   )
   return module.exports
@@ -751,7 +751,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(html.includes(messages[locale].library.sourceKinds[kind]), id)
       assert.ok(!html.includes(messages[locale].library.typeManual), id)
       assert.ok(!html.includes(`>${messages[locale].library.channelApi}<`), id)
-      assert.ok(html.includes('MD'), id)
+      assert.ok(html.includes(messages[locale].ikb18.markdown), id)
     }
     assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
   })

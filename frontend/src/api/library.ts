@@ -8,13 +8,18 @@ export interface LibraryContentType { name: string; position: number; enabled: b
 export interface LibraryRelationType { name: string; position: number; enabled: boolean }
 export interface LibraryCatalogItem {
   id: string; directory: string; name: string; display_name: string; system_role: string;
-  template: LibraryTemplate; description: string; review_criteria: string;
+  entry_count?: number; template: LibraryTemplate; description: string; review_criteria: string;
   source_evidence_rule: '' | 'link_required' | 'link_or_publisher_date';
   collect_content: string; exclude_content: string; deduplication_rule: string;
   content_types: LibraryContentType[]; relation_types: LibraryRelationType[]; feed_enabled: boolean;
   template_rules: { deduplication: string; source_evidence: string; review: boolean; process: boolean; merge_reposts: boolean; collapse_similar: boolean; fact_source: boolean };
 }
-export function listLibraries() { return get('/api/v1/libraries'); }
+export function listLibraries() { return get<{ success: boolean; data: LibraryCatalogItem[]; message?: string }>('/api/v1/libraries'); }
+export const getCatalogLibrary = (id: string) => get<{ success: boolean; data: LibraryCatalogItem; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
+export const createCatalogLibrary = (data: { template: LibraryTemplate; directory: string; name: string; description: string }) => post<{ success: boolean; data: LibraryCatalogItem; message?: string }>('/api/v1/libraries', data)
+export const saveCatalogLibrary = (id: string, data: Record<string, unknown>) => put<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`, data)
+export const deleteCatalogLibrary = (id: string) => del<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
+export const mergeLibraryRelationTypes = (id: string, from_type: string, to_type: string) => post<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/relation-types/merge`, { from_type, to_type })
 
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }
 
@@ -31,6 +36,7 @@ export function listEntryFiles(
   params: {
     page: number;
     page_size: number;
+    libraries?: string[];
     keyword?: string;
     file_type?: string;
     content_type?: string;
@@ -45,6 +51,7 @@ export function listEntryFiles(
   const query = new URLSearchParams();
   query.append('page', String(params.page));
   query.append('page_size', String(params.page_size));
+  if (params.libraries?.length) query.set('libraries', params.libraries.join(','));
   if (params.keyword) query.append('keyword', params.keyword);
   if (params.file_type) query.append('file_type', params.file_type);
   if (params.content_type) query.append('content_type', params.content_type);

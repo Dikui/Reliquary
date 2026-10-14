@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { reactive } from 'vue'
+import { reactive, defineComponent, h } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { loadComponent, renderer, element, descendants, visibleText, click, settle, type Element } from '../library/componentTestHarness.ts'
 import zh from '../../i18n/locales/zh-CN.ts'
 import en from '../../i18n/locales/en-US.ts'
 import { metricKeys, metricLabels } from '../../api/insightMetrics.ts'
 import { mapTrend, chartGeometry } from './trend.ts'
+import { createApplicationRoutes } from '../../router/routes.ts'
 
 const metrics = (v: number) => Object.fromEntries(metricKeys.map(k => [k, v]))
 const question = (extra = {}) => ({ id: 'q1', method: 'ordinary', status: 'confirmed', source: 'manual', revision: 1, answer_deleted: false, request: { query: 'Calibration?', libraries: ['lib1'], content_types: ['reference'] }, answers: [{ entry_id: 'e1', grade: 2 }], ...extra })
@@ -27,9 +28,10 @@ function environment(locale = 'en-US') {
       if (path === 'evaluation/sets') return state.sets
       if (path.endsWith('/questions')) return state.questions.filter(q => q.status === (body as any).status)
       if (path === 'search/records') return state.records
-      if (path === 'evaluation/runs') return state.runs
+      if (path === 'evaluation/runs') return state.runs.filter(r => !(body as any).set_id || r.set_id === (body as any).set_id)
       if (path === 'evaluation/vector-sets') return [{ selector: 'active', model_id: 'current', dimension: 3 }, { selector: 'candidate:next', model_id: 'next', dimension: 3 }, { selector: 'archive:old', model_id: 'old', dimension: 3 }]
-      if (path.startsWith('evaluation/runs/')) return state.runs.find(r => r.id === path.split('/').at(-1))
+      if (path.startsWith('evaluation/runs/')) { const found = state.runs.find(r => r.id === path.split('/').at(-1)); if (!found) throw { status: 404, message: 'Not found' }; return found }
+      if (path.startsWith('evaluation/sets/')) return { id: path.split('/').at(-1), name: 'Other set', description: '' }
       if (path === 'evaluation/compare') return comparison
       if (path === 'entries/search') return [{ id: 'e1', title: 'Selected material', library_id: 'lib1' }, { id: 'outside', title: 'Outside library', library_id: 'lib2' }]
       if (path === 'model-calls/purposes') return ['body_embedding', 'evaluation_generation']
@@ -50,11 +52,14 @@ function environment(locale = 'en-US') {
     async remove(path: string) { capture('delete', path, {}); if (path === 'evaluation/sets/set1') state.sets = []; else state.questions = []; return {} },
     async callDetails(body: any) { capture('get', 'model-calls', body); return { data: state.details, total: state.total } },
   }
-  const modules: Record<string, unknown> = { 'vue-i18n': { useI18n: () => i18n.global }, 'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async (to: any) => { route.query = to.query } }) }, '@/api/insights': api, './insights.css': {}, './trend': { mapTrend, chartGeometry } }
+  const modules: Record<string, unknown> = { 'vue-i18n': { useI18n: () => i18n.global }, 'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async (to: any) => { route.query = to.query } }) }, '@/api/insights': api, '@/api/library': { listLibraries: async () => ({ success: true, data: await api.read('libraries') }) }, './insights.css': {}, './trend': { mapTrend, chartGeometry } }
   function component(name: string) { return loadComponent(new URL(name, import.meta.url), modules) }
+  modules['@/components/LibraryScopeSelect.vue'] = component('../../components/LibraryScopeSelect.vue')
   for (const name of ['EntryPicker', 'QuestionEditor', 'RunResults', 'TrendChart']) modules[`./${name}.vue`] = component(`./${name}.vue`)
   function mount(name: string, props = {}) {
     const root = element('root'), errors: unknown[] = [], warnings: string[] = [], app = renderer.createApp(component(name), props)
+    app.component('t-select', defineComponent({ props: { value: Array, options: Array, disabled: Boolean, loading: Boolean, multiple: Boolean }, emits: ['change'], setup: (props, { attrs, emit }) => () => h('scope-select', { ...attrs, ...props, onChange: (event: any) => emit('change', event.target.value) }) }))
+    app.component('t-button', defineComponent({ setup: (_props, { attrs, slots }) => () => h('button', attrs, slots.default?.()) }))
     app.config.errorHandler = e => errors.push(e); app.config.warnHandler = w => warnings.push(w); app.mount(root)
     return { root, errors, warnings, close: () => app.unmount() }
   }
@@ -63,8 +68,9 @@ function environment(locale = 'en-US') {
 const button = (root: Element, text: string) => { const b = descendants(root).find(n => n.tag === 'button' && visibleText(n).trim() === text); assert.ok(b, `Missing button ${text}`); return b }
 const control = (root: Element, label: string, tag = 'input') => { const n = descendants(root).find(n => n.tag === 'label' && visibleText(n).startsWith(label))?.children.find(n => n.tag === tag); assert.ok(n, `Missing control ${label}`); return n }
 async function input(node: Element, value: string | number) { node.props.onInput?.({ target: { value: String(value) } }); await settle() }
-async function change(node: Element, value: string | boolean) { node.props.onChange?.({ target: { value, checked: value } }); await settle() }
+async function change(node: Element, value: string | boolean | string[]) { node.props.onChange?.({ target: { value, checked: value } }); await settle() }
 async function submit(root: Element) { const form = descendants(root).find(n => n.tag === 'form')!; assert.ok(form); form.props.onSubmit({ preventDefault() {} }); await settle() }
+const scope = (root: Element) => descendants(root).find(n => n.tag === 'scope-select')!
 const check = (root: Element, text?: string) => text ? descendants(root).find(n => n.tag === 'label' && visibleText(n).includes(text))!.children.find(n => n.tag === 'input')! : descendants(root).find(n => n.tag === 'input' && n.props.type === 'checkbox')!
 
 test('set creation, editing and confirmed deletion preserve the history explanation', async () => {
@@ -86,7 +92,7 @@ for (const locale of ['zh-CN', 'en-US']) test(`${locale}: question editing saves
 test('manual question uses selected-library material search and graph parameters', async () => {
   const env = environment(), m = env.mount('./QuestionEditor.vue', { setId: 'set1', libraries: [{ id: 'lib1', name: 'My materials' }] })
   try {
-    await input(control(m.root, 'Question', 'textarea'), 'New?'); await change(check(m.root), true); await input(control(m.root, 'Search materials'), 'Calibration'); await click(button(m.root, 'Search')); assert.ok(visibleText(m.root).includes('Selected material')); assert.ok(!visibleText(m.root).includes('Outside library'))
+    await input(control(m.root, 'Question', 'textarea'), 'New?'); await change(scope(m.root), ['lib1']); await input(control(m.root, 'Search materials'), 'Calibration'); await click(button(m.root, 'Search')); assert.ok(visibleText(m.root).includes('Selected material')); assert.ok(!visibleText(m.root).includes('Outside library'))
     await change(check(m.root, 'Selected material'), true); await change(control(m.root, 'Search method', 'select'), 'graph'); await input(control(m.root, 'Graph parameters JSON', 'textarea'), '{"entity_ids":["entity1"],"hops":2}'); await submit(m.root)
     const saved = env.calls.find(c => c.method === 'write')!; assert.equal(saved.update, false); assert.deepEqual(saved.body.answers, [{ entry_id: 'e1', grade: 1 }]); assert.deepEqual(saved.body.request.graph_parameters, { entity_ids: ['entity1'], hops: 2 }); assert.deepEqual(m.errors, [])
   } finally { m.close() }
@@ -108,7 +114,7 @@ test('record filters default to excluding evaluation and conversion sends only c
 test('AI generation sends scope and count, shows pending questions, then supports confirmation and deletion', async () => {
   const env = environment(), m = env.mount('./EvaluationPage.vue')
   try {
-    await settle(); await click(button(m.root, 'AI candidates')); await change(check(m.root), true); await input(control(m.root, 'Search materials'), 'calibration'); await click(button(m.root, 'Search')); await change(check(m.root, 'Selected material'), true); await input(control(m.root, 'Question count'), 2); await change(control(m.root, 'Model', 'select'), 'model1'); await submit(m.root)
+    await settle(); await click(button(m.root, 'AI candidates')); await change(scope(m.root), ['lib1']); await input(control(m.root, 'Search materials'), 'calibration'); await click(button(m.root, 'Search')); await change(check(m.root, 'Selected material'), true); await input(control(m.root, 'Question count'), 2); await change(control(m.root, 'Model', 'select'), 'model1'); await submit(m.root)
     assert.deepEqual(env.calls.find(c => c.path.endsWith('/candidates'))?.body, { libraries: ['lib1'], entry_ids: ['e1'], count: 2, model_id: 'model1' }); assert.equal(control(m.root, 'Confirmation status', 'select').props.value, 'pending')
     await click(button(m.root, 'Confirm candidate')); assert.ok(env.calls.some(c => c.path.endsWith('/pending1/confirm'))); assert.ok(visibleText(m.root).includes('No pending questions.')); await change(control(m.root, 'Confirmation status', 'select'), 'confirmed'); await click(button(m.root, 'Delete')); await click(button(m.root, 'Confirm delete')); assert.ok(env.calls.some(c => c.path.endsWith('/pending1') && c.method === 'delete')); assert.deepEqual(m.errors, [])
   } finally { m.close() }
@@ -159,7 +165,7 @@ for (const page of ['./EvaluationPage.vue', './ModelCallsPage.vue']) test(`${pag
 })
 test('graph 503 retains run parameters and offers graph service recovery steps', async () => {
   const env = environment(); env.state.fail = (method, path) => method === 'write' && path.endsWith('/runs') ? { status: 503 } : undefined; const m = env.mount('./EvaluationPage.vue')
-  try { await settle(); await click(button(m.root, 'Runs and comparison')); await input(control(m.root, 'K (1 to 100)'), 7); await submit(m.root); assert.ok(visibleText(m.root).includes('Graph search is unavailable (503).')); assert.equal(control(m.root, 'K (1 to 100)').props.value, 7); assert.equal(button(m.root, 'Start run').props.disabled, false); assert.deepEqual(m.errors, []) } finally { m.close() }
+  try { await settle(); await click(button(m.root, 'Runs and comparison')); await input(control(m.root, 'K (1 to 100)'), 7); await submit(m.root); assert.ok(visibleText(m.root).includes('The backend returned service unavailable (503).')); assert.equal(control(m.root, 'K (1 to 100)').props.value, 7); assert.equal(button(m.root, 'Start run').props.disabled, false); assert.deepEqual(m.errors, []) } finally { m.close() }
 })
 test('failed and running details show errors and next actions', () => {
   const env = environment(), bad = env.mount('./RunResults.vue', { run: run('bad', 0, { status: 'failed', error: 'Model timeout' }) }), running = env.mount('./RunResults.vue', { run: run('active', 0, { status: 'running' }) })
@@ -168,3 +174,76 @@ test('failed and running details show errors and next actions', () => {
 test('narrow layout contains scrolling tables and responds to theme tokens', () => {
   const css = readFileSync(new URL('./insights.css', import.meta.url), 'utf8'); assert.match(css, /\.table-scroll[^}]*max-width: 100%;[^}]*overflow-x: auto/); assert.match(css, /@media \(max-width: 640px\)/); assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/); assert.match(css, /var\(--td-bg-color-container\)/); assert.match(css, /min-width: 0/)
 })
+
+for (const locale of ['zh-CN', 'en-US']) test(`${locale}: graph question runs successfully and renders its metrics and reference hit without an outage warning`, async () => {
+  const env = environment(locale)
+  const graphQuestion = question({ method: 'graph', request: { query: 'Graph calibration?', libraries: ['lib1'], graph_parameters: { entity: { id: 'entity1' }, hops: 1 } } })
+  env.state.questions = [graphQuestion]
+  env.state.runs = [run('graph-run', 1, { questions: [{ ...run('graph-run', 1).questions[0], question: graphQuestion }] })]
+  const m = env.mount('./EvaluationPage.vue')
+  try {
+    await settle(); assert.ok(visibleText(m.root).includes(env.t('ikb19.graph')))
+    assert.ok(!visibleText(m.root).includes(env.t('ikb19.graphUnavailable')))
+    await click(button(m.root, env.t('ikb19.runs'))); await submit(m.root)
+    assert.ok(env.calls.some(call => call.method === 'write' && call.path.endsWith('/runs')))
+    for (const text of ['Graph calibration?', '1.0000', 'Reference 1', env.t('ikb19.completed'), env.t('ikb19.hit')]) assert.ok(visibleText(m.root).includes(text), text)
+    assert.ok(!visibleText(m.root).includes(env.t('ikb19.graphUnavailable')))
+    assert.deepEqual(m.errors, [])
+  } finally { m.close() }
+})
+
+test('clearing the shared library scope explicitly resolves all current libraries for evaluation and candidate generation', async () => {
+  const env = environment(), editor = env.mount('./QuestionEditor.vue', { setId: 'set1', question: question(), libraries: [{ id: 'lib1', name: 'My materials' }, { id: 'lib2', name: 'Other library' }] })
+  try { await settle(); await change(scope(editor.root), []); await submit(editor.root); assert.deepEqual(env.calls.find(c => c.method === 'write')?.body.request.libraries, ['lib1', 'lib2']); assert.equal(scope(editor.root).props.multiple, true); assert.deepEqual(editor.errors, []) } finally { editor.close() }
+  const page = env.mount('./EvaluationPage.vue')
+  try {
+    await settle(); await click(button(page.root, 'AI candidates')); await change(scope(page.root), ['lib1']); await change(scope(page.root), []); await input(control(page.root, 'Search materials'), 'Calibration'); await click(button(page.root, 'Search')); await change(check(page.root, 'Selected material'), true); await submit(page.root)
+    assert.deepEqual(env.calls.find(c => c.path.endsWith('/candidates'))?.body.libraries, ['lib1', 'lib2']); assert.deepEqual(page.errors, [])
+  } finally { page.close() }
+})
+
+
+test('merged navigation retains unique evaluation, model calls, and library settings entries', () => {
+  const menus = readFileSync(new URL('../../stores/menu.ts', import.meta.url), 'utf8')
+  for (const key of ['evaluation', 'modelCalls', 'settings']) assert.equal([...menus.matchAll(new RegExp(`key: '${key}'`, 'g'))].length, 1)
+  const routes = createApplicationRoutes().find(route => route.path === '/platform')!.children!
+  for (const path of ['evaluation', 'model-calls', 'settings', 'entries', 'search']) assert.equal(routes.filter(route => route.path === path).length, 1)
+  const settings = readFileSync(new URL('../settings/Settings.vue', import.meta.url), 'utf8')
+  const library = readFileSync(new URL('../settings/LibrarySettings.vue', import.meta.url), 'utf8')
+  assert.ok(settings.includes("currentSection === 'library'"))
+  assert.ok(library.includes('<LibraryCatalogSettings'))
+})
+
+for (const locale of ['zh-CN', 'en-US']) {
+  for (const listed of [true, false]) test(`${locale}: run deep link selects its nondefault set (listed=${listed}) and scopes the run form`, async () => {
+    const env = environment(locale)
+    if (listed) env.state.sets.push({ id: 'set2', name: 'Other set', description: '' })
+    env.state.runs.push(run('linked-run', .9, { set_id: 'set2', set_snapshot: { id: 'set2', name: 'Other set' } }))
+    env.route.query.run = 'linked-run'
+    const m = env.mount('./EvaluationPage.vue')
+    try {
+      await settle()
+      assert.equal(control(m.root, env.t('ikb19.set'), 'select').props.value, 'set2')
+      assert.ok(visibleText(m.root).includes(`${env.t('ikb19.runDetail')}: Other set`))
+      assert.ok(env.calls.some(c => c.path === 'evaluation/runs' && c.body.set_id === 'set2'))
+      assert.ok(!env.calls.some(c => c.path === 'evaluation/runs' && c.body.set_id === 'set1'))
+      assert.ok(!descendants(m.root).filter(n => n.tag === 'tbody').some(n => visibleText(n).includes('Calibration set')))
+      await submit(m.root)
+      assert.ok(env.calls.some(c => c.method === 'write' && c.path === 'evaluation/sets/set2/runs'))
+      assert.deepEqual(m.errors, [])
+    } finally { m.close() }
+  })
+  test(`${locale}: missing run deep link shows an explicit recovery message without stale details`, async () => {
+    const env = environment(locale); env.route.query.run = 'missing-run'
+    const m = env.mount('./EvaluationPage.vue')
+    try {
+      await settle()
+      const alert = descendants(m.root).find(n => n.props.role === 'alert')
+      assert.ok(alert && visibleText(alert).includes(env.t('ikb19.runNotFound')))
+      assert.ok(!visibleText(m.root).includes(env.t('ikb19.runDetail')))
+      await click(button(m.root, env.t('ikb19.refresh')))
+      assert.ok(visibleText(m.root).includes(env.t('ikb19.runNotFound')))
+      assert.deepEqual(m.errors, [])
+    } finally { m.close() }
+  })
+}

@@ -25,6 +25,8 @@ import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import MissingMaterials from '@/components/MissingMaterials.vue';
 import IncompleteActions from '@/components/IncompleteActions.vue';
+import BodyReference from './BodyReference.vue';
+import type { SourceLocation } from '@/types/search';
 import ReviewActions from '@/components/ReviewActions.vue';
 import EntryArticleJudgments from '@/components/EntryArticleJudgments.vue';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
@@ -195,7 +197,7 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "libraryId"]);
+const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "libraryId", "reference"]);
 const externalToolName = computed(() => getExternalToolName(props.details));
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
 const personalDocumentDeleteBusy = ref(false);
@@ -927,7 +929,7 @@ const getChannelLabel = (channel: string) => {
 
 // 获取类型标签
 const getTypeLabel = () => {
-  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return props.details.file_type?.toUpperCase() || t('library.typeFile');
+  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return ['manual', 'md', 'markdown'].includes(props.details.file_type?.toLowerCase()) ? t('ikb18.markdown') : (props.details.file_type?.toUpperCase() || t('library.typeFile'));
   if (isIngestAPIEntry(props.details)) return t('library.typeIngestAPI');
   if (props.details.channel === 'rss') return t('library.channelRSS');
   switch (props.details.type) {
@@ -1116,9 +1118,11 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
       </t-drawer>
 
       <div ref="docMarkdownRoot" class="doc-markdown-root doc-drawer-body setting-drawer__body">
+        <BodyReference v-if="visible && details.id && reference" :key="details.id" :entry-id="details.id" :location="reference as SourceLocation" />
         <section v-if="details.id" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('library.detailSectionMeta') }}</h4>
           <div class="doc-detail-rows">
+            <div v-if="details.library_name" class="doc-detail-row"><span class="doc-detail-label">{{ $t('ikb18.library') }}</span><span class="doc-detail-value">{{ details.library_name }}</span></div>
             <div v-if="details.time" class="doc-detail-row">
               <span class="doc-detail-label">{{ getTimeLabel() }}</span>
               <span class="doc-detail-value">{{ details.time }}</span>

@@ -16,11 +16,11 @@
               </div>
               <div class="source-description">
                 <p class="source-title" :title="reparsePreview?.fileName">{{ reparsePreview?.fileName || t('reparseConfirm.reparseSource') }}</p>
-                <p class="source-hint">{{ t('reparseConfirm.reparseHint') }}</p>
+                <p class="source-hint">{{ t(reparsePreview?.sourceKind === 'report' ? 'ikb18.reindexHint' : 'reparseConfirm.reparseHint') }}</p>
               </div>
             </aside>
 
-            <aside class="settings-sidebar">
+            <aside v-if="reparsePreview?.sourceKind !== 'report'" class="settings-sidebar">
               <div class="settings-sidebar-header">
                 <h2 class="settings-sidebar-title">{{ t('reparseConfirm.parseConfig') }}</h2>
               </div>
@@ -57,7 +57,7 @@
             <div class="config-panel">
               <div class="content-wrapper reparse-confirm-content">
 
-                  <div v-show="activeSection === 'chunking'" class="section" data-section="chunking">
+                  <div v-if="reparsePreview?.sourceKind !== 'report'" v-show="activeSection === 'chunking'" class="section" data-section="chunking">
                     <LibraryChunkingSettings v-model:config="uiState.chunkingConfig" embedded />
                   </div>
 
@@ -132,8 +132,8 @@ function truncateNavText(text: string, max = 18): string {
   return `${text.slice(0, max - 1)}…`
 }
 
-const dialogTitle = computed(() => t('reparseConfirm.titleReparse'))
-const confirmButtonText = computed(() => t('reparseConfirm.confirmReparse'))
+const dialogTitle = computed(() => t(props.reparsePreview?.sourceKind === 'report' ? 'ikb18.reindex' : 'reparseConfirm.titleReparse'))
+const confirmButtonText = computed(() => t(props.reparsePreview?.sourceKind === 'report' ? 'library.reindexDocument' : 'reparseConfirm.confirmReparse'))
 const batchFileExts = computed(() => {
   const ext = (props.reparsePreview?.fileType || '').toLowerCase()
   return ext ? [ext] : []
@@ -166,6 +166,7 @@ const navItems = computed(() => {
     })
   }
 
+  if (props.reparsePreview?.sourceKind === 'report') return []
   push('chunking', 'file-copy', t('reparseConfirm.chunking'))
   return items
 })

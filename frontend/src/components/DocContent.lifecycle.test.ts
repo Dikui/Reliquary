@@ -49,7 +49,7 @@ test('reference audit detects deleted callbacks in watchers, lifecycle, expose a
 function evaluate(code: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : modules[name] ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : (name === './BodyReference.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? require(name), module, module.exports)
   return module.exports
 }
 

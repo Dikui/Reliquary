@@ -1,3 +1,5 @@
+import * as bodyReference from '../utils/bodyReference'
+import * as libraryScopeHelpers from '../utils/libraryScope'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -30,7 +32,7 @@ function loadSearchAPI(post: (url: string, body: any) => Promise<unknown>) {
       assert.equal(url, '/api/v1/search/options')
       return { success: true, data: { entities: [], topics: [] } }
     },
-  } : require(name), value, value.exports)
+  } : name === '@/utils/libraryScope' ? libraryScopeHelpers : require(name), value, value.exports)
   return value.exports
 }
 
@@ -85,6 +87,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       // URL state supplies the query; this renderer has no native DOM input.
       vue: { ...vue, vModelText: {} },
       '@/api/search': api, '@/utils/search': searchHelpers,
+    '@/utils/bodyReference': bodyReference,
+    '@/composables/useLibraryScope': { useLibraryScope: () => vue.ref([]) },
+    '@/components/LibraryScopeSelect.vue': empty,
       '@/components/SearchEntry.vue': moduleOf(article), '@/components/SearchFilters.vue': empty,
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {}, push: async (path: unknown) => { navigations.push(path) } }) },
     })

@@ -19,6 +19,8 @@ export default function (defaultLibraryId?: string) {
   const { cardList, total } = storeToRefs(usemenuStore);
   let moreIndex = ref(-1);
   const details = reactive({
+    library_name: "",
+    library_id: "",
     title: "",
     time: "",
     md: [] as any[],
@@ -63,6 +65,7 @@ export default function (defaultLibraryId?: string) {
     query: {
       page: number;
       page_size: number;
+      libraries?: string[];
       keyword?: string;
       file_type?: string;
       content_type?: string;
@@ -166,6 +169,8 @@ export default function (defaultLibraryId?: string) {
       file_type: "",
       description: "",
       collect_reason: "",
+      library_name: '',
+      library_id: '',
       content_type: '',
       library_content_types: [],
       image_descriptions: [],
@@ -207,6 +212,8 @@ export default function (defaultLibraryId?: string) {
             file_type: data.file_type || '',
             description: data.description || '',
             collect_reason: data.collect_reason || '',
+            library_name: data.library_name || '',
+            library_id: data.library_id || '',
             content_type: data.content_type || '',
             library_content_types: Array.isArray(data.library_content_types) ? data.library_content_types : [],
             image_descriptions: Array.isArray(data.image_descriptions) ? data.image_descriptions : [],

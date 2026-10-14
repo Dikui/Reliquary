@@ -122,6 +122,9 @@ func (h *EntryHandler) UploadIngestAsset(c *gin.Context) {
 }
 
 func (h *EntryHandler) ListIncomplete(c *gin.Context) {
+	if !h.applyLibraryReadScope(c) {
+		return
+	}
 	page, size := 0, 0
 	for key, target := range map[string]*int{"page": &page, "page_size": &size} {
 		if raw := c.Query(key); raw != "" {

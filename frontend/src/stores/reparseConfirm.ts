@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import type { EntryProcessOverrides } from '@/types/entryProcess'
 
 export interface ReparseConfirmSource {
+  sourceKind?: string
   entryId: string
   fileName?: string
   fileType?: string

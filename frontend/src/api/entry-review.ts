@@ -14,9 +14,10 @@ export interface ReviewEntry extends ClassifiedEntry {
 }
 export interface ReviewEnvelope { success: boolean; data: ReviewEntry; message?: string }
 export interface PendingReviewEnvelope { success: boolean; data: ReviewEntry[]; total: number; page: number; page_size: number; message?: string }
-export function listPendingEntry(input: { kind?: ReviewKind; page: number; page_size: number }) {
+export function listPendingEntry(input: { libraries?: string[]; kind?: ReviewKind; page: number; page_size: number }) {
   const query = new URLSearchParams({ page: String(input.page), page_size: String(input.page_size) })
   if (input.kind) query.set('kind', input.kind)
+  if (input.libraries?.length) query.set('libraries', input.libraries.join(','))
   return get<PendingReviewEnvelope>(`/api/v1/entries/pending?${query}`)
 }
 export const resolveIntakeReview = (id: string, input: { action: IntakeReviewAction; source_info?: IntakeSourceInfo; confirmed?: boolean }) =>

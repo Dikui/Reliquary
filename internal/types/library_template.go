@@ -191,7 +191,7 @@ func SystemLibraryDefaults() []*Library {
 }
 
 func (l *Library) DisplayName(language string) string {
-	en := map[string]string{"institutional": "Institutional", "opinions": "Opinions", "references": "References", "mine": "My documents", "ai-reports": "AI reports"}
+	en := map[string]string{"institutional": "Institutional releases", "opinions": "Personal opinions", "references": "References", "mine": "My materials", "ai-reports": "AI reports"}
 	for _, defaults := range SystemLibraryDefaults() {
 		if defaults.SystemRole == l.SystemRole && defaults.Name == l.Name && !strings.HasPrefix(strings.ToLower(language), "zh") {
 			return en[l.SystemRole]

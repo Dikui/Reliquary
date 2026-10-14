@@ -3,6 +3,21 @@ import type { TranslationCall } from './translationCallAudit.ts'
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
+    file: 'views/library/components/PendingReviews.vue',
+    expressions: ['`ingestStatus.acquisition.${item.acquisition}`'],
+    reason: 'Acquisition values are the three ingest enums already audited in both locale bundles.',
+  },
+  {
+    file: 'views/library/components/EntityRelations.vue',
+    expressions: ['`ikb18.${relation.direction}`'],
+    reason: 'Relation direction has two HTTP enum values covered by ikb18 component tests.',
+  },
+  {
+    file: 'views/settings/LibraryCatalogSettings.vue',
+    expressions: ['`ikb18.${draft.template}`', '`ikb18.${draft.template}Hint`', '`ikb18.${value}`', '`ikb18.${value}Hint`', '`ikb18.${newLibrary.template}Hint`'],
+    reason: 'Four immutable library template enums and their descriptions are tested in both locales.',
+  },
+  {
     "file": "api/auth.ts",
     "expressions": [
       "key"
@@ -242,14 +257,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
       "`mergeSuggestions.feedback.${action}`",
       "`mergeSuggestions.status.${item.status}`",
       "`mergeSuggestions.status.${value}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/library/components/PendingReviews.vue",
-    "expressions": [
-      "`ingestStatus.acquisition.${item.acquisition}`",
-      "`knowledgeReview.${kind}Hint`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

@@ -1060,6 +1060,7 @@ onUnmounted(() => {
 }
 
 .rq-actions {
+  padding-right: 48px;
   display: flex;
   align-items: center;
   gap: 10px;

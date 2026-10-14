@@ -535,4 +535,11 @@ const openDelete = async (item: EntryItem) => {
   }
 }
 
+@media (max-width: 640px) {
+  .doc-list-header { display: none; }
+  .doc-list-row { grid-template-columns: 32px minmax(0, 1fr) 52px; padding: 12px 6px; }
+  .doc-list-row > :nth-child(n+3):nth-child(-n+6) { display: none; }
+  .doc-list-row .row-file-name { white-space: normal; overflow-wrap: anywhere; }
+  .doc-list-view { min-width: 0; overflow-x: hidden; }
+}
 </style>

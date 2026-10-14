@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -355,9 +356,32 @@ func (h *SpaceHandler) GetSpaceRetrievalConfig(c *gin.Context) {
 func (h *SpaceHandler) updateSpaceRetrievalConfigInternal(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var cfg types.RetrievalConfig
-	if err := c.ShouldBindJSON(&cfg); err != nil {
+	var patch json.RawMessage
+	if err := c.ShouldBindJSON(&patch); err != nil {
 		logger.Error(ctx, "Failed to parse request parameters", err)
+		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
+		return
+	}
+
+	// Merge only supplied fields. Decoding into a zero-value config would reset
+	// hidden settings such as image_vector_enabled during a partial UI update.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(patch, &fields); err != nil || fields == nil {
+		c.Error(errors.NewValidationError("retrieval-config must be a JSON object"))
+		return
+	}
+	for field, value := range fields {
+		if strings.TrimSpace(string(value)) == "null" {
+			c.Error(errors.NewValidationError(field + " must not be null"))
+			return
+		}
+	}
+	space, _ := types.SpaceInfoFromContext(ctx)
+	var cfg types.RetrievalConfig
+	if space != nil && space.RetrievalConfig != nil {
+		cfg = *space.RetrievalConfig
+	}
+	if err := json.Unmarshal(patch, &cfg); err != nil {
 		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
 		return
 	}
@@ -396,7 +420,6 @@ func (h *SpaceHandler) updateSpaceRetrievalConfigInternal(c *gin.Context) {
 		return
 	}
 
-	space, _ := types.SpaceInfoFromContext(ctx)
 	if space == nil {
 		logger.Error(ctx, "Workspace is empty")
 		c.Error(errors.NewBadRequestError("Workspace is empty"))

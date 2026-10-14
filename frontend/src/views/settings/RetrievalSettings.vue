@@ -135,6 +135,7 @@ const loadConfig = async () => {
     if (response.data) {
       const cfg = response.data
       Object.assign(localConfig, {
+        ...cfg,
         ...(cfg.rrf_k !== undefined ? { rrf_k: cfg.rrf_k } : {}),
         ...(cfg.rrf_vector_weight !== undefined ? { rrf_vector_weight: cfg.rrf_vector_weight } : {}),
         ...(cfg.rrf_keyword_weight !== undefined ? { rrf_keyword_weight: cfg.rrf_keyword_weight } : {}),

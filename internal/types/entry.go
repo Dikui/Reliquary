@@ -86,6 +86,7 @@ const (
 // EntryListFilter aggregates optional filters for listing entry entries
 // under a library. Empty / zero fields mean "no filter on that dimension".
 type EntryListFilter struct {
+	LibraryIDs      []string
 	CollapseSimilar *bool
 
 	// SourceKind selects article, mine or report independently of ingestion channel.

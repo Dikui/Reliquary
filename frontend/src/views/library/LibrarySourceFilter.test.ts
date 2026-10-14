@@ -1,8 +1,9 @@
+import * as bodyReference from '../../utils/bodyReference'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 import ts from 'typescript'
 import { CONTENT_TYPES } from '../../types/entryClassification'
 import { SEARCH_SOURCES } from '../../types/search'
@@ -87,6 +88,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   })
   const empty = moduleOf(defineComponent({ setup: () => () => null }))
   const modules: Record<string, any> = {
+    '@/utils/bodyReference': bodyReference,
+    '@/composables/useLibraryScope': { useLibraryScope: () => ref([]) },
     'vue-router': vueRouter,
     '@/composables/useLibrary': hook,
     '@/stores/ui': { useUIStore: () => ({}) },

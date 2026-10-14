@@ -110,6 +110,9 @@ func (r *entryRepository) ListEntryByLibraryID(
 // EntryListFilter to a GORM query. Space / library scoping must be
 // applied by the caller before invoking this helper.
 func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB {
+	if len(filter.LibraryIDs) > 0 {
+		query = query.Where("library_id IN ?", filter.LibraryIDs)
+	}
 	if filter.SourceKind != "" {
 		query = query.Where("source_kind = ?", filter.SourceKind)
 	}

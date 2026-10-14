@@ -1,3 +1,4 @@
+import { ikb18Zh } from './ikb18'
 export default {
   ikb19: {
     elapsed: '耗时',
@@ -93,10 +94,11 @@ export default {
     "completed": "已完成",
     "failed": "失败",
     "running": "运行中",
+    "runNotFound": "该运行不存在或已无法访问。请检查链接或从运行列表重新选择。",
     "runFailed": "运行失败。",
     "runFailedNext": "查看逐题错误，修订题目或检查服务后重新发起运行。",
     "runningHint": "同步运行尚未结束。刷新详情查看进度；若进程已中断，可检查现有结果后重新运行。",
-    "graphUnavailable": "图谱检索服务暂不可用（503）。检查图谱服务，或修订测评集中的图谱题后重新运行。",
+    "graphUnavailable": "后端返回服务暂不可用（503）。请检查检索服务和 Neo4j 连接，恢复后重新运行。",
     "configuration": "配置",
     "runDetail": "运行详情",
     "snapshot": "配置与题目快照",
@@ -189,8 +191,9 @@ export default {
         "other": "其他"
     }
 },
+  ikb18: ikb18Zh,
   chatgpt: {
-    synchronousRetry: 'ChatGPT 生成调用已暂停。本次修改未保存，原文章仍保留。请在模型设置恢复后重新操作。',
+    synchronousRetry: 'ChatGPT 生成调用已暂停。本次修改未保存，原资料仍保留。请在模型设置恢复后重新操作。',
     "usageTitle": "ChatGPT 用量",
     "revocationUnconfirmed": "本机 ChatGPT 凭据已删除，但未能确认 OpenAI 已撤销授权。请在 ChatGPT 设置中手动断开 Reliquary 的连接。",
     "refreshInvalid": "ChatGPT 刷新凭据已失效，请重新登录。",
@@ -254,7 +257,7 @@ export default {
 },
   embeddingRebuild: {
     title: '重建全部向量',
-    description: '使用当前模型重新生成正文分块、文章、图片、用户文档、整理结果和实体名称的向量。',
+    description: '使用当前模型重新生成正文分块、资料、图片、资料、AI 报告和实体名称的向量。',
     currentModel: '当前模型：{name}',
     runModel: '本次重建模型：{name}，{dimension} 维',
     saveFirst: '先保存模型设置，再开始或继续重建。',
@@ -275,7 +278,7 @@ export default {
     failureLimit: '显示前 {shown} 项，共 {total} 项失败。',
     attempts: '已尝试 {count} 次',
     status: { pending: '等待执行', running: '重建中', paused: '已中断，可继续', completed: '重建完成', completed_with_errors: '重建结束，有失败项', failed: '重建失败，可继续' },
-    kinds: { article_chunk: '正文分块', article: '文章', image: '图片', mine_chunk: '用户文档分块', report_chunk: '整理结果分块', entity: '实体名称' },
+    kinds: { article_chunk: '正文分块', article: '资料', image: '图片', mine_chunk: '资料分块', report_chunk: 'AI 报告分块', entity: '实体名称' },
   },
   follows: {
     library: '库',
@@ -291,7 +294,7 @@ export default {
     saveFailed: '关注未保存，请重试。',
     targetsFailed: '无法加载关注列表，请重试。',
     feedFailed: '无法加载关注动态，请重试。',
-    countFailed: '新文章数加载失败，稍后自动重试。',
+    countFailed: '新资料数加载失败，稍后自动重试。',
     filterTarget: '关注的实体与主题',
     allTargets: '全部关注',
     limit: '显示数量',
@@ -307,7 +310,7 @@ export default {
     matchedTargets: '命中关注',
     markAllViewed: '全部标为已看',
     markFailed: '查看时间未保存，请重试。',
-    navCount: '关注，{count} 篇新文章',
+    navCount: '关注，{count} 篇新资料',
     targetTypes: { entity: '实体', topic: '主题' },
   },
   ingestStatus: {
@@ -316,7 +319,7 @@ export default {
   "modelWritten": "模型整理",
   "modelWrittenHint": "正文由外部工具的模型整理，可能不是原文",
   "incomplete": "待补全",
-  "incompleteHint": "文章和本人文档缺少图片，可在待处理页面接受缺失，也可由外部工具补全。文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。",
+  "incompleteHint": "资料已入库并可检索，但缺少图片。按资料 ID 补交图片，也可接受缺失或丢弃。",
   "acquisitionLabel": "获取方式",
   "unknownAcquisition": "未声明",
   "acquisition": {
@@ -342,17 +345,17 @@ export default {
   "acceptSaved": "已接受缺失",
   "discard": "丢弃",
   "discardTitle": "确认丢弃这条内容？",
-  "discardDescription": "内容与独占附件将被删除。丢弃文章后，其原文链接不会再被收录。",
+  "discardDescription": "内容与独占附件将被删除。丢弃资料后，其原文链接不会再被收录。",
   "discardSaved": "内容已丢弃",
   "failed": "操作失败，请重试。"
 },
   knowledgeReview: {
   "incomplete": "待补全",
-  "incompleteHint": "文章和本人文档已入库并可检索，但缺少图片。文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。你也可以接受缺失或丢弃内容。",
-  "emptyIncomplete": "没有待补全的文章或本人文档。",
-  "conflictReason": "与已有文章正文不同",
-  "relatedArticle": "关联文章",
-  "saveAsNew": "另存为新文章",
+  "incompleteHint": "资料已入库并可检索，但缺少图片。按资料 ID 补交图片，也可接受缺失或丢弃。",
+  "emptyIncomplete": "没有待补全的资料。",
+  "conflictReason": "与已有资料正文不同",
+  "relatedArticle": "关联资料",
+  "saveAsNew": "另存为新资料",
   "title": "待处理",
   "intake": "收录待审",
   "intakeHint": "未通过收录审核的内容保留在这里，审核通过后开始处理。",
@@ -375,7 +378,7 @@ export default {
   "confirmations": {
     "admit_unverified": {
       "title": "确认无链接入库",
-      "description": "文章会跳过收录审核，全文保存并标记为来源未核实，原始链接留空。"
+      "description": "资料会跳过收录审核，全文保存并标记为来源未核实，原始链接留空。"
     },
 
     "discard": {
@@ -397,8 +400,8 @@ export default {
   "unstarred": "已取消星标",
   "starFailed": "星标未保存，请重试。",
   "allStars": "全部星标状态",
-  "starredOnly": "仅星标文章",
-  "unstarredOnly": "仅未星标文章",
+  "starredOnly": "仅星标资料",
+  "unstarredOnly": "仅未星标资料",
   "contentType": "内容类型",
   "saveContentType": "保存内容类型",
   "contentTypeHint": "用户修正的类型将在重新处理时保留。修改内容类型不会删除正文或图片。",
@@ -417,7 +420,7 @@ export default {
     libraryHint: '留空适用于全部库。缩小范围会保留已有归入，但范围外资料不再进入该主题的关注动态。',
     libraryLoadFailed: '库列表加载失败',
   "title": "主题",
-  "description": "管理关注方向，并把历史文章归入对应主题。",
+  "description": "管理关注方向，并把历史资料归入对应主题。",
   "create": "新建主题",
   "edit": "修改主题",
   "name": "主题名称",
@@ -425,9 +428,9 @@ export default {
   "nameRequired": "请填写主题名称。",
   "nameExists": "此名称已存在，请使用其他名称。",
   "noDescription": "尚未填写说明。",
-  "descriptionHint": "修改说明会重新判断历史文章，保留手动加入的关联。",
-  "historyHint": "历史归入只使用文章的标题与摘要，用户文档和整理结果不参与。新建主题或修改说明后，后台自动开始。",
-  "articleCount": "{count} 篇文章",
+  "descriptionHint": "修改说明会重新判断历史资料，保留手动加入的关联。",
+  "historyHint": "历史归入使用适用库中已完成资料的标题与摘要。未指定适用库时使用全部库。新建主题或修改说明后，后台自动开始。",
+  "articleCount": "{count} 篇资料",
   "progress": "已处理 {processed} / {total}",
   "failures": "失败 {articles} 篇，{batches} 批",
   "historyProgress": "历史归入进度",
@@ -440,13 +443,13 @@ export default {
   "created": "主题已创建，历史归入已开始",
   "updated": "主题已更新",
   "deleted": "主题已删除",
-  "empty": "还没有主题。新建一个主题，开始归入历史文章。",
+  "empty": "还没有主题。新建一个主题，开始归入历史资料。",
   "deleteTitle": "删除主题",
-  "deleteDescription": "删除“{name}”及其文章关联？文章仍然保留，相关文章的表头会更新。",
+  "deleteDescription": "删除“{name}”及其资料关联？资料仍然保留，相关资料的表头会更新。",
   "batchFailure": "第 {ordinal} 批，{count} 篇，已尝试 {attempts} 次：{reason}",
   "status": {
     "pending": "等待历史归入",
-    "running": "正在归入历史文章",
+    "running": "正在归入历史资料",
     "completed": "历史归入完成",
     "failed": "历史归入有失败批次"
   }
@@ -467,9 +470,11 @@ export default {
   "loadFailed": "无法加载操作日志，请重试。",
   "empty": "没有符合条件的操作日志。",
   "types": {
+    "graph_check": "核对图谱副本",
+    "graph_rebuild": "重建图谱副本",
     "review_supplement_url": "补链接重新审核",
     "review_admit_unverified": "无链接入库",
-    "delete_document": "删除本人文档",
+    "delete_document": "删除资料",
     "review_approve": "审核通过",
     "review_reject": "审核拒绝",
     "review_retry": "审核重试",
@@ -478,6 +483,12 @@ export default {
     "unstar": "取消星标",
     "follow": "关注",
     "unfollow": "取消关注",
+    "delete_relation": "删除关系",
+    "merge_relation_types": "合并关系类型",
+    "ingest_supplement": "补交资料",
+    "ingest_conflict": "收录冲突",
+    "accept_incomplete": "接受图片缺失",
+    "ingest_discard": "丢弃资料",
     "add_relation_type": "自动添加关系类型",
     "correct_content_type": "修正内容类型",
     "correct_topics": "修正主题",
@@ -486,12 +497,12 @@ export default {
     "update_topic": "修改主题",
     "delete_topic": "删除主题",
     "ingest": "收录",
-    "write_report": "写入整理结果"
+    "write_report": "写入AI 报告"
   }
 },
   menu: {
     batchManage: '批量管理',
-  "library": "文章",
+  "library": "资料",
   "settings": "设置",
   "logout": "退出登录",
   "search": "知识检索",
@@ -500,10 +511,10 @@ export default {
   "logoutSuccess": "已退出登录"
 },
   navigation: {
-    removedFeature: '此功能已移除，已返回文章页面。',
+    removedFeature: '此功能已移除，已返回资料页面。',
     pageNotFound: '页面不存在',
-    pageNotFoundDescription: '请检查页面地址，或返回文章页面继续使用。',
-    returnToKnowledge: '返回文章页面',
+    pageNotFoundDescription: '请检查页面地址，或返回资料页面继续使用。',
+    returnToKnowledge: '返回资料页面',
   },
 
   modelTiers: {
@@ -511,24 +522,24 @@ export default {
   "title": "模型档位",
   "scopeHint": {
 
-    "library": "所有文章共用此处保存的模型档位。"
+    "library": "所有资料共用此处保存的模型档位。"
   },
   "names": {
     "light": "轻量",
-    "generation": "文章处理",
+    "generation": "资料处理",
     "embedding": "向量",
     "rerank": "重排",
     "entity_resolution": "实体解析"
   },
   "uses": {
     "light": "收录审核与转载判定",
-    "generation": "文章内容类型、结构化摘要、实体和主题",
+    "generation": "资料内容类型、结构化摘要、实体和主题",
     "embedding": "内容检索与实体名称相似度",
     "rerank": "重排检索结果",
     "entity_resolution": "判断实体候选是否属于已有实体"
   },
   "sources": {
-    "generation": "文章处理模型档位",
+    "generation": "资料处理模型档位",
 
     "library": "库设置",
     "legacy": "已有模型配置",
@@ -539,7 +550,7 @@ export default {
   "useDefault": "选择模型",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
-  "explicitChoice": "文章分类、摘要、实体和主题使用生成模型档位。",
+  "explicitChoice": "资料分类、摘要、实体和主题使用生成模型档位。",
   "loadFailed": "无法加载模型配置，请重试。",
   "saveFailed": "模型配置保存失败，请重试。",
   "saved": "模型档位已保存",
@@ -547,7 +558,7 @@ export default {
 },
   mergeSuggestions: {
   "title": "待合并建议",
-  "description": "无法确认的实体保持独立，核验文章后决定是否合并到候选实体。",
+  "description": "无法确认的实体保持独立，核验资料后决定是否合并到候选实体。",
   "statusFilter": "建议状态",
   "status": {
     "pending": "待处理",
@@ -564,7 +575,7 @@ export default {
   "accept": "接受并合并",
   "reject": "拒绝建议",
   "confirmTitle": "接受并合并实体",
-  "confirmBody": "将“{source}”合并到“{target}”？本空间的别名和文章关联将转移到保留实体。",
+  "confirmBody": "将“{source}”合并到“{target}”？本空间的别名和资料关联将转移到保留实体。",
   "feedback": {
     "accept": "建议已接受，实体已合并",
     "reject": "建议已拒绝，实体保持独立"
@@ -636,7 +647,7 @@ export default {
   },
   "entities": {
     "title": "实体",
-    "description": "查看实体类型、别名和提及该实体的文章。",
+    "description": "查看实体类型、别名和提及该实体的资料。",
     "filter": "搜索实体名称或别名",
     "type": "实体类型",
     "allTypes": "全部类型",
@@ -654,14 +665,14 @@ export default {
     "aliasLabel": "别名",
     "noAliases": "暂无别名",
     "choose": "选择一个实体查看档案",
-    "articles": "提及该实体的文章",
-    "noArticles": "还没有文章提及该实体。",
-    "openArticle": "打开文章",
-    "untitledArticle": "无标题文章",
+    "articles": "提及该实体的资料",
+    "noArticles": "还没有资料提及该实体。",
+    "openArticle": "打开资料",
+    "untitledArticle": "无标题资料",
     "loaded": "已加载 {count} 个实体",
     "merge": "合并重复实体",
     "mergeTitle": "合并实体",
-    "mergeHint": "选择要保留的实体，别名和文章关联将转移到保留的实体。",
+    "mergeHint": "选择要保留的实体，别名和资料关联将转移到保留的实体。",
     "mergeSource": "待合并实体",
     "mergeTarget": "保留实体",
     "mergeTargetPlaceholder": "选择保留的实体",
@@ -735,10 +746,10 @@ export default {
       baseUrl: 'API 地址',
       baseUrlDesc: '与 REST API 路径拼接使用。',
       ingestUrl: '外部 Agent 收录接口',
-      ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。新内容经过模型收录审核；重复、已丢弃、缺正文等情况按规则直接返回。未通过审核的文章返回 pending_review 与原因，调用方的判断不替代审核。通过内网访问时使用 Authorization: Bearer API_KEY。",
+      ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。新内容经过模型收录审核；重复、已丢弃、缺正文等情况按规则直接返回。未通过审核的资料返回 pending_review 与原因，调用方的判断不替代审核。通过内网访问时使用 Authorization: Bearer API_KEY。",
       copyIngestUrl: '复制收录接口地址',
       mcpUrl: 'MCP 服务地址',
-      mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取文章、收录、待审区、星标和写入整理结果。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
+      mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取资料、收录、待审区、星标和写入AI 报告。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
       copyMcpUrl: '复制 MCP 服务地址',
       apiKeys: 'API 密钥',
       apiKeysDesc: "API Key 可以访问个人空间的全部内容和收录、检索等接口。部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。",
@@ -810,7 +821,7 @@ export default {
     previewImage: '查看图片：{title}',
     imageLoadFailed: '图片读取失败',
     title: '知识检索',
-    description: '从文章、用户文档和整理结果中检索，按文章展示命中内容。',
+    description: '从资料、资料和AI 报告中检索，按资料展示命中内容。',
     query: '检索内容',
     queryPlaceholder: '输入要查找的内容',
     clearQuery: '清除检索内容',
@@ -820,17 +831,17 @@ export default {
     entities: '实体',
     topics: '主题',
     source: '来源',
-    sources: { article: '文章', mine: '用户文档', report: '整理结果' },
+    sources: { article: '资料', mine: '我的资料', report: 'AI 报告' },
     publishedFrom: '发布时间起始',
     publishedTo: '发布时间截止',
     collapseSimilar: '折叠相似报道',
-    limit: '最多返回文章数',
+    limit: '最多返回资料数',
     all: '全部',
-    filterHint: '同一筛选中的多选值匹配任意一项，不同筛选同时满足。日期范围包含起止日期；缺失发布时间的文章会被排除。',
+    filterHint: '同一筛选中的多选值匹配任意一项，不同筛选同时满足。日期范围包含起止日期；缺失发布时间的资料会被排除。',
     resetFilters: '重置筛选',
     results: '检索结果',
-    resultCount: '显示 {count} 篇文章',
-    excludedMissingPublishedAt: '已排除 {count} 篇缺失发布时间的文章。',
+    resultCount: '显示 {count} 篇资料',
+    excludedMissingPublishedAt: '已排除 {count} 篇缺失发布时间的资料。',
     missingPublishedAt: '发布时间缺失',
     snippets: '命中片段',
     score: '得分',
@@ -842,12 +853,12 @@ export default {
     unavailable: '检索暂时不可用，请重试。',
     optionsFailed: '筛选选项加载失败，请重试。',
     invalidDateRange: '截止日期不能早于起始日期。',
-    invalidLimit: '最多返回文章数须为 1 到 100 的整数。',
+    invalidLimit: '最多返回资料数须为 1 到 100 的整数。',
     fullSearch: '打开完整检索',
     requestPreview: '检索请求参数',
   },
   commandPalette: {
-    placeholder: "搜索文章、用户文档与整理结果…",
+    placeholder: "搜索资料、资料与AI 报告…",
     clearRecent: '清除',
     retrieval: '检索参数',
     hotkey: {
@@ -861,7 +872,7 @@ export default {
       adjustRetrieval: '调整检索参数'
     },
     quick: {
-      knowledge: '打开文章',
+      knowledge: '打开资料',
       settings: '打开设置',
     },
     match: {
@@ -953,7 +964,7 @@ export default {
           rerank_model_tier: '重排档位',
 
         embedding_model: 'Embedding 模型',
-        summary_model: "文章处理模型",
+        summary_model: "资料处理模型",
         rerank_model: '重排序模型',
         unknown: '其他模型配置'
       }
@@ -1037,7 +1048,7 @@ export default {
     },
     chat: {
       title: "生成模型",
-      desc: "配置用于审核和文章处理的大语言模型",
+      desc: "配置用于审核和资料处理的大语言模型",
       empty: "暂无生成模型"
     },
     source: {
@@ -1163,7 +1174,7 @@ export default {
       sourceRemote: 'API',
       baseUrlLabel: '服务地址',
       displayNameLabel: '显示名称（可选）',
-      displayNamePlaceholder: '例如：文章处理模型',
+      displayNamePlaceholder: '例如：资料处理模型',
       displayNameDesc: '仅用于界面展示，实际调用仍使用上面的模型名称。',
       baseUrlPlaceholder: '例如：https://api.openai.com/v1',
       apiKeyOptional: 'API Key（可选）',
@@ -1186,13 +1197,13 @@ export default {
       dimensionOverrideLabel: '自定义输出维度',
       dimensionOverrideDesc: '仅在确认该模型支持 dimensions 参数时开启；默认只使用检测到的实际维度。',
       supportsImagesLabel: '支持图片',
-      supportsImagesDesc: '文字与图片必须由同一个模型生成同一向量空间的向量。开启后会索引全文文章的图片，并用于文字检索。',
+      supportsImagesDesc: '文字与图片必须由同一个模型生成同一向量空间的向量。开启后会索引全文资料的图片，并用于文字检索。',
       supportsImagesLocalHint: 'Ollama 暂不支持图片向量。请使用远程 API 类型配置本地多模态服务。',
       multimodalFormatLabel: '多模态请求格式',
       multimodalFormatJina: 'Jina 多模态 Embeddings',
       multimodalFormatHint: '服务需同时接受 text 和 image 输入。Base URL 填服务的 /v1 地址。',
       supportsVisionLabel: '支持视觉/多模态',
-      supportsVisionDesc: "模型是否接受图片输入。开启后，文章处理会把正文中的图片一同发送给生成模型。",
+      supportsVisionDesc: "模型是否接受图片输入。开启后，资料处理会把正文中的图片一同发送给生成模型。",
       contextWindowLabel: '上下文窗口',
       contextWindowPlaceholder: '默认 {value}',
       contextWindowDesc: "模型支持的最大上下文长度，按 token 计算。",
@@ -1445,7 +1456,7 @@ export default {
         queue: {
           core_concurrency: '正文处理与手工重新处理的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
           enrichment_concurrency: "实体名称向量重建、全部向量重建与主题历史归入的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
-          maintenance_concurrency: "每实例批处理与删除清理的并发数，独立于文章处理；最小为 1，修改后需重启服务。",
+          maintenance_concurrency: "每实例批处理与删除清理的并发数，独立于资料处理；最小为 1，修改后需重启服务。",
           shared_concurrency: '核心处理与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
         ssrf: {
@@ -1569,7 +1580,7 @@ export default {
           },
           guides: {
             active: '运行中任务可查看执行池、开始时间和截止时间。只有具备完整业务取消语义的任务才允许终止。',
-            pending: '排队任务尚未被执行程序领取。终止操作会同步更新文章状态并取消相关任务。',
+            pending: '排队任务尚未被执行程序领取。终止操作会同步更新资料状态并取消相关任务。',
             scheduled: '延后任务可提前立即执行；支持业务取消的文档任务也可以安全终止。',
             retry: '请结合最后错误、重试次数和下次执行时间判断是否立即执行或终止。',
             archived: '请先修复失败原因再立即执行。清除记录不会完成原业务任务。',
@@ -1595,7 +1606,7 @@ export default {
 
             entityNameEmbeddingRebuild: '实体名称向量重建',
             embeddingRebuild: '全部向量重建',
-            reportIndex: '整理结果索引',
+            reportIndex: 'AI 报告索引',
             topicBackfill: '主题历史归入',
           }
         },
@@ -1864,15 +1875,15 @@ export default {
       embeddingOptional: '（可选）',
     },
     document: {
-      title: '文章',
-      subtitle: "收集文章、处理待审内容与管理用户判断"
+      title: '资料',
+      subtitle: "收集资料、处理待审内容与管理用户判断"
     },
     messages: {
       loadModelsFailed: '加载模型列表失败',
       loadDataFailed: '加载库数据失败',
       notFound: '库不存在',
       nameRequired: '请输入库名称',
-      summaryRequired: "请选择文章处理的生成模型",
+      summaryRequired: "请选择资料处理的生成模型",
 
       missingId: '缺少库 ID',
       buildDataFailed: '数据构建失败',
@@ -2039,7 +2050,7 @@ export default {
   },
   retrievalSettings: {
     imageWeightLabel: '图片检索通道权重',
-    imageWeightHint: '默认 0.2，图片作为正文和文章检索的补充。设为 0 时使用默认权重 0.2；当前模型必须支持图片。',
+    imageWeightHint: '默认 0.2，图片作为正文和资料检索的补充。设为 0 时使用默认权重 0.2；当前模型必须支持图片。',
     title: '搜索设置',
     description: '配置知识检索的全局检索参数与相似报道折叠规则',
     embeddingTopKLabel: '向量检索数量 (Top K)',
@@ -2049,7 +2060,7 @@ export default {
     rerankThresholdLabel: 'Rerank 阈值',
     similarReportsThresholdLabel: '相似报道余弦相似度阈值',
     similarReportsWindowDaysLabel: '相似报道发布时间窗口（天）',
-    similarReportsHint: '默认相似度 0.85，时间窗口 3 天。只有相似度与时间间隔同时满足的文章会折叠，用户文档和整理结果不参与。',
+    similarReportsHint: '默认相似度 0.85，时间窗口 3 天。仅外部时效型库内同时满足相似度与时间间隔的资料会折叠，其他模板的库不参与。',
 
     toasts: {
       saveSuccess: '检索配置已保存',
@@ -2057,10 +2068,10 @@ export default {
     }
   },
   personalDocument: {
-    delete: '删除本人文档',
+    delete: '删除资料',
     deleteConfirm: '删除“{title}”？正文、文件、附件和索引都会删除。',
-    deleted: '本人文档已删除',
-    deleteFailed: '本人文档未删除，请重试。',
+    deleted: '资料已删除',
+    deleteFailed: '资料未删除，请重试。',
   },
   settings: {
     maintenance: {
@@ -2091,9 +2102,9 @@ export default {
       title: '文件库状态',
       root: '根目录',
       rootHint: '由服务器配置，此处只读。',
-      mine: '用户文档',
-      mineImportedHint: '用户文档通过收录接口导入。更新正文请通过收录接口重新提交。',
-      reports: '整理结果',
+      mine: '资料',
+      mineImportedHint: '资料通过收录接口导入。更新正文请通过收录接口重新提交。',
+      reports: 'AI 报告',
       lastScan: '最近扫描时间',
       indexedFiles: '已索引文件数',
       lastError: '最近错误',
@@ -2187,7 +2198,7 @@ export default {
       cancelled: '已取消'
     },
     stage: {
-    processing: "文章处理",
+    processing: "资料处理",
       docreader: '正文与图片准备',
       chunking: '分块',
       embedding: '向量化',},
@@ -2251,14 +2262,14 @@ export default {
     titleReparse: '重新处理确认',
     confirmReparse: '确认并重新处理',
     reparseSource: '待重新处理文档',
-    reparseHint: "重新处理已有材料。正文缺失时，需要外部工具通过收录接口补全。",
+    reparseHint: '重新处理已有资料，保留正文并更新处理结果与索引。正文缺失时，需要外部工具通过收录接口补全。',
 
   },
   library: {
     channelRSS: "RSS",
-    emptyArticles: "暂无文章",
+    emptyArticles: "暂无资料",
     ingestOnlyHint: "请通过外部工具将完整材料送入 HTTP 或 MCP 收录接口。",
-    sourceKinds: { mine: '本人文档', report: '整理结果' },
+    sourceKinds: { mine: '我的资料', report: 'AI 报告' },
     collectReason: '收藏理由',
     vaultPath: '文件库路径',
     copyVaultPath: '复制文件库路径',
@@ -2282,7 +2293,7 @@ export default {
     description: '描述',
     settings: '设置',
 
-    searchMessageContent: '搜索文章内容',
+    searchMessageContent: '搜索资料内容',
     fileExists: '文件已存在',
     urlRequired: '请输入URL',
     invalidURL: '请输入有效的URL',
@@ -2303,7 +2314,7 @@ export default {
     channelUnknown: '未知',
     urlSource: '来源网址',
     webContent: '网页内容',
-    documentContent: '文章内容',
+    documentContent: '资料内容',
     importTime: '导入时间',
     createTime: '创建时间',
     createdAt: '创建',
@@ -2317,7 +2328,7 @@ export default {
     viewParentContext: '查看父块上下文',
     parentContextLoadFailed: '加载父上下文失败',
     customMetadata: '自定义元数据',
-    metadataCapabilityHint: '随文章保存的附加信息，供阅读时查看；不建立索引，也不影响检索排序',
+    metadataCapabilityHint: '随资料保存的附加信息，供阅读时查看；不建立索引，也不影响检索排序',
     noCustomMetadata: '暂无自定义元数据',
     addMetadataField: '添加元数据字段',
     metadataKeyPlaceholder: '字段名',
@@ -2329,17 +2340,17 @@ export default {
     metadataKeyRequired: '元数据字段名不能为空',
     metadataKeyDuplicate: '元数据字段 {key} 重复',
     metadataNumberRequired: '元数据字段 {key} 必须是有效数字',
-    noDocumentSummary: '暂无文章摘要',
+    noDocumentSummary: '暂无资料摘要',
     missingId: '缺少库ID',
     deleteFailed: '删除失败，请稍后再试！',
     uploadTime: '上传时间',
-    rebuildDocument: '重建知识',
-    rebuildConfirm: '确认重建文章"{fileName}"？该操作会清理现有分块并重新处理。',
+    rebuildDocument: '重新处理资料',
+    rebuildConfirm: '重新处理资料“{fileName}”？保留正文，更新摘要、分类、关系与索引。',
     rebuildSubmitted: '重建任务已提交',
     rebuildFailed: '重建失败，请稍后再试',
-    rebuildInProgress: '当前文章正在处理中，请稍后重试',
+    rebuildInProgress: '当前资料正在处理中，请稍后重试',
     cancelParse: '停止处理',
-    cancelParseConfirmBody: "确认停止处理\"{title}\"？已写入的分块会保留，可稍后通过\"重建\"重新触发；该文章尚未执行的处理任务会被取消。",
+    cancelParseConfirmBody: "确认停止处理\"{title}\"？已写入的分块会保留，可稍后通过\"重建\"重新触发；该资料尚未执行的处理任务会被取消。",
     cancelParseSubmitted: '已停止处理',
     cancelParseFailed: '停止失败，请稍后再试',
     draft: '草稿',
@@ -2355,15 +2366,15 @@ export default {
     intakeDiscard: '确认不收录',
     intakeReviewSubmitted: '已提交审核',
     intakeReviewFailed: '审核操作失败',
-    untitledDocument: '未命名文章',
+    untitledDocument: '未命名资料',
     moreOptions: '更多操作',
-    deleteDocument: '删除文章',
+    deleteDocument: '删除资料',
 
     parsingFailed: '处理失败',
     parsingInProgress: '处理中...',
     documentSummary: '摘要',
     detailSectionMeta: '基本信息',
-    confirmDeleteDocument: '确认删除文章"{fileName}"，删除后将无法恢复',
+    confirmDeleteDocument: '确认删除资料"{fileName}"，删除后将无法恢复',
     confirmDelete: '确认删除',
     viewModeGrid: '卡片视图',
     viewModeList: '列表视图',
@@ -2378,14 +2389,14 @@ export default {
     selectedCount: '已选 {count} 项',
     clearSelection: '取消选择',
     batchDelete: '批量删除',
-    confirmBatchDeleteDocument: '确认删除选中的 {count} 篇文章？删除后将无法恢复。',
-    batchDeleteSuccess: '成功删除 {count} 篇文章',
+    confirmBatchDeleteDocument: '确认删除选中的 {count} 篇资料？删除后将无法恢复。',
+    batchDeleteSuccess: '成功删除 {count} 篇资料',
     batchDeleteFailed: '批量删除失败',
-    confirmBatchReparseDocument: '确认重建选中的 {count} 篇文章？现有内容将被清除并重新处理。',
+    confirmBatchReparseDocument: '重新处理选中的 {count} 份资料？保留正文，更新处理结果与索引。AI 报告只重新索引。',
     confirmBatchReparse: '确认并重新处理',
     batchReparseSuccess: '已提交 {count} 个重建任务',
     batchReparseFailed: '批量重建失败',
-    batchReparseSkippedInFlight: '已跳过 {count} 个正在处理中的文章',
+    batchReparseSkippedInFlight: '已跳过 {count} 个正在处理中的资料',
     statusCompleted: '已完成',
     statusProcessing: '处理中',
     statusFinalizing: '优化中',
@@ -2394,7 +2405,7 @@ export default {
     statusDraft: '草稿',
     noDescription: '无描述',
     searchPlaceholder: '搜索库...',
-    docSearchPlaceholder: '搜索文章标题...',
+    docSearchPlaceholder: '搜索资料标题...',
     fileTypeFilter: '文件类型',
     allFileTypes: '全部类型',
     parseStatusFilter: '处理状态',
@@ -2434,7 +2445,7 @@ export default {
       source: '来源',
       enabled: '已启用',
       fileStorage: '文件存储',
-      documentCount: '文章数',
+      documentCount: '资料数',
       chunking: '分块',
       parentShort: '父',
       childShort: '子'

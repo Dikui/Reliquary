@@ -98,7 +98,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 		})
 	}
 	// The catalog localizes a default system label separately from stored article metadata.
-	require.Equal(t, "Institutional", systemLibrary.DisplayName("en-US"))
+	require.Equal(t, "Institutional releases", systemLibrary.DisplayName("en-US"))
 	require.Equal(t, customLibrary.Name, customLibrary.DisplayName("en-US"))
 	for _, article := range articles {
 		var read service.EntryReadResult

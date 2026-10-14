@@ -507,7 +507,12 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		return
 	}
 
+	if !h.applyLibraryReadScope(c) {
+		return
+	}
+	ctx = c.Request.Context()
 	filter := types.EntryListFilter{
+		LibraryIDs:  types.LibraryReadScope(ctx),
 		SourceKind:  strings.TrimSpace(c.Query("source_kind")),
 		ContentType: strings.TrimSpace(c.Query("content_type")),
 		Keyword:     c.Query("keyword"),

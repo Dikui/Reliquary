@@ -1,3 +1,4 @@
+import * as libraryScopeHelpers from '../utils/libraryScope'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -11,7 +12,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', code)((name: string) => (name === '@/utils/libraryScope' ? libraryScopeHelpers : modules[name]) ?? require(name), module, module.exports)
   return module.exports
 }
 
@@ -67,6 +68,7 @@ test('article search and filter options use the shared HTTP service routes', asy
   const module = { exports: {} as any }
   const code = ts.transpileModule(readFileSync(new URL('./search.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', code)((name: string) => {
+    if (name === '@/utils/libraryScope') return libraryScopeHelpers
     assert.equal(name, '@/utils/request')
     return Object.fromEntries(['get', 'post'].map(method => [method, (url: string, body?: unknown) => { calls.push({ method, url, body }); return Promise.resolve({ success: true }) }]))
   }, module, module.exports)
@@ -95,4 +97,13 @@ test('a failed library catalog prevents an unscoped web search', async () => {
   } })
   await assert.rejects(api.searchEntries({ query: 'query' }), /catalog unavailable/)
   assert.equal(posted, false)
+})
+
+test('web search sends the remembered library range and an explicit all-library selection overrides it', async t => {
+  const f = fixture(t, [])
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => key === libraryScopeHelpers.LIBRARY_SCOPE_KEY ? '["all-b"]' : null } })
+  await f.search.searchEntries({ query: 'remembered' })
+  assert.deepEqual(JSON.parse(f.calls[1].data).libraries, ['all-b'])
+  await f.search.searchEntries({ query: 'all', libraries: [] })
+  assert.deepEqual(JSON.parse(f.calls[3].data).libraries, ['all-a', 'all-b'])
 })

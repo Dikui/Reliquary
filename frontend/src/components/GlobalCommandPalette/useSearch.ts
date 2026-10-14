@@ -1,10 +1,12 @@
 import { searchErrorMessage } from '@/utils/search'
 import { useI18n } from 'vue-i18n'
 import { onUnmounted, ref, watch } from 'vue'
+import { useLibraryScope } from '@/composables/useLibraryScope'
 import { searchEntries } from '@/api/search'
-import type { SearchEntry } from '@/types/search'
+import type { SourceLocation, SearchEntry } from '@/types/search'
 
 export interface CmdkChunk {
+  locations?: SourceLocation[]
   id: string
   chunk_index: number
   entry_id: string
@@ -46,6 +48,7 @@ export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
       library_id: article.library_id || '', entry_title: article.title, content: snippet.content,
       match_type: snippet.match_type, score: article.score,
       image_path: 'image_path' in snippet ? snippet.image_path : undefined,
+      locations: 'locations' in snippet ? snippet.locations : undefined,
     })),
   }))
 }
@@ -58,6 +61,7 @@ export function useCmdkSearch(options: {
   debounceMs?: number
 }) {
   const { t } = useI18n()
+  const libraryScope = useLibraryScope()
   const searchError = ref('')
   const debounceMs = options.debounceMs ?? 350
   const query = ref('')
@@ -84,7 +88,7 @@ export function useCmdkSearch(options: {
     hasSearched.value = true
 
     searchError.value = ''
-    const articles = await searchEntries({ query: q }).then(res => {
+    const articles = await searchEntries({ query: q, libraries: libraryScope.value }).then(res => {
       if (!res?.success) throw res
       return res.data.results
     }).catch(error => {
@@ -101,7 +105,7 @@ export function useCmdkSearch(options: {
     loading.value = false
   }
 
-  watch([query, composing], ([val, isComposing]) => {
+  watch([query, composing, libraryScope], ([val, isComposing]) => {
     requestSeq++
     if (debounceTimer) clearTimeout(debounceTimer)
     loading.value = false
@@ -122,6 +126,7 @@ export function useCmdkSearch(options: {
   onUnmounted(() => { requestSeq++; if (debounceTimer) clearTimeout(debounceTimer) })
 
   return {
+    libraryScope,
     searchError,
     retry: () => runSearch(query.value.trim(), ++requestSeq),
     query,

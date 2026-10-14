@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { read, write, remove, type Answer, type EvaluationSet, type Question, type SearchRecord, type EvaluationRun, type Comparison, type VectorSet } from '@/api/insights'
 import QuestionEditor from './QuestionEditor.vue'
 import EntryPicker from './EntryPicker.vue'
 import RunResults from './RunResults.vue'
+import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
 import './insights.css'
 const { t } = useI18n(), route = useRoute()
 const sets = ref<EvaluationSet[]>([]), libraries = ref<{ id: string; name: string }[]>([]), models = ref<{ id: string; name: string; type: string }[]>([])
@@ -16,6 +17,7 @@ const setForm = ref<{ id?: string; name: string; description: string }>(), editi
 const deletion = ref<{ path: string; label: string; kind: 'set' | 'question' }>()
 const chosenRecord = ref<SearchRecord>(), recordAnswers = ref<Answer[]>([])
 const candidateLibraries = ref<string[]>([]), candidateEntries = ref<Answer[]>([]), candidateCount = ref(5), candidateModel = ref('')
+const effectiveCandidateLibraries = computed(() => candidateLibraries.value.length ? candidateLibraries.value : libraries.value.map(lib => lib.id))
 const filters = ref({ source: '', method: '', library: '', query: '', from: '', to: '', include_evaluation: false })
 const k = ref(10), vector = ref('active'), collapse = ref(false), rerank = ref('library')
 const detail = ref<EvaluationRun>(), comparison = ref<Comparison>(), before = ref(''), after = ref('')
@@ -47,8 +49,9 @@ async function initialize() {
     const [, libs, mods] = await Promise.all([loadSets(), read<{ id: string; name: string }[]>('libraries'), read<{ id: string; name: string; type: string }[]>('models')])
     libraries.value = libs; models.value = mods
     if (!selected.value) selected.value = sets.value[0]?.id || ''
-    await loadPane()
-    if (typeof route.query.run === 'string') { tab.value = 'runs'; await openRun(route.query.run) }
+    await nextTick()
+    if (typeof route.query.run === 'string') await openRun(route.query.run)
+    else await loadPane()
   } catch (e: any) { error.value = e?.message || t('ikb19.loadFailed') }
   finally { loading.value = false }
 }
@@ -79,13 +82,12 @@ async function questionFromRecord() {
   await action(async () => { await write(`evaluation/sets/${selected.value}/from-record`, { record_id: chosenRecord.value!.id, answers: recordAnswers.value }); chosenRecord.value = undefined; tab.value = 'questions'; status.value = 'confirmed'; questionOffset.value = 0; message.value = t('ikb19.recordCreated'); await loadPane() })
 }
 async function generate() {
-  if (!selected.value || !candidateLibraries.value.length || !candidateEntries.value.length) return
+  if (!selected.value || !effectiveCandidateLibraries.value.length || !candidateEntries.value.length) return
   await action(async () => {
-    await write(`evaluation/sets/${selected.value}/candidates`, { libraries: candidateLibraries.value, entry_ids: candidateEntries.value.map(a => a.entry_id), count: candidateCount.value, ...(candidateModel.value ? { model_id: candidateModel.value } : {}) })
+    await write(`evaluation/sets/${selected.value}/candidates`, { libraries: effectiveCandidateLibraries.value, entry_ids: candidateEntries.value.map(a => a.entry_id), count: candidateCount.value, ...(candidateModel.value ? { model_id: candidateModel.value } : {}) })
     tab.value = 'questions'; status.value = 'pending'; questionOffset.value = 0; message.value = t('ikb19.generated'); await loadPane()
   })
 }
-function toggleCandidateLibrary(id: string) { candidateLibraries.value = candidateLibraries.value.includes(id) ? candidateLibraries.value.filter(v => v !== id) : [...candidateLibraries.value, id] }
 async function confirm(q: Question) { await action(async () => { await write(`evaluation/sets/${selected.value}/questions/${q.id}/confirm`, {}); await loadPane(); message.value = t('ikb19.confirmedMessage') }) }
 async function startRun() {
   if (!selected.value || !vector.value) return
@@ -94,7 +96,22 @@ async function startRun() {
     runOffset.value = 0; await loadPane()
   }, true)
 }
-async function openRun(id: string) { await action(async () => { detail.value = await read<EvaluationRun>(`evaluation/runs/${id}`) }) }
+async function openRun(id: string) {
+  await action(async () => {
+    detail.value = undefined
+    let run: EvaluationRun
+    try { run = await read<EvaluationRun>(`evaluation/runs/${id}`) }
+    catch (e: any) { if (e?.status === 404) throw new Error(t('ikb19.runNotFound')); throw e }
+    if (!sets.value.some(set => set.id === run.set_id)) {
+      sets.value.push(await read<EvaluationSet>(`evaluation/sets/${run.set_id}`))
+    }
+    selected.value = run.set_id; tab.value = 'runs'
+    // Let selection watchers clear the previous details before displaying this run.
+    await nextTick()
+    await loadPane()
+    detail.value = run
+  })
+}
 async function compare() { if (before.value && after.value && before.value !== after.value) await action(async () => { comparison.value = await read<Comparison>('evaluation/compare', { before: before.value, after: after.value }) }) }
 async function page(kind: string, direction: number) {
   if (kind === 'sets') { setOffset.value = Math.max(0, setOffset.value + direction * 50); await action(async () => { await loadSets(); selected.value = sets.value[0]?.id || '' }); return }
@@ -141,10 +158,10 @@ onMounted(initialize)
     </section>
     <form v-if="tab === 'candidates' && selected" class="panel" @submit.prevent="generate">
       <h2>{{ t('ikb19.aiCandidates') }}</h2><p class="muted">{{ t('ikb19.candidateHint') }}</p>
-      <fieldset><legend>{{ t('ikb19.libraries') }}</legend><label v-for="lib in libraries" :key="lib.id"><input type="checkbox" :checked="candidateLibraries.includes(lib.id)" @change="toggleCandidateLibrary(lib.id)" /> {{ lib.name }} </label></fieldset>
-      <EntryPicker :libraries="candidateLibraries" :model-value="candidateEntries" @update:model-value="candidateEntries = $event" />
+      <div class="candidate-scope"><p>{{ t('ikb19.libraries') }}</p><LibraryScopeSelect :model-value="candidateLibraries" :disabled="busy" @update:model-value="candidateLibraries = $event" @loaded="libraries = $event" /></div>
+      <EntryPicker :libraries="effectiveCandidateLibraries" :model-value="candidateEntries" @update:model-value="candidateEntries = $event" />
       <div class="fields"><label class="field">{{ t('ikb19.count') }}<input type="number" min="1" max="20" required :value="candidateCount" @input="candidateCount = Number(($event.target as HTMLInputElement).value)" /></label><label class="field">{{ t('ikb19.model') }}<select :value="candidateModel" @change="candidateModel = ($event.target as HTMLSelectElement).value"><option value="">{{ t('ikb19.libraryDefault') }}</option><option v-for="m in models.filter(m => m.type === 'KnowledgeQA')" :key="m.id" :value="m.id">{{ m.name }}</option></select></label></div>
-      <div class="toolbar"><button type="submit" class="primary" :disabled="busy || !candidateLibraries.length || !candidateEntries.length || candidateEntries.length > 50 || candidateCount < 1 || candidateCount > 20">{{ busy ? t('ikb19.generating') : t('ikb19.generate') }}</button></div>
+      <div class="toolbar"><button type="submit" class="primary" :disabled="busy || !effectiveCandidateLibraries.length || !candidateEntries.length || candidateEntries.length > 50 || candidateCount < 1 || candidateCount > 20">{{ busy ? t('ikb19.generating') : t('ikb19.generate') }}</button></div>
     </form>
     <section v-if="tab === 'runs'">
       <form v-if="selected" class="panel" @submit.prevent="startRun"><h2>{{ t('ikb19.startRun') }}</h2><div class="fields"><label class="field">{{ t('ikb19.k') }}<input type="number" min="1" max="100" required :value="k" @input="k = Number(($event.target as HTMLInputElement).value)" /></label><label class="field">{{ t('ikb19.vectorSet') }}<select :value="vector" @change="vector = ($event.target as HTMLSelectElement).value"><option v-for="v in vectors" :key="v.selector" :value="v.selector">{{ vectorName(v) }}</option></select></label><label class="field">{{ t('ikb19.rerank') }}<select :value="rerank" @change="rerank = ($event.target as HTMLSelectElement).value"><option value="library">{{ t('ikb19.libraryDefault') }}</option><option value="">{{ t('ikb19.disabled') }}</option><option v-for="m in models.filter(m => m.type === 'Rerank')" :key="m.id" :value="m.id">{{ m.name }}</option></select></label><label><input type="checkbox" :checked="collapse" @change="collapse = ($event.target as HTMLInputElement).checked" /> {{ t('ikb19.collapse') }}</label></div><p class="muted">{{ t('ikb19.runHint') }}</p><div class="toolbar"><button type="submit" class="primary" :disabled="busy || loading || !vectors.length || k < 1 || k > 100">{{ busy ? t('ikb19.running') : t('ikb19.startRun') }}</button><button type="button" :disabled="busy || loading" @click="loadPane">{{ t('ikb19.refresh') }}</button></div></form>
@@ -157,4 +174,4 @@ onMounted(initialize)
     </section>
   </main>
 </template>
-<style scoped>.record-answer { display: block; margin: 10px 0; overflow-wrap: anywhere; } fieldset { margin: 16px 0; border: 1px solid var(--td-component-stroke); border-radius: 6px; } fieldset label { display: inline-block; padding: 8px; }</style>
+<style scoped>.record-answer { display: block; margin: 10px 0; overflow-wrap: anywhere; } .candidate-scope { margin: 16px 0; min-width: 0; }</style>
