@@ -79,6 +79,7 @@ func (d *DocumentInfo) UnmarshalJSON(data []byte) error {
 }
 
 type RerankerConfig struct {
+	Accounting        *types.ModelCallAccounting
 	MaxConcurrency    int
 	RequestsPerMinute int
 	APIKey            string
@@ -124,7 +125,7 @@ func NewReranker(config *RerankerConfig) (Reranker, error) {
 	if logger.LLMDebugEnabled() {
 		r = &debugReranker{inner: r}
 	}
-	return &governedReranker{inner: r, limit: config.MaxConcurrency, requestsPerMinute: config.RequestsPerMinute}, nil
+	return &governedReranker{accounting: config.Accounting, inner: r, limit: config.MaxConcurrency, requestsPerMinute: config.RequestsPerMinute}, nil
 }
 
 // customHeaderSetter 表示支持注入自定义 HTTP header 的 reranker 实现。

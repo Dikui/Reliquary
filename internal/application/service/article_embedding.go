@@ -30,6 +30,7 @@ func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.M
 }
 
 func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.Embedder, article *types.Entry) error {
+	ctx = types.WithModelCallEntry(ctx, article.ID)
 	summary := ""
 	if article.StructuredSummary != nil {
 		summary = article.StructuredSummary.RenderText()

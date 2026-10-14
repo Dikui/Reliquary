@@ -38,6 +38,10 @@ var allowedOutboundCalls = map[string]int{
 	"internal/models/rerank/aliyun_reranker.go|Rerank|r.client.Do":                        1,
 	"internal/models/rerank/remote_api.go|Rerank|http.NewRequestWithContext":              1,
 	"internal/models/rerank/remote_api.go|Rerank|r.client.Do":                             1,
+	// Accounting delegates only to the existing guarded transport; no new endpoints.
+	"internal/modelcalls/transport.go|RoundTrip|t.Inner.RoundTrip": 3,
+	"internal/modelcalls/transport.go|RoundTrip|resp.Header.Get":   2,
+	"internal/modelcalls/transport.go|finish|b.once.Do":            1,
 	// Shared guarded transports.
 	"internal/utils/extraheaders.go|RoundTrip|base.RoundTrip":             2,
 	"internal/utils/security.go|RoundTrip|t.Base.RoundTrip":               1,

@@ -107,12 +107,13 @@ type Chat interface {
 }
 
 type ChatConfig struct {
-	Source    types.ModelSource
-	BaseURL   string
-	ModelName string
-	APIKey    string
-	ModelID   string
-	Provider  string
+	Accounting *types.ModelCallAccounting
+	Source     types.ModelSource
+	BaseURL    string
+	ModelName  string
+	APIKey     string
+	ModelID    string
+	Provider   string
 	// MaxConcurrency caps concurrent background calls to this model; 0 falls
 	// back to the process-wide default (see limiter.GateN).
 	MaxConcurrency    int
@@ -168,6 +169,7 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 	c, err = wrapChatDebug(c, err)
 	wrapped, err := wrapChatConcurrency(c, config.MaxConcurrency, err)
 	if w, ok := wrapped.(*concurrencyChat); ok {
+		w.accounting = config.Accounting
 		w.requestsPerMinute = config.RequestsPerMinute
 	}
 	return wrapped, err

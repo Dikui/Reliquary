@@ -58,7 +58,9 @@ var PersistentTables = map[string]PersistentTable{
 
 // BackupOnlyTables must be explicitly classified when introduced. They are
 // preserved by PostgreSQL backups, never by portable replicas.
-var BackupOnlyTables = map[string]Rule{}
+var BackupOnlyTables = map[string]Rule{
+	"model_calls": {Sidecar: "id space_id requested_at model_id model_name provider purpose entry_id input_tokens output_tokens input_price output_price currency cost cost_status duration_ms success error_category attempt retry_number"},
+}
 
 // RegeneratedTable registers derived tables without putting their rows in a
 // portable replica. Their names still participate in strict schema verification.

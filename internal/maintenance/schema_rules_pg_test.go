@@ -14,10 +14,7 @@ import (
 )
 
 func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T) {
-	for version := uint(0); version <= 17; version++ {
-		if version == 13 {
-			continue
-		}
+	for _, version := range []uint{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 22} {
 		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
 			db := pgtest.Open(t)
 			directory, err := filepath.Abs("../../migrations/versioned")
@@ -25,7 +22,7 @@ func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T)
 			migration, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
 			require.NoError(t, err)
 			t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
-			if version != 17 {
+			if version != 22 {
 				require.NoError(t, migration.Migrate(version))
 			}
 			before, err := CatalogSchema(context.Background(), db)

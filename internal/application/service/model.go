@@ -85,6 +85,9 @@ func (s *modelService) CreateModel(ctx context.Context, model *types.Model) erro
 	if err := s.validateChatGPTModel(ctx, model); err != nil {
 		return err
 	}
+	if err := model.Parameters.Pricing.Validate(); err != nil {
+		return apperrors.NewValidationError(err.Error())
+	}
 	if err := validateImageEmbeddingModel(model); err != nil {
 		return err
 	}
@@ -259,6 +262,9 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	}
 	if err := s.validateChatGPTModel(ctx, model); err != nil {
 		return err
+	}
+	if err := model.Parameters.Pricing.Validate(); err != nil {
+		return apperrors.NewValidationError(err.Error())
 	}
 	if err := validateImageEmbeddingModel(model); err != nil {
 		return err
@@ -572,7 +578,9 @@ func (s *modelService) GetEmbeddingModel(ctx context.Context, modelId string) (e
 		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
 	}
 
-	embedder, err := embedding.NewEmbedder(embedding.ConfigFromModel(model), s.pooler, s.ollamaService)
+	cfg := embedding.ConfigFromModel(model)
+	cfg.Accounting = s.callAccounting(model)
+	embedder, err := embedding.NewEmbedder(cfg, s.pooler, s.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,
@@ -602,7 +610,9 @@ func (s *modelService) GetRerankModel(ctx context.Context, modelId string) (rera
 		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
 	}
 
-	reranker, err := rerank.NewReranker(rerank.ConfigFromModel(model, s.decryptAppSecret(model.Parameters.AppSecret)))
+	cfg := rerank.ConfigFromModel(model, s.decryptAppSecret(model.Parameters.AppSecret))
+	cfg.Accounting = s.callAccounting(model)
+	reranker, err := rerank.NewReranker(cfg)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,
@@ -658,7 +668,9 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 	if model.Source == types.ModelSourceChatGPT {
 		return s.chatGPTModel(ctx, model)
 	}
-	chatModel, err := chat.NewChat(chat.ConfigFromModel(model), s.ollamaService)
+	cfg := chat.ConfigFromModel(model)
+	cfg.Accounting = s.callAccounting(model)
+	chatModel, err := chat.NewChat(cfg, s.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,

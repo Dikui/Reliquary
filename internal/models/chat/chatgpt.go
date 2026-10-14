@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"reliquary/internal/modelcalls"
 	"reliquary/internal/types"
 	secutils "reliquary/internal/utils"
 )
@@ -101,7 +102,7 @@ func NewChatGPTChat(config *ChatConfig) (*ChatGPTChat, error) {
 	}
 	// Bearer credentials stay on the documented endpoint. Admission redirects
 	// are surfaced as HTTP failures instead of forwarding OAuth credentials.
-	clientCopy := *client
+	clientCopy := *modelcalls.WrapClient(client)
 	clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &ChatGPTChat{
 		modelName: config.ModelName, modelID: config.ModelID,

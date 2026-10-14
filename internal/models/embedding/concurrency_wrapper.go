@@ -24,6 +24,7 @@ func (w *concurrencyEmbedder) EmbedImage(ctx context.Context, image string) ([]f
 	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	defer release()
+	ctx = types.WithModelCallAccounting(ctx, w.accounting)
 	return e.EmbedImage(ctx, image)
 }
 
@@ -44,7 +45,8 @@ func (w *concurrencyEmbedder) EmbedImage(ctx context.Context, image string) ([]f
 // trade-off is that Gate wait time is included in debug timing, which
 // is acceptable for background ingestion.
 type concurrencyEmbedder struct {
-	inner Embedder
+	accounting *types.ModelCallAccounting
+	inner      Embedder
 	// limit is this model's configured per-model background cap; 0 falls back
 	// to the process-wide default (see limiter.GateN).
 	limit             int
@@ -61,6 +63,7 @@ func (w *concurrencyEmbedder) Embed(ctx context.Context, text string) ([]float32
 	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	defer release()
+	ctx = types.WithModelCallAccounting(ctx, w.accounting)
 	return w.inner.Embed(ctx, text)
 }
 
@@ -71,6 +74,7 @@ func (w *concurrencyEmbedder) BatchEmbed(ctx context.Context, texts []string) ([
 	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	defer release()
+	ctx = types.WithModelCallAccounting(ctx, w.accounting)
 	return w.inner.BatchEmbed(ctx, texts)
 }
 
