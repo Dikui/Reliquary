@@ -339,14 +339,14 @@ class AdminStorageTests(unittest.TestCase):
                          "external_completion_attempted": True, "ingest_api_key_id": 7,
                          "ingest_api_key_name": "Original collector", "last_ingest_api_key_id": 8,
                          "last_ingest_api_key_name": "Completion collector", "content_type_hint": "research",
-                         "related_article_id": "original", "missing_materials": [{"type": "image",
+                         "related_entry_id": "original", "missing_materials": [{"type": "image",
                          "source_url": "https://example.test/missing.png", "reason": "Image unavailable"}],
                          "ingest_attachments": [{"asset_id": "asset", "path": "local://original.pdf"}]}],
             "ingest_assets": [{"id": "asset", "space_id": 1, "name": "original.pdf", "file_type": "pdf",
                               "size": len(b"%PDF original bytes"), "path": "local://original.pdf", "created_at": "2026-10-12T00:00:00Z",
                               "referenced_at": "2026-10-12T01:00:00Z", "entry_id": "article"}],
             "ingest_discards": [{"space_id": 1, "normalized_url": "https://example.test/discarded",
-                                "article_id": "discarded", "discarded_at": "2026-10-12T02:00:00Z", "reason": "User discarded"}],
+                                "entry_id": "discarded", "discarded_at": "2026-10-12T02:00:00Z", "reason": "User discarded"}],
             "operation_logs": [{"id": "operation", "api_key_id": 8, "api_key_name": "Completion collector"}],
         }
         for table, rows in tables.items():

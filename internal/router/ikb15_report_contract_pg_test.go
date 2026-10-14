@@ -84,14 +84,14 @@ func TestIKB15ReportContractHTTPAndMCP(t *testing.T) {
 			require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: 1, EntityID: e1.ID, EntityType: e1.EntityType, Alias: "Alias", NormalizedAlias: "alias"}).Error)
 			topic := types.Topic{ID: uuid.NewString(), SpaceID: 1, Name: "Known topic", LibraryIDs: []string{}}
 			require.NoError(t, f.db.Create(&topic).Error)
-			invalid := map[string]any{"title": " ", "markdown": " ", "related_article_ids": []string{"absent", deleted.ID}, "related_entities": []string{"absent", "Shared"}, "topics": []string{"absent"}, "author": "unsupported"}
+			invalid := map[string]any{"title": " ", "markdown": " ", "related_entry_ids": []string{"absent", deleted.ID}, "related_entities": []string{"absent", "Shared"}, "topics": []string{"absent"}, "author": "unsupported"}
 			missing, missingIssue := write(map[string]any{})
 			require.Nil(t, missing)
 			require.Contains(t, missingIssue, "title")
 			require.Contains(t, missingIssue, "markdown")
 			report, issue := write(invalid)
 			require.Nil(t, report)
-			for _, field := range []string{"title", "markdown", "related_article_ids[0]", "related_article_ids[1]", "related_entities[0]", "related_entities[1]", "topics[0]", "author", e1.ID, e2.ID} {
+			for _, field := range []string{"title", "markdown", "related_entry_ids[0]", "related_entry_ids[1]", "related_entities[0]", "related_entities[1]", "topics[0]", "author", e1.ID, e2.ID} {
 				require.Contains(t, issue, field)
 			}
 			report, issue = write(map[string]any{"title": 23, "markdown": false, "related_entities": "Shared", "topics": nil})
@@ -109,12 +109,12 @@ func TestIKB15ReportContractHTTPAndMCP(t *testing.T) {
 			files, err := filepath.Glob(filepath.Join(f.root, "ai-reports", "*.md"))
 			require.NoError(t, err)
 			require.Empty(t, files)
-			nul, nulIssue := write(map[string]any{"title": "\x00", "markdown": "\x00", "request_id": "\x00", "related_article_ids": []string{"\x00"}, "related_entities": []string{"\x00"}, "topics": []string{"\x00"}})
+			nul, nulIssue := write(map[string]any{"title": "\x00", "markdown": "\x00", "request_id": "\x00", "related_entry_ids": []string{"\x00"}, "related_entities": []string{"\x00"}, "topics": []string{"\x00"}})
 			require.Nil(t, nul)
-			for _, field := range []string{"title", "markdown", "request_id", "related_article_ids[0]", "related_entities[0]", "topics[0]"} {
+			for _, field := range []string{"title", "markdown", "request_id", "related_entry_ids[0]", "related_entities[0]", "topics[0]"} {
 				require.Contains(t, nulIssue, field)
 			}
-			input := map[string]any{"title": "Report contract", "markdown": "# Report contract\n\nikb15searchfixture derived analysis.\n\n![chart](https://example.test/chart.png)", "related_article_ids": []string{source.ID, source.ID}, "related_entities": []string{"Alias", e1.ID}, "topics": []string{topic.ID, topic.Name}}
+			input := map[string]any{"title": "Report contract", "markdown": "# Report contract\n\nikb15searchfixture derived analysis.\n\n![chart](https://example.test/chart.png)", "related_entry_ids": []string{source.ID, source.ID}, "related_entities": []string{"Alias", e1.ID}, "topics": []string{topic.ID, topic.Name}}
 			report, issue = write(input)
 			require.Empty(t, issue)
 			require.False(t, report.Existing)
@@ -134,7 +134,7 @@ func TestIKB15ReportContractHTTPAndMCP(t *testing.T) {
 			require.Empty(t, header.Entities)
 			require.Empty(t, header.ContentType)
 			require.Nil(t, header.Summary)
-			retry, issue := write(map[string]any{"title": " Report contract ", "markdown": input["markdown"], "related_article_ids": []string{source.ID}, "related_entities": []string{e1.ID}, "topics": []string{topic.ID}})
+			retry, issue := write(map[string]any{"title": " Report contract ", "markdown": input["markdown"], "related_entry_ids": []string{source.ID}, "related_entities": []string{e1.ID}, "topics": []string{topic.ID}})
 			require.Empty(t, issue)
 			require.True(t, retry.Existing)
 			require.Equal(t, report.ID, retry.ID)
@@ -174,7 +174,7 @@ func TestIKB15ReportContractHTTPAndMCP(t *testing.T) {
 			}
 			require.Contains(t, ids, report.ID)
 			var read service.EntryReadResult
-			mcpCall(t, client, "get_article", map[string]any{"id": report.ID}, &read)
+			mcpCall(t, client, "get_entry", map[string]any{"id": report.ID}, &read)
 			require.True(t, read.CannotBeFact)
 			require.True(t, read.Header.CannotBeFact)
 			for _, table := range []string{"entry_entities", "entry_processing_outputs"} {

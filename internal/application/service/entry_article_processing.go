@@ -288,14 +288,14 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if s.db != nil {
 		if isIngestArticle(k) {
 			var latest types.Entry
-			if err := s.db.WithContext(ctx).Select("acquisition", "incomplete", "external_completion_attempted", "missing_materials", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_article_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
+			if err := s.db.WithContext(ctx).Select("acquisition", "incomplete", "external_completion_attempted", "missing_materials", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_entry_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
 				return err
 			}
 			k.Acquisition, k.Incomplete, k.ExternalCompletionAttempted = latest.Acquisition, latest.Incomplete, latest.ExternalCompletionAttempted
 			k.MissingMaterials = latest.MissingMaterials
 			k.IngestAPIKeyID, k.IngestAPIKeyName = latest.IngestAPIKeyID, latest.IngestAPIKeyName
 			k.LastIngestAPIKeyID, k.LastIngestAPIKeyName = latest.LastIngestAPIKeyID, latest.LastIngestAPIKeyName
-			k.ContentTypeHint, k.RelatedArticleID = latest.ContentTypeHint, latest.RelatedArticleID
+			k.ContentTypeHint, k.RelatedEntryID = latest.ContentTypeHint, latest.RelatedEntryID
 		}
 		var current types.Entry
 		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Select("content_type", "content_type_corrected", "source_unverified", "graph").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&current).Error; err != nil {

@@ -14,7 +14,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `source_ref` | 仅自有型库接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库同来源按最新记录的正文判断重复 |
 | `identifier` | 仅外部长效型库接受。可选 `scheme:value`，最多 2048 Unicode 码点。去两部分首尾空白，scheme 小写，DOI 的 value 也小写。其他 scheme 的值保留大小写。在所属库内参与去重 |
 | `graph` | 可选布尔值，保存在资料上；未提供或 null 表示按库和内容类型默认。非生成型库在处理时依该值和内容类型开关抽取图谱 |
-| `article_id` | 仅补全使用，已有资料 ID。Go 字段名为 `EntryID`；JSON 保留已发布的 `article_id` 契约。普通检索 HTTP 使用 `entry_id`，调用方在接口边界转换名称，不要提交未知的 `entry_id` 收录字段 |
+| `entry_id` | 仅补全使用，已有资料 ID。HTTP 与 MCP 均使用 `entry_id`，不接受旧字段别名 |
 | `url` | 可选来源链接，可为空；非空必须为 HTTP 或 HTTPS，最多 2048 字节。现有外部来源审核仍可能要求链接 |
 | `title` | 可选标题，最多 255 个码点；AI 报告需要标题 |
 | `author`、`publisher`、`published_at` | 可选来源信息；日期使用 YYYY-MM-DD 或 RFC3339 |
@@ -89,15 +89,15 @@ AI 报告：
 
 来源未核实标记在 HTTP/MCP 收录结果、资料列表、详情、正文读取、检索和关注动态返回中保留。网页沿用已有标记位置。缺链接的待审条目继续支持补链接并重新审核、明确确认无链接入库、确认不收录。补上链接后清除未核实标记；无链接手工入库仍标记未核实。
 
-图片缺失继续进入待补全。调用方按 `library` 与 `article_id` 定位原资料，补全成功后重新处理，撤换旧关系证据并重新计算正文位置；缺少图片与来源证据不足分别处理。长文按文末规则分段审核。
+图片缺失继续进入待补全。调用方按 `library` 与 `entry_id` 定位原资料，补全成功后重新处理，撤换旧关系证据并重新计算正文位置；缺少图片与来源证据不足分别处理。长文按文末规则分段审核。
 
 ## 来源标识与结果
 
-自有型库同一 `source_ref` 的正文，按规范 Markdown（含追加片段、引用和图片稳定标识）去首尾空白、统一空白后计算 SHA-256，与最新一条比较。相同则返回 `exists` 和已有 `article_id`；不同则保存新资料，保留旧记录。再次提交较早的正文也会产生新记录。无 `source_ref` 时按正文哈希去重；不同库互不影响。
+自有型库同一 `source_ref` 的正文，按规范 Markdown（含追加片段、引用和图片稳定标识）去首尾空白、统一空白后计算 SHA-256，与最新一条比较。相同则返回 `exists` 和已有 `entry_id`；不同则保存新资料，保留旧记录。再次提交较早的正文也会产生新记录。无 `source_ref` 时按正文哈希去重；不同库互不影响。
 
-资料详情、HTTP 收录结果、MCP 收录与 `get_article` 返回 `source_ref`、`identifier`、`graph`、`source_unverified`、`has_update`、`latest_article_id`。`has_update=true` 表示存在更新记录，`latest_article_id` 指向同库同来源最新的未删除记录。最新记录本身返回 false 与自己的 ID；无来源标识时不提供最新 ID。历史记录的查询、正文与时间保持不变。
+资料详情、HTTP 收录结果、MCP 收录与 `get_entry` 返回 `source_ref`、`identifier`、`graph`、`source_unverified`、`has_update`、`latest_entry_id`。`has_update=true` 表示存在更新记录，`latest_entry_id` 指向同库同来源最新的未删除记录。最新记录本身返回 false 与自己的 ID；无来源标识时不提供最新 ID。历史记录的查询、正文与时间保持不变。
 
-逐项结果另含 `index`、`library_id`、`article_id`、`status`、`message`、`reason`、`image_failures`、`completeness`。状态包括 `accepted`、`exists`、`supplemented`、`pending_review`、`conflict`、`discarded`、`invalid`。无效项原因可包含：
+逐项结果另含 `index`、`library_id`、`entry_id`、`status`、`message`、`reason`、`image_failures`、`completeness`。状态包括 `accepted`、`exists`、`supplemented`、`pending_review`、`conflict`、`discarded`、`invalid`。无效项原因可包含：
 
 | 错误 | 返回方式与信息 |
 | --- | --- |
@@ -129,12 +129,12 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 补全只凭库与资料 ID 定位，无须 URL 或再次提交正文：
 
 ```json
-{"items":[{"library":"mine","article_id":"首次收录返回的 article_id","images":[{"asset_id":"上传返回的 asset_id","source_url":"https://example.org/chart.png"}]}]}
+{"items":[{"library":"mine","entry_id":"首次收录返回的 entry_id","images":[{"asset_id":"上传返回的 asset_id","source_url":"https://example.org/chart.png"}]}]}
 ```
 
 补全把正文中匹配的图片引用替换为本地路径，文字保持原样。可选 `content` 用于旧有正文冲突检查；不同正文另存关联收录待审，返回 `conflict`，不覆盖原资料。保留原有规范化与近似正文比较规则。不能用相同 URL 自动补全。图片替换后重新计算保存正文的哈希和位置，检索与关系证据使用更新后的坐标。
 
-`GET /api/v1/ingest/incomplete?page=1&page_size=20` 列出待补全资料，含 `article_id`、`library_id` 与缺失图片。`include_attempted=false` 排除已尝试补全一次的资料。`POST /api/v1/ingest/:id/accept-incomplete` 接受缺失，`POST /api/v1/ingest/:id/discard` 丢弃资料，可附 `reason`。
+`GET /api/v1/ingest/incomplete?page=1&page_size=20` 列出待补全资料，含 `entry_id`、`library_id` 与缺失图片。`include_attempted=false` 排除已尝试补全一次的资料。`POST /api/v1/ingest/:id/accept-incomplete` 接受缺失，`POST /api/v1/ingest/:id/discard` 丢弃资料，可附 `reason`。
 
 ## 长度和传输上限
 
@@ -161,12 +161,12 @@ MCP 工具 `write_report` 与 HTTP `POST /api/v1/reports` 使用同一 JSON 对�
 | `title` | string | 必填，去掉首尾空白后 1 至 255 个 Unicode 字符 |
 | `markdown` | string | 必填，非空 UTF-8 Markdown，最多 5000000 个 Unicode 字符；保留正文文字 |
 | `library` | string | 可省略；仅接受 `ai-reports` 或该系统库 ID |
-| `related_article_ids` | string[] | 可选，每个 ID 必须属于当前空间、存在且未删除；可跨库引用 |
+| `related_entry_ids` | string[] | 可选，每个 ID 必须属于当前空间、存在且未删除；可跨库引用 |
 | `related_entities` | string[] | 可选，按实体 ID 优先，其次规范名或别名精确规范化匹配；必须已存在且未合并；多个候选时拒绝并返回候选 ID、规范名和类型 |
 | `topics` | string[] | 可选，已有主题的 ID 或名称，ID 优先；不新建主题 |
 | `request_id` | string | 可选，首尾空白去除后最多 255 个 Unicode 字符；非空时优先作为幂等键 |
 
-可选列表字段省略或使用空数组；不接受 `null`。所有文本字段禁止 NUL 字符。未知字段逐项拒绝。来源链接、作者、发布者、摘要、内容类型、图谱开关均不属于 `write_report` 契约；旧 MCP 与 HTTP 文档未定义这些字段，旧 HTTP 曾静默忽略未知字段；现在 HTTP 与 MCP 一致拒绝。引用来源用 `related_article_ids` 表达，正文中的普通链接照常保存。
+可选列表字段省略或使用空数组；不接受 `null`。所有文本字段禁止 NUL 字符。未知字段逐项拒绝。来源链接、作者、发布者、摘要、内容类型、图谱开关均不属于 `write_report` 契约；旧 MCP 与 HTTP 文档未定义这些字段，旧 HTTP 曾静默忽略未知字段；现在 HTTP 与 MCP 一致拒绝。引用来源用 `related_entry_ids` 表达，正文中的普通链接照常保存。
 
 格式错误整体返回 HTTP 400，`details.fields` 列出全部问题；MCP 返回 `isError=true`，文本中包含同一字段错误集合。每项包含 `field`、`message`，实体多候选另含 `candidates`。错误请求不写资料、文件、操作日志或索引任务。
 
@@ -184,7 +184,7 @@ HTTP 示例，ID 用现有资料、实体和主题替换：
 {
   "title": "研究报告",
   "markdown": "# 研究报告\n\n这是综合分析，不能当作事实。",
-  "related_article_ids": ["已有资料ID"],
+  "related_entry_ids": ["已有资料ID"],
   "related_entities": ["已有实体ID", "已有实体别名"],
   "topics": ["已有主题ID"],
   "request_id": "agent-report-20261014-01"
@@ -194,16 +194,16 @@ HTTP 示例，ID 用现有资料、实体和主题替换：
 MCP 使用同一对象作为 `arguments`：
 
 ```json
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_report","arguments":{"title":"研究报告","markdown":"# 研究报告\n\n综合分析内容。","related_article_ids":["已有资料ID"],"related_entities":["已有实体ID"],"topics":["已有主题ID"],"request_id":"agent-report-20261014-02"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_report","arguments":{"title":"研究报告","markdown":"# 研究报告\n\n综合分析内容。","related_entry_ids":["已有资料ID"],"related_entities":["已有实体ID"],"topics":["已有主题ID"],"request_id":"agent-report-20261014-02"}}}
 ```
 
 错误示例，以下请求整体拒绝：
 
 ```json
-{"title":" ","markdown":" ","related_article_ids":["不存在的资料"],"related_entities":["不存在的实体","有多个候选的名字"],"topics":["不存在的主题"],"author":"不支持的字段"}
+{"title":" ","markdown":" ","related_entry_ids":["不存在的资料"],"related_entities":["不存在的实体","有多个候选的名字"],"topics":["不存在的主题"],"author":"不支持的字段"}
 ```
 
-HTTP 的 `details.fields` 包括 `title`、`markdown`、`related_article_ids[0]`、`related_entities[0]`、`related_entities[1]`、`topics[0]` 与 `author`；多候选项形如：
+HTTP 的 `details.fields` 包括 `title`、`markdown`、`related_entry_ids[0]`、`related_entities[0]`、`related_entities[1]`、`topics[0]` 与 `author`；多候选项形如：
 
 ```json
 {"field":"related_entities[1]","message":"ambiguous entity; use an ID","candidates":[{"id":"公司实体ID","name":"同名","entity_type":"company"},{"id":"产品实体ID","name":"同名","entity_type":"product"}]}

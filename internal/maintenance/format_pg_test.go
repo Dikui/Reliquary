@@ -14,7 +14,7 @@ import (
 )
 
 func TestLegacyReplicasImportCurrentRowsAndPreserveOpaqueValues(t *testing.T) {
-	for _, format := range []int{1, 2, 3, 4} {
+	for _, format := range []int{1, 2, 3, 4, 5} {
 		t.Run(fmt.Sprint(format), func(t *testing.T) {
 			ctx := context.Background()
 			source := pgtest.Open(t)
@@ -54,7 +54,7 @@ func TestLegacyReplicasImportCurrentRowsAndPreserveOpaqueValues(t *testing.T) {
 						continue
 					}
 					table := strings.TrimSuffix(filepath.Base(file.Path), ".json")
-					rows := namedRows(snapshot.Tables[table], true, format)
+					rows := entryNamedRows(table, snapshot.Tables[table], true, format)
 					contents, err := json.MarshalIndent(rows, "", "  ")
 					require.NoError(t, err)
 					contents = append(contents, '\n')

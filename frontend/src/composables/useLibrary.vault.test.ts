@@ -47,18 +47,18 @@ test('article details retain vault source and path from the actual API loading h
 
 test('detail loading retains incomplete material data and changing documents clears every ingest field', async () => {
   const missing = [{ type: 'image', source_url: 'https://example.com/source.png', reason: 'Login required', api_key_name: 'Collector', submitted_at: '2026-10-12T08:00:00Z' }]
-  const hook = createHook(async id => ({ success: true, data: { id, updated_at: '2026-10-12T00:00:00Z', ...(id === 'incomplete' ? { acquisition: 'model_written', incomplete: true, missing_materials: missing, external_completion_attempted: true, related_article_id: 'original' } : {}) } }))
+  const hook = createHook(async id => ({ success: true, data: { id, updated_at: '2026-10-12T00:00:00Z', ...(id === 'incomplete' ? { acquisition: 'model_written', incomplete: true, missing_materials: missing, external_completion_attempted: true, related_entry_id: 'original' } : {}) } }))
   hook.getCardDetails({ id: 'incomplete' }); await settle()
   assert.equal(hook.details.acquisition, 'model_written')
   assert.equal(hook.details.incomplete, true)
   assert.equal(hook.details.external_completion_attempted, true)
-  assert.equal(hook.details.related_article_id, 'original')
+  assert.equal(hook.details.related_entry_id, 'original')
   assert.deepEqual(hook.details.missing_materials, missing)
   hook.getCardDetails({ id: 'complete' })
   assert.equal(hook.details.acquisition, undefined)
   assert.equal(hook.details.incomplete, false)
   assert.equal(hook.details.external_completion_attempted, false)
-  assert.equal(hook.details.related_article_id, '')
+  assert.equal(hook.details.related_entry_id, '')
   assert.deepEqual(hook.details.missing_materials, [])
   await settle()
   assert.equal(hook.details.acquisition, undefined)
@@ -117,10 +117,10 @@ test('same document refresh ignores an older detail response and missing process
 })
 
 test('old source details retain update links and clearing or switching resets them', async () => {
- const hook=createHook(async id=>({success:true,data:{id,updated_at:'2026-10-14T00:00:00Z',...(id==='old'?{has_update:true,latest_article_id:'latest'}:{})}}))
+ const hook=createHook(async id=>({success:true,data:{id,updated_at:'2026-10-14T00:00:00Z',...(id==='old'?{has_update:true,latest_entry_id:'latest'}:{})}}))
  hook.getCardDetails({id:'old'});await settle()
- assert.equal(hook.details.has_update,true);assert.equal(hook.details.latest_article_id,'latest')
+ assert.equal(hook.details.has_update,true);assert.equal(hook.details.latest_entry_id,'latest')
  hook.getCardDetails({id:'latest'})
- assert.equal(hook.details.has_update,false);assert.equal(hook.details.latest_article_id,'')
+ assert.equal(hook.details.has_update,false);assert.equal(hook.details.latest_entry_id,'')
  await settle();assert.equal(hook.details.has_update,false)
 })

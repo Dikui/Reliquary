@@ -91,6 +91,6 @@ func TestGraphReplicaMergeUpgrade18To22(t *testing.T) {
 	require.NoError(t, ValidateClassification(context.Background(), db))
 	version, dirty, err := m.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 22, version)
+	require.EqualValues(t, pgtest.LatestMigrationVersion(t), version)
 	require.False(t, dirty)
 }

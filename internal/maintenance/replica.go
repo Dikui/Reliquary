@@ -329,7 +329,8 @@ func replicaFilesForFormat(snapshot *Snapshot, format int) (map[string][]byte, e
 			dir = "config"
 		}
 		if format < FormatVersion {
-			table, rows = legacyTable(table, format), namedRows(rows, true, format)
+			rows = entryNamedRows(table, rows, true, format)
+			table = legacyTable(table, format)
 		}
 		data, err := json.MarshalIndent(rows, "", "  ")
 		if err != nil {

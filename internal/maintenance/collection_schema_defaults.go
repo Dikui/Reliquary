@@ -10,7 +10,7 @@ import (
 var entryIngestDefaults = map[string]any{
 	"acquisition": "", "incomplete": false, "external_completion_attempted": false,
 	"ingest_api_key_id": json.Number("0"), "ingest_api_key_name": "", "last_ingest_api_key_id": json.Number("0"), "last_ingest_api_key_name": "",
-	"missing_materials": []any{}, "ingest_attachments": []any{}, "content_type_hint": "", "related_article_id": "",
+	"missing_materials": []any{}, "ingest_attachments": []any{}, "content_type_hint": "", "related_entry_id": "",
 }
 var logIngestDefaults = map[string]any{"api_key_id": json.Number("0"), "api_key_name": ""}
 var initialMaintenanceData = map[string]any{
@@ -74,6 +74,9 @@ func projectCollectionSchemaDefaults(expected, actual *Manifest, legacyFormat in
 		}
 		missing := map[string]any{}
 		for column, value := range defaults {
+			if actual.SchemaVersion < 23 {
+				column = entryColumn(table, column, true)
+			}
 			if !columns[column] {
 				missing[column] = value
 				entry.Columns = append(entry.Columns, column)

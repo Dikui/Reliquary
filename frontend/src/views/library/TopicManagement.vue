@@ -120,17 +120,17 @@ onUnmounted(() => { disposed = true; generation++; clearTimeout(pollTimer) })
     <t-loading :loading="loading">
       <ul v-if="topics.length" class="topic-list">
         <li v-for="topic in topics" :key="topic.id" class="topic-card">
-          <div class="topic-heading"><h2>{{ topic.name }}</h2><span>{{ t('topicManagement.articleCount', { count: topic.article_count }) }}</span></div>
+          <div class="topic-heading"><h2>{{ topic.name }}</h2><span>{{ t('topicManagement.articleCount', { count: topic.entry_count }) }}</span></div>
           <p class="topic-description">{{ topic.description || t('topicManagement.noDescription') }}</p>
           <div v-if="progress[topic.id]" class="topic-progress" aria-live="polite">
             <span>{{ t(`topicManagement.status.${progress[topic.id]!.status}`) }}</span>
             <span>{{ t('topicManagement.progress', { processed: progress[topic.id]!.processed, total: progress[topic.id]!.total }) }}</span>
-            <span>{{ t('topicManagement.failures', { articles: progress[topic.id]!.failed_articles, batches: progress[topic.id]!.failed_batches }) }}</span>
+            <span>{{ t('topicManagement.failures', { articles: progress[topic.id]!.failed_entries, batches: progress[topic.id]!.failed_batches }) }}</span>
             <progress :value="progress[topic.id]!.processed" :max="Math.max(1, progress[topic.id]!.total)" :aria-label="t('topicManagement.historyProgress')" />
             <t-button v-if="progress[topic.id]!.failed_batches > 0" size="small" variant="outline" :loading="retrying[topic.id]" :disabled="active(progress[topic.id])" @click="retry(topic.id)">{{ t('topicManagement.retryFailedBatches') }}</t-button>
           </div>
           <ul v-if="progress[topic.id]?.batches?.some(batch => batch.status === 'failed')" class="topic-batch-errors">
-            <li v-for="batch in progress[topic.id]!.batches!.filter(batch => batch.status === 'failed')" :key="batch.id">{{ t('topicManagement.batchFailure', { ordinal: batch.ordinal, count: batch.article_count, attempts: batch.attempts, reason: batch.error || t('common.error') }) }}</li>
+            <li v-for="batch in progress[topic.id]!.batches!.filter(batch => batch.status === 'failed')" :key="batch.id">{{ t('topicManagement.batchFailure', { ordinal: batch.ordinal, count: batch.entry_count, attempts: batch.attempts, reason: batch.error || t('common.error') }) }}</li>
           </ul>
           <div v-if="progressErrors[topic.id]" class="topic-error" role="alert">{{ progressErrors[topic.id] }} <t-button size="small" variant="text" @click="readProgress(topic.id).then(schedulePoll)">{{ t('common.retry') }}</t-button></div>
           <div class="topic-actions"><FollowToggle target-type="topic" :target-id="topic.id" :name="topic.name" /><t-button size="small" variant="outline" @click="openEditor(topic)">{{ t('topicManagement.edit') }}</t-button><t-button size="small" variant="text" theme="danger" @click="requestDelete(topic)">{{ t('common.delete') }}</t-button></div>

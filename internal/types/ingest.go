@@ -19,7 +19,7 @@ const (
 // Agent annotations are stored separately from article metadata and processing input.
 type IngestRequest struct {
 	Library            string             `json:"library"`
-	EntryID            string             `json:"article_id,omitempty"`
+	EntryID            string             `json:"entry_id,omitempty"`
 	SourceRef          string             `json:"source_ref,omitempty"`
 	Identifier         string             `json:"identifier,omitempty"`
 	Graph              *bool              `json:"graph"`
@@ -88,9 +88,9 @@ type IngestResult struct {
 	Identifier       string               `json:"identifier,omitempty"`
 	Graph            *bool                `json:"graph"`
 	HasUpdate        bool                 `json:"has_update"`
-	LatestEntryID    string               `json:"latest_article_id,omitempty"`
+	LatestEntryID    string               `json:"latest_entry_id,omitempty"`
 	Index            int                  `json:"index"`
-	EntryID          string               `json:"article_id"`
+	EntryID          string               `json:"entry_id"`
 	Status           string               `json:"status"`
 	Message          string               `json:"message"`
 	Reason           string               `json:"reason"`
@@ -112,7 +112,7 @@ type IngestCheckResult struct {
 	Reason     string `json:"reason,omitempty"`
 	URL        string `json:"url"`
 	Status     string `json:"status"`
-	EntryID    string `json:"article_id"`
+	EntryID    string `json:"entry_id"`
 	Incomplete bool   `json:"incomplete"`
 }
 type IngestCheckResponse struct {
@@ -123,7 +123,7 @@ type IncompleteArticle struct {
 	SourceUnverified            bool            `json:"source_unverified"`
 	LibraryTemplate             string          `json:"library_template"`
 	LibraryID                   string          `json:"library_id"`
-	EntryID                     string          `json:"article_id"`
+	EntryID                     string          `json:"entry_id"`
 	URL                         string          `json:"url"`
 	Title                       string          `json:"title"`
 	Acquisition                 string          `json:"acquisition"`
@@ -151,7 +151,7 @@ type IngestAsset struct {
 	Path         string     `json:"-"`
 	CreatedAt    time.Time  `json:"created_at"`
 	ReferencedAt *time.Time `json:"referenced_at,omitempty"`
-	EntryID      string     `json:"article_id,omitempty"`
+	EntryID      string     `json:"entry_id,omitempty"`
 }
 
 func (IngestAsset) TableName() string { return "ingest_assets" }
@@ -161,7 +161,7 @@ type IngestDiscard struct {
 	LibraryID     string    `json:"library_id" gorm:"primaryKey"`
 	Fingerprint   string    `json:"fingerprint" gorm:"primaryKey"`
 	NormalizedURL string    `json:"normalized_url"`
-	EntryID       string    `json:"article_id" gorm:"column:article_id"`
+	EntryID       string    `json:"entry_id" gorm:"column:entry_id"`
 	DiscardedAt   time.Time `json:"discarded_at"`
 	Reason        string    `json:"reason"`
 }

@@ -68,7 +68,7 @@ export const useFollowStore = defineStore('follows', () => {
       if (!response.success) throw new Error(response.message)
       mutationEpoch++
       targets.value = targets.value.filter(target => target.target_type !== type || target.target_id !== id)
-      if (following) targets.value.push(response.data || { target_type: type, target_id: id, name, created_at: new Date().toISOString(), recent_article_count: 0 })
+      if (following) targets.value.push(response.data || { target_type: type, target_id: id, name, created_at: new Date().toISOString(), recent_entry_count: 0 })
       void refreshState()
     } finally { delete pending.value[targetKey] }
   }

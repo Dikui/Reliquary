@@ -125,7 +125,7 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 // document-related PostgreSQL queue payload. Kept narrow so we don't accidentally
 // depend on the full payload schema and survive future field churn.
 type deadLetterEntryPayload struct {
-	EntryID string `json:"knowledge_id,omitempty"`
+	EntryID string `json:"entry_id,omitempty"`
 	// Attempt threads through DocumentProcess / ManualProcess payloads
 	// so the dead-letter callback can also close the
 	// matching root span as failed. Older in-flight payloads without
@@ -141,7 +141,7 @@ var taskTypesAffectingEntryStatus = map[string]struct{}{
 }
 
 type deadLetterEntryListDeletePayload struct {
-	EntryIDs []string `json:"knowledge_ids,omitempty"`
+	EntryIDs []string `json:"entry_ids,omitempty"`
 }
 
 // newDeadLetterEntryFailer returns the callback wired into the PostgreSQL queue

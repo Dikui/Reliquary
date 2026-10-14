@@ -140,16 +140,16 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		var existing types.Entry
 		err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, request.EntryID).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, werrors.NewBadRequestError("article_id does not identify an existing entry")
+			return nil, werrors.NewBadRequestError("entry_id does not identify an existing entry")
 		}
 		if err != nil {
 			return nil, err
 		}
 		if existing.LibraryID != library.ID {
-			return nil, werrors.NewBadRequestError("article_id belongs to a different library")
+			return nil, werrors.NewBadRequestError("entry_id belongs to a different library")
 		}
 		if !existing.Incomplete {
-			return nil, werrors.NewBadRequestError("article_id is not awaiting image completion")
+			return nil, werrors.NewBadRequestError("entry_id is not awaiting image completion")
 		}
 		return s.supplementIngest(ctx, library, &existing, request, keyID, keyName)
 	}
@@ -358,7 +358,7 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	}
 	if request.EntryID != "" {
 		if _, err := uuid.Parse(request.EntryID); err != nil {
-			return bad("article_id must be a UUID")
+			return bad("entry_id must be a UUID")
 		}
 		if len(request.Images) == 0 {
 			return bad("image completion requires images")

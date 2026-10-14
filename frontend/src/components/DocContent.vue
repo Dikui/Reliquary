@@ -274,7 +274,7 @@ const applyIncompleteChange = () => {
   applyProcessingState({ incomplete: false, missing_materials: [] });
   emit('reviewChanged', props.details, false);
 };
-const applyArticleJudgment = (value: Record<string, unknown>) => {
+const applyEntryJudgment = (value: Record<string, unknown>) => {
   applyProcessingState(value);
   emit('reviewChanged', props.details, false);
 };
@@ -1266,13 +1266,13 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             </div>
           </details>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
-        <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_article_id" />
+        <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
           <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
             <MissingMaterials :items="details.missing_materials || []" />
             <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />
           </section>
-          <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" />
-          <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" />
+          <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('library.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('library.parsingFailed') }}</p>
         </section>

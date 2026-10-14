@@ -20,7 +20,7 @@ func projectDiscardSnapshot(snapshot *Snapshot) {
 			continue
 		}
 		space := fmt.Sprint(row["space_id"])
-		library := owners[space+":"+stringValue(row["article_id"])]
+		library := owners[space+":"+stringValue(row["entry_id"])]
 		if library == "" {
 			library = "legacy-space:" + space
 		}

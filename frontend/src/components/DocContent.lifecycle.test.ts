@@ -112,7 +112,7 @@ test('mounted detail switches full-text articles, closes and unmounts without un
     app.config.errorHandler = error => errors.push(error)
     app.config.warnHandler = warning => warnings.push(warning)
     const root = node(); app.mount(root); await nextTick()
-    Object.assign(props.details, { has_update:true, latest_article_id:'latest' }); await nextTick()
+    Object.assign(props.details, { has_update:true, latest_entry_id:'latest' }); await nextTick()
     const flatten = (n: HostNode): HostNode[] => [n, ...n.children.flatMap(flatten)]
     assert.equal(flatten(root).find(n=>n.props?.href==='/platform/entries?entry_id=latest')?.props?.href, '/platform/entries?entry_id=latest')
     const beforeVaultMetadata = imageHydrations

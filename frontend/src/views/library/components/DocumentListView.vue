@@ -9,7 +9,7 @@ import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
-import type { ArticleJudgment } from '@/api/entry-judgments';
+import type { EntryJudgment } from '@/api/entry-judgments';
 import type { ClassifiedEntry } from '@/types/entryClassification';
 
 interface EntryItem extends ClassifiedEntry {
@@ -37,7 +37,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'open', item: EntryItem): void;
   (e: 'open-entity', id: string): void;
-  (e: 'judgment-updated', value: ArticleJudgment): void;
+  (e: 'judgment-updated', value: EntryJudgment): void;
   (e: 'toggle-row', id: string, checked: boolean, shiftKey: boolean): void;
   (e: 'toggle-all', checked: boolean): void;
   (e: 'action', action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem): void;
@@ -200,7 +200,7 @@ const openDelete = async (item: EntryItem) => {
             <span class="row-file-name" :title="item.file_name">{{ item.file_name }}</span>
 
             <EntryClassification :entry="item" compact @open-entity="emit('open-entity', $event)" />
-        <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_article_id" />
+        <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_entry_id" />
           </div>
         </div>
 

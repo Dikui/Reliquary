@@ -415,10 +415,10 @@ test('personal document search results render the content type returned by the A
 })
 
 for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: real search results show an update link and global grouping retains the latest ID`,async()=>{
- const api=ingestSearchAPI({source:'mine',has_update:true,latest_article_id:'latest-record'})
+ const api=ingestSearchAPI({source:'mine',has_update:true,latest_entry_id:'latest-record'})
  const result=await pageScenario(async state=>{state.query.value='Launch';await state.runSearch()},api.searchEntries,locale)
  assert.ok(result.html.includes(messages[locale].ikb18.hasUpdate))
  assert.ok(result.html.includes('/platform/entries?entry_id=latest-record'))
- const groups=evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts',import.meta.url),'utf8'),{'@/utils/search':helpers,'@/api/search':{}}).articleFileGroups([{...article,source:'mine',has_update:true,latest_article_id:'latest-record'}])
- assert.equal(groups[0].has_update,true);assert.equal(groups[0].latest_article_id,'latest-record')
+ const groups=evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts',import.meta.url),'utf8'),{'@/utils/search':helpers,'@/api/search':{}}).articleFileGroups([{...article,source:'mine',has_update:true,latest_entry_id:'latest-record'}])
+ assert.equal(groups[0].has_update,true);assert.equal(groups[0].latest_entry_id,'latest-record')
 })

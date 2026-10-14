@@ -2,13 +2,13 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { correctEntryContentType, correctEntryTopics, type ArticleJudgment } from '@/api/entry-judgments'
+import { correctEntryContentType, correctEntryTopics, type EntryJudgment } from '@/api/entry-judgments'
 import { listTopics, type Topic } from '@/api/topics'
 import { getEntryDetails } from '@/api/library'
 import EntryStarToggle from './EntryStarToggle.vue'
 
-const props = defineProps<{ entry: ArticleJudgment; disabled?: boolean }>()
-const emit = defineEmits<{ updated: [value: ArticleJudgment]; 'busy-change': [value: boolean] }>()
+const props = defineProps<{ entry: EntryJudgment; disabled?: boolean }>()
+const emit = defineEmits<{ updated: [value: EntryJudgment]; 'busy-change': [value: boolean] }>()
 const { t } = useI18n()
 const typeDraft = ref<string>(''), topicDraft = ref<string[]>([])
 const topics = ref<Topic[]>([]), optionsLoading = ref(false), optionsError = ref('')

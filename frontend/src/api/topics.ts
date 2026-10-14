@@ -1,18 +1,18 @@
 import { get, post, put, del } from '@/utils/request'
 import type { EntryTopic } from '@/types/entryClassification'
 
-export interface Topic extends EntryTopic { library_ids?: string[]; article_count: number; created_at: string; updated_at: string }
+export interface Topic extends EntryTopic { library_ids?: string[]; entry_count: number; created_at: string; updated_at: string }
 export interface TopicBackfill {
   id: string
   topic_id: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   total: number
   processed: number
-  failed_articles: number
+  failed_entries: number
   failed_batches: number
   created_at: string
   updated_at: string
-  batches?: { id: string; ordinal: number; article_count: number; status: string; attempts: number; error?: string }[]
+  batches?: { id: string; ordinal: number; entry_count: number; status: string; attempts: number; error?: string }[]
 }
 export interface TopicEnvelope<T> { success: boolean; data: T; message?: string }
 export interface TopicInput { library_ids?: string[]; name: string; description: string }

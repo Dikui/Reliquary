@@ -18,15 +18,15 @@ The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/W
 | Storage | Every content type retains the full Markdown text and supplied images |
 | File library | Every library has its own English directory: `institutional/`, `opinions/`, `references/`, `mine/`, `ai-reports/`, or a custom directory. All use the same database-owned header and full Markdown body; images live in `attachments/<entry-id>/` |
 | Search | Hybrid full-text and vector retrieval, merged entry results, filters for content type, entities, topics, publication dates, stars, and library; similar reporting can be collapsed |
-| Personal decisions | Star articles, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical article summaries |
-| External AI | MCP supports search, article reading, collection, pending review, stars, entity/topic lookup, and writing AI reports |
+| Personal decisions | Star entries, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical entry summaries |
+| External AI | MCP supports search, entry reading, collection, pending review, stars, entity/topic lookup, and writing AI reports |
 | Graph search | Query 1 to 3 hops or paths within selected libraries, with source entries and body positions; no model calls |
 | Evaluation and accounting | Question sets, five retrieval metrics, run comparison, and model call price snapshots |
 | Administration | Library, models, file library status, operation log, API integration, and runtime queues |
 
 Article bodies become final when all missing material is supplied or you accept the missing material. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates all library headers in one direction; refresh and rebuild overwrite manual edits in Obsidian. File names use a title slug and the first eight ID characters, with no monthly subdirectories. See [header fields and replica registration](docs/maintenance-data.md#按库文件与统一表头).
 
-The Web UI provides article management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. Content enters only through external tools using HTTP intake or MCP, as required Markdown text with supplied images. Images are uploaded by the caller. Missing images remain visible as missing material. RSS subscriptions, URL imports, browser uploads, and manual entry are removed. Existing articles and their RSS or Web source labels remain readable. See [ADR 0012](docs/adr/0012-ingest-only-no-collection.md), [CONTEXT.md](CONTEXT.md), and the [intake](docs/ingest-api.md), [ordinary and graph search](docs/search-api.md), [relations](docs/relations-api.md), [evaluation](docs/search-evaluation-api.md), and [model calls](docs/model-calls.md) references.
+The Web UI provides entry management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. Content enters only through external tools using HTTP intake or MCP, as required Markdown text with supplied images. Images are uploaded by the caller. Missing images remain visible as missing material. RSS subscriptions, URL imports, browser uploads, and manual entry are removed. Existing entries and their RSS or Web source labels remain readable. See [ADR 0012](docs/adr/0012-ingest-only-no-collection.md), [CONTEXT.md](CONTEXT.md), and the [intake](docs/ingest-api.md), [ordinary and graph search](docs/search-api.md), [relations](docs/relations-api.md), [evaluation](docs/search-evaluation-api.md), and [model calls](docs/model-calls.md) references.
 
 ## Run from source
 
@@ -48,7 +48,7 @@ The frontend build helper installs dependencies with `npm ci` during a normal in
 
 Keep the file library, uploaded resources, and backups outside the Desktop and Documents folders.
 
-Open the `vault/` directory itself in Obsidian. Exclude `attachments/` and `.reliquary/` from Obsidian search, and leave generated article headers and `.reliquary/` unchanged. Reading settings in `.obsidian/` are backed up and ignored during verification and indexing.
+Open the `vault/` directory itself in Obsidian. Exclude `attachments/` and `.reliquary/` from Obsidian search, and leave generated entry headers and `.reliquary/` unchanged. Reading settings in `.obsidian/` are backed up and ignored during verification and indexing.
 
 By default the Web UI is at `http://localhost`, and the backend API is at `http://localhost:8080`. The first successful registration closes further registration. The single user and valid API keys have full access to the personal space. Deploy on your private network.
 
@@ -92,3 +92,5 @@ Integration tests require PostgreSQL, Redis, and Neo4j endpoints documented in t
 ## License
 
 [MIT](LICENSE). Upstream attribution and third-party licenses remain in the repository.
+
+Entry IDs use `entry_id` and lists use `entry_ids` across HTTP and MCP. Read content with `get_entry` and cite report sources with `related_entry_ids`. Retired field and tool aliases are not accepted.

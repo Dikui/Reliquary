@@ -57,7 +57,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   return html
 }
 const notifications = { MessagePlugin: { success() {} } }
-const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions and research', article_count: 3, created_at: '', updated_at: '' }
+const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions and research', entry_count: 3, created_at: '', updated_at: '' }
 const article = { id: 'article-a', content_type: 'event', processing_mode: 'full', starred: false, topics: [{ id: 'old-topic', name: 'Old topic' }], parse_status: 'completed' }
 function judgments(api: Record<string, unknown>, details?: unknown, notificationModule: { MessagePlugin: { success: (message: string) => unknown } } = notifications) {
   return component('../../components/EntryArticleJudgments.vue', {
@@ -120,7 +120,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: topic management renders counts and failed batches, retries, creates, edits and deletes`, async () => {
     const calls: unknown[] = []
-    let run = { id: 'run-a', topic_id: topic.id, status: 'failed', total: 31, processed: 31, failed_articles: 1, failed_batches: 1, batches: [{ id: 'batch-a', ordinal: 2, article_count: 1, status: 'failed', attempts: 1, error: 'Model timeout' }] }
+    let run = { id: 'run-a', topic_id: topic.id, status: 'failed', total: 31, processed: 31, failed_entries: 1, failed_batches: 1, batches: [{ id: 'batch-a', ordinal: 2, entry_count: 1, status: 'failed', attempts: 1, error: 'Model timeout' }] }
     const view = component('./TopicManagement.vue', {
       '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
       '@/api/topics': {
@@ -128,7 +128,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         createTopic: async (input: any) => { calls.push(['create', input]); return { success: true, data: topic } },
         updateTopic: async (id: string, input: any) => { calls.push(['update', id, input]); return { success: true, data: topic } },
         deleteTopic: async (id: string) => { calls.push(['delete', id]); return { success: true } },
-        retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_articles: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
+        retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_entries: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
       },
     })
     const html = await render(view, {}, locale, async state => { await state.load() })
@@ -143,7 +143,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         createTopic: async (input: any) => { calls.push(['create', input]); return { success: true, data: topic } },
         updateTopic: async (id: string, input: any) => { calls.push(['update', id, input]); return { success: true, data: topic } },
         deleteTopic: async (id: string) => { calls.push(['delete', id]); return { success: true } },
-        retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_articles: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
+        retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_entries: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
       },
     })
     await render(fresh, {}, locale, async state => {

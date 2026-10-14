@@ -2,8 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listPendingEntry, type ReviewKind, type ReviewEntry } from '@/api/entry-review'
-import { listIncompleteArticles } from '@/api/ingest'
-import type { IncompleteArticle } from '@/types/ingest'
+import { listIncompleteEntrys } from '@/api/ingest'
+import type { IncompleteEntry } from '@/types/ingest'
 import { isValidURL } from '@/utils/security'
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
 import { useLibraryScope } from '@/composables/useLibraryScope'
@@ -15,7 +15,7 @@ const emit = defineEmits<{ 'open-source': [id: string]; changed: []; refreshed: 
 const { t } = useI18n()
 const libraryScope = useLibraryScope()
 type PendingKind = ReviewKind | 'incomplete'
-const kind = ref<PendingKind>('intake'), records = ref<ReviewEntry[]>([]), incompleteRecords = ref<IncompleteArticle[]>([]), total = ref(0), page = ref(1)
+const kind = ref<PendingKind>('intake'), records = ref<ReviewEntry[]>([]), incompleteRecords = ref<IncompleteEntry[]>([]), total = ref(0), page = ref(1)
 const loading = ref(false), error = ref(''), busyIds = ref(new Set<string>())
 const busy = computed(() => busyIds.value.size > 0)
 const pageSize = 20
@@ -29,11 +29,11 @@ async function load() {
   try {
     const selected = kind.value
     const response = selected === 'incomplete'
-      ? await listIncompleteArticles({ page: page.value, libraries: libraryScope.value, page_size: pageSize, include_attempted: true })
+      ? await listIncompleteEntrys({ page: page.value, libraries: libraryScope.value, page_size: pageSize, include_attempted: true })
       : await listPendingEntry({ libraries: libraryScope.value, kind: selected, page: page.value, page_size: pageSize })
     if (!response.success) throw new Error(response.message || t('knowledgeReview.loadFailed'))
     if (current !== generation) return
-    if (selected === 'incomplete') incompleteRecords.value = (response.data || []) as IncompleteArticle[]
+    if (selected === 'incomplete') incompleteRecords.value = (response.data || []) as IncompleteEntry[]
     else records.value = (response.data || []) as ReviewEntry[]
     total.value = response.total || 0
     if (!response.data?.length && page.value > 1) { page.value--; await load() }
@@ -72,20 +72,20 @@ defineExpose({ refresh: load })
           <t-tag v-if="item.library_name" size="small" variant="light-outline">{{ item.library_name }}</t-tag>
           <t-tag v-if="item.source_kind === 'mine'" class="acquisition-tag" size="small" variant="light-outline">{{ t('library.sourceKinds.mine') }}</t-tag>
           <t-tag v-if="kind === 'intake' && item.acquisition === 'model_written'" class="acquisition-tag" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
-          <p v-if="kind === 'intake' && item.related_article_id">{{ t('knowledgeReview.conflictReason') }} <a :href="articleLink(item.related_article_id)" @click.prevent="emit('open-source', item.related_article_id)">{{ t('knowledgeReview.relatedArticle') }}</a></p>
+          <p v-if="kind === 'intake' && item.related_entry_id">{{ t('knowledgeReview.conflictReason') }} <a :href="articleLink(item.related_entry_id)" @click.prevent="emit('open-source', item.related_entry_id)">{{ t('knowledgeReview.relatedArticle') }}</a></p>
           <p v-else-if="kind === 'intake' && item.metadata?.intake?.reason">{{ item.metadata.intake.reason }}</p>
           <a v-if="originalURL(item)" :href="originalURL(item)" target="_blank" rel="noopener noreferrer">{{ originalURL(item) }}</a>
           <ReviewActions :entry="item" @changed="reviewed" @busy-change="setBusy(item.id, $event)" />
         </article>
-        <article v-for="item in incompleteRecords" :key="item.article_id" class="review-record" :data-incomplete-id="item.article_id">
+        <article v-for="item in incompleteRecords" :key="item.entry_id" class="review-record" :data-incomplete-id="item.entry_id">
           <t-tag v-if="item.library_name" size="small" variant="light-outline">{{ item.library_name }}</t-tag>
           <t-tag v-if="item.library_template === 'own'" class="acquisition-tag" size="small" variant="light-outline">{{ t('library.sourceKinds.mine') }}</t-tag>
-          <div class="review-record-heading"><h4><a :href="articleLink(item.article_id)" @click.prevent="emit('open-source', item.article_id)">{{ item.title || t('library.untitledDocument') }}</a></h4><t-tag v-if="item.external_completion_attempted" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.attemptedTitle') }}</t-tag></div>
+          <div class="review-record-heading"><h4><a :href="articleLink(item.entry_id)" @click.prevent="emit('open-source', item.entry_id)">{{ item.title || t('library.untitledDocument') }}</a></h4><t-tag v-if="item.external_completion_attempted" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.attemptedTitle') }}</t-tag></div>
           <a v-if="safeURL(item.url)" :href="safeURL(item.url)" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
           <p>{{ t('ingestStatus.acquisitionLabel') }}: {{ item.acquisition ? t(`ingestStatus.acquisition.${item.acquisition}`) : t('ingestStatus.unknownAcquisition') }}</p>
           <p v-if="item.external_completion_attempted">{{ t('ingestStatus.attemptedHint') }}</p>
           <MissingMaterials :items="item.missing || []" />
-          <IncompleteActions :article-id="item.article_id" :title="item.title" allow-discard @changed="reviewed" @busy-change="setBusy(item.article_id, $event)" />
+          <IncompleteActions :article-id="item.entry_id" :title="item.title" allow-discard @changed="reviewed" @busy-change="setBusy(item.entry_id, $event)" />
         </article>
       </div>
     </t-loading>

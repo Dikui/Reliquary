@@ -26,7 +26,7 @@ type VaultRebuildSkippedFile struct {
 }
 
 type VaultRebuildResult struct {
-	Articles int                       `json:"articles"`
+	Articles int                       `json:"entries"`
 	Mine     int64                     `json:"mine"`
 	Reports  int64                     `json:"reports"`
 	Skipped  []VaultRebuildSkippedFile `json:"skipped"`
@@ -50,7 +50,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 		return nil, fmt.Errorf("vault rebuild requires an empty entry database")
 	}
 	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
-	seenArticleIDs := make(map[string]bool)
+	seenEntryIDs := make(map[string]bool)
 	var libraries []types.Library
 	if err := s.db.WithContext(ctx).Find(&libraries).Error; err != nil {
 		return result, err
@@ -99,7 +99,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 				result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, err.Error()})
 				return nil
 			}
-			if seenArticleIDs[header.ID] {
+			if seenEntryIDs[header.ID] {
 				result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{rel, "duplicate article id"})
 				return nil
 			}
@@ -107,7 +107,7 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 			if err != nil {
 				return fmt.Errorf("restore article %s: %w", rel, err)
 			}
-			seenArticleIDs[header.ID] = true
+			seenEntryIDs[header.ID] = true
 
 			if err := s.indexVaultChunks(ctx, library, entry, entry.VaultBody); err != nil {
 				_ = s.db.WithContext(ctx).Model(entry).Updates(map[string]interface{}{
@@ -213,7 +213,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 	}
 
 	if kind == "report" {
-		metadata, _ := json.Marshal(reportMetadata{RelatedArticleIDs: header.RelatedArticleIDs, RelatedEntities: header.RelatedEntities, TopicIDs: header.TopicIDs, Fingerprint: header.ReportFingerprint, RequestID: header.RequestID})
+		metadata, _ := json.Marshal(reportMetadata{RelatedEntryIDs: header.RelatedEntryIDs, RelatedEntities: header.RelatedEntities, TopicIDs: header.TopicIDs, Fingerprint: header.ReportFingerprint, RequestID: header.RequestID})
 		entry.Metadata = metadata
 	}
 	setMessageFingerprint(entry, string(body))

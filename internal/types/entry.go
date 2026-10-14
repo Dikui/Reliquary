@@ -124,7 +124,7 @@ type Entry struct {
 	Identifier     string `json:"identifier,omitempty" gorm:"not null;default:''"`
 	Graph          *bool  `json:"graph"`
 	HasUpdate      bool   `json:"has_update" gorm:"-"`
-	LatestEntryID  string `json:"latest_article_id,omitempty" gorm:"-"`
+	LatestEntryID  string `json:"latest_entry_id,omitempty" gorm:"-"`
 	// Unique identifier of the entry
 	ID string `json:"id"                 gorm:"type:varchar(36);primaryKey"`
 	// Workspace ID
@@ -159,7 +159,7 @@ type Entry struct {
 	LastIngestAPIKeyName        string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
 	MissingMaterials            JSON          `json:"missing_materials" gorm:"type:jsonb;not null"`
 	ContentTypeHint             string        `json:"content_type_hint" gorm:"type:varchar(16);not null;default:''"`
-	RelatedArticleID            string        `json:"related_article_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
+	RelatedEntryID              string        `json:"related_entry_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	StructuredSummary           *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
 	Entities                    []Entity      `json:"entities" gorm:"-"`
 	Topics                      []Topic       `json:"topics" gorm:"-"`

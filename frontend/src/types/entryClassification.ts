@@ -7,7 +7,7 @@ export interface StructuredSummary { overview: string; points: string[]; key_ter
 export interface EntryTopic { id: string; name: string; description?: string }
 export interface ClassifiedEntry {
   has_update?: boolean
-  latest_article_id?: string
+  latest_entry_id?: string
   library_id?: string
   library_name?: string
  library_content_types?: { name: string; enabled: boolean; extract_graph: boolean; position: number }[]
@@ -16,7 +16,7 @@ export interface ClassifiedEntry {
   incomplete?: boolean
   external_completion_attempted?: boolean
   missing_materials?: MissingMaterial[]
-  related_article_id?: string
+  related_entry_id?: string
   starred?: boolean
   cannot_be_fact?: boolean
   source_unverified?: boolean

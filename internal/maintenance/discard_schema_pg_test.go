@@ -57,7 +57,7 @@ func TestLibraryIntakeMigrationPreservesHistoricalRows(t *testing.T) {
 		require.Equal(t, rows, actual, table)
 	}
 	// New fields remain strict preservation data rather than comparison exceptions.
-	require.NoError(t, db.Exec(`UPDATE ingest_discards SET library_id='wrong' WHERE article_id='retained'`).Error)
+	require.NoError(t, db.Exec(`UPDATE ingest_discards SET library_id='wrong' WHERE entry_id='retained'`).Error)
 	changed, err := Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", changed))

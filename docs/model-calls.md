@@ -1,5 +1,6 @@
 # 模型调用统计 API
 
+资料标识统一为 `entry_id`，资料列表使用 `entry_ids`，不接受旧字段别名。
 调用账本记录每次实际发出的 chat、视觉 chat、embedding、图片向量和 rerank HTTP 请求。SDK、原始 HTTP、Ollama 和 ChatGPT 登录生成均在相同 transport 边界记账。排队、限流、模型下载、凭据刷新和未发出请求的参数校验不计入调用。
 
 模型创建与更新 API 接受 `parameters.pricing`：

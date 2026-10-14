@@ -40,7 +40,7 @@ func TestIKB06SourceUnverifiedHTTPAndMCP(t *testing.T) {
 		require.NoError(t, json.Unmarshal(detail.Body.Bytes(), &header))
 		require.True(t, header.Data.SourceUnverified)
 		var article map[string]any
-		mcpCall(t, client, "get_article", map[string]any{"id": batch.Items[0].EntryID}, &article)
+		mcpCall(t, client, "get_entry", map[string]any{"id": batch.Items[0].EntryID}, &article)
 		require.Equal(t, true, article["source_unverified"])
 	}
 }

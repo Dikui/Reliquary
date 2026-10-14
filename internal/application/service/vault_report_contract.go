@@ -16,14 +16,14 @@ import (
 
 // ReportInput is the shared HTTP and MCP report contract.
 type ReportInput struct {
-	Library           string   `json:"library,omitempty"`
-	Title             string   `json:"title"`
-	Markdown          string   `json:"markdown"`
-	RelatedArticleIDs []string `json:"related_article_ids,omitempty"`
-	RelatedEntities   []string `json:"related_entities,omitempty"`
-	Topics            []string `json:"topics,omitempty"`
-	RequestID         string   `json:"request_id,omitempty"`
-	issues            []ReportFieldError
+	Library         string   `json:"library,omitempty"`
+	Title           string   `json:"title"`
+	Markdown        string   `json:"markdown"`
+	RelatedEntryIDs []string `json:"related_entry_ids,omitempty"`
+	RelatedEntities []string `json:"related_entities,omitempty"`
+	Topics          []string `json:"topics,omitempty"`
+	RequestID       string   `json:"request_id,omitempty"`
+	issues          []ReportFieldError
 }
 
 type ReportFieldError struct {
@@ -39,11 +39,11 @@ type ReportEntityReference struct {
 }
 
 type reportMetadata struct {
-	RelatedArticleIDs []string                `json:"related_article_ids"`
-	RelatedEntities   []ReportEntityReference `json:"related_entities,omitempty"`
-	TopicIDs          []string                `json:"topic_ids,omitempty"`
-	Fingerprint       string                  `json:"report_fingerprint,omitempty"`
-	RequestID         string                  `json:"request_id,omitempty"`
+	RelatedEntryIDs []string                `json:"related_entry_ids"`
+	RelatedEntities []ReportEntityReference `json:"related_entities,omitempty"`
+	TopicIDs        []string                `json:"topic_ids,omitempty"`
+	Fingerprint     string                  `json:"report_fingerprint,omitempty"`
+	RequestID       string                  `json:"request_id,omitempty"`
 }
 
 // DecodeReportInput collects type errors and rejects unknown fields in both transports.
@@ -58,7 +58,7 @@ func DecodeReportInput(reader io.Reader) (ReportInput, error) {
 	if decoder.Decode(&extra) != io.EOF {
 		return input, werrors.NewBadRequestError("report must contain one JSON object")
 	}
-	targets := map[string]any{"library": &input.Library, "title": &input.Title, "markdown": &input.Markdown, "related_article_ids": &input.RelatedArticleIDs, "related_entities": &input.RelatedEntities, "topics": &input.Topics, "request_id": &input.RequestID}
+	targets := map[string]any{"library": &input.Library, "title": &input.Title, "markdown": &input.Markdown, "related_entry_ids": &input.RelatedEntryIDs, "related_entities": &input.RelatedEntities, "topics": &input.Topics, "request_id": &input.RequestID}
 	keys := make([]string, 0, len(fields))
 	for key := range fields {
 		keys = append(keys, key)
@@ -74,7 +74,7 @@ func DecodeReportInput(reader io.Reader) (ReportInput, error) {
 		if string(raw) == "null" || !utf8.Valid(raw) || json.Unmarshal(raw, target) != nil {
 			expected := "string"
 			switch key {
-			case "related_article_ids", "related_entities", "topics":
+			case "related_entry_ids", "related_entities", "topics":
 				expected = "array of strings"
 			}
 			input.issues = append(input.issues, ReportFieldError{Field: key, Message: "invalid type; expected " + expected})
@@ -108,12 +108,12 @@ func reportInputFingerprint(input ReportInput, metadata reportMetadata) string {
 		Articles []string `json:"articles"`
 		Entities []string `json:"entities"`
 		Topics   []string `json:"topics"`
-	}{strings.TrimSpace(input.Title), strings.ReplaceAll(strings.ReplaceAll(input.Markdown, "\r\n", "\n"), "\r", "\n"), normalizedReportIDs(metadata.RelatedArticleIDs), normalizedReportIDs(entities), normalizedReportIDs(metadata.TopicIDs)})
+	}{strings.TrimSpace(input.Title), strings.ReplaceAll(strings.ReplaceAll(input.Markdown, "\r\n", "\n"), "\r", "\n"), normalizedReportIDs(metadata.RelatedEntryIDs), normalizedReportIDs(entities), normalizedReportIDs(metadata.TopicIDs)})
 	return vaultContentHash(string(data))
 }
 
 func validateReport(tx *gorm.DB, library *types.Library, input ReportInput) (reportMetadata, error) {
-	metadata := reportMetadata{RelatedArticleIDs: normalizedReportIDs(input.RelatedArticleIDs), RequestID: strings.TrimSpace(input.RequestID)}
+	metadata := reportMetadata{RelatedEntryIDs: normalizedReportIDs(input.RelatedEntryIDs), RequestID: strings.TrimSpace(input.RequestID)}
 	issues := append([]ReportFieldError(nil), input.issues...)
 	add := func(field, message string) { issues = append(issues, ReportFieldError{Field: field, Message: message}) }
 	if title := strings.TrimSpace(input.Title); title == "" || !utf8.ValidString(title) || strings.ContainsRune(title, 0) || utf8.RuneCountInString(title) > 255 {
@@ -128,15 +128,15 @@ func validateReport(tx *gorm.DB, library *types.Library, input ReportInput) (rep
 	if metadata.RequestID != "" && (!utf8.ValidString(metadata.RequestID) || strings.ContainsRune(metadata.RequestID, 0) || utf8.RuneCountInString(metadata.RequestID) > 255) {
 		add("request_id", "at most 255 valid UTF-8 characters without NUL")
 	}
-	for i, ref := range input.RelatedArticleIDs {
+	for i, ref := range input.RelatedEntryIDs {
 		if !utf8.ValidString(ref) || strings.ContainsRune(ref, 0) {
-			add(fmt.Sprintf("related_article_ids[%d]", i), "reference must be valid UTF-8 without NUL")
+			add(fmt.Sprintf("related_entry_ids[%d]", i), "reference must be valid UTF-8 without NUL")
 			continue
 		}
 		var article types.Entry
 		err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("space_id=? AND id=?", library.SpaceID, strings.TrimSpace(ref)).First(&article).Error
 		if err == gorm.ErrRecordNotFound {
-			add(fmt.Sprintf("related_article_ids[%d]", i), "article does not exist or is deleted: "+ref)
+			add(fmt.Sprintf("related_entry_ids[%d]", i), "article does not exist or is deleted: "+ref)
 		} else if err != nil {
 			return metadata, err
 		}

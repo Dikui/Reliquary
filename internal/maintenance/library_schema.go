@@ -145,7 +145,7 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 	for _, row := range snapshot.Tables["task_pending_ops"] {
 		if payload, ok := row["payload"].(map[string]any); ok {
 			if _, present := payload["library_id"]; present {
-				if id := entryLibrary[fmt.Sprint(payload["knowledge_id"])]; id != "" {
+				if id := entryLibrary[legacyTaskEntryID(payload)]; id != "" {
 					payload["library_id"] = id
 				}
 			}

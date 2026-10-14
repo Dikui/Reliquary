@@ -208,7 +208,7 @@ func (s *entryService) storeIngestConflict(ctx context.Context, library *types.L
 	}
 	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: original.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual, SourceKind: original.SourceKind, Source: request.URL, Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual, ParseStatus: types.ParseStatusRejected, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
-		EmbeddingModelID: library.EmbeddingModelID, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint, RelatedArticleID: original.ID, AgentTags: types.JSON("[]"), CollectReason: request.CollectReason, AgentSummary: request.AgentSummary, SourceName: request.SourceName,
+		EmbeddingModelID: library.EmbeddingModelID, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint, RelatedEntryID: original.ID, AgentTags: types.JSON("[]"), CollectReason: request.CollectReason, AgentSummary: request.AgentSummary, SourceName: request.SourceName,
 		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName}
 	tags, marshalErr := json.Marshal(request.AgentTags)
 	if marshalErr != nil {
@@ -229,7 +229,7 @@ func (s *entryService) storeIngestConflict(ctx context.Context, library *types.L
 	// Ingest holds the library deduplication lock through this lookup
 	// and creation. Retry only an exact body hash for this original article.
 	var existing types.Entry
-	err = s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND source_kind=? AND related_article_id=? AND content_hash=? AND parse_status=?",
+	err = s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND source_kind=? AND related_entry_id=? AND content_hash=? AND parse_status=?",
 		incoming.SpaceID, incoming.LibraryID, original.SourceKind, original.ID, incoming.ContentHash, types.ParseStatusRejected).
 		Order("created_at ASC,id ASC").First(&existing).Error
 	if err == nil {
@@ -256,7 +256,7 @@ func (s *entryService) storeIngestConflict(ctx context.Context, library *types.L
 		return nil, err
 	}
 	s.bindContentResources(ctx, incoming.SpaceID, incoming.ID, body)
-	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_conflict", incoming.ID, nil, map[string]any{"related_article_id": original.ID, "reason": intake.Reason}); err != nil {
+	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_conflict", incoming.ID, nil, map[string]any{"related_entry_id": original.ID, "reason": intake.Reason}); err != nil {
 		return nil, err
 	}
 	return ingestResult(incoming, "conflict", message, intake.Reason, ""), nil

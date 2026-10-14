@@ -10,7 +10,7 @@ import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
-import type { ArticleJudgment } from '@/api/entry-judgments';
+import type { EntryJudgment } from '@/api/entry-judgments';
 import type { ClassifiedEntry } from '@/types/entryClassification';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
 
@@ -46,7 +46,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'open', item: EntryCard): void;
   (e: 'open-entity', id: string): void;
-  (e: 'judgment-updated', value: ArticleJudgment): void;
+  (e: 'judgment-updated', value: EntryJudgment): void;
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: EntryCard): void;
   (e: 'action', action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard): void;
@@ -375,7 +375,7 @@ const openDelete = async (item: EntryCard) => {
           <t-tag size="small" theme="warning" variant="light-outline">{{ $t('library.intakeWaiting') }}</t-tag>
         </div>
         <EntryClassification v-else-if="item.parse_status === 'completed'" :entry="item" compact @open-entity="emit('open-entity', $event)" />
-        <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_article_id" />
+        <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_entry_id" />
       </div>
 
       <div class="card-bottom">

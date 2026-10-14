@@ -35,7 +35,7 @@ type ReportWriteResult struct {
 func (s *VaultDocumentService) reportIndexManagedByQueue(ctx context.Context, spaceID uint64, path string) (bool, error) {
 	var count int64
 	err := s.db.WithContext(ctx).Table("task_pending_ops j").
-		Joins("JOIN entries e ON e.id=j.payload->>'knowledge_id'").
+		Joins("JOIN entries e ON e.id=j.payload->>'entry_id'").
 		Where("e.space_id=? AND e.vault_path=? AND e.deleted_at IS NULL AND j.task_type=? AND j.state IN ?",
 			spaceID, path, types.TypeReportIndex, []string{"pending", "dispatched", "active", "scheduled", "retry", "archived"}).Count(&count).Error
 	return count > 0, err
@@ -49,7 +49,7 @@ func (s *VaultDocumentService) reportWriteResult(ctx context.Context, entry *typ
 	if entry.ParseStatus != types.ParseStatusCompleted {
 		var queued int64
 		if err := s.db.WithContext(ctx).Model(&queue.Job{}).
-			Where("task_type=? AND payload->>'knowledge_id'=? AND state IN ?", types.TypeReportIndex, entry.ID,
+			Where("task_type=? AND payload->>'entry_id'=? AND state IN ?", types.TypeReportIndex, entry.ID,
 				[]string{"pending", "dispatched", "active", "scheduled", "retry"}).Count(&queued).Error; err != nil {
 			return nil, err
 		}
@@ -74,7 +74,7 @@ func (s *VaultDocumentService) CreateReportRequest(ctx context.Context, input Re
 }
 
 func (s *VaultDocumentService) createReport(ctx context.Context, library *types.Library, title, markdown string, relatedIDs []string, graph *bool) (*ReportWriteResult, error) {
-	return s.createReportInput(ctx, library, ReportInput{Title: title, Markdown: markdown, RelatedArticleIDs: relatedIDs}, graph)
+	return s.createReportInput(ctx, library, ReportInput{Title: title, Markdown: markdown, RelatedEntryIDs: relatedIDs}, graph)
 }
 
 func (s *VaultDocumentService) createReportInput(ctx context.Context, library *types.Library, input ReportInput, graph *bool) (*ReportWriteResult, error) {
@@ -116,7 +116,7 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 			existing = true
 			return nil
 		}
-		selected := metadata.RelatedArticleIDs
+		selected := metadata.RelatedEntryIDs
 		created := time.Now().UTC()
 		id := uuid.NewString()
 		createdID = id
@@ -179,7 +179,7 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 			return writeErr
 		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", entry.ID, nil,
-			map[string]any{"title": title, "vault_path": path, "related_article_ids": selected, "related_entities": metadata.RelatedEntities, "topic_ids": metadata.TopicIDs, "request_id": metadata.RequestID}); err != nil {
+			map[string]any{"title": title, "vault_path": path, "related_entry_ids": selected, "related_entities": metadata.RelatedEntities, "topic_ids": metadata.TopicIDs, "request_id": metadata.RequestID}); err != nil {
 			return err
 		}
 		payload, _ := json.Marshal(types.ReportIndexPayload{SpaceID: library.SpaceID, LibraryID: library.ID, EntryID: id})

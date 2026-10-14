@@ -55,7 +55,7 @@ func (s *TopicService) enqueueBackfill(tx *gorm.DB, topic *types.Topic) error {
 		if err != nil {
 			return err
 		}
-		batch := types.TopicBackfillBatch{ID: uuid.NewString(), JobID: job.ID, Ordinal: ordinal, EntryIDs: types.JSON(raw), ArticleCount: end - offset, Status: "pending"}
+		batch := types.TopicBackfillBatch{ID: uuid.NewString(), JobID: job.ID, Ordinal: ordinal, EntryIDs: types.JSON(raw), EntryCount: end - offset, Status: "pending"}
 		if err := tx.Create(&batch).Error; err != nil {
 			return err
 		}
@@ -120,7 +120,7 @@ func (s *TopicService) RetryBackfill(ctx context.Context, topicID string) (*type
 			Updates(map[string]any{"status": "pending", "error": "", "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&job).Updates(map[string]any{"status": "pending", "processed": job.Processed - job.FailedArticles, "failed_articles": 0, "failed_batches": 0, "updated_at": time.Now()}).Error; err != nil {
+		if err := tx.Model(&job).Updates(map[string]any{"status": "pending", "processed": job.Processed - job.FailedEntries, "failed_entries": 0, "failed_batches": 0, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
 		return s.enqueueBackfillTask(ctx, tx, &job)
@@ -348,13 +348,13 @@ func (s *TopicService) finishBatch(ctx context.Context, job types.TopicBackfillJ
 			return err
 		}
 		var totals struct {
-			Processed      int
-			FailedArticles int
-			FailedBatches  int
-			Pending        int
+			Processed     int
+			FailedEntries int
+			FailedBatches int
+			Pending       int
 		}
-		if err := tx.Model(&types.TopicBackfillBatch{}).Select(`COALESCE(sum(CASE WHEN status IN ('completed','failed') THEN article_count ELSE 0 END),0) AS processed,
-			COALESCE(sum(CASE WHEN status='failed' THEN article_count ELSE 0 END),0) AS failed_articles,
+		if err := tx.Model(&types.TopicBackfillBatch{}).Select(`COALESCE(sum(CASE WHEN status IN ('completed','failed') THEN entry_count ELSE 0 END),0) AS processed,
+			COALESCE(sum(CASE WHEN status='failed' THEN entry_count ELSE 0 END),0) AS failed_entries,
 			count(*) FILTER (WHERE status='failed') AS failed_batches,count(*) FILTER (WHERE status IN ('pending','running')) AS pending`).Where("job_id=?", job.ID).Scan(&totals).Error; err != nil {
 			return err
 		}
@@ -365,7 +365,7 @@ func (s *TopicService) finishBatch(ctx context.Context, job types.TopicBackfillJ
 				jobStatus = "failed"
 			}
 		}
-		return tx.Model(&current).Updates(map[string]any{"status": jobStatus, "processed": totals.Processed, "failed_articles": totals.FailedArticles, "failed_batches": totals.FailedBatches, "updated_at": time.Now()}).Error
+		return tx.Model(&current).Updates(map[string]any{"status": jobStatus, "processed": totals.Processed, "failed_entries": totals.FailedEntries, "failed_batches": totals.FailedBatches, "updated_at": time.Now()}).Error
 	})
 	if err == nil && applied {
 		s.refresh(ctx, matched)

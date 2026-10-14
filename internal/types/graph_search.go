@@ -16,7 +16,7 @@ type GraphSearchRequest struct {
 	Limit         int               `json:"limit,omitempty"`
 }
 type GraphSource struct {
-	ArticleID        string             `json:"article_id"`
+	EntryID          string             `json:"entry_id"`
 	Title            string             `json:"title"`
 	LibraryID        string             `json:"library_id"`
 	LibraryName      string             `json:"library_name"`

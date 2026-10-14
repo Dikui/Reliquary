@@ -15,7 +15,7 @@ export interface SearchEntry {
   identifier?: string
   graph?: boolean | null
   has_update?: boolean
-  latest_article_id?: string
+  latest_entry_id?: string
   entry_id: string
   title: string
   source: SearchSource

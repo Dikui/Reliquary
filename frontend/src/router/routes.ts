@@ -3,12 +3,7 @@ import { normalizeSettingsSection } from '../config/settingsRoute'
 import { removedPlatformRoutes, removedRootRoutes } from './routeFallbacks'
 
 const libraryPage = () => import('../views/library/Library.vue')
-const legacyEntryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => {
-  const query = { ...to.query }
-  if (query.entry_id == null && query.knowledge_id != null) query.entry_id = query.knowledge_id
-  delete query.knowledge_id
-  return { path, query, hash: to.hash }
-}
+const entryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => ({ path, query: { ...to.query }, hash: to.hash })
 const notFound = () => import('../views/NotFound.vue')
 
 // Settings is owned by the platform layout. Its route supplies only the background.
@@ -33,14 +28,6 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       children: [
         ...removedPlatformRoutes,
         {
-          path: 'knowledge',
-          redirect: to => legacyEntryLocation('/platform/entries', to),
-        },
-        {
-          path: 'knowledge-search',
-          redirect: to => legacyEntryLocation('/platform/search', to),
-        },
-        {
           path: "space",
           redirect: "/platform/settings"
         },
@@ -57,7 +44,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         },
         {
           path: "libraries/:legacyLibraryId/:pathMatch(.*)*",
-          redirect: to => legacyEntryLocation('/platform/entries', to),
+          redirect: to => entryLocation('/platform/entries', to),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {

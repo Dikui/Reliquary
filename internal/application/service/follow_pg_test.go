@@ -492,7 +492,7 @@ func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T
 	items, err := h.follows.ListFollows(h.ctx)
 	require.NoError(t, err)
 	for _, item := range items {
-		require.EqualValues(t, 2, item.RecentArticleCount, "old, ineligible, mine and report do not contribute")
+		require.EqualValues(t, 2, item.RecentEntryCount, "old, ineligible, mine and report do not contribute")
 	}
 	request.TargetIDs = []string{"topic-follow"}
 	filtered := h.feed(t, request)

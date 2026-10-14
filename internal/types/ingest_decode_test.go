@@ -43,7 +43,7 @@ func TestDecodeIngestAllowsOptionalURL(t *testing.T) {
 }
 
 func TestDecodeIngestMineAllowsOmittedURLAndEntrySupplementID(t *testing.T) {
-	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"library":"mine","acquisition":"verbatim","content":"本人原文"},{"library":"mine","article_id":"11111111-1111-4111-8111-111111111111","url":"","acquisition":"verbatim"},{"library":"mine","url":null,"acquisition":"verbatim"}]}`))
+	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"library":"mine","acquisition":"verbatim","content":"本人原文"},{"library":"mine","entry_id":"11111111-1111-4111-8111-111111111111","url":"","acquisition":"verbatim"},{"library":"mine","url":null,"acquisition":"verbatim"}]}`))
 	require.NoError(t, err)
 	require.Empty(t, request.Items[0].InputError)
 	require.Equal(t, "mine", request.Items[0].Library)

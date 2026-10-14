@@ -2,10 +2,10 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { setEntryStar, type ArticleJudgment } from '@/api/entry-judgments'
+import { setEntryStar, type EntryJudgment } from '@/api/entry-judgments'
 
-const props = defineProps<{ entry: ArticleJudgment; disabled?: boolean }>()
-const emit = defineEmits<{ updated: [value: ArticleJudgment] }>()
+const props = defineProps<{ entry: EntryJudgment; disabled?: boolean }>()
+const emit = defineEmits<{ updated: [value: EntryJudgment] }>()
 const { t } = useI18n()
 const saving = ref(false), error = ref('')
 async function toggle() {

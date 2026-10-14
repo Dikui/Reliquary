@@ -9,8 +9,8 @@ export interface MissingMaterial {
   submitted_at?: string
 }
 
-export interface IncompleteArticle {
-  article_id: string
+export interface IncompleteEntry {
+  entry_id: string
   library_name?: string
   library_id: string
   library_template: string

@@ -92,3 +92,5 @@ npm test
 ## 许可证
 
 [MIT](LICENSE)。保留仓库内的上游署名和第三方许可。
+
+对外资料 ID 统一为 `entry_id`，列表为 `entry_ids`；MCP 全文读取使用 `get_entry`，报告引用使用 `related_entry_ids`。不保留旧字段或旧工具别名。

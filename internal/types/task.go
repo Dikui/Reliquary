@@ -202,7 +202,7 @@ const (
 type DocumentProcessPayload struct {
 	RequestId string   `json:"request_id"`
 	SpaceID   uint64   `json:"tenant_id"`
-	EntryID   string   `json:"knowledge_id"`
+	EntryID   string   `json:"entry_id"`
 	LibraryID string   `json:"library_id"`
 	FilePath  string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
 	FileName  string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
@@ -223,14 +223,14 @@ type DocumentProcessPayload struct {
 // EntryListDeletePayload represents the batch entry delete task payload
 type EntryListDeletePayload struct {
 	SpaceID   uint64        `json:"tenant_id"`
-	EntryIDs  []string      `json:"knowledge_ids"`
+	EntryIDs  []string      `json:"entry_ids"`
 	Initiator TaskInitiator `json:"initiator,omitempty"`
 }
 
 // EntryListReparsePayload represents the batch entry reparse task payload
 type EntryListReparsePayload struct {
 	SpaceID       uint64                 `json:"tenant_id"`
-	EntryIDs      []string               `json:"knowledge_ids"`
+	EntryIDs      []string               `json:"entry_ids"`
 	ProcessConfig *EntryProcessOverrides `json:"process_config,omitempty"`
 	Initiator     TaskInitiator          `json:"initiator,omitempty"`
 }
@@ -240,7 +240,7 @@ type EntryListReparsePayload struct {
 type ManualProcessPayload struct {
 	RequestId   string `json:"request_id"`
 	SpaceID     uint64 `json:"tenant_id"`
-	EntryID     string `json:"knowledge_id"`
+	EntryID     string `json:"entry_id"`
 	LibraryID   string `json:"library_id"`
 	Content     string `json:"content"`      // cleaned markdown content
 	NeedCleanup bool   `json:"need_cleanup"` // true for update, false for create
@@ -257,5 +257,5 @@ type TopicBackfillPayload struct {
 type ReportIndexPayload struct {
 	SpaceID   uint64 `json:"tenant_id"`
 	LibraryID string `json:"library_id"`
-	EntryID   string `json:"knowledge_id"`
+	EntryID   string `json:"entry_id"`
 }

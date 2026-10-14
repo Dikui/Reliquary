@@ -19,7 +19,7 @@ func TestOwnershipFieldsKeepMCPContract(t *testing.T) {
 	require.NoError(t, err)
 	data, err := json.Marshal(output)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"topics":[{"id":"topic","tenant_id":9007199254740993,"name":"","description":"","library_ids":null,"created_at":"0001-01-01T00:00:00Z","updated_at":"0001-01-01T00:00:00Z","article_count":0}],"metadata":{"space_id":"user metadata","tenant_id":"original key"},"payload":{"space_id":1}}`, string(data))
+	require.JSONEq(t, `{"topics":[{"id":"topic","tenant_id":9007199254740993,"name":"","description":"","library_ids":null,"created_at":"0001-01-01T00:00:00Z","updated_at":"0001-01-01T00:00:00Z","entry_count":0}],"metadata":{"space_id":"user metadata","tenant_id":"original key"},"payload":{"space_id":1}}`, string(data))
 }
 
 func TestSearchAndFollowFeedContractsIncludeIncompleteBoolean(t *testing.T) {
@@ -38,10 +38,10 @@ func TestSearchAndFollowFeedContractsIncludeIncompleteBoolean(t *testing.T) {
 				require.NoError(t, err)
 				result := output.(map[string]any)["results"].([]any)[0].(map[string]any)
 				require.Equal(t, incomplete, result["incomplete"])
-				require.Equal(t, "article", result["article_id"])
+				require.Equal(t, "article", result["entry_id"])
 				member := result["similar_reports"].([]any)[0].(map[string]any)
 				require.Equal(t, !incomplete, member["incomplete"])
-				require.Equal(t, "similar", member["article_id"])
+				require.Equal(t, "similar", member["entry_id"])
 			})
 		}
 	}

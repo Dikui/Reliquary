@@ -7,7 +7,7 @@ import (
 )
 
 // FormatVersion is the personal-space replica and verification manifest format.
-const FormatVersion = 5
+const FormatVersion = 6
 
 func supportedFormat(version int) bool { return version >= 1 && version <= FormatVersion }
 
@@ -133,18 +133,21 @@ func currentSnapshot(snapshot *Snapshot) error {
 		if _, exists := tables[table]; exists {
 			return fmt.Errorf("duplicate replica table mapping %s", table)
 		}
-		tables[table] = namedRows(rows, false)
+		tables[table] = entryNamedRows(table, rows, false, snapshot.FormatVersion)
 		if previous := snapshot.JSONNulls[oldTable]; previous != nil {
 			nulls[table] = map[string][]string{}
 			for _, row := range rows {
 				if columns, present := previous[rowIdentity(row)]; present {
-					nulls[table][rowIdentity(namedRows([]map[string]any{row}, false)[0])] = columns
+					nulls[table][rowIdentity(entryNamedRows(table, []map[string]any{row}, false, snapshot.FormatVersion)[0])] = columns
 				}
 			}
 		}
 	}
 	snapshot.Tables, snapshot.JSONNulls = tables, nulls
 	snapshot.Required = currentRequirements(snapshot.Required)
+	if err := projectLegacyEntryJSON(snapshot); err != nil {
+		return err
+	}
 	snapshot.FormatVersion = FormatVersion
 	return nil
 }
@@ -162,10 +165,12 @@ func currentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 	for old, entry := range expected.Tables {
 		table := currentTable(old)
 		if entry.Data != nil {
-			entry.Data = namedRows(entry.Data, false)
+			entry.Data = entryNamedRows(table, entry.Data, false, expected.FormatVersion)
 		}
 		entry.Columns = append([]string(nil), entry.Columns...)
 		for i, column := range entry.Columns {
+			column = entryColumn(table, column, false)
+			entry.Columns[i] = column
 			switch column {
 			case "knowledge_base_id":
 				entry.Columns[i] = "library_id"
@@ -199,7 +204,7 @@ func currentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 			if entry.Data == nil {
 				continue
 			}
-			oldData, _ := json.MarshalIndent(namedRows(entry.Data, true, expected.FormatVersion), "", "  ")
+			oldData, _ := json.MarshalIndent(entryNamedRows(table, entry.Data, true, expected.FormatVersion), "", "  ")
 			newData, _ := json.MarshalIndent(entry.Data, "", "  ")
 			oldData, newData = append(oldData, '\n'), append(newData, '\n')
 			if before.SHA256 != sum(oldData) || before.Size != int64(len(oldData)) {

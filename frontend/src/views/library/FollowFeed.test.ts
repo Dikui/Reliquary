@@ -22,8 +22,8 @@ async function settle() { await settleNodes(); await new Promise<void>(resolve =
 async function click(node: Element) { await clickNode(node); await settle() }
 const empty = moduleOf(defineComponent({ setup: () => () => null }))
 const entity = { id: 'entity-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
-const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions', article_count: 2, created_at: '', updated_at: '' }
-const follow = (type: 'entity' | 'topic', id: string, name: string) => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00Z', recent_article_count: 2 })
+const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
+const follow = (type: 'entity' | 'topic', id: string, name: string) => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00Z', recent_entry_count: 2 })
 const entityFollow = follow('entity', entity.id, entity.canonical_name), topicFollow = follow('topic', topic.id, topic.name)
 const previous = '2026-10-10T08:00:00Z', openedAt = '2026-10-11T12:00:00Z', markedAt = '2026-10-11T14:00:00Z'
 const article = (id: string, collected: string, matches = [entityFollow, topicFollow]) => ({ entry_id: id, title: `Article ${id}`, source: 'article', published_at: collected, collected_at: collected, entered_at: collected as string | null, is_new: true, matched_follows: matches, content_type: 'research', processing_mode: 'summary_only', summary: { overview: `Overview ${id}`, points: ['A useful point'], key_terms: ['Aurora'] }, entities: [entity], topics: [topic], snippets: [], score: 0, similar_reports: [], vault_path: `articles/2026-10/${id}.md`, original_url: `https://example.com/${id}` })

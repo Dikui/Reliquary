@@ -166,7 +166,7 @@ for (const locale of ['zh-CN', 'en-US']) test(`${locale}: pending review shows l
   const modules = {
     '@/composables/useLibraryScope': { useLibraryScope: () => ref(['mine']) }, '@/utils/security': { isValidURL: () => true },
     '@/api/entry-review': { listPendingEntry: async (input: any) => { calls.push(input); return { success: true, total: 1, data: [{ id: 'a', title: 'Pending', library_name: 'Notes', metadata: { intake: { reason: '第 2/3 段: body incomplete' } } }] } } },
-    '@/api/ingest': { listIncompleteArticles: async (input: any) => { calls.push(input); return { success: true, data: [], total: 0 } } },
+    '@/api/ingest': { listIncompleteEntrys: async (input: any) => { calls.push(input); return { success: true, data: [], total: 0 } } },
   }
   const html = await scenario('./views/library/components/PendingReviews.vue', {}, modules, async state => { await state.load() }, locale)
   assert.match(html, /Notes/); assert.match(html, /第 2\/3 段/); assert.deepEqual(calls[0].libraries, ['mine'])

@@ -2,14 +2,15 @@ package modelcalls_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
 	"reliquary/internal/maintenance"
 	"reliquary/internal/modelcalls"
 	"reliquary/internal/testutil/pgtest"
@@ -105,15 +106,16 @@ func TestSummaryTrendAndRetention(t *testing.T) {
 func TestMigration22PreservesPreviousRowsAndReplicaOwnership(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	require.NoError(t, db.Exec("DROP TABLE model_calls").Error)
-	require.NoError(t, db.Exec("UPDATE schema_migrations SET version=17").Error)
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	migration, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, migration.Migrate(21))
 	require.NoError(t, db.Exec(`INSERT INTO models(id,space_id,name,type,source,parameters) VALUES('price-before',1,'before',?,'remote','{"pricing":{"input_per_million":2,"output_per_million":4,"currency":"USD"}}')`, types.ModelTypeGeneration).Error)
 	var before, after []string
 	require.NoError(t, db.Raw(`SELECT to_jsonb(t)::text FROM models t ORDER BY id`).Scan(&before).Error)
-	migration, err := os.ReadFile(filepath.Join("..", "..", "migrations", "versioned", "000022_model_calls.up.sql"))
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(string(migration)).Error)
-	require.NoError(t, db.Exec("UPDATE schema_migrations SET version=22").Error)
+	require.NoError(t, migration.Migrate(22))
 	require.NoError(t, db.Raw(`SELECT to_jsonb(t)::text FROM models t ORDER BY id`).Scan(&after).Error)
 	require.Equal(t, before, after)
 	require.NoError(t, maintenance.ValidateClassification(ctx, db))

@@ -1,9 +1,9 @@
 import { get, post } from '@/utils/request'
-import type { IncompleteArticle, MissingMaterial } from '@/types/ingest'
+import type { IncompleteEntry, MissingMaterial } from '@/types/ingest'
 
 export interface IncompleteEnvelope {
   success: boolean
-  data: IncompleteArticle[]
+  data: IncompleteEntry[]
   total: number
   page: number
   page_size: number
@@ -12,11 +12,11 @@ export interface IncompleteEnvelope {
 
 export interface IngestActionEnvelope {
   success: boolean
-  data: { article_id: string; status: string; message: string; completeness: MissingMaterial[] }
+  data: { entry_id: string; status: string; message: string; completeness: MissingMaterial[] }
   message?: string
 }
 
-export function listIncompleteArticles(input: { libraries?: string[]; page: number; page_size: number; include_attempted?: boolean }) {
+export function listIncompleteEntrys(input: { libraries?: string[]; page: number; page_size: number; include_attempted?: boolean }) {
   const query = new URLSearchParams({ page: String(input.page), page_size: String(input.page_size), include_attempted: String(input.include_attempted ?? true) })
   if (input.libraries?.length) query.set('libraries', input.libraries.join(','))
   return get<IncompleteEnvelope>(`/api/v1/ingest/incomplete?${query}`)

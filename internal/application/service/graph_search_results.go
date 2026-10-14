@@ -67,7 +67,7 @@ func (s *GraphSearchService) hydrate(ctx context.Context, space uint64, librarie
 			continue
 		}
 		l := libMap[e.LibraryID]
-		sourceMap[src.RelationID] = append(sourceMap[src.RelationID], types.GraphSource{ArticleID: e.ID, Title: e.Title, LibraryID: e.LibraryID, LibraryName: l.Name, LibraryDirectory: l.Directory, PublishedAt: e.SearchPublishedAt, SourceUnverified: e.SourceUnverified, Acquisition: e.Acquisition, Evidence: src.Evidence})
+		sourceMap[src.RelationID] = append(sourceMap[src.RelationID], types.GraphSource{EntryID: e.ID, Title: e.Title, LibraryID: e.LibraryID, LibraryName: l.Name, LibraryDirectory: l.Directory, PublishedAt: e.SearchPublishedAt, SourceUnverified: e.SourceUnverified, Acquisition: e.Acquisition, Evidence: src.Evidence})
 	}
 	for _, e := range edges {
 		r, ok := rows[e.ID]
@@ -151,10 +151,10 @@ func graphDocuments(edges []types.GraphSearchEdge) []*types.EntrySearchResult {
 	seen := map[string]*types.EntrySearchResult{}
 	for _, edge := range edges {
 		for _, source := range edge.Sources {
-			d := seen[source.ArticleID]
+			d := seen[source.EntryID]
 			if d == nil {
-				d = &types.EntrySearchResult{EntryID: source.ArticleID, Title: source.Title, LibraryID: source.LibraryID, LibraryName: source.LibraryName, LibraryDirectory: source.LibraryDirectory, PublishedAt: source.PublishedAt, SourceUnverified: source.SourceUnverified, Acquisition: source.Acquisition, Score: 1, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}, Snippets: []types.EntrySearchSnippet{}, SimilarReports: []*types.EntrySearchResult{}}
-				seen[source.ArticleID] = d
+				d = &types.EntrySearchResult{EntryID: source.EntryID, Title: source.Title, LibraryID: source.LibraryID, LibraryName: source.LibraryName, LibraryDirectory: source.LibraryDirectory, PublishedAt: source.PublishedAt, SourceUnverified: source.SourceUnverified, Acquisition: source.Acquisition, Score: 1, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}, Snippets: []types.EntrySearchSnippet{}, SimilarReports: []*types.EntrySearchResult{}}
+				seen[source.EntryID] = d
 				out = append(out, d)
 			}
 			for _, evidence := range source.Evidence {

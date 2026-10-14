@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// Task writers retain established keys. Readers accept either naming generation
-// at the row envelope, rejecting contradictory aliases without traversing JSON.
+// New tasks write entry keys. Convert legacy backup task envelopes only,
+// rejecting conflicts without traversing arbitrary nested JSON.
 func normalizeEntryPayload(fields map[string]json.RawMessage) error {
 	for _, pair := range [][2]string{{"knowledge_id", "entry_id"}, {"knowledge_ids", "entry_ids"}} {
 		var seen bool
@@ -42,7 +42,7 @@ func normalizeEntryPayload(fields map[string]json.RawMessage) error {
 			delete(fields, key)
 		}
 		if seen {
-			fields[pair[0]] = raw
+			fields[pair[1]] = raw
 		}
 	}
 	return nil

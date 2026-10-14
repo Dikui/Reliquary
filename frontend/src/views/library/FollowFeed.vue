@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { getFollowFeed } from '@/api/follows'
 import { useFollowStore } from '@/stores/follows'
 import SearchEntry from '@/components/SearchEntry.vue'
-import type { FollowFeedArticle } from '@/types/follows'
+import type { FollowFeedEntry } from '@/types/follows'
 import { isRFC3339After } from '@/utils/rfc3339'
 
 const { t } = useI18n()
@@ -14,15 +14,15 @@ const libraryId = ref('')
 const libraryOptions = computed(() => [{ value: '', label: `${t('follows.allLibraries')} (${store.libraries.reduce((n, lib) => n + lib.new_count, 0)})` }, ...store.libraries.map(lib => ({ value: lib.library_id, label: `${lib.display_name || lib.library_name} (${lib.new_count})` }))])
 const scope = () => libraryId.value ? [libraryId.value] : undefined
 const targetIds = ref<string[]>([]), collapseSimilar = ref(true), limit = ref(20)
-const results = ref<FollowFeedArticle[]>([]), total = ref(0), loading = ref(false), error = ref(''), viewError = ref(''), marking = ref(false)
+const results = ref<FollowFeedEntry[]>([]), total = ref(0), loading = ref(false), error = ref(''), viewError = ref(''), marking = ref(false)
 const viewRetryAction = ref<'open' | 'all'>('open')
 const options = computed(() => store.targets.map(target => ({ value: target.target_id, label: `${target.name} (${t(`follows.targetTypes.${target.target_type}`)})` })))
 const limitOptions = [20, 50, 100].map(value => ({ value, label: String(value) }))
 let snapshotByLibrary: Record<string, string | null> = {}
 let sequence = 0, disposed = false, mounted = false, opened = false, snapshotLastViewed: string | null = null, snapshotViewedAt: string | undefined
-const countArticles = (articles: FollowFeedArticle[]): number => articles.reduce((count, article) => count + 1 + countArticles(article.similar_reports || []), 0)
+const countArticles = (articles: FollowFeedEntry[]): number => articles.reduce((count, article) => count + 1 + countArticles(article.similar_reports || []), 0)
 const shownArticleCount = computed(() => countArticles(results.value))
-function applyNewSnapshot(articles: FollowFeedArticle[]) { for (const article of articles) { const viewed = (article.library_id || "") in snapshotByLibrary ? snapshotByLibrary[article.library_id || ""]! : snapshotLastViewed; article.is_new = article.entered_at !== null && (viewed === null || isRFC3339After(article.entered_at, viewed)); applyNewSnapshot(article.similar_reports || []) } }
+function applyNewSnapshot(articles: FollowFeedEntry[]) { for (const article of articles) { const viewed = (article.library_id || "") in snapshotByLibrary ? snapshotByLibrary[article.library_id || ""]! : snapshotLastViewed; article.is_new = article.entered_at !== null && (viewed === null || isRFC3339After(article.entered_at, viewed)); applyNewSnapshot(article.similar_reports || []) } }
 const filterKey = () => JSON.stringify({ libraryId: libraryId.value, targetIds: targetIds.value, collapseSimilar: collapseSimilar.value, limit: limit.value })
 function readURL() {
   const nextLibrary = typeof route.query.library === 'string' ? route.query.library : ''
@@ -73,7 +73,7 @@ async function load(updateURL = false) {
   } catch { if (current === sequence && !disposed) error.value = t('follows.feedFailed') }
   finally { if (current === sequence && !disposed) loading.value = false }
 }
-function clearNew(articles: FollowFeedArticle[]) { for (const article of articles) { article.is_new = false; clearNew(article.similar_reports || []) } }
+function clearNew(articles: FollowFeedEntry[]) { for (const article of articles) { article.is_new = false; clearNew(article.similar_reports || []) } }
 async function markAllViewed() {
   if (marking.value || loading.value) return
   marking.value = true
@@ -90,7 +90,7 @@ async function markAllViewed() {
   } catch { if (!disposed) viewError.value = t('follows.markFailed') }
   finally { if (!disposed) marking.value = false }
 }
-function openArticle(article: FollowFeedArticle) { void router.push({ path: '/platform/entries', query: { entry_id: article.entry_id } }) }
+function openArticle(article: FollowFeedEntry) { void router.push({ path: '/platform/entries', query: { entry_id: article.entry_id } }) }
 function openEntity(id: string) { void router.push({ path: '/platform/entries', query: { tab: 'entities', entity_id: id } }) }
 function retryViewed() { return viewRetryAction.value === 'all' ? markAllViewed() : recordOpening() }
 watch(() => route.query, () => {
@@ -119,7 +119,7 @@ onUnmounted(() => { disposed = true; sequence++ })
       <template v-else-if="results.length">
         <p class="feed-count" role="status">{{ t('follows.resultCount', { count: results.length }) }}</p>
         <p v-if="total > shownArticleCount" class="feed-count" role="status">{{ t('follows.limitHint', { shown: shownArticleCount, total }) }}</p>
-        <SearchEntry v-for="article in results" :key="article.entry_id" :article="article" query="" follow-feed @open-article="openArticle($event as FollowFeedArticle)" @open-entity="openEntity" />
+        <SearchEntry v-for="article in results" :key="article.entry_id" :article="article" query="" follow-feed @open-article="openArticle($event as FollowFeedEntry)" @open-entity="openEntity" />
       </template>
       <div v-else class="feed-empty"><t-empty :description="t(store.targets.length ? 'follows.emptyFeed' : 'follows.emptyTargets')" /><div v-if="!store.targets.length" class="empty-actions"><router-link to="/platform/entries?tab=entities">{{ t('knowledgeWorkbench.title') }}</router-link><router-link to="/platform/topics">{{ t('topicManagement.title') }}</router-link></div></div>
     </section>

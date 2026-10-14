@@ -21,6 +21,16 @@ func preservedBeforeVectorDefaults(t *testing.T, table string, before, after []m
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	require.NoError(t, decoder.Decode(&rows))
+	for _, pair := range legacyEntryColumns[table] {
+		if len(before) > 0 {
+			if _, legacy := before[0][pair[0]]; legacy {
+				for _, row := range rows {
+					row[pair[0]] = row[pair[1]]
+					delete(row, pair[1])
+				}
+			}
+		}
+	}
 	if table == "models" {
 		kept := rows[:0]
 		for _, row := range rows {

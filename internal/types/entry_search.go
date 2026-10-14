@@ -54,7 +54,7 @@ type EntrySearchResult struct {
 	Identifier       string               `json:"identifier,omitempty"`
 	Graph            *bool                `json:"graph"`
 	HasUpdate        bool                 `json:"has_update"`
-	LatestEntryID    string               `json:"latest_article_id,omitempty"`
+	LatestEntryID    string               `json:"latest_entry_id,omitempty"`
 	EntryID          string               `json:"entry_id"`
 	Title            string               `json:"title"`
 	Source           string               `json:"source"`

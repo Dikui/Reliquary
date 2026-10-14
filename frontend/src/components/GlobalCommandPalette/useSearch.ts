@@ -28,7 +28,7 @@ export interface CmdkFileGroup {
   source?: SearchEntry['source']
   cannot_be_fact?: boolean
   has_update?: boolean
-  latest_article_id?: string
+  latest_entry_id?: string
   source_unverified?: boolean
   acquisition?: SearchEntry['acquisition']
   incomplete?: boolean
@@ -41,7 +41,7 @@ export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
     entryId: article.entry_id, libraryId: article.library_id || '', libraryName: article.library_name, title: article.title, source: article.source,
     cannot_be_fact: Boolean(article.cannot_be_fact || article.source === 'report'),
     source_unverified: Boolean(article.source_unverified),
-    has_update: Boolean(article.has_update), latest_article_id: article.latest_article_id,
+    has_update: Boolean(article.has_update), latest_entry_id: article.latest_entry_id,
     acquisition: article.source === 'article' ? article.acquisition : undefined,
     incomplete: article.source === 'article' ? article.incomplete : undefined,
     similarCount: article.similar_reports?.length || 0,

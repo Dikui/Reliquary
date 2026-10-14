@@ -11,7 +11,7 @@ import (
 
 func TestEntryContractFieldSetsAndExample(t *testing.T) {
 	value := map[string]any{
-		"entry":         types.Entry{ID: "item", SpaceID: 1, LibraryID: "library", SourceKind: "mine", Metadata: types.JSON(`{"knowledge_id":"opaque","entry_id":"user value"}`)},
+		"entry":         types.Entry{ID: "item", SpaceID: 1, LibraryID: "library", SourceKind: "mine", Metadata: types.JSON(`{"custom_id":"opaque","entry_id":"user value"}`)},
 		"entity_detail": types.EntityDetail{Entries: []types.Entry{{ID: "item", SpaceID: 1}}},
 		"search":        types.EntrySearchResponse{Results: []*types.EntrySearchResult{{EntryID: "item", Source: "mine", Snippets: []types.EntrySearchSnippet{{ChunkID: "chunk", Content: "Evidence", Score: 0.75}}, SimilarReports: []*types.EntrySearchResult{}}}},
 		"association":   types.EntryTopic{SpaceID: 1, EntryID: "item", TopicID: "topic"},

@@ -6,8 +6,8 @@ import (
 	"reliquary/internal/types"
 )
 
-// Editing history retains its persisted ownership key. Only the typed row
-// values written by topic editing are adapted; arbitrary user JSON stays intact.
+// Typed topic history retains the existing space key; entry keys use current
+// names. Arbitrary user JSON stays intact.
 func marshalOperationValue(value any) ([]byte, error) {
 	data, err := json.Marshal(value)
 	if err != nil || string(data) == "null" {
@@ -21,10 +21,6 @@ func marshalOperationValue(value any) ([]byte, error) {
 		if owner, ok := fields["space_id"]; ok {
 			fields["tenant_id"] = owner
 			delete(fields, "space_id")
-		}
-		if id, ok := fields["entry_id"]; ok {
-			fields["knowledge_id"] = id
-			delete(fields, "entry_id")
 		}
 		return json.Marshal(fields)
 	}

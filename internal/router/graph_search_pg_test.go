@@ -185,7 +185,7 @@ func TestGraphSearchNamesHopsPathsScopeSourcesAndPending(t *testing.T) {
 	require.Len(t, path.Paths, 1)
 	require.Equal(t, f.ids[:4], path.Paths[0].EntityIDs)
 	source := alias.Edges[0].Sources[0]
-	require.Equal(t, first, source.ArticleID)
+	require.Equal(t, first, source.EntryID)
 	require.Equal(t, 2026, source.PublishedAt.Year())
 	require.Equal(t, 2, source.Evidence[0].Locations[0].Paragraph)
 	require.Equal(t, "Speaker", source.Evidence[0].Speaker.Name)
@@ -287,6 +287,11 @@ func TestGraphSearchHTTPMCPRecordsAndEvaluation(t *testing.T) {
 		require.False(t, mcpOut.IsError, "%+v", mcpOut)
 		data, _ := json.Marshal(mcpOut.StructuredContent)
 		require.JSONEq(t, string(httpOut.Data), string(data))
+		var wire any
+		require.NoError(t, json.Unmarshal(data, &wire))
+		requireEntryWireKeys(t, wire)
+		require.Contains(t, string(data), `"entry_id"`)
+		require.NotContains(t, string(data), `"article_id"`)
 	}
 	records, err := service.NewSearchRecorder(f.db).List(f.ctx, service.SearchRecordFilter{Method: "graph"})
 	require.NoError(t, err)
@@ -352,7 +357,7 @@ func TestGraphSearchDeletedSourcesAndStaleReplicaDoNotBridge(t *testing.T) {
 	out, err = f.graph.Search(f.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, 1, out.Edges[0].SourceCount)
-	require.Equal(t, entry.ID, out.Edges[0].Sources[0].ArticleID)
+	require.Equal(t, entry.ID, out.Edges[0].Sources[0].EntryID)
 	require.NoError(t, f.db.Unscoped().Delete(&types.Entry{}, "id=?", entry.ID).Error)
 	request.Hops = 3
 	out, err = f.graph.Search(f.ctx, request)

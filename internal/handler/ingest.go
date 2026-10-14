@@ -185,7 +185,7 @@ func (h *EntryHandler) DiscardIngest(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"article_id": c.Param("id"), "status": "discarded", "message": "已丢弃"}})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"entry_id": c.Param("id"), "status": "discarded", "message": "已丢弃"}})
 }
 
 func (h *EntryHandler) DeleteDocument(c *gin.Context) {

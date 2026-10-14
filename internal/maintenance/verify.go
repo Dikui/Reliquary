@@ -101,8 +101,8 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			entry.JSONNulls = snapshot.JSONNulls[table]
 			entry.Data = rows
 			entry.legacySHA256 = map[int]string{}
-			for _, version := range []int{1, 2, 3} {
-				legacy, _ := json.Marshal(namedRows(portable, true, version))
+			for version := 1; version < FormatVersion; version++ {
+				legacy, _ := json.Marshal(entryNamedRows(table, portable, true, version))
 				entry.legacySHA256[version] = sum(legacy)
 			}
 		}
@@ -475,6 +475,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectMarkdownManifest(expected, actual, fileOrigin, legacyFormat)
 	expected, actual = projectIngestManifest(expected, actual)
 	expected, actual = projectLibraryManifest(expected, actual)
+	expected, actual = projectEntryNamingManifest(expected, actual)
 	expected, actual = projectDiscardManifest(expected, actual)
 	expected, actual = projectVectorManifest(expected, actual)
 	expected, actual = projectFollowManifest(expected, actual)

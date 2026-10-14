@@ -72,7 +72,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	require.Equal(t, root, status.Data.Root)
 	require.EqualValues(t, 1, status.Data.Reports.IndexedFiles)
 	response = httptest.NewRecorder()
-	request = httptest.NewRequest(http.MethodPost, "/api/v1/reports", bytes.NewBufferString(`{"title":"bad","markdown":"x","related_article_ids":["missing"]}`))
+	request = httptest.NewRequest(http.MethodPost, "/api/v1/reports", bytes.NewBufferString(`{"title":"bad","markdown":"x","related_entry_ids":["missing"]}`))
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())

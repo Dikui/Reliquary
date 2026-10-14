@@ -102,7 +102,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	require.Equal(t, customLibrary.Name, customLibrary.DisplayName("en-US"))
 	for _, article := range articles {
 		var read service.EntryReadResult
-		mcpCall(t, client, "get_article", map[string]any{"id": article.ID}, &read)
+		mcpCall(t, client, "get_entry", map[string]any{"id": article.ID}, &read)
 		require.Equal(t, article.LibraryID, read.LibraryID)
 		require.Equal(t, expected[article.LibraryID], read.LibraryName)
 	}
@@ -143,6 +143,6 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	require.NoError(t, f.db.Model(systemLibrary).Update("name", expected[systemLibrary.ID]).Error)
 	require.Greater(t, assertNames(request(http.MethodGet, "/api/v1/entries/"+articles[0].ID, "", "en-US")), 0)
 	var read service.EntryReadResult
-	mcpCall(t, client, "get_article", map[string]any{"id": articles[0].ID}, &read)
+	mcpCall(t, client, "get_entry", map[string]any{"id": articles[0].ID}, &read)
 	require.Equal(t, expected[systemLibrary.ID], read.LibraryName)
 }

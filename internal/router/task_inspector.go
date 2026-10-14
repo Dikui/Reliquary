@@ -31,16 +31,16 @@ func NewPostgresTaskInspector(client *task.Client) interfaces.TaskInspector {
 }
 
 type entryIDProbe struct {
-	EntryID string `json:"knowledge_id,omitempty"`
+	EntryID string `json:"entry_id,omitempty"`
 }
 
 type runtimeTaskPayloadProbe struct {
 	SpaceID    uint64   `json:"tenant_id,omitempty"`
 	LibraryID  string   `json:"library_id,omitempty"`
-	EntryID    string   `json:"knowledge_id,omitempty"`
+	EntryID    string   `json:"entry_id,omitempty"`
 	TaskID     string   `json:"task_id,omitempty"`
 	JobID      string   `json:"job_id,omitempty"`
-	EntryIDs   []string `json:"knowledge_ids,omitempty"`
+	EntryIDs   []string `json:"entry_ids,omitempty"`
 	EnqueuedAt int64    `json:"enqueued_at,omitempty"`
 	CreatedAt  int64    `json:"created_at,omitempty"`
 }
@@ -58,7 +58,7 @@ func (a *postgresTaskInspector) CancelTasksForEntry(ctx context.Context, entryID
 	}
 	var jobs []task.Job
 	err := a.db.WithContext(ctx).Where(
-		"task_type IN ? AND COALESCE(payload->>'knowledge_id',payload->>'entry_id') = ? AND state IN ?",
+		"task_type IN ? AND payload->>'entry_id' = ? AND state IN ?",
 		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, entryID,
 		[]string{"pending", "dispatched", "active", "scheduled", "retry"},
 	).Find(&jobs).Error
@@ -88,7 +88,7 @@ func (a *postgresTaskInspector) HasQueuedTasksForEntry(ctx context.Context, entr
 	}
 	var count int64
 	err := a.db.WithContext(ctx).Model(&task.Job{}).Where(
-		"task_type IN ? AND COALESCE(payload->>'knowledge_id',payload->>'entry_id') = ? AND state IN ?",
+		"task_type IN ? AND payload->>'entry_id' = ? AND state IN ?",
 		[]string{types.TypeDocumentProcess, types.TypeManualProcess}, entryID,
 		[]string{"pending", "dispatched", "active", "scheduled", "retry"},
 	).Count(&count).Error

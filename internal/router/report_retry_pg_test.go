@@ -197,7 +197,7 @@ func TestWriteReportConcurrentDuplicateAndLegacyFingerprint(t *testing.T) {
 	require.NoError(t, errs[1])
 	require.Equal(t, results[0].ID, results[1].ID)
 	require.NotEqual(t, results[0].Existing, results[1].Existing)
-	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", results[0].ID).Update("metadata", types.JSON(`{"related_article_ids":[]}`)).Error)
+	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", results[0].ID).Update("metadata", types.JSON(`{"related_entry_ids":[]}`)).Error)
 	legacy, err := f.documents.CreateReport(f.ctx, "Concurrent report", "# Different displayed heading\n\nconcurrentreportfixture", nil)
 	require.NoError(t, err)
 	require.True(t, legacy.Existing)

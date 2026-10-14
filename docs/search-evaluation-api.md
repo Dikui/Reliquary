@@ -1,5 +1,6 @@
 # 检索记录与测评 HTTP API
 
+资料标识统一为 `entry_id`，资料列表使用 `entry_ids`，不接受旧字段别名。
 所有路径在 `/api/v1` 下，使用现有 JWT 或 API Key 鉴权。响应为 `{"success":true,"data":...}`；错误沿用现有错误中间件。列表使用 `limit` 和 `offset`，默认 50，最大 200。
 
 | 方法 | 路径 | 用途 |

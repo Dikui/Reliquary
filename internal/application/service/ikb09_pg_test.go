@@ -115,7 +115,7 @@ func TestIKB09RetainedTopicLinkDoesNotEnterFeedOutsideScope(t *testing.T) {
 	targets, err := h.follows.ListFollows(h.ctx)
 	require.NoError(t, err)
 	for _, target := range targets {
-		require.Zero(t, target.RecentArticleCount)
+		require.Zero(t, target.RecentEntryCount)
 	}
 }
 

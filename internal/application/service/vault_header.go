@@ -23,14 +23,14 @@ type VaultArticleHeader struct {
 	SourceRef         string                  `yaml:"source_ref,omitempty" json:"source_ref,omitempty"`
 	Identifier        string                  `yaml:"identifier,omitempty" json:"identifier,omitempty"`
 	HasUpdate         bool                    `yaml:"has_update,omitempty" json:"has_update,omitempty"`
-	LatestEntryID     string                  `yaml:"latest_article_id,omitempty" json:"latest_article_id,omitempty"`
+	LatestEntryID     string                  `yaml:"latest_entry_id,omitempty" json:"latest_entry_id,omitempty"`
 	Graph             *bool                   `yaml:"graph,omitempty" json:"graph,omitempty"`
 	CannotBeFact      bool                    `yaml:"cannot_be_fact,omitempty" json:"cannot_be_fact,omitempty"`
 	RelatedEntities   []ReportEntityReference `yaml:"related_entities,omitempty" json:"related_entities,omitempty"`
 	TopicIDs          []string                `yaml:"topic_ids,omitempty" json:"topic_ids,omitempty"`
 	ReportFingerprint string                  `yaml:"report_fingerprint,omitempty" json:"report_fingerprint,omitempty"`
 	RequestID         string                  `yaml:"request_id,omitempty" json:"request_id,omitempty"`
-	RelatedArticleIDs []string                `yaml:"related_article_ids,omitempty" json:"related_article_ids,omitempty"`
+	RelatedEntryIDs   []string                `yaml:"related_entry_ids,omitempty" json:"related_entry_ids,omitempty"`
 	ID                string                  `yaml:"id" json:"id"`
 	SourceKind        string                  `yaml:"source_kind,omitempty" json:"source_kind,omitempty"`
 	URL               string                  `yaml:"url" json:"url"`
@@ -95,12 +95,12 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	if h.HasUpdate {
 		b.WriteString("has_update: true\n")
 	}
-	scalar("latest_article_id", h.LatestEntryID)
+	scalar("latest_entry_id", h.LatestEntryID)
 	if h.Graph != nil {
 		fmt.Fprintf(&b, "graph: %t\n", *h.Graph)
 	}
-	if len(h.RelatedArticleIDs) > 0 {
-		writeVaultList(&b, "related_article_ids", h.RelatedArticleIDs, true)
+	if len(h.RelatedEntryIDs) > 0 {
+		writeVaultList(&b, "related_entry_ids", h.RelatedEntryIDs, true)
 	}
 	if h.CannotBeFact {
 		b.WriteString("cannot_be_fact: true\n")

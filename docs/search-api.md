@@ -1,6 +1,6 @@
 # 普通检索接口
 
-HTTP 为 `POST /api/v1/search`，使用登录令牌或收录 API Key。MCP 为 `search`，参数相同。HTTP 返回 `{"success":true,"data":...}`；MCP 保留现有命名适配，资料 ID 字段为 `article_id`。
+HTTP 为 `POST /api/v1/search`，使用登录令牌或收录 API Key。MCP 为 `search`，参数相同。HTTP 返回 `{"success":true,"data":...}`；MCP 使用同样的资料字段，资料 ID 为 `entry_id`。
 
 ```json
 {
@@ -22,15 +22,15 @@ HTTP 为 `POST /api/v1/search`，使用登录令牌或收录 API Key。MCP 为 `
 
 | 字段 | 含义 |
 | --- | --- |
-| `entry_id` | HTTP 资料 ID，MCP 沿用 `article_id` |
+| `entry_id` | HTTP 与 MCP 的资料 ID |
 | `library_id`, `library_name`, `library_directory` | 所属库 |
 | `title`, `summary`, `entities`, `topics`, `starred` | 资料信息 |
 | `source_unverified`, `incomplete` | 来源未核实、待补全 |
-| `has_update`, `latest_article_id` | 同一来源标识是否有新记录及最新记录 ID |
+| `has_update`, `latest_entry_id` | 同一来源标识是否有新记录及最新记录 ID |
 | `score`, `similar_reports` | 最终排序分数及同库相似报道 |
 | `snippets` | 最多三个命中片段 |
 
-同一 source_ref 的旧记录返回 has_update=true 时，网页资料列表、卡片、详情和检索结果显示“有更新的记录”，点击可打开 latest_article_id 指向的新资料。字段缺失或 has_update=false 时不显示更新标记；旧资料仍可读取与检索。
+同一 source_ref 的旧记录返回 has_update=true 时，网页资料列表、卡片、详情和检索结果显示“有更新的记录”，点击可打开 latest_entry_id 指向的新资料。字段缺失或 has_update=false 时不显示更新标记；旧资料仍可读取与检索。
 
 `snippets` 保留 `chunk_id`, `content`, `chunk_index`, `score`, `match_type`, `image_path`。新增 `locations` 数组；跨段落或标题的分块可能具有多个位置。`mapping=exact` 的文字命中，位置切片按顺序拼接等于分块 `content`。既有分块器把 CRLF 规范为 LF 时，位置仍按原保存正文计数，标为 `normalized_line_endings`；先把切片中的 CRLF 替换成 LF，再与分块文字比较。图片向量命中的 `content` 可以为空，位置范围对应正文图片目标 URL，切片等于 `image_path`，不包含图片说明或 Markdown 括号。纯表头、摘要等生成文本没有正文对应范围时返回空数组，不伪造正文坐标。
 
@@ -86,7 +86,7 @@ const exactText = body.slice(utf16Start, utf16End)
 
 ## 资料返回中的库名
 
-资料详情、列表、批量读取、待审列表、待补全列表、实体关联资料、检索、关注动态及 MCP 返回中的 `library_name` 均使用所属库当前保存的 `libraries.name`，与 `library_id` 对应。改名后下次读取立即生效，库名不写入资料表。MCP `get_article` 在顶层返回 `library_id`、`library_name`，同时保留原有 `header.library_id` 和 `header.library`。
+资料详情、列表、批量读取、待审列表、待补全列表、实体关联资料、检索、关注动态及 MCP 返回中的 `library_name` 均使用所属库当前保存的 `libraries.name`，与 `library_id` 对应。改名后下次读取立即生效，库名不写入资料表。MCP `get_entry` 在顶层返回 `library_id`、`library_name`，同时保留原有 `header.library_id` 和 `header.library`。
 
 `library_name` 不随请求语言翻译，与检索结果保持一致。库列表接口另外提供 `display_name`：未改名的系统库按请求语言本地化，已改名的系统库和自定义库保留所保存的名称。需要本地化的客户端可以通过 `library_id` 对应库列表的 `display_name`。
 
@@ -155,7 +155,7 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
     "version": 1,
     "source_count": 1,
     "sources": [{
-      "article_id": "source-document-id",
+      "entry_id": "source-document-id",
       "title": "合作资料",
       "library_id": "mine-library-id",
       "library_name": "我的资料",

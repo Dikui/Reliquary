@@ -146,7 +146,7 @@ func TestIngestConflictPreservesOriginalAndCanBeDiscardedOrSaved(t *testing.T) {
 	require.Equal(t, "conflict", result.Status)
 	require.NotEqual(t, first.EntryID, result.EntryID)
 	conflict := h.article(t, result.EntryID)
-	require.Equal(t, first.EntryID, conflict.RelatedArticleID)
+	require.Equal(t, first.EntryID, conflict.RelatedEntryID)
 	require.Equal(t, different.CollectReason, conflict.CollectReason)
 	require.Equal(t, different.AgentSummary, conflict.AgentSummary)
 	_, _, still := readVaultArticle(t, v, h.article(t, first.EntryID))
@@ -164,7 +164,7 @@ func TestIngestConflictPreservesOriginalAndCanBeDiscardedOrSaved(t *testing.T) {
 	saved := h.article(t, result.EntryID)
 	require.Equal(t, types.ParseStatusCompleted, saved.ParseStatus)
 	require.NotEmpty(t, saved.VaultPath)
-	require.Equal(t, first.EntryID, saved.RelatedArticleID)
+	require.Equal(t, first.EntryID, saved.RelatedEntryID)
 }
 
 func TestIngestConcurrentSameSupplementMutatesOnce(t *testing.T) {

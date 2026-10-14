@@ -140,22 +140,14 @@ test('the operation log bookmark opens its settings section and preserves filter
   assert.deepEqual(router.currentRoute.value.query, { section: 'operation-logs', operation_type: 'star', page: '2' })
 })
 
-test('saved list and search bookmarks redirect with query and hash intact', async () => {
+test('retired entry route aliases are no longer registered', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const [oldPath, newPath] of [['/platform/knowledge', '/platform/entries'], ['/platform/knowledge-search', '/platform/search']]) {
-    await router.push(`${oldPath}?query=observations&sources=mine#selected`)
-    assert.equal(router.currentRoute.value.path, newPath)
-    assert.deepEqual(router.currentRoute.value.query, { query: 'observations', sources: 'mine' })
-    assert.equal(router.currentRoute.value.hash, '#selected')
+  for (const path of ['/platform/knowledge', '/platform/knowledge-search']) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.name, 'platformNotFound')
   }
-})
-
-test('a pre-rename bookmarked entry selection reaches the current detail query', async () => {
-  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  await router.push('/platform/knowledge?knowledge_id=original-entry#detail')
-  assert.equal(router.currentRoute.value.path, '/platform/entries')
-  assert.deepEqual(router.currentRoute.value.query, { entry_id: 'original-entry' })
-  assert.equal(router.currentRoute.value.hash, '#detail')
+  const source = readFileSync(new URL('./routes.ts', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /knowledge_id/)
 })
 
 test('old collection page URLs redirect to the article list instead of not found', async () => {

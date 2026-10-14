@@ -47,7 +47,7 @@ import {
   documentListFiltersEqual,
   type DocumentListFilters,
 } from './documentListFilters';
-import type { ArticleJudgment } from '@/api/entry-judgments';
+import type { EntryJudgment } from '@/api/entry-judgments';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import { useReparseConfirmStore } from '@/stores/reparseConfirm';
 import {
@@ -811,7 +811,7 @@ const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknow
     void loadEntryFiles(libraryId.value);
   }
 };
-const syncArticleJudgment = (state: ArticleJudgment) => {
+const syncEntryJudgment = (state: EntryJudgment) => {
   syncDocumentProcessingState({ ...state });
   if (details.id === state.id) Object.assign(details, state);
   void pendingCounts.refresh();
@@ -1180,7 +1180,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 <template v-else-if="cardList.length && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
                   <DocumentCardView
-                    :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncArticleJudgment"
+                    :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment"
 
                     :selected-ids="selectedIds"
                     :batch-mode="batchMode"
@@ -1198,7 +1198,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                   />
                 </template>
                 <template v-else-if="cardList.length && (viewMode === 'list' || selectedParseStatus === 'rejected')">
-                  <DocumentListView :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncArticleJudgment"
+                  <DocumentListView :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment"
                     :selected-ids="selectedIds"
 
                     :trace-visible-ids="traceAvailableById"

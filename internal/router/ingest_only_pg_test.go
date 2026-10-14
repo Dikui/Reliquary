@@ -65,7 +65,7 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 	for _, tool := range tools.Tools {
 		if tool.Name == "ingest" || tool.Name == "check_urls" || tool.Name == "list_incomplete" {
 			require.Contains(t, tool.Description, "送入 Markdown 正文全文与图片文件")
-			require.Contains(t, tool.Description, "补全时提供 library、article_id 与图片")
+			require.Contains(t, tool.Description, "补全时提供 library、entry_id 与图片")
 		}
 		if tool.Name == "ingest" {
 			require.Contains(t, tool.Description, "10 MiB")
@@ -116,7 +116,7 @@ func TestMCPAndHTTPIncompleteListAcceptAndAcquisition(t *testing.T) {
 		}
 	}
 	var read service.EntryReadResult
-	mcpCall(t, client, "get_article", map[string]any{"id": first.ID}, &read)
+	mcpCall(t, client, "get_entry", map[string]any{"id": first.ID}, &read)
 	require.Equal(t, "model_written", read.Acquisition)
 	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "Acquisitionfixture", "collapse_similar": false}, &search)

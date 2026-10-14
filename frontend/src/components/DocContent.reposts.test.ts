@@ -185,11 +185,11 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: detail conflict keeps its approval label after loading the actual related article field`, async () => {
-    const loader = createArticleDetailsLoader({ conflict: { related_article_id: 'original-article', parse_status: 'rejected', metadata: { intake: { source: 'api', decision: 'rejected', source_info: { original_url: 'https://example.com/conflict' } } } } })
+    const loader = createArticleDetailsLoader({ conflict: { related_entry_id: 'original-article', parse_status: 'rejected', metadata: { intake: { source: 'api', decision: 'rejected', source_info: { original_url: 'https://example.com/conflict' } } } } })
     const review = compileSFC('./ReviewActions.vue').create({ '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) }, 'tdesign-vue-next': { MessagePlugin: {} } })
     const loadedDetails = await loader.load('conflict')
     const html = await renderDetails([], locale, { loadedDetails, reviewActions: { __esModule: true, default: review } })
-    assert.equal(loadedDetails.related_article_id, 'original-article')
+    assert.equal(loadedDetails.related_entry_id, 'original-article')
     assert.ok(html.includes(messages[locale].knowledgeReview.saveAsNew))
   })
   test(`${locale}: details prevent cross-action submissions and refresh review counts only on article judgments`, async () => {
@@ -203,7 +203,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await state.reprocess()
       state.applyProcessingState({ parse_status: 'completed' })
       assert.equal(events.length, 0, 'processing polls do not refresh pending counts')
-      state.applyArticleJudgment({ content_type: 'research' })
+      state.applyEntryJudgment({ content_type: 'research' })
       assert.equal(events.length, 1)
     } })
     assert.deepEqual(disabled, [true])

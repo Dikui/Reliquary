@@ -73,7 +73,7 @@ func (s *entryService) findIngestURL(ctx context.Context, normalized string, loc
 		return nil, nil
 	}
 	owners := s.db.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id=? AND library_id=? AND normalized_url=?", spaceID, library.ID, normalized)
-	query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND related_article_id=''", spaceID, library.ID).
+	query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND related_entry_id=''", spaceID, library.ID).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting})
 	if rules.MergeReposts {
 		query = query.Where("normalized_url=? OR id IN (?)", normalized, owners)
@@ -233,7 +233,7 @@ func (s *entryService) AcceptIncomplete(ctx context.Context, id string) (*types.
 // Record every canonical and repost link before destructive deletion. The
 // ledger has no FK because it intentionally survives article removal.
 func (s *entryService) rememberIngestDiscard(ctx context.Context, k *types.Entry, reason string) error {
-	if s.db == nil || k == nil || k.RelatedArticleID != "" {
+	if s.db == nil || k == nil || k.RelatedEntryID != "" {
 		return nil
 	}
 	rules, err := messageTemplateRules(s.db.WithContext(ctx), k)
@@ -258,7 +258,7 @@ func (s *entryService) rememberIngestDiscard(ctx context.Context, k *types.Entry
 	}
 	for _, key := range keys {
 		row := types.IngestDiscard{SpaceID: k.SpaceID, LibraryID: k.LibraryID, Fingerprint: key.fingerprint, NormalizedURL: key.url, EntryID: k.ID, DiscardedAt: time.Now(), Reason: reason}
-		if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "fingerprint"}}, DoUpdates: clause.AssignmentColumns([]string{"article_id", "discarded_at", "reason"})}).Create(&row).Error; err != nil {
+		if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "fingerprint"}}, DoUpdates: clause.AssignmentColumns([]string{"entry_id", "discarded_at", "reason"})}).Create(&row).Error; err != nil {
 			return err
 		}
 	}

@@ -41,7 +41,7 @@ func ingestConflictingMaterialRequest(t *testing.T) *types.IngestRequest {
 func assertIngestConflictCount(t *testing.T, h *articleProcessingHarness, originalID string, count int64) {
 	t.Helper()
 	var articles int64
-	require.NoError(t, h.db.Model(&types.Entry{}).Where("related_article_id=? AND parse_status=?", originalID, types.ParseStatusRejected).Count(&articles).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("related_entry_id=? AND parse_status=?", originalID, types.ParseStatusRejected).Count(&articles).Error)
 	require.Equal(t, count, articles)
 	logs, err := NewOperationLogService(h.db).List(h.ctx, "ingest_conflict", 1, 100)
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestIngestConflictSameBodyRetryKeepsPendingIDAndMaterials(t *testing.T) {
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "conflict", first.Status)
-	require.Equal(t, originalID, h.article(t, first.EntryID).RelatedArticleID)
+	require.Equal(t, originalID, h.article(t, first.EntryID).RelatedEntryID)
 	beforeFiles := transactionStoredFiles(t, root)
 	var beforeResources int64
 	require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&beforeResources).Error)

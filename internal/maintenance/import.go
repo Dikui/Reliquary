@@ -118,7 +118,10 @@ func Load(root string) (*Snapshot, error) {
 		if err := decoder.Decode(&rows); err != nil {
 			return nil, err
 		}
-		for _, row := range namedRows(rows, false) {
+		if err := validateEntryReplicaColumns(table, rows, manifest.FormatVersion, manifest.SchemaVersion); err != nil {
+			return nil, err
+		}
+		for _, row := range entryNamedRows(table, rows, false, manifest.FormatVersion) {
 			for column := range row {
 				if _, ok := rule.Columns()[column]; !ok && !legacyMarkdownColumn(table, column) {
 					return nil, fmt.Errorf("unclassified replica column %s.%s", table, column)

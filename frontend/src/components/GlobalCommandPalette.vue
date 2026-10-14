@@ -60,7 +60,7 @@
                 @primary="openChunk(item)" @hover="selectItemAt($event)">
                 <template #title>
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>
-                  <EntryUpdateNotice :has-update="item.file.has_update" :latest-entry-id="item.file.latest_article_id" />
+                  <EntryUpdateNotice :has-update="item.file.has_update" :latest-entry-id="item.file.latest_entry_id" />
                 </template>
                 <template #subtitle>
                   <span v-if="item.file.libraryName" class="result-library">{{ item.file.libraryName }}</span>

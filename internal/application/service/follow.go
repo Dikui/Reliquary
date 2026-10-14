@@ -182,7 +182,7 @@ func (s *FollowService) ListFollows(ctx context.Context) ([]types.FollowTarget, 
 	err = s.db.WithContext(ctx).Raw(`SELECT f.target_type,f.target_id,f.created_at,
         CASE WHEN f.target_type='entity' THEN e.canonical_name ELSE t.name END AS name,
         (SELECT count(*) FROM entries k WHERE k.space_id=f.space_id AND `+followEligibleSQL+`
-            AND k.created_at>=? AND k.created_at<=? AND `+followMatchSQL+`) AS recent_article_count
+            AND k.created_at>=? AND k.created_at<=? AND `+followMatchSQL+`) AS recent_entry_count
         FROM follows f LEFT JOIN entities e ON f.target_type='entity' AND e.space_id=f.space_id AND e.id=f.target_id
         LEFT JOIN topics t ON f.target_type='topic' AND t.space_id=f.space_id AND t.id=f.target_id
         WHERE f.space_id=? AND ((f.target_type='entity' AND e.merged_into_id='') OR (f.target_type='topic' AND t.id IS NOT NULL))

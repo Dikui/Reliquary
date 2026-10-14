@@ -1,8 +1,8 @@
 {
   "association": {
     "created_at": "0001-01-01T00:00:00Z",
+    "entry_id": "item",
     "is_historical": false,
-    "knowledge_id": "item",
     "source": "",
     "tenant_id": 1,
     "topic_id": "topic"
@@ -18,7 +18,7 @@
       "tenant_id": 0,
       "updated_at": "0001-01-01T00:00:00Z"
     },
-    "knowledge": [
+    "entries": [
       {
         "acquisition": "",
         "agent_summary": "",
@@ -110,8 +110,8 @@
     "library_id": "library",
     "library_name": "",
     "metadata": {
-      "entry_id": "user value",
-      "knowledge_id": "opaque"
+      "custom_id": "opaque",
+      "entry_id": "user value"
     },
     "missing_materials": null,
     "parse_status": "",
@@ -165,15 +165,19 @@
   },
   "search": {
     "excluded_missing_published_at": 0,
+    "rerank_status": "",
     "results": [
       {
         "acquisition": "",
-        "article_id": "item",
         "content_type": "",
         "entities": null,
+        "entry_id": "item",
         "graph": null,
         "has_update": false,
         "incomplete": false,
+        "library_directory": "",
+        "library_id": "",
+        "library_name": "",
         "original_url": "",
         "published_at": null,
         "score": 0,
@@ -183,9 +187,9 @@
             "chunk_id": "chunk",
             "chunk_index": 0,
             "content": "Evidence",
+            "locations": null,
             "match_type": "",
-            "score": 0.75,
-            "locations": null
+            "score": 0.75
           }
         ],
         "source": "mine",
@@ -194,13 +198,9 @@
         "summary": null,
         "title": "",
         "topics": null,
-        "vault_path": "",
-        "library_id": "",
-        "library_name": "",
-        "library_directory": ""
+        "vault_path": ""
       }
     ],
-    "vector_unavailable": false,
-    "rerank_status": ""
+    "vector_unavailable": false
   }
 }

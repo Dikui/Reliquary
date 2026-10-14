@@ -46,12 +46,12 @@ HTTP `POST /api/v1/ingest` 对应 MCP `ingest`，参数相同：
 {"items":[{"library":"mine","source_ref":"notes/calibration.md","title":"校准记录","content":"# 校准\n\n完整步骤与结果。","acquisition":"verbatim"}]}
 ```
 
-每批 1 至 50 项。content 是完整 Markdown；acquisition 必选 verbatim、extracted 或 model_written。新收录最多 500 万 Unicode 码点，实际处理还受模型上下文及分段数限制。逐项检查 status、article_id、reason、image_failures 和 completeness。accepted 表示接收成功，处理可异步完成；用 `GET /api/v1/entries/:id` 查询 parse_status。pending_review 需要用户判断，invalid 需要修正参数，exists 使用已有 ID。
+每批 1 至 50 项。content 是完整 Markdown；acquisition 必选 verbatim、extracted 或 model_written。新收录最多 500 万 Unicode 码点，实际处理还受模型上下文及分段数限制。逐项检查 status、entry_id、reason、image_failures 和 completeness。accepted 表示接收成功，处理可异步完成；用 `GET /api/v1/entries/:id` 查询 parse_status。pending_review 需要用户判断，invalid 需要修正参数，exists 使用已有 ID。
 
 图片先经 `POST /api/v1/ingest/assets` 上传 multipart 的 file，再用 asset_id 和 source_url 对应正文图片地址，也可提交受限的 base64。服务端不下载远程图片。暂缺图片时提交 missing，后续按资料 ID 补全：
 
 ```json
-{"items":[{"library":"mine","article_id":"已有待补全ID","images":[{"asset_id":"上传返回ID","source_url":"https://example.org/chart.png"}]}]}
+{"items":[{"library":"mine","entry_id":"已有待补全ID","images":[{"asset_id":"上传返回ID","source_url":"https://example.org/chart.png"}]}]}
 ```
 
 普通 URL 查重使用 HTTP `POST /api/v1/ingest/check` 或 MCP `check_urls`，参数为 library 与 urls；不是图片补全入口。完整状态、长度上限、重试及来源规则见 [收录接口](ingest-api.md)。
@@ -64,7 +64,7 @@ HTTP `POST /api/v1/search` 对应 MCP `search`：
 {"query":"仪器校准","libraries":["mine","references"],"limit":20,"collapse_similar":false}
 ```
 
-libraries 必填，可多选。支持所属库的 content_types、entity_ids、topic_ids、published_from、published_to 与 starred。结果按资料合并，返回库、摘要、命中 snippets 和正文位置。vector_unavailable 与 rerank_status 说明退回全文或原排序；检索返回 cannot_be_fact 的报告和 source_unverified 的来源时，外部工具应保留这些标记。完整坐标与过滤规则见 [检索接口](search-api.md)。MCP `get_article` 可分段读取全文，HTTP 为 `GET /api/v1/entries/:id/body`。
+libraries 必填，可多选。支持所属库的 content_types、entity_ids、topic_ids、published_from、published_to 与 starred。结果按资料合并，返回库、摘要、命中 snippets 和正文位置。vector_unavailable 与 rerank_status 说明退回全文或原排序；检索返回 cannot_be_fact 的报告和 source_unverified 的来源时，外部工具应保留这些标记。完整坐标与过滤规则见 [检索接口](search-api.md)。MCP `get_entry` 可分段读取全文，HTTP 为 `GET /api/v1/entries/:id/body`。
 
 ## 图谱检索
 
@@ -81,13 +81,13 @@ HTTP `POST /api/v1/graph/search` 对应 MCP `graph_search`，参数和返回 dat
 HTTP `POST /api/v1/reports` 对应 MCP `write_report`，固定写入 AI 报告系统库：
 
 ```json
-{"title":"校准分析报告","markdown":"# 校准分析\n\n基于引用资料的综合分析。","related_article_ids":["已有资料ID"],"related_entities":["已有实体ID"],"request_id":"grok-calibration-20261014-01"}
+{"title":"校准分析报告","markdown":"# 校准分析\n\n基于引用资料的综合分析。","related_entry_ids":["已有资料ID"],"related_entities":["已有实体ID"],"request_id":"grok-calibration-20261014-01"}
 ```
 
 title 与 markdown 必填。related_entities 只引用已存在且未合并的实体，topics 可引用已有主题；不自动创建档案。不传来源、摘要或图谱开关。相同 request_id 的重试返回原报告，existing=true，不覆盖内容。没有 request_id 时按规范内容指纹幂等。报告只建索引，向量调用仍记账；index_status=pending_retry 时由后台继续，不必再创建另一份。完整格式与幂等边界见 [报告契约](ingest-api.md#write_reportai-报告格式契约)。
 
-## 资料 ID 与兼容字段
+## 资料 ID
 
-内部模型统一为 Entry。已发布的收录、补全和部分 MCP 字段仍为 article_id；普通检索 HTTP、测评答案和调用统计字段使用 entry_id；write_report 的引用列表为 related_article_ids。它们指同一资料 ID。客户端在边界转换字段名称，不能把 entry_id 当成收录的别名提交。当前不同时发布两套可写 ID 字段，统一改名需单独安排兼容迁移。
+HTTP、MCP 和文件库统一使用 Entry 命名。资料 ID 为 `entry_id`，列表为 `entry_ids`，更新指针为 `latest_entry_id`，关联资料为 `related_entry_id` 或 `related_entry_ids`。MCP 读取工具为 `get_entry`，实体详情返回 `entries`。不接受旧字段或旧工具名称的别名。资料对象与文件库表头自身的主键保持 `id`，读取 HTTP 路径保持 `/api/v1/entries/:id`。
 
 测评集与运行、检索记录、模型调用统计通过 HTTP 管理，分别见 [测评 API](search-evaluation-api.md) 与 [调用统计](model-calls.md)。当前没有这些管理操作的 MCP 工具。备份、恢复、队列重推及图谱重建由部署维护者执行，见 [个人使用](personal-use.md)。

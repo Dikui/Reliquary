@@ -52,7 +52,7 @@ func TestIngestResourceDuplicateCleanupWithinTransaction(t *testing.T) {
 			t.Logf("batch result after duplicate lookup: %+v", result.Items[0])
 			var repost types.EntryRepostSource
 			require.NoError(t, h.db.Where("normalized_url=?", normalizeMessageURL(request.URL)).First(&repost).Error)
-			t.Logf("persisted repost method=%s article_id=%s", repost.MatchMethod, repost.EntryID)
+			t.Logf("persisted repost method=%s entry_id=%s", repost.MatchMethod, repost.EntryID)
 			require.Equal(t, "exists", result.Items[0].Status)
 			require.Equal(t, existing.EntryID, result.Items[0].EntryID)
 			require.Equal(t, method, repost.MatchMethod)

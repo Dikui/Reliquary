@@ -90,7 +90,7 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 			expected = append(expected, "source_unverified")
 		}
 		if entry.SourceRef != "" {
-			expected = append(expected, "latest_article_id")
+			expected = append(expected, "latest_entry_id")
 		}
 		if entry.SourceKind == "report" {
 			expected = append(expected, "cannot_be_fact", "report_fingerprint")

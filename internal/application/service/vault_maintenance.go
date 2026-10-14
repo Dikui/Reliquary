@@ -212,7 +212,12 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 	if err := maintenance.RequireCurrentVaultReplica(s.root); err != nil {
 		return result, err
 	}
-	_, err := maintenance.Import(ctx, s.db, s.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), func(row map[string]any) error {
+	original, err := maintenance.Load(s.root)
+	if err != nil {
+		return result, err
+	}
+	legacyEntryNames := original.UsesLegacyEntryNames()
+	_, err = maintenance.Import(ctx, s.db, s.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), func(row map[string]any) error {
 		path, _ := row["vault_path"].(string)
 		if path == "" {
 			return nil
@@ -229,7 +234,7 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 			row["vault_body"] = ""
 			return nil
 		}
-		header, body, err := ParseVaultArticle(data)
+		header, body, err := parseVaultReplicaHeader(data, legacyEntryNames)
 		if err != nil {
 			return err
 		}

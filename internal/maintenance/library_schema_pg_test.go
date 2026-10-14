@@ -21,7 +21,7 @@ func TestLibraryUpgradePreservationProjection(t *testing.T) {
 	require.NoError(t, err)
 	defer migration.Close()
 	require.NoError(t, migration.Migrate(9))
-	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Owner','personal'); INSERT INTO libraries(id,space_id,name,description,embedding_model_id,summary_model_id) VALUES('old',1,'Library','','embed',''); INSERT INTO entries(id,space_id,library_id,type,title,source,source_kind) VALUES('mine',1,'old','manual','Retained','','mine'),('report',1,'old','manual','Report','','report')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Owner','personal'); INSERT INTO libraries(id,space_id,name,description,embedding_model_id,summary_model_id) VALUES('old',1,'Library','','embed',''); INSERT INTO entries(id,space_id,library_id,type,title,source,source_kind) VALUES('mine',1,'old','manual','Retained','','mine'),('report',1,'old','manual','Report','','report'); INSERT INTO task_pending_ops(id,task_type,queue,payload,state) VALUES('legacy-library-task','manual:process','default','{"knowledge_id":"mine","library_id":"old"}','pending')`).Error)
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", snapshot))

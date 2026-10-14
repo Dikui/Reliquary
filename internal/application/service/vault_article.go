@@ -100,7 +100,7 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	}
 	var metadata reportMetadata
 	if err := json.Unmarshal(k.Metadata, &metadata); err == nil {
-		h.RelatedArticleIDs = metadata.RelatedArticleIDs
+		h.RelatedEntryIDs = metadata.RelatedEntryIDs
 		if k.SourceKind == "report" {
 			h.RelatedEntities = metadata.RelatedEntities
 			h.TopicIDs = metadata.TopicIDs

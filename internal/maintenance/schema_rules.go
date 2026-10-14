@@ -57,6 +57,11 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 		if migration.Version < 22 {
 			delete(copy, "model_calls")
 		}
+		if migration.Version < 23 {
+			for table, rule := range copy {
+				copy[table] = legacyEntryRule(table, rule)
+			}
+		}
 		result = copy
 	}()
 	if migration.Dirty {
@@ -165,7 +170,7 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 	}
 	entries := legacy["entries"]
 	entries.Header = remove(entries.Header, "acquisition")
-	entries.Sidecar = remove(entries.Sidecar, "incomplete", "external_completion_attempted", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "missing_materials", "ingest_attachments", "content_type_hint", "related_article_id")
+	entries.Sidecar = remove(entries.Sidecar, "incomplete", "external_completion_attempted", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "missing_materials", "ingest_attachments", "content_type_hint", "related_entry_id")
 	legacy["entries"] = entries
 	logs := legacy["operation_logs"]
 	logs.Sidecar = remove(logs.Sidecar, "api_key_id", "api_key_name")

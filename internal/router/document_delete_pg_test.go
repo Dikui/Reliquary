@@ -104,7 +104,7 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 				require.Zero(t, count, table)
 			}
 			var discards int64
-			require.NoError(t, f.db.Table("ingest_discards").Where("article_id=?", id).Count(&discards).Error)
+			require.NoError(t, f.db.Table("ingest_discards").Where("entry_id=?", id).Count(&discards).Error)
 			require.EqualValues(t, 1, discards)
 			var log types.OperationLog
 			require.NoError(t, f.db.Where("operation_type=? AND object_id=?", "delete_document", id).First(&log).Error)

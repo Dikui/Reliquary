@@ -18,11 +18,11 @@ type Follow struct {
 func (Follow) TableName() string { return "follows" }
 
 type FollowTarget struct {
-	TargetType         string    `json:"target_type"`
-	TargetID           string    `json:"target_id"`
-	Name               string    `json:"name"`
-	CreatedAt          time.Time `json:"created_at"`
-	RecentArticleCount int64     `json:"recent_article_count"`
+	TargetType       string    `json:"target_type"`
+	TargetID         string    `json:"target_id"`
+	Name             string    `json:"name"`
+	CreatedAt        time.Time `json:"created_at"`
+	RecentEntryCount int64     `json:"recent_entry_count"`
 }
 
 type FollowFeedRequest struct {
