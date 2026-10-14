@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, watch, computed, nextTick } 
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import ModelCallSummary from './ModelCallSummary.vue'
+import ModelCallContentViewer from './ModelCallContentViewer.vue'
 import { modelCallsFromSpan } from '@/utils/modelCalls'
 import { copyWithToast } from '@/utils/clipboard'
 import { processingSpanLabel } from '@/utils/processingSpanLabel'
@@ -1164,9 +1165,14 @@ watch(
   { immediate: true },
 )
 
+function hasCallViewer(node: SpanNode): boolean {
+  return !!node.span_id && (node.kind === 'generation' || ['docreader', 'processing', 'embedding'].includes(node.name) || modelCallsFromSpan(node).length > 0)
+}
+
 function tabHasContent(tab: 'input' | 'output' | 'metadata'): boolean {
   const node = selectedRow.value?.node
   if (!node) return false
+  if (tab !== 'metadata' && hasCallViewer(node)) return true
   return hasContent((node as any)[tab])
 }
 
@@ -1643,6 +1649,7 @@ const processConfigLines = computed<string[]>(() => {
 
               <!-- Input / Output / Metadata tabs -->
               <template v-else-if="detailTab === 'input' || detailTab === 'output' || detailTab === 'metadata'">
+                <ModelCallContentViewer v-if="detailTab !== 'metadata' && hasCallViewer(selectedRow.node)" :entry-id="entryId" :processing-attempt="data?.attempt" :span-id="selectedRow.node.span_id" :direction="detailTab" />
                 <div v-if="!tabHasContent(detailTab)" class="kp-detail-empty">
                   <span>{{ detailTab === 'metadata' ? t('knowledgeStages.detail.metadataEmpty') :
                     t('knowledgeStages.detail.empty') }}</span>

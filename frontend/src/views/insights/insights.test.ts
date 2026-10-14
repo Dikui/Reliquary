@@ -8,6 +8,7 @@ import zh from '../../i18n/locales/zh-CN.ts'
 import en from '../../i18n/locales/en-US.ts'
 import { metricKeys, metricLabels } from '../../api/insightMetrics.ts'
 import { mapTrend, chartGeometry } from './trend.ts'
+import { contentBlocks, formatContent, contentCharacters } from '../../utils/modelCallContent'
 import { createApplicationRoutes } from '../../router/routes.ts'
 
 const metrics = (v: number) => Object.fromEntries(metricKeys.map(k => [k, v]))
@@ -36,6 +37,7 @@ function environment(locale = 'en-US') {
       if (path === 'entries/search') return [{ id: 'e1', title: 'Selected material', library_id: 'lib1' }, { id: 'outside', title: 'Outside library', library_id: 'lib2' }]
       if (path === 'model-calls/purposes') return ['body_embedding', 'evaluation_generation']
       if (path === 'model-calls/summary' || path === 'model-calls/trend') return state.summaries
+      if (path === 'model-calls/call1/content') return { id: 'call1', request: '{\"messages\":[{\"role\":\"user\",\"content\":\"Complete prompt\"}]}', response: 'Complete response', complete: true }
       if (path === 'entries/e1') return { title: 'Selected material' }
       throw new Error(`Unexpected GET ${path}`)
     },
@@ -52,8 +54,9 @@ function environment(locale = 'en-US') {
     async remove(path: string) { capture('delete', path, {}); if (path === 'evaluation/sets/set1') state.sets = []; else state.questions = []; return {} },
     async callDetails(body: any) { capture('get', 'model-calls', body); return { data: state.details, total: state.total } },
   }
-  const modules: Record<string, unknown> = { 'vue-i18n': { useI18n: () => i18n.global }, 'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async (to: any) => { route.query = to.query } }) }, '@/api/insights': api, '@/api/library': { listLibraries: async () => ({ success: true, data: await api.read('libraries') }) }, './insights.css': {}, './trend': { mapTrend, chartGeometry } }
+  const modules: Record<string, unknown> = { '@/utils/modelCallContent': { contentBlocks, formatContent, contentCharacters }, '@/utils/clipboard': { copyToClipboard: async () => true }, 'vue-i18n': { useI18n: () => i18n.global }, 'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async (to: any) => { route.query = to.query } }) }, '@/api/insights': api, '@/api/library': { listLibraries: async () => ({ success: true, data: await api.read('libraries') }) }, './insights.css': {}, './trend': { mapTrend, chartGeometry } }
   function component(name: string) { return loadComponent(new URL(name, import.meta.url), modules) }
+  modules['@/components/ModelCallContentViewer.vue'] = component('../../components/ModelCallContentViewer.vue')
   modules['@/components/LibraryScopeSelect.vue'] = component('../../components/LibraryScopeSelect.vue')
   for (const name of ['EntryPicker', 'QuestionEditor', 'RunResults', 'TrendChart']) modules[`./${name}.vue`] = component(`./${name}.vue`)
   function mount(name: string, props = {}) {
@@ -247,3 +250,10 @@ for (const locale of ['zh-CN', 'en-US']) {
     } finally { m.close() }
   })
 }
+
+test('call statistics opens the shared content viewer for the chosen request', async () => {
+ const env = environment(), m = env.mount('./ModelCallsPage.vue'); await settle()
+ await click(descendants(m.root).find(n => n.tag === 'button' && visibleText(n) === 'View input and output')!)
+ assert.match(visibleText(m.root), /Complete prompt/)
+ assert.ok(env.calls.some(c => c.path === 'model-calls/call1/content')); assert.deepEqual(m.errors, []); m.close()
+})

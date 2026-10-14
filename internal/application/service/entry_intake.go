@@ -105,8 +105,26 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 		return true, s.repo.UpdateEntry(ctx, entry)
 	}
 	ctx, calls := types.WithModelCallCollector(ctx)
-	parent := s.tracker().LookupStage(ctx, entry.ID, s.tracker().LatestAttempt(ctx, entry.ID), types.StageDocReader)
+	reviewAttempt := s.tracker().LatestAttempt(ctx, entry.ID)
+	if reviewAttempt == 0 {
+		if root, n, err := s.tracker().OpenAttempt(ctx, entry.ID); err == nil && root != nil {
+			reviewAttempt = n
+			if s.db != nil {
+				_ = s.db.WithContext(ctx).Model(&types.EntryProcessingSpan{}).Where("entry_id=? AND span_id=?", entry.ID, root.SpanID).Update("metadata", types.JSONMap{"synchronous_review": true}).Error
+			}
+		}
+	}
+	if reviewAttempt > 0 {
+		ctx = withAttempt(ctx, reviewAttempt)
+	}
+	parent := s.tracker().LookupStage(ctx, entry.ID, reviewAttempt, types.StageDocReader)
+	if parent == nil && reviewAttempt > 0 {
+		parent = s.tracker().BeginStage(ctx, entry.ID, reviewAttempt, types.StageDocReader, nil)
+	}
 	span := s.tracker().BeginSubSpan(ctx, parent, "intake.review", types.SpanKindGeneration, nil)
+	if span != nil {
+		ctx = types.WithModelCallTrace(ctx, span.Attempt, span.SpanID)
+	}
 	defer func() {
 		if reviewErr != nil && !errors.Is(reviewErr, errSegmentReviewQueued) {
 			s.tracker().FailSpan(ctx, span, "INTAKE_REVIEW_FAILED", reviewErr.Error(), reviewErr)

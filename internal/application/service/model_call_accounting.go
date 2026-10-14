@@ -22,7 +22,7 @@ func (s *modelService) callAccounting(m *types.Model) *types.ModelCallAccounting
 	default:
 		snapshot.Parameters.Provider = string(provider.Resolve(provider.ProviderName(m.Parameters.Provider), m.Parameters.BaseURL))
 	}
-	return &types.ModelCallAccounting{Model: &snapshot, Write: modelcalls.NewStore(s.db).Write}
+	return &types.ModelCallAccounting{Model: &snapshot, Write: modelcalls.NewStore(s.db).Enqueue}
 }
 
 // ModelCallAccounting also supplies the ledger for temporary connection probes.

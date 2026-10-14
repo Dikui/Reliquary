@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -211,6 +212,14 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 	bodyLimit, _, completion := s.articleProcessingLimits(model)
 	images, imageInputs, imageRecords := s.attachProcessingImages(ctx, library, k, body, model.Parameters.SupportsVision, imageRefs...)
 	input.Images = imageInputs
+	imageReferences := []types.ModelCallImageReference{}
+	for i, uri := range images {
+		_, payload, _ := strings.Cut(uri, ",")
+		data, _ := base64.StdEncoding.DecodeString(payload)
+		index := imageInputs[i].Index - 1
+		imageReferences = append(imageReferences, types.ModelCallImageReference{Path: imageRecords[index].URL, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))})
+	}
+	ctx = types.WithModelCallImages(ctx, imageReferences)
 	if len([]rune(body)) > bodyLimit {
 		return nil, errors.New("segment exceeds configured body budget")
 	}

@@ -100,7 +100,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	}
 	s.beginStage(ctx, k.ID, types.StageProcessing, types.JSONMap{"source_body_chars": len([]rune(body)), "run_id": run.ID})
 	runes := []rune(body)
-	parts, err := s.executeSegments(ctx, k, run, func(p types.ProcessingSegment, count int) (json.RawMessage, error) {
+	parts, err := s.executeSegments(ctx, k, run, func(ctx context.Context, p types.ProcessingSegment, count int) (json.RawMessage, error) {
 		stored := []docparser.StoredImage(nil)
 		if count == 1 {
 			stored = images
@@ -286,6 +286,9 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 	ctx, calls := types.WithModelCallCollector(ctx)
 	parent := s.tracker().LookupStage(ctx, k.ID, attemptFromCtx(ctx), types.StageProcessing)
 	span := s.tracker().BeginSubSpan(ctx, parent, "processing.summary_merge", types.SpanKindGeneration, types.JSONMap{"segment_count": len(parts)})
+	if span != nil {
+		ctx = types.WithModelCallTrace(ctx, span.Attempt, span.SpanID)
+	}
 	response, err := llm.Chat(types.WithLLMCallMetadata(ctx, "article_summary_merge", ""), []chat.Message{{Role: "system", Content: segmentSummaryPrompt}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion})
 	if err == nil && response == nil {
 		err = errors.New("empty summary merge response")

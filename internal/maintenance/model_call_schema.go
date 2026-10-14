@@ -3,6 +3,7 @@ package maintenance
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"gorm.io/gorm"
@@ -29,6 +30,40 @@ func backupOnlyTableManifest(ctx context.Context, db *gorm.DB, table string, rul
 		rows = append(rows, row)
 	}
 	canonical := canonicalRows(table, rows)
+	if table == "model_calls" {
+		legacy := []map[string]any{}
+		defaults := true
+		for _, row := range canonical {
+			copy := map[string]any{}
+			for key, value := range row {
+				copy[key] = value
+			}
+			if value, ok := copy["processing_attempt"]; ok && fmt.Sprint(value) != "0" {
+				defaults = false
+			}
+			if value, ok := copy["span_id"]; ok && value != "" {
+				defaults = false
+			}
+			delete(copy, "processing_attempt")
+			delete(copy, "span_id")
+			legacy = append(legacy, copy)
+		}
+		if defaults {
+			projected := TableManifest{Rows: int64(len(legacy)), Columns: []string{}, BackupRowHashes: map[string]string{}}
+			for _, col := range result.Columns {
+				if col != "processing_attempt" && col != "span_id" {
+					projected.Columns = append(projected.Columns, col)
+				}
+			}
+			data, _ := json.Marshal(legacy)
+			projected.SHA256 = sum(data)
+			for _, row := range legacy {
+				data, _ := json.Marshal(row)
+				projected.BackupRowHashes[rowIdentity(row)] = sum(data)
+			}
+			result.legacyCalls = &projected
+		}
+	}
 	for _, row := range canonical {
 		data, err := json.Marshal(row)
 		if err != nil {
@@ -62,9 +97,41 @@ func projectModelCallManifest(expected, actual *Manifest) (*Manifest, *Manifest)
 	}
 	columns := []string{}
 	for column := range BackupOnlyTables["model_calls"].Columns() {
-		columns = append(columns, column)
+		if column != "processing_attempt" && column != "span_id" {
+			columns = append(columns, column)
+		}
 	}
 	sort.Strings(columns)
 	left.Tables["model_calls"] = TableManifest{Columns: columns, SHA256: sum([]byte("[]"))}
 	return &left, actual
+}
+
+func projectCallContentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 24 || actual.SchemaVersion < 24 {
+		return expected, actual
+	}
+	left, right := *expected, *actual
+	left.Tables = map[string]TableManifest{}
+	right.Tables = map[string]TableManifest{}
+	for name, table := range expected.Tables {
+		left.Tables[name] = table
+	}
+	for name, table := range actual.Tables {
+		right.Tables[name] = table
+	}
+	if table, ok := actual.Tables["model_calls"]; ok && table.legacyCalls != nil {
+		right.Tables["model_calls"] = *table.legacyCalls
+	}
+	for _, name := range []string{"model_call_contents", "model_call_content_deletions"} {
+		if _, ok := expected.Tables[name]; !ok {
+			columns := []string{}
+			for col := range BackupOnlyTables[name].Columns() {
+				columns = append(columns, col)
+			}
+			sort.Strings(columns)
+			left.Tables[name] = TableManifest{Columns: columns, SHA256: sum([]byte("[]"))}
+		}
+	}
+
+	return &left, &right
 }

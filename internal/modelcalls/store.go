@@ -16,14 +16,40 @@ type Store struct{ DB *gorm.DB }
 
 func NewStore(db *gorm.DB) *Store { return &Store{DB: db} }
 func (s *Store) Write(ctx context.Context, call *types.ModelCall) error {
-	return s.DB.WithContext(ctx).Create(call).Error
+	if call.EntryID != nil && call.SpanID == "" {
+		// Older callers have no explicit trace context. Attach to the active stage.
+		var trace struct {
+			Attempt int
+			SpanID  string
+		}
+		stage := "processing"
+		if call.Purpose == types.CallPurposeIntakeReview {
+			stage = "docreader"
+		}
+		if call.Purpose == types.CallPurposeBodyEmbedding {
+			stage = "embedding"
+		}
+		q := s.DB.WithContext(ctx).Table("entry_processing_spans").Select("attempt,span_id").Where("entry_id=? AND name=? AND kind='stage'", *call.EntryID, stage)
+		if call.ProcessingAttempt > 0 {
+			q = q.Where("attempt=?", call.ProcessingAttempt)
+		}
+		if q.Order("attempt DESC,id DESC").Limit(1).Find(&trace).Error == nil && trace.SpanID != "" {
+			call.ProcessingAttempt, call.SpanID = trace.Attempt, trace.SpanID
+		}
+	}
+	if err := s.DB.WithContext(ctx).Create(call).Error; err != nil {
+		return err
+	}
+	return s.writeContent(ctx, call)
 }
 
 type Filter struct {
-	SpaceID          uint64
-	From, To         *time.Time
-	ModelID, EntryID string
-	Purpose          types.ModelCallPurpose
+	SpaceID           uint64
+	From, To          *time.Time
+	ModelID, EntryID  string
+	ProcessingAttempt *int
+	SpanID            string
+	Purpose           types.ModelCallPurpose
 }
 
 func (f Filter) Validate() error {
@@ -56,6 +82,12 @@ func (s *Store) query(ctx context.Context, f Filter) *gorm.DB {
 	}
 	if f.EntryID != "" {
 		q = q.Where("entry_id=?", f.EntryID)
+	}
+	if f.ProcessingAttempt != nil {
+		q = q.Where("processing_attempt=?", *f.ProcessingAttempt)
+	}
+	if f.SpanID != "" {
+		q = q.Where("span_id=?", f.SpanID)
 	}
 	if f.Purpose != "" {
 		q = q.Where("purpose=?", f.Purpose)
@@ -143,6 +175,9 @@ func (s *Store) List(ctx context.Context, f Filter, limit, offset int) ([]types.
 
 // Retention defaults to no cleanup. Opt-in days are applied by housekeeping.
 func (s *Store) Prune(ctx context.Context) error {
+	if err := s.PruneContents(ctx); err != nil {
+		return err
+	}
 	raw := os.Getenv("RELIQUARY_MODEL_CALL_RETENTION_DAYS")
 	if raw == "" || raw == "0" {
 		return nil

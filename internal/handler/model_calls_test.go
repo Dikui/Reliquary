@@ -71,3 +71,45 @@ func TestModelPricingUpdatePresence(t *testing.T) {
 		require.Equal(t, tc.present, req.PricingProvided)
 	}
 }
+
+func TestModelCallContentHTTPReadsAndMetadataList(t *testing.T) {
+	db := pgtest.Open(t)
+	h := NewModelHandlerWithMaintenance(nil, db)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.SpaceIDContextKey, uint64(1)))
+		c.Next()
+		if len(c.Errors) > 0 {
+			c.JSON(400, gin.H{"error": c.Errors.Last().Error()})
+		}
+	})
+	router.GET("/calls", h.ListModelCalls)
+	router.GET("/calls/:call_id/content", h.ReadModelCallContent)
+	id := uuid.NewString()
+	entry := "fixture-entry"
+	content := &types.ModelCallContent{Request: "  Full input with all whitespace 正文\n", Response: "raw invalid JSON\n", ResponseType: "text/plain", HTTPStatus: 500}
+	call := &types.ModelCall{ID: id, SpaceID: 1, EntryID: &entry, ModelID: "m", ModelName: "m", Provider: "test", Purpose: types.CallPurposeArticleProcessing, RequestedAt: time.Now(), Currency: "USD", CostStatus: "unknown", Attempt: 1, ProcessingAttempt: 5, SpanID: "fixture-span", Content: content}
+	require.NoError(t, modelcalls.NewStore(db).Write(context.Background(), call))
+	list := httptest.NewRecorder()
+	router.ServeHTTP(list, httptest.NewRequest("GET", "/calls?entry_id=fixture-entry&processing_attempt=5&span_id=fixture-span", nil))
+	require.Equal(t, 200, list.Code)
+	require.NotContains(t, list.Body.String(), "Full input")
+	require.NotContains(t, list.Body.String(), "response_gzip")
+	require.Contains(t, list.Body.String(), id)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest("GET", "/calls/"+id+"/content", nil))
+	require.Equal(t, 200, rec.Code)
+	var body struct {
+		Data types.ModelCallContent `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, content.Request, body.Data.Request)
+	require.Equal(t, content.Response, body.Data.Response)
+	require.NoError(t, db.Exec("UPDATE model_calls SET space_id=2 WHERE id=?", id).Error)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest("GET", "/calls/"+id+"/content", nil))
+	require.Equal(t, 400, rec.Code)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest("GET", "/calls?processing_attempt=-1", nil))
+	require.Equal(t, 400, rec.Code)
+}

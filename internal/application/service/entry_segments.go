@@ -189,7 +189,7 @@ func (s *entryService) mutateSegmentRun(ctx context.Context, run *entrySegmentRu
 	})
 }
 
-func (s *entryService) executeSegments(ctx context.Context, entry *types.Entry, run *entrySegmentRun, call func(types.ProcessingSegment, int) (json.RawMessage, error)) ([]segmentCheckpoint, error) {
+func (s *entryService) executeSegments(ctx context.Context, entry *types.Entry, run *entrySegmentRun, call func(context.Context, types.ProcessingSegment, int) (json.RawMessage, error)) ([]segmentCheckpoint, error) {
 	var plan []segmentCheckpoint
 	if err := json.Unmarshal(run.Plan, &plan); err != nil {
 		return nil, err
@@ -212,7 +212,11 @@ func (s *entryService) executeSegments(ctx context.Context, entry *types.Entry, 
 			}
 			parent := s.tracker().LookupStage(ctx, entry.ID, attemptFromCtx(ctx), stage)
 			span := s.tracker().BeginSubSpan(ctx, parent, fmt.Sprintf("%s.segment.%d/%d", run.Phase, i+1, len(plan)), types.SpanKindGeneration, types.JSONMap{"segment_number": i + 1, "segment_count": len(plan), "start": p.Start, "end": p.End, "run_id": run.ID})
-			result, err := call(p.ProcessingSegment, len(plan))
+			callCtx := ctx
+			if span != nil {
+				callCtx = types.WithModelCallTrace(ctx, span.Attempt, span.SpanID)
+			}
+			result, err := call(callCtx, p.ProcessingSegment, len(plan))
 			if err != nil {
 				s.tracker().FailSpan(ctx, span, "SEGMENT_FAILED", err.Error(), err)
 				return err

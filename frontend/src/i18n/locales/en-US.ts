@@ -1,5 +1,6 @@
 import { ikb18En } from './ikb18'
 export default {
+ ikb23: { view: 'View input and output', input: 'Input', output: 'Output', raw: 'Complete raw content', body: 'Body', characters: '{n} characters', copy: 'Copy', copied: 'Copied', copyFailed: 'Copy failed', unavailable: 'Content was not saved or was removed by retention', loading: 'Loading content', retry: 'Retry', call: 'Call', partial: 'Response was partially received', close: 'Close', details: 'Other fields' },
   ikb19: {
     elapsed: 'Duration',
     refreshDetail: 'Refresh run details',

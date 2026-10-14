@@ -765,10 +765,20 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 	// Allocate an attempt and pass it through article processing and indexing
 	// so all manual processing stages belong to this execution.
 	attempt := 0
-	if root, n, err := s.tracker().OpenAttempt(ctx, entry.ID); err == nil && root != nil {
-		attempt = n
-	} else if err != nil {
-		logger.Warnf(ctx, "ProcessManualUpdate: OpenAttempt failed for %s: %v", entry.ID, err)
+	// The initial synchronous review and background processing share one trace.
+	if !payload.NeedCleanup && s.db != nil {
+		var review types.EntryProcessingSpan
+		_ = s.db.WithContext(ctx).Where("entry_id=? AND kind='root' AND metadata->>'synchronous_review'='true'", entry.ID).Order("attempt DESC").Limit(1).Find(&review).Error
+		if review.Attempt > 0 && s.tracker().LookupStage(ctx, entry.ID, review.Attempt, types.StageProcessing) == nil {
+			attempt = review.Attempt
+		}
+	}
+	if attempt == 0 {
+		if root, n, err := s.tracker().OpenAttempt(ctx, entry.ID); err == nil && root != nil {
+			attempt = n
+		} else if err != nil {
+			logger.Warnf(ctx, "ProcessManualUpdate: OpenAttempt failed for %s: %v", entry.ID, err)
+		}
 	}
 	ctx = types.WithModelCallEntry(ctx, payload.EntryID)
 	ctx = withAttempt(ctx, attempt)

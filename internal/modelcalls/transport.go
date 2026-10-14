@@ -1,4 +1,4 @@
-// Package modelcalls records actual outbound inference requests without storing content or credentials.
+// Package modelcalls records actual outbound inference requests and retains inference content without credentials.
 package modelcalls
 
 import (
@@ -60,8 +60,28 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if m.Source == types.ModelSourceChatGPT {
 		call.CostStatus = "not_applicable"
 	}
+	trace := types.ModelCallTraceFromContext(req.Context())
+	call.ProcessingAttempt, call.SpanID = trace.Attempt, trace.SpanID
+	body := &accountingBody{ctx: req.Context(), call: call, write: session.Accounting.Write, capture: captureEnabled(m), embedding: m.Type == types.ModelTypeEmbedding, secrets: requestSecrets(req, m)}
+	if body.capture && req.Body != nil {
+		// Replayable JSON bodies retain the complete input even when dialing fails.
+		if req.GetBody != nil {
+			if copy, err := req.GetBody(); err == nil {
+				raw, readErr := io.ReadAll(copy)
+				copy.Close()
+				if readErr == nil {
+					body.requestRaw = string(raw)
+					body.requestReady = true
+				}
+			}
+		}
+		if !body.requestReady {
+			req = req.Clone(req.Context())
+			body.request = &capturedRequest{ReadCloser: req.Body}
+			req.Body = body.request
+		}
+	}
 	resp, err := t.Inner.RoundTrip(req)
-	body := &accountingBody{ctx: req.Context(), call: call, write: session.Accounting.Write}
 	if err != nil {
 		call.ErrorCategory = "transport"
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -70,6 +90,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		body.finish(err)
 		return resp, err
 	}
+	body.httpStatus, body.responseType = resp.StatusCode, resp.Header.Get("Content-Type")
 	call.Success = resp.StatusCode >= 200 && resp.StatusCode < 300
 	if !call.Success {
 		call.ErrorCategory = httpErrorCategory(resp.StatusCode)
@@ -105,20 +126,29 @@ func httpErrorCategory(code int) string {
 }
 
 type accountingBody struct {
-	inner      io.ReadCloser
-	ctx        context.Context
-	call       *types.ModelCall
-	write      func(context.Context, *types.ModelCall) error
-	once       sync.Once
-	mu         sync.Mutex
-	finished   bool
-	stopCancel func() bool
-	pending    []byte
-	stream     bool
-	terminal   bool
-	eof        bool
-	invalid    bool
-	validJSON  bool
+	capture      bool
+	embedding    bool
+	secrets      []string
+	request      *capturedRequest
+	requestRaw   string
+	requestReady bool
+	response     bytes.Buffer
+	httpStatus   int
+	responseType string
+	inner        io.ReadCloser
+	ctx          context.Context
+	call         *types.ModelCall
+	write        func(context.Context, *types.ModelCall) error
+	once         sync.Once
+	mu           sync.Mutex
+	finished     bool
+	stopCancel   func() bool
+	pending      []byte
+	stream       bool
+	terminal     bool
+	eof          bool
+	invalid      bool
+	validJSON    bool
 }
 
 const maxAccountingEvent = 8 * 1024 * 1024
@@ -128,6 +158,9 @@ func (b *accountingBody) Read(p []byte) (int, error) {
 	b.mu.Lock()
 	if !b.finished {
 		if n > 0 {
+			if b.capture {
+				b.response.Write(p[:n])
+			}
 			if len(b.pending)+n <= maxAccountingEvent {
 				b.pending = append(b.pending, p[:n]...)
 			} else {
@@ -155,6 +188,10 @@ func (b *accountingBody) Read(p []byte) (int, error) {
 	return n, err
 }
 func (b *accountingBody) Close() error {
+	// Decoders can finish before reading trailing wire bytes.
+	if !b.stream {
+		_, _ = io.Copy(io.Discard, b)
+	}
 	err := b.inner.Close()
 	b.mu.Lock()
 	if !b.finished {
@@ -315,6 +352,18 @@ func (b *accountingBody) finish(err error) {
 				c.Cost = &cost
 				c.CostStatus = "calculated"
 			}
+		}
+		if b.capture {
+			raw := b.response.String()
+			if b.embedding && c.Success {
+				raw = vectorSummary(raw)
+			}
+			request := b.requestRaw
+			if !b.requestReady {
+				request = b.request.snapshot()
+			}
+			c.Content = &types.ModelCallContent{ID: c.ID, Request: protectContent(request, b.secrets, b.ctx), Response: protectContent(raw, b.secrets, b.ctx), ResponseType: b.responseType, HTTPStatus: b.httpStatus, Complete: !b.stream && b.eof || b.stream && b.terminal}
+			b.response.Reset()
 		}
 		c.DurationMS = time.Since(c.RequestedAt).Milliseconds()
 		b.pending = nil

@@ -57,6 +57,15 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 		if migration.Version < 22 {
 			delete(copy, "model_calls")
 		}
+		if migration.Version < 24 {
+			delete(copy, "model_call_contents")
+			delete(copy, "model_call_content_deletions")
+			rule := copy["model_calls"]
+			rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(rule.Sidecar, " processing_attempt span_id", ""))
+			if rule.Sidecar != "" {
+				copy["model_calls"] = rule
+			}
+		}
 		if migration.Version < 23 {
 			for table, rule := range copy {
 				copy[table] = legacyEntryRule(table, rule)

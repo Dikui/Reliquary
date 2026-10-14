@@ -22,10 +22,12 @@ export interface CallSummary {
   input_tokens: number | null; output_tokens: number | null; cost: number | null
   unknown_input_calls: number; unknown_output_calls: number; unknown_cost_calls: number; not_applicable_cost_calls: number
 }
-export interface ModelCall { id: string; requested_at: string; model_id: string; model_name: string; purpose: string; entry_id: string | null; duration_ms: number; success: boolean; error_category: string; input_tokens: number | null; output_tokens: number | null; cost: number | null; cost_status: string; currency: string; attempt: number; retry_number: number }
+export interface ModelCall { processing_attempt?: number; span_id?: string; id: string; requested_at: string; model_id: string; model_name: string; purpose: string; entry_id: string | null; duration_ms: number; success: boolean; error_category: string; input_tokens: number | null; output_tokens: number | null; cost: number | null; cost_status: string; currency: string; attempt: number; retry_number: number }
 interface Envelope<T> { success: boolean; data: T; total?: number }
 export const read = async <T>(path: string, params = {}): Promise<T> => (await get<Envelope<T>>(`/api/v1/${path}`, { params })).data
 export const write = async <T>(path: string, body: unknown, update = false): Promise<T> =>
   (await (update ? put : post)<Envelope<T>>(`/api/v1/${path}`, body as object, { timeout: 300000 })).data
 export const remove = (path: string) => del(`/api/v1/${path}`)
 export const callDetails = (params: Record<string, unknown>) => get<Envelope<ModelCall[]>>('/api/v1/model-calls', { params })
+
+export interface ModelCallContent { id: string; request: string; response: string; request_bytes: number; response_bytes: number; response_type: string; http_status: number; complete: boolean }

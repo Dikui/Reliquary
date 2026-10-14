@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"gorm.io/gorm"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +16,14 @@ import (
 
 func modelCallFilter(c *gin.Context) (modelcalls.Filter, error) {
 	f := modelcalls.Filter{SpaceID: types.MustSpaceIDFromContext(c.Request.Context()), ModelID: c.Query("model_id"), EntryID: c.Query("entry_id"), Purpose: types.ModelCallPurpose(c.Query("purpose"))}
+	if raw := c.Query("processing_attempt"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			return f, apperrors.NewBadRequestError("processing_attempt must be nonnegative")
+		}
+		f.ProcessingAttempt = &n
+	}
+	f.SpanID = c.Query("span_id")
 	for key, dest := range map[string]**time.Time{"from": &f.From, "to": &f.To} {
 		if raw := c.Query(key); raw != "" {
 			t, err := time.Parse(time.RFC3339, raw)
@@ -89,4 +99,21 @@ func (h *ModelHandler) ListModelCalls(c *gin.Context) {
 }
 func (h *ModelHandler) ModelCallPurposes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": types.ModelCallPurposes})
+}
+
+func (h *ModelHandler) ReadModelCallContent(c *gin.Context) {
+	if h.db == nil {
+		c.Error(apperrors.NewServiceUnavailableError("accounting database unavailable"))
+		return
+	}
+	row, err := modelcalls.NewStore(h.db).Content(c.Request.Context(), types.MustSpaceIDFromContext(c.Request.Context()), c.Param("call_id"))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.Error(apperrors.NewNotFoundError("model call content unavailable"))
+		return
+	}
+	if err != nil {
+		c.Error(apperrors.NewInternalServerError(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }

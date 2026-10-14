@@ -56,7 +56,7 @@
 | `public.library_content_types` | `library_id`、`name`、`position`、`enabled`、`extract_graph` | 无 | 无 | 无 |
 | `public.library_relation_types` | `library_id`、`name`、`position`、`enabled` | 无 | 无 | 无 |
 | `public.maintenance_state` | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error`、`backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` | 无 | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | 无 |
-| `public.model_calls` | 无 | `id`、`space_id`、`requested_at`、`model_id`、`model_name`、`provider`、`purpose`、`entry_id`、`input_tokens`、`output_tokens`、`input_price`、`output_price`、`currency`、`cost`、`cost_status`、`duration_ms`、`success`、`error_category`、`attempt`、`retry_number` | 无 | 无 |
+| `public.model_calls` | 无 | `id`、`space_id`、`requested_at`、`model_id`、`model_name`、`provider`、`purpose`、`entry_id`、`input_tokens`、`output_tokens`、`input_price`、`output_price`、`currency`、`cost`、`cost_status`、`duration_ms`、`success`、`error_category`、`attempt`、`retry_number`、`processing_attempt`、`span_id` | 无 | 无 |
 | `public.models` | `id`、`space_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` | 无 | 无 | 无 |
 | `public.operation_logs` | `id`、`space_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at`、`api_key_id`、`api_key_name` | 无 | 无 | 无 |
 | `public.relation_sources` | `relation_id`、`entry_id`、`evidence`、`run_id`、`body_hash` | 无 | 无 | 无 |
@@ -463,3 +463,13 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 恢复演练使用临时 PG 数据库、独立临时 Redis 容器中的 DB 0、受限 Neo4j 命名空间和临时文件目录。恢复真实待处理操作的 Redis 唤醒，但只消费独立队列的探针，不触发模型或外部工具。探针验证暂停期间零执行、解除暂停后一次完成；实际业务任务的完成由完整恢复集成测试验证。结果 JSON 包含原件核对、Redis 补推与暂停探针、Neo4j 重建及最终核对。结束清理临时数据库、Redis、图谱命名空间与文件；清理失败保留 ownership，下一次 schedule run 清理后重试。
 
 结构版本 23 将 `entries.related_entry_id`、`ingest_discards.entry_id`、`topic_backfill_batches.entry_count` 与 `topic_backfill_jobs.failed_entries` 归为 Sidecar；版本 22 及以前仍按原列名称核对。副本格式 6 写入新行字段，格式 1 至 5 的原文件先校验再转换。
+
+## 模型调用内容归属，结构版本 24
+
+`model_call_contents` 的 `id`、`request_gzip`、`response_gzip`、`request_bytes`、`response_bytes`、`response_type`、`http_status`、`complete` 全部属于仅备份证据。`model_calls.processing_attempt` 与 `model_calls.span_id` 同样仅备份。`model_call_content_deletions.space_id` 和 `entry_id` 保存删除标记，也属于仅备份操作证据。模型实际响应不能可靠再生；请求包含当次完整提示词、正文和模型参数。它们随 PG dump 备份与恢复，不进入 `.reliquary/`，仅文件库恢复不能找回调用内容。
+
+`BackupOnlyTables` 登记全部新列，版本 24 之前使用旧规则；审计遇到未知列即失败。内容表以调用 ID 为主键及账本外键，账本删除时级联。资料删除时由触发器清理其内容并写删除标记，历史统计继续保留。内容写入与资料删除使用相同的事务级 advisory lock，已排队但延迟写入的内容不会在删除之后重新出现。gzip 字节参与完整备份的逐行哈希核对，清单不复制内容。旧版本升级只接受新增空内容表及默认关联字段，原账本仍逐行核对。副本格式保持 6。
+
+默认内容永不清理。`RELIQUARY_MODEL_CALL_CONTENT_RETENTION_DAYS` 和 `RELIQUARY_MODEL_CALL_CONTENT_RETENTION_ATTEMPTS` 分别控制保留天数和每篇资料最近 N 个处理尝试，0 或未配置表示不限；同时配置时两项均生效。非资料调用不受尝试数量限制。旧的 `RELIQUARY_MODEL_CALL_RETENTION_DAYS` 仍控制整个统计账本，删除账本也会级联清理内容。
+
+`RELIQUARY_MODEL_CALL_CAPTURE_EMBEDDING` 与 `RELIQUARY_MODEL_CALL_CAPTURE_RERANK` 默认开启，设置 `false` 关闭对应内容捕获，统计照常。正常向量响应只保存数量及维度，错误响应保留原文。图片二进制用 SHA-256 与附件路径引用替换，正文文字、提示词和所有其他响应字节完整保留。请求头不保存，已知凭据及 JSON 凭据字段脱敏。持久化由最多 64 项的进程队列异步执行，超时、失败或队列饱和仅记日志；正常停止会刷新队列。

@@ -283,19 +283,29 @@ func TestChatGPTLoginGenerationAccounting(t *testing.T) {
 	secutils.ResetSSRFWhitelistForTest()
 	t.Cleanup(secutils.ResetSSRFWhitelistForTest)
 	rows := []types.ModelCall{}
+	var sent, received string
 	m := model("subscription", types.ModelTypeGeneration)
 	m.Source = types.ModelSourceChatGPT
 	cfg := chat.ConfigFromModel(m)
 	cfg.Accounting = accounting(m, &rows)
 	cfg.ChatGPTToken = func(context.Context) (string, error) { return "surrogate-token", nil }
-	cfg.ChatGPTHTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"test\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":10,\"output_tokens\":3,\"total_tokens\":13}}}\n\n"))}, nil
+	cfg.ChatGPTHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		raw, _ := io.ReadAll(req.Body)
+		sent = string(raw)
+		response := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"test\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":10,\"output_tokens\":3,\"total_tokens\":13}}}\n\n"))}
+		rawResponse, _ := io.ReadAll(response.Body)
+		received = string(rawResponse)
+		response.Body = io.NopCloser(strings.NewReader(received))
+		return response, nil
 	})}
 	c, err := chat.NewChat(cfg, nil)
 	require.NoError(t, err)
 	_, err = c.Chat(callCtx("evaluation_generation"), []chat.Message{{Role: "user", Content: "generate"}}, nil)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
+	require.Equal(t, sent, rows[0].Content.Request)
+	require.Equal(t, received, rows[0].Content.Response)
+	require.NotContains(t, rows[0].Content.Request, "surrogate-token")
 	require.True(t, rows[0].Success)
 	require.Equal(t, types.CallPurposeEvaluation, rows[0].Purpose)
 	require.Equal(t, "not_applicable", rows[0].CostStatus)

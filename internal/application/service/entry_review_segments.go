@@ -144,7 +144,7 @@ func (s *entryService) reviewSegments(ctx context.Context, library *types.Librar
 		return false, "", err
 	}
 	runes := []rune(body)
-	parts, err := s.executeSegments(ctx, entry, run, func(p types.ProcessingSegment, count int) (json.RawMessage, error) {
+	parts, err := s.executeSegments(ctx, entry, run, func(ctx context.Context, p types.ProcessingSegment, count int) (json.RawMessage, error) {
 		input := map[string]any{"source_info": source, "body": string(runes[p.Start:p.End]), "segment": segmentInput(p, count)}
 		encoded, e := json.Marshal(input)
 		if e != nil {

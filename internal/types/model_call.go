@@ -74,26 +74,29 @@ func (p ModelPricing) Validate() error {
 }
 
 type ModelCall struct {
-	ID            string           `json:"id" gorm:"primaryKey"`
-	SpaceID       uint64           `json:"space_id"`
-	RequestedAt   time.Time        `json:"requested_at"`
-	ModelID       string           `json:"model_id"`
-	ModelName     string           `json:"model_name"`
-	Provider      string           `json:"provider"`
-	Purpose       ModelCallPurpose `json:"purpose"`
-	EntryID       *string          `json:"entry_id"`
-	InputTokens   *int64           `json:"input_tokens"`
-	OutputTokens  *int64           `json:"output_tokens"`
-	InputPrice    *float64         `json:"input_price_per_million"`
-	OutputPrice   *float64         `json:"output_price_per_million"`
-	Currency      string           `json:"currency"`
-	Cost          *float64         `json:"cost"`
-	CostStatus    string           `json:"cost_status"`
-	DurationMS    int64            `json:"duration_ms"`
-	Success       bool             `json:"success"`
-	ErrorCategory string           `json:"error_category"`
-	Attempt       int              `json:"attempt"`
-	RetryNumber   int              `json:"retry_number"`
+	ProcessingAttempt int               `json:"processing_attempt"`
+	SpanID            string            `json:"span_id"`
+	Content           *ModelCallContent `json:"-" gorm:"-"`
+	ID                string            `json:"id" gorm:"primaryKey"`
+	SpaceID           uint64            `json:"space_id"`
+	RequestedAt       time.Time         `json:"requested_at"`
+	ModelID           string            `json:"model_id"`
+	ModelName         string            `json:"model_name"`
+	Provider          string            `json:"provider"`
+	Purpose           ModelCallPurpose  `json:"purpose"`
+	EntryID           *string           `json:"entry_id"`
+	InputTokens       *int64            `json:"input_tokens"`
+	OutputTokens      *int64            `json:"output_tokens"`
+	InputPrice        *float64          `json:"input_price_per_million"`
+	OutputPrice       *float64          `json:"output_price_per_million"`
+	Currency          string            `json:"currency"`
+	Cost              *float64          `json:"cost"`
+	CostStatus        string            `json:"cost_status"`
+	DurationMS        int64             `json:"duration_ms"`
+	Success           bool              `json:"success"`
+	ErrorCategory     string            `json:"error_category"`
+	Attempt           int               `json:"attempt"`
+	RetryNumber       int               `json:"retry_number"`
 }
 
 type ModelCallAccounting struct {
@@ -136,4 +139,43 @@ func WithModelCallRetry(ctx context.Context, n int) context.Context {
 func ModelCallRetryFromContext(ctx context.Context) int {
 	n, _ := ctx.Value(callRetryKey{}).(int)
 	return n
+}
+
+// ModelCallContent is loaded separately from the accounting list.
+type ModelCallContent struct {
+	ID            string `json:"id"`
+	Request       string `json:"request"`
+	Response      string `json:"response"`
+	RequestBytes  int64  `json:"request_bytes"`
+	ResponseBytes int64  `json:"response_bytes"`
+	ResponseType  string `json:"response_type"`
+	HTTPStatus    int    `json:"http_status"`
+	Complete      bool   `json:"complete"`
+}
+type modelCallTraceKey struct{}
+type ModelCallTrace struct {
+	Attempt int
+	SpanID  string
+}
+
+func WithModelCallTrace(ctx context.Context, attempt int, spanID string) context.Context {
+	return context.WithValue(ctx, modelCallTraceKey{}, ModelCallTrace{attempt, spanID})
+}
+func ModelCallTraceFromContext(ctx context.Context) ModelCallTrace {
+	trace, _ := ctx.Value(modelCallTraceKey{}).(ModelCallTrace)
+	return trace
+}
+
+type modelCallImageKey struct{}
+type ModelCallImageReference struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+func WithModelCallImages(ctx context.Context, images []ModelCallImageReference) context.Context {
+	return context.WithValue(ctx, modelCallImageKey{}, images)
+}
+func ModelCallImagesFromContext(ctx context.Context) []ModelCallImageReference {
+	images, _ := ctx.Value(modelCallImageKey{}).([]ModelCallImageReference)
+	return images
 }

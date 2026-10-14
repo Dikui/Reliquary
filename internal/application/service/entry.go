@@ -129,7 +129,7 @@ func withAttempt(ctx context.Context, attempt int) context.Context {
 	if attempt <= 0 {
 		return ctx
 	}
-	return context.WithValue(ctx, attemptCtxKey{}, attempt)
+	return types.WithModelCallTrace(context.WithValue(ctx, attemptCtxKey{}, attempt), attempt, "")
 }
 
 // attemptFromCtx extracts the attempt number stored by withAttempt;

@@ -2,6 +2,10 @@ package maintenance
 
 import (
 	"context"
+	"github.com/golang-migrate/migrate/v4"
+	"gorm.io/driver/postgres"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,4 +51,36 @@ func TestOldModelCallManifestProjectsOnlyEmptyLedger(t *testing.T) {
 	current.Tables["model_calls"] = TableManifest{Rows: 1, SHA256: "changed"}
 	require.Contains(t, CompareManifest(old, current), "table model_calls")
 	require.NotContains(t, old.Tables, "model_calls")
+}
+
+func TestCallContentManifestDetectsTamperingAndProjectsVersion23(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx := context.Background()
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	migration, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, migration.Migrate(23))
+	call := types.ModelCall{ID: uuid.NewString(), SpaceID: 1, RequestedAt: time.Now().UTC(), ModelID: "m", ModelName: "m", Provider: "test", Purpose: types.CallPurposeOther, Currency: "USD", CostStatus: "unknown", Attempt: 1, Success: true}
+	require.NoError(t, db.Omit("ProcessingAttempt", "SpanID").Create(&call).Error)
+	before, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, migration.Migrate(24))
+	after, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
+	require.NoError(t, err)
+	require.Empty(t, CompareManifest(before, after))
+	require.NoError(t, db.Exec("INSERT INTO model_call_contents(id,request_gzip,response_gzip,request_bytes,response_bytes,response_type,http_status,complete) VALUES(?,?::bytea,?::bytea,3,3,'text/plain',200,true)", call.ID, "abc", "def").Error)
+	current, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
+	require.NoError(t, err)
+	require.Contains(t, CompareManifest(before, current), "table model_call_contents")
+	snapshot, err := Capture(ctx, db)
+	require.NoError(t, err)
+	require.NotContains(t, snapshot.Tables, "model_call_contents")
+	require.NoError(t, db.Exec("UPDATE model_call_contents SET response_gzip='changed'::bytea WHERE id=?", call.ID).Error)
+	changed, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
+	require.NoError(t, err)
+	require.Contains(t, strings.Join(CompareManifest(current, changed), "\n"), call.ID)
+	require.NoError(t, db.Exec("ALTER TABLE model_call_contents ADD COLUMN unowned text").Error)
+	require.Error(t, ValidateClassification(ctx, db))
 }
