@@ -201,7 +201,7 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 	if err := s.loadAliases(ctx, spaceID, entities); err != nil {
 		return nil, err
 	}
-	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}}
+	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}, LibraryGroups: []types.EntityLibraryGroup{}}
 	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND links.entity_id=?", spaceID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
 	if err == nil {
 		entries := make([]*types.Entry, len(result.Entries))
@@ -209,6 +209,18 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 			entries[i] = &result.Entries[i]
 		}
 		err = populateEntryLibraryNames(ctx, s.db, entries)
+		positions := map[string]int{}
+		for _, entry := range result.Entries {
+			i, ok := positions[entry.LibraryID]
+			if !ok {
+				i = len(result.LibraryGroups)
+				positions[entry.LibraryID] = i
+				result.LibraryGroups = append(result.LibraryGroups, types.EntityLibraryGroup{LibraryID: entry.LibraryID, LibraryName: entry.LibraryName, Entries: []types.Entry{}})
+			}
+			group := &result.LibraryGroups[i]
+			group.Entries = append(group.Entries, entry)
+			group.Count++
+		}
 	}
 	return result, err
 }

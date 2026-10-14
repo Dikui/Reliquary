@@ -43,6 +43,9 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 			return err
 		}
 	}
+	if db.Migrator().HasColumn("topics", "library_ids") {
+		projectFollowSnapshot(original)
+	}
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(original)
 	}

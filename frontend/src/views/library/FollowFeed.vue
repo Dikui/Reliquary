@@ -10,17 +10,24 @@ import { isRFC3339After } from '@/utils/rfc3339'
 
 const { t } = useI18n()
 const route = useRoute(), router = useRouter(), store = useFollowStore()
+const libraryId = ref('')
+const libraryOptions = computed(() => [{ value: '', label: `${t('follows.allLibraries')} (${store.libraries.reduce((n, lib) => n + lib.new_count, 0)})` }, ...store.libraries.map(lib => ({ value: lib.library_id, label: `${lib.display_name || lib.library_name} (${lib.new_count})` }))])
+const scope = () => libraryId.value ? [libraryId.value] : undefined
 const targetIds = ref<string[]>([]), collapseSimilar = ref(true), limit = ref(20)
 const results = ref<FollowFeedArticle[]>([]), total = ref(0), loading = ref(false), error = ref(''), viewError = ref(''), marking = ref(false)
 const viewRetryAction = ref<'open' | 'all'>('open')
 const options = computed(() => store.targets.map(target => ({ value: target.target_id, label: `${target.name} (${t(`follows.targetTypes.${target.target_type}`)})` })))
 const limitOptions = [20, 50, 100].map(value => ({ value, label: String(value) }))
+let snapshotByLibrary: Record<string, string | null> = {}
 let sequence = 0, disposed = false, mounted = false, opened = false, snapshotLastViewed: string | null = null, snapshotViewedAt: string | undefined
 const countArticles = (articles: FollowFeedArticle[]): number => articles.reduce((count, article) => count + 1 + countArticles(article.similar_reports || []), 0)
 const shownArticleCount = computed(() => countArticles(results.value))
-function applyNewSnapshot(articles: FollowFeedArticle[]) { for (const article of articles) { article.is_new = article.entered_at !== null && (snapshotLastViewed === null || isRFC3339After(article.entered_at, snapshotLastViewed)); applyNewSnapshot(article.similar_reports || []) } }
-const filterKey = () => JSON.stringify({ targetIds: targetIds.value, collapseSimilar: collapseSimilar.value, limit: limit.value })
+function applyNewSnapshot(articles: FollowFeedArticle[]) { for (const article of articles) { const viewed = (article.library_id || "") in snapshotByLibrary ? snapshotByLibrary[article.library_id || ""]! : snapshotLastViewed; article.is_new = article.entered_at !== null && (viewed === null || isRFC3339After(article.entered_at, viewed)); applyNewSnapshot(article.similar_reports || []) } }
+const filterKey = () => JSON.stringify({ libraryId: libraryId.value, targetIds: targetIds.value, collapseSimilar: collapseSimilar.value, limit: limit.value })
 function readURL() {
+  const nextLibrary = typeof route.query.library === 'string' ? route.query.library : ''
+  if (nextLibrary !== libraryId.value) { opened = false; snapshotByLibrary = {} }
+  libraryId.value = nextLibrary
   const ids = route.query.target_ids
   targetIds.value = [...new Set((Array.isArray(ids) ? ids : typeof ids === 'string' ? ids.split(',') : []).filter((id): id is string => Boolean(id)))]
   collapseSimilar.value = route.query.collapse_similar !== 'false'
@@ -28,14 +35,15 @@ function readURL() {
   limit.value = [20, 50, 100].includes(value) ? value : 20
 }
 function syncURL() {
-  void router.replace({ query: { ...(targetIds.value.length ? { target_ids: targetIds.value.join(',') } : {}), ...(!collapseSimilar.value ? { collapse_similar: 'false' } : {}), ...(limit.value !== 20 ? { limit: String(limit.value) } : {}) } })
+  void router.replace({ query: { ...(libraryId.value ? { library: libraryId.value } : {}), ...(targetIds.value.length ? { target_ids: targetIds.value.join(',') } : {}), ...(!collapseSimilar.value ? { collapse_similar: 'false' } : {}), ...(limit.value !== 20 ? { limit: String(limit.value) } : {}) } })
 }
+function changeLibrary() { opened = false; snapshotByLibrary = {}; void load(true) }
 async function recordOpening() {
   if (!snapshotViewedAt || marking.value) return
   marking.value = true
   viewError.value = ''
   viewRetryAction.value = 'open'
-  try { await store.markViewed(snapshotViewedAt) }
+  try { await store.markViewed(snapshotViewedAt, scope()) }
   catch { if (!disposed) viewError.value = t('follows.markFailed') }
   finally { if (!disposed) marking.value = false }
 }
@@ -47,13 +55,15 @@ async function load(updateURL = false) {
   error.value = ''
   try {
     await store.loadTargets(true)
+    await store.refreshState()
     if (current !== sequence || disposed) return
-    const response = await getFollowFeed({ include_seen: true, ...(targetIds.value.length ? { target_ids: [...targetIds.value] } : {}), limit: limit.value, collapse_similar: collapseSimilar.value })
+    const response = await getFollowFeed({ include_seen: true, ...(scope() ? { libraries: scope() } : {}), ...(targetIds.value.length ? { target_ids: [...targetIds.value] } : {}), limit: limit.value, collapse_similar: collapseSimilar.value })
     if (!response.success) throw new Error(response.message)
     if (current !== sequence || disposed) return
     total.value = response.data.total || 0
     if (!opened) {
       opened = true
+      snapshotByLibrary = Object.fromEntries((response.data.libraries || []).map(lib => [lib.library_id, lib.last_viewed_at]))
       snapshotLastViewed = response.data.last_viewed_at
       snapshotViewedAt = response.data.viewed_at
       results.value = response.data.results || []
@@ -70,8 +80,9 @@ async function markAllViewed() {
   viewError.value = ''
   viewRetryAction.value = 'all'
   try {
-    const state = await store.markViewed()
+    const state = await store.markViewed(undefined, scope())
     if (disposed) return
+    snapshotByLibrary = Object.fromEntries((state.libraries || []).map(lib => [lib.library_id, lib.last_viewed_at]))
     snapshotLastViewed = state.last_viewed_at
     snapshotViewedAt = state.last_viewed_at || undefined
     clearNew(results.value)
@@ -95,6 +106,7 @@ onUnmounted(() => { disposed = true; sequence++ })
   <main class="follow-feed-page">
     <header class="feed-heading"><div><h1>{{ t('follows.title') }}</h1><p>{{ t('follows.description') }}</p></div><t-button variant="outline" :loading="marking" :disabled="loading || marking" @click="markAllViewed">{{ t('follows.markAllViewed') }}</t-button></header>
     <form class="feed-toolbar" @submit.prevent="load(true)">
+      <label class="feed-filter-field"><span>{{ t('follows.library') }}</span><t-select v-model="libraryId" :options="libraryOptions" :disabled="loading || marking" :aria-label="t('follows.library')" @change="changeLibrary" /></label>
       <label class="feed-filter-field"><span>{{ t('follows.filterTarget') }}</span><t-select v-model="targetIds" :options="options" multiple clearable filterable :loading="store.targetsLoading" :disabled="loading || marking" :placeholder="t('follows.allTargets')" :aria-label="t('follows.filterTarget')" @change="load(true)" /></label>
       <label class="feed-filter-field feed-limit"><span>{{ t('follows.limit') }}</span><t-select v-model="limit" :options="limitOptions" :disabled="loading || marking" :aria-label="t('follows.limit')" @change="load(true)" /></label>
       <label class="feed-filter-field fold-control"><span>{{ t('knowledgeSearch.collapseSimilar') }}</span><t-switch v-model="collapseSimilar" :disabled="loading || marking" :aria-label="t('knowledgeSearch.collapseSimilar')" @change="load(true)" /></label>

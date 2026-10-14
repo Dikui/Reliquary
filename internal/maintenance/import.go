@@ -215,6 +215,9 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			return nil, err
 		}
 	}
+	if db.Migrator().HasColumn("topics", "library_ids") {
+		projectFollowSnapshot(snapshot)
+	}
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(snapshot)
 	}

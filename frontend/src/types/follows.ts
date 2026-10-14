@@ -8,8 +8,10 @@ export interface FollowTarget {
   created_at: string
   recent_article_count: number
 }
-export interface FollowState { new_count: number; last_viewed_at: string | null }
+export interface FollowLibraryState { library_id: string; library_name: string; display_name: string; new_count: number; last_viewed_at: string | null }
+export interface FollowState { libraries?: FollowLibraryState[]; new_count: number; last_viewed_at: string | null }
 export interface FollowFeedRequest {
+  libraries?: string[]
   cursor?: string
   since?: string
   target_ids?: string[]

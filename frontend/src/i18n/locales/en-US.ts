@@ -88,8 +88,10 @@ export default {
     kinds: { article_chunk: 'Body chunk', article: 'Article', image: 'Image', mine_chunk: 'Your document chunk', report_chunk: 'Saved report chunk', entity: 'Entity name' },
   },
   follows: {
+    library: 'Library',
+    allLibraries: 'All libraries',
     title: 'Following',
-    description: 'Read articles about entities and topics you follow. Articles entering the feed since your last visit are marked new.',
+    description: 'Read material about entities and topics you follow. Each library tracks its own viewing time; later feed arrivals are marked new.',
     follow: 'Follow',
     unfollow: 'Unfollow',
     followNamed: 'Follow {name}',
@@ -106,8 +108,8 @@ export default {
     refresh: 'Refresh feed',
     loading: 'Loading follow feed',
     results: 'Follow feed',
-    resultCount: 'Showing {count} article groups, newest collected first',
-    limitHint: 'Showing {shown} of {total} articles. Increase the limit to see more; opening this page updates the viewing time for the entire feed.',
+    resultCount: 'Showing {count} groups, newest feed arrivals first',
+    limitHint: 'Showing {shown} of {total} items. Increase the limit to see more; opening this page updates the viewing time for the selected libraries.',
     emptyTargets: 'You do not follow any targets yet. Follow an entity or topic from its page.',
     emptyFeed: 'No articles match these followed targets.',
     new: 'New',
@@ -218,6 +220,9 @@ export default {
   "topicsFailed": "Topics were not saved. Try again."
 },
   topicManagement: {
+    libraries: 'Applicable libraries',
+    libraryHint: 'Leave empty for all libraries. Existing matches outside a narrowed scope are retained and excluded from this topic’s feed.',
+    libraryLoadFailed: 'Could not load libraries',
   "title": "Topics",
   "description": "Manage interests and assign past articles to their topics.",
   "create": "Create topic",

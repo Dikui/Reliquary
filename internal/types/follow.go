@@ -26,6 +26,7 @@ type FollowTarget struct {
 }
 
 type FollowFeedRequest struct {
+	Libraries       []string `json:"libraries,omitempty"`
 	Cursor          string   `json:"cursor,omitempty"`
 	Since           string   `json:"since,omitempty"`
 	TargetIDs       []string `json:"target_ids,omitempty"`
@@ -45,6 +46,7 @@ type FollowFeedArticle struct {
 }
 
 type FollowFeedResponse struct {
+	Libraries    []FollowLibraryState `json:"libraries"`
 	Results      []*FollowFeedArticle `json:"results"`
 	NextCursor   string               `json:"next_cursor,omitempty"`
 	Total        int64                `json:"total"`
@@ -53,15 +55,33 @@ type FollowFeedResponse struct {
 	ViewedAt     time.Time            `json:"viewed_at"`
 }
 
-type FollowFeedState struct {
+type FollowLibraryState struct {
+	LibraryID    string     `json:"library_id"`
+	LibraryName  string     `json:"library_name"`
+	DisplayName  string     `json:"display_name"`
 	NewCount     int64      `json:"new_count"`
 	LastViewedAt *time.Time `json:"last_viewed_at"`
 }
 
-// FollowFeedCheckpoint is space-wide because each space has one user.
+type FollowFeedState struct {
+	Libraries    []FollowLibraryState `json:"libraries"`
+	NewCount     int64                `json:"new_count"`
+	LastViewedAt *time.Time           `json:"last_viewed_at"`
+}
+
+// FollowFeedCheckpoint retains the legacy space watermark for older backups.
 type FollowFeedCheckpoint struct {
 	SpaceID      uint64 `gorm:"primaryKey"`
 	LastViewedAt *time.Time
 }
 
 func (FollowFeedCheckpoint) TableName() string { return "follow_feed_states" }
+
+// Library checkpoints are independent; the old space checkpoint is retained for backup compatibility.
+type FollowLibraryCheckpoint struct {
+	SpaceID      uint64 `gorm:"primaryKey"`
+	LibraryID    string `gorm:"primaryKey"`
+	LastViewedAt *time.Time
+}
+
+func (FollowLibraryCheckpoint) TableName() string { return "follow_feed_library_states" }

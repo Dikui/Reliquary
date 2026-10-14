@@ -384,11 +384,11 @@ test('bounded feed lists report all candidate articles and offer supported limit
   const mounted = env.mount(env.component('./FollowFeed.vue'))
   try {
     await settle()
-    assert.ok(visibleText(mounted.root).includes('Showing 20 of 105 articles.'))
+    assert.ok(visibleText(mounted.root).includes('Showing 20 of 105 items.'))
     const limitControl = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages['en-US'].follows.limit)!
     assert.deepEqual(limitControl.props.options.map((option: any) => option.value), [20, 50, 100])
     await env.change(limitControl, 100)
-    assert.ok(visibleText(mounted.root).includes('Showing 100 of 105 articles.'))
+    assert.ok(visibleText(mounted.root).includes('Showing 100 of 105 items.'))
     assert.equal(env.calls.filter(call => call.url.endsWith('/follows/view')).length, 1)
     assert.deepEqual(env.errors, [])
   } finally { mounted.close() }
@@ -475,9 +475,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await settle()
       const toolbar = descendants(mounted.root).find(node => hasClass(node, 'feed-toolbar'))!
       const fields = toolbar.children.filter(node => hasClass(node, 'feed-filter-field'))
-      assert.equal(fields.length, 3)
-      const labels = [messages[locale].follows.filterTarget, messages[locale].follows.limit, messages[locale].knowledgeSearch.collapseSimilar]
-      const tags = ['t-select', 't-select', 't-switch']
+      assert.equal(fields.length, 4)
+      const labels = [messages[locale].follows.library, messages[locale].follows.filterTarget, messages[locale].follows.limit, messages[locale].knowledgeSearch.collapseSimilar]
+      const tags = ['t-select', 't-select', 't-select', 't-switch']
       fields.forEach((field, index) => {
         assert.equal(field.tag, 'label')
         assert.equal(field.parent, toolbar)
@@ -525,4 +525,64 @@ test('feed toolbar compiled styles use the search grid layout and stack fields o
   assert.equal(declarations('.feed-filter-field[data-v-feed-toolbar] .t-select__wrap').width, '100%')
   assert.equal(declarations('.fold-control[data-v-feed-toolbar]')['align-items'], 'flex-start')
   assert.equal(declarations('.feed-toolbar[data-v-feed-toolbar]', '(max-width: 560px)')['grid-template-columns'], 'minmax(0, 1fr)')
+})
+
+test('library feed selectors show per-library counts and acknowledge only the selected library', async () => {
+  const env = environment('zh-CN', [entityFollow])
+  const libraries = [
+    { library_id: 'one', library_name: '机构发布', display_name: '机构发布', new_count: 1, last_viewed_at: previous as string | null },
+    { library_id: 'two', library_name: '人物观点', display_name: '人物观点', new_count: 2, last_viewed_at: previous as string | null },
+  ]
+  const entries = [Object.assign(article('library-one', openedAt, [entityFollow]), { library_id: 'one' }), Object.assign(article('library-two', openedAt, [entityFollow]), { library_id: 'two' })]
+  env.route.query = { library: 'one' }
+  const handleLibraryRequest = async (method: string, url: string, body: any) => {
+    const selected = body?.libraries?.length ? libraries.filter(lib => body.libraries.includes(lib.library_id)) : libraries
+    if (method === 'get' && url === '/api/v1/follows/state') return env.envelope({ libraries, new_count: libraries.reduce((n, lib) => n + lib.new_count, 0), last_viewed_at: previous })
+    if (method === 'post' && url === '/api/v1/follows/feed') return env.envelope({ libraries: selected, results: entries.filter(entry => selected.some(lib => lib.library_id === entry.library_id)), total: selected.length, viewed_at: openedAt, last_viewed_at: previous, new_count: selected.reduce((n, lib) => n + lib.new_count, 0) })
+    if (method === 'post' && url === '/api/v1/follows/view') {
+      for (const lib of selected) { lib.new_count = 0; lib.last_viewed_at = body.viewed_at || markedAt }
+      return env.envelope({ libraries: selected, new_count: 0, last_viewed_at: body.viewed_at || markedAt })
+    }
+    return undefined as any
+  }
+  // The harness interceptor is synchronous unless handling one of these requests.
+  const intercept = handleLibraryRequest
+  env.transport.intercept = (method, url, body) => (url.includes('/follows/state') || url.includes('/follows/feed') || url.includes('/follows/view')) ? intercept(method, url, body) : undefined
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    assert.ok(visibleText(mounted.root).includes('Article library-one'))
+    assert.ok(!visibleText(mounted.root).includes('Article library-two'))
+    assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).at(-1)?.body, { viewed_at: openedAt, libraries: ['one'] })
+    const selector = () => descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === '库')!
+    assert.ok(selector().props.options.some((option: any) => option.label === '人物观点 (2)'))
+    await env.change(selector(), 'two')
+    assert.ok(visibleText(mounted.root).includes('Article library-two'))
+    assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).at(-1)?.body, { viewed_at: openedAt, libraries: ['two'] })
+    await click(env.button(mounted.root, zh.follows.markAllViewed))
+    assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).at(-1)?.body, { libraries: ['two'] })
+    await env.change(selector(), '')
+    assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).at(-1)?.body, { viewed_at: openedAt })
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
+})
+
+test('entity related material is grouped by library with group counts', async () => {
+  const env = environment('zh-CN')
+  env.transport.intercept = (_method, url) => url === `/api/v1/entities/${entity.id}` ? Promise.resolve(env.envelope({ entity, entries: [
+    { id: 'one-a', library_id: 'one', library_name: '机构发布', title: 'First', created_at: openedAt },
+    { id: 'two', library_id: 'two', library_name: '人物观点', title: 'Second', created_at: openedAt },
+    { id: 'one-b', library_id: 'one', library_name: '机构发布', title: 'Third', created_at: openedAt },
+  ] })) : undefined
+  const mounted = env.mount(env.component('./components/EntryWorkbench.vue'))
+  try {
+    await settle()
+    await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'entity-list__item'))!)
+    const groups = descendants(mounted.root).filter(node => hasClass(node, 'entity-library-group'))
+    assert.equal(groups.length, 2)
+    assert.ok(visibleText(groups[0]!).includes('机构发布 (2)'))
+    assert.ok(visibleText(groups[0]!).includes('Third'))
+    assert.ok(visibleText(groups[1]!).includes('人物观点 (1)'))
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
 })

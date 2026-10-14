@@ -19,6 +19,7 @@ export interface Entity {
 export interface EntityEntry {
   id: string
   library_id: string
+  library_name?: string
   title?: string
   file_name?: string
   created_at: string

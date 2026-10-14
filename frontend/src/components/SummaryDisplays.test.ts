@@ -89,7 +89,7 @@ function environment(locale: keyof typeof messages) {
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {}, push: async () => {} }) },
     './GlobalCommandPalette/useHighlight': highlight,
     '@/api/follows': evaluateFile('../api/follows.ts', { '@/utils/request': transport }),
-    '@/stores/follows': { useFollowStore: () => ({ targets: [], targetsLoading: false, loadTargets: async () => {}, markViewed: async () => ({ last_viewed_at: record.updated_at }) }) },
+    '@/stores/follows': { useFollowStore: () => ({ libraries: [], targets: [], targetsLoading: false, refreshState: async () => {}, loadTargets: async () => {}, markViewed: async () => ({ last_viewed_at: record.updated_at }) }) },
   }
   const classification = moduleOf(component('./EntryClassification.vue', modules))
   modules['@/components/EntryClassification.vue'] = modules['./EntryClassification.vue'] = classification

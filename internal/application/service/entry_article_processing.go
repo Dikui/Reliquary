@@ -221,7 +221,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	}
 	input.Publisher, input.PublishedAt = source.Publisher, source.PublishedAt
 	if s.db != nil {
-		topics, err := NewTopicService(s.db).ListTopics(ctx)
+		topics, err := NewTopicService(s.db).TopicsForLibrary(ctx, k.LibraryID)
 		if err != nil {
 			return nil, err
 		}

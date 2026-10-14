@@ -39,7 +39,7 @@ func (s *TopicService) enqueueBackfill(tx *gorm.DB, topic *types.Topic) error {
 	}
 	var ids []string
 	if err := tx.Model(&types.Entry{}).Where("space_id=? AND source_kind IN ('article','mine') AND parse_status=? AND (structured_summary IS NOT NULL OR description<>'')", topic.SpaceID, types.ParseStatusCompleted).
-		Order("created_at,id").Pluck("id", &ids).Error; err != nil {
+		Where("(?::jsonb = '[]'::jsonb OR ?::jsonb @> jsonb_build_array(library_id))", topicLibrariesJSON(topic.LibraryIDs), topicLibrariesJSON(topic.LibraryIDs)).Order("created_at,id").Pluck("id", &ids).Error; err != nil {
 		return err
 	}
 	job := types.TopicBackfillJob{ID: uuid.NewString(), SpaceID: topic.SpaceID, TopicID: topic.ID, TopicName: topic.Name, TopicDescription: topic.Description, Status: "pending", Total: len(ids)}
@@ -249,7 +249,7 @@ func (s *TopicService) judgeBatch(ctx context.Context, job types.TopicBackfillJo
 		return nil, err
 	}
 	var articles []types.Entry
-	if err := s.db.WithContext(ctx).Where("space_id=? AND id IN ? AND source_kind IN ('article','mine') AND parse_status=?", job.SpaceID, ids, types.ParseStatusCompleted).Order("id").Find(&articles).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND id IN ? AND source_kind IN ('article','mine') AND parse_status=?", job.SpaceID, ids, types.ParseStatusCompleted).Where("EXISTS (SELECT 1 FROM topics t WHERE t.id=? AND (t.library_ids='[]'::jsonb OR t.library_ids @> jsonb_build_array(entries.library_id)))", job.TopicID).Order("id").Find(&articles).Error; err != nil {
 		return nil, err
 	}
 	if len(articles) == 0 {
@@ -337,8 +337,8 @@ func (s *TopicService) finishBatch(ctx context.Context, job types.TopicBackfillJ
 			if len(matched) > 0 {
 				if err := tx.Exec(`INSERT INTO entry_topics(space_id,entry_id,topic_id,source,created_at,is_historical)
 				SELECT space_id,id,?,'model',CURRENT_TIMESTAMP,true FROM entries
-				WHERE space_id=? AND id IN ? AND deleted_at IS NULL AND source_kind IN ('article','mine')
-				ON CONFLICT (entry_id,topic_id) DO NOTHING`, job.TopicID, job.SpaceID, matched).Error; err != nil {
+				WHERE space_id=? AND id IN ? AND deleted_at IS NULL AND source_kind IN ('article','mine') AND EXISTS (SELECT 1 FROM topics t WHERE t.id=? AND (t.library_ids='[]'::jsonb OR t.library_ids @> jsonb_build_array(entries.library_id)))
+				ON CONFLICT (entry_id,topic_id) DO NOTHING`, job.TopicID, job.SpaceID, matched, job.TopicID).Error; err != nil {
 					return err
 				}
 			}

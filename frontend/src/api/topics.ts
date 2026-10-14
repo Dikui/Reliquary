@@ -1,7 +1,7 @@
 import { get, post, put, del } from '@/utils/request'
 import type { EntryTopic } from '@/types/entryClassification'
 
-export interface Topic extends EntryTopic { article_count: number; created_at: string; updated_at: string }
+export interface Topic extends EntryTopic { library_ids?: string[]; article_count: number; created_at: string; updated_at: string }
 export interface TopicBackfill {
   id: string
   topic_id: string
@@ -15,7 +15,7 @@ export interface TopicBackfill {
   batches?: { id: string; ordinal: number; article_count: number; status: string; attempts: number; error?: string }[]
 }
 export interface TopicEnvelope<T> { success: boolean; data: T; message?: string }
-export interface TopicInput { name: string; description: string }
+export interface TopicInput { library_ids?: string[]; name: string; description: string }
 const path = (id: string) => `/api/v1/topics/${encodeURIComponent(id)}`
 export const listTopics = () => get<TopicEnvelope<Topic[]>>('/api/v1/topics')
 export const createTopic = (input: TopicInput) => post<TopicEnvelope<Topic>>('/api/v1/topics', input)

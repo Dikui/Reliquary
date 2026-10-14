@@ -487,7 +487,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			require.Contains(t, tool.Description, "incomplete=true 表示文章材料缺失，待补全")
 		}
 	}
-	require.ElementsMatch(t, []string{"list_libraries", "search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "check_urls", "list_incomplete", "accept_incomplete"}, names)
+	require.ElementsMatch(t, []string{"list_libraries", "search", "get_article", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "check_urls", "list_incomplete", "accept_incomplete"}, names)
 	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
 		"topic_ids": []string{topic.ID}, "sources": []string{"article"}, "starred": false,
@@ -562,5 +562,5 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	latest := f.connect(t, "")
 	listed, err := latest.ListTools(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 20)
+	require.Len(t, listed.Tools, len(names))
 }

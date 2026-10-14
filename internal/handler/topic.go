@@ -22,14 +22,15 @@ func (h *TopicHandler) List(c *gin.Context) {
 }
 func (h *TopicHandler) Create(c *gin.Context) {
 	var input struct {
-		Name        string `json:"name" binding:"required"`
-		Description string `json:"description"`
+		LibraryIDs  []string `json:"library_ids"`
+		Name        string   `json:"name" binding:"required"`
+		Description string   `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.Error(werrors.NewBadRequestError("topic name is required"))
 		return
 	}
-	item, err := h.service.CreateTopic(c.Request.Context(), &types.Topic{Name: input.Name, Description: input.Description})
+	item, err := h.service.CreateTopic(c.Request.Context(), &types.Topic{Name: input.Name, Description: input.Description, LibraryIDs: input.LibraryIDs})
 	if err != nil {
 		c.Error(err)
 		return
@@ -38,14 +39,19 @@ func (h *TopicHandler) Create(c *gin.Context) {
 }
 func (h *TopicHandler) Update(c *gin.Context) {
 	var input struct {
-		Name        *string `json:"name"`
-		Description *string `json:"description"`
+		LibraryIDs  *[]string `json:"library_ids"`
+		Name        *string   `json:"name"`
+		Description *string   `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.Error(werrors.NewBadRequestError("invalid topic update"))
 		return
 	}
-	item, err := h.service.UpdateTopic(c.Request.Context(), c.Param("id"), input.Name, input.Description)
+	var scopes [][]string
+	if input.LibraryIDs != nil {
+		scopes = append(scopes, *input.LibraryIDs)
+	}
+	item, err := h.service.UpdateTopic(c.Request.Context(), c.Param("id"), input.Name, input.Description, scopes...)
 	if err != nil {
 		c.Error(err)
 		return

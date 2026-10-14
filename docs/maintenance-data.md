@@ -25,6 +25,7 @@
 | `entity_embedding_rebuild_runs` | 无 | `id`、`space_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
 | `entity_merge_records` | 无 | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 |
 | `entity_merge_suggestions` | 无 | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`entry_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 |
+| `follow_feed_library_states` | 无 | `space_id`、`library_id`、`last_viewed_at` | 无 | 无 |
 | `follow_feed_states` | 无 | `space_id`、`last_viewed_at` | 无 | 无 |
 | `follows` | 无 | `space_id`、`target_type`、`target_id`、`created_at` | `entity_id`、`topic_id` | 无 |
 | `image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
@@ -52,7 +53,7 @@
 | `spaces` | 无 | 无 | 无 | `id`、`name`、`description`、`status`、`business`、`storage_used`、`created_at`、`updated_at`、`deleted_at`、`retrieval_config`、`credentials` |
 | `topic_backfill_batches` | 无 | `id`、`job_id`、`ordinal`、`entry_ids`、`article_count`、`status`、`attempts`、`error`、`created_at`、`updated_at`、`retry_at` | 无 | 无 |
 | `topic_backfill_jobs` | 无 | `id`、`space_id`、`topic_id`、`topic_name`、`topic_description`、`status`、`total`、`processed`、`failed_articles`、`failed_batches`、`created_at`、`updated_at` | 无 | 无 |
-| `topics` | 无 | `id`、`space_id`、`name`、`description`、`created_at`、`updated_at` | 无 | 无 |
+| `topics` | 无 | `id`、`space_id`、`name`、`description`、`library_ids`、`created_at`、`updated_at` | 无 | 无 |
 | `users` | 无 | 无 | 无 | `id`、`username`、`email`、`password_hash`、`avatar`、`space_id`、`is_active`、`created_at`、`updated_at`、`deleted_at` |
 
 非 public 扩展表的逐列归属如下。表头、实时副本和配置均不另存这些行；可重新生成分类只在扩展拥有者、固定版本、关系类型、完整列集合、行数与默认内容 SHA256 全部一致时成立。扩展 SQL 安装脚本是默认内容的来源，不凭表名把自定义数据当作缓存。目录包含没有列的空表，新增其他 schema 下的表也不能绕过检查。
@@ -301,3 +302,5 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 候选运行及其明细分别登记在 `data/embedding_rebuild_runs.json` 和 `data/embedding_rebuild_items.json`，按空间、模型、运行的依赖顺序恢复。`candidate` 与 `switched_at` 与其他运行字段一样参与严格比较。`RegeneratedTables` 登记两张结构版本 14 的派生向量表；副本不保存其行，但目录核对仍拒绝未知表及未知列。
 
 副本 manifest 的可选 `schema_version` 记录来源结构版本，防止对当前配置重复施加历史默认值。版本 14 升级仅允许迁移定义的本地默认模型、空空间模型选择和运行字段默认值；模型参数或已有配置的任意其他变化仍拒绝。恢复正文分块时重新计算位置；`rebuild-files` 只重建文件，不改变已保存的分块位置。
+
+000015 的主题适用库和分库查看时间均属于 Sidecar。分库检查点经 `PersistentTables` 登记；原空间检查点保留。升级及旧副本导入按空间为每个已有库复制旧检查点，主题默认适用全部库；其他原有字段及行必须完全保留。

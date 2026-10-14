@@ -170,7 +170,7 @@ const followEligibleSQL = `k.deleted_at IS NULL AND EXISTS (SELECT 1 FROM librar
 const followMatchSQL = `((f.target_type='entity' AND EXISTS (SELECT 1 FROM entry_entities ke
     WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.entity_id=f.target_id))
     OR (f.target_type='topic' AND EXISTS (SELECT 1 FROM entry_topics kt
-    WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.topic_id=f.target_id)))`
+    JOIN topics scoped_topic ON scoped_topic.id=kt.topic_id AND scoped_topic.space_id=kt.space_id WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.topic_id=f.target_id AND (scoped_topic.library_ids='[]'::jsonb OR scoped_topic.library_ids @> jsonb_build_array(k.library_id)))))`
 
 func (s *FollowService) ListFollows(ctx context.Context) ([]types.FollowTarget, error) {
 	spaceID, err := followSpace(ctx)

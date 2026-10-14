@@ -266,11 +266,25 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in entryInput) (any, error) {
 			return services.Entries.ReadEntry(ctx, in.ID, in.Offset, in.Length)
 		})
-	addTool(server, "list_topics", "列出用户定义的主题，返回 topics 数组，包含主题 ID、名称、说明和文章数。", object(map[string]any{}),
+	addTool(server, "list_topics", "列出用户定义的主题，返回 topics 数组，包含主题 ID、名称、说明、适用库 library_ids 和资料数。library_ids 为空表示全部库。", object(map[string]any{}),
 		func(ctx context.Context, _ struct{}) (any, error) {
 			items, err := services.Topics.ListTopics(ctx)
 			return map[string]any{"topics": items}, err
 		})
+	addTool(server, "create_topic", "创建主题，library_ids 为空或省略表示全部库。"+externalContentNotice, object(map[string]any{"name": text("主题名称"), "description": text("主题说明"), "library_ids": stringArray("适用库 ID；空数组表示全部库")}, "name"), func(ctx context.Context, in types.Topic) (any, error) { return services.Topics.CreateTopic(ctx, &in) })
+	addTool(server, "update_topic", "修改主题；省略 library_ids 保持原范围，空数组恢复全部库。已有范围外归入保留，但不进入关注动态。"+externalContentNotice, object(map[string]any{"id": text("主题 ID"), "name": text("主题名称"), "description": text("主题说明"), "library_ids": stringArray("适用库 ID")}, "id"), func(ctx context.Context, in struct {
+		ID          string    `json:"id"`
+		Name        *string   `json:"name"`
+		Description *string   `json:"description"`
+		LibraryIDs  *[]string `json:"library_ids"`
+	}) (any, error) {
+		var scopes [][]string
+		if in.LibraryIDs != nil {
+			scopes = append(scopes, *in.LibraryIDs)
+		}
+		return services.Topics.UpdateTopic(ctx, in.ID, in.Name, in.Description, scopes...)
+	})
+
 	addTool(server, "list_entities", "查询个人空间的实体档案，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
 		object(map[string]any{"entity": text("名称或别名中的文本，省略查询全部"),
 			"entity_type": enum("实体类型，省略查询全部", types.EntityTypes...),
@@ -282,13 +296,14 @@ func registerTools(server *mcp.Server, services Services) {
 	addTool(server, "get_entity", "按 ID 读取实体档案和提及该实体的文章列表；已合并的实体 ID 自动解析到保留档案。"+externalContentNotice,
 		object(map[string]any{"id": text("实体 ID，必填")}, "id"),
 		func(ctx context.Context, in idInput) (any, error) { return services.Entities.EntityDetail(ctx, in.ID) })
-	addTool(server, "list_follows", "列出关注的实体与主题，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成文章数。只统计外部文章，排除用户文档、整理结果和待审内容；调用不更新上次查看时间。"+externalContentNotice,
+	addTool(server, "list_follows", "列出关注的实体与主题，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成文章数。只统计开启动态的库中已完成、已启用且已通过审核的资料；调用不更新上次查看时间。"+externalContentNotice,
 		object(map[string]any{}), func(ctx context.Context, _ struct{}) (any, error) {
 			items, err := services.Follows.ListFollows(ctx)
 			return map[string]any{"follows": items}, err
 		})
-	addTool(server, "follow_feed", "读取关注动态，按收录时间倒序返回与关注实体或主题关联的已完成外部文章，排除用户文档、整理结果和待审内容。results 中文章字段与 search 一致，另含 collected_at、entered_at、is_new、matched_follows；相似报道也保留这些字段。incomplete=true 表示文章材料缺失，待补全；相似报道中的文章也包含该字段。since 省略使用网页上次查看时间，首次查看前返回全部；is_new 始终以网页上次查看时间判定，new_count 是全局未看文章数。调用不更新上次查看时间。返回 next_cursor 时须用 cursor 继续翻页，直到没有 next_cursor；游标保留首请求的时间上限、since、对象筛选与折叠开关，后续只需 cursor 和 limit。主题历史归入不产生新动态。"+externalContentNotice,
+	addTool(server, "follow_feed", "读取开启动态的库中与关注实体或主题关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使用各库网页上次查看时间；调用不更新查看时间。相似报道只在库内折叠，历史归入不产生新动态。用 next_cursor 继续翻页。incomplete=true 表示文章材料缺失，待补全；相似报道也保留该字段。"+externalContentNotice,
 		object(map[string]any{
+			"libraries":        stringArray("库 ID 或英文目录名，可选多个；省略为全部开启动态的库"),
 			"cursor":           text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
 			"since":            text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的文章"),
 			"target_ids":       stringArray("关注对象 ID 列表，省略查询全部关注；多个对象取并集"),
