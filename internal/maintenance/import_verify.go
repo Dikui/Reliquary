@@ -49,6 +49,15 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	if db.Migrator().HasColumn("ingest_discards", "library_id") {
 		projectDiscardSnapshot(original)
 	}
+	if db.Migrator().HasColumn("embedding_rebuild_runs", "candidate") {
+		var created, updated any
+		for _, row := range current.Tables["models"] {
+			if row["id"] == defaultVectorModelID {
+				created, updated = row["created_at"], row["updated_at"]
+			}
+		}
+		projectVectorSnapshot(original, created, updated, vectorSnapshotLegacy(original))
+	}
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]

@@ -81,6 +81,7 @@ type IngestImageFailure struct {
 }
 
 type IngestResult struct {
+	LibraryName      string               `json:"library_name"`
 	SourceUnverified bool                 `json:"source_unverified"`
 	LibraryID        string               `json:"library_id"`
 	SourceRef        string               `json:"source_ref,omitempty"`
@@ -118,6 +119,7 @@ type IngestCheckResponse struct {
 	Items []IngestCheckResult `json:"items"`
 }
 type IncompleteArticle struct {
+	LibraryName                 string          `json:"library_name"`
 	SourceUnverified            bool            `json:"source_unverified"`
 	LibraryTemplate             string          `json:"library_template"`
 	LibraryID                   string          `json:"library_id"`

@@ -41,7 +41,7 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 		if table == "schema_migrations" {
 			continue
 		}
-		actual := after.Tables[table]
+		actual := preservedBeforeVectorDefaults(t, table, rows, after.Tables[table])
 		if table == "entries" {
 			for _, row := range actual {
 				require.Equal(t, "", row["source_ref"])

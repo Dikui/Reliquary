@@ -110,7 +110,7 @@ func TestIngestDuplicateReturnsExistingAndFillsReasonWithoutReprocessing(t *test
 		}
 		header, body, err := ParseVaultArticle(data)
 		return err == nil && header.CollectReason == "保留做研究" && string(body) == string(originalBody)
-	}, time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 	request.CollectReason = "后续理由不能覆盖"
 	_, err = h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)

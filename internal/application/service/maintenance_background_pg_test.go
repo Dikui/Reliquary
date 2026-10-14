@@ -28,16 +28,22 @@ func TestSnapshotPauseSkipsAutomaticHousekeepingUntilResume(t *testing.T) {
 
 func TestSnapshotPauseSkipsAutomaticReportScanUntilResume(t *testing.T) {
 	h := newVaultDocumentHarness(t, 25*time.Millisecond)
-	h.write(t, "reports/paused.md", "# Waiting for credentials\n\nKeep this exact original document.")
+	models := h.documents.models
+	h.documents.models = reportFailedEmbeddingModels{}
+	report, err := h.documents.CreateReport(h.ctx, "Waiting for credentials", "# Waiting for credentials\n\nKeep this exact original document.", nil)
+	require.NoError(t, err)
+	h.documents.models = models
+	// The fallback scan only owns reports without a durable index operation.
+	require.NoError(t, h.db.Exec("DELETE FROM task_pending_ops WHERE task_type=?", types.TypeReportIndex).Error)
 	require.NoError(t, h.db.Exec("UPDATE maintenance_state SET paused=true,pause_mode='snapshot' WHERE id=true").Error)
 	require.NoError(t, h.documents.Start(h.ctx))
 	time.Sleep(125 * time.Millisecond)
 	var count int64
-	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report'").Count(&count).Error)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report' AND parse_status='completed'").Count(&count).Error)
 	require.Zero(t, count)
 	require.Zero(t, h.embedder.inputCount())
 	require.NoError(t, h.db.Exec("UPDATE maintenance_state SET paused=false,pause_mode='' WHERE id=true").Error)
 	require.Eventually(t, func() bool {
-		return h.db.Model(&types.Entry{}).Where("source_kind='report' AND vault_path='reports/paused.md'").Count(&count).Error == nil && count == 1 && h.embedder.inputCount() > 0
+		return h.db.Model(&types.Entry{}).Where("source_kind='report' AND parse_status='completed' AND vault_path=?", report.VaultPath).Count(&count).Error == nil && count == 1 && h.embedder.inputCount() > 0
 	}, 2*time.Second, 25*time.Millisecond)
 }

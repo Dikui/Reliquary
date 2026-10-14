@@ -277,7 +277,11 @@ func (s *entryService) GetEntryByIDOnly(ctx context.Context, id string) (*types.
 func (s *entryService) ListEntryByLibraryID(ctx context.Context,
 	libraryID string,
 ) ([]*types.Entry, error) {
-	return s.repo.ListEntryByLibraryID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), libraryID)
+	entries, err := s.repo.ListEntryByLibraryID(ctx, ctx.Value(types.SpaceIDContextKey).(uint64), libraryID)
+	if err == nil {
+		err = populateEntryLibraryNames(ctx, s.db, entries)
+	}
+	return entries, err
 }
 
 // ListPagedEntryByLibraryID returns paginated entry entries in a library

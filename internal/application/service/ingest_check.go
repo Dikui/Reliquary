@@ -161,25 +161,27 @@ func (s *entryService) ListIncomplete(ctx context.Context, page, size int, inclu
 		return nil, err
 	}
 	templates := map[string]string{}
+	names := map[string]string{}
 	var libraries []types.Library
 	ids := []string{}
 	for _, article := range articles {
 		ids = append(ids, article.LibraryID)
 	}
 	if len(ids) > 0 {
-		if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&libraries).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("space_id=? AND id IN ?", spaceID, ids).Find(&libraries).Error; err != nil {
 			return nil, err
 		}
 	}
 	for _, library := range libraries {
 		templates[library.ID] = library.Template
+		names[library.ID] = library.Name
 	}
 	for _, article := range articles {
 		url := article.Source
 		if intake, _ := article.IntakeMetadata(); intake != nil && intake.SourceInfo.OriginalURL != "" {
 			url = intake.SourceInfo.OriginalURL
 		}
-		result.Items = append(result.Items, types.IncompleteArticle{LibraryTemplate: templates[article.LibraryID], LibraryID: article.LibraryID, EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, SourceUnverified: article.SourceUnverified, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
+		result.Items = append(result.Items, types.IncompleteArticle{LibraryName: names[article.LibraryID], LibraryTemplate: templates[article.LibraryID], LibraryID: article.LibraryID, EntryID: article.ID, URL: url, Title: article.Title, Acquisition: article.Acquisition, SourceUnverified: article.SourceUnverified, Missing: article.IngestMissing(), ExternalCompletionAttempted: article.ExternalCompletionAttempted})
 	}
 	return result, nil
 }
@@ -216,6 +218,9 @@ func (s *entryService) AcceptIncomplete(ctx context.Context, id string) (*types.
 
 	if s.vault != nil {
 		s.vault.ScheduleRefresh(ctx, id)
+	}
+	if err := populateEntryLibraryNames(ctx, s.db, []*types.Entry{&article}); err != nil {
+		return nil, err
 	}
 	result := ingestResult(&article, "accepted", "已接受缺失，文章已定稿。", "", "")
 	result.Completeness = []types.IngestMissing{}

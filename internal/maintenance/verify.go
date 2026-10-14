@@ -309,10 +309,12 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 		return result, err
 	}
 	storedFormat := FormatVersion
+	registryVersion := RegistryVersion
 	if saved, err := Load(root); err != nil {
 		result.Differences = append(result.Differences, "replica manifest or asset integrity: "+err.Error())
 	} else {
 		storedFormat = saved.storedFormat
+		registryVersion = saved.registryVersion
 		before, _ := json.Marshal(saved.JSONNulls)
 		after, _ := json.Marshal(snapshot.JSONNulls)
 		if !bytes.Equal(before, after) {
@@ -347,6 +349,9 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 	expected, err := replicaFilesForFormat(snapshot, storedFormat)
 	if err != nil {
 		return result, err
+	}
+	if registryVersion == 0 {
+		delete(expected, "registry.json")
 	}
 	for path, data := range expected {
 		target, err := SafePath(filepath.Join(root, ".reliquary"), path)
@@ -437,6 +442,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	legacyFormat := expected.FormatVersion
 	expected, actual = currentManifest(expected, actual)
 	fileOrigin := expected
+	registryOrigin := actual
 	expected, actual = projectRetiredTables(expected, actual)
 	expected, actual = projectQueueMigration(expected, actual)
 	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
@@ -444,6 +450,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectIngestManifest(expected, actual)
 	expected, actual = projectLibraryManifest(expected, actual)
 	expected, actual = projectDiscardManifest(expected, actual)
+	expected, actual = projectVectorManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
@@ -579,6 +586,13 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 			if group == "vault" && vaultpath.UserMetadata(file.Path) {
 				continue
 			}
+			if group == "vault" && file.Path == ".reliquary/registry.json" {
+				got, present := current[file.Path]
+				if present && registryManifestFileMatches(file, fileOrigin) && registryManifestFileMatches(got, registryOrigin) {
+					delete(current, file.Path)
+					continue
+				}
+			}
 			if group == "vault" && (file.Path == ".reliquary/data/task_jobs.json" || file.Path == ".reliquary/data/task_pending_ops.json") {
 				table := strings.TrimSuffix(filepath.Base(file.Path), ".json")
 				if got, present := current[file.Path]; present && matchingTaskReplicaRecovery(expected.Tables[table], actual.Tables[table], file, got) {
@@ -598,6 +612,9 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 			delete(current, file.Path)
 		}
 		for path := range current {
+			if group == "vault" && path == ".reliquary/registry.json" && registryManifestFileMatches(current[path], actual) {
+				continue
+			}
 			if strings.HasPrefix(path, ".reliquary/config/") || strings.HasPrefix(path, ".reliquary/quarantine/") || path == ".reliquary/manifest.json" || (allowLogAppend && path == ".reliquary/operation_logs.jsonl") || (allowModelChange && rebuildReplicaFile(path)) || (options.AllowReconfigurationAppend && authenticationReplicaFile(path)) {
 				continue
 			}

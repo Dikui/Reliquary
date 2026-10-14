@@ -62,7 +62,7 @@ func TestIngestImageSupplementWithBodyPreservesTextReprocessesAndUpdatesHeader(t
 	require.Contains(t, string(header), "content_type: \"research\"")
 	refs := articleImagesInOrder(string(newBody), nil)
 	require.Len(t, refs, 1)
-	require.Contains(t, refs[0], "../../attachments/")
+	require.Regexp(t, `^\.\./attachments/`, refs[0])
 	require.Equal(t, replaceIngestImageTargets(string(oldBody), map[string]string{source: refs[0]}), string(newBody), "all text outside the image destination is byte-identical")
 	require.Zero(t, transport.calls.Load())
 	require.EqualValues(t, 1, after.IngestAPIKeyID)

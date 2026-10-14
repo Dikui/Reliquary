@@ -203,6 +203,13 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 	}
 	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}}
 	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND links.entity_id=?", spaceID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
+	if err == nil {
+		entries := make([]*types.Entry, len(result.Entries))
+		for i := range result.Entries {
+			entries[i] = &result.Entries[i]
+		}
+		err = populateEntryLibraryNames(ctx, s.db, entries)
+	}
 	return result, err
 }
 func (s *EntityService) ListMergeRecords(ctx context.Context, id string) ([]types.EntityMergeRecord, error) {

@@ -61,6 +61,7 @@
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>
                 </template>
                 <template #subtitle>
+                  <span v-if="item.file.libraryName" class="result-library">{{ item.file.libraryName }}</span>
                   <SearchImage v-if="item.file.imagePath" :article-id="item.file.entryId" :path="item.file.imagePath" :title="item.file.title" compact />
                   <span v-html="highlight(item.chunk.matched_content || item.chunk.content)" />
                 </template>

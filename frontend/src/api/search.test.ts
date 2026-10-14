@@ -21,7 +21,7 @@ function fixture(t: TestContext, results: unknown[]) {
   const calls: InternalAxiosRequestConfig[] = []
   const network = { __esModule: true, default: { create: (options: object) => axios.create({ ...options, adapter: async (config: InternalAxiosRequestConfig) => {
     calls.push(config)
-    return { data: { success: true, data: { results: structuredClone(results), excluded_missing_published_at: 0 } }, status: 200, statusText: 'OK', headers: {}, config }
+    return { data: { success: true, data: config.url === "/api/v1/libraries" ? [{ id: "all-a" }, { id: "all-b" }] : { results: structuredClone(results), excluded_missing_published_at: 0 } }, status: 200, statusText: 'OK', headers: {}, config }
   } }) } }
   const request = evaluateFile('../utils/request.ts', {
     axios: network,
@@ -55,8 +55,9 @@ for (const kind of ['search', 'follow feed'] as const) {
       assert.equal(rows[2].incomplete, undefined)
       assert.equal(Object.hasOwn(rows[2], 'incomplete'), false)
     }
-    assert.deepEqual(f.calls.map(call => ({ method: call.method, url: call.url, body: JSON.parse(call.data) })), [
-      { method: 'post', url: kind === 'search' ? '/api/v1/search' : '/api/v1/follows/feed', body: request },
+    assert.deepEqual(f.calls.map(call => ({ method: call.method, url: call.url, body: call.data ? JSON.parse(call.data) : undefined })), [
+      ...(kind === 'search' ? [{ method: 'get', url: '/api/v1/libraries', body: undefined }] : []),
+      { method: 'post', url: kind === 'search' ? '/api/v1/search' : '/api/v1/follows/feed', body: kind === 'search' ? { ...request, libraries: ['all-a', 'all-b'] } : request },
     ])
   })
 }
@@ -69,8 +70,29 @@ test('article search and filter options use the shared HTTP service routes', asy
     assert.equal(name, '@/utils/request')
     return Object.fromEntries(['get', 'post'].map(method => [method, (url: string, body?: unknown) => { calls.push({ method, url, body }); return Promise.resolve({ success: true }) }]))
   }, module, module.exports)
-  const request = { query: 'Launch', content_types: ['event'], entity_ids: ['e1'], topic_ids: ['t1'], published_from: '2026-10-01', sources: ['article'], collapse_similar: false, limit: 20 }
+  const request = { libraries: ['selected'], query: 'Launch', content_types: ['event'], entity_ids: ['e1'], topic_ids: ['t1'], published_from: '2026-10-01', sources: ['article'], collapse_similar: false, limit: 20 }
   await module.exports.searchEntries(request)
   await module.exports.getSearchOptions()
   assert.deepEqual(calls, [{ method: 'post', url: '/api/v1/search', body: request }, { method: 'get', url: '/api/v1/search/options', body: undefined }])
+})
+
+
+test('web search reloads all libraries for every request and preserves an explicit selection', async t => {
+  const f = fixture(t, [])
+  await f.search.searchEntries({ query: 'first' })
+  await f.search.searchEntries({ query: 'second' })
+  await f.search.searchEntries({ query: 'third', libraries: ['selected'] })
+  assert.deepEqual(f.calls.map(c => c.url), ['/api/v1/libraries', '/api/v1/search', '/api/v1/libraries', '/api/v1/search', '/api/v1/search'])
+  assert.deepEqual(JSON.parse(f.calls[1].data).libraries, ['all-a', 'all-b'])
+  assert.deepEqual(JSON.parse(f.calls[4].data).libraries, ['selected'])
+})
+
+test('a failed library catalog prevents an unscoped web search', async () => {
+  let posted = false
+  const api = evaluateFile('./search.ts', { '@/utils/request': {
+    get: async () => { throw new Error('catalog unavailable') },
+    post: async () => { posted = true },
+  } })
+  await assert.rejects(api.searchEntries({ query: 'query' }), /catalog unavailable/)
+  assert.equal(posted, false)
 })

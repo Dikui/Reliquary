@@ -29,6 +29,8 @@ type Snapshot struct {
 	ActiveUploads    *[]File                        `json:"active_uploads,omitempty"`
 	JSONNulls        map[string]map[string][]string `json:"json_nulls"`
 	credentialValues []string
+	registryVersion  int
+	schemaVersion    int64
 	storedFormat     int
 }
 type File struct {
@@ -37,13 +39,15 @@ type File struct {
 	Size   int64  `json:"size"`
 }
 type ReplicaManifest struct {
-	FormatVersion int                            `json:"format_version"`
-	Files         []File                         `json:"files"`
-	Required      []Requirement                  `json:"required"`
-	ActiveUploads *[]File                        `json:"active_uploads,omitempty"`
-	JSONNulls     map[string]map[string][]string `json:"json_nulls"`
-	VaultFiles    []File                         `json:"vault_files"`
-	Tables        []string                       `json:"tables"`
+	SchemaVersion   int64                          `json:"schema_version,omitempty"`
+	RegistryVersion int                            `json:"registry_version,omitempty"`
+	FormatVersion   int                            `json:"format_version"`
+	Files           []File                         `json:"files"`
+	Required        []Requirement                  `json:"required"`
+	ActiveUploads   *[]File                        `json:"active_uploads,omitempty"`
+	JSONNulls       map[string]map[string][]string `json:"json_nulls"`
+	VaultFiles      []File                         `json:"vault_files"`
+	Tables          []string                       `json:"tables"`
 }
 
 func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
@@ -55,6 +59,11 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 		return nil, err
 	}
 	snapshot := &Snapshot{FormatVersion: FormatVersion, Tables: map[string][]map[string]any{}, Required: []Requirement{}, JSONNulls: map[string]map[string][]string{}}
+	if db.Migrator().HasTable("schema_migrations") {
+		if err := db.WithContext(ctx).Table("schema_migrations").Select("version").Scan(&snapshot.schemaVersion).Error; err != nil {
+			return nil, err
+		}
+	}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return nil, err
@@ -74,6 +83,9 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 		}
 		snapshot.credentialValues = needles
 		for _, table := range sortedTables(rules) {
+			if _, backupOnly := BackupOnlyTables[table]; backupOnly {
+				continue
+			}
 			if !present[table] || table == "schema_migrations" {
 				continue
 			}
@@ -154,7 +166,7 @@ func Capture(ctx context.Context, db *gorm.DB) (*Snapshot, error) {
 				}
 				// Published article text lives in the vault. Imported personal
 				// documents retain their database recovery copy in this replica.
-				if table == "entries" && row["vault_path"] != "" && row["source_kind"] != "mine" {
+				if table == "entries" && row["vault_path"] != "" && row["source_kind"] != "mine" && row["source_kind"] != "report" {
 					delete(clean, "vault_body")
 				}
 				items = append(items, clean)
@@ -323,8 +335,17 @@ func replicaFilesForFormat(snapshot *Snapshot, format int) (map[string][]byte, e
 		if err != nil {
 			return nil, err
 		}
-		files[filepath.ToSlash(filepath.Join(dir, table+".json"))] = append(data, '\n')
+		path := filepath.ToSlash(filepath.Join(dir, table+".json"))
+		if registered, ok := registeredPath(table); ok {
+			path = registered
+		}
+		files[path] = append(data, '\n')
 	}
+	registry, err := registryBytes(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	files["registry.json"] = registry
 	return files, nil
 }
 
@@ -379,7 +400,7 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	if err != nil {
 		return err
 	}
-	manifest := ReplicaManifest{FormatVersion: FormatVersion, Required: required, ActiveUploads: &activeUploads, JSONNulls: snapshot.JSONNulls, Files: []File{}, Tables: []string{}}
+	manifest := ReplicaManifest{SchemaVersion: snapshot.schemaVersion, RegistryVersion: RegistryVersion, FormatVersion: FormatVersion, Required: required, ActiveUploads: &activeUploads, JSONNulls: snapshot.JSONNulls, Files: []File{}, Tables: []string{}}
 	for table := range snapshot.Tables {
 		manifest.Tables = append(manifest.Tables, table)
 	}

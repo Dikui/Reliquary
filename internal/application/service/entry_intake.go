@@ -202,6 +202,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 	if err != nil {
 		return nil, err
 	}
+	entry.LibraryName = library.Name
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, werrors.NewForbiddenError("an authenticated user is required to review intake")
 	}

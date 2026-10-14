@@ -109,7 +109,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, h.db.Table("entries").Select("search_published_at").Where("id=?", a.ID).Scan(&row).Error)
 			require.Nil(t, row.PublishedAt)
 			_, header, _ := readVaultArticle(t, v, a)
-			require.Contains(t, string(header), "published_at: null\n")
+			require.NotContains(t, string(header), "\npublished_at:")
 			search := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, nil, h.db)
 			space, _ := types.SpaceInfoFromContext(h.ctx)
 			space.RetrievalConfig = &types.RetrievalConfig{KeywordThreshold: .00001, RerankTopK: 20}

@@ -48,6 +48,7 @@ func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t 
 	}
 	type articleWire struct {
 		EntryID        string        `json:"entry_id"`
+		LibraryName    string        `json:"library_name"`
 		Incomplete     *bool         `json:"incomplete"`
 		SimilarReports []articleWire `json:"similar_reports"`
 	}
@@ -79,6 +80,7 @@ func TestEntrySearchAndFollowHTTPPostgresIncompleteInResultsAndSimilarReports(t 
 					seen := map[string]bool{}
 					var check func(articleWire)
 					check = func(article articleWire) {
+						require.Equal(t, base.Data.Name, article.LibraryName)
 						require.NotNil(t, article.Incomplete, "JSON must return incomplete even when false")
 						require.Equal(t, expected[article.EntryID], *article.Incomplete, article.EntryID)
 						seen[article.EntryID] = true

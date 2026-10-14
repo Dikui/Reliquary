@@ -139,6 +139,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 function ingestSearchAPI(fields: Record<string, unknown>) {
   return evaluate(readFileSync(new URL('../../api/search.ts', import.meta.url), 'utf8'), {
     '@/utils/request': {
+      get: async () => ({ success: true, data: [{ id: 'all-library' }] }),
       post: async (url: string) => {
         assert.equal(url, '/api/v1/search')
         return { success: true, data: { results: structuredClone([{ ...article, ...fields }]), excluded_missing_published_at: 0 } }
@@ -386,3 +387,15 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(attempts, 2)
   })
 }
+
+
+test('search results render their library display name', async () => {
+  const html = await render(articleComponent(), { article: { ...article, library_id: 'lib-a', library_name: '机构资料库' }, query: '' }, 'zh-CN')
+  assert.ok(html.includes('机构资料库'))
+  assert.ok(html.includes('article-library'))
+  const groups = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), {
+    '@/utils/search': helpers, '@/api/search': {},
+  }).articleFileGroups([{ ...article, library_id: 'lib-a', library_name: '机构资料库' }])
+  assert.equal(groups[0].libraryName, '机构资料库')
+  assert.equal(groups[0].libraryId, 'lib-a')
+})

@@ -12,6 +12,8 @@ import (
 
 // EntryReadResult exposes the database-owned header and a Unicode-safe body slice.
 type EntryReadResult struct {
+	LibraryID        string             `json:"library_id"`
+	LibraryName      string             `json:"library_name"`
 	SourceRef        string             `json:"source_ref,omitempty"`
 	Identifier       string             `json:"identifier,omitempty"`
 	Graph            *bool              `json:"graph"`
@@ -57,7 +59,7 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	}
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
-	result := &EntryReadResult{SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID, Header: header, OriginalURL: header.URL,
+	result := &EntryReadResult{LibraryID: entry.LibraryID, LibraryName: entry.LibraryName, SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID, Header: header, OriginalURL: header.URL,
 		ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
 	reader, _, err := s.GetEntryBody(ctx, id)
 	if err != nil {
@@ -109,6 +111,9 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 	}
 	items := []*types.Entry{}
 	if err := query.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
+		return nil, err
+	}
+	if err := populateEntryLibraryNames(ctx, s.db, items); err != nil {
 		return nil, err
 	}
 	for _, item := range items {

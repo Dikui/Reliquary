@@ -451,6 +451,9 @@ func (s *entryService) processChunks(ctx context.Context,
 
 func (s *entryService) ReparseEntry(ctx context.Context, entryID string, overrides *types.EntryProcessOverrides) (entry *types.Entry, err error) {
 	err = s.withTaskObject(ctx, entryID, func(held context.Context) error { entry, err = s.reparseEntry(held, entryID, overrides); return err })
+	if err == nil {
+		err = populateEntryLibraryNames(ctx, s.db, []*types.Entry{entry})
+	}
 	return entry, err
 }
 
@@ -562,6 +565,9 @@ func resetEntryForReparse(entry *types.Entry, library *types.Library) {
 //   - ParseStatusDeleting: a delete is in progress; cancel cannot supersede it.
 func (s *entryService) CancelEntryParse(ctx context.Context, entryID string) (entry *types.Entry, err error) {
 	err = s.withTaskObject(ctx, entryID, func(held context.Context) error { entry, err = s.cancelEntryParse(held, entryID); return err })
+	if err == nil {
+		err = populateEntryLibraryNames(ctx, s.db, []*types.Entry{entry})
+	}
 	return entry, err
 }
 

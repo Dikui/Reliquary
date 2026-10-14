@@ -76,3 +76,14 @@ const exactText = body.slice(utf16Start, utf16End)
 切换必须全部完成，并再次核对模型身份、源内容哈希及分块覆盖。计算中新增、修改或删除资料导致核对失败时应重新建立候选集。未完成的候选可用 `{"action":"cancel","run_id":"运行 ID"}` 取消，随后重新 start；旧任务会被隔离，不能继续写入。切换在一个数据库事务中完成，检索继续旧向量直到事务提交。旧向量独立保存，随后可删除；删除旧向量不删除当前向量或源资料。无 `model_id` 的 `start` 保留原有当前模型维护重建行为。
 
 空间 `PUT /api/v1/space/kv/retrieval-config` 中 `image_vector_enabled` 默认 false。只有显式开启且模型支持图片时计算、检索图片向量；开关不影响 Markdown 图片引用或文字检索。
+
+
+### 网页默认库范围
+
+在网页加入库选择控件前，搜索页和全局搜索框共用的请求适配器先读取 `GET /api/v1/libraries`，再将当前全部库 ID 放入 `libraries`。调用方显式传入库时保持原值。库列表读取失败时不发送无库检索；结果显示 `library_name`。HTTP 与 MCP 后端仍严格要求库参数。
+
+## 资料返回中的库名
+
+资料详情、列表、批量读取、待审列表、待补全列表、实体关联资料、检索、关注动态及 MCP 返回中的 `library_name` 均使用所属库当前保存的 `libraries.name`，与 `library_id` 对应。改名后下次读取立即生效，库名不写入资料表。MCP `get_article` 在顶层返回 `library_id`、`library_name`，同时保留原有 `header.library_id` 和 `header.library`。
+
+`library_name` 不随请求语言翻译，与检索结果保持一致。库列表接口另外提供 `display_name`：未改名的系统库按请求语言本地化，已改名的系统库和自定义库保留所保存的名称。需要本地化的客户端可以通过 `library_id` 对应库列表的 `display_name`。

@@ -26,6 +26,7 @@ function loadSearchAPI(post: (url: string, body: any) => Promise<unknown>) {
   const value = { exports: {} as any }
   new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {
     post, get: async (url: string) => {
+      if (url === '/api/v1/libraries') return { success: true, data: [{ id: 'images' }] }
       assert.equal(url, '/api/v1/search/options')
       return { success: true, data: { entities: [], topics: [] } }
     },
@@ -97,6 +98,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       app.mount(root); await settle()
       assert.equal(searches.length, 1)
       assert.equal(searches[0].query, 'a blue circle')
+      assert.deepEqual(searches[0].libraries, ['images'])
       const thumbnail = descendants(root).find(node => hasClass(node, 'search-image-open'))
       assert.ok(thumbnail, 'the loaded picture has an operable preview trigger')
       assert.equal(thumbnail.tag, 'button')

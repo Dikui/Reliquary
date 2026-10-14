@@ -46,6 +46,11 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err == nil && result != nil && result.LibraryID == library.ID {
+			result.LibraryName = library.Name
+		}
+	}()
 	if err := validateLibraryIngest(request, library); err != nil {
 		return nil, err
 	}
@@ -288,6 +293,7 @@ func (s *entryService) finishIngestReview(ctx context.Context, library *types.Li
 func ingestResult(article *types.Entry, status, message, reason, id string) *types.IngestResult {
 	result := &types.IngestResult{EntryID: id, Status: status, Message: message, Reason: reason, Completeness: []types.IngestMissing{}, ImageFailures: []types.IngestImageFailure{}}
 	if article != nil {
+		result.LibraryName = article.LibraryName
 		result.EntryID = article.ID
 		result.SourceUnverified = article.SourceUnverified
 		result.LibraryID, result.SourceRef, result.Identifier, result.Graph = article.LibraryID, article.SourceRef, article.Identifier, article.Graph

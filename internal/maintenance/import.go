@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"reliquary/internal/vaultpath"
 
@@ -34,6 +35,9 @@ func Load(root string) (*Snapshot, error) {
 	if !supportedFormat(manifest.FormatVersion) {
 		return nil, fmt.Errorf("unsupported replica format %d", manifest.FormatVersion)
 	}
+	if manifest.RegistryVersion < 0 || manifest.RegistryVersion > RegistryVersion {
+		return nil, fmt.Errorf("unsupported persistent table registry format %d", manifest.RegistryVersion)
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return nil, err
@@ -44,7 +48,7 @@ func Load(root string) (*Snapshot, error) {
 	if err := validateActiveUploads(root, &manifest); err != nil {
 		return nil, err
 	}
-	snapshot := &Snapshot{FormatVersion: manifest.FormatVersion, storedFormat: manifest.FormatVersion, Tables: map[string][]map[string]any{}, Required: manifest.Required, ActiveUploads: manifest.ActiveUploads, JSONNulls: manifest.JSONNulls}
+	snapshot := &Snapshot{FormatVersion: manifest.FormatVersion, storedFormat: manifest.FormatVersion, registryVersion: manifest.RegistryVersion, schemaVersion: manifest.SchemaVersion, Tables: map[string][]map[string]any{}, Required: manifest.Required, ActiveUploads: manifest.ActiveUploads, JSONNulls: manifest.JSONNulls}
 	for _, file := range manifest.VaultFiles {
 		path, err := SafePath(root, file.Path)
 		if err != nil {
@@ -126,6 +130,17 @@ func Load(root string) (*Snapshot, error) {
 		}
 		snapshot.Tables[strings.TrimSuffix(filepath.Base(file.Path), ".json")] = rows
 	}
+	if manifest.RegistryVersion > 0 {
+		found := false
+		for _, file := range manifest.Files {
+			if file.Path == "registry.json" {
+				found = true
+			}
+		}
+		if !found {
+			return nil, errors.New("missing persistent table registry")
+		}
+	}
 	for _, table := range manifest.Tables {
 		if _, found := snapshot.Tables[table]; !found {
 			return nil, fmt.Errorf("missing replica table %s", table)
@@ -134,11 +149,24 @@ func Load(root string) (*Snapshot, error) {
 	if err := currentSnapshot(snapshot); err != nil {
 		return nil, err
 	}
+	if manifest.RegistryVersion > 0 {
+		actual, err := os.ReadFile(filepath.Join(directory, "registry.json"))
+		if err != nil {
+			return nil, err
+		}
+		expected, err := registryBytes(snapshot)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(actual, expected) {
+			return nil, errors.New("persistent table registry differs from supported table and column mapping")
+		}
+	}
 	return snapshot, nil
 }
 
 // Import restores stable identities and every non-derived field. The optional
-// materializer supplies body bytes from article files, mine/ and reports/.
+// materializer supplies body bytes from files in each library directory.
 func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize func(map[string]any) error) (*Snapshot, error) {
 	if err := ValidateClassification(ctx, db); err != nil {
 		return nil, err
@@ -193,6 +221,10 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if db.Migrator().HasColumn("ingest_discards", "library_id") {
 		projectDiscardSnapshot(snapshot)
 	}
+	if db.Migrator().HasColumn("embedding_rebuild_runs", "candidate") {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		projectVectorSnapshot(snapshot, now, now, vectorSnapshotLegacy(snapshot))
+	}
 	order := []string{"spaces", "users", "auth_tokens", "libraries", "library_content_types", "library_relation_types", "models", "resources", "resource_access_grants", "entities", "entity_aliases", "topics", "entries", "entry_entities", "entry_topics", "entity_merge_suggestions", "entity_merge_records", "follows", "follow_feed_states", "topic_backfill_jobs", "topic_backfill_batches", "embedding_rebuild_runs", "embedding_rebuild_items", "resource_bindings", "api_keys", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_login_attempts", "chatgpt_policy", "entity_embedding_rebuild_runs", "entry_processing_spans", "entry_repost_sources", "ingest_assets", "ingest_discards", "operation_logs", "task_dead_letters", queueTable, "task_queue_counters", "maintenance_state"}
 	if !db.Migrator().HasTable("library_content_types") {
 		filtered := []string{}
@@ -202,6 +234,10 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			}
 		}
 		order = filtered
+	}
+	order, err = registeredImportOrder(order, snapshot.Tables)
+	if err != nil {
+		return nil, err
 	}
 	covered := map[string]bool{}
 	for _, table := range order {

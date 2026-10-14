@@ -42,14 +42,14 @@ func vaultWriteCount(v *VaultService) int {
 	return v.articles.writeCount
 }
 
-func TestVaultArticleNamingFallsBackToCollectedMonthAndSanitizesTitle(t *testing.T) {
+func TestVaultArticleNamingUsesLibraryAndSanitizesTitle(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	k := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Title: "中文 / 标题:*?\"<>|", SourceKind: "article", Type: "url", Source: "https://example.org/date-less", ParseStatus: types.ParseStatusCompleted, ContentType: "event", CreatedAt: time.Date(2025, 9, 10, 0, 0, 0, 0, time.UTC)}
 	require.NoError(t, h.db.Create(k).Error)
 	require.NoError(t, v.WriteArticle(h.ctx, k, "正文", nil))
-	require.Equal(t, "articles/2025-09/中文-标题-"+k.ID[:8]+".md", k.VaultPath)
+	require.Equal(t, h.library.Directory+"/中文-标题-"+k.ID[:8]+".md", k.VaultPath)
 	_, header, _ := readVaultArticle(t, v, k)
-	require.Contains(t, string(header), "published_at: null\n")
+	require.NotContains(t, string(header), "published_at:")
 	require.LessOrEqual(t, len([]rune(vaultSlug(strings.Repeat("中", 200)))), 80)
 	require.Equal(t, "untitled", vaultSlug("../:*?<>|"))
 }
@@ -63,7 +63,7 @@ func TestVaultArticleHeaderDeterminismAndUnchangedModificationTime(t *testing.T)
 	header.Entities = []string{"[[乙]]", "[[甲]]", "[[乙]]"}
 	header.Topics = []string{"主题 B", "主题 A"}
 	require.Equal(t, RenderVaultArticleHeader(header), RenderVaultArticleHeader(header))
-	require.NotContains(t, string(RenderVaultArticleHeader(header)), "\nauthor:")
+	require.Contains(t, string(RenderVaultArticleHeader(header)), "\nauthor:")
 	path := filepath.Join(v.root, filepath.FromSlash(k.VaultPath))
 	fixed := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 	require.NoError(t, os.Chtimes(path, fixed, fixed))
@@ -262,7 +262,9 @@ func TestVaultReprocessingUpdatesHeaderAndReadsVaultBody(t *testing.T) {
 
 func TestImportedVaultDocumentReadBodyExcludesHeaderAndDeleteRemovesFile(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	doc := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID,
+	var mine types.Library
+	require.NoError(t, h.db.Where("system_role=?", "mine").First(&mine).Error)
+	doc := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: mine.ID,
 		SourceKind: "mine", VaultPath: "mine/user.md", Title: "User", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted}
 	require.NoError(t, h.db.Create(doc).Error)
 	data := []byte("---\ntitle: User\n---\n# User\n\nBody")

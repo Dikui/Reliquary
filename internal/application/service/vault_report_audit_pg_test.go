@@ -65,7 +65,7 @@ func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
 	require.Equal(t, "pending_retry", report.IndexStatus)
 	require.Contains(t, report.ErrorMessage, "fixture embedding is unavailable")
 	files := []string{}
-	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "reports"), func(path string, entry fs.DirEntry, err error) error {
+	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "ai-reports"), func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -93,7 +93,7 @@ BEGIN
   RETURN NEW;
 END $$`).Error)
 	require.NoError(t, h.db.Exec(`CREATE TRIGGER reject_report_queue BEFORE INSERT ON task_pending_ops FOR EACH ROW EXECUTE FUNCTION reject_report_queue()`).Error)
-	_, err := h.documents.CreateReport(h.ctx, "Unqueued report", "# Unqueued report\n\nA saved report must have durable recovery.", nil)
+	_, err := h.documents.CreateReport(h.ctx, "Unqueued report", "# Unqueued report\n\nA saved report must have durable recovery.\n\n![image]("+articleImageDataURI(t, 5)+")", nil)
 	require.ErrorContains(t, err, "fixture refuses report queue")
 	require.Equal(t, before, vaultFileHashes(t, h.root))
 	var count int64

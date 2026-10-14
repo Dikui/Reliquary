@@ -41,7 +41,7 @@ func TestLibraryIntakeMigrationPreservesHistoricalRows(t *testing.T) {
 		if table == "schema_migrations" {
 			continue
 		}
-		actual := after.Tables[table]
+		actual := preservedBeforeVectorDefaults(t, table, rows, after.Tables[table])
 		if table == "ingest_discards" {
 			for _, row := range actual {
 				require.Len(t, row["fingerprint"], 64)

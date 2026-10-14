@@ -20,7 +20,6 @@ import (
 	"reliquary/internal/types"
 
 	"github.com/google/uuid"
-	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -48,6 +47,9 @@ func (s *VaultDocumentService) reportIndexManagedByQueue(ctx context.Context, sp
 }
 
 func (s *VaultDocumentService) reportWriteResult(ctx context.Context, entry *types.Entry, existing bool) (*ReportWriteResult, error) {
+	if err := populateEntryLibraryNames(ctx, s.db, []*types.Entry{entry}); err != nil {
+		return nil, err
+	}
 	status := "completed"
 	if entry.ParseStatus != types.ParseStatusCompleted {
 		var queued int64
@@ -94,6 +96,7 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 	}
 	var entry *types.Entry
 	var absolutePath string
+	var createdID string
 	var jobID string
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
@@ -105,7 +108,7 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 		}
 		selected := []string{}
 		if len(relatedIDs) > 0 {
-			if err := tx.Model(&types.Entry{}).Where("space_id=? AND source_kind='article' AND id IN ?", library.SpaceID, relatedIDs).
+			if err := tx.Model(&types.Entry{}).Where("space_id=? AND id IN ?", library.SpaceID, relatedIDs).
 				Order("id").Pluck("id", &selected).Error; err != nil {
 				return err
 			}
@@ -119,17 +122,38 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 		}
 		created := time.Now().UTC()
 		id := uuid.NewString()
-		path := filepath.ToSlash(filepath.Join("reports", created.Format("2006-01"), vaultSlug(title)+"-"+id[:8]+".md"))
-		header := struct {
-			Title             string   `yaml:"title"`
-			CreatedAt         string   `yaml:"created_at"`
-			RelatedArticleIDs []string `yaml:"related_article_ids"`
-		}{title, created.Format(time.RFC3339Nano), selected}
-		raw, err := yaml.Marshal(header)
+		createdID = id
+		directory, err := vaultLibraryDirectory(tx, library.ID)
 		if err != nil {
 			return err
 		}
-		content := "---\n" + string(raw) + "---\n" + markdown
+		path := vaultEntryPath(directory, title, id)
+		metadata, _ := json.Marshal(map[string]any{"related_article_ids": selected})
+		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
+			Graph: graph, SourceKind: "report", Title: title, VaultPath: path, Source: path, VaultBody: markdown,
+			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
+			Acquisition: "model_written", ParseStatus: types.ParseStatusPending, Metadata: types.JSON(metadata), CreatedAt: created, UpdatedAt: created}
+		vault := &VaultService{db: tx, root: s.root}
+		markdown, err = vault.copyArticleImages(ctx, entry, path, markdown, nil)
+		if err != nil {
+			return err
+		}
+		entry.VaultBody = markdown
+		if err := tx.Create(entry).Error; err != nil {
+			return err
+		}
+		if err := tx.First(entry, "id=?", id).Error; err != nil {
+			return err
+		}
+		header, err := vault.articleHeader(ctx, entry)
+		if err != nil {
+			return err
+		}
+		content := string(RenderVaultArticleHeader(header)) + markdown
+		entry.FileSize, entry.FileHash = int64(len(content)), vaultContentHash(content)
+		if err := tx.Model(entry).Updates(map[string]any{"file_size": entry.FileSize, "file_hash": entry.FileHash}).Error; err != nil {
+			return err
+		}
 		pathOnDisk, err := vaultAbsolute(s.root, path)
 		if err != nil {
 			return err
@@ -152,15 +176,6 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 		if writeErr != nil {
 			return writeErr
 		}
-		metadata, _ := json.Marshal(map[string]any{"related_article_ids": selected})
-		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
-			Graph: graph, SourceKind: "report", Title: vaultDocumentTitle(path, content), VaultPath: path, Source: path,
-			FileName: filepath.Base(path), FileType: "md", FileSize: int64(len(content)), FileHash: vaultContentHash(content),
-			EnableStatus: "enabled", Channel: types.ChannelAPI,
-			ParseStatus: types.ParseStatusPending, Metadata: types.JSON(metadata), CreatedAt: created, UpdatedAt: created}
-		if err := tx.Create(entry).Error; err != nil {
-			return err
-		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", entry.ID, nil,
 			map[string]any{"title": title, "vault_path": path, "related_article_ids": selected}); err != nil {
 			return err
@@ -177,6 +192,15 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 		if absolutePath != "" {
 			if cleanupErr := os.Remove(absolutePath); cleanupErr != nil {
 				return nil, errors.Join(err, fmt.Errorf("remove unsaved report: %w", cleanupErr))
+			}
+		}
+		if createdID != "" {
+			attachmentPath, pathErr := vaultAbsolute(s.root, filepath.ToSlash(filepath.Join("attachments", createdID)))
+			if pathErr != nil {
+				return nil, errors.Join(err, pathErr)
+			}
+			if cleanupErr := os.RemoveAll(attachmentPath); cleanupErr != nil {
+				return nil, errors.Join(err, cleanupErr)
 			}
 		}
 		return nil, err
@@ -196,6 +220,10 @@ func (s *VaultDocumentService) createReport(ctx context.Context, library *types.
 }
 
 func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *types.Library, entry *types.Entry) (*types.Entry, error) {
+	vault := &VaultService{db: s.db, root: s.root}
+	if err := vault.RefreshHeader(ctx, entry.ID); err != nil {
+		return nil, err
+	}
 	path, err := vaultAbsolute(s.root, entry.VaultPath)
 	if err != nil {
 		return nil, err
@@ -203,9 +231,6 @@ func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *ty
 	body, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
-	}
-	if !utf8.Valid(body) {
-		return nil, fmt.Errorf("Markdown must be valid UTF-8")
 	}
 	var indexed *types.Entry
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

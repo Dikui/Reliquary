@@ -103,3 +103,12 @@ func bodyImageReferences(body string) []docparser.MarkdownImageReference {
 	sort.SliceStable(refs, func(i, j int) bool { return refs[i].Position < refs[j].Position })
 	return refs
 }
+
+// BackfillBodyLocations also serves offline SQL backup upgrades, whose chunks
+// acquire the empty location column before the application next starts.
+func BackfillBodyLocations(ctx context.Context, db *gorm.DB) error {
+	if !db.Migrator().HasColumn("chunks", "source_locations") {
+		return nil
+	}
+	return backfillBodyLocations(ctx, db)
+}

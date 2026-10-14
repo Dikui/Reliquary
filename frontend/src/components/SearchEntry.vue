@@ -32,7 +32,7 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
       <t-tag v-if="followFeed && feedArticle.is_new" class="feed-new" size="small" theme="primary">{{ t('follows.new') }}</t-tag>
       <span v-else-if="!followFeed" class="article-score">{{ t('knowledgeSearch.score') }} {{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
     </div>
-    <p class="article-meta"><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span><span>{{ published }}</span><code v-if="article.vault_path">{{ article.vault_path }}</code></p>
+    <p class="article-meta"><span v-if="article.library_name" class="article-library">{{ article.library_name }}</span><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span><span>{{ published }}</span><code v-if="article.vault_path">{{ article.vault_path }}</code></p>
     <div v-if="followFeed" class="feed-attribution"><time :datetime="feedArticle.collected_at">{{ t('follows.collectedAt', { time: new Date(feedArticle.collected_at).toLocaleString(locale) }) }}</time><div class="feed-matches"><strong>{{ t('follows.matchedTargets') }}</strong><t-tag v-for="target in feedArticle.matched_follows" :key="`${target.target_type}:${target.target_id}`" size="small" variant="light-outline">{{ target.name }} ({{ t(`follows.targetTypes.${target.target_type}`) }})</t-tag></div></div>
     <EntryClassification v-if="article.source === 'article'" :entry="classification" compact @open-entity="emit('open-entity', $event)" />
     <div v-if="article.snippets?.length" class="article-snippets">

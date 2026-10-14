@@ -64,7 +64,8 @@ func TestIngestMineReviewsProcessesTutorialFullTextAndPortableHeader(t *testing.
 	require.NoError(t, err)
 	header, body, err := ParseVaultArticle(data)
 	require.NoError(t, err)
-	require.Equal(t, "mine", header.SourceKind)
+	require.Empty(t, header.SourceKind)
+	require.Equal(t, k.LibraryID, header.LibraryID)
 	require.Equal(t, k.VaultBody, string(body))
 	require.Contains(t, string(body), content)
 	require.Contains(t, string(data), "[[Spectrometer]]")
@@ -119,7 +120,8 @@ func TestIngestMineRejectedIsPersonalPendingAndApprovalProcessesWithoutReview(t 
 	require.NoError(t, err)
 	header, _, err := ParseVaultArticle(data)
 	require.NoError(t, err)
-	require.Equal(t, "mine", header.SourceKind)
+	require.Empty(t, header.SourceKind)
+	require.Equal(t, k.LibraryID, header.LibraryID)
 }
 
 func TestIngestMineDuplicateIsSameKindAndNeverCreatesRepost(t *testing.T) {

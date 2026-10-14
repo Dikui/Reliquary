@@ -68,11 +68,13 @@ func TestMCPFollowFeedSimilarReportsKeepTheirMatches(t *testing.T) {
 	}
 	var feed types.FollowFeedResponse
 	mcpCall(t, client, "follow_feed", map[string]any{"collapse_similar": true}, &feed)
+	require.Equal(t, f.library.Name, feed.Results[0].LibraryName)
 	require.Equal(t, []string{newer.ID}, mcpFeedIDs(&feed))
 	require.Equal(t, []string{topic.ID}, mcpMatchedIDs(feed.Results[0]))
 	require.False(t, feed.Results[0].Incomplete)
 	require.Len(t, feed.Results[0].SimilarReports, 1)
 	member := feed.Results[0].SimilarReports[0]
+	require.Equal(t, f.library.Name, member.LibraryName)
 	require.Equal(t, older.ID, member.EntryID)
 	require.True(t, member.Incomplete)
 	require.Equal(t, []string{entity.ID}, mcpMatchedIDs(member))
