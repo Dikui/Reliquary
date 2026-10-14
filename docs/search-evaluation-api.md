@@ -31,7 +31,7 @@
 }
 ```
 
-`request` 使用普通检索的参数，可包含类型、实体、主题、时间与星标筛选。库目录在保存时解析为稳定 ID。`grade` 省略时为 1，范围为 0 至 10；0 表示不相关。答案必须属于所选库，不允许重复 ID。`answers: []` 允许构造无答案题。`method` 为 `ordinary` 或 `graph`。图谱题可在 `request.graph_parameters` 保存原图谱请求 JSON，图谱记录转题时自动保留原请求，供适配器读取实体、跳数等参数。普通检索拒绝该字段。本分支尚无 ikb-14 图谱服务，含图谱题的运行返回 503，合并时须连接 `EvaluationService.GraphSearch`，以外层已校验的库为准，验证实体参数映射。
+`request` 使用普通检索的参数，可包含类型、实体、主题、时间与星标筛选。库目录在保存时解析为稳定 ID。`grade` 省略时为 1，范围为 0 至 10；0 表示不相关。答案必须属于所选库，不允许重复 ID。`answers: []` 允许构造无答案题。`method` 为 `ordinary` 或 `graph`。图谱题可在 `request.graph_parameters` 保存原图谱请求 JSON，图谱记录转题时自动保留原请求，供适配器读取实体、跳数等参数。普通检索拒绝该字段。图谱题运行通过 `EvaluationService.GraphSearch` 调用实际 `GraphSearchService.Search`，以题目外层已校验的 `request.libraries` 覆盖 graph_parameters 内的库，以运行 K 覆盖 limit。资料级 documents 列表参与指标计算；图谱查询不调用模型，逐题 snapshot 保存有效请求、扩展预算、截断与未同步计数。实体候选不明确时题目失败，需要人工改为选定 ID；Neo4j 不可用时保存明确错误。图谱检索同样记录 evaluation 来源与运行 ID。完整字段见 [图谱检索接口](search-api.md#图谱检索)。
 
 转题请求为 `{"record_id":"...","answers":[{"entry_id":"..."}]}`。题目保存当次 `suggested_results`，供界面勾选；再次 PUT 可以修改答案。题目的来源由服务决定，不能由客户端伪造。AI 题的来源为 `ai`，状态为 `pending`，普通 PUT 不能绕过人工确认。
 
@@ -64,3 +64,25 @@
 五项指标均先对主结果资料 ID 去重并截取前 K 项，折叠成员不计命中。Precision@K 的分母固定为 K；Recall@K 的分母为所有正相关答案数；MRR 为首个命中排名的倒数；MAP 为各命中位置 Precision 之和除以全部正相关答案数；NDCG@K 使用 `(2^grade-1)/log2(rank+1)`，理想排序由全部答案按等级排序后取 K 项。无正相关答案时五项均为零。汇总为所有题目的算术平均。
 
 测评集、题目、标准答案、运行及逐题结果通过 `PersistentTables` 进入 `.reliquary/data/`。检索记录通过 `BackupOnlyTables` 分类，只随 PostgreSQL 完整备份保存。
+
+
+图谱题请求示例：
+
+```json
+{
+  "method":"graph",
+  "request": {
+    "query":"Atlas Lab 的合作机构",
+    "libraries":["mine"],
+    "graph_parameters": {
+      "entity":{"id":"atlas-entity-id"},
+      "mode":"neighbors",
+      "hops":2,
+      "relation_types":["合作"]
+    }
+  },
+  "answers":[{"entry_id":"source-document-id","grade":1}]
+}
+```
+
+query 是题目文本；实体、目标和查询模式由 graph_parameters 提供。嵌入请求中的 libraries 不能扩大题目范围。普通检索的向量集和重排选项不会改变图谱查询。

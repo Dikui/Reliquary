@@ -5,6 +5,8 @@ import (
 	"os"
 	"time"
 
+	"gorm.io/gorm"
+	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/graphreplica"
 	"reliquary/internal/types/interfaces"
@@ -27,4 +29,10 @@ func startGraphReplica(s *graphreplica.Service, cleaner interfaces.ResourceClean
 	}
 	cleaner.RegisterWithName("Graph replica notification sweep", s.Start(interval))
 	log.Printf("Neo4j query replica synchronization registered; sweep interval %s", interval)
+}
+
+func newEvaluationService(db *gorm.DB, search interfaces.SearchService, models interfaces.ModelService, graph *service.GraphSearchService) *service.EvaluationService {
+	s := service.NewEvaluationService(db, search, models)
+	s.GraphSearch = graph.EvaluationSearch
+	return s
 }

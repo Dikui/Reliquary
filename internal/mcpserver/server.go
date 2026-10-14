@@ -35,6 +35,7 @@ type Services struct {
 	Libraries interfaces.LibraryService
 	Entries   EntryService
 	Search    interfaces.SearchService
+	Graph     *service.GraphSearchService
 	Topics    *service.TopicService
 	Entities  *service.EntityService
 	Reports   *service.VaultDocumentService
@@ -232,6 +233,7 @@ func contractFields(value any) any {
 }
 
 func registerTools(server *mcp.Server, services Services) {
+	registerGraphSearch(server, services.Graph)
 	if services.Libraries != nil {
 		addTool(server, "list_libraries", "列出全部库的 ID、目录、名称、模板、说明、该收与不该收的内容、审核标准、去重规则、内容类型和关注动态配置。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
 			libraries, err := services.Libraries.ListLibraries(ctx)
