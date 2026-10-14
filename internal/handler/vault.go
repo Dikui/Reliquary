@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -82,4 +83,29 @@ func (h *VaultHandler) CreateReport(c *gin.Context) {
 		status = http.StatusOK
 	}
 	c.JSON(status, gin.H{"success": true, "data": report})
+}
+
+func (h *VaultHandler) RebuildFiles(c *gin.Context) {
+	if h.articles == nil {
+		c.Error(werrors.NewServiceUnavailableError("vault file rebuild unavailable"))
+		return
+	}
+	state, err := h.articles.StartFileRebuild(c.Request.Context())
+	if errors.Is(err, service.ErrVaultRebuildRunning) {
+		c.Error(werrors.NewConflictError(err.Error()))
+		return
+	}
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": state})
+}
+
+func (h *VaultHandler) FileRebuildStatus(c *gin.Context) {
+	if h.articles == nil {
+		c.Error(werrors.NewServiceUnavailableError("vault file rebuild unavailable"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": h.articles.FileRebuildStatus()})
 }

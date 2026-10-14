@@ -2100,6 +2100,13 @@ export default {
       loadFailed: '无法加载备份与恢复状态，请重试。',
     },
     vault: {
+      rebuild: '重建',
+      rebuildConfirm: '根据数据库重建 Markdown 文件和维护副本？这会覆盖在文件中修改的表头和正文。缺失图片需要从备份恢复。重建可能需要较长时间。',
+      rebuildRunning: '正在重建文件。可离开此页，返回后查看结果。',
+      rebuildComplete: '文件重建完成。',
+      rebuildFailed: '文件重建失败。',
+      rebuildCounts: '写入 {written}，跳过 {skipped}，失败 {failed}。计数仅包含 Markdown 文件，未变化的文件计入跳过。',
+
       title: '文件库状态',
       root: '根目录',
       rootHint: '由服务器配置，此处只读。',

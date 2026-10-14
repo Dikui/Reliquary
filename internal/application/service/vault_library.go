@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,25 +54,4 @@ func ensureVaultDirectories(db *gorm.DB, root string) error {
 
 func vaultEntryPath(directory, title, id string) string {
 	return filepath.ToSlash(filepath.Join(directory, vaultSlug(title)+"-"+id[:min(8, len(id))]+".md"))
-}
-
-// RebuildFiles renders all database-owned Markdown without reading edited headers.
-// Image bytes remain in attachments or must be restored from a physical backup.
-func (v *VaultService) RebuildFiles(ctx context.Context) error {
-	if err := ensureVaultDirectories(v.db.WithContext(ctx), v.root); err != nil {
-		return err
-	}
-	var entries []types.Entry
-	if err := v.db.WithContext(ctx).Where("vault_path<>'' AND parse_status<>'deleting'").Find(&entries).Error; err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if err := v.RefreshHeader(ctx, entry.ID); err != nil {
-			return err
-		}
-	}
-	if v.replica != nil {
-		return v.replica.Flush(ctx)
-	}
-	return nil
 }

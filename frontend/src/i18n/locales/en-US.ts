@@ -1044,6 +1044,13 @@ export default {
       loadFailed: 'Could not load backup and recovery status. Try again.',
     },
     vault: {
+      rebuild: 'Rebuild',
+      rebuildConfirm: 'Rebuild Markdown files and the maintenance replica from the database? This overwrites edited headers and bodies. Missing images require a backup. This may take some time.',
+      rebuildRunning: 'Rebuilding files. You can leave this page and return to check the result.',
+      rebuildComplete: 'File rebuild completed.',
+      rebuildFailed: 'File rebuild failed.',
+      rebuildCounts: 'Written: {written}, skipped: {skipped}, failed: {failed}. Counts cover Markdown files; unchanged files are skipped.',
+
       title: 'Vault status',
       root: 'Root directory',
       rootHint: 'Configured on the server. This value is read-only.',
