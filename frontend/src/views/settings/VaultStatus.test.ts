@@ -26,11 +26,12 @@ const status: VaultStatus = {
   reports: { directory: 'ai-reports', indexed_files: 3, last_error: 'Cannot read ai-reports/example.md' },
 }
 
-async function scenario(locale: keyof typeof messages, getVaultStatus: () => Promise<unknown>, action: (state: any) => Promise<void>) {
+async function scenario(locale: keyof typeof messages, getVaultStatus: () => Promise<unknown>, action: (state: any) => Promise<void>, api: Record<string, unknown> = {}, dialog: (options: any) => void = () => {}) {
   const i18n = createI18n({ legacy: false, locale, messages })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
-    '@/api/vault': { getVaultStatus },
+    '@/api/vault': { getVaultStatus, getVaultFileRebuildStatus: async () => ({ success: true, data: { status: 'idle' } }), ...api },
+    'tdesign-vue-next': { DialogPlugin: { confirm: (options: any) => { dialog(options); return { destroy() {} } } } },
     './MaintenanceStatus.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('section', { 'data-maintenance-status': true }) }) },
   }
   function evaluate(code: string) {
@@ -41,9 +42,11 @@ async function scenario(locale: keyof typeof messages, getVaultStatus: () => Pro
   }
   const component = evaluate(script.content).default
   component.ssrRender = evaluate(template.code).ssrRender
+  let captured: any
   const setup = component.setup
   component.setup = (props: object, context: object) => {
     const state = setup(props, context)
+    captured = state
     onServerPrefetch(async () => { await action(state) })
     return state
   }
@@ -56,6 +59,7 @@ async function scenario(locale: keyof typeof messages, getVaultStatus: () => Pro
   app.config.errorHandler = error => failures.push(error)
   app.config.warnHandler = warning => warnings.push(warning)
   const html = await renderToString(app)
+  clearTimeout(captured?.pollTimer)
   assert.deepEqual(failures, [])
   assert.deepEqual(warnings, [])
   return html
@@ -125,4 +129,116 @@ test('vault status uses localized loading and ignores responses after teardown',
   })
   assert.ok(html.includes(messages['zh-CN'].common.loading))
   assert.match(html, /aria-busy="true"/)
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  const copy = messages[locale].settings.vault
+  test(`${locale}: rebuild requires confirmation and cancellation does not submit`, async () => {
+    let confirmation: any
+    let calls = 0
+    await scenario(locale, async () => ({ success: true, data: status }), async state => {
+      state.confirmRebuild()
+      assert.equal(confirmation.body, copy.rebuildConfirm)
+      assert.equal(calls, 0)
+      confirmation.onCancel()
+      assert.equal(state.confirming.value, false)
+      state.confirmRebuild()
+      confirmation.onConfirm()
+      await Promise.resolve()
+      assert.equal(calls, 1)
+    }, { rebuildVaultFiles: async () => { calls++; return { success: true, data: { status: 'running' } } } }, options => { confirmation = options })
+  })
+
+  test(`${locale}: rebuild disables the button while running and rejects duplicate starts`, async () => {
+    let calls = 0
+    const html = await scenario(locale, async () => ({ success: true, data: status }), async state => {
+      await state.startRebuild()
+      await state.startRebuild()
+      state.confirmRebuild()
+      assert.equal(calls, 1)
+      assert.equal(state.rebuilding.value, true)
+    }, { rebuildVaultFiles: async () => { calls++; return { success: true, data: { status: 'running' } } } })
+    assert.ok(html.includes(copy.rebuildRunning))
+    assert.match(html, /<button[^>]*disabled[^>]*>Rebuild|<button[^>]*disabled[^>]*>重建/)
+  })
+
+  test(`${locale}: polling renders completed counts and refreshes directory status`, async () => {
+    const html = await scenario(locale, async () => ({ success: true, data: status }), async state => {
+      state.rebuilding.value = true
+      await state.pollRebuild()
+      assert.equal(state.rebuilding.value, false)
+    }, { getVaultFileRebuildStatus: async () => ({ success: true, data: { status: 'success', result: { rebuilt: true, written: 3, skipped: 4, failed: 0 } } }) })
+    assert.ok(html.includes(copy.rebuildComplete))
+    assert.ok(html.includes('3'))
+    assert.ok(html.includes('4'))
+    assert.ok(html.includes(locale === 'en-US' ? 'failed: 0' : '失败 0'))
+  })
+
+  test(`${locale}: failed run renders its error and partial counts`, async () => {
+    const html = await scenario(locale, async () => ({ success: true, data: status }), async state => {
+      await state.pollRebuild()
+      assert.equal(state.rebuilding.value, false)
+    }, { getVaultFileRebuildStatus: async () => ({ success: true, data: { status: 'failed', error: 'Disk is full', result: { rebuilt: false, written: 2, skipped: 0, failed: 1 } } }) })
+    assert.ok(html.includes('Disk is full'))
+    assert.ok(html.includes(copy.rebuildFailed))
+    assert.match(html, /role="alert"/)
+  })
+
+  test(`${locale}: failed start shows an error and enables retry`, async () => {
+    const html = await scenario(locale, async () => ({ success: true, data: status }), async state => {
+      await state.startRebuild()
+      assert.equal(state.rebuilding.value, false)
+    }, { rebuildVaultFiles: async () => { throw new Error('Request failed') } })
+    assert.ok(html.includes('Request failed'))
+    assert.match(html, /role="alert"/)
+  })
+}
+
+test('an initial status response cannot replace a newly accepted rebuild', async () => {
+  let finish: (value: unknown) => void = () => {}
+  await scenario('en-US', async () => ({ success: true, data: status }), async state => {
+    const pending = state.pollRebuild()
+    await state.startRebuild()
+    finish({ success: true, data: { status: 'idle' } })
+    await pending
+    assert.equal(state.rebuilding.value, true)
+    assert.equal(state.rebuild.value.status, 'running')
+  }, {
+    getVaultFileRebuildStatus: () => new Promise(resolve => { finish = resolve }),
+    rebuildVaultFiles: async () => ({ success: true, data: { status: 'running' } }),
+  })
+})
+
+test('polling failure retains running state and shows an error', async () => {
+  const html = await scenario('en-US', async () => ({ success: true, data: status }), async state => {
+    state.rebuilding.value = true
+    await state.pollRebuild()
+    assert.equal(state.rebuilding.value, true)
+  }, { getVaultFileRebuildStatus: async () => { throw new Error('Connection interrupted') } })
+  assert.ok(html.includes('Connection interrupted'))
+  assert.ok(html.includes(messages['en-US'].settings.vault.rebuildRunning))
+})
+
+test('reopening the page discovers a running rebuild and disables its button', async () => {
+  const html = await scenario('en-US', async () => ({ success: true, data: status }), async state => {
+    await state.pollRebuild()
+    assert.equal(state.rebuilding.value, true)
+  }, { getVaultFileRebuildStatus: async () => ({ success: true, data: { status: 'running' } }) })
+  assert.match(html, /<button[^>]*disabled[^>]*>Rebuild/)
+})
+
+test('refresh during submission cannot cancel observation of the accepted task', async () => {
+  let finish: (value: unknown) => void = () => {}
+  let polls = 0
+  await scenario('en-US', async () => ({ success: true, data: status }), async state => {
+    const pending = state.startRebuild()
+    state.refresh()
+    assert.equal(polls, 0)
+    finish({ success: true, data: { status: 'running' } })
+    await pending
+    assert.equal(state.rebuilding.value, true)
+  }, {
+    rebuildVaultFiles: () => new Promise(resolve => { finish = resolve }),
+    getVaultFileRebuildStatus: async () => { polls++; return { success: true, data: { status: 'idle' } } },
+  })
 })

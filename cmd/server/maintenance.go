@@ -201,10 +201,13 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		if err != nil {
 			return err
 		}
-		if err := v.RebuildFiles(ctx); err != nil {
-			return err
+		result, rebuildErr := v.RebuildFilesWithResult(ctx)
+		if result != nil {
+			if err := emit(result); err != nil {
+				return err
+			}
 		}
-		return emit(map[string]bool{"rebuilt": true})
+		return rebuildErr
 	case "manifest":
 		manifest, err := maintenance.BuildManifest(ctx, db, root, uploads)
 		if err != nil {

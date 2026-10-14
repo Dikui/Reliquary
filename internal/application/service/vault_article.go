@@ -340,7 +340,12 @@ func vaultImageExtension(ref, mediaType string) string {
 
 // RefreshHeader reads fields from PostgreSQL and replaces only the leading
 // front matter. Missing files are rebuilt from the saved body in PostgreSQL.
-func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refreshErr error) {
+func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) error {
+	_, err := v.refreshHeader(ctx, entryID)
+	return err
+}
+
+func (v *VaultService) refreshHeader(ctx context.Context, entryID string) (written bool, refreshErr error) {
 	defer func() {
 		if refreshErr != nil {
 			v.recordArticleError(ctx, entryID, refreshErr)
@@ -355,47 +360,47 @@ func (v *VaultService) RefreshHeader(ctx context.Context, entryID string) (refre
 		query = query.Where("space_id=?", space)
 	}
 	if err := query.First(&k).Error; err != nil {
-		return err
+		return false, err
 	}
 	if (k.SourceKind != "report" && !isIngestArticle(&k)) || k.VaultPath == "" || k.ParseStatus == types.ParseStatusDeleting {
-		return nil
+		return false, nil
 	}
 	directory, err := vaultLibraryDirectory(v.db.WithContext(ctx), k.LibraryID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !strings.HasPrefix(filepath.ToSlash(filepath.Clean(k.VaultPath)), directory+"/") {
-		return errors.New("entry path must belong to its library directory")
+		return false, errors.New("entry path must belong to its library directory")
 	}
 	abs, err := vaultAbsolute(v.root, k.VaultPath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	h, err := v.articleHeader(ctx, &k)
 	if err != nil {
-		return err
+		return false, err
 	}
 	header := RenderVaultArticleHeader(h)
 	current, err := os.ReadFile(abs)
 	if errors.Is(err, os.ErrNotExist) {
 		body := []byte(k.VaultBody)
 		if err = v.atomicArticleWrite(abs, header, body, nil); err != nil {
-			return err
+			return false, err
 		}
 		logger.Warnf(ctx, "Rebuilt externally deleted article %s from PostgreSQL at %s", k.ID, k.VaultPath)
-		return nil
+		return true, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	oldHeader, body, err := SplitVaultArticle(current)
 	if err != nil || !bytes.Equal(body, []byte(k.VaultBody)) {
-		return v.atomicArticleWrite(abs, header, []byte(k.VaultBody), nil)
+		return true, v.atomicArticleWrite(abs, header, []byte(k.VaultBody), nil)
 	}
 	if bytes.Equal(header, oldHeader) {
-		return nil
+		return false, nil
 	}
-	return v.atomicArticleWrite(abs, header, body, current)
+	return true, v.atomicArticleWrite(abs, header, body, current)
 }
 
 // atomicArticleWrite verifies the actual temporary file's body before rename.
@@ -503,6 +508,7 @@ func (v *VaultService) ScheduleRefresh(ctx context.Context, entryID string) {
 }
 
 func (v *VaultService) Close() error {
+	v.closeFileRebuild()
 	v.articles.mu.Lock()
 	v.articles.stopped = true
 	for id, timer := range v.articles.timers {

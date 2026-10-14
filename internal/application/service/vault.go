@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 	"reliquary/internal/config"
@@ -13,11 +15,16 @@ import (
 
 // VaultService persists articles and refreshes their database-owned headers.
 type VaultService struct {
-	db       *gorm.DB
-	root     string
-	cfg      config.VaultConfig
-	articles vaultArticleState
-	replica  *maintenance.Writer
+	db            *gorm.DB
+	root          string
+	cfg           config.VaultConfig
+	articles      vaultArticleState
+	replica       *maintenance.Writer
+	rebuildMu     sync.Mutex
+	rebuild       VaultFileRebuildStatus
+	rebuildCancel context.CancelFunc
+	rebuildDone   chan struct{}
+	rebuildClosed bool
 }
 
 func NewVaultService(db *gorm.DB, cfg *config.Config) (*VaultService, error) {
