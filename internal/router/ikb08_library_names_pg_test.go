@@ -120,7 +120,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	require.Greater(t, assertNames(detail), 0)
 	// Mutation responses reuse the same article metadata contract.
 	require.Greater(t, assertNames(request(http.MethodPut, "/api/v1/entries/"+articles[0].ID+"/star", `{"starred":true}`, "en-US")), 0)
-	require.Greater(t, assertNames(request(http.MethodPut, "/api/v1/entries/"+articles[0].ID+"/content-type", `{"content_type":"event"}`, "en-US")), 0)
+	require.Greater(t, assertNames(request(http.MethodPut, "/api/v1/entries/"+articles[0].ID+"/content-type", `{"content_type":"新闻"}`, "en-US")), 0)
 	require.Greater(t, assertNames(request(http.MethodPost, "/api/v1/ingest/"+articles[0].ID+"/accept-incomplete", `{}`, "en-US")), 0)
 	var starred any
 	mcpCall(t, client, "set_star", map[string]any{"id": articles[1].ID, "starred": true}, &starred)

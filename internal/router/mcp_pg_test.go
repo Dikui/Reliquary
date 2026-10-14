@@ -61,7 +61,7 @@ func (mcpFixtureChat) Chat(_ context.Context, messages []chat.Message, _ *chat.C
 		approved := !strings.Contains(messages[1].Content, "rejectfixture")
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"model fixture decision"}`, approved)}, nil
 	}
-	return &types.ChatResponse{Content: `{"content_type":"event","summary":{"overview":"MCP fixture","points":["one","two","three"],"key_terms":["MCP"]},"entities":[],"topics":[]}`}, nil
+	return &types.ChatResponse{Content: `{"content_type":"event","summary":{"overview":"MCP fixture","points":["one","two","three"],"key_terms":["MCP"]},"entities":[],"topics":[],"relations":[],"image_descriptions":[]}`}, nil
 }
 func (mcpFixtureChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	return nil, fmt.Errorf("streaming is not used by the MCP fixture")

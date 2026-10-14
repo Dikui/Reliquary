@@ -1,4 +1,3 @@
-import { CONTENT_TYPES, type ContentType } from '../types/entryClassification'
 import { SEARCH_SOURCES, type SearchFilters, type SearchRequest, type SearchSource } from '../types/search'
 
 export function defaultSearchFilters(): SearchFilters {
@@ -23,7 +22,7 @@ export function searchStateFromURL(query: Record<string, URLValue>): { query: st
   const first = (key: string) => typeof query[key] === 'string' ? query[key] as string : ''
   const list = (key: string) => (Array.isArray(query[key]) ? query[key] as (string | null)[] : first(key).split(',')).filter((value): value is string => !!value)
   const filters = defaultSearchFilters()
-  filters.content_types = list('content_types').filter((value): value is ContentType => CONTENT_TYPES.includes(value as ContentType))
+  filters.content_types = list('content_types').filter(value => value.trim() && [...value].length <= 100)
   filters.sources = list('sources').filter((value): value is SearchSource => SEARCH_SOURCES.includes(value as SearchSource))
   filters.entity_ids = list('entity_ids')
   filters.topic_ids = list('topic_ids')

@@ -14,7 +14,7 @@ import (
 )
 
 func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T) {
-	for version := uint(0); version <= 16; version++ {
+	for version := uint(0); version <= 17; version++ {
 		if version == 13 {
 			continue
 		}
@@ -25,7 +25,7 @@ func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T)
 			migration, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
 			require.NoError(t, err)
 			t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
-			if version != 16 {
+			if version != 17 {
 				require.NoError(t, migration.Migrate(version))
 			}
 			before, err := CatalogSchema(context.Background(), db)

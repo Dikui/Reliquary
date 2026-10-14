@@ -537,10 +537,6 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		value := raw == "true"
 		filter.Starred = &value
 	}
-	if filter.ContentType != "" && !types.IsContentType(filter.ContentType) {
-		c.Error(errors.NewBadRequestError("invalid content_type"))
-		return
-	}
 
 	if raw := c.Query("start_time"); raw != "" {
 		t, err := parseFilterTime(raw)

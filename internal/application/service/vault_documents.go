@@ -390,6 +390,9 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, library *ty
 	}
 	byHash := make(map[string][]*types.Chunk)
 	for _, chunk := range previous {
+		if chunk.ChunkType != types.ChunkTypeText {
+			continue
+		}
 		byHash[chunk.ContentHash] = append(byHash[chunk.ContentHash], chunk)
 	}
 	parts := chunker.Split(chunker.NormalizeLineEndings(body), buildSplitterConfig(library))
@@ -426,6 +429,28 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, library *ty
 		}
 		if i+1 < len(current) {
 			chunk.NextChunkID = current[i+1].ID
+		}
+	}
+	output, err := ReadEntryProcessingOutput(ctx, s.db, entry.SpaceID, entry.ID)
+	if err != nil {
+		return err
+	}
+	if output != nil && output.BodyHash == fmt.Sprintf("%x", sha256.Sum256([]byte(body))) {
+		for _, caption := range imageDescriptionChunks(entry, output.Images, len(current)) {
+			caption.ContentHash = vaultContentHash(buildEntryIndexContent(entry, caption.Content))
+			reused := false
+			for _, old := range previous {
+				if !used[old.ID] && old.ChunkType == types.ChunkTypeImageDescription && old.ContentHash == caption.ContentHash {
+					caption.ID, caption.CreatedAt = old.ID, old.CreatedAt
+					used[old.ID] = true
+					reused = true
+					break
+				}
+			}
+			current = append(current, caption)
+			if !reused {
+				added = append(added, caption)
+			}
 		}
 	}
 	removed := make([]string, 0)

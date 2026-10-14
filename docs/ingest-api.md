@@ -172,3 +172,23 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 服务端在 `entry_segment_runs` 保存审核与处理各自的分段计划、范围、哈希、逐段状态和结果。模型失败或进程退出后，重试只调用未完成段；已经完成的摘要合并也可复用。正文、模型输入配置或分段规则变化会新建完整计划。只有全部段及合并成功后才进入后续保存和索引，部分处理不会显示为完成。处理时间线显示“第 3/12 段”等进度。
 
 配置见 [个人使用指南](personal-use.md) 的长文配置。默认最多 128 段，每篇顺序执行，仍受现有模型并发限制。
+
+## 联合处理的图片说明
+
+除 AI 报告外，处理调用从所属库的内容类型清单选择类型，同时输出关系和图片说明。`graph: true/false` 覆盖内容类型的图谱开关；未提供时使用所属库的配置，其他默认不抽关系。资料的内容类型修正只能选择所属库启用的类型。
+
+每张可读图片的说明作为独立检索块进入 BM25 与文本向量索引，不写回 Markdown 正文。处理模型须支持视觉；图片不可读或模型不支持视觉时保存跳过原因。资料详情的 `image_descriptions` 返回 `url`、`ordinal`、`description`、`skip_reason` 和 `locations`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。关系处理结果暂不通过详情界面展示。
+
+普通检索的 `snippets` 中，图片说明命中包含 `chunk_type: "image_description"`，`content` 为说明文字，`match_type` 仍表示 `keyword` 或 `vector` 检索通道。`locations` 指向图片引用所在正文段落，`mapping` 为 `image_description`，字符范围和 `body_hash` 使用保存后的 Markdown 正文坐标。例如：
+
+```json
+{
+  "chunk_type": "image_description",
+  "chunk_id": "图片说明块 ID",
+  "content": "图表显示 2026 年收入 120 万，增长 42%。",
+  "match_type": "keyword",
+  "locations": [{"heading_path": ["收入数据"], "paragraph": 3, "start": 80, "end": 120, "body_hash": "正文 SHA256", "mapping": "image_description"}]
+}
+```
+
+图片说明使用联合处理的生成模型与现有图片读取流程。每段最多读取 `article_processing.max_images` 张图片，超过时增加分段，不增加独立图片说明调用。可读图片遗漏说明或重复返回图片序号会使该段处理失败并保留检查点供重试。

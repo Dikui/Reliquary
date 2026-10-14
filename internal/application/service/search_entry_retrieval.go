@@ -23,7 +23,7 @@ type entrySearchHit struct {
 }
 
 const entrySearchableChunks = `c.deleted_at IS NULL AND (c.is_enabled IS NULL OR c.is_enabled = true)
-	AND c.chunk_type IN ('text','summary','table_summary','table_column')`
+	AND c.chunk_type IN ('text','summary','table_summary','table_column','image_description')`
 
 func (s *searchService) entryChunkVectorQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool, vector []float32, config *types.RetrievalConfig) *gorm.DB {
 	expression := fmt.Sprintf("e.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))

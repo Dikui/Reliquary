@@ -48,6 +48,17 @@ func (m *articleProcessingChat) Chat(ctx context.Context, messages []chat.Messag
 	if stage == "table_metadata" {
 		return &types.ChatResponse{Content: "The table records product counts with product and count columns."}, nil
 	}
+	var input articleProcessingInput
+	var output map[string]any
+	if stage == "article_processing" && json.Unmarshal([]byte(messages[len(messages)-1].Content), &input) == nil && json.Unmarshal([]byte(m.output), &output) == nil {
+		captions := []extractedImage{}
+		for _, image := range input.Images {
+			captions = append(captions, extractedImage{Index: image.Index, Description: "Fixture chart shows deployment counts."})
+		}
+		output["image_descriptions"] = captions
+		data, _ := json.Marshal(output)
+		return &types.ChatResponse{Content: string(data)}, nil
+	}
 	return &types.ChatResponse{Content: m.output}, nil
 }
 
@@ -99,6 +110,11 @@ type articleProcessingHarness struct {
 func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHarness {
 	t.Helper()
 	h := newRetainedIntakeHarness(t)
+	for i, name := range []string{"event", "opinion", "research", "tutorial", "case", "reference", "other"} {
+		row := types.LibraryContentType{LibraryID: h.library.ID, Name: name, Position: i, Enabled: true, ExtractGraph: name != "other"}
+		require.NoError(t, h.db.Create(&row).Error)
+		h.library.ContentTypes = append(h.library.ContentTypes, row)
+	}
 	model := &articleProcessingChat{output: validProcessingFixture("event")}
 	metadata := &types.Model{ID: "local-fixture", SpaceID: h.library.SpaceID, Name: "Processing fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
 	require.NoError(t, h.db.Create(metadata).Error)
@@ -179,7 +195,16 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
-	retrieved := []*types.SearchResult{{ID: hits[0].Results[0].ChunkID}}
+	var bodyChunk types.Chunk
+	require.NoError(t, h.db.Where("entry_id=? AND chunk_type=?", article.ID, types.ChunkTypeText).First(&bodyChunk).Error)
+	foundBody := false
+	for _, hit := range hits[0].Results {
+		if hit.ChunkID == bodyChunk.ID {
+			foundBody = true
+		}
+	}
+	require.True(t, foundBody, "body and description vectors may tie, but the body remains retrievable")
+	retrieved := []*types.SearchResult{{ID: bodyChunk.ID}}
 	searchutil.EnrichSearchResultsImageInfo(h.ctx, h.service.chunkService.GetRepository(), article.SpaceID, retrieved)
 	var imageInfos []types.ImageInfo
 	require.NoError(t, json.Unmarshal([]byte(retrieved[0].ImageInfo), &imageInfos))

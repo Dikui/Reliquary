@@ -1251,6 +1251,13 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               {{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.reprocess') }}
             </t-button>
           </div>
+          <details v-if="details.image_descriptions?.some(image => image.description)" class="image-descriptions">
+            <summary>{{ t('articleJudgments.imageDescriptions') }}</summary>
+            <div v-for="image in details.image_descriptions.filter(image => image.description)" :key="image.ordinal">
+              <p>{{ t('articleJudgments.imageNumber', { number: image.ordinal }) }}</p>
+              <p>{{ image.description }}</p>
+            </div>
+          </details>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
           <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
             <MissingMaterials :items="details.missing_materials || []" />

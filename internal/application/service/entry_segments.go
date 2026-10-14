@@ -114,6 +114,13 @@ func (s *entryService) openSegmentRun(ctx context.Context, entry *types.Entry, p
 	if err != nil {
 		return nil, err
 	}
+	if phase == "processing" {
+		_, images, _ := s.articleProcessingLimits(nil)
+		plan, err = imageBoundedSegments(body, plan, images, limit)
+		if err != nil {
+			return nil, err
+		}
+	}
 	var policy any
 	if s.config != nil {
 		policy = s.config.ArticleProcessing

@@ -46,7 +46,7 @@ func (r chatGPTGenerationRequest) stage() string {
 	switch {
 	case strings.HasPrefix(r.Instructions, intakeReviewPrompt()):
 		return "intake_review"
-	case r.Instructions == articleProcessingPrompt:
+	case strings.HasPrefix(r.Instructions, articleProcessingPrompt):
 		return "article_processing"
 	case r.Instructions == topicBackfillPrompt:
 		return "topic_backfill"
@@ -140,6 +140,19 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 		h.calls = append(h.calls, request)
 		h.mu.Unlock()
 		output, code := reply(request)
+		if code == "" && request.stage() == "article_processing" {
+			var input articleProcessingInput
+			var result map[string]any
+			if json.Unmarshal([]byte(request.userText()), &input) == nil && json.Unmarshal([]byte(output), &result) == nil {
+				descriptions := []extractedImage{}
+				for _, image := range input.Images {
+					descriptions = append(descriptions, extractedImage{Index: image.Index, Description: "Fixture chart contains calibration counts."})
+				}
+				result["image_descriptions"] = descriptions
+				encoded, _ := json.Marshal(result)
+				output = string(encoded)
+			}
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("x-request-id", "req_generation_fixture")
 		if code != "" {
@@ -250,7 +263,7 @@ func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHisto
 			require.NotEqual(t, "system", input.Role)
 		}
 		if request.stage() == "article_processing" {
-			require.Equal(t, articleProcessingPrompt, request.Instructions)
+			require.Equal(t, libraryProcessingPrompt(h.library, &types.Entry{}), request.Instructions)
 			require.Len(t, request.Input, 1)
 			require.Len(t, request.Input[0].Content, 2)
 			require.Equal(t, "input_image", request.Input[0].Content[1].Type)

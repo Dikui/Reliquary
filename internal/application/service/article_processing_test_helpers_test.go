@@ -28,7 +28,7 @@ func (s *summaryStateModelService) GetModelByID(_ context.Context, id string) (*
 }
 
 func validProcessingFixture(contentType string) string {
-	result := map[string]interface{}{"content_type": contentType, "summary": map[string]interface{}{"overview": "Acme reports an original product announcement and its deployment capabilities.", "points": []string{"The product has been announced.", "Deployment capabilities are described.", "Original measurements are supplied."}, "key_terms": []string{"Acme", "widget"}}, "entities": []interface{}{}, "topics": []string{}}
+	result := map[string]interface{}{"content_type": contentType, "summary": map[string]interface{}{"overview": "Acme reports an original product announcement and its deployment capabilities.", "points": []string{"The product has been announced.", "Deployment capabilities are described.", "Original measurements are supplied."}, "key_terms": []string{"Acme", "widget"}}, "entities": []interface{}{}, "topics": []string{}, "relations": []extractedRelation{}, "image_descriptions": []extractedImage{}}
 	raw, _ := json.Marshal(result)
 	return string(raw)
 }

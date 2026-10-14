@@ -53,13 +53,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "components/EntryArticleJudgments.vue",
-    "expressions": [
-      "`library.contentTypes.${value}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
     "file": "components/EntryClassification.vue",
     "expressions": [
       "`library.contentTypes.${type}`"

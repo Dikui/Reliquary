@@ -23,7 +23,7 @@ func TestMarkdownOnlyProcessingNormalizesUnknownContentType(t *testing.T) {
 			require.NoError(t, err)
 			result, err := parseArticleProcessingResult(string(raw))
 			require.NoError(t, err)
-			require.Equal(t, types.ContentTypeOther, *result.ContentType)
+			require.Equal(t, types.ContentTypeOther, libraryContentType(&types.Library{}, *result.ContentType))
 		})
 	}
 }

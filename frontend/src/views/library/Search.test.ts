@@ -154,8 +154,8 @@ test('search requests and URL state preserve all filters without old scope param
   assert.deepEqual(helpers.buildSearchRequest('  Launch  ', mutable), { query: 'Launch', ...mutable })
   assert.deepEqual(helpers.searchStateFromURL(helpers.searchStateToURL('Launch', mutable)), { query: 'Launch', filters: mutable })
   assert.deepEqual(helpers.buildSearchRequest('Launch', helpers.defaultSearchFilters()), { query: 'Launch', collapse_similar: true, limit: 20 })
-  const invalid = helpers.searchStateFromURL({ content_types: 'event,removed', sources: 'mine,removed', limit: '200' })
-  assert.deepEqual(invalid.filters.content_types, ['event']); assert.deepEqual(invalid.filters.sources, ['mine']); assert.equal(invalid.filters.limit, 20)
+  const invalid = helpers.searchStateFromURL({ content_types: 'event,实验记录', sources: 'mine,removed', limit: '200' })
+  assert.deepEqual(invalid.filters.content_types, ['event', '实验记录']); assert.deepEqual(invalid.filters.sources, ['mine']); assert.equal(invalid.filters.limit, 20)
 })
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: search markers show and hide using fields loaded through the real search API`, async () => {
@@ -212,10 +212,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const opened = await render(articleComponent(), { article: grouped, query: 'Launch' }, locale, async state => { state.expanded.value = true })
     assert.match(opened, /aria-expanded="true"/); assert.match(opened, /id="similar-reports-a"/); assert.match(opened, /data-article-id="b"/)
   })
-  test(`${locale}: user documents show their source and missing date without article classification`, async () => {
+  test(`${locale}: user documents show their source, missing date and content type`, async () => {
     const html = await render(articleComponent(), { article: { ...article, source: 'mine', summary: null, published_at: null, original_url: '' }, query: 'Launch' }, locale)
     assert.ok(html.includes(messages[locale].knowledgeSearch.sources.mine)); assert.ok(html.includes(messages[locale].knowledgeSearch.missingPublishedAt))
-    assert.doesNotMatch(html, /entry-classification/)
+    assert.match(html, /entry-classification/)
+    assert.ok(html.includes(messages[locale].library.contentTypes.research))
   })
   test(`${locale}: filters offer six content types, three sources and ID-valued entity and topic options`, async () => {
     const filtersComponent = component('../../components/SearchFilters.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/types/search': { SEARCH_SOURCES } })
@@ -398,4 +399,13 @@ test('search results render their library display name', async () => {
   }).articleFileGroups([{ ...article, library_id: 'lib-a', library_name: '机构资料库' }])
   assert.equal(groups[0].libraryName, '机构资料库')
   assert.equal(groups[0].libraryId, 'lib-a')
+})
+
+test('personal document search results render the content type returned by the API', async () => {
+  const api = ingestSearchAPI({ source: 'mine', content_type: '内部方案', vault_path: 'mine/plan.md' })
+  const result = await pageScenario(async state => {
+    state.query.value = 'Launch'; await state.runSearch()
+    assert.equal(state.results.value[0].content_type, '内部方案')
+  }, api.searchEntries, 'zh-CN')
+  assert.ok(result.html.includes('内部方案'))
 })

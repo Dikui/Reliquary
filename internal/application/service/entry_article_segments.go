@@ -37,7 +37,7 @@ func (s *entryService) prepareArticleProcessing(ctx context.Context, library *ty
 	if err != nil {
 		return input, "", nil, err
 	}
-	input.Publisher, input.PublishedAt = source.Publisher, source.PublishedAt
+	input.Publisher, input.PublishedAt, input.Author = source.Publisher, source.PublishedAt, source.Author
 	if s.db != nil {
 		topics, err := NewTopicService(s.db).TopicsForLibrary(ctx, k.LibraryID)
 		if err != nil {
@@ -47,7 +47,7 @@ func (s *entryService) prepareArticleProcessing(ctx context.Context, library *ty
 			input.ExistingTopics = append(input.ExistingTopics, articleProcessingTopic{ID: topic.ID, Name: topic.Name, Description: topic.Description})
 		}
 	}
-	prompt := articleProcessingPrompt
+	prompt := libraryProcessingPrompt(library, k)
 	if input.ContentTypeHint != "" {
 		prompt += "\ncontent_type_hint 是外部工具对内容类型的建议，仅作参考输入，不替代你的判断。仍须按文章内容判定主要用途。"
 	}
@@ -104,7 +104,8 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 		if count == 1 {
 			stored = images
 		}
-		result, err := s.callArticleProcessingPart(ctx, library, k, string(runes[p.Start:p.End]), stored, segmentInput(p, count))
+		refs := segmentImageReferences(body, p)
+		result, err := s.callArticleProcessingPart(ctx, library, k, string(runes[p.Start:p.End]), stored, segmentInput(p, count), refs)
 		if err != nil {
 			return nil, err
 		}
@@ -119,6 +120,8 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 			}
 		}
 		result.Topics = topics
+		qualifySegmentOutput(library, k, body, p, result)
+		qualifyImageLocations(body, p, result, refs)
 		return json.Marshal(result)
 	})
 	if err != nil {
@@ -209,10 +212,21 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 	p := &articleProcessingProvenance{ContentTypes: map[string][]int{}, Entities: map[string][]int{}, Topics: map[string][]int{}}
 	merged := &articleProcessingResult{Summary: parts[0].Summary, Entities: []articleProcessingEntity{}, Topics: []string{}, Provenance: p, Extensions: map[string][]SegmentContribution{}}
 	entityIndex := map[string]int{}
+	relationIndex := map[string]int{}
 	winningType := ""
 	winningCount := 0
 	for i, part := range parts {
 		n := i + 1
+		for _, rel := range part.Relations {
+			key := entityNameKey(rel.SubjectType, rel.Subject) + "\x00" + relationNameKey(rel.Type) + "\x00" + entityNameKey(rel.ObjectType, rel.Object)
+			if index, ok := relationIndex[key]; ok {
+				merged.Relations[index].Evidence = append(merged.Relations[index].Evidence, rel.Evidence...)
+			} else {
+				relationIndex[key] = len(merged.Relations)
+				merged.Relations = append(merged.Relations, rel)
+			}
+		}
+		merged.Images = append(merged.Images, part.Images...)
 		p.Summary = append(p.Summary, n)
 		p.ContentTypes[*part.ContentType] = append(p.ContentTypes[*part.ContentType], n)
 		for _, entity := range part.Entities {
@@ -281,7 +295,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		}
 		err = json.Unmarshal([]byte(response.Content), &output)
 		if err == nil {
-			encoded, _ := json.Marshal(map[string]any{"summary": output.Summary, "entities": []any{}, "topics": []string{}})
+			encoded, _ := json.Marshal(map[string]any{"summary": output.Summary, "entities": []any{}, "topics": []string{}, "relations": []extractedRelation{}, "image_descriptions": []extractedImage{}})
 			var checked *articleProcessingResult
 			checked, err = parseArticleProcessingResult(string(encoded))
 			if err == nil {

@@ -11,6 +11,7 @@ const emit = defineEmits<{ 'open-entity': [id: string] }>()
 const { t } = useI18n()
 const plainText = (value: string) => markdownToPlainText(value, `[${t('ingestStatus.missingTypes.image')}]`)
 const type = computed(() => CONTENT_TYPES.includes(props.entry.content_type as ContentType) ? props.entry.content_type : 'other')
+const customType = computed(() => props.entry.content_type && !CONTENT_TYPES.includes(props.entry.content_type as ContentType) ? props.entry.content_type : '')
 const originalURL = computed(() => {
   const url = props.entry.metadata?.intake?.source_info?.original_url || props.entry.source || ''
   return /^https?:\/\//i.test(url) && isValidURL(url) ? url : ''
@@ -20,7 +21,8 @@ const originalURL = computed(() => {
 <template>
   <div class="entry-classification" :class="{ compact }">
     <div class="classification-tags">
-      <t-tag size="small" variant="light-outline">{{ t(`library.contentTypes.${type}`) }}</t-tag>
+      <t-tag v-if="customType" size="small" variant="light-outline">{{ customType }}</t-tag>
+      <t-tag v-else size="small" variant="light-outline">{{ t(`library.contentTypes.${type}`) }}</t-tag>
       <t-tag v-if="entry.source_unverified" size="small" theme="warning" variant="light-outline">{{ t('knowledgeReview.sourceUnverified') }}</t-tag>
       <t-tag v-if="entry.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
       <t-tag v-if="entry.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>

@@ -2,7 +2,6 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { CONTENT_TYPES, type ContentType } from '@/types/entryClassification'
 import { correctEntryContentType, correctEntryTopics, type ArticleJudgment } from '@/api/entry-judgments'
 import { listTopics, type Topic } from '@/api/topics'
 import { getEntryDetails } from '@/api/library'
@@ -11,10 +10,10 @@ import EntryStarToggle from './EntryStarToggle.vue'
 const props = defineProps<{ entry: ArticleJudgment; disabled?: boolean }>()
 const emit = defineEmits<{ updated: [value: ArticleJudgment]; 'busy-change': [value: boolean] }>()
 const { t } = useI18n()
-const typeDraft = ref<ContentType | ''>(''), topicDraft = ref<string[]>([])
+const typeDraft = ref<string>(''), topicDraft = ref<string[]>([])
 const topics = ref<Topic[]>([]), optionsLoading = ref(false), optionsError = ref('')
 const typeSaving = ref(false), topicsSaving = ref(false), typeError = ref(''), topicsError = ref('')
-const typeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })))
+const typeOptions = computed(() => (props.entry.library_content_types || []).filter(row => row.enabled).map(row => ({ value: row.name, label: row.name })))
 const topicOptions = computed(() => topics.value.map(topic => ({ value: topic.id, label: topic.name })))
 const busy = computed(() => props.disabled || typeSaving.value || topicsSaving.value)
 watch([typeSaving, topicsSaving], () => emit('busy-change', typeSaving.value || topicsSaving.value))
@@ -34,7 +33,7 @@ async function loadTopics() {
 watch(() => props.entry.id, () => {
   void loadTopics()
 }, { immediate: true })
-watch(() => props.entry.content_type, value => { typeDraft.value = CONTENT_TYPES.includes(value as ContentType) ? value as ContentType : '' }, { immediate: true })
+watch(() => props.entry.content_type, value => { typeDraft.value = value || '' }, { immediate: true })
 watch(() => props.entry.topics, value => { topicDraft.value = (value || []).map(topic => topic.id) }, { immediate: true, deep: true })
 async function saveType() {
   if (!typeDraft.value || busy.value) return

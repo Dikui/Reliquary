@@ -327,6 +327,6 @@ func (s *chunkSearchService) isSearchableChunk(chunk *types.Chunk) bool {
 	}
 	return slices.Contains([]types.ChunkType{
 		types.ChunkTypeText, types.ChunkTypeSummary,
-		types.ChunkTypeTableColumn, types.ChunkTypeTableSummary,
+		types.ChunkTypeTableColumn, types.ChunkTypeTableSummary, types.ChunkTypeImageDescription,
 	}, chunk.ChunkType)
 }

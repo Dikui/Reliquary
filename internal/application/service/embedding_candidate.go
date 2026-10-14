@@ -172,7 +172,7 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 			return apperrors.NewBadRequestError("candidate vectors are incomplete")
 		}
 		var count int64
-		if err := tx.Table("chunks c").Joins("JOIN entries k ON k.id=c.entry_id AND k.space_id=c.space_id").Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status='completed' AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column')", spaceID).Count(&count).Error; err != nil {
+		if err := tx.Table("chunks c").Joins("JOIN entries k ON k.id=c.entry_id AND k.space_id=c.space_id").Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status='completed' AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column','image_description')", spaceID).Count(&count).Error; err != nil {
 			return err
 		}
 		chunkCount := int64(0)

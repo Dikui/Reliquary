@@ -6,7 +6,7 @@ export const SEARCH_SOURCES = ['article', 'mine', 'report'] as const
 export type SearchSource = typeof SEARCH_SOURCES[number]
 export interface SearchEntity { id: string; canonical_name: string; entity_type: EntityType; aliases?: string[] }
 export interface SourceLocation { heading_path: string[]; paragraph: number; start: number; end: number; body_hash: string; mapping: string }
-export interface SearchSnippet { locations?: SourceLocation[]; chunk_id: string; content: string; chunk_index: number; score: number; match_type: string; image_path?: string }
+export interface SearchSnippet { chunk_type?: string; locations?: SourceLocation[]; chunk_id: string; content: string; chunk_index: number; score: number; match_type: string; image_path?: string }
 export interface SearchEntry {
   library_id?: string
   library_name?: string
@@ -35,7 +35,7 @@ export interface SearchEntry {
   incomplete?: boolean
 }
 export interface SearchFilters {
-  content_types: ContentType[]
+  content_types: string[]
   entity_ids: string[]
   topic_ids: string[]
   sources: SearchSource[]
@@ -47,4 +47,4 @@ export interface SearchFilters {
 }
 export interface SearchRequest extends Partial<SearchFilters> { query: string; libraries?: string[] }
 export interface SearchData { vector_unavailable?: boolean; rerank_status?: string; results: SearchEntry[]; excluded_missing_published_at: number }
-export interface SearchOptions { entities: SearchEntity[]; topics: EntryTopic[] }
+export interface SearchOptions { content_types?: string[]; entities: SearchEntity[]; topics: EntryTopic[] }

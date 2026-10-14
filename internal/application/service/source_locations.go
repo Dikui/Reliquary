@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"gorm.io/gorm"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/searchutil"
@@ -49,6 +52,11 @@ func recalculateBodyLocations(ctx context.Context, db *gorm.DB, entry *types.Ent
 	}
 	updated := []rune(newBody)
 	for _, c := range chunks {
+		if c.ChunkType == types.ChunkTypeImageDescription {
+			c.StartAt, c.EndAt = mapOffset(c.StartAt), mapOffset(c.EndAt)
+			c.SourceLocations = bodyRangeLocations(newBody, c.StartAt, c.EndAt, "image_description")
+			continue
+		}
 		if c.StartAt >= 0 && c.EndAt <= len(old) && c.EndAt > c.StartAt && string(old[c.StartAt:c.EndAt]) == c.Content {
 			c.StartAt, c.EndAt = mapOffset(c.StartAt), mapOffset(c.EndAt)
 			if c.StartAt < 0 || c.EndAt > len(updated) || c.StartAt > c.EndAt {
@@ -60,9 +68,56 @@ func recalculateBodyLocations(ctx context.Context, db *gorm.DB, entry *types.Ent
 			c.SourceLocations = nil
 		}
 	}
-	sourceloc.Assign(newBody, chunks)
+	exactChunks := []*types.Chunk{}
 	for _, c := range chunks {
-		if err := db.WithContext(ctx).Model(c).Select("content", "start_at", "end_at", "source_locations").Updates(c).Error; err != nil {
+		if c.ChunkType != types.ChunkTypeImageDescription {
+			exactChunks = append(exactChunks, c)
+		}
+	}
+	sourceloc.Assign(newBody, exactChunks)
+	output, err := ReadEntryProcessingOutput(ctx, db, entry.SpaceID, entry.ID)
+	if err != nil {
+		return err
+	}
+	if output != nil {
+		for i := range output.Relations {
+			for j := range output.Relations[i].Evidence {
+				evidence := &output.Relations[i].Evidence[j]
+				locations := []types.SourceLocation{}
+				for _, loc := range evidence.Locations {
+					locations = append(locations, bodyRangeLocations(newBody, mapOffset(loc.Start), mapOffset(loc.End), loc.Mapping)...)
+				}
+				evidence.Locations = locations
+			}
+		}
+		for i := range output.Images {
+			image := &output.Images[i]
+			if image.Ordinal <= len(newRefs) && image.Ordinal > 0 {
+				image.URL = newRefs[image.Ordinal-1].URL
+			}
+			locations := []types.SourceLocation{}
+			for _, loc := range image.Locations {
+				locations = append(locations, bodyRangeLocations(newBody, mapOffset(loc.Start), mapOffset(loc.End), "image_description")...)
+			}
+			image.Locations = locations
+		}
+		output.BodyHash = fmt.Sprintf("%x", sha256.Sum256([]byte(newBody)))
+		if err := db.WithContext(ctx).Save(output).Error; err != nil {
+			return err
+		}
+		for _, c := range chunks {
+			if c.ChunkType == types.ChunkTypeImageDescription {
+				for _, image := range output.Images {
+					if len(image.Locations) > 0 && image.Locations[0].Start == c.StartAt {
+						infos, _ := json.Marshal([]types.ImageInfo{{URL: image.URL, Caption: image.Description}})
+						c.ImageInfo = string(infos)
+					}
+				}
+			}
+		}
+	}
+	for _, c := range chunks {
+		if err := db.WithContext(ctx).Model(c).Select("content", "start_at", "end_at", "source_locations", "image_info").Updates(c).Error; err != nil {
 			return err
 		}
 	}

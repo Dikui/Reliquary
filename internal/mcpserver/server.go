@@ -500,7 +500,7 @@ func ingestSchema() map[string]any {
 		"quotes": map[string]any{"type": "array", "description": "按顺序追加的引用内容", "items": object(map[string]any{
 			"content": text("引用内容，必填"), "author": text("引用作者"), "url": text("引用来源 URL")}, "content")},
 		"collect_reason":    text("收藏理由，写入表头；重复命中时合并理由"),
-		"content_type_hint": enum("调用方建议的内容类型，仅作处理参考，不替代模型判定", types.ContentTypes...),
+		"content_type_hint": text("调用方建议的所属库内容类型，仅作处理参考，不替代模型判定"),
 		"agent_summary":     text("调用方摘要，仅存数据库，不进入表头和处理调用"),
 		"agent_tags":        stringArray("调用方标签，仅存数据库，不进入表头和处理调用"),
 		"source_name":       text("调用方名称，仅存数据库，身份以经过验证的 API Key 为准"),

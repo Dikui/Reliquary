@@ -33,6 +33,8 @@ export default function (defaultLibraryId?: string) {
     description: "",
     collect_reason: "",
     content_type: '',
+    library_content_types: [] as NonNullable<ClassifiedEntry['library_content_types']>,
+    image_descriptions: [] as NonNullable<ClassifiedEntry['image_descriptions']>,
     starred: false,
     source_unverified: false,
     acquisition: undefined as ClassifiedEntry['acquisition'],
@@ -55,6 +57,7 @@ export default function (defaultLibraryId?: string) {
   });
   let entryListGeneration = 0;
   let chunkRequestGeneration = 0;
+  let detailRequestGeneration = 0;
   let activeEntryId = '';
   const loadEntries = (
     query: {
@@ -147,6 +150,7 @@ export default function (defaultLibraryId?: string) {
     }
   };
   const getCardDetails = (item: any) => {
+    const requestGeneration = ++detailRequestGeneration;
     activeEntryId = item.id;
     chunkRequestGeneration++;
     Object.assign(details, {
@@ -163,6 +167,8 @@ export default function (defaultLibraryId?: string) {
       description: "",
       collect_reason: "",
       content_type: '',
+      library_content_types: [],
+      image_descriptions: [],
       starred: false,
       source_unverified: false,
       acquisition: undefined,
@@ -184,7 +190,7 @@ export default function (defaultLibraryId?: string) {
     });
     getEntryDetails(item.id)
       .then((result: any) => {
-        if (activeEntryId !== item.id) return;
+        if (requestGeneration !== detailRequestGeneration || activeEntryId !== item.id) return;
         if (result.success && result.data) {
           const { data } = result;
           Object.assign(details, {
@@ -202,6 +208,8 @@ export default function (defaultLibraryId?: string) {
             description: data.description || '',
             collect_reason: data.collect_reason || '',
             content_type: data.content_type || '',
+            library_content_types: Array.isArray(data.library_content_types) ? data.library_content_types : [],
+            image_descriptions: Array.isArray(data.image_descriptions) ? data.image_descriptions : [],
             starred: Boolean(data.starred),
             source_unverified: Boolean(data.source_unverified),
             acquisition: data.acquisition,

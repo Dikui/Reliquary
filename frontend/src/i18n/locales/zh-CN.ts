@@ -194,6 +194,8 @@ export default {
   }
 },
   articleJudgments: {
+    imageDescriptions: '图片说明',
+    imageNumber: '图片 {number}',
   "approveReview": "通过并收录",
   "rejectReview": "拒绝收录",
   "title": "用户判断",
@@ -285,6 +287,7 @@ export default {
     "unstar": "取消星标",
     "follow": "关注",
     "unfollow": "取消关注",
+    "add_relation_type": "自动添加关系类型",
     "correct_content_type": "修正内容类型",
     "correct_topics": "修正主题",
     "merge_entities": "合并实体",

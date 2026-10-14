@@ -99,3 +99,19 @@ test('mine and report names display the indexed heading without removing dots', 
     assert.equal(hook.details.title, record.title)
   }
 })
+
+test('same document refresh ignores an older detail response and missing processing fields clear previous values', async () => {
+  const replies: ((response: unknown) => void)[] = []
+  const hook = createHook(() => new Promise(resolve => replies.push(resolve)))
+  hook.getCardDetails({ id: 'same' })
+  hook.getCardDetails({ id: 'same' })
+  const record = { id: 'same', updated_at: '2026-10-14T00:00:00Z', library_content_types: [{ name: '最新类型', enabled: true }], image_descriptions: [{ ordinal: 1, description: '最新图片说明' }] }
+  replies[1]({ success: true, data: record }); await settle()
+  replies[0]({ success: true, data: { ...record, library_content_types: [{ name: '旧类型', enabled: true }], image_descriptions: [{ description: '旧说明' }] } }); await settle()
+  assert.deepEqual(hook.details.library_content_types, record.library_content_types)
+  assert.deepEqual(hook.details.image_descriptions, record.image_descriptions)
+  hook.getCardDetails({ id: 'without-images' })
+  replies[2]({ success: true, data: { id: 'without-images', updated_at: record.updated_at } }); await settle()
+  assert.deepEqual(hook.details.library_content_types, [])
+  assert.deepEqual(hook.details.image_descriptions, [])
+})

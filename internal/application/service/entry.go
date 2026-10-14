@@ -260,6 +260,18 @@ func (s *entryService) GetEntryByID(ctx context.Context, id string) (*types.Entr
 		return nil, err
 	}
 	entry.RepostSources = reposts
+	if s.db != nil {
+		output, err := ReadEntryProcessingOutput(ctx, s.db, spaceID, entry.ID)
+		if err != nil {
+			return nil, err
+		}
+		if output != nil {
+			entry.ImageDescriptions = output.Images
+		}
+		if err := s.db.WithContext(ctx).Where("library_id=? AND enabled=true", entry.LibraryID).Order("position,name").Find(&entry.LibraryContentTypes).Error; err != nil {
+			return nil, err
+		}
+	}
 	if err := s.loadEntryAssociations(ctx, spaceID, []*types.Entry{entry}); err != nil {
 		return nil, err
 	}

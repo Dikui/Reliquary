@@ -22,9 +22,6 @@ func (s *entryService) CorrectContentType(ctx context.Context, id, contentType s
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, werrors.NewUnauthorizedError("authenticated editor required")
 	}
-	if !types.IsContentType(contentType) {
-		return nil, werrors.NewBadRequestError("invalid content type")
-	}
 	if s.db == nil {
 		return nil, werrors.NewInternalServerError("content type corrections require PostgreSQL")
 	}
@@ -36,6 +33,19 @@ func (s *entryService) CorrectContentType(ctx context.Context, id, contentType s
 		}
 		if !isIngestArticle(&entry) || entry.ParseStatus != types.ParseStatusCompleted {
 			return werrors.NewBadRequestError("only completed articles can have their content type corrected")
+		}
+		var catalog []types.LibraryContentType
+		if err := tx.Where("library_id=? AND enabled=true", entry.LibraryID).Find(&catalog).Error; err != nil {
+			return err
+		}
+		valid := false
+		for _, row := range catalog {
+			if row.Name == contentType {
+				valid = true
+			}
+		}
+		if !valid {
+			return werrors.NewBadRequestError("content type must belong to this library")
 		}
 		before := entry.ContentType
 		if err := tx.Model(&entry).Updates(map[string]any{"content_type": contentType, "content_type_corrected": true, "updated_at": time.Now()}).Error; err != nil {

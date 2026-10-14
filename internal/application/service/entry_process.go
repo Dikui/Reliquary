@@ -26,7 +26,8 @@ import (
 
 // ProcessChunksOptions contains options for processing chunks
 type ProcessChunksOptions struct {
-	Body string
+	Body             string
+	AdditionalChunks []*types.Chunk
 	// ParentChunks holds parent chunk data when parent-child chunking is enabled.
 	// When set, the chunks passed to processChunks are child chunks, and each
 	// child's ParentIndex references an entry in this slice.
@@ -291,6 +292,7 @@ func (s *entryService) processChunks(ctx context.Context,
 		insertChunks = append(insertChunks, textChunk)
 	}
 
+	insertChunks = append(insertChunks, options.AdditionalChunks...)
 	// Sort chunks by index for proper ordering
 	sort.Slice(insertChunks, func(i, j int) bool {
 		return insertChunks[i].ChunkIndex < insertChunks[j].ChunkIndex
@@ -300,19 +302,25 @@ func (s *entryService) processChunks(ctx context.Context,
 	// When ParentChunkID is empty, retrieval keeps the standalone child content without loading a parent.
 	textChunks := make([]*types.Chunk, 0, len(chunks))
 	for _, chunk := range insertChunks {
-		if chunk.ChunkType == types.ChunkTypeText {
+		if chunk.ChunkType == types.ChunkTypeText || chunk.ChunkType == types.ChunkTypeImageDescription {
 			textChunks = append(textChunks, chunk)
 		}
 	}
 
 	// 设置文本Chunk之间的前后关系 (skip if parent-child, children don't need prev/next links)
 	if !hasParentChild {
-		for i, chunk := range textChunks {
-			if i > 0 {
-				textChunks[i-1].NextChunkID = chunk.ID
+		bodyChunks := []*types.Chunk{}
+		for _, c := range textChunks {
+			if c.ChunkType == types.ChunkTypeText {
+				bodyChunks = append(bodyChunks, c)
 			}
-			if i < len(textChunks)-1 {
-				textChunks[i+1].PreChunkID = chunk.ID
+		}
+		for i, chunk := range bodyChunks {
+			if i > 0 {
+				bodyChunks[i-1].NextChunkID = chunk.ID
+			}
+			if i < len(bodyChunks)-1 {
+				bodyChunks[i+1].PreChunkID = chunk.ID
 			}
 		}
 	}
@@ -330,7 +338,13 @@ func (s *entryService) processChunks(ctx context.Context,
 	s.beginStage(ctx, entry.ID, types.StageChunking, types.JSONMap{
 		"chunks_planned": len(insertChunks),
 	})
-	sourceloc.Assign(options.Body, insertChunks)
+	exactChunks := []*types.Chunk{}
+	for _, c := range insertChunks {
+		if c.ChunkType != types.ChunkTypeImageDescription {
+			exactChunks = append(exactChunks, c)
+		}
+	}
+	sourceloc.Assign(options.Body, exactChunks)
 	if err := s.chunkService.CreateChunks(ctx, insertChunks); err != nil {
 		entry.ParseStatus = types.ParseStatusFailed
 		entry.ErrorMessage = err.Error()

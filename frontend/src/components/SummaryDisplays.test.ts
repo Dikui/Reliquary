@@ -95,12 +95,13 @@ function environment(locale: keyof typeof messages) {
   modules['@/components/EntryClassification.vue'] = modules['./EntryClassification.vue'] = classification
   modules['@/components/SearchEntry.vue'] = moduleOf(component('./SearchEntry.vue', modules))
   const errors: unknown[] = [], warnings: string[] = []
-  function mount(value: any) {
+  function mount(value: any, select?: any) {
     const root = element('root')
     const app = renderer.createApp(value)
     app.use(pinia)
     app.use(createI18n({ legacy: false, locale, messages }))
     registerPrimitives(app)
+    if (select) app.component('t-select', select)
     const primitive = defineComponent({ props: ['visible'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', attrs, [slots.header?.(), slots.default?.(), slots.operation?.()]) })
     for (const name of ['t-checkbox', 't-input-number', 't-pagination', 't-switch', 't-radio-group', 't-radio-button', 't-empty']) app.component(name, primitive)
     app.component('router-link', defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { href: props.to }, slots.default?.()) }))
@@ -196,3 +197,52 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     } finally { mounted.close() }
   })
 }
+
+test('initial detail mount, document switch and refreshed mount render API image descriptions and library type options', async () => {
+  const restore = browserGlobals()
+  const env = environment('zh-CN')
+  env.modules['@/api/topics'] = { listTopics: async () => ({ success: true, data: [] }) }
+  env.modules['@/api/entry-judgments'] = {}
+  env.modules['@/components/EntryArticleJudgments.vue'] = moduleOf(component('./EntryArticleJudgments.vue', env.modules))
+  const detail = component('./DocContent.vue', env.modules)
+  let hook: any
+  const mounts: ReturnType<typeof env.mount>[] = []
+  const setRecord = (id: string, caption: string, type: string) => Object.assign(env.record, {
+    id, content_type: type,
+    image_descriptions: [{ ordinal: 1, url: 'chart.png', description: caption, locations: [{ paragraph: 3, start: 0, end: 1 }] }],
+    library_content_types: [{ name: type, enabled: true, extract_graph: true, position: 0 }, { name: '停用类型', enabled: false, extract_graph: false, position: 1 }],
+  })
+  const mount = () => {
+    const mounted = env.mount(defineComponent({ setup() {
+      hook = env.hook()
+      onMounted(() => hook.getCardDetails({ id: env.record.id }))
+      return () => h(detail, { visible: true, details: hook.details })
+    } }), defineComponent({ props: ['options'], setup: props => () => h('select', (props.options || []).map((row: any) => h('option', { value: row.value }, row.label))) }))
+    mounts.push(mounted)
+    return mounted
+  }
+  const check = (root: Element, caption: string, type: string) => {
+    const section = descendants(root).find(node => hasClass(node, 'image-descriptions'))
+    assert.ok(section, 'initial API response reaches the image description component')
+    assert.ok(visibleText(section).includes(caption))
+    assert.deepEqual(hook.details.library_content_types.filter((row: any) => row.enabled).map((row: any) => row.name), [type])
+    assert.ok(descendants(root).some(node => node.tag === 'option' && visibleText(node) === type))
+    assert.ok(!descendants(root).some(node => node.tag === 'option' && visibleText(node) === '停用类型'))
+    assert.ok(visibleText(root).includes('图片说明'))
+    assert.equal(hook.details.md[0].content, body)
+  }
+  try {
+    setRecord('first', '第一张图的数字说明', '机构快讯')
+    const first = mount(); await settle(); check(first.root, '第一张图的数字说明', '机构快讯')
+    setRecord('second', '第二张图的图表说明', '研究论文')
+    hook.getCardDetails({ id: 'second' })
+    assert.deepEqual(hook.details.image_descriptions, [])
+    assert.deepEqual(hook.details.library_content_types, [])
+    await settle(); check(first.root, '第二张图的图表说明', '研究论文')
+    assert.ok(!visibleText(first.root).includes('第一张图的数字说明'))
+    first.close()
+    const refreshed = mount(); await settle(); check(refreshed.root, '第二张图的图表说明', '研究论文')
+    assert.deepEqual(env.errors, []); assert.deepEqual(env.warnings, [])
+    assert.ok(env.calls.every(call => call.method === 'get'), 'no topic save or reprocessing is needed')
+  } finally { for (const mounted of mounts.slice(1)) mounted.close(); if (mounts.length === 1) mounts[0].close(); restore() }
+})

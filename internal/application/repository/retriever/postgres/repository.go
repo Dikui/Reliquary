@@ -230,7 +230,7 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 		SQL: `c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
 			AND c.chunk_type <> 'parent_text'
-			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column')
+			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column','image_description')
 			AND k.deleted_at IS NULL AND library.deleted_at IS NULL
 			AND (library.indexing_strategy IS NULL OR library.indexing_strategy->>'keyword_enabled' = 'true')`,
 	})
@@ -429,7 +429,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		WHERE candidates.distance <= $%[4]d
 			AND c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
-			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column')
+			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column','image_description')
 			AND k.deleted_at IS NULL
 		ORDER BY candidates.distance ASC
 		LIMIT $%[5]d

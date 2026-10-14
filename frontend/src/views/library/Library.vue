@@ -33,6 +33,7 @@ import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
 import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
+import type { LibraryContentType } from '@/api/library';
 import { CONTENT_TYPES } from '@/types/entryClassification';
 import { SEARCH_SOURCES } from '@/types/search';
 import {
@@ -224,7 +225,7 @@ const starredOptions = computed(() => [
   { value: 'true', label: t('articleJudgments.starredOnly') },
   { value: 'false', label: t('articleJudgments.unstarredOnly') },
 ]);
-const contentTypeOptions = computed(() => CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })));
+const contentTypeOptions = computed(() => libraryInfo.value?.content_types?.filter((row: LibraryContentType) => row.enabled).map((row: LibraryContentType) => ({ value: row.name, label: row.name })) || CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })));
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
 const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };

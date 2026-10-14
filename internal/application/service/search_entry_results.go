@@ -84,13 +84,15 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 		}
 	}
 	if len(chunkIDs) > 0 {
-		if err := s.db.WithContext(ctx).Select("id", "source_locations").Where("space_id=? AND id IN ?", spaceID, chunkIDs).Find(&chunks).Error; err != nil {
+		if err := s.db.WithContext(ctx).Select("id", "source_locations", "chunk_type", "image_info").Where("space_id=? AND id IN ?", spaceID, chunkIDs).Find(&chunks).Error; err != nil {
 			return nil, err
 		}
 	}
 	locations := map[string][]types.SourceLocation{}
+	chunkTypes := map[string]string{}
 	for _, c := range chunks {
 		locations[c.ID] = c.SourceLocations
+		chunkTypes[c.ID] = c.ChunkType
 	}
 	for _, entry := range entries {
 		source, err := entrySourceInfo(&entry.Entry)
@@ -141,6 +143,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 		}
 		for _, snippet := range snippets[entry.ID] {
 			snippet.Locations = locations[snippet.ChunkID]
+			snippet.ChunkType = chunkTypes[snippet.ChunkID]
 			if snippet.ImagePath != "" {
 				for _, ref := range bodyImageReferences(entry.VaultBody) {
 					if ref.URL != snippet.ImagePath {
@@ -272,9 +275,12 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 	if s.db == nil {
 		return nil, fmt.Errorf("entry search requires PostgreSQL")
 	}
-	options := &types.EntrySearchOptions{Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}}
+	options := &types.EntrySearchOptions{ContentTypes: []string{}, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}}
 	if err := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID).
 		Select("id,canonical_name,entity_type").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Table("library_content_types ct").Joins("JOIN libraries l ON l.id=ct.library_id").Where("l.space_id=? AND l.deleted_at IS NULL AND ct.enabled=true", spaceID).Distinct().Order("ct.name").Pluck("ct.name", &options.ContentTypes).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(options.Entities))

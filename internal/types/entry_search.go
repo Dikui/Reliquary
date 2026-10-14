@@ -31,6 +31,7 @@ type EntrySearchTopic struct {
 }
 
 type EntrySearchSnippet struct {
+	ChunkType  string           `json:"chunk_type,omitempty"`
 	Locations  []SourceLocation `json:"locations"`
 	ImagePath  string           `json:"image_path,omitempty"`
 	ChunkID    string           `json:"chunk_id"`
@@ -76,6 +77,7 @@ type EntrySearchResponse struct {
 }
 
 type EntrySearchOptions struct {
-	Entities []EntrySearchEntity `json:"entities"`
-	Topics   []EntrySearchTopic  `json:"topics"`
+	ContentTypes []string            `json:"content_types"`
+	Entities     []EntrySearchEntity `json:"entities"`
+	Topics       []EntrySearchTopic  `json:"topics"`
 }

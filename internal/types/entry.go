@@ -114,7 +114,9 @@ type EntryListFilter struct {
 // It contains metadata about the entry source, its processing status,
 // and references to the physical file if applicable.
 type Entry struct {
-	SimilarReports []*Entry `json:"similar_reports,omitempty" gorm:"-"`
+	ImageDescriptions   []ProcessingImage    `json:"image_descriptions,omitempty" gorm:"-"`
+	LibraryContentTypes []LibraryContentType `json:"library_content_types,omitempty" gorm:"-"`
+	SimilarReports      []*Entry             `json:"similar_reports,omitempty" gorm:"-"`
 
 	SourceRef      string `json:"source_ref,omitempty" gorm:"not null;default:''"`
 	SourceBodyHash string `json:"-" gorm:"not null;default:''"`

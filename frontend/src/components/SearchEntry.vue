@@ -34,11 +34,12 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
     </div>
     <p class="article-meta"><span v-if="article.library_name" class="article-library">{{ article.library_name }}</span><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span><span>{{ published }}</span><code v-if="article.vault_path">{{ article.vault_path }}</code></p>
     <div v-if="followFeed" class="feed-attribution"><time :datetime="feedArticle.collected_at">{{ t('follows.collectedAt', { time: new Date(feedArticle.collected_at).toLocaleString(locale) }) }}</time><div class="feed-matches"><strong>{{ t('follows.matchedTargets') }}</strong><t-tag v-for="target in feedArticle.matched_follows" :key="`${target.target_type}:${target.target_id}`" size="small" variant="light-outline">{{ target.name }} ({{ t(`follows.targetTypes.${target.target_type}`) }})</t-tag></div></div>
-    <EntryClassification v-if="article.source === 'article'" :entry="classification" compact @open-entity="emit('open-entity', $event)" />
+    <EntryClassification v-if="article.source === 'article' || article.source === 'mine'" :entry="classification" compact @open-entity="emit('open-entity', $event)" />
     <div v-if="article.snippets?.length" class="article-snippets">
       <strong>{{ t('knowledgeSearch.snippets') }}</strong>
       <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="article-snippet">
         <SearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.entry_id" :path="snippet.image_path" :title="article.title" />
+        <span v-if="snippet.chunk_type === 'image_description'">{{ t('articleJudgments.imageDescriptions') }}</span>
         <p v-if="snippet.content" v-html="highlightText(plainText(snippet.content), query)" />
       </div>
     </div>

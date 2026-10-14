@@ -194,6 +194,8 @@ export default {
   }
 },
   articleJudgments: {
+    imageDescriptions: 'Image descriptions',
+    imageNumber: 'Image {number}',
   "approveReview": "Approve and collect",
   "rejectReview": "Reject collection",
   "title": "User decisions",
@@ -285,6 +287,7 @@ export default {
     "unstar": "Unstar article",
     "follow": "Follow",
     "unfollow": "Unfollow",
+    "add_relation_type": "Automatically add relation type",
     "correct_content_type": "Correct content type",
     "correct_topics": "Correct topics",
     "merge_entities": "Merge entities",

@@ -382,7 +382,7 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	if len([]rune(strings.TrimSpace(request.Title))) > 255 {
 		return bad("title exceeds 255 characters")
 	}
-	if request.ContentTypeHint != "" && !types.IsContentType(request.ContentTypeHint) {
+	if len([]rune(request.ContentTypeHint)) > 100 {
 		return bad("invalid content_type_hint")
 	}
 	if len(request.Images) > 100 {

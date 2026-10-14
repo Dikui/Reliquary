@@ -113,7 +113,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 		}
 		var chunks []struct{ ID, SourceKind string }
 		if err := tx.Table("chunks c").Joins("JOIN entries k ON k.id=c.entry_id AND k.space_id=c.space_id").
-			Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status=? AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column')", spaceID, types.ParseStatusCompleted).
+			Where("k.space_id=? AND k.deleted_at IS NULL AND k.parse_status=? AND c.deleted_at IS NULL AND c.chunk_type IN ('text','summary','table_summary','table_column','image_description')", spaceID, types.ParseStatusCompleted).
 			Select("c.id,k.source_kind").Order("c.id").Scan(&chunks).Error; err != nil {
 			return err
 		}
@@ -468,7 +468,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			return tx.Exec(`UPDATE entries SET embedding_model_id=? WHERE space_id=? AND id=? AND NOT EXISTS (
 			 SELECT 1 FROM chunks c LEFT JOIN embeddings e ON e.chunk_id=c.id AND e.source_type=0
 			 WHERE c.entry_id=entries.id AND c.space_id=entries.space_id AND c.deleted_at IS NULL
-			 AND c.chunk_type IN ('text','summary','table_summary','table_column')
+			 AND c.chunk_type IN ('text','summary','table_summary','table_column','image_description')
 			 AND (e.id IS NULL OR e.model_id<>? OR e.dimension<>?))`, run.ModelID, run.SpaceID, article.ID, run.ModelID, run.Dimension).Error
 		}
 		var currentChunk types.Chunk
@@ -489,7 +489,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		return tx.Exec(`UPDATE entries SET embedding_model_id=? WHERE space_id=? AND id=? AND NOT EXISTS (
 			SELECT 1 FROM chunks c LEFT JOIN embeddings e ON e.chunk_id=c.id AND e.source_type=0
 			WHERE c.entry_id=entries.id AND c.space_id=entries.space_id AND c.deleted_at IS NULL
-			AND c.chunk_type IN ('text','summary','table_summary','table_column')
+			AND c.chunk_type IN ('text','summary','table_summary','table_column','image_description')
 			AND (e.id IS NULL OR e.model_id<>? OR e.dimension<>?))`, run.ModelID, run.SpaceID, article.ID, run.ModelID, run.Dimension).Error
 	}, nil
 }
