@@ -22,8 +22,8 @@ func TestOpenRunsVersionedMigrations(t *testing.T) {
 	if err := db.Raw("SELECT version, dirty FROM schema_migrations").Row().Scan(&version, &dirty); err != nil {
 		t.Fatal(err)
 	}
-	if dirty || version != 14 {
-		t.Fatalf("expected the clean library intake migration at version 14, got version=%d dirty=%v", version, dirty)
+	if dirty || version != 16 {
+		t.Fatalf("expected the clean library intake migration at version 16, got version=%d dirty=%v", version, dirty)
 	}
 	var count int64
 	if err := db.Raw("SELECT COUNT(*) FROM pg_extension WHERE extname IN ('vector', 'pg_search', 'pg_trgm')").Scan(&count).Error; err != nil || count != 3 {

@@ -54,6 +54,10 @@ func (ingestHandlerChat) GetModelName() string { return "intake-test" }
 
 type ingestHandlerModels struct{ interfaces.ModelService }
 
+func (ingestHandlerModels) GetModelByID(_ context.Context, id string) (*types.Model, error) {
+	return &types.Model{ID: id, Type: types.ModelTypeGeneration}, nil
+}
+
 func (ingestHandlerModels) GetChatModel(context.Context, string) (chat.Chat, error) {
 	return ingestHandlerChat{}, nil
 }
@@ -134,7 +138,7 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rejectedResponse.Body.Bytes(), &rejected))
 	require.Equal(t, "pending_review", rejected.Data.Items[0].Status)
-	require.Equal(t, "model rejected source", rejected.Data.Items[0].Reason)
+	require.Equal(t, "第 1/1 段: model rejected source", rejected.Data.Items[0].Reason)
 	require.Empty(t, queue.tasks)
 	var pending types.Entry
 	require.NoError(t, db.First(&pending, "id=?", rejected.Data.Items[0].EntryID).Error)

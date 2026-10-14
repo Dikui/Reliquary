@@ -1921,6 +1921,8 @@ export default {
     }
   },
   knowledgeStages: {
+    segmentProgress: '第 {current}/{total} 段',
+    summaryMerge: '合并各段摘要',
     title: '处理流水线',
     root: '知识处理',
     attempt: '第 {n} 次尝试',

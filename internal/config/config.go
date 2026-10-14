@@ -24,11 +24,14 @@ type Config struct {
 	Models []ModelConfig `yaml:"models"           json:"models"`
 }
 
-// ArticleProcessingConfig bounds the single article processing call.
+// ArticleProcessingConfig bounds review, processing and segmented input.
 type ArticleProcessingConfig struct {
-	MaxBodyChars        int `yaml:"max_body_chars" json:"max_body_chars"`
-	MaxImages           int `yaml:"max_images" json:"max_images"`
-	MaxCompletionTokens int `yaml:"max_completion_tokens" json:"max_completion_tokens"`
+	MaxBodyChars          int `yaml:"max_body_chars" json:"max_body_chars"`
+	MaxImages             int `yaml:"max_images" json:"max_images"`
+	MaxCompletionTokens   int `yaml:"max_completion_tokens" json:"max_completion_tokens"`
+	MaxSegments           int `yaml:"max_segments" json:"max_segments"`
+	SegmentOverlapChars   int `yaml:"segment_overlap_chars" json:"segment_overlap_chars"`
+	ContextReservePercent int `yaml:"context_reserve_percent" json:"context_reserve_percent"`
 }
 
 // ServerConfig 服务器配置
@@ -162,7 +165,7 @@ func ValidateConfig(cfg *Config) error {
 	if cfg.TopicBackfillBatchSize < 0 || cfg.TopicBackfillBatchSize > 1000 {
 		errs = append(errs, "topic_backfill_batch_size must be between 0 and 1000")
 	}
-	if cfg.ArticleProcessing != nil && (cfg.ArticleProcessing.MaxBodyChars < 0 || cfg.ArticleProcessing.MaxImages < 0 || cfg.ArticleProcessing.MaxCompletionTokens < 0) {
+	if cfg.ArticleProcessing != nil && (cfg.ArticleProcessing.MaxBodyChars < 0 || cfg.ArticleProcessing.MaxImages < 0 || cfg.ArticleProcessing.MaxCompletionTokens < 0 || cfg.ArticleProcessing.MaxSegments < 0 || cfg.ArticleProcessing.SegmentOverlapChars < 0 || cfg.ArticleProcessing.ContextReservePercent < 0 || cfg.ArticleProcessing.ContextReservePercent > 90) {
 		errs = append(errs, "article_processing limits must be nonnegative")
 	}
 

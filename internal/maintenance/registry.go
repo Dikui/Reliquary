@@ -22,6 +22,10 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"entry_segment_runs": {
+		Columns: Rule{Sidecar: "id space_id entry_id phase plan_hash body_hash plan result status created_at updated_at"},
+		File:    "data/entry_segment_runs.json", After: []string{"spaces", "entries"}, Since: 16,
+	},
 	"embedding_rebuild_runs": {
 		Columns: Rule{Sidecar: "id space_id status model_id model_name dimension profile_hash total_count completed_count failed_count error attempt_id lease_until created_at updated_at started_at finished_at candidate switched_at"},
 		File:    "data/embedding_rebuild_runs.json", After: []string{"spaces", "models"}, Since: 0,

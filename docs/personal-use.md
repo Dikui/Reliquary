@@ -424,3 +424,29 @@ curl --fail --location \
 GGUF 示例来自 [GPUStack 发布的量化模型](https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/tree/main)。启动参数和协议以 [llama.cpp server 文档](https://github.com/ggml-org/llama.cpp/tree/master/tools/server) 为准。在模型设置中新建 `Rerank` 类型，来源使用通用 HTTP，`base_url=http://127.0.0.1:18802/v1`，填写实际模型名称，并选择重排模型。容器访问使用 `host.docker.internal`；仅在现有 `SSRF_WHITELIST` 中追加相应主机名或 `127.0.0.1`。无需填写虚构 API Key。
 
 客户端发送 `POST /v1/rerank`，JSON 为 `model`, `query`, `documents`, `top_n`，接收 `results` 或 `data` 中的 `index` 与 `relevance_score`，兼容 Jina/Cohere 及 llama.cpp 格式。超时或错误保留原排序并返回 `rerank_status=unavailable`；未选择模型返回 `unconfigured`。接口字段、正文位置与两套向量切换参见 [普通检索接口](search-api.md)。
+## 长文配置
+
+`config/config.yaml` 中的 `article_processing` 同时控制收录审核与内容处理：
+
+```yaml
+article_processing:
+  max_body_chars: 0
+  max_images: 8
+  max_completion_tokens: 0
+  max_segments: 128
+  segment_overlap_chars: 128
+  context_reserve_percent: 40
+```
+
+| 配置 | 含义 |
+| --- | --- |
+| `max_body_chars` | 每段正文的码点上限。0 按所选模型上下文计算；模型未声明上下文时回退到 24,000。正值只降低预算，不能突破模型上下文。 |
+| `max_images` | 每段最多输入的图片数，默认 8。 |
+| `max_completion_tokens` | 每次模型调用的输出预算，0 默认最多 4,096，并受模型上下文与输出上限约束。 |
+| `max_segments` | 单篇审核或处理的最大段数，0 使用 128。超过时进入收录待审。 |
+| `segment_overlap_chars` | 超长单块切分时附带的前文码点数，0 使用 128。前文单独标注，不改变每段负责的正文范围。 |
+| `context_reserve_percent` | 上下文安全余量百分比，0 使用 40，可设 1 至 90。还会扣除提示词、资料和主题元数据、图片、输出预算及分段上下文预留，采用较小预算。 |
+
+预算按一个正文码点约占一个 token 作保守估计。请为库的轻量、生成模型填写实际 `context_window`，程序分别计算审核与处理预算；修改配置后重启服务。所有分段调用继续使用现有模型并发限制，每篇内部顺序执行。
+
+长文处理失败后保留原文和逐段检查点，再次重试可续跑。正文、模型输入配置或分段规则变化会重新处理全文。合并摘要过大时会明确报错，可选用更大上下文模型或将资料拆成多篇，不能靠提高 `max_body_chars` 越过模型上限。备份及文件库副本包含检查点，恢复后可继续未完成的处理。

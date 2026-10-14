@@ -58,6 +58,7 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 		}
 		projectVectorSnapshot(original, created, updated, vectorSnapshotLegacy(original))
 	}
+	projectSegmentSnapshot(original, current)
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]

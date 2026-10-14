@@ -31,6 +31,7 @@ type Retrieval struct {
 	IDs   []string `json:"ids"`
 }
 type Manifest struct {
+	SchemaVersion      int64 `json:"schema_version,omitempty"`
 	collectionMigrated bool
 	FormatVersion      int                      `json:"format_version"`
 	Tables             map[string]TableManifest `json:"tables"`
@@ -57,7 +58,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	if err != nil {
 		return nil, err
 	}
-	manifest := &Manifest{FormatVersion: FormatVersion, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
+	manifest := &Manifest{SchemaVersion: snapshot.schemaVersion, FormatVersion: FormatVersion, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return nil, err
@@ -451,6 +452,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectLibraryManifest(expected, actual)
 	expected, actual = projectDiscardManifest(expected, actual)
 	expected, actual = projectVectorManifest(expected, actual)
+	expected, actual = projectSegmentManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}

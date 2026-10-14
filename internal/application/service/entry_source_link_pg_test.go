@@ -109,7 +109,7 @@ func TestIngestModelRejectReturnsPendingReviewWithReason(t *testing.T) {
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://example.org/intake-rejected", Publisher: "Acme", Content: "A complete original selected by an external agent.", AgentSummary: "The collector says this passes review."})
 	require.NoError(t, err)
 	require.Equal(t, "pending_review", result.Status)
-	require.Equal(t, "Fixture sourced article", result.Reason)
+	require.Equal(t, "第 1/1 段: Fixture sourced article", result.Reason)
 	require.Empty(t, h.queue.tasks)
 	k := h.article(t, result.EntryID)
 	require.Equal(t, types.ParseStatusRejected, k.ParseStatus)

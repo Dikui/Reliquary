@@ -270,7 +270,13 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 }
 
 func (s *entryService) finishIngestReview(ctx context.Context, library *types.Library, article *types.Entry, body string) (*types.IngestResult, error) {
-	rejected, err := s.reviewIntake(ctx, library, article, body)
+	rejected, err := s.reviewIntake(context.WithValue(ctx, deferSegmentReviewKey{}, true), library, article, body)
+	if errors.Is(err, errSegmentReviewQueued) {
+		if _, err := s.enqueueManualProcessing(ctx, article, body, false); err != nil {
+			return nil, err
+		}
+		return ingestResult(article, "accepted", "已接收，正在分段审核。", "", ""), nil
+	}
 	var deferred *types.ChatGPTDeferredError
 	var options []taskqueue.Option
 	if err != nil {

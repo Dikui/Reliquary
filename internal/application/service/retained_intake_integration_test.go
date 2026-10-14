@@ -138,7 +138,7 @@ func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T
 		require.False(t, h.db.Migrator().HasColumn(&types.Chunk{}, column), column)
 	}
 	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
-	require.Equal(t, []string{intakeReviewPrompt(h.library)}, h.model.prompts)
+	require.Equal(t, []string{segmentReviewPrompt(h.library)}, h.model.prompts)
 	require.NotContains(t, string(completed.Metadata), "classification")
 }
 
@@ -155,8 +155,12 @@ func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	require.Equal(t, types.ParseStatusFailed, failed.ParseStatus)
 	intake, err := failed.IntakeMetadata()
 	require.NoError(t, err)
-	require.Equal(t, "error", intake.Decision)
-	require.Empty(t, intake.OriginalPath)
+	require.Equal(t, "pending", intake.Decision)
+	require.NotEmpty(t, intake.OriginalPath)
 	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
-	require.Equal(t, []string{intakeReviewPrompt(h.library)}, h.model.prompts)
+	require.Equal(t, []string{segmentReviewPrompt(h.library)}, h.model.prompts)
+	h.model.malformed = false
+	require.NoError(t, h.service.ProcessDocument(h.ctx, h.queue.tasks[0]))
+	require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
+	require.Len(t, h.model.prompts, 2)
 }

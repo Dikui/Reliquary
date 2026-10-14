@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/url"
 	"reliquary/internal/application/repository"
@@ -17,7 +16,6 @@ import (
 	"gorm.io/gorm"
 
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 )
 
@@ -110,7 +108,7 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 	parent := s.tracker().LookupStage(ctx, entry.ID, s.tracker().LatestAttempt(ctx, entry.ID), types.StageDocReader)
 	span := s.tracker().BeginSubSpan(ctx, parent, "intake.review", types.SpanKindGeneration, nil)
 	defer func() {
-		if reviewErr != nil {
+		if reviewErr != nil && !errors.Is(reviewErr, errSegmentReviewQueued) {
 			s.tracker().FailSpan(ctx, span, "INTAKE_REVIEW_FAILED", reviewErr.Error(), reviewErr)
 		} else {
 			s.tracker().EndSpan(ctx, span, types.JSONMap{"model_calls": calls.Snapshot(), "model_tier": types.ModelTierLight})
@@ -143,36 +141,18 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 		}
 		return true, s.repo.UpdateEntry(ctx, entry)
 	}
-	model, err := GetTierChatModel(ctx, s.db, s.modelService, library, types.ModelTierLight)
-	if err != nil {
-		return false, err
-	}
 	reviewSource := intake.SourceInfo
 	reviewSource.Confirmed = false
-	reviewInput, err := json.Marshal(struct {
-		SourceInfo types.SourceInfo `json:"source_info"`
-		Body       string           `json:"body"`
-	}{reviewSource, body})
+	approved, decisionReason, err := s.reviewSegments(ctx, library, entry, body, reviewSource)
 	if err != nil {
-		return false, err
-	}
-	prompt := intakeReviewPrompt(library)
-	response, err := model.Chat(types.WithLLMCallMetadata(ctx, "intake_review", ""), []chat.Message{{Role: "system", Content: prompt}, {Role: "user", Content: string(reviewInput)}}, &chat.ChatOptions{Temperature: 0})
-	if err != nil || response == nil {
-		if err == nil {
-			err = fmt.Errorf("empty intake review response")
+		var limit *types.SegmentLimitError
+		if !errors.As(err, &limit) {
+			return false, err
 		}
-		return false, err
+		approved, decisionReason = false, limit.Error()
 	}
-	var decision struct {
-		Approved *bool  `json:"approved"`
-		Reason   string `json:"reason"`
-	}
-	if err := json.Unmarshal([]byte(response.Content), &decision); err != nil || decision.Approved == nil || strings.TrimSpace(decision.Reason) == "" {
-		return false, fmt.Errorf("invalid intake review response")
-	}
-	if !*decision.Approved {
-		intake.Decision, intake.Reason = "rejected", string([]rune(decision.Reason)[:min(len([]rune(decision.Reason)), 500)])
+	if !approved {
+		intake.Decision, intake.Reason = "rejected", string([]rune(decisionReason)[:min(len([]rune(decisionReason)), 500)])
 		entry.ParseStatus, entry.EnableStatus = types.ParseStatusRejected, "disabled"
 	} else {
 		intake.Decision, intake.Reason = "approved", ""
@@ -181,7 +161,7 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 	if err := entry.SetIntakeMetadata(intake); err != nil {
 		return false, err
 	}
-	return !*decision.Approved, s.repo.UpdateEntry(ctx, entry)
+	return !approved, s.repo.UpdateEntry(ctx, entry)
 }
 
 // ReviewEntryIntake retries an initially rejected message or discards its
@@ -276,6 +256,11 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 	if action != "retry" && action != "approve" && action != "supplement_url" && action != "admit_unverified" {
 		return nil, werrors.NewBadRequestError("invalid intake review action")
 	}
+	if action == "retry" {
+		if err := advanceSegmentGeneration(entry, "review"); err != nil {
+			return nil, err
+		}
+	}
 	if source.Author != "" {
 		intake.SourceInfo.Author = source.Author
 	}
@@ -332,7 +317,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 		if strings.TrimSpace(string(body)) == "" {
 			return nil, werrors.NewBadRequestError("stored original is empty")
 		}
-		if action == "supplement_url" {
+		if action == "supplement_url" && s.singleReviewSegment(ctx, library, entry, string(body)) {
 			rejected, err := s.reviewIntake(ctx, library, entry, string(body))
 			var deferred *types.ChatGPTDeferredError
 			if errors.As(err, &deferred) {
@@ -496,6 +481,17 @@ func (s *entryService) failIntake(ctx context.Context, k *types.Entry) {
 	if s.taskEnqueueFailedInTransaction() || ctx.Err() != nil {
 		// An interrupted worker will run again from its durable queue record.
 		// Keep the stored original available to that recovered execution.
+		return
+	}
+	if s.hasSegmentCheckpoint(ctx, k) {
+		if k.ParseStatus != types.ParseStatusFailed {
+			reason := strings.TrimSpace(k.ErrorMessage)
+			if reason == "" {
+				reason = "message processing failed"
+			}
+			s.markArticleProcessingFailed(ctx, k, errors.New(reason))
+		}
+		s.tracker().FinalizeAttempt(ctx, k.ID, s.tracker().LatestAttempt(ctx, k.ID), "failed", nil, "intake_processing_failed", k.ErrorMessage)
 		return
 	}
 	intake, err := k.IntakeMetadata()

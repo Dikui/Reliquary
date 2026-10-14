@@ -515,6 +515,11 @@ func (s *entryService) reparseEntry(
 	}
 	// The worker opens the attempt when execution begins, after queue delivery.
 	if hasBody {
+		if existing.ParseStatus == types.ParseStatusCompleted {
+			if err := advanceSegmentGeneration(existing, "processing"); err != nil {
+				return nil, err
+			}
+		}
 		resetEntryForReparse(existing, library)
 		if err := s.repo.UpdateEntry(ctx, existing); err != nil {
 			return nil, err

@@ -679,6 +679,8 @@ export default {
     reparseHint: "Reprocess the existing material. Missing body content must be supplied by an external tool through the ingest API.",
   },
   knowledgeStages: {
+    segmentProgress: 'Segment {current}/{total}',
+    summaryMerge: 'Merge segment summaries',
     title: 'Processing pipeline',
     root: 'Knowledge processing',
     processConfig: {

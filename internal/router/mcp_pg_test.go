@@ -71,6 +71,16 @@ func (mcpFixtureChat) GetModelName() string { return "mcp-test-chat" }
 
 type mcpFixtureModels struct{ interfaces.ModelService }
 
+func (mcpFixtureModels) GetModelByID(_ context.Context, id string) (*types.Model, error) {
+	model := &types.Model{ID: id, Name: "mcp-test-chat", Type: types.ModelTypeGeneration, Status: types.ModelStatusActive}
+	if strings.Contains(id, "embedding") {
+		model.Type = types.ModelTypeEmbedding
+		model.Name = "mcp-test-embedding"
+		model.Parameters.EmbeddingParameters.Dimension = 3
+	}
+	return model, nil
+}
+
 func (mcpFixtureModels) GetEmbeddingModel(_ context.Context, id string) (embedding.Embedder, error) {
 	if id == "missing-embedding" {
 		return nil, fmt.Errorf("embedding model no longer exists")

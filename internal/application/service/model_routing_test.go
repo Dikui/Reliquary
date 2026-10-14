@@ -113,3 +113,7 @@ func TestModelTierReferencesProtectModelDeletion(t *testing.T) {
 	require.Equal(t, int64(1), usage.LibraryTotal)
 	require.Equal(t, []types.ModelUsageBinding{"generation_model_tier"}, usage.Libraries[0].Bindings)
 }
+
+func (m *tierTestModels) GetModelByID(_ context.Context, id string) (*types.Model, error) {
+	return &types.Model{ID: id, Type: types.ModelTypeGeneration}, nil
+}

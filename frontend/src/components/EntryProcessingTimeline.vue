@@ -150,7 +150,10 @@ const currentStageLabel = computed(() => {
   const running = stages.value.find((s) => s.status === 'running')
   const failed = stages.value.find((s) => s.status === 'failed')
   const target = failed || running || stages.value.find((s) => s.status === 'pending') || stages.value[stages.value.length - 1]
-  return target ? t(`knowledgeStages.stage.${target.name}`) : ''
+  if (!target) return ''
+  const activeSegment = target.children?.find((node) => node.status === 'running' || node.status === 'failed')
+  const progress = activeSegment ? segmentLabel(activeSegment) : ''
+  return [t(`knowledgeStages.stage.${target.name}`), progress].filter(Boolean).join(' · ')
 })
 
 const currentStageIndex = computed(() => {
@@ -867,10 +870,15 @@ function localizedStatus(status: string): string {
   return localized === key ? status : localized
 }
 
+function segmentLabel(node: SpanNode): string {
+  const match = /^(?:review|processing)\.segment\.(\d+)\/(\d+)$/.exec(node.name)
+  return match ? t('knowledgeStages.segmentProgress', { current: match[1], total: match[2] }) : ''
+}
+
 function rowLabel(row: FlatRow): string {
   if (row.isRoot) return t('knowledgeStages.root')
   if (row.isStage) return t(`knowledgeStages.stage.${row.node.name}`)
-  return row.node.name
+  return segmentLabel(row.node) || (row.node.name === 'processing.summary_merge' ? t('knowledgeStages.summaryMerge') : row.node.name)
 }
 
 function rowKindLabel(row: FlatRow): string {
