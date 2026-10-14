@@ -16,6 +16,7 @@ make dev-start
 
 - PostgreSQL（数据库）
 - Redis（任务唤醒）
+- Neo4j Community 5.26.12（图谱查询副本）
 
 #### 2. 启动后端应用（新终端）
 
@@ -250,3 +251,37 @@ make test-integration
 ```
 
 同时设置上文的 `RELIQUARY_TEST_PG_DSN`。已有 `reliquary-test-redis` 时复用，不重复创建。未提供 Redis 测试地址时，依赖 Redis 的用例会跳过并提示。每个测试按独立 PG 数据库名隔离 Redis 队列，结束时清理自身键，保留容器供后续测试。严禁对共用 Redis 的 DB 0 执行 `FLUSHDB`；清空恢复用例使用独立 DB。前端编译缓存写入 worktree 的 `.cache`，不会修改共享 `node_modules`。
+
+## Neo4j 查询副本与集成测试
+
+`make dev-start` 启动带认证、数据卷的 Neo4j。初始管理员用户名固定为 `neo4j`。
+在 `.env` 中设置 `NEO4J_USERNAME=neo4j`、`NEO4J_PASSWORD`，本地 `make dev-app` 会把 Compose 地址转换为宿主机 Bolt 地址；远程开发使用 `DEV_REMOTE_HOST`。`make run` 使用本地 Bolt 地址，密码仍从环境读取。Neo4j 连接失败不会阻止后端启动或 PG 收录。
+
+Compose 固定使用 `neo4j:5.26.12-community` 及镜像摘要。32 GB 服务器的小型部署分配初始堆 512 MB、最大堆 1 GB、页缓存 1 GB，容器上限 3 GB，剩余内存留给 PG、后端和系统。数据放在独立 Neo4j 卷中，不进入备份。
+
+创建并保留测试实例，先用 `docker inspect reliquary-test-neo4j` 检查是否已存在：
+
+```bash
+docker run -d --name reliquary-test-neo4j \
+  -p 127.0.0.1:57687:7687 \
+  -e NEO4J_AUTH=neo4j/reliquary_test \
+  -e NEO4J_server_memory_heap_initial__size=256m \
+  -e NEO4J_server_memory_heap_max__size=512m \
+  -e NEO4J_server_memory_pagecache_size=256m \
+  neo4j:5.26.12-community@sha256:9f75e8df4325a24f00fdd7a8c0bcce650a58375049b1058e496e8b43d6c36b37
+export RELIQUARY_TEST_PG_DSN='postgres://reliquary:reliquary_test@127.0.0.1:55432/reliquary_test?sslmode=disable'
+export RELIQUARY_TEST_REDIS_ADDR=127.0.0.1:56379
+export RELIQUARY_TEST_NEO4J_URI=bolt://127.0.0.1:57687
+export RELIQUARY_TEST_NEO4J_USERNAME=neo4j
+export RELIQUARY_TEST_NEO4J_PASSWORD=reliquary_test
+# Only enable outage tests against this explicitly named local test container.
+export RELIQUARY_TEST_NEO4J_CONTAINER=reliquary-test-neo4j
+make test-integration
+```
+
+固定测试密码为 `reliquary_test`，不能用于正式部署。没有设置 Neo4j URI 时集成测试跳过并打印配置提示。图谱队列测试使用 Redis DB 13，其中清空测试会执行 FLUSHDB；不要与其他任务共用 DB 13。Neo4j 测试按独立命名空间隔离并清理图数据，容器结束后保留。测试目标按 Go 包串行执行，以隔离全量清空专用数据库的维护用例。停止容器测试需要显式设置上述容器变量，结束后自动恢复容器。
+
+`go run ./cmd/server maintenance graph-check` 执行一次全量核对。
+`go run ./cmd/server maintenance graph-rebuild` 清空专用 Neo4j 数据库后从 PG 重建。
+也可用 `make graph-check`、`make graph-rebuild`，连接参数和文件库参数与后端相同。
+登录用户可调用 `POST /api/v1/maintenance/graph/rebuild`，返回待处理操作 ID，在运行队列查看状态。API Key 无权调用这个维护入口。

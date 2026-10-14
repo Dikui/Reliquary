@@ -39,9 +39,33 @@ services:
     stop_grace_period: 1m
 
 
+  # Small deployment on a 32 GB host: 1 GB heap + 1 GB page cache, 3 GB container limit.
+  neo4j:
+    image: neo4j:5.26.12-community@sha256:9f75e8df4325a24f00fdd7a8c0bcce650a58375049b1058e496e8b43d6c36b37
+    environment:
+      - NEO4J_AUTH=${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:?Set NEO4J_PASSWORD}
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1g
+      - NEO4J_server_memory_pagecache_size=1g
+    ports:
+      - "127.0.0.1:${NEO4J_PORT:-7687}:7687"
+    mem_limit: 3g
+    volumes:
+      - neo4j-data-dev:/data
+    networks:
+      - Reliquary-network-dev
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u \"neo4j\" -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
 networks:
   Reliquary-network-dev:
     driver: bridge
 
 volumes:
   postgres-data-dev:
+  neo4j-data-dev:

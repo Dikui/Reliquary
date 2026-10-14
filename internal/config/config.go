@@ -15,6 +15,7 @@ import (
 
 // Config 应用程序总配置
 type Config struct {
+	Neo4j                  *Neo4jConfig             `yaml:"neo4j" json:"neo4j"`
 	Vault                  *VaultConfig             `yaml:"vault" json:"vault"`
 	ArticleProcessing      *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
 	TopicBackfillBatchSize int                      `yaml:"topic_backfill_batch_size" json:"topic_backfill_batch_size"`

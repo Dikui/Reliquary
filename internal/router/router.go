@@ -21,6 +21,7 @@ import (
 // RouterParams 路由参数
 type RouterParams struct {
 	dig.In
+	GraphReplicaHandler *handler.GraphReplicaHandler `optional:"true"`
 
 	Config                  *config.Config
 	FileService             interfaces.FileService
@@ -145,6 +146,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 			v1.GET("/entries/:id/vault-attachment", accessGuards.LibraryExistsFromEntryIDParam("id"), params.VaultHandler.Attachment)
 		}
 		if params.MaintenanceHandler != nil {
+			if params.GraphReplicaHandler != nil {
+				v1.POST("/maintenance/graph/rebuild", params.GraphReplicaHandler.Rebuild)
+			}
 			v1.GET("/maintenance/status", params.MaintenanceHandler.Status)
 			v1.PUT("/maintenance/configure", params.MaintenanceHandler.Configure)
 		}

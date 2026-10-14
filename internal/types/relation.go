@@ -37,13 +37,14 @@ type RelationTypeMerge struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 type GraphPendingSync struct {
-	ID              string    `json:"id" gorm:"primaryKey"`
-	SpaceID         uint64    `json:"space_id"`
-	EntityID        string    `json:"entity_id"`
-	RelationID      string    `json:"relation_id"`
-	RelationVersion int64     `json:"relation_version"`
-	Deleted         bool      `json:"deleted"`
-	CreatedAt       time.Time `json:"created_at"`
+	CompletedAt     *time.Time `json:"completed_at,omitempty"`
+	ID              string     `json:"id" gorm:"primaryKey"`
+	SpaceID         uint64     `json:"space_id"`
+	EntityID        string     `json:"entity_id"`
+	RelationID      string     `json:"relation_id"`
+	RelationVersion int64      `json:"relation_version"`
+	Deleted         bool       `json:"deleted"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 func (GraphPendingSync) TableName() string { return "graph_pending_sync" }

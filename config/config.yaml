@@ -25,3 +25,9 @@ library:
   chunk_overlap: 50
   split_markers: ["\n\n", "\n", "。"]
   document_process_timeout: 2h
+
+# Disposable read replica; connection failure does not block startup.
+neo4j:
+  uri: "bolt://127.0.0.1:7687"
+  username: "neo4j"
+  password: ""

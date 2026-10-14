@@ -55,7 +55,7 @@ show_help() {
     echo "用法: $0 [命令] [选项]"
     echo ""
     echo "命令:"
-    echo "  start      启动基础设施服务（postgres、redis）"
+    echo "  start      启动基础设施服务（postgres、redis、neo4j）"
     echo "  stop       停止所有服务"
     echo "  restart    重启所有服务"
     echo "  logs       查看服务日志"
@@ -169,6 +169,7 @@ start_services() {
         echo ""
         log_info "服务访问地址:"
         echo "  - PostgreSQL:    localhost:5432"
+        echo "  - Neo4j Bolt:    localhost:${NEO4J_PORT:-7687}"
         echo "  - Redis:         localhost:${REDIS_PORT:-6379}"
         
         echo ""
@@ -313,6 +314,10 @@ start_app() {
         if [ -z "${REDIS_ADDR:-}" ] || [ "$REDIS_ADDR" = "redis:6379" ]; then
             export REDIS_ADDR="127.0.0.1:${REDIS_PORT:-6379}"
         fi
+    fi
+
+    if [ -z "${NEO4J_URI:-}" ] || [ "$NEO4J_URI" = "bolt://neo4j:7687" ]; then
+        export NEO4J_URI="bolt://${DEV_REMOTE_HOST:-127.0.0.1}:${NEO4J_PORT:-7687}"
     fi
 
     if ! check_remote_dev_connectivity; then

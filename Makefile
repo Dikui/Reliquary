@@ -9,7 +9,7 @@ help:
 	@echo "  run               运行应用"
 	@echo "  reset-password    从标准输入重置唯一用户密码"
 	@echo "  test              运行测试"
-	@echo "  test-integration  运行 PostgreSQL 与 Redis 集成测试"
+	@echo "  test-integration  运行 PostgreSQL、Redis 与 Neo4j 集成测试"
 	@echo "  test-pg           运行含 PostgreSQL 集成用例的测试（设置 RELIQUARY_TEST_PG_DSN）"
 	@echo "  clean             清理构建文件"
 	@echo ""
@@ -82,22 +82,22 @@ build:
 
 # Run the application
 run: build
-	REDIS_ADDR="$${REDIS_ADDR:-127.0.0.1:6379}" VAULT_ROOT="$${VAULT_ROOT:-$(CURDIR)/.local-data/vault}" SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
+	NEO4J_URI="$${NEO4J_URI:-bolt://127.0.0.1:7687}" REDIS_ADDR="$${REDIS_ADDR:-127.0.0.1:6379}" VAULT_ROOT="$${VAULT_ROOT:-$(CURDIR)/.local-data/vault}" SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
 
 reset-password:
 	go run ./cmd/server reset-password
 
 # Run tests
 test:
-	go test -v ./...
+	go test -p 1 -v ./...
 
 .PHONY: test-pg
-export RELIQUARY_TEST_PG_DSN RELIQUARY_TEST_REDIS_ADDR
+export RELIQUARY_TEST_PG_DSN RELIQUARY_TEST_REDIS_ADDR RELIQUARY_TEST_NEO4J_URI RELIQUARY_TEST_NEO4J_USERNAME RELIQUARY_TEST_NEO4J_PASSWORD RELIQUARY_TEST_NEO4J_CONTAINER
 
 # Run PostgreSQL integration tests against an explicitly configured test server.
 test-pg:
 	@test -n "$$RELIQUARY_TEST_PG_DSN" || (echo "Set RELIQUARY_TEST_PG_DSN to a PostgreSQL test connection URL"; exit 1)
-	go test -count=1 -v ./...
+	go test -p 1 -count=1 -v ./...
 
 # Clean build artifacts
 clean:
@@ -281,4 +281,11 @@ dev-frontend:
 test-integration:
 	@test -n "$$RELIQUARY_TEST_PG_DSN" || (echo "Set RELIQUARY_TEST_PG_DSN"; exit 1)
 	@test -n "$$RELIQUARY_TEST_REDIS_ADDR" || (echo "Set RELIQUARY_TEST_REDIS_ADDR"; exit 1)
-	go test -count=1 ./...
+	GOFLAGS=-p=1 go test -count=1 -timeout=30m ./...
+
+.PHONY: graph-rebuild graph-check
+graph-rebuild:
+	go run ./cmd/server maintenance graph-rebuild
+
+graph-check:
+	go run ./cmd/server maintenance graph-check

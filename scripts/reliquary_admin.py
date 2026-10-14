@@ -366,7 +366,7 @@ class Context:
 
     def runtime_env(self):
         if self.direct or self.local_server:
-            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "REDIS_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "JWT_SECRET", "APP_PORT", "FRONTEND_PORT", "TZ"}}
+            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "REDIS_", "NEO4J_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "JWT_SECRET", "APP_PORT", "FRONTEND_PORT", "TZ"}}
         else:
             config = json.loads(self.compose("config", "--format", "json"))
             values = config["services"].get(self.app, {}).get("environment", {})
@@ -932,14 +932,14 @@ def restored_environment(ctx, package, env_path=None):
     for key in list(values):
         if key.startswith("RELIQUARY_ADMIN_") or key in {"RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY"}:
             values.pop(key)
-    values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32), "DB_PASSWORD": secrets.token_urlsafe(32)})
+    values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32), "DB_PASSWORD": secrets.token_urlsafe(32), "NEO4J_PASSWORD": secrets.token_urlsafe(32)})
     values.setdefault("VAULT_ROOT", "/data/vault")
     values.setdefault("LOCAL_STORAGE_BASE_DIR", "/data/files")
     values.update(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="${HOME}/Reliquary/files", BACKUP_DIR="${HOME}/Backups/Reliquary")
     for key in ("COMPOSE_FILE", "COMPOSE_PROJECT_NAME"):
         values.pop(key, None)
     # Keep the new destination's actual connection and ports when supplied.
-    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PORT", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
+    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PORT", "NEO4J_URI", "NEO4J_USERNAME", "NEO4J_PASSWORD", "NEO4J_PORT", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
         if key in ctx.env:
             values[key] = ctx.env[key]
     if env_path:
@@ -1302,6 +1302,11 @@ def finalize_restore(ctx, package):
             json_write(ctx.root / ".maintenance-restore.json", {"state": "waiting_scheduler", "package": str(package), "scheduler_required": True, "error": str(error)})
             raise AdminError("State: waiting_scheduler. Collection remains paused. Fix host scheduler installation, then run unpack --resume: " + str(error)) from error
     if not legacy:
+        # Graph copies contain no source details and are rebuilt from restored PG.
+        if ctx.sql("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='graph_pending_sync' AND column_name='completed_at')") == "t":
+            if not ctx.direct and not ctx.local_server:
+                ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "neo4j")
+            ctx.cli_json("graph-rebuild")
         ctx.cli_json("resume")
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")

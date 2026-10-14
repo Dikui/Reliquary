@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.uber.org/dig"
+	"reliquary/internal/graphreplica"
 	"reliquary/internal/queue"
 
 	"reliquary/internal/application/service"
@@ -21,6 +22,7 @@ import (
 
 type TaskParams struct {
 	dig.In
+	GraphReplica        *graphreplica.Service `optional:"true"`
 	Client              *queue.Client
 	SystemSettings      interfaces.SystemSettingService
 	EntryService        interfaces.EntryService
@@ -73,6 +75,11 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux := queue.NewServeMux()
 	mux.Use(chatGPTPermanentFailureMiddleware())
 	mux.Use(backgroundTaskMiddleware())
+	if params.GraphReplica != nil {
+		mux.HandleFunc(graphreplica.TypeSync, params.GraphReplica.HandleSync)
+		mux.HandleFunc(graphreplica.TypeCheck, params.GraphReplica.HandleCheck)
+		mux.HandleFunc(graphreplica.TypeRebuild, params.GraphReplica.HandleRebuild)
+	}
 	mux.HandleFunc(types.TypeDocumentProcess, params.EntryService.ProcessDocument)
 	mux.HandleFunc(types.TypeManualProcess, params.EntryService.ProcessManualUpdate)
 	mux.HandleFunc(types.TypeEntryListDelete, params.EntryService.ProcessEntryListDelete)
