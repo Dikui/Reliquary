@@ -108,7 +108,7 @@ func (s *entryService) segmentBudget(model *types.Model, prompt string, metadata
 	return body, nil
 }
 
-func (s *entryService) openSegmentRun(ctx context.Context, entry *types.Entry, phase, body string, budget int, fingerprint any) (*entrySegmentRun, error) {
+func (s *entryService) openSegmentRun(ctx context.Context, entry *types.Entry, phase, body string, budget int, fingerprint any, legacyFingerprints ...any) (*entrySegmentRun, error) {
 	limit, overlap, reserve := s.segmentSettings()
 	plan, err := types.PlanProcessingSegments(body, budget, overlap, limit)
 	if err != nil {
@@ -118,7 +118,10 @@ func (s *entryService) openSegmentRun(ctx context.Context, entry *types.Entry, p
 	if s.config != nil {
 		policy = s.config.ArticleProcessing
 	}
-	key := segmentHash([]any{types.ProcessingSegmentVersion, plan, fingerprint, budget, limit, overlap, reserve, policy, segmentGeneration(entry, phase)})
+	planKey := func(input any) string {
+		return segmentHash([]any{types.ProcessingSegmentVersion, plan, input, budget, limit, overlap, reserve, policy, segmentGeneration(entry, phase)})
+	}
+	key := planKey(fingerprint)
 	run := &entrySegmentRun{ID: uuid.NewString(), SpaceID: entry.SpaceID, EntryID: entry.ID, Phase: phase, PlanHash: key, BodyHash: fmt.Sprintf("%x", sha256.Sum256([]byte(body))), Status: "pending", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	checkpoints := make([]segmentCheckpoint, len(plan))
 	for i, p := range plan {
@@ -136,9 +139,22 @@ func (s *entryService) openSegmentRun(ctx context.Context, entry *types.Entry, p
 		}
 		var latest entrySegmentRun
 		err := tx.Where("entry_id=? AND space_id=? AND phase=?", entry.ID, entry.SpaceID, phase).Order("created_at DESC,id DESC").First(&latest).Error
-		if err == nil && latest.PlanHash == key {
-			*run = latest
-			return nil
+		if err == nil {
+			compatible := latest.PlanHash == key
+			for _, fingerprint := range legacyFingerprints {
+				compatible = compatible || latest.PlanHash == planKey(fingerprint)
+			}
+			if compatible {
+				// Upgrade an unchanged legacy fingerprint without discarding checkpoints.
+				if latest.PlanHash != key {
+					if err := tx.Model(&latest).Update("plan_hash", key).Error; err != nil {
+						return err
+					}
+					latest.PlanHash = key
+				}
+				*run = latest
+				return nil
+			}
 		}
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -172,6 +188,9 @@ func (s *entryService) executeSegments(ctx context.Context, entry *types.Entry, 
 		return nil, err
 	}
 	for i := range plan {
+		if aborted, _ := s.isEntryAborted(ctx, entry.SpaceID, entry.ID); aborted {
+			return nil, context.Canceled
+		}
 		err := s.mutateSegmentRun(ctx, run, func(current *entrySegmentRun) error {
 			if err := json.Unmarshal(current.Plan, &plan); err != nil {
 				return err

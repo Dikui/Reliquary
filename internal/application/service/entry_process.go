@@ -476,9 +476,6 @@ func (s *entryService) reparseEntry(
 		logger.Errorf(ctx, "Failed to load entry: %v", err)
 		return nil, err
 	}
-	if existing.SourceKind != "" && existing.SourceKind != "article" {
-		return nil, werrors.NewBadRequestError("vault documents are indexed directly from their files")
-	}
 
 	if intake, _ := existing.IntakeMetadata(); intake != nil && (intake.Decision == "rejected" || intake.Decision == "error") {
 		return nil, werrors.NewBadRequestError("use the intake review action for this message")
@@ -515,7 +512,7 @@ func (s *entryService) reparseEntry(
 	}
 	// The worker opens the attempt when execution begins, after queue delivery.
 	if hasBody {
-		if existing.ParseStatus == types.ParseStatusCompleted {
+		if existing.ParseStatus == types.ParseStatusCompleted && library.Template != types.TemplateGenerated {
 			if err := advanceSegmentGeneration(existing, "processing"); err != nil {
 				return nil, err
 			}
@@ -539,9 +536,11 @@ func (s *entryService) reparseEntry(
 func resetEntryForReparse(entry *types.Entry, library *types.Library) {
 	entry.ParseStatus = types.ParseStatusPending
 	entry.EnableStatus = "disabled"
-	entry.Description = ""
-	entry.StructuredSummary = nil
-	entry.SummaryStatus = types.SummaryStatusPending
+	if library.Template != types.TemplateGenerated {
+		entry.Description = ""
+		entry.StructuredSummary = nil
+		entry.SummaryStatus = types.SummaryStatusPending
+	}
 	entry.ProcessedAt = nil
 	entry.ErrorMessage = ""
 	entry.EmbeddingModelID = library.EmbeddingModelID

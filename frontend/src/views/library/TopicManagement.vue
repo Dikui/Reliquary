@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
+import { listLibraries, type LibraryCatalogItem } from '@/api/library'
 import { useFollowStore } from '@/stores/follows'
 import { createTopic, deleteTopic, getTopicBackfill, listTopics, retryTopicBackfill, updateTopic, type Topic, type TopicBackfill } from '@/api/topics'
 
@@ -12,7 +13,10 @@ const followStore = useFollowStore()
 const topics = ref<Topic[]>([]), loading = ref(false), error = ref('')
 const progress = reactive<Record<string, TopicBackfill | null>>({})
 const progressErrors = reactive<Record<string, string>>({}), retrying = reactive<Record<string, boolean>>({})
-const editorVisible = ref(false), editing = ref<Topic | null>(null), draft = ref({ name: '', description: '' })
+const editorVisible = ref(false), editing = ref<Topic | null>(null), draft = ref({ name: '', description: '', library_ids: [] as string[] })
+const libraries = ref<LibraryCatalogItem[]>([]), librariesError = ref(false)
+const libraryOptions = computed(() => libraries.value.map(lib => ({ value: lib.id, label: lib.display_name || lib.name })))
+async function loadLibraries() { try { const response = await listLibraries(); if (!response.success) throw new Error(); libraries.value = response.data || []; librariesError.value = false } catch { librariesError.value = true } }
 const saving = ref(false), saveError = ref(''), deleting = ref(false), deleteError = ref(''), deleteTarget = ref<Topic | null>(null)
 const deleteVisible = computed({ get: () => Boolean(deleteTarget.value), set: value => { if (!value && !deleting.value) deleteTarget.value = null } })
 let generation = 0, pollTimer: ReturnType<typeof setTimeout> | undefined, disposed = false
@@ -55,13 +59,14 @@ async function load() {
 }
 function openEditor(topic?: Topic) {
   editing.value = topic || null
-  draft.value = { name: topic?.name || '', description: topic?.description || '' }
+  draft.value = { name: topic?.name || '', description: topic?.description || '', library_ids: [...(topic?.library_ids || [])] }
+  void loadLibraries()
   saveError.value = ''
   editorVisible.value = true
 }
 async function save() {
   if (saving.value) return
-  const input = { name: draft.value.name.trim(), description: draft.value.description.trim() }
+  const input = { name: draft.value.name.trim(), description: draft.value.description.trim(), library_ids: draft.value.library_ids }
   if (!input.name) { saveError.value = t('topicManagement.nameRequired'); return }
   saving.value = true
   saveError.value = ''
@@ -137,6 +142,9 @@ onUnmounted(() => { disposed = true; generation++; clearTimeout(pollTimer) })
       <form class="topic-form" novalidate @submit.prevent="save">
         <label><span>{{ t('topicManagement.name') }}</span><t-input v-model="draft.name" :maxlength="255" :disabled="saving" :aria-label="t('topicManagement.name')" :aria-invalid="Boolean(saveError)" /></label>
         <label><span>{{ t('topicManagement.topicDescription') }}</span><SafeTextarea v-model="draft.description" :autosize="{ minRows: 3, maxRows: 8 }" :maxlength="2000" :disabled="saving" :aria-label="t('topicManagement.topicDescription')" /></label>
+        <label><span>{{ t('topicManagement.libraries') }}</span><t-select v-model="draft.library_ids" multiple clearable :options="libraryOptions" :disabled="saving || librariesError" :placeholder="t('follows.allLibraries')" :aria-label="t('topicManagement.libraries')" /></label>
+        <p class="topic-hint">{{ t('topicManagement.libraryHint') }}</p>
+        <p v-if="librariesError" role="alert">{{ t('topicManagement.libraryLoadFailed') }} <t-button variant="text" @click="loadLibraries">{{ t('common.retry') }}</t-button></p>
         <p class="topic-hint">{{ t('topicManagement.descriptionHint') }}</p>
         <p v-if="saveError" class="topic-error" role="alert">{{ saveError }}</p>
       </form>

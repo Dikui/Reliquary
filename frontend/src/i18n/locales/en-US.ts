@@ -88,8 +88,10 @@ export default {
     kinds: { article_chunk: 'Body chunk', article: 'Article', image: 'Image', mine_chunk: 'Your document chunk', report_chunk: 'Saved report chunk', entity: 'Entity name' },
   },
   follows: {
+    library: 'Library',
+    allLibraries: 'All libraries',
     title: 'Following',
-    description: 'Read articles about entities and topics you follow. Articles entering the feed since your last visit are marked new.',
+    description: 'Read material about entities and topics you follow. Each library tracks its own viewing time; later feed arrivals are marked new.',
     follow: 'Follow',
     unfollow: 'Unfollow',
     followNamed: 'Follow {name}',
@@ -106,8 +108,8 @@ export default {
     refresh: 'Refresh feed',
     loading: 'Loading follow feed',
     results: 'Follow feed',
-    resultCount: 'Showing {count} article groups, newest collected first',
-    limitHint: 'Showing {shown} of {total} articles. Increase the limit to see more; opening this page updates the viewing time for the entire feed.',
+    resultCount: 'Showing {count} groups, newest feed arrivals first',
+    limitHint: 'Showing {shown} of {total} items. Increase the limit to see more; opening this page updates the viewing time for the selected libraries.',
     emptyTargets: 'You do not follow any targets yet. Follow an entity or topic from its page.',
     emptyFeed: 'No articles match these followed targets.',
     new: 'New',
@@ -218,6 +220,9 @@ export default {
   "topicsFailed": "Topics were not saved. Try again."
 },
   topicManagement: {
+    libraries: 'Applicable libraries',
+    libraryHint: 'Leave empty for all libraries. Existing matches outside a narrowed scope are retained and excluded from this topic’s feed.',
+    libraryLoadFailed: 'Could not load libraries',
   "title": "Topics",
   "description": "Manage interests and assign past articles to their topics.",
   "create": "Create topic",
@@ -496,6 +501,8 @@ export default {
     articleTopics: "Topics",
     originalArticle: "Original article",
     originalLinkMissing: "No original link",
+    reindexDocument: 'Rebuild index',
+    reindexConfirm: 'Rebuild the index for “{fileName}”? Report fields are preserved; no review or content generation runs.',
     reprocess: "Reprocess",
     reprocessQueued: "Reprocessing queued; results will update automatically",
     title: 'Library',
@@ -679,6 +686,7 @@ export default {
     reparseHint: "Reprocess the existing material. Missing body content must be supplied by an external tool through the ingest API.",
   },
   knowledgeStages: {
+    intakeReview: 'Intake review',
     segmentProgress: 'Segment {current}/{total}',
     summaryMerge: 'Merge segment summaries',
     title: 'Processing pipeline',
@@ -771,6 +779,19 @@ export default {
       cancelled: 'Cancelled'
     },
     errorCode: {
+      SEGMENT_FAILED: 'Segment processing failed',
+      SEGMENT_FAILED_SUGGESTION: 'Fix the model error and retry. Completed segments are reused.',
+      SUMMARY_MERGE_FAILED: 'Summary merge failed',
+      SUMMARY_MERGE_FAILED_SUGGESTION: 'Fix the model error and retry. Saved segment summaries are reused.',
+      INTAKE_REVIEW_FAILED: 'Intake review failed',
+      INTAKE_REVIEW_FAILED_SUGGESTION: 'Check the review model and retry. Completed review segments are reused.',
+      ARTICLE_PROCESSING_FAILED: 'Content processing failed',
+      ARTICLE_PROCESSING_FAILED_SUGGESTION: 'Check the processing model and retry. Saved segment results are reused.',
+      USER_CANCELLED: 'Processing cancelled',
+      USER_CANCELLED_SUGGESTION: 'Restart processing to resume from saved checkpoints.',
+      intake_processing_failed: 'Intake processing failed',
+      intake_processing_failed_SUGGESTION: 'Fix the error and retry processing from saved checkpoints.',
+
       CHUNKING_FAILED: 'Document chunking failed',
       CHUNKING_FAILED_SUGGESTION: 'Check the chunking configuration and try splitting oversized documents before retrying.',
       EMBEDDING_RATE_LIMIT: 'Embedding requests rate limited',
@@ -787,7 +808,7 @@ export default {
   },
   personalDocument: {
     delete: 'Delete personal document',
-    deleteConfirm: 'Delete “{title}”? This removes its body, file, attachments and index. To change a document, delete it and import it again.',
+    deleteConfirm: 'Delete “{title}”? This removes its body, file, attachments and index.',
     deleted: 'Personal document deleted',
     deleteFailed: 'The personal document was not deleted. Try again.',
   },

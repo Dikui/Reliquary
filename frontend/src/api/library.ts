@@ -111,8 +111,9 @@ export function updateEntryMetadata(entryId: string, customMetadata: Record<stri
   return put(`/api/v1/entries/${entryId}`, { custom_metadata: customMetadata });
 }
 
+/** Compatibility name for the shared processing and resume action. */
 export function reprocessEntry(entryId: string) {
-  return post(`/api/v1/entries/${entryId}/reprocess`, {});
+  return reparseEntry(entryId);
 }
 
 // Get chunk by chunk_id only (new endpoint - to be added to backend)

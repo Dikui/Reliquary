@@ -103,7 +103,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     await render(reviewComponent(api), { entry: mine }, locale, async state => { await state.submit('approve') })
     assert.deepEqual(calls.at(-1), { method: 'post', url: '/api/v1/entries/missing-url/review', body: { action: 'approve', source_info: {} } })
   })
-  test(`${locale}: personal document menu deletion uses an independent confirmation with full removal and reimport copy`, async () => {
+  test(`${locale}: personal document menu keeps deletion independent while offering normal reprocessing`, async () => {
     const shared = component('../../components/DocumentDeleteConfirm.vue', {})
     const setup = shared.setup
     shared.setup = (props: object, context: object) => { const state = setup(props, context); onServerPrefetch(() => state.open()); return state }
@@ -116,12 +116,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const item = { id: 'mine', title: 'My source', source_kind: 'mine', parse_status: 'completed' }
     const menuHTML = await render(menu, { item, traceVisible: false }, locale)
     assert.ok(menuHTML.includes(messages[locale].personalDocument.delete))
-    assert.ok(!menuHTML.includes('My source'), 'the menu never embeds confirmation content')
-    assert.ok(!menuHTML.includes(`>${messages[locale].library.rebuildDocument}<`))
+    assert.ok(!menuHTML.includes(messages[locale].personalDocument.deleteConfirm.replace('{title}', 'My source')), 'deletion confirmation remains in its independent dialog')
+    assert.ok(menuHTML.includes(`>${messages[locale].library.rebuildDocument}<`))
     assert.ok(!menuHTML.includes('name="edit"'))
     const html = await render(modal, {}, locale, async state => { await state.open(item) })
     assert.ok(html.includes('My source'))
-    assert.ok(html.includes(locale === 'zh-CN' ? '删除后重新导入' : 'import it again'))
+    assert.ok(html.includes(messages[locale].personalDocument.deleteConfirm.replace('{title}', 'My source')))
+    assert.ok(!html.includes(locale === 'zh-CN' ? '删除后重新导入' : 'import it again'))
   })
   test(`${locale}: incomplete articles and personal documents load with the correct completion instructions and shared action copy`, async () => {
     const records = [

@@ -124,6 +124,24 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 		return errors.New("article body is empty")
 	}
 	clean = content
+	if library.Template == types.TemplateGenerated {
+		// Reports retain caller-provided fields and only rebuild their indexes.
+		s.bindContentResources(ctx, entry.SpaceID, entry.ID, content)
+		s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "saved_markdown"})
+		s.endStage(ctx, entry.ID, types.StageDocReader, nil)
+		s.skipStage(ctx, entry.ID, types.StageProcessing, "generated_library")
+		overrides, _ := entry.ProcessOverrides()
+		eff := ResolveProcessConfig(library, overrides)
+		chunks, options := splitArticleBody(content, eff.ChunkingConfig)
+		s.processChunks(ctx, library, entry, chunks, options)
+		if entry.ParseStatus == types.ParseStatusFailed {
+			return errors.New(entry.ErrorMessage)
+		}
+		if aborted, _ := s.isEntryAborted(ctx, entry.SpaceID, entry.ID); !aborted {
+			s.tracker().FinalizeAttempt(ctx, entry.ID, attemptFromCtx(ctx), "done", types.JSONMap{"index_only": true}, "", "")
+		}
+		return nil
+	}
 	s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "markdown", "body_chars": len([]rune(content))})
 	if err := s.recordMissingIngestImages(ctx, entry, clean); err != nil {
 		return err

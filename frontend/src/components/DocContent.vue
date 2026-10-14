@@ -12,7 +12,7 @@ import { onMounted, ref, nextTick, onUnmounted, watch, computed } from "vue";
 import {
   getChunkByIdOnly,
   updateEntryMetadata,
-  reprocessEntry, getEntryDetails,
+  reparseEntry, getEntryDetails,
   ENTRY_CHUNK_PAGE_SIZE,
 } from "@/api/library";
 import { MessagePlugin } from "tdesign-vue-next";
@@ -73,7 +73,6 @@ const syncMetadataDraft = () => {
 };
 
 const startMetadataEdit = () => {
-  if (props.details?.source_kind === 'mine') return;
   syncMetadataDraft();
   if (!metadataDraft.value.length) metadataDraft.value.push(makeMetadataRow());
   metadataEditing.value = true;
@@ -108,7 +107,6 @@ const formatMetadataValue = (value: unknown) => {
 };
 
 const saveMetadata = async () => {
-  if (props.details?.source_kind === 'mine') return;
   try {
     const value: Record<string, unknown> = {};
     for (const row of metadataDraft.value) {
@@ -137,12 +135,13 @@ const saveMetadata = async () => {
 const reprocessing = ref(false);
 const articleJudgmentsBusy = ref(false);
 const incompleteBusy = ref(false);
-const canReprocess = computed(() => !['mine', 'report'].includes(props.details?.source_kind || ''));
+const canReprocess = computed(() => Boolean(props.details?.id));
+const isIndexOnly = computed(() => props.details?.source_kind === 'report' || props.details?.library_template === 'generated');
 const reprocess = async () => {
   if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value || incompleteBusy.value) return;
   reprocessing.value = true;
   try {
-    const result: any = await reprocessEntry(props.details.id);
+    const result: any = await reparseEntry(props.details.id);
     applyProcessingState(result?.data || { parse_status: 'pending' });
     MessagePlugin.success(t('library.reprocessQueued'));
   } catch (error: any) {
@@ -304,7 +303,6 @@ watch(() => [props.visible, props.details?.id, props.details?.parse_status], ([v
   else stopProcessingPolling();
 }, { immediate: true });
 watch(() => props.details?.id, syncMetadataDraft, { immediate: true });
-watch(() => props.details?.source_kind, value => { if (value === 'mine') metadataEditing.value = false; });
 
 const hasTimelineSpans = ref(false);
 const timelineDrawerVisible = ref(false);
@@ -341,16 +339,17 @@ const TRACE_DRAWER_MIN_WIDTH = 560;
 
 const timelineDrawerWidth = ref(TRACE_DRAWER_DEFAULT_WIDTH);
 const timelineDrawerResizing = ref(false);
+const timelineDrawerSize = computed(() => `min(${timelineDrawerWidth.value}px, 100vw)`);
 
 let traceResizeStartX = 0;
 let traceResizeStartWidth = 0;
 
 function traceDrawerMaxWidth() {
-  return Math.min(1400, Math.max(TRACE_DRAWER_MIN_WIDTH, Math.floor(window.innerWidth * 0.92)));
+  return Math.min(1400, window.innerWidth, Math.max(TRACE_DRAWER_MIN_WIDTH, Math.floor(window.innerWidth * 0.92)));
 }
 
 function clampTraceDrawerWidth(width: number) {
-  return Math.max(TRACE_DRAWER_MIN_WIDTH, Math.min(traceDrawerMaxWidth(), width));
+  return Math.min(traceDrawerMaxWidth(), Math.max(TRACE_DRAWER_MIN_WIDTH, width));
 }
 
 function loadTraceDrawerWidth() {
@@ -1097,14 +1096,14 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
       <!-- 二级抽屉：完整 processing waterfall -->
       <teleport to="body">
-        <div v-if="timelineDrawerVisible" class="trace-drawer-resize-handle"
+        <div v-if="timelineDrawerVisible && !isMainDrawerNarrow" class="trace-drawer-resize-handle"
           :style="{ right: `${timelineDrawerWidth}px` }" role="separator" aria-orientation="vertical"
           :aria-label="$t('knowledgeStages.resizeDrawer')" :title="$t('knowledgeStages.resizeDrawer')"
           @mousedown.prevent="onTraceDrawerResizeStart">
           <div class="trace-drawer-resize-line" />
         </div>
       </teleport>
-      <t-drawer :visible="timelineDrawerVisible" :zIndex="2100" :size="`${timelineDrawerWidth}px`" attach="body"
+      <t-drawer :visible="timelineDrawerVisible" :zIndex="2100" :size="timelineDrawerSize" attach="body"
         :closeBtn="false" :footer="false" :header="false" :showOverlay="true" :closeOnOverlayClick="true"
         placement="right" :class="['kp-secondary-drawer', { 'kp-secondary-drawer--resizing': timelineDrawerResizing }]"
         @close="closeTimeline">
@@ -1170,32 +1169,32 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <RepostSources :sources="details.repost_sources" />
         </section>
 
-        <section v-if="details.id && (details.source_kind !== 'mine' || Object.keys(details.custom_metadata || {}).length)" class="setting-drawer__section metadata-section">
+        <section v-if="details.id" class="setting-drawer__section metadata-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">
               <span>{{ $t('library.customMetadata') }}</span>
-              <t-tooltip v-if="details.source_kind !== 'mine'" :content="$t('library.metadataCapabilityHint')" placement="top">
+              <t-tooltip :content="$t('library.metadataCapabilityHint')" placement="top">
                 <t-icon name="info-circle" size="14px" class="metadata-capability-icon" />
               </t-tooltip>
               <span v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-count">
                 {{ Object.keys(details.custom_metadata || {}).length }}/20
               </span>
             </h4>
-            <t-tooltip v-if="!metadataEditing && details.source_kind !== 'mine'" :content="$t('common.edit')" placement="top">
+            <t-tooltip v-if="!metadataEditing" :content="$t('common.edit')" placement="top">
               <t-button class="icon-action-btn" size="small" variant="text" shape="square" @click="startMetadataEdit">
                 <template #icon><t-icon name="edit" size="15px" /></template>
               </t-button>
             </t-tooltip>
           </div>
 
-          <div v-if="!metadataEditing || details.source_kind === 'mine'" class="metadata-display">
+          <div v-if="!metadataEditing" class="metadata-display">
             <div v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-grid">
               <div v-for="(value, key) in (details.custom_metadata || {})" :key="key" class="metadata-item">
                 <span class="metadata-item-key">{{ key }}</span>
                 <span class="metadata-item-value">{{ formatMetadataValue(value) }}</span>
               </div>
             </div>
-            <button v-else-if="details.source_kind !== 'mine'" type="button" class="metadata-empty-action" @click="startMetadataEdit">
+            <button v-else type="button" class="metadata-empty-action" @click="startMetadataEdit">
               <t-icon name="add" size="15px" />
               <span>{{ $t('library.addMetadataField') }}</span>
             </button>
@@ -1249,7 +1248,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <h4 class="setting-drawer__section-title">{{ $t('library.documentSummary') }}</h4>
             <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy || incompleteBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
-              {{ $t('library.reprocess') }}
+              {{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.reprocess') }}
             </t-button>
           </div>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
@@ -1257,7 +1256,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <MissingMaterials :items="details.missing_materials || []" />
             <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />
           </section>
-          <EntryArticleJudgments v-if="canReprocess && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('library.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('library.parsingFailed') }}</p>
         </section>

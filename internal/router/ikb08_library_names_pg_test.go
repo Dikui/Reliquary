@@ -42,7 +42,12 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 		t.Logf("HTTP %s %s (%s): %s", method, path, language, rec.Body.String())
 		return envelope.Data
 	}
-	expected := map[string]string{systemLibrary.ID: systemLibrary.Name, customLibrary.ID: customLibrary.Name}
+	expected := map[string]string{}
+	var catalog []types.Library
+	require.NoError(t, f.db.Find(&catalog).Error)
+	for _, library := range catalog {
+		expected[library.ID] = library.Name
+	}
 	var assertNames func(any) int
 	assertNames = func(value any) int {
 		t.Helper()

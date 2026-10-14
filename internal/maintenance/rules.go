@@ -42,6 +42,6 @@ var Rules = map[string]Rule{
 	"spaces":                        {Configuration: "embedding_model_id id name description status business storage_used created_at updated_at deleted_at retrieval_config credentials"},
 	"topic_backfill_batches":        {Sidecar: "id job_id ordinal entry_ids article_count status attempts error created_at updated_at retry_at"},
 	"topic_backfill_jobs":           {Sidecar: "id space_id topic_id topic_name topic_description status total processed failed_articles failed_batches created_at updated_at"},
-	"topics":                        {Sidecar: "id space_id name description created_at updated_at"},
+	"topics":                        {Sidecar: "id space_id name description library_ids created_at updated_at"},
 	"users":                         {Configuration: "id username email password_hash avatar space_id is_active created_at updated_at deleted_at"},
 }

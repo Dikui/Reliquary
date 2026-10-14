@@ -42,6 +42,8 @@ var entryNamingExceptions = map[string]entryNamingException{
 	"frontend/src/components/EmptyEntry.vue":                                {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"emptyKnowledgeDragDrop"}},
 	"frontend/src/components/EntryClassification.vue":                       {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"knowledgeReview"}},
 	"frontend/src/components/EntryProcessingTimeline.vue":                   {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变；既有处理 trace 阶段值", Tokens: []string{"knowledgeStages", "knowledge_processing"}},
+	"frontend/src/utils/processingSpanLabel.ts":                             {Reason: "时间线共享标签复用既有 knowledgeStages 国际化命名空间，不引入旧领域类型", Tokens: []string{"knowledgeStages"}},
+	"frontend/src/utils/processingSpanLabel.test.ts":                        {Reason: "核对共享时间线标签与既有 knowledgeStages 国际化命名空间", Tokens: []string{"knowledgeStages"}},
 	"frontend/src/components/GlobalCommandPalette.vue":                      {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"knowledgeSearch"}},
 	"frontend/src/components/GlobalCommandPalette/ResultItem.vue":           {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"knowledgeReview"}},
 	"frontend/src/components/GlobalCommandPalette/commands.test.ts":         {Reason: "现有 i18n 键、界面原文案或对应断言", Tokens: []string{"knowledge"}},

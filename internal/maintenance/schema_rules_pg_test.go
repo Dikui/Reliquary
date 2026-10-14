@@ -15,7 +15,7 @@ import (
 
 func TestLegacyPreservationRulesMatchVersionWithoutMigratingSchema(t *testing.T) {
 	for version := uint(0); version <= 16; version++ {
-		if version == 13 || version == 15 {
+		if version == 13 {
 			continue
 		}
 		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {

@@ -39,7 +39,7 @@ func (s *entryService) prepareArticleProcessing(ctx context.Context, library *ty
 	}
 	input.Publisher, input.PublishedAt = source.Publisher, source.PublishedAt
 	if s.db != nil {
-		topics, err := NewTopicService(s.db).ListTopics(ctx)
+		topics, err := NewTopicService(s.db).TopicsForLibrary(ctx, k.LibraryID)
 		if err != nil {
 			return input, "", nil, err
 		}
@@ -88,7 +88,12 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	if err != nil {
 		return nil, err
 	}
-	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{input, prompt, segmentModelIdentity(model), budget})
+	// Topic eligibility is live catalog state, not a document processing revision.
+	// Completed segment results are retained when the catalog changes; new
+	// segments use the current candidates and persistence revalidates all IDs.
+	fingerprintInput := input
+	fingerprintInput.ExistingTopics = []articleProcessingTopic{}
+	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{fingerprintInput, prompt, segmentModelIdentity(model), budget}, []any{input, prompt, segmentModelIdentity(model), budget})
 	if err != nil {
 		return nil, err
 	}

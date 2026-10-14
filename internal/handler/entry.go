@@ -954,13 +954,9 @@ func (h *EntryHandler) UpdateEntry(c *gin.Context) {
 		return
 	}
 
-	existing, effCtx, err := h.resolveEntryAndValidateLibraryAccess(c, id)
+	_, effCtx, err := h.resolveEntryAndValidateLibraryAccess(c, id)
 	if err != nil {
 		c.Error(err)
-		return
-	}
-	if existing.SourceKind == "mine" {
-		c.Error(errors.NewBadRequestError("本人文档不可修改，请删除后重新导入"))
 		return
 	}
 

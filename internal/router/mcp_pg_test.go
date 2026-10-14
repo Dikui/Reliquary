@@ -69,7 +69,10 @@ func (mcpFixtureChat) ChatStream(context.Context, []chat.Message, *chat.ChatOpti
 func (mcpFixtureChat) GetModelID() string   { return "mcp-chat" }
 func (mcpFixtureChat) GetModelName() string { return "mcp-test-chat" }
 
-type mcpFixtureModels struct{ interfaces.ModelService }
+type mcpFixtureModels struct {
+	interfaces.ModelService
+	chatModel chat.Chat
+}
 
 func (mcpFixtureModels) GetModelByID(_ context.Context, id string) (*types.Model, error) {
 	model := &types.Model{ID: id, Name: "mcp-test-chat", Type: types.ModelTypeGeneration, Status: types.ModelStatusActive}
@@ -87,7 +90,10 @@ func (mcpFixtureModels) GetEmbeddingModel(_ context.Context, id string) (embeddi
 	}
 	return mcpFixtureEmbedder{}, nil
 }
-func (mcpFixtureModels) GetChatModel(context.Context, string) (chat.Chat, error) {
+func (m mcpFixtureModels) GetChatModel(context.Context, string) (chat.Chat, error) {
+	if m.chatModel != nil {
+		return m.chatModel, nil
+	}
 	return mcpFixtureChat{}, nil
 }
 
@@ -126,7 +132,12 @@ func (f *mcpFixture) seedProcessingModels(t *testing.T) {
 	require.NoError(t, f.db.Create(&types.Model{ID: "mcp-embedding", SpaceID: types.SingleSpaceID, Name: "mcp-test-embedding", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 }
 
-func newMCPFixture(t *testing.T) *mcpFixture {
+type mcpProcessingFixture struct {
+	chat         chat.Chat
+	maxBodyChars int
+}
+
+func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture {
 	t.Helper()
 	f := newPersonalAuthFixture(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(types.SingleSpaceID))
@@ -136,7 +147,10 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	require.NoError(t, service.EnsureSystemLibraries(ctx, f.db))
 	libraryRepo, entryRepo := apprepo.NewLibraryRepository(f.db), apprepo.NewEntryRepository(f.db)
 	chunkRepo := apprepo.NewChunkRepository(f.db)
-	models := mcpFixtureModels{service.NewModelService(apprepo.NewModelRepository(f.db), libraryRepo, nil, nil, f.params.SpaceService)}
+	models := mcpFixtureModels{ModelService: service.NewModelService(apprepo.NewModelRepository(f.db), libraryRepo, nil, nil, f.params.SpaceService)}
+	if len(processing) > 0 {
+		models.chatModel = processing[0].chat
+	}
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(f.db))
 	bases := service.NewLibraryService(f.db, libraryRepo, entryRepo, chunkRepo, models, engine, nil)
 	library, err := bases.GetSystemLibrary(ctx)
@@ -149,6 +163,9 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", types.SingleSpaceID).Update("embedding_model_id", "mcp-embedding").Error)
 	root := t.TempDir()
 	cfg := &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 10 * time.Millisecond}}
+	if len(processing) > 0 {
+		cfg.ArticleProcessing = &config.ArticleProcessingConfig{MaxBodyChars: processing[0].maxBodyChars}
+	}
 	vault, err := service.NewVaultService(f.db, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, vault.Close()) })
@@ -497,7 +514,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			require.Contains(t, tool.Description, "incomplete=true 表示文章材料缺失，待补全")
 		}
 	}
-	require.ElementsMatch(t, []string{"list_libraries", "search", "get_article", "list_topics", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "check_urls", "list_incomplete", "accept_incomplete"}, names)
+	require.ElementsMatch(t, []string{"list_libraries", "search", "get_article", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "write_report", "check_urls", "list_incomplete", "accept_incomplete"}, names)
 	var search types.EntrySearchResponse
 	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
 		"topic_ids": []string{topic.ID}, "sources": []string{"article"}, "starred": false,
@@ -572,5 +589,5 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	latest := f.connect(t, "")
 	listed, err := latest.ListTools(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 20)
+	require.Len(t, listed.Tools, len(names))
 }

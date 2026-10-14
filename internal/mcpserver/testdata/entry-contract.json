@@ -73,7 +73,8 @@
         "updated_at": "0001-01-01T00:00:00Z",
         "vault_path": ""
       }
-    ]
+    ],
+    "library_groups": null
   },
   "entry": {
     "acquisition": "",

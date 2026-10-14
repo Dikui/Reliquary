@@ -695,7 +695,6 @@ const handleViewTrace = (index: number, item: EntryCard) => {
 };
 
 const confirmRebuildEntry = async (index: number, item: EntryCard) => {
-  if (['mine', 'report'].includes(item.source_kind || '')) return;
   if (!item?.id) {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
     return;
@@ -879,7 +878,7 @@ const {
 
 const selectedDocumentsReprocessable = computed(() => Array.from(selectedIds.value).every(id => {
   const item = cardList.value.find((card: EntryCard) => card.id === id);
-  return item && !['mine', 'report'].includes(item.source_kind || '');
+  return Boolean(item);
 }));
 
 const openEntryItem = (item: EntryCard) => {

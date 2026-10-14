@@ -60,7 +60,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.deepEqual(result.removed, [])
     assert.ok(result.html.includes(messages[locale].personalDocument.delete))
     assert.ok(result.html.includes('Working note'))
-    assert.ok(result.html.includes(locale === 'zh-CN' ? '删除后重新导入' : 'import it again'))
+    assert.ok(!result.html.includes(locale === 'zh-CN' ? '删除后重新导入' : 'import it again'))
   })
   test(`${locale}: confirmed personal deletion calls the ID route and announces completion`, async () => {
     const result = await scenario(locale, async () => ({ success: true, data: { document_id: 'mine/doc', status: 'deleted' } }), async state => { state.open(); await state.confirm(); assert.equal(state.visible.value, false) })

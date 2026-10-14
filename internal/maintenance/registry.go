@@ -22,6 +22,10 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"follow_feed_library_states": {
+		Columns: Rule{Sidecar: "space_id library_id last_viewed_at"},
+		File:    "data/follow_feed_library_states.json", After: []string{"libraries"}, Since: 15,
+	},
 	"entry_segment_runs": {
 		Columns: Rule{Sidecar: "id space_id entry_id phase plan_hash body_hash plan result status created_at updated_at"},
 		File:    "data/entry_segment_runs.json", After: []string{"spaces", "entries"}, Since: 16,

@@ -452,6 +452,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectLibraryManifest(expected, actual)
 	expected, actual = projectDiscardManifest(expected, actual)
 	expected, actual = projectVectorManifest(expected, actual)
+	expected, actual = projectFollowManifest(expected, actual)
 	expected, actual = projectSegmentManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend

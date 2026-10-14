@@ -101,6 +101,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
 }
 
 interface DetailRenderOptions {
+  reprocessRequests?: string[]
   copyRequests?: { text: string; successKey: string }[]
   environment?: Record<string, unknown>
   scenario?: (state: any) => void | Promise<void>
@@ -121,8 +122,8 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     'marked-katex-extension': { __esModule: true, default: () => ({}) },
     'highlight.js': { __esModule: true, default: {} },
     mermaid: { __esModule: true, default: { initialize() {} } },
-    'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI } },
-    '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI },
+    'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI, success() {} } },
+    '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI, reparseEntry: (id: string) => { options.reprocessRequests?.push(id); return envelope({ parse_status: 'pending' }) } },
     '@/utils/clipboard': { copyWithToast: async (text: string, successKey: string) => { options.copyRequests?.push({ text, successKey }); return true } },
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL,
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
@@ -351,16 +352,19 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
 
   for (const source_kind of ['mine', 'report']) {
-    test(`${locale}: ${source_kind} detail hides reprocessing and never submits a model request`, async () => {
+    test(`${locale}: ${source_kind} detail submits processing or index rebuilding`, async () => {
+      const calls: string[] = []
       const html = await renderDetails([], locale, {
-        details: { source_kind, vault_path: `${source_kind}/note.md` },
+        details: { source_kind, vault_path: `${source_kind}/note.md`, parse_status: 'failed' },
+        reprocessRequests: calls,
         scenario: state => state.reprocess(),
       })
-      assert.ok(!html.includes(messages[locale].library.reprocess))
+      assert.deepEqual(calls, ['message-a'])
+      assert.ok(html.includes(source_kind === 'report' ? messages[locale].library.reindexDocument : messages[locale].library.reprocess))
     })
   }
 
-  test(`${locale}: legacy manual and vault documents have no body editor and personal documents have no reprocessing action`, async () => {
+  test(`${locale}: all library documents expose reprocessing or report index rebuilding without a body editor`, async () => {
     const component = actionMenuSFC.create({
       '@/components/PersonalDocumentDelete.vue': personalDeleteModule,
       '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
@@ -379,7 +383,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       for (const parse_status of ['completed', 'processing']) {
         const html = await render({ source_kind, parse_status })
         assert.equal(hasEditAction(html), false)
-        assert.ok(!html.includes(reprocessLabel))
+        assert.ok(html.includes(source_kind === 'report' ? messages[locale].library.reindexDocument : messages[locale].library.rebuildDocument))
       }
     }
     const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2, reparseAllowed: false }, locale)
@@ -773,13 +777,22 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: personal document detail shows delete and hides metadata editing`, async () => {
+  test(`${locale}: personal document detail supports metadata editing and processing alongside deletion`, async () => {
     const deletion = { __esModule: true, default: defineComponent({ props: ['documentId'], setup: props => () => h('button', { 'data-delete-document': props.documentId }, messages[locale].personalDocument.delete) }) }
     const html = await renderDetails([], locale, { details: { source_kind: 'mine', title: 'My imported note', custom_metadata: {} }, personalDelete: deletion })
     assert.match(html, /data-delete-document="message-a"/)
     assert.ok(html.includes(messages[locale].personalDocument.delete))
-    assert.ok(!html.includes('metadata-empty-action'))
-    assert.ok(!html.includes('name="edit"'))
-    assert.ok(!html.includes(messages[locale].library.rebuildDocument))
+    assert.ok(html.includes('metadata-empty-action'))
+    assert.ok(html.includes(messages[locale].library.addMetadataField))
+    assert.ok(html.includes(messages[locale].library.reprocess))
   })
 }
+
+for (const width of [390, 1440]) test(`trace drawer is bounded by its ${width}px viewport`, async () => {
+  const html = await renderDetails([], 'en-US', {
+    environment: { window: { innerWidth: width }, localStorage: { getItem: () => '1200' } },
+    scenario: state => state.openTimeline(),
+  })
+  assert.match(html, /data-drawer-size="min\(820px, 100vw\)"/)
+  if (width === 390) assert.ok(!html.includes('trace-drawer-resize-handle'))
+})

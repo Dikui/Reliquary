@@ -88,8 +88,10 @@ export default {
     kinds: { article_chunk: '正文分块', article: '文章', image: '图片', mine_chunk: '用户文档分块', report_chunk: '整理结果分块', entity: '实体名称' },
   },
   follows: {
+    library: '库',
+    allLibraries: '全部库',
     title: '关注',
-    description: '集中查看关注实体与主题的文章。上次打开后进入动态的文章标为新。',
+    description: '集中查看关注实体与主题的资料。各库分别记录查看时间，上次查看后进入动态的资料标为新。',
     follow: '关注',
     unfollow: '取消关注',
     followNamed: '关注 {name}',
@@ -106,8 +108,8 @@ export default {
     refresh: '刷新动态',
     loading: '正在加载关注动态',
     results: '关注动态',
-    resultCount: '显示 {count} 组文章，按收录时间倒序',
-    limitHint: '当前显示 {shown} / {total} 篇文章。可增加显示数量；打开页面会更新全部关注动态的查看时间。',
+    resultCount: '显示 {count} 组资料，按进入动态时间倒序',
+    limitHint: '当前显示 {shown} / {total} 篇资料。可增加显示数量；打开页面会更新当前所选库的查看时间。',
     emptyTargets: '还没有关注的实体或主题。到相应页面点击关注。',
     emptyFeed: '没有符合条件的关注动态。',
     new: '新',
@@ -218,6 +220,9 @@ export default {
   "topicsFailed": "主题未保存，请重试。"
 },
   topicManagement: {
+    libraries: '适用库',
+    libraryHint: '留空适用于全部库。缩小范围会保留已有归入，但范围外资料不再进入该主题的关注动态。',
+    libraryLoadFailed: '库列表加载失败',
   "title": "主题",
   "description": "管理关注方向，并把历史文章归入对应主题。",
   "create": "新建主题",
@@ -1859,7 +1864,7 @@ export default {
   },
   personalDocument: {
     delete: '删除本人文档',
-    deleteConfirm: '删除“{title}”？正文、文件、附件和索引都会删除。要修改文档，请删除后重新导入。',
+    deleteConfirm: '删除“{title}”？正文、文件、附件和索引都会删除。',
     deleted: '本人文档已删除',
     deleteFailed: '本人文档未删除，请重试。',
   },
@@ -1921,6 +1926,7 @@ export default {
     }
   },
   knowledgeStages: {
+    intakeReview: '收录审核',
     segmentProgress: '第 {current}/{total} 段',
     summaryMerge: '合并各段摘要',
     title: '处理流水线',
@@ -1948,6 +1954,19 @@ export default {
     totalDuration: '总耗时：{d}',
     total: '总耗时 {d}',
     errorCode: {
+      SEGMENT_FAILED: '分段处理失败',
+      SEGMENT_FAILED_SUGGESTION: '修复模型错误后重新处理，已完成的分段会复用。',
+      SUMMARY_MERGE_FAILED: '摘要合并失败',
+      SUMMARY_MERGE_FAILED_SUGGESTION: '修复模型错误后重新处理，已保存的分段摘要会复用。',
+      INTAKE_REVIEW_FAILED: '收录审核失败',
+      INTAKE_REVIEW_FAILED_SUGGESTION: '检查审核模型后重试，已完成的审核段会复用。',
+      ARTICLE_PROCESSING_FAILED: '内容处理失败',
+      ARTICLE_PROCESSING_FAILED_SUGGESTION: '检查处理模型后重试，已保存的分段结果会复用。',
+      USER_CANCELLED: '处理已取消',
+      USER_CANCELLED_SUGGESTION: '重新处理可从已保存的检查点继续。',
+      intake_processing_failed: '收录处理失败',
+      intake_processing_failed_SUGGESTION: '修复错误后重新处理，从已保存的检查点继续。',
+
       CHUNKING_FAILED: '文档分块失败',
       CHUNKING_FAILED_SUGGESTION: '请检查分块配置，尝试拆分过大的文档后重新处理。',
       EMBEDDING_RATE_LIMIT: '向量模型请求受限',
@@ -2059,6 +2078,8 @@ export default {
     articleTopics: "主题",
     originalArticle: "原文链接",
     originalLinkMissing: "没有原文链接",
+    reindexDocument: '重新索引',
+    reindexConfirm: '重新建立“{fileName}”的索引？保留报告字段，不执行审核或内容生成。',
     reprocess: "重新处理",
     reprocessQueued: "重新处理已提交，完成后会自动更新",
     title: '库',

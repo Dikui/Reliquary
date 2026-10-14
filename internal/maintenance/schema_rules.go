@@ -44,12 +44,21 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 	if migration.Dirty {
 		return nil, fmt.Errorf("maintenance requires a clean migration version")
 	}
-	if migration.Version >= 14 {
+	if migration.Version >= 15 {
 		return Rules, nil
 	}
 	current := make(map[string]Rule, len(Rules))
 	for table, rule := range Rules {
 		current[table] = rule
+	}
+	if migration.Version < 15 {
+		delete(current, "follow_feed_library_states")
+		topic := current["topics"]
+		topic.Sidecar = strings.ReplaceAll(topic.Sidecar, "library_ids ", "")
+		current["topics"] = topic
+	}
+	if migration.Version >= 14 {
+		return current, nil
 	}
 	for table, registration := range RegeneratedTables {
 		if migration.Version < registration.Since {

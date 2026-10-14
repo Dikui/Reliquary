@@ -69,8 +69,11 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, toolMissing.IsError)
 			}
-			immutable := personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+id, `{"title":"Changed"}`, f.key, true)
-			require.Equal(t, http.StatusBadRequest, immutable.Code, immutable.Body.String())
+			updated := personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+id, `{"title":"Changed"}`, f.key, true)
+			require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+			var edited types.Entry
+			require.NoError(t, f.db.First(&edited, "id=?", id).Error)
+			require.Equal(t, "Changed", edited.Title)
 			switch protocol {
 			case "mcp":
 				var removed struct {

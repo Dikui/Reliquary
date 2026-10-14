@@ -315,3 +315,37 @@ func TestSegmentAsyncRejectionRemainsOutOfVault(t *testing.T) {
 	require.Contains(t, intake.Reason, "第 2/")
 	require.Empty(t, m.calls["article_processing"])
 }
+
+func TestSegmentLegacyTopicFingerprintUpgradesWithoutRepeatingCompletedWork(t *testing.T) {
+	h, model := segmentedHarness(t)
+	k := segmentedEntry(t, h)
+	body := "# Original\n\n" + strings.Repeat("Complete original measurements. ", 30)
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Original topic"})
+	require.NoError(t, err)
+	model.fail = 4
+	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
+	require.Error(t, err)
+	input, prompt, chatModel, err := h.service.prepareArticleProcessing(h.ctx, h.library, k)
+	require.NoError(t, err)
+	budget, err := h.service.segmentBudget(chatModel, prompt, input, 0)
+	require.NoError(t, err)
+	limit, overlap, reserve := h.service.segmentSettings()
+	plan, err := types.PlanProcessingSegments(body, budget, overlap, limit)
+	require.NoError(t, err)
+	legacy := segmentHash([]any{types.ProcessingSegmentVersion, plan, []any{input, prompt, segmentModelIdentity(chatModel), budget}, budget, limit, overlap, reserve, h.service.config.ArticleProcessing, segmentGeneration(k, "processing")})
+	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", k.ID).Update("plan_hash", legacy).Error)
+	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
+	require.Error(t, err)
+	require.Equal(t, 1, model.calls["article_processing"][1])
+	var upgraded entrySegmentRun
+	require.NoError(t, h.db.Where("entry_id=? AND phase='processing'", k.ID).First(&upgraded).Error)
+	require.NotEqual(t, legacy, upgraded.PlanHash)
+	require.NoError(t, h.db.Delete(topic).Error)
+	model.fail = 0
+	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, model.calls["article_processing"][1])
+	var runs int64
+	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", k.ID).Count(&runs).Error)
+	require.EqualValues(t, 1, runs)
+}

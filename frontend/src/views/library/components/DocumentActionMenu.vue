@@ -31,7 +31,8 @@ const isParseInFlight = computed(() =>
 );
 
 const fileName = computed(() => props.item.file_name || props.item.title || props.item.id);
-const canReprocess = computed(() => !['mine', 'report'].includes(props.item.source_kind || ''));
+const canReprocess = computed(() => Boolean(props.item.id));
+const isIndexOnly = computed(() => props.item.source_kind === 'report');
 </script>
 
 <template>
@@ -44,18 +45,18 @@ const canReprocess = computed(() => !['mine', 'report'].includes(props.item.sour
   <!-- 重建知识 (in-flight: no popconfirm, just emits) -->
   <div v-if="canReprocess && isParseInFlight" class="doc-action-menu-item" @click.stop="emit('reparse')">
     <t-icon class="icon" name="refresh" />
-    <span>{{ $t('library.rebuildDocument') }}</span>
+    <span>{{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.rebuildDocument') }}</span>
   </div>
 
   <!-- 重建知识 (normal: with popconfirm) -->
   <t-popconfirm v-else-if="canReprocess" theme="warning"
-    :content="$t('library.rebuildConfirm', { fileName })"
+    :content="$t(isIndexOnly ? 'library.reindexConfirm' : 'library.rebuildConfirm', { fileName })"
     :confirm-btn="{ content: $t('common.confirm'), theme: 'primary' }"
     :cancel-btn="{ content: $t('common.cancel') }" placement="left"
     @confirm="emit('reparse')">
     <div class="doc-action-menu-item" @click.stop>
       <t-icon class="icon" name="refresh" />
-      <span>{{ $t('library.rebuildDocument') }}</span>
+      <span>{{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.rebuildDocument') }}</span>
     </div>
   </t-popconfirm>
 

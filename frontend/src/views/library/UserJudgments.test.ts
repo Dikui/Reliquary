@@ -23,7 +23,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
-  modules = { '@/components/FollowToggle.vue': empty, '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) }, ...modules }
+  modules = { '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', name: 'Library A', display_name: 'Library A' }, { id: 'lib-b', name: 'Library B', display_name: 'Library B' }] }) }, '@/components/FollowToggle.vue': empty, '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) }, ...modules }
   const filename = path.split('/').at(-1)!
   const { descriptor, errors } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'), { filename })
   assert.deepEqual(errors, [])
@@ -150,15 +150,16 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await state.load()
       await state.retry(topic.id)
       state.openEditor()
-      state.draft.value = { name: ' New topic ', description: ' New description ' }
+      state.draft.value = { name: ' New topic ', description: ' New description ', library_ids: ['lib-a'] }
       await state.save()
       state.openEditor(topic)
+      assert.deepEqual(state.draft.value.library_ids, [])
       state.draft.value.description = 'Changed description'
       await state.save()
       state.requestDelete(topic)
       await state.remove()
     })
-    assert.deepEqual(calls, [['retry', topic.id], ['create', { name: 'New topic', description: 'New description' }], ['update', topic.id, { name: topic.name, description: 'Changed description' }], ['delete', topic.id]])
+    assert.deepEqual(calls, [['retry', topic.id], ['create', { name: 'New topic', description: 'New description', library_ids: ['lib-a'] }], ['update', topic.id, { name: topic.name, description: 'Changed description', library_ids: [] }], ['delete', topic.id]])
   })
   test(`${locale}: operation log displays before and after, time and type filters`, async () => {
     const calls: unknown[] = [], urls: unknown[] = [], route = { path: '/platform/settings', query: { section: 'operation-logs', operation_type: 'star', page: '2' } }

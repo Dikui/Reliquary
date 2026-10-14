@@ -389,9 +389,6 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		return werrors.NewBadRequestError("entry library_id is immutable")
 	}
 	previousTitle := record.Title
-	if record.SourceKind == "mine" {
-		return fmt.Errorf("本人文档不可修改，请删除后重新导入")
-	}
 	// if need other fields update, please add here
 	if entry.Title != "" {
 		record.Title = entry.Title
@@ -431,7 +428,7 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		record.CustomMetadata = entry.CustomMetadata
 	}
 
-	if s.db != nil && record.Title != previousTitle && record.SourceKind != "mine" && record.SourceKind != "report" &&
+	if s.db != nil && record.Title != previousTitle && record.SourceKind != "report" &&
 		record.StructuredSummary != nil && record.ParseStatus == types.ParseStatusCompleted {
 		library, err := s.libraryService.GetLibraryByID(ctx, record.LibraryID)
 		if err != nil {
@@ -450,7 +447,7 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		logger.Errorf(ctx, "Failed to update entry: %v", err)
 		return err
 	}
-	if s.vault != nil && record.SourceKind == "article" && record.VaultPath != "" {
+	if s.vault != nil && isIngestArticle(record) && record.VaultPath != "" {
 		s.vault.ScheduleRefresh(ctx, record.ID)
 	}
 	logger.Infof(ctx, "Entry updated successfully, ID: %s", entry.ID)

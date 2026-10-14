@@ -53,6 +53,7 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 		k.PUT("/:id", g.LibraryExistsFromEntryIDParam("id"), handler.UpdateEntry)
 		k.PUT("/:id/star", g.LibraryExistsFromEntryIDParam("id"), handler.SetStarred)
 		k.PUT("/:id/content-type", g.LibraryExistsFromEntryIDParam("id"), handler.CorrectContentType)
+		// Compatibility alias; both routes share config overrides and checkpoint resumption.
 		k.POST("/:id/reprocess", g.LibraryExistsFromEntryIDParam("id"), handler.ReparseEntry)
 		k.POST("/:id/reparse", g.LibraryExistsFromEntryIDParam("id"), handler.ReparseEntry)
 		k.POST("/:id/cancel-parse", g.LibraryExistsFromEntryIDParam("id"), handler.CancelEntryParse)

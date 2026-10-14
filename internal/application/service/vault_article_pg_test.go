@@ -276,7 +276,7 @@ func TestImportedVaultDocumentReadBodyExcludesHeaderAndDeleteRemovesFile(t *test
 	_, err = os.Stat(filepath.Join(v.root, doc.VaultPath))
 	require.True(t, os.IsNotExist(err))
 	_, err = h.service.ReparseEntry(h.ctx, doc.ID, nil)
-	require.ErrorContains(t, err, "indexed directly from their files")
+	require.True(t, os.IsNotExist(err), "a missing saved body still cannot be reprocessed")
 	require.Empty(t, h.queue.tasks)
 	require.Empty(t, h.processor.requests)
 	var stored types.Entry

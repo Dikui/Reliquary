@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import ModelCallSummary from './ModelCallSummary.vue'
 import { modelCallsFromSpan } from '@/utils/modelCalls'
 import { copyWithToast } from '@/utils/clipboard'
+import { processingSpanLabel } from '@/utils/processingSpanLabel'
 import { getEntrySpans, reparseEntry, cancelEntryParse, getEntryDetails } from '@/api/library'
 import {
   entrySpansPayloadHasTrace,
@@ -872,13 +873,13 @@ function localizedStatus(status: string): string {
 
 function segmentLabel(node: SpanNode): string {
   const match = /^(?:review|processing)\.segment\.(\d+)\/(\d+)$/.exec(node.name)
-  return match ? t('knowledgeStages.segmentProgress', { current: match[1], total: match[2] }) : ''
+  return match ? processingSpanLabel(node.name, t) : ''
 }
 
 function rowLabel(row: FlatRow): string {
   if (row.isRoot) return t('knowledgeStages.root')
   if (row.isStage) return t(`knowledgeStages.stage.${row.node.name}`)
-  return segmentLabel(row.node) || (row.node.name === 'processing.summary_merge' ? t('knowledgeStages.summaryMerge') : row.node.name)
+  return processingSpanLabel(row.node.name, t)
 }
 
 function rowKindLabel(row: FlatRow): string {
@@ -3175,5 +3176,17 @@ const processConfigLines = computed<string[]>(() => {
   line-height: 1.6;
   color: var(--td-text-color-secondary);
   word-break: break-word;
+}
+</style>
+
+<style scoped lang="less">
+@media (max-width: 600px) {
+  .kp-head { padding: 12px; }
+  .kp-head-toolbar { flex-wrap: wrap; }
+  .kp-row { grid-template-columns: minmax(0, 1fr) 54px; height: auto; min-height: 40px; padding: 6px 12px; }
+  .kp-name-inner { gap: 4px; }
+  .kp-name-text { white-space: normal; overflow-wrap: anywhere; }
+  .kp-name-kind, .kp-cell-bar, .kp-ruler { display: none; }
+  .kp-detail-name { white-space: normal; overflow-wrap: anywhere; }
 }
 </style>
