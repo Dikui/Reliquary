@@ -23,6 +23,7 @@ import { useI18n } from 'vue-i18n';
 import RepostSources from '@/views/library/components/RepostSources.vue';
 import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import ReportAssociations from '@/components/ReportAssociations.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import MissingMaterials from '@/components/MissingMaterials.vue';
 import IncompleteActions from '@/components/IncompleteActions.vue';
@@ -200,7 +201,13 @@ mermaid.initialize({
 });
 const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "libraryId", "reference"]);
 const externalToolName = computed(() => getExternalToolName(props.details));
-const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
+const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "openTopic", "reviewChanged"]);
+const reportRelatedEntryIds = computed(() => Array.isArray(props.details?.metadata?.related_entry_ids)
+  ? props.details.metadata.related_entry_ids
+  : []);
+const reportRelatedEntities = computed(() => Array.isArray(props.details?.metadata?.related_entities)
+  ? props.details.metadata.related_entities
+  : []);
 const personalDocumentDeleteBusy = ref(false);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
@@ -1238,6 +1245,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
         </section>
 
+        <ReportAssociations v-if="details.source_kind === 'report'"
+          :entry-ids="reportRelatedEntryIds" :entities="reportRelatedEntities" :topics="details.topics || []"
+          @open-entry="emit('openEntry', $event)" @open-entity="emit('openEntity', $event)" @open-topic="emit('openTopic', $event)" />
+
         <section v-if="details.type === 'url'" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('library.urlSource') }}</h4>
           <div class="url_link_box">
@@ -1265,7 +1276,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               <p>{{ image.description }}</p>
             </div>
           </details>
-          <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
+          <EntryClassification :entry="details" followable :hide-relations="details.source_kind === 'report'" @open-entity="emit('openEntity', $event)" />
         <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
           <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
             <MissingMaterials :items="details.missing_materials || []" />

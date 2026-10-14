@@ -662,6 +662,11 @@ const openSourceDoc = (entryId: string, location?: SourceLocation) => {
   getCardDetails({ id: entryId });
 };
 
+const openReportTopic = (topicId: string) => {
+  closeDoc();
+  void router.push({ path: '/platform/topics', query: { topic_id: topicId } });
+};
+
 const closeCardMoreMenu = (index: number) => {
   if (cardList.value?.[index]) {
     cardList.value[index].isMore = false;
@@ -1234,7 +1239,8 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       <!-- Document content drawer -->
       <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId"
-        @openEntity="openArticleEntity" @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">
+        @openEntry="openSourceDoc" @openEntity="openArticleEntity" @openTopic="openReportTopic"
+        @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">
       </DocContent>
     </div>
 
