@@ -44,9 +44,13 @@ type evaluationChatInterface interface{ chat.Chat }
 type evaluationChat struct {
 	evaluationChatInterface
 	content string
+	onCall  func(context.Context)
 }
 
-func (m evaluationChat) Chat(context.Context, []chat.Message, *chat.ChatOptions) (*types.ChatResponse, error) {
+func (m evaluationChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
+	if m.onCall != nil {
+		m.onCall(ctx)
+	}
 	return &types.ChatResponse{Content: m.content}, nil
 }
 
@@ -135,7 +139,15 @@ func TestEvaluationLifecycleAndRecordCleanup(t *testing.T) {
 func TestEvaluationAICandidateConfirmationAndPhysicalDeletion(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	h.add(t, "answer", "article", "2026-10-01", "event", "semanticlaunch", 1)
-	models := &evaluationModels{llm: evaluationChat{content: `[{"query":"What happened?","answers":[{"entry_id":"answer","grade":1}]}]`}}
+	calls := 0
+	models := &evaluationModels{llm: evaluationChat{content: `[{"query":"What happened?","answers":[{"entry_id":"answer","grade":1}]}]`, onCall: func(ctx context.Context) {
+		calls++
+		stage, _ := types.LLMCallMetadataFromContext(ctx)
+		require.Equal(t, string(types.CallPurposeEvaluation), stage)
+		require.Equal(t, types.ModelTierGeneration, types.ModelTierFromContext(ctx))
+		spaceID, _ := types.SpaceIDFromContext(ctx)
+		require.EqualValues(t, 1, spaceID)
+	}}}
 	svc := NewEvaluationService(h.db, h.svc, models)
 	set, err := svc.SaveSet(h.ctx, "", "AI candidates", "")
 	require.NoError(t, err)
@@ -143,6 +155,7 @@ func TestEvaluationAICandidateConfirmationAndPhysicalDeletion(t *testing.T) {
 	candidates, err := svc.GenerateCandidates(h.ctx, set.ID, input)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
+	require.Equal(t, 1, calls)
 	require.Equal(t, "pending", candidates[0].Status)
 	_, err = svc.Run(h.ctx, set.ID, types.EvaluationRunOptions{})
 	require.ErrorContains(t, err, "no confirmed questions")

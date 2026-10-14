@@ -197,6 +197,7 @@ func (s *entryService) processingImageDataURI(ctx context.Context, library *type
 }
 
 func (s *entryService) callArticleProcessingPart(ctx context.Context, library *types.Library, k *types.Entry, body string, stored []docparser.StoredImage, segment any, imageRefs ...[]docparser.MarkdownImageReference) (*articleProcessingResult, error) {
+	ctx = types.WithModelCallEntry(ctx, k.ID)
 	ctx = types.WithLLMCallMetadata(ctx, "article_processing", "")
 	input, prompt, model, err := s.prepareArticleProcessing(ctx, library, k)
 	if err != nil {
@@ -261,6 +262,7 @@ func (s *entryService) markArticleProcessingFailed(ctx context.Context, k *types
 }
 
 func (s *entryService) processArticleBody(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig) error {
+	ctx = types.WithModelCallEntry(ctx, k.ID)
 	if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
 	}
@@ -279,6 +281,7 @@ func (s *entryService) processArticleBody(ctx context.Context, library *types.Li
 // A conversion prepares the model result before opening its database transaction
 // and owns the file write so it can restore the previous file on rollback.
 func (s *entryService) persistArticleProcessingResult(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig, result *articleProcessingResult, writeFiles bool) error {
+	ctx = types.WithModelCallEntry(ctx, k.ID)
 	if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
 	}

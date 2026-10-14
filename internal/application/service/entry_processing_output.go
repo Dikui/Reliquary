@@ -288,6 +288,7 @@ func relationCosine(a, b []float32) float64 {
 }
 
 func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Library, k *types.Entry, body string, result *articleProcessingResult, resolved []types.Entity) error {
+	ctx = types.WithModelCallEntry(ctx, k.ID)
 	ids := map[string]string{}
 	for _, e := range resolved {
 		for _, name := range append([]string{e.CanonicalName}, e.Aliases...) {

@@ -27,13 +27,15 @@ import (
 
 type vaultRecordingEmbedder struct {
 	chunkSearchEmbedder
-	mu     sync.Mutex
-	inputs []string
+	mu           sync.Mutex
+	inputs       []string
+	callContexts []context.Context
 }
 
 func (e *vaultRecordingEmbedder) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, texts []string) ([][]float32, error) {
 	e.mu.Lock()
 	e.inputs = append(e.inputs, texts...)
+	e.callContexts = append(e.callContexts, ctx)
 	e.mu.Unlock()
 	return e.chunkSearchEmbedder.BatchEmbed(ctx, texts)
 }

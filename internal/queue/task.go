@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"reliquary/internal/types"
 )
 
 type OptionType int
@@ -111,7 +113,7 @@ type execution struct {
 }
 
 func WithExecution(ctx context.Context, info *TaskInfo, pool string) context.Context {
-	return context.WithValue(ctx, taskContextKey{}, execution{info.ID, info.Queue, pool, info.Retried, info.MaxRetry})
+	return context.WithValue(types.WithModelCallRetry(ctx, info.Retried), taskContextKey{}, execution{info.ID, info.Queue, pool, info.Retried, info.MaxRetry})
 }
 func GetRetryCount(ctx context.Context) (int, bool) {
 	e, ok := ctx.Value(taskContextKey{}).(execution)

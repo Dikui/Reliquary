@@ -375,6 +375,7 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, library *types.L
 
 // indexVaultChunks matches content hashes across positions, keeping unchanged vectors.
 func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, library *types.Library, entry *types.Entry, body string) error {
+	ctx = types.WithLLMCallMetadata(types.WithModelCallEntry(ctx, entry.ID), string(types.CallPurposeBodyEmbedding), "")
 	var embedder embedding.Embedder
 	if library.IndexingStrategy.VectorEnabled {
 		var err error

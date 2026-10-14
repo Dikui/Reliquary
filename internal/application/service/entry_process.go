@@ -91,6 +91,7 @@ func (s *entryService) processChunks(ctx context.Context,
 	library *types.Library, entry *types.Entry, chunks []types.ParsedChunk,
 	opts ...ProcessChunksOptions,
 ) {
+	ctx = types.WithModelCallEntry(ctx, entry.ID)
 	ctx, _ = types.WithModelCallCollector(ctx)
 	ctx = types.WithLLMCallMetadata(ctx, "document_embedding", "")
 	// Get options
@@ -769,6 +770,7 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 	} else if err != nil {
 		logger.Warnf(ctx, "ProcessManualUpdate: OpenAttempt failed for %s: %v", entry.ID, err)
 	}
+	ctx = types.WithModelCallEntry(ctx, payload.EntryID)
 	ctx = withAttempt(ctx, attempt)
 
 	// Cleanup old resources (indexes and chunks) for update operations
@@ -935,6 +937,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 			attempt = n
 		}
 	}
+	ctx = types.WithModelCallEntry(ctx, payload.EntryID)
 	ctx = withAttempt(ctx, attempt)
 
 	// Parse, resolve body images, review intake, then process the article once.

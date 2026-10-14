@@ -504,12 +504,13 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 // UpdateModelRequest defines the structure for model update requests
 // Contains fields that can be updated for an existing model
 type UpdateModelRequest struct {
-	Name        string                `json:"name"`
-	DisplayName *string               `json:"display_name"`
-	Description string                `json:"description"`
-	Parameters  types.ModelParameters `json:"parameters"`
-	Source      types.ModelSource     `json:"source"`
-	Type        types.ModelType       `json:"type"`
+	PricingProvided bool                  `json:"-"`
+	Name            string                `json:"name"`
+	DisplayName     *string               `json:"display_name"`
+	Description     string                `json:"description"`
+	Parameters      types.ModelParameters `json:"parameters"`
+	Source          types.ModelSource     `json:"source"`
+	Type            types.ModelType       `json:"type"`
 }
 
 // UpdateModel godoc
@@ -583,6 +584,9 @@ func (h *ModelHandler) UpdateModel(c *gin.Context) {
 			"deprecated: app_secret in PUT /models/%s body is ignored; use PUT /credentials instead", id)
 	}
 	newParams := req.Parameters
+	if !req.PricingProvided {
+		newParams.Pricing = model.Parameters.Pricing
+	}
 	newParams.APIKey = storedAPIKey
 	newParams.AppSecret = storedAppSecret
 	// Preserve backend-managed fields not sent by the frontend either.
@@ -748,4 +752,21 @@ func (h *ModelHandler) ListModelProviders(c *gin.Context) {
 		"success": true,
 		"data":    result,
 	})
+}
+
+func (r *UpdateModelRequest) UnmarshalJSON(data []byte) error {
+	type plain UpdateModelRequest
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	var raw struct {
+		Parameters map[string]json.RawMessage `json:"parameters"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	_, value.PricingProvided = raw.Parameters["pricing"]
+	*r = UpdateModelRequest(value)
+	return nil
 }

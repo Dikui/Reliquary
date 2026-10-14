@@ -144,7 +144,17 @@ func TestIKB11SegmentRelationsResolveGlobalIDsAndKeepAllEvidence(t *testing.T) {
 	resolved, err := h.service.resolveProcessingEntities(h.ctx, k, candidates, result)
 	require.NoError(t, err)
 	k.ContentType = ct
+	relationCalls := 0
+	fixture := &relationVectorFixture{vectors: map[string][]float32{"合作": {1, 0, 0}}, onCall: func(ctx context.Context) {
+		relationCalls++
+		stage, _ := types.LLMCallMetadataFromContext(ctx)
+		require.Equal(t, "relation_type_embedding", stage)
+		require.Equal(t, types.CallPurposeOther, types.NormalizeModelCallPurpose(stage, types.ModelTierFromContext(ctx)))
+		require.Equal(t, k.ID, *types.ModelCallEntryFromContext(ctx))
+	}}
+	h.service.modelService = relationVectorModels{articleProcessingModels: h.service.modelService.(articleProcessingModels), fixture: fixture}
 	require.NoError(t, h.service.saveProcessingOutput(h.ctx, h.library, k, body, result, resolved))
+	require.Equal(t, 1, relationCalls)
 	out, err := ReadEntryProcessingOutput(h.ctx, h.db, k.SpaceID, k.ID)
 	require.NoError(t, err)
 	require.Len(t, out.Relations, 1)
@@ -313,10 +323,14 @@ type relationVectorFixture struct {
 	chunkSearchEmbedder
 	calls   int
 	vectors map[string][]float32
+	onCall  func(context.Context)
 }
 
-func (m *relationVectorFixture) BatchEmbed(_ context.Context, names []string) ([][]float32, error) {
+func (m *relationVectorFixture) BatchEmbed(ctx context.Context, names []string) ([][]float32, error) {
 	m.calls++
+	if m.onCall != nil {
+		m.onCall(ctx)
+	}
 	out := [][]float32{}
 	for _, name := range names {
 		value, ok := m.vectors[name]

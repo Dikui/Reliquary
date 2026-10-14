@@ -53,7 +53,12 @@ func projectEvaluationManifest(expected, actual *Manifest) (*Manifest, *Manifest
 	}
 	if _, ok := actual.Tables["search_records"]; ok {
 		if _, exists := left.Tables["search_records"]; !exists {
-			left.Tables["search_records"] = TableManifest{Regenerated: true}
+			columns := []string{}
+			for column := range BackupOnlyTables["search_records"].Columns() {
+				columns = append(columns, column)
+			}
+			sort.Strings(columns)
+			left.Tables["search_records"] = TableManifest{Columns: columns, SHA256: sum([]byte("[]"))}
 		}
 	}
 	return &left, actual

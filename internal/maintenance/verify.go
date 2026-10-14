@@ -18,13 +18,14 @@ import (
 )
 
 type TableManifest struct {
-	Rows         int64               `json:"rows"`
-	SHA256       string              `json:"sha256"`
-	Columns      []string            `json:"columns"`
-	Regenerated  bool                `json:"regenerated"`
-	Data         []map[string]any    `json:"data,omitempty"`
-	JSONNulls    map[string][]string `json:"json_nulls,omitempty"`
-	legacySHA256 map[int]string
+	BackupRowHashes map[string]string   `json:"backup_row_hashes,omitempty"`
+	Rows            int64               `json:"rows"`
+	SHA256          string              `json:"sha256"`
+	Columns         []string            `json:"columns"`
+	Regenerated     bool                `json:"regenerated"`
+	Data            []map[string]any    `json:"data,omitempty"`
+	JSONNulls       map[string][]string `json:"json_nulls,omitempty"`
+	legacySHA256    map[int]string
 }
 type Retrieval struct {
 	Query string   `json:"query"`
@@ -69,6 +70,14 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	}
 	for _, table := range sortedTables(rules) {
 		if !present[table] {
+			continue
+		}
+		if rule, backupOnly := BackupOnlyTables[table]; backupOnly {
+			entry, err := backupOnlyTableManifest(ctx, db, table, rule)
+			if err != nil {
+				return nil, err
+			}
+			manifest.Tables[table] = entry
 			continue
 		}
 		entry := TableManifest{Columns: []string{}}
@@ -455,6 +464,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectFollowManifest(expected, actual)
 	expected, actual = projectSegmentManifest(expected, actual)
 	expected, actual = projectEvaluationManifest(expected, actual)
+	expected, actual = projectModelCallManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
@@ -510,6 +520,17 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 		}
 		matches := wanted.SHA256 == current.SHA256
 		rowsMatch := wanted.Rows == current.Rows
+		if _, backupOnly := BackupOnlyTables[table]; backupOnly && (options.AllowModelChange || options.AllowReconfigurationAppend) {
+			if wanted.Rows == 0 || wanted.BackupRowHashes != nil {
+				matches = current.Rows >= wanted.Rows
+				for id, hash := range wanted.BackupRowHashes {
+					if current.BackupRowHashes[id] != hash {
+						matches = false
+					}
+				}
+				rowsMatch = matches
+			}
+		}
 		if (wanted.Data != nil || wanted.Rows == 0) && current.Data != nil {
 			left, right := comparableCredentialRows(table, wanted.Data, current.Data, expected.Required)
 			if options.AllowReconfigurationAppend && table == "api_keys" {

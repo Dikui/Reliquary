@@ -129,6 +129,7 @@ func EmbeddingProfileHash(modelID string, dimension int, model *Model) string {
 }
 
 type ModelParameters struct {
+	Pricing             ModelPricing        `yaml:"pricing" json:"pricing"`
 	BaseURL             string              `yaml:"base_url"             json:"base_url"`
 	APIKey              string              `yaml:"api_key"              json:"api_key"`
 	InterfaceType       string              `yaml:"interface_type"       json:"interface_type"`

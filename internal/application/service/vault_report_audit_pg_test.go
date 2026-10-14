@@ -17,6 +17,14 @@ func TestVaultReportAuditAndFailureRollback(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Minute)
 	report, err := h.documents.CreateReport(h.ctx, "Successful report", "# Successful report\n\nAudit fixture report.", nil)
 	require.NoError(t, err)
+	h.embedder.mu.Lock()
+	require.NotEmpty(t, h.embedder.callContexts)
+	for _, ctx := range h.embedder.callContexts {
+		stage, _ := types.LLMCallMetadataFromContext(ctx)
+		require.Equal(t, types.CallPurposeBodyEmbedding, types.NormalizeModelCallPurpose(stage, types.ModelTierFromContext(ctx)))
+		require.Equal(t, report.ID, *types.ModelCallEntryFromContext(ctx))
+	}
+	h.embedder.mu.Unlock()
 	var logs []types.OperationLog
 	require.NoError(t, h.db.Find(&logs).Error)
 	require.Len(t, logs, 1)
