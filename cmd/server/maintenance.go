@@ -22,6 +22,7 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/container"
 	"reliquary/internal/database"
+	"reliquary/internal/graphreplica"
 	applogger "reliquary/internal/logger"
 	"reliquary/internal/maintenance"
 	"reliquary/internal/maintenanceops"
@@ -53,7 +54,7 @@ func maintenanceDatabase() (*gorm.DB, string, error) {
 func runMaintenance(args []string, input io.Reader, output io.Writer) error {
 	applogger.SetOutput(os.Stderr)
 	if len(args) == 0 {
-		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
+		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|graph-rebuild|graph-check|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -96,6 +97,24 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		return v.Flush(ctx)
 	}
 	switch args[0] {
+	case "graph-rebuild", "graph-check":
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			return err
+		}
+		store := graphreplica.NewStore(config.ResolveNeo4j(cfg))
+		defer store.Close()
+		svc := graphreplica.NewService(db, store, nil)
+		var result graphreplica.CheckResult
+		if args[0] == "graph-rebuild" {
+			result, err = svc.Rebuild(ctx)
+		} else {
+			result, err = svc.Check(ctx)
+		}
+		if err != nil {
+			return err
+		}
+		return emit(result)
 	case "credentials":
 		return runMaintenanceCredentials(ctx, db, args[1:], input, output)
 	case "chatgpt-login", "chatgpt-complete":

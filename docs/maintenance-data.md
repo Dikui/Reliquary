@@ -324,6 +324,6 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 | `relation_sources` | Sidecar: relation_id entry_id evidence run_id body_hash | `data/relation_sources.json` | relations entries |
 | `relation_suppressions` | Sidecar: space_id library_id subject_id relation_type object_id actor created_at | `data/relation_suppressions.json` | spaces libraries entities library_relation_types |
 | `relation_type_merges` | Configuration: library_id from_type to_type created_at | `data/relation_type_merges.json` | library_relation_types |
-| `graph_pending_sync` | Regenerated: id space_id entity_id relation_id relation_version deleted created_at | 不进入副本 | 恢复后由图谱全量重建生成投影 |
+| `graph_pending_sync` | Regenerated: id space_id entity_id relation_id relation_version deleted created_at completed_at | 不进入副本 | 恢复后由图谱全量重建生成投影 |
 
 既有 `library_relation_types` 保持 Configuration 与 `data/library_relation_types.json` 登记。旧副本升级核对只投影四张新持久表的空默认值；当前非空关系、来源、版本、抑制及合并记录被改动或丢失会核对失败。待同步记录不参与数据相等核对，不进入文件库实时副本；PostgreSQL 完整备份仍包含该表。恢复后的 Neo4j 重建由 ikb-13 接入。

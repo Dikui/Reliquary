@@ -80,7 +80,7 @@ type RegeneratedTable struct {
 }
 
 var RegeneratedTables = map[string]RegeneratedTable{
-	"graph_pending_sync":        {Columns: Rule{Regenerated: "id space_id entity_id relation_id relation_version deleted created_at"}, Since: 18},
+	"graph_pending_sync":        {Columns: Rule{Regenerated: "id space_id entity_id relation_id relation_version deleted created_at completed_at"}, Since: 18},
 	"embedding_rebuild_vectors": {Columns: Rule{Regenerated: "run_id kind source_id attachment_path entry_id library_id model_id dimension embedding content_hash"}, Since: 14},
 	"embedding_vector_archives": {Columns: Rule{Regenerated: "run_id space_id payload created_at"}, Since: 14},
 }

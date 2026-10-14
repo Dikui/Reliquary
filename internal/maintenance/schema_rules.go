@@ -44,6 +44,13 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				delete(copy, table)
 			}
 		}
+		if migration.Version < 19 {
+			rule := copy["graph_pending_sync"]
+			rule.Regenerated = strings.TrimSpace(strings.ReplaceAll(rule.Regenerated, "completed_at", ""))
+			if rule.Regenerated != "" {
+				copy["graph_pending_sync"] = rule
+			}
+		}
 		if migration.Version < 21 {
 			delete(copy, "search_records")
 		}

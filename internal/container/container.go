@@ -25,6 +25,7 @@ import (
 	"reliquary/internal/chatgpt"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
+	"reliquary/internal/graphreplica"
 
 	"reliquary/internal/handler"
 	"reliquary/internal/infrastructure/docparser"
@@ -92,7 +93,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewLibraryService))
 	must(container.Provide(service.NewEntryService))
 	must(container.Provide(service.NewSearchService))
-	must(container.Provide(service.NewEvaluationService))
+	must(container.Provide(service.NewGraphSearchService))
+	must(container.Provide(handler.NewGraphSearchHandler))
+	must(container.Provide(newEvaluationService))
 	must(container.Provide(service.NewSearchRecorder))
 	must(container.Provide(handler.NewEvaluationHandler))
 	must(container.Invoke(startSearchRecordCleanup))
@@ -118,6 +121,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewResourceCatalog))
 	logger.Debugf(ctx, "[Container] Registering task enqueuer...")
 	must(container.Provide(queue.NewClient))
+	must(container.Provide(newGraphReplicaStore))
+	must(container.Provide(graphreplica.NewService))
 	must(container.Provide(func(client *queue.Client) interfaces.TaskEnqueuer { return client }))
 	must(container.Provide(router.NewPostgresTaskInspector))
 	must(container.Invoke(registerModelConcurrencyLimiter))
@@ -133,6 +138,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewEntryHandler))
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewMaintenanceHandler))
+	must(container.Provide(handler.NewGraphReplicaHandler))
 	must(container.Provide(handler.NewSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewEmbeddingRebuildHandler))
@@ -163,6 +169,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
 	must(container.Provide(router.NewRouter))
 	must(container.Invoke(router.RunTaskServer))
+	must(container.Invoke(startGraphReplica))
 	must(container.Invoke(recoverEntityNameEmbeddings))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
