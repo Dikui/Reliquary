@@ -225,42 +225,70 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 第一条输出逐项差异，成功后应没有未解决的差异。第二条根据数据库补回各库资料文件和数据库副本，再核对。也可运行 `./reliquary-admin maintenance rebuild-files` 重建全部库的 Markdown；图片字节不可重算，保留 attachments/ 或从完整备份恢复。错误时保留原库和故障文件，先检查输出指向的路径、权限和磁盘空间，再从完整备份恢复。不要通过删除数据库行消除差异。
 
-## 每周备份和每月恢复演练
+## 四服务备份、恢复与演练
 
-备份目录默认 `~/Backups/Reliquary`。首次部署可在 `.env` 的 `BACKUP_DIR` 设置默认值；已有计划在设置中或通过 `schedule configure --backup-directory` 修改，例如改为外接硬盘路径。它必须位于项目源码之外，且与文件库、上传资源目录互不包含。修改后运行 `./reliquary-admin check-deployment` 检查。外接硬盘到位前，这种备份只防止误删、应用损坏和升级失败；同一台机器的硬盘损坏仍可能同时损坏原件和备份，这个风险已接受。
+维护时使用部署目录的相同 `.env`、`COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。四个数据相关服务为 PostgreSQL、Redis、Neo4j、Reliquary；本机 Ollama 和重排服务分别提供向量与重排，不把模型权重放入数据备份。宿主机需要 Python 3、Git、Docker 与 Compose。先启动并检查 PostgreSQL、Redis、Neo4j，再启动应用：
 
-在运行正常部署的同一账号终端配置计划，再安装宿主机调度：
+```bash
+./reliquary-admin check-deployment
+docker compose up -d --wait postgres redis neo4j
+docker compose up -d app
+./reliquary-admin setup-models
+```
+
+完整备份包含脱敏 PostgreSQL dump、完整文件库、`.reliquary/`、`attachments/`、上传资源及阅读配置。关系正本、来源、测评题、答案、评测运行、库配置、检索记录和调用统计都由 PG 备份保留；检索记录与调用统计不进入文件副本。Redis 只保存任务唤醒，Neo4j 是可重建图谱，两者不备份。账号密码哈希保留，模型 API Key、收录 API Key、ChatGPT 令牌和系统密钥不进入备份，恢复时重新配置。
+
+备份目录默认 `~/Backups/Reliquary`，也可在 `.env` 配置 `BACKUP_DIR`。目录应位于源码之外，与文件库和上传目录互不包含。备份时暂停收录与任务消费，停止应用，将 PG 与文件取成一致快照；长任务的检查点和待处理操作保留。成功核对后启动原应用并解除暂停。外部编辑器写文件也应暂停。
+
+```bash
+./reliquary-admin backup /Users/yourname/Backups/Reliquary --timeout 300
+```
+
+成功输出 `backup complete and read-back verified` 与具体备份路径。未变化文件用硬链接复用，每份成功备份都可独立恢复，默认保留最近四份。需要同时保存部署镜像和源码时加 `--with-images`，再用 `unpack` 恢复。失败或超时不会产生假成功备份。
+
+完整恢复使用新的空 PG 数据库和空文件目录，目标应用保持停止。先填写目标 `.env` 中的四服务连接、`RELIQUARY_VAULT_DIR`、`RELIQUARY_FILES_DIR` 和新系统密钥。恢复不覆盖现有数据库或非空目录：
+
+```bash
+docker compose up -d --wait postgres redis neo4j
+./reliquary-admin restore /Users/yourname/Backups/Reliquary/backup-具体时间 --skip-models
+```
+
+命令恢复 PG 与文件库，强制 snapshot 暂停，重建全文索引并按原备份清单核对。离线 `queue-replay` 将中断操作恢复并把所有到期唤醒推入 Redis，未来操作保留 process_at。Redis 完全为空也可以恢复。随后启动应用供配置；消费者每次领取仍检查 PG 暂停门禁，不会提前执行任务或消耗重试预算。
+
+按清单填写模型凭据、重新登录 ChatGPT，重新生成收录 API Key。确认本机 Ollama 及重排服务地址仍可达，向量模型与维度符合原配置，然后继续：
+
+```bash
+./reliquary-admin setup-models
+./reliquary-admin unpack --resume
+./reliquary-admin verify --vectors
+./reliquary-admin maintenance graph-verify
+```
+
+继续命令核对原件与不可再生数据，从 PG 全量重建 Neo4j，核对实体、边及来源计数，刷新新增系统重建日志后的维护副本，最终核对通过才解除暂停。向量模型发生变化时先重建全部向量。缺模型、缺凭据、图谱不可用或任何核对差异都会保留暂停。`State: ready` 后后台补推并完成未完成操作；`--resume` 继续原恢复，不再次导入。独立验收环境可对 `unpack --resume` 加 `--no-scheduler`，避免注册本机自动计划。
+
+一键演练从指定目录选择最近一份完整备份，不需要关闭正常部署：
+
+```bash
+./reliquary-admin drill /Users/yourname/Backups/Reliquary \
+  --report /Users/yourname/Backups/Reliquary/drill-result.json
+```
+
+演练在临时 PG 数据库、独立 Redis 容器中的临时 DB 0、临时 Neo4j 命名空间和临时目录恢复并核对。它重推真实待处理操作的唤醒，独立探针验证暂停期间零执行、解除暂停后一次完成；业务队列保持暂停，演练不会调用模型或外部工具。报告含原件核对、补推数量、暂停探针、图谱重建和最终核对结果，`status: success` 才表示通过。结束清理临时数据库、Redis、图谱空间和目录，不清空线上 Redis 或 Neo4j。
+
+失败也清理自己创建的资源，清理失败时保留 `.maintenance-schedule/drill-active.json` 记录，执行 `schedule run --once` 重试清理，错误及报告保留。普通命令把报告写到 `.maintenance-schedule/drill-result.json`；`--report` 可指定永久存证位置。
+
+每周备份、每月演练可以安装宿主机计划，macOS 用 launchd，Linux 用用户 systemd：
 
 ```bash
 ./reliquary-admin schedule configure \
   --backup-directory /Users/yourname/Backups/Reliquary \
-  --backup-schedule '0 3 * * 0' \
-  --drill-schedule '0 4 1 * *' \
+  --backup-schedule '0 3 * * 0' --drill-schedule '0 4 1 * *' \
   --timezone Asia/Shanghai --enabled true
 ./reliquary-admin schedule install
-```
-
-第一条返回保存的目录、计划和时区。五个 cron 字段依次是分钟、小时、日期、月份和星期，上例每周日 03:00 备份、每月 1 日 04:00 演练。第二条应显示调度已安装，配置和日志保存在部署目录的 `.maintenance-schedule/`；macOS 使用当前登录用户的 launchd，Linux 使用用户 systemd。Docker 必须保持可用。调度器每分钟检查一次，首次运行立即备份和演练，主机休眠错过计划后补跑一次；失败、超时或中断的自动作业十五分钟后重试。换部署目录或机器后重新安装调度，不把旧机器的计划当成新机器已安装。暂停自动运行可执行 `./reliquary-admin schedule configure --enabled false`。
-
-每份备份完整导出数据库；宿主机文件库和上传资源按增量快照复制，未变化文件用硬链接，每份目录都能单独恢复。文件库内 `.obsidian/` 等阅读配置一同保留，备份核对不比较这些用户配置。只保留最近 4 份正常完成的定期备份，不把失败的半成品作为成功备份。系统加密密钥、JWT 密钥、数据库密码、API Key、模型凭据、ChatGPT 令牌不进入备份。唯一账号的密码哈希保留，恢复后仍用原账号密码登录。
-
-备份暂停 HTTP/MCP 收录及附件上传，等待短写入事务及文件副本写入结束，再停止应用取得一致快照。它不等待主题历史归入、向量重建等长任务完成；队列和检查点一同导出。恢复后从 PostgreSQL 待处理操作重推 Redis 唤醒任务，保留文章与重试预算。等待超过上限时跳过本次备份，恢复收录并记录告警，不生成假成功结果。请暂停 Obsidian 等外部编辑器写文件，程序无法锁住其他软件。
-
-手动触发和检查自动计划使用以下命令。手动备份的目录参数明确指定位置，避免与 `.env` 中的 `BACKUP_DIR` 默认值混淆：
-
-```bash
-./reliquary-admin backup /Users/yourname/Backups/Reliquary --timeout 300
-./reliquary-admin drill /Users/yourname/Backups/Reliquary
 ./reliquary-admin schedule run --once
 ```
 
-备份成功应显示 `backup complete and read-back verified` 和完整备份路径，设置中的文件库状态区域显示最近一次备份时间、大小、状态和错误，也显示最近一次恢复演练结果。`schedule run --once` 只运行当前到期的计划，已有其他 runner 时跳过，手动迁移暂停时也不运行；演练中可加 `--force` 强制运行两项，仍遵守暂停及自动运行开关。
-
-每月演练将最近一份备份恢复到隔离的临时应用容器、空数据库和临时目录，重建全文索引并运行 `verify`。通过后应显示 `Monthly restore drill passed`，临时数据库、文件和容器已删除。失败也清理临时环境，保留设置页错误和调度日志并告警。例行演练不需要访问原模型或调用付费模型，只核对不可再生数据和文件；模型可用性由 `setup-models` 单独检查。演练清理不能影响正常部署。
-
-普通备份默认不重复保存镜像。已有完整源码与固定版本镜像时，先准备新的空数据库，在目标 `.env` 的 `RELIQUARY_VAULT_DIR` 与 `RELIQUARY_FILES_DIR` 指定空或不存在的宿主机目录，保持目标应用停止，再在目标部署目录执行 `./reliquary-admin restore /完整备份路径`。非空目标目录会被拒绝。它恢复数据和阅读配置，并进入下文的模型及凭据等待流程，不会替换目标部署的代码。需要带代码及镜像的一体恢复包时执行 `backup /备份目录 --with-images`，再使用 `unpack` 恢复到空部署目录。
-
-个人空间命名清理之前生成的版本 1 完整数据库备份仍保留底层离线映射。单独的旧文件库副本若没有受支持的 registry_version，当前重建入口会拒绝；应使用匹配版本读取原文，再通过当前收录接口重新导入。恢复旧数据库后，维护入口保持暂停，先按原备份清单核对旧副本、附件和向量，再导出旧采集配置、运行新增迁移、重建全文索引和刷新当前副本；最后再次按未改写的原备份清单核对。副本旧表名及外层列名会映射为当前名字。未完成任务继续读取原 payload，模型及凭据检查通过后才能恢复执行。结构版本 0 的整体回退仍遵守下文的离线 helper 流程。含旧文件目录的备份应在匹配版本恢复并导出原文；当前 helper 只读核对旧 schema，不自动改写旧目录，升级后也不会覆盖不符合所属库目录的路径。
+Docker 必须保持可用。调度器每分钟检查，主机休眠错过计划后补跑；日志和中断记录位于 `.maintenance-schedule/`。换目录或机器后重新安装。关闭计划执行 `schedule configure --enabled false`。
 
 ## 迁移到另一台 Mac mini
 
@@ -321,16 +349,16 @@ APP_PORT=18080 FRONTEND_PORT=18081 \
 ./reliquary-admin rebuild /Users/yourname/RecoveredVault
 ```
 
-命令读取表头、正文和 `.reliquary/`，恢复文章、带表头的用户文档及表头未保存的用户数据、档案、待审内容、日志、配置和任务检查点，再生成全文索引并逐表核对原副本。`.obsidian/`、`.trash/` 和 `.DS_Store` 等用户配置保留原样，不作为文章或用户文档索引。重建成功后自动进入 snapshot 暂停，队列不会领取任务或消耗重试预算。缺少或损坏的副本、文章、待审附件会列出错误并停止。库目录中没有有效表头或未在副本登记的文件不会作为已有资料导入，不兼容旧的按来源类别目录规则。可重建的索引和向量不作为唯一原件。
+命令读取表头、正文和 `.reliquary/`，恢复文章、带表头的用户文档及表头未保存的用户数据、档案、待审内容、日志、配置和任务检查点，再生成全文索引并逐表核对原副本。`.obsidian/`、`.trash/` 和 `.DS_Store` 等用户配置保留原样，不作为文章或用户文档索引。导入前先确认 PG 为空并进入 snapshot 暂停，队列不会在导入或配置期间领取任务或消耗重试预算。缺少或损坏的副本、文章、待审附件会列出错误并停止。库目录中没有有效表头或未在副本登记的文件不会作为已有资料导入，不兼容旧的按来源类别目录规则。可重建的索引和向量不作为唯一原件。
 
-随后可以执行 `docker compose up -d app frontend` 启动网页，用原账号密码登录。按照程序输出的清单重新填写模型凭据，ChatGPT 重新登录；账号密码哈希保留。此时处理队列与收录仍暂停，不要手工解除暂停。完成后执行：
+随后可以执行 `docker compose up -d app` 启动应用，用原账号密码登录。按照程序输出的清单重新填写模型凭据，ChatGPT 重新登录；账号密码哈希保留。此时处理队列与收录仍暂停，不要手工解除暂停。完成后执行：
 
 ```bash
 ./reliquary-admin setup-models
 ./reliquary-admin rebuild /Users/yourname/RecoveredVault --resume
 ```
 
-第一条确认配置模型可用；第二条只继续已经重建的库，读取初次保存的固定核对清单，不再次导入数据。它先严格核对，再检查模型及必需凭据，自动补齐全部向量，保留实体档案时间，核对向量完整性并安装本机备份调度。缺模型、缺凭据、向量失败、核对不一致或调度安装失败时继续暂停并返回非零状态。全部通过才显示 `State: ready`、解除维护暂停并让原有任务自动继续。其他未配置功能仍暂停。隔离演练可加 `--no-scheduler`，日常使用默认安装。初次清单保存在部署目录的 `.maintenance-rebuild.json` 等维护状态文件中，位于文件库之外，不进入迁移包。不要删除清单或重新执行初次 rebuild 来跳过失败。
+第一条确认配置模型可用；第二条只继续已经重建的库，读取初次保存的固定核对清单，不再次导入数据。它先严格核对，再检查模型及必需凭据，自动补齐全部向量，保留实体档案时间，从关系正本全量重建 Neo4j 并核对，核对向量完整性并安装本机备份调度。缺模型、缺凭据、向量失败、核对不一致或调度安装失败时继续暂停并返回非零状态。全部通过才显示 `State: ready`、解除维护暂停并让原有任务自动继续。其他未配置功能仍暂停。隔离演练可加 `--no-scheduler`，日常使用默认安装。初次清单保存在部署目录的 `.maintenance-rebuild.json` 等维护状态文件中，位于文件库之外，不进入迁移包。不要删除清单或重新执行初次 rebuild 来跳过失败。
 
 没有 `.reliquary/` 时，`vault-rebuild` 只能从当前按库目录下的统一表头和正文恢复部分资料，无法凭空恢复档案说明、日志、关注、待审与库配置。旧 `articles/`、`reports/` 布局不受支持。应保留原件，寻找完整数据库备份，不要宣称完整重建成功。
 

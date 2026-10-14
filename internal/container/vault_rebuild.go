@@ -49,19 +49,26 @@ func RebuildVaultWithDatabase(ctx context.Context, db *gorm.DB) (*service.VaultR
 
 func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Config) (*service.VaultRebuildResult, error) {
 	if service.HasVaultReplica(cfg.Vault.Root) {
+		var existing int64
+		if err := db.WithContext(ctx).Unscoped().Model(&types.Entry{}).Count(&existing).Error; err != nil {
+			return nil, err
+		}
+		if existing != 0 {
+			return nil, fmt.Errorf("replica import requires an empty entry database")
+		}
 		documents, err := service.NewVaultDocumentService(db, nil, NewPostgresRetrievalService(db), cfg.Vault.Root)
 		if err != nil {
 			return nil, err
 		}
 		defer documents.Close()
-		result, err := documents.RebuildReplica(ctx)
-		if err != nil {
-			return result, err
-		}
 		pauseCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		if err := maintenanceops.Pause(pauseCtx, db, "snapshot", "vault rebuild awaiting configuration", nil); err != nil {
-			return result, fmt.Errorf("pause restored vault before configuration: %w", err)
+			return nil, fmt.Errorf("pause empty database before vault import: %w", err)
+		}
+		result, err := documents.RebuildReplica(ctx)
+		if err != nil {
+			return result, err
 		}
 		return result, nil
 	}

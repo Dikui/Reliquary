@@ -1298,5 +1298,88 @@ class AdminStorageTests(unittest.TestCase):
         self.assertNotIn(("flush",), ctx.calls)
 
 
+class IKB20DrillTests(unittest.TestCase):
+    def test_drill_parser_accepts_result_report(self):
+        args = admin.parser().parse_args(["drill", "/backups", "--report", "/results/drill.json"])
+        self.assertEqual(args.report, "/results/drill.json")
+
+    def test_drill_restores_checks_and_cleans_on_success_or_failure(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory(prefix="ikb20-admin-") as temporary:
+                root = Path(temporary)
+                backup = root / "backups/backup-20261014"
+                backup.mkdir(parents=True)
+                admin.json_write(backup / "manifest.json", {})
+                (backup / "database.dump").write_bytes(b"fixture")
+                class Context:
+                    env = {}
+                    direct = True
+                    local_server = None
+                    def __init__(self):
+                        self.root, self.calls = root, []
+                    def sql(self, *args):
+                        self.calls.append(args)
+                ctx = Context()
+                calls = []
+                @contextlib.contextmanager
+                def runtime(*args):
+                    def invoke(*flags):
+                        calls.append(flags)
+                        if fail and flags[0] == "graph-verify":
+                            raise admin.AdminError("edge corruption")
+                        return {"ok": True}
+                    try:
+                        yield invoke, str(backup / "snapshot.json")
+                    finally:
+                        calls.append(("cleanup",))
+                ctx.pg_command = lambda *args: ["pg_restore"]
+                report = root / "report.json"
+                args = argparse.Namespace(directory=str(root / "backups"), automatic=False, report=str(report))
+                with mock.patch.object(admin, "check_files"), mock.patch.object(admin, "snapshot_tree"), mock.patch.object(admin, "record"), mock.patch.object(admin, "drill_runtime", runtime), mock.patch.object(admin.subprocess, "run", return_value=mock.Mock(returncode=0)):
+                    if fail:
+                        with self.assertRaisesRegex(admin.AdminError, "edge corruption"):
+                            admin.drill(ctx, args)
+                    else:
+                        admin.drill(ctx, args)
+                result = json.loads(report.read_text())
+                self.assertEqual(result["status"], "failed" if fail else "success")
+                self.assertIn(("queue-replay",), calls)
+                self.assertIn(("queue-probe-drill",), calls)
+                self.assertIn(("cleanup",), calls)
+                self.assertTrue(any("DROP DATABASE" in query[0] for query in ctx.calls))
+                self.assertFalse(list((root / "backups").glob(".reliquary-drill-*")))
+                if not fail:
+                    self.assertFalse((root / ".maintenance-schedule/drill-active.json").exists())
+                    self.assertTrue(any("--allow-operation-log-append" in flags for flags in calls))
+
+    def test_drill_runtime_never_uses_live_redis_and_always_cleans_graph(self):
+        with tempfile.TemporaryDirectory(prefix="ikb20-runtime-test-") as temporary:
+            root = Path(temporary)
+            class Context:
+                local_server = "server"
+                direct = True
+                env = {"REDIS_ADDR": "live:6379", "REDIS_DB": "4"}
+                def __init__(self):
+                    self.root, self.calls = root, []
+                def runtime_env(self):
+                    return {"NEO4J_URI": "bolt://graph:7687"}
+                def cli_json(self, *args, **kwargs):
+                    self.calls.append((args, kwargs))
+                    return {"ok": True}
+            ctx = Context()
+            database = "reliquary_drill_0123456789abcdef"
+            def run(argv, **kwargs):
+                return b"healthy" if argv[1] == "inspect" else b""
+            with mock.patch.object(admin, "run", side_effect=run) as command:
+                with admin.drill_runtime(ctx, root / "temporary", root / "backup", database) as (invoke, expected):
+                    invoke("queue-replay")
+                self.assertTrue(any(call.args[0][:3] == ["docker", "rm", "-f"] for call in command.call_args_list))
+            replay = ctx.calls[0][1]["overrides"]
+            self.assertEqual(replay["REDIS_DB"], "0")
+            self.assertTrue(replay["REDIS_ADDR"].startswith("127.0.0.1:2"))
+            self.assertEqual(ctx.env["REDIS_ADDR"], "live:6379")
+            self.assertEqual(ctx.calls[-1][0], ("graph-clear-drill", "--namespace", database))
+
+
 if __name__ == "__main__":
     unittest.main()

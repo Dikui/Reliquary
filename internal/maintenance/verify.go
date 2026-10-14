@@ -371,6 +371,22 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 		actual, err := os.ReadFile(target)
 		if err != nil || !bytes.Equal(actual, data) {
 			result.Differences = append(result.Differences, ".reliquary/"+path)
+			table := currentTable(strings.TrimSuffix(filepath.Base(path), ".json"))
+			if _, known := Rules[table]; known {
+				decode := func(raw []byte) ([]map[string]any, error) {
+					var rows []map[string]any
+					decoder := json.NewDecoder(bytes.NewReader(raw))
+					decoder.UseNumber()
+					err := decoder.Decode(&rows)
+					return namedRows(rows, false), err
+				}
+				before, beforeErr := decode(data)
+				after, afterErr := decode(actual)
+				if beforeErr == nil && afterErr == nil {
+					left, right := comparableCredentialRows(table, before, after, snapshot.Required)
+					result.Differences = append(result.Differences, rowDifferences(table, left, right)...)
+				}
+			}
 		}
 	}
 	// The log is never rewritten. A corrupted or altered previous record is a
@@ -518,6 +534,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 		if wanted.Regenerated {
 			continue
 		}
+		var diagnosticLeft, diagnosticRight []map[string]any
 		matches := wanted.SHA256 == current.SHA256
 		rowsMatch := wanted.Rows == current.Rows
 		if _, backupOnly := BackupOnlyTables[table]; backupOnly && (options.AllowModelChange || options.AllowReconfigurationAppend) {
@@ -567,9 +584,18 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 			before, _ := json.Marshal(left)
 			after, _ := json.Marshal(right)
 			matches = bytes.Equal(before, after)
+			diagnosticLeft, diagnosticRight = left, right
 		}
 		if !rowsMatch || !matches {
 			diffs = append(diffs, "table "+table)
+			diffs = append(diffs, rowDifferences(table, diagnosticLeft, diagnosticRight)...)
+			if wanted.BackupRowHashes != nil {
+				for id, hash := range wanted.BackupRowHashes {
+					if current.BackupRowHashes[id] != hash {
+						diffs = append(diffs, "table "+table+" row "+id+" changed or missing")
+					}
+				}
+			}
 		}
 		beforeNulls, _ := json.Marshal(wanted.JSONNulls)
 		nulls := current.JSONNulls
@@ -802,8 +828,9 @@ func normalizeRebuildAppend(table string, expected, actual []map[string]any, mod
 	return result
 }
 
-// Only a proven startup transition may change delivery metadata. Pending,
-// delayed and terminal rows retain every persisted field exactly.
+// Recovery can reset interrupted deliveries and publish ready operations while
+// paused. Only transport metadata changes; payload, generation, schedule, retry
+// budget, errors and terminal history are compared exactly.
 func comparableOperationRows(expected, actual []map[string]any) ([]map[string]any, []map[string]any) {
 	left, right := canonicalRows("task_pending_ops", expected), canonicalRows("task_pending_ops", actual)
 	originals := map[string]map[string]any{}
@@ -815,12 +842,17 @@ func comparableOperationRows(expected, actual []map[string]any) ([]map[string]an
 		if before == nil {
 			continue
 		}
-		if (before["state"] == "active" || before["state"] == "dispatched") && row["state"] == "pending" && before["completed_at"] == nil && row["completed_at"] == nil {
+		unfinished := before["state"] == "active" || before["state"] == "dispatched" || before["state"] == "pending" || before["state"] == "scheduled" || before["state"] == "retry"
+		if unfinished && (row["state"] == "pending" || row["state"] == "dispatched") && before["completed_at"] == nil && row["completed_at"] == nil {
 			oldN, e1 := strconv.ParseInt(fmt.Sprint(before["delivery"]), 10, 64)
 			newN, e2 := strconv.ParseInt(fmt.Sprint(row["delivery"]), 10, 64)
-			if e1 == nil && e2 == nil && newN == oldN+1 {
+			if e1 == nil && e2 == nil && oldN > 0 && (newN > oldN || (newN == oldN && row["state"] == "dispatched" && row["dispatched_at"] != nil)) {
 				for _, key := range []string{"state", "delivery", "dispatched_at", "worker_pool", "updated_at"} {
-					row[key] = before[key]
+					if value, present := before[key]; present {
+						row[key] = value
+					} else {
+						delete(row, key)
+					}
 				}
 			}
 		}

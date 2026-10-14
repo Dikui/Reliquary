@@ -40,6 +40,10 @@ func deliveryID(j *Job) string { return fmt.Sprintf("%s:%d:%d", j.ID, j.Generati
 // business transaction. Expired deliveries receive a new fencing number so a
 // Redis archive or lost acknowledgement cannot suppress durable work forever.
 func (c *Client) DispatchPending(ctx context.Context) error {
+	return c.dispatchPending(ctx, false)
+}
+
+func (c *Client) dispatchPending(ctx context.Context, recovery bool) error {
 	c.dispatchMu.Lock()
 	defer c.dispatchMu.Unlock()
 	c.mu.Lock()
@@ -50,7 +54,7 @@ func (c *Client) DispatchPending(ctx context.Context) error {
 	if err := c.db.WithContext(ctx).Raw("SELECT EXISTS(SELECT 1 FROM maintenance_state WHERE paused AND pause_mode='snapshot')").Scan(&paused).Error; err != nil {
 		return err
 	}
-	if paused {
+	if paused && !recovery {
 		return nil
 	}
 	now := time.Now().UTC()
@@ -72,7 +76,7 @@ func (c *Client) DispatchPending(ctx context.Context) error {
 			return err
 		}
 		// A worker may already have started or finished. Never write its state back.
-		if err := c.db.WithContext(ctx).Model(&Job{}).Where("NOT EXISTS(SELECT 1 FROM maintenance_state WHERE paused AND pause_mode='snapshot') AND id=? AND generation=? AND delivery=? AND state IN ?", op.ID, op.Generation, op.Delivery, []TaskState{TaskStatePending, TaskStateScheduled, TaskStateRetry}).Updates(map[string]any{"state": TaskStateDispatched, "dispatched_at": now, "updated_at": now}).Error; err != nil {
+		if err := c.db.WithContext(ctx).Model(&Job{}).Where("(? OR NOT EXISTS(SELECT 1 FROM maintenance_state WHERE paused AND pause_mode='snapshot')) AND id=? AND generation=? AND delivery=? AND state IN ?", recovery, op.ID, op.Generation, op.Delivery, []TaskState{TaskStatePending, TaskStateScheduled, TaskStateRetry}).Updates(map[string]any{"state": TaskStateDispatched, "dispatched_at": now, "updated_at": now}).Error; err != nil {
 			return err
 		}
 	}

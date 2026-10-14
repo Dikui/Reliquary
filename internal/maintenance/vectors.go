@@ -51,15 +51,16 @@ func ModelProfile(model map[string]any) string {
 // values and the stored model configuration, including after a model change.
 func CheckVectorDimensions(ctx context.Context, db *gorm.DB) ([]string, error) {
 	queries := map[string]string{
-		"article_embeddings": `SELECT e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM article_embeddings e WHERE e.embedding IS NOT NULL`,
-		"image_embeddings":   `SELECT e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM image_embeddings e WHERE e.embedding IS NOT NULL`,
-		"embeddings":         `SELECT e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM embeddings e WHERE e.embedding IS NOT NULL AND e.is_enabled`,
-		"entities":           `SELECT e.embedding_model_id AS model_id,e.embedding_dimension AS dimension,vector_dims(e.name_embedding) AS actual FROM entities e WHERE e.name_embedding IS NOT NULL`,
+		"article_embeddings": `SELECT e.entry_id AS identity,e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM article_embeddings e WHERE e.embedding IS NOT NULL`,
+		"image_embeddings":   `SELECT e.entry_id||'/'||e.attachment_path AS identity,e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM image_embeddings e WHERE e.embedding IS NOT NULL`,
+		"embeddings":         `SELECT e.id AS identity,e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM embeddings e WHERE e.embedding IS NOT NULL AND e.is_enabled`,
+		"entities":           `SELECT e.id AS identity,e.embedding_model_id AS model_id,e.embedding_dimension AS dimension,vector_dims(e.name_embedding) AS actual FROM entities e WHERE e.name_embedding IS NOT NULL`,
 	}
 	differences := []string{}
 	dimensions := map[string]map[int]bool{}
 	for table, query := range queries {
 		var values []struct {
+			Identity   string
 			ModelID    string
 			Dimension  int
 			Actual     int
@@ -70,18 +71,14 @@ func CheckVectorDimensions(ctx context.Context, db *gorm.DB) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		bad := 0
 		for _, value := range values {
 			if !value.Present || value.Actual <= 0 || value.Dimension != value.Actual || (value.Configured > 0 && value.Configured != value.Actual) {
-				bad++
+				differences = append(differences, fmt.Sprintf("%s row %s has inconsistent vector model or dimensions", table, value.Identity))
 			}
 			if dimensions[value.ModelID] == nil {
 				dimensions[value.ModelID] = map[int]bool{}
 			}
 			dimensions[value.ModelID][value.Actual] = true
-		}
-		if bad > 0 {
-			differences = append(differences, fmt.Sprintf("%s: %d vectors have inconsistent model or dimensions", table, bad))
 		}
 	}
 	for _, values := range dimensions {

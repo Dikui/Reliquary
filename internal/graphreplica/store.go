@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
@@ -33,6 +34,29 @@ func NewStore(c config.Neo4jConfig) *Store {
 		c.MaxTransactionRetryTime = 2 * time.Second
 	})
 	return &Store{driver: d, initErr: err}
+}
+
+// NewDrillStore restricts all writes and deletes to a unique rehearsal scope.
+// The runtime store always uses the dedicated database without a namespace.
+func NewDrillStore(c config.Neo4jConfig, namespace string) (*Store, error) {
+	if !regexp.MustCompile(`^reliquary_drill_[a-f0-9]{16}$`).MatchString(namespace) {
+		return nil, errors.New("invalid isolated drill namespace")
+	}
+	s := NewStore(c)
+	s.namespace = namespace
+	return s, nil
+}
+
+func (s *Store) ClearDrill(ctx context.Context) error {
+	if s.namespace == "" {
+		return errors.New("cleanup requires an isolated drill namespace")
+	}
+	if err := s.Available(ctx); err != nil {
+		return err
+	}
+	return s.write(ctx, func(tx neo4j.ManagedTransaction) error {
+		return run(ctx, tx, `MATCH (n {namespace:$namespace}) DETACH DELETE n`, map[string]any{"namespace": s.namespace})
+	})
 }
 func (s *Store) Close() error {
 	if s.driver == nil {
@@ -180,7 +204,7 @@ func (s *Store) apply(ctx context.Context, space uint64, entity string, snapshot
 }
 func (s *Store) replace(ctx context.Context, snapshot Snapshot) error {
 	return s.write(ctx, func(tx neo4j.ManagedTransaction) error {
-		q := `MATCH (n) DETACH DELETE n`
+		q := `MATCH (n) WHERE NOT coalesce(n.namespace =~ 'reliquary_drill_[a-f0-9]{16}',false) DETACH DELETE n`
 		p := map[string]any{}
 		if s.namespace != "" {
 			q = `MATCH (n {namespace:$namespace}) DETACH DELETE n`

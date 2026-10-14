@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -123,13 +124,65 @@ func (s *Service) HandleSync(ctx context.Context, t *queue.Task) error {
 }
 
 type CheckResult struct {
-	PGEdges    int    `json:"pg_edges"`
-	Neo4jEdges int    `json:"neo4j_edges"`
-	PGHash     string `json:"pg_hash"`
-	Neo4jHash  string `json:"neo4j_hash"`
-	Repaired   bool   `json:"repaired"`
-	Method     string `json:"method"`
-	Error      string `json:"error,omitempty"`
+	PGEdges     int      `json:"pg_edges"`
+	Neo4jEdges  int      `json:"neo4j_edges"`
+	PGHash      string   `json:"pg_hash"`
+	Neo4jHash   string   `json:"neo4j_hash"`
+	Repaired    bool     `json:"repaired"`
+	Method      string   `json:"method"`
+	Error       string   `json:"error,omitempty"`
+	Differences []string `json:"differences,omitempty"`
+}
+
+// Verify reports corruption without repairing it or appending audit rows.
+// Restores use it as a final gate, separately from the daily repairing Check.
+func (s *Service) Verify(ctx context.Context) (CheckResult, error) {
+	result := CheckResult{Method: "read-only full entity and relation verification"}
+	err := s.allLocked(ctx, func(tx *gorm.DB) error {
+		pg, err := readPG(tx, 0, "")
+		if err != nil {
+			return err
+		}
+		copy, err := s.store.snapshot(ctx)
+		if err != nil {
+			return err
+		}
+		result.PGEdges, result.Neo4jEdges = len(pg.Edges), len(copy.Edges)
+		result.PGHash, result.Neo4jHash = pg.Hash(), copy.Hash()
+		result.Differences = snapshotDifferences(pg, copy)
+		return nil
+	})
+	return result, err
+}
+
+func snapshotDifferences(pg, replica Snapshot) []string {
+	index := func(snapshot Snapshot) map[string]string {
+		rows := map[string]string{}
+		for _, n := range snapshot.Nodes {
+			data, _ := json.Marshal(n)
+			key := fmt.Sprintf("entities row %d/%s", n.SpaceID, n.ID)
+			rows[key] += string(data)
+		}
+		for _, e := range snapshot.Edges {
+			data, _ := json.Marshal(e)
+			rows["relations row "+e.ID] += string(data)
+		}
+		return rows
+	}
+	left, right := index(pg), index(replica)
+	differences := []string{}
+	for key, value := range left {
+		if right[key] != value {
+			differences = append(differences, key+" differs: pg="+value+" neo4j="+right[key])
+		}
+	}
+	for key := range right {
+		if _, ok := left[key]; !ok {
+			differences = append(differences, key+" unexpected in Neo4j")
+		}
+	}
+	sort.Strings(differences)
+	return differences
 }
 
 func (s *Service) allLocked(ctx context.Context, fn func(*gorm.DB) error) error {
@@ -179,6 +232,7 @@ func (s *Service) Check(ctx context.Context) (CheckResult, error) {
 		result.PGHash = pg.Hash()
 		result.Neo4jHash = replica.Hash()
 		if result.PGHash != result.Neo4jHash {
+			result.Differences = snapshotDifferences(pg, replica)
 			if err := s.store.replace(ctx, pg); err != nil {
 				return err
 			}

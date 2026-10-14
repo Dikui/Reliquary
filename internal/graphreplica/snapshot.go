@@ -66,7 +66,7 @@ func readPG(tx *gorm.DB, space uint64, entity string) (Snapshot, error) {
 // snapshot is internal maintenance inspection, not the graph retrieval API.
 func (s *Store) snapshot(ctx context.Context) (Snapshot, error) {
 	result := Snapshot{Nodes: []Node{}, Edges: []Edge{}}
-	nodes, err := neo4j.ExecuteQuery(ctx, s.driver, `MATCH (n) WHERE $namespace='' OR n.namespace=$namespace RETURN n.space_id,n.id,n.canonical_name,n.entity_type,labels(n)`, map[string]any{"namespace": s.namespace}, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithReadersRouting())
+	nodes, err := neo4j.ExecuteQuery(ctx, s.driver, `MATCH (n) WHERE ($namespace<>'' AND n.namespace=$namespace) OR ($namespace='' AND NOT coalesce(n.namespace =~ 'reliquary_drill_[a-f0-9]{16}',false)) RETURN n.space_id,n.id,n.canonical_name,n.entity_type,labels(n)`, map[string]any{"namespace": s.namespace}, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithReadersRouting())
 	if err != nil {
 		return result, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
@@ -78,7 +78,7 @@ func (s *Store) snapshot(ctx context.Context) (Snapshot, error) {
 		}
 		result.Nodes = append(result.Nodes, Node{SpaceID: uint64(integer(r.Values[0])), ID: str(r.Values[1]), CanonicalName: str(r.Values[2]), EntityType: kind})
 	}
-	edges, err := neo4j.ExecuteQuery(ctx, s.driver, `MATCH (a)-[r]->(b) WHERE $namespace='' OR a.namespace=$namespace OR b.namespace=$namespace RETURN r.space_id,r.id,a.id,b.id,r.relation_type,r.library_id,r.source_count,r.version,type(r),r.subject_id,r.object_id,r.namespace`, map[string]any{"namespace": s.namespace}, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithReadersRouting())
+	edges, err := neo4j.ExecuteQuery(ctx, s.driver, `MATCH (a)-[r]->(b) WHERE ($namespace<>'' AND (a.namespace=$namespace OR b.namespace=$namespace)) OR ($namespace='' AND NOT (coalesce(a.namespace =~ 'reliquary_drill_[a-f0-9]{16}',false) AND coalesce(b.namespace =~ 'reliquary_drill_[a-f0-9]{16}',false))) RETURN r.space_id,r.id,a.id,b.id,r.relation_type,r.library_id,r.source_count,r.version,type(r),r.subject_id,r.object_id,r.namespace`, map[string]any{"namespace": s.namespace}, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithReadersRouting())
 	if err != nil {
 		return result, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}

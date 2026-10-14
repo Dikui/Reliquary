@@ -1,6 +1,123 @@
 # 数据归属与文件库恢复格式
 
-所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，新登记表在 `internal/maintenance/registry.go` 并合入同一归属清单，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。下表保留原有 public 表的详细归属，结构版本 `000005` 已删除 `data_sources` 与 `sync_logs`。之后新增的表与列按结构版本在文末补充，当前完整清单以 `Rules` 和登记框架的目录核对结果为准。
+所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，新登记表在 `internal/maintenance/registry.go` 并合入同一归属清单，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。最新完整清单见下节逐列审计表，历史对照表保留原有 public 表的详细归属，结构版本 `000005` 已删除 `data_sources` 与 `sync_logs`。之后新增的表与列按结构版本在文末补充，当前完整清单以 `Rules` 和登记框架的目录核对结果为准。
+
+
+## 最新结构逐列归属审计
+
+本表来自结构版本 22 的真实 PostgreSQL 目录，共 101 张非系统表、1125 列。列由 `maintenance audit` 自动核查，表格每格完整列出该归属的列，没有使用通配符。副本列包括统一表头、非密钥配置及高成本处理结果；仅备份列由脱敏 PostgreSQL dump 保留。凭据列归入可再生，但必须通过重新登录或配置生成新值，不恢复原值；审计的 recovery 字段标记 replace_secret。凭据不放入备份。扩展可再生列只在扩展版本、默认行数和指纹匹配时成立。
+
+```bash
+./reliquary-admin maintenance audit
+```
+
+| 表 | 副本列 | 仅备份列 | 可再生列 | 可再生凭据列（重新配置） |
+| --- | --- | --- | --- | --- |
+| `paradedb._typmod_cache` | 无 | 无 | `id`、`typmod` | 无 |
+| `pgivm.pg_ivm_immv` | 无 | 无 | `immvrelid`、`viewdef`、`ispopulated`、`lastivmupdate` | 无 |
+| `public.api_keys` | `id`、`space_id`、`name`、`last_used_at`、`expires_at`、`revoked_at`、`created_at`、`updated_at` | 无 | 无 | `key_hash`、`api_key` |
+| `public.article_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
+| `public.auth_tokens` | `id`、`user_id`、`token_type`、`expires_at`、`is_revoked`、`created_at`、`updated_at` | 无 | 无 | `token` |
+| `public.chatgpt_accounts` | `id`、`client_id`、`issuer`、`subject`、`email`、`scopes`、`expires_at`、`earliest_refresh_at`、`status`、`last_error`、`welcome_acknowledged`、`created_at`、`updated_at` | 无 | 无 | `credentials` |
+| `public.chatgpt_hosts` | `id`、`ext_agent_host_id`、`created_at` | 无 | 无 | 无 |
+| `public.chatgpt_login_attempts` | `callback_url`、`client_id`、`account_id`、`expires_at` | 无 | 无 | `state`、`nonce`、`verifier` |
+| `public.chatgpt_policy` | `id`、`daily_limit`、`daily_used`、`day`、`paused`、`reason`、`retry_at`、`fallback_model_id`、`updated_at` | 无 | 无 | 无 |
+| `public.chunks` | 无 | 无 | `id`、`space_id`、`library_id`、`entry_id`、`content`、`chunk_index`、`is_enabled`、`start_at`、`end_at`、`pre_chunk_id`、`next_chunk_id`、`chunk_type`、`parent_chunk_id`、`image_info`、`relation_chunks`、`indirect_relation_chunks`、`created_at`、`updated_at`、`deleted_at`、`metadata`、`status`、`content_hash`、`flags`、`seq_id`、`video_info`、`context_header`、`search_title`、`source_locations` | 无 |
+| `public.embedding_rebuild_items` | `id`、`run_id`、`kind`、`source_id`、`attachment_path`、`status`、`attempts`、`error`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.embedding_rebuild_runs` | `id`、`space_id`、`status`、`model_id`、`model_name`、`dimension`、`profile_hash`、`total_count`、`completed_count`、`failed_count`、`error`、`attempt_id`、`lease_until`、`created_at`、`updated_at`、`started_at`、`finished_at`、`candidate`、`switched_at` | 无 | 无 | 无 |
+| `public.embedding_rebuild_vectors` | 无 | 无 | `run_id`、`kind`、`source_id`、`attachment_path`、`entry_id`、`library_id`、`model_id`、`dimension`、`embedding`、`content_hash` | 无 |
+| `public.embedding_vector_archives` | 无 | 无 | `run_id`、`space_id`、`payload`、`created_at` | 无 |
+| `public.embeddings` | 无 | 无 | `id`、`created_at`、`updated_at`、`source_id`、`source_type`、`chunk_id`、`entry_id`、`library_id`、`model_id`、`dimension`、`embedding`、`is_enabled` | 无 |
+| `public.entities` | `id`、`space_id`、`canonical_name`、`normalized_name`、`entity_type`、`description`、`merged_into_id`、`created_at`、`updated_at` | 无 | `name_embedding`、`embedding_model_id`、`embedding_dimension`、`embedding_needs_rebuild` | 无 |
+| `public.entity_aliases` | `id`、`space_id`、`entity_type`、`entity_id`、`alias`、`normalized_alias`、`resolution_method`、`created_at` | 无 | 无 | 无 |
+| `public.entity_embedding_rebuild_runs` | `id`、`space_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 | 无 |
+| `public.entity_merge_records` | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 | 无 |
+| `public.entity_merge_suggestions` | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`entry_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 | 无 |
+| `public.entries` | `id`、`space_id`、`library_id`、`type`、`title`、`description`、`content_type`、`source_unverified`、`source_kind`、`vault_path`、`vault_body`、`starred`、`collect_reason`、`agent_summary`、`agent_tags`、`source_name`、`structured_summary`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count`、`storage_size`、`metadata`、`created_at`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`acquisition`、`incomplete`、`external_completion_attempted`、`ingest_api_key_id`、`ingest_api_key_name`、`last_ingest_api_key_id`、`last_ingest_api_key_name`、`missing_materials`、`content_type_hint`、`related_article_id`、`source_ref`、`source_body_hash`、`identifier`、`graph` | 无 | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
+| `public.entry_entities` | `space_id`、`entry_id`、`entity_id`、`created_at` | 无 | 无 | 无 |
+| `public.entry_processing_outputs` | `entry_id`、`space_id`、`library_id`、`run_id`、`body_hash`、`content_type`、`relations`、`images`、`updated_at` | 无 | 无 | 无 |
+| `public.entry_processing_spans` | `id`、`entry_id`、`attempt`、`span_id`、`parent_span_id`、`name`、`kind`、`status`、`input`、`output`、`metadata`、`error_code`、`error_message`、`error_detail`、`started_at`、`finished_at`、`duration_ms`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.entry_repost_sources` | `id`、`space_id`、`library_id`、`entry_id`、`original_url`、`normalized_url`、`source_fingerprint`、`author`、`publisher`、`published_at`、`published_at_missing`、`match_method`、`sim_hash_distance`、`created_at` | 无 | 无 | 无 |
+| `public.entry_segment_runs` | `id`、`space_id`、`entry_id`、`phase`、`plan_hash`、`body_hash`、`plan`、`result`、`status`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.entry_topics` | `space_id`、`entry_id`、`topic_id`、`source`、`is_historical`、`created_at` | 无 | 无 | 无 |
+| `public.evaluation_answers` | `question_id`、`entry_id`、`grade` | 无 | 无 | 无 |
+| `public.evaluation_questions` | `id`、`space_id`、`set_id`、`method`、`request`、`source`、`status`、`source_record_id`、`suggested_results`、`answer_deleted`、`revision`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.evaluation_run_results` | `run_id`、`question_id`、`question`、`snapshot`、`results`、`metrics`、`hits`、`error` | 无 | 无 | 无 |
+| `public.evaluation_runs` | `id`、`space_id`、`set_id`、`set_snapshot`、`options`、`snapshot`、`status`、`summary`、`error`、`created_at`、`finished_at` | 无 | 无 | 无 |
+| `public.evaluation_sets` | `id`、`space_id`、`name`、`description`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.follow_feed_library_states` | `space_id`、`library_id`、`last_viewed_at` | 无 | 无 | 无 |
+| `public.follow_feed_states` | `space_id`、`last_viewed_at` | 无 | 无 | 无 |
+| `public.follows` | `space_id`、`target_type`、`target_id`、`created_at` | 无 | `entity_id`、`topic_id` | 无 |
+| `public.graph_pending_sync` | 无 | 无 | `id`、`space_id`、`entity_id`、`relation_id`、`relation_version`、`deleted`、`created_at`、`completed_at` | 无 |
+| `public.image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
+| `public.ingest_assets` | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 | 无 |
+| `public.ingest_discards` | `space_id`、`normalized_url`、`article_id`、`discarded_at`、`reason`、`library_id`、`fingerprint` | 无 | 无 | 无 |
+| `public.libraries` | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id`、`system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` | 无 | 无 | 无 |
+| `public.library_content_types` | `library_id`、`name`、`position`、`enabled`、`extract_graph` | 无 | 无 | 无 |
+| `public.library_relation_types` | `library_id`、`name`、`position`、`enabled` | 无 | 无 | 无 |
+| `public.maintenance_state` | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error`、`backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` | 无 | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | 无 |
+| `public.model_calls` | 无 | `id`、`space_id`、`requested_at`、`model_id`、`model_name`、`provider`、`purpose`、`entry_id`、`input_tokens`、`output_tokens`、`input_price`、`output_price`、`currency`、`cost`、`cost_status`、`duration_ms`、`success`、`error_category`、`attempt`、`retry_number` | 无 | 无 |
+| `public.models` | `id`、`space_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` | 无 | 无 | 无 |
+| `public.operation_logs` | `id`、`space_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at`、`api_key_id`、`api_key_name` | 无 | 无 | 无 |
+| `public.relation_sources` | `relation_id`、`entry_id`、`evidence`、`run_id`、`body_hash` | 无 | 无 | 无 |
+| `public.relation_suppressions` | `space_id`、`library_id`、`subject_id`、`relation_type`、`object_id`、`actor`、`created_at` | 无 | 无 | 无 |
+| `public.relation_type_merges` | `library_id`、`from_type`、`to_type`、`created_at` | 无 | 无 | 无 |
+| `public.relations` | `id`、`space_id`、`library_id`、`subject_id`、`relation_type`、`object_id`、`version`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.resource_access_grants` | `id`、`resource_id`、`access_scope`、`expires_at`、`revoked_at`、`created_at` | 无 | 无 | `token_hash` |
+| `public.resource_bindings` | `id`、`resource_id`、`space_id`、`owner_type`、`owner_id`、`relation`、`created_at` | 无 | 无 | 无 |
+| `public.resources` | `id`、`handle`、`space_id`、`provider`、`physical_path`、`location_hash`、`kind`、`mime_type`、`original_name`、`size`、`content_hash`、`lifecycle`、`expires_at`、`state`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 | 无 |
+| `public.schema_migrations` | 无 | 无 | `version`、`dirty` | 无 |
+| `public.search_records` | 无 | `id`、`space_id`、`created_at`、`source`、`method`、`query`、`libraries`、`request`、`results`、`duration_ms`、`fallback_fulltext`、`reranked`、`evaluation_run_id`、`error` | 无 | 无 |
+| `public.spaces` | `id`、`name`、`description`、`status`、`business`、`storage_used`、`created_at`、`updated_at`、`deleted_at`、`retrieval_config`、`embedding_model_id` | 无 | 无 | `credentials` |
+| `public.spatial_ref_sys` | 无 | 无 | `srid`、`auth_name`、`auth_srid`、`srtext`、`proj4text` | 无 |
+| `public.system_settings` | `id`、`key`、`value`、`value_type`、`category`、`description`、`is_secret`、`requires_restart`、`last_modified_by`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.task_dead_letters` | `id`、`space_id`、`task_type`、`scope`、`scope_id`、`related_id`、`payload`、`last_error`、`fail_count`、`failed_at` | 无 | 无 | 无 |
+| `public.task_pending_ops` | `id`、`task_type`、`queue`、`payload`、`headers`、`state`、`max_retry`、`retried`、`fail_count`、`timeout_ns`、`retention_ns`、`deadline`、`group_name`、`created_at`、`updated_at`、`process_at`、`started_at`、`completed_at`、`last_failed_at`、`last_error`、`dispatched_at`、`object_id`、`generation`、`delivery`、`worker_pool`、`cancel_requested` | 无 | 无 | 无 |
+| `public.task_queue_counters` | `queue`、`day`、`processed`、`failed` | 无 | 无 | 无 |
+| `public.topic_backfill_batches` | `id`、`job_id`、`ordinal`、`entry_ids`、`article_count`、`status`、`attempts`、`error`、`created_at`、`updated_at`、`retry_at` | 无 | 无 | 无 |
+| `public.topic_backfill_jobs` | `id`、`space_id`、`topic_id`、`topic_name`、`topic_description`、`status`、`total`、`processed`、`failed_articles`、`failed_batches`、`created_at`、`updated_at` | 无 | 无 | 无 |
+| `public.topics` | `id`、`space_id`、`name`、`description`、`created_at`、`updated_at`、`library_ids` | 无 | 无 | 无 |
+| `public.users` | `id`、`username`、`email`、`password_hash`、`avatar`、`space_id`、`is_active`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 | 无 |
+| `tiger.addr` | 无 | 无 | `gid`、`tlid`、`fromhn`、`tohn`、`side`、`zip`、`plus4`、`fromtyp`、`totyp`、`fromarmid`、`toarmid`、`arid`、`mtfcc`、`statefp` | 无 |
+| `tiger.addrfeat` | 无 | 无 | `gid`、`tlid`、`statefp`、`aridl`、`aridr`、`linearid`、`fullname`、`lfromhn`、`ltohn`、`rfromhn`、`rtohn`、`zipl`、`zipr`、`edge_mtfcc`、`parityl`、`parityr`、`plus4l`、`plus4r`、`lfromtyp`、`ltotyp`、`rfromtyp`、`rtotyp`、`offsetl`、`offsetr`、`the_geom` | 无 |
+| `tiger.bg` | 无 | 无 | `gid`、`statefp`、`countyfp`、`tractce`、`blkgrpce`、`bg_id`、`namelsad`、`mtfcc`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom` | 无 |
+| `tiger.county` | 无 | 无 | `gid`、`statefp`、`countyfp`、`countyns`、`cntyidfp`、`name`、`namelsad`、`lsad`、`classfp`、`mtfcc`、`csafp`、`cbsafp`、`metdivfp`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom` | 无 |
+| `tiger.county_lookup` | 无 | 无 | `st_code`、`state`、`co_code`、`name` | 无 |
+| `tiger.countysub_lookup` | 无 | 无 | `st_code`、`state`、`co_code`、`county`、`cs_code`、`name` | 无 |
+| `tiger.cousub` | 无 | 无 | `gid`、`statefp`、`countyfp`、`cousubfp`、`cousubns`、`cosbidfp`、`name`、`namelsad`、`lsad`、`classfp`、`mtfcc`、`cnectafp`、`nectafp`、`nctadvfp`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom` | 无 |
+| `tiger.direction_lookup` | 无 | 无 | `name`、`abbrev` | 无 |
+| `tiger.edges` | 无 | 无 | `gid`、`statefp`、`countyfp`、`tlid`、`tfidl`、`tfidr`、`mtfcc`、`fullname`、`smid`、`lfromadd`、`ltoadd`、`rfromadd`、`rtoadd`、`zipl`、`zipr`、`featcat`、`hydroflg`、`railflg`、`roadflg`、`olfflg`、`passflg`、`divroad`、`exttyp`、`ttyp`、`deckedroad`、`artpath`、`persist`、`gcseflg`、`offsetl`、`offsetr`、`tnidf`、`tnidt`、`the_geom` | 无 |
+| `tiger.faces` | 无 | 无 | `gid`、`tfid`、`statefp00`、`countyfp00`、`tractce00`、`blkgrpce00`、`blockce00`、`cousubfp00`、`submcdfp00`、`conctyfp00`、`placefp00`、`aiannhfp00`、`aiannhce00`、`comptyp00`、`trsubfp00`、`trsubce00`、`anrcfp00`、`elsdlea00`、`scsdlea00`、`unsdlea00`、`uace00`、`cd108fp`、`sldust00`、`sldlst00`、`vtdst00`、`zcta5ce00`、`tazce00`、`ugace00`、`puma5ce00`、`statefp`、`countyfp`、`tractce`、`blkgrpce`、`blockce`、`cousubfp`、`submcdfp`、`conctyfp`、`placefp`、`aiannhfp`、`aiannhce`、`comptyp`、`trsubfp`、`trsubce`、`anrcfp`、`ttractce`、`tblkgpce`、`elsdlea`、`scsdlea`、`unsdlea`、`uace`、`cd111fp`、`sldust`、`sldlst`、`vtdst`、`zcta5ce`、`tazce`、`ugace`、`puma5ce`、`csafp`、`cbsafp`、`metdivfp`、`cnectafp`、`nectafp`、`nctadvfp`、`lwflag`、`offset`、`atotal`、`intptlat`、`intptlon`、`the_geom`、`tractce20`、`blkgrpce20`、`blockce20`、`countyfp20`、`statefp20` | 无 |
+| `tiger.featnames` | 无 | 无 | `gid`、`tlid`、`fullname`、`name`、`predirabrv`、`pretypabrv`、`prequalabr`、`sufdirabrv`、`suftypabrv`、`sufqualabr`、`predir`、`pretyp`、`prequal`、`sufdir`、`suftyp`、`sufqual`、`linearid`、`mtfcc`、`paflag`、`statefp` | 无 |
+| `tiger.geocode_settings` | 无 | 无 | `name`、`setting`、`unit`、`category`、`short_desc` | 无 |
+| `tiger.geocode_settings_default` | 无 | 无 | `name`、`setting`、`unit`、`category`、`short_desc` | 无 |
+| `tiger.loader_lookuptables` | 无 | 无 | `process_order`、`lookup_name`、`table_name`、`single_mode`、`load`、`level_county`、`level_state`、`level_nation`、`post_load_process`、`single_geom_mode`、`insert_mode`、`pre_load_process`、`columns_exclude`、`website_root_override` | 无 |
+| `tiger.loader_platform` | 无 | 无 | `os`、`declare_sect`、`pgbin`、`wget`、`unzip_command`、`psql`、`path_sep`、`loader`、`environ_set_command`、`county_process_command` | 无 |
+| `tiger.loader_variables` | 无 | 无 | `tiger_year`、`website_root`、`staging_fold`、`data_schema`、`staging_schema` | 无 |
+| `tiger.pagc_gaz` | 无 | 无 | `id`、`seq`、`word`、`stdword`、`token`、`is_custom` | 无 |
+| `tiger.pagc_lex` | 无 | 无 | `id`、`seq`、`word`、`stdword`、`token`、`is_custom` | 无 |
+| `tiger.pagc_rules` | 无 | 无 | `id`、`rule`、`is_custom` | 无 |
+| `tiger.place` | 无 | 无 | `gid`、`statefp`、`placefp`、`placens`、`plcidfp`、`name`、`namelsad`、`lsad`、`classfp`、`cpi`、`pcicbsa`、`pcinecta`、`mtfcc`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom` | 无 |
+| `tiger.place_lookup` | 无 | 无 | `st_code`、`state`、`pl_code`、`name` | 无 |
+| `tiger.secondary_unit_lookup` | 无 | 无 | `name`、`abbrev` | 无 |
+| `tiger.state` | 无 | 无 | `gid`、`region`、`division`、`statefp`、`statens`、`stusps`、`name`、`lsad`、`mtfcc`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom` | 无 |
+| `tiger.state_lookup` | 无 | 无 | `st_code`、`name`、`abbrev`、`statefp` | 无 |
+| `tiger.street_type_lookup` | 无 | 无 | `name`、`abbrev`、`is_hw` | 无 |
+| `tiger.tabblock` | 无 | 无 | `gid`、`statefp`、`countyfp`、`tractce`、`blockce`、`tabblock_id`、`name`、`mtfcc`、`ur`、`uace`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom` | 无 |
+| `tiger.tabblock20` | 无 | 无 | `statefp`、`countyfp`、`tractce`、`blockce`、`geoid`、`name`、`mtfcc`、`ur`、`uace`、`uatype`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom`、`housing`、`pop` | 无 |
+| `tiger.tract` | 无 | 无 | `gid`、`statefp`、`countyfp`、`tractce`、`tract_id`、`name`、`namelsad`、`mtfcc`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`the_geom` | 无 |
+| `tiger.zcta5` | 无 | 无 | `gid`、`statefp`、`zcta5ce`、`classfp`、`mtfcc`、`funcstat`、`aland`、`awater`、`intptlat`、`intptlon`、`partflg`、`the_geom` | 无 |
+| `tiger.zip_lookup` | 无 | 无 | `zip`、`st_code`、`state`、`co_code`、`county`、`cs_code`、`cousub`、`pl_code`、`place`、`cnt` | 无 |
+| `tiger.zip_lookup_all` | 无 | 无 | `zip`、`st_code`、`state`、`co_code`、`county`、`cs_code`、`cousub`、`pl_code`、`place`、`cnt` | 无 |
+| `tiger.zip_lookup_base` | 无 | 无 | `zip`、`state`、`county`、`city`、`statefp` | 无 |
+| `tiger.zip_state` | 无 | 无 | `zip`、`stusps`、`statefp` | 无 |
+| `tiger.zip_state_loc` | 无 | 无 | `zip`、`stusps`、`statefp`、`place` | 无 |
+| `topology.layer` | 无 | 无 | `topology_id`、`layer_id`、`schema_name`、`table_name`、`feature_column`、`feature_type`、`level`、`child_id` | 无 |
+| `topology.topology` | 无 | 无 | `id`、`name`、`srid`、`precision`、`hasz`、`useslargeids` | 无 |
+
+`search_records` 与 `model_calls` 的全部列只有 PostgreSQL 备份，没有副本。`graph_pending_sync` 是重建通知，关系正本与来源仍进副本。`relations` 的来源计数由 `relation_sources` 按资料去重计算，Neo4j 中保存的 `source_count` 属于图谱副本，不是独立正本。本次没有改变业务列的存储归属；修正文档中旧基线表格被误当成完整清单、仅备份表沿用 Sidecar 分类但未明确呈现的歧义。
+
+## 历史格式与基线对照
 
 维护副本与核对清单的 `format_version` 为 5，表名使用 `spaces`、`api_keys`、`libraries`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`library_id`、`entry_id`、`entry_ids`。完整数据库备份的底层导入及核对接受版本 1 至 4，当前文件库重建入口的版本限制见本文末节：版本 1 先映射个人空间表及归属列，其中版本 1 和 2 将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。版本 1 至 3 的 `knowledge_bases` 表名与行外层 `knowledge_base_id` 分别映射为 `libraries`、`library_id`。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 5，完成清单原子替换后才移除旧表文件。标题与摘要向量 `article_embeddings` 包含文章和导入的用户文档，不包含整理结果；表名保留，外键列为 `entry_id`。
 
@@ -172,7 +289,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 核对逐表比较非派生列的规范 JSON、行数及 JSONB null 类型。JSONB 字面值 null 与 SQL NULL 单独记录，导入后逐列保持原类型，操作日志中的空 before_value 不会误变成 SQL NULL。模型和 ChatGPT 账号的安全行与待填凭据 ID 进入核对清单，原始 status 保留供逐行核对。未剔除凭据的模型，status 与 updated_at 精确比较，任何改变都会失败。只有旧清单已列出的凭据受影响 ID 可以由原 status 转为 models.needs_configuration，再恢复清单记录的原 status；该行 updated_at 允许凭据操作改变。其他 status 不忽略。模型 parameters.extra_config 中 maintenance_required_fields、maintenance_original_status、maintenance_original_updated_at 是恢复提醒，只排除这些明确键，其他参数精确核对。ChatGPT 待重新登录账号允许 needs_login 和完成新登录的 connected，expires_at、earliest_refresh_at 与 updated_at 仅在上述待填账号行允许变化；last_error 仍精确核对。版本 4 及以前的订阅源净化与暂停规则仅用于旧备份读取及删表前导出，当前维护不恢复采集功能。
 
-待处理操作是任务权威，随数据库备份与格式 5 的维护副本保存。启动时 active 或 dispatched 操作恢复为 pending，投递代次 delivery 恰好增加 1，并清空 dispatched_at、worker_pool，更新 updated_at。核对只允许由同 ID 原始行证明的这一转换；payload、generation、object_id、重试次数、截止时间、process_at 和完成历史均精确比较。pending、scheduled、retry、cancelled、archived、completed 的字段不因恢复而放宽。Redis 数据不进入备份，恢复后从未完成操作补推。版本 9 以前的离线维护仍按原 task_jobs 列归属处理，升级 000009 时删除旧任务；不导入旧队列消息。维护暂停标记与定时 due_at 可重新生成，最近备份和恢复演练的时间、状态、目录、大小及错误属于不可再生历史，进入副本并恢复；只有 backup_directory 是目标机器可调整的配置路径。全文索引、分块、向量和搜索 sequence ID 可重新生成，向量值与检索分数不做字节比较。固定检索使用真实 ParadeDB BM25 查询 maintenancearchive、observations、reference，核对排序后的文章 ID，忽略分数。文件仍按字节哈希核对，副本 config 文件由其规范数据库内容核对。正常恢复先与旧清单严格核对，再开放凭据填写；填写过程可以追加新的操作日志，完成凭据配置前再次按旧清单核对。该步骤显式使用 --allow-reconfiguration-append；只允许追加日志的场合使用 --allow-operation-log-append。旧日志按 ID 保留逐行完整内容与 JSONB null 类型，只接受新的日志 ID。--allow-model-change 显式允许库 embedding_model_id 和 model_tiers.embedding 变更，以及旧、新选中 embedding 模型的名称、展示名、说明、来源、参数和 updated_at 变化；原有模型的 ID、租户、类型和创建时间、其他未选模型及全部不可再生业务表仍严格比较。新加模型只允许新选中的 Embedding 行，不允许删掉旧模型。新模型的全部向量生成完整后再开放使用。后续日常 verify 检查当前数据库与副本一致。
+待处理操作是任务权威，随数据库备份与格式 5 的维护副本保存。启动时 active 或 dispatched 操作恢复为 pending，每次启动恢复增加投递代次 delivery，并清空 dispatched_at、worker_pool，更新 updated_at。离线 `queue-replay` 在 snapshot 暂停且没有消费者时按页重推全部到期操作，未来的 process_at 继续等待。核对允许同 ID 未完成行的 pending 或 dispatched 恢复转换及递增的投递代次；payload、generation、object_id、重试次数、截止时间、process_at 和完成历史均精确比较。可运行操作的投递元数据可以重建，cancelled、archived、completed 的全部字段保持精确核对。Redis 数据不进入备份，恢复后从未完成操作补推。版本 9 以前的离线维护仍按原 task_jobs 列归属处理，升级 000009 时删除旧任务；不导入旧队列消息。维护暂停标记与定时 due_at 可重新生成，最近备份和恢复演练的时间、状态、目录、大小及错误属于不可再生历史，进入副本并恢复；只有 backup_directory 是目标机器可调整的配置路径。全文索引、分块、向量和搜索 sequence ID 可重新生成，向量值与检索分数不做字节比较。固定检索使用真实 ParadeDB BM25 查询 maintenancearchive、observations、reference，核对排序后的文章 ID，忽略分数。文件仍按字节哈希核对，副本 config 文件由其规范数据库内容核对。正常恢复先与旧清单严格核对，再开放凭据填写；填写过程可以追加新的操作日志，完成凭据配置前再次按旧清单核对。该步骤显式使用 --allow-reconfiguration-append；只允许追加日志的场合使用 --allow-operation-log-append。旧日志按 ID 保留逐行完整内容与 JSONB null 类型，只接受新的日志 ID。--allow-model-change 显式允许库 embedding_model_id 和 model_tiers.embedding 变更，以及旧、新选中 embedding 模型的名称、展示名、说明、来源、参数和 updated_at 变化；原有模型的 ID、租户、类型和创建时间、其他未选模型及全部不可再生业务表仍严格比较。新加模型只允许新选中的 Embedding 行，不允许删掉旧模型。新模型的全部向量生成完整后再开放使用。后续日常 verify 检查当前数据库与副本一致。
 
 迁移清单另存向量语义摘要，包括模型语义 profile、维度、行数和来源覆盖哈希。文章、图片、实体使用原始 ID 和图片路径；分块使用文章 ID、位置与内容哈希，不依赖可重新生成的 chunk ID。`verify --manifest <清单> --vectors` 在模型未改变时严格核对这些摘要，不比较向量浮点值或检索分数。模型改变时先执行完整向量重建，再按新的模型 profile 核对覆盖情况。普通 `verify` 输出 `pending_vectors`，仅用文件库恢复后尚未生成向量时不把原始数据核对放宽，也不把待生成向量误判为原文丢失。
 
@@ -327,3 +444,20 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 | `graph_pending_sync` | Regenerated: id space_id entity_id relation_id relation_version deleted created_at completed_at | 不进入副本 | 恢复后由图谱全量重建生成投影 |
 
 既有 `library_relation_types` 保持 Configuration 与 `data/library_relation_types.json` 登记。旧副本升级核对只投影四张新持久表的空默认值；当前非空关系、来源、版本、抑制及合并记录被改动或丢失会核对失败。待同步记录不参与数据相等核对，不进入文件库实时副本；PostgreSQL 完整备份仍包含该表。恢复后的 Neo4j 重建由 ikb-13 接入。
+
+## 导入顺序与恢复核对
+
+导出在 PostgreSQL repeatable read 一致快照中读取所有归属表，文件名与 JSON 键稳定，manifest 最后原子替换。导出文件没有消费顺序；恢复先核验全部文件，再按 `replicaImportOrder` 和登记框架的拓扑排序写入同一事务。`TestIKB20ImportOrderCoversActualForeignKeys` 从最新数据库 `pg_constraint` 读取每条外键，验证所有副本表都在顺序中且父表先于子表。缺依赖、环或遗漏表在写入前失败。
+
+关系正本在 spaces、users、libraries、library_relation_types、entities 之后，relation_sources 还依赖 entries；抑制记录与类型合并依赖实体及库关系类型。evaluation_sets 在 spaces 之后，questions 在 sets 之后，answers 在 questions 之后，runs 在 spaces 之后，run_results 在 runs 之后。标准答案允许保留已删资料 ID，因此没有 entry 外键。历史来源检索记录 ID 也不要求 search_records 随文件库恢复。
+
+核对覆盖所有不可再生字段、行数、JSONB null 类型、正文与表头、attachments、待审资源、模型与库配置、分块向量数量、模型及维度、关系及来源行、测评题和标准答案。副本差异及快照差异输出具体表和主键；复合键包含 relation_id 与 entry_id 或 question_id 与 entry_id。正文损坏输出文件路径。文件库恢复向量暂缺时输出 pending_vectors，恢复继续执行向量重建，`verify --vectors` 全部通过后解除暂停。
+
+```bash
+./reliquary-admin verify --vectors
+./reliquary-admin maintenance graph-verify
+```
+
+`graph-verify` 只核对，不自动修复。它比较全部实体节点及关系边的 ID、端点、类型、库、版本与来源计数，差异包含 PG 表名及行 ID。日常 `graph-check` 继续核对并修复。完整恢复在最终核对之前从 PG 重建图谱、刷新维护副本，新增系统重建日志允许追加，已有日志仍必须保留。
+
+恢复演练使用临时 PG 数据库、独立临时 Redis 容器中的 DB 0、受限 Neo4j 命名空间和临时文件目录。恢复真实待处理操作的 Redis 唤醒，但只消费独立队列的探针，不触发模型或外部工具。探针验证暂停期间零执行、解除暂停后一次完成；实际业务任务的完成由完整恢复集成测试验证。结果 JSON 包含原件核对、Redis 补推与暂停探针、Neo4j 重建及最终核对。结束清理临时数据库、Redis、图谱命名空间与文件；清理失败保留 ownership，下一次 schedule run 清理后重试。

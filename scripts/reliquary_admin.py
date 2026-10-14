@@ -428,6 +428,8 @@ class Context:
             extra += ["-e", key]
         if env.get("RELIQUARY_ADMIN_CLI_VAULT_HOST"):
             extra += ["-v", env["RELIQUARY_ADMIN_CLI_VAULT_HOST"] + ":" + env["VAULT_ROOT"]]
+        if env.get("RELIQUARY_ADMIN_CLI_RESOURCES_HOST"):
+            extra += ["-v", env["RELIQUARY_ADMIN_CLI_RESOURCES_HOST"] + ":" + env["LOCAL_STORAGE_BASE_DIR"]]
         if env.get("RELIQUARY_ADMIN_CLI_PACKAGE_HOST"):
             extra += ["-v", env["RELIQUARY_ADMIN_CLI_PACKAGE_HOST"] + ":/maintenance-package:ro"]
         if env.get("RELIQUARY_ADMIN_CLI_SCAN_HOST"):
@@ -891,7 +893,9 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                 for child in stage.iterdir():
                     shutil.move(str(child), destination / child.name)
                 check_files(destination)
-        ctx.cli_json("verify")
+            # Verify while writers remain stopped. Resumed workers can change
+            # PG immediately, before the debounced replica catches up.
+            ctx.cli_json("verify")
         result.update(status="success", size_bytes=sum(p.stat().st_size for p in destination.rglob("*") if p.is_file()))
         print(f"{kind} complete and read-back verified: {destination}")
         return destination
@@ -1010,6 +1014,11 @@ def restore(ctx, package, args):
                                                         "scheduler_required": getattr(ctx, "scheduler_required", False),
                                                         "required_credentials": required, "preserve_version": preserve_version})
     print_credentials(required, preserve_version)
+    if not legacy and ctx.sql("SELECT to_regclass('public.task_pending_ops') IS NOT NULL") == "t":
+        if not ctx.direct and not ctx.local_server:
+            ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "redis")
+        ctx.cli_json("queue-replay")
+        ctx.cli_json("flush")
     start_paused_environment(ctx)
     if getattr(args, "skip_models", False):
         print("Restored and verified. State: waiting_models. Run setup-models, then unpack --resume. Host scheduler installation is checked before resuming task execution.")
@@ -1261,6 +1270,13 @@ def rebuild(ctx, args):
             state.update(state="waiting_scheduler", error=str(error))
             json_write(state_path, state)
             raise AdminError("State: waiting_scheduler. Fix host scheduler installation, then run rebuild VAULT --resume: " + str(error)) from error
+    if ctx.sql("SELECT to_regclass('public.graph_pending_sync') IS NOT NULL") == "t":
+        if not ctx.direct and not ctx.local_server:
+            ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "neo4j")
+        ctx.cli_json("graph-rebuild", overrides=side)
+        ctx.cli_json("graph-verify", overrides=side)
+        ctx.cli_json("flush", overrides=side)
+        verification = verify_reconfigured_data(ctx, *flags, overrides=checks)
     ctx.cli_json("resume")
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")
@@ -1307,6 +1323,9 @@ def finalize_restore(ctx, package):
             if not ctx.direct and not ctx.local_server:
                 ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "neo4j")
             ctx.cli_json("graph-rebuild")
+            ctx.cli_json("graph-verify")
+            ctx.cli_json("flush")
+            verification = verify_reconfigured_data(ctx, "--manifest", expected, "--vectors", *(["--allow-model-change"] if rebuilt else []), overrides=verification_overrides)
         ctx.cli_json("resume")
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")
@@ -1617,12 +1636,94 @@ def prepare_multimodal(ctx, name, args):
                 time.sleep(1)
 
 
+@contextlib.contextmanager
+def drill_runtime(ctx, root, package, database):
+    """Disposable Redis DB 0 and scoped graph, without touching live consumers."""
+    container = database.replace("_", "-")
+    redis_name = container + "-redis"
+    native = ctx.local_server or ctx.direct
+    runtime = ctx.runtime_env()
+    overrides = {"DB_NAME": database, "SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32),
+                 "VAULT_ROOT": str(root / "vault"), "LOCAL_STORAGE_BASE_DIR": str(root / "resources"),
+                 "REDIS_DB": "0", "REDIS_PASSWORD": ""}
+    redis_command = ["docker", "run", "-d", "--pull", "never", "--name", redis_name,
+                     "--health-cmd", "redis-cli ping", "--health-interval", "1s", "--health-timeout", "1s", "--health-retries", "30"]
+    if native:
+        for port in range(20000 + secrets.randbelow(5000), 30000):
+            with socket.socket() as sock:
+                try:
+                    sock.bind(("127.0.0.1", port))
+                    break
+                except OSError:
+                    continue
+        else:
+            raise AdminError("No free drill Redis port in 20000 to 29999")
+        redis_command += ["-p", f"127.0.0.1:{port}:6379"]
+        overrides["REDIS_ADDR"] = f"127.0.0.1:{port}"
+        invoke = lambda *flags: ctx.cli_json(*flags, overrides=overrides)
+    else:
+        config = json.loads(ctx.compose("config", "--format", "json"))
+        networks = list(config["services"][ctx.app].get("networks", {}).keys())
+        if not networks:
+            raise AdminError("Drill requires the application's Compose network")
+        redis_command += ["--network", config["networks"][networks[0]]["name"]]
+        overrides.update(REDIS_ADDR=redis_name + ":6379", VAULT_ROOT="/drill/vault", LOCAL_STORAGE_BASE_DIR="/drill/resources")
+        cfg = {"services": {"drill": {"image": ctx.env.get("RELIQUARY_ADMIN_HELPER_IMAGE") or config["services"][ctx.app]["image"],
+               "entrypoint": [], "environment": {**runtime, **overrides},
+               "volumes": [str(root) + ":/drill", str(package) + ":/check:ro",
+                           str(ctx.root / "config") + ":/app/config:ro"], "networks": networks}}}
+        json_write(root / "drill.compose.json", cfg)
+        env = {**ctx.env, "COMPOSE_FILE": ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml")) + os.pathsep + str(root / "drill.compose.json")}
+        def invoke(*flags):
+            return json.loads(run(["docker", "compose", "run", "--rm", "-T", "--no-deps", "--name", container,
+                                   "drill", "./Reliquary", "maintenance", *flags], env=env, cwd=ctx.root))
+    # Create cleanup ownership before any external resource is allocated.
+    owner = ctx.root / ".maintenance-schedule/drill-active.json"
+    json_write(owner, {"reason": "automatic:drill", "database": database, "directory": str(root.parent),
+                       "root": str(root), "container": container, "redis_container": redis_name})
+    try:
+        run(redis_command + ["redis:7-alpine", "redis-server", "--save", "", "--appendonly", "no"])
+        for _ in range(60):
+            if run(["docker", "inspect", "--format", "{{.State.Health.Status}}", redis_name]).strip() == b"healthy":
+                break
+            time.sleep(0.5)
+        else:
+            raise AdminError("Temporary drill Redis failed its health check")
+        yield invoke, str(package / "snapshot.json") if native else "/check/snapshot.json"
+    finally:
+        cleanup_errors = []
+        try:
+            invoke("graph-clear-drill", "--namespace", database)
+        except (AdminError, OSError, ValueError) as error:
+            cleanup_errors.append(str(error))
+        for name in (container, redis_name):
+            run(["docker", "rm", "-f", name], check=False)
+        if cleanup_errors:
+            raise AdminError("Drill graph cleanup failed; ownership retained for retry: " + "; ".join(cleanup_errors))
+
+
 def drill(ctx, args):
+    if getattr(args, "automatic", False):
+        return run_drill(ctx, args)
+    import fcntl
+    lock_dir = ctx.root / ".maintenance-schedule"
+    lock_dir.mkdir(exist_ok=True)
+    with (lock_dir / "runner.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise AdminError("Maintenance runner is already active; drill was skipped") from error
+        return run_drill(ctx, args)
+
+
+def run_drill(ctx, args):
     directory = host_path(args.directory or default_backup_directory(ctx.env), ctx.env, ctx.root)
     check_context_directories(ctx, directory)
     packages = sorted(p for p in directory.glob("backup-*") if (p / "manifest.json").is_file())
-    result = {"status": "failed", "path": "", "started_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+    result = {"status": "failed", "path": "", "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "checks": {}}
     owner_path = ctx.root / ".maintenance-schedule/drill-active.json"
+    if owner_path.exists():
+        raise AdminError("An interrupted drill owns temporary resources; run schedule run --once to clean it before another drill")
     try:
         if not packages:
             raise AdminError("Monthly restore drill has no complete backup")
@@ -1630,52 +1731,44 @@ def drill(ctx, args):
         result["path"] = str(package)
         check_files(package)
         database = "reliquary_drill_" + secrets.token_hex(8)
-        if getattr(args, "automatic", False):
-            json_write(owner_path, {"reason": "automatic:drill", "database": database, "directory": str(directory)})
+        result["database"] = database
+        json_write(owner_path, {"reason": "automatic:drill", "database": database, "directory": str(directory)})
         ctx.sql(f'CREATE DATABASE "{database}" TEMPLATE template0', "postgres")
         try:
             with tempfile.TemporaryDirectory(prefix=".reliquary-drill-", dir=directory) as temp:
                 root = Path(temp)
-                container_name = database.replace("_", "-")
-                if getattr(args, "automatic", False):
-                    json_write(owner_path, {"reason": "automatic:drill", "database": database, "directory": str(directory), "root": str(root), "container": container_name})
                 snapshot_tree(package / "vault", root / "vault", vault=True)
                 snapshot_tree(package / "resources", root / "resources")
                 with (package / "database.dump").open("rb") as stream:
-                    proc = subprocess.run(ctx.pg_command("pg_restore", database, "--clean", "--if-exists", "--no-owner", "--no-acl", "--exit-on-error"), env={**ctx.env, "PGPASSWORD": ctx.env.get("DB_PASSWORD", "")}, cwd=ctx.root, stdin=stream, stderr=subprocess.PIPE)
+                    proc = subprocess.run(ctx.pg_command("pg_restore", database, "--clean", "--if-exists", "--no-owner", "--no-acl", "--single-transaction", "--exit-on-error"),
+                                          env={**ctx.env, "PGPASSWORD": ctx.env.get("DB_PASSWORD", "")}, cwd=ctx.root, stdin=stream, stderr=subprocess.PIPE)
                     if proc.returncode:
                         raise AdminError("Drill database restore failed: " + proc.stderr.decode()[-2000:])
-                overrides = {"DB_NAME": database, "SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32),
-                             "VAULT_ROOT": str(root / "vault"), "LOCAL_STORAGE_BASE_DIR": str(root / "resources")}
-                if ctx.local_server or ctx.direct:
-                    ctx.cli_json("reindex", overrides=overrides)
-                    ctx.cli_json("verify", "--manifest", str(package / "snapshot.json"), "--vectors", overrides=overrides)
-                else:
-                    # A separate one-off app environment mounts only drill storage.
-                    runtime_env = ctx.runtime_env()
-                    cfg = {"services": {"drill": {"image": ctx.env.get("RELIQUARY_ADMIN_HELPER_IMAGE") or json.loads(ctx.compose("config", "--format", "json"))["services"][ctx.app]["image"],
-                           "entrypoint": [], "command": ["./Reliquary", "maintenance", "verify", "--manifest", "/check/snapshot.json", "--vectors"],
-                           "environment": {**{k: v for k, v in runtime_env.items() if k.startswith("DB_")}, **overrides, "VAULT_ROOT": "/drill/vault", "LOCAL_STORAGE_BASE_DIR": "/drill/resources"},
-                           "volumes": [str(root) + ":/drill", str(package) + ":/check:ro"],
-                           "networks": list(json.loads(ctx.compose("config", "--format", "json"))["services"][ctx.app].get("networks", {}).keys())}}}
-                    json_write(root / "drill.compose.json", cfg)
-                    base = ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml"))
-                    env = {**ctx.env, "COMPOSE_FILE": base + os.pathsep + str(root / "drill.compose.json")}
-                    run(["docker", "compose", "run", "--rm", "--no-deps", "--name", container_name, "drill", "./Reliquary", "maintenance", "reindex"], env=env, cwd=ctx.root)
-                    run(["docker", "compose", "run", "--rm", "--no-deps", "--name", container_name, "drill"], env=env, cwd=ctx.root)
+                ctx.sql("UPDATE maintenance_state SET paused=true,pause_mode='snapshot' WHERE id=true", database)
+                with drill_runtime(ctx, root, package, database) as (invoke, expected):
+                    invoke("reindex")
+                    result["checks"]["original"] = invoke("verify", "--manifest", expected, "--vectors")
+                    result["checks"]["redis_replay"] = invoke("queue-replay")
+                    result["checks"]["redis_pause_probe"] = invoke("queue-probe-drill")
+                    result["checks"]["neo4j_rebuild"] = invoke("graph-rebuild", "--namespace", database)
+                    result["checks"]["neo4j_verify"] = invoke("graph-verify", "--namespace", database)
+                    invoke("flush")
+                    result["checks"]["restored"] = invoke("verify", "--manifest", expected, "--vectors", "--allow-operation-log-append")
                 result["status"] = "success"
         finally:
             ctx.sql(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)', "postgres")
-            if getattr(args, "automatic", False):
+            if result["status"] == "success":
                 owner_path.unlink(missing_ok=True)
-        print("Monthly restore drill passed; temporary database, files and containers were removed.")
     except BaseException as error:
         result["error"] = str(error)
-        print(f"Alert: monthly restore drill failed: {error}", file=sys.stderr)
+        print(f"Alert: restore drill failed: {error}", file=sys.stderr)
         raise
     finally:
         result["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        report = Path(getattr(args, "report", None) or ctx.root / ".maintenance-schedule/drill-result.json")
+        json_write(report, result)
         record(ctx, "drill", result)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def schedule(ctx, args):
@@ -1710,6 +1803,10 @@ def schedule(ctx, args):
                     container = owner.get("container", "")
                     if container == database.replace("_", "-"):
                         run(["docker", "rm", "-f", container], check=False)
+                    redis_container = owner.get("redis_container", "")
+                    if redis_container == database.replace("_", "-") + "-redis":
+                        ctx.cli_json("graph-clear-drill", "--namespace", database)
+                        run(["docker", "rm", "-f", redis_container], check=False)
                     ctx.sql(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)', "postgres")
                     root = Path(owner.get("root", ""))
                     directory = Path(owner.get("directory", ""))
@@ -1827,9 +1924,10 @@ def parser():
     p.add_argument("--install", action="store_true")
     p.add_argument("--download", action="store_true")
     p.add_argument("--start", action="store_true")
-    p = sub.add_parser("drill")
+    p = sub.add_parser("drill", help="Restore the latest backup in isolated PostgreSQL, Redis, Neo4j and storage")
     p.add_argument("directory", nargs="?")
     p.add_argument("--automatic", action="store_true")
+    p.add_argument("--report", help="Write a JSON result report")
     p = sub.add_parser("schedule")
     p.add_argument("action", choices=["run", "install", "configure"])
     p.add_argument("--once", action="store_true")

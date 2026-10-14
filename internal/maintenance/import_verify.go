@@ -75,6 +75,7 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 		after, _ := json.Marshal(right)
 		if len(wanted) != len(actual) || !bytes.Equal(before, after) {
 			differences = append(differences, "table "+table)
+			differences = append(differences, rowDifferences(table, left, right)...)
 		}
 		before, _ = json.Marshal(original.JSONNulls[table])
 		after, _ = json.Marshal(current.JSONNulls[table])
