@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import ImagePreview from './ImagePreview.vue'
 import { buildProtectedFileRequest } from '@/utils/protectedFileAccess'
 
-const props = withDefaults(defineProps<{ articleId: string; path: string; title: string; compact?: boolean }>(), { compact: false })
+const props = withDefaults(defineProps<{ articleId: string; path: string; title: string; compact?: boolean; interactive?: boolean }>(), { compact: false, interactive: false })
 const { t } = useI18n()
 const imageURL = ref(''), loading = ref(true), failed = ref(false)
 const previewVisible = ref(false)
@@ -38,7 +38,7 @@ onBeforeUnmount(() => { mounted = false; generation++; request?.abort(); release
 <template>
   <component :is="compact ? 'span' : 'figure'" class="search-image" :class="{ compact }" :aria-busy="loading" :data-image-path="path">
     <component :is="compact ? 'span' : 'div'" class="search-image-preview">
-      <button v-if="imageURL && !compact" ref="previewTrigger" type="button" class="search-image-open" :aria-label="t('knowledgeSearch.previewImage', { title })" @click.stop="openPreview">
+      <button v-if="imageURL && (!compact || interactive)" ref="previewTrigger" type="button" class="search-image-open" :aria-label="t('knowledgeSearch.previewImage', { title })" @click.stop="openPreview">
         <img :src="imageURL" :alt="t('knowledgeSearch.imageAlt', { title })" loading="lazy" @error="failed = true; previewVisible = false" />
       </button>
       <img v-else-if="imageURL" :src="imageURL" :alt="t('knowledgeSearch.imageAlt', { title })" loading="lazy" @error="failed = true" />

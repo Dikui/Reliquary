@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
 import { MessagePlugin } from "tdesign-vue-next";
+import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue';
+import { useLibraryScope } from '@/composables/useLibraryScope';
+import { parseReference } from '@/utils/bodyReference';
+import type { SourceLocation } from '@/types/search';
 import DocContent from "@/components/DocContent.vue";
 import useLibrary from '@/composables/useLibrary';
 import { useRoute, useRouter } from 'vue-router';
@@ -57,6 +61,10 @@ const { t } = useI18n();
 const pendingCounts = usePendingCountsStore();
 const libraryId = computed(() => resources.library?.id || '');
 const libraryInfo = ref<any>(null);
+const libraryScope = useLibraryScope();
+const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
+const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
+const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
 const docListLoading = ref(true);
 const validTabs = ['documents', 'reviews', 'entities'] as const
@@ -225,7 +233,13 @@ const starredOptions = computed(() => [
   { value: 'true', label: t('articleJudgments.starredOnly') },
   { value: 'false', label: t('articleJudgments.unstarredOnly') },
 ]);
-const contentTypeOptions = computed(() => libraryInfo.value?.content_types?.filter((row: LibraryContentType) => row.enabled).map((row: LibraryContentType) => ({ value: row.name, label: row.name })) || CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })));
+const contentTypeOptions = computed(() => {
+  if (libraryCatalog.value.length) {
+    const names = new Set(libraryCatalog.value.filter(item => !libraryScope.value.length || libraryScope.value.includes(item.id)).flatMap(item => (item.content_types || []).filter(row => row.enabled).map(row => row.name)));
+    return [...names].map(value => ({ value, label: value }));
+  }
+  return libraryInfo.value?.content_types?.filter((row: LibraryContentType) => row.enabled).map((row: LibraryContentType) => ({ value: row.name, label: row.name })) || CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) }));
+});
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
 const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };
@@ -298,6 +312,7 @@ const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)
 const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
   return {
+    libraries: libraryScope.value,
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
     file_type: selectedFileType.value || undefined,
     content_type: selectedContentType.value || undefined,
@@ -404,6 +419,8 @@ watch(() => libraryId.value, (newLibraryId, oldLibraryId) => {
   loadLibraryInfo(newLibraryId);
 }, { immediate: true });
 
+watch(libraryScope, () => { selectedIds.value.clear(); resetPage(); void loadEntryFiles(libraryId.value); }, { deep: true });
+
 // Restore all filters together before requesting the list after history navigation.
 let documentFiltersRestoredFromRoute = false;
 watch(() => route.query, query => {
@@ -461,7 +478,9 @@ let autoOpenRequest = 0;
 
 const tryAutoOpenDocument = async () => {
   if (!pendingEntryId.value) return;
+  activeReference.value = parseReference(route.query.reference);
   const targetId = pendingEntryId.value;
+  referencedEntryId.value = targetId;
   pendingEntryId.value = null;
   const request = ++autoOpenRequest;
   const card = cardList.value.find((c: EntryCard) => c.id === targetId);
@@ -477,7 +496,7 @@ const tryAutoOpenDocument = async () => {
   } catch (error) {
     // Keep the previous ID-only fallback: getCardDetails will surface the
     // normal detail loading error, while links to root-level files still work.
-    console.error('Failed to load referenced article', error);
+    console.error('Failed to load referenced material', error);
   }
 
   if (request !== autoOpenRequest) return;
@@ -487,8 +506,8 @@ const tryAutoOpenDocument = async () => {
 
 // React to later ?entry_id= changes on the same Library route (no remount).
 watch(
-  () => route.query.entry_id,
-  (newId) => {
+  () => [route.query.entry_id, route.query.reference],
+  ([newId]) => {
     if (typeof newId !== 'string' || !newId) return;
     pendingEntryId.value = newId;
     tryAutoOpenDocument();
@@ -498,11 +517,12 @@ watch(
 // Dispatched by the global command palette when the user picks a chunk that
 // lives in the Library they are already viewing — vue-router dedupes identical
 // navigations, so we rely on this event instead of a URL change.
-const handleOpenEntryEvent = (e: Event) => {
-  const detail = (e as CustomEvent<{ libraryId: string; entryId: string }>).detail;
+const handleOpenEntryEvent = async (e: Event) => {
+  const detail = (e as CustomEvent<{ libraryId: string; entryId: string; location?: SourceLocation }>).detail;
   if (!detail || !detail.entryId) return;
-  if (detail.libraryId && detail.libraryId !== libraryId.value) return;
+  activeReference.value = detail.location;
   pendingEntryId.value = detail.entryId;
+  await router.replace({ query: { ...route.query, entry_id: detail.entryId, reference: detail.location ? JSON.stringify(detail.location) : undefined } });
   tryAutoOpenDocument();
 };
 
@@ -635,7 +655,9 @@ const openCardDetails = (item: EntryCard) => {
 };
 
 // Open source document preview
-const openSourceDoc = (entryId: string) => {
+const openSourceDoc = (entryId: string, location?: SourceLocation) => {
+  activeReference.value = location;
+  referencedEntryId.value = entryId;
   isCardDetails.value = true;
   getCardDetails({ id: entryId });
 };
@@ -731,7 +753,7 @@ const confirmRebuildEntry = async (index: number, item: EntryCard) => {
   try {
     const result = await reparseConfirmStore.open({
       libraryInfo: libraryInfo.value,
-      reparse: { entryId: item.id, fileName, fileType, processOverrides },
+      reparse: { entryId: item.id, fileName, fileType, processOverrides, sourceKind: item.source_kind },
     });
     await submitReparse(result.reparse.entryId, result.processConfig);
   } catch {
@@ -1058,6 +1080,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                   </template>
                 </t-input>
                 <div class="doc-filter-bar__filters">
+                <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
 
                 <div class="doc-filter-field">
                   <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
@@ -1209,7 +1232,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details"
+      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId"
         @openEntity="openArticleEntity" @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">
       </DocContent>
@@ -1321,6 +1344,8 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 }
 
 // 目录树选中路径的面包屑：与顶部库面包屑同一套视觉语言，只是更轻量。
+
+.doc-filter-bar__filters > .library-scope { flex: 0 0 220px; width: 220px; min-width: 220px; }
 
 .doc-filter-bar {
   padding: 0 0 12px 0;
@@ -2380,4 +2405,10 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
   }
 }
 
+@media (max-width: 640px) {
+  .doc-filter-bar { display: flex; flex-direction: column; gap: 12px; }
+  .doc-filter-bar__filters > .library-scope { width: 100%; min-width: 0; max-width: none; }
+  .doc-filter-bar__filters { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .doc-filter-field, .doc-filter-field__control, .doc-date-range { width: 100%; min-width: 0; }
+}
 </style>

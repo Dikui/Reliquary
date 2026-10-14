@@ -149,6 +149,9 @@ func (s *entryService) ListIncomplete(ctx context.Context, page, size int, inclu
 	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND source_kind IN ('article','mine') AND incomplete=true", spaceID).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusRejected, types.ParseStatusDeleting, types.ParseStatusCancelled}).
 		Where("COALESCE(metadata::jsonb->'intake'->>'decision','approved')='approved'")
+	if ids := types.LibraryReadScope(ctx); len(ids) > 0 {
+		query = query.Where("library_id IN ?", ids)
+	}
 	if !includeAttempted {
 		query = query.Where("external_completion_attempted=false")
 	}

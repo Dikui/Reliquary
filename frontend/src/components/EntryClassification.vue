@@ -19,8 +19,10 @@ const originalURL = computed(() => {
 </script>
 
 <template>
+
   <div class="entry-classification" :class="{ compact }">
     <div class="classification-tags">
+      <t-tag v-if="entry.library_name" size="small" variant="light-outline">{{ entry.library_name }}</t-tag>
       <t-tag v-if="customType && !entry.cannot_be_fact && entry.source_kind !== 'report'" size="small" variant="light-outline">{{ customType }}</t-tag>
       <t-tag v-else-if="!entry.cannot_be_fact && entry.source_kind !== 'report'" size="small" variant="light-outline">{{ t(`library.contentTypes.${type}`) }}</t-tag>
       <t-tag v-if="entry.cannot_be_fact || entry.source_kind === 'report'" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.cannotBeFact') }}</t-tag>

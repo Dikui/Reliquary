@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { SearchEntry } from '@/types/search'
+import type { SourceLocation, SearchEntry } from '@/types/search'
 import type { FollowFeedArticle } from '@/types/follows'
 import EntryClassification from './EntryClassification.vue'
 import SearchImage from './SearchImage.vue'
@@ -9,7 +9,7 @@ import { highlightText } from './GlobalCommandPalette/useHighlight'
 import { markdownToPlainText } from '@/utils/markdownPlainText'
 
 const props = withDefaults(defineProps<{ article: SearchEntry; query: string; nested?: boolean; followFeed?: boolean }>(), { nested: false, followFeed: false })
-const emit = defineEmits<{ 'open-article': [article: SearchEntry]; 'open-entity': [id: string] }>()
+const emit = defineEmits<{ 'open-article': [article: SearchEntry, location?: SourceLocation]; 'open-entity': [id: string] }>()
 const { t, locale } = useI18n()
 const expanded = ref(false)
 const plainText = (text: string | undefined) => markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`)
@@ -41,7 +41,7 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
       <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="article-snippet">
         <SearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.entry_id" :path="snippet.image_path" :title="article.title" />
         <span v-if="snippet.chunk_type === 'image_description'">{{ t('articleJudgments.imageDescriptions') }}</span>
-        <p v-if="snippet.content" v-html="highlightText(plainText(snippet.content), query)" />
+        <button v-if="snippet.content" type="button" class="snippet-reference" @click="emit('open-article', article, snippet.locations?.[0])"><span v-html="highlightText(plainText(snippet.content), query)" /></button>
       </div>
     </div>
     <template v-if="!nested && article.similar_reports?.length">
@@ -50,7 +50,7 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
         {{ t(expanded ? 'knowledgeSearch.hideSimilar' : 'knowledgeSearch.showSimilar', { count: article.similar_reports.length }) }}
       </button>
       <div v-if="expanded" :id="similarRegionID" class="similar-reports">
-        <SearchEntry v-for="similar in article.similar_reports" :key="similar.entry_id" :article="similar" :query="query" :follow-feed="followFeed" nested @open-article="emit('open-article', $event)" @open-entity="emit('open-entity', $event)" />
+        <SearchEntry v-for="similar in article.similar_reports" :key="similar.entry_id" :article="similar" :query="query" :follow-feed="followFeed" nested @open-article="(entry, location) => emit('open-article', entry, location)" @open-entity="emit('open-entity', $event)" />
       </div>
     </template>
   </article>
@@ -70,6 +70,9 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
 .feed-new { flex-shrink: 0; }
 .article-snippets { display: grid; gap: 8px; margin-top: 14px; color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.7; }
 .article-snippets strong { color: var(--td-text-color-primary); font-weight: 500; }
+.snippet-reference { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.snippet-reference:focus-visible { outline: 2px solid var(--td-brand-color); }
+.snippet-reference:hover { color: var(--td-brand-color); }
 .article-snippets p { margin: 0; white-space: pre-wrap; }
 .article-snippet { display: grid; gap: 8px; }
 .article-snippets :deep(.search-highlight) { color: var(--td-brand-color); background: var(--td-brand-color-light); border-radius: var(--td-radius-small); }

@@ -29,8 +29,8 @@ type KbTab = 'documents' | 'reviews' | 'entities'
 type LibraryInfo = { name: string } | null
 const tabs: KbTab[] = ['documents', 'reviews', 'entities']
 const expectedLabels = {
-  'zh-CN': { root: '库', tabs: ['文章', '待处理', '实体'] },
-  'en-US': { root: 'Library', tabs: ['Articles', 'Pending', 'Entities'] },
+  'zh-CN': { root: '库', tabs: ['资料', '待处理', '实体'] },
+  'en-US': { root: 'Library', tabs: ['Materials', 'Pending', 'Entities'] },
 }
 const databaseNames: [string, LibraryInfo][] = [
   ['before the library loads', null],

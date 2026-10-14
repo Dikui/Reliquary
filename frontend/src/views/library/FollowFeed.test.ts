@@ -31,7 +31,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const value = { exports: {} as any }
-  new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? require(name), value, value.exports)
+  new Function('require', 'module', 'exports', code)((name: string) => (name === './BodyReference.vue' || name === './EntityRelations.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? require(name), value, value.exports)
   return value.exports
 }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
@@ -96,6 +96,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
   const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  modules['./EntityRelations.vue'] = modules['./BodyReference.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
   modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
@@ -141,7 +142,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(visibleText(result).includes(`Overview ${image}`))
       assert.ok(visibleText(result).includes('Point'))
       assert.ok(visibleText(result).includes('Term'))
-      const snippet = descendants(result).find(node => node.tag === 'p' && node.props.innerHTML)?.props.innerHTML
+      const snippet = descendants(result).find(node => node.tag === 'span' && node.props.innerHTML)?.props.innerHTML
       assert.ok(snippet.includes(`code ${image} ${image} HTML`))
       assert.match(snippet, /Feed heading/)
       assert.match(snippet, /bold read/)

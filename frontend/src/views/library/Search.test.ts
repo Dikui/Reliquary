@@ -1,3 +1,5 @@
+import * as bodyReference from '../../utils/bodyReference'
+import * as libraryScopeHelpers from '../../utils/libraryScope'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -25,7 +27,7 @@ const stub = defineComponent({ setup: (_props, { attrs, slots }) => () => h('div
 function evaluate(code: string, modules: Record<string, unknown>) {
   const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', compiled)((name: string) => (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? require(name), module, module.exports)
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
@@ -255,7 +257,7 @@ test('search page submits all filters, renders exclusion count and opens the art
     state.openArticle(article)
     assert.deepEqual(pushes.at(-1), { path: '/platform/entries', query: { entry_id: 'a' } })
   })
-  assert.ok(result.html.includes('已排除 2 篇缺失发布时间的文章。')); assert.match(result.html, /data-article-id="a"/)
+  assert.ok(result.html.includes('已排除 2 篇缺失发布时间的资料。')); assert.match(result.html, /data-article-id="a"/)
 })
 test('search page rejects invalid date order and ignores an older response after a new query', async () => {
   let resolveOld!: (value: any) => void
@@ -324,7 +326,7 @@ for (const count of [1, 2]) {
     const noun = count === 1 ? 'report' : 'reports'
     assert.ok(closed.includes(`Show ${count} similar ${noun}`)); assert.ok(opened.includes(`Hide ${count} similar ${noun}`))
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: reports, excluded_missing_published_at: count } }), 'en-US')
-    const articleNoun = count === 1 ? 'article' : 'articles'
+    const articleNoun = count === 1 ? 'material' : 'materials'
     assert.ok(result.html.includes(`Showing ${count} ${articleNoun}`))
     assert.ok(result.html.includes(`Excluded ${count} ${articleNoun} without a publication date.`))
     if (count === 1) assert.doesNotMatch(closed + opened + result.html, /1 (?:articles|similar reports)/)

@@ -1,3 +1,5 @@
+import * as bodyReference from '../../utils/bodyReference'
+import * as libraryScopeHelpers from '../../utils/libraryScope'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import * as markdownPlainText from '../../utils/markdownPlainText'
@@ -6,7 +8,7 @@ import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 import { renderToString } from '@vue/server-renderer'
-import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch, reactive } from 'vue'
+import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch, reactive, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
@@ -23,7 +25,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
     ? moduleOf(component('../../components/SelectionCheckbox.vue', {}))
-    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name === '@/utils/markdownPlainText' ? markdownPlainText : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
+    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name === '@/utils/markdownPlainText' ? markdownPlainText : name.endsWith('.png') ? '/image.png' : (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? require(name), module, module.exports)
   return module.exports
 }
 function source(path: string) { return readFileSync(new URL(path, import.meta.url), 'utf8') }
@@ -141,8 +143,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes(records[0].title)); assert.ok(html.includes(records[1].title))
     assert.ok(html.includes(messages[locale].library.sourceKinds.mine))
     const instructions = locale === 'zh-CN'
-      ? '文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。'
-      : 'Resubmit articles with the same original URL and personal documents with the document ID.'
+      ? '按资料 ID 补交图片'
+      : 'material ID'
     assert.ok(html.includes(instructions))
     assert.ok(messages[locale].ingestStatus.incompleteHint.includes(instructions))
     assert.ok(html.includes(messages[locale].ingestStatus.attemptedHint))
@@ -155,7 +157,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     }
     const emptyIngest = createIngestAPI(async () => ({ success: true, data: [], total: 0 })).api
     const emptyHTML = await render(pendingComponent(review, reviewComponent(review), emptyIngest), {}, locale, async state => { state.changeKind('incomplete'); await settle() })
-    assert.ok(emptyHTML.includes(locale === 'zh-CN' ? '没有待补全的文章或本人文档。' : 'No articles or personal documents need completion.'))
+    assert.ok(emptyHTML.includes(messages[locale].knowledgeReview.emptyIncomplete))
   })
 
   test(`${locale}: incomplete records without an external attempt hide the attempt notice and refresh after an action`, async () => {

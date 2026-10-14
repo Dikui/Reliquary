@@ -1,14 +1,14 @@
 import { get, post } from '@/utils/request'
 import type { SearchData, SearchOptions, SearchRequest } from '@/types/search'
 
+import { readLibraryScope, scopedLibraryIDs } from '@/utils/libraryScope'
+
 interface SearchEnvelope<T> { success: boolean; data: T; message?: string }
-// Until the UI offers library selection, every web search explicitly selects
-// the current library catalog. Do not cache: newly created libraries participate.
 export async function searchEntries(request: SearchRequest) {
-  if (request.libraries === undefined) {
+  if (request.libraries === undefined || request.libraries.length === 0) {
     const catalog = await get<SearchEnvelope<Array<{ id: string }>>>('/api/v1/libraries')
     if (!catalog.success) throw catalog
-    request = { ...request, libraries: catalog.data.map(library => library.id) }
+    request = { ...request, libraries: scopedLibraryIDs(request.libraries ?? readLibraryScope(), catalog.data) }
   }
   return post<SearchEnvelope<SearchData>>('/api/v1/search', request)
 }

@@ -1,3 +1,4 @@
+import * as bodyReference from '../../utils/bodyReference'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import * as markdownPlainText from '../../utils/markdownPlainText'
@@ -32,6 +33,8 @@ async function mountLibrary(realCheckbox = false) {
   const stub = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
   const opened: string[] = []
   const modules: Record<string, any> = {
+    '@/utils/bodyReference': bodyReference,
+    '@/composables/useLibraryScope': { useLibraryScope: () => ref([]) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace() {} }) },
     '@/composables/useMarqueeSelect': { useMarqueeSelect },

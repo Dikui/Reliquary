@@ -3,8 +3,9 @@
     <div class="section-header"><h2>{{ $t('settings.librarySettings') }}</h2></div>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button v-if="!formData" variant="text" :loading="loading" @click="load">{{ $t('common.retry') }}</t-button></template></t-alert>
     <t-loading :loading="loading" show-overlay>
-      <t-tabs v-model="currentSection"><t-tab-panel v-for="tab in tabs" :key="tab" :value="tab" :label="$t(`knowledgeEditor.sidebar.${tab}`)" /></t-tabs>
+      <t-tabs v-model="currentSection"><t-tab-panel v-for="tab in tabs" :key="tab" :value="tab" :label="tab === 'catalog' ? $t('ikb18.catalog') : $t(`knowledgeEditor.sidebar.${tab}`)" /></t-tabs>
       <div class="library-settings-body">
+        <LibraryCatalogSettings ref="catalogRef" v-show="currentSection === 'catalog'" @changed="load" />
                 <!-- 基本信息 -->
                 <div v-show="currentSection === 'basic'" class="section">
                   <div v-if="formData" class="section-content">
@@ -77,7 +78,7 @@
 
       </div>
     </t-loading>
-    <div class="library-settings-actions"><t-button variant="outline" :disabled="!dirty || saving || loading" @click="reset">{{ $t('common.cancel') }}</t-button><t-button theme="primary" :loading="saving" :disabled="!dirty || loading" @click="handleSubmit">{{ $t('common.save') }}</t-button></div>
+    <div v-if="currentSection !== 'catalog'" class="library-settings-actions"><t-button variant="outline" :disabled="!dirty || saving || loading" @click="reset">{{ $t('common.cancel') }}</t-button><t-button theme="primary" :loading="saving" :disabled="!dirty || loading" @click="handleSubmit">{{ $t('common.save') }}</t-button></div>
   </section>
 </template>
 <script setup lang="ts">
@@ -92,15 +93,17 @@ import { copyModelTiers } from '@/utils/modelTiers'
 import type { ResolvedModelTiers } from '@/types/modelTiers'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import EmbeddingRebuild from '@/components/EmbeddingRebuild.vue'
+import LibraryCatalogSettings from './LibraryCatalogSettings.vue'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import LibraryChunkingSettings from '@/views/library/settings/LibraryChunkingSettings.vue'
 
 const { t } = useI18n()
 const props = defineProps<{ initialSection?: string }>()
 const resources = useResourcesStore(), uiStore = useUIStore()
-const tabs = ['basic', 'models', 'chunking']
-const initialSection = props.initialSection || uiStore.settingsInitialSubSection || 'basic'
-const currentSection = ref(tabs.includes(initialSection) ? initialSection : 'basic')
+const tabs = ['catalog', 'models', 'chunking']
+const initialSection = props.initialSection || uiStore.settingsInitialSubSection || 'catalog'
+const currentSection = ref(tabs.includes(initialSection) ? initialSection : 'catalog')
+const catalogRef = ref<{ confirmLeave?: () => Promise<boolean> }>()
 const formData = ref<any>(null), saved = ref(''), loading = ref(false), saving = ref(false), error = ref('')
 const activeLibraryId = ref(''), hasFiles = ref(false), initialIndexingStrategy = ref<any>(null)
 const loadedLibrary = ref<any>(null)
@@ -212,7 +215,8 @@ async function handleSubmit() {
   finally { saving.value = false }
 }
 function reset() { if (saved.value && !saving.value) formData.value = JSON.parse(saved.value) }
-function confirmLeave(): Promise<boolean> {
+async function confirmLeave(): Promise<boolean> {
+  if (catalogRef.value?.confirmLeave && !await catalogRef.value.confirmLeave()) return false
   if (saving.value) return Promise.resolve(false)
   if (!dirty.value) return Promise.resolve(true)
   return new Promise(resolve => { const dialog = DialogPlugin.confirm({ header: t('common.discardTitle'), body: t('common.discardHint'), confirmBtn: t('common.discard'), cancelBtn: t('common.cancel'), onConfirm: () => { reset(); dialog.destroy(); resolve(true) }, onCancel: () => { dialog.destroy(); resolve(false) }, onClose: () => { dialog.destroy(); resolve(false) } }) })

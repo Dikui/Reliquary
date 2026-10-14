@@ -14,6 +14,9 @@ import (
 )
 
 func (h *EntryHandler) ListPending(c *gin.Context) {
+	if !h.applyLibraryReadScope(c) {
+		return
+	}
 	page, size := 0, 0
 	for key, target := range map[string]*int{"page": &page, "page_size": &size} {
 		if raw := c.Query(key); raw != "" {

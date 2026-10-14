@@ -36,7 +36,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './MergeSuggestions.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('div', { class: 'merge-suggestions-test' }, i18n.global.t('mergeSuggestions.title')) }) } }
-  function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports); return module.exports }
+  function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => (name === './EntityRelations.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? require(name), module, module.exports); return module.exports }
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any
   component.setup = (props: object, context: object) => { state = setup(props, context); onServerPrefetch(async () => { try { await state.refreshAll(); await options.scenario?.(state, () => cleanups.forEach(callback => callback())); await nextTick() } finally { state.clearNameEmbeddingPoll(); if (state.entitySearchTimer) clearTimeout(state.entitySearchTimer) } }); return state }
@@ -73,7 +73,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: entity details render type, aliases and article actions`, async () => {
     const { html, requests } = await renderWorkbench({ locale, scenario: state => state.selectEntity(entity) }); assert.deepEqual(requests.details, ['entity-a'])
     assert.ok(html.includes(locale === 'zh-CN' ? '公司' : 'Company')); assert.match(html, /Aurora Labs/); assert.match(html, /Aurora announcement/)
-    assert.ok(html.includes(locale === 'zh-CN' ? '提及该实体的文章' : 'Articles mentioning this entity')); assert.match(source, /@click="emit\('open-source', article.id\)"/); assert.doesNotMatch(html, /entryWorkbench\./)
+    assert.ok(html.includes(locale === 'zh-CN' ? '提及该实体的资料' : 'Materials mentioning this entity')); assert.match(source, /@click="emit\('open-source', article.id\)"/); assert.doesNotMatch(html, /entryWorkbench\./)
   })
   for (const count of [0, 1, 2]) test(`${locale}: an entity list uses the correct alias noun for ${count}`, async () => {
     const { html } = await renderWorkbench({ locale, entities: [{ ...entity, aliases: Array.from({ length: count }, (_, index) => `Alias ${index}`) }] }); assert.ok(html.includes(locale === 'zh-CN' ? `${count} 个别名` : `${count} ${count === 1 ? 'alias' : 'aliases'}`), html)

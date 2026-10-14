@@ -55,10 +55,10 @@ for (const [locale, bundle] of Object.entries({ 'zh-CN': zhCN, 'en-US': enUS }))
 }
 
 test('navigation and article labels use the same current names in both locales', () => {
-  assert.equal(zhCN.menu.library, '文章')
-  assert.equal(enUS.menu.library, 'Articles')
-  assert.equal(zhCN.knowledgeEditor.document.title, '文章')
-  assert.equal(enUS.knowledgeEditor.document.title, 'Articles')
+  assert.equal(zhCN.menu.library, '资料')
+  assert.equal(enUS.menu.library, 'Materials')
+  assert.equal(zhCN.knowledgeEditor.document.title, '资料')
+  assert.equal(enUS.knowledgeEditor.document.title, 'Materials')
   assert.equal(zhCN.menu.search, '知识检索')
   assert.equal(zhCN.knowledgeWorkbench.tabLabel, '实体')
   assert.equal(zhCN.settings.vault.title, '文件库状态')

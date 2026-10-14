@@ -16,8 +16,9 @@ export interface IngestActionEnvelope {
   message?: string
 }
 
-export function listIncompleteArticles(input: { page: number; page_size: number; include_attempted?: boolean }) {
+export function listIncompleteArticles(input: { libraries?: string[]; page: number; page_size: number; include_attempted?: boolean }) {
   const query = new URLSearchParams({ page: String(input.page), page_size: String(input.page_size), include_attempted: String(input.include_attempted ?? true) })
+  if (input.libraries?.length) query.set('libraries', input.libraries.join(','))
   return get<IncompleteEnvelope>(`/api/v1/ingest/incomplete?${query}`)
 }
 

@@ -105,6 +105,9 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 		return nil, werrors.NewBadRequestError("kind must be intake")
 	}
 	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND source_kind IN ('article','mine')", types.MustSpaceIDFromContext(ctx))
+	if ids := types.LibraryReadScope(ctx); len(ids) > 0 {
+		query = query.Where("library_id IN ?", ids)
+	}
 	query = query.Where("parse_status=?", types.ParseStatusRejected)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {

@@ -1,5 +1,9 @@
 <template>
-  <button
+  <div
+    role="button"
+    tabindex="0"
+    @keydown.enter.self.prevent="$emit('primary')"
+    @keydown.space.self.prevent="$emit('primary')"
     type="button"
     :class="['cmdk-item', { 'cmdk-item--selected': selected }]"
     :data-cmdk-index="index"
@@ -37,7 +41,7 @@
         <kbd>⌘</kbd><kbd>{{ shortcut }}</kbd>
       </span>
     </div>
-  </button>
+  </div>
 </template>
 
 <script setup lang="ts">

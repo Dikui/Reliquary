@@ -104,6 +104,7 @@ const getEntryType = (item: EntryCard) => {
   if (isIngestAPIEntry(item)) return t('library.typeIngestAPI');
   if (item.type === 'url') return t('library.typeURL') || 'URL';
   if (item.type === 'manual') return t('library.typeManual');
+  if (item.file_type?.toLowerCase() === 'manual') return t('ikb18.markdown');
   if (item.file_type) return item.file_type.toUpperCase();
   return '--';
 };

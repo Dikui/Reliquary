@@ -41,6 +41,7 @@
             <section v-else>
               <div class="entity-detail__header"><div><span class="eyebrow">{{ entityTypeLabel(selectedEntity.entity_type) }}</span><h3>{{ selectedEntity.canonical_name }}</h3><p v-if="selectedEntity.description">{{ selectedEntity.description }}</p><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><div class="entity-detail__actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div></div>
 
+              <EntityRelations :entity-id="selectedEntity.id" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" />
               <t-alert v-if="entityDetailError" theme="error" :message="entityDetailError" role="alert"><template #operation><t-button variant="text" :loading="entityDetailLoading" @click="selectEntity(selectedEntity)">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
               <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><t-empty v-if="!entityEntries.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><section v-for="group in entityLibraryGroups" :key="group.id" class="entity-library-group"><h5>{{ group.name }} ({{ group.entries.length }})</h5><ul><li v-for="article in group.entries" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></section></div></t-loading>
             </section>
@@ -59,12 +60,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ENTITY_TYPES, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityEntry, type EntityNameEmbeddingRebuildStatus, type EntityType } from '@/api/entities'
+import EntityRelations from './EntityRelations.vue'
+import type { SourceLocation } from '@/types/search'
 import MergeSuggestions from './MergeSuggestions.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
 import { useFollowStore } from '@/stores/follows'
 
 const props = withDefaults(defineProps<{ initialEntityId?: string }>(), { initialEntityId: '' })
-const emit = defineEmits<{ 'open-source': [entryId: string] }>()
+const emit = defineEmits<{ 'open-source': [entryId: string, location?: SourceLocation] }>()
 const { t, locale } = useI18n()
 const followStore = useFollowStore()
 const pageSize = 50

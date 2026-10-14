@@ -67,3 +67,24 @@ func TestListPaged_ExcludesDeletingByDefault(t *testing.T) {
 	assert.Equal(t, deletingID, rows[0].ID)
 	assert.Equal(t, int64(1), total)
 }
+
+func TestListPagedLibraryScopeFiltersBeforePagination(t *testing.T) {
+	db := setupEntryTestDB(t)
+	repo := NewEntryRepository(db).(*entryRepository)
+	first, second, hidden := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	insertEntryInLibrary(t, db, 1, first, "completed")
+	insertEntryInLibrary(t, db, 1, second, "completed")
+	insertEntryInLibrary(t, db, 1, hidden, "completed")
+	insertEntryInLibrary(t, db, 2, first, "completed")
+	filter := types.EntryListFilter{LibraryIDs: []string{first, second}}
+	rows, total, err := repo.ListPagedEntryByLibraryID(context.Background(), 1, "", &types.Pagination{Page: 1, PageSize: 1}, filter)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.EqualValues(t, 2, total)
+	require.Contains(t, filter.LibraryIDs, rows[0].LibraryID)
+	rows, total, err = repo.ListPagedEntryByLibraryID(context.Background(), 1, "", &types.Pagination{Page: 2, PageSize: 1}, filter)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.EqualValues(t, 2, total)
+	require.Contains(t, filter.LibraryIDs, rows[0].LibraryID)
+}
