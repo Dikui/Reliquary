@@ -224,3 +224,21 @@ test('English newline separator labels display literal escapes', async () => {
   assert.equal(getLocaleValueAtPath(en, double), 'Double newline (' + escapedNewline + escapedNewline + ')')
   assert.equal(getLocaleValueAtPath(en, single), 'Single newline (' + escapedNewline + ')')
 })
+
+for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: historical default description uses current copy without an implicit save`, async()=>{
+ const legacy='外部个人的观点：专家、分析师、KOL 的评论与文章。'
+ const original=library('opinions',{system_role:'opinions',template:'external_timely',description:legacy})
+ const calls:any[]=[]
+ const modules=catalogModules(calls)
+ modules['@/api/library'].listLibraries=async()=>({success:true,data:[original]})
+ modules['@/api/library'].getCatalogLibrary=async()=>({success:true,data:structuredClone(original)})
+ await scenario('./views/settings/LibraryCatalogSettings.vue',{},modules,async state=>{
+  await state.load()
+  assert.equal(state.draft.value.description,(locale==='zh-CN'?zh:en).ikb18.systemOpinionsDescription)
+  assert.equal(state.dirty.value,false)
+  assert.equal(calls.length,0)
+  assert.equal(original.description,legacy)
+ },locale)
+ assert.equal(form.catalogDescription({...original,description:'自定义说明：'+legacy} as any,'replacement'),'自定义说明：'+legacy)
+ assert.equal(form.catalogDescription({...original,system_role:''} as any,'replacement'),legacy)
+})

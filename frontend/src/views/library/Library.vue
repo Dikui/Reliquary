@@ -527,7 +527,7 @@ const handleOpenEntryEvent = async (e: Event) => {
 };
 
 onMounted(() => {
-  void resources.fetchLibrary();
+  void resources.fetchLibrary().catch(() => {});
 
   window.addEventListener('reliquary:open-entry', handleOpenEntryEvent as EventListener);
 });
@@ -1059,7 +1059,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </div>
 
       <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
-        <EntryWorkbench v-if="libraryId" :initial-entity-id="selectedEntityId"
+        <EntryWorkbench :initial-entity-id="selectedEntityId"
           @open-source="openSourceDoc" />
       </div>
 

@@ -7,6 +7,12 @@ export * from './model-usage'
 const t = (key: string) => i18n.global.t(key)
 
 // 模型类型定义
+export interface ModelPricing {
+  input_per_million: number | null;
+  output_per_million: number | null;
+  currency: string;
+}
+
 export interface ModelConfig {
   id?: string;
   space_id?: number;
@@ -16,6 +22,7 @@ export interface ModelConfig {
   source: 'local' | 'remote' | 'chatgpt';
   description?: string;
   parameters: {
+    pricing?: ModelPricing | null;
     base_url?: string;
     api_key?: string;
     provider?: string; // Provider identifier: openai, aliyun, zhipu, generic

@@ -29,6 +29,7 @@ import (
 
 // VaultDirectoryStatus describes indexing of one directory, including the last scan failure.
 type VaultDirectoryStatus struct {
+	Directory    string     `json:"directory"`
 	LastScanAt   *time.Time `json:"last_scan_at"`
 	IndexedFiles int64      `json:"indexed_files"`
 	LastError    string     `json:"last_error"`
@@ -524,12 +525,18 @@ func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) 
 		spaceID = types.SingleSpaceID
 	}
 	for _, target := range []struct {
-		kind  string
-		count *int64
-	}{{"mine", &result.Mine.IndexedFiles}, {"report", &result.Reports.IndexedFiles}} {
+		kind   string
+		role   string
+		status *VaultDirectoryStatus
+	}{{"mine", "mine", &result.Mine}, {"report", "ai-reports", &result.Reports}} {
+		var library types.Library
+		if err := s.db.WithContext(ctx).Select("directory").Where("space_id=? AND system_role=?", spaceID, target.role).First(&library).Error; err != nil {
+			return result, err
+		}
+		target.status.Directory = library.Directory
 		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
 			Where("space_id=? AND source_kind=? AND parse_status=?", spaceID, target.kind, types.ParseStatusCompleted).
-			Count(target.count).Error; err != nil {
+			Count(&target.status.IndexedFiles).Error; err != nil {
 			return result, err
 		}
 	}

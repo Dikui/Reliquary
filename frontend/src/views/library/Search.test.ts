@@ -67,6 +67,7 @@ function articleComponent() {
     'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
   })
   return component('../../components/SearchEntry.vue', {
+    './EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
     './EntryClassification.vue': moduleOf(component('../../components/EntryClassification.vue', classificationModules)),
     './SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', {
       '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
@@ -124,6 +125,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/utils/markdownPlainText': markdownPlainText,
       './GlobalCommandPalette/ResultGroup.vue': moduleOf(component('../../components/GlobalCommandPalette/ResultGroup.vue', {})),
       './GlobalCommandPalette/ResultItem.vue': moduleOf(component('../../components/GlobalCommandPalette/ResultItem.vue', {})),
+      '@/components/EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
       './SearchImage.vue': moduleOf(defineComponent({ setup: () => () => null })),
       '@/views/settings/RetrievalSettings.vue': moduleOf(defineComponent({ setup: () => () => null })),
     })
@@ -410,4 +412,13 @@ test('personal document search results render the content type returned by the A
     assert.equal(state.results.value[0].content_type, '内部方案')
   }, api.searchEntries, 'zh-CN')
   assert.ok(result.html.includes('内部方案'))
+})
+
+for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: real search results show an update link and global grouping retains the latest ID`,async()=>{
+ const api=ingestSearchAPI({source:'mine',has_update:true,latest_article_id:'latest-record'})
+ const result=await pageScenario(async state=>{state.query.value='Launch';await state.runSearch()},api.searchEntries,locale)
+ assert.ok(result.html.includes(messages[locale].ikb18.hasUpdate))
+ assert.ok(result.html.includes('/platform/entries?entry_id=latest-record'))
+ const groups=evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts',import.meta.url),'utf8'),{'@/utils/search':helpers,'@/api/search':{}}).articleFileGroups([{...article,source:'mine',has_update:true,latest_article_id:'latest-record'}])
+ assert.equal(groups[0].has_update,true);assert.equal(groups[0].latest_article_id,'latest-record')
 })

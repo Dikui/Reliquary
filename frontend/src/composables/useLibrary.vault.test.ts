@@ -115,3 +115,12 @@ test('same document refresh ignores an older detail response and missing process
   assert.deepEqual(hook.details.library_content_types, [])
   assert.deepEqual(hook.details.image_descriptions, [])
 })
+
+test('old source details retain update links and clearing or switching resets them', async () => {
+ const hook=createHook(async id=>({success:true,data:{id,updated_at:'2026-10-14T00:00:00Z',...(id==='old'?{has_update:true,latest_article_id:'latest'}:{})}}))
+ hook.getCardDetails({id:'old'});await settle()
+ assert.equal(hook.details.has_update,true);assert.equal(hook.details.latest_article_id,'latest')
+ hook.getCardDetails({id:'latest'})
+ assert.equal(hook.details.has_update,false);assert.equal(hook.details.latest_article_id,'')
+ await settle();assert.equal(hook.details.has_update,false)
+})

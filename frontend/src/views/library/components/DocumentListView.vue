@@ -5,6 +5,7 @@ import { formatFileSize, getFileIcon } from '@/utils/files';
 import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import DocumentMenuDelete from './DocumentMenuDelete.vue';
+import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
@@ -199,6 +200,7 @@ const openDelete = async (item: EntryItem) => {
             <span class="row-file-name" :title="item.file_name">{{ item.file_name }}</span>
 
             <EntryClassification :entry="item" compact @open-entity="emit('open-entity', $event)" />
+        <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_article_id" />
           </div>
         </div>
 

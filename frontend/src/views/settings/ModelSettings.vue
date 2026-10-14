@@ -305,6 +305,7 @@ function convertToLegacyFormat(model: ModelConfig) {
     supportsVision: model.parameters.supports_vision || false,
     contextWindow: model.parameters.context_window || undefined,
     maxConcurrency: model.parameters.max_concurrency,
+    pricing: model.parameters.pricing ?? null,
     customHeaders: model.parameters.custom_headers
       ? Object.entries(model.parameters.custom_headers).map(([key, value]) => ({ key, value: String(value) }))
       : [],
@@ -534,6 +535,7 @@ const handleModelSave = async (modelData: any) => {
       source: modelData.source,
       description: '',
       parameters: {
+        ...(Object.hasOwn(modelData, 'pricing') ? { pricing: modelData.pricing } : {}),
         ...(modelData.source === 'chatgpt' ? {} : {
           base_url: modelData.baseUrl?.trim() || '',
           ...apiKeyFields,

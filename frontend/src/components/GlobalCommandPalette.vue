@@ -60,6 +60,7 @@
                 @primary="openChunk(item)" @hover="selectItemAt($event)">
                 <template #title>
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>
+                  <EntryUpdateNotice :has-update="item.file.has_update" :latest-entry-id="item.file.latest_article_id" />
                 </template>
                 <template #subtitle>
                   <span v-if="item.file.libraryName" class="result-library">{{ item.file.libraryName }}</span>
@@ -119,6 +120,7 @@
 </template>
 
 <script setup lang="ts">
+import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'

@@ -41,7 +41,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const setup = component.setup; let state: any
   component.setup = (props: object, context: object) => { state = setup(props, context); onServerPrefetch(async () => { try { await state.refreshAll(); await options.scenario?.(state, () => cleanups.forEach(callback => callback())); await nextTick() } finally { state.clearNameEmbeddingPoll(); if (state.entitySearchTimer) clearTimeout(state.entitySearchTimer) } }); return state }
   const app = createSSRApp(component)
-  const stub = defineComponent({ props: ['message', 'description', 'disabled', 'visible'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', { ...attrs, 'data-disabled': props.disabled || undefined }, [props.message, props.description, slots.default?.()]) })
+  const stub = defineComponent({ props: ['message', 'description', 'disabled', 'visible'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', { ...attrs, 'data-disabled': props.disabled || undefined }, [props.message, props.description, slots.operation?.(), slots.default?.()]) })
   for (const name of ['t-button', 't-icon', 't-select', 't-input', 't-alert', 't-empty', 't-loading', 't-dialog']) app.component(name, stub)
   const errors: unknown[] = []; app.config.errorHandler = error => errors.push(error)
   const html = await renderToString(app); assert.deepEqual(errors, [], 'the real workbench template renders without exceptions'); return { html, requests, state }
@@ -92,3 +92,13 @@ test('older entity details cannot replace a more recently selected entity', asyn
 test('failed entity detail loads keep the selection and expose retry feedback', async () => { const { html } = await renderWorkbench({ api: { getEntity: () => Promise.resolve({ success: false, error: 'Article list unavailable' }) }, scenario: state => state.selectEntity(entity) }); assert.match(html, /Aurora/); assert.match(html, /Article list unavailable/) })
 test('type filters are sent to the entity list API', async () => { const { requests } = await renderWorkbench({ scenario: async state => { state.entityTypeFilter.value = 'company'; await nextTick(); await state.loadEntities() } }); assert.equal(requests.lists.at(-1).scope, undefined); assert.equal(requests.lists.at(-1).entity_type, 'company'); assert.equal(requests.lists.at(-1).library_id, undefined) })
 test('merge transfers the selected entity into the explicit retained target', async () => { const { requests } = await renderWorkbench({ scenario: async state => { await state.selectEntity(entity); state.mergeTargetId.value = 'entity-b'; await state.confirmMerge(); assert.equal(state.mergeVisible.value, false) } }); assert.deepEqual(requests.merges, [{ keep_entity_id: 'entity-b', merge_entity_id: 'entity-a' }]) })
+
+for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: entity request failure is visible and retry restores the list`,async()=>{
+ let available=false
+ const failed=await renderWorkbench({locale,api:{listEntities:async()=>{if(!available)throw new Error('Entities unavailable');return {success:true,data:[entity]}}},scenario:state=>{assert.equal(state.loadError.value,'Entities unavailable')}})
+ assert.ok(failed.html.includes('Entities unavailable'))
+ assert.ok(failed.html.includes((locale==='zh-CN'?zhCN:enUS).common.retry))
+ assert.match(failed.html,/role="alert"/)
+ const restored=await renderWorkbench({locale,api:{listEntities:async()=>{if(!available)throw new Error('Entities unavailable');return {success:true,data:[entity]}}},scenario:async state=>{available=true;await state.loadEntities();assert.equal(state.loadError.value,'')}})
+ assert.ok(restored.html.includes('Aurora'));assert.ok(!restored.html.includes('Entities unavailable'))
+})

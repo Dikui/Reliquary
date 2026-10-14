@@ -22,8 +22,8 @@ assert.deepEqual(template.errors, [])
 
 const status: VaultStatus = {
   root: '/srv/reliquary/vault',
-  mine: { last_scan_at: '2026-10-11T06:12:30Z', indexed_files: 12 },
-  reports: { indexed_files: 3, last_error: 'Cannot read reports/example.md' },
+  mine: { directory: 'custom-mine', last_scan_at: '2026-10-11T06:12:30Z', indexed_files: 12 },
+  reports: { directory: 'ai-reports', indexed_files: 3, last_error: 'Cannot read ai-reports/example.md' },
 }
 
 async function scenario(locale: keyof typeof messages, getVaultStatus: () => Promise<unknown>, action: (state: any) => Promise<void>) {
@@ -68,6 +68,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     for (const value of [copy.title, copy.root, copy.rootHint, copy.mine, copy.reports, copy.lastScan, copy.indexedFiles, copy.lastError, copy.noError, copy.notScanned, status.root, status.reports.last_error!]) assert.ok(html.includes(value), value)
     assert.ok(html.includes(copy.mineImportedHint))
     assert.ok(!html.includes(new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(status.mine.last_scan_at!))))
+    assert.ok(html.includes('custom-mine/'))
+    assert.ok(html.includes('ai-reports/'))
+    assert.doesNotMatch(html, />reports\//)
     assert.match(html, /<dd>12<\/dd>/)
     assert.match(html, /<dd>3<\/dd>/)
     assert.doesNotMatch(html, /<input|<textarea/)

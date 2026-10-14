@@ -21,6 +21,7 @@ import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
 import { useI18n } from 'vue-i18n';
 import RepostSources from '@/views/library/components/RepostSources.vue';
+import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import MissingMaterials from '@/components/MissingMaterials.vue';
@@ -1265,6 +1266,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             </div>
           </details>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
+        <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_article_id" />
           <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
             <MissingMaterials :items="details.missing_materials || []" />
             <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />

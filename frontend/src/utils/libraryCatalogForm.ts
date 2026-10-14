@@ -20,3 +20,10 @@ export function moveType(rows: unknown[], index: number, delta: number) {
   if (target < 0 || target >= rows.length) return
   const [row] = rows.splice(index, 1); rows.splice(target, 0, row)
 }
+
+// Only the exact historical system default is adapted for display. Saved
+// configuration and user-authored descriptions remain untouched until Save.
+export function catalogDescription(library: LibraryCatalogItem, currentOpinionsDescription: string) {
+  return library.system_role === 'opinions' && /^外部个人的观点：专家、分析师、KOL 的评论与\u6587\u7ae0。$/.test(library.description)
+    ? currentOpinionsDescription : library.description
+}

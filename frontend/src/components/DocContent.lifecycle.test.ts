@@ -53,12 +53,12 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   return module.exports
 }
 
-type HostNode = { children: HostNode[]; parent?: HostNode; querySelector: () => null; querySelectorAll: () => []; text?: string }
+type HostNode = { children: HostNode[]; parent?: HostNode; querySelector: () => null; querySelectorAll: () => []; text?: string; props?: Record<string, any> }
 const node = (): HostNode => ({ children: [], querySelector: () => null, querySelectorAll: () => [] })
 const renderer = createRenderer<HostNode, HostNode>({
   querySelector: node,
   createElement: node, createText: text => ({ ...node(), text }), createComment: node,
-  setText: (el, text) => { el.text = text }, setElementText: (el, text) => { el.text = text }, patchProp() {},
+  setText: (el, text) => { el.text = text }, setElementText: (el, text) => { el.text = text }, patchProp(el, key, _old, value) { (el.props ||= {})[key] = value },
   insert(el, parent, anchor) {
     if (el.parent) el.parent.children.splice(el.parent.children.indexOf(el), 1)
     const index = anchor ? parent.children.indexOf(anchor) : -1
@@ -84,6 +84,9 @@ test('mounted detail switches full-text articles, closes and unmounts without un
     const empty = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
     const passthrough = (value: string) => value
     const { script, template } = compile(detailPath)
+    const noticeCompiled = compile(resolve('src/components/EntryUpdateNotice.vue'))
+    const notice = evaluate(noticeCompiled.script.content, { 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) } }).default
+    notice.render = evaluate(noticeCompiled.template.code, {}).render
     const detail = evaluate(script.content, {
       marked: { marked: { use() {}, Renderer: class {}, parse: passthrough } }, 'marked-katex-extension': { __esModule: true, default: () => ({}) },
       'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
@@ -92,7 +95,7 @@ test('mounted detail switches full-text articles, closes and unmounts without un
       '@/utils/clipboard': { copyWithToast() {} },
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
-      '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty,
+      '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryUpdateNotice.vue': { __esModule:true, default:notice }, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty,
       '@/components/MissingMaterials.vue': empty, '@/components/IncompleteActions.vue': empty, '@/components/PersonalDocumentDelete.vue': empty,
       '@/views/library/components/RepostSources.vue': empty, '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
     }).default
@@ -108,7 +111,10 @@ test('mounted detail switches full-text articles, closes and unmounts without un
     app.config.globalProperties.$t = (key: string) => key
     app.config.errorHandler = error => errors.push(error)
     app.config.warnHandler = warning => warnings.push(warning)
-    app.mount(node()); await nextTick()
+    const root = node(); app.mount(root); await nextTick()
+    Object.assign(props.details, { has_update:true, latest_article_id:'latest' }); await nextTick()
+    const flatten = (n: HostNode): HostNode[] => [n, ...n.children.flatMap(flatten)]
+    assert.equal(flatten(root).find(n=>n.props?.href==='/platform/entries?entry_id=latest')?.props?.href, '/platform/entries?entry_id=latest')
     const beforeVaultMetadata = imageHydrations
     Object.assign(props.details, { source_kind: 'article', vault_path: 'articles/2026-10/event.md' })
     await nextTick(); await nextTick()

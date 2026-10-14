@@ -33,7 +33,8 @@ const presets: ModelProviderOption[] = presetIds.map(value => ({
 }))
 presets.find(preset => preset.value === 'aliyun')!.defaultUrls.embedding = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
-async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = null, testEmbedding = async () => ({ available: true, dimension: 512 }), listProviders = async (type: string) => presets.filter(preset => preset.modelTypes.includes(type)), scenario = async () => {} }: {
+async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = null, testEmbedding = async () => ({ available: true, dimension: 512 }), listProviders = async (type: string) => presets.filter(preset => preset.modelTypes.includes(type)), scenario = async () => {}, initializeModel = false }: {
+  initializeModel?: boolean
   locale?: 'zh-CN' | 'en-US'
   modelType?: 'chat' | 'embedding' | 'rerank'
   modelData?: any
@@ -46,7 +47,9 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
   const chatgptRequests: string[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const stub = defineComponent({ setup: (_, { attrs, slots }) => () => h('div', attrs, slots.default?.()) })
+  let visibleWatcher: ((visible: boolean) => void) | undefined
   const modules: Record<string, unknown> = {
+    vue: { ...require('vue'), watch: (getter: any, callback: any, options: any) => { if (String(getter).includes('props.visible')) visibleWatcher = callback; return require('vue').watch(getter, callback, options) } },
     'vue-i18n': { useI18n: () => i18n.global },
     'tdesign-vue-next': { MessagePlugin: { error() {}, success() {}, warning() {}, info() {} }, DialogPlugin: {} },
     '@/api/initialization': {
@@ -84,7 +87,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
   let state: any
   component.setup = (props: object, context: object) => {
     state = setup(props, context)
-    onServerPrefetch(async () => { await state.loadProviders(); await scenario(state); await nextTick() })
+    onServerPrefetch(async () => { if (initializeModel) { visibleWatcher?.(true); await nextTick() }; await state.loadProviders(); await scenario(state); await nextTick() })
     return state
   }
   const app = createSSRApp(component, { visible: true, modelType, modelData, onConfirm: (value: unknown) => confirmed.push(value) })
@@ -246,3 +249,45 @@ test('restored model credential save uses only its subresource and unchanged edi
  }})
  assert.deepEqual(confirmed,[])
 })
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  for (const modelType of ['chat', 'embedding', 'rerank'] as const) test(`${locale}: ${modelType} editor displays nullable prices and saves currency with zero input`, async () => {
+    const modelData = { id: 'priced', modelName: 'fixture', source: 'remote', baseUrl: 'http://localhost:21901/v1', pricing: { input_per_million: 2, output_per_million: 4, currency: 'CNY' } }
+    const loaded = await renderEditor({ locale, modelType, modelData, initializeModel: true })
+    assert.equal(loaded.state.formData.value.inputPerMillion, 2)
+    assert.equal(loaded.state.formData.value.outputPerMillion, 4)
+    assert.equal(loaded.state.formData.value.priceCurrency, 'CNY')
+    assert.ok(loaded.html.includes((locale === 'zh-CN' ? zhCN : enUS).ikb18.priceTitle))
+    assert.match(loaded.html, /id="model-price-input"/)
+    const saved = await renderEditor({ locale, modelType, modelData, initializeModel: true, scenario: async state => {
+      state.formData.value.inputPerMillion = '0'
+      state.formData.value.outputPerMillion = ''
+      state.formData.value.priceCurrency = 'usd'
+      await state.handleConfirm()
+    } })
+    assert.equal(saved.confirmed.length, 1)
+    assert.deepEqual(saved.confirmed[0].pricing, { input_per_million: 0, output_per_million: null, currency: 'USD' })
+  })
+  test(`${locale}: clearing all price fields emits explicit null`, async () => {
+    const { confirmed } = await renderEditor({ locale, scenario: async state => {
+      Object.assign(state.formData.value, { modelName: 'fixture', baseUrl: 'http://localhost:21901/v1', inputPerMillion: '', outputPerMillion: '', priceCurrency: '' })
+      await state.handleConfirm()
+    } })
+    assert.equal(confirmed.length, 1)
+    assert.equal(confirmed[0].pricing, null)
+  })
+  test(`${locale}: invalid prices and currency prevent submission`, async () => {
+    for (const price of ['-1', 'Infinity', 'invalid']) {
+      const { confirmed } = await renderEditor({ locale, scenario: async state => {
+        Object.assign(state.formData.value, { modelName: 'fixture', baseUrl: 'http://localhost:21901/v1', inputPerMillion: price })
+        await state.handleConfirm()
+      } })
+      assert.equal(confirmed.length, 0)
+    }
+    const { confirmed } = await renderEditor({ locale, scenario: async state => {
+      Object.assign(state.formData.value, { modelName: 'fixture', baseUrl: 'http://localhost:21901/v1', priceCurrency: 'US1' })
+      await state.handleConfirm()
+    } })
+    assert.equal(confirmed.length, 0)
+  })
+}

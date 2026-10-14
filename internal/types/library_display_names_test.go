@@ -36,3 +36,16 @@ func TestSystemLibraryDisplayNamesMatchFrontendLocales(t *testing.T) {
 	require.Equal(t, custom.Name, custom.DisplayName("en-US"))
 	require.Equal(t, custom.Name, custom.DisplayName("zh-CN"))
 }
+
+func TestSystemLibraryDefaultTextUsesCurrentTerminology(t *testing.T) {
+	retired := regexp.MustCompile(`(?i)文章|用户文档|整理结果|本人文档|知识库|\b(articles?|user documents?|personal documents?|organized results?|knowledge base)\b`)
+	for _, library := range SystemLibraryDefaults() {
+		values := []string{library.Name, library.Description, library.ReviewCriteria, library.DisplayName("en-US"), library.DisplayName("zh-CN")}
+		for _, row := range library.ContentTypes {
+			values = append(values, row.Name)
+		}
+		for _, text := range values {
+			require.NotRegexp(t, retired, text, "system role %s", library.SystemRole)
+		}
+	}
+}

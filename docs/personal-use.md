@@ -1,12 +1,12 @@
 # 个人使用指南
 
-Reliquary 在一个个人空间的唯一库中收集、存储、去重与检索文章。综合分析和写报告由外部 AI 通过收录接口与 MCP 完成。统一术语和设计见 [CONTEXT.md](../CONTEXT.md) 与 [ADR 0009](adr/0009-kb-collect-store-retrieve.md)。
+Reliquary 在一个个人空间中按库收录、存储、去重、检索资料，并维护实体关系图谱。系统初始化机构发布、人物观点、参考文献、我的资料、AI 报告五个库，可从四个处理模板新建库。综合分析和写报告由外部 AI 通过 HTTP 与 MCP 完成。统一术语和设计见 [CONTEXT.md](../CONTEXT.md) 与 [ADR 0014](adr/0014-internal-knowledge-base.md)。
 
 ## 账号与网页入口
 
 系统只有一个用户。首个用户注册成功后关闭注册，登录用户与有效 API Key 可以访问个人空间全部内容。API Key 支持名称、有效期和撤销，接入方式见 [收录接口说明](ingest-api.md)。
 
-登录后进入文章页。主要入口为文章、知识检索、实体、主题、关注和设置。待处理页面分为收录待审与待补全，可以处理收录审核、修正内容类型，标记星标，修正内容类型和主题，并简单查看文章。实体页管理规范名、别名和合并；主题页管理名称、说明及历史文章归入进度。设置集中提供库、模型、文件库状态、操作日志、API 集成和运行队列。
+登录后进入资料页。主要入口为资料、检索、实体、主题、关注、测评和设置。待处理页面分收录待审与待补全两个标签，可审核、按资料 ID 补图、接受缺失或丢弃。资料可标星、修正内容类型与主题，实体页可查看关系来源、删除关系和合并实体。设置提供库配置、从模板新建库、模型、文件库状态、操作日志、API 集成、运行队列和调用统计。测评页管理题集、确认 AI 候选、运行普通或图谱检索评测并比较两次完成运行。
 
 用户可在页面修改密码。忘记密码时，保持数据库可用，在仓库根目录使用服务器相同的数据库配置执行：
 
@@ -20,19 +20,15 @@ go run ./cmd/server reset-password
 
 新内容由外部工具通过收录接口送入。Reliquary 不采集 RSS，不按链接抓取原文、图片或文件，网页不提供网址导入、文件上传与手动录入创建入口。外部工具的材料要求、HTTP 与 MCP 用法见 [收录接口说明](ingest-api.md)。正文中的图片需要由调用方上传。缺失图片显示来源链接，不由服务端下载；待补全清单仅记录缺失图片。
 
-新材料进入收录审核流程，未通过的内容进入收录待审，审核通过后才写入文件库；待审正文及附件也进入隐藏维护副本。调用方自身的判断不会替代模型审核。缺正文或缺来源证据时先待审；重复与已丢弃的材料按收录结果处理。文章和本人文档缺文件或图片时正常入库并标记待补全。文章用同一原文链接再次收录，本人文档用文档 ID 再次收录。用户可在待处理页面接受缺失或丢弃内容。旧文章重新处理时缺正文，记录“重新处理需要正文”并等待外部工具补全，不抓取原网址。历史 RSS、网页和手动录入文章继续可读，手动录入专用编辑入口已删除。
+调用方每项必须指定库，提交完整 Markdown 和获取方式。外部时效型按库规则要求链接，或接受机构名称加有效发布日期并标记来源未核实。外部长效型要求链接或 identifier；自有型不要求来源证据，可用 source_ref 标识同一来源。同库同 source_ref 的正文变化会新建记录，旧记录保留，图谱仅采用最新活动记录。资料入库后不能换库。各库用途见 [外部接入总览](external-integration.md)。
 
-规范化网址、正文哈希与近似重复检测用于去重，转载只补充来源记录。一篇文章通过一次处理调用得到内容类型、统一摘要、实体和主题。模型拿不准时归为“其他”，所有类型都全文保存。修正后的类型记为用户修正，操作记录日志。摘要包含一句话概述、3 到 5 条要点与关键名词。实体归一到实体档案，主题由用户定义，一篇文章可以属于多个主题。新建主题或修改说明后，可用历史摘要批量归入，页面显示进度。
+除生成型外，新资料按所属库的审核标准审核，未通过进入收录待审；通过后才写文件库。正文齐全但缺图片仍可入库和检索，调用方用 library 与 article_id 补图，补全后重新处理并更新位置与关系证据。补全一次后仍缺失的由用户接受或丢弃，不通过链接定位补全。
 
-| 内容类型 | 处理方式 |
-| --- | --- |
-| 所有内容类型 | Markdown 正文和图片全文保存 |
+处理调用生成统一摘要、所属库内容类型、实体、主题、关系和图片说明。摘要包括一句话概述、3 至 5 条要点和关键名词。图谱抽取按内容类型开关及资料 graph 覆盖执行，所有类型均保存全文。支持视觉的模型在同次调用中读取图片，说明作为独立检索块，不写回正文。长文按上下文预算分段审核、处理及合并，保留检查点，任何段审核失败则整篇待审。实体档案跨库共用，主题可限定适用库。新建主题可按历史摘要归入，历史归入不产生新动态。
 
-处理模型支持视觉时，在同一次调用中读取正文图片。生成模型支持 OpenAI 兼容、Anthropic 原生与 Ollama 接口。嵌入支持 OpenAI 兼容与 Ollama；重排支持通用 `/rerank` 格式及阿里云百炼接口。在设置中测试模型连接、维度、视觉支持与实际调用，再配置库的处理和嵌入模型。
+生成型资料不审核、不调用内容处理模型、不抽图谱，只建索引。外部 AI 推荐使用 write_report，固定写入 AI 报告系统库，可引用已存在的资料、实体与主题，重试幂等，返回 cannot_be_fact=true。向量索引仍会调用 embedding。
 
-文章未提供原文链接时，先尝试从材料本地提取链接，不联网搜索。仍未找到时进入收录待审，原因为“缺少原始链接”。本人文档通过 HTTP 或 MCP 收录时指定 `kind=mine`，仍经过模型收录审核与处理，审核标准保持一致；原始链接可以为空，不提取链接，不因缺链接进入待审。一律全文保存，教程、案例、参考类型也保留正文、图片与附件。与其他用户文档按现有规则去重，不与文章做转载归并。
-
-缺链接的内容可补链接后重新审核，或确认无链接入库。无链接入库跳过模型审核，标记 source_unverified=true，始终全文保存，表头 url 为空；文章列表、详情与检索结果显示“来源未核实”，检索接口与 MCP 也返回该字段。收录待审中的本人文档显示“本人文档”，批准后进入同一路径。
+去重及转载按模板在库内执行；只有外部时效型做转载归并与相似报道折叠。审核待审可补链接后重审、确认无链接入库或丢弃。人工无链接入库标记来源未核实。模型配置支持现有 OpenAI 兼容、Anthropic 与 Ollama 协议；先测试连接及能力，再给各库选择轻量、生成、实体判断和重排档位，向量模型由空间共享。
 
 ## 文件库与检索
 
@@ -49,15 +45,15 @@ Compose 将宿主机 `RELIQUARY_VAULT_DIR` 绑定到容器内的 `VAULT_ROOT`。
 | `attachments/<资料ID>/` | 仅图片，不按库分类 |
 | `.reliquary/` | 数据库维护副本、持久表登记和配置 |
 
-在 Obsidian 选择“打开文件夹作为仓库”，打开 `vault/` 这一层，例如 `~/Reliquary/vault`。建议在 Obsidian 设置的“文件与链接 > 排除的文件”中加入 `attachments/` 与 `.reliquary/`，避免搜索附件和维护副本。正文图片使用相对路径指向 `attachments/<文章id>/`，可直接显示。
+在 Obsidian 选择“打开文件夹作为仓库”，打开 `vault/` 这一层，例如 `~/Reliquary/vault`。建议在 Obsidian 设置的“文件与链接 > 排除的文件”中加入 `attachments/` 与 `.reliquary/`，避免搜索附件和维护副本。正文图片使用相对路径指向 `attachments/<资料ID>/`，可直接显示。
 
 所有库的正文在补全完成或用户接受缺失后定稿。程序按 `<库目录>/<标题短名>-<ID前8位>.md` 保存，不设年月子目录。不要在 Obsidian 修改正文、表头或 `.reliquary/`；手放文件不会收录，手改表头不会回写数据库，刷新及重建会覆盖。星标、收录理由、内容类型、实体与主题以数据库为准。自有型资料可用相同 `source_ref` 提交新正文，旧记录保留并显示有更新的记录。上传过程使用 `LOCAL_STORAGE_BASE_DIR`，备份同时包含上传目录和文件库。统一表头的字段顺序见[维护数据](maintenance-data.md#按库文件与统一表头)。
 
 Obsidian 的 `.obsidian/` 阅读配置、`.trash/` 和 `.DS_Store` 等用户配置不会参与文件库核对、重建或索引，程序不会修改或删除它们。备份和迁移包包含这些文件，保留阅读配置；恢复核对不比较其内容。
 
-`VAULT_HEADER_DEBOUNCE` 合并表头连续更新，默认 `5s`。用户文档不监听文件变化，也没有索引等待时间设置。文件库状态页显示目录、最近扫描、文件数量与错误。
+`VAULT_HEADER_DEBOUNCE` 合并表头连续更新，默认 `5s`。资料正文不监听文件变化，也没有索引等待时间设置。文件库状态页显示目录、最近扫描、文件数量与错误。
 
-知识检索覆盖文章表头、全文正文、用户文档和整理结果，使用 PostgreSQL 全文与向量混合检索，按文章合并命中片段。可按内容类型、实体、主题、发布时间、星标及来源目录筛选。按发布时间筛选会排除缺少发布时间的文章并说明数量，采集时间不会代替发布时间。相似报道按摘要向量和时间窗口折叠，可以展开。
+普通检索必须选择一个或多个库，使用 PostgreSQL BM25 与向量混合检索加可选重排，按资料合并命中并返回正文位置。可按内容类型、实体、主题、发布时间与星标筛选；时间筛选排除缺日期的资料，不用收录时间替代。图谱检索按库查询实体的 1 至 3 跳关系或两实体间路径，不调用模型，返回 PG 来源、人物观点发言人、位置和待同步数量。详见 [普通与图谱检索](search-api.md)。
 
 只运行一个后端进程。模型并发、速率和接口限流由该进程维护；待处理操作与业务数据在同一 PostgreSQL 事务中持久化，Redis（asynq）只负责调度唤醒，设置保存后立即刷新进程内缓存。数据库备份同时包含未完成任务，恢复后任务可继续执行。文件库与数据库仍需一致性备份，迁移前应停止写入并等待运行队列完成。详见 [ADR 0014](adr/0014-internal-knowledge-base.md)。
 
@@ -75,7 +71,7 @@ Reliquary 可以通过自己的 OpenID Connect 登录，使用符合条件的 Ch
 
 OpenAI 返回 `subscription_sharing_usage_limit_exceeded` 时，设置与运行队列显示额度暂停，并提供 **Manage usage** 链接到 [ChatGPT 用量设置](https://chatgpt.com/settings/usage)。该错误可能对应应用上限，不能仅凭错误码推断全部订阅耗尽或具体重置时间；调整额度或等待官方用量页显示恢复后，点击“手动恢复”。`subscription_sharing_usage_unavailable` 表示暂时无法确认用量，保留凭据并在五分钟后再试。暂停期间未完成的任务延后执行，额度暂停不消耗普通失败重试次数，文章的原始内容保留，主题批次保持待处理。参考 [错误与恢复](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)。
 
-修改文章内容类型或处理复核中的摘要转全文操作保持同步确认语义。生成暂停时返回可重试的 HTTP 503 与 `Retry-After`，保留原文章、分类、索引和复核状态；恢复后需要用户再次发起操作，系统不会稍后自动应用这次选择。
+修改资料内容类型需按所属库校验并联动图谱。需要同步调用生成模型时，生成暂停返回可重试的 HTTP 503 与 `Retry-After`；操作失败保留原资料和分类，恢复后需再次发起。
 
 手动恢复解除生成暂停，已经延后的任务会在原定重试时间运行；需要立即重试文章时，在运行队列对相应任务点击“立即运行”。主题历史归入由后台轮询按批次恢复。
 
@@ -97,24 +93,24 @@ OpenAI 返回 `subscription_sharing_usage_limit_exceeded` 时，设置与运行�
 
 Reliquary 提供资料，不生成周报或推送通知。下面是外部 AI 通过已配置 MCP 编写周报的示例流程，只用于说明工具用法，没有内置 skill：
 
-1. 调用 `list_follows`，读取关注对象的 `target_type`、`target_id`、名称、关注时间和近 7 天文章数，确认本周关注方向。
-2. 调用 `follow_feed`，显式指定周报开始时间，例如 `{"since":"2026-10-05T00:00:00+08:00","limit":100,"collapse_similar":true}`。只整理某些对象时，增加 `target_ids`。省略 `since` 使用网页上次查看时间；MCP 调用不会更新该时间。since 比较进入动态时间，排序仍按收录时间倒序。每次收到 `next_cursor`，继续调用 `follow_feed`，传入 `{"cursor":"上一页的 next_cursor","limit":100}`，直到响应没有 `next_cursor`；再开始整理全部主项及折叠成员。
-3. 根据返回的 `results`、`matched_follows` 和 `similar_reports` 归纳线索。需核实的全文文章用 `get_article` 分段读取。文章 ID 用于引用和去重，勿把相似报道当作独立事件重复统计。
-4. 由外部 AI 写出 Markdown 周报，注明时间范围、来源文章与资料限制，再调用 `write_report` 保存，例如：
+1. 调用 `list_follows`，读取关注对象的 `target_type`、`target_id`、名称、关注时间和近 7 天资料数，确认本周关注方向。
+2. 调用 `follow_feed`，显式指定周报开始时间，例如 `{"since":"2026-10-05T00:00:00+08:00","limit":100,"collapse_similar":true}`。只整理某些对象时，增加 `target_ids`。省略 `since` 使用网页上次查看时间；MCP 调用不会更新该时间。since 和排序均使用资料进入动态的时间，逐库检查点控制新动态。每次收到 `next_cursor`，继续调用 `follow_feed`，传入 `{"cursor":"上一页的 next_cursor","limit":100}`，直到响应没有 `next_cursor`；再开始整理全部主项及折叠成员。
+3. 根据返回的 `results`、`matched_follows` 和 `similar_reports` 归纳线索。需核实的全文资料用 `get_article` 分段读取。资料 ID 用于引用和去重，勿把相似报道当作独立事件重复统计。
+4. 由外部 AI 写出 Markdown 周报，注明时间范围、来源资料与资料限制，再调用 `write_report` 保存，例如：
 
    ```json
    {
      "title": "关注周报 2026-10-05 至 2026-10-11",
-     "markdown": "# 关注周报\n\n## 产品进展\n\n根据本周原文归纳进展，并逐条注明来源文章。\n",
-     "related_article_ids": ["替换为本周引用的真实文章 ID"]
+     "markdown": "# 关注周报\n\n## 产品进展\n\n根据本周原文归纳进展，并逐条注明来源资料。\n",
+     "related_article_ids": ["替换为本周引用的真实资料 ID"]
    }
    ```
 
-`follow_feed` 默认返回最多 20 个主项，`limit` 最大为 100；相似报道作为主项的 `similar_reports` 返回，不占主项额度。`total` 是首请求窗口内折叠前的候选文章数。游标保留首请求的时间上限、since、对象筛选和折叠开关，后续可只传 cursor 与 limit。必须翻页直到没有 next_cursor，再按文章 ID 汇总主项和折叠成员。AI 报告写入 `ai-reports/` 后可检索，仍不会进入关注动态。
+`follow_feed` 默认返回最多 20 个主项，`limit` 最大为 100；相似报道作为主项的 `similar_reports` 返回，不占主项额度。`total` 是首请求窗口内折叠前的候选资料数。游标保留首请求的时间上限、since、对象筛选和折叠开关，后续可只传 cursor 与 limit。必须翻页直到没有 next_cursor，再按资料 ID 汇总主项和折叠成员。AI 报告写入 `ai-reports/` 后可检索，仍不会进入关注动态。
 
 ## 部署在 Mac mini
 
-Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。应用、PostgreSQL（ParadeDB）与 Redis 使用 Compose；模型服务可以在 macOS 原生运行。应用镜像从当前仓库构建，未发布公共应用镜像。
+Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。四个核心服务为应用、PostgreSQL（ParadeDB）、Redis 与 Neo4j，均使用 Compose；网页静态资源由独立 frontend 容器代理，模型服务可在 macOS 原生或其他端点运行。应用镜像从当前仓库构建，未发布公共应用镜像。
 
 ```bash
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
@@ -136,7 +132,9 @@ cp .env.example .env
 | `JWT_SECRET`、`SYSTEM_AES_KEY` | 设置自己的登录签名密钥及 32 字节凭据加密密钥；迁移和整体恢复时由维护命令生成新值 |
 | `OLLAMA_BASE_URL` | 容器访问 macOS 模型服务的地址，例如 `http://host.docker.internal:11434` |
 | `OLLAMA_OPTIONAL` | 设为 `true` 时，Ollama 暂不可用只输出告警 |
-| `SSRF_WHITELIST_EXTRA` | 部署额外放行的模型或解析服务主机/IP/CIDR；与设置页白名单合并 |
+| `SSRF_WHITELIST_EXTRA` | 部署额外放行的模型服务主机/IP/CIDR；与设置页白名单合并 |
+| `NEO4J_URI`、`NEO4J_USERNAME`、`NEO4J_PASSWORD` | 使用 `bolt://neo4j:7687`、`neo4j` 与独立密码，须与 Neo4j 初始化一致 |
+| `REDIS_ADDR` | Compose 内使用 `redis:6379` |
 | `APP_PORT`、`FRONTEND_PORT` | 宿主机 API 与网页端口，默认 `8080` 和 `80` |
 | `APP_EXTERNAL_URL` | 需要外部调用方读取限时文件链接时填写内网访问地址并代理 `/r/` |
 
@@ -163,14 +161,14 @@ export COMPOSE_PROJECT_NAME=reliquary
 ./reliquary-admin check-deployment
 ./scripts/build-frontend-dist.sh
 docker compose build
-docker compose up -d --wait postgres redis
+docker compose up -d --wait postgres redis neo4j
 ./reliquary-admin check-deployment
-docker compose up -d
+docker compose up -d --no-build
 ```
 
 `./scripts/start-all.sh --docker` 也会在应用启动前创建并检查宿主机目录，先启动数据库，再核对已保存的备份设置。应用入口随后为挂载目录设置容器用户写入权限，并以 `appuser` 运行。在 macOS 的 Docker 兼容运行环境中，宿主机登录用户仍可读取文件库供 Obsidian 使用；无需手工执行递归 `chown`。运行环境的文件共享设置应允许访问所选目录。
 
-启动后访问 `.env` 配置的网页端口，注册唯一用户，配置模型并收录一篇文章。检查宿主机文件库是否产生 Markdown 和附件，知识检索是否命中。后续执行 Compose、备份或恢复时，使用相同的 `COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。数据库仍使用原有命名卷；不迁移旧的文件库或上传资源命名卷。
+启动后访问 `.env` 配置的网页端口，注册唯一用户，配置共享向量与各库模型并收录一份资料。检查宿主机文件库是否产生 Markdown 和附件，知识检索是否命中。后续执行 Compose、备份或恢复时，使用相同的 `COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。数据库仍使用原有命名卷；不迁移旧的文件库或上传资源命名卷。
 
 推荐将 Ollama 直接安装到 macOS，在宿主机运行生成和嵌入模型。Ollama 支持 Apple GPU 的 Metal 加速；其官方文档说明 macOS 上的 Docker 容器不能使用 GPU 加速。因此将模型服务放在 macOS，Compose 中只运行 Reliquary 与数据服务，不依赖 CUDA。参见 [Ollama 硬件支持](https://docs.ollama.com/gpu)与 [Ollama FAQ](https://docs.ollama.com/faq#how-do-i-use-ollama-with-gpu-acceleration-in-docker)。
 
@@ -349,7 +347,7 @@ APP_PORT=18080 FRONTEND_PORT=18081 \
 ./reliquary-admin rebuild /Users/yourname/RecoveredVault
 ```
 
-命令读取表头、正文和 `.reliquary/`，恢复文章、带表头的用户文档及表头未保存的用户数据、档案、待审内容、日志、配置和任务检查点，再生成全文索引并逐表核对原副本。`.obsidian/`、`.trash/` 和 `.DS_Store` 等用户配置保留原样，不作为文章或用户文档索引。导入前先确认 PG 为空并进入 snapshot 暂停，队列不会在导入或配置期间领取任务或消耗重试预算。缺少或损坏的副本、文章、待审附件会列出错误并停止。库目录中没有有效表头或未在副本登记的文件不会作为已有资料导入，不兼容旧的按来源类别目录规则。可重建的索引和向量不作为唯一原件。
+命令读取表头、正文和 `.reliquary/`，恢复资料及表头未保存的用户数据、档案、待审内容、日志、配置和任务检查点，再生成全文索引并逐表核对原副本。`.obsidian/`、`.trash/` 和 `.DS_Store` 等用户配置保留原样，不作为资料索引。导入前先确认 PG 为空并进入 snapshot 暂停，队列不会在导入或配置期间领取任务或消耗重试预算。缺少或损坏的副本、文章、待审附件会列出错误并停止。库目录中没有有效表头或未在副本登记的文件不会作为已有资料导入，不兼容旧的按来源类别目录规则。可重建的索引和向量不作为唯一原件。
 
 随后可以执行 `docker compose up -d app` 启动应用，用原账号密码登录。按照程序输出的清单重新填写模型凭据，ChatGPT 重新登录；账号密码哈希保留。此时处理队列与收录仍暂停，不要手工解除暂停。完成后执行：
 
@@ -414,7 +412,7 @@ BACKUP_DIR=/Users/yourname/Backups/Reliquary-Rollback \
 
 Grok Bot、Claude Code 等外部工具需能访问 Reliquary 的内网地址。登录网页后，在“设置 > API 集成”为每个工具创建自己的 API Key，复制完整令牌和连接地址。同页可查看 Key、修改名称与有效期或撤销 Key。
 
-将 [收录接口说明](ingest-api.md) 提供给外部工具开发者或 Agent。该文档包含完整材料要求、认证、查重与收录顺序、可执行示例、HTTP 与 MCP 接口、补全、重试和用户反馈。外部工具负责取得原始资料，Reliquary 负责去重、模型审核、处理、存储与检索。收录结果和待处理页面供用户确认后续操作。
+将 [外部接入总览](external-integration.md) 与 [收录接口说明](ingest-api.md) 提供给外部工具开发者或 Agent。该文档包含 Markdown 与图片要求、认证、查重与收录顺序、可执行示例、HTTP 与 MCP 接口、补全、重试和用户反馈。外部工具负责取得原始资料，Reliquary 负责去重、模型审核、处理、存储与检索。收录结果和待处理页面供用户确认后续操作。
 
 ## Redis 任务调度
 
@@ -491,4 +489,4 @@ PostgreSQL 是唯一正本。业务修改和图谱通知在同一 PG 事务提�
 
 备份不包含 Neo4j 卷和 Redis。`reliquary-admin` 恢复当前版本备份时，在解除维护暂停前自动重建 Neo4j。Neo4j 不可用或重建失败时恢复不会解除暂停，修复连接后再次使用恢复的 `--resume`。恢复到新环境会生成新 Neo4j 密码，目标环境显式提供的 Neo4j 地址、账号、密码和端口优先。历史版本缺少图谱同步结构时保持原版本恢复流程，升级后由每日核对生成副本。
 
-来源资料、发言人和位置明细只保存在 PG，Neo4j 只含全局实体节点及关系概要。图谱检索接口由后续任务提供。
+来源资料、发言人和位置明细只保存在 PG，Neo4j 只含全局实体节点及关系概要。HTTP 与 MCP 图谱检索已提供，见 [图谱检索](search-api.md#图谱检索)。

@@ -270,7 +270,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 `entries.vault_body` 保存各库的完整正文。已发布普通资料的维护副本继续从资料 Markdown 读取正文；自有资料和 AI 报告的正文还保留在数据库与维护副本中，并与资料文件核对。未发布、待审和处理中的内容尚无文件时，在副本保留数据库已有原文及收录 metadata。分块不是正文恢复来源。图片由文件库及完整备份保护。文件库重建使用统一表头和按库目录，未登记的手放文件不会自动收录。
 
-账号密码哈希选择保留在 `config/users.json`，使仅用文件库重建后仍能用原密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。账号、模型、解析器配置保留非凭据部分；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、JWT_SECRET、数据库密码等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
+账号密码哈希选择保留在 `config/users.json`，使仅用文件库重建后仍能用原密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。当前账号与模型配置保留非凭据部分，旧结构的解析器字段按历史版本规则读取；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、JWT_SECRET、数据库密码等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
 
 `.reliquary/` 是数据库的实时可读副本，不反向同步外部编辑。普通表和配置使用 UTF-8 JSON 数组，每行保留原始主键、时间戳和非派生字段；JSON 键稳定排序。操作日志每条一行 JSON，正常变化只追加，不改写既有条目。`verify --repair` 遇到损坏日志时，把坏原件移到 `quarantine/`，保留坏原件，再从数据库建立完整的新日志。这是显式修复操作，正常同步不会做这件事。
 
@@ -409,7 +409,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 副本新增 `registry.json`，自身格式版本为 1；主 manifest 的 `registry_version` 为 1，文件哈希在主 manifest 中登记。原副本主格式继续为 5，没有改变原有表文件格式。文件库重建拒绝没有受支持登记版本的旧副本，包括没有 registry_version 的旧格式 1 至 5，并提示使用匹配版本读取原文，再通过当前收录接口重新导入。不会猜测旧目录对应哪个库。底层完整数据库备份读取仍保留原有名称、默认值和结构版本映射，独立于当前文件库重建入口。没有生产数据迁移或旧目录扫描兼容。旧 schema 的维护 helper 仅导出副本并按原哈希核对，不生成库目录或改写旧表头；旧文件修复需使用匹配版本。
 
-关系正本、来源、抑制记录和关系类型合并已从结构版本 18 按上述方式登记；后续测评集沿用该入口。检索记录与模型调用统计只随 PostgreSQL 完整备份保存，不进 `.reliquary/`；未来建表时将其逐列登记到 `BackupOnlyTables`。Redis 临时队列和派生索引仍按现有规则处理。
+关系正本、来源、抑制记录和关系类型合并已从结构版本 18 按上述方式登记；测评集、题目、答案、运行和逐题结果已按结构版本 21 沿用该入口。检索记录与模型调用统计只随 PostgreSQL 完整备份保存，不进 `.reliquary/`；两者已在结构版本 21 与 22 逐列登记到 `BackupOnlyTables`。Redis 临时队列和派生索引仍按现有规则处理。
 
 `./reliquary-admin maintenance rebuild-files` 从现有数据库重新生成所有库的 Markdown 和维护副本；它覆盖手改表头及正文，不调用模型。删除所有库的资料目录后可以逐文件重建；应保留 `attachments/` 中不可重算的图片，图片或整个磁盘丢失须从包含文件库的完整备份恢复。`./reliquary-admin rebuild <文件库>` 仍用于从文件库和副本恢复空数据库，导入前核对原文件，恢复后逐列核对原副本。`verify --repair` 修复数据库拥有的表头及正文。
 
@@ -443,7 +443,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 | `relation_type_merges` | Configuration: library_id from_type to_type created_at | `data/relation_type_merges.json` | library_relation_types |
 | `graph_pending_sync` | Regenerated: id space_id entity_id relation_id relation_version deleted created_at completed_at | 不进入副本 | 恢复后由图谱全量重建生成投影 |
 
-既有 `library_relation_types` 保持 Configuration 与 `data/library_relation_types.json` 登记。旧副本升级核对只投影四张新持久表的空默认值；当前非空关系、来源、版本、抑制及合并记录被改动或丢失会核对失败。待同步记录不参与数据相等核对，不进入文件库实时副本；PostgreSQL 完整备份仍包含该表。恢复后的 Neo4j 重建由 ikb-13 接入。
+既有 `library_relation_types` 保持 Configuration 与 `data/library_relation_types.json` 登记。旧副本升级核对只投影四张新持久表的空默认值；当前非空关系、来源、版本、抑制及合并记录被改动或丢失会核对失败。待同步记录不参与数据相等核对，不进入文件库实时副本；PostgreSQL 完整备份仍包含该表。完整恢复及仅文件库恢复在解除暂停前从 PG 正本重建 Neo4j 并严格核对。
 
 ## 导入顺序与恢复核对
 

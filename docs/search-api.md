@@ -6,7 +6,7 @@ HTTP 为 `POST /api/v1/search`，使用登录令牌或收录 API Key。MCP 为 `
 {
   "query": "仪器校准",
   "libraries": ["mine", "references"],
-  "content_types": ["tutorial"],
+  "content_types": ["教程"],
   "entity_ids": [],
   "topic_ids": [],
   "published_from": "2026-01-01",
@@ -30,6 +30,8 @@ HTTP 为 `POST /api/v1/search`，使用登录令牌或收录 API Key。MCP 为 `
 | `score`, `similar_reports` | 最终排序分数及同库相似报道 |
 | `snippets` | 最多三个命中片段 |
 
+同一 source_ref 的旧记录返回 has_update=true 时，网页资料列表、卡片、详情和检索结果显示“有更新的记录”，点击可打开 latest_article_id 指向的新资料。字段缺失或 has_update=false 时不显示更新标记；旧资料仍可读取与检索。
+
 `snippets` 保留 `chunk_id`, `content`, `chunk_index`, `score`, `match_type`, `image_path`。新增 `locations` 数组；跨段落或标题的分块可能具有多个位置。`mapping=exact` 的文字命中，位置切片按顺序拼接等于分块 `content`。既有分块器把 CRLF 规范为 LF 时，位置仍按原保存正文计数，标为 `normalized_line_endings`；先把切片中的 CRLF 替换成 LF，再与分块文字比较。图片向量命中的 `content` 可以为空，位置范围对应正文图片目标 URL，切片等于 `image_path`，不包含图片说明或 Markdown 括号。纯表头、摘要等生成文本没有正文对应范围时返回空数组，不伪造正文坐标。
 
 ```json
@@ -45,7 +47,7 @@ HTTP 为 `POST /api/v1/search`，使用登录令牌或收录 API Key。MCP 为 `
 
 坐标仅覆盖保存后的 Markdown 正文，不包含文件表头。字符范围为 Unicode 码点的零基半开区间 `[start,end)`，不是 UTF-8 字节数或 JavaScript 字符串索引。标题路径包含祖先和当前位置的各级标题文字，不包含 Markdown 标记。段落序号从 1 开始；标题、每个列表项、连续表格及整段围栏代码各为一个块，普通段落以空行分隔，块后的空白归入前一块。代码内部的空行和 `#` 不产生标题或新段落。图片引用保持原始 Markdown 文本和范围，同时支持 Markdown 内行内 `<img>` 的目标 URL。正文哈希用于拒绝对不同正文应用旧坐标。
 
-前端 ikb-18 应先核对正文哈希，再转换 UTF-16：
+网页引用先核对正文哈希，再转换 UTF-16；外部调用方可使用同样的方法：
 
 ```js
 const points = Array.from(body)
@@ -80,7 +82,7 @@ const exactText = body.slice(utf16Start, utf16End)
 
 ### 网页默认库范围
 
-在网页加入库选择控件前，搜索页和全局搜索框共用的请求适配器先读取 `GET /api/v1/libraries`，再将当前全部库 ID 放入 `libraries`。调用方显式传入库时保持原值。库列表读取失败时不发送无库检索；结果显示 `library_name`。HTTP 与 MCP 后端仍严格要求库参数。
+搜索页和全局搜索框提供库选择并记忆所选范围。全部库范围根据 `GET /api/v1/libraries` 动态解析，显式选择时传所选 ID。库列表读取失败时不发送无库检索；结果显示 `library_name`。HTTP 与 MCP 均严格要求库参数。
 
 ## 资料返回中的库名
 

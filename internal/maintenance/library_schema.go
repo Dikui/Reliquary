@@ -36,6 +36,13 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 	}
 	ids := map[string]map[string]string{}
 	defaults := types.SystemLibraryDefaults()
+	// The 9 to 10 projection must retain the text written by frozen 000010,
+	// independently of later corrections to the current initialization copy.
+	for _, library := range defaults {
+		if library.SystemRole == "opinions" {
+			library.Description = "外部个人的观点：专家、分析师、KOL 的评论与文章。"
+		}
+	}
 	original := snapshot.Tables["libraries"]
 	libraries := []map[string]any{}
 	contents := []map[string]any{}

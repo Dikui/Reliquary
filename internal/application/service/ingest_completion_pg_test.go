@@ -217,3 +217,21 @@ func TestIngestSupplementRollbackRestoresVaultBody(t *testing.T) {
 	require.Equal(t, before, after)
 	require.True(t, h.article(t, article.ID).Incomplete)
 }
+
+func TestIncompleteOwnDiscardUsesIngestOperation(t *testing.T) {
+	h, _ := newIngestHarness(t)
+	forbidIngestNetwork(t, h)
+	row, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "mine", SourceRef: "discard/own.md", Title: "Discard fixture", Content: "# Discard\n\nAcme has original calibration observations.\n\n![figure](https://example.org/discard.png)", Acquisition: "verbatim", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/discard.png", Reason: "unavailable"}}})
+	require.NoError(t, err)
+	require.Equal(t, "accepted", row.Status)
+	h.drain(t)
+	require.True(t, h.article(t, row.EntryID).Incomplete)
+	require.NoError(t, h.service.DiscardIngest(h.ctx, row.EntryID, "不再保留"))
+	logs, err := NewOperationLogService(h.db).List(h.ctx, "ingest_discard", 1, 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, logs.Total)
+	require.Equal(t, row.EntryID, logs.Items[0].ObjectID)
+	deleted, err := NewOperationLogService(h.db).List(h.ctx, "delete_document", 1, 100)
+	require.NoError(t, err)
+	require.Zero(t, deleted.Total)
+}

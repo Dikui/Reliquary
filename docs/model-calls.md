@@ -10,6 +10,8 @@
 
 单位为每百万 token 的币种金额。单价可为 null，币种缺省为 USD，提供时要求三个大写字母。更新省略 pricing 会保留现有价格，显式 null 清空价格。模型响应返回 pricing。每次请求保存单价、币种和模型名称快照，历史记录不会随配置变更。
 
+网页在“设置 > 模型”的新建和编辑表单提供输入单价、输出单价和币种。两项单价可分别留空，明确的 0 表示免费；币种留空时使用 USD。三项全部清空会提交 pricing=null。保存新价格只影响之后发出的调用，历史快照保持原值。ChatGPT 订阅模型显示费用不适用说明，不提供 token 单价填写。
+
 费用状态为 `calculated`、`unknown` 或 `not_applicable`。`calculated` 是按模型配置计算的金额，不代表提供方账单。ChatGPT 登录账号始终为 `not_applicable`，cost 为 null。无 usage 的 token 字段为 null；明确返回的 0 保持为 0。输入型 embedding 和 rerank 接受 total_tokens 作为输入 token，缺失的输出 token 保持 null。
 
 所有接口位于 `/api/v1`，沿用登录和 API Key 认证：
@@ -33,3 +35,9 @@ summary 支持 `period=day|week|month`（默认 day）、`group_by=model,purpose
 写入采用同步 best effort，独立于业务取消，最多等待一秒，错误只写日志。这样避免内存队列在退出时丢失统计，代价是每个请求增加一次 PostgreSQL INSERT。流取消时还有独立回调，即使生产者没有继续读取或关闭响应也会完成中断记账。耗时在写入前取值，不包含记账耗时；不会保存正文、响应内容或凭据。进程被强制终止时尚未完成的请求没有持久记录。
 
 `RELIQUARY_MODEL_CALL_RETENTION_DAYS` 缺省或 0 表示不清理；可设置为 730 等正整数。现有 housekeeping 在未暂停维护时清理过期记录，关闭 housekeeping 时不自动清理。账本没有模型或资料外键，因此删除资料或模型不会删除历史；统计表登记为 BackupOnlyTables，仅随 PostgreSQL 完整备份，不进入维护副本。SQL 备份核对保留行数和摘要，重建或重配时允许追加新调用，已有行的摘要仍须一致。
+
+## 接入与维护边界
+
+外部工具用 API Key 调用本文 HTTP 统计接口，没有单独的统计 MCP 工具。AI 报告不调用审核或处理模型，但向量索引调用仍记账。图谱检索不调用模型。普通检索可能调用查询向量和重排；不可用时的退回状态见 [检索接口](search-api.md)。
+
+完整 PG 备份保存调用账本，仅文件库恢复不能恢复历史调用统计或检索记录。恢复后重建索引产生的调用追加到账本，不修改历史价格快照。替身返回的 token 与费用用于验证记账规则，不代表真实模型费用或效果。

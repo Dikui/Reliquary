@@ -226,12 +226,12 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 	if err := s.rememberIngestDiscard(ctx, entry, ingestDiscardReason(ctx)); err != nil {
 		return err
 	}
-	if s.db != nil && entry.SourceKind == "article" {
+	if s.db != nil && (entry.SourceKind == "article" || ctx.Value(ingestDiscardReasonKey{}) != nil) {
 		if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_discard", id, map[string]any{"url": entry.Source, "missing": entry.IngestMissing()}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
 			return err
 		}
 	}
-	if s.db != nil && entry.SourceKind == "mine" {
+	if s.db != nil && entry.SourceKind == "mine" && ctx.Value(ingestDiscardReasonKey{}) == nil {
 		if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "delete_document", id, map[string]any{"title": entry.Title, "source_kind": "mine", "vault_path": entry.VaultPath}, nil); err != nil {
 			return err
 		}

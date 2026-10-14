@@ -54,7 +54,7 @@ onBeforeUnmount(() => { generation++ })
       <p class="vault-readonly-hint">{{ t('settings.vault.rootHint') }}</p>
       <div class="vault-directories">
         <section v-for="kind in (['mine', 'reports'] as const)" :key="kind" class="vault-directory">
-          <h4>{{ t(kind === 'mine' ? 'settings.vault.mine' : 'settings.vault.reports') }} <code>{{ kind }}/</code></h4>
+          <h4>{{ t(kind === 'mine' ? 'settings.vault.mine' : 'settings.vault.reports') }} <code>{{ status[kind].directory }}/</code></h4>
           <p v-if="kind === 'mine'" class="vault-readonly-hint">{{ t('settings.vault.mineImportedHint') }}</p>
           <dl>
             <template v-if="kind === 'reports'">

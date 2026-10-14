@@ -93,6 +93,7 @@ make test-pg
 - **后端 API**: http://localhost:8080
 - **PostgreSQL**: localhost:5432
 - **Redis**: localhost:6379
+- **Neo4j Bolt**: localhost:7687
 
 ## 开发工作流对比
 
@@ -236,7 +237,7 @@ A: 检查前端的代理配置，确保 `vite.config.ts` 中配置了正确的�
 
 ## 收录接口与采集表升级
 
-新内容只由外部工具经 HTTP 收录接口或 MCP 送入，网页没有 RSS、网址导入、文件上传或手动录入创建入口。接口说明由任务 4 编写于 `docs/ingest-api.md`。模型、embedding 与正文图片处理继续保留。
+新内容只由外部工具经 HTTP 收录接口或 MCP 送入，网页没有 RSS、网址导入、文件上传或手动录入创建入口。接入总览见 [外部接入](external-integration.md)，契约见 [收录 API](ingest-api.md)。模型、embedding 与正文图片处理继续保留。
 
 开发库升级到 `000005` 前先在相同数据库与 `VAULT_ROOT` 配置下执行 `./reliquary-admin export-sources`，再执行直接迁移；生产使用 `./reliquary-admin upgrade` 自动完成升级前完整备份和导出。导出位于文件库 `.reliquary/exports/`，不含凭据。失败时保持暂停并停止迁移，不能跳过失败删表。
 
@@ -274,8 +275,9 @@ export RELIQUARY_TEST_REDIS_ADDR=127.0.0.1:56379
 export RELIQUARY_TEST_NEO4J_URI=bolt://127.0.0.1:57687
 export RELIQUARY_TEST_NEO4J_USERNAME=neo4j
 export RELIQUARY_TEST_NEO4J_PASSWORD=reliquary_test
-# Only enable outage tests against this explicitly named local test container.
-export RELIQUARY_TEST_NEO4J_CONTAINER=reliquary-test-neo4j
+# 停机测试会实际停止容器，必须使用任务独占实例。
+# 不停止或重启共用测试容器时，不设置 RELIQUARY_TEST_NEO4J_CONTAINER。
+# 容器停机用例只可对自己创建的独立实例显式设置该变量。
 make test-integration
 ```
 
@@ -300,3 +302,17 @@ make test-integration
 | 15 | `TestRedisFlushStartupReplaysAllUnfinishedOperations` | 固定保留，测试前、过程中及结束时执行 FLUSHDB |
 
 Python 管理员恢复测试中的 DB 4 仅为环境配置断言，不创建真实 Redis 连接。未显式配置 DB 的 RedisClientOpt 默认使用 0。`REDIS_DB=2` 只影响通过生产 `RedisOptions` 创建的运行客户端，不覆盖上述夹具固定编号。新增执行 FLUSHDB 的测试必须先核查此表及全部连接选项，选用独占编号。完整 Neo4j 维护测试按 Go 包串行执行，避免全量重建清空其他包的测试图。
+
+## 系列联合验证
+
+在设置上面的 PG、Redis、Neo4j 环境变量后执行：
+
+```bash
+go build ./...
+go vet ./...
+GOFLAGS=-p=1 go test -count=1 -timeout=40m ./...
+(cd frontend && npm run type-check && npm run build && npm test)
+python3 scripts/test-reliquary-admin.py
+```
+
+依赖 PG 或 Redis 的用例会使用真实服务；缺环境变量的集成测试明确跳过。容器停机测试还需要显式容器变量，禁止让它停止共用测试服务。维护核对测试按包串行运行。联合验收使用独立 Compose 项目及文件目录，替身模型验证收录、普通和图谱检索、人工动作、调用统计与恢复流程。浏览器巡检独立执行。资料 JSON 的旧 ID 名称边界见 [外部接入](external-integration.md#资料-id-与兼容字段)。

@@ -13,7 +13,7 @@ import zhCN from '../../i18n/locales/zh-CN'
 import enUS from '../../i18n/locales/en-US'
 import * as polling from './entryStatusPolling'
 import * as documentListFilters from './documentListFilters'
-import { descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from './componentTestHarness'
+import { descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle, visibleText } from './componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const { createPinia, setActivePinia } = require('pinia') as typeof import('pinia')
@@ -32,7 +32,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
 }
 const moduleOf = <T>(value: T) => ({ __esModule: true, default: value })
 
-async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'grid') {
+async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'grid', unavailable = false) {
   const previous = { window: globalThis.window, document: globalThis.document,
     storage: Object.getOwnPropertyDescriptor(globalThis, 'localStorage') }
   globalThis.window = { innerHeight: 900, setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} } as any
@@ -87,6 +87,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/stores/resources': { useResourcesStore: () => ({}) },
   })
   const empty = moduleOf(defineComponent({ setup: () => () => null }))
+  let backendAvailable = !unavailable
   const modules: Record<string, any> = {
     '@/utils/bodyReference': bodyReference,
     '@/composables/useLibraryScope': { useLibraryScope: () => ref([]) },
@@ -95,7 +96,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/stores/ui': { useUIStore: () => ({}) },
     '@/stores/pendingCounts': { usePendingCountsStore: () => ({ total: null, refresh: async () => {} }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
-    '@/stores/resources': { useResourcesStore: () => ({ library: { id: 'library-source' }, fetchLibrary: async () => ({ id: 'library-source' }) }) },
+    '@/stores/resources': { useResourcesStore: () => ({ library: unavailable ? null : { id: 'library-source' }, fetchLibrary: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return { id: 'library-source' } } }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },
     '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
     '@/composables/useMarqueeSelect': { useMarqueeSelect: () => ({ shouldSuppressClick: () => false }) },
@@ -119,6 +120,12 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   for (const view of ['Card', 'List']) modules[`./components/Document${view}View.vue`] = moduleOf(
     loadComponent(new URL(`./components/Document${view}View.vue`, import.meta.url), modules),
   )
+  if (unavailable) {
+    modules['@/api/entities'] = { ENTITY_TYPES: ['company'], listEntities: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:[{id:'recovered',canonical_name:'Recovered entity',entity_type:'company',aliases:[]}] } }, getEntityNameEmbeddingRebuildStatus: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:{pending_count:0}} } }
+    modules['@/stores/follows'] = {useFollowStore:()=>({refreshAfterTargetChange:async()=>{}})}
+    modules['./MergeSuggestions.vue']=empty;modules['./EntityRelations.vue']=empty;modules['@/components/FollowToggle.vue']=empty
+    modules['./components/EntryWorkbench.vue']=moduleOf(loadComponent(new URL('./components/EntryWorkbench.vue',import.meta.url),modules))
+  }
   const library = loadComponent(new URL('./Library.vue', import.meta.url), modules)
   const router = vueRouter.createRouter({ history: vueRouter.createMemoryHistory(), routes: [
     { path: '/platform/library', component: library },
@@ -132,6 +139,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   app.use(pinia)
   app.use(i18n)
   registerPrimitives(app)
+  if (unavailable) app.component('t-alert',defineComponent({props:['message'],setup:(props,{attrs,slots})=>()=>h('div',attrs,[props.message,slots.operation?.()])}))
   delete app._context.components['t-select']
   delete app._context.components['t-input']
   app.component('t-select', defineComponent({
@@ -173,6 +181,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const ids = () => descendants(root).filter(node => node.props['data-select-id']).map(node => node.props['data-select-id'])
   return {
     root, router, requests, records, errors, control, byOptions, ids, t,
+    recover() { backendAvailable = true },
     get route() { return router.currentRoute.value },
     async change(node: ReturnType<typeof element>, value: unknown) { node.props.onChange({ value }); await waitForLoad() },
     async navigate(query: Record<string, any>) { await router.push({ path: '/platform/library', query }); await waitForLoad() },
@@ -388,4 +397,16 @@ test('source and star filter changes clear selected entries before loading the f
     assert.equal(selected().length, 0)
     assert.ok(env.ids().every(id => id.startsWith('mine')))
   } finally { env.cleanup() }
+})
+
+for (const locale of ['zh-CN','en-US']) test(`${locale}: entity page mounts on initial library failure and retry restores entities`, async()=>{
+ const page=await mountLibrary(locale,{tab:'entities'},'grid',true)
+ try {
+  assert.ok(visibleText(page.root).includes('Backend unavailable'))
+  const retry=descendants(page.root).find(node=>node.tag==='button' && visibleText(node)===page.t('common.retry'))
+  assert.ok(retry)
+  page.recover();retry.props.onClick();await new Promise(resolve=>setImmediate(resolve));await settle()
+  assert.ok(visibleText(page.root).includes('Recovered entity'))
+  assert.ok(!visibleText(page.root).includes('Backend unavailable'))
+ } finally { page.cleanup() }
 })

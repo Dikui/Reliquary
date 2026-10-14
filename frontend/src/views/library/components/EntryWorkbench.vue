@@ -21,7 +21,7 @@
     <nav class="workbench-nav" :aria-label="t('knowledgeWorkbench.sections')">
       <button v-for="section in sections" :key="section" type="button" :class="['workbench-nav__item', { active: activeSection === section }]" :aria-pressed="activeSection === section" @click="activeSection = section">{{ t(`knowledgeWorkbench.nav.${section}`) }}</button>
     </nav>
-    <t-alert v-if="loadError" theme="error" :message="loadError" role="alert"><template #operation><t-button variant="text" :loading="entitiesLoading" @click="loadEntities()">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
+    <t-alert v-if="loadError" theme="error" :message="loadError" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="refreshAll">{{ t('common.retry') }}</t-button></template></t-alert>
     <section v-if="activeSection === 'entities'" class="workbench-panel">
       <div class="panel-heading"><div><h3>{{ t('knowledgeWorkbench.entities.title') }}</h3><p>{{ t('knowledgeWorkbench.entities.description') }}</p></div>
         <div class="entity-filters"><t-input v-model="entityFilter" clearable :placeholder="t('knowledgeWorkbench.entities.filter')" :aria-label="t('knowledgeWorkbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @enter="onEntityEnter" /><t-select v-model="entityTypeFilter" clearable :options="entityTypeOptions" :placeholder="t('knowledgeWorkbench.entities.allTypes')" :aria-label="t('knowledgeWorkbench.entities.type')" /></div>

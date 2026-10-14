@@ -6,6 +6,7 @@ import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
 import { markdownToPlainText } from '@/utils/markdownPlainText';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import DocumentMenuDelete from './DocumentMenuDelete.vue';
+import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
@@ -374,6 +375,7 @@ const openDelete = async (item: EntryCard) => {
           <t-tag size="small" theme="warning" variant="light-outline">{{ $t('library.intakeWaiting') }}</t-tag>
         </div>
         <EntryClassification v-else-if="item.parse_status === 'completed'" :entry="item" compact @open-entity="emit('open-entity', $event)" />
+        <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_article_id" />
       </div>
 
       <div class="card-bottom">

@@ -67,7 +67,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
     })
     const article = loadComponent(new URL('./SearchEntry.vue', import.meta.url), {
-      './SearchImage.vue': moduleOf(image), './EntryClassification.vue': empty,
+      './EntryUpdateNotice.vue': empty, './SearchImage.vue': moduleOf(image), './EntryClassification.vue': empty,
       './GlobalCommandPalette/useHighlight': highlight,
       '@/utils/markdownPlainText': markdownPlainText,
     })

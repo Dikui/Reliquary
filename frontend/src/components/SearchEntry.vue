@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { SourceLocation, SearchEntry } from '@/types/search'
 import type { FollowFeedArticle } from '@/types/follows'
+import EntryUpdateNotice from './EntryUpdateNotice.vue'
 import EntryClassification from './EntryClassification.vue'
 import SearchImage from './SearchImage.vue'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
@@ -36,6 +37,7 @@ const feedArticle = computed(() => props.article as FollowFeedArticle)
     <p class="article-meta"><span v-if="article.library_name" class="article-library">{{ article.library_name }}</span><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span><span>{{ published }}</span><code v-if="article.vault_path">{{ article.vault_path }}</code></p>
     <div v-if="followFeed" class="feed-attribution"><time :datetime="feedArticle.collected_at">{{ t('follows.collectedAt', { time: new Date(feedArticle.collected_at).toLocaleString(locale) }) }}</time><div class="feed-matches"><strong>{{ t('follows.matchedTargets') }}</strong><t-tag v-for="target in feedArticle.matched_follows" :key="`${target.target_type}:${target.target_id}`" size="small" variant="light-outline">{{ target.name }} ({{ t(`follows.targetTypes.${target.target_type}`) }})</t-tag></div></div>
     <EntryClassification :entry="classification" compact @open-entity="emit('open-entity', $event)" />
+        <EntryUpdateNotice :has-update="article.has_update" :latest-entry-id="article.latest_article_id" />
     <div v-if="article.snippets?.length" class="article-snippets">
       <strong>{{ t('knowledgeSearch.snippets') }}</strong>
       <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="article-snippet">

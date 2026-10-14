@@ -85,6 +85,7 @@ for (const locale of ['en-US', 'zh-CN']) for (const timeline of [false, true]) t
       '@/views/settings/RetrievalSettings.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('input', { 'data-settings-input': true }) }) },
     }
     for (const name of ['ResultGroup', 'ResultItem']) modules[`./GlobalCommandPalette/${name}.vue`] = { __esModule: true, default: loadComponent(new URL(`./GlobalCommandPalette/${name}.vue`, import.meta.url), {}) }
+    modules['@/components/EntryUpdateNotice.vue'] = { __esModule:true, default:loadComponent(new URL('./EntryUpdateNotice.vue', import.meta.url), modules) }
     const palette = loadComponent(new URL('./GlobalCommandPalette.vue', import.meta.url), modules)
     const preview = loadComponent(new URL('./ImagePreview.vue', import.meta.url), { 'tdesign-vue-next': { ImageViewer } })
     const previewOpen = ref(false)

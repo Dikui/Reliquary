@@ -1,6 +1,7 @@
 import { get } from '../utils/request'
 
 export interface VaultDirectoryStatus {
+  directory?: string
   last_scan_at?: string | null
   indexed_files: number
   last_error?: string

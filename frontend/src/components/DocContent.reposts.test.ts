@@ -130,6 +130,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
     '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule, '@/components/EntryStarToggle.vue': emptyModule,
+    '@/components/EntryUpdateNotice.vue': emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
     '@/components/EntryProcessingTimeline.vue': emptyModule,
     '@/components/PersonalDocumentDelete.vue': options.personalDelete || emptyModule,

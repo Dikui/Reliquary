@@ -104,6 +104,11 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		if err := tx.Model(&merged).Update("merged_into_id", keep.ID).Error; err != nil {
 			return err
 		}
+		for _, id := range []string{merged.ID, keep.ID} {
+			if err := notifyEntityProjection(tx, spaceID, id); err != nil {
+				return err
+			}
+		}
 		if err := tx.Model(&keep).Updates(map[string]any{"embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
@@ -182,6 +187,9 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 			return err
 		}
 		entity.CanonicalName, entity.NormalizedName, entity.EmbeddingNeedsRebuild = name, normalizeEntityName(name), true
+		if err := notifyEntityProjection(tx, spaceID, entity.ID); err != nil {
+			return err
+		}
 		if s.nameEmbeddingRebuilder != nil {
 			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "entity_renamed")
 		}

@@ -3,7 +3,7 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin } from 'tdesign-vue-next'
 import { listLibraries, getCatalogLibrary, createCatalogLibrary, saveCatalogLibrary, deleteCatalogLibrary, mergeLibraryRelationTypes, type LibraryCatalogItem, type LibraryTemplate } from '@/api/library'
-import { LIBRARY_TEMPLATES, validDirectory, validLibraryName, validTypes, librarySettingsPayload, moveType } from '@/utils/libraryCatalogForm'
+import { LIBRARY_TEMPLATES, validDirectory, validLibraryName, validTypes, librarySettingsPayload, moveType, catalogDescription } from '@/utils/libraryCatalogForm'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 const { t, locale } = useI18n()
 const emit = defineEmits<{ changed: [] }>()
@@ -33,7 +33,7 @@ async function load(id?: string) {
     if (!selected) { draft.value = null; return }
     const response = await getCatalogLibrary(selected); if (!response.success) throw new Error(response.message)
     if (current !== sequence) return
-    draft.value = { ...response.data, content_types: response.data.content_types || [], relation_types: response.data.relation_types || [] }
+    draft.value = { ...response.data, description: catalogDescription(response.data, t('ikb18.systemOpinionsDescription')), content_types: response.data.content_types || [], relation_types: response.data.relation_types || [] }
     saved.value = JSON.stringify(draft.value); fromType.value = ''; toType.value = ''
   } catch (cause: any) { if (current === sequence) error.value = cause.message || t('common.operationFailed') }
   finally { if (current === sequence) loading.value = false }

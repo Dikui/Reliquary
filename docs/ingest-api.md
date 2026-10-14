@@ -13,8 +13,8 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `acquisition` | 新收录必填：`verbatim` 逐字原文、`extracted` 提取、`model_written` 模型整理 |
 | `source_ref` | 仅自有型库接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库同来源按最新记录的正文判断重复 |
 | `identifier` | 仅外部长效型库接受。可选 `scheme:value`，最多 2048 Unicode 码点。去两部分首尾空白，scheme 小写，DOI 的 value 也小写。其他 scheme 的值保留大小写。在所属库内参与去重 |
-| `graph` | 可选布尔值，保存在资料上；未提供或 null 表示按库和内容类型默认。本阶段不执行图谱抽取 |
-| `article_id` | 仅补全使用，已有资料 ID。Go 字段名为 `EntryID`，JSON 沿用收录结果及 MCP 的 `article_id`，避免同时出现两套 ID 名称 |
+| `graph` | 可选布尔值，保存在资料上；未提供或 null 表示按库和内容类型默认。非生成型库在处理时依该值和内容类型开关抽取图谱 |
+| `article_id` | 仅补全使用，已有资料 ID。Go 字段名为 `EntryID`；JSON 保留已发布的 `article_id` 契约。普通检索 HTTP 使用 `entry_id`，调用方在接口边界转换名称，不要提交未知的 `entry_id` 收录字段 |
 | `url` | 可选来源链接，可为空；非空必须为 HTTP 或 HTTPS，最多 2048 字节。现有外部来源审核仍可能要求链接 |
 | `title` | 可选标题，最多 255 个码点；AI 报告需要标题 |
 | `author`、`publisher`、`published_at` | 可选来源信息；日期使用 YYYY-MM-DD 或 RFC3339 |
@@ -81,7 +81,7 @@ AI 报告：
 | 外部时效型，`link_or_publisher_date` | 有链接正常审核；无链接但有发布者和有效发布日期可审核入库，并标记 `source_unverified=true`；缺少任一项进入收录待审 | 同上 |
 | 外部长效型 | 链接或 `identifier` 至少一个，否则进入收录待审 | 规范化 URL、规范化 `identifier`、正文哈希；不做近似去重 |
 | 自有型 | 不要求来源证据 | `source_ref` 优先，按最新同来源正文比较；没有 `source_ref` 时按正文哈希 |
-| 生成型 | 不要求来源证据 | 不去重 |
+| 生成型 | 不要求来源证据 | 不做来源与近似去重；报告写入按请求 ID 或内容指纹幂等 |
 
 同一链接或正文可以收入不同库。确认不收录后，仅在原库保存链接、正文、标识或来源身份的适用指纹，再次提交相同指纹返回 `discarded`。自有型有 `source_ref` 时，丢弃指纹同时包含该来源与正文，正文变化仍可重新收录。
 
@@ -89,7 +89,7 @@ AI 报告：
 
 来源未核实标记在 HTTP/MCP 收录结果、资料列表、详情、正文读取、检索和关注动态返回中保留。网页沿用已有标记位置。缺链接的待审条目继续支持补链接并重新审核、明确确认无链接入库、确认不收录。补上链接后清除未核实标记；无链接手工入库仍标记未核实。
 
-图片缺失继续进入待补全。调用方按 `library` 与 `article_id` 定位原资料，补全成功后重新处理；缺少图片与来源证据不足分别处理。长文审核仍沿用当前长度处理，分段审核由 ikb-10 实现。
+图片缺失继续进入待补全。调用方按 `library` 与 `article_id` 定位原资料，补全成功后重新处理，撤换旧关系证据并重新计算正文位置；缺少图片与来源证据不足分别处理。长文按文末规则分段审核。
 
 ## 来源标识与结果
 
@@ -132,7 +132,7 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 {"items":[{"library":"mine","article_id":"首次收录返回的 article_id","images":[{"asset_id":"上传返回的 asset_id","source_url":"https://example.org/chart.png"}]}]}
 ```
 
-补全把正文中匹配的图片引用替换为本地路径，文字保持原样。可选 `content` 用于旧有正文冲突检查；不同正文另存关联收录待审，返回 `conflict`，不覆盖原资料。保留原有规范化与近似正文比较规则。不能用相同 URL 自动补全。图片替换位置预留 ikb-08 重新计算正文坐标的调用点。
+补全把正文中匹配的图片引用替换为本地路径，文字保持原样。可选 `content` 用于旧有正文冲突检查；不同正文另存关联收录待审，返回 `conflict`，不覆盖原资料。保留原有规范化与近似正文比较规则。不能用相同 URL 自动补全。图片替换后重新计算保存正文的哈希和位置，检索与关系证据使用更新后的坐标。
 
 `GET /api/v1/ingest/incomplete?page=1&page_size=20` 列出待补全资料，含 `article_id`、`library_id` 与缺失图片。`include_attempted=false` 排除已尝试补全一次的资料。`POST /api/v1/ingest/:id/accept-incomplete` 接受缺失，`POST /api/v1/ingest/:id/discard` 丢弃资料，可附 `reason`。
 
@@ -227,7 +227,7 @@ HTTP 的 `details.fields` 包括 `title`、`markdown`、`related_article_ids[0]`
 
 除 AI 报告外，处理调用从所属库的内容类型清单选择类型，同时输出关系和图片说明。`graph: true/false` 覆盖内容类型的图谱开关；未提供时使用所属库的配置，其他默认不抽关系。资料的内容类型修正只能选择所属库启用的类型。
 
-每张可读图片的说明作为独立检索块进入 BM25 与文本向量索引，不写回 Markdown 正文。处理模型须支持视觉；图片不可读或模型不支持视觉时保存跳过原因。资料详情的 `image_descriptions` 返回 `url`、`ordinal`、`description`、`skip_reason` 和 `locations`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。关系处理结果暂不通过详情界面展示。
+每张可读图片的说明作为独立检索块进入 BM25 与文本向量索引，不写回 Markdown 正文。处理模型须支持视觉；图片不可读或模型不支持视觉时保存跳过原因。资料详情的 `image_descriptions` 返回 `url`、`ordinal`、`description`、`skip_reason` 和 `locations`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。关系及来源通过实体详情和 [关系接口](relations-api.md) 读取。
 
 普通检索的 `snippets` 中，图片说明命中包含 `chunk_type: "image_description"`，`content` 为说明文字，`match_type` 仍表示 `keyword` 或 `vector` 检索通道。`locations` 指向图片引用所在正文段落，`mapping` 为 `image_description`，字符范围和 `body_hash` 使用保存后的 Markdown 正文坐标。例如：
 
