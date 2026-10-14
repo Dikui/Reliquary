@@ -1071,6 +1071,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <div class="doc-drawer-header-title">{{ getDisplayTitle() }}</div>
           </div>
           <div class="header-actions">
+            <a v-if="details.id" :href="`/platform/model-calls?entry_id=${encodeURIComponent(details.id)}`" :title="t('ikb19.viewEntryCalls')" :aria-label="t('ikb19.viewEntryCalls')" class="header-action-btn"><t-icon name="chart-bar" size="16px" /></a>
 
             <PersonalDocumentDelete v-if="details.source_kind === 'mine' && details.id" :document-id="details.id" :title="getDisplayTitle()"
               :disabled="articleJudgmentsBusy || incompleteBusy" @busy-change="personalDocumentDeleteBusy = $event"

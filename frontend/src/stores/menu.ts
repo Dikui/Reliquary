@@ -9,6 +9,8 @@ export const useMenuStore = defineStore('menuStore', () => {
     { key: 'entities', title: i18n.global.t('knowledgeWorkbench.title'), icon: 'usergroup', path: 'entries', tab: 'entities' },
     { key: 'topics', title: i18n.global.t('topicManagement.title'), icon: 'folder', path: 'topics', tab: undefined },
     { key: 'follows', title: i18n.global.t('follows.title'), icon: 'heart', path: 'follows', tab: undefined },
+    { key: 'evaluation', title: i18n.global.t('ikb19.evaluationTitle'), icon: 'task', path: 'evaluation', tab: undefined },
+    { key: 'modelCalls', title: i18n.global.t('ikb19.callsTitle'), icon: 'chart-line', path: 'model-calls', tab: undefined },
     { key: 'settings', title: i18n.global.t('menu.settings'), icon: 'setting', path: 'settings', tab: undefined },
   ])
   return { menuArr, visibleMenuArr: menuArr }

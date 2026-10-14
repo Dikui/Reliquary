@@ -35,6 +35,8 @@ var entryNamingExceptions = map[string]entryNamingException{
 	"cmd/server/maintenance_credentials_pg_test.go":                         {Reason: "既有模型类型 KnowledgeQA 保持原值；旧数据库维护 fixture 使用历史表与 payload", Tokens: []string{"KnowledgeQA"}},
 	"cmd/server/maintenance_legacy_pg_test.go":                              {Reason: "既有模型类型 KnowledgeQA 保持原值；旧数据库维护 fixture 使用历史表与 payload", Tokens: []string{"knowledge", "knowledge_id", "knowledges"}},
 	"frontend/src/api/model-usage.test.ts":                                  {Reason: "现有 i18n 键、界面原文案或对应断言", Tokens: []string{"knowledge"}},
+	"frontend/src/views/insights/EvaluationPage.vue": {Reason: "测评生成模型筛选使用既有 HTTP 模型类型枚举，不改已持久化值", Tokens: []string{"KnowledgeQA"}},
+	"frontend/src/views/insights/insights.test.ts": {Reason: "测评页面夹具核对既有 HTTP 模型类型枚举", Tokens: []string{"KnowledgeQA"}},
 	"frontend/src/api/model.ts":                                             {Reason: "已持久化模型类型值", Tokens: []string{"KnowledgeQA"}},
 	"frontend/src/api/personal-space-routes.test.ts":                        {Reason: "现有 i18n 键、界面原文案或对应断言", Tokens: []string{"knowledge"}},
 	"frontend/src/components/DocContent.reposts.test.ts":                    {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"knowledgeReview", "knowledgeWorkbench"}},

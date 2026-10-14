@@ -50,6 +50,10 @@ func evaluationPage(c *gin.Context) (int, int, bool) {
 }
 func (h *EvaluationHandler) Register(v1 *gin.RouterGroup) {
 	v1.GET("/search/records", h.ListRecords)
+	v1.GET("/evaluation/vector-sets", func(c *gin.Context) {
+		data, err := h.service.ListVectorSets(c.Request.Context())
+		evaluationJSON(c, data, err)
+	})
 	v1.GET("/evaluation/sets", func(c *gin.Context) {
 		limit, offset, ok := evaluationPage(c)
 		if !ok {

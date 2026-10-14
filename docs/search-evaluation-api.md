@@ -15,6 +15,7 @@
 | POST | `/evaluation/sets/:set_id/runs` | 同步运行评测 |
 | GET | `/evaluation/runs` | 运行列表，可按 `set_id` 筛选 |
 | GET | `/evaluation/runs/:run_id` | 配置快照、逐题结果、汇总 |
+| GET | `/evaluation/vector-sets` | 当前及可用候选、归档向量集，返回 selector、model_id、dimension、profile_hash、run_id |
 | GET | `/evaluation/compare?before=:id&after=:id` | 两次运行按题与汇总比较 |
 
 测评集写入 `name` 和 `description`。题目写入示例：

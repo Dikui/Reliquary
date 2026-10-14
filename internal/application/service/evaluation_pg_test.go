@@ -204,6 +204,14 @@ func TestEvaluationSelectsActiveCandidateAndArchiveVectors(t *testing.T) {
 	models := &evaluationModels{}
 	search := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, models, h.db)
 	svc := NewEvaluationService(h.db, search, models)
+	available, err := svc.ListVectorSets(h.ctx)
+	require.NoError(t, err)
+	require.Len(t, available, 2)
+	require.Equal(t, "active", available[0].Selector)
+	require.Equal(t, "candidate:candidate", available[1].Selector)
+	require.Equal(t, "new-model", available[1].ModelID)
+	_, err = svc.ListVectorSets(context.Background())
+	require.Error(t, err)
 	set, err := svc.SaveSet(h.ctx, "", "Vectors", "")
 	require.NoError(t, err)
 	_, err = svc.SaveQuestion(h.ctx, set.ID, "", types.EvaluationQuestion{Request: types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", CollapseSimilar: entrySearchNoCollapse()}, Answers: []types.EvaluationAnswer{{EntryID: "b", Grade: 1}}})
@@ -229,6 +237,11 @@ func TestEvaluationSelectsActiveCandidateAndArchiveVectors(t *testing.T) {
 	require.NoError(t, h.db.Exec("UPDATE embeddings SET model_id='fixture-model'").Error)
 	require.NoError(t, h.db.Exec(`INSERT INTO embedding_vector_archives(run_id,space_id,payload) SELECT 'candidate',1,jsonb_build_object('embeddings',(SELECT jsonb_agg(to_jsonb(e)) FROM embeddings e),'article_embeddings','[]'::jsonb,'image_embeddings','[]'::jsonb)`).Error)
 	require.NoError(t, h.db.Model(&run).Update("switched_at", time.Now()).Error)
+	available, err = svc.ListVectorSets(h.ctx)
+	require.NoError(t, err)
+	require.Len(t, available, 2)
+	require.Equal(t, "archive:candidate", available[1].Selector)
+	require.Equal(t, "fixture-model", available[1].ModelID)
 	archived, err := svc.Run(h.ctx, set.ID, types.EvaluationRunOptions{K: 1, VectorSet: "archive:candidate"})
 	require.NoError(t, err)
 	require.Equal(t, "completed", archived.Status, archived.Error)
@@ -238,6 +251,10 @@ func TestEvaluationSelectsActiveCandidateAndArchiveVectors(t *testing.T) {
 	require.Equal(t, "archive:candidate", snapshot["vector_set"].(map[string]any)["selector"])
 	_, err = svc.Run(h.ctx, set.ID, types.EvaluationRunOptions{VectorSet: "candidate:candidate"})
 	require.Error(t, err)
+	require.NoError(t, h.db.Exec("DELETE FROM embedding_vector_archives WHERE run_id='candidate'").Error)
+	available, err = svc.ListVectorSets(h.ctx)
+	require.NoError(t, err)
+	require.Len(t, available, 1)
 }
 
 func TestEvaluationPreservesReportFactBoundaryAndRecords(t *testing.T) {
