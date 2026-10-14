@@ -44,6 +44,9 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				delete(copy, table)
 			}
 		}
+		if migration.Version < 21 {
+			delete(copy, "search_records")
+		}
 		result = copy
 	}()
 	if migration.Dirty {

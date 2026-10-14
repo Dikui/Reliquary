@@ -251,7 +251,7 @@ func registerTools(server *mcp.Server, services Services) {
 			"collapse_similar": boolean("是否折叠相似报道，省略使用检索服务默认值"),
 			"limit":            integer("最多返回的文章数，省略使用检索服务默认值", 1, 100),
 		}, "query", "libraries"), func(ctx context.Context, in types.EntrySearchRequest) (any, error) {
-			return services.Search.Search(ctx, in)
+			return services.Search.Search(types.WithSearchSource(ctx, "mcp"), in)
 		})
 	addTool(server, "get_article", "按 ID 读取数据库表头字段和正文。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。摘要加链接文章返回表头摘要与 original_url，body 为空。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
 		object(map[string]any{"id": text("文章 ID，必填"), "offset": integer("正文起始 Unicode 字符偏移，默认 0", 0, 0),

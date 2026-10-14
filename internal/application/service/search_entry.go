@@ -23,6 +23,9 @@ type entrySearchFilters struct {
 
 func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters, error) {
 	f := entrySearchFilters{request: request}
+	if len(request.GraphParameters) > 0 {
+		return f, apperrors.NewBadRequestError("graph_parameters require a graph evaluation question")
+	}
 	if len(request.Libraries) == 0 || len(request.Libraries) > 100 {
 		return f, apperrors.NewBadRequestError("libraries requires 1 to 100 library IDs or directories")
 	}
@@ -84,7 +87,8 @@ func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters,
 }
 
 // Search is the article retrieval entry point used by HTTP and external adapters.
-func (s *searchService) Search(ctx context.Context, request types.EntrySearchRequest) (*types.EntrySearchResponse, error) {
+func (s *searchService) Search(ctx context.Context, request types.EntrySearchRequest) (out *types.EntrySearchResponse, resultErr error) {
+	started := time.Now()
 	f, err := normalizeEntrySearch(request)
 	if err != nil {
 		return nil, err
@@ -96,8 +100,13 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if s.db == nil {
 		return nil, fmt.Errorf("article search requires PostgreSQL")
 	}
+	defer func() {
+		if err := recordOrdinarySearch(ctx, s.db, request, out, started, resultErr); err != nil {
+			resultErr = fmt.Errorf("persist search record: %w", err)
+		}
+	}()
 	var selected []types.Library
-	if err := s.db.WithContext(ctx).Where("space_id=? AND (id IN ? OR directory IN ?)", spaceID, request.Libraries, request.Libraries).Find(&selected).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND (id IN ? OR directory IN ?)", spaceID, request.Libraries, request.Libraries).Order("id").Find(&selected).Error; err != nil {
 		return nil, err
 	}
 	ids := []string{}
@@ -116,6 +125,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 		ids = append(ids, lib.ID)
 	}
 	f.request.Libraries = ids
+	request.Libraries = ids
 	keywordEnabled := false
 	for _, lib := range selected {
 		keywordEnabled = keywordEnabled || lib.IsKeywordEnabled()
@@ -138,6 +148,15 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			config = space.RetrievalConfig
 		}
 	}
+	execution, hasExecution := types.SearchExecution(ctx)
+	if hasExecution && execution.RetrievalConfig != nil {
+		config = execution.RetrievalConfig
+	}
+	set, err := resolveSearchVectorSet(ctx, s.db, spaceID, request.VectorSet, false)
+	if err != nil {
+		return nil, err
+	}
+	f.request.VectorSet = set.Selector
 	limit := f.request.Limit
 	if limit == 0 {
 		limit = min(config.GetEffectiveRerankTopK(), 100)
@@ -146,11 +165,18 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	var queryVector []float32
 	modelID := ""
 	queryProfileHash := ""
+	modelDimension := 0
 	vectorUnavailable := false
 	if library.IsVectorEnabled() {
 		modelID, err = ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 		if err != nil {
 			return nil, err
+		}
+		if set.ModelID != "" {
+			modelID = set.ModelID
+		}
+		if execution.ExpectedEmbeddingModelID != "" && modelID != execution.ExpectedEmbeddingModelID {
+			return nil, fmt.Errorf("embedding model changed during evaluation")
 		}
 		if modelID != "" {
 			var metadata types.Model
@@ -160,9 +186,26 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			}
 			if read.RowsAffected > 0 {
 				queryProfileHash = types.EmbeddingProfileHash(modelID, metadata.Parameters.EmbeddingParameters.Dimension, &metadata)
+				modelDimension = metadata.Parameters.EmbeddingParameters.Dimension
+			}
+			if execution.ExpectedEmbeddingProfileHash != "" && queryProfileHash != execution.ExpectedEmbeddingProfileHash {
+				return nil, fmt.Errorf("embedding profile changed during evaluation")
 			}
 			queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			queryVector, err = s.libraryService.GetQueryEmbedding(queryCtx, library.ID, f.request.Query)
+			if set.Selector == "active" {
+				queryVector, err = s.libraryService.GetQueryEmbedding(queryCtx, library.ID, f.request.Query)
+			} else if s.modelService != nil {
+				model, modelErr := s.modelService.GetEmbeddingModel(queryCtx, modelID)
+				if modelErr != nil {
+					err = modelErr
+				} else if model == nil {
+					err = fmt.Errorf("embedding model unavailable")
+				} else {
+					queryVector, err = model.Embed(queryCtx, f.request.Query)
+				}
+			} else {
+				err = fmt.Errorf("embedding model unavailable")
+			}
 			cancel()
 			invalid := len(queryVector) == 0 || (metadata.Parameters.EmbeddingParameters.Dimension > 0 && len(queryVector) != metadata.Parameters.EmbeddingParameters.Dimension)
 			norm := float64(0)
@@ -196,6 +239,13 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			currentID, err := ResolveModelTier(ctx, tx, &currentLibrary, types.ModelTierEmbedding)
 			if err != nil {
 				return err
+			}
+			if set.Selector != "active" {
+				lockedSet, setErr := resolveSearchVectorSet(ctx, tx, spaceID, set.Selector, true)
+				if setErr != nil {
+					return setErr
+				}
+				currentID = lockedSet.ModelID
 			}
 			if currentID != modelID {
 				return fmt.Errorf("embedding model selection changed during query generation")
@@ -233,9 +283,19 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if err != nil {
 		return nil, err
 	}
+	rerankID, resolveErr := ResolveModelTier(ctx, s.db, library, types.ModelTierRerank)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if hasExecution && execution.RerankModelID != nil {
+		rerankID = *execution.RerankModelID
+	}
+	execution.RerankModelID = &rerankID
+	ctx = types.WithSearchExecution(ctx, execution)
 	merged, response.RerankStatus = s.rerankEntryResults(ctx, library, f.request.Query, merged)
 	if f.request.CollapseSimilar == nil || *f.request.CollapseSimilar {
-		merged, err = s.collapseArticleReports(ctx, spaceID, merged, config)
+		set.ModelID = modelID
+		merged, err = s.collapseArticleReports(ctx, spaceID, merged, config, set)
 		if err != nil {
 			return nil, err
 		}
@@ -244,6 +304,18 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 		merged = merged[:limit]
 	}
 	response.Results = merged
+	f.request.Limit = limit
+	if f.request.CollapseSimilar == nil {
+		enabled := true
+		f.request.CollapseSimilar = &enabled
+	}
+	if set.Selector == "active" {
+		set.ModelID = modelID
+		set.ProfileHash = queryProfileHash
+		set.Dimension = modelDimension
+	}
+	response.Snapshot = searchSnapshot(config, selected, set, f.request, rerankID)
+	request = f.request
 	return response, nil
 }
 
@@ -300,6 +372,9 @@ func (s *searchService) rerankEntryResults(ctx context.Context, library *types.L
 	modelID, err := ResolveModelTier(ctx, s.db, library, types.ModelTierRerank)
 	if err != nil {
 		return results, "unavailable"
+	}
+	if execution, ok := types.SearchExecution(ctx); ok && execution.RerankModelID != nil {
+		modelID = *execution.RerankModelID
 	}
 	if modelID == "" {
 		return results, "unconfigured"

@@ -454,6 +454,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectVectorManifest(expected, actual)
 	expected, actual = projectFollowManifest(expected, actual)
 	expected, actual = projectSegmentManifest(expected, actual)
+	expected, actual = projectEvaluationManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
