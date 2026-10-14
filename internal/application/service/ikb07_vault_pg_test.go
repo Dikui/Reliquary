@@ -92,6 +92,9 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 		if entry.SourceRef != "" {
 			expected = append(expected, "latest_article_id")
 		}
+		if entry.SourceKind == "report" {
+			expected = append(expected, "cannot_be_fact", "report_fingerprint")
+		}
 		require.Equal(t, expected, keys)
 		require.NotContains(t, string(head), ": null")
 		bodies[entry.ID] = string(full)

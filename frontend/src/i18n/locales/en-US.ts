@@ -122,6 +122,7 @@ export default {
   },
   ingestStatus: {
   "navCount": "Pending, {count} items",
+  "cannotBeFact": "Cannot be treated as fact",
   "modelWritten": "Model written",
   "modelWrittenHint": "The body was written by an external tool's model and may differ from the original",
   "incomplete": "Incomplete",

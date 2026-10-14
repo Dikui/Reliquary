@@ -27,13 +27,15 @@ import (
 
 type vaultRecordingEmbedder struct {
 	chunkSearchEmbedder
-	mu     sync.Mutex
-	inputs []string
+	mu           sync.Mutex
+	inputs       []string
+	callContexts []context.Context
 }
 
 func (e *vaultRecordingEmbedder) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, texts []string) ([][]float32, error) {
 	e.mu.Lock()
 	e.inputs = append(e.inputs, texts...)
+	e.callContexts = append(e.callContexts, ctx)
 	e.mu.Unlock()
 	return e.chunkSearchEmbedder.BatchEmbed(ctx, texts)
 }
@@ -263,7 +265,8 @@ func TestVaultReportImmediatelyIndexesReadOnlyBodyAndValidatesRelations(t *testi
 	require.NoError(t, h.documents.Scan(h.ctx, false))
 	require.Equal(t, count, h.embedder.inputCount())
 	_, err = h.documents.CreateReport(h.ctx, "bad", "some Markdown", []string{uuid.NewString()})
-	require.ErrorContains(t, err, "unavailable article")
+	require.ErrorContains(t, err, "related_article_ids[0]")
+	require.ErrorContains(t, err, "does not exist or is deleted")
 	_, err = h.documents.CreateReport(h.ctx, "", "body", nil)
 	require.Error(t, err)
 	_, err = h.documents.CreateReport(h.ctx, "Empty", " \n", nil)

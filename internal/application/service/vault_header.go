@@ -18,30 +18,35 @@ import (
 
 // VaultArticleHeader is the portable article metadata used by vault rebuild.
 type VaultArticleHeader struct {
-	LibraryID         string              `yaml:"library_id,omitempty" json:"library_id,omitempty"`
-	Library           string              `yaml:"library,omitempty" json:"library,omitempty"`
-	SourceRef         string              `yaml:"source_ref,omitempty" json:"source_ref,omitempty"`
-	Identifier        string              `yaml:"identifier,omitempty" json:"identifier,omitempty"`
-	HasUpdate         bool                `yaml:"has_update,omitempty" json:"has_update,omitempty"`
-	LatestEntryID     string              `yaml:"latest_article_id,omitempty" json:"latest_article_id,omitempty"`
-	Graph             *bool               `yaml:"graph,omitempty" json:"graph,omitempty"`
-	RelatedArticleIDs []string            `yaml:"related_article_ids,omitempty" json:"related_article_ids,omitempty"`
-	ID                string              `yaml:"id" json:"id"`
-	SourceKind        string              `yaml:"source_kind,omitempty" json:"source_kind,omitempty"`
-	URL               string              `yaml:"url" json:"url"`
-	Title             string              `yaml:"title" json:"title"`
-	Publisher         string              `yaml:"publisher" json:"publisher"`
-	Author            string              `yaml:"author" json:"author"`
-	PublishedAt       string              `yaml:"published_at" json:"published_at"`
-	CollectedAt       string              `yaml:"collected_at" json:"collected_at"`
-	ContentType       string              `yaml:"content_type" json:"content_type"`
-	Summary           *types.EntrySummary `yaml:"summary" json:"summary"`
-	Entities          []string            `yaml:"entities" json:"entities"`
-	Topics            []string            `yaml:"topics" json:"topics"`
-	Starred           bool                `yaml:"starred" json:"starred"`
-	CollectReason     string              `yaml:"collect_reason" json:"collect_reason"`
-	SourceUnverified  bool                `yaml:"source_unverified,omitempty" json:"source_unverified"`
-	Acquisition       string              `yaml:"acquisition,omitempty" json:"acquisition,omitempty"`
+	LibraryID         string                  `yaml:"library_id,omitempty" json:"library_id,omitempty"`
+	Library           string                  `yaml:"library,omitempty" json:"library,omitempty"`
+	SourceRef         string                  `yaml:"source_ref,omitempty" json:"source_ref,omitempty"`
+	Identifier        string                  `yaml:"identifier,omitempty" json:"identifier,omitempty"`
+	HasUpdate         bool                    `yaml:"has_update,omitempty" json:"has_update,omitempty"`
+	LatestEntryID     string                  `yaml:"latest_article_id,omitempty" json:"latest_article_id,omitempty"`
+	Graph             *bool                   `yaml:"graph,omitempty" json:"graph,omitempty"`
+	CannotBeFact      bool                    `yaml:"cannot_be_fact,omitempty" json:"cannot_be_fact,omitempty"`
+	RelatedEntities   []ReportEntityReference `yaml:"related_entities,omitempty" json:"related_entities,omitempty"`
+	TopicIDs          []string                `yaml:"topic_ids,omitempty" json:"topic_ids,omitempty"`
+	ReportFingerprint string                  `yaml:"report_fingerprint,omitempty" json:"report_fingerprint,omitempty"`
+	RequestID         string                  `yaml:"request_id,omitempty" json:"request_id,omitempty"`
+	RelatedArticleIDs []string                `yaml:"related_article_ids,omitempty" json:"related_article_ids,omitempty"`
+	ID                string                  `yaml:"id" json:"id"`
+	SourceKind        string                  `yaml:"source_kind,omitempty" json:"source_kind,omitempty"`
+	URL               string                  `yaml:"url" json:"url"`
+	Title             string                  `yaml:"title" json:"title"`
+	Publisher         string                  `yaml:"publisher" json:"publisher"`
+	Author            string                  `yaml:"author" json:"author"`
+	PublishedAt       string                  `yaml:"published_at" json:"published_at"`
+	CollectedAt       string                  `yaml:"collected_at" json:"collected_at"`
+	ContentType       string                  `yaml:"content_type" json:"content_type"`
+	Summary           *types.EntrySummary     `yaml:"summary" json:"summary"`
+	Entities          []string                `yaml:"entities" json:"entities"`
+	Topics            []string                `yaml:"topics" json:"topics"`
+	Starred           bool                    `yaml:"starred" json:"starred"`
+	CollectReason     string                  `yaml:"collect_reason" json:"collect_reason"`
+	SourceUnverified  bool                    `yaml:"source_unverified,omitempty" json:"source_unverified"`
+	Acquisition       string                  `yaml:"acquisition,omitempty" json:"acquisition,omitempty"`
 }
 
 // RenderVaultArticleHeader emits one ordered schema for every library.
@@ -97,6 +102,22 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	if len(h.RelatedArticleIDs) > 0 {
 		writeVaultList(&b, "related_article_ids", h.RelatedArticleIDs, true)
 	}
+	if h.CannotBeFact {
+		b.WriteString("cannot_be_fact: true\n")
+	}
+	if len(h.RelatedEntities) > 0 {
+		b.WriteString("related_entities:\n")
+		for _, entity := range h.RelatedEntities {
+			scalar("  - id", entity.ID)
+			scalar("    name", entity.Name)
+			scalar("    entity_type", entity.EntityType)
+		}
+	}
+	if len(h.TopicIDs) > 0 {
+		writeVaultList(&b, "topic_ids", h.TopicIDs, true)
+	}
+	scalar("report_fingerprint", h.ReportFingerprint)
+	scalar("request_id", h.RequestID)
 	b.WriteString("---\n")
 	return []byte(b.String())
 }

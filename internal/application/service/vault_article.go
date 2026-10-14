@@ -98,16 +98,21 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	if k.SourceRef != "" && h.LatestEntryID == "" {
 		h.LatestEntryID = k.ID
 	}
-	var metadata struct {
-		RelatedArticleIDs []string `json:"related_article_ids"`
-	}
+	var metadata reportMetadata
 	if err := json.Unmarshal(k.Metadata, &metadata); err == nil {
 		h.RelatedArticleIDs = metadata.RelatedArticleIDs
+		if k.SourceKind == "report" {
+			h.RelatedEntities = metadata.RelatedEntities
+			h.TopicIDs = metadata.TopicIDs
+			h.ReportFingerprint = metadata.Fingerprint
+			h.RequestID = metadata.RequestID
+		}
 	}
 	h.SourceUnverified = k.SourceUnverified
 	if k.SourceKind == "mine" {
 		h.SourceKind = "mine"
 	}
+	h.CannotBeFact = k.SourceKind == "report"
 	h.Acquisition = k.Acquisition
 	if k.SourceUnverified {
 		h.URL = ""

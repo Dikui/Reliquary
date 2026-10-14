@@ -94,6 +94,7 @@ func saveArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *VaultSer
 // prepareArticleImageEmbedding performs file reads and the model call before
 // a rebuild checkpoint transaction acquires its progress and profile locks.
 func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *VaultService, embedder embedding.Embedder, article *types.Entry, attachmentPath string, force bool) (func(*gorm.DB) error, error) {
+	ctx = types.WithModelCallEntry(ctx, article.ID)
 	source := *article
 	article = &source
 	images, ok := embedder.(embedding.ImageEmbedder)

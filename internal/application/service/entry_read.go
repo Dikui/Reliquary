@@ -23,6 +23,7 @@ type EntryReadResult struct {
 	Body             string             `json:"body"`
 	OriginalURL      string             `json:"original_url"`
 	ParseStatus      string             `json:"parse_status"`
+	CannotBeFact     bool               `json:"cannot_be_fact,omitempty"`
 	SourceUnverified bool               `json:"source_unverified"`
 	Acquisition      string             `json:"acquisition"`
 	Offset           int                `json:"offset"`
@@ -60,7 +61,7 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
 	result := &EntryReadResult{LibraryID: entry.LibraryID, LibraryName: entry.LibraryName, SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID, Header: header, OriginalURL: header.URL,
-		ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
+		CannotBeFact: entry.SourceKind == "report", ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
 	reader, _, err := s.GetEntryBody(ctx, id)
 	if err != nil {
 		return nil, err

@@ -50,6 +50,7 @@ type EmbedderType string
 
 // Config represents the embedder configuration
 type Config struct {
+	Accounting                *types.ModelCallAccounting
 	Source                    types.ModelSource `json:"source"`
 	BaseURL                   string            `json:"base_url"`
 	ModelName                 string            `json:"model_name"`
@@ -110,6 +111,7 @@ func NewEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 	// before debug logging. See concurrencyEmbedder for the placement rationale.
 	e = wrapEmbeddingConcurrency(e, config.MaxConcurrency)
 	if w, ok := e.(*concurrencyEmbedder); ok {
+		w.accounting = config.Accounting
 		w.requestsPerMinute = config.RequestsPerMinute
 		w.profileHash = config.ProfileHash
 	}

@@ -14,6 +14,7 @@ export interface ClassifiedEntry {
   missing_materials?: MissingMaterial[]
   related_article_id?: string
   starred?: boolean
+  cannot_be_fact?: boolean
   source_unverified?: boolean
   source_kind?: 'article' | 'mine' | 'report'
   vault_path?: string

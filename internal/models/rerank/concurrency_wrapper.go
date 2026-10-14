@@ -7,6 +7,7 @@ import (
 )
 
 type governedReranker struct {
+	accounting               *types.ModelCallAccounting
 	inner                    Reranker
 	limit, requestsPerMinute int
 }
@@ -20,6 +21,7 @@ func (w *governedReranker) Rerank(ctx context.Context, query string, documents [
 	}
 	release := limiter.GateNamedN(ctx, w.GetModelID(), w.GetModelName(), w.limit)
 	defer release()
+	ctx = types.WithModelCallAccounting(ctx, w.accounting)
 	types.RecordModelCall(ctx, w.GetModelID())
 	return w.inner.Rerank(ctx, query, documents)
 }

@@ -122,6 +122,7 @@ export default {
   },
   ingestStatus: {
   "navCount": "待处理，{count} 项",
+  "cannotBeFact": "不能当作事实",
   "modelWritten": "模型整理",
   "modelWrittenHint": "正文由外部工具的模型整理，可能不是原文",
   "incomplete": "待补全",

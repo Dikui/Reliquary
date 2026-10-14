@@ -29,7 +29,7 @@ func (s *searchService) entryChunkVectorQuery(ctx context.Context, spaceID uint6
 	expression := fmt.Sprintf("e.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
 	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
 		Joins("JOIN chunks c ON c.entry_id=k.id AND c.space_id=k.space_id").
-		Joins("JOIN embeddings e ON e.chunk_id=c.id AND e.entry_id=k.id").
+		Joins("JOIN "+vectorRelation(f.request.VectorSet, "chunk", "e")+" ON e.chunk_id=c.id AND e.entry_id=k.id").
 		Where(entrySearchableChunks).
 		Where("e.dimension=? AND e.embedding IS NOT NULL AND (e.is_enabled IS NULL OR e.is_enabled=true)", len(vector)).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
@@ -38,7 +38,7 @@ func (s *searchService) entryChunkVectorQuery(ctx context.Context, spaceID uint6
 func (s *searchService) articleVectorQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool, vector []float32, modelID string, config *types.RetrievalConfig) *gorm.DB {
 	expression := fmt.Sprintf("a.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
 	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
-		Joins("JOIN article_embeddings a ON a.entry_id=k.id AND a.space_id=k.space_id").
+		Joins("JOIN "+vectorRelation(f.request.VectorSet, "article", "a")+" ON a.entry_id=k.id AND a.space_id=k.space_id").
 		Where("k.source_kind IN ('article','mine') AND a.dimension=? AND a.model_id=?", len(vector), modelID).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
@@ -46,13 +46,17 @@ func (s *searchService) articleVectorQuery(ctx context.Context, spaceID uint64, 
 func (s *searchService) imageVectorQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool, vector []float32, modelID string, config *types.RetrievalConfig) *gorm.DB {
 	expression := fmt.Sprintf("i.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
 	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
-		Joins("JOIN image_embeddings i ON i.entry_id=k.id AND i.space_id=k.space_id").
+		Joins("JOIN "+vectorRelation(f.request.VectorSet, "image", "i")+" ON i.entry_id=k.id AND i.space_id=k.space_id").
 		Where("k.source_kind IN ('article','mine') AND i.dimension=? AND i.model_id=?", len(vector), modelID).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 
 func (s *searchService) imageSearchEnabled(ctx context.Context, spaceID uint64, modelID string) (bool, error) {
-	if !imageVectorsEnabled(ctx, s.db, spaceID) {
+	enabled := imageVectorsEnabled(ctx, s.db, spaceID)
+	if execution, ok := types.SearchExecution(ctx); ok && execution.RetrievalConfig != nil {
+		enabled = execution.RetrievalConfig.ImageVectorEnabled
+	}
+	if !enabled {
 		return false, nil
 	}
 	var model types.Model

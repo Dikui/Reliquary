@@ -13,6 +13,11 @@ func RegisterModelRoutes(
 	handler *handler.ModelHandler,
 	credHandler *handler.ModelCredentialsHandler,
 	g *accessGuards) {
+	r.GET("/model-calls", handler.ListModelCalls)
+	r.GET("/model-calls/summary", handler.ModelCallSummary)
+	r.GET("/model-calls/trend", handler.ModelCallTrend)
+	r.GET("/model-calls/purposes", handler.ModelCallPurposes)
+	r.GET("/entries/:id/model-calls", handler.ListModelCalls)
 	// 模型路由组，登录用户和 API Key 均可访问。
 	models := r.Group("/models")
 	{

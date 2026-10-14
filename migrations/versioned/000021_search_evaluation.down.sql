@@ -1,0 +1,3 @@
+DROP TRIGGER evaluation_answer_deleted ON entries;
+DROP FUNCTION mark_evaluation_answer_deleted();
+DROP TABLE evaluation_run_results,evaluation_runs,evaluation_answers,evaluation_questions,evaluation_sets,search_records;

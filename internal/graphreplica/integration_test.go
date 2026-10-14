@@ -23,6 +23,9 @@ import (
 	"reliquary/internal/types"
 )
 
+// Dedicated database: other destructive recovery tests reserve DB 13 and 15.
+const graphTestRedisDB = 9
+
 func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
 func fixture(t *testing.T) (*Service, *types.Entry) {
 	t.Helper()
@@ -218,7 +221,7 @@ func newQueue(t *testing.T, s *Service) *queue.Client {
 	if addr == "" {
 		t.Skip("set RELIQUARY_TEST_REDIS_ADDR for real Redis graph tests")
 	}
-	opt := asynq.RedisClientOpt{Addr: addr, DB: 13, DialTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second}
+	opt := asynq.RedisClientOpt{Addr: addr, DB: graphTestRedisDB, DialTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second}
 	client := queue.NewClientWithRedis(s.db, opt)
 	t.Cleanup(func() {
 		require.NoError(t, client.Close())
@@ -253,10 +256,13 @@ func waitSynced(t *testing.T, s *Service) {
 }
 func TestRedisFlushStartupReplayAndPeriodicNotificationSweep(t *testing.T) {
 	s, e := fixture(t)
+	require.NoError(t, s.db.Exec(`INSERT INTO search_records(id,space_id,source,method,query,libraries,request,results) VALUES('merge-search',1,'http','ordinary','retained query','["library"]','{}','[]')`).Error)
+	var originalSearch string
+	require.NoError(t, s.db.Raw("SELECT to_jsonb(r)::text FROM search_records r WHERE id='merge-search'").Scan(&originalSearch).Error)
 	s.queue = newQueue(t, s)
 	publish(t, s, e)
 	require.NoError(t, s.Sweep(context.Background(), time.Now()))
-	redisClient := redis.NewClient(&redis.Options{Addr: os.Getenv("RELIQUARY_TEST_REDIS_ADDR"), DB: 13})
+	redisClient := redis.NewClient(&redis.Options{Addr: os.Getenv("RELIQUARY_TEST_REDIS_ADDR"), DB: graphTestRedisDB})
 	defer redisClient.Close()
 	require.NoError(t, redisClient.FlushDB(context.Background()).Err())
 	startQueue(t, s)
@@ -280,6 +286,23 @@ func TestRedisFlushStartupReplayAndPeriodicNotificationSweep(t *testing.T) {
 	var n int64
 	require.NoError(t, s.db.Model(&queue.Job{}).Where("task_type=?", TypeCheck).Count(&n).Error)
 	require.EqualValues(t, 1, n)
+	var calls int64
+	require.NoError(t, s.db.Table("model_calls").Count(&calls).Error)
+	require.Zero(t, calls)
+	var afterSearch string
+	require.NoError(t, s.db.Raw("SELECT to_jsonb(r)::text FROM search_records r WHERE id='merge-search'").Scan(&afterSearch).Error)
+	require.JSONEq(t, originalSearch, afterSearch)
+	for _, operation := range []string{"graph_check", "graph_rebuild"} {
+		var count int64
+		require.NoError(t, s.db.Table("operation_logs").Where("operation_type=?", operation).Count(&count).Error)
+		require.Positive(t, count)
+	}
+	for _, task := range []string{TypeSync, TypeCheck, TypeRebuild} {
+		require.Eventually(t, func() bool {
+			var count int64
+			return s.db.Model(&queue.Job{}).Where("task_type=? AND state=?", task, queue.TaskStateCompleted).Count(&count).Error == nil && count > 0
+		}, 30*time.Second, 100*time.Millisecond)
+	}
 }
 func TestStoppedNeo4jChangesReplayAfterRecovery(t *testing.T) {
 	container := os.Getenv("RELIQUARY_TEST_NEO4J_CONTAINER")

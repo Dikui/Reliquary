@@ -111,9 +111,9 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID,
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
-			Acquisition: entry.Acquisition,
-			Incomplete:  (entry.SourceKind == "article" || entry.SourceKind == "mine") && entry.Incomplete,
-			Summary:     entry.StructuredSummary, Starred: entry.Starred,
+			Acquisition: entry.Acquisition, CannotBeFact: entry.SourceKind == "report",
+			Incomplete: (entry.SourceKind == "article" || entry.SourceKind == "mine") && entry.Incomplete,
+			Summary:    entry.StructuredSummary, Starred: entry.Starred,
 			SourceUnverified: entry.SourceUnverified,
 			Entities:         entities[entry.ID], Topics: topics[entry.ID],
 			Score: scores[entry.ID], SimilarReports: []*types.EntrySearchResult{},
@@ -302,7 +302,7 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 	return options, err
 }
 
-func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.EntrySearchResult, config *types.RetrievalConfig) ([]*types.EntrySearchResult, error) {
+func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.EntrySearchResult, config *types.RetrievalConfig, sets ...searchVectorSet) ([]*types.EntrySearchResult, error) {
 	ids := []string{}
 	for _, result := range results {
 		if (result.Source == "article" || result.Source == "mine") && result.PublishedAt != nil {
@@ -325,7 +325,14 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 	if err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Table("article_embeddings ae").Select("ae.*, l.template").
+	selector := "active"
+	if len(sets) > 0 {
+		selector = sets[0].Selector
+		if sets[0].ModelID != "" {
+			modelID = sets[0].ModelID
+		}
+	}
+	if err := s.db.WithContext(ctx).Table(vectorRelation(selector, "article", "ae")).Select("ae.*, l.template").
 		Joins("JOIN libraries l ON l.space_id=ae.space_id AND l.id=ae.library_id").
 		Joins("JOIN entries e ON e.space_id=ae.space_id AND e.library_id=ae.library_id AND e.id=ae.entry_id").
 		Where("ae.space_id=? AND ae.entry_id IN ? AND ae.model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {

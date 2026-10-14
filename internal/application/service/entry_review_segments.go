@@ -80,6 +80,7 @@ func (s *entryService) singleReviewSegment(ctx context.Context, library *types.L
 }
 
 func (s *entryService) reviewSegments(ctx context.Context, library *types.Library, entry *types.Entry, body string, source types.SourceInfo) (bool, string, error) {
+	ctx = types.WithModelCallEntry(ctx, entry.ID)
 	id, err := ResolveModelTier(ctx, s.db, library, types.ModelTierLight)
 	if err != nil {
 		return false, "", err

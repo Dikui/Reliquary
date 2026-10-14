@@ -281,7 +281,7 @@ const openDelete = async (item: EntryCard) => {
             />
           </div>
           <span class="card-content-title" :title="item.file_name">{{ item.file_name }}</span>
-          <EntryStarToggle v-if="item.source_kind !== 'report' && item.parse_status === 'completed'" :entry="item" @updated="emit('judgment-updated', $event)" />
+          <EntryStarToggle v-if="item.parse_status === 'completed'" :entry="item" @updated="emit('judgment-updated', $event)" />
           <t-popup
 
             v-model="item.isMore"

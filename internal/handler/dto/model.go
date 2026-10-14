@@ -37,6 +37,7 @@ type ModelResponse struct {
 // ModelParametersDTO carries every parameter field except APIKey and AppSecret.
 // CustomHeaders is kept as structural metadata rather than a credential.
 type ModelParametersDTO struct {
+	Pricing             types.ModelPricing        `json:"pricing"`
 	BaseURL             string                    `json:"base_url"`
 	InterfaceType       string                    `json:"interface_type"`
 	EmbeddingParameters types.EmbeddingParameters `json:"embedding_parameters"`
@@ -60,6 +61,7 @@ func NewModelResponse(ctx context.Context, m *types.Model) *ModelResponse {
 		return nil
 	}
 	params := ModelParametersDTO{
+		Pricing:             m.Parameters.Pricing,
 		BaseURL:             m.Parameters.BaseURL,
 		InterfaceType:       m.Parameters.InterfaceType,
 		EmbeddingParameters: m.Parameters.EmbeddingParameters,

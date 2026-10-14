@@ -230,7 +230,7 @@ const openDelete = async (item: EntryItem) => {
         </div>
 
         <div class="cell cell-actions" @click.stop>
-          <EntryStarToggle v-if="item.source_kind !== 'report' && item.parse_status === 'completed'" :entry="item" @updated="emit('judgment-updated', $event)" />
+          <EntryStarToggle v-if="item.parse_status === 'completed'" :entry="item" @updated="emit('judgment-updated', $event)" />
           <t-popup v-model="item.isMore" placement="bottom-right" trigger="click" :destroy-on-close="false" overlay-class-name="card-more"
             :on-visible-change="(v: boolean) => onMoreVisible(item.id, v)">
             <button class="row-more-btn" :class="{ active: moreOpen === item.id }" type="button"

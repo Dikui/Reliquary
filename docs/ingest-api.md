@@ -152,13 +152,63 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 
 先 `initialize`，随后请求 `/mcp`，使用 Bearer API Key、`Accept: application/json, text/event-stream` 和协商的 `MCP-Protocol-Version`。`list_libraries` 返回库用途、模板、审核和来源说明、去重说明及 `accepted_fields`。`check_urls` 参数与 HTTP 相同。`list_incomplete`、`accept_incomplete` 可用于发现和处理缺图片的资料；图片上传仍走 HTTP。
 
-`write_report` 固定写 AI 报告系统库。`library` 可省略（固定为 `ai-reports`），提供时仅接受该系统库 ID 或目录名，其他库报错。现有格式为标题、Markdown 正文及可选 `related_article_ids`；完整 AI 报告格式由 ikb-15 定义。
+## write_report：AI 报告格式契约
+
+MCP 工具 `write_report` 与 HTTP `POST /api/v1/reports` 使用同一 JSON 对象，固定写入 AI 报告系统库。
+
+| 字段 | 类型 | 规则 |
+| --- | --- | --- |
+| `title` | string | 必填，去掉首尾空白后 1 至 255 个 Unicode 字符 |
+| `markdown` | string | 必填，非空 UTF-8 Markdown，最多 5000000 个 Unicode 字符；保留正文文字 |
+| `library` | string | 可省略；仅接受 `ai-reports` 或该系统库 ID |
+| `related_article_ids` | string[] | 可选，每个 ID 必须属于当前空间、存在且未删除；可跨库引用 |
+| `related_entities` | string[] | 可选，按实体 ID 优先，其次规范名或别名精确规范化匹配；必须已存在且未合并；多个候选时拒绝并返回候选 ID、规范名和类型 |
+| `topics` | string[] | 可选，已有主题的 ID 或名称，ID 优先；不新建主题 |
+| `request_id` | string | 可选，首尾空白去除后最多 255 个 Unicode 字符；非空时优先作为幂等键 |
+
+可选列表字段省略或使用空数组；不接受 `null`。所有文本字段禁止 NUL 字符。未知字段逐项拒绝。来源链接、作者、发布者、摘要、内容类型、图谱开关均不属于 `write_report` 契约；旧 MCP 与 HTTP 文档未定义这些字段，旧 HTTP 曾静默忽略未知字段；现在 HTTP 与 MCP 一致拒绝。引用来源用 `related_article_ids` 表达，正文中的普通链接照常保存。
+
+格式错误整体返回 HTTP 400，`details.fields` 列出全部问题；MCP 返回 `isError=true`，文本中包含同一字段错误集合。每项包含 `field`、`message`，实体多候选另含 `candidates`。错误请求不写资料、文件、操作日志或索引任务。
+
+不审核，不调用生成模型，不生成摘要、内容类型、实体、主题、关系或图片说明。只写入调用方元数据并建立 BM25 与向量索引；embedding 是建立向量索引所必需的调用。不会计算实体名向量。关联实体保存在报告引用元数据和表头 `related_entities`，不写 `entry_entities`，不进入实体档案或图谱。已有主题按调用方选择建立关联。远程图片链接保留，不下载、不写图片说明；内联图片沿用文件复制机制。
+
+响应含 `cannot_be_fact=true`，意为“不能当作事实”；Markdown 表头、资料读取、普通检索及 MCP 返回同样带此标记。首次保存 HTTP 201，幂等命中 HTTP 200，`existing=true`。`index_status` 为 `completed`、`pending_retry` 或 `failed`；索引暂时失败仍保留报告，由持久化任务重试，调用方无需创建另一份。
+
+幂等范围是当前空间和目标库，跨 HTTP、MCP 和服务重启生效。`request_id` 非空时仅按该 ID 找已有活动报告，命中返回原报告，不更新正文，即使重试提供了不同的有效内容。使用新的 `request_id` 可以创建独立报告。省略或空字符串时，按标题、正文和规范化关联字段的 SHA-256 指纹返回已有报告：标题去掉首尾空白，正文换行规范化后参与哈希，关联列表去重、排序，实体和主题解析为 ID；实际正文仍保留调用方文字。
+
+这是接口幂等，没有内容相似度识别、转载归并或报告丢弃指纹。不同调用若省略 `request_id` 且内容及关联字段相同，也会返回已有报告，因为无法仅靠内容判断重试与新的业务请求；这种行为避免网络重试造成重复综合分析，可接受。需明确区分业务请求时提供不同 `request_id`。已删除的报告不拦截新写入。历史报告没有新指纹时按保存的标题、正文与关联元数据比较，返回最早匹配报告，保留历史独立记录。
+
+HTTP 示例，ID 用现有资料、实体和主题替换：
 
 ```json
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_report","arguments":{"library":"ai-reports","title":"研究报告","markdown":"# 研究报告\n\n综合分析内容。"}}}
+{
+  "title": "研究报告",
+  "markdown": "# 研究报告\n\n这是综合分析，不能当作事实。",
+  "related_article_ids": ["已有资料ID"],
+  "related_entities": ["已有实体ID", "已有实体别名"],
+  "topics": ["已有主题ID"],
+  "request_id": "agent-report-20261014-01"
+}
 ```
 
-报告不审核、不进行模型处理，只保存并索引。每次调用创建独立报告，不按标题或正文去重；接口幂等扩展留待 ikb-15。保存后索引失败仍返回已保存结果及索引状态，待处理操作负责重试。
+MCP 使用同一对象作为 `arguments`：
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_report","arguments":{"title":"研究报告","markdown":"# 研究报告\n\n综合分析内容。","related_article_ids":["已有资料ID"],"related_entities":["已有实体ID"],"topics":["已有主题ID"],"request_id":"agent-report-20261014-02"}}}
+```
+
+错误示例，以下请求整体拒绝：
+
+```json
+{"title":" ","markdown":" ","related_article_ids":["不存在的资料"],"related_entities":["不存在的实体","有多个候选的名字"],"topics":["不存在的主题"],"author":"不支持的字段"}
+```
+
+HTTP 的 `details.fields` 包括 `title`、`markdown`、`related_article_ids[0]`、`related_entities[0]`、`related_entities[1]`、`topics[0]` 与 `author`；多候选项形如：
+
+```json
+{"field":"related_entities[1]","message":"ambiguous entity; use an ID","candidates":[{"id":"公司实体ID","name":"同名","entity_type":"company"},{"id":"产品实体ID","name":"同名","entity_type":"product"}]}
+```
+
 ## 长文审核与处理
 
 正文安全上限仍为 5,000,000 个 Unicode 码点。实际可自动处理的长度还受所选模型上下文与单篇分段数限制，超过限制的资料进入收录待审，原因中包含分段上限，不会无限调用模型或截断后标记完成。

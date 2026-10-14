@@ -27,8 +27,8 @@ func (s *entryService) SetStarred(ctx context.Context, id string, starred bool) 
 			}
 			return err
 		}
-		if !isIngestArticle(&article) {
-			return werrors.NewBadRequestError("only articles and user documents can be starred")
+		if !isIngestArticle(&article) && article.SourceKind != "report" {
+			return werrors.NewBadRequestError("only library material can be starred")
 		}
 		if article.Starred == starred {
 			return nil

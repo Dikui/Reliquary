@@ -2,6 +2,8 @@ package maintenance
 
 import (
 	"context"
+	"fmt"
+	"gorm.io/gorm"
 	"path/filepath"
 	"testing"
 
@@ -42,4 +44,53 @@ func TestGraphReplicaMigrationPreservesAuthorityAndPendingRecords(t *testing.T) 
 	require.NoError(t, m.Migrate(18))
 	require.NoError(t, m.Migrate(19))
 	require.NoError(t, ValidateClassification(context.Background(), db))
+}
+
+// All pre-upgrade rows must survive 19, 21 and 22, including regenerated notices.
+func TestGraphReplicaMergeUpgrade18To22(t *testing.T) {
+	db := pgtest.Open(t)
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	m, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	defer m.Close()
+	require.NoError(t, m.Migrate(18))
+	seed(t, db)
+	require.NoError(t, db.Exec(`INSERT INTO graph_pending_sync(id,space_id,entity_id,relation_id,relation_version,deleted) VALUES('merge-live',1,'entity-a','gone',7,false),('merge-deleted',1,'gone','gone',8,true)`).Error)
+	capture := func(database *gorm.DB, stripCompleted bool) map[string]string {
+		var tables []string
+		require.NoError(t, database.Raw("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations' ORDER BY tablename").Scan(&tables).Error)
+		rows := map[string]string{}
+		for _, table := range tables {
+			expression := "to_jsonb(t)"
+			if stripCompleted && table == "graph_pending_sync" {
+				expression += "-'completed_at'"
+			}
+			var data string
+			require.NoError(t, database.Raw(fmt.Sprintf(`SELECT COALESCE(jsonb_agg(%s ORDER BY %s::text),'[]'::jsonb)::text FROM public.%q t`, expression, expression, table)).Scan(&data).Error)
+			rows[table] = data
+		}
+		return rows
+	}
+	before := capture(db, false)
+	for _, version := range []uint{19, 21, 22} {
+		require.NoError(t, m.Migrate(version))
+		require.NoError(t, ValidateClassification(context.Background(), db))
+		actual := capture(db, true)
+		for table, data := range before {
+			require.JSONEq(t, data, actual[table], "version %d table %s", version, table)
+		}
+		for table, data := range actual {
+			if _, existed := before[table]; !existed {
+				require.JSONEq(t, "[]", data, "new table %s", table)
+			}
+		}
+	}
+	require.NoError(t, m.Down())
+	require.NoError(t, m.Up())
+	require.NoError(t, ValidateClassification(context.Background(), db))
+	version, dirty, err := m.Version()
+	require.NoError(t, err)
+	require.EqualValues(t, 22, version)
+	require.False(t, dirty)
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"reliquary/internal/modelcalls"
 	secutils "reliquary/internal/utils"
 )
 
@@ -33,5 +34,5 @@ var sharedRerankHTTPTransport = secutils.NewSSRFSafeTransport(
 func newRerankHTTPClient(timeout time.Duration) *http.Client {
 	cfg := secutils.DefaultSSRFSafeHTTPClientConfig()
 	cfg.Timeout = timeout
-	return secutils.NewSSRFSafeHTTPClientWithTransport(cfg, sharedRerankHTTPTransport)
+	return modelcalls.WrapClient(secutils.NewSSRFSafeHTTPClientWithTransport(cfg, sharedRerankHTTPTransport))
 }

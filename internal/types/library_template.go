@@ -40,7 +40,7 @@ func RulesForTemplate(template string) (TemplateRules, bool) {
 	case TemplateOwn:
 		return TemplateRules{Deduplication: "仅在本库去重；有 source_ref 时只与同来源最新记录比较正文，相同返回最新记录，变化新增并保留旧记录；无 source_ref 时按正文哈希识别。", SourceEvidence: "不需要来源证据。", Review: true, Process: true, FactSource: true, Identity: IdentityRules{Body: true, SourceRef: true}}, true
 	case TemplateGenerated:
-		return TemplateRules{Deduplication: "不去重。", SourceEvidence: "不需要来源证据。"}, true
+		return TemplateRules{Deduplication: "不做内容去重；报告写入按 request_id 或规范化内容指纹保证接口幂等。", SourceEvidence: "不需要来源证据。"}, true
 	default:
 		return TemplateRules{}, false
 	}

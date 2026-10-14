@@ -35,6 +35,7 @@ type RouterParams struct {
 	VaultHandler            *handler.VaultHandler       `optional:"true"`
 	MaintenanceHandler      *handler.MaintenanceHandler `optional:"true"`
 	SearchHandler           *handler.SearchHandler
+	EvaluationHandler       *handler.EvaluationHandler `optional:"true"`
 	EntityHandler           *handler.EntityHandler
 	EmbeddingRebuildHandler *handler.EmbeddingRebuildHandler `optional:"true"`
 	TopicHandler            *handler.TopicHandler            `optional:"true"`
@@ -153,6 +154,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 			v1.PUT("/maintenance/configure", params.MaintenanceHandler.Configure)
 		}
 		v1.POST("/search", params.SearchHandler.SearchEntry)
+		if params.EvaluationHandler != nil {
+			params.EvaluationHandler.Register(v1)
+		}
 		v1.GET("/search/options", params.SearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)

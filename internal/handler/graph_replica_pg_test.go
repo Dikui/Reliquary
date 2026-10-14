@@ -19,7 +19,7 @@ import (
 
 func TestGraphRebuildRequiresWebUserAndEnqueuesDurableOperation(t *testing.T) {
 	db := pgtest.Open(t)
-	client := queue.NewClientWithRedis(db, asynq.RedisClientOpt{Addr: "127.0.0.1:19398", DB: 13})
+	client := queue.NewClientWithRedis(db, asynq.RedisClientOpt{Addr: "127.0.0.1:19398", DB: 9})
 	defer client.Close()
 	h := NewGraphReplicaHandler(graphreplica.NewService(db, nil, client))
 	router := gin.New()

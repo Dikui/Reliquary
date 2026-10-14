@@ -18,6 +18,7 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
 	"reliquary/internal/maintenanceops"
+	"reliquary/internal/modelcalls"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -104,6 +105,9 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 	}
 	if paused {
 		return
+	}
+	if err := modelcalls.NewStore(h.db).Prune(ctx); err != nil {
+		logger.Warnf(ctx, "model call retention failed: %v", err)
 	}
 	threshold := h.staleThreshold()
 	cutoff := time.Now().Add(-threshold)

@@ -279,9 +279,24 @@ export RELIQUARY_TEST_NEO4J_CONTAINER=reliquary-test-neo4j
 make test-integration
 ```
 
-固定测试密码为 `reliquary_test`，不能用于正式部署。没有设置 Neo4j URI 时集成测试跳过并打印配置提示。图谱队列测试使用 Redis DB 13，其中清空测试会执行 FLUSHDB；不要与其他任务共用 DB 13。Neo4j 测试按独立命名空间隔离并清理图数据，容器结束后保留。测试目标按 Go 包串行执行，以隔离全量清空专用数据库的维护用例。停止容器测试需要显式设置上述容器变量，结束后自动恢复容器。
+固定测试密码为 `reliquary_test`，不能用于正式部署。没有设置 Neo4j URI 时集成测试跳过并打印配置提示。图谱队列测试专用 Redis DB 9，其中清空测试会执行 FLUSHDB；不要与其他任务共用 DB 9。Neo4j 测试按独立命名空间隔离并清理图数据，容器结束后保留。测试目标按 Go 包串行执行，以隔离全量清空专用数据库的维护用例。停止容器测试需要显式设置上述容器变量，结束后自动恢复容器。
 
 `go run ./cmd/server maintenance graph-check` 执行一次全量核对。
 `go run ./cmd/server maintenance graph-rebuild` 清空专用 Neo4j 数据库后从 PG 重建。
 也可用 `make graph-check`、`make graph-rebuild`，连接参数和文件库参数与后端相同。
 登录用户可调用 `POST /api/v1/maintenance/graph/rebuild`，返回待处理操作 ID，在运行队列查看状态。API Key 无权调用这个维护入口。
+
+### Redis 测试数据库占用
+
+以下占用按全部 Go、Python 和 Shell 测试中的连接选项及清空操作核查。默认 Redis 地址由 `RELIQUARY_TEST_REDIS_ADDR` 提供，数据库编号由各夹具确定。
+
+| DB | 使用位置 | 隔离与清理 |
+| --- | --- | --- |
+| 0 | `internal/testutil/redistest` 与 `internal/queue/redis_test.go` 的通用夹具 | 队列名 `reliquary:<临时PG库名>:<逻辑队列>`，Redis 键 `asynq:*<临时PG库名>*`；只清理自己的队列与匹配键 |
+| 2 | 本次及后续手工后端运行验证，设置 `REDIS_DB=2` | 使用运行数据库名作为队列前缀；结束只清理对应队列和键 |
+| 8 | `TestVectorDeferralRecoversWithoutOrdinaryFailures` | 使用临时 PG 库名隔离，夹具按对应 Redis DB 清理 |
+| 9 | `internal/graphreplica` 的队列、周期补推和 Redis 丢失测试 | 图谱专用；丢失测试执行 FLUSHDB，不能与其他测试或后端共用。HTTP 图谱夹具也选 9，但连接的是不可达测试端口 |
+| 13 | `TestPeriodicSweepRecoversRedisLossWithoutRestart` | 固定保留，测试前、过程中及结束时执行 FLUSHDB |
+| 15 | `TestRedisFlushStartupReplaysAllUnfinishedOperations` | 固定保留，测试前、过程中及结束时执行 FLUSHDB |
+
+Python 管理员恢复测试中的 DB 4 仅为环境配置断言，不创建真实 Redis 连接。未显式配置 DB 的 RedisClientOpt 默认使用 0。`REDIS_DB=2` 只影响通过生产 `RedisOptions` 创建的运行客户端，不覆盖上述夹具固定编号。新增执行 FLUSHDB 的测试必须先核查此表及全部连接选项，选用独占编号。完整 Neo4j 维护测试按 Go 包串行执行，避免全量重建清空其他包的测试图。

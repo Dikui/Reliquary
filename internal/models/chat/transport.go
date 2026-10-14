@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"reliquary/internal/modelcalls"
 	secutils "reliquary/internal/utils"
 )
 
@@ -56,7 +57,7 @@ var rawHTTPTransport = &http.Transport{
 	MaxIdleConnsPerHost: 5,
 }
 
-var rawHTTPClient = secutils.NewSSRFSafeHTTPClientWithTransport(
+var rawHTTPClient = modelcalls.WrapClient(secutils.NewSSRFSafeHTTPClientWithTransport(
 	secutils.SSRFSafeHTTPClientConfig{Timeout: 0, MaxRedirects: 10},
 	rawHTTPTransport,
-)
+))
