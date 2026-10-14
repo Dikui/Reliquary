@@ -138,6 +138,7 @@ type Entry struct {
 	Description                 string        `json:"description"`
 	ContentType                 string        `json:"content_type" gorm:"type:varchar(16)"`
 	ContentTypeCorrected        bool          `json:"content_type_corrected" gorm:"not null;default:false"`
+	CannotBeFact                bool          `json:"cannot_be_fact,omitempty" gorm:"-"`
 	SourceUnverified            bool          `json:"source_unverified" gorm:"not null;default:false"`
 	ReviewKind                  string        `json:"review_kind,omitempty" gorm:"-"`
 	SourceKind                  string        `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`

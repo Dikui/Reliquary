@@ -57,6 +57,7 @@ type EntrySearchResult struct {
 	ContentType      string               `json:"content_type"`
 	Acquisition      string               `json:"acquisition"`
 	Incomplete       bool                 `json:"incomplete"`
+	CannotBeFact     bool                 `json:"cannot_be_fact,omitempty"`
 	SourceUnverified bool                 `json:"source_unverified"`
 	Starred          bool                 `json:"starred"`
 	Summary          *EntrySummary        `json:"summary"`

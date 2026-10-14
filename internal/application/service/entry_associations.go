@@ -55,6 +55,7 @@ func populateEntryLibraryNames(ctx context.Context, db *gorm.DB, entries []*type
 				continue
 			}
 			entry.LibraryName = names[key{entry.SpaceID, entry.LibraryID}]
+			entry.CannotBeFact = entry.SourceKind == "report"
 			fill(entry.SimilarReports)
 		}
 	}

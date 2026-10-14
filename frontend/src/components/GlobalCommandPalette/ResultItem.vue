@@ -19,6 +19,7 @@
         <span v-if="badge" :class="['cmdk-item__badge', `cmdk-item__badge--${badgeVariant || 'default'}`]">
           {{ badge }}
         </span>
+        <span v-if="cannotBeFact" class="cmdk-item__badge cmdk-item__badge--keyword">{{ t('ingestStatus.cannotBeFact') }}</span>
         <span v-if="sourceUnverified" class="cmdk-item__badge cmdk-item__badge--keyword">{{ t('knowledgeReview.sourceUnverified') }}</span>
         <span v-if="acquisition === 'model_written'" class="cmdk-item__badge" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</span>
         <span v-if="incomplete" class="cmdk-item__badge cmdk-item__badge--keyword" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</span>
@@ -56,6 +57,7 @@ defineProps<{
   badge?: string
   badgeVariant?: 'vector' | 'keyword' | 'default'
   score?: number
+  cannotBeFact?: boolean
   sourceUnverified?: boolean
   acquisition?: string
   incomplete?: boolean

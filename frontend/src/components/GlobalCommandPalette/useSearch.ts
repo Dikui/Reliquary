@@ -24,6 +24,7 @@ export interface CmdkFileGroup {
   title: string
   chunks: CmdkChunk[]
   source?: SearchEntry['source']
+  cannot_be_fact?: boolean
   source_unverified?: boolean
   acquisition?: SearchEntry['acquisition']
   incomplete?: boolean
@@ -34,6 +35,7 @@ export interface CmdkFileGroup {
 export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
   return articles.map(article => ({
     entryId: article.entry_id, libraryId: article.library_id || '', libraryName: article.library_name, title: article.title, source: article.source,
+    cannot_be_fact: Boolean(article.cannot_be_fact || article.source === 'report'),
     source_unverified: Boolean(article.source_unverified),
     acquisition: article.source === 'article' ? article.acquisition : undefined,
     incomplete: article.source === 'article' ? article.incomplete : undefined,

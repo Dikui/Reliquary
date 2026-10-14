@@ -22,6 +22,7 @@ import { openMermaidFullscreen } from '@/utils/mermaidViewer';
 import { useI18n } from 'vue-i18n';
 import RepostSources from '@/views/library/components/RepostSources.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import MissingMaterials from '@/components/MissingMaterials.vue';
 import IncompleteActions from '@/components/IncompleteActions.vue';
 import ReviewActions from '@/components/ReviewActions.vue';
@@ -1263,6 +1264,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <MissingMaterials :items="details.missing_materials || []" />
             <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />
           </section>
+          <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" />
           <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('library.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('library.parsingFailed') }}</p>

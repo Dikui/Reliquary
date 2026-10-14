@@ -213,13 +213,27 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 	}
 
 	if kind == "report" {
-		metadata, _ := json.Marshal(map[string]any{"related_article_ids": header.RelatedArticleIDs})
+		metadata, _ := json.Marshal(reportMetadata{RelatedArticleIDs: header.RelatedArticleIDs, RelatedEntities: header.RelatedEntities, TopicIDs: header.TopicIDs, Fingerprint: header.ReportFingerprint, RequestID: header.RequestID})
 		entry.Metadata = metadata
 	}
 	setMessageFingerprint(entry, string(body))
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(entry).Error; err != nil {
 			return err
+		}
+		if kind == "report" {
+			for _, topicID := range header.TopicIDs {
+				var count int64
+				if err := tx.Model(&types.Topic{}).Where("space_id=? AND id=?", library.SpaceID, topicID).Count(&count).Error; err != nil {
+					return err
+				}
+				if count > 0 {
+					if err := tx.Create(&types.EntryTopic{SpaceID: library.SpaceID, EntryID: entry.ID, TopicID: topicID, Source: types.TopicSourceUser, CreatedAt: collected.UTC()}).Error; err != nil {
+						return err
+					}
+				}
+			}
+			return nil
 		}
 		for _, name := range sortedUniqueNames(header.Topics) {
 			var topic types.Topic

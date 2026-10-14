@@ -135,3 +135,17 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     await render(row, { ...props, items: [{ ...article, channel: 'rss' }, { ...article, type: 'url', channel: 'web' }] }, locale)
   })
 }
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: AI reports display their trust marker in classification, cards and rows`, async () => {
+    const report = { ...article, source_kind: 'report', cannot_be_fact: true, content_type: '', structured_summary: null, entities: [], topics: [] }
+    const html = await render(classification, { entry: report }, locale)
+    assert.ok(html.includes(messages[locale].ingestStatus.cannotBeFact))
+    const ordinary = await render(classification, { entry: article }, locale)
+    assert.ok(!ordinary.includes(messages[locale].ingestStatus.cannotBeFact))
+    for (const path of ['../views/library/components/DocumentCardView.vue', '../views/library/components/DocumentListView.vue']) {
+      const html = await render(component(path, listModules), { ...props, items: [report] }, locale)
+      assert.ok(html.includes(messages[locale].ingestStatus.cannotBeFact), path)
+    }
+  })
+}

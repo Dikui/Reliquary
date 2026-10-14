@@ -21,8 +21,9 @@ const originalURL = computed(() => {
 <template>
   <div class="entry-classification" :class="{ compact }">
     <div class="classification-tags">
-      <t-tag v-if="customType" size="small" variant="light-outline">{{ customType }}</t-tag>
-      <t-tag v-else size="small" variant="light-outline">{{ t(`library.contentTypes.${type}`) }}</t-tag>
+      <t-tag v-if="customType && !entry.cannot_be_fact && entry.source_kind !== 'report'" size="small" variant="light-outline">{{ customType }}</t-tag>
+      <t-tag v-else-if="!entry.cannot_be_fact && entry.source_kind !== 'report'" size="small" variant="light-outline">{{ t(`library.contentTypes.${type}`) }}</t-tag>
+      <t-tag v-if="entry.cannot_be_fact || entry.source_kind === 'report'" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.cannotBeFact') }}</t-tag>
       <t-tag v-if="entry.source_unverified" size="small" theme="warning" variant="light-outline">{{ t('knowledgeReview.sourceUnverified') }}</t-tag>
       <t-tag v-if="entry.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
       <t-tag v-if="entry.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>

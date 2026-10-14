@@ -139,12 +139,12 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	own.SourceRef = "local/notes"
 	own.Content = "New content following a discarded source record."
 	require.Equal(t, "accepted", send(own).Status)
-	// Generated content always creates a new report and never a discard fingerprint.
+	// Generated content uses interface idempotency and never a discard fingerprint.
 	generated := types.IngestRequest{Library: "ai-reports", Title: "Generated report", Content: "Independent generated report.", Acquisition: "model_written"}
 	g1, g2 := send(generated), send(generated)
-	require.NotEqual(t, g1.EntryID, g2.EntryID)
+	require.Equal(t, g1.EntryID, g2.EntryID)
 	require.NoError(t, h.service.rememberIngestDiscard(h.ctx, h.article(t, g1.EntryID), "Delete report"))
-	require.Equal(t, "accepted", send(generated).Status)
+	require.Equal(t, "exists", send(generated).Status)
 	// Reposts are recorded for timely libraries only.
 	var rows []types.EntryRepostSource
 	require.NoError(t, h.db.Find(&rows).Error)

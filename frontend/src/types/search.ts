@@ -30,6 +30,7 @@ export interface SearchEntry {
   vault_path: string
   original_url: string
   starred?: boolean
+  cannot_be_fact?: boolean
   source_unverified?: boolean
   acquisition?: Acquisition | ''
   incomplete?: boolean
