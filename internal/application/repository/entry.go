@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"reliquary/internal/application/graph"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -249,6 +250,9 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 		return nil
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := graph.Lock(tx, spaceID); err != nil {
+			return err
+		}
 		var articles []types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("space_id=? AND id IN ?", spaceID, ids).Order("id").Find(&articles).Error; err != nil {
 			return err
@@ -259,7 +263,7 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 		if err := tx.Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryTopic{}).Error; err != nil {
 			return err
 		}
-		return tx.Where("space_id=? AND id IN ?", spaceID, ids).Delete(&types.Entry{}).Error
+		return graph.DeleteEntriesTx(tx, spaceID, ids, false)
 	})
 }
 
@@ -574,9 +578,7 @@ func (r *entryRepository) CountEntryByStatus(
 // DeleteEntry's soft-delete cascade so sync-internal deletions never
 // become tombstones that block a later re-sync of the same external item.
 func (r *entryRepository) HardDeleteEntry(ctx context.Context, spaceID uint64, id string) error {
-	return r.db.Unscoped().WithContext(ctx).
-		Where("space_id = ? AND id = ?", spaceID, id).
-		Delete(&types.Entry{}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return graph.DeleteEntriesTx(tx, spaceID, []string{id}, true) })
 }
 
 func (r *entryRepository) SearchEntry(

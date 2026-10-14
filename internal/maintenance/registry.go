@@ -22,6 +22,10 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"relations":             {Columns: Rule{Sidecar: "id space_id library_id subject_id relation_type object_id version created_at updated_at"}, File: "data/relations.json", After: []string{"spaces", "libraries", "entities", "library_relation_types"}, Since: 18},
+	"relation_sources":      {Columns: Rule{Sidecar: "relation_id entry_id evidence run_id body_hash"}, File: "data/relation_sources.json", After: []string{"relations", "entries"}, Since: 18},
+	"relation_suppressions": {Columns: Rule{Sidecar: "space_id library_id subject_id relation_type object_id actor created_at"}, File: "data/relation_suppressions.json", After: []string{"spaces", "libraries", "entities", "library_relation_types"}, Since: 18},
+	"relation_type_merges":  {Columns: Rule{Configuration: "library_id from_type to_type created_at"}, File: "data/relation_type_merges.json", After: []string{"library_relation_types"}, Since: 18},
 	"entry_processing_outputs": {
 		Columns: Rule{Sidecar: "entry_id space_id library_id run_id body_hash content_type relations images updated_at"},
 		File:    "data/entry_processing_outputs.json", After: []string{"spaces", "libraries", "entries"}, Since: 17,
@@ -68,6 +72,7 @@ type RegeneratedTable struct {
 }
 
 var RegeneratedTables = map[string]RegeneratedTable{
+	"graph_pending_sync":        {Columns: Rule{Regenerated: "id space_id entity_id relation_id relation_version deleted created_at"}, Since: 18},
 	"embedding_rebuild_vectors": {Columns: Rule{Regenerated: "run_id kind source_id attachment_path entry_id library_id model_id dimension embedding content_hash"}, Since: 14},
 	"embedding_vector_archives": {Columns: Rule{Regenerated: "run_id space_id payload created_at"}, Since: 14},
 }

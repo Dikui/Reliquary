@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/application/graph"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 )
@@ -43,8 +44,16 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 		}
 	}
 	names, _ := json.Marshal(relations)
-	override, _ := json.Marshal(k.Graph)
-	return articleProcessingPrompt + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + `
+	graphOverride := k.Graph
+	corrected := ""
+	if k.ContentTypeCorrected {
+		value := libraryGraphEnabled(l, k.ContentType, k.Graph)
+		graphOverride = &value
+		name, _ := json.Marshal(k.ContentType)
+		corrected = "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类；关系开关已按此类型设置。"
+	}
+	override, _ := json.Marshal(graphOverride)
+	return articleProcessingPrompt + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + corrected + `
 先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。先定类型再决定是否抽关系：graph_override=true 总是抽，false 总是不抽，null 时依照所选类型的 extract_graph，其他默认不抽。关闭时 relations=[]。
 关系优先使用 relation_types 中的名称，无相近类型才提出新名称。relations 的 subject、object 必须是本次 entities 中的 name；start/end 是证据在本段 body 内的 Unicode 字符范围 [start,end)，不要用字节或 context_before 的位置。
 人物观点库每条关系必须输出 speaker：有明确发言人时使用本次 entities 的人物 name，否则使用输入 author，不将被评论对象当作发言人。
@@ -95,6 +104,9 @@ func bodyRangeLocations(body string, start, end int, mapping string) []types.Sou
 
 func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types.ProcessingSegment, result *articleProcessingResult) {
 	ct := libraryContentType(l, *result.ContentType)
+	if k.ContentTypeCorrected {
+		ct = libraryContentType(l, k.ContentType)
+	}
 	result.ContentType = &ct
 	entities := map[string]articleProcessingEntity{}
 	ambiguous := map[string]bool{}
@@ -171,6 +183,15 @@ func (s *entryService) canonicalRelationTypes(ctx context.Context, l *types.Libr
 		if err := tx.Where("library_id=?", l.ID).Order("position,name").Find(&rows).Error; err != nil {
 			return err
 		}
+		original := append([]string{}, raw...)
+		raw = append([]string{}, raw...)
+		for i, name := range raw {
+			mapped, err := graph.MapType(tx, l.ID, name)
+			if err != nil {
+				return err
+			}
+			raw[i] = mapped
+		}
 		names := []string{}
 		for _, row := range rows {
 			if row.Enabled {
@@ -242,6 +263,9 @@ func (s *entryService) canonicalRelationTypes(ctx context.Context, l *types.Libr
 				vectors[chosen] = vectors[name]
 			}
 			result[name] = chosen
+		}
+		for i, name := range original {
+			result[name] = result[raw[i]]
 		}
 		return nil
 	})

@@ -380,6 +380,11 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 			return err
 		}
 	}
+	if s.db != nil {
+		if err := s.publishEntryRelations(ctx, k.ID, result.RunID); err != nil {
+			return err
+		}
+	}
 	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType}, "", "")
 	return nil
 }

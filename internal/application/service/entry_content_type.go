@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
+	"reliquary/internal/application/graph"
 	"reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"time"
 
 	"gorm.io/gorm"
@@ -18,7 +21,11 @@ type ArticleContentTypeCorrector interface {
 }
 
 // CorrectContentType changes the label while preserving the full article.
-func (s *entryService) CorrectContentType(ctx context.Context, id, contentType string) (*types.Entry, error) {
+func (s *entryService) CorrectContentType(ctx context.Context, id, contentType string) (entry *types.Entry, err error) {
+	err = s.withTaskObject(ctx, id, func(held context.Context) error { entry, err = s.correctContentType(held, id, contentType); return err })
+	return entry, err
+}
+func (s *entryService) correctContentType(ctx context.Context, id, contentType string) (*types.Entry, error) {
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, werrors.NewUnauthorizedError("authenticated editor required")
 	}
@@ -27,6 +34,9 @@ func (s *entryService) CorrectContentType(ctx context.Context, id, contentType s
 	}
 	spaceID := types.MustSpaceIDFromContext(ctx)
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := graph.Lock(tx, spaceID); err != nil {
+			return err
+		}
 		var entry types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, spaceID).First(&entry).Error; err != nil {
 			return err
@@ -47,9 +57,39 @@ func (s *entryService) CorrectContentType(ctx context.Context, id, contentType s
 		if !valid {
 			return werrors.NewBadRequestError("content type must belong to this library")
 		}
+		oldGraph, err := graph.Enabled(tx, &entry)
+		if err != nil {
+			return err
+		}
 		before := entry.ContentType
 		if err := tx.Model(&entry).Updates(map[string]any{"content_type": contentType, "content_type_corrected": true, "updated_at": time.Now()}).Error; err != nil {
 			return err
+		}
+
+		entry.ContentType = contentType
+		newGraph, err := graph.Enabled(tx, &entry)
+		if err != nil {
+			return err
+		}
+		if !newGraph {
+			if err := graph.WithdrawTx(tx, []string{id}); err != nil {
+				return err
+			}
+		}
+		if newGraph && !oldGraph {
+			queue, ok := s.task.(interfaces.TransactionalTaskEnqueuer)
+			if !ok {
+				return errors.New("graph extraction queue must support PostgreSQL transactions")
+			}
+			copy := s.contentTypeTransactionService(tx)
+			bound := &transactionTaskEnqueuer{queue: queue, ctx: ctx, tx: tx}
+			copy.task = bound
+			if _, err := copy.reparseEntry(ctx, id, nil); err != nil {
+				return err
+			}
+			if bound.enqueueErr != nil {
+				return bound.enqueueErr
+			}
 		}
 		return NewOperationLogService(tx).RecordTx(ctx, tx, "correct_content_type", id, map[string]any{"content_type": before}, map[string]any{"content_type": contentType})
 	})

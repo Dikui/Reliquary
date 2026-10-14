@@ -5,6 +5,15 @@ import "sort"
 // Portable replica verification compares snapshots directly, before a new
 // manifest is written. Apply the same versioned empty default on that path.
 func projectSegmentSnapshot(original, current *Snapshot) {
+	if original.schemaVersion < 18 && current.schemaVersion >= 18 {
+		for table, r := range PersistentTables {
+			if r.Since == 18 {
+				if _, ok := original.Tables[table]; !ok {
+					original.Tables[table] = []map[string]any{}
+				}
+			}
+		}
+	}
 	if original.schemaVersion < 17 && current.schemaVersion >= 17 {
 		if _, exists := original.Tables["entry_processing_outputs"]; !exists {
 			original.Tables["entry_processing_outputs"] = []map[string]any{}
@@ -21,6 +30,7 @@ func projectSegmentSnapshot(original, current *Snapshot) {
 // Version 16 only adds an empty checkpoint table. Project precisely that
 // empty default when verifying an older backup against an upgraded database.
 func projectSegmentManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	expected, actual = projectGraphManifest(expected, actual)
 	expected, actual = projectProcessingOutputManifest(expected, actual)
 	if expected.SchemaVersion >= 16 || actual.SchemaVersion < 16 {
 		return expected, actual
@@ -88,5 +98,46 @@ func projectProcessingOutputManifest(expected, actual *Manifest) (*Manifest, *Ma
 			}
 		}
 	}
+	return &left, actual
+}
+
+func projectGraphManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 18 || actual.SchemaVersion < 18 {
+		return expected, actual
+	}
+	left := *expected
+	left.Tables = make(map[string]TableManifest, len(expected.Tables)+5)
+	for table, row := range expected.Tables {
+		left.Tables[table] = row
+	}
+	left.Files = make(map[string][]File, len(expected.Files))
+	for group, files := range expected.Files {
+		left.Files[group] = append([]File{}, files...)
+	}
+	for table, r := range PersistentTables {
+		if r.Since != 18 {
+			continue
+		}
+		if _, ok := left.Tables[table]; ok {
+			continue
+		}
+		if _, ok := actual.Tables[table]; !ok {
+			continue
+		}
+		columns := []string{}
+		for column := range Rules[table].Columns() {
+			columns = append(columns, column)
+		}
+		sort.Strings(columns)
+		left.Tables[table] = TableManifest{Columns: columns, SHA256: sum([]byte("[]")), Data: []map[string]any{}}
+		for _, files := range actual.Files {
+			for _, file := range files {
+				if file.Path == ".reliquary/"+r.File {
+					left.Files["vault"] = append(left.Files["vault"], File{Path: file.Path, SHA256: sum([]byte("[]\n")), Size: 3})
+				}
+			}
+		}
+	}
+	left.Tables["graph_pending_sync"] = TableManifest{Regenerated: true}
 	return &left, actual
 }
