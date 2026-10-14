@@ -22,6 +22,11 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"evaluation_sets":        {Columns: Rule{Sidecar: "id space_id name description created_at updated_at"}, File: "data/evaluation_sets.json", After: []string{"spaces"}, Since: 21},
+	"evaluation_questions":   {Columns: Rule{Sidecar: "id space_id set_id method request source status source_record_id suggested_results answer_deleted revision created_at updated_at"}, File: "data/evaluation_questions.json", After: []string{"evaluation_sets"}, Since: 21},
+	"evaluation_answers":     {Columns: Rule{Sidecar: "question_id entry_id grade"}, File: "data/evaluation_answers.json", After: []string{"evaluation_questions"}, Since: 21},
+	"evaluation_runs":        {Columns: Rule{Sidecar: "id space_id set_id set_snapshot options snapshot status summary error created_at finished_at"}, File: "data/evaluation_runs.json", After: []string{"spaces"}, Since: 21},
+	"evaluation_run_results": {Columns: Rule{Sidecar: "run_id question_id question snapshot results metrics hits error"}, File: "data/evaluation_run_results.json", After: []string{"evaluation_runs"}, Since: 21},
 	"entry_processing_outputs": {
 		Columns: Rule{Sidecar: "entry_id space_id library_id run_id body_hash content_type relations images updated_at"},
 		File:    "data/entry_processing_outputs.json", After: []string{"spaces", "libraries", "entries"}, Since: 17,
@@ -58,7 +63,9 @@ var PersistentTables = map[string]PersistentTable{
 
 // BackupOnlyTables must be explicitly classified when introduced. They are
 // preserved by PostgreSQL backups, never by portable replicas.
-var BackupOnlyTables = map[string]Rule{}
+var BackupOnlyTables = map[string]Rule{
+	"search_records": {Sidecar: "id space_id created_at source method query libraries request results duration_ms fallback_fulltext reranked evaluation_run_id error"},
+}
 
 // RegeneratedTable registers derived tables without putting their rows in a
 // portable replica. Their names still participate in strict schema verification.

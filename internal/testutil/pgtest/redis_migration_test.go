@@ -65,6 +65,6 @@ func TestRedisMigrationFullUpDownUp(t *testing.T) {
 	require.NoError(t, m.Up())
 	version, dirty, err := m.Version()
 	require.NoError(t, err)
-	require.EqualValues(t, 17, version)
+	require.EqualValues(t, LatestMigrationVersion(t), version)
 	require.False(t, dirty)
 }

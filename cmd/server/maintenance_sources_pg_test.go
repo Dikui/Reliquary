@@ -69,7 +69,7 @@ func TestMaintenanceExportSourcesAndMigratePreserveHistory(t *testing.T) {
 	require.NoError(t, runMaintenanceDatabase(context.Background(), db, dsn, []string{"migrate"}, bytes.NewReader(nil), &output))
 	var version int
 	require.NoError(t, db.Table("schema_migrations").Select("version").Scan(&version).Error)
-	require.Equal(t, 17, version)
+	require.EqualValues(t, pgtest.LatestMigrationVersion(t), version)
 	var paused bool
 	require.NoError(t, db.Table("maintenance_state").Select("paused").Scan(&paused).Error)
 	require.True(t, paused)
