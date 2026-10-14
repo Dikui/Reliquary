@@ -37,7 +37,7 @@ function unresolvedReferences(path: string, text = source(path)) {
 }
 
 test('detail and related article components have defined script and template references', () => {
-  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/EntryClassification.vue'), resolve('src/components/EntryStarToggle.vue'), resolve('src/components/EntryArticleJudgments.vue'), resolve('src/views/library/FollowFeed.vue'), resolve('src/views/library/TopicManagement.vue'), resolve('src/views/library/OperationLogs.vue'), resolve('src/components/EntryProcessingTimeline.vue'), resolve('src/views/library/components/DocumentActionMenu.vue'), resolve('src/views/library/components/DocumentCardView.vue'), resolve('src/views/library/components/DocumentListView.vue'), resolve('src/views/library/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
+  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/EntryClassification.vue'), resolve('src/components/ReportAssociations.vue'), resolve('src/components/EntryStarToggle.vue'), resolve('src/components/EntryArticleJudgments.vue'), resolve('src/views/library/FollowFeed.vue'), resolve('src/views/library/TopicManagement.vue'), resolve('src/views/library/OperationLogs.vue'), resolve('src/components/EntryProcessingTimeline.vue'), resolve('src/views/library/components/DocumentActionMenu.vue'), resolve('src/views/library/components/DocumentCardView.vue'), resolve('src/views/library/components/DocumentListView.vue'), resolve('src/views/library/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
 })
 
 test('reference audit detects deleted callbacks in watchers, lifecycle, expose and template events', () => {
@@ -96,6 +96,7 @@ test('mounted detail switches full-text articles, closes and unmounts without un
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
       '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryUpdateNotice.vue': { __esModule:true, default:notice }, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty,
+      '@/components/ReportAssociations.vue': empty,
       '@/components/MissingMaterials.vue': empty, '@/components/IncompleteActions.vue': empty, '@/components/PersonalDocumentDelete.vue': empty,
       '@/views/library/components/RepostSources.vue': empty, '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
     }).default

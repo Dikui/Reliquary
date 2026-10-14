@@ -149,4 +149,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(html.includes(messages[locale].ingestStatus.cannotBeFact), path)
     }
   })
+
+  test(`${locale}: report association relations can move to the dedicated detail section`, async () => {
+    const html = await render(classification, { entry: article, hideRelations: true }, locale)
+    assert.ok(!html.includes(messages[locale].library.articleEntities))
+    assert.ok(!html.includes(messages[locale].library.articleTopics))
+  })
 }

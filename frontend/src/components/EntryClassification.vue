@@ -6,7 +6,7 @@ import { isValidURL } from '@/utils/security'
 import { markdownToPlainText } from '@/utils/markdownPlainText'
 import FollowToggle from './FollowToggle.vue'
 
-const props = withDefaults(defineProps<{ entry: ClassifiedEntry; compact?: boolean; followable?: boolean }>(), { compact: false, followable: false })
+const props = withDefaults(defineProps<{ entry: ClassifiedEntry; compact?: boolean; followable?: boolean; hideRelations?: boolean }>(), { compact: false, followable: false, hideRelations: false })
 const emit = defineEmits<{ 'open-entity': [id: string] }>()
 const { t } = useI18n()
 const plainText = (value: string) => markdownToPlainText(value, `[${t('ingestStatus.missingTypes.image')}]`)
@@ -37,8 +37,8 @@ const originalURL = computed(() => {
       <div class="summary-key-terms"><strong>{{ t('library.summaryKeyTerms') }}</strong><span>{{ entry.structured_summary.key_terms.map(plainText).join(' · ') }}</span></div>
     </div>
     <p v-else-if="entry.description" class="summary-description">{{ plainText(entry.description) }}</p>
-    <div v-if="entry.entities?.length" class="classification-relations entity-relations"><strong>{{ t('library.articleEntities') }}</strong><span v-for="entity in entry.entities" :key="entity.id" class="relation-target"><button type="button" @click.stop="emit('open-entity', entity.id)">{{ entity.canonical_name }}</button><FollowToggle v-if="followable" target-type="entity" :target-id="entity.id" :name="entity.canonical_name" compact /></span></div>
-    <div v-if="entry.topics?.length" class="classification-relations topic-relations"><strong>{{ t('library.articleTopics') }}</strong><span v-for="topic in entry.topics" :key="topic.id" class="relation-target"><span class="topic-label" :title="topic.description">{{ topic.name }}</span><FollowToggle v-if="followable" target-type="topic" :target-id="topic.id" :name="topic.name" compact /></span></div>
+    <div v-if="!hideRelations && entry.entities?.length" class="classification-relations entity-relations"><strong>{{ t('library.articleEntities') }}</strong><span v-for="entity in entry.entities" :key="entity.id" class="relation-target"><button type="button" @click.stop="emit('open-entity', entity.id)">{{ entity.canonical_name }}</button><FollowToggle v-if="followable" target-type="entity" :target-id="entity.id" :name="entity.canonical_name" compact /></span></div>
+    <div v-if="!hideRelations && entry.topics?.length" class="classification-relations topic-relations"><strong>{{ t('library.articleTopics') }}</strong><span v-for="topic in entry.topics" :key="topic.id" class="relation-target"><span class="topic-label" :title="topic.description">{{ topic.name }}</span><FollowToggle v-if="followable" target-type="topic" :target-id="topic.id" :name="topic.name" compact /></span></div>
   </div>
 </template>
 
