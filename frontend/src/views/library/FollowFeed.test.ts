@@ -59,8 +59,11 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
       let results: any[] = structuredClone(selected)
       for (const item of results) item.is_new = item.entered_at !== null && (!transport.checkpoint || item.entered_at > transport.checkpoint)
       if (body.collapse_similar && results.length > 1 && results[0].entry_id === 'new' && results[1].entry_id === 'similar') { results[0].similar_reports = [results[1]]; results.splice(1, 1) }
-      results = results.slice(0, body.limit)
-      return envelope({ ...state(), results, total: selected.length, viewed_at: openedAt })
+      const offset = body.cursor ? Number(String(body.cursor).replace('cursor:', '')) : 0
+      const end = Math.min(offset + body.limit, results.length)
+      const nextCursor = end < results.length ? `cursor:${end}` : undefined
+      results = results.slice(offset, end)
+      return envelope({ ...state(), results, total: selected.length, viewed_at: openedAt, ...(nextCursor ? { next_cursor: nextCursor } : {}) })
     }
     const target = url.match(/^\/api\/v1\/follows\/(entity|topic)\/(.+)$/)
     if (target && ['put', 'del'].includes(method)) {
@@ -254,7 +257,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'similar-toggle'))!)
       assert.ok(visibleText(mounted.root).includes('Article similar'))
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
-      assert.ok(visibleText(mounted.root).includes(`${topic.name} (${messages[locale].follows.targetTypes.topic})`))
+      assert.ok(visibleText(mounted.root).includes(env.i18n.global.t('follows.targetLabel', { name: topic.name, type: messages[locale].follows.targetTypes.topic, count: 2 })))
       await click(env.button(mounted.root, messages[locale].follows.refresh))
       await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'similar-toggle'))!)
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
@@ -292,6 +295,23 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(descendants(mounted.root).find(node => hasClass(node, 'follow-badge'))!.text, '2')
       await env.store.markViewed(openedAt); await settle()
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'follow-badge')).length, 0)
+      assert.deepEqual(env.errors, [])
+    } finally { mounted.close() }
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: followed target options and feed matches show recent material counts including zero`, async () => {
+    const zeroFollow = { ...entityFollow, recent_entry_count: 0 }
+    const env = environment(locale, [zeroFollow])
+    env.transport.articles = [article('zero-count', openedAt, [zeroFollow])]
+    const mounted = env.mount(env.component('./FollowFeed.vue'))
+    try {
+      await settle()
+      const expected = env.i18n.global.t('follows.targetLabel', { name: entity.canonical_name, type: messages[locale].follows.targetTypes.entity, count: 0 })
+      const selector = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!
+      assert.ok(selector.props.options.some((option: any) => option.label === expected))
+      assert.ok(visibleText(mounted.root).includes(expected))
       assert.deepEqual(env.errors, [])
     } finally { mounted.close() }
   })
@@ -380,18 +400,73 @@ test('a query change during initial loading invalidates the older feed response'
   } finally { mounted.close() }
 })
 
-test('bounded feed lists report all candidate articles and offer supported limits', async () => {
+test('bounded feed lists report the current page and offer supported limits', async () => {
   const env = environment('en-US', [entityFollow])
   env.transport.articles = Array.from({ length: 105 }, (_, index) => article(`item-${index}`, '2026-10-11T10:00:00Z', [entityFollow]))
   const mounted = env.mount(env.component('./FollowFeed.vue'))
   try {
     await settle()
-    assert.ok(visibleText(mounted.root).includes('Showing 20 of 105 items.'))
+    assert.ok(visibleText(mounted.root).includes('Showing 20 items on this page out of 105.'))
     const limitControl = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages['en-US'].follows.limit)!
     assert.deepEqual(limitControl.props.options.map((option: any) => option.value), [20, 50, 100])
     await env.change(limitControl, 100)
-    assert.ok(visibleText(mounted.root).includes('Showing 100 of 105 items.'))
+    assert.ok(visibleText(mounted.root).includes('Showing 100 items on this page out of 105.'))
     assert.equal(env.calls.filter(call => call.url.endsWith('/follows/view')).length, 1)
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
+})
+
+test('feed pagination passes cursors, returns through history, disables the last page and resets when the limit changes', async () => {
+  const env = environment('en-US', [entityFollow])
+  env.route.query = { collapse_similar: 'false' }
+  env.transport.articles = Array.from({ length: 45 }, (_, index) => article(`page-${index}`, '2026-10-11T10:00:00Z', [entityFollow]))
+  const secondPage = deferred<any>()
+  let delaySecondPage = true
+  env.transport.intercept = (method, url, body) => {
+    if (delaySecondPage && method === 'post' && url.endsWith('/follows/feed') && body.cursor === 'cursor:20') {
+      delaySecondPage = false
+      return secondPage.promise
+    }
+    return undefined
+  }
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  const pageButton = (label: string) => env.button(mounted.root, label)
+  try {
+    await settle()
+    assert.equal(pageButton(en.follows.previousPage).props.disabled, true)
+    assert.equal(pageButton(en.follows.nextPage).props.disabled, false)
+    await click(pageButton(en.follows.nextPage))
+    assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.cursor, 'cursor:20')
+    assert.equal(pageButton(en.follows.previousPage).props.disabled, true)
+    assert.equal(pageButton(en.follows.nextPage).props.disabled, true)
+    assert.equal(pageButton(en.follows.nextPage).props['data-loading'], true)
+    secondPage.resolve(env.envelope({ ...env.state(), results: structuredClone(env.transport.articles.slice(20, 40)), total: 45, viewed_at: openedAt, next_cursor: 'cursor:40' }))
+    await settle()
+    assert.ok(visibleText(mounted.root).includes('Article page-20'))
+    assert.equal(pageButton(en.follows.previousPage).props.disabled, false)
+    assert.equal(pageButton(en.follows.nextPage).props.disabled, false)
+    assert.ok(visibleText(mounted.root).includes('Page 2'))
+
+    await click(pageButton(en.follows.previousPage))
+    assert.equal(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.cursor, undefined)
+    assert.ok(visibleText(mounted.root).includes('Article page-0'))
+    assert.ok(visibleText(mounted.root).includes('Page 1'))
+
+    await click(pageButton(en.follows.nextPage))
+    await click(pageButton(en.follows.nextPage))
+    assert.equal(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.cursor, 'cursor:40')
+    assert.ok(visibleText(mounted.root).includes('Article page-40'))
+    assert.equal(pageButton(en.follows.nextPage).props.disabled, true)
+    assert.ok(visibleText(mounted.root).includes('Page 3'))
+
+    const limitControl = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === en.follows.limit)!
+    await env.change(limitControl, 50)
+    assert.equal(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.cursor, undefined)
+    assert.equal(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.limit, 50)
+    assert.ok(visibleText(mounted.root).includes('Article page-0'))
+    assert.ok(visibleText(mounted.root).includes('Page 1'))
+    assert.equal(pageButton(en.follows.previousPage).props.disabled, true)
+    assert.equal(pageButton(en.follows.nextPage).props.disabled, true)
     assert.deepEqual(env.errors, [])
   } finally { mounted.close() }
 })
