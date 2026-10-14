@@ -153,3 +153,34 @@ func (h *EntityHandler) RebuildNameEmbeddings(c *gin.Context) {
 	}
 	h.NameEmbeddingRebuildStatus(c)
 }
+
+func (h *EntityHandler) Relations(c *gin.Context) {
+	items, err := h.service.ListRelations(c.Request.Context(), c.Param("entity_id"), c.Query("library_id"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+}
+func (h *EntityHandler) DeleteRelation(c *gin.Context) {
+	if err := h.service.DeleteRelation(c.Request.Context(), c.Param("relation_id")); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+func (h *EntityHandler) MergeRelationTypes(c *gin.Context) {
+	var input struct {
+		From string `json:"from_type" binding:"required"`
+		To   string `json:"to_type" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.Error(werrors.NewBadRequestError(err.Error()))
+		return
+	}
+	if err := h.service.MergeRelationTypes(c.Request.Context(), c.Param("id"), input.From, input.To); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}

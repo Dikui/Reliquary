@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/application/graph"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 )
@@ -95,6 +96,9 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		actor, _ := types.PrincipalFromContext(ctx)
 		record := types.EntityMergeRecord{ID: uuid.NewString(), SpaceID: spaceID, KeepEntityID: keep.ID, MergeEntityID: merged.ID, Actor: actor.StorageID(), CreatedAt: time.Now()}
 		if err := tx.Create(&record).Error; err != nil {
+			return err
+		}
+		if err := graph.MergeEntityTx(tx, spaceID, merged.ID, keep.ID); err != nil {
 			return err
 		}
 		if err := tx.Model(&merged).Update("merged_into_id", keep.ID).Error; err != nil {

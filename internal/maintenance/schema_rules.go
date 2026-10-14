@@ -39,6 +39,11 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				delete(copy, table)
 			}
 		}
+		for table, registration := range RegeneratedTables {
+			if migration.Version < registration.Since {
+				delete(copy, table)
+			}
+		}
 		result = copy
 	}()
 	if migration.Dirty {

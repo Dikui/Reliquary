@@ -1,6 +1,6 @@
 # 数据归属与文件库恢复格式
 
-所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，新登记表在 `internal/maintenance/registry.go` 并合入同一归属清单，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。当前固定镜像的完整目录为 82 张表、960 列，其中 public 44 张表、515 列，非 public 扩展表 38 张、445 列；扩展拥有表共 39 张，包含 public.spatial_ref_sys。当前维护归属以 `000005` 后的结构为准，已删除 `data_sources` 与 `sync_logs`。下表列出当前 public 的 44 张表。
+所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，新登记表在 `internal/maintenance/registry.go` 并合入同一归属清单，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。下表保留原有 public 表的详细归属，结构版本 `000005` 已删除 `data_sources` 与 `sync_logs`。之后新增的表与列按结构版本在文末补充，当前完整清单以 `Rules` 和登记框架的目录核对结果为准。
 
 维护副本与核对清单的 `format_version` 为 5，表名使用 `spaces`、`api_keys`、`libraries`、`entries` 和 `entry_` 关联表，行外层字段使用 `space_id`、`library_id`、`entry_id`、`entry_ids`。完整数据库备份的底层导入及核对接受版本 1 至 4，当前文件库重建入口的版本限制见本文末节：版本 1 先映射个人空间表及归属列，其中版本 1 和 2 将 `knowledges`、四张 `knowledge_` 关联表和行外层 `knowledge_id`、`knowledge_ids` 映射为当前名字。版本 1 至 3 的 `knowledge_bases` 表名与行外层 `knowledge_base_id` 分别映射为 `libraries`、`library_id`。先验证原文件校验和，再在原版本命名下比较规范行哈希，任意嵌套 JSON 不递归改名。文件库表头、任务 payload、日志的 before/after、其他嵌套 JSON 与设置键保持原值。只追加的 `operation_logs.jsonl` 保留旧外层归属键，SQL 列与网页 HTTP 字段使用新名字。下一次刷新副本写入版本 5，完成清单原子替换后才移除旧表文件。标题与摘要向量 `article_embeddings` 包含文章和导入的用户文档，不包含整理结果；表名保留，外键列为 `entry_id`。
 
@@ -292,7 +292,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 副本新增 `registry.json`，自身格式版本为 1；主 manifest 的 `registry_version` 为 1，文件哈希在主 manifest 中登记。原副本主格式继续为 5，没有改变原有表文件格式。文件库重建拒绝没有受支持登记版本的旧副本，包括没有 registry_version 的旧格式 1 至 5，并提示使用匹配版本读取原文，再通过当前收录接口重新导入。不会猜测旧目录对应哪个库。底层完整数据库备份读取仍保留原有名称、默认值和结构版本映射，独立于当前文件库重建入口。没有生产数据迁移或旧目录扫描兼容。旧 schema 的维护 helper 仅导出副本并按原哈希核对，不生成库目录或改写旧表头；旧文件修复需使用匹配版本。
 
-后续关系正本、抑制记录、关系类型合并与测评集按上述方式登记。检索记录与模型调用统计只随 PostgreSQL 完整备份保存，不进 `.reliquary/`；未来建表时将其逐列登记到 `BackupOnlyTables`。Redis 临时队列和派生索引仍按现有规则处理。
+关系正本、来源、抑制记录和关系类型合并已从结构版本 18 按上述方式登记；后续测评集沿用该入口。检索记录与模型调用统计只随 PostgreSQL 完整备份保存，不进 `.reliquary/`；未来建表时将其逐列登记到 `BackupOnlyTables`。Redis 临时队列和派生索引仍按现有规则处理。
 
 `./reliquary-admin maintenance rebuild-files` 从现有数据库重新生成所有库的 Markdown 和维护副本；它覆盖手改表头及正文，不调用模型。删除所有库的资料目录后可以逐文件重建；应保留 `attachments/` 中不可重算的图片，图片或整个磁盘丢失须从包含文件库的完整备份恢复。`./reliquary-admin rebuild <文件库>` 仍用于从文件库和副本恢复空数据库，导入前核对原文件，恢复后逐列核对原副本。`verify --repair` 修复数据库拥有的表头及正文。
 
@@ -311,4 +311,19 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 副本格式保持 5；结构版本低于 16 的维护核对只允许该新增表为空。当前版本检查点被修改、丢失或替换为空计划均不通过核对。
 
-`entry_processing_outputs` 从结构版本 17 登记为 sidecar，副本路径为 `data/entry_processing_outputs.json`。关系仍是处理证据，供后续关系正本任务消费；图片说明及其位置、不可读原因同样保存。恢复时从该结果重建 `image_description` 分块和向量，不需要重新调用视觉模型。库的关系类型自动补充写入已有配置正本，操作日志同时记录系统处理行为。
+`entry_processing_outputs` 从结构版本 17 登记为 sidecar，副本路径为 `data/entry_processing_outputs.json`。这里的关系是处理证据，由关系正本消费；图片说明及其位置、不可读原因同样保存。恢复时从该结果重建 `image_description` 分块和向量，不需要重新调用视觉模型。库的关系类型自动补充写入已有配置正本，操作日志同时记录系统处理行为。
+
+
+## PostgreSQL 关系正本与待同步记录
+
+结构版本 18 新增五张表，副本格式仍为 5，登记格式仍为 1。关系以库加主体、类型、客体唯一，空间实体跨库共用，各库的来源及人工抑制分别保存。`relation_sources` 以关系加资料唯一，`evidence` 保留位置列表和每份证据的发言人。来源数量通过来源行计算，不保存冗余计数。
+
+| 表 | 全部列的归属 | 副本路径 | 恢复依赖 |
+| --- | --- | --- | --- |
+| `relations` | Sidecar: id space_id library_id subject_id relation_type object_id version created_at updated_at | `data/relations.json` | spaces libraries entities library_relation_types |
+| `relation_sources` | Sidecar: relation_id entry_id evidence run_id body_hash | `data/relation_sources.json` | relations entries |
+| `relation_suppressions` | Sidecar: space_id library_id subject_id relation_type object_id actor created_at | `data/relation_suppressions.json` | spaces libraries entities library_relation_types |
+| `relation_type_merges` | Configuration: library_id from_type to_type created_at | `data/relation_type_merges.json` | library_relation_types |
+| `graph_pending_sync` | Regenerated: id space_id entity_id relation_id relation_version deleted created_at | 不进入副本 | 恢复后由图谱全量重建生成投影 |
+
+既有 `library_relation_types` 保持 Configuration 与 `data/library_relation_types.json` 登记。旧副本升级核对只投影四张新持久表的空默认值；当前非空关系、来源、版本、抑制及合并记录被改动或丢失会核对失败。待同步记录不参与数据相等核对，不进入文件库实时副本；PostgreSQL 完整备份仍包含该表。恢复后的 Neo4j 重建由 ikb-13 接入。

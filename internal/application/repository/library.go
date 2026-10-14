@@ -123,15 +123,44 @@ func (r *libraryRepository) UpdateLibrary(ctx context.Context, library *types.Li
 			}
 		}
 		if library.RelationTypes != nil {
-			if err := tx.Where("library_id=?", library.ID).Delete(&types.LibraryRelationType{}).Error; err != nil {
+			// Preserve referenced type identities and durable merge aliases.
+			names := []string{}
+			for i := range library.RelationTypes {
+				row := &library.RelationTypes[i]
+				row.LibraryID = library.ID
+				names = append(names, row.Name)
+				var merged int64
+				if err := tx.Model(&types.RelationTypeMerge{}).Where("library_id=? AND from_type=?", library.ID, row.Name).Count(&merged).Error; err != nil {
+					return err
+				}
+				if merged > 0 {
+					row.Enabled = false
+				}
+				if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "library_id"}, {Name: "name"}}, DoUpdates: clause.AssignmentColumns([]string{"position", "enabled"})}).Create(row).Error; err != nil {
+					return err
+				}
+			}
+			var old []types.LibraryRelationType
+			q := tx.Where("library_id=?", library.ID)
+			if len(names) > 0 {
+				q = q.Where("name NOT IN ?", names)
+			}
+			if err := q.Find(&old).Error; err != nil {
 				return err
 			}
-			for i := range library.RelationTypes {
-				library.RelationTypes[i].LibraryID = library.ID
-			}
-			if len(library.RelationTypes) > 0 {
-				if err := tx.Create(&library.RelationTypes).Error; err != nil {
+			for _, row := range old {
+				var used bool
+				if err := tx.Raw(`SELECT EXISTS(SELECT 1 FROM relations WHERE library_id=? AND relation_type=? UNION ALL SELECT 1 FROM relation_suppressions WHERE library_id=? AND relation_type=? UNION ALL SELECT 1 FROM relation_type_merges WHERE library_id=? AND (from_type=? OR to_type=?))`, library.ID, row.Name, library.ID, row.Name, library.ID, row.Name, row.Name).Scan(&used).Error; err != nil {
 					return err
+				}
+				if used {
+					if err := tx.Model(&row).Update("enabled", false).Error; err != nil {
+						return err
+					}
+				} else {
+					if err := tx.Delete(&row).Error; err != nil {
+						return err
+					}
 				}
 			}
 		}
