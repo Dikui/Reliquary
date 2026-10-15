@@ -64,7 +64,10 @@ fix-docker.sh
 .maintenance-runtime.previous/
 .maintenance-tools/
 compose.images.json
-.scratch/tasks/
-.scratch/prototype/
 !CLAUDE.md
 !.githooks/
+!.scratch/
+!.out-of-scope/
+# 须在 !.scratch/ 之后，否则会被重新放出
+.scratch/tasks/
+.scratch/prototype/

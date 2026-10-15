@@ -1,7 +1,7 @@
 # Issue tracker: Local Markdown
 
 本仓库的 issues 和 specs 作为 Markdown 文件存放在 `.scratch/` 中。
-当前 `.gitignore` 会忽略该目录，文件默认仅保存在本地。
+`.scratch/<feature>/` 随仓库提交；`.scratch/tasks/` 与 `.scratch/prototype/` 被 `.gitignore` 忽略，仅保存在本地（见 `docs/agents/layout.md`）。
 
 ## Conventions
 
