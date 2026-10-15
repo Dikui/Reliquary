@@ -18,22 +18,22 @@ function evaluate(path: string, modules: Record<string, any>) {
  new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? require(name), value, value.exports)
  return value.exports
 }
-function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', refresh = false, previousCache = false) {
+function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', previousCache = false) {
  const priorStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage'), priorWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
- const storage = new Map([['reliquary_token', 'valid-session'], ['reliquary_user', JSON.stringify({ id: 'user-1', space_id: 1 })]])
+ // reliquary_token is left over from the removed login; the store must drop it.
+ const storage = new Map([['reliquary_token', 'stale-session'], ['reliquary_refresh_token', 'stale-refresh'], ['reliquary_user', JSON.stringify({ id: 'user-1', space_id: 1 })]])
  if (previousCache) {
   storage.set('reliquary_user', JSON.stringify({ id: 'user-1', 'tenant_id': 1 }))
   storage.set('reliquary_tenant', JSON.stringify({ id: '1', name: 'Original personal space' }))
  }
- if (refresh) storage.set('reliquary_refresh_token', 'valid-refresh')
  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) } })
  const location = { pathname: '/platform/settings', href: '/platform/settings' }
  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location } })
- const transport = { mode: 'healthy', refreshMode: '503', spaceName: 'Personal' }, calls: InternalAxiosRequestConfig[] = [], modules: Record<string, any> = {}
+ const transport = { mode: 'healthy', spaceName: 'Personal' }, calls: InternalAxiosRequestConfig[] = [], modules: Record<string, any> = {}
  const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
  const network = { __esModule: true, default: { create: (config: object) => axios.create({ ...config, adapter: async (packet: InternalAxiosRequestConfig) => {
   calls.push(packet)
-  const mode = packet.url?.includes('/auth/refresh') ? transport.refreshMode : transport.mode
+  const mode = transport.mode
   if (mode !== 'healthy') {
    if (mode === 'network' || mode === 'timeout') throw new AxiosError('offline', mode === 'timeout' ? AxiosError.ECONNABORTED : AxiosError.ERR_NETWORK, packet)
    const status = Number(mode)
@@ -77,35 +77,26 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: actual auth store and request interceptor preserve session on ${mode} and clear global notice after recovery`, async t => {
    const f = fixture(t, locale); f.transport.mode = mode
    assert.equal(await f.store.refreshFromAuthMe(), false); await settle()
-   assert.equal(f.store.isLoggedIn, true); assert.equal(f.storage.get('reliquary_token'), 'valid-session')
+   assert.equal(f.store.isLoggedIn, true); assert.equal(f.storage.has('reliquary_token'), false); assert.equal(f.storage.has('reliquary_refresh_token'), false)
    assert.equal(f.location.href, '/platform/settings')
    assert.ok(visibleText(f.root).includes((locale === 'zh-CN' ? zh : en).error.serviceUnavailable))
    f.transport.mode = 'healthy'; await f.request.retryServiceAvailability(); await settle()
    assert.equal(f.request.serviceUnavailable.value, false); assert.equal(visibleText(f.root), '')
    assert.equal(f.store.isLoggedIn, true); assert.equal(f.calls.at(-1)?.url, '/api/v1/auth/me')
-   assert.equal(f.calls.at(-1)?.headers.Authorization, 'Bearer valid-session')
+   assert.equal(f.calls.at(-1)?.headers.Authorization, undefined)
   })
  }
 }
-for (const refreshMode of ['503', 'network', 'timeout', '401']) {
- test(`expired access token with ${refreshMode} refresh preserves session except explicit 401`, async t => {
-  const f = fixture(t, 'zh-CN', true); f.transport.mode = '401'; f.transport.refreshMode = refreshMode
-  assert.equal(await f.store.refreshFromAuthMe(), false)
-  const invalid = refreshMode === '401'
-  assert.equal(f.store.isLoggedIn, !invalid); assert.equal(f.storage.has('reliquary_token'), !invalid)
-  assert.equal(f.location.href, invalid ? '/login' : '/platform/settings')
-  assert.ok(f.calls.some(packet => packet.url === '/api/v1/auth/refresh'))
- })
-}
-test('explicit protected 401 without refresh clears the real auth store and redirects', async t => {
+test('a 401 neither refreshes a session nor redirects to the removed login page', async t => {
  const f = fixture(t); f.transport.mode = '401'
  assert.equal(await f.store.refreshFromAuthMe(), false)
- assert.equal(f.store.isLoggedIn, false); assert.equal(f.storage.has('reliquary_token'), false); assert.equal(f.location.href, '/login')
+ assert.equal(f.store.isLoggedIn, true); assert.equal(f.location.href, '/platform/settings')
+ assert.ok(!f.calls.some(packet => packet.url?.includes('/auth/refresh')))
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
  test(`${locale}: persisted browser session upgrades before loading current HTTP data`, async t => {
-  const f = fixture(t, locale, false, true)
+  const f = fixture(t, locale, true)
   assert.equal(f.store.user.space_id, '1')
   assert.equal(f.store.effectiveSpaceId, 1)
   assert.equal(f.store.currentSpaceName, 'Original personal space')
@@ -124,7 +115,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   assert.equal(loaded.data.space_id, 1)
   await f.spaceApi.updateSpace({ name: 'Updated personal space' })
   assert.equal((await f.spaceApi.getSpaceInfo()).data.name, 'Updated personal space')
-  assert.equal(f.calls.at(-1)?.headers.Authorization, 'Bearer valid-session')
+  assert.equal(f.calls.at(-1)?.headers.Authorization, undefined)
   assert.ok(f.calls.some(packet => packet.url === '/api/v1/space' && packet.method === 'put'))
  })
 }
@@ -147,7 +138,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   assert.equal(spans.data.entry_id,'loaded-entry')
   const list=f.calls.find(packet=>packet.url?.startsWith('/api/v1/entries?'))
   assert.ok(list)
-  assert.equal(list.headers.Authorization,'Bearer valid-session')
+  assert.equal(list.headers.Authorization,undefined)
   assert.equal(f.calls.at(-1)?.url,'/api/v1/entries/loaded-entry/spans')
   assert.ok(!f.calls.some(packet=>packet.url?.startsWith('/api/v1/knowledge/')))
  })

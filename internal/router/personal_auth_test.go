@@ -39,6 +39,7 @@ func personalRequest(t *testing.T, r *gin.Engine, method, path, body, credential
 	// Each test gets its own client IP so auth budgets do not leak across fixtures.
 	client := crc32.ChecksumIEEE([]byte(t.Name()))
 	req.RemoteAddr = fmt.Sprintf("192.%d.%d.%d:12345", byte(client>>16), byte(client>>8), byte(client))
+	req.Host = "localhost"
 	req.Header.Set("Content-Type", "application/json")
 	if credential != "" {
 		if apiKey {
@@ -60,7 +61,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	cfg := &config.Config{}
 	spaceRepo := apprepo.NewSpaceRepository(db)
 	spaceSvc := service.NewSpaceService(spaceRepo)
-	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), apprepo.NewAuthTokenRepository(db), spaceSvc)
+	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), spaceSvc)
 	keys := service.NewAPIKeyService(apprepo.NewAPIKeyRepository(db))
 	entryRepo := apprepo.NewEntryRepository(db)
 	libraryRepo := apprepo.NewLibraryRepository(db)
@@ -94,27 +95,10 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	RegisterEntryRoutes(v1, params.EntryHandler, guards)
 	RegisterLibraryRoutes(v1, params.LibraryHandler, guards)
 	f := &personalAuthFixture{db: db, router: r, params: params}
-	register := personalRequest(t, r, http.MethodPost, "/api/v1/auth/register", `{"username":"personal","email":"personal@example.test","password":"initial-password"}`, "", false)
-	require.Equal(t, http.StatusCreated, register.Code, register.Body.String())
-	var registration types.RegisterResponse
-	require.NoError(t, json.Unmarshal(register.Body.Bytes(), &registration))
-	require.NotNil(t, registration.User)
-	f.userID = registration.User.ID
-	second := personalRequest(t, r, http.MethodPost, "/api/v1/auth/register", `{"username":"second","email":"second@example.test","password":"another-password"}`, "", false)
-	require.Equal(t, http.StatusForbidden, second.Code, second.Body.String())
-	var usersCount int64
-	require.NoError(t, db.Model(&types.User{}).Count(&usersCount).Error)
-	require.EqualValues(t, 1, usersCount)
-	authConfig := personalRequest(t, r, http.MethodGet, "/api/v1/auth/config", "", "", false)
-	require.Equal(t, http.StatusOK, authConfig.Code, authConfig.Body.String())
-	require.Contains(t, authConfig.Body.String(), `"registration_enabled":false`)
-	login := personalRequest(t, r, http.MethodPost, "/api/v1/auth/login", `{"email":"personal@example.test","password":"initial-password"}`, "", false)
-	require.Equal(t, http.StatusOK, login.Code, login.Body.String())
-	var loggedIn types.LoginResponse
-	require.NoError(t, json.Unmarshal(login.Body.Bytes(), &loggedIn))
-	require.True(t, loggedIn.Success)
-	f.token = loggedIn.Token
-	created := personalRequest(t, r, http.MethodPost, "/api/v1/space/api-keys", `{"name":"personal integration"}`, f.token, false)
+	sole, err := users.EnsureSoleUser(context.Background())
+	require.NoError(t, err)
+	f.userID = sole.ID
+	created := personalRequest(t, r, http.MethodPost, "/api/v1/space/api-keys", `{"name":"personal integration"}`, "", false)
 	require.Equal(t, http.StatusCreated, created.Code, created.Body.String())
 	var createdKey struct {
 		Data struct {
@@ -127,32 +111,48 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	return f
 }
 
-func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
+func TestPersonalLocalAccessAndAPIKeys(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	for _, path := range []string{"/api/v1/system/settings", "/api/v1/system/runtime/queues", "/api/v1/models", "/api/v1/space/api-keys"} {
-		for _, credential := range []string{"", "invalid-key"} {
-			rec := personalRequest(t, f.router, http.MethodGet, path, "", credential, true)
-			require.Equal(t, http.StatusUnauthorized, rec.Code, path+" "+rec.Body.String())
-		}
-		for _, apiKey := range []bool{false, true} {
-			credential := f.token
-			if apiKey {
-				credential = f.key
-			}
-			rec := personalRequest(t, f.router, http.MethodGet, path, "", credential, apiKey)
+	var usersCount int64
+	require.NoError(t, f.db.Model(&types.User{}).Count(&usersCount).Error)
+	require.EqualValues(t, 1, usersCount)
+	for _, path := range []string{"/api/v1/system/settings", "/api/v1/system/runtime/queues", "/api/v1/models", "/api/v1/space/api-keys", "/api/v1/auth/me"} {
+		rec := personalRequest(t, f.router, http.MethodGet, path, "", "invalid-key", true)
+		require.Equal(t, http.StatusUnauthorized, rec.Code, path+" "+rec.Body.String())
+		for _, credential := range []string{"", f.key} {
+			rec := personalRequest(t, f.router, http.MethodGet, path, "", credential, credential != "")
 			require.Equal(t, http.StatusOK, rec.Code, path+" "+rec.Body.String())
 		}
 	}
-	for i, apiKey := range []bool{false, true} {
-		credential := f.token
-		if apiKey {
-			credential = f.key
-		}
-		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/settings/queue.core_concurrency", `{"value":4}`, credential, apiKey)
+	for i, credential := range []string{"", f.key} {
+		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/settings/queue.core_concurrency", `{"value":4}`, credential, credential != "")
 		require.Equal(t, http.StatusOK, settings.Code, settings.Body.String())
-		model := personalRequest(t, f.router, http.MethodPost, "/api/v1/models", fmt.Sprintf(`{"name":"test-model-%d","type":"KnowledgeQA","source":"remote","parameters":{}}`, i), credential, apiKey)
+		model := personalRequest(t, f.router, http.MethodPost, "/api/v1/models", fmt.Sprintf(`{"name":"test-model-%d","type":"KnowledgeQA","source":"remote","parameters":{}}`, i), credential, credential != "")
 		require.Equal(t, http.StatusCreated, model.Code, model.Body.String())
+	}
+}
 
+func TestCredentialLessAccessRejectsCrossSiteAndRemoteHosts(t *testing.T) {
+	f := newPersonalAuthFixture(t)
+	for name, mutate := range map[string]func(*http.Request){
+		"cross-site page": func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "cross-site") },
+		"rebinding host":  func(r *http.Request) { r.Host = "attacker.example:8080" },
+		"lan address":     func(r *http.Request) { r.Host = "192.168.1.20" },
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Host = "localhost"
+		mutate(req)
+		rec := httptest.NewRecorder()
+		f.router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusUnauthorized, rec.Code, name)
+	}
+	for _, host := range []string{"127.0.0.1:8080", "[::1]:8080", "localhost"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Host = host
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		rec := httptest.NewRecorder()
+		f.router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, host)
 	}
 }
 
@@ -172,7 +172,7 @@ func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 	}
 }
 
-func TestPersonalAPIKeyAndLoginReturnAllEntities(t *testing.T) {
+func TestPersonalAPIKeyAndLocalUserReturnAllEntities(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	seedPersonalEntities(t, f)
 	cases := []struct{ method, path, body string }{
@@ -182,8 +182,6 @@ func TestPersonalAPIKeyAndLoginReturnAllEntities(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
-			missing := personalRequest(t, f.router, tc.method, tc.path, tc.body, "", false)
-			require.Equal(t, http.StatusUnauthorized, missing.Code)
 			invalid := personalRequest(t, f.router, tc.method, tc.path, tc.body, "invalid-key", true)
 			require.Equal(t, http.StatusUnauthorized, invalid.Code)
 			login := personalRequest(t, f.router, tc.method, tc.path, tc.body, f.token, false)

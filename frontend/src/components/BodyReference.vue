@@ -12,8 +12,7 @@ async function load() {
   const current = ++sequence; controller?.abort(); controller = new AbortController()
   loading.value = true; paragraphs.value = []; changed.value = false; error.value = ''
   try {
-    let token = ''; try { token = localStorage.getItem('reliquary_token') || '' } catch { /* No stored token. */ }
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${encodeURIComponent(props.entryId)}/body`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${encodeURIComponent(props.entryId)}/body`, { signal: controller.signal })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const body = await response.text(), reference = await resolveBodyReference(body, props.location)
     if (current !== sequence) return

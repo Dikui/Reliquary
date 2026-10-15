@@ -3,6 +3,7 @@ package middleware
 import (
 	"errors"
 	"github.com/gin-gonic/gin"
+	"net"
 	"net/http"
 	apprepo "reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
@@ -14,10 +15,6 @@ import (
 
 var noAuthAPI = map[string][]string{
 	"/health":                 {"GET"},
-	"/api/v1/auth/register":   {"POST"},
-	"/api/v1/auth/login":      {"POST"},
-	"/api/v1/auth/config":     {"GET"},
-	"/api/v1/auth/refresh":    {"POST"},
 	"/api/v1/files/presigned": {"GET", "HEAD"},
 }
 
@@ -38,7 +35,7 @@ func bearerToken(c *gin.Context) (string, bool) {
 	return strings.TrimPrefix(value, "Bearer "), true
 }
 
-// Auth verifies credentials and attaches the sole user's workspace identity.
+// Auth verifies API keys, or treats a request without credentials as the sole user.
 func Auth(spaces interfaces.SpaceService, users interfaces.UserService, keys interfaces.APIKeyService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Method == http.MethodOptions || isNoAuthAPI(c.Request.URL.Path, c.Request.Method) {
@@ -49,18 +46,13 @@ func Auth(spaces interfaces.SpaceService, users interfaces.UserService, keys int
 		mcpRequest := c.Request.URL.Path == "/mcp"
 		var user *types.User
 		var principal types.Principal
-		if token, ok := bearerToken(c); ok {
-			if !mcpRequest {
-				candidate, spaceID, err := users.ValidateToken(ctx, token)
-				if authUnavailable(c, err) {
-					return
-				}
-				if err == nil && spaceID == types.SingleSpaceID {
-					user = candidate
-				}
-			}
-			if user == nil && keys != nil {
-				key, err := keys.AuthenticateAPIKey(ctx, token)
+		credential, hasBearer := bearerToken(c)
+		if !hasBearer && !mcpRequest {
+			credential = c.GetHeader("X-API-Key")
+		}
+		if credential != "" {
+			if keys != nil {
+				key, err := keys.AuthenticateAPIKey(ctx, credential)
 				if authUnavailable(c, err) {
 					return
 				}
@@ -73,19 +65,13 @@ func Auth(spaces interfaces.SpaceService, users interfaces.UserService, keys int
 					principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10), Name: key.Name}
 				}
 			}
-		}
-		if !mcpRequest && user == nil && keys != nil && c.GetHeader("X-API-Key") != "" {
-			key, err := keys.AuthenticateAPIKey(ctx, c.GetHeader("X-API-Key"))
-			if authUnavailable(c, err) {
+		} else if !mcpRequest && localRequest(c) {
+			// Login was removed (ADR 0015): the local web UI acts as the sole user.
+			var err error
+			user, err = users.EnsureSoleUser(ctx)
+			if err != nil {
+				authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
 				return
-			}
-			if err == nil && key != nil && key.SpaceIDValue() == types.SingleSpaceID {
-				user, err = users.GetUserBySpaceID(ctx, types.SingleSpaceID)
-				if err != nil && !errors.Is(err, apprepo.ErrUserNotFound) {
-					authUnavailable(c, apperrors.NewServiceUnavailableError("Authentication is temporarily unavailable"))
-					return
-				}
-				principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10), Name: key.Name}
 			}
 		}
 		if user == nil || !user.IsActive || user.SpaceID != types.SingleSpaceID {
@@ -114,6 +100,26 @@ func Auth(spaces interfaces.SpaceService, users interfaces.UserService, keys int
 		applyAuthSession(c, authSession{User: user, Principal: principal, SpaceID: types.SingleSpaceID, Space: space})
 		c.Next()
 	}
+}
+
+// localRequest admits credential-less callers only on a loopback Host (blocks DNS
+// rebinding) and never from another site's page (blocks CSRF and cross-site reads).
+func localRequest(c *gin.Context) bool {
+	switch c.GetHeader("Sec-Fetch-Site") {
+	case "", "none", "same-origin", "same-site":
+	default:
+		return false
+	}
+	host := c.Request.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // authUnavailable preserves credentials when their database checks cannot run.

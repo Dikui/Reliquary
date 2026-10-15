@@ -15,7 +15,7 @@
 
 费用状态为 `calculated`、`unknown` 或 `not_applicable`。`calculated` 是按模型配置计算的金额，不代表提供方账单。ChatGPT 登录账号始终为 `not_applicable`，cost 为 null。无 usage 的 token 字段为 null；明确返回的 0 保持为 0。输入型 embedding 和 rerank 接受 total_tokens 作为输入 token，缺失的输出 token 保持 null。
 
-所有接口位于 `/api/v1`，沿用登录和 API Key 认证：
+所有接口位于 `/api/v1`，网页不带凭据，外部工具使用 API Key 认证：
 
 | 方法与路径 | 功能 |
 | --- | --- |

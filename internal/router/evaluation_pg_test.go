@@ -70,7 +70,7 @@ func TestEvaluationHTTPAndAllSearchOrigins(t *testing.T) {
 	listed := personalRequest(t, f.router, "GET", "/api/v1/search/records?source=evaluation", "", f.key, true)
 	require.Equal(t, 200, listed.Code)
 	require.Contains(t, listed.Body.String(), run.Data.ID)
-	unauthorized := personalRequest(t, f.router, "GET", "/api/v1/evaluation/sets", "", "", false)
+	unauthorized := personalRequest(t, f.router, "GET", "/api/v1/evaluation/sets", "", "invalid-key", true)
 	require.Equal(t, 401, unauthorized.Code)
 	invalid := personalRequest(t, f.router, "POST", "/api/v1/evaluation/sets/"+set.Data.ID+"/runs", `{"k":-1}`, f.key, true)
 	require.Equal(t, 400, invalid.Code)

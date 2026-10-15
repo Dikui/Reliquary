@@ -121,7 +121,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const attachment = new URL(requests[0].url, 'http://localhost')
       assert.equal(attachment.pathname, '/api/v1/entries/image-a/vault-attachment')
       assert.equal(attachment.searchParams.get('path'), '../../attachments/image-a/figure.png')
-      assert.deepEqual(requests[0].options.headers, { Authorization: 'Bearer private-image-token' })
+      assert.deepEqual(requests[0].options.headers, {})
       assert.doesNotMatch(requests[0].url + source, /private-image-token/)
       await click(descendants(dialog).find(node => node.props['data-close-preview'])!)
       assert.equal(descendants(root).some(node => node.props.role === 'dialog'), false)

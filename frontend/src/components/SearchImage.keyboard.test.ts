@@ -19,7 +19,6 @@ import PicturePreview from '/src/components/PicturePreview.vue'
 import zh from '/src/i18n/locales/zh-CN.ts'
 import en from '/src/i18n/locales/en-US.ts'
 
-localStorage.setItem('reliquary_token', 'keyboard-preview-test-token')
 const params = new URLSearchParams(location.search)
 const fixture = params.get('fixture') || 'search'
 document.documentElement.setAttribute('theme-mode', params.get('theme') || 'light')
@@ -157,7 +156,7 @@ for (const locale of ['zh-CN', 'en-US']) {
     assert.deepEqual(page.errors, [])
     const articleRequests = requests.filter(request => request.url.includes('/keyboard-article/'))
     assert.ok(articleRequests.length >= 2)
-    assert.ok(articleRequests.every(request => request.authorization === 'Bearer keyboard-preview-test-token'))
+    assert.ok(articleRequests.every(request => !request.authorization))
     assert.ok(articleRequests.every(request => !request.url.includes('keyboard-preview-test-token')))
     await openSearchPreview(page)
     const reopened = await page.evaluate(viewerProbe)

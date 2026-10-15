@@ -20,7 +20,7 @@ func TestChatGPTSettingsRequireLocalUserAndCallbackChecksState(t *testing.T) {
 	f.params.ChatGPTPolicyHandler = handler.NewChatGPTPolicyHandler(service.NewChatGPTPolicyService(f.db))
 	f.router = NewRouter(f.params)
 	for _, path := range []string{"/api/v1/chatgpt/accounts", "/api/v1/chatgpt/policy"} {
-		unauth := personalRequest(t, f.router, http.MethodGet, path, "", "", false)
+		unauth := personalRequest(t, f.router, http.MethodGet, path, "", "invalid-key", true)
 		require.Equal(t, http.StatusUnauthorized, unauth.Code)
 		apiKey := personalRequest(t, f.router, http.MethodGet, path, "", f.key, true)
 		require.Equal(t, http.StatusForbidden, apiKey.Code)

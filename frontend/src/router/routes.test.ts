@@ -98,9 +98,9 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   }
 })
 
-test('login and registration return to libraries and removed conversation pages show not found', async () => {
+test('root, platform and old login links return to entries and removed conversation pages show not found', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const path of ['/', '/platform']) {
+  for (const path of ['/', '/platform', '/login']) {
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'entries')
   }
@@ -108,10 +108,6 @@ test('login and registration return to libraries and removed conversation pages 
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
   }
-  const login = readFileSync(new URL('../views/auth/Login.vue', import.meta.url), 'utf8')
-  assert.equal((login.match(/router\.replace\('\/platform\/entries'\)/g) || []).length, 2)
-  const navigation = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
-  assert.match(navigation, /to\.path === '\/login' && authStore\.isLoggedIn[\s\S]*next\('\/platform\/entries'\)/)
 })
 
 test('old knowledge list and ID routes redirect to the single article page', async () => {

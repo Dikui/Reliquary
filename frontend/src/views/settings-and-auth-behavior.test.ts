@@ -38,9 +38,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
     '@/components/settings/SettingDrawer.vue': { default: stub, __esModule: true },
     '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
     '@/utils/clipboard': { copyWithToast() {} },
-    '@/utils/loginNotify': { notifyLoginSuccess() {} },
     '@/utils/workspaceCopy': workspaceCopy,
-    '@/utils/passwordValidation': { newPasswordRules: () => [] },
     'vue-router': { useRouter: () => ({ replace() {}, push() {} }) },
     ...modules,
   }
@@ -96,30 +94,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(personalError.apiKeyErrorMessage({ message: 'internal backend error' }, t, 'integrations.api.createApiKeyFailed'), t('integrations.api.createApiKeyFailed'))
   })
 
-  test(`${locale}: registration-closed response uses localized copy in the actual form`, async () => {
-    const messages: string[] = []
-    await componentScenario('./auth/Login.vue', locale, {
-      'tdesign-vue-next': { MessagePlugin: { error: (message: string) => messages.push(message) } },
-      '@/api/auth': { register: async () => { throw { status: 403, message: 'Registration is closed' } } },
-    }, async state => {
-      state.registrationEnabled.value = true
-      state.registerFormRef.value = { validate: async () => true }
-      await state.handleRegister()
-    })
-    assert.deepEqual(messages, [locale === 'zh-CN' ? '已有用户，注册已关闭。请登录现有账户。' : 'Registration is closed. Please sign in with the existing account.'])
-    assert.notEqual(messages[0], 'Registration is closed')
-  })
-
 }
-
-test('390px login navigation reserves its own normal-flow row before the introduction', async () => {
-  const rules = await compiledSFCStyleRules(new URL('./auth/Login.vue', import.meta.url))
-  assert.equal(styleDeclarationsAtWidth(rules, '.login-header', 390).position, 'relative')
-  assert.equal(styleDeclarationsAtWidth(rules, '.login-header', 390).display, 'flex')
-  assert.equal(styleDeclarationsAtWidth(rules, '.header-logo', 390).position, 'static')
-  assert.equal(styleDeclarationsAtWidth(rules, '.header-links', 390).position, 'static')
-  assert.equal(styleDeclarationsAtWidth(rules, '.header-logo', 1280).position, 'fixed')
-})
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: space info shows used storage above the former limit without a quota or percentage`, async () => {

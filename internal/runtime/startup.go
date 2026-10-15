@@ -74,7 +74,6 @@ type envVarSpec struct {
 var startupEnvVars = []envVarSpec{
 	// Security
 	{name: "SYSTEM_AES_KEY", sensitive: true},
-	{name: "JWT_SECRET", sensitive: true},
 	// Runtime
 	{name: "GIN_MODE"},
 	{name: "AUTO_MIGRATE"},
@@ -95,7 +94,6 @@ var startupEnvVars = []envVarSpec{
 // Output format (one line per var to stay grep-able):
 //
 //	[startup-env] SYSTEM_AES_KEY=set (32 chars)
-//	[startup-env] JWT_SECRET=<unset>
 //	[startup-env] DB_DRIVER=postgres
 //
 // Special call-outs are printed afterwards for misconfigurations that

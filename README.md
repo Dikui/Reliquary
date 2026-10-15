@@ -36,7 +36,7 @@ Requirements: Git, Node.js/npm, a runtime compatible with Docker (such as OrbSta
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
-# Configure database credentials, JWT_SECRET, SYSTEM_AES_KEY, and model endpoints.
+# Configure database credentials, SYSTEM_AES_KEY, and model endpoints.
 ./scripts/build-frontend-dist.sh
 ./reliquary-admin check-deployment
 docker compose up -d --wait postgres redis neo4j

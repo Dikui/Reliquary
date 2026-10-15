@@ -20,7 +20,7 @@ services:
   postgres:
     image: paradedb/paradedb:v0.22.2-pg17@sha256:af585013f97f622715de01e48d00558f7edf17055d7b40deafc9f98ca8d99a56
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}

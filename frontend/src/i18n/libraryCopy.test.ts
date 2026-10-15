@@ -21,7 +21,6 @@ const pages = [
   '../components/DocContent.vue',
   '../components/SideMenu.vue',
   '../components/UserMenu.vue',
-  '../views/auth/Login.vue',
 ]
 
 for (const [locale, bundle] of Object.entries({ 'zh-CN': zhCN, 'en-US': enUS })) {
@@ -73,8 +72,6 @@ test('library settings navigation, heading and model labels agree in both locale
   }
 })
 
-test('login presents current localized copy without obsolete screenshot claims', () => {
-  const source = readFileSync(new URL('../views/auth/Login.vue', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /screenshot-[12]\.svg|screenshot-swiper|swiper\/|<swiper|platform\.carousel/)
+test('removed screenshot carousel copy stays absent', () => {
   for (const bundle of [zhCN, enUS]) assert.equal('carousel' in bundle.platform, false)
 })

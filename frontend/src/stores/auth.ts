@@ -6,14 +6,6 @@ import i18n from '@/i18n'
 import { reloadFontFromStorage } from '@/composables/useFont'
 import { reloadThemeFromStorage } from '@/composables/useTheme'
 import { resetMigrationLatch } from '@/composables/preferenceStorage'
-import { useResourcesStore } from '@/stores/resources'
-import { useEditorResourcesStore } from '@/stores/editorResources'
-
-/** 登出时丢弃 Pinia 内的空间级资源缓存，避免 SPA 重登复用上一账号数据。 */
-function clearSessionResourceCaches() {
-  useResourcesStore().invalidate()
-  useEditorResourcesStore().invalidate()
-}
 
 // Per-user UI preferences are namespaced by user id in localStorage.
 // Reload them whenever the active user changes.
@@ -28,12 +20,8 @@ export const useAuthStore = defineStore('auth', () => {
   // 状态
   const user = ref<UserInfo | null>(null)
   const space = ref<SpaceInfo | null>(null)
-  const token = ref<string>('')
-  const refreshToken = ref<string>('')
-  // 计算属性
-  const isLoggedIn = computed(() => {
-    return !!token.value && !!user.value
-  })
+  // 计算属性：没有登录，取到唯一用户即视为可用。
+  const isLoggedIn = computed(() => !!user.value)
 
   const hasValidSpace = computed(() => {
     return !!space.value && !!space.value.id
@@ -72,16 +60,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const setToken = (tokenValue: string) => {
-    token.value = tokenValue
-    localStorage.setItem('reliquary_token', tokenValue)
-  }
-
-  const setRefreshToken = (refreshTokenValue: string) => {
-    refreshToken.value = refreshTokenValue
-    localStorage.setItem('reliquary_refresh_token', refreshTokenValue)
-  }
-
   // Refresh the current user and workspace.
   const refreshFromAuthMe = async (): Promise<boolean> => {
     try {
@@ -115,31 +93,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const logout = () => {
-    // 清空状态
-    user.value = null
-    space.value = null
-    token.value = ''
-    refreshToken.value = ''
-    clearSessionResourceCaches()
-
-    // 清空localStorage
-    localStorage.removeItem('reliquary_user')
-    localStorage.removeItem('reliquary_tenant')
-    localStorage.removeItem('reliquary_token')
-    localStorage.removeItem('reliquary_refresh_token')
-    localStorage.removeItem('reliquary_libraries')
-    localStorage.removeItem('reliquary_current_library')
-    reloadUserPreferences()
-  }
-
   const initFromStorage = () => {
     // 从localStorage恢复状态
     const storedUser = localStorage.getItem('reliquary_user')
     // The existing browser storage key survives upgrades. HTTP uses current names.
     const storedSpace = localStorage.getItem('reliquary_tenant')
-    const storedToken = localStorage.getItem('reliquary_token')
-    const storedRefreshToken = localStorage.getItem('reliquary_refresh_token')
+    // Tokens from the removed login would be sent as invalid API keys.
+    localStorage.removeItem('reliquary_token')
+    localStorage.removeItem('reliquary_refresh_token')
 
     if (storedUser) {
       try {
@@ -162,17 +123,6 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    if (storedToken) {
-      token.value = storedToken
-    }
-
-    if (storedRefreshToken) {
-      refreshToken.value = storedRefreshToken
-    }
-
-
-
-
   }
 
   // 初始化时从localStorage恢复状态
@@ -182,8 +132,6 @@ export const useAuthStore = defineStore('auth', () => {
     // 状态
     user,
     space,
-    token,
-    refreshToken,
 
     // 计算属性
     isLoggedIn,
@@ -196,10 +144,7 @@ export const useAuthStore = defineStore('auth', () => {
     // 方法
     setUser,
     setSpace,
-    setToken,
-    setRefreshToken,
     refreshFromAuthMe,
-    logout,
     initFromStorage
   }
 })

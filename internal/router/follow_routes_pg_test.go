@@ -18,7 +18,7 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	follows := service.NewFollowService(f.db)
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(follows))
-	r := personalRequest(t, f.router, http.MethodGet, "/api/v1/follows", "", "", false)
+	r := personalRequest(t, f.router, http.MethodGet, "/api/v1/follows", "", "invalid-key", true)
 	require.Equal(t, http.StatusUnauthorized, r.Code)
 	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/library", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code)

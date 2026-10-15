@@ -86,7 +86,6 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: true,
     // 代理配置，用于开发环境
     proxy: {
       '/health': {
@@ -116,7 +115,6 @@ export default defineConfig({
   // （如主题变量被打包顺序覆盖）。用法：npm run build && npm run preview
   preview: {
     port: 4173,
-    host: true,
     proxy: {
       '/health': {
         target: DEV_PROXY_TARGET,

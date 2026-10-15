@@ -14,10 +14,9 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       redirect: "/platform/entries",
     },
     {
+      // 登录已移除，旧书签回到资料页。
       path: "/login",
-      name: "login",
-      component: () => import("../views/auth/Login.vue"),
-      meta: { requiresAuth: false, requiresInit: false }
+      redirect: "/platform/entries",
     },
     {
       path: "/platform",

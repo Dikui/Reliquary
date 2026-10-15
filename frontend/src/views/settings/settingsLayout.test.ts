@@ -57,7 +57,7 @@ for (const [file, wideMinimum] of [
   })
 }
 
-test('narrow font choices, information values and password popup preserve readable widths', async () => {
+test('narrow font choices and information values preserve readable widths', async () => {
   const general = await compiledSFCStyleRules(new URL('./GeneralSettings.vue', import.meta.url))
   for (const selector of ['.setting-select', '.font-preview']) {
     assert.equal(styleDeclarationsAtWidth(general, selector, 900, { 'settings-content': 636 }).width, '100%')
@@ -66,16 +66,6 @@ test('narrow font choices, information values and password popup preserve readab
   for (const file of ['SystemInfo.vue', 'UserProfile.vue', 'SpaceInfo.vue']) {
     const rules = await compiledSFCStyleRules(new URL(`./${file}`, import.meta.url))
     assert.equal(styleDeclarationsAtWidth(rules, '.setting-control .info-value', 900, { 'settings-content': 636 })['text-align'], 'left')
-  }
-  const profile = await compiledSFCStyleRules(new URL('./UserProfile.vue', import.meta.url))
-  const popup = '.user-profile-password-popup-overlay .t-popup__content'
-  assert.equal(styleDeclarationsAtWidth(profile, popup, 1440)['min-width'], '300px')
-  for (const { viewport } of scenarios.filter(item => item.viewport <= 1100)) {
-    const style = styleDeclarationsAtWidth(profile, popup, viewport)
-    assert.equal(style['min-width'], '0')
-    assert.equal(style.width, 'min(360px, calc(100vw - 72px))')
-    assert.equal(style['box-sizing'], 'border-box')
-    assert.equal(styleDeclarationsAtWidth(profile, '.password-popup-footer', viewport)['flex-wrap'], 'wrap')
   }
 })
 

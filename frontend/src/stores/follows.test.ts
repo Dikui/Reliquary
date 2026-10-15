@@ -28,7 +28,7 @@ type PendingRequest = {
 }
 
 function fixture(t: TestContext) {
-  const storage = new Map([['reliquary_token', 'follow-test-token'], ['locale', 'zh-CN']])
+  const storage = new Map([['locale', 'zh-CN']])
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
@@ -83,7 +83,7 @@ test('follow targets load through the real API and authenticated Axios wrapper, 
   assert.equal(f.store.targetsLoading, true)
   const packet = await f.next('get', '/api/v1/follows')
   assert.equal(packet.config.baseURL, 'http://follows.test')
-  assert.equal(packet.config.headers.Authorization, 'Bearer follow-test-token')
+  assert.equal(packet.config.headers.Authorization, undefined)
   assert.equal(packet.config.headers['Accept-Language'], 'zh-CN')
   packet.resolve(envelope([target(), target('topic', 'topic-a', 'Space research')]))
   await Promise.all([first, second])

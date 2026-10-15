@@ -4,17 +4,9 @@ Reliquary 在一个个人空间中按库收录、存储、去重、检索资料�
 
 ## 账号与网页入口
 
-系统只有一个用户。首个用户注册成功后关闭注册，登录用户与有效 API Key 可以访问个人空间全部内容。API Key 支持名称、有效期和撤销，接入方式见 [收录接口说明](ingest-api.md)。
+系统只有一个用户，没有登录。网页和后端端口只绑定本机 `127.0.0.1`，打开网页即可访问个人空间全部内容；外部工具使用 API Key。其他设备无法访问，见 [ADR 0015](adr/0015-no-login-local-only.md)。API Key 支持名称、有效期和撤销，接入方式见 [收录接口说明](ingest-api.md)。
 
-登录后进入资料页。主要入口为资料、检索、实体、主题、关注、测评和设置。待处理页面分收录待审与待补全两个标签，可审核、按资料 ID 补图、接受缺失或丢弃。资料可标星、修正内容类型与主题，实体页可查看关系来源、删除关系和合并实体。设置提供库配置、从模板新建库、模型、文件库状态、操作日志、API 集成、运行队列和调用统计。测评页管理题集、确认 AI 候选、运行普通或图谱检索评测并比较两次完成运行。
-
-用户可在页面修改密码。忘记密码时，保持数据库可用，在仓库根目录使用服务器相同的数据库配置执行：
-
-```bash
-go run ./cmd/server reset-password
-```
-
-新密码从标准输入读取，最少 8 个字符，UTF-8 编码不超过 72 字节。修改会撤销旧登录令牌。Docker 部署可执行 `docker compose run --rm --no-deps app ./Reliquary reset-password`。
+打开网页后进入资料页。主要入口为资料、检索、实体、主题、关注、测评和设置。待处理页面分收录待审与待补全两个标签，可审核、按资料 ID 补图、接受缺失或丢弃。资料可标星、修正内容类型与主题，实体页可查看关系来源、删除关系和合并实体。设置提供库配置、从模板新建库、模型、文件库状态、操作日志、API 集成、运行队列和调用统计。测评页管理题集、确认 AI 候选、运行普通或图谱检索评测并比较两次完成运行。
 
 ## 收集、审核与处理
 
@@ -129,7 +121,7 @@ cp .env.example .env
 | `LOCAL_STORAGE_BASE_DIR` | 容器内上传资源目录，建议保持 `/data/files` |
 | `DB_DRIVER`、`DB_HOST`、`DB_PORT` | 使用 `postgres`、Compose 服务名 `postgres` 与 `5432` |
 | `DB_USER`、`DB_PASSWORD`、`DB_NAME` | PostgreSQL 账号、密码和库名，同时用于初始化数据库服务 |
-| `JWT_SECRET`、`SYSTEM_AES_KEY` | 设置自己的登录签名密钥及 32 字节凭据加密密钥；迁移和整体恢复时由维护命令生成新值 |
+| `SYSTEM_AES_KEY` | 设置自己的 32 字节凭据加密密钥；迁移和整体恢复时由维护命令生成新值 |
 | `OLLAMA_BASE_URL` | 容器访问 macOS 模型服务的地址，例如 `http://host.docker.internal:11434` |
 | `OLLAMA_OPTIONAL` | 设为 `true` 时，Ollama 暂不可用只输出告警 |
 | `SSRF_WHITELIST_EXTRA` | 部署额外放行的模型服务主机/IP/CIDR；与设置页白名单合并 |
@@ -168,7 +160,7 @@ docker compose up -d --no-build
 
 `./scripts/start-all.sh --docker` 也会在应用启动前创建并检查宿主机目录，先启动数据库，再核对已保存的备份设置。应用入口随后为挂载目录设置容器用户写入权限，并以 `appuser` 运行。在 macOS 的 Docker 兼容运行环境中，宿主机登录用户仍可读取文件库供 Obsidian 使用；无需手工执行递归 `chown`。运行环境的文件共享设置应允许访问所选目录。
 
-启动后访问 `.env` 配置的网页端口，注册唯一用户，配置共享向量与各库模型并收录一份资料。检查宿主机文件库是否产生 Markdown 和附件，知识检索是否命中。后续执行 Compose、备份或恢复时，使用相同的 `COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。数据库仍使用原有命名卷；不迁移旧的文件库或上传资源命名卷。
+启动后在本机访问 `.env` 配置的网页端口，配置共享向量与各库模型并收录一份资料。检查宿主机文件库是否产生 Markdown 和附件，知识检索是否命中。后续执行 Compose、备份或恢复时，使用相同的 `COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。数据库仍使用原有命名卷；不迁移旧的文件库或上传资源命名卷。
 
 推荐将 Ollama 直接安装到 macOS，在宿主机运行生成和嵌入模型。Ollama 支持 Apple GPU 的 Metal 加速；其官方文档说明 macOS 上的 Docker 容器不能使用 GPU 加速。因此将模型服务放在 macOS，Compose 中只运行 Reliquary 与数据服务，不依赖 CUDA。参见 [Ollama 硬件支持](https://docs.ollama.com/gpu)与 [Ollama FAQ](https://docs.ollama.com/faq#how-do-i-use-ollama-with-gpu-acceleration-in-docker)。
 
@@ -320,7 +312,7 @@ APP_PORT=18080 FRONTEND_PORT=18081 \
 
 后续维护命令在新部署目录执行，保留生成的 `.env` 和 Compose 映射。
 
-接下来必须看到核对结果和 `Reconfiguration checklist`。缺少本地模型时状态为 `waiting_models`，等待模型就绪；已选择的模型缺少凭据时为 `waiting_credentials`，等待重新填写。两种状态都会启动网页供登录和修改设置，但暂停收录与领取处理任务，保留所有中断任务。命令因等待返回非零状态是预期行为；不要通过手工 `maintenance resume` 跳过检查，也不要重复执行初次 `unpack` 覆盖已恢复的数据库。
+接下来必须看到核对结果和 `Reconfiguration checklist`。缺少本地模型时状态为 `waiting_models`，等待模型就绪；已选择的模型缺少凭据时为 `waiting_credentials`，等待重新填写。两种状态都会启动网页供修改设置，但暂停收录与领取处理任务，保留所有中断任务。命令因等待返回非零状态是预期行为；不要通过手工 `maintenance resume` 跳过检查，也不要重复执行初次 `unpack` 覆盖已恢复的数据库。
 
 按清单重新填写模型 API Key、App Secret、鉴权请求头，URL 中的认证参数也要补齐；ChatGPT 账号重新登录，回到模型列表刷新并测试。模型所需字段全部补齐后才解除该模型的维护暂停，只有 API Key 而仍缺 App Secret 或请求头时继续暂停。收录 API Key 重新生成并更新 HTTP/MCP 调用方。自动生成的系统密钥和数据库密码无需填入旧值。
 
@@ -410,7 +402,7 @@ BACKUP_DIR=/Users/yourname/Backups/Reliquary-Rollback \
 
 ## 外部 Agent 接入
 
-Grok Bot、Claude Code 等外部工具需能访问 Reliquary 的内网地址。登录网页后，在“设置 > API 集成”为每个工具创建自己的 API Key，复制完整令牌和连接地址。同页可查看 Key、修改名称与有效期或撤销 Key。
+Grok Bot、Claude Code 等外部工具需与 Reliquary 运行在同一台电脑上，端口只绑定 `127.0.0.1`。打开网页，在“设置 > API 集成”为每个工具创建自己的 API Key，复制完整令牌和连接地址。同页可查看 Key、修改名称与有效期或撤销 Key。
 
 将 [外部接入总览](external-integration.md) 与 [收录接口说明](ingest-api.md) 提供给外部工具开发者或 Agent。该文档包含 Markdown 与图片要求、认证、查重与收录顺序、可执行示例、HTTP 与 MCP 接口、补全、重试和用户反馈。外部工具负责取得原始资料，Reliquary 负责去重、模型审核、处理、存储与检索。收录结果和待处理页面供用户确认后续操作。
 
@@ -485,7 +477,7 @@ PostgreSQL 是唯一正本。业务修改和图谱通知在同一 PG 事务提�
 
 每天执行一次全量排序 SHA-256 核对，同时比较实体信息、边数、关系类型、库、来源数量与版本。发现偏差时以 PG 为准修复，结果写入操作日志 `graph_check`。图快照占用 O(V+E) 内存，PG 来源计数还需读取 S 条来源行，读取代价为 O(V+E+S)，核对与重建期间会暂时锁定 PG 关系修改，适用于当前小型部署。同步也持有短时关系锁，离线检测先于该锁，任务超时为 15 秒。
 
-手工重建命令为 `./reliquary-admin maintenance graph-rebuild`，手工核对为 `./reliquary-admin maintenance graph-check`。登录后的 `POST /api/v1/maintenance/graph/rebuild` 将重建排入运行队列，返回操作 ID。重建清空专用 Neo4j 数据库，在一个 Neo4j 事务内从当前 PG 全量创建实体与关系并核对哈希；不能把这个数据库与其他应用共用。
+手工重建命令为 `./reliquary-admin maintenance graph-rebuild`，手工核对为 `./reliquary-admin maintenance graph-check`。网页用户的 `POST /api/v1/maintenance/graph/rebuild` 将重建排入运行队列，返回操作 ID。重建清空专用 Neo4j 数据库，在一个 Neo4j 事务内从当前 PG 全量创建实体与关系并核对哈希；不能把这个数据库与其他应用共用。
 
 备份不包含 Neo4j 卷和 Redis。`reliquary-admin` 恢复当前版本备份时，在解除维护暂停前自动重建 Neo4j。Neo4j 不可用或重建失败时恢复不会解除暂停，修复连接后再次使用恢复的 `--resume`。恢复到新环境会生成新 Neo4j 密码，目标环境显式提供的 Neo4j 地址、账号、密码和端口优先。历史版本缺少图谱同步结构时保持原版本恢复流程，升级后由每日核对生成副本。
 

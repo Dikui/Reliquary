@@ -25,7 +25,6 @@ require (
 	github.com/yanyiwu/gojieba v1.4.7
 	go.opentelemetry.io/otel/trace v1.43.0
 	go.uber.org/dig v1.19.0
-	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/time v0.15.0
@@ -34,6 +33,8 @@ require (
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
+
+require golang.org/x/crypto v0.53.0 // indirect
 
 require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect

@@ -1,7 +1,8 @@
 # Server configuration
 server:
   port: 8080
-  host: "0.0.0.0"
+  # 无登录，只监听本机；容器内由 SERVER_HOST=0.0.0.0 覆盖。
+  host: "127.0.0.1"
 
 # Zero body limit derives a safe input budget from the generation model context.
 article_processing:

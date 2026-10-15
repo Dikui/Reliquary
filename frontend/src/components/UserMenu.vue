@@ -92,10 +92,6 @@
             </svg>
           </span>
         </div>
-        <div class="menu-divider"></div><div class="menu-item danger" @click="handleLogout">
-            <t-icon name="logout" class="menu-icon" />
-            <span>{{ $t('auth.logout') }}</span>
-          </div>
       </div>
     </Transition>
 
@@ -107,8 +103,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import { MessagePlugin } from 'tdesign-vue-next'
-import { getCurrentUser, logout as logoutApi, userInfoFromApi } from '@/api/auth'
+import { getCurrentUser, userInfoFromApi } from '@/api/auth'
 import { useI18n } from 'vue-i18n'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
 import { workspaceName } from '@/utils/workspaceCopy'
@@ -184,27 +179,6 @@ const openDocs = () => {
 const openGithub = () => {
   menuVisible.value = false
   window.open('http://192.168.1.146:3000/dikui/reliquary', '_blank')
-}
-
-// 注销
-const handleLogout = async () => {
-  menuVisible.value = false
-
-  try {
-    // 调用后端API注销
-    await logoutApi()
-  } catch (error) {
-    // 即使API调用失败，也继续执行本地清理
-    console.error('注销API调用失败:', error)
-  }
-
-  // 清理所有状态和本地存储
-  authStore.logout()
-
-  MessagePlugin.success(t('auth.logout'))
-
-  // 跳转到登录页
-  router.push('/login')
 }
 
 // 加载用户信息
@@ -587,18 +561,6 @@ onUnmounted(() => {
 
   &:hover {
     background: var(--td-bg-color-container-hover);
-  }
-
-  &.danger {
-    color: var(--td-error-color);
-
-    &:hover {
-      background: var(--td-error-color-light);
-    }
-
-    .menu-icon {
-      color: var(--td-error-color);
-    }
   }
 
   // 包含右弹子菜单的菜单项

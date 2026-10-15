@@ -54,7 +54,6 @@ var allowedOutboundCalls = map[string]int{
 	"internal/application/service/system_setting.go|Get|s.repo.Get":                                    1,
 	"internal/application/service/system_setting.go|Update|s.repo.Get":                                 2,
 	"internal/application/service/system_setting.go|resolveRaw|s.repo.Get":                             1,
-	"internal/application/service/user.go|getJwtSecret|jwtSecretOnce.Do":                               1,
 	"internal/chatgpt/http.go|request|response.Header.Get":                                             2,
 	"internal/handler/chatgpt_policy.go|Get|h.service.Get":                                             1,
 	"internal/handler/entry.go|GetEntryBatch|c.Get":                                                    1,

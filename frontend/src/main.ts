@@ -16,7 +16,6 @@ import { initTheme } from "@/composables/useTheme";
 import { initFont } from "@/composables/useFont";
 import { installTDesignIconOfflineGuard } from "@/utils/tdesign-icon-offline";
 import { installAutofillGuard } from "@/utils/disable-autofill";
-import { useAuthStore } from "@/stores/auth";
 
 // 必须在 Vue 组件挂载之前执行，避免 tdesign-icons 运行时请求 tdesign.gtimg.com
 installTDesignIconOfflineGuard();
@@ -35,16 +34,6 @@ async function bootstrap() {
   app.use(TDesign);
   const pinia = createPinia();
   app.use(pinia);
-
-  // in localStorage — reconcile once before first paint when a session exists.
-  const authStore = useAuthStore();
-  if (localStorage.getItem("reliquary_token")) {
-    try {
-      await authStore.refreshFromAuthMe();
-    } catch {
-      // best-effort; capabilities stay at defaults until the next refresh
-    }
-  }
 
   app.use(router);
   app.use(i18n);

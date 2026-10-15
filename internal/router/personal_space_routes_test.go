@@ -14,7 +14,7 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	paths := []string{"/api/v1/space", "/api/v1/space/api-keys", "/api/v1/space/kv/retrieval-config"}
 	for _, path := range paths {
-		response := personalRequest(t, f.router, http.MethodGet, path, "", "", false)
+		response := personalRequest(t, f.router, http.MethodGet, path, "", "invalid-key", true)
 		require.Equal(t, http.StatusUnauthorized, response.Code, path+" "+response.Body.String())
 	}
 	for _, actor := range []struct {

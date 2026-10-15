@@ -3,6 +3,7 @@
 Status: accepted
 部分被 [0009](0009-kb-collect-store-retrieve.md) 取代（入口、MCP 服务端、工作流；站内对话、智能体、DuckDB 数据分析、MCP 客户端一并删除）
 日期：2026-10-08
+2026-10-15：注册、登录、修改密码和重置密码命令已按 [0015](0015-no-login-local-only.md) 删除，改为无登录、只允许本机访问。
 2026-10-11 事实更新：后台任务队列已改用 PostgreSQL 并删除 Redis，见 [0010](0010-postgres-task-queue.md)。
 
 ## 背景

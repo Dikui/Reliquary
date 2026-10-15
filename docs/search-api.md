@@ -1,6 +1,6 @@
 # 普通检索接口
 
-HTTP 为 `POST /api/v1/search`，使用登录令牌或收录 API Key。MCP 为 `search`，参数相同。HTTP 返回 `{"success":true,"data":...}`；MCP 使用同样的资料字段，资料 ID 为 `entry_id`。
+HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 API Key。MCP 为 `search`，参数相同。HTTP 返回 `{"success":true,"data":...}`；MCP 使用同样的资料字段，资料 ID 为 `entry_id`。
 
 ```json
 {
@@ -92,7 +92,7 @@ const exactText = body.slice(utf16Start, utf16End)
 
 ## 图谱检索
 
-HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复用 `GraphSearchService.Search`，图谱响应 JSON 字段完全一致。HTTP 包装为 `{"success":true,"data":...}`，MCP 在 `structuredContent` 与文本内容中返回同一 data。需要现有登录或 API Key 鉴权，MCP 使用 Bearer API Key。检索过程不调用模型。
+HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复用 `GraphSearchService.Search`，图谱响应 JSON 字段完全一致。HTTP 包装为 `{"success":true,"data":...}`，MCP 在 `structuredContent` 与文本内容中返回同一 data。网页不带凭据，外部工具使用 API Key 鉴权，MCP 使用 Bearer API Key。检索过程不调用模型。
 
 ```json
 {

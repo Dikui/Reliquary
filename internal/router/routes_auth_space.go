@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"reliquary/internal/handler"
-	"reliquary/internal/middleware"
 )
 
 // RegisterSpaceRoutes exposes personal workspace settings and API keys.
@@ -22,15 +21,7 @@ func RegisterSpaceRoutes(r *gin.RouterGroup, h *handler.SpaceHandler, g *accessG
 
 // RegisterAuthRoutes registers authentication routes
 func RegisterAuthRoutes(r *gin.RouterGroup, h *handler.AuthHandler, g *accessGuards) {
-	public := r.Group("/auth", middleware.PublicAuthRateLimit())
-	public.POST("/register", h.Register)
-	public.POST("/login", h.Login)
-	public.GET("/config", h.GetAuthConfig)
-	public.POST("/refresh", h.RefreshToken)
-	r.GET("/auth/validate", h.ValidateToken)
-	r.POST("/auth/logout", h.Logout)
 	r.GET("/auth/me", h.GetCurrentUser)
-	r.POST("/auth/change-password", h.ChangePassword)
 }
 
 func RegisterSystemRoutes(r *gin.RouterGroup, h *handler.SystemHandler, g *accessGuards) {

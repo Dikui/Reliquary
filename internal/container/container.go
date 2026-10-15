@@ -82,7 +82,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewChunkRepository))
 	must(container.Provide(repository.NewModelRepository))
 	must(container.Provide(repository.NewUserRepository))
-	must(container.Provide(repository.NewAuthTokenRepository))
 	must(container.Provide(repository.NewSystemSettingRepository))
 	must(container.Provide(repository.NewTaskDeadLetterRepository))
 

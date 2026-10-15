@@ -286,7 +286,7 @@ make test-integration
 `go run ./cmd/server maintenance graph-check` 执行一次全量核对。
 `go run ./cmd/server maintenance graph-rebuild` 清空专用 Neo4j 数据库后从 PG 重建。
 也可用 `make graph-check`、`make graph-rebuild`，连接参数和文件库参数与后端相同。
-登录用户可调用 `POST /api/v1/maintenance/graph/rebuild`，返回待处理操作 ID，在运行队列查看状态。API Key 无权调用这个维护入口。
+网页用户（不带凭据的本机请求）可调用 `POST /api/v1/maintenance/graph/rebuild`，返回待处理操作 ID，在运行队列查看状态。API Key 无权调用这个维护入口。
 
 ### Redis 测试数据库占用
 

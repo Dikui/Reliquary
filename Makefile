@@ -1,4 +1,4 @@
-.PHONY: help build run reset-password test clean docker-build-app docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend
+.PHONY: help build run test clean docker-build-app docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend
 
 # Show help
 help:
@@ -7,7 +7,6 @@ help:
 	@echo "基础命令:"
 	@echo "  build             构建应用"
 	@echo "  run               运行应用"
-	@echo "  reset-password    从标准输入重置唯一用户密码"
 	@echo "  test              运行测试"
 	@echo "  test-integration  运行 PostgreSQL、Redis 与 Neo4j 集成测试"
 	@echo "  test-pg           运行含 PostgreSQL 集成用例的测试（设置 RELIQUARY_TEST_PG_DSN）"
@@ -84,8 +83,6 @@ build:
 run: build
 	NEO4J_URI="$${NEO4J_URI:-bolt://127.0.0.1:7687}" REDIS_ADDR="$${REDIS_ADDR:-127.0.0.1:6379}" VAULT_ROOT="$${VAULT_ROOT:-$(CURDIR)/.local-data/vault}" SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
 
-reset-password:
-	go run ./cmd/server reset-password
 
 # Run tests
 test:

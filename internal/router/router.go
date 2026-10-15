@@ -75,9 +75,8 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// CORS 中间件应放在最前面。
 	// 注意：通配符 AllowOrigins 下浏览器会拒绝一切带凭据（cookie）的跨域
 	// 请求（CORS 规范禁止 "*" 与 credentials 组合），因此 AllowCredentials
-	// 实际只对未来改为回显具体 Origin 时才生效；当前认证全部走显式的
-	// Authorization / X-API-Key 头，不依赖 ambient 凭据。若引入 cookie
-	// 认证，必须先把 AllowOrigins 换成受控清单。
+	// 实际只对未来改为回显具体 Origin 时才生效。无凭据请求按唯一用户放行，
+	// 跨站页面由 middleware.Auth 的 Sec-Fetch-Site 与回环 Host 检查拦截。
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

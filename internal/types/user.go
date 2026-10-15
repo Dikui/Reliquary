@@ -56,41 +56,6 @@ type AuthToken struct {
 	User *User `json:"user,omitempty" gorm:"foreignKey:UserID"`
 }
 
-// LoginRequest represents a login request
-type LoginRequest struct {
-	Email    string `json:"email"    binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
-}
-
-// RegisterRequest represents a registration request
-type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=2,max=50"`
-	Email    string `json:"email"    binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
-
-	// deliberately excluded from JSON so a public caller cannot choose its
-	// own tenancy semantics. Empty preserves the historical behaviour and is
-}
-
-// LoginResponse represents a login response
-type LoginResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	User    *User  `json:"user,omitempty"`
-	// ActiveSpace identifies the personal workspace encoded in the issued JWT.
-	ActiveSpace  *Space `json:"active_space,omitempty"`
-	Token        string `json:"token,omitempty"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-}
-
-// RegisterResponse represents a registration response
-type RegisterResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	User    *User  `json:"user,omitempty"`
-	Space   *Space `json:"space,omitempty"`
-}
-
 // UserInfo represents user information for API responses
 type UserInfo struct {
 	ID        string    `json:"id"`

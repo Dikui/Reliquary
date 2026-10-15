@@ -9,12 +9,6 @@ import (
 
 var ErrRegistrationClosed = errors.New("registration is closed")
 
-func (r *userRepository) HasUsers(ctx context.Context) (bool, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Unscoped().Model(&types.User{}).Count(&count).Error
-	return count > 0, err
-}
-
 // RegisterSingleUser serializes registration across server processes.
 func (r *userRepository) RegisterSingleUser(ctx context.Context, user *types.User) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

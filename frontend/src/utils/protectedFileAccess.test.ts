@@ -69,7 +69,7 @@ test('vault attachments use the authenticated article proxy with their relative 
       const url = new URL(request.url, 'http://localhost')
       assert.equal(url.pathname, '/api/v1/entries/article-id/vault-attachment')
       assert.equal(url.searchParams.get('path'), relative)
-      assert.deepEqual(request.headers, { Authorization: 'Bearer vault-secret-token' })
+      assert.deepEqual(request.headers, {})
       assert.doesNotMatch(request.url, /vault-secret-token|token=/)
     }
     for (const invalid of ['vault://article-id/', 'vault://article-id/%E0%A4', 'vault://missing-id']) {

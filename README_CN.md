@@ -36,7 +36,7 @@ Reliquary 是个人 AI 工作平台的内部资料库，负责资料的收录、
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
-# 配置数据库密码、JWT_SECRET、SYSTEM_AES_KEY 与模型服务地址。
+# 配置数据库密码、SYSTEM_AES_KEY 与模型服务地址。
 ./scripts/build-frontend-dist.sh
 ./reliquary-admin check-deployment
 docker compose up -d --wait postgres redis neo4j
@@ -50,7 +50,7 @@ docker compose up -d --build
 
 在 Obsidian 打开 `vault/` 这一层，将 `attachments/` 与 `.reliquary/` 排除在搜索之外，不要修改资料表头和 `.reliquary/`。`.obsidian/` 阅读配置随备份保存，核对与索引忽略其内容。
 
-默认网页地址为 `http://localhost`，后端 API 地址为 `http://localhost:8080`。首个用户注册后关闭注册，登录用户与有效 API Key 可访问个人空间全部内容。部署在内网使用。
+默认网页地址为 `http://localhost`，后端 API 地址为 `http://localhost:8080`。没有登录，端口只绑定本机，打开网页即可使用；外部工具通过 API Key 访问。
 
 Apple Silicon 可在 macOS 原生运行 Ollama，通过 Metal 运行模型。生成模型支持 Ollama、OpenAI 兼容接口与 Anthropic 原生接口；嵌入与重排按对应支持的接口配置。设置方法与外部接入见[个人使用指南](docs/personal-use.md)。
 

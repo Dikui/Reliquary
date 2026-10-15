@@ -2,7 +2,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [个人使用指南](personal-use.md) | 部署、登录、模型、外部 AI 与备份恢复 |
+| [个人使用指南](personal-use.md) | 部署、本机访问、模型、外部 AI 与备份恢复 |
 | [收录接口说明](ingest-api.md) | 外部工具对接、完整材料、HTTP 与 MCP、补全和重试 |
 | [开发指南](development.md) | 本地开发、脚本职责与 PostgreSQL 集成测试 |
 | [快速开发模式](quick-development.md) | 开发与生产模式的架构对比 |

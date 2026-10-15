@@ -4,7 +4,7 @@ Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格
 
 ## 连接与认证
 
-登录网页，在设置的 API 集成为每个工具创建独立 API Key，记录可达的后端地址。HTTP 使用 `Authorization: Bearer <KEY>` 与 `Content-Type: application/json`。以下示例的 BASE 是后端地址，不含 `/api/v1`。
+打开网页，在设置的 API 集成为每个工具创建独立 API Key，记录后端地址。后端只监听本机，工具须运行在同一台电脑上。HTTP 使用 `Authorization: Bearer <KEY>` 与 `Content-Type: application/json`。以下示例的 BASE 是后端地址，不含 `/api/v1`。
 
 ```sh
 export BASE='http://127.0.0.1:8080'

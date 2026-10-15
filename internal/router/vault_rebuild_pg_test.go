@@ -34,8 +34,8 @@ func TestVaultRebuildUsesSameAuthenticationAsStatus(t *testing.T) {
 		key         bool
 		allowed     bool
 	}{
-		{"anonymous", "", false, false}, {"invalid token", "invalid", false, false}, {"invalid key", "invalid", true, false},
-		{"web user", f.token, false, true}, {"API key", f.key, true, true},
+		{"invalid token", "invalid", false, false}, {"invalid key", "invalid", true, false},
+		{"local user", "", false, true}, {"API key", f.key, true, true},
 	} {
 		t.Run(credential.name, func(t *testing.T) {
 			for _, route := range []struct {

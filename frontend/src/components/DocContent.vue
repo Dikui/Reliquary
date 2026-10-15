@@ -246,7 +246,6 @@ const loadIntakeOriginal = async () => {
     const start = intakeOriginalOffset.value;
     const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${props.details.id}/body`, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('reliquary_token') || ''}`,
         Range: `bytes=${start}-${start + 65535}`,
       },
       signal: controller.signal,

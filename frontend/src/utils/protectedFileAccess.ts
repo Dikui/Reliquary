@@ -82,19 +82,6 @@ export function isProtectedFileProxyPath(pathname: string): boolean {
   );
 }
 
-function spaceRequestHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  try {
-    const token = (localStorage.getItem('reliquary_token') || '').trim();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-  } catch {
-    // ignore localStorage read errors
-  }
-  return headers;
-}
-
 /**
  * 为存储路径构造代理请求。非存储路径返回 null。
  */
@@ -114,7 +101,7 @@ export function buildProtectedFileRequest(
       const query = new URLSearchParams({ path }).toString();
       return {
         url: `/api/v1/entries/${encodeURIComponent(entryID)}/vault-attachment?${query}`,
-        headers: spaceRequestHeaders(),
+        headers: {},
       };
     } catch {
       return null;
@@ -127,9 +114,9 @@ export function buildProtectedFileRequest(
   if (access.mode === 'library') {
     return {
       url: `/api/v1/libraries/${encodeURIComponent(access.libraryId.trim())}/files?${query}`,
-      headers: spaceRequestHeaders(),
+      headers: {},
     };
   }
 
-  return { url: `/files?${query}`, headers: spaceRequestHeaders() };
+  return { url: `/files?${query}`, headers: {} };
 }

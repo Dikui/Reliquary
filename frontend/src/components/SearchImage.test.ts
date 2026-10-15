@@ -41,7 +41,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const target = new URL(requests[1].url, 'http://localhost')
       assert.equal(target.pathname, '/api/v1/entries/search-image-1/vault-attachment')
       assert.equal(target.searchParams.get('path'), relative)
-      assert.deepEqual(requests[1].options.headers, { Authorization: 'Bearer image-token' })
+      assert.deepEqual(requests[1].options.headers, {})
       assert.equal(requests[1].options.credentials, 'include')
       assert.doesNotMatch(requests[1].url, /image-token/)
       app.unmount()

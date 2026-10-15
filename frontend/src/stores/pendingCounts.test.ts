@@ -55,7 +55,7 @@ function renderer() {
 }
 function fixture(t: TestContext) {
   const oldStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
-  const storage = new Map([['reliquary_token', 'pending-test-token'], ['locale', 'zh-CN']])
+  const storage = new Map([['locale', 'zh-CN']])
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
@@ -189,7 +189,7 @@ test('pending navigation loads and adds both queues through the authenticated HT
   const requests = await f.batch()
   for (const packet of requests) {
     assert.equal(packet.config.baseURL, 'http://pending.test')
-    assert.equal(packet.config.headers.Authorization, 'Bearer pending-test-token')
+    assert.equal(packet.config.headers.Authorization, undefined)
     assert.equal(packet.config.headers['Accept-Language'], 'zh-CN')
   }
   requests[0]!.resolve(envelope(4))
