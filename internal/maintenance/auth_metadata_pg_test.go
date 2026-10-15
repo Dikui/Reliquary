@@ -218,28 +218,31 @@ func TestLegacySubscriptionCredentialRequirementsNameEveryEncryptedLeaf(t *testi
 	encoded, err := json.Marshal(config)
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(`UPDATE data_sources SET config=?::jsonb WHERE id='rss'`, string(encoded)).Error)
-	before, err := Capture(ctx, db)
-	require.NoError(t, err)
-	expected := []string{"config.credentials.token", "config.credentials.app_secret", "config.credentials.auth_headers.Authorization", "config.credentials.auth_headers.X-Custom-Key"}
-	for _, requirement := range before.Required {
-		if requirement.Kind == "data_sources" && requirement.ID == "rss" {
-			require.ElementsMatch(t, expected, requirement.Fields)
+	require.NoError(t, WithCurrentNames(db, func(db *gorm.DB) error {
+		before, err := Capture(ctx, db)
+		require.NoError(t, err)
+		expected := []string{"config.credentials.token", "config.credentials.app_secret", "config.credentials.auth_headers.Authorization", "config.credentials.auth_headers.X-Custom-Key"}
+		for _, requirement := range before.Required {
+			if requirement.Kind == "data_sources" && requirement.ID == "rss" {
+				require.ElementsMatch(t, expected, requirement.Fields)
+			}
 		}
-	}
-	_, err = Scrub(ctx, db)
-	require.NoError(t, err)
-	after, err := Capture(ctx, db)
-	require.NoError(t, err)
-	for _, requirement := range after.Required {
-		if requirement.Kind == "data_sources" && requirement.ID == "rss" {
-			require.ElementsMatch(t, expected, requirement.Fields)
+		_, err = Scrub(ctx, db)
+		require.NoError(t, err)
+		after, err := Capture(ctx, db)
+		require.NoError(t, err)
+		for _, requirement := range after.Required {
+			if requirement.Kind == "data_sources" && requirement.ID == "rss" {
+				require.ElementsMatch(t, expected, requirement.Fields)
+			}
 		}
-	}
-	serialized, err := json.Marshal(after)
-	require.NoError(t, err)
-	for _, secret := range []string{"subscription-private-token-123456", "subscription-private-app-secret-123456", "subscription-private-header-123456", "subscription-private-second-header-123456"} {
-		require.NotContains(t, string(serialized), secret)
-	}
+		serialized, err := json.Marshal(after)
+		require.NoError(t, err)
+		for _, secret := range []string{"subscription-private-token-123456", "subscription-private-app-secret-123456", "subscription-private-header-123456", "subscription-private-second-header-123456"} {
+			require.NotContains(t, string(serialized), secret)
+		}
+		return nil
+	}))
 }
 
 func TestRestoredCredentialSentinelsAllowAnotherBackupWithoutWeakeningSecretScan(t *testing.T) {

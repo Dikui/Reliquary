@@ -37,7 +37,7 @@ function unresolvedReferences(path: string, text = source(path)) {
 }
 
 test('detail and related article components have defined script and template references', () => {
-  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/EntryClassification.vue'), resolve('src/components/EntryStarToggle.vue'), resolve('src/components/EntryArticleJudgments.vue'), resolve('src/views/knowledge-base/FollowFeed.vue'), resolve('src/views/knowledge-base/TopicManagement.vue'), resolve('src/views/knowledge-base/OperationLogs.vue'), resolve('src/components/EntryProcessingTimeline.vue'), resolve('src/views/knowledge-base/components/DocumentActionMenu.vue'), resolve('src/views/knowledge-base/components/DocumentCardView.vue'), resolve('src/views/knowledge-base/components/DocumentListView.vue'), resolve('src/views/knowledge-base/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
+  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/EntryClassification.vue'), resolve('src/components/ReportAssociations.vue'), resolve('src/components/EntryStarToggle.vue'), resolve('src/components/EntryArticleJudgments.vue'), resolve('src/views/library/FollowFeed.vue'), resolve('src/views/library/TopicManagement.vue'), resolve('src/views/library/OperationLogs.vue'), resolve('src/components/EntryProcessingTimeline.vue'), resolve('src/views/library/components/DocumentActionMenu.vue'), resolve('src/views/library/components/DocumentCardView.vue'), resolve('src/views/library/components/DocumentListView.vue'), resolve('src/views/library/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
 })
 
 test('reference audit detects deleted callbacks in watchers, lifecycle, expose and template events', () => {
@@ -49,16 +49,16 @@ test('reference audit detects deleted callbacks in watchers, lifecycle, expose a
 function evaluate(code: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : modules[name] ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : (name === './BodyReference.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? require(name), module, module.exports)
   return module.exports
 }
 
-type HostNode = { children: HostNode[]; parent?: HostNode; querySelector: () => null; querySelectorAll: () => []; text?: string }
+type HostNode = { children: HostNode[]; parent?: HostNode; querySelector: () => null; querySelectorAll: () => []; text?: string; props?: Record<string, any> }
 const node = (): HostNode => ({ children: [], querySelector: () => null, querySelectorAll: () => [] })
 const renderer = createRenderer<HostNode, HostNode>({
   querySelector: node,
   createElement: node, createText: text => ({ ...node(), text }), createComment: node,
-  setText: (el, text) => { el.text = text }, setElementText: (el, text) => { el.text = text }, patchProp() {},
+  setText: (el, text) => { el.text = text }, setElementText: (el, text) => { el.text = text }, patchProp(el, key, _old, value) { (el.props ||= {})[key] = value },
   insert(el, parent, anchor) {
     if (el.parent) el.parent.children.splice(el.parent.children.indexOf(el), 1)
     const index = anchor ? parent.children.indexOf(anchor) : -1
@@ -70,7 +70,7 @@ const renderer = createRenderer<HostNode, HostNode>({
   insertStaticContent(text, parent) { const el = { ...node(), text, parent }; parent.children.push(el); return [el, el] },
 })
 
-test('mounted detail switches articles and modes, closes and unmounts without undefined references', async () => {
+test('mounted detail switches full-text articles, closes and unmounts without undefined references', async () => {
   const previous = new Map<string, PropertyDescriptor | undefined>()
   for (const [name, value] of Object.entries({ window: { innerWidth: 1440, addEventListener() {}, removeEventListener() {} }, localStorage: { getItem: () => null, setItem() {} }, document: { body: { style: {} }, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} } })) {
     previous.set(name, Object.getOwnPropertyDescriptor(globalThis, name)); Object.defineProperty(globalThis, name, { configurable: true, value })
@@ -84,23 +84,27 @@ test('mounted detail switches articles and modes, closes and unmounts without un
     const empty = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
     const passthrough = (value: string) => value
     const { script, template } = compile(detailPath)
+    const noticeCompiled = compile(resolve('src/components/EntryUpdateNotice.vue'))
+    const notice = evaluate(noticeCompiled.script.content, { 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) } }).default
+    notice.render = evaluate(noticeCompiled.template.code, {}).render
     const detail = evaluate(script.content, {
       marked: { marked: { use() {}, Renderer: class {}, parse: passthrough } }, 'marked-katex-extension': { __esModule: true, default: () => ({}) },
       'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
-      '@/api/knowledge-base': { ENTRY_CHUNK_PAGE_SIZE: 25 },
+      '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 25 },
       '@/utils/clipboard': { copyWithToast() {} },
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
-      '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryClassification.vue': empty,
+      '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryUpdateNotice.vue': { __esModule:true, default:notice }, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty,
+      '@/components/ReportAssociations.vue': empty,
       '@/components/MissingMaterials.vue': empty, '@/components/IncompleteActions.vue': empty, '@/components/PersonalDocumentDelete.vue': empty,
-      '@/views/knowledge-base/components/RepostSources.vue': empty, '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
+      '@/views/library/components/RepostSources.vue': empty, '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
     }).default
     detail.render = evaluate(template.code, {}).render
     let state: any
     const setup = detail.setup
     detail.setup = (props: object, context: object) => { state = setup(props, context); return state }
-    const article = (id: string, mode = 'full') => ({ id, type: 'manual', file_type: 'md', file_name: `${id}.md`, title: id, parse_status: 'completed', processing_mode: mode, md: [], total: 0, metadata: {}, custom_metadata: {} })
+    const article = (id: string) => ({ id, type: 'manual', file_type: 'md', file_name: `${id}.md`, title: id, parse_status: 'completed', md: [], total: 0, metadata: {}, custom_metadata: {} })
     const props = reactive({ visible: true, details: article('event') })
     app = renderer.createApp(defineComponent({ setup: () => () => h(detail, props) }))
     const stub = defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible === false ? null : h('div', slots.default?.()) })
@@ -108,12 +112,15 @@ test('mounted detail switches articles and modes, closes and unmounts without un
     app.config.globalProperties.$t = (key: string) => key
     app.config.errorHandler = error => errors.push(error)
     app.config.warnHandler = warning => warnings.push(warning)
-    app.mount(node()); await nextTick()
+    const root = node(); app.mount(root); await nextTick()
+    Object.assign(props.details, { has_update:true, latest_entry_id:'latest' }); await nextTick()
+    const flatten = (n: HostNode): HostNode[] => [n, ...n.children.flatMap(flatten)]
+    assert.equal(flatten(root).find(n=>n.props?.href==='/platform/entries?entry_id=latest')?.props?.href, '/platform/entries?entry_id=latest')
     const beforeVaultMetadata = imageHydrations
     Object.assign(props.details, { source_kind: 'article', vault_path: 'articles/2026-10/event.md' })
     await nextTick(); await nextTick()
     assert.ok(imageHydrations > beforeVaultMetadata, 'late vault metadata hydrates images even when chunks arrived first')
-    for (const value of [article('another-event'), article('tutorial', 'summary_only'), article('research'), article('reference', 'summary_only')]) {
+    for (const value of [article('another-event'), article('tutorial'), article('research'), article('reference')]) {
       state.chunkPage.value = 3; state.loadedChunkPage.value = 3
       props.details = value; await nextTick()
       assert.deepEqual(errors, []); assert.deepEqual(warnings, [])

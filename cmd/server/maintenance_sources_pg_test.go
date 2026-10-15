@@ -35,7 +35,7 @@ func sourcesAdminFixture(t *testing.T) (*gorm.DB, string, string) {
 	require.NoError(t, a)
 	require.NoError(t, b)
 	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Export owner','personal');
- INSERT INTO data_sources(id,space_id,knowledge_base_id,name,type,config,sync_schedule,status) VALUES('old-source',1,'kb','Retained source','rss','{"url":"https://example.test/feed","credentials":{"token":"private-export-token"}}','0 * * * *','active');
+ INSERT INTO data_sources(id,space_id,knowledge_base_id,name,type,config,sync_schedule,status) VALUES('old-source',1,'library','Retained source','rss','{"url":"https://example.test/feed","credentials":{"token":"private-export-token"}}','0 * * * *','active');
  INSERT INTO sync_logs(id,data_source_id,space_id,status,result) VALUES('old-log','old-source',1,'success','{"created":3}');`).Error)
 	dsn := db.Dialector.(*postgres.Dialector).DSN
 	parsed, err := url.Parse(dsn)
@@ -69,7 +69,7 @@ func TestMaintenanceExportSourcesAndMigratePreserveHistory(t *testing.T) {
 	require.NoError(t, runMaintenanceDatabase(context.Background(), db, dsn, []string{"migrate"}, bytes.NewReader(nil), &output))
 	var version int
 	require.NoError(t, db.Table("schema_migrations").Select("version").Scan(&version).Error)
-	require.Equal(t, 6, version)
+	require.EqualValues(t, pgtest.LatestMigrationVersion(t), version)
 	var paused bool
 	require.NoError(t, db.Table("maintenance_state").Select("paused").Scan(&paused).Error)
 	require.True(t, paused)
@@ -101,7 +101,7 @@ func TestMaintenanceExportFailureLeavesVersionFourPaused(t *testing.T) {
 	require.EqualValues(t, 1, logs)
 }
 
-func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *testing.T) {
+func TestMaintenanceRestoreOldSnapshotRejectsLegacyLayoutAfterOriginalVerification(t *testing.T) {
 	repository, err := filepath.Abs("../..")
 	require.NoError(t, err)
 	for _, version := range []uint{0, 4} {
@@ -118,8 +118,8 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 				require.NoError(t, b)
 			}
 			ctx := context.Background()
-			statement := `INSERT INTO knowledge_bases(id,name,space_id,embedding_model_id,summary_model_id,indexing_strategy) VALUES('kb','Restore fixture',1,'','','{"keyword_enabled":true,"vector_enabled":false}');
- INSERT INTO entries(id,space_id,knowledge_base_id,type,source_kind,title,source,channel,content_type,processing_mode,parse_status,enable_status,vault_body,metadata) VALUES('b6cfe58c-2eb4-4cf8-99a7-5482c9c9106c',1,'kb','url','article','Old RSS article','https://example.test/restore-article','rss','research','full','completed','enabled','Original restore research observations.','{"intake":{"source":"rss","decision":"approved","source_info":{"original_url":"https://example.test/restore-article"}}}');`
+			statement := `INSERT INTO knowledge_bases(id,name,space_id,embedding_model_id,summary_model_id,indexing_strategy) VALUES('library','Restore fixture',1,'','','{"keyword_enabled":true,"vector_enabled":false}');
+ INSERT INTO entries(id,space_id,knowledge_base_id,type,source_kind,title,source,channel,content_type,processing_mode,parse_status,enable_status,vault_body,metadata) VALUES('b6cfe58c-2eb4-4cf8-99a7-5482c9c9106c',1,'library','url','article','Old RSS article','https://example.test/restore-article','rss','research','full','completed','enabled','Original restore research observations.','{"intake":{"source":"rss","decision":"approved","source_info":{"original_url":"https://example.test/restore-article"}}}');`
 			if version == 0 {
 				statement = strings.ReplaceAll(strings.ReplaceAll(statement, "space_id", "tenant_id"), "INSERT INTO entries(", "INSERT INTO knowledges(")
 			}
@@ -135,7 +135,7 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 				if err != nil {
 					return err
 				}
-				if version == 0 {
+				{
 					article.VaultPath = "articles/2026-10/old-rss-restore.md"
 					path := filepath.Join(root, filepath.FromSlash(article.VaultPath))
 					if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -148,8 +148,6 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 					if err := current.Table("entries").Where("id=?", article.ID).UpdateColumn("vault_path", article.VaultPath).Error; err != nil {
 						return err
 					}
-				} else if err := vault.WriteArticle(ctx, &article, article.VaultBody, nil); err != nil {
-					return err
 				}
 				if err := os.WriteFile(filepath.Join(uploads, "original.bin"), []byte("Preserved original attachment"), 0600); err != nil {
 					return err
@@ -160,13 +158,19 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 				original, err = maintenance.BuildManifest(ctx, current, root, uploads)
 				return err
 			}))
+			beforeArticle, err := os.ReadFile(filepath.Join(root, article.VaultPath))
+			require.NoError(t, err)
 			baseline, err := json.Marshal(original)
 			require.NoError(t, err)
 			originalPath := filepath.Join(t.TempDir(), "snapshot.json")
 			require.NoError(t, os.WriteFile(originalPath, baseline, 0600))
 			invoke := func(arguments ...string) error {
 				var output bytes.Buffer
-				return runMaintenance(arguments, bytes.NewReader(nil), &output)
+				err := runMaintenance(arguments, bytes.NewReader(nil), &output)
+				if err != nil {
+					t.Log(output.String())
+				}
+				return err
 			}
 			require.NoError(t, invoke("verify", "--manifest", originalPath, "--vectors"))
 			oldLogPath := filepath.Join(root, ".reliquary/data/sync_logs.json")
@@ -185,10 +189,12 @@ func TestMaintenanceRestoreOldSnapshotRefreshesOnlyAfterOriginalVerification(t *
 			require.NoError(t, invoke("migrate"))
 			require.NoError(t, invoke("reindex"))
 			require.Error(t, invoke("verify", "--manifest", originalPath, "--vectors"), "the old sync_logs sidecar cannot be accepted before the controlled current-schema refresh")
-			require.NoError(t, invoke("flush"))
-			require.NoError(t, invoke("verify", "--manifest", originalPath, "--vectors"))
-			require.NoFileExists(t, oldLogPath)
-			require.NoFileExists(t, filepath.Join(root, ".reliquary/config/data_sources.json"))
+			require.ErrorContains(t, invoke("flush"), "entry path must belong to its library directory")
+			require.FileExists(t, oldLogPath)
+			require.FileExists(t, filepath.Join(root, ".reliquary/config/data_sources.json"))
+			afterArticle, err := os.ReadFile(filepath.Join(root, article.VaultPath))
+			require.NoError(t, err)
+			require.Equal(t, beforeArticle, afterArticle, "rejecting an old layout preserves its source file")
 			unchanged, err := os.ReadFile(originalPath)
 			require.NoError(t, err)
 			require.Equal(t, baseline, unchanged, "restore keeps the original package baseline immutable")

@@ -2,6 +2,7 @@
 
 Status: accepted
 日期：2026-10-12
+部分被 [0014](0014-internal-knowledge-base.md) 取代（2026-10-14）。
 部分取代 [0009](0009-kb-collect-store-retrieve.md)
 
 ## 背景

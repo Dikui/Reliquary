@@ -5,9 +5,10 @@ import (
 	"slices"
 	"testing"
 
+	"reliquary/internal/types"
+
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/types"
 )
 
 func enableImageSearchFixture(t *testing.T, h *entrySearchFixture) {
@@ -15,6 +16,7 @@ func enableImageSearchFixture(t *testing.T, h *entrySearchFixture) {
 	require.NoError(t, h.db.Create(&types.Model{ID: "fixture-model", SpaceID: 1, Name: "Shared image space",
 		Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3, SupportsImages: true, MultimodalFormat: "jina"}}}).Error)
+	h.config.ImageVectorEnabled = true
 	h.config.VectorThreshold = 0.9
 	var space types.Space
 	require.NoError(t, h.db.First(&space, "id=1").Error)
@@ -25,8 +27,8 @@ func enableImageSearchFixture(t *testing.T, h *entrySearchFixture) {
 func addImageSearchVector(t *testing.T, h *entrySearchFixture, article *types.Entry, path, modelID string, vector []float32) {
 	t.Helper()
 	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings
-		(entry_id,space_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
-		VALUES (?,1,?,?,?,?,?,'fixture')`, article.ID, h.kb.ID, path, modelID, len(vector), pgvector.NewHalfVector(vector)).Error)
+		(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash)
+		VALUES (?,1,?,?,?,?,?,'fixture')`, article.ID, h.library.ID, path, modelID, len(vector), pgvector.NewHalfVector(vector)).Error)
 }
 
 func TestArticleImageSearchRecallsImageOnlyInformationAndReturnsThumbnail(t *testing.T) {
@@ -74,14 +76,14 @@ func TestArticleImageSearchRejectsOldModelAndWrongDimensionAndHonorsFilters(t *t
 		addImageSearchVector(t, h, article, fmt.Sprintf("../../attachments/%s/image.png", article.ID), test.model, test.vector)
 	}
 	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchBool(false)})
-	require.Equal(t, []string{"current", "personal"}, entrySearchIDs(response))
+	require.Equal(t, []string{"current", "personal", "summary"}, entrySearchIDs(response))
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", ContentTypes: []string{"event"}})
 	require.Empty(t, response.Results)
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", Sources: []string{"mine"}})
 	require.Equal(t, []string{"personal"}, entrySearchIDs(response))
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id='current'").Update("enable_status", "disabled").Error)
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
-	require.Equal(t, []string{"personal"}, entrySearchIDs(response))
+	require.Equal(t, []string{"personal", "summary"}, entrySearchIDs(response))
 }
 
 func TestArticleImageSearchKeepsMatchedImageAlongsideHigherScoringText(t *testing.T) {

@@ -11,20 +11,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
-const ingestAuthCheckBody = `{"urls":["https://example.org/auth-recheck"]}`
-const ingestAuthBatchBody = `{"items":[{"url":"https://example.org/auth-recheck","content":"Complete original measurements.","acquisition":"extracted","publisher":"Fixture Journal"}]}`
-const ingestAuthMCPBody = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"check_urls","arguments":{"urls":["https://example.org/auth-recheck"]}}}`
+const ingestAuthCheckBody = `{"library":"institutional","urls":["https://example.org/auth-recheck"]}`
+const ingestAuthBatchBody = `{"items":[{"url":"https://example.org/auth-recheck","content":"Complete original measurements.","library":"institutional","acquisition":"extracted","publisher":"Fixture Journal"}]}`
+const ingestAuthMCPBody = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"check_urls","arguments":{"library":"institutional","urls":["https://example.org/auth-recheck"]}}}`
 
 func ingestAuthMCPRequest(router *gin.Engine, key, body string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
@@ -54,7 +55,7 @@ func ingestAuthHTTPRouter(f *mcpFixture) *gin.Engine {
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), middleware.Auth(f.params.SpaceService, f.params.UserService, f.params.APIKeyService))
 	entries := f.articles.(interfaces.EntryService)
-	RegisterEntryRoutes(router.Group("/api/v1"), handler.NewEntryHandler(nil, entries, f.params.KBService, f.queue, nil), newAccessGuards(f.params.KBService, entries, nil))
+	RegisterEntryRoutes(router.Group("/api/v1"), handler.NewEntryHandler(nil, entries, f.params.LibraryService, f.queue, nil), newAccessGuards(f.params.LibraryService, entries, nil))
 	return router
 }
 
@@ -164,7 +165,7 @@ func TestIngestHTTPBatchDoesNotHideItemCredentialFailures(t *testing.T) {
 func TestIngestHTTPAssetAndCompletionCredentialFailures(t *testing.T) {
 	f := newMCPFixture(t)
 	router := ingestAuthHTTPRouter(f)
-	article := f.seedArticle(t, "Auth completion fixture", types.ProcessingModeFull, "# Original measurements\n\nA complete source body.\n")
+	article := f.seedArticle(t, "Auth completion fixture", "full", "# Original measurements\n\nA complete source body.\n")
 	require.NoError(t, f.db.Callback().Query().Before("gorm:query").Register("ingest_auth_asset_failure", func(tx *gorm.DB) {
 		if tx.Statement.Table == "api_keys" && len(tx.Statement.Selects) != 0 {
 			tx.Statement.Selects = append(tx.Statement.Selects, "unavailable_expires_at")

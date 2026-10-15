@@ -153,6 +153,7 @@ func (s *EntityService) entityNameEmbedder(ctx context.Context, spaceID uint64) 
 }
 
 func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, spaceID uint64, entryID string, input []entityResolutionInput) ([]types.Entity, map[string]types.Entity, error) {
+	ctx = types.WithModelCallEntry(ctx, entryID)
 	embedder, embeddingModelID, embeddingHash, err := s.entityNameEmbedder(ctx, spaceID)
 	if err != nil {
 		return nil, nil, err
@@ -403,8 +404,14 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 					entity.EmbeddingNeedsRebuild = true
 				}
 			}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, DoNothing: true}).Create(&entity).Error; err != nil {
-				return nil, err
+			created := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, DoNothing: true}).Create(&entity)
+			if created.Error != nil {
+				return nil, created.Error
+			}
+			if created.RowsAffected > 0 {
+				if err := notifyEntityProjection(tx, entity.SpaceID, entity.ID); err != nil {
+					return nil, err
+				}
 			}
 			if err := tx.Where("space_id=? AND entity_type=? AND normalized_name=?", entity.SpaceID, entity.EntityType, entity.NormalizedName).First(&existing).Error; err != nil {
 				return nil, err

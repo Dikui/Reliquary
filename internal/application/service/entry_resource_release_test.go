@@ -55,7 +55,7 @@ func TestDeleteExtractedImagesKeepsFilesAnotherOwnerStillClaims(t *testing.T) {
 	}
 }
 
-// A knowledge base delete releases every entry's claim before deciding, so a
+// A library delete releases every entry's claim before deciding, so a
 // file shared between two entries of the same base is still removed.
 func TestDeleteExtractedImagesReleasesEveryOwnerBeforeDeciding(t *testing.T) {
 	shared := handleRef("c")

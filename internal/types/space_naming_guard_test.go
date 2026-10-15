@@ -19,6 +19,7 @@ type namingException struct {
 // Each exception allows specific literal tokens in a specific file. Go
 // identifiers are checked separately and have no exceptions.
 var namingExceptions = map[string]namingException{
+	"internal/types/library_payload_test.go":                               {Reason: "验证旧队列归属键可读且新写入使用库字段", Tokens: []string{"tenant_id"}},
 	"cmd/server/maintenance_sources_pg_test.go":                            {Reason: "冻结基线恢复的真实离线 CLI 顺序使用旧归属列夹具", Tokens: []string{"tenant_id"}},
 	"internal/maintenance/collection_migration_pg_test.go":                 {Reason: "冻结基线备份恢复到当前版本的真实旧表与归属列夹具", Tokens: []string{"tenants", "tenant_id"}},
 	"internal/application/service/entry_reprocess_missing_pg_test.go":      {Reason: "验证旧采集任务 payload 不再联网且保留旧文章状态", Tokens: []string{"tenant_id"}},
@@ -43,7 +44,6 @@ var namingExceptions = map[string]namingException{
 	"internal/middleware/auth.go":                                          {Reason: "原有可选 HTTP 请求头保留，保持认证检查行为", Tokens: []string{"tenant"}},
 	"internal/queue/dead_letter_test.go":                                   {Reason: "验证旧任务归属字段诊断及死信 scope 取值不变", Tokens: []string{"tenant_id"}},
 	"internal/queue/queue_pg_test.go":                                      {Reason: "真实队列夹具保留旧任务 payload 字段", Tokens: []string{"tenant_id"}},
-	"internal/queue/worker.go":                                             {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/router/space_naming_pg_test.go":                              {Reason: "真实 HTTP 否定旧响应字段并执行新旧 payload 任务", Tokens: []string{"tenant_id"}},
 	"internal/router/task.go":                                              {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/router/task_inspector.go":                                    {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},

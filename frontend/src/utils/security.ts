@@ -455,7 +455,7 @@ function applyHydratedProtectedImage(root: ParentNode, sourceURL: string, blobUR
  *
  * 走哪条代理由 {@link resolveProtectedFileAccess} 决定：应用入口注册的默认
  * 上下文（如嵌入应用的 Embed 平面）优先，组件只在同一鉴权平面内用
- * `access` 细化作用域（如知识库）。
+ * `access` 细化作用域（如库）。
  */
 export async function hydrateProtectedFileImages(
   root: ParentNode | null | undefined,

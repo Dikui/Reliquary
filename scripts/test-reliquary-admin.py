@@ -18,6 +18,17 @@ spec.loader.exec_module(admin)
 
 
 class AdminStorageTests(unittest.TestCase):
+    def test_library_configuration_renames_only_the_legacy_table_envelope(self):
+        rows = {"data": [{"id": "library", "parameters": {"knowledge_base_id": "opaque"}}]}
+        original = {"models": {"data": []}, "knowledge_bases": rows}
+        mapped = admin.library_configuration_tables(original)
+        self.assertEqual(set(mapped), {"models", "libraries"})
+        self.assertIs(mapped["libraries"], rows)
+        self.assertIn("knowledge_bases", original)
+        self.assertEqual(admin.library_configuration_tables(mapped), mapped)
+        with self.assertRaises(admin.AdminError):
+            admin.library_configuration_tables({"libraries": rows, "knowledge_bases": rows})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="reliquary-admin-test-")
         self.root = Path(self.temp.name)
@@ -55,9 +66,7 @@ class AdminStorageTests(unittest.TestCase):
 
     @unittest.skipUnless(admin.shutil.which("docker"), "Docker Compose is required to check its interpolation")
     def test_compose_and_admin_resolve_the_same_host_directories(self):
-        evidence = Path(__file__).resolve().parent.parent / ".scratch/ingest-only/evidence/06"
-        evidence.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="admin-compose-paths-", dir=evidence) as temporary:
+        with tempfile.TemporaryDirectory(prefix="admin-compose-paths-", dir=self.root) as temporary:
             fixture = Path(temporary)
             source, home = fixture / "source", fixture / "home"
             source.mkdir()
@@ -75,7 +84,7 @@ class AdminStorageTests(unittest.TestCase):
                     (source / ".env").write_text(dotenv)
                     process_env = {"PATH": os.environ.get("PATH", os.defpath), "HOME": str(home),
                                    "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker")),
-                                   "COMPOSE_PROJECT_NAME": "reliquary-admin-path-test", **overrides}
+                                   "COMPOSE_PROJECT_NAME": "reliquary-admin-path-test", "NEO4J_PASSWORD": "compose-test-password", **overrides}
                     with mock.patch.dict(admin.os.environ, process_env, clear=True):
                         ctx = admin.Context(source)
                         config = json.loads(ctx.compose("config", "--format", "json"))
@@ -330,14 +339,14 @@ class AdminStorageTests(unittest.TestCase):
                          "external_completion_attempted": True, "ingest_api_key_id": 7,
                          "ingest_api_key_name": "Original collector", "last_ingest_api_key_id": 8,
                          "last_ingest_api_key_name": "Completion collector", "content_type_hint": "research",
-                         "related_article_id": "original", "missing_materials": [{"type": "image",
+                         "related_entry_id": "original", "missing_materials": [{"type": "image",
                          "source_url": "https://example.test/missing.png", "reason": "Image unavailable"}],
                          "ingest_attachments": [{"asset_id": "asset", "path": "local://original.pdf"}]}],
             "ingest_assets": [{"id": "asset", "space_id": 1, "name": "original.pdf", "file_type": "pdf",
                               "size": len(b"%PDF original bytes"), "path": "local://original.pdf", "created_at": "2026-10-12T00:00:00Z",
                               "referenced_at": "2026-10-12T01:00:00Z", "entry_id": "article"}],
             "ingest_discards": [{"space_id": 1, "normalized_url": "https://example.test/discarded",
-                                "article_id": "discarded", "discarded_at": "2026-10-12T02:00:00Z", "reason": "User discarded"}],
+                                "entry_id": "discarded", "discarded_at": "2026-10-12T02:00:00Z", "reason": "User discarded"}],
             "operation_logs": [{"id": "operation", "api_key_id": 8, "api_key_name": "Completion collector"}],
         }
         for table, rows in tables.items():
@@ -562,6 +571,36 @@ class AdminStorageTests(unittest.TestCase):
         admin.schedule(ctx, argparse.Namespace(action="configure", enabled="false"))
         self.assertEqual(ctx.called, ("configure", "--enabled=false"))
 
+    def test_restore_rebuilds_graph_before_resuming_and_failure_keeps_pause(self):
+        class FakeContext:
+            direct = True
+            local_server = None
+            def __init__(self, root, graph=True, fail=False):
+                self.root, self.calls, self.graph, self.fail = root, [], graph, fail
+            def legacy_schema(self):
+                return False
+            def sql(self, query):
+                return "t" if self.graph else "f"
+            def cli_json(self, *args, **kwargs):
+                self.calls.append(args)
+                if args[0] == "graph-rebuild" and self.fail:
+                    raise admin.AdminError("Neo4j unavailable")
+                return {"models": []} if args[0] == "models" else {"valid": True}
+        for graph, fail in [(True, False), (True, True), (False, False)]:
+            with self.subTest(graph=graph, fail=fail):
+                ctx = FakeContext(self.root, graph, fail)
+                with mock.patch.object(admin, "require_parser_credentials"), mock.patch.object(admin, "verify_reconfigured_data", return_value={"valid": True}):
+                    if fail:
+                        with self.assertRaisesRegex(admin.AdminError, "Neo4j unavailable"):
+                            admin.finalize_restore(ctx, self.root)
+                        self.assertNotIn(("resume",), ctx.calls)
+                    else:
+                        admin.finalize_restore(ctx, self.root)
+                        if graph:
+                            self.assertLess(ctx.calls.index(("graph-rebuild",)), ctx.calls.index(("resume",)))
+                        else:
+                            self.assertNotIn(("graph-rebuild",), ctx.calls)
+
     def test_scheduler_install_failure_keeps_restore_paused(self):
         class FakeContext:
             scheduler_required = True
@@ -716,7 +755,7 @@ class AdminStorageTests(unittest.TestCase):
                 self.root, self.calls, self.ready_vectors, self.current_required = root, [], False, []
                 self.options, self.model_name = [], "original"
             def manifest(self):
-                return {"required_credentials": self.current_required, "tables": {"models": {"data": [{"id": "embedding", "name": self.model_name}]}, "knowledge_bases": {"data": [{"id": "kb", "embedding_model_id": "embedding"}]}, "entities": {"data": [{"id": "entity", "description": "must survive"}]}, "embedding_rebuild_runs": {"data": [{"id": "new-run"}] if self.ready_vectors else []}}, "files": {}, "vectors": []}
+                return {"required_credentials": self.current_required, "tables": {"models": {"data": [{"id": "embedding", "name": self.model_name}]}, "libraries": {"data": [{"id": "library", "embedding_model_id": "embedding"}]}, "entities": {"data": [{"id": "entity", "description": "must survive"}]}, "embedding_rebuild_runs": {"data": [{"id": "new-run"}] if self.ready_vectors else []}}, "files": {}, "vectors": []}
             def sql(self, query):
                 self.calls.append(("sql", query))
                 return "0"
@@ -737,7 +776,7 @@ class AdminStorageTests(unittest.TestCase):
                         current = self.manifest()
                         if expected["tables"].keys() != current["tables"].keys():
                             raise admin.AdminError("unexpected table entities")
-                        if any(expected["tables"][table] != current["tables"][table] for table in ("models", "knowledge_bases")):
+                        if any(expected["tables"][table] != current["tables"][table] for table in ("models", "libraries")):
                             raise admin.AdminError("table models differs")
                     return {"ok": True, "differences": [], "pending_vectors": {"articles": 0 if self.ready_vectors else 1}}
                 return {"ok": True}
@@ -840,7 +879,7 @@ class AdminStorageTests(unittest.TestCase):
     def test_rebuild_configuration_container_mount_is_temporary_and_keeps_required_fields(self):
         package = self.root / ".maintenance-rebuild"
         required = [{"kind": "models", "id": "model", "fields": ["parameters.api_key"]}]
-        original = {"models": {"data": [{"id": "model", "name": "original"}]}, "knowledge_bases": {"data": [{"id": "kb"}]}}
+        original = {"models": {"data": [{"id": "model", "name": "original"}]}, "libraries": {"data": [{"id": "library"}]}}
         admin.json_write(package / "configuration.json", {"tables": original, "required_credentials": required})
         original_hashes = admin.hashes(package)
         class Context:
@@ -850,14 +889,14 @@ class AdminStorageTests(unittest.TestCase):
                 self.root, self.mount = root, None
             def cli_json(self, *args, **kwargs):
                 if args[0] == "manifest":
-                    return {"tables": {"models": {"data": [{"id": "model", "name": "new credentials"}]}, "knowledge_bases": {"data": [{"id": "kb"}]}, "entities": {"data": [{"id": "preserved"}]}}, "required_credentials": [], "files": {"vault": []}}
+                    return {"tables": {"models": {"data": [{"id": "model", "name": "new credentials"}]}, "libraries": {"data": [{"id": "library"}]}, "entities": {"data": [{"id": "preserved"}]}}, "required_credentials": [], "files": {"vault": []}}
                 self.mount = Path(kwargs["overrides"]["RELIQUARY_ADMIN_CLI_PACKAGE_HOST"])
                 projected = json.loads((self.mount / "configuration.json").read_text())
                 self.assertions(projected, args, kwargs)
                 return {"ok": True}
         ctx = Context(self.root)
         def assertions(projected, args, kwargs):
-            self.assertEqual(set(projected["tables"]), {"models", "knowledge_bases", "entities"})
+            self.assertEqual(set(projected["tables"]), {"models", "libraries", "entities"})
             self.assertEqual(projected["tables"]["models"], original["models"])
             self.assertEqual(projected["required_credentials"], required)
             self.assertEqual(args, ("verify", "--manifest", "/maintenance-package/configuration.json"))
@@ -886,12 +925,16 @@ class AdminStorageTests(unittest.TestCase):
     def test_unpack_discards_source_host_control_paths_and_keeps_destination_overrides(self):
         admin.write_env(self.root / ".env.template", {"RELIQUARY_ADMIN_VAULT_DIR": "/old-host/vault", "RELIQUARY_ADMIN_RESOURCES_DIR": "/old-host/uploads", "RELIQUARY_ADMIN_SERVER": "/old-host/server", "FEATURE_CONFIG": "preserved"})
         class FakeContext:
-            env = {"RELIQUARY_ADMIN_VAULT_DIR": "/new-host/vault"}
+            env = {"RELIQUARY_ADMIN_VAULT_DIR": "/new-host/vault", "REDIS_ADDR": "destination:6379", "REDIS_DB": "4", "REDIS_PASSWORD": "destination-password"}
         values = admin.restored_environment(FakeContext(), self.root)
         self.assertEqual(values["RELIQUARY_ADMIN_VAULT_DIR"], "/new-host/vault")
         self.assertNotIn("RELIQUARY_ADMIN_RESOURCES_DIR", values)
         self.assertNotIn("RELIQUARY_ADMIN_SERVER", values)
         self.assertEqual(values["FEATURE_CONFIG"], "preserved")
+        runtime = self.host_context(RELIQUARY_ADMIN_DIRECT="1", **FakeContext.env).runtime_env()
+        for key in ("REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD"):
+            self.assertEqual(values[key], FakeContext.env[key])
+            self.assertEqual(runtime[key], FakeContext.env[key])
 
     def test_unpack_overrides_legacy_fixed_names_without_modifying_old_source(self):
         path = self.root / "compose.images.json"
@@ -1253,6 +1296,89 @@ class AdminStorageTests(unittest.TestCase):
         self.assertNotIn(("export-sources",), ctx.calls)
         self.assertNotIn(("migrate",), ctx.calls)
         self.assertNotIn(("flush",), ctx.calls)
+
+
+class IKB20DrillTests(unittest.TestCase):
+    def test_drill_parser_accepts_result_report(self):
+        args = admin.parser().parse_args(["drill", "/backups", "--report", "/results/drill.json"])
+        self.assertEqual(args.report, "/results/drill.json")
+
+    def test_drill_restores_checks_and_cleans_on_success_or_failure(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory(prefix="ikb20-admin-") as temporary:
+                root = Path(temporary)
+                backup = root / "backups/backup-20261014"
+                backup.mkdir(parents=True)
+                admin.json_write(backup / "manifest.json", {})
+                (backup / "database.dump").write_bytes(b"fixture")
+                class Context:
+                    env = {}
+                    direct = True
+                    local_server = None
+                    def __init__(self):
+                        self.root, self.calls = root, []
+                    def sql(self, *args):
+                        self.calls.append(args)
+                ctx = Context()
+                calls = []
+                @contextlib.contextmanager
+                def runtime(*args):
+                    def invoke(*flags):
+                        calls.append(flags)
+                        if fail and flags[0] == "graph-verify":
+                            raise admin.AdminError("edge corruption")
+                        return {"ok": True}
+                    try:
+                        yield invoke, str(backup / "snapshot.json")
+                    finally:
+                        calls.append(("cleanup",))
+                ctx.pg_command = lambda *args: ["pg_restore"]
+                report = root / "report.json"
+                args = argparse.Namespace(directory=str(root / "backups"), automatic=False, report=str(report))
+                with mock.patch.object(admin, "check_files"), mock.patch.object(admin, "snapshot_tree"), mock.patch.object(admin, "record"), mock.patch.object(admin, "drill_runtime", runtime), mock.patch.object(admin.subprocess, "run", return_value=mock.Mock(returncode=0)):
+                    if fail:
+                        with self.assertRaisesRegex(admin.AdminError, "edge corruption"):
+                            admin.drill(ctx, args)
+                    else:
+                        admin.drill(ctx, args)
+                result = json.loads(report.read_text())
+                self.assertEqual(result["status"], "failed" if fail else "success")
+                self.assertIn(("queue-replay",), calls)
+                self.assertIn(("queue-probe-drill",), calls)
+                self.assertIn(("cleanup",), calls)
+                self.assertTrue(any("DROP DATABASE" in query[0] for query in ctx.calls))
+                self.assertFalse(list((root / "backups").glob(".reliquary-drill-*")))
+                if not fail:
+                    self.assertFalse((root / ".maintenance-schedule/drill-active.json").exists())
+                    self.assertTrue(any("--allow-operation-log-append" in flags for flags in calls))
+
+    def test_drill_runtime_never_uses_live_redis_and_always_cleans_graph(self):
+        with tempfile.TemporaryDirectory(prefix="ikb20-runtime-test-") as temporary:
+            root = Path(temporary)
+            class Context:
+                local_server = "server"
+                direct = True
+                env = {"REDIS_ADDR": "live:6379", "REDIS_DB": "4"}
+                def __init__(self):
+                    self.root, self.calls = root, []
+                def runtime_env(self):
+                    return {"NEO4J_URI": "bolt://graph:7687"}
+                def cli_json(self, *args, **kwargs):
+                    self.calls.append((args, kwargs))
+                    return {"ok": True}
+            ctx = Context()
+            database = "reliquary_drill_0123456789abcdef"
+            def run(argv, **kwargs):
+                return b"healthy" if argv[1] == "inspect" else b""
+            with mock.patch.object(admin, "run", side_effect=run) as command:
+                with admin.drill_runtime(ctx, root / "temporary", root / "backup", database) as (invoke, expected):
+                    invoke("queue-replay")
+                self.assertTrue(any(call.args[0][:3] == ["docker", "rm", "-f"] for call in command.call_args_list))
+            replay = ctx.calls[0][1]["overrides"]
+            self.assertEqual(replay["REDIS_DB"], "0")
+            self.assertTrue(replay["REDIS_ADDR"].startswith("127.0.0.1:2"))
+            self.assertEqual(ctx.env["REDIS_ADDR"], "live:6379")
+            self.assertEqual(ctx.calls[-1][0], ("graph-clear-drill", "--namespace", database))
 
 
 if __name__ == "__main__":

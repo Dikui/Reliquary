@@ -8,9 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/sourceloc"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
 )
 
 func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lanes [][]entrySearchHit, config *types.RetrievalConfig) ([]*types.EntrySearchResult, error) {
@@ -68,6 +70,30 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 	if err != nil {
 		return nil, err
 	}
+	var libraries []types.Library
+	if err := s.db.WithContext(ctx).Where("space_id=?", spaceID).Find(&libraries).Error; err != nil {
+		return nil, err
+	}
+	var chunks []types.Chunk
+	chunkIDs := []string{}
+	for _, parts := range snippets {
+		for _, part := range parts {
+			if part.ChunkID != "" {
+				chunkIDs = append(chunkIDs, part.ChunkID)
+			}
+		}
+	}
+	if len(chunkIDs) > 0 {
+		if err := s.db.WithContext(ctx).Select("id", "source_locations", "chunk_type", "image_info").Where("space_id=? AND id IN ?", spaceID, chunkIDs).Find(&chunks).Error; err != nil {
+			return nil, err
+		}
+	}
+	locations := map[string][]types.SourceLocation{}
+	chunkTypes := map[string]string{}
+	for _, c := range chunks {
+		locations[c.ID] = c.SourceLocations
+		chunkTypes[c.ID] = c.ChunkType
+	}
 	for _, entry := range entries {
 		source, err := entrySourceInfo(&entry.Entry)
 		if err != nil {
@@ -81,17 +107,34 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			originalURL = ""
 		}
 		result := &types.EntrySearchResult{
+			LibraryID: entry.LibraryID,
+			SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID,
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
 			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
-			Acquisition:    entry.Acquisition,
-			Incomplete:     (entry.SourceKind == "article" || entry.SourceKind == "mine") && entry.Incomplete,
-			ProcessingMode: entry.ProcessingMode, Summary: entry.StructuredSummary, Starred: entry.Starred,
+			Acquisition: entry.Acquisition, CannotBeFact: entry.SourceKind == "report",
+			Incomplete: (entry.SourceKind == "article" || entry.SourceKind == "mine") && entry.Incomplete,
+			Summary:    entry.StructuredSummary, Starred: entry.Starred,
 			SourceUnverified: entry.SourceUnverified,
 			Entities:         entities[entry.ID], Topics: topics[entry.ID],
 			Score: scores[entry.ID], SimilarReports: []*types.EntrySearchResult{},
 			VaultPath: entry.VaultPath, OriginalURL: originalURL,
 			Snippets: []types.EntrySearchSnippet{},
 		}
+		for _, lib := range libraries {
+			if lib.ID == entry.LibraryID {
+				result.LibraryName, result.LibraryDirectory = lib.Name, lib.Directory
+			}
+		}
+		if entry.SourceRef != "" {
+			latest, err := types.FindLatestSourceEntry(s.db.WithContext(ctx), spaceID, entry.LibraryID, entry.SourceRef)
+			if err != nil {
+				return nil, err
+			}
+			if latest != nil {
+				entry.HasUpdate, entry.LatestEntryID = latest.ID != entry.ID, latest.ID
+			}
+		}
+		result.HasUpdate, result.LatestEntryID = entry.HasUpdate, entry.LatestEntryID
 		if result.Entities == nil {
 			result.Entities = []types.EntrySearchEntity{}
 		}
@@ -99,6 +142,23 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			result.Topics = []types.EntrySearchTopic{}
 		}
 		for _, snippet := range snippets[entry.ID] {
+			snippet.Locations = locations[snippet.ChunkID]
+			snippet.ChunkType = chunkTypes[snippet.ChunkID]
+			if snippet.ImagePath != "" {
+				for _, ref := range bodyImageReferences(entry.VaultBody) {
+					if ref.URL != snippet.ImagePath {
+						continue
+					}
+					offset := ref.Position + strings.Index(entry.VaultBody[ref.Position:], ref.URL)
+					start := len([]rune(entry.VaultBody[:offset]))
+					c := &types.Chunk{Content: ref.URL, StartAt: start, EndAt: start + len([]rune(ref.URL))}
+					sourceloc.Assign(entry.VaultBody, []*types.Chunk{c})
+					snippet.Locations = append(snippet.Locations, c.SourceLocations...)
+				}
+			}
+			if snippet.Locations == nil {
+				snippet.Locations = []types.SourceLocation{}
+			}
 			result.Snippets = append(result.Snippets, snippet)
 		}
 		slices.SortFunc(result.Snippets, func(a, b types.EntrySearchSnippet) int {
@@ -132,7 +192,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 				text = entry.Title
 			}
 			result.Snippets = append(result.Snippets, types.EntrySearchSnippet{
-				Content: text, ChunkIndex: -1, Score: result.Score, MatchType: metadataMatch[entry.ID],
+				Locations: []types.SourceLocation{}, Content: text, ChunkIndex: -1, Score: result.Score, MatchType: metadataMatch[entry.ID],
 			})
 		}
 		results = append(results, result)
@@ -215,9 +275,12 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 	if s.db == nil {
 		return nil, fmt.Errorf("entry search requires PostgreSQL")
 	}
-	options := &types.EntrySearchOptions{Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}}
+	options := &types.EntrySearchOptions{ContentTypes: []string{}, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}}
 	if err := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID).
 		Select("id,canonical_name,entity_type").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Table("library_content_types ct").Joins("JOIN libraries l ON l.id=ct.library_id").Where("l.space_id=? AND l.deleted_at IS NULL AND ct.enabled=true", spaceID).Distinct().Order("ct.name").Pluck("ct.name", &options.ContentTypes).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(options.Entities))
@@ -239,7 +302,7 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 	return options, err
 }
 
-func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.EntrySearchResult, config *types.RetrievalConfig) ([]*types.EntrySearchResult, error) {
+func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.EntrySearchResult, config *types.RetrievalConfig, sets ...searchVectorSet) ([]*types.EntrySearchResult, error) {
 	ids := []string{}
 	for _, result := range results {
 		if (result.Source == "article" || result.Source == "mine") && result.PublishedAt != nil {
@@ -250,6 +313,8 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 		return results, nil
 	}
 	type vectorRow struct {
+		LibraryID string
+		Template  string
 		EntryID   string
 		ModelID   string
 		Dimension int
@@ -260,12 +325,24 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 	if err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Table("article_embeddings").Where("space_id=? AND entry_id IN ? AND model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {
+	selector := "active"
+	if len(sets) > 0 {
+		selector = sets[0].Selector
+		if sets[0].ModelID != "" {
+			modelID = sets[0].ModelID
+		}
+	}
+	if err := s.db.WithContext(ctx).Table(vectorRelation(selector, "article", "ae")).Select("ae.*, l.template").
+		Joins("JOIN libraries l ON l.space_id=ae.space_id AND l.id=ae.library_id").
+		Joins("JOIN entries e ON e.space_id=ae.space_id AND e.library_id=ae.library_id AND e.id=ae.entry_id").
+		Where("ae.space_id=? AND ae.entry_id IN ? AND ae.model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	vectors := map[string]vectorRow{}
 	for _, row := range rows {
-		vectors[row.EntryID] = row
+		if rules, ok := types.RulesForTemplate(row.Template); ok && rules.CollapseSimilar {
+			vectors[row.EntryID] = row
+		}
 	}
 	window := time.Duration(config.GetEffectiveSimilarReportsWindowDays()) * 24 * time.Hour
 	threshold := config.GetEffectiveSimilarReportsThreshold()
@@ -279,7 +356,7 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 		}
 		av, aok := vectors[a.EntryID]
 		bv, bok := vectors[b.EntryID]
-		return aok && bok && av.ModelID == bv.ModelID && av.Dimension == bv.Dimension &&
+		return aok && bok && av.LibraryID == bv.LibraryID && av.ModelID == bv.ModelID && av.Dimension == bv.Dimension &&
 			articleCosineSimilarity(av.Embedding.Slice(), bv.Embedding.Slice()) >= threshold
 	}
 	groups := []*types.EntrySearchResult{}

@@ -33,8 +33,8 @@ func TestQueryEmbeddingRejectsClientFromChangedProfile(t *testing.T) {
 		model.Name = "Changed during query generation"
 		require.NoError(t, svc.UpdateModel(h.ctx, &model))
 	}
-	bases := &knowledgeBaseService{db: h.db, repo: repository.NewKnowledgeBaseRepository(h.db), modelService: profileRaceModels{client: client}}
-	_, err := bases.GetQueryEmbedding(h.ctx, h.kb.ID, "a query from the earlier space")
+	bases := &libraryService{db: h.db, repo: repository.NewLibraryRepository(h.db), modelService: profileRaceModels{client: client}}
+	_, err := bases.GetQueryEmbedding(h.ctx, h.library.ID, "a query from the earlier space")
 	require.ErrorContains(t, err, "profile changed")
 }
 
@@ -43,8 +43,8 @@ type changingEntrySearchBases struct {
 	change func()
 }
 
-func (b changingEntrySearchBases) GetQueryEmbedding(ctx context.Context, kbID, query string) ([]float32, error) {
-	vector, err := b.entrySearchFixtureBases.GetQueryEmbedding(ctx, kbID, query)
+func (b changingEntrySearchBases) GetQueryEmbedding(ctx context.Context, libraryID, query string) ([]float32, error) {
+	vector, err := b.entrySearchFixtureBases.GetQueryEmbedding(ctx, libraryID, query)
 	b.change()
 	return vector, err
 }
@@ -52,7 +52,7 @@ func (b changingEntrySearchBases) GetQueryEmbedding(ctx context.Context, kbID, q
 func TestEntrySearchRejectsProfileChangedBetweenQueryAndRecall(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	enableImageSearchFixture(t, h)
-	base := changingEntrySearchBases{entrySearchFixtureBases: entrySearchFixtureBases{kb: h.kb}, change: func() {
+	base := changingEntrySearchBases{entrySearchFixtureBases: entrySearchFixtureBases{library: h.library}, change: func() {
 		var model types.Model
 		require.NoError(t, h.db.First(&model, "id='fixture-model'").Error)
 		model.Name = "A new model space during query generation"
@@ -60,7 +60,7 @@ func TestEntrySearchRejectsProfileChangedBetweenQueryAndRecall(t *testing.T) {
 		require.NoError(t, svc.UpdateModel(h.ctx, &model))
 	}}
 	svc := NewSearchService(base, nil, nil, h.db)
-	_, err := svc.Search(h.ctx, types.EntrySearchRequest{Query: "othersemantic"})
+	_, err := svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "othersemantic"})
 	require.ErrorContains(t, err, "profile changed during query generation")
 }
 
@@ -95,7 +95,7 @@ func TestBuiltinYAMLChangesRetireEmbeddingIdentity(t *testing.T) {
 	require.NoError(t, h.db.First(entity, "id=?", entity.ID).Error)
 	require.True(t, entity.EmbeddingNeedsRebuild)
 	require.True(t, strings.HasPrefix(entity.EmbeddingModelID, "stale:"))
-	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
+	response := h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "othersemantic"})
 	require.Empty(t, response.Results)
 }
 
@@ -155,7 +155,7 @@ func TestRunningEmbeddingClientCannotRepublishRetiredIdentity(t *testing.T) {
 				var chunk types.Chunk
 				require.NoError(t, h.db.First(&chunk, "entry_id=?", article.ID).Error)
 				index := &types.IndexInfo{SourceID: chunk.ID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID,
-					EntryID: article.ID, KnowledgeBaseID: h.kb.ID, Content: buildEntryIndexContent(article, chunk.Content)}
+					EntryID: article.ID, LibraryID: h.library.ID, Content: buildEntryIndexContent(article, chunk.Content)}
 				if kind == "chunk" {
 					err = h.service.retrieveEngine.Index(h.ctx, embedder, index)
 				} else {
@@ -183,7 +183,7 @@ func TestModelEditInvalidatesSameIDAndDimensionVectors(t *testing.T) {
 			}
 			path := "../../attachments/profile-article/chart.png"
 			addImageSearchVector(t, h, article, path, "fixture-model", []float32{0, 1, 0})
-			response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
+			response := h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "othersemantic"})
 			require.Len(t, response.Results, 1)
 			var before pgvector.HalfVector
 			require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Pluck("embedding", &before).Error)
@@ -212,9 +212,9 @@ func TestModelEditInvalidatesSameIDAndDimensionVectors(t *testing.T) {
 			var after pgvector.HalfVector
 			require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Pluck("embedding", &after).Error)
 			require.Equal(t, before.Slice(), after.Slice(), "old vector bytes remain available until successful rebuild")
-			response = h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
+			response = h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "othersemantic"})
 			require.Empty(t, response.Results, "matching dimensions cannot re-enable vectors from the prior profile")
-			response = h.search(t, types.EntrySearchRequest{Query: "Searchfixture"})
+			response = h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "Searchfixture"})
 			require.Len(t, response.Results, 1, "full text continues serving while vector identity is retired")
 			for _, snippet := range response.Results[0].Snippets {
 				require.Empty(t, snippet.ImagePath, "the retired image vector does not contribute")
@@ -239,7 +239,7 @@ func TestModelCosmeticAndCredentialEditsKeepVectorIdentity(t *testing.T) {
 	var identity string
 	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Pluck("model_id", &identity).Error)
 	require.Equal(t, "fixture-model", identity)
-	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
+	response := h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "othersemantic"})
 	require.Len(t, response.Results, 1)
 	require.Equal(t, "image", response.Results[0].Snippets[0].MatchType)
 }

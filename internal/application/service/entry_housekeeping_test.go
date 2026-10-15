@@ -26,7 +26,7 @@ const entryTestDDL = `
 CREATE TABLE IF NOT EXISTS entries (
     id              VARCHAR(64) PRIMARY KEY,
     space_id       INTEGER NOT NULL DEFAULT 0,
-    knowledge_base_id VARCHAR(64),
+    library_id VARCHAR(64),
     parse_status    VARCHAR(32) NOT NULL DEFAULT 'pending',
     summary_status  VARCHAR(32) NOT NULL DEFAULT 'none',
     pending_subtasks_count INTEGER NOT NULL DEFAULT 0,
@@ -133,7 +133,7 @@ func newHousekeepingSvcForTest(db *gorm.DB) *HousekeepingService {
 }
 
 func newHousekeepingSvcWithInspector(db *gorm.DB, inspector interfaces.TaskInspector) *HousekeepingService {
-	cfg := &config.Config{KnowledgeBase: &config.KnowledgeBaseConfig{
+	cfg := &config.Config{Library: &config.LibraryConfig{
 		// 1h floor + 10min buffer = 70min cutoff. Tight enough to keep
 		// the test's relative timestamps in seconds; the production
 		// default of 2h+10min is just a constant scale factor.

@@ -57,7 +57,7 @@ func (s *chunkSearchService) processSearchResults(ctx context.Context,
 		if entry != nil && input.ChunkID == types.EntrySummarySearchID(entry.ID) {
 			chunkMap[input.ChunkID] = &types.Chunk{
 				ID: input.ChunkID, SpaceID: spaceID, EntryID: entry.ID,
-				KnowledgeBaseID: entry.KnowledgeBaseID, Content: entry.Description,
+				LibraryID: entry.LibraryID, Content: entry.Description,
 				ChunkType: types.ChunkTypeSummary, IsEnabled: true,
 			}
 		}
@@ -316,7 +316,7 @@ func (s *chunkSearchService) buildSearchResult(chunk *types.Chunk,
 		EntryCustomMetadata: entry.CustomMetadataText(),
 		ChunkMetadata:       chunk.Metadata,
 		MatchedContent:      matchedContent,
-		KnowledgeBaseID:     entry.KnowledgeBaseID,
+		LibraryID:           entry.LibraryID,
 	}
 }
 
@@ -327,6 +327,6 @@ func (s *chunkSearchService) isSearchableChunk(chunk *types.Chunk) bool {
 	}
 	return slices.Contains([]types.ChunkType{
 		types.ChunkTypeText, types.ChunkTypeSummary,
-		types.ChunkTypeTableColumn, types.ChunkTypeTableSummary,
+		types.ChunkTypeTableColumn, types.ChunkTypeTableSummary, types.ChunkTypeImageDescription,
 	}, chunk.ChunkType)
 }

@@ -36,10 +36,10 @@ func TestDocumentProcessTaskOptions_defaults(t *testing.T) {
 		cfg  *config.Config
 	}{
 		{"nil config", nil},
-		{"nil knowledge base", &config.Config{}},
-		{"zero timeout", &config.Config{KnowledgeBase: &config.KnowledgeBaseConfig{}}},
+		{"nil library", &config.Config{}},
+		{"zero timeout", &config.Config{Library: &config.LibraryConfig{}}},
 		{"negative timeout", &config.Config{
-			KnowledgeBase: &config.KnowledgeBaseConfig{DocumentProcessTimeout: -time.Minute},
+			Library: &config.LibraryConfig{DocumentProcessTimeout: -time.Minute},
 		}},
 	}
 	for _, tc := range cases {
@@ -58,7 +58,7 @@ func TestDocumentProcessTaskOptions_defaults(t *testing.T) {
 func TestDocumentProcessTaskOptions_configuredTimeout(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
-		KnowledgeBase: &config.KnowledgeBaseConfig{
+		Library: &config.LibraryConfig{
 			DocumentProcessTimeout: 90 * time.Minute,
 		},
 	}

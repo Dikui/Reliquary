@@ -3,9 +3,7 @@ package types
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -15,6 +13,7 @@ import (
 
 // Space represents the space
 type Space struct {
+	EmbeddingModelID string `json:"embedding_model_id"`
 	// ID
 	ID uint64 `yaml:"id"                  json:"id"                  gorm:"primaryKey"`
 	// Name
@@ -27,8 +26,6 @@ type Space struct {
 	Business string `yaml:"business"            json:"business"`
 	// Storage used (Bytes)
 	StorageUsed int64 `yaml:"storage_used"        json:"storage_used"        gorm:"default:0"`
-	// Parser engine config overrides (MinerU endpoint, API key, etc.). Used when parsing documents; overrides env.
-	ParserEngineConfig *ParserEngineConfig `yaml:"parser_engine_config" json:"parser_engine_config" gorm:"type:jsonb"`
 	// Credentials retains encrypted metadata from existing deployments.
 	Credentials *CredentialsConfig `yaml:"credentials" json:"credentials" gorm:"type:jsonb"`
 	// Retrieval config: global search/retrieval parameters used by entry search
@@ -92,132 +89,6 @@ func (c *CredentialsConfig) Scan(value interface{}) error {
 		}
 	}
 	return nil
-}
-
-// ParserEngineConfig holds space-level overrides for document parser engines (e.g. MinerU endpoint, API key).
-// These values take precedence over environment variables when parsing documents.
-type ParserEngineConfig struct {
-	MinerUEndpoint string `json:"mineru_endpoint"` // MinerU 自建服务端点
-	MinerUAPIKey   string `json:"mineru_api_key"`  // MinerU 云 API Key
-
-	// MinerU 自建解析参数
-	MinerUModel         string `json:"mineru_model,omitempty"`          // backend: pipeline, vlm-*, hybrid-*
-	MinerUVLMServerURL  string `json:"mineru_vlm_server_url,omitempty"` // vLLM 服务器地址 (vlm-http-client / hybrid-http-client)
-	MinerUEnableFormula *bool  `json:"mineru_enable_formula,omitempty"`
-	MinerUEnableTable   *bool  `json:"mineru_enable_table,omitempty"`
-	MinerUParseMethod   string `json:"mineru_parse_method,omitempty"`
-	// MinerUEnableOCR is retained for compatibility with configurations saved
-	// before parse_method supported auto/ocr/txt.
-	MinerUEnableOCR *bool  `json:"mineru_enable_ocr,omitempty"`
-	MinerULanguage  string `json:"mineru_language,omitempty"`
-
-	// MinerU 云 API 解析参数
-	MinerUCloudModel         string `json:"mineru_cloud_model,omitempty"` // model_version: pipeline, vlm, MinerU-HTML
-	MinerUCloudEnableFormula *bool  `json:"mineru_cloud_enable_formula,omitempty"`
-	MinerUCloudEnableTable   *bool  `json:"mineru_cloud_enable_table,omitempty"`
-	MinerUCloudEnableOCR     *bool  `json:"mineru_cloud_enable_ocr,omitempty"`
-	MinerUCloudLanguage      string `json:"mineru_cloud_language,omitempty"`
-}
-
-const (
-	MinerUParseMethodAuto = "auto"
-	MinerUParseMethodOCR  = "ocr"
-	MinerUParseMethodText = "txt"
-)
-
-// ResolveMinerUParseMethod normalizes the explicit MinerU parse method and
-// maps the legacy OCR toggle to the closest safe behavior. The old enabled
-// value maps to auto instead of ocr so digital PDFs keep their native text
-// layer while scanned PDFs are still detected and OCRed by MinerU.
-func ResolveMinerUParseMethod(method string, legacyOCREnabled *bool) string {
-	switch strings.ToLower(strings.TrimSpace(method)) {
-	case MinerUParseMethodAuto:
-		return MinerUParseMethodAuto
-	case MinerUParseMethodOCR:
-		return MinerUParseMethodOCR
-	case MinerUParseMethodText:
-		return MinerUParseMethodText
-	}
-
-	if legacyOCREnabled != nil && !*legacyOCREnabled {
-		return MinerUParseMethodText
-	}
-	return MinerUParseMethodAuto
-}
-
-// ToOverridesMap returns a map suitable for ParserEngineOverrides in parse requests.
-// Keys are snake_case (mineru_endpoint, mineru_api_key, etc.).
-func (c *ParserEngineConfig) ToOverridesMap() map[string]string {
-	if c == nil {
-		return nil
-	}
-	m := make(map[string]string)
-	if c.MinerUEndpoint != "" {
-		m["mineru_endpoint"] = c.MinerUEndpoint
-	}
-	if c.MinerUAPIKey != "" {
-		m["mineru_api_key"] = c.MinerUAPIKey
-	}
-	if c.MinerUModel != "" {
-		m["mineru_model"] = c.MinerUModel
-	}
-	if c.MinerUVLMServerURL != "" {
-		m["mineru_vlm_server_url"] = c.MinerUVLMServerURL
-	}
-	if c.MinerUEnableFormula != nil {
-		m["mineru_enable_formula"] = fmt.Sprintf("%v", *c.MinerUEnableFormula)
-	}
-	if c.MinerUEnableTable != nil {
-		m["mineru_enable_table"] = fmt.Sprintf("%v", *c.MinerUEnableTable)
-	}
-	if c.MinerUParseMethod != "" || c.MinerUEnableOCR != nil {
-		m["mineru_parse_method"] = ResolveMinerUParseMethod(c.MinerUParseMethod, c.MinerUEnableOCR)
-	}
-	if c.MinerUEnableOCR != nil {
-		m["mineru_enable_ocr"] = fmt.Sprintf("%v", *c.MinerUEnableOCR)
-	}
-	if c.MinerULanguage != "" {
-		m["mineru_language"] = c.MinerULanguage
-	}
-	if c.MinerUCloudModel != "" {
-		m["mineru_cloud_model"] = c.MinerUCloudModel
-	}
-	if c.MinerUCloudEnableFormula != nil {
-		m["mineru_cloud_enable_formula"] = fmt.Sprintf("%v", *c.MinerUCloudEnableFormula)
-	}
-	if c.MinerUCloudEnableTable != nil {
-		m["mineru_cloud_enable_table"] = fmt.Sprintf("%v", *c.MinerUCloudEnableTable)
-	}
-	if c.MinerUCloudEnableOCR != nil {
-		m["mineru_cloud_enable_ocr"] = fmt.Sprintf("%v", *c.MinerUCloudEnableOCR)
-	}
-	if c.MinerUCloudLanguage != "" {
-		m["mineru_cloud_language"] = c.MinerUCloudLanguage
-	}
-	if len(m) == 0 {
-		return nil
-	}
-	return m
-}
-
-// Value implements the driver.Valuer interface for ParserEngineConfig
-func (c *ParserEngineConfig) Value() (driver.Value, error) {
-	if c == nil {
-		return nil, nil
-	}
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface for ParserEngineConfig
-func (c *ParserEngineConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
 }
 
 // SingleSpaceID identifies the only personal space.

@@ -16,8 +16,8 @@ import (
 )
 
 // NewModelServiceWithChatGPT shares the authorization manager with settings.
-func NewModelServiceWithChatGPT(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB, manager *chatgpt.Manager, policy *ChatGPTPolicyService) interfaces.ModelService {
-	s := NewModelServiceWithRoutingDB(repo, kbRepo, ollamaService, pooler, spaceService, db).(*modelService)
+func NewModelServiceWithChatGPT(repo interfaces.ModelRepository, libraryRepo interfaces.LibraryRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB, manager *chatgpt.Manager, policy *ChatGPTPolicyService) interfaces.ModelService {
+	s := NewModelServiceWithRoutingDB(repo, libraryRepo, ollamaService, pooler, spaceService, db).(*modelService)
 	s.chatGPT, s.chatGPTPolicy = manager, policy
 	return s
 }
@@ -70,6 +70,7 @@ func (s *modelService) chatGPTModel(ctx context.Context, m *types.Model) (chat.C
 	}
 	accountID := m.Parameters.ExtraConfig["chatgpt_account_id"]
 	cfg := chat.ConfigFromModel(m)
+	cfg.Accounting = s.callAccounting(m)
 	cfg.ChatGPTToken = func(ctx context.Context) (string, error) {
 		token, err := manager.AccessToken(ctx, accountID)
 		if err != nil {

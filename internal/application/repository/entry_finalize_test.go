@@ -25,21 +25,15 @@ const entriesTestDDL = `
 CREATE TABLE IF NOT EXISTS entries (
     id VARCHAR(36) PRIMARY KEY,
     space_id INTEGER NOT NULL,
-    knowledge_base_id VARCHAR(36) NOT NULL,
+    library_id VARCHAR(36) NOT NULL,
     type VARCHAR(50) NOT NULL DEFAULT '',
     title VARCHAR(255) NOT NULL DEFAULT '',
     description TEXT,
     content_type VARCHAR(16),
-    content_type_uncertain BOOLEAN NOT NULL DEFAULT false,
-    processing_review_status VARCHAR(16) NOT NULL DEFAULT '',
-    processing_review_content_type VARCHAR(16) NOT NULL DEFAULT '',
-    processing_review_reason TEXT NOT NULL DEFAULT '',
     source_unverified BOOLEAN NOT NULL DEFAULT false,
-    processing_mode VARCHAR(16) NOT NULL DEFAULT 'full',
     source_kind VARCHAR(16) NOT NULL DEFAULT 'article',
     vault_path TEXT NOT NULL DEFAULT '',
     vault_body TEXT NOT NULL DEFAULT '',
-    vault_original_path TEXT NOT NULL DEFAULT '',
     starred BOOLEAN NOT NULL DEFAULT false,
     collect_reason TEXT NOT NULL DEFAULT '',
     agent_summary TEXT NOT NULL DEFAULT '',
@@ -86,7 +80,7 @@ func insertProcessingEntry(t *testing.T, db *gorm.DB) string {
 	t.Helper()
 	id := uuid.New().String()
 	require.NoError(t, db.Exec(`
-		INSERT INTO entries (id, space_id, knowledge_base_id, type, title, source, parse_status, pending_subtasks_count)
+		INSERT INTO entries (id, space_id, library_id, type, title, source, parse_status, pending_subtasks_count)
 		VALUES (?, 1, ?, 'document', 'finalize-test', 'manual', 'processing', 0)
 	`, id, uuid.New().String()).Error)
 	return id
@@ -133,7 +127,7 @@ func insertEntryWithStatus(t *testing.T, db *gorm.DB, status string, deleted boo
 		deletedAt = "2026-06-16 12:00:00"
 	}
 	require.NoError(t, db.Exec(`
-		INSERT INTO entries (id, space_id, knowledge_base_id, type, title, source, parse_status, deleted_at)
+		INSERT INTO entries (id, space_id, library_id, type, title, source, parse_status, deleted_at)
 		VALUES (?, 1, ?, 'document', 'delete-test', 'manual', ?, ?)
 	`, id, uuid.New().String(), status, deletedAt).Error)
 	return id
@@ -373,38 +367,6 @@ func TestUpdateEntryPreservesCollectionReasonFromConcurrentIntake(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, "Preserve the measured result", current.CollectReason)
 	require.Equal(t, stale.Description, current.Description)
-}
-
-func TestUpdateEntryPreservesProcessingReviewDecisionAndUnverifiedSource(t *testing.T) {
-	db := pgtest.Open(t)
-	repo := NewEntryRepository(db)
-	ctx := context.Background()
-	id := insertProcessingEntry(t, db)
-	stale, err := repo.GetEntryByID(ctx, 1, id)
-	require.NoError(t, err)
-	require.NoError(t, repo.UpdateEntryColumns(ctx, id, map[string]any{
-		"source_unverified":              true,
-		"content_type_uncertain":         true,
-		"processing_review_status":       types.ProcessingReviewIgnored,
-		"processing_review_content_type": types.ContentTypeTutorial,
-		"processing_review_reason":       "User retained the original source despite the uncertain type.",
-	}))
-	for _, batch := range []bool{false, true} {
-		stale.Description = "An unrelated background update completed."
-		if batch {
-			require.NoError(t, repo.UpdateEntryBatch(ctx, []*types.Entry{stale}))
-		} else {
-			require.NoError(t, repo.UpdateEntry(ctx, stale))
-		}
-		current, err := repo.GetEntryByID(ctx, 1, id)
-		require.NoError(t, err)
-		require.True(t, current.SourceUnverified)
-		require.True(t, current.ContentTypeUncertain)
-		require.Equal(t, types.ProcessingReviewIgnored, current.ProcessingReviewStatus)
-		require.Equal(t, types.ContentTypeTutorial, current.ProcessingReviewContentType)
-		require.Contains(t, current.ProcessingReviewReason, "User retained")
-		require.Equal(t, stale.Description, current.Description)
-	}
 }
 
 func TestUpdateActiveDeletingEntryColumns_GuardsStateAndSoftDelete(t *testing.T) {

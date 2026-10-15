@@ -25,7 +25,8 @@ import (
 // around the actual provider round-trip and the wait time is excluded from the
 // inner debug timing.
 type concurrencyChat struct {
-	inner Chat
+	accounting *types.ModelCallAccounting
+	inner      Chat
 	// limit is this model's configured per-model background cap; 0 falls back
 	// to the process-wide default (see limiter.GateN).
 	limit             int
@@ -41,6 +42,7 @@ func (w *concurrencyChat) Chat(ctx context.Context, messages []Message, opts *Ch
 	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	defer release()
+	ctx = types.WithModelCallAccounting(ctx, w.accounting)
 	return w.inner.Chat(ctx, messages, opts)
 }
 
@@ -49,6 +51,7 @@ func (w *concurrencyChat) ChatStream(ctx context.Context, messages []Message, op
 		return nil, err
 	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
+	ctx = types.WithModelCallAccounting(ctx, w.accounting)
 	ch, err := w.inner.ChatStream(ctx, messages, opts)
 	if err != nil || ch == nil {
 		release()

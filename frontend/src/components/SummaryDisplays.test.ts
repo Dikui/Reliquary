@@ -15,7 +15,7 @@ import * as markdownPlainText from '../utils/markdownPlainText'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
 import * as rfc3339 from '../utils/rfc3339'
 import * as highlight from './GlobalCommandPalette/useHighlight'
-import { descendants, element, hasClass, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from '../views/knowledge-base/componentTestHarness'
+import { descendants, element, hasClass, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from '../views/library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zh, 'en-US': en }
@@ -60,7 +60,7 @@ function environment(locale: keyof typeof messages) {
   async function request(method: string, url: string, requestBody?: unknown) {
     calls.push({ method, url, ...(requestBody === undefined ? {} : { body: requestBody }) })
     let response: any
-    if (method === 'get' && url.startsWith('/api/v1/knowledge-bases/summary-displays/entries?')) response = { success: true, data: [structuredClone(record)], total: 1 }
+    if (method === 'get' && url.startsWith('/api/v1/entries?')) response = { success: true, data: [structuredClone(record)], total: 1 }
     else if (method === 'get' && url === `/api/v1/entries/${record.id}`) response = { success: true, data: structuredClone(record) }
     else if (method === 'get' && url.startsWith(`/api/v1/chunks/${record.id}?`)) response = { success: true, data: [{ id: 'body-chunk', content: body, chunk_index: 0 }], total: 1 }
     else if (method === 'post' && url === '/api/v1/follows/feed') response = { success: true, data: { results: [structuredClone(feedArticle)], total: 1, new_count: 1, last_viewed_at: null, viewed_at: record.updated_at } }
@@ -69,7 +69,7 @@ function environment(locale: keyof typeof messages) {
     return response
   }
   const transport = { get: (url: string) => request('get', url), post: (url: string, value?: unknown) => request('post', url, value) }
-  const api = evaluateFile('../api/knowledge-base.ts', { '../utils/request': transport })
+  const api = evaluateFile('../api/library.ts', { '../utils/request': transport })
   const storeModule = evaluateFile('../stores/entry.ts', { pinia: piniaModule })
   const route = reactive({ query: {} as Record<string, unknown> })
   const parser = new Marked()
@@ -77,30 +77,31 @@ function environment(locale: keyof typeof messages) {
   const modules: Record<string, unknown> = {
     pinia: piniaModule,
     '@/utils/markdownPlainText': markdownPlainText, '@/utils/entrySourceLabels': entrySourceLabels, '@/utils/rfc3339': rfc3339,
-    '@/types/entryClassification': { CONTENT_TYPES }, '@/api/knowledge-base': api, '@/stores/entry': storeModule,
+    '@/types/entryClassification': { CONTENT_TYPES }, '@/api/library': api, '@/stores/entry': storeModule,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
     '@/utils/security': { isValidURL: () => true, isValidImageURL: () => true, safeMarkdownToHTML: identity, sanitizeHTML: identity, hydrateProtectedFileImages: async () => {}, createSafeImage: (url: string, alt: string) => `<img src="${url}" alt="${alt}">` },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: identity },
-    '@/utils/mermaidViewer': {}, '@/utils/clipboard': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {}, '@/views/knowledge-base/entryDownloadFileName': {},
+    '@/utils/mermaidViewer': {}, '@/utils/clipboard': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {}, '@/views/library/entryDownloadFileName': {},
     marked: { marked: { Renderer, use: parser.use.bind(parser), parse: parser.parse.bind(parser) } },
     'marked-katex-extension': moduleOf(() => ({})), 'highlight.js': moduleOf({}), mermaid: moduleOf({ initialize() {} }),
     'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {}, push: async () => {} }) },
     './GlobalCommandPalette/useHighlight': highlight,
     '@/api/follows': evaluateFile('../api/follows.ts', { '@/utils/request': transport }),
-    '@/stores/follows': { useFollowStore: () => ({ targets: [], targetsLoading: false, loadTargets: async () => {}, markViewed: async () => ({ last_viewed_at: record.updated_at }) }) },
+    '@/stores/follows': { useFollowStore: () => ({ libraries: [], targets: [], targetsLoading: false, refreshState: async () => {}, loadTargets: async () => {}, markViewed: async () => ({ last_viewed_at: record.updated_at }) }) },
   }
   const classification = moduleOf(component('./EntryClassification.vue', modules))
   modules['@/components/EntryClassification.vue'] = modules['./EntryClassification.vue'] = classification
   modules['@/components/SearchEntry.vue'] = moduleOf(component('./SearchEntry.vue', modules))
   const errors: unknown[] = [], warnings: string[] = []
-  function mount(value: any) {
+  function mount(value: any, select?: any) {
     const root = element('root')
     const app = renderer.createApp(value)
     app.use(pinia)
     app.use(createI18n({ legacy: false, locale, messages }))
     registerPrimitives(app)
+    if (select) app.component('t-select', select)
     const primitive = defineComponent({ props: ['visible'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', attrs, [slots.header?.(), slots.default?.(), slots.operation?.()]) })
     for (const name of ['t-checkbox', 't-input-number', 't-pagination', 't-switch', 't-radio-group', 't-radio-button', 't-empty']) app.component(name, primitive)
     app.component('router-link', defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { href: props.to }, slots.default?.()) }))
@@ -109,7 +110,7 @@ function environment(locale: keyof typeof messages) {
     app.mount(root)
     return { root, close: () => app.unmount() }
   }
-  return { record, feedArticle, calls, received, modules, errors, warnings, mount, hook: () => evaluateFile('../composables/useKnowledgeBase.ts', modules).default('summary-displays') }
+  return { record, feedArticle, calls, received, modules, errors, warnings, mount, hook: () => evaluateFile('../composables/useLibrary.ts', modules).default('summary-displays') }
 }
 
 function summaryFields(root: Element, localizedImage: string, structured: boolean) {
@@ -141,8 +142,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const restore = browserGlobals()
       const env = environment(locale)
       if (!structured) env.record.structured_summary = null as any
-      const card = component('../views/knowledge-base/components/DocumentCardView.vue', env.modules)
-      const list = component('../views/knowledge-base/components/DocumentListView.vue', env.modules)
+      const card = component('../views/library/components/DocumentCardView.vue', env.modules)
+      const list = component('../views/library/components/DocumentListView.vue', env.modules)
       const detail = component('./DocContent.vue', env.modules)
       let hook: any
       const mounted = env.mount(defineComponent({
@@ -171,7 +172,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         assert.equal(hook.details.description, summary)
         assert.deepEqual(hook.details.structured_summary, env.record.structured_summary)
         assert.equal(hook.details.md[0].content, body)
-        assert.deepEqual(env.calls.map(call => call.url), ['/api/v1/knowledge-bases/summary-displays/entries?page=1&page_size=35', `/api/v1/entries/${env.record.id}`, `/api/v1/chunks/${env.record.id}?page=1&page_size=25`])
+        assert.deepEqual(env.calls.map(call => call.url), ['/api/v1/entries?page=1&page_size=35', `/api/v1/entries/${env.record.id}`, `/api/v1/chunks/${env.record.id}?page=1&page_size=25`])
         assert.deepEqual(env.received[0].data[0], env.record)
         assert.deepEqual(env.received[1].data, env.record)
         assert.deepEqual(env.errors, [])
@@ -181,7 +182,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   }
   test(`${locale}: follow feed loads summaries through its page and API once while preserving escaped and code symbols`, async () => {
     const env = environment(locale)
-    const mounted = env.mount(component('../views/knowledge-base/FollowFeed.vue', env.modules))
+    const mounted = env.mount(component('../views/library/FollowFeed.vue', env.modules))
     try {
       await settle()
       const article = descendants(mounted.root).find(node => node.props['data-article-id'] === env.record.id)!
@@ -196,3 +197,52 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     } finally { mounted.close() }
   })
 }
+
+test('initial detail mount, document switch and refreshed mount render API image descriptions and library type options', async () => {
+  const restore = browserGlobals()
+  const env = environment('zh-CN')
+  env.modules['@/api/topics'] = { listTopics: async () => ({ success: true, data: [] }) }
+  env.modules['@/api/entry-judgments'] = {}
+  env.modules['@/components/EntryArticleJudgments.vue'] = moduleOf(component('./EntryArticleJudgments.vue', env.modules))
+  const detail = component('./DocContent.vue', env.modules)
+  let hook: any
+  const mounts: ReturnType<typeof env.mount>[] = []
+  const setRecord = (id: string, caption: string, type: string) => Object.assign(env.record, {
+    id, content_type: type,
+    image_descriptions: [{ ordinal: 1, url: 'chart.png', description: caption, locations: [{ paragraph: 3, start: 0, end: 1 }] }],
+    library_content_types: [{ name: type, enabled: true, extract_graph: true, position: 0 }, { name: '停用类型', enabled: false, extract_graph: false, position: 1 }],
+  })
+  const mount = () => {
+    const mounted = env.mount(defineComponent({ setup() {
+      hook = env.hook()
+      onMounted(() => hook.getCardDetails({ id: env.record.id }))
+      return () => h(detail, { visible: true, details: hook.details })
+    } }), defineComponent({ props: ['options'], setup: props => () => h('select', (props.options || []).map((row: any) => h('option', { value: row.value }, row.label))) }))
+    mounts.push(mounted)
+    return mounted
+  }
+  const check = (root: Element, caption: string, type: string) => {
+    const section = descendants(root).find(node => hasClass(node, 'image-descriptions'))
+    assert.ok(section, 'initial API response reaches the image description component')
+    assert.ok(visibleText(section).includes(caption))
+    assert.deepEqual(hook.details.library_content_types.filter((row: any) => row.enabled).map((row: any) => row.name), [type])
+    assert.ok(descendants(root).some(node => node.tag === 'option' && visibleText(node) === type))
+    assert.ok(!descendants(root).some(node => node.tag === 'option' && visibleText(node) === '停用类型'))
+    assert.ok(visibleText(root).includes('图片说明'))
+    assert.equal(hook.details.md[0].content, body)
+  }
+  try {
+    setRecord('first', '第一张图的数字说明', '机构快讯')
+    const first = mount(); await settle(); check(first.root, '第一张图的数字说明', '机构快讯')
+    setRecord('second', '第二张图的图表说明', '研究论文')
+    hook.getCardDetails({ id: 'second' })
+    assert.deepEqual(hook.details.image_descriptions, [])
+    assert.deepEqual(hook.details.library_content_types, [])
+    await settle(); check(first.root, '第二张图的图表说明', '研究论文')
+    assert.ok(!visibleText(first.root).includes('第一张图的数字说明'))
+    first.close()
+    const refreshed = mount(); await settle(); check(refreshed.root, '第二张图的图表说明', '研究论文')
+    assert.deepEqual(env.errors, []); assert.deepEqual(env.warnings, [])
+    assert.ok(env.calls.every(call => call.method === 'get'), 'no topic save or reprocessing is needed')
+  } finally { for (const mounted of mounts.slice(1)) mounted.close(); if (mounts.length === 1) mounts[0].close(); restore() }
+})

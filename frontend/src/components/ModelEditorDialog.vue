@@ -377,6 +377,17 @@
         </div>
       </section>
 
+      <section class="pricing-config" :aria-label="$t('ikb18.priceTitle')">
+        <h3>{{ $t('ikb18.priceTitle') }}</h3>
+        <p v-if="formData.source === 'chatgpt'" class="form-desc">{{ $t('ikb18.priceNotApplicable') }}</p>
+        <template v-else>
+          <div class="form-item"><label class="form-label" for="model-price-input">{{ $t('ikb18.priceInput') }}</label><t-input id="model-price-input" v-model="formData.inputPerMillion" type="number" :min="0" :aria-label="$t('ikb18.priceInput')" /></div>
+          <div class="form-item"><label class="form-label" for="model-price-output">{{ $t('ikb18.priceOutput') }}</label><t-input id="model-price-output" v-model="formData.outputPerMillion" type="number" :min="0" :aria-label="$t('ikb18.priceOutput')" /></div>
+          <div class="form-item"><label class="form-label" for="model-price-currency">{{ $t('ikb18.priceCurrency') }}</label><t-input id="model-price-currency" v-model="formData.priceCurrency" placeholder="USD" :maxlength="3" :aria-label="$t('ikb18.priceCurrency')" /></div>
+          <p class="form-desc">{{ $t('ikb18.priceHint') }}</p>
+        </template>
+      </section>
+
     </t-form>
   </SettingDrawer>
 </template>
@@ -412,6 +423,10 @@ interface CustomHeaderItem {
 }
 
 interface ModelFormData {
+  pricing?: import('@/api/model').ModelPricing | null
+  inputPerMillion?: number | string | null
+  outputPerMillion?: number | string | null
+  priceCurrency?: string
   id: string
   name: string
   source: 'local' | 'remote' | 'chatgpt'
@@ -659,6 +674,7 @@ const formData = ref<ModelFormData>({
   supportsVision: false,
   contextWindow: undefined,
   maxConcurrency: undefined,
+  inputPerMillion: '', outputPerMillion: '', priceCurrency: '',
   thinkingControl: defaultThinkingControl('generic', ''),
   customHeaders: [],
 })
@@ -837,6 +853,9 @@ watch(() => props.visible, (val) => {
           supportsImages: props.modelData.supportsImages ?? false,
           multimodalFormat: props.modelData.multimodalFormat || 'jina',
           apiKey: '',
+          inputPerMillion: props.modelData.pricing?.input_per_million ?? '',
+          outputPerMillion: props.modelData.pricing?.output_per_million ?? '',
+          priceCurrency: props.modelData.pricing?.currency || '',
           customHeaders: Array.isArray(props.modelData.customHeaders)
             ? props.modelData.customHeaders.map(h => ({ key: h.key, value: h.value }))
             : [],
@@ -890,6 +909,7 @@ const resetForm = () => {
     supportsVision: false,
     contextWindow: undefined,
     maxConcurrency: undefined,
+    inputPerMillion: '', outputPerMillion: '', priceCurrency: '',
     thinkingControl: defaultThinkingControl('generic', ''),
     customHeaders: [],
   }
@@ -1317,6 +1337,15 @@ const handleConfirm = async () => {
       MessagePlugin.warning(t('chatgpt.accountRequired'))
       return
     }
+    const parseRate = (value: number | string | null | undefined) => value == null || String(value).trim() === '' ? null : Number(value)
+    const inputRate = parseRate(formData.value.inputPerMillion)
+    const outputRate = parseRate(formData.value.outputPerMillion)
+    const currency = (formData.value.priceCurrency || '').trim().toUpperCase()
+    if ([inputRate, outputRate].some(value => value !== null && (!Number.isFinite(value) || value < 0)) || (currency && !/^[A-Z]{3}$/.test(currency))) {
+      MessagePlugin.warning(t('ikb18.priceInvalid'))
+      return
+    }
+    const pricing = formData.value.source === 'chatgpt' || (inputRate === null && outputRate === null && !currency) ? null : { input_per_million: inputRate, output_per_million: outputRate, currency: currency || 'USD' }
     // 执行表单验证
     await formRef.value?.validate()
 
@@ -1333,6 +1362,7 @@ const handleConfirm = async () => {
 
     emit('confirm', {
       ...formData.value,
+      pricing,
       ...(isEdit.value ? {} : { modelType: activeModelType.value }),
     })
     dialogVisible.value = false

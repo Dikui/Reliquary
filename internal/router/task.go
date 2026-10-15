@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.uber.org/dig"
+	"reliquary/internal/graphreplica"
 	"reliquary/internal/queue"
 
 	"reliquary/internal/application/service"
@@ -21,16 +22,17 @@ import (
 
 type TaskParams struct {
 	dig.In
-	Client               *queue.Client
-	SystemSettings       interfaces.SystemSettingService
-	EntryService         interfaces.EntryService
-	KnowledgeBaseService interfaces.KnowledgeBaseService
-	TopicService         *service.TopicService
-	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
-	EmbeddingRebuild     *service.EmbeddingRebuilder
-	Reports              *service.VaultDocumentService `optional:"true"`
-	SpanTracker          service.SpanTracker
-	Cleaner              interfaces.ResourceCleaner
+	GraphReplica        *graphreplica.Service `optional:"true"`
+	Client              *queue.Client
+	SystemSettings      interfaces.SystemSettingService
+	EntryService        interfaces.EntryService
+	LibraryService      interfaces.LibraryService
+	TopicService        *service.TopicService
+	EntityNameEmbedding *service.EntityNameEmbeddingRebuilder
+	EmbeddingRebuild    *service.EmbeddingRebuilder
+	Reports             *service.VaultDocumentService `optional:"true"`
+	SpanTracker         service.SpanTracker
+	Cleaner             interfaces.ResourceCleaner
 }
 
 // backgroundTaskMiddleware tags every task's context as a background worker
@@ -73,12 +75,18 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux := queue.NewServeMux()
 	mux.Use(chatGPTPermanentFailureMiddleware())
 	mux.Use(backgroundTaskMiddleware())
+	if params.GraphReplica != nil {
+		mux.HandleFunc(graphreplica.TypeSync, params.GraphReplica.HandleSync)
+		mux.HandleFunc(graphreplica.TypeCheck, params.GraphReplica.HandleCheck)
+		mux.HandleFunc(graphreplica.TypeRebuild, params.GraphReplica.HandleRebuild)
+	}
 	mux.HandleFunc(types.TypeDocumentProcess, params.EntryService.ProcessDocument)
 	mux.HandleFunc(types.TypeManualProcess, params.EntryService.ProcessManualUpdate)
 	mux.HandleFunc(types.TypeEntryListDelete, params.EntryService.ProcessEntryListDelete)
 	mux.HandleFunc(types.TypeEntryListReparse, params.EntryService.ProcessEntryListReparse)
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
+	mux.HandleFunc(types.TypeEntryVector, params.EmbeddingRebuild.HandleEntryVector)
 	mux.HandleFunc(types.TypeTopicBackfill, params.TopicService.HandleBackfill)
 	if params.Reports != nil {
 		mux.HandleFunc(types.TypeReportIndex, params.Reports.HandleReportIndex)
@@ -89,6 +97,15 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 		mux.HandleFunc(types.TypeIngestAssetCleanup, assets.HandleIngestAssetCleanup)
 	}
 	config := queue.Config{Pools: resolveWorkerPoolConcurrency(params.SystemSettings), OnDeadLetter: newDeadLetterEntryFailer(params.EntryService, params.SpanTracker)}
+	for name, target := range map[string]*time.Duration{"RELIQUARY_QUEUE_SWEEP_INTERVAL": &config.CheckInterval, "RELIQUARY_QUEUE_DELIVERY_TIMEOUT": &config.DeliveryTimeout} {
+		if raw := os.Getenv(name); raw != "" {
+			d, err := time.ParseDuration(raw)
+			if err != nil || d <= 0 {
+				panic(name + " must be a positive Go duration")
+			}
+			*target = d
+		}
+	}
 	if raw := os.Getenv("RELIQUARY_QUEUE_RECONNECT_ALERT_AFTER"); raw != "" {
 		duration, err := time.ParseDuration(raw)
 		if err != nil || duration <= 0 {
@@ -97,10 +114,10 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 		config.ReconnectAlertAfter = duration
 	}
 	if err := params.Client.Start(context.Background(), mux, config); err != nil {
-		panic(fmt.Errorf("start PostgreSQL task workers: %w", err))
+		panic(fmt.Errorf("start durable operation workers: %w", err))
 	}
-	params.Cleaner.RegisterWithName("PostgresTaskQueue", params.Client.Close)
-	log.Printf("PostgreSQL task workers started: core=%d enrichment=%d maintenance=%d shared=%d", config.Pools.Core, config.Pools.Enrichment, config.Pools.Maintenance, config.Pools.Shared)
+	params.Cleaner.RegisterWithName("RedisTaskQueue", params.Client.Close)
+	log.Printf("Redis task workers started: core=%d enrichment=%d maintenance=%d shared=%d", config.Pools.Core, config.Pools.Enrichment, config.Pools.Maintenance, config.Pools.Shared)
 	return mux
 }
 
@@ -108,7 +125,7 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 // document-related PostgreSQL queue payload. Kept narrow so we don't accidentally
 // depend on the full payload schema and survive future field churn.
 type deadLetterEntryPayload struct {
-	EntryID string `json:"knowledge_id,omitempty"`
+	EntryID string `json:"entry_id,omitempty"`
 	// Attempt threads through DocumentProcess / ManualProcess payloads
 	// so the dead-letter callback can also close the
 	// matching root span as failed. Older in-flight payloads without
@@ -124,7 +141,7 @@ var taskTypesAffectingEntryStatus = map[string]struct{}{
 }
 
 type deadLetterEntryListDeletePayload struct {
-	EntryIDs []string `json:"knowledge_ids,omitempty"`
+	EntryIDs []string `json:"entry_ids,omitempty"`
 }
 
 // newDeadLetterEntryFailer returns the callback wired into the PostgreSQL queue

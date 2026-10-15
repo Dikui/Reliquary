@@ -8,27 +8,32 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
 	"reliquary/internal/vaultpath"
+
+	"gorm.io/gorm"
 )
 
 type TableManifest struct {
-	Rows         int64               `json:"rows"`
-	SHA256       string              `json:"sha256"`
-	Columns      []string            `json:"columns"`
-	Regenerated  bool                `json:"regenerated"`
-	Data         []map[string]any    `json:"data,omitempty"`
-	JSONNulls    map[string][]string `json:"json_nulls,omitempty"`
-	legacySHA256 map[int]string
+	BackupRowHashes map[string]string   `json:"backup_row_hashes,omitempty"`
+	Rows            int64               `json:"rows"`
+	SHA256          string              `json:"sha256"`
+	Columns         []string            `json:"columns"`
+	Regenerated     bool                `json:"regenerated"`
+	Data            []map[string]any    `json:"data,omitempty"`
+	JSONNulls       map[string][]string `json:"json_nulls,omitempty"`
+	legacySHA256    map[int]string
+	legacyCalls     *TableManifest
 }
 type Retrieval struct {
 	Query string   `json:"query"`
 	IDs   []string `json:"ids"`
 }
 type Manifest struct {
+	SchemaVersion      int64 `json:"schema_version,omitempty"`
 	collectionMigrated bool
 	FormatVersion      int                      `json:"format_version"`
 	Tables             map[string]TableManifest `json:"tables"`
@@ -55,7 +60,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	if err != nil {
 		return nil, err
 	}
-	manifest := &Manifest{FormatVersion: FormatVersion, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
+	manifest := &Manifest{SchemaVersion: snapshot.schemaVersion, FormatVersion: FormatVersion, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return nil, err
@@ -66,6 +71,14 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	}
 	for _, table := range sortedTables(rules) {
 		if !present[table] {
+			continue
+		}
+		if rule, backupOnly := BackupOnlyTables[table]; backupOnly {
+			entry, err := backupOnlyTableManifest(ctx, db, table, rule)
+			if err != nil {
+				return nil, err
+			}
+			manifest.Tables[table] = entry
 			continue
 		}
 		entry := TableManifest{Columns: []string{}}
@@ -89,8 +102,8 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			entry.JSONNulls = snapshot.JSONNulls[table]
 			entry.Data = rows
 			entry.legacySHA256 = map[int]string{}
-			for _, version := range []int{1, 2} {
-				legacy, _ := json.Marshal(namedRows(portable, true, version))
+			for version := 1; version < FormatVersion; version++ {
+				legacy, _ := json.Marshal(entryNamedRows(table, portable, true, version))
 				entry.legacySHA256[version] = sum(legacy)
 			}
 		}
@@ -182,7 +195,7 @@ func canonicalRows(table string, rows []map[string]any) []map[string]any {
 				}
 			}
 		case "task_jobs":
-			if (copy["state"] == "active" || copy["state"] == "pending") && copy["completed_at"] == nil {
+			if (copy["state"] == "active" || copy["state"] == "pending" || copy["state"] == "dispatched") && copy["completed_at"] == nil {
 				for _, key := range []string{"claim_token", "worker_pool", "lease_until", "started_at", "updated_at"} {
 					delete(copy, key)
 				}
@@ -204,7 +217,7 @@ func comparableTaskRows(expected, actual []map[string]any) ([]map[string]any, []
 	left, right := canonicalRows("task_jobs", expected), canonicalRows("task_jobs", actual)
 	interrupted := map[string]map[string]any{}
 	for _, row := range expected {
-		if row["state"] == "active" && row["completed_at"] == nil {
+		if (row["state"] == "active" || row["state"] == "dispatched") && row["completed_at"] == nil {
 			interrupted[fmt.Sprint(row["id"])] = row
 		}
 	}
@@ -227,6 +240,9 @@ func comparableTaskRows(expected, actual []map[string]any) ([]map[string]any, []
 // Credential exclusions permit only the documented pause and the restoration
 // of that row's recorded original status. All other business fields stay exact.
 func comparableCredentialRows(table string, expected, actual []map[string]any, requirements []Requirement) ([]map[string]any, []map[string]any) {
+	if table == "task_pending_ops" {
+		return comparableOperationRows(expected, actual)
+	}
 	if table == "task_jobs" {
 		return comparableTaskRows(expected, actual)
 	}
@@ -304,10 +320,12 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 		return result, err
 	}
 	storedFormat := FormatVersion
+	registryVersion := RegistryVersion
 	if saved, err := Load(root); err != nil {
 		result.Differences = append(result.Differences, "replica manifest or asset integrity: "+err.Error())
 	} else {
 		storedFormat = saved.storedFormat
+		registryVersion = saved.registryVersion
 		before, _ := json.Marshal(saved.JSONNulls)
 		after, _ := json.Marshal(snapshot.JSONNulls)
 		if !bytes.Equal(before, after) {
@@ -343,6 +361,9 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 	if err != nil {
 		return result, err
 	}
+	if registryVersion == 0 {
+		delete(expected, "registry.json")
+	}
 	for path, data := range expected {
 		target, err := SafePath(filepath.Join(root, ".reliquary"), path)
 		if err != nil {
@@ -351,6 +372,22 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 		actual, err := os.ReadFile(target)
 		if err != nil || !bytes.Equal(actual, data) {
 			result.Differences = append(result.Differences, ".reliquary/"+path)
+			table := currentTable(strings.TrimSuffix(filepath.Base(path), ".json"))
+			if _, known := Rules[table]; known {
+				decode := func(raw []byte) ([]map[string]any, error) {
+					var rows []map[string]any
+					decoder := json.NewDecoder(bytes.NewReader(raw))
+					decoder.UseNumber()
+					err := decoder.Decode(&rows)
+					return namedRows(rows, false), err
+				}
+				before, beforeErr := decode(data)
+				after, afterErr := decode(actual)
+				if beforeErr == nil && afterErr == nil {
+					left, right := comparableCredentialRows(table, before, after, snapshot.Required)
+					result.Differences = append(result.Differences, rowDifferences(table, left, right)...)
+				}
+			}
 		}
 	}
 	// The log is never rewritten. A corrupted or altered previous record is a
@@ -431,8 +468,22 @@ func CompareManifestWithOptions(expected, actual *Manifest, allowModelChange, al
 func CompareManifestWithSettings(expected, actual *Manifest, options CompareOptions) []string {
 	legacyFormat := expected.FormatVersion
 	expected, actual = currentManifest(expected, actual)
+	fileOrigin := expected
+	registryOrigin := actual
 	expected, actual = projectRetiredTables(expected, actual)
+	expected, actual = projectQueueMigration(expected, actual)
 	expected, actual = projectCollectionSchemaDefaults(expected, actual, legacyFormat)
+	expected, actual = projectMarkdownManifest(expected, actual, fileOrigin, legacyFormat)
+	expected, actual = projectIngestManifest(expected, actual)
+	expected, actual = projectLibraryManifest(expected, actual)
+	expected, actual = projectEntryNamingManifest(expected, actual)
+	expected, actual = projectDiscardManifest(expected, actual)
+	expected, actual = projectVectorManifest(expected, actual)
+	expected, actual = projectFollowManifest(expected, actual)
+	expected, actual = projectSegmentManifest(expected, actual)
+	expected, actual = projectEvaluationManifest(expected, actual)
+	expected, actual = projectModelCallManifest(expected, actual)
+	expected, actual = projectCallContentManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
@@ -447,7 +498,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	currentEmbeddingIDs := map[string]bool{}
 	if allowModelChange {
 		for _, manifest := range []*Manifest{expected, actual} {
-			for _, row := range manifest.Tables["knowledge_bases"].Data {
+			for _, row := range append(append([]map[string]any{}, manifest.Tables["libraries"].Data...), manifest.Tables["spaces"].Data...) {
 				id := fmt.Sprint(row["embedding_model_id"])
 				if tiers, ok := row["model_tiers"].(map[string]any); ok && nonempty(tiers["embedding"]) {
 					id = fmt.Sprint(tiers["embedding"])
@@ -486,15 +537,27 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 		if wanted.Regenerated {
 			continue
 		}
+		var diagnosticLeft, diagnosticRight []map[string]any
 		matches := wanted.SHA256 == current.SHA256
 		rowsMatch := wanted.Rows == current.Rows
+		if _, backupOnly := BackupOnlyTables[table]; backupOnly && (options.AllowModelChange || options.AllowReconfigurationAppend) {
+			if wanted.Rows == 0 || wanted.BackupRowHashes != nil {
+				matches = current.Rows >= wanted.Rows
+				for id, hash := range wanted.BackupRowHashes {
+					if current.BackupRowHashes[id] != hash {
+						matches = false
+					}
+				}
+				rowsMatch = matches
+			}
+		}
 		if (wanted.Data != nil || wanted.Rows == 0) && current.Data != nil {
 			left, right := comparableCredentialRows(table, wanted.Data, current.Data, expected.Required)
 			if options.AllowReconfigurationAppend && table == "api_keys" {
 				right = reconfiguredAPIKeyRows(left, right, expected.Required)
 				rowsMatch = len(left) == len(right)
 			}
-			if allowModelChange && table == "knowledge_bases" {
+			if allowModelChange && (table == "libraries" || table == "spaces") {
 				right = normalizeEmbeddingSelection(left, right)
 			}
 			if allowModelChange && table == "models" {
@@ -524,9 +587,18 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 			before, _ := json.Marshal(left)
 			after, _ := json.Marshal(right)
 			matches = bytes.Equal(before, after)
+			diagnosticLeft, diagnosticRight = left, right
 		}
 		if !rowsMatch || !matches {
 			diffs = append(diffs, "table "+table)
+			diffs = append(diffs, rowDifferences(table, diagnosticLeft, diagnosticRight)...)
+			if wanted.BackupRowHashes != nil {
+				for id, hash := range wanted.BackupRowHashes {
+					if current.BackupRowHashes[id] != hash {
+						diffs = append(diffs, "table "+table+" row "+id+" changed or missing")
+					}
+				}
+			}
 		}
 		beforeNulls, _ := json.Marshal(wanted.JSONNulls)
 		nulls := current.JSONNulls
@@ -568,8 +640,16 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 			if group == "vault" && vaultpath.UserMetadata(file.Path) {
 				continue
 			}
-			if group == "vault" && file.Path == ".reliquary/data/task_jobs.json" {
-				if got, present := current[file.Path]; present && matchingTaskReplicaRecovery(expected.Tables["task_jobs"], actual.Tables["task_jobs"], file, got) {
+			if group == "vault" && file.Path == ".reliquary/registry.json" {
+				got, present := current[file.Path]
+				if present && registryManifestFileMatches(file, fileOrigin) && registryManifestFileMatches(got, registryOrigin) {
+					delete(current, file.Path)
+					continue
+				}
+			}
+			if group == "vault" && (file.Path == ".reliquary/data/task_jobs.json" || file.Path == ".reliquary/data/task_pending_ops.json") {
+				table := strings.TrimSuffix(filepath.Base(file.Path), ".json")
+				if got, present := current[file.Path]; present && matchingTaskReplicaRecovery(expected.Tables[table], actual.Tables[table], file, got) {
 					delete(current, file.Path)
 					continue
 				}
@@ -586,6 +666,9 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 			delete(current, file.Path)
 		}
 		for path := range current {
+			if group == "vault" && path == ".reliquary/registry.json" && registryManifestFileMatches(current[path], actual) {
+				continue
+			}
 			if strings.HasPrefix(path, ".reliquary/config/") || strings.HasPrefix(path, ".reliquary/quarantine/") || path == ".reliquary/manifest.json" || (allowLogAppend && path == ".reliquary/operation_logs.jsonl") || (allowModelChange && rebuildReplicaFile(path)) || (options.AllowReconfigurationAppend && authenticationReplicaFile(path)) {
 				continue
 			}
@@ -621,6 +704,11 @@ func matchingTaskReplicaRecovery(expected, actual TableManifest, before, after F
 		}
 	}
 	left, right := comparableTaskRows(expected.Data, actual.Data)
+	if len(expected.Data) > 0 {
+		if _, modern := expected.Data[0]["delivery"]; modern {
+			left, right = comparableOperationRows(expected.Data, actual.Data)
+		}
+	}
 	leftJSON, _ := json.Marshal(left)
 	rightJSON, _ := json.Marshal(right)
 	return bytes.Equal(leftJSON, rightJSON)
@@ -741,4 +829,37 @@ func normalizeRebuildAppend(table string, expected, actual []map[string]any, mod
 	}
 	sortRows(result)
 	return result
+}
+
+// Recovery can reset interrupted deliveries and publish ready operations while
+// paused. Only transport metadata changes; payload, generation, schedule, retry
+// budget, errors and terminal history are compared exactly.
+func comparableOperationRows(expected, actual []map[string]any) ([]map[string]any, []map[string]any) {
+	left, right := canonicalRows("task_pending_ops", expected), canonicalRows("task_pending_ops", actual)
+	originals := map[string]map[string]any{}
+	for _, row := range left {
+		originals[fmt.Sprint(row["id"])] = row
+	}
+	for _, row := range right {
+		before := originals[fmt.Sprint(row["id"])]
+		if before == nil {
+			continue
+		}
+		unfinished := before["state"] == "active" || before["state"] == "dispatched" || before["state"] == "pending" || before["state"] == "scheduled" || before["state"] == "retry"
+		if unfinished && (row["state"] == "pending" || row["state"] == "dispatched") && before["completed_at"] == nil && row["completed_at"] == nil {
+			oldN, e1 := strconv.ParseInt(fmt.Sprint(before["delivery"]), 10, 64)
+			newN, e2 := strconv.ParseInt(fmt.Sprint(row["delivery"]), 10, 64)
+			if e1 == nil && e2 == nil && oldN > 0 && (newN > oldN || (newN == oldN && row["state"] == "dispatched" && row["dispatched_at"] != nil)) {
+				for _, key := range []string{"state", "delivery", "dispatched_at", "worker_pool", "updated_at"} {
+					if value, present := before[key]; present {
+						row[key] = value
+					} else {
+						delete(row, key)
+					}
+				}
+			}
+		}
+	}
+	sortRows(right)
+	return left, right
 }

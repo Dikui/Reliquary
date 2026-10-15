@@ -14,34 +14,34 @@ import (
 	"reliquary/internal/types"
 )
 
-type stubInitializationKBLookup struct {
-	kbs map[string]*types.KnowledgeBase
+type stubInitializationLibraryLookup struct {
+	libraries map[string]*types.Library
 }
 
-func (s *stubInitializationKBLookup) GetKnowledgeBaseByID(_ context.Context, id string) (*types.KnowledgeBase, error) {
-	if kb, ok := s.kbs[id]; ok {
-		return kb, nil
+func (s *stubInitializationLibraryLookup) GetLibraryByID(_ context.Context, id string) (*types.Library, error) {
+	if library, ok := s.libraries[id]; ok {
+		return library, nil
 	}
-	return nil, apprepo.ErrKnowledgeBaseNotFound
+	return nil, apprepo.ErrLibraryNotFound
 }
 
-func newInitializationRouteTestEngine(t *testing.T, callerSpaceID uint64, kbLookup *stubInitializationKBLookup) *gin.Engine {
-	return newKBRouteTestEngine(t, callerSpaceID, kbLookup, func(r *gin.RouterGroup, guards *accessGuards) {
+func newInitializationRouteTestEngine(t *testing.T, callerSpaceID uint64, libraryLookup *stubInitializationLibraryLookup) *gin.Engine {
+	return newLibraryRouteTestEngine(t, callerSpaceID, libraryLookup, func(r *gin.RouterGroup, guards *accessGuards) {
 		RegisterInitializationRoutes(r, &handler.InitializationHandler{}, guards)
 	})
 }
 
-func newKBRouteTestEngine(
+func newLibraryRouteTestEngine(
 	t *testing.T,
 	callerSpaceID uint64,
-	kbLookup *stubInitializationKBLookup,
+	libraryLookup *stubInitializationLibraryLookup,
 	register func(r *gin.RouterGroup, guards *accessGuards),
 ) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	guards := &accessGuards{
-		kbService: kbLookup,
+		libraryService: libraryLookup,
 	}
 
 	r := gin.New()
@@ -58,25 +58,25 @@ func newKBRouteTestEngine(
 	return r
 }
 
-func spaceKBLookupFixture() *stubInitializationKBLookup {
-	return &stubInitializationKBLookup{
-		kbs: map[string]*types.KnowledgeBase{
-			"kb-allowed": {ID: "kb-allowed", SpaceID: 1, Type: types.KnowledgeBaseTypeDocument},
-			"kb-other":   {ID: "kb-other", SpaceID: 1, Type: types.KnowledgeBaseTypeDocument},
+func spaceLibraryLookupFixture() *stubInitializationLibraryLookup {
+	return &stubInitializationLibraryLookup{
+		libraries: map[string]*types.Library{
+			"library-allowed": {ID: "library-allowed", SpaceID: 1, Type: types.LibraryTypeDocument},
+			"library-other":   {ID: "library-other", SpaceID: 1, Type: types.LibraryTypeDocument},
 		},
 	}
 }
 
 func TestRemovedInitializationConfigRouteReturns404(t *testing.T) {
-	kbLookup := &stubInitializationKBLookup{
-		kbs: map[string]*types.KnowledgeBase{
-			"kb-victim": {ID: "kb-victim", SpaceID: 999},
+	libraryLookup := &stubInitializationLibraryLookup{
+		libraries: map[string]*types.Library{
+			"library-victim": {ID: "library-victim", SpaceID: 999},
 		},
 	}
-	engine := newInitializationRouteTestEngine(t, 1, kbLookup)
+	engine := newInitializationRouteTestEngine(t, 1, libraryLookup)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/initialization/config/kb-victim", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/initialization/config/library-victim", nil)
 	engine.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusNotFound, rec.Code, "body=%s", rec.Body.String())
 }

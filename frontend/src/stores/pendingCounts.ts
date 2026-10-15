@@ -1,7 +1,7 @@
 import { onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { listPendingEntry } from '@/api/entry-review'
-import { listIncompleteArticles } from '@/api/ingest'
+import { listIncompleteEntrys } from '@/api/ingest'
 
 export const usePendingCountsStore = defineStore('pending-counts', () => {
   const total = ref<number | null>(null), loading = ref(false)
@@ -15,8 +15,7 @@ export const usePendingCountsStore = defineStore('pending-counts', () => {
     try {
       const responses = await Promise.all([
         listPendingEntry({ kind: 'intake', page: 1, page_size: 1 }),
-        listPendingEntry({ kind: 'processing', page: 1, page_size: 1 }),
-        listIncompleteArticles({ page: 1, page_size: 1, include_attempted: true }),
+        listIncompleteEntrys({ page: 1, page_size: 1, include_attempted: true }),
       ])
       if (responses.some(response => !response.success || !Number.isSafeInteger(response.total) || response.total < 0)) return
       const sum = responses.reduce((value, response) => value + response.total, 0)

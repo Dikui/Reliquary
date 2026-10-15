@@ -22,12 +22,12 @@ test('space access routes through the space-scoped proxy', () => {
   assert.equal(request?.url, `/files?file_path=${encodeURIComponent(RESOURCE)}`)
 })
 
-test('knowledge-base access routes through the KB-scoped proxy', () => {
-  const request = buildProtectedFileRequest(RESOURCE, { mode: 'knowledgeBase', kbId: 'kb 1' })
+test('library access routes through the Library-scoped proxy', () => {
+  const request = buildProtectedFileRequest(RESOURCE, { mode: 'library', libraryId: 'library 1' })
 
   assert.equal(
     request?.url,
-    `/api/v1/knowledge-bases/kb%201/files?file_path=${encodeURIComponent(RESOURCE)}`,
+    `/api/v1/libraries/library%201/files?file_path=${encodeURIComponent(RESOURCE)}`,
   )
 })
 
@@ -39,19 +39,19 @@ test('non-storage sources are not proxied', () => {
 })
 
 test('a component scope refines the default space plane', () => {
-  const override: ProtectedFileAccessContext = { mode: 'knowledgeBase', kbId: 'kb-1' }
+  const override: ProtectedFileAccessContext = { mode: 'library', libraryId: 'library-1' }
 
   assert.deepEqual(resolveProtectedFileAccess(override), override)
   assert.deepEqual(resolveProtectedFileAccess(), { mode: 'space' })
   assert.deepEqual(
-    resolveProtectedFileAccess({ mode: 'knowledgeBase', kbId: '  ' }),
+    resolveProtectedFileAccess({ mode: 'library', libraryId: '  ' }),
     { mode: 'space' },
   )
 })
 
 test('all file proxies are recognized as protected proxy paths', () => {
   assert.equal(isProtectedFileProxyPath('/files'), true)
-  assert.equal(isProtectedFileProxyPath('/api/v1/knowledge-bases/kb-1/files'), true)
+  assert.equal(isProtectedFileProxyPath('/api/v1/libraries/library-1/files'), true)
   assert.equal(isProtectedFileProxyPath('/api/v1/entries/article-id/vault-attachment'), true)
 })
 
@@ -64,7 +64,7 @@ test('vault attachments use the authenticated article proxy with their relative 
     const relative = '../../attachments/article-id/图表.png'
     const source = `vault://article-id/${encodeURIComponent(relative)}`
     assert.equal(isProviderFileURL(source), true)
-    for (const access of [{ mode: 'space' }, { mode: 'knowledgeBase', kbId: 'kb-1' }] as ProtectedFileAccessContext[]) {
+    for (const access of [{ mode: 'space' }, { mode: 'library', libraryId: 'library-1' }] as ProtectedFileAccessContext[]) {
       const request = buildProtectedFileRequest(source, access)!
       const url = new URL(request.url, 'http://localhost')
       assert.equal(url.pathname, '/api/v1/entries/article-id/vault-attachment')

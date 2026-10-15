@@ -3,18 +3,17 @@ package service
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
-	"github.com/pgvector/pgvector-go"
 
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+
+	"github.com/stretchr/testify/require"
 )
 
 // The fixture is deterministic across calls and produces different vectors
@@ -116,7 +115,7 @@ func TestArticleChunkPrefixDoesNotEnterStoredBodyOrFullText(t *testing.T) {
 
 func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 		newMultipartFileHeader(t, "Undated article.md", "# Independent observation\n\nundatedprefixfixture exact source observations."),
 		map[string]string{"publisher": "Undated publisher", "original_url": "https://example.org/undated"},
 		nil, "", types.ChannelWeb, nil)
@@ -143,62 +142,6 @@ func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	require.Nil(t, date.SearchPublishedAt)
 }
 
-func TestArticleEmbeddingGeneratesForSummaryOnlyAndRecomputesAfterReprocessing(t *testing.T) {
-	h, e := newArticleIndexingHarness(t)
-	h.processor.output = validProcessingFixture("tutorial")
-	article := h.upload(t, "Summary vector", "bodyonlyfixture this tutorial body is discarded.")
-	var chunkCount, bodyVectorCount int64
-	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", article.ID).Count(&chunkCount).Error)
-	require.Zero(t, chunkCount)
-	require.NoError(t, h.db.Table("embeddings").Where("entry_id=?", article.ID).Count(&bodyVectorCount).Error)
-	require.Zero(t, bodyVectorCount)
-	var before struct {
-		ContentHash string
-		Embedding   pgvector.HalfVector
-	}
-	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).First(&before).Error)
-	wantInput := article.Title + "\n" + article.StructuredSummary.RenderText()
-	require.Contains(t, e.recorded(), wantInput)
-	require.Equal(t, vaultContentHash(wantInput), before.ContentHash)
-	count := len(e.recorded())
-	require.NoError(t, indexArticleEmbedding(h.ctx, h.db, h.service.modelService, h.kb, article))
-	require.Len(t, e.recorded(), count, "unchanged input retains the existing vector")
-	var output map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(h.processor.output), &output))
-	output["summary"].(map[string]interface{})["overview"] = "reprocessedfixture updated tutorial observations."
-	raw, err := json.Marshal(output)
-	require.NoError(t, err)
-	h.processor.output = string(raw)
-	_, err = h.service.ReparseEntry(h.ctx, article.ID, nil)
-	require.NoError(t, err)
-	h.drain(t)
-	article = h.article(t, article.ID)
-	require.True(t, article.Incomplete)
-	require.Contains(t, article.IngestMissing()[0].Reason, "重新处理需要正文")
-	intake, err := article.IntakeMetadata()
-	require.NoError(t, err)
-	h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
-	ctx := types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalWebUser, ID: "personal-user"})
-	result, err := h.service.Ingest(ctx, &types.IngestRequest{URL: intake.SourceInfo.OriginalURL, Acquisition: "verbatim", Publisher: "Acme", Content: "bodyonlyfixture this tutorial body is supplied by an external tool."})
-	require.NoError(t, err)
-	require.Equal(t, article.ID, result.EntryID)
-	h.drain(t)
-	article = h.article(t, article.ID)
-	var after struct {
-		ContentHash string
-		Embedding   pgvector.HalfVector
-	}
-	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).First(&after).Error)
-	require.NotEqual(t, before.ContentHash, after.ContentHash)
-	require.NotEqual(t, before.Embedding.Slice(), after.Embedding.Slice())
-	require.Contains(t, e.recorded(), article.Title+"\n"+article.StructuredSummary.RenderText())
-	var hits int64
-	require.NoError(t, h.db.Table("entries").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, "bodyonlyfixture").Count(&hits).Error)
-	require.Zero(t, hits, "summary-only body is not full-text indexed")
-	require.NoError(t, h.db.Table("entries").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, "reprocessedfixture").Count(&hits).Error)
-	require.EqualValues(t, 1, hits)
-}
-
 func TestArticleTitleVectorChangeRollsBackWhenEmbeddingFails(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
 	article := h.upload(t, "Original title", "Measured deployment details and original observations.")
@@ -222,9 +165,9 @@ func TestArticleTitleVectorChangeRollsBackWhenEmbeddingFails(t *testing.T) {
 
 func TestUnprocessedArticleTitleUpdateDoesNotRequireEmbedding(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article := &types.Entry{ID: "pending-article", SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID,
+	article := &types.Entry{ID: "pending-article", SpaceID: h.library.SpaceID, LibraryID: h.library.ID,
 		Type: "url", SourceKind: "article", Title: "Pending title", Source: "https://example.org/pending",
-		ParseStatus: types.ParseStatusPending, EnableStatus: "enabled", ProcessingMode: types.ProcessingModeFull}
+		ParseStatus: types.ParseStatusPending, EnableStatus: "enabled"}
 	require.NoError(t, h.db.Create(article).Error)
 	h.service.modelService = nil
 	require.NoError(t, h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Title: "Edited pending title"}))
@@ -241,7 +184,7 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 	models := indexingRecordingModels{articleProcessingModels: h.service.modelService.(articleProcessingModels), embedder: e}
 	h.service.modelService = models
 	h.service.chunkService.(*chunkService).modelService = models
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Kind: "mine", Acquisition: "verbatim", Title: "Personal notebook", Content: "# Personal notebook\n\npersonalprefixfixture preserved observations with complete supporting evidence."})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "mine", Acquisition: "verbatim", Title: "Personal notebook", Content: "# Personal notebook\n\npersonalprefixfixture preserved observations with complete supporting evidence."})
 	require.NoError(t, err)
 	h.drain(t)
 	mine := h.article(t, result.EntryID)

@@ -3,9 +3,19 @@ package service
 import (
 	"sort"
 	"strconv"
+	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"reliquary/internal/types"
 )
+
+// Isolated entities are part of the full projection too. Keep their notification
+// in the identity transaction, even when no relation can notify an endpoint.
+func notifyEntityProjection(tx *gorm.DB, spaceID uint64, entityID string) error {
+	return tx.Create(&types.GraphPendingSync{ID: uuid.NewString(), SpaceID: spaceID,
+		EntityID: entityID, RelationVersion: 1, CreatedAt: time.Now()}).Error
+}
 
 // Maintenance mutations take the exclusive barrier. Ordinary persistence takes
 // the shared barrier, allowing concurrent messages while excluding merge/prune.

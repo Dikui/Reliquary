@@ -7,6 +7,7 @@ import (
 
 	ollamaapi "github.com/ollama/ollama/api"
 	"reliquary/internal/logger"
+	"reliquary/internal/types"
 	"reliquary/internal/utils/ollama"
 )
 
@@ -43,7 +44,7 @@ func NewOllamaEmbedder(baseURL,
 	ollamaService *ollama.OllamaService,
 ) (*OllamaEmbedder, error) {
 	if modelName == "" {
-		modelName = "nomic-embed-text"
+		modelName = "qwen3-embedding:0.6b"
 	}
 
 	if truncatePromptTokens == 0 {
@@ -63,7 +64,14 @@ func NewOllamaEmbedder(baseURL,
 // ensureModelAvailable ensures that the model is available
 func (e *OllamaEmbedder) ensureModelAvailable(ctx context.Context) error {
 	logger.GetLogger(ctx).Infof("Ensuring model %s is available", e.modelName)
-	return e.ollamaService.EnsureModelAvailable(ctx, e.modelName)
+	available, err := e.ollamaService.IsModelAvailable(ctx, e.modelName)
+	if err != nil {
+		return err
+	}
+	if !available {
+		return fmt.Errorf("Ollama model %s is not installed", e.modelName)
+	}
+	return nil
 }
 
 func (e *OllamaEmbedder) SetSupportsDimensionOverride(supported bool) {
@@ -88,7 +96,7 @@ func (e *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 func (e *OllamaEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 	// Ensure model is available
 	if err := e.ensureModelAvailable(ctx); err != nil {
-		return nil, err
+		return nil, &types.VectorDeferredError{Cause: err, RetryAt: time.Now().Add(time.Minute)}
 	}
 
 	// Create request
@@ -112,7 +120,7 @@ func (e *OllamaEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]fl
 	startTime := time.Now()
 	resp, err := e.ollamaService.Embeddings(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get embedding vectors: %w", err)
+		return nil, &types.VectorDeferredError{Cause: fmt.Errorf("failed to get embedding vectors: %w", err), RetryAt: time.Now().Add(time.Minute)}
 	}
 
 	logger.GetLogger(ctx).Debugf("Embedding vector retrieval took: %v", time.Since(startTime))

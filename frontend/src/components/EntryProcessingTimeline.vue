@@ -3,9 +3,11 @@ import { ref, reactive, onMounted, onBeforeUnmount, watch, computed, nextTick } 
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import ModelCallSummary from './ModelCallSummary.vue'
+import ModelCallContentViewer from './ModelCallContentViewer.vue'
 import { modelCallsFromSpan } from '@/utils/modelCalls'
 import { copyWithToast } from '@/utils/clipboard'
-import { getEntrySpans, reparseEntry, cancelEntryParse, getEntryDetails } from '@/api/knowledge-base'
+import { processingSpanLabel } from '@/utils/processingSpanLabel'
+import { getEntrySpans, reparseEntry, cancelEntryParse, getEntryDetails } from '@/api/library'
 import {
   entrySpansPayloadHasTrace,
   type EntryTraceNode,
@@ -150,7 +152,10 @@ const currentStageLabel = computed(() => {
   const running = stages.value.find((s) => s.status === 'running')
   const failed = stages.value.find((s) => s.status === 'failed')
   const target = failed || running || stages.value.find((s) => s.status === 'pending') || stages.value[stages.value.length - 1]
-  return target ? t(`knowledgeStages.stage.${target.name}`) : ''
+  if (!target) return ''
+  const activeSegment = target.children?.find((node) => node.status === 'running' || node.status === 'failed')
+  const progress = activeSegment ? segmentLabel(activeSegment) : ''
+  return [t(`knowledgeStages.stage.${target.name}`), progress].filter(Boolean).join(' · ')
 })
 
 const currentStageIndex = computed(() => {
@@ -427,10 +432,10 @@ async function onCancelParseConfirm() {
   cancelling.value = true
   try {
     await cancelEntryParse(id)
-    MessagePlugin.success(t('knowledgeBase.cancelParseSubmitted'))
+    MessagePlugin.success(t('library.cancelParseSubmitted'))
     await fetchSpans({ manual: true })
   } catch (e: any) {
-    MessagePlugin.error(e?.message || t('knowledgeBase.cancelParseFailed'))
+    MessagePlugin.error(e?.message || t('library.cancelParseFailed'))
   } finally {
     cancelling.value = false
   }
@@ -867,10 +872,15 @@ function localizedStatus(status: string): string {
   return localized === key ? status : localized
 }
 
+function segmentLabel(node: SpanNode): string {
+  const match = /^(?:review|processing)\.segment\.(\d+)\/(\d+)$/.exec(node.name)
+  return match ? processingSpanLabel(node.name, t) : ''
+}
+
 function rowLabel(row: FlatRow): string {
   if (row.isRoot) return t('knowledgeStages.root')
   if (row.isStage) return t(`knowledgeStages.stage.${row.node.name}`)
-  return row.node.name
+  return processingSpanLabel(row.node.name, t)
 }
 
 function rowKindLabel(row: FlatRow): string {
@@ -1155,9 +1165,14 @@ watch(
   { immediate: true },
 )
 
+function hasCallViewer(node: SpanNode): boolean {
+  return !!node.span_id && (node.kind === 'generation' || ['docreader', 'processing', 'embedding'].includes(node.name) || modelCallsFromSpan(node).length > 0)
+}
+
 function tabHasContent(tab: 'input' | 'output' | 'metadata'): boolean {
   const node = selectedRow.value?.node
   if (!node) return false
+  if (tab !== 'metadata' && hasCallViewer(node)) return true
   return hasContent((node as any)[tab])
 }
 
@@ -1235,26 +1250,11 @@ function getFileTypeFromName(name: string): string {
   return dot >= 0 ? clean.slice(dot + 1) : ''
 }
 
-function formatParserRulesForCurrentFile(
-  rules: Array<{ file_types?: string[]; engine?: string }>,
-): string {
-  const currentType = currentEntryFileType.value
-  if (currentType) {
-    const matched = rules.find((rule) =>
-      (rule.file_types || []).some((ft) => normalizeFileType(ft) === currentType),
-    )
-    if (matched?.engine) {
-      return `${currentType}→${matched.engine}`
-    }
-  }
-  return rules.map(r => `${(r.file_types || []).join('/')}→${r.engine}`).join(', ')
-}
-
 // Human-readable summary of the per-upload parse overrides stored in
-// entry.metadata.process_overrides. Empty overrides → KB defaults.
+// entry.metadata.process_overrides. Empty overrides → Library defaults.
 const processConfigLines = computed<string[]>(() => {
   const o = processOverrides.value
-  if (!o) return [t('knowledgeStages.processConfig.kbDefault')]
+  if (!o) return [t('knowledgeStages.processConfig.libraryDefault')]
   const onOff = (v: boolean) => (v ? t('knowledgeStages.processConfig.on') : t('knowledgeStages.processConfig.off'))
   const lines: string[] = []
 
@@ -1268,12 +1268,7 @@ const processConfigLines = computed<string[]>(() => {
     if (parts.length) lines.push(`${t('knowledgeStages.processConfig.chunking')}: ${parts.join(' · ')}`)
   }
 
-  const rules = o.parser_engine_rules || cc?.parser_engine_rules
-  if (rules?.length) {
-    lines.push(`${t('knowledgeStages.processConfig.parser')}: ${formatParserRulesForCurrentFile(rules)}`)
-  }
-
-  return lines.length ? lines : [t('knowledgeStages.processConfig.kbDefault')]
+  return lines.length ? lines : [t('knowledgeStages.processConfig.libraryDefault')]
 })
 </script>
 
@@ -1343,15 +1338,15 @@ const processConfigLines = computed<string[]>(() => {
               <t-popconfirm
                 v-if="canCancelParse"
                 theme="warning"
-                :content="t('knowledgeBase.cancelParseConfirmBody', { title: props.docTitle || props.entryId })"
-                :confirm-btn="{ content: t('knowledgeBase.cancelParse'), theme: 'danger' }"
+                :content="t('library.cancelParseConfirmBody', { title: props.docTitle || props.entryId })"
+                :confirm-btn="{ content: t('library.cancelParse'), theme: 'danger' }"
                 :cancel-btn="{ content: t('common.cancel') }"
                 placement="bottom"
                 @confirm="onCancelParseConfirm"
               >
                 <button type="button" class="kp-icon-btn kp-icon-btn-danger"
                   :class="{ 'kp-icon-btn-spin': cancelling }" :disabled="cancelling"
-                  :title="t('knowledgeBase.cancelParse')" :aria-label="t('knowledgeBase.cancelParse')"
+                  :title="t('library.cancelParse')" :aria-label="t('library.cancelParse')"
                   @click.stop>
                   <t-icon :name="cancelling ? 'loading' : 'close-circle'" size="15px" />
                 </button>
@@ -1654,6 +1649,7 @@ const processConfigLines = computed<string[]>(() => {
 
               <!-- Input / Output / Metadata tabs -->
               <template v-else-if="detailTab === 'input' || detailTab === 'output' || detailTab === 'metadata'">
+                <ModelCallContentViewer v-if="detailTab !== 'metadata' && hasCallViewer(selectedRow.node)" :entry-id="entryId" :processing-attempt="data?.attempt" :span-id="selectedRow.node.span_id" :direction="detailTab" />
                 <div v-if="!tabHasContent(detailTab)" class="kp-detail-empty">
                   <span>{{ detailTab === 'metadata' ? t('knowledgeStages.detail.metadataEmpty') :
                     t('knowledgeStages.detail.empty') }}</span>
@@ -3187,5 +3183,17 @@ const processConfigLines = computed<string[]>(() => {
   line-height: 1.6;
   color: var(--td-text-color-secondary);
   word-break: break-word;
+}
+</style>
+
+<style scoped lang="less">
+@media (max-width: 600px) {
+  .kp-head { padding: 12px; }
+  .kp-head-toolbar { flex-wrap: wrap; }
+  .kp-row { grid-template-columns: minmax(0, 1fr) 54px; height: auto; min-height: 40px; padding: 6px 12px; }
+  .kp-name-inner { gap: 4px; }
+  .kp-name-text { white-space: normal; overflow-wrap: anywhere; }
+  .kp-name-kind, .kp-cell-bar, .kp-ruler { display: none; }
+  .kp-detail-name { white-space: normal; overflow-wrap: anywhere; }
 }
 </style>

@@ -1,26 +1,28 @@
 import type { Entity } from '@/api/entities'
 import type { Acquisition, MissingMaterial } from './ingest'
 
-export const CONTENT_TYPES = ['event', 'opinion', 'research', 'tutorial', 'case', 'reference'] as const
+export const CONTENT_TYPES = ['event', 'opinion', 'research', 'tutorial', 'case', 'reference', 'other'] as const
 export type ContentType = typeof CONTENT_TYPES[number]
 export interface StructuredSummary { overview: string; points: string[]; key_terms: string[] }
 export interface EntryTopic { id: string; name: string; description?: string }
 export interface ClassifiedEntry {
+  has_update?: boolean
+  latest_entry_id?: string
+  library_id?: string
+  library_name?: string
+ library_content_types?: { name: string; enabled: boolean; extract_graph: boolean; position: number }[]
+ image_descriptions?: { url: string; description?: string; skip_reason?: string; ordinal: number; locations: { paragraph: number; start: number; end: number }[] }[]
   acquisition?: Acquisition | ''
   incomplete?: boolean
   external_completion_attempted?: boolean
   missing_materials?: MissingMaterial[]
-  related_article_id?: string
+  related_entry_id?: string
   starred?: boolean
+  cannot_be_fact?: boolean
   source_unverified?: boolean
-  content_type_uncertain?: boolean
-  processing_review_status?: string
-  processing_review_content_type?: string
-  processing_review_reason?: string
   source_kind?: 'article' | 'mine' | 'report'
   vault_path?: string
   content_type?: ContentType | string | null
-  processing_mode?: 'full' | 'summary_only'
   structured_summary?: StructuredSummary | null
   description?: string
   source?: string

@@ -1,14 +1,12 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/types"
 )
@@ -26,8 +24,8 @@ func TestChunkOverlapExplicitZeroAndOmittedDefaults(t *testing.T) {
 		var reloaded types.ChunkingConfig
 		require.NoError(t, reloaded.Scan(stored))
 		require.True(t, reloaded.ChunkOverlapSet)
-		kb := &types.KnowledgeBase{ChunkingConfig: types.ChunkingConfig{ChunkOverlap: 30}}
-		eff := ResolveProcessConfig(kb, &types.EntryProcessOverrides{ChunkingConfig: &reloaded})
+		library := &types.Library{ChunkingConfig: types.ChunkingConfig{ChunkOverlap: 30}}
+		eff := ResolveProcessConfig(library, &types.EntryProcessOverrides{ChunkingConfig: &reloaded})
 		cfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
 		require.Zero(t, cfg.ChunkOverlap)
 		text := strings.Repeat("An individual structured record.\n\n", 20)
@@ -45,8 +43,8 @@ func TestChunkOverlapExplicitZeroAndOmittedDefaults(t *testing.T) {
 	t.Run("omitted", func(t *testing.T) {
 		var override types.ChunkingConfig
 		require.NoError(t, json.Unmarshal([]byte(`{"chunk_size":100}`), &override))
-		kb := &types.KnowledgeBase{ChunkingConfig: types.ChunkingConfig{ChunkOverlap: 30}}
-		eff := ResolveProcessConfig(kb, &types.EntryProcessOverrides{ChunkingConfig: &override})
+		library := &types.Library{ChunkingConfig: types.ChunkingConfig{ChunkOverlap: 30}}
+		eff := ResolveProcessConfig(library, &types.EntryProcessOverrides{ChunkingConfig: &override})
 		require.Equal(t, 30, buildSplitterConfigFromChunking(eff.ChunkingConfig).ChunkOverlap)
 		stored, err := (types.ChunkingConfig{}).Value()
 		require.NoError(t, err)
@@ -65,13 +63,13 @@ func TestChunkOverlapExplicitZeroAndOmittedDefaults(t *testing.T) {
 func TestResolveProcessConfig_OverridesChunkSize(t *testing.T) {
 	t.Parallel()
 
-	kb := &types.KnowledgeBase{
+	library := &types.Library{
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50},
 	}
 	overrides := &types.EntryProcessOverrides{
 		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 2048},
 	}
-	eff := ResolveProcessConfig(kb, overrides)
+	eff := ResolveProcessConfig(library, overrides)
 	require.Equal(t, 2048, eff.ChunkingConfig.ChunkSize)
 	require.Equal(t, 50, eff.ChunkingConfig.ChunkOverlap)
 }
@@ -79,33 +77,33 @@ func TestResolveProcessConfig_OverridesChunkSize(t *testing.T) {
 func TestResolveProcessConfig_OverrideTogglesParentChild(t *testing.T) {
 	t.Parallel()
 
-	// KB has parent-child on; override snapshot turns it off.
-	kbOn := &types.KnowledgeBase{
+	// Library has parent-child on; override snapshot turns it off.
+	libraryOn := &types.Library{
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, EnableParentChild: true},
 	}
-	effOff := ResolveProcessConfig(kbOn, &types.EntryProcessOverrides{
+	effOff := ResolveProcessConfig(libraryOn, &types.EntryProcessOverrides{
 		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 512, EnableParentChild: false},
 	})
 	require.False(t, effOff.ChunkingConfig.EnableParentChild)
 
-	// KB has parent-child off; override snapshot turns it on.
-	kbOff := &types.KnowledgeBase{
+	// Library has parent-child off; override snapshot turns it on.
+	libraryOff := &types.Library{
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, EnableParentChild: false},
 	}
-	effOn := ResolveProcessConfig(kbOff, &types.EntryProcessOverrides{
+	effOn := ResolveProcessConfig(libraryOff, &types.EntryProcessOverrides{
 		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 512, EnableParentChild: true},
 	})
 	require.True(t, effOn.ChunkingConfig.EnableParentChild)
 }
 
-func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
+func TestResolveProcessConfig_NilOverridesUsesLibraryDefaults(t *testing.T) {
 	t.Parallel()
 
-	kb := &types.KnowledgeBase{
+	library := &types.Library{
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50},
 	}
 
-	eff := ResolveProcessConfig(kb, nil)
+	eff := ResolveProcessConfig(library, nil)
 
 	require.Equal(t, 512, eff.ChunkingConfig.ChunkSize)
 	require.Equal(t, 50, eff.ChunkingConfig.ChunkOverlap)
@@ -114,164 +112,18 @@ func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
 func TestBuildSplitterConfigFromChunking_UsesEffectiveChunkingConfig(t *testing.T) {
 	t.Parallel()
 
-	kb := &types.KnowledgeBase{
+	library := &types.Library{
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50, Strategy: "token"},
 	}
 	overrides := &types.EntryProcessOverrides{
 		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 1500, ChunkOverlap: 120, Strategy: "character"},
 	}
-	eff := ResolveProcessConfig(kb, overrides)
+	eff := ResolveProcessConfig(library, overrides)
 	cfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
 
 	require.Equal(t, 1500, cfg.ChunkSize)
 	require.Equal(t, 120, cfg.ChunkOverlap)
 	require.Equal(t, "character", cfg.Strategy)
-}
-
-func TestEffectiveChunkingConfig_ResolveParserEngineFromOverrides(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		ChunkingConfig: types.ChunkingConfig{
-			ParserEngineRules: []types.ParserEngineRule{
-				{FileTypes: []string{"pdf"}, Engine: "anydoc"},
-			},
-		},
-	}
-	overrides := &types.EntryProcessOverrides{
-		ParserEngineRules: []types.ParserEngineRule{
-			{FileTypes: []string{"pdf"}, Engine: "mineru"},
-			{
-				FileTypes: []string{"xlsx", "xls"},
-				Engine:    "anydoc",
-			},
-		},
-	}
-	eff := ResolveProcessConfig(kb, overrides)
-	require.Equal(t, "mineru", eff.ChunkingConfig.ResolveParserEngine("pdf"))
-	xlsxRule := eff.ChunkingConfig.ResolveParserEngineRule("xlsx")
-	require.NotNil(t, xlsxRule)
-	require.Equal(t, "anydoc", xlsxRule.Engine)
-}
-
-func TestResolveProcessConfig_ParserEngineRulesReplaced(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		ChunkingConfig: types.ChunkingConfig{
-			ParserEngineRules: []types.ParserEngineRule{
-				{FileTypes: []string{"pdf"}, Engine: "anydoc"},
-			},
-		},
-	}
-	overrides := &types.EntryProcessOverrides{
-		ParserEngineRules: []types.ParserEngineRule{
-			{FileTypes: []string{"docx"}, Engine: "custom"},
-		},
-	}
-	eff := ResolveProcessConfig(kb, overrides)
-	require.Len(t, eff.ChunkingConfig.ParserEngineRules, 1)
-	require.Equal(t, []string{"docx"}, eff.ChunkingConfig.ParserEngineRules[0].FileTypes)
-	require.Equal(t, "custom", eff.ChunkingConfig.ParserEngineRules[0].Engine)
-}
-
-func TestResolveProcessConfig_PreservesKnowledgeBasePromptInstructions(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		ChunkingConfig: types.ChunkingConfig{TableMetadataInstructions: "table context"},
-	}
-	overrides := &types.EntryProcessOverrides{
-		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 256},
-	}
-
-	eff := ResolveProcessConfig(kb, overrides)
-	require.Equal(t, "table context", eff.ChunkingConfig.TableMetadataInstructions)
-}
-
-func TestValidateProcessOverrides_RejectsOversizedInstructions(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{}
-	overrides := &types.EntryProcessOverrides{ChunkingConfig: &types.ChunkingConfig{TableMetadataInstructions: strings.Repeat("a", types.MaxCustomPromptInstructionsLength+1)}}
-	err := ValidateProcessOverrides(context.Background(), kb, overrides, []string{"txt"})
-	require.Error(t, err)
-	var badReq *werrors.AppError
-	require.ErrorAs(t, err, &badReq)
-}
-
-func TestValidateProcessOverrides_NilOverrides(t *testing.T) {
-	t.Parallel()
-
-	err := ValidateProcessOverrides(context.Background(), &types.KnowledgeBase{}, nil, []string{"png"})
-	require.NoError(t, err)
-}
-
-func TestValidateProcessOverrides_NonMediaFileTypes(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{}
-	err := ValidateProcessOverrides(context.Background(), kb, &types.EntryProcessOverrides{}, []string{"pdf", "txt"})
-	require.NoError(t, err)
-}
-
-func TestResolveFileImportProcessConfig_SpreadsheetAllowedWithoutOverrides(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{ChunkingConfig: types.ChunkingConfig{ChunkSize: 512}}
-	for _, ext := range []string{"xlsx", "xls", "csv"} {
-		eff, err := resolveFileImportProcessConfig(context.Background(), kb, ext, nil, nil)
-		require.NoErrorf(t, err, "ext=%s", ext)
-		require.Equal(t, 512, eff.ChunkingConfig.ChunkSize)
-	}
-}
-
-func TestResolveFileImportProcessConfig_RejectsUnsupportedAndUndeterminable(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{}
-	for _, ext := range []string{"exe", "mp4", "", unknownFileType} {
-		_, err := resolveFileImportProcessConfig(context.Background(), kb, ext, nil, nil)
-		require.Errorf(t, err, "ext=%s should be rejected", ext)
-	}
-}
-
-// ApplyEntryProcessOverrides stays scoped to overrides: import-time file
-// type gating belongs to resolveFileImportProcessConfig, so callers that pass
-// no overrides (reparse, connector sync) keep their existing behaviour.
-func TestApplyEntryProcessOverrides_NoOverridesSkipsImportGate(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{}
-	entry := &types.Entry{}
-	_, err := ApplyEntryProcessOverrides(context.Background(), kb, entry, nil, []string{"png"}, nil)
-	require.NoError(t, err)
-}
-
-func TestMergeParserEngineOverrides(t *testing.T) {
-	t.Parallel()
-
-	// 1. Both nil/empty
-	merged := MergeParserEngineOverrides(nil, nil)
-	require.Empty(t, merged)
-
-	// 2. Space only
-	merged = MergeParserEngineOverrides(map[string]string{"k1": "v1"}, nil)
-	require.Equal(t, map[string]string{"k1": "v1"}, merged)
-
-	// 3. Upload only
-	merged = MergeParserEngineOverrides(nil, map[string]string{"k2": "v2"})
-	require.Equal(t, map[string]string{"k2": "v2"}, merged)
-
-	// 4. Overlap priority (upload override should take priority over space config)
-	space := map[string]string{"k1": "space_val", "k2": "v2"}
-	upload := map[string]string{"k1": "upload_val", "k3": "v3"}
-	merged = MergeParserEngineOverrides(space, upload)
-	require.Equal(t, map[string]string{
-		"k1": "upload_val",
-		"k2": "v2",
-		"k3": "v3",
-	}, merged)
 }
 
 func TestBuildParentChildConfigs_PropagatesStrategy(t *testing.T) {

@@ -260,9 +260,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: Playground searches the unique knowledge base without range parameters`, async () => {
+  test(`${locale}: Playground loads all libraries using the entered API key before searching`, async () => {
     const originalFetch = globalThis.fetch, calls: any[] = []
-    globalThis.fetch = async (_url, options) => { calls.push(options); return { ok: true, json: async () => ({ data: [] }) } as Response }
+    globalThis.fetch = async (url, options) => { calls.push(options); return { ok: true, json: async () => ({ data: String(url).endsWith('/libraries') ? [{ id: 'all-a' }, { id: 'all-b' }] : [] }) } as Response }
     try {
       await scenario(locale, async state => {
         state.openPlayground()
@@ -270,8 +270,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         state.playground.query = ' question '
         await state.runQuery()
       })
-      assert.equal(calls.length, 1)
-      assert.deepEqual(JSON.parse(calls[0].body), { query: 'question', collapse_similar: true, limit: 20 })
+      assert.equal(calls.length, 2)
+      assert.deepEqual(JSON.parse(calls[1].body), { libraries: ['all-a', 'all-b'], query: 'question', collapse_similar: true, limit: 20 })
       assert.equal(calls[0].headers['X-API-Key'], 'secret')
     } finally { globalThis.fetch = originalFetch }
   })
@@ -293,7 +293,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: Playground sends every article filter and previews the request without the API key`, async () => {
     const originalFetch = globalThis.fetch, calls: any[] = []
-    globalThis.fetch = async (_url, options) => { calls.push(options); return { ok: true, json: async () => ({ success: true, data: { results: [], excluded_missing_published_at: 1 } }) } as Response }
+    globalThis.fetch = async (url, options) => { calls.push(options); return { ok: true, json: async () => ({ success: true, data: String(url).endsWith('/libraries') ? [{ id: 'all-a' }, { id: 'all-b' }] : { results: [], excluded_missing_published_at: 1 } }) } as Response }
     try {
       const result = await scenario(locale, async state => {
         state.openPlayground()
@@ -301,8 +301,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         state.playground.query = ' Launch '
         state.playgroundFilters.value = { ...searchHelpers.defaultSearchFilters(), content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
         await state.runQuery()
-        const expected = { query: 'Launch', content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
-        assert.deepEqual(JSON.parse(calls[0].body), expected)
+        const expected = { libraries: ['all-a', 'all-b'], query: 'Launch', content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+        assert.deepEqual(JSON.parse(calls[1].body), expected)
         assert.deepEqual(JSON.parse(state.playgroundRequestPreview.value), expected)
         assert.doesNotMatch(state.playgroundRequestPreview.value, /secret|apiKey/)
         assert.equal(JSON.parse(state.playgroundResult.value).data.excluded_missing_published_at, 1)

@@ -59,7 +59,7 @@ func entryTaskTransaction[T any](ctx context.Context, s *entryService, mutation 
 		copy.chunkRepo = repository.NewChunkRepository(tx)
 		copy.spaceRepo = repository.NewSpaceRepository(tx)
 		copy.retrieveEngine = s.contentTypeTransactionService(tx).retrieveEngine
-		copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewKnowledgeBaseRepository(tx), copy.modelService, copy.retrieveEngine)
+		copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewLibraryRepository(tx), copy.modelService, copy.retrieveEngine)
 		if _, ok := s.resourceCatalog.(*resourceCatalog); ok {
 			copy.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(tx))
 			copy.fileSvc = file.WithResourceCatalog(s.fileSvc, copy.resourceCatalog, func(path string) {
@@ -154,4 +154,18 @@ func (s *entryService) removeRolledBackCollectionSource(ctx context.Context, k *
 		}
 	}
 	return err
+}
+
+// Coordinate user mutations with the operation executor without changing the
+// business handler or its checkpoints.
+func (s *entryService) withTaskObject(ctx context.Context, id string, mutation func(context.Context) error) error {
+	if q, ok := s.task.(interfaces.TaskObjectCoordinator); ok {
+		return q.WithObject(ctx, id, mutation)
+	}
+	if bound, ok := s.task.(*transactionTaskEnqueuer); ok {
+		if q, ok := bound.queue.(interfaces.TaskObjectCoordinator); ok {
+			return q.WithObject(ctx, id, mutation)
+		}
+	}
+	return mutation(ctx)
 }

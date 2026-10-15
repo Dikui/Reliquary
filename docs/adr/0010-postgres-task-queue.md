@@ -2,6 +2,7 @@
 
 Status: accepted
 日期：2026-10-11
+部分被 [0014](0014-internal-knowledge-base.md) 取代（2026-10-14）。
 部分取代 [0007](0007-personal-single-user.md) 中 Redis 只保留任务队列的部署事实。
 
 ## 背景

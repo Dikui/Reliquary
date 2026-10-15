@@ -47,13 +47,13 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 	return nil
 }
 
-// ResolveModelTier reads the model choices stored on the only knowledge base.
-func ResolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, tier types.ModelTier) (string, error) {
-	resolved, err := resolveModelTier(ctx, db, kb, tier)
+// ResolveModelTier uses the space embedding model and explicit library processing settings.
+func ResolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, tier types.ModelTier) (string, error) {
+	resolved, err := resolveModelTier(ctx, db, library, tier)
 	return resolved.ModelID, err
 }
 
-func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, tier types.ModelTier) (ResolvedModelTier, error) {
+func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, tier types.ModelTier) (ResolvedModelTier, error) {
 	valid := false
 	for _, candidate := range types.ModelTiers {
 		if candidate == tier {
@@ -63,39 +63,61 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 	if !valid {
 		return ResolvedModelTier{}, fmt.Errorf("unknown model tier %q", tier)
 	}
-	if kb == nil && db != nil {
+	if tier == types.ModelTierEmbedding && db != nil {
+		spaceID, ok := types.SpaceIDFromContext(ctx)
+		if !ok && library != nil {
+			spaceID = library.SpaceID
+		}
+		var space types.Space
+		if err := db.WithContext(ctx).Select("id", "embedding_model_id").Where("id=?", spaceID).Find(&space).Error; err != nil {
+			return ResolvedModelTier{}, err
+		}
+		if space.ID != 0 {
+			return ResolvedModelTier{space.EmbeddingModelID, "space"}, nil
+		}
+	}
+	if library == nil && db != nil {
 		spaceID := types.MustSpaceIDFromContext(ctx)
-		kb = &types.KnowledgeBase{}
-		if err := db.WithContext(ctx).Where("space_id = ?", spaceID).First(kb).Error; err != nil {
-			return ResolvedModelTier{}, fmt.Errorf("read knowledge base model tiers: %w", err)
+		library = &types.Library{}
+		if err := db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "institutional").First(library).Error; err != nil {
+			return ResolvedModelTier{}, fmt.Errorf("read library model tiers: %w", err)
 		}
 	}
-	if kb != nil {
-		if id := kb.ModelTiers.ModelID(tier); id != "" {
-			return ResolvedModelTier{id, "knowledge_base"}, nil
+	if library != nil {
+		if id := library.ModelTiers.ModelID(tier); id != "" {
+			return ResolvedModelTier{id, "library"}, nil
 		}
 	}
-	if kb != nil {
+	if library != nil {
 		id := ""
 		switch tier {
 		case types.ModelTierLight:
 			if strings.TrimSpace(id) == "" {
-				id = kb.SummaryModelID
+				id = library.SummaryModelID
 			}
 		case types.ModelTierEntityResolution, types.ModelTierGeneration:
-			id = kb.SummaryModelID
+			id = library.SummaryModelID
 		case types.ModelTierEmbedding:
-			id = kb.EmbeddingModelID
+			id = library.EmbeddingModelID
 		}
 		if id = strings.TrimSpace(id); id != "" {
-			return ResolvedModelTier{id, "knowledge_base"}, nil
+			return ResolvedModelTier{id, "library"}, nil
+		}
+	}
+	if db != nil && library != nil && library.SystemRole != "institutional" && tier != types.ModelTierEmbedding {
+		var defaults types.Library
+		if err := db.WithContext(ctx).Where("space_id=? AND system_role=?", library.SpaceID, "institutional").Find(&defaults).Error; err != nil {
+			return ResolvedModelTier{}, err
+		}
+		if defaults.ID != "" {
+			return resolveModelTier(ctx, nil, &defaults, tier)
 		}
 	}
 	return ResolvedModelTier{Source: "unconfigured"}, nil
 }
 
-func GetTierChatModel(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, tier types.ModelTier) (chat.Chat, error) {
-	id, err := ResolveModelTier(ctx, db, kb, tier)
+func GetTierChatModel(ctx context.Context, db *gorm.DB, models interfaces.ModelService, library *types.Library, tier types.ModelTier) (chat.Chat, error) {
+	id, err := ResolveModelTier(ctx, db, library, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +151,8 @@ func (m *tierChat) ChatStream(ctx context.Context, messages []chat.Message, opts
 func (m *tierChat) GetModelName() string { return m.inner.GetModelName() }
 func (m *tierChat) GetModelID() string   { return m.modelID }
 
-func GetTierEmbeddingModel(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase) (embedding.Embedder, error) {
-	id, err := ResolveModelTier(ctx, db, kb, types.ModelTierEmbedding)
+func GetTierEmbeddingModel(ctx context.Context, db *gorm.DB, models interfaces.ModelService, library *types.Library) (embedding.Embedder, error) {
+	id, err := ResolveModelTier(ctx, db, library, types.ModelTierEmbedding)
 	if err != nil {
 		return nil, err
 	}

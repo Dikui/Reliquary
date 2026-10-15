@@ -51,44 +51,44 @@ func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 	t.Helper()
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
-	team := types.Space{ID: 1, Name: "Rebuild triggers"}
+	team := types.Space{ID: 1, Name: "Rebuild triggers", EmbeddingModelID: "team-vector"}
 	require.NoError(t, db.Create(&team).Error)
-	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "trigger-kb", SpaceID: 1, Name: "Knowledge Base", EmbeddingModelID: "team-vector"}).Error)
+	require.NoError(t, db.Create(&types.Library{ID: "trigger-library", SpaceID: 1, Name: "Library", EmbeddingModelID: "team-vector"}).Error)
 	for _, id := range []string{"team-vector", "override-vector"} {
 		require.NoError(t, db.Create(&types.Model{ID: id, SpaceID: 1, Name: id, Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 	}
 	return db, ctx
 }
 
-func TestKnowledgeBaseNameEmbeddingTriggersInTheSettingsTransaction(t *testing.T) {
+func TestLibraryNameEmbeddingTriggersInTheSettingsTransaction(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
-	kb := &types.KnowledgeBase{}
-	require.NoError(t, db.Where("space_id=1").First(kb).Error)
+	library := &types.Library{}
+	require.NoError(t, db.Where("space_id=1").First(library).Error)
 	spy := &nameEmbeddingTriggerSpy{}
-	svc := &knowledgeBaseService{db: db, repo: repository.NewKnowledgeBaseRepository(db)}
+	svc := &libraryService{db: db, repo: repository.NewLibraryRepository(db)}
 	svc.SetNameEmbeddingRebuilder(spy)
-	config := &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}}
+	config := &types.LibraryConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}}
 	spy.onCall = func() {
-		var saved types.KnowledgeBase
-		require.NoError(t, spy.db.First(&saved, "id = ?", kb.ID).Error)
+		var saved types.Library
+		require.NoError(t, spy.db.First(&saved, "id = ?", library.ID).Error)
 		require.Equal(t, config.ModelTiers.Embedding, saved.ModelTiers.Embedding, "enqueue sees configuration inside its transaction")
 	}
-	_, err := svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", config)
+	_, err := svc.UpdateLibrary(ctx, library.ID, library.Name, "", config)
 	require.NoError(t, err)
-	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "knowledge_base_embedding_model_changed"}}, spy.calls)
+	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "library_embedding_model_changed"}}, spy.calls)
 	spy.calls = nil
-	_, err = svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "rename metadata", config)
+	_, err = svc.UpdateLibrary(ctx, library.ID, library.Name, "rename metadata", config)
 	require.NoError(t, err)
 	require.Empty(t, spy.calls)
 	config.ModelTiers.Embedding = ""
 	spy.err = errors.New("queue unavailable")
-	saved, err := svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", config)
+	saved, err := svc.UpdateLibrary(ctx, library.ID, library.Name, "", config)
 	require.ErrorContains(t, err, "queue unavailable")
-	var unchanged types.KnowledgeBase
-	require.NoError(t, db.First(&unchanged, "id=?", kb.ID).Error)
+	var unchanged types.Library
+	require.NoError(t, db.First(&unchanged, "id=?", library.ID).Error)
 	require.Equal(t, "override-vector", unchanged.ModelTiers.Embedding, "queue failure rolls back settings")
 	require.NotNil(t, saved)
-	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "knowledge_base_embedding_model_changed"}}, spy.calls)
+	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "library_embedding_model_changed"}}, spy.calls)
 }
 
 func TestEmbeddingModelUpdateTriggersCurrentTeamProfileOnly(t *testing.T) {
@@ -167,11 +167,11 @@ func TestNameEmbeddingConfigurationAndEmptyWorkbenchIntegrateWithDurableTask(t *
 	queue := &nameEmbeddingTriggerQueue{}
 	models := &nameEmbeddingTriggerModels{embedder: &nameEmbeddingTriggerEmbedder{}}
 	rebuilder := NewEntityNameEmbeddingRebuilder(db, models, queue)
-	kb := &types.KnowledgeBase{}
-	require.NoError(t, db.Where("space_id=1").First(kb).Error)
-	bases := &knowledgeBaseService{db: db, repo: repository.NewKnowledgeBaseRepository(db)}
+	library := &types.Library{}
+	require.NoError(t, db.Where("space_id=1").First(library).Error)
+	bases := &libraryService{db: db, repo: repository.NewLibraryRepository(db)}
 	bases.SetNameEmbeddingRebuilder(rebuilder)
-	_, err := bases.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}})
+	_, err := bases.UpdateLibrary(ctx, library.ID, library.Name, "", &types.LibraryConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}})
 	require.NoError(t, err)
 	require.Len(t, queue.tasks, 1)
 	require.Equal(t, types.TypeEntityNameEmbeddingRebuild, queue.tasks[0].Type())
@@ -183,7 +183,7 @@ func TestNameEmbeddingConfigurationAndEmptyWorkbenchIntegrateWithDurableTask(t *
 	require.Equal(t, "override-vector", entity.EmbeddingModelID)
 	require.Equal(t, 1, models.embedder.calls)
 	for _, selected := range models.selected {
-		require.Equal(t, "override-vector", selected, "entity names use the knowledge base profile")
+		require.Equal(t, "override-vector", selected, "entity names use the library profile")
 	}
 	require.NoError(t, db.Model(&entity).Update("embedding_needs_rebuild", true).Error)
 	require.NoError(t, rebuilder.Enqueue(ctx, 1, "workbench_rebuild"))

@@ -23,7 +23,7 @@ test('dark sidebar CSS filters only the wordmark after scoped compilation', asyn
 })
 
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
-const source = readFileSync(new URL('../views/knowledge-base/settings/KBChunkingDebug.vue', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../views/library/settings/LibraryChunkingDebug.vue', import.meta.url), 'utf8')
 const statsTemplate = source.match(/<div class="chunk-stats">[\s\S]*?\n          <\/div>/)![0]
 const compiled = compileTemplate({ source: statsTemplate, filename: 'chunk-stats.vue', id: 'ui09-stats', ssr: true, ssrCssVars: [] })
 assert.deepEqual(compiled.errors, [])

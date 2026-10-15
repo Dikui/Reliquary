@@ -7,17 +7,17 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-type stubArticleKBService struct {
-	interfaces.KnowledgeBaseService
+type stubArticleLibraryService struct {
+	interfaces.LibraryService
 }
 
-func (s *stubArticleKBService) GetKnowledgeBaseByID(_ context.Context, id string) (*types.KnowledgeBase, error) {
-	if id != "kb-1" {
-		return nil, errors.New("knowledge base not found")
+func (s *stubArticleLibraryService) GetLibraryByID(_ context.Context, id string) (*types.Library, error) {
+	if id != "library-1" {
+		return nil, errors.New("library not found")
 	}
-	return &types.KnowledgeBase{ID: "kb-1", SpaceID: 1, Type: types.KnowledgeBaseTypeDocument}, nil
+	return &types.Library{ID: "library-1", SpaceID: 1, Type: types.LibraryTypeDocument}, nil
 }
 
-func (s *stubArticleKBService) GetKnowledgeBase(ctx context.Context) (*types.KnowledgeBase, error) {
-	return s.GetKnowledgeBaseByID(ctx, "kb-1")
+func (s *stubArticleLibraryService) GetSystemLibrary(ctx context.Context, roles ...string) (*types.Library, error) {
+	return s.GetLibraryByID(ctx, "library-1")
 }

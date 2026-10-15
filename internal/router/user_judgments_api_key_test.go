@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/types"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
@@ -29,13 +30,13 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 	topics.SetOperationLogs(logs)
 	topics.SetHeaderRefresher(v)
 	group := f.router.Group("/api/v1")
-	RegisterTopicRoutes(group, handler.NewTopicHandler(topics), newAccessGuards(f.params.KBService, f.params.EntryService, nil))
+	RegisterTopicRoutes(group, handler.NewTopicHandler(topics), newAccessGuards(f.params.LibraryService, f.params.EntryService, nil))
 	group.GET("/operation-logs", handler.NewOperationLogHandler(logs).List)
-	kbResponse := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-base", "", f.key, true)
-	require.Equal(t, http.StatusOK, kbResponse.Code, kbResponse.Body.String())
-	var kb struct{ Data types.KnowledgeBase }
-	require.NoError(t, json.Unmarshal(kbResponse.Body.Bytes(), &kb))
-	k := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.Data.ID, Title: "API fixture", Type: "manual", ContentType: "event", ProcessingMode: "full", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+	libraryResponse := personalRequest(t, f.router, http.MethodGet, "/api/v1/library", "", f.key, true)
+	require.Equal(t, http.StatusOK, libraryResponse.Code, libraryResponse.Body.String())
+	var library struct{ Data types.Library }
+	require.NoError(t, json.Unmarshal(libraryResponse.Body.Bytes(), &library))
+	k := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.Data.ID, Title: "API fixture", Type: "manual", ContentType: "新闻", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, f.db.Create(k).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, v.WriteArticle(ctx, k, "API original body.\n", nil))
@@ -47,7 +48,7 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &topic))
 	r = personalRequest(t, f.router, http.MethodPut, "/api/v1/entries/"+k.ID+"/topics", `{"topic_ids":["`+topic.Data.ID+`"]}`, f.key, true)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
-	r = personalRequest(t, f.router, http.MethodPut, "/api/v1/entries/"+k.ID+"/content-type", `{"content_type":"research"}`, f.key, true)
+	r = personalRequest(t, f.router, http.MethodPut, "/api/v1/entries/"+k.ID+"/content-type", `{"content_type":"研究报告"}`, f.key, true)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
 	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/operation-logs?page=1&page_size=100", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
@@ -65,7 +66,7 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 			return false
 		}
 		header, body, err := service.ParseVaultArticle(data)
-		return err == nil && header.Starred && header.ContentType == "research" && len(header.Topics) == 1 && header.Topics[0] == "API topic" && string(body) == "API original body.\n"
+		return err == nil && header.Starred && header.ContentType == "研究报告" && len(header.Topics) == 1 && header.Topics[0] == "API topic" && string(body) == "API original body.\n"
 	}, time.Second, 10*time.Millisecond)
 	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/operation-logs?operation_type=star", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())

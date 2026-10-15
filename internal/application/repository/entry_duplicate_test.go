@@ -15,16 +15,16 @@ func TestCheckEntryExists_FileHashIsScopedByFileType(t *testing.T) {
 	repo := NewEntryRepository(db)
 	ctx := context.Background()
 	spaceID := uint64(1)
-	kbID := uuid.NewString()
+	libraryID := uuid.NewString()
 	const fileHash = "same-content-hash"
 
 	require.NoError(t, db.Exec(`
-		INSERT INTO entries (id, space_id, knowledge_base_id, type, title, file_name, file_type, file_hash, parse_status)
+		INSERT INTO entries (id, space_id, library_id, type, title, file_name, file_type, file_hash, parse_status)
 		VALUES (?, ?, ?, 'file', 'document.md', 'document.md', 'md', ?, 'completed')
-	`, uuid.NewString(), spaceID, kbID, fileHash).Error)
+	`, uuid.NewString(), spaceID, libraryID, fileHash).Error)
 
 	t.Run("same content with another file type is allowed", func(t *testing.T) {
-		exists, entry, err := repo.CheckEntryExists(ctx, spaceID, kbID, &types.EntryCheckParams{
+		exists, entry, err := repo.CheckEntryExists(ctx, spaceID, libraryID, &types.EntryCheckParams{
 			Type:     "file",
 			FileHash: fileHash,
 			FileType: "txt",
@@ -36,7 +36,7 @@ func TestCheckEntryExists_FileHashIsScopedByFileType(t *testing.T) {
 	})
 
 	t.Run("same content and file type remains a duplicate", func(t *testing.T) {
-		exists, entry, err := repo.CheckEntryExists(ctx, spaceID, kbID, &types.EntryCheckParams{
+		exists, entry, err := repo.CheckEntryExists(ctx, spaceID, libraryID, &types.EntryCheckParams{
 			Type:     "file",
 			FileHash: fileHash,
 			FileType: "md",
@@ -49,7 +49,7 @@ func TestCheckEntryExists_FileHashIsScopedByFileType(t *testing.T) {
 	})
 
 	t.Run("file type matching is case-insensitive", func(t *testing.T) {
-		exists, entry, err := repo.CheckEntryExists(ctx, spaceID, kbID, &types.EntryCheckParams{
+		exists, entry, err := repo.CheckEntryExists(ctx, spaceID, libraryID, &types.EntryCheckParams{
 			Type:     "file",
 			FileHash: fileHash,
 			FileType: "MD",

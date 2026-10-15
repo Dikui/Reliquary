@@ -58,8 +58,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: the article empty state directs external tools to the ingest interface`, async () => {
     const html = await render('components/EmptyEntry.vue', locale)
     const copy = locale === 'zh-CN' ? zh : en
-    assert.ok(html.includes(copy.knowledgeBase.emptyArticles))
-    assert.ok(html.includes(copy.knowledgeBase.ingestOnlyHint))
+    assert.ok(html.includes(copy.library.emptyArticles))
+    assert.ok(html.includes(copy.library.ingestOnlyHint))
     assert.doesNotMatch(html, /type="file"|dragenter|upload|manual-editor/i)
   })
 
@@ -77,35 +77,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     }, {}, state => {
       assert.equal(state.currentSection.value, 'general')
       const keys = state.navItems.value.map((item: { key: string }) => item.key)
-      for (const key of ['knowledge-base', 'vault', 'models', 'operation-logs', 'integration-api']) assert.ok(keys.includes(key))
+      for (const key of ['library', 'vault', 'models', 'operation-logs', 'integration-api']) assert.ok(keys.includes(key))
       for (const key of ['datasource', 'sync-logs', 'import', 'upload', 'manual']) assert.equal(keys.includes(key), false)
     })
     assert.ok(replacements.some(value => JSON.stringify(value) === JSON.stringify({ path: '/platform/settings', query: { section: 'general' } })))
     assert.doesNotMatch(html, /DataSource|data-source|订阅源|Subscriptions/)
   })
 
-  test(`${locale}: reprocessing preserves parser and chunking overrides and submits only the existing article`, async () => {
-    const emitted: unknown[] = []
-    const overrides = { parser_engine_rules: [{ file_types: ['pdf'], engine: 'mineru' }], parser_engine_overrides: { pdf_force_scanned: 'true' }, chunking_config: { chunk_size: 700, chunk_overlap: 60, strategy: 'heading', enable_parent_child: false } }
-    const html = await render('views/knowledge-base/components/ReparseConfirmDialog.vue', locale, {}, {
-      visible: true, kbInfo: {}, reparsePreview: { entryId: 'old-article', fileName: 'Original.pdf', fileType: 'pdf', processOverrides: overrides },
-      onConfirm: (value: unknown) => emitted.push(value),
-    }, state => {
-      state.initFromKbInfo({})
-      state.applyOverridesToState(overrides)
-      state.handleConfirm()
-    })
-    assert.ok(html.includes('Original.pdf'))
-    const result = emitted[0] as any
-    assert.deepEqual(result.reparse, { entryId: 'old-article', fileName: 'Original.pdf', fileType: 'pdf', processOverrides: overrides })
-    assert.equal(result.processConfig.chunking_config.chunk_size, 700)
-    assert.equal(result.processConfig.chunking_config.chunk_overlap, 60)
-    assert.equal(result.processConfig.chunking_config.strategy, 'heading')
-    assert.deepEqual(result.processConfig.parser_engine_rules, overrides.parser_engine_rules)
-    assert.deepEqual(result.processConfig.parser_engine_overrides, overrides.parser_engine_overrides)
-    assert.deepEqual(Object.keys(result).sort(), ['processConfig', 'reparse'])
-    assert.doesNotMatch(html, /type="file"|sourceInfo|continueAdd|upload-confirm|manualPreview/)
-  })
+
 }
 
 function productionFiles(directory: string): string[] {
@@ -122,5 +101,5 @@ test('production frontend code has no references to removed intake modules or AP
   for (const name of ['datasource', 'uploadConfirm', 'manualEditor', 'upload']) {
     for (const bundle of [zh, en]) assert.equal(name in bundle, false, name)
   }
-  for (const path of ['api/datasource.ts', 'components/ManualEntryEditor.vue', 'components/UploadMask.vue', 'views/knowledge-base/components/KbUploadSourceDropdown.vue', 'views/knowledge-base/settings/DataSourceSettings.vue']) assert.equal(existsSync(join(sourceRoot, path)), false, path)
+  for (const path of ['api/datasource.ts', 'components/ManualEntryEditor.vue', 'components/UploadMask.vue', 'views/library/components/KbUploadSourceDropdown.vue', 'views/library/settings/DataSourceSettings.vue']) assert.equal(existsSync(join(sourceRoot, path)), false, path)
 })

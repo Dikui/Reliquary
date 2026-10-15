@@ -1,6 +1,6 @@
 // Chunker debug / preview API. Single endpoint that runs the adaptive
 // chunker over a sample text without touching DB or embeddings. Used by
-// the KB editor debug panel.
+// the Library editor debug panel.
 
 import { post } from '../utils/request'
 import type {

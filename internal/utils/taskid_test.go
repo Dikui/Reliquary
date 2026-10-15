@@ -3,7 +3,7 @@ package utils
 import "testing"
 
 func TestParseTaskID_CompoundTaskType(t *testing.T) {
-	taskID := GenerateTaskID("document_process", 42, "kb-abc-123")
+	taskID := GenerateTaskID("document_process", 42, "library-abc-123")
 	taskType, spaceID, _, uuidPart, businessID, err := ParseTaskID(taskID)
 	if err != nil {
 		t.Fatalf("ParseTaskID failed: %v", err)
@@ -23,7 +23,7 @@ func TestParseTaskID_CompoundTaskType(t *testing.T) {
 }
 
 func TestTaskSpaceID(t *testing.T) {
-	taskID := GenerateTaskID("entry_move", 7, "source-kb")
+	taskID := GenerateTaskID("entry_move", 7, "source-library")
 	got, err := TaskSpaceID(taskID)
 	if err != nil {
 		t.Fatalf("TaskSpaceID failed: %v", err)

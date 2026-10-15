@@ -23,12 +23,12 @@ func (s *entryService) enqueueManualProcessing(ctx context.Context,
 ) (string, error) {
 	requestID, _ := types.RequestIDFromContext(ctx)
 	payload := types.ManualProcessPayload{
-		RequestId:       requestID,
-		SpaceID:         entry.SpaceID,
-		EntryID:         entry.ID,
-		KnowledgeBaseID: entry.KnowledgeBaseID,
-		Content:         content,
-		NeedCleanup:     needCleanup,
+		RequestId:   requestID,
+		SpaceID:     entry.SpaceID,
+		EntryID:     entry.ID,
+		LibraryID:   entry.LibraryID,
+		Content:     content,
+		NeedCleanup: needCleanup,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -112,7 +112,7 @@ func (s *entryService) bindContentResources(
 }
 
 func (s *entryService) triggerManualProcessing(ctx context.Context,
-	kb *types.KnowledgeBase, entry *types.Entry, content string, _ bool,
+	library *types.Library, entry *types.Entry, content string, _ bool,
 ) error {
 	defer func() {
 		if entry.ParseStatus == types.ParseStatusFailed {
@@ -124,6 +124,25 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 		return errors.New("article body is empty")
 	}
 	clean = content
+	if library.Template == types.TemplateGenerated {
+		// Reports retain caller-provided fields and only rebuild their indexes.
+		s.bindContentResources(ctx, entry.SpaceID, entry.ID, content)
+		s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "saved_markdown"})
+		s.endStage(ctx, entry.ID, types.StageDocReader, nil)
+		s.skipStage(ctx, entry.ID, types.StageProcessing, "generated_library")
+		overrides, _ := entry.ProcessOverrides()
+		eff := ResolveProcessConfig(library, overrides)
+		chunks, options := splitArticleBody(content, eff.ChunkingConfig)
+		s.processChunks(ctx, library, entry, chunks, options)
+		if entry.ParseStatus == types.ParseStatusFailed {
+			return errors.New(entry.ErrorMessage)
+		}
+		if aborted, _ := s.isEntryAborted(ctx, entry.SpaceID, entry.ID); !aborted {
+			s.tracker().FinalizeAttempt(ctx, entry.ID, attemptFromCtx(ctx), "done", types.JSONMap{"index_only": true}, "", "")
+		}
+		return nil
+	}
+	s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "markdown", "body_chars": len([]rune(content))})
 	if err := s.recordMissingIngestImages(ctx, entry, clean); err != nil {
 		return err
 	}
@@ -131,8 +150,8 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	// Store embedded image bytes before chunking.
 	// Runs before chunking so chunks contain stable provider:// URLs.
 	var resolvedImages []docparser.StoredImage
-	if s.imageResolver != nil && !(s.vault != nil && entry.VaultPath != "" && entry.ProcessingMode == types.ProcessingModeFull) {
-		fileSvc := s.resolveFileService(ctx, kb)
+	if s.imageResolver != nil && !(s.vault != nil && entry.VaultPath != "") {
+		fileSvc := s.resolveFileService(ctx, library)
 		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, entry.SpaceID)
 		if err := s.recordIntakeImages(ctx, entry, fromDataURI); err != nil {
 			entry.ParseStatus = types.ParseStatusFailed
@@ -159,7 +178,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			return errors.New("article processing failed")
 		}
 	}
-	if err := extractIntakeOriginalLink(entry, clean, nil, entry.FileType, nil); err != nil {
+	if err := extractIntakeOriginalLink(entry, clean, nil); err != nil {
 		entry.ParseStatus = types.ParseStatusFailed
 		return err
 	}
@@ -183,7 +202,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			entry.ParseStatus = types.ParseStatusFailed
 			return errors.New("article processing failed")
 		}
-		if err := s.saveIntakeOriginal(ctx, kb, entry, clean, nil); err != nil {
+		if err := s.saveIntakeOriginal(ctx, library, entry, clean, nil); err != nil {
 			entry.ParseStatus = types.ParseStatusFailed
 			return errors.New("article processing failed")
 		}
@@ -198,11 +217,12 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	// chunking preview endpoint.
 	clean = chunker.NormalizeLineEndings(clean)
 
+	s.endStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"images": len(resolvedImages), "body_chars": len([]rune(clean))})
 	processOverrides, _ := entry.ProcessOverrides()
-	eff := ResolveProcessConfig(kb, processOverrides)
+	eff := ResolveProcessConfig(library, processOverrides)
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
-		rejected, err := s.reviewIntake(ctx, kb, entry, clean)
+		rejected, err := s.reviewIntake(ctx, library, entry, clean)
 		if err != nil {
 			s.markArticleProcessingFailed(ctx, entry, err)
 			return err
@@ -211,7 +231,7 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			return nil
 		}
 	}
-	if err := s.processArticleBody(ctx, kb, entry, clean, resolvedImages, eff); err != nil {
+	if err := s.processArticleBody(ctx, library, entry, clean, resolvedImages, eff); err != nil {
 		s.markArticleProcessingFailed(ctx, entry, err)
 		return err
 	}

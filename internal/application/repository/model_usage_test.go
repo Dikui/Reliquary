@@ -11,15 +11,16 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestCountByModelID_KnowledgeBase(t *testing.T) {
+func TestCountByModelID_Library(t *testing.T) {
 	ctx := context.Background()
-	db := setupKBTestDB(t)
-	repo := NewKnowledgeBaseRepository(db)
+	db := setupLibraryTestDB(t)
+	repo := NewLibraryRepository(db)
 	modelID := "embed-model-1"
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", modelID).Error)
 
-	kb := makeKB()
-	kb.EmbeddingModelID = modelID
-	require.NoError(t, db.Create(kb).Error)
+	library := makeLibrary()
+	library.EmbeddingModelID = modelID
+	require.NoError(t, db.Create(library).Error)
 
 	count, err := repo.CountByModelID(ctx, 1, modelID)
 	require.NoError(t, err)
@@ -29,48 +30,49 @@ func TestCountByModelID_KnowledgeBase(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), count)
 
-	kb2 := makeKB()
-	kb2.ID = uuid.New().String()
-	kb2.ModelTiers.Generation = modelID
-	require.NoError(t, db.Create(kb2).Error)
+	library2 := makeLibrary()
+	library2.ID = uuid.New().String()
+	library2.ModelTiers.Generation = modelID
+	require.NoError(t, db.Create(library2).Error)
 
 	count, err = repo.CountByModelID(ctx, 1, modelID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), count)
 
-	require.NoError(t, db.Delete(kb2).Error)
+	require.NoError(t, db.Delete(library2).Error)
 	count, err = repo.CountByModelID(ctx, 1, modelID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
 }
 
-func TestListModelUsages_KnowledgeBase(t *testing.T) {
+func TestListModelUsages_Library(t *testing.T) {
 	ctx := context.Background()
-	db := setupKBTestDB(t)
-	repo := NewKnowledgeBaseRepository(db)
-	modelID := "all-kb-bindings"
+	db := setupLibraryTestDB(t)
+	repo := NewLibraryRepository(db)
+	modelID := "all-library-bindings"
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", modelID).Error)
 
-	allBindings := makeKB()
-	allBindings.Name = "Zulu KB"
+	allBindings := makeLibrary()
+	allBindings.Name = "Zulu Library"
 	allBindings.EmbeddingModelID = modelID
 	allBindings.SummaryModelID = modelID
 	allBindings.ModelTiers.Generation = modelID
 	allBindings.ModelTiers.Light = modelID
 	require.NoError(t, db.Create(allBindings).Error)
 
-	generationOnly := makeKB()
-	generationOnly.Name = "Alpha KB"
+	generationOnly := makeLibrary()
+	generationOnly.Name = "Alpha Library"
 	generationOnly.ModelTiers.Generation = modelID
 	require.NoError(t, db.Create(generationOnly).Error)
 
-	otherSpace := makeKB()
+	otherSpace := makeLibrary()
 	otherSpace.Name = "Other space"
 	otherSpace.SpaceID = 2
 	otherSpace.EmbeddingModelID = modelID
 	require.NoError(t, db.Create(otherSpace).Error)
 
-	deleted := makeKB()
-	deleted.Name = "Deleted KB"
+	deleted := makeLibrary()
+	deleted.Name = "Deleted Library"
 	deleted.EmbeddingModelID = modelID
 	require.NoError(t, db.Create(deleted).Error)
 	require.NoError(t, db.Delete(deleted).Error)
@@ -78,34 +80,36 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	usages, err := repo.ListModelUsages(ctx, 1, modelID)
 	require.NoError(t, err)
 	require.Len(t, usages, 2)
-	assert.Equal(t, "Alpha KB", usages[0].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, usages[0].Bindings)
-	assert.Equal(t, "Zulu KB", usages[1].Name)
+	assert.Equal(t, "Alpha Library", usages[0].Name)
+	assert.Equal(t, []types.ModelUsageBinding{"generation_model_tier", "embedding_model_tier", types.ModelUsageBindingEmbeddingModel}, usages[0].Bindings)
+	assert.Equal(t, "Zulu Library", usages[1].Name)
 	assert.Equal(t, []types.ModelUsageBinding{
 		types.ModelUsageBinding("light_model_tier"),
 		types.ModelUsageBinding("generation_model_tier"),
+		"embedding_model_tier",
 		types.ModelUsageBindingEmbeddingModel,
 		types.ModelUsageBindingSummaryModel,
 	}, usages[1].Bindings)
 }
 
-func TestListModelUsages_KnowledgeBaseRespectsLimit(t *testing.T) {
+func TestListModelUsages_LibraryRespectsLimit(t *testing.T) {
 	ctx := context.Background()
-	db := setupKBTestDB(t)
-	repo := NewKnowledgeBaseRepository(db)
+	db := setupLibraryTestDB(t)
+	repo := NewLibraryRepository(db)
 	modelID := "shared-embed"
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", modelID).Error)
 
 	for i := 0; i < types.ModelUsageListLimit+3; i++ {
-		kb := makeKB()
-		kb.Name = fmt.Sprintf("KB %03d", i)
-		kb.EmbeddingModelID = modelID
-		require.NoError(t, db.Create(kb).Error)
+		library := makeLibrary()
+		library.Name = fmt.Sprintf("Library %03d", i)
+		library.EmbeddingModelID = modelID
+		require.NoError(t, db.Create(library).Error)
 	}
 
 	usages, err := repo.ListModelUsages(ctx, 1, modelID)
 	require.NoError(t, err)
 	require.Len(t, usages, types.ModelUsageListLimit)
-	assert.Equal(t, "KB 000", usages[0].Name)
+	assert.Equal(t, "Library 000", usages[0].Name)
 
 	count, err := repo.CountByModelID(ctx, 1, modelID)
 	require.NoError(t, err)

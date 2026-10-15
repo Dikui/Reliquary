@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import type { EntryProcessOverrides } from '@/types/entryProcess'
 
 export interface ReparseConfirmSource {
+  sourceKind?: string
   entryId: string
   fileName?: string
   fileType?: string
@@ -16,16 +17,16 @@ export interface ReparseConfirmResult {
 export const useReparseConfirmStore = defineStore('reparseConfirm', {
   state: () => ({
     visible: false,
-    kbInfo: null as any,
+    libraryInfo: null as any,
     reparse: null as ReparseConfirmSource | null,
     pendingResolve: null as ((value: ReparseConfirmResult) => void) | null,
     pendingReject: null as (() => void) | null,
   }),
   actions: {
-    open(options: { kbInfo: any; reparse: ReparseConfirmSource }): Promise<ReparseConfirmResult> {
+    open(options: { libraryInfo: any; reparse: ReparseConfirmSource }): Promise<ReparseConfirmResult> {
       return new Promise((resolve, reject) => {
         this.visible = true
-        this.kbInfo = options.kbInfo
+        this.libraryInfo = options.libraryInfo
         this.reparse = options.reparse
         this.pendingResolve = resolve
         this.pendingReject = reject
@@ -41,7 +42,7 @@ export const useReparseConfirmStore = defineStore('reparseConfirm', {
     },
     reset() {
       this.visible = false
-      this.kbInfo = null
+      this.libraryInfo = null
       this.reparse = null
       this.pendingResolve = null
       this.pendingReject = null

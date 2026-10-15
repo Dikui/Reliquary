@@ -1,14 +1,16 @@
 import { searchErrorMessage } from '@/utils/search'
 import { useI18n } from 'vue-i18n'
 import { onUnmounted, ref, watch } from 'vue'
+import { useLibraryScope } from '@/composables/useLibraryScope'
 import { searchEntries } from '@/api/search'
-import type { SearchEntry } from '@/types/search'
+import type { SourceLocation, SearchEntry } from '@/types/search'
 
 export interface CmdkChunk {
+  locations?: SourceLocation[]
   id: string
   chunk_index: number
   entry_id: string
-  knowledge_base_id: string
+  library_id: string
   entry_title: string
   content: string
   matched_content?: string
@@ -19,10 +21,14 @@ export interface CmdkChunk {
 
 export interface CmdkFileGroup {
   entryId: string
-  kbId: string
+  libraryId: string
+  libraryName?: string
   title: string
   chunks: CmdkChunk[]
   source?: SearchEntry['source']
+  cannot_be_fact?: boolean
+  has_update?: boolean
+  latest_entry_id?: string
   source_unverified?: boolean
   acquisition?: SearchEntry['acquisition']
   incomplete?: boolean
@@ -32,17 +38,20 @@ export interface CmdkFileGroup {
 
 export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
   return articles.map(article => ({
-    entryId: article.entry_id, kbId: '', title: article.title, source: article.source,
+    entryId: article.entry_id, libraryId: article.library_id || '', libraryName: article.library_name, title: article.title, source: article.source,
+    cannot_be_fact: Boolean(article.cannot_be_fact || article.source === 'report'),
     source_unverified: Boolean(article.source_unverified),
+    has_update: Boolean(article.has_update), latest_entry_id: article.latest_entry_id,
     acquisition: article.source === 'article' ? article.acquisition : undefined,
     incomplete: article.source === 'article' ? article.incomplete : undefined,
     similarCount: article.similar_reports?.length || 0,
     imagePath: article.source === 'article' ? article.snippets?.find(snippet => snippet.image_path)?.image_path : undefined,
     chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.entry_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
       id: snippet.chunk_id, chunk_index: snippet.chunk_index, entry_id: article.entry_id,
-      knowledge_base_id: '', entry_title: article.title, content: snippet.content,
+      library_id: article.library_id || '', entry_title: article.title, content: snippet.content,
       match_type: snippet.match_type, score: article.score,
       image_path: 'image_path' in snippet ? snippet.image_path : undefined,
+      locations: 'locations' in snippet ? snippet.locations : undefined,
     })),
   }))
 }
@@ -55,6 +64,7 @@ export function useCmdkSearch(options: {
   debounceMs?: number
 }) {
   const { t } = useI18n()
+  const libraryScope = useLibraryScope()
   const searchError = ref('')
   const debounceMs = options.debounceMs ?? 350
   const query = ref('')
@@ -81,7 +91,7 @@ export function useCmdkSearch(options: {
     hasSearched.value = true
 
     searchError.value = ''
-    const articles = await searchEntries({ query: q }).then(res => {
+    const articles = await searchEntries({ query: q, libraries: libraryScope.value }).then(res => {
       if (!res?.success) throw res
       return res.data.results
     }).catch(error => {
@@ -98,7 +108,7 @@ export function useCmdkSearch(options: {
     loading.value = false
   }
 
-  watch([query, composing], ([val, isComposing]) => {
+  watch([query, composing, libraryScope], ([val, isComposing]) => {
     requestSeq++
     if (debounceTimer) clearTimeout(debounceTimer)
     loading.value = false
@@ -119,6 +129,7 @@ export function useCmdkSearch(options: {
   onUnmounted(() => { requestSeq++; if (debounceTimer) clearTimeout(debounceTimer) })
 
   return {
+    libraryScope,
     searchError,
     retry: () => runSearch(query.value.trim(), ++requestSeq),
     query,

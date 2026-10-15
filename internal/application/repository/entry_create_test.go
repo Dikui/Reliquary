@@ -16,12 +16,12 @@ func TestCreateEntryDefaultsCustomMetadataToEmptyObject(t *testing.T) {
 
 	repo := NewEntryRepository(db)
 	entry := &types.Entry{
-		SpaceID:         1,
-		KnowledgeBaseID: "kb-1",
-		Type:            "file",
-		Title:           "document.txt",
-		ParseStatus:     types.ParseStatusPending,
-		EnableStatus:    "disabled",
+		SpaceID:      1,
+		LibraryID:    "library-1",
+		Type:         "file",
+		Title:        "document.txt",
+		ParseStatus:  types.ParseStatusPending,
+		EnableStatus: "disabled",
 	}
 
 	require.NoError(t, repo.CreateEntry(context.Background(), entry))

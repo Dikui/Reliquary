@@ -59,18 +59,18 @@ log_success() {
 # 检查Docker是否已安装
 check_docker() {
     log_info "检查Docker环境..."
-    
+
     if ! command -v docker &> /dev/null; then
         log_error "未安装Docker，请先安装Docker"
         return 1
     fi
-    
+
     # 检查Docker服务运行状态
     if ! docker info &> /dev/null; then
         log_error "Docker服务未运行，请启动Docker服务"
         return 1
     fi
-    
+
     log_success "Docker环境检查通过"
     return 0
 }
@@ -101,24 +101,24 @@ get_version_info() {
     else
         VERSION="unknown"
     fi
-    
+
     # 获取commit ID
     if command -v git >/dev/null 2>&1; then
         COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     else
         COMMIT_ID="unknown"
     fi
-    
+
     # 获取构建时间
     BUILD_TIME=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-    
+
     # 获取Go版本
     if command -v go >/dev/null 2>&1; then
         GO_VERSION=$(go version 2>/dev/null || echo "unknown")
     else
         GO_VERSION="unknown"
     fi
-    
+
     log_info "版本信息: $VERSION"
     log_info "Commit ID: $COMMIT_ID"
     log_info "构建时间: $BUILD_TIME"
@@ -128,12 +128,12 @@ get_version_info() {
 # 构建应用镜像
 build_app_image() {
     log_info "构建应用镜像 (reliquary-app)..."
-    
+
     cd "$PROJECT_ROOT"
-    
+
     # 获取版本信息
     get_version_info
-    
+
     docker build \
         --platform $PLATFORM \
         --build-arg GOPRIVATE_ARG=${GOPRIVATE:-""} \
@@ -143,12 +143,11 @@ build_app_image() {
         --build-arg COMMIT_ID_ARG="$COMMIT_ID" \
         --build-arg BUILD_TIME_ARG="$BUILD_TIME" \
         --build-arg GO_VERSION_ARG="$GO_VERSION" \
-        --build-arg WITH_ANYDOC=${WITH_ANYDOC:-1} \
         -f docker/Dockerfile.app \
         -t "reliquary-app:$VERSION" \
         -t "reliquary-app:$COMMIT_ID" \
         .
-    
+
     if [ $? -eq 0 ]; then
         log_success "应用镜像构建成功"
         return 0
@@ -161,9 +160,9 @@ build_app_image() {
 # 构建前端镜像
 build_frontend_image() {
     log_info "构建前端镜像 (reliquary-ui)..."
-    
+
     cd "$PROJECT_ROOT"
-    
+
     # 获取版本信息（用于注入前端 commit hash）
     get_version_info
 
@@ -176,7 +175,7 @@ build_frontend_image() {
         -t "reliquary-ui:$VERSION" \
         -t "reliquary-ui:$COMMIT_ID" \
         frontend/
-    
+
     if [ $? -eq 0 ]; then
         log_success "前端镜像构建成功"
         return 0
@@ -229,24 +228,24 @@ build_all_images() {
 # 清理本地镜像
 clean_images() {
     log_info "清理本地Reliquary镜像..."
-    
+
     # 停止相关容器
     log_info "停止相关容器..."
     docker stop $(docker ps -q --filter "ancestor=reliquary-app:latest" 2>/dev/null) 2>/dev/null || true
     docker stop $(docker ps -q --filter "ancestor=reliquary-ui:latest" 2>/dev/null) 2>/dev/null || true
-    
+
     # 删除相关容器
     log_info "删除相关容器..."
     docker rm $(docker ps -aq --filter "ancestor=reliquary-app:latest" 2>/dev/null) 2>/dev/null || true
     docker rm $(docker ps -aq --filter "ancestor=reliquary-ui:latest" 2>/dev/null) 2>/dev/null || true
-    
+
     # 删除镜像
     log_info "删除本地镜像..."
     docker rmi reliquary-app:latest 2>/dev/null || true
     docker rmi reliquary-ui:latest 2>/dev/null || true
-    
+
     docker image prune -f
-    
+
     log_success "镜像清理完成"
     return 0
 }

@@ -10,10 +10,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pgvector/pgvector-go"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
+	"github.com/stretchr/testify/require"
 )
 
 type articleImageFixtureEmbedder struct {
@@ -41,6 +42,7 @@ func (m articleImageFixtureModels) GetEmbeddingModel(context.Context, string) (e
 func newArticleImageHarness(t *testing.T, enabled bool) (*articleProcessingHarness, *VaultService, *articleImageFixtureEmbedder) {
 	t.Helper()
 	h, vault := newVaultArticleHarness(t)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("retrieval_config", &types.RetrievalConfig{ImageVectorEnabled: true}).Error)
 	e := &articleImageFixtureEmbedder{enabled: enabled}
 	h.service.modelService = articleImageFixtureModels{h.service.modelService.(articleProcessingModels), e}
 	h.service.chunkService.(*chunkService).modelService = h.service.modelService
@@ -81,10 +83,10 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 		require.NoError(t, file.Close())
 		require.Equal(t, fmt.Sprintf("%x", sha256.Sum256(data)), stored.ContentHash)
 	}
-	require.NoError(t, indexArticleImages(h.ctx, h.db, h.service.modelService, h.kb, vault, article))
+	require.NoError(t, indexArticleImages(h.ctx, h.db, h.service.modelService, h.library, vault, article))
 	require.Len(t, e.images, 2, "unchanged bytes and model retain vectors")
 	e.err = errors.New("fixture unavailable")
-	embedder, err := GetTierEmbeddingModel(h.ctx, h.db, h.service.modelService, h.kb)
+	embedder, err := GetTierEmbeddingModel(h.ctx, h.db, h.service.modelService, h.library)
 	require.NoError(t, err)
 	err = saveArticleImageEmbedding(h.ctx, h.db, vault, embedder, article, paths[0], true)
 	require.ErrorContains(t, err, "fixture unavailable")
@@ -93,31 +95,11 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 	require.EqualValues(t, 2, count, "failed replacement keeps the prior image vector")
 }
 
-func TestArticleImagesSkipSummaryOnlyAndUnsupportedModels(t *testing.T) {
-	for _, test := range []struct {
-		name, contentType string
-		supported         bool
-	}{
-		{"summary", "tutorial", true}, {"text model", "event", false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			h, _, e := newArticleImageHarness(t, test.supported)
-			h.processor.output = validProcessingFixture(test.contentType)
-			article := h.upload(t, "Image skip", "Verifiable source measurements are illustrated below.\n\n![chart]("+articleImageDataURI(t, 42)+")")
-			require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
-			require.Empty(t, e.images)
-			var count int64
-			require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-			require.Zero(t, count)
-		})
-	}
-}
-
 func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T) {
 	h, vault, _ := newArticleImageHarness(t, true)
 	article := h.upload(t, "Fresh image", "Original illustration records verifiable source details.\n\n![chart]("+articleImageDataURI(t, 17)+")")
 	path := articleImagePaths(article)[0]
-	embedder, err := GetTierEmbeddingModel(h.ctx, h.db, h.service.modelService, h.kb)
+	embedder, err := GetTierEmbeddingModel(h.ctx, h.db, h.service.modelService, h.library)
 	require.NoError(t, err)
 	write, err := prepareArticleImageEmbedding(h.ctx, h.db, vault, embedder, article, path, true)
 	require.NoError(t, err)
@@ -129,19 +111,4 @@ func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T
 	require.Equal(t, articleImagePaths(article), articleImagePaths(&copy))
 	copy.SourceKind = "report"
 	require.Empty(t, articleImagePaths(&copy))
-}
-
-func TestArticleImageVectorsCleanOnSummaryOnlyAndSoftDeletion(t *testing.T) {
-	h, _, _ := newArticleImageHarness(t, true)
-	article := h.upload(t, "Image cleanup", "Original illustration records verifiable source details.\n\n![chart]("+articleImageDataURI(t, 21)+")")
-	var count int64
-	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-	require.EqualValues(t, 1, count)
-	require.NoError(t, h.db.Model(article).Update("processing_mode", types.ProcessingModeSummaryOnly).Error)
-	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-	require.Zero(t, count)
-	article = h.upload(t, "Image delete", "Different original illustration contains complete measurements.\n\n![chart]("+articleImageDataURI(t, 67)+")")
-	require.NoError(t, h.db.Delete(article).Error)
-	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-	require.Zero(t, count)
 }

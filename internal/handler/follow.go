@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -55,7 +56,7 @@ func (h *FollowHandler) Feed(c *gin.Context) {
 }
 
 func (h *FollowHandler) State(c *gin.Context) {
-	result, err := h.service.State(c.Request.Context())
+	result, err := h.service.State(c.Request.Context(), followLibraries(c.Query("libraries"))...)
 	if err != nil {
 		c.Error(err)
 		return
@@ -65,7 +66,8 @@ func (h *FollowHandler) State(c *gin.Context) {
 
 func (h *FollowHandler) MarkViewed(c *gin.Context) {
 	var input struct {
-		ViewedAt *time.Time `json:"viewed_at"`
+		ViewedAt  *time.Time `json:"viewed_at"`
+		Libraries []string   `json:"libraries"`
 	}
 	if c.Request.ContentLength != 0 {
 		if err := c.ShouldBindJSON(&input); err != nil {
@@ -73,10 +75,17 @@ func (h *FollowHandler) MarkViewed(c *gin.Context) {
 			return
 		}
 	}
-	result, err := h.service.MarkViewed(c.Request.Context(), input.ViewedAt)
+	result, err := h.service.MarkViewed(c.Request.Context(), input.ViewedAt, input.Libraries...)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
+func followLibraries(value string) []string {
+	if value == "" {
+		return nil
+	}
+	return strings.Split(value, ",")
 }

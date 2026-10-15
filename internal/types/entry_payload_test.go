@@ -15,8 +15,8 @@ func TestEntryPayloadGenerationsAndPersistedWriterKeys(t *testing.T) {
 		require.NoError(t, err)
 		var fields map[string]json.RawMessage
 		require.NoError(t, json.Unmarshal(encoded, &fields))
-		require.Contains(t, fields, "knowledge_id")
-		require.NotContains(t, fields, "entry_id")
+		require.Contains(t, fields, "entry_id")
+		require.NotContains(t, fields, "knowledge_id")
 	}
 	for _, key := range []string{"knowledge_ids", "entry_ids"} {
 		var p EntryListReparsePayload
@@ -24,7 +24,7 @@ func TestEntryPayloadGenerationsAndPersistedWriterKeys(t *testing.T) {
 		require.Equal(t, []string{"a", "b"}, p.EntryIDs)
 		data, err := json.Marshal(p)
 		require.NoError(t, err)
-		require.Contains(t, string(data), `"knowledge_ids"`)
+		require.Contains(t, string(data), `"entry_ids"`)
 	}
 	for _, raw := range []string{`{"knowledge_id":"a","entry_id":"b"}`, `{"entry_id":12}`, `{"entry_id":null}`, `{"knowledge_ids":["a"],"entry_ids":["b"]}`, `{"entry_ids":[1]}`} {
 		var p DocumentProcessPayload

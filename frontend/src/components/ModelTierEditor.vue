@@ -1,6 +1,6 @@
 <template>
   <section class="model-tier-editor" :aria-label="t('modelTiers.title')">
-    <div class="model-tier-heading"><div><h3>{{ t('modelTiers.title') }}</h3><p>{{ t('modelTiers.scopeHint.knowledge_base') }}</p></div><t-button variant="text" :loading="loading" :disabled="disabled" @click="refresh">{{ t('common.refresh') }}</t-button></div>
+    <div class="model-tier-heading"><div><h3>{{ t('modelTiers.title') }}</h3><p>{{ t('modelTiers.scopeHint.library') }}</p></div><t-button variant="text" :loading="loading" :disabled="disabled" @click="refresh">{{ t('common.refresh') }}</t-button></div>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" @click="refresh">{{ t('modelTiers.retry') }}</t-button></template></t-alert>
     <div v-for="tier in MODEL_TIERS" :key="tier" class="model-tier-row">
       <div class="model-tier-info"><label :id="`${id}-${tier}`">{{ t(`modelTiers.names.${tier}`) }}</label><p>{{ t(`modelTiers.uses.${tier}`) }}</p></div>
@@ -37,7 +37,7 @@ const models = computed(() => props.allModels || resources.allModels)
 const resolved = computed(() => {
   const generation = props.modelValue.generation || ''
   const inherited: ResolvedModelTiers = generation ? Object.fromEntries(['light', 'entity_resolution'].map(tier => [tier, { model_id: generation, source: 'generation' }])) : {}
-  return previewModelTiers(props.modelValue, inherited, 'knowledge_base')
+  return previewModelTiers(props.modelValue, inherited, 'library')
 })
 function modelName(modelId?: string): string { const model = models.value?.find(item => item.id === modelId); return model?.display_name || model?.name || modelId || t('modelTiers.unconfigured') }
 function sourceName(source?: string): string { const key = `modelTiers.sources.${source || 'unconfigured'}`; return te(key) ? t(key) : t('modelTiers.sources.default') }

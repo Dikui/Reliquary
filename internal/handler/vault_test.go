@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -26,10 +25,12 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
-	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
+	library, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
-	kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
-	require.NoError(t, db.Save(kb).Error)
+	library, err = repository.NewLibraryRepository(db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, "ai-reports")
+	require.NoError(t, err)
+	library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
+	require.NoError(t, db.Save(library).Error)
 	root := t.TempDir()
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(db))
 	documents, err := service.NewVaultDocumentService(db, nil, engine, root)
@@ -52,11 +53,11 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
 	require.Equal(t, "report", result.Data.SourceKind)
 	require.Equal(t, "测试报告", result.Data.Title)
-	require.Contains(t, result.Data.VaultPath, "reports/"+time.Now().UTC().Format("2006-01")+"/测试报告-")
+	require.Contains(t, result.Data.VaultPath, library.Directory+"/测试报告-")
 	content, err := os.ReadFile(filepath.Join(root, result.Data.VaultPath))
 	require.NoError(t, err)
 	require.Contains(t, string(content), "Reportvaultmarker")
-	hits, err := engine.Retrieve(ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, KnowledgeBaseIDs: []string{kb.ID}, Query: "Reportvaultmarker", TopK: 10}})
+	hits, err := engine.Retrieve(ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{library.ID}, Query: "Reportvaultmarker", TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
@@ -71,7 +72,7 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	require.Equal(t, root, status.Data.Root)
 	require.EqualValues(t, 1, status.Data.Reports.IndexedFiles)
 	response = httptest.NewRecorder()
-	request = httptest.NewRequest(http.MethodPost, "/api/v1/reports", bytes.NewBufferString(`{"title":"bad","markdown":"x","related_article_ids":["missing"]}`))
+	request = httptest.NewRequest(http.MethodPost, "/api/v1/reports", bytes.NewBufferString(`{"title":"bad","markdown":"x","related_entry_ids":["missing"]}`))
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())

@@ -8,7 +8,7 @@
             </t-button>
         </div>
         <t-drawer v-if="compactNavigation" v-model:visible="mobileSidebarOpen" placement="left"
-            :header="t('menu.knowledgeBase')" :footer="false" size="min(280px, 90vw)"
+            :header="t('menu.library')" :footer="false" size="min(280px, 90vw)"
             drawer-class-name="platform-mobile-navigation">
             <Menu mobile-overlay @close="mobileSidebarOpen = false" />
         </t-drawer>

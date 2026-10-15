@@ -23,7 +23,7 @@ const (
 
 var ModelTiers = []ModelTier{ModelTierLight, ModelTierEntityResolution, ModelTierGeneration, ModelTierEmbedding, ModelTierRerank}
 
-// ModelTierConfig stores the model choices for the knowledge base.
+// ModelTierConfig stores the model choices for the library.
 type ModelTierConfig struct {
 	Light            string `json:"light"`
 	EntityResolution string `json:"entity_resolution"`

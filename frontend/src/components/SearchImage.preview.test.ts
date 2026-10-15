@@ -1,3 +1,5 @@
+import * as bodyReference from '../utils/bodyReference'
+import * as libraryScopeHelpers from '../utils/libraryScope'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -13,7 +15,7 @@ import * as searchHelpers from '../utils/search'
 import * as highlight from './GlobalCommandPalette/useHighlight'
 import * as markdownPlainText from '../utils/markdownPlainText'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../utils/sfcStyleTestHelpers'
-import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from '../views/knowledge-base/componentTestHarness'
+import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle } from '../views/library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
@@ -26,10 +28,11 @@ function loadSearchAPI(post: (url: string, body: any) => Promise<unknown>) {
   const value = { exports: {} as any }
   new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {
     post, get: async (url: string) => {
+      if (url === '/api/v1/libraries') return { success: true, data: [{ id: 'images' }] }
       assert.equal(url, '/api/v1/search/options')
       return { success: true, data: { entities: [], topics: [] } }
     },
-  } : require(name), value, value.exports)
+  } : name === '@/utils/libraryScope' ? libraryScopeHelpers : require(name), value, value.exports)
   return value.exports
 }
 
@@ -64,7 +67,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
     })
     const article = loadComponent(new URL('./SearchEntry.vue', import.meta.url), {
-      './SearchImage.vue': moduleOf(image), './EntryClassification.vue': empty,
+      './EntryUpdateNotice.vue': empty, './SearchImage.vue': moduleOf(image), './EntryClassification.vue': empty,
       './GlobalCommandPalette/useHighlight': highlight,
       '@/utils/markdownPlainText': markdownPlainText,
     })
@@ -80,10 +83,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         }],
       }] } }
     })
-    const page = loadComponent(new URL('../views/knowledge-base/SearchView.vue', import.meta.url), {
+    const page = loadComponent(new URL('../views/library/SearchView.vue', import.meta.url), {
       // URL state supplies the query; this renderer has no native DOM input.
       vue: { ...vue, vModelText: {} },
       '@/api/search': api, '@/utils/search': searchHelpers,
+    '@/utils/bodyReference': bodyReference,
+    '@/composables/useLibraryScope': { useLibraryScope: () => vue.ref([]) },
+    '@/components/LibraryScopeSelect.vue': empty,
       '@/components/SearchEntry.vue': moduleOf(article), '@/components/SearchFilters.vue': empty,
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {}, push: async (path: unknown) => { navigations.push(path) } }) },
     })
@@ -97,6 +103,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       app.mount(root); await settle()
       assert.equal(searches.length, 1)
       assert.equal(searches[0].query, 'a blue circle')
+      assert.deepEqual(searches[0].libraries, ['images'])
       const thumbnail = descendants(root).find(node => hasClass(node, 'search-image-open'))
       assert.ok(thumbnail, 'the loaded picture has an operable preview trigger')
       assert.equal(thumbnail.tag, 'button')

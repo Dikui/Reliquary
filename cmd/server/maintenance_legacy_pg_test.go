@@ -31,9 +31,9 @@ func TestMaintenanceHelperSnapshotsLegacySchemaWithoutUpgradingIt(t *testing.T) 
 INSERT INTO tenants(id,name,business) VALUES(1,'Legacy maintenance','personal');
 INSERT INTO users(id,username,email,password_hash) VALUES('legacy-user','Legacy owner','legacy@example.invalid','fixture-password-hash');
 INSERT INTO models(id,tenant_id,name,type,source,status,parameters) VALUES('legacy-model',1,'Legacy model','knowledge-qa','remote','active','{"api_key":"fixture-legacy-key","interface_type":"openai"}');
-INSERT INTO knowledge_bases(id,name,tenant_id,embedding_model_id,summary_model_id) VALUES('legacy-kb','Articles',1,'legacy-model','legacy-model');
+INSERT INTO knowledge_bases(id,name,tenant_id,embedding_model_id,summary_model_id) VALUES('legacy-library','Articles',1,'legacy-model','legacy-model');
 INSERT INTO knowledges(id,tenant_id,knowledge_base_id,type,title,source,parse_status,content_sim_hash,metadata)
-VALUES('legacy-article',1,'legacy-kb','manual','Original awaiting review','','pending_review',9007199254740993,'{"intake":{"original_content":"Exact legacy original.","reason":"missing source"}}');
+VALUES('legacy-article',1,'legacy-library','manual','Original awaiting review','','pending_review',9007199254740993,'{"intake":{"original_content":"Exact legacy original.","reason":"missing source"}}');
 INSERT INTO task_jobs(id,task_type,queue,state,payload,claim_token,lease_until) VALUES('legacy-active','manual:process','default','active','{"knowledge_id":"legacy-article"}','legacy-worker',now()+interval '1 hour');
 `).Error)
 	contents := func() map[string]string {

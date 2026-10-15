@@ -42,16 +42,16 @@ func (r *reparseFailureEntryRepo) UpdateEntryColumn(
 	return nil
 }
 
-type reparseFailureKBService struct {
-	interfaces.KnowledgeBaseService
-	kb *types.KnowledgeBase
+type reparseFailureLibraryService struct {
+	interfaces.LibraryService
+	library *types.Library
 }
 
-func (s *reparseFailureKBService) GetKnowledgeBaseByID(
+func (s *reparseFailureLibraryService) GetLibraryByID(
 	_ context.Context,
 	_ string,
-) (*types.KnowledgeBase, error) {
-	return s.kb, nil
+) (*types.Library, error) {
+	return s.library, nil
 }
 
 type failingReparseTaskEnqueuer struct {
@@ -68,21 +68,21 @@ func (e failingReparseTaskEnqueuer) Enqueue(
 func TestReparseEntryManualEnqueueFailureIsVisible(t *testing.T) {
 	enqueueErr := errors.New("queue unavailable")
 	entry := &types.Entry{
-		ID:              "entry-1",
-		SpaceID:         7,
-		KnowledgeBaseID: "kb-1",
-		Type:            types.EntryTypeManual,
-		ParseStatus:     types.ParseStatusCompleted,
-		EnableStatus:    "enabled",
+		ID:           "entry-1",
+		SpaceID:      7,
+		LibraryID:    "library-1",
+		Type:         types.EntryTypeManual,
+		ParseStatus:  types.ParseStatusCompleted,
+		EnableStatus: "enabled",
 	}
 	require.NoError(t, entry.SetManualMetadata(
 		types.NewManualEntryMetadata("# content", types.ManualEntryStatusPublish, 1),
 	))
 	repo := &reparseFailureEntryRepo{entry: entry}
 	svc := &entryService{
-		repo:      repo,
-		kbService: &reparseFailureKBService{kb: &types.KnowledgeBase{ID: "kb-1"}},
-		task:      failingReparseTaskEnqueuer{err: enqueueErr},
+		repo:           repo,
+		libraryService: &reparseFailureLibraryService{library: &types.Library{ID: "library-1"}},
+		task:           failingReparseTaskEnqueuer{err: enqueueErr},
 	}
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
 

@@ -1,11 +1,12 @@
 package pgtest
 
 import (
-	"github.com/golang-migrate/migrate/v4"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/golang-migrate/migrate/v4"
 
 	"gorm.io/driver/postgres"
 )
@@ -21,16 +22,16 @@ func TestOpenRunsVersionedMigrations(t *testing.T) {
 	if err := db.Raw("SELECT version, dirty FROM schema_migrations").Row().Scan(&version, &dirty); err != nil {
 		t.Fatal(err)
 	}
-	if dirty || version != 6 {
-		t.Fatalf("expected the clean imported-documents migration at version 6, got version=%d dirty=%v", version, dirty)
+	if dirty || version != LatestMigrationVersion(t) {
+		t.Fatalf("expected clean latest migration, got version=%d dirty=%v", version, dirty)
 	}
 	var count int64
 	if err := db.Raw("SELECT COUNT(*) FROM pg_extension WHERE extname IN ('vector', 'pg_search', 'pg_trgm')").Scan(&count).Error; err != nil || count != 3 {
 		t.Fatalf("required PostgreSQL extensions: count=%d error=%v", count, err)
 	}
 	if err := db.Exec(`INSERT INTO chunks
-		(space_id, knowledge_base_id, entry_id, content, chunk_index, start_at, end_at)
-		VALUES (1, 'pgtest-kb', 'pgtest-entry', 'PostgreSQL integration tests', 0, 0, 28)`).Error; err != nil {
+		(space_id, library_id, entry_id, content, chunk_index, start_at, end_at)
+		VALUES (1, 'pgtest-library', 'pgtest-entry', 'PostgreSQL integration tests', 0, 0, 28)`).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO embeddings (source_id, source_type, dimension, embedding)

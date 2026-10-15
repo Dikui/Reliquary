@@ -205,7 +205,7 @@
             <div class="login-features">
               <div class="feature-item">
                 <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.multimodalParsing') }}</span>
+                <span class="feature-text">{{ $t('platform.markdownImageIngest') }}</span>
               </div>
               <div class="feature-item">
                 <span class="feature-icon">✓</span>
@@ -272,7 +272,7 @@
               </div>
               <div class="feature-item">
                 <span class="feature-icon">✓</span>
-                <span class="feature-text">{{ $t('platform.knowledgeBaseManagement') }}</span>
+                <span class="feature-text">{{ $t('platform.libraryManagement') }}</span>
               </div>
             </div>
           </div>

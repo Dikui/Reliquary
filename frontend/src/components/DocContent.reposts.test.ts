@@ -15,7 +15,7 @@ import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import { safeExternalUrl } from '../utils/externalUrl'
-import type { EntryRepostSource } from '../api/knowledge-base'
+import type { EntryRepostSource } from '../api/library'
 import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML } from '../utils/security'
 import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
 import { CONTENT_TYPES } from '../types/entryClassification'
@@ -28,7 +28,7 @@ const compile = (code: string) => ts.transpileModule(code, {
 function evaluate(code: string, modules: Record<string, unknown>, environment: Record<string, unknown> = {}) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', 'window', 'localStorage', compile(code))(
-    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : modules[name] ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
+    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : (name === './BodyReference.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
     environment.window, environment.localStorage,
   )
   return module.exports
@@ -49,10 +49,10 @@ function compileSFC(path: string) {
     return component
   } }
 }
-const repostSFC = compileSFC('../views/knowledge-base/components/RepostSources.vue')
+const repostSFC = compileSFC('../views/library/components/RepostSources.vue')
 const detailSFC = compileSFC('./DocContent.vue')
-const actionMenuSFC = compileSFC('../views/knowledge-base/components/DocumentActionMenu.vue')
-const batchBarSFC = compileSFC('../views/knowledge-base/components/DocumentBatchBar.vue')
+const actionMenuSFC = compileSFC('../views/library/components/DocumentActionMenu.vue')
+const batchBarSFC = compileSFC('../views/library/components/DocumentBatchBar.vue')
 const actualRepostSources = repostSFC.create({ '@/utils/externalUrl': { safeExternalUrl } })
 const sharedRepostModule = { __esModule: true, default: actualRepostSources }
 const emptyComponent = defineComponent({ setup: () => () => null })
@@ -62,7 +62,7 @@ const unexpectedAPI = () => { throw new Error('The repost rendering test must no
 const deleteConfirmModule = { __esModule: true, default: compileSFC('./DocumentDeleteConfirm.vue').create() }
 const personalDeleteModule = { __esModule: true, default: compileSFC('./PersonalDocumentDelete.vue').create({
   '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
-  '@/api/knowledge-base': { deleteDocument: unexpectedAPI },
+  '@/api/library': { deleteDocument: unexpectedAPI },
   'tdesign-vue-next': { MessagePlugin: { success: unexpectedAPI } },
 }) }
 
@@ -101,6 +101,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
 }
 
 interface DetailRenderOptions {
+  reprocessRequests?: string[]
   copyRequests?: { text: string; successKey: string }[]
   environment?: Record<string, unknown>
   scenario?: (state: any) => void | Promise<void>
@@ -121,20 +122,22 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     'marked-katex-extension': { __esModule: true, default: () => ({}) },
     'highlight.js': { __esModule: true, default: {} },
     mermaid: { __esModule: true, default: { initialize() {} } },
-    'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI } },
-    '@/api/knowledge-base': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI },
+    'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI, success() {} } },
+    '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI, reparseEntry: (id: string) => { options.reprocessRequests?.push(id); return envelope({ parse_status: 'pending' }) } },
     '@/utils/clipboard': { copyWithToast: async (text: string, successKey: string) => { options.copyRequests?.push({ text, successKey }); return true } },
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL,
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule,
+    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule, '@/components/EntryStarToggle.vue': emptyModule,
+    '@/components/EntryUpdateNotice.vue': emptyModule,
+    '@/components/ReportAssociations.vue': emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
     '@/components/EntryProcessingTimeline.vue': emptyModule,
     '@/components/PersonalDocumentDelete.vue': options.personalDelete || emptyModule,
     '@/components/MissingMaterials.vue': options.missingMaterials || emptyModule, '@/components/IncompleteActions.vue': options.incompleteActions || emptyModule,
-    '@/views/knowledge-base/components/RepostSources.vue': sharedRepostModule,
-    '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+    '@/views/library/components/RepostSources.vue': sharedRepostModule,
+    '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   }, options.environment)
   if (options.scenario) {
     const setup = component.setup
@@ -145,7 +148,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     }
   }
   return renderComponent(component, {
-    visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', entryType: 'document',
+    visible: true, canEditLibrary: false, canDownloadLibrary: false, libraryId: 'library-a', entryType: 'document',
     onReviewChanged: options.onReviewChanged,
     details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
@@ -156,12 +159,12 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
 // are replaced. The resulting reactive details object is passed to the real drawer.
 function createArticleDetailsLoader(records: Record<string, Record<string, unknown>>) {
   const calls: string[] = []
-  const hookSource = readFileSync(new URL('../composables/useKnowledgeBase.ts', import.meta.url), 'utf8')
+  const hookSource = readFileSync(new URL('../composables/useLibrary.ts', import.meta.url), 'utf8')
   const modules = {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-11' },
     'tdesign-vue-next': { MessagePlugin: {} },
-    '@/api/knowledge-base': {
+    '@/api/library': {
       getEntryDetails: async (id: string) => {
         calls.push(id)
         return { success: true, data: { id, title: id, type: 'manual', source_kind: 'article',
@@ -173,7 +176,7 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
   }
-  const hook = evaluate(hookSource, modules).default('kb-a')
+  const hook = evaluate(hookSource, modules).default('library-a')
   return { hook, calls, async load(id: string) {
     hook.getCardDetails({ id })
     await new Promise<void>(resolve => setImmediate(resolve))
@@ -183,11 +186,11 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: detail conflict keeps its approval label after loading the actual related article field`, async () => {
-    const loader = createArticleDetailsLoader({ conflict: { related_article_id: 'original-article', parse_status: 'rejected', metadata: { intake: { source: 'api', decision: 'rejected', source_info: { original_url: 'https://example.com/conflict' } } } } })
+    const loader = createArticleDetailsLoader({ conflict: { related_entry_id: 'original-article', parse_status: 'rejected', metadata: { intake: { source: 'api', decision: 'rejected', source_info: { original_url: 'https://example.com/conflict' } } } } })
     const review = compileSFC('./ReviewActions.vue').create({ '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) }, 'tdesign-vue-next': { MessagePlugin: {} } })
     const loadedDetails = await loader.load('conflict')
     const html = await renderDetails([], locale, { loadedDetails, reviewActions: { __esModule: true, default: review } })
-    assert.equal(loadedDetails.related_article_id, 'original-article')
+    assert.equal(loadedDetails.related_entry_id, 'original-article')
     assert.ok(html.includes(messages[locale].knowledgeReview.saveAsNew))
   })
   test(`${locale}: details prevent cross-action submissions and refresh review counts only on article judgments`, async () => {
@@ -201,7 +204,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await state.reprocess()
       state.applyProcessingState({ parse_status: 'completed' })
       assert.equal(events.length, 0, 'processing polls do not refresh pending counts')
-      state.applyArticleJudgment({ content_type: 'research' })
+      state.applyEntryJudgment({ content_type: 'research' })
       assert.equal(events.length, 1)
     } })
     assert.deepEqual(disabled, [true])
@@ -274,7 +277,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await renderDetails([], locale, { loadedDetails })
     assert.deepEqual(loader.calls, ['article'], 'The production hook requested article details')
     assert.match(html, /doc-collect-reason-row/, 'The API reason survives projection into drawer props')
-    assert.ok(html.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(html.includes(messages[locale].library.collectReason))
     assert.ok(html.includes(reason))
   })
 
@@ -291,7 +294,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await new Promise<void>(resolve => setImmediate(resolve))
       const html = await renderDetails([], locale, { loadedDetails: loader.hook.details })
       assert.doesNotMatch(html, /doc-collect-reason-row/)
-      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+      assert.ok(!html.includes(messages[locale].library.collectReason))
       assert.ok(!html.includes('Keep the source.'))
     }
   })
@@ -308,7 +311,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await renderDetails([], locale, { details: { collect_reason: '保存研究来源 <script>alert(1)</script>' } })
     const row = html.match(/<div class="doc-detail-row doc-collect-reason-row">([\s\S]*?)<\/div>/)?.[1]
     assert.ok(row, 'The reason is a basic-information row')
-    assert.ok(row.includes(messages[locale].knowledgeBase.collectReason))
+    assert.ok(row.includes(messages[locale].library.collectReason))
     assert.ok(row.includes('保存研究来源 &lt;script&gt;alert(1)&lt;/script&gt;'))
     assert.doesNotMatch(row, /<script>/)
   })
@@ -317,7 +320,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     test(`${locale}: article basic information hides an empty collection reason ${JSON.stringify(collect_reason)}`, async () => {
       const html = await renderDetails([], locale, { details: { collect_reason } })
       assert.doesNotMatch(html, /doc-collect-reason-row/)
-      assert.ok(!html.includes(messages[locale].knowledgeBase.collectReason))
+      assert.ok(!html.includes(messages[locale].library.collectReason))
     })
   }
 
@@ -351,16 +354,19 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
 
   for (const source_kind of ['mine', 'report']) {
-    test(`${locale}: ${source_kind} detail hides reprocessing and never submits a model request`, async () => {
+    test(`${locale}: ${source_kind} detail submits processing or index rebuilding`, async () => {
+      const calls: string[] = []
       const html = await renderDetails([], locale, {
-        details: { source_kind, vault_path: `${source_kind}/note.md` },
+        details: { source_kind, vault_path: `${source_kind}/note.md`, parse_status: 'failed' },
+        reprocessRequests: calls,
         scenario: state => state.reprocess(),
       })
-      assert.ok(!html.includes(messages[locale].knowledgeBase.reprocess))
+      assert.deepEqual(calls, ['message-a'])
+      assert.ok(html.includes(source_kind === 'report' ? messages[locale].library.reindexDocument : messages[locale].library.reprocess))
     })
   }
 
-  test(`${locale}: legacy manual and vault documents have no body editor and personal documents have no reprocessing action`, async () => {
+  test(`${locale}: all library documents expose reprocessing or report index rebuilding without a body editor`, async () => {
     const component = actionMenuSFC.create({
       '@/components/PersonalDocumentDelete.vue': personalDeleteModule,
       '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
@@ -369,7 +375,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
     const editable = await render({})
     const hasEditAction = (html: string) => /class="[^"]*doc-action-menu-item[^"]*"[^>]*>[\s\S]*?name="edit"/.test(html)
-    const reprocessLabel = `<span>${messages[locale].knowledgeBase.rebuildDocument}</span>`
+    const reprocessLabel = `<span>${messages[locale].library.rebuildDocument}</span>`
     assert.equal(hasEditAction(editable), false)
     assert.ok(editable.includes(reprocessLabel))
     const article = await render({ source_kind: 'article', vault_path: 'articles/note.md' })
@@ -379,12 +385,12 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       for (const parse_status of ['completed', 'processing']) {
         const html = await render({ source_kind, parse_status })
         assert.equal(hasEditAction(html), false)
-        assert.ok(!html.includes(reprocessLabel))
+        assert.ok(html.includes(source_kind === 'report' ? messages[locale].library.reindexDocument : messages[locale].library.rebuildDocument))
       }
     }
     const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2, reparseAllowed: false }, locale)
-    assert.ok(!mixedBatch.includes(messages[locale].knowledgeBase.rebuildDocument))
-    assert.ok(mixedBatch.includes(messages[locale].knowledgeBase.batchDelete))
+    assert.ok(!mixedBatch.includes(messages[locale].library.rebuildDocument))
+    assert.ok(mixedBatch.includes(messages[locale].library.batchDelete))
   })
 
   test(`${locale}: article detail shows the relative vault path and copies it through the shared clipboard helper`, async () => {
@@ -394,8 +400,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       details: { vault_path: path }, copyRequests,
       scenario: async state => { await state.copyWithToast(path, 'common.copySuccess') },
     })
-    assert.ok(html.includes(messages[locale].knowledgeBase.vaultPath))
-    assert.ok(html.includes(messages[locale].knowledgeBase.copyVaultPath))
+    assert.ok(html.includes(messages[locale].library.vaultPath))
+    assert.ok(html.includes(messages[locale].library.copyVaultPath))
     assert.ok(html.includes(`<code>${path}</code>`))
     assert.deepEqual(copyRequests, [{ text: path, successKey: 'common.copySuccess' }])
     assert.doesNotMatch(await renderDetails([], locale), /doc-vault-path-row/)
@@ -627,7 +633,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(drawerTag(html).includes(`data-drawer-size="${width === 390 ? '100vw' : '654px'}"`))
       const intake = html.match(/<section class="setting-drawer__section intake-review-panel">[\s\S]*?<\/section>/)?.[0]
       assert.ok(intake, 'the actual original preview panel is rendered')
-      assert.ok(intake.includes(messages[locale].knowledgeBase.intakePreviewOriginal))
+      assert.ok(intake.includes(messages[locale].library.intakePreviewOriginal))
       assert.ok(intake.includes(`<a href="${longOriginalURL}" target="_blank" rel="noopener">${longOriginalURL}</a>`),
         'the full original preview URL retains its exact href and visible text')
       const urlSource = html.match(/<div class="url_link_box">[\s\S]*?<\/a><\/div>/)?.[0]
@@ -744,10 +750,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const loader = createArticleDetailsLoader({ converted: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Converted.md' }, direct: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Direct.md' }, report: { source_kind: 'report', channel: 'api', file_type: 'md', vault_path: 'reports/Report.md' } })
     for (const [id, kind] of [['converted', 'mine'], ['direct', 'mine'], ['report', 'report']] as const) {
       const html = await renderDetails([], locale, { loadedDetails: await loader.load(id) })
-      assert.ok(html.includes(messages[locale].knowledgeBase.sourceKinds[kind]), id)
-      assert.ok(!html.includes(messages[locale].knowledgeBase.typeManual), id)
-      assert.ok(!html.includes(`>${messages[locale].knowledgeBase.channelApi}<`), id)
-      assert.ok(html.includes('MD'), id)
+      assert.ok(html.includes(messages[locale].library.sourceKinds[kind]), id)
+      assert.ok(!html.includes(messages[locale].library.typeManual), id)
+      assert.ok(!html.includes(`>${messages[locale].library.channelApi}<`), id)
+      assert.ok(html.includes(messages[locale].ikb18.markdown), id)
     }
     assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
   })
@@ -761,7 +767,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await renderDetails([], locale, { loadedDetails, scenario: state => {
       assert.equal(state.mergedContent.value, body)
       assert.equal(state.isLegacyManualDraft.value, true)
-      assert.equal(state.canPreview(), false)
+
     } })
     assert.ok(html.includes('Preserved draft'))
     assert.ok(html.includes('Draft body with a source reference.'))
@@ -769,25 +775,26 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(loadedDetails.metadata.content, body)
   })
 
-  test(`${locale}: historical manual drafts stored in a local intake file retain the existing read-only preview`, async () => {
-    const loader = createArticleDetailsLoader({ draft: { type: 'manual', parse_status: 'draft', metadata: { intake: { source: 'manual', decision: 'pending', original_path: 'local://draft/body.md' } } } })
-    const loadedDetails = await loader.load('draft')
-    await renderDetails([], locale, { loadedDetails, scenario: state => {
-      assert.equal(state.isLegacyManualDraft.value, true)
-      assert.equal(state.canPreview(), true)
-    } })
-    assert.equal(loadedDetails.metadata.intake.original_path, 'local://draft/body.md')
-  })
+
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: personal document detail shows delete and hides metadata editing`, async () => {
+  test(`${locale}: personal document detail supports metadata editing and processing alongside deletion`, async () => {
     const deletion = { __esModule: true, default: defineComponent({ props: ['documentId'], setup: props => () => h('button', { 'data-delete-document': props.documentId }, messages[locale].personalDocument.delete) }) }
     const html = await renderDetails([], locale, { details: { source_kind: 'mine', title: 'My imported note', custom_metadata: {} }, personalDelete: deletion })
     assert.match(html, /data-delete-document="message-a"/)
     assert.ok(html.includes(messages[locale].personalDocument.delete))
-    assert.ok(!html.includes('metadata-empty-action'))
-    assert.ok(!html.includes('name="edit"'))
-    assert.ok(!html.includes(messages[locale].knowledgeBase.rebuildDocument))
+    assert.ok(html.includes('metadata-empty-action'))
+    assert.ok(html.includes(messages[locale].library.addMetadataField))
+    assert.ok(html.includes(messages[locale].library.reprocess))
   })
 }
+
+for (const width of [390, 1440]) test(`trace drawer is bounded by its ${width}px viewport`, async () => {
+  const html = await renderDetails([], 'en-US', {
+    environment: { window: { innerWidth: width }, localStorage: { getItem: () => '1200' } },
+    scenario: state => state.openTimeline(),
+  })
+  assert.match(html, /data-drawer-size="min\(820px, 100vw\)"/)
+  if (width === 390) assert.ok(!html.includes('trace-drawer-resize-handle'))
+})

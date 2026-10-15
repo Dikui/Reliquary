@@ -20,8 +20,8 @@ export interface ModelUsageResource {
 }
 
 export interface ModelUsageDetails {
-  knowledge_bases: ModelUsageResource[]
-  knowledge_base_total: number
+  libraries: ModelUsageResource[]
+  library_total: number
 }
 
 export class ModelInUseError extends Error {
@@ -72,14 +72,14 @@ function parseTotal(value: unknown, listed: number): number {
 export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null {
   if (!isRecord(value)) return null
 
-  const knowledgeBases = parseResources(value.knowledge_bases)
-  if (!knowledgeBases) return null
+  const libraries = parseResources(value.libraries)
+  if (!libraries) return null
 
   const details: ModelUsageDetails = {
-    knowledge_bases: knowledgeBases,
-    knowledge_base_total: parseTotal(value.knowledge_base_total, knowledgeBases.length),
+    libraries: libraries,
+    library_total: parseTotal(value.library_total, libraries.length),
   }
-  if (knowledgeBases.length === 0) {
+  if (libraries.length === 0) {
     return null
   }
   return details
@@ -110,20 +110,20 @@ export function modelUsageListTruncated(resources: readonly ModelUsageResource[]
   return modelUsageResourceCount(resources, total) > resources.length
 }
 
-export type ModelUsageResourceKind = 'knowledge_base'
+export type ModelUsageResourceKind = 'library'
 
-export type KnowledgeBaseModelUsageSection = 'models'
+export type LibraryModelUsageSection = 'models'
 
-const knowledgeBaseUsageSections: Partial<Record<KnownModelUsageBinding, KnowledgeBaseModelUsageSection>> = {
+const libraryUsageSections: Partial<Record<KnownModelUsageBinding, LibraryModelUsageSection>> = {
   embedding_model: 'models',
   summary_model: 'models',
 }
 
-export function modelUsageKnowledgeBaseSection(
+export function modelUsageLibrarySection(
   bindings: readonly string[],
-): KnowledgeBaseModelUsageSection {
+): LibraryModelUsageSection {
   for (const binding of bindings) {
-    const section = knowledgeBaseUsageSections[binding as KnownModelUsageBinding]
+    const section = libraryUsageSections[binding as KnownModelUsageBinding]
     if (section) return section
   }
   return 'models'
@@ -134,5 +134,5 @@ export function modelUsageResourceRoute(
   id: string,
   bindings: readonly string[] = [],
 ) {
-  return { path: '/platform/settings', query: { section: 'knowledge-base', subsection: modelUsageKnowledgeBaseSection(bindings) } }
+  return { path: '/platform/settings', query: { section: 'library', subsection: modelUsageLibrarySection(bindings) } }
 }

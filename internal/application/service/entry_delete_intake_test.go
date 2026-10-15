@@ -20,13 +20,13 @@ type intakeDeleteRepo struct {
 
 func TestDeleteArticleRemovesEntityAssociationsAndRetainsEntity(t *testing.T) {
 	db := pgtest.Open(t)
-	article := &types.Entry{ID: "article", SpaceID: 1, KnowledgeBaseID: "kb", ParseStatus: types.ParseStatusCompleted}
+	article := &types.Entry{ID: "article", SpaceID: 1, LibraryID: "library", ParseStatus: types.ParseStatusCompleted}
 	entity := &types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
 	require.NoError(t, db.Create(article).Error)
 	require.NoError(t, db.Create(entity).Error)
 	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: entity.ID}).Error)
 	svc := &entryService{
-		db: db, repo: repository.NewEntryRepository(db), kbService: intakeDeleteKB{},
+		db: db, repo: repository.NewEntryRepository(db), libraryService: intakeDeleteLibrary{},
 		fileSvc: &intakeFileService{}, chunkService: intakeDeleteChunks{repo: intakeDeleteChunkRepo{}},
 		spaceRepo: intakeSpaceRepo{},
 	}
@@ -61,18 +61,18 @@ type intakeDeleteChunks struct {
 func (s intakeDeleteChunks) GetRepository() interfaces.ChunkRepository       { return s.repo }
 func (intakeDeleteChunks) DeleteByEntryList(context.Context, []string) error { return nil }
 
-type intakeDeleteKB struct {
-	interfaces.KnowledgeBaseService
+type intakeDeleteLibrary struct {
+	interfaces.LibraryService
 	creator string
 }
 
-func (s intakeDeleteKB) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
-	return &types.KnowledgeBase{ID: "kb", CreatorID: s.creator}, nil
+func (s intakeDeleteLibrary) GetLibraryByID(context.Context, string) (*types.Library, error) {
+	return &types.Library{ID: "library", CreatorID: s.creator}, nil
 }
 
 func TestDeleteEntryListIntakeAndResources(t *testing.T) {
 	makeEntry := func() *types.Entry {
-		k := &types.Entry{ID: "k", SpaceID: 1, KnowledgeBaseID: "kb", FilePath: "upload", ParseStatus: types.ParseStatusRejected}
+		k := &types.Entry{ID: "k", SpaceID: 1, LibraryID: "library", FilePath: "upload", ParseStatus: types.ParseStatusRejected}
 		require.NoError(t, k.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", OriginalPath: "original", Images: []string{"image"}}))
 		return k
 	}
@@ -83,7 +83,7 @@ func TestDeleteEntryListIntakeAndResources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &intakeDeleteRepo{entry: makeEntry()}
 			files := &intakeFileService{saved: map[string][]byte{"upload": {}, "original": {}, "image": {}}}
-			svc := &entryService{repo: repo, kbService: intakeDeleteKB{creator: "creator"}, fileSvc: files, chunkService: intakeDeleteChunks{repo: intakeDeleteChunkRepo{}}, spaceRepo: intakeSpaceRepo{}}
+			svc := &entryService{repo: repo, libraryService: intakeDeleteLibrary{creator: "creator"}, fileSvc: files, chunkService: intakeDeleteChunks{repo: intakeDeleteChunkRepo{}}, spaceRepo: intakeSpaceRepo{}}
 			ctx := context.WithValue(context.Background(), types.SpaceInfoContextKey, &types.Space{ID: 1})
 			ctx = context.WithValue(ctx, types.SpaceIDContextKey, uint64(1))
 			ctx = context.WithValue(ctx, types.UserIDContextKey, tt.user)

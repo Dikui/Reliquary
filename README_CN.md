@@ -1,10 +1,10 @@
 # Reliquary
 
-后台任务与业务数据同存 PostgreSQL，支持事务内入队与崩溃恢复，部署不需要单独的队列服务。详见 [ADR 0010](docs/adr/0010-postgres-task-queue.md)。
+四个核心服务为 PostgreSQL、Redis、Neo4j 与 Reliquary。PG 保存业务正本和待处理操作，Redis 调度任务，Neo4j 提供可重建的图谱副本。详见 [ADR 0014](docs/adr/0014-internal-knowledge-base.md)。
 
 [English](README.md)
 
-Reliquary 是个人信息组件，负责文章的收集、存储、去重与检索。一个个人空间只有一个知识库。外部 AI 通过收录接口与 MCP 进行综合分析、整理和写报告。
+Reliquary 是个人 AI 工作平台的内部资料库，负责资料的收录、存储、去重、普通检索与知识图谱。一个个人空间初始化五个系统库，可按模板新建库。外部 AI 通过 HTTP 与 MCP 进行检索、综合分析和写报告。接入 Grok Bot 等工具从 [外部接入总览](docs/external-integration.md) 开始。
 
 源码底座来自 [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0)，上游提交为 `1edcd54b43606d9079bb36650efe3f68707a79ea`。来源、命名与许可说明见 [UPSTREAM.md](UPSTREAM.md)。
 
@@ -14,17 +14,19 @@ Reliquary 是个人信息组件，负责文章的收集、存储、去重与检�
 | --- | --- |
 | 收录 | 外部工具通过 HTTP 收录接口或 MCP 送入完整内容；Reliquary 不抓取原文 |
 | 收录审核 | 送入内容经过收录审核，未通过或缺正文的内容进入待处理，由用户审核、补全或丢弃 |
-| 文章处理 | 一次处理调用生成内容类型、统一摘要、实体和用户定义的主题；支持视觉的处理模型可在同次调用中读取正文图片 |
-| 处理方式 | 事件、观点、研究全文保存，保留正文、图片与原始文件；教程、案例、参考保存摘要加链接 |
-| 文件库 | 审核通过的文章生成带表头的 Markdown 文件，`mine/` 保存用户文档，`reports/` 保存整理结果 |
-| 检索 | 全文与向量混合检索，按文章合并结果；可按内容类型、实体、主题、发布时间、星标与来源目录筛选，并折叠相似报道 |
-| 用户判断 | 星标、修正内容类型与主题、合并实体、查看操作日志；新建主题可批量归入历史文章摘要 |
-| 外部 AI | MCP 支持检索、读取文章、收录、待审区处理、星标、实体与主题查询、保存整理结果 |
-| 设置 | 知识库、模型、文件库状态、操作日志、API 集成与运行队列 |
+| 资料处理 | 联合输出内容类型、摘要、实体、主题、关系及图片说明；长文分段并保留检查点，AI 报告免审核与内容处理 |
+| 所有内容类型 | 保存 Markdown 全文和图片 |
+| 文件库 | 每库一个英文目录：`institutional/`、`opinions/`、`references/`、`mine/`、`ai-reports/` 或自建目录，统一表头并保存全文；图片位于 `attachments/<资料ID>/` |
+| 检索 | 全文与向量混合检索，按资料合并结果；可按内容类型、实体、主题、发布时间、星标与库筛选，并折叠相似报道 |
+| 用户判断 | 星标、修正内容类型与主题、合并实体、删除关系、合并关系类型、查看操作日志；新建主题可批量归入历史资料摘要 |
+| 外部 AI | MCP 支持检索、读取文章、收录、待审区处理、星标、实体与主题查询、写入 AI 报告 |
+| 图谱检索 | 按库查询实体 1 至 3 跳关系或两点路径，返回来源与正文位置，不调用模型 |
+| 测评与统计 | 题集、运行、五项指标、逐题比较及模型调用价格快照 |
+| 设置 | 库、模型、文件库状态、操作日志、API 集成与运行队列 |
 
-正文在补全完成或用户接受缺失后定稿。PostgreSQL 保存索引、实体档案、主题、审核状态、用户判断与操作日志。文章表头由数据库单向生成，在 Obsidian 中手动修改表头可能被覆盖。用户文档只读并建立索引。
+正文在补全完成或用户接受缺失后定稿。PostgreSQL 保存索引、实体档案、主题、审核状态、用户判断与操作日志。所有库的表头由数据库单向生成，刷新及重建会覆盖 Obsidian 手改。文件名使用标题短名和 ID 前八位，不设年月子目录。字段及副本登记方式见[维护数据](docs/maintenance-data.md#按库文件与统一表头)。
 
-网页用于管理文章和简单阅读，日常阅读可用 Obsidian 打开文件库。综合分析与写报告由外部 AI 完成。内容只能由外部工具经 HTTP 收录接口或 MCP 送入，原始文件与图片也由外部工具提供。网页阅读时仍显示原网站图片，由浏览器直接加载，后端不下载或代理，缺失材料记录保持不变。RSS 订阅、网址导入、网页上传和手动录入入口已删除，已有文章及其 RSS、网页来源标记仍可读取。统一术语与架构见 [CONTEXT.md](CONTEXT.md) 和 [ADR 0012](docs/adr/0012-ingest-only-no-collection.md)；接口说明由任务 4 编写于 `docs/ingest-api.md`。
+网页用于管理资料和简单阅读，日常阅读可用 Obsidian 打开文件库。综合分析与写报告由外部 AI 完成。内容只能由外部工具经 HTTP 收录接口或 MCP 送入，正文由调用方转换为 Markdown，图片由调用方上传。网页展示已上传的图片，缺少的图片显示缺失提示。RSS 订阅、网址导入、网页上传和手动录入入口已删除，已有文章及其 RSS、网页来源标记仍可读取。统一术语与架构见 [CONTEXT.md](CONTEXT.md) 和 [ADR 0012](docs/adr/0012-ingest-only-no-collection.md)；接口见 [收录](docs/ingest-api.md)、[普通与图谱检索](docs/search-api.md)、[关系](docs/relations-api.md)、[测评](docs/search-evaluation-api.md) 和 [模型调用](docs/model-calls.md)。
 
 ## 从源码启动
 
@@ -37,7 +39,7 @@ cp .env.example .env
 # 配置数据库密码、JWT_SECRET、SYSTEM_AES_KEY 与模型服务地址。
 ./scripts/build-frontend-dist.sh
 ./reliquary-admin check-deployment
-docker compose up -d --wait postgres
+docker compose up -d --wait postgres redis neo4j
 ./reliquary-admin check-deployment
 docker compose up -d --build
 ```
@@ -46,7 +48,7 @@ docker compose up -d --build
 
 文件库、上传资源、备份目录不要放在“桌面”或“文稿”目录下。
 
-在 Obsidian 打开 `vault/` 这一层，将 `attachments/` 与 `.reliquary/` 排除在搜索之外，不要修改文章表头和 `.reliquary/`。`.obsidian/` 阅读配置随备份保存，核对与索引忽略其内容。
+在 Obsidian 打开 `vault/` 这一层，将 `attachments/` 与 `.reliquary/` 排除在搜索之外，不要修改资料表头和 `.reliquary/`。`.obsidian/` 阅读配置随备份保存，核对与索引忽略其内容。
 
 默认网页地址为 `http://localhost`，后端 API 地址为 `http://localhost:8080`。首个用户注册后关闭注册，登录用户与有效 API Key 可访问个人空间全部内容。部署在内网使用。
 
@@ -63,7 +65,7 @@ Apple Silicon 可在 macOS 原生运行 Ollama，通过 Metal 运行模型。生
 ./reliquary-admin export-sources
 ```
 
-备份保存宿主机文件及 Obsidian 阅读配置，不包含可用凭据。`unpack` 与 `restore` 要求目标宿主机文件库和上传资源目录为空或不存在。恢复后重新填写模型与解析器凭据，步骤见[个人使用指南](docs/personal-use.md)、[迁移规范](docs/database-migrations.md)与[维护数据归属](docs/maintenance-data.md)。
+备份保存宿主机文件及 Obsidian 阅读配置，不包含可用凭据。`unpack` 与 `restore` 要求目标宿主机文件库和上传资源目录为空或不存在。恢复后重新填写模型凭据，步骤见[个人使用指南](docs/personal-use.md)、[迁移规范](docs/database-migrations.md)与[维护数据归属](docs/maintenance-data.md)。
 
 ## 开发与验证
 
@@ -78,15 +80,17 @@ make dev-frontend  # 在另一终端运行
 ```bash
 go build ./...
 go vet ./...
-go test -count=1 ./...
+GOFLAGS=-p=1 go test -count=1 -timeout=40m ./...
 cd frontend
 npm run type-check
 npm run build
 npm test
 ```
 
-数据库集成测试通过 `RELIQUARY_TEST_PG_DSN` 指定 PostgreSQL 测试库。修改的 Go 文件使用 `gofmt` 格式化；基线或环境失败需记录对应命令。
+集成测试需配置真实 PG、Redis 与 Neo4j，环境变量见 [开发指南](docs/development.md#系列联合验证)。修改的 Go 文件使用 `gofmt` 格式化；基线或环境失败需记录对应命令。
 
 ## 许可证
 
 [MIT](LICENSE)。保留仓库内的上游署名和第三方许可。
+
+对外资料 ID 统一为 `entry_id`，列表为 `entry_ids`；MCP 全文读取使用 `get_entry`，报告引用使用 `related_entry_ids`。不保留旧字段或旧工具别名。

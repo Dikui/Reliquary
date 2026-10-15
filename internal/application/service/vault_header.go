@@ -11,82 +11,113 @@ import (
 	"time"
 	"unicode"
 
-	"gopkg.in/yaml.v3"
 	"reliquary/internal/types"
+
+	"gopkg.in/yaml.v3"
 )
 
 // VaultArticleHeader is the portable article metadata used by vault rebuild.
 type VaultArticleHeader struct {
-	ID               string              `yaml:"id" json:"id"`
-	SourceKind       string              `yaml:"source_kind,omitempty" json:"source_kind,omitempty"`
-	URL              string              `yaml:"url" json:"url"`
-	Title            string              `yaml:"title" json:"title"`
-	Publisher        string              `yaml:"publisher" json:"publisher"`
-	Author           string              `yaml:"author" json:"author"`
-	PublishedAt      string              `yaml:"published_at" json:"published_at"`
-	CollectedAt      string              `yaml:"collected_at" json:"collected_at"`
-	ContentType      string              `yaml:"content_type" json:"content_type"`
-	Summary          *types.EntrySummary `yaml:"summary" json:"summary"`
-	Entities         []string            `yaml:"entities" json:"entities"`
-	Topics           []string            `yaml:"topics" json:"topics"`
-	Starred          bool                `yaml:"starred" json:"starred"`
-	CollectReason    string              `yaml:"collect_reason" json:"collect_reason"`
-	SourceUnverified bool                `yaml:"source_unverified,omitempty" json:"source_unverified"`
-	ProcessingMode   string              `yaml:"processing_mode,omitempty" json:"processing_mode,omitempty"`
-	Acquisition      string              `yaml:"acquisition,omitempty" json:"acquisition,omitempty"`
+	LibraryID         string                  `yaml:"library_id,omitempty" json:"library_id,omitempty"`
+	Library           string                  `yaml:"library,omitempty" json:"library,omitempty"`
+	SourceRef         string                  `yaml:"source_ref,omitempty" json:"source_ref,omitempty"`
+	Identifier        string                  `yaml:"identifier,omitempty" json:"identifier,omitempty"`
+	HasUpdate         bool                    `yaml:"has_update,omitempty" json:"has_update,omitempty"`
+	LatestEntryID     string                  `yaml:"latest_entry_id,omitempty" json:"latest_entry_id,omitempty"`
+	Graph             *bool                   `yaml:"graph,omitempty" json:"graph,omitempty"`
+	CannotBeFact      bool                    `yaml:"cannot_be_fact,omitempty" json:"cannot_be_fact,omitempty"`
+	RelatedEntities   []ReportEntityReference `yaml:"related_entities,omitempty" json:"related_entities,omitempty"`
+	TopicIDs          []string                `yaml:"topic_ids,omitempty" json:"topic_ids,omitempty"`
+	ReportFingerprint string                  `yaml:"report_fingerprint,omitempty" json:"report_fingerprint,omitempty"`
+	RequestID         string                  `yaml:"request_id,omitempty" json:"request_id,omitempty"`
+	RelatedEntryIDs   []string                `yaml:"related_entry_ids,omitempty" json:"related_entry_ids,omitempty"`
+	ID                string                  `yaml:"id" json:"id"`
+	SourceKind        string                  `yaml:"source_kind,omitempty" json:"source_kind,omitempty"`
+	URL               string                  `yaml:"url" json:"url"`
+	Title             string                  `yaml:"title" json:"title"`
+	Publisher         string                  `yaml:"publisher" json:"publisher"`
+	Author            string                  `yaml:"author" json:"author"`
+	PublishedAt       string                  `yaml:"published_at" json:"published_at"`
+	CollectedAt       string                  `yaml:"collected_at" json:"collected_at"`
+	ContentType       string                  `yaml:"content_type" json:"content_type"`
+	Summary           *types.EntrySummary     `yaml:"summary" json:"summary"`
+	Entities          []string                `yaml:"entities" json:"entities"`
+	Topics            []string                `yaml:"topics" json:"topics"`
+	Starred           bool                    `yaml:"starred" json:"starred"`
+	CollectReason     string                  `yaml:"collect_reason" json:"collect_reason"`
+	SourceUnverified  bool                    `yaml:"source_unverified,omitempty" json:"source_unverified"`
+	Acquisition       string                  `yaml:"acquisition,omitempty" json:"acquisition,omitempty"`
 }
 
-// RenderVaultArticleHeader uses a fixed field order and JSON double quoted
-// strings, which are YAML scalars. Empty optional strings are explicit nulls.
+// RenderVaultArticleHeader emits one ordered schema for every library.
 func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
-	writeVaultScalar(&b, "id", h.ID)
-	mine := h.SourceKind == "mine"
-	if mine {
-		writeVaultScalar(&b, "source_kind", h.SourceKind)
-	}
-	writeScalar := func(key, value string) {
-		if !mine || value != "" {
+	scalar := func(key, value string) {
+		if value != "" {
 			writeVaultScalar(&b, key, value)
 		}
 	}
-	writeScalar("url", h.URL)
-	writeVaultScalar(&b, "title", h.Title)
-	writeScalar("publisher", h.Publisher)
-	if h.Author != h.Publisher {
-		writeScalar("author", h.Author)
-	}
-	writeScalar("published_at", h.PublishedAt)
-	writeVaultScalar(&b, "collected_at", h.CollectedAt)
-	writeScalar("content_type", h.ContentType)
-	if h.Summary == nil {
-		if !mine {
-			b.WriteString("summary: null\n")
-		}
-	} else {
-		b.WriteString("summary:\n")
-		writeVaultScalar(&b, "  overview", h.Summary.Overview)
-		writeVaultList(&b, "  points", h.Summary.Points, false)
-		writeVaultList(&b, "  key_terms", h.Summary.KeyTerms, false)
-	}
-	if !mine || len(h.Entities) > 0 {
+	scalar("id", h.ID)
+	scalar("library_id", h.LibraryID)
+	scalar("library", h.Library)
+	scalar("title", h.Title)
+	scalar("url", h.URL)
+	scalar("publisher", h.Publisher)
+	scalar("author", h.Author)
+	scalar("published_at", h.PublishedAt)
+	scalar("collected_at", h.CollectedAt)
+	scalar("content_type", h.ContentType)
+	if len(h.Entities) > 0 {
 		writeVaultList(&b, "entities", h.Entities, true)
 	}
-	if !mine || len(h.Topics) > 0 {
+	if len(h.Topics) > 0 {
 		writeVaultList(&b, "topics", h.Topics, true)
 	}
+	if h.Summary != nil && (h.Summary.Overview != "" || len(h.Summary.Points) > 0 || len(h.Summary.KeyTerms) > 0) {
+		b.WriteString("summary:\n")
+		scalar("  overview", h.Summary.Overview)
+		if len(h.Summary.Points) > 0 {
+			writeVaultList(&b, "  points", h.Summary.Points, false)
+		}
+		if len(h.Summary.KeyTerms) > 0 {
+			writeVaultList(&b, "  key_terms", h.Summary.KeyTerms, false)
+		}
+	}
 	fmt.Fprintf(&b, "starred: %t\n", h.Starred)
-	writeScalar("collect_reason", h.CollectReason)
+	scalar("collect_reason", h.CollectReason)
+	scalar("acquisition", h.Acquisition)
+	scalar("source_ref", h.SourceRef)
+	scalar("identifier", h.Identifier)
 	if h.SourceUnverified {
 		b.WriteString("source_unverified: true\n")
 	}
-	if h.ProcessingMode != "" {
-		writeVaultScalar(&b, "processing_mode", h.ProcessingMode)
+	if h.HasUpdate {
+		b.WriteString("has_update: true\n")
 	}
-	if h.Acquisition != "" {
-		writeVaultScalar(&b, "acquisition", h.Acquisition)
+	scalar("latest_entry_id", h.LatestEntryID)
+	if h.Graph != nil {
+		fmt.Fprintf(&b, "graph: %t\n", *h.Graph)
 	}
+	if len(h.RelatedEntryIDs) > 0 {
+		writeVaultList(&b, "related_entry_ids", h.RelatedEntryIDs, true)
+	}
+	if h.CannotBeFact {
+		b.WriteString("cannot_be_fact: true\n")
+	}
+	if len(h.RelatedEntities) > 0 {
+		b.WriteString("related_entities:\n")
+		for _, entity := range h.RelatedEntities {
+			scalar("  - id", entity.ID)
+			scalar("    name", entity.Name)
+			scalar("    entity_type", entity.EntityType)
+		}
+	}
+	if len(h.TopicIDs) > 0 {
+		writeVaultList(&b, "topic_ids", h.TopicIDs, true)
+	}
+	scalar("report_fingerprint", h.ReportFingerprint)
+	scalar("request_id", h.RequestID)
 	b.WriteString("---\n")
 	return []byte(b.String())
 }
@@ -181,11 +212,6 @@ func ParseVaultArticle(data []byte) (VaultArticleHeader, []byte, error) {
 	if err = yaml.Unmarshal(header[first:last], &fields); err != nil {
 		return h, nil, fmt.Errorf("parse article YAML fields: %w", err)
 	}
-	// The writer omits author only when it equals publisher. An explicit null
-	// author instead records an unknown author and must remain distinct.
-	if _, supplied := fields["author"]; !supplied {
-		h.Author = h.Publisher
-	}
 	if h.ID == "" || h.Title == "" || h.CollectedAt == "" {
 		return h, nil, errors.New("article header requires id, title and collected_at")
 	}
@@ -194,9 +220,6 @@ func ParseVaultArticle(data []byte) (VaultArticleHeader, []byte, error) {
 	}
 	if _, err = time.Parse(time.RFC3339Nano, h.CollectedAt); err != nil {
 		return h, nil, fmt.Errorf("parse collected_at: %w", err)
-	}
-	if h.ContentType != "" && types.NormalizeContentType(h.ContentType) == "" {
-		return h, nil, fmt.Errorf("unsupported article content_type %q", h.ContentType)
 	}
 	return h, body, nil
 }

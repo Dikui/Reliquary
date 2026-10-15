@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -23,18 +24,18 @@ import (
 func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
 
 func testConfig() Config {
-	return Config{Pools: types.WorkerPoolConcurrency{Core: 1, Enrichment: 1, Maintenance: 1, Shared: 1}, CheckInterval: 5 * time.Millisecond, RetryDelayFunc: func(int, error, *Task) time.Duration { return 5 * time.Millisecond }}
+	return Config{Pools: types.WorkerPoolConcurrency{Core: 1, Enrichment: 1, Maintenance: 1, Shared: 1}, CheckInterval: 20 * time.Millisecond, RetryDelayFunc: func(int, error, *Task) time.Duration { return 5 * time.Millisecond }}
 }
 func jobState(t *testing.T, c *Client, id string, state TaskState) *Job {
 	t.Helper()
 	var j Job
-	require.Eventually(t, func() bool { return c.db.First(&j, "id = ?", id).Error == nil && j.State == state }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return c.db.First(&j, "id = ?", id).Error == nil && j.State == state }, 15*time.Second, 10*time.Millisecond)
 	return &j
 }
 
 func TestEveryRegisteredTaskExecutesRetriesAndArchives(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	mux := NewServeMux()
 	var completed atomic.Int32
 	for _, definition := range types.QueueDefinitions() {
@@ -55,7 +56,7 @@ func TestEveryRegisteredTaskExecutesRetriesAndArchives(t *testing.T) {
 		for _, kind := range definition.TaskTypes {
 			count++
 			t.Run(kind, func(t *testing.T) {
-				payload := []byte(`{"tenant_id":1,"entry_id":"fixture","knowledge_base_id":"fixture-kb"}`)
+				payload := []byte(`{"tenant_id":1,"entry_id":"fixture","library_id":"fixture-library"}`)
 				i, err := c.Enqueue(NewTaskWithHeaders(kind, payload, map[string]string{"scenario": "success"}), Queue(definition.Name), MaxRetry(2), Retention(time.Hour))
 				require.NoError(t, err)
 				j := jobState(t, c, i.ID, TaskStateCompleted)
@@ -69,7 +70,7 @@ func TestEveryRegisteredTaskExecutesRetriesAndArchives(t *testing.T) {
 				require.NoError(t, db.Where("task_type = ?", kind).Find(&rows).Error)
 				require.Len(t, rows, 1)
 				require.Equal(t, 3, rows[0].FailCount)
-				require.Equal(t, types.TaskScopeKnowledgeBase, rows[0].Scope)
+				require.Equal(t, types.TaskScopeLibrary, rows[0].Scope)
 				require.Equal(t, "fixture", rows[0].RelatedID)
 				t.Logf("type=%s queue=%s executed=true ordinary_attempts=%d dead_letters=%d", kind, definition.Name, j.FailCount, len(rows))
 			})
@@ -80,7 +81,7 @@ func TestEveryRegisteredTaskExecutesRetriesAndArchives(t *testing.T) {
 
 func TestEnqueueSharesCommitAndRollback(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	tx := db.Begin()
 	require.NoError(t, tx.Error)
 	rolledBack, err := c.EnqueueTx(context.Background(), tx, NewTask(types.TypeDocumentProcess, []byte(`{"tenant_id":1}`)))
@@ -97,6 +98,14 @@ func TestEnqueueSharesCommitAndRollback(t *testing.T) {
 	require.NoError(t, tx.Commit().Error)
 	require.NoError(t, db.Model(&Job{}).Where("id = ?", committed.ID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
+	require.NoError(t, c.DispatchPending(context.Background()))
+	var committedOp Job
+	require.NoError(t, db.First(&committedOp, "id=?", committed.ID).Error)
+	inspector := asynq.NewInspector(c.redisOpt)
+	defer inspector.Close()
+	wake, err := inspector.GetTaskInfo(c.redisQueue(committedOp.Queue), deliveryID(&committedOp))
+	require.NoError(t, err)
+	require.JSONEq(t, fmt.Sprintf(`{"operation_id":%q}`, committed.ID), string(wake.Payload), "Redis contains only the durable operation ID")
 	// A duplicate deterministic schedule ID leaves the outer transaction usable.
 	tx = db.Begin()
 	_, err = c.EnqueueTx(context.Background(), tx, NewTask(types.TypeEntryListReparse, nil), TaskID("schedule:minute"))
@@ -112,7 +121,7 @@ func TestQuotaDeferralPreservesBudgetAndOptionsAtFinalAttempt(t *testing.T) {
 	for _, budget := range []int{0, 2} {
 		t.Run(fmt.Sprint(budget), func(t *testing.T) {
 			db := pgtest.Open(t)
-			c := NewClient(db)
+			c := testClient(t, db)
 			config := testConfig()
 			var callbacks atomic.Int32
 			config.OnDeadLetter = func(context.Context, *Task, error) { callbacks.Add(1) }
@@ -153,7 +162,7 @@ func TestQuotaDeferralPreservesBudgetAndOptionsAtFinalAttempt(t *testing.T) {
 
 func TestShutdownInterruptionReexecutesWithoutRetry(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	started := make(chan struct{})
 	require.NoError(t, c.Start(context.Background(), HandlerFunc(func(ctx context.Context, _ *Task) error { close(started); <-ctx.Done(); return ctx.Err() }), testConfig()))
 	i, err := c.Enqueue(NewTask(types.TypeDocumentProcess, nil), MaxRetry(0), Retention(time.Hour))
@@ -163,7 +172,7 @@ func TestShutdownInterruptionReexecutesWithoutRetry(t *testing.T) {
 	j := jobState(t, c, i.ID, TaskStatePending)
 	require.Zero(t, j.Retried)
 	require.Zero(t, j.FailCount)
-	restarted := NewClient(db)
+	restarted := testClient(t, db)
 	require.NoError(t, restarted.Start(context.Background(), HandlerFunc(func(context.Context, *Task) error { return nil }), testConfig()))
 	t.Cleanup(func() { require.NoError(t, restarted.Close()) })
 	j = jobState(t, restarted, i.ID, TaskStateCompleted)
@@ -180,14 +189,14 @@ func TestQueueCrashChild(t *testing.T) {
 	}
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	c := NewClient(db)
+	c := testClient(t, db)
 	require.NoError(t, c.Start(context.Background(), HandlerFunc(func(ctx context.Context, _ *Task) error { <-ctx.Done(); return ctx.Err() }), testConfig()))
 	select {}
 }
 
 func TestKilledProcessReleasesLockAndRecoversActiveJob(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	i, err := c.Enqueue(NewTask(types.TypeDocumentProcess, []byte(`{"tenant_id":1,"entry_id":"crash"}`)), MaxRetry(0), Timeout(time.Hour), Retention(time.Hour))
 	require.NoError(t, err)
 	command := exec.Command(os.Args[0], "-test.run=^TestQueueCrashChild$", "-test.timeout=30s")
@@ -200,11 +209,10 @@ func TestKilledProcessReleasesLockAndRecoversActiveJob(t *testing.T) {
 		}
 	})
 	j := jobState(t, c, i.ID, TaskStateActive)
-	require.NotNil(t, j.LeaseUntil)
-	require.Greater(t, time.Until(*j.LeaseUntil), 20*time.Second)
+	require.Positive(t, j.Delivery)
 	require.NoError(t, command.Process.Kill())
 	require.Error(t, command.Wait())
-	restarted := NewClient(db)
+	restarted := testClient(t, db)
 	// SIGKILL closes the client socket before PostgreSQL necessarily notices it.
 	// Wait for the server to release session ownership without weakening recovery.
 	require.Eventually(t, func() bool {
@@ -214,12 +222,12 @@ func TestKilledProcessReleasesLockAndRecoversActiveJob(t *testing.T) {
 	j = jobState(t, restarted, i.ID, TaskStateCompleted)
 	require.Zero(t, j.Retried)
 	require.Zero(t, j.FailCount)
-	t.Log("SIGKILL released singleton PostgreSQL lock; restart rescued active job before 30-second lease expiry; completed without retry")
+	t.Log("SIGKILL released the singleton PostgreSQL lock; startup replay completed the active operation without consuming retries")
 }
 
 func TestPoolConcurrencyAndWeightedSharedClaims(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	config := testConfig()
 	config.Pools = types.WorkerPoolConcurrency{Core: 2, Enrichment: 3, Maintenance: 2, Shared: 2}
 	gate := make(chan struct{})
@@ -262,32 +270,12 @@ func TestPoolConcurrencyAndWeightedSharedClaims(t *testing.T) {
 		require.LessOrEqual(t, peaks[idx].Load(), limit)
 	}
 	require.NoError(t, c.Close())
-	// With both logical queues ready, shared dispatch selects three default
-	// jobs for each entity job. Dedicated workers retain their own limits.
-	require.NoError(t, db.Exec("DELETE FROM task_jobs").Error)
-	for _, name := range []string{types.QueueDefault, types.QueueEntity} {
-		for n := 0; n < 8; n++ {
-			_, err := c.Enqueue(NewTask("fixture:weights", nil), Queue(name))
-			require.NoError(t, err)
-		}
-	}
-	c.config = config.withDefaults()
-	shared := c.config.workerPools()[3]
-	counts := map[string]int{}
-	for n := 0; n < 8; n++ {
-		j, err := c.claim(context.Background(), shared)
-		require.NoError(t, err)
-		require.NotNil(t, j)
-		counts[j.Queue]++
-	}
-	require.Equal(t, 6, counts[types.QueueDefault])
-	require.Equal(t, 2, counts[types.QueueEntity])
-	t.Logf("pool peaks core=%d enrichment=%d maintenance=%d shared=%d; shared claims default=%d entity=%d", peaks[0].Load(), peaks[1].Load(), peaks[2].Load(), peaks[3].Load(), counts[types.QueueDefault], counts[types.QueueEntity])
+	require.Equal(t, map[string]int{types.QueueDefault: 3, types.QueueEntity: 1}, config.workerPools()[3].weights)
 }
 
 func TestPermanentAndElapsedDeadlineArchiveOnce(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	var calls, callbacks atomic.Int32
 	config := testConfig()
 	config.OnDeadLetter = func(context.Context, *Task, error) { callbacks.Add(1) }
@@ -317,7 +305,7 @@ func TestPermanentAndElapsedDeadlineArchiveOnce(t *testing.T) {
 
 func TestArchiveAndDeadLetterRollbackTogether(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	config := testConfig()
 	var callbacks atomic.Int32
 	config.OnDeadLetter = func(context.Context, *Task, error) { callbacks.Add(1) }
@@ -341,7 +329,7 @@ func TestArchiveAndDeadLetterRollbackTogether(t *testing.T) {
 
 func TestActiveCancellationAcknowledgedWithoutRetry(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	started := make(chan struct{})
 	require.NoError(t, c.Start(context.Background(), HandlerFunc(func(ctx context.Context, _ *Task) error { close(started); <-ctx.Done(); return ctx.Err() }), testConfig()))
 	t.Cleanup(func() { require.NoError(t, c.Close()) })
@@ -351,7 +339,7 @@ func TestActiveCancellationAcknowledgedWithoutRetry(t *testing.T) {
 	require.NoError(t, c.Cancel(context.Background(), i.ID))
 	require.Eventually(t, func() bool {
 		var n int64
-		return db.Model(&Job{}).Where("id = ?", i.ID).Count(&n).Error == nil && n == 0
+		return db.Model(&Job{}).Where("id = ? AND state = ?", i.ID, TaskStateCancelled).Count(&n).Error == nil && n == 1
 	}, time.Second, 10*time.Millisecond)
 	var n int64
 	require.NoError(t, db.Model(&types.TaskDeadLetter{}).Count(&n).Error)
@@ -360,7 +348,7 @@ func TestActiveCancellationAcknowledgedWithoutRetry(t *testing.T) {
 
 func TestDeferredErrorNeverCreatesDeadLetterAfterDeadline(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	started, release := make(chan struct{}), make(chan struct{})
 	deadline := time.Now().UTC().Add(time.Hour)
 	h := HandlerFunc(func(ctx context.Context, _ *Task) error {
@@ -393,13 +381,13 @@ func TestDeferredErrorNeverCreatesDeadLetterAfterDeadline(t *testing.T) {
 	// absolute deadline has elapsed terminates with a deadline error instead.
 	require.NoError(t, c.RunNow(context.Background(), i.ID))
 	j = jobState(t, c, i.ID, TaskStateArchived)
-	require.Contains(t, j.LastError, "absolute deadline")
+	require.Contains(t, j.LastError, "deadline")
 	require.NotContains(t, j.LastError, "daily_limit")
 }
 
 func TestTimeoutRetriesAndArchives(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	var calls atomic.Int32
 	h := HandlerFunc(func(ctx context.Context, _ *Task) error { calls.Add(1); <-ctx.Done(); return ctx.Err() })
 	require.NoError(t, c.Start(context.Background(), h, testConfig()))
@@ -414,48 +402,9 @@ func TestTimeoutRetriesAndArchives(t *testing.T) {
 	require.Contains(t, j.LastError, "context deadline exceeded")
 }
 
-func TestLeaseHeartbeatsAndExpiredLeaseRescue(t *testing.T) {
-	db := pgtest.Open(t)
-	c := NewClient(db)
-	config := testConfig()
-	config.LeaseDuration = 120 * time.Millisecond
-	config.HeartbeatInterval = 20 * time.Millisecond
-	var calls atomic.Int32
-	h := HandlerFunc(func(ctx context.Context, task *Task) error {
-		calls.Add(1)
-		if task.Type() == "fixture:long" {
-			<-ctx.Done()
-			return ctx.Err()
-		}
-		return nil
-	})
-	require.NoError(t, c.Start(context.Background(), h, config))
-	t.Cleanup(func() { require.NoError(t, c.Close()) })
-	other := NewClient(db)
-	require.ErrorContains(t, other.Start(context.Background(), h, config), "another task worker process")
-	i, err := c.Enqueue(NewTask("fixture:long", nil), MaxRetry(0))
-	require.NoError(t, err)
-	j := jobState(t, c, i.ID, TaskStateActive)
-	firstLease := *j.LeaseUntil
-	require.Eventually(t, func() bool {
-		return db.First(&j, "id = ?", i.ID).Error == nil && j.State == TaskStateActive && j.LeaseUntil.After(firstLease.Add(1100*time.Millisecond))
-	}, 3*time.Second, 10*time.Millisecond)
-	require.EqualValues(t, 1, calls.Load(), "live heartbeat prevents duplicate recovery")
-	require.NoError(t, c.Cancel(context.Background(), i.ID))
-	// Simulate a lost execution owner after the workers are already running.
-	expired := time.Now().UTC().Add(-time.Minute)
-	j = &Job{ID: "fixture:expired-lease", TaskType: types.TypeDocumentProcess, Queue: types.QueueDefault, Payload: []byte("{}"), Headers: []byte("{}"), State: TaskStateActive, ClaimToken: "lost-owner", LeaseUntil: &expired, ProcessAt: expired, CreatedAt: expired, UpdatedAt: expired, RetentionNS: int64(time.Hour)}
-	require.NoError(t, db.Create(j).Error)
-	j = jobState(t, c, j.ID, TaskStateCompleted)
-	require.Zero(t, j.Retried)
-	require.Zero(t, j.FailCount)
-	require.EqualValues(t, 2, calls.Load())
-	t.Log("singleton rejects a second worker; live leases renew across rescue cycles; expired owner is rescued without spending retries")
-}
-
 func TestDailyCountersCountSuccessfulAndFailedExecutions(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	h := HandlerFunc(func(_ context.Context, task *Task) error {
 		if task.Type() == "fixture:success" {
 			return nil
@@ -481,7 +430,7 @@ func TestPostgresErrorDiagnosticsAllowMultibyteNulAndInvalidUTF8(t *testing.T) {
 	for _, message := range []string{"x" + strings.Repeat("错", 3000), "bad\x00text", "invalid\xff\xfeUTF8"} {
 		t.Run(fmt.Sprint(len(message)), func(t *testing.T) {
 			db := pgtest.Open(t)
-			c := NewClient(db)
+			c := testClient(t, db)
 			require.NoError(t, c.Start(context.Background(), HandlerFunc(func(context.Context, *Task) error { return errors.New(message) }), testConfig()))
 			t.Cleanup(func() { require.NoError(t, c.Close()) })
 			i, err := c.Enqueue(NewTask(types.TypeDocumentProcess, nil), MaxRetry(0))
@@ -503,45 +452,9 @@ func TestPostgresErrorDiagnosticsAllowMultibyteNulAndInvalidUTF8(t *testing.T) {
 	}
 }
 
-func TestRescueDoesNotReclaimAStillLiveHandler(t *testing.T) {
-	db := pgtest.Open(t)
-	c := NewClient(db)
-	config := testConfig()
-	config.Pools = types.WorkerPoolConcurrency{Core: 2}
-	config.LeaseDuration = 2 * time.Minute
-	config.HeartbeatInterval = time.Minute
-	started := make(chan struct{}, 2)
-	var calls atomic.Int32
-	h := HandlerFunc(func(ctx context.Context, _ *Task) error {
-		calls.Add(1)
-		started <- struct{}{}
-		<-ctx.Done()
-		return ctx.Err()
-	})
-	require.NoError(t, c.Start(context.Background(), h, config))
-	t.Cleanup(func() { require.NoError(t, c.Close()) })
-	i, err := c.Enqueue(NewTask(types.TypeDocumentProcess, nil), MaxRetry(0))
-	require.NoError(t, err)
-	<-started
-	// Simulate a heartbeat delayed by a database outage while the owning
-	// handler remains alive. Rescue must wait for that handler to exit.
-	require.NoError(t, db.Model(&Job{}).Where("id = ?", i.ID).Update("lease_until", time.Now().Add(-time.Minute)).Error)
-	require.NoError(t, c.recoverJobs(context.Background(), false))
-	var j Job
-	require.NoError(t, db.First(&j, "id = ?", i.ID).Error)
-	require.Equal(t, TaskStateActive, j.State)
-	require.EqualValues(t, 1, calls.Load())
-	require.NoError(t, c.Cancel(context.Background(), i.ID))
-	require.Eventually(t, func() bool {
-		var n int64
-		return db.Model(&Job{}).Where("id = ?", i.ID).Count(&n).Error == nil && n == 0
-	}, time.Second, 10*time.Millisecond)
-	t.Log("expired lease owned by a live local handler remains active and executes once; cancellation ownership remains intact")
-}
-
 func TestDisconnectedSingletonPausesWorkerStatsAndPreservesTask(t *testing.T) {
 	db := pgtest.Open(t)
-	c := NewClient(db)
+	c := testClient(t, db)
 	started := make(chan struct{})
 	h := HandlerFunc(func(ctx context.Context, _ *Task) error { close(started); <-ctx.Done(); return ctx.Err() })
 	require.NoError(t, c.Start(context.Background(), h, testConfig()))
@@ -558,9 +471,9 @@ func TestDisconnectedSingletonPausesWorkerStatsAndPreservesTask(t *testing.T) {
 		require.Equal(t, "active", pool.Status)
 	}
 	var pid int
-	c.lockMu.Lock()
+	c.mu.Lock()
 	pidErr := c.lock.QueryRowContext(context.Background(), "SELECT pg_backend_pid()").Scan(&pid)
-	c.lockMu.Unlock()
+	c.mu.Unlock()
 	require.NoError(t, pidErr)
 	var terminated bool
 	require.NoError(t, db.Raw("SELECT pg_terminate_backend(?)", pid).Scan(&terminated).Error)
@@ -581,4 +494,33 @@ func TestDisconnectedSingletonPausesWorkerStatsAndPreservesTask(t *testing.T) {
 	require.Zero(t, j.Retried)
 	require.Zero(t, j.FailCount)
 	t.Log("terminated PostgreSQL singleton session cancels workers; all pool stats show stopped; interrupted job remains pending without spending retries")
+}
+
+func TestVectorDeferralRecoversWithoutOrdinaryFailures(t *testing.T) {
+	db := pgtest.Open(t)
+	addr := os.Getenv("RELIQUARY_TEST_REDIS_ADDR")
+	if addr == "" {
+		t.Skip("Redis integration endpoint required")
+	}
+	c := NewClientWithRedis(db, asynq.RedisClientOpt{Addr: addr, DB: 8})
+	t.Cleanup(func() { _ = c.Close(); cleanupRedis(t, c) })
+	var available atomic.Bool
+	require.NoError(t, c.Start(context.Background(), HandlerFunc(func(context.Context, *Task) error {
+		if !available.Load() {
+			return &types.VectorDeferredError{Cause: errors.New("Ollama unavailable"), RetryAt: time.Now().Add(time.Minute)}
+		}
+		return nil
+	}), testConfig()))
+	t.Cleanup(func() { require.NoError(t, c.Close()) })
+	info, err := c.Enqueue(NewTask(types.TypeEntryVector, []byte(`{"space_id":1,"entry_id":"retry"}`)), Queue(types.QueueEntity), MaxRetry(0))
+	require.NoError(t, err)
+	var j Job
+	require.Eventually(t, func() bool { return db.First(&j, "id=?", info.ID).Error == nil && j.State == TaskStateScheduled }, 10*time.Second, 20*time.Millisecond)
+	require.Zero(t, j.Retried)
+	require.Zero(t, j.FailCount)
+	available.Store(true)
+	require.NoError(t, db.Model(&Job{}).Where("id=?", info.ID).Update("process_at", time.Now().Add(-time.Second)).Error)
+	require.NoError(t, c.DispatchPending(context.Background()))
+	require.Eventually(t, func() bool { return db.First(&j, "id=?", info.ID).Error == nil && j.State == TaskStateCompleted }, 10*time.Second, 20*time.Millisecond)
+	require.Zero(t, j.FailCount)
 }

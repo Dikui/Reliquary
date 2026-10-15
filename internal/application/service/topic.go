@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -54,7 +56,7 @@ func (s *TopicService) ListTopics(ctx context.Context) ([]types.Topic, error) {
 	result := []types.Topic{}
 	err = s.db.WithContext(ctx).Table("topics t").Select(`t.*, (SELECT count(*) FROM entry_topics kt
 		JOIN entries k ON k.id=kt.entry_id AND k.space_id=kt.space_id
-		WHERE kt.space_id=t.space_id AND kt.topic_id=t.id AND k.deleted_at IS NULL AND k.source_kind IN ('article','mine')) AS article_count`).
+		WHERE kt.space_id=t.space_id AND kt.topic_id=t.id AND k.deleted_at IS NULL AND k.source_kind IN ('article','mine')) AS entry_count`).
 		Where("t.space_id = ?", spaceID).Order("t.name, t.id").Find(&result).Error
 	return result, err
 }
@@ -107,6 +109,10 @@ func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*ty
 	}
 	copy := *topic
 	copy.SpaceID, copy.Name = spaceID, name
+	copy.LibraryIDs, err = s.validateLibraries(ctx, spaceID, topic.LibraryIDs)
+	if err != nil {
+		return nil, err
+	}
 	if copy.ID == "" {
 		copy.ID = uuid.NewString()
 	}
@@ -125,13 +131,13 @@ func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*ty
 	return &copy, nil
 }
 
-// UpdateTopic reruns classification only when the explanation changes.
-func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, description *string) (*types.Topic, error) {
+// UpdateTopic reclassifies eligible history after an explanation or scope change.
+func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, description *string, scopes ...[]string) (*types.Topic, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if name == nil && description == nil {
+	if name == nil && description == nil && len(scopes) == 0 {
 		return nil, werrors.NewBadRequestError("name or description is required")
 	}
 	if name != nil {
@@ -140,6 +146,13 @@ func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, descrip
 			return nil, err
 		}
 		name = &value
+	}
+	var libraries []string
+	if len(scopes) > 0 {
+		libraries, err = s.validateLibraries(ctx, spaceID, scopes[0])
+		if err != nil {
+			return nil, err
+		}
 	}
 	var result types.Topic
 	var affected []string
@@ -152,26 +165,31 @@ func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, descrip
 			return err
 		}
 		before := result
+		if len(scopes) > 0 {
+			result.LibraryIDs = libraries
+		}
 		if name != nil {
 			result.Name = *name
 		}
 		if description != nil {
 			result.Description = *description
 		}
-		if before.Name == result.Name && before.Description == result.Description {
+		if before.Name == result.Name && before.Description == result.Description && slices.Equal(before.LibraryIDs, result.LibraryIDs) {
 			return nil
 		}
 		changed = true
 		if err := tx.Model(&types.EntryTopic{}).Where("space_id=? AND topic_id=?", spaceID, id).Pluck("entry_id", &affected).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&result).Updates(map[string]any{"name": result.Name, "description": result.Description, "updated_at": time.Now()}).Error; err != nil {
+		if err := tx.Model(&result).Updates(map[string]any{"name": result.Name, "description": result.Description, "library_ids": gorm.Expr("?::jsonb", topicLibrariesJSON(result.LibraryIDs)), "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
 		if before.Description != result.Description {
-			if err := tx.Where("space_id=? AND topic_id=? AND source=?", spaceID, id, types.TopicSourceModel).Delete(&types.EntryTopic{}).Error; err != nil {
+			if err := tx.Where("space_id=? AND topic_id=? AND source=? AND entry_id IN (SELECT id FROM entries WHERE ?::jsonb='[]'::jsonb OR ?::jsonb @> jsonb_build_array(library_id))", spaceID, id, types.TopicSourceModel, topicLibrariesJSON(result.LibraryIDs), topicLibrariesJSON(result.LibraryIDs)).Delete(&types.EntryTopic{}).Error; err != nil {
 				return err
 			}
+		}
+		if before.Description != result.Description || !slices.Equal(before.LibraryIDs, result.LibraryIDs) {
 			if err := s.enqueueBackfill(tx, &result); err != nil {
 				return err
 			}
@@ -243,7 +261,7 @@ func (s *TopicService) replaceEntryTopics(ctx context.Context, entryID string, i
 	ids = uniqueTopicIDs(ids)
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var article types.Entry
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id,source_kind").Where("space_id=? AND id=?", spaceID, entryID).First(&article).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id,source_kind,library_id").Where("space_id=? AND id=?", spaceID, entryID).First(&article).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("article not found")
 			}
@@ -254,7 +272,7 @@ func (s *TopicService) replaceEntryTopics(ctx context.Context, entryID string, i
 		}
 		var selected []types.Topic
 		if len(ids) > 0 {
-			if err := tx.Where("space_id=? AND id IN ?", spaceID, ids).Order("id").Find(&selected).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id IN ? AND (library_ids = '[]'::jsonb OR library_ids @> ?::jsonb)", spaceID, ids, topicLibrariesJSON([]string{article.LibraryID})).Order("id").Find(&selected).Error; err != nil {
 				return err
 			}
 		}
@@ -267,7 +285,7 @@ func (s *TopicService) replaceEntryTopics(ctx context.Context, entryID string, i
 		}
 		query := tx.Where("space_id=? AND entry_id=?", spaceID, entryID)
 		if source == types.TopicSourceModel {
-			query = query.Where("source=?", types.TopicSourceModel)
+			query = query.Where("source=? AND topic_id IN (SELECT id FROM topics WHERE library_ids = '[]'::jsonb OR library_ids @> ?::jsonb)", types.TopicSourceModel, topicLibrariesJSON([]string{article.LibraryID}))
 		}
 		if err := query.Delete(&types.EntryTopic{}).Error; err != nil {
 			return err
@@ -297,4 +315,39 @@ func (s *TopicService) replaceEntryTopics(ctx context.Context, entryID string, i
 		s.refresh(ctx, []string{entryID})
 	}
 	return err
+}
+
+func topicLibrariesJSON(ids []string) string {
+	if ids == nil {
+		ids = []string{}
+	}
+	raw, _ := json.Marshal(ids)
+	return string(raw)
+}
+func (s *TopicService) validateLibraries(ctx context.Context, spaceID uint64, ids []string) ([]string, error) {
+	ids = uniqueTopicIDs(ids)
+	if len(ids) > 100 {
+		return nil, werrors.NewBadRequestError("library_ids accepts at most 100 IDs")
+	}
+	if len(ids) == 0 {
+		return []string{}, nil
+	}
+	var n int64
+	if err := s.db.WithContext(ctx).Model(&types.Library{}).Where("space_id=? AND id IN ?", spaceID, ids).Count(&n).Error; err != nil {
+		return nil, err
+	}
+	if n != int64(len(ids)) {
+		return nil, werrors.NewBadRequestError("library_ids contains an unavailable library")
+	}
+	return ids, nil
+}
+func (s *TopicService) TopicsForLibrary(ctx context.Context, libraryID string) ([]types.Topic, error) {
+	items, err := s.ListTopics(ctx)
+	result := []types.Topic{}
+	for _, t := range items {
+		if len(t.LibraryIDs) == 0 || slices.Contains(t.LibraryIDs, libraryID) {
+			result = append(result, t)
+		}
+	}
+	return result, err
 }

@@ -10,7 +10,7 @@ import en from '../../i18n/locales/en-US'
 import * as countCopy from '../../i18n/countCopy'
 import * as pagination from './runtimeTaskPagination'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../../utils/sfcStyleTestHelpers'
-import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../knowledge-base/componentTestHarness'
+import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
@@ -35,7 +35,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         return { available: true, has_more: false, tasks: [{
           id: 'full-rebuild-task', queue: 'entity', type: kind === 'embeddingRebuild' ? 'knowledge:embedding_rebuild' : 'topic:backfill', state: 'active',
           retried: 0, max_retry: 3, allowed_actions: [],
-          knowledge_base_id: 'knowledge-base-12345678-1234-1234-1234-123456789012',
+          library_id: 'library-12345678-1234-1234-1234-123456789012',
           entry_id: 'article-12345678-1234-1234-1234-123456789012',
           task_id: kind === 'topicBackfill' ? 'topic-history-job' : undefined,
         }] }
@@ -77,7 +77,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const taskType = descendants(dialog).find(node => hasClass(node, 'rq-failed-row-type'))!
       assert.equal(visibleText(taskType), runtime.tasks.taskTypes[kind])
       assert.doesNotMatch(visibleText(dialog), /knowledge:embedding_rebuild|topic:backfill/)
-      for (const [label, value] of [[runtime.tasks.knowledgeBaseLabel, 'knowledge-base-12345678-1234-1234-1234-123456789012'], [runtime.tasks.knowledgeLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
+      for (const [label, value] of [[runtime.tasks.libraryLabel, 'library-12345678-1234-1234-1234-123456789012'], [runtime.tasks.knowledgeLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
         const reference: ReturnType<typeof descendants>[number] | undefined = descendants(dialog).find(node => hasClass(node, 'rq-failed-ref') && descendants(node).some(child => child.tag === 'dt' && visibleText(child) === label))
         assert.ok(reference, label)
         assert.equal(visibleText(descendants(reference).find(child => child.tag === 'dd')!), value)

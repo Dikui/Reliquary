@@ -9,35 +9,35 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-type failingSearchKnowledgeBaseService struct {
-	interfaces.KnowledgeBaseService
+type failingSearchLibraryService struct {
+	interfaces.LibraryService
 	err error
 }
 
-func (s *failingSearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
+func (s *failingSearchLibraryService) GetLibrariesByIDsOnly(
 	context.Context, []string,
-) ([]*types.KnowledgeBase, error) {
-	return []*types.KnowledgeBase{{
-		ID:               "kb-1",
-		Type:             types.KnowledgeBaseTypeDocument,
+) ([]*types.Library, error) {
+	return []*types.Library{{
+		ID:               "library-1",
+		Type:             types.LibraryTypeDocument,
 		EmbeddingModelID: "embedding-1",
 		IndexingStrategy: types.DefaultIndexingStrategy(),
 	}}, nil
 }
 
-func (s *failingSearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
-	context.Context, []*types.KnowledgeBase,
+func (s *failingSearchLibraryService) ResolveEmbeddingModelKeys(
+	context.Context, []*types.Library,
 ) map[string]string {
-	return map[string]string{"kb-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
+	return map[string]string{"library-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
 }
 
-func (s *failingSearchKnowledgeBaseService) GetQueryEmbedding(
+func (s *failingSearchLibraryService) GetQueryEmbedding(
 	context.Context, string, string,
 ) ([]float32, error) {
 	return nil, s.err
 }
 
-func (s *failingSearchKnowledgeBaseService) HybridSearch(
+func (s *failingSearchLibraryService) HybridSearch(
 	context.Context, string, types.SearchParams,
 ) ([]*types.SearchResult, error) {
 	return nil, s.err
@@ -48,13 +48,13 @@ func (s *failingSearchKnowledgeBaseService) HybridSearch(
 func TestSearchEmbeddingFailureIsNotReportedAsNoResults(t *testing.T) {
 	rootCause := errors.New("embedding endpoint unavailable")
 	plugin := &SearchStage{
-		knowledgeBaseService: &failingSearchKnowledgeBaseService{err: rootCause},
+		libraryService: &failingSearchLibraryService{err: rootCause},
 	}
 	state := &State{
 		Request: Request{
 			SearchTargets: types.SearchTargets{{
-				Type:            types.SearchTargetTypeKnowledgeBase,
-				KnowledgeBaseID: "kb-1",
+				Type:      types.SearchTargetTypeLibrary,
+				LibraryID: "library-1",
 			}},
 			EmbeddingTopK: 10,
 		},
@@ -72,37 +72,37 @@ func TestSearchEmbeddingFailureIsNotReportedAsNoResults(t *testing.T) {
 	}
 }
 
-type degradingSearchKnowledgeBaseService struct {
-	interfaces.KnowledgeBaseService
+type degradingSearchLibraryService struct {
+	interfaces.LibraryService
 	embedErr     error
 	gotParams    *types.SearchParams
 	searchResult []*types.SearchResult
 }
 
-func (s *degradingSearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
+func (s *degradingSearchLibraryService) GetLibrariesByIDsOnly(
 	context.Context, []string,
-) ([]*types.KnowledgeBase, error) {
-	return []*types.KnowledgeBase{{
-		ID:               "kb-1",
-		Type:             types.KnowledgeBaseTypeDocument,
+) ([]*types.Library, error) {
+	return []*types.Library{{
+		ID:               "library-1",
+		Type:             types.LibraryTypeDocument,
 		EmbeddingModelID: "embedding-1",
 		IndexingStrategy: types.DefaultIndexingStrategy(),
 	}}, nil
 }
 
-func (s *degradingSearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
-	context.Context, []*types.KnowledgeBase,
+func (s *degradingSearchLibraryService) ResolveEmbeddingModelKeys(
+	context.Context, []*types.Library,
 ) map[string]string {
-	return map[string]string{"kb-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
+	return map[string]string{"library-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
 }
 
-func (s *degradingSearchKnowledgeBaseService) GetQueryEmbedding(
+func (s *degradingSearchLibraryService) GetQueryEmbedding(
 	context.Context, string, string,
 ) ([]float32, error) {
 	return nil, s.embedErr
 }
 
-func (s *degradingSearchKnowledgeBaseService) HybridSearch(
+func (s *degradingSearchLibraryService) HybridSearch(
 	_ context.Context, _ string, params types.SearchParams,
 ) ([]*types.SearchResult, error) {
 	s.gotParams = &params
@@ -112,18 +112,18 @@ func (s *degradingSearchKnowledgeBaseService) HybridSearch(
 // embedding API 限流/长尾时检索必须降级为纯关键词模式返回结果，
 // 而不是让整次 search 以 500 失败（评测中三次复现的故障）。
 func TestSearchEmbeddingFailureDegradesToKeywordSearch(t *testing.T) {
-	svc := &degradingSearchKnowledgeBaseService{
+	svc := &degradingSearchLibraryService{
 		embedErr: errors.New("embedding rate limited"),
 		searchResult: []*types.SearchResult{
 			{ID: "chunk-1", Content: "关键词命中的内容", EntryID: "k-1"},
 		},
 	}
-	plugin := &SearchStage{knowledgeBaseService: svc}
+	plugin := &SearchStage{libraryService: svc}
 	state := &State{
 		Request: Request{
 			SearchTargets: types.SearchTargets{{
-				Type:            types.SearchTargetTypeKnowledgeBase,
-				KnowledgeBaseID: "kb-1",
+				Type:      types.SearchTargetTypeLibrary,
+				LibraryID: "library-1",
 			}},
 			EmbeddingTopK: 10,
 		},
@@ -147,36 +147,36 @@ func TestSearchEmbeddingFailureDegradesToKeywordSearch(t *testing.T) {
 	}
 }
 
-type vectorOnlySearchKnowledgeBaseService struct {
-	interfaces.KnowledgeBaseService
+type vectorOnlySearchLibraryService struct {
+	interfaces.LibraryService
 	embedErr     error
 	hybridCalled bool
 }
 
-func (s *vectorOnlySearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
+func (s *vectorOnlySearchLibraryService) GetLibrariesByIDsOnly(
 	context.Context, []string,
-) ([]*types.KnowledgeBase, error) {
-	return []*types.KnowledgeBase{{
+) ([]*types.Library, error) {
+	return []*types.Library{{
 		ID:               "document-1",
-		Type:             types.KnowledgeBaseTypeDocument,
+		Type:             types.LibraryTypeDocument,
 		EmbeddingModelID: "embedding-1",
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
 	}}, nil
 }
 
-func (s *vectorOnlySearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
-	context.Context, []*types.KnowledgeBase,
+func (s *vectorOnlySearchLibraryService) ResolveEmbeddingModelKeys(
+	context.Context, []*types.Library,
 ) map[string]string {
 	return map[string]string{"document-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
 }
 
-func (s *vectorOnlySearchKnowledgeBaseService) GetQueryEmbedding(
+func (s *vectorOnlySearchLibraryService) GetQueryEmbedding(
 	context.Context, string, string,
 ) ([]float32, error) {
 	return nil, s.embedErr
 }
 
-func (s *vectorOnlySearchKnowledgeBaseService) HybridSearch(
+func (s *vectorOnlySearchLibraryService) HybridSearch(
 	context.Context, string, types.SearchParams,
 ) ([]*types.SearchResult, error) {
 	s.hybridCalled = true
@@ -185,13 +185,13 @@ func (s *vectorOnlySearchKnowledgeBaseService) HybridSearch(
 
 func TestSearchEmbeddingFailureOnVectorOnlyTargetPreservesRootCause(t *testing.T) {
 	rootCause := errors.New("embedding endpoint unavailable")
-	svc := &vectorOnlySearchKnowledgeBaseService{embedErr: rootCause}
-	plugin := &SearchStage{knowledgeBaseService: svc}
+	svc := &vectorOnlySearchLibraryService{embedErr: rootCause}
+	plugin := &SearchStage{libraryService: svc}
 	state := &State{
 		Request: Request{
 			SearchTargets: types.SearchTargets{{
-				Type:            types.SearchTargetTypeKnowledgeBase,
-				KnowledgeBaseID: "document-1",
+				Type:      types.SearchTargetTypeLibrary,
+				LibraryID: "document-1",
 			}},
 			EmbeddingTopK: 10,
 		},
@@ -212,19 +212,19 @@ func TestSearchEmbeddingFailureOnVectorOnlyTargetPreservesRootCause(t *testing.T
 	}
 }
 
-type partialSearchKnowledgeBaseService struct {
-	interfaces.KnowledgeBaseService
+type partialSearchLibraryService struct {
+	interfaces.LibraryService
 	rootCause error
 }
 
-func (s *partialSearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
+func (s *partialSearchLibraryService) GetLibrariesByIDsOnly(
 	_ context.Context, ids []string,
-) ([]*types.KnowledgeBase, error) {
-	result := make([]*types.KnowledgeBase, 0, len(ids))
+) ([]*types.Library, error) {
+	result := make([]*types.Library, 0, len(ids))
 	for _, id := range ids {
-		result = append(result, &types.KnowledgeBase{
+		result = append(result, &types.Library{
 			ID:               id,
-			Type:             types.KnowledgeBaseTypeDocument,
+			Type:             types.LibraryTypeDocument,
 			EmbeddingModelID: "embedding-" + id,
 			IndexingStrategy: types.DefaultIndexingStrategy(),
 		})
@@ -232,61 +232,61 @@ func (s *partialSearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
 	return result, nil
 }
 
-func (s *partialSearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
-	_ context.Context, kbs []*types.KnowledgeBase,
+func (s *partialSearchLibraryService) ResolveEmbeddingModelKeys(
+	_ context.Context, libraries []*types.Library,
 ) map[string]string {
-	result := make(map[string]string, len(kbs))
-	for _, kb := range kbs {
-		result[kb.ID] = "model-" + kb.ID
+	result := make(map[string]string, len(libraries))
+	for _, library := range libraries {
+		result[library.ID] = "model-" + library.ID
 	}
 	return result
 }
 
-func (s *partialSearchKnowledgeBaseService) GetQueryEmbedding(
+func (s *partialSearchLibraryService) GetQueryEmbedding(
 	context.Context, string, string,
 ) ([]float32, error) {
 	return []float32{1}, nil
 }
 
-func (s *partialSearchKnowledgeBaseService) HybridSearch(
+func (s *partialSearchLibraryService) HybridSearch(
 	_ context.Context, id string, _ types.SearchParams,
 ) ([]*types.SearchResult, error) {
-	if id == "kb-bad" {
+	if id == "library-bad" {
 		return nil, s.rootCause
 	}
 	return []*types.SearchResult{{ID: "chunk-good", Content: "可用结果", EntryID: "entry-good"}}, nil
 }
 
-type unindexedSearchKnowledgeBaseService struct {
-	interfaces.KnowledgeBaseService
+type unindexedSearchLibraryService struct {
+	interfaces.LibraryService
 	embedErr     error
 	hybridCalled bool
 }
 
-func (s *unindexedSearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
+func (s *unindexedSearchLibraryService) GetLibrariesByIDsOnly(
 	context.Context, []string,
-) ([]*types.KnowledgeBase, error) {
-	return []*types.KnowledgeBase{{
+) ([]*types.Library, error) {
+	return []*types.Library{{
 		ID:               "unindexed-1",
-		Type:             types.KnowledgeBaseTypeDocument,
+		Type:             types.LibraryTypeDocument,
 		EmbeddingModelID: "embedding-1",
 		IndexingStrategy: types.IndexingStrategy{},
 	}}, nil
 }
 
-func (s *unindexedSearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
-	context.Context, []*types.KnowledgeBase,
+func (s *unindexedSearchLibraryService) ResolveEmbeddingModelKeys(
+	context.Context, []*types.Library,
 ) map[string]string {
 	return map[string]string{"unindexed-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
 }
 
-func (s *unindexedSearchKnowledgeBaseService) GetQueryEmbedding(
+func (s *unindexedSearchLibraryService) GetQueryEmbedding(
 	context.Context, string, string,
 ) ([]float32, error) {
 	return nil, s.embedErr
 }
 
-func (s *unindexedSearchKnowledgeBaseService) HybridSearch(
+func (s *unindexedSearchLibraryService) HybridSearch(
 	context.Context, string, types.SearchParams,
 ) ([]*types.SearchResult, error) {
 	s.hybridCalled = true
@@ -294,15 +294,15 @@ func (s *unindexedSearchKnowledgeBaseService) HybridSearch(
 }
 
 func TestSearchEmbeddingFailureOnUnindexedTargetReportsNoResults(t *testing.T) {
-	svc := &unindexedSearchKnowledgeBaseService{
+	svc := &unindexedSearchLibraryService{
 		embedErr: errors.New("embedding endpoint unavailable"),
 	}
-	plugin := &SearchStage{knowledgeBaseService: svc}
+	plugin := &SearchStage{libraryService: svc}
 	state := &State{
 		Request: Request{
 			SearchTargets: types.SearchTargets{{
-				Type:            types.SearchTargetTypeKnowledgeBase,
-				KnowledgeBaseID: "unindexed-1",
+				Type:      types.SearchTargetTypeLibrary,
+				LibraryID: "unindexed-1",
 			}},
 			EmbeddingTopK: 10,
 		},
@@ -313,7 +313,7 @@ func TestSearchEmbeddingFailureOnUnindexedTargetReportsNoResults(t *testing.T) {
 		return nil
 	})
 	if err != ErrSearchNothing {
-		t.Fatalf("expected search_nothing for unindexed KB, got %#v", err)
+		t.Fatalf("expected search_nothing for unindexed Library, got %#v", err)
 	}
 	if !svc.hybridCalled {
 		t.Fatal("unindexed target should still delegate empty recall to HybridSearch")
@@ -322,12 +322,12 @@ func TestSearchEmbeddingFailureOnUnindexedTargetReportsNoResults(t *testing.T) {
 
 func TestSearchKeepsSuccessfulResultsWhenAnotherTargetFails(t *testing.T) {
 	rootCause := errors.New("one store unavailable")
-	plugin := &SearchStage{knowledgeBaseService: &partialSearchKnowledgeBaseService{rootCause: rootCause}}
+	plugin := &SearchStage{libraryService: &partialSearchLibraryService{rootCause: rootCause}}
 	state := &State{
 		Request: Request{
 			SearchTargets: types.SearchTargets{
-				{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-good"},
-				{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-bad"},
+				{Type: types.SearchTargetTypeLibrary, LibraryID: "library-good"},
+				{Type: types.SearchTargetTypeLibrary, LibraryID: "library-bad"},
 			},
 			EmbeddingTopK: 10,
 		},

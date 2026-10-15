@@ -9,7 +9,7 @@ import (
 type IngestService interface {
 	Ingest(context.Context, *types.IngestRequest) (*types.IngestResult, error)
 	IngestBatch(context.Context, *types.IngestBatchRequest) (*types.IngestBatchResult, error)
-	CheckURLs(context.Context, []string) ([]types.IngestCheckResult, error)
+	CheckURLs(context.Context, []string, ...string) ([]types.IngestCheckResult, error)
 	ListIncomplete(context.Context, int, int, bool) (*types.IncompleteListResult, error)
 	AcceptIncomplete(context.Context, string) (*types.IngestResult, error)
 	DiscardIngest(context.Context, string, string) error

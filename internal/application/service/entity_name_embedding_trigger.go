@@ -12,7 +12,7 @@ type EntityNameEmbeddingRebuildTrigger interface {
 	BindTransaction(context.Context, *gorm.DB) (EntityNameEmbeddingRebuildTrigger, error)
 }
 
-func (s *knowledgeBaseService) SetNameEmbeddingRebuilder(rebuilder EntityNameEmbeddingRebuildTrigger) {
+func (s *libraryService) SetNameEmbeddingRebuilder(rebuilder EntityNameEmbeddingRebuildTrigger) {
 	s.nameEmbeddingRebuilder = rebuilder
 }
 func (s *modelService) SetNameEmbeddingRebuilder(rebuilder EntityNameEmbeddingRebuildTrigger) {

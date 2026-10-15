@@ -45,7 +45,7 @@ onBeforeUnmount(() => { visibilityChange++; trigger = null })
 </script>
 
 <template>
-  <ImageViewer :visible="viewerVisible" :images="images" close-on-overlay close-on-esc-keydown @close="closePreview">
+  <ImageViewer attach="body" :z-index="3000" :visible="viewerVisible" :images="images" close-on-overlay close-on-esc-keydown @close="closePreview">
     <template #trigger></template>
   </ImageViewer>
 </template>

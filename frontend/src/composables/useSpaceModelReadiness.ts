@@ -37,8 +37,8 @@ export function useSpaceModelReadiness() {
     },
   )
 
-  const isReadyForDocumentKb = computed(
-    () => readiness.value?.isReadyForDocumentKb ?? false,
+  const isReadyForDocumentLibrary = computed(
+    () => readiness.value?.isReadyForDocumentLibrary ?? false,
   )
 
 
@@ -49,7 +49,7 @@ export function useSpaceModelReadiness() {
     loaded,
     loading,
     refresh,
-    isReadyForDocumentKb,
+    isReadyForDocumentLibrary,
     hasGeneration,
   }
 }

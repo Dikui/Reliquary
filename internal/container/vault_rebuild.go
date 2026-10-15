@@ -49,23 +49,30 @@ func RebuildVaultWithDatabase(ctx context.Context, db *gorm.DB) (*service.VaultR
 
 func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Config) (*service.VaultRebuildResult, error) {
 	if service.HasVaultReplica(cfg.Vault.Root) {
+		var existing int64
+		if err := db.WithContext(ctx).Unscoped().Model(&types.Entry{}).Count(&existing).Error; err != nil {
+			return nil, err
+		}
+		if existing != 0 {
+			return nil, fmt.Errorf("replica import requires an empty entry database")
+		}
 		documents, err := service.NewVaultDocumentService(db, nil, NewPostgresRetrievalService(db), cfg.Vault.Root)
 		if err != nil {
 			return nil, err
 		}
 		defer documents.Close()
+		pauseCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		if err := maintenanceops.Pause(pauseCtx, db, "snapshot", "vault rebuild awaiting configuration", nil); err != nil {
+			return nil, fmt.Errorf("pause empty database before vault import: %w", err)
+		}
 		result, err := documents.RebuildReplica(ctx)
 		if err != nil {
 			return result, err
 		}
-		pauseCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		if err := maintenanceops.Pause(pauseCtx, db, "snapshot", "vault rebuild awaiting configuration", nil); err != nil {
-			return result, fmt.Errorf("pause restored vault before configuration: %w", err)
-		}
 		return result, nil
 	}
-	kb, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
+	library, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +83,7 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 	if count != 0 {
 		return nil, fmt.Errorf("vault-rebuild requires an empty entry database")
 	}
-	if err := configureVaultRebuildEmbedding(ctx, db, kb); err != nil {
+	if err := configureVaultRebuildEmbedding(ctx, db, library); err != nil {
 		return nil, err
 	}
 	workers, err := ants.NewPool(5)
@@ -88,7 +95,7 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 	if err != nil {
 		return nil, err
 	}
-	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollamaClient, embedding.NewBatchEmbedder(workers), service.NewSpaceService(repository.NewSpaceRepository(db)), db)
+	models := service.NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewLibraryRepository(db), ollamaClient, embedding.NewBatchEmbedder(workers), service.NewSpaceService(repository.NewSpaceRepository(db)), db)
 	documents, err := service.NewVaultDocumentService(db, models, NewPostgresRetrievalService(db), cfg.Vault.Root)
 	if err != nil {
 		return nil, err
@@ -99,7 +106,7 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 
 // An empty application database can opt into vector rebuilding using an
 // OpenAI-compatible embedding endpoint. Without it, keyword indexing works.
-func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase) error {
+func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, library *types.Library) error {
 	id := strings.TrimSpace(os.Getenv("VAULT_REBUILD_EMBEDDING_MODEL_ID"))
 	endpoint := strings.TrimSpace(os.Getenv("VAULT_REBUILD_EMBEDDING_URL"))
 	if endpoint != "" {
@@ -115,9 +122,14 @@ func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, kb *types.
 		id = model.ID
 	}
 	if id == "" {
-		if kb.EmbeddingModelID == "" && kb.ModelTiers.Embedding == "" {
-			kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true, VectorEnabled: false}
-			return db.WithContext(ctx).Save(kb).Error
+		if library.EmbeddingModelID == "" && library.ModelTiers.Embedding == "" {
+			library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true, VectorEnabled: false}
+			return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				if err := tx.Save(library).Error; err != nil {
+					return err
+				}
+				return tx.Model(&types.Library{}).Where("space_id=?", library.SpaceID).Update("indexing_strategy", library.IndexingStrategy).Error
+			})
 		}
 		return nil
 	}
@@ -125,8 +137,16 @@ func configureVaultRebuildEmbedding(ctx context.Context, db *gorm.DB, kb *types.
 	if err := db.WithContext(ctx).Where("id=? AND space_id=? AND type=?", id, types.SingleSpaceID, types.ModelTypeEmbedding).First(&model).Error; err != nil {
 		return fmt.Errorf("rebuild embedding model: %w", err)
 	}
-	kb.EmbeddingModelID = id
-	kb.ModelTiers.Embedding = id
-	kb.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true, VectorEnabled: true}
-	return db.WithContext(ctx).Save(kb).Error
+	if err := db.WithContext(ctx).Model(&types.Space{}).Where("id=?", library.SpaceID).Update("embedding_model_id", id).Error; err != nil {
+		return err
+	}
+	library.EmbeddingModelID = id
+	library.ModelTiers.Embedding = id
+	library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true, VectorEnabled: true}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(library).Error; err != nil {
+			return err
+		}
+		return tx.Model(&types.Library{}).Where("space_id=?", library.SpaceID).Update("indexing_strategy", library.IndexingStrategy).Error
+	})
 }

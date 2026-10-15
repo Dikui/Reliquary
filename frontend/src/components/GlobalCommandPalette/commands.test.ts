@@ -22,7 +22,7 @@ test('commands and sidebar expose knowledge and settings navigation', () => {
   assert.match(palette, /flatChunkItems\.value/)
 })
 
-test('primary navigation exposes articles, search, entities, topics, following and settings in order', () => {
+test('primary navigation includes evaluation and model calls in its established order', () => {
   const source = readFileSync(new URL('../../stores/menu.ts', import.meta.url), 'utf8')
   const module = { exports: {} as any }
   const require = createRequire(import.meta.url)
@@ -33,12 +33,12 @@ test('primary navigation exposes articles, search, entities, topics, following a
     return require(name)
   }, module, module.exports)
   const items = module.exports.useMenuStore().visibleMenuArr.value
-  assert.deepEqual(items.map((item: any) => item.key), ['articles', 'search', 'entities', 'topics', 'follows', 'settings'])
+  assert.deepEqual(items.map((item: any) => item.key), ['articles', 'search', 'entities', 'topics', 'follows', 'evaluation', 'modelCalls', 'settings'])
   assert.deepEqual(items.map((item: any) => [item.path, item.tab]), [
-    ['entries', undefined], ['search', undefined], ['entries', 'entities'], ['topics', undefined], ['follows', undefined], ['settings', undefined],
+    ['entries', undefined], ['search', undefined], ['entries', 'entities'], ['topics', undefined], ['follows', undefined], ['evaluation', undefined], ['model-calls', undefined], ['settings', undefined],
   ])
   const settings = readFileSync(new URL('../../views/settings/Settings.vue', import.meta.url), 'utf8')
-  for (const section of ['knowledge-base', 'models', 'vault', 'operation-logs', 'runtime-queues']) {
+  for (const section of ['library', 'models', 'vault', 'operation-logs', 'runtime-queues']) {
     assert.ok(settings.includes(`currentSection === '${section}'`), section)
     assert.ok(settings.includes(`key: '${section}'`), section)
   }

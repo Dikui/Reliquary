@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -15,16 +14,20 @@ import (
 	"reliquary/internal/types"
 )
 
-func (s *FollowService) eligibleFeed(ctx context.Context, spaceID uint64, cutoff time.Time, targetIDs []string) *gorm.DB {
-	query := s.db.WithContext(ctx).Table("entries k").Where("k.space_id=? AND k.created_at<=? AND k.follow_ready_at<=?", spaceID, cutoff, cutoff).Where(followEligibleSQL)
+func (s *FollowService) eligibleFeed(ctx context.Context, spaceID uint64, cutoff time.Time, targetIDs []string, libraries ...string) *gorm.DB {
+	query := s.db.WithContext(ctx).Table("entries k").Joins("JOIN libraries feed_library ON feed_library.id=k.library_id AND feed_library.deleted_at IS NULL AND feed_library.feed_enabled=true").Where("k.space_id=? AND k.created_at<=? AND COALESCE(k.follow_ready_at,k.processed_at,k.created_at)<=?", spaceID, cutoff, cutoff).Where(followEligibleSQL)
+	if len(libraries) > 0 {
+		query = query.Where("k.library_id IN ?", libraries)
+	}
+	query = query.Joins("LEFT JOIN follow_feed_library_states checkpoint ON checkpoint.space_id=k.space_id AND checkpoint.library_id=k.library_id")
 	query = query.Joins(`JOIN LATERAL (
  SELECT MAX(matches.entered_at) AS entered_at, COUNT(*) AS match_count, ARRAY_AGG(matches.target_id) AS target_ids FROM (
- SELECT GREATEST(k.follow_ready_at,ke.created_at) AS entered_at, f.target_id
+ SELECT GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),ke.created_at) AS entered_at, f.target_id
  FROM entry_entities ke JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
  WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.created_at<=? AND f.created_at<=?
  UNION ALL
- SELECT CASE WHEN kt.is_historical THEN NULL ELSE GREATEST(k.follow_ready_at,kt.created_at) END, f.target_id
- FROM entry_topics kt JOIN follows f ON f.space_id=kt.space_id AND f.target_type='topic' AND f.target_id=kt.topic_id
+ SELECT CASE WHEN kt.is_historical THEN NULL ELSE GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),kt.created_at) END, f.target_id
+ FROM entry_topics kt JOIN topics t ON t.id=kt.topic_id AND t.space_id=kt.space_id AND (t.library_ids='[]'::jsonb OR t.library_ids @> jsonb_build_array(k.library_id)) JOIN follows f ON f.space_id=kt.space_id AND f.target_type='topic' AND f.target_id=kt.topic_id
  WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.created_at<=? AND f.created_at<=?
  ) matches) entry ON entry.match_count>0`, cutoff, cutoff, cutoff, cutoff)
 	if len(targetIDs) > 0 {
@@ -34,39 +37,102 @@ func (s *FollowService) eligibleFeed(ctx context.Context, spaceID uint64, cutoff
 
 }
 
-func (s *FollowService) readState(ctx context.Context, spaceID uint64, cutoff time.Time) (*types.FollowFeedState, error) {
-	state := &types.FollowFeedState{}
-	var checkpoint types.FollowFeedCheckpoint
-	err := s.db.WithContext(ctx).Where("space_id=?", spaceID).First(&checkpoint).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+// feedNow uses the clock that stamps follow_ready_at in PostgreSQL.
+func (s *FollowService) feedNow(ctx context.Context) (time.Time, error) {
+	var now time.Time
+	err := s.db.WithContext(ctx).Raw("SELECT clock_timestamp()").Scan(&now).Error
+	return now.UTC(), err
+}
+func (s *FollowService) feedLibraries(ctx context.Context, spaceID uint64, selectors []string) ([]types.Library, error) {
+	if len(selectors) > 100 {
+		return nil, werrors.NewBadRequestError("libraries accepts at most 100 values")
+	}
+	var libraries []types.Library
+	q := s.db.WithContext(ctx).Where("space_id=?", spaceID)
+	if len(selectors) > 0 {
+		q = q.Where("id IN ? OR directory IN ?", selectors, selectors)
+	}
+	if err := q.Order("directory,id").Find(&libraries).Error; err != nil {
 		return nil, err
 	}
-	state.LastViewedAt = checkpoint.LastViewedAt
-	query := s.eligibleFeed(ctx, spaceID, cutoff, nil).Where("entry.entered_at IS NOT NULL")
-	if state.LastViewedAt != nil {
-		query = query.Where("entry.entered_at>?", *state.LastViewedAt)
+	for _, selector := range selectors {
+		found := false
+		for _, lib := range libraries {
+			if selector == lib.ID || selector == lib.Directory {
+				found = true
+			}
+		}
+		if !found {
+			return nil, werrors.NewBadRequestError("unknown library: " + selector)
+		}
 	}
-	if err := query.Count(&state.NewCount).Error; err != nil {
+	enabled := []types.Library{}
+	for _, lib := range libraries {
+		if lib.FeedEnabled {
+			enabled = append(enabled, lib)
+		}
+	}
+	return enabled, nil
+}
+func (s *FollowService) readState(ctx context.Context, spaceID uint64, cutoff time.Time, selectors ...string) (*types.FollowFeedState, error) {
+	libraries, err := s.feedLibraries(ctx, spaceID, selectors)
+	if err != nil {
 		return nil, err
+	}
+	state := &types.FollowFeedState{Libraries: []types.FollowLibraryState{}}
+	for _, library := range libraries {
+		item := types.FollowLibraryState{LibraryID: library.ID, LibraryName: library.Name, DisplayName: library.DisplayName(types.LanguageFromContextOrDefault(ctx))}
+		var rows []types.FollowLibraryCheckpoint
+		if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=?", spaceID, library.ID).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		if len(rows) > 0 {
+			item.LastViewedAt = rows[0].LastViewedAt
+		}
+		q := s.eligibleFeed(ctx, spaceID, cutoff, nil, library.ID).Where("entry.entered_at IS NOT NULL AND (checkpoint.last_viewed_at IS NULL OR entry.entered_at>checkpoint.last_viewed_at)")
+		if err := q.Count(&item.NewCount).Error; err != nil {
+			return nil, err
+		}
+		state.NewCount += item.NewCount
+		state.Libraries = append(state.Libraries, item)
+	}
+	// The scalar is only a compatibility projection. Eligibility always uses each library's checkpoint.
+	if len(state.Libraries) > 0 {
+		state.LastViewedAt = state.Libraries[0].LastViewedAt
+	}
+	for _, item := range state.Libraries {
+		if item.LastViewedAt == nil {
+			state.LastViewedAt = nil
+			break
+		}
+		if state.LastViewedAt != nil && item.LastViewedAt.Before(*state.LastViewedAt) {
+			state.LastViewedAt = item.LastViewedAt
+		}
 	}
 	return state, nil
 }
-
-func (s *FollowService) State(ctx context.Context) (*types.FollowFeedState, error) {
+func (s *FollowService) State(ctx context.Context, selectors ...string) (*types.FollowFeedState, error) {
 	spaceID, err := followSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.readState(ctx, spaceID, time.Now().UTC())
+	now, err := s.feedNow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.readState(ctx, spaceID, now, selectors...)
 }
 
-// MarkViewed advances monotonically. A page can acknowledge its captured cutoff.
-func (s *FollowService) MarkViewed(ctx context.Context, viewedAt *time.Time) (*types.FollowFeedState, error) {
+// MarkViewed advances only enabled libraries in the requested scope, monotonically.
+func (s *FollowService) MarkViewed(ctx context.Context, viewedAt *time.Time, selectors ...string) (*types.FollowFeedState, error) {
 	spaceID, err := followSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now, err := s.feedNow(ctx)
+	if err != nil {
+		return nil, err
+	}
 	value := now
 	if viewedAt != nil {
 		value = viewedAt.UTC().Truncate(time.Microsecond)
@@ -74,11 +140,22 @@ func (s *FollowService) MarkViewed(ctx context.Context, viewedAt *time.Time) (*t
 			return nil, werrors.NewBadRequestError("viewed_at must not be in the future or zero")
 		}
 	}
-	if err := s.db.WithContext(ctx).Exec(`INSERT INTO follow_feed_states (space_id,last_viewed_at) VALUES (?,?)
-        ON CONFLICT (space_id) DO UPDATE SET last_viewed_at=GREATEST(follow_feed_states.last_viewed_at,EXCLUDED.last_viewed_at)`, spaceID, value).Error; err != nil {
+	libraries, err := s.feedLibraries(ctx, spaceID, selectors)
+	if err != nil {
 		return nil, err
 	}
-	return s.readState(ctx, spaceID, now)
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, library := range libraries {
+			if err := tx.Exec(`INSERT INTO follow_feed_library_states(space_id,library_id,last_viewed_at) VALUES(?,?,?) ON CONFLICT(space_id,library_id) DO UPDATE SET last_viewed_at=GREATEST(follow_feed_library_states.last_viewed_at,EXCLUDED.last_viewed_at)`, spaceID, library.ID, value).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.readState(ctx, spaceID, now, selectors...)
 }
 
 func normalizeFollowFeed(request types.FollowFeedRequest) (*time.Time, int, error) {
@@ -109,15 +186,18 @@ func normalizeFollowFeed(request types.FollowFeedRequest) (*time.Time, int, erro
 }
 
 type followCursor struct {
-	Version     int        `json:"v"`
-	SpaceID     uint64     `json:"space"`
-	Cutoff      time.Time  `json:"cutoff"`
-	Since       *time.Time `json:"since"`
-	Targets     []string   `json:"targets"`
-	Collapse    bool       `json:"collapse"`
-	IncludeSeen bool       `json:"include_seen"`
-	CollectedAt time.Time  `json:"collected"`
-	EntryID     string     `json:"id"`
+	Checkpoints map[string]*time.Time `json:"checkpoints"`
+	EnteredAt   *time.Time            `json:"entered_at"`
+	Version     int                   `json:"v"`
+	SpaceID     uint64                `json:"space"`
+	Cutoff      time.Time             `json:"cutoff"`
+	Since       *time.Time            `json:"since"`
+	Libraries   []string              `json:"libraries"`
+	Targets     []string              `json:"targets"`
+	Collapse    bool                  `json:"collapse"`
+	IncludeSeen bool                  `json:"include_seen"`
+	CollectedAt time.Time             `json:"collected"`
+	EntryID     string                `json:"id"`
 }
 
 func decodeFollowCursor(value string, spaceID uint64) (*followCursor, error) {
@@ -130,7 +210,7 @@ func decodeFollowCursor(value string, spaceID uint64) (*followCursor, error) {
 		return invalid()
 	}
 	var cursor followCursor
-	if json.Unmarshal(data, &cursor) != nil || cursor.Version != 1 || cursor.SpaceID != spaceID || cursor.Cutoff.IsZero() || cursor.Cutoff.After(time.Now()) || cursor.CollectedAt.IsZero() || cursor.CollectedAt.After(cursor.Cutoff) || cursor.EntryID == "" || len(cursor.EntryID) > 36 {
+	if json.Unmarshal(data, &cursor) != nil || cursor.Version != 1 || cursor.SpaceID != spaceID || cursor.Cutoff.IsZero() || cursor.CollectedAt.IsZero() || cursor.CollectedAt.After(cursor.Cutoff) || cursor.EntryID == "" || len(cursor.EntryID) > 36 {
 		return invalid()
 	}
 	if _, _, err := normalizeFollowFeed(types.FollowFeedRequest{TargetIDs: cursor.Targets}); err != nil {
@@ -149,17 +229,24 @@ func (s *FollowService) Feed(ctx context.Context, request types.FollowFeedReques
 	if err != nil {
 		return nil, err
 	}
-	cutoff := time.Now().UTC().Truncate(time.Microsecond)
+	cutoff, err := s.feedNow(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var cursor *followCursor
 	if request.Cursor != "" {
 		cursor, err = decodeFollowCursor(request.Cursor, spaceID)
 		if err != nil {
 			return nil, err
 		}
-		if (request.Since != "" && (cursor.Since == nil || !since.Equal(*cursor.Since))) || (len(request.TargetIDs) > 0 && !slices.Equal(request.TargetIDs, cursor.Targets)) || (request.CollapseSimilar != nil && *request.CollapseSimilar != cursor.Collapse) || (request.IncludeSeen && !cursor.IncludeSeen) {
+		if cursor.Cutoff.After(cutoff) {
+			return nil, werrors.NewBadRequestError("invalid follow_feed cursor")
+		}
+		if (len(request.Libraries) > 0 && !slices.Equal(request.Libraries, cursor.Libraries)) || (request.Since != "" && (cursor.Since == nil || !since.Equal(*cursor.Since))) || (len(request.TargetIDs) > 0 && !slices.Equal(request.TargetIDs, cursor.Targets)) || (request.CollapseSimilar != nil && *request.CollapseSimilar != cursor.Collapse) || (request.IncludeSeen && !cursor.IncludeSeen) {
 			return nil, werrors.NewBadRequestError("cursor filters cannot change")
 		}
 		cutoff, since = cursor.Cutoff, cursor.Since
+		request.Libraries = cursor.Libraries
 		request.TargetIDs, request.CollapseSimilar, request.IncludeSeen = cursor.Targets, &cursor.Collapse, cursor.IncludeSeen
 	}
 	var response *types.FollowFeedResponse
@@ -174,15 +261,39 @@ func (s *FollowService) Feed(ctx context.Context, request types.FollowFeedReques
 }
 
 func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, request types.FollowFeedRequest, since *time.Time, limit int, cutoff time.Time, cursor *followCursor) (*types.FollowFeedResponse, error) {
-	state, err := s.readState(ctx, spaceID, cutoff)
+	state, err := s.readState(ctx, spaceID, cutoff, request.Libraries...)
 	if err != nil {
 		return nil, err
 	}
-	response := &types.FollowFeedResponse{Results: []*types.FollowFeedArticle{}, NewCount: state.NewCount, LastViewedAt: state.LastViewedAt, ViewedAt: cutoff}
-	if cursor == nil && since == nil && !request.IncludeSeen {
-		since = state.LastViewedAt
+	response := &types.FollowFeedResponse{Results: []*types.FollowFeedArticle{}, Libraries: state.Libraries, NewCount: state.NewCount, LastViewedAt: state.LastViewedAt, ViewedAt: cutoff}
+
+	ids := []string{}
+	checkpoints := map[string]*time.Time{}
+	for _, lib := range state.Libraries {
+		ids = append(ids, lib.LibraryID)
+		checkpoints[lib.LibraryID] = lib.LastViewedAt
 	}
-	query := s.eligibleFeed(ctx, spaceID, cutoff, request.TargetIDs)
+	if cursor != nil && cursor.Checkpoints != nil {
+		checkpoints = cursor.Checkpoints
+	}
+	if len(ids) == 0 {
+		return response, nil
+	}
+	query := s.eligibleFeed(ctx, spaceID, cutoff, request.TargetIDs, ids...)
+	if since == nil && !request.IncludeSeen {
+		conditions := []string{}
+		args := []any{}
+		for _, id := range ids {
+			condition := "(k.library_id=? AND entry.entered_at IS NOT NULL"
+			args = append(args, id)
+			if stamp := checkpoints[id]; stamp != nil {
+				condition += " AND entry.entered_at>?"
+				args = append(args, *stamp)
+			}
+			conditions = append(conditions, condition+")")
+		}
+		query = query.Where("("+strings.Join(conditions, " OR ")+")", args...)
+	}
 	if since != nil {
 		query = query.Where("entry.entered_at>?", *since)
 	}
@@ -192,7 +303,7 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 		EnteredAt *time.Time
 	}
 	var rows []collectedArticle
-	if err := query.Select("k.id,k.created_at,entry.entered_at").Order("k.created_at DESC,k.id").Scan(&rows).Error; err != nil {
+	if err := query.Select("k.id,k.created_at,entry.entered_at").Order("entry.entered_at DESC NULLS LAST,k.created_at DESC,k.id").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	response.Total = int64(len(rows))
@@ -219,6 +330,18 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 		return nil, err
 	}
 	slices.SortFunc(articles, func(a, b *types.EntrySearchResult) int {
+		left, right := entered[a.EntryID], entered[b.EntryID]
+		if left == nil && right != nil {
+			return 1
+		}
+		if left != nil && right == nil {
+			return -1
+		}
+		if left != nil && right != nil {
+			if n := right.Compare(*left); n != 0 {
+				return n
+			}
+		}
 		if result := collected[b.EntryID].Compare(collected[a.EntryID]); result != 0 {
 			return result
 		}
@@ -227,6 +350,14 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 	follows, err := s.ListFollows(ctx)
 	if err != nil {
 		return nil, err
+	}
+	topics, err := NewTopicService(s.db).ListTopics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	scopes := map[string][]string{}
+	for _, topic := range topics {
+		scopes[topic.ID] = topic.LibraryIDs
 	}
 	byTarget := map[string]types.FollowTarget{}
 	for _, follow := range follows {
@@ -246,7 +377,7 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 			}
 		}
 		for _, topic := range article.Topics {
-			if follow, ok := byTarget[types.FollowTargetTopic+":"+topic.ID]; ok {
+			if follow, ok := byTarget[types.FollowTargetTopic+":"+topic.ID]; ok && (len(scopes[topic.ID]) == 0 || slices.Contains(scopes[topic.ID], article.LibraryID)) {
 				matched[article.EntryID] = append(matched[article.EntryID], follow)
 			}
 		}
@@ -261,7 +392,7 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 	project = func(article *types.EntrySearchResult) *types.FollowFeedArticle {
 		date := collected[article.EntryID]
 		result := &types.FollowFeedArticle{EntrySearchResult: *article, CollectedAt: date, EnteredAt: entered[article.EntryID],
-			IsNew: entered[article.EntryID] != nil && (state.LastViewedAt == nil || entered[article.EntryID].After(*state.LastViewedAt)), MatchedFollows: matched[article.EntryID], SimilarReports: []*types.FollowFeedArticle{}}
+			IsNew: entered[article.EntryID] != nil && (checkpoints[article.LibraryID] == nil || entered[article.EntryID].After(*checkpoints[article.LibraryID])), MatchedFollows: matched[article.EntryID], SimilarReports: []*types.FollowFeedArticle{}}
 		for _, child := range article.SimilarReports {
 			result.SimilarReports = append(result.SimilarReports, project(child))
 		}
@@ -270,6 +401,18 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 	// Fold the full query window before keyset slicing so children cannot reappear.
 	if cursor != nil {
 		articles = slices.DeleteFunc(articles, func(a *types.EntrySearchResult) bool {
+			stamp := entered[a.EntryID]
+			if stamp != nil && cursor.EnteredAt == nil {
+				return true
+			}
+			if stamp == nil && cursor.EnteredAt != nil {
+				return false
+			}
+			if stamp != nil && cursor.EnteredAt != nil {
+				if !stamp.Equal(*cursor.EnteredAt) {
+					return stamp.After(*cursor.EnteredAt)
+				}
+			}
 			date := collected[a.EntryID]
 			return date.After(cursor.CollectedAt) || (date.Equal(cursor.CollectedAt) && a.EntryID <= cursor.EntryID)
 		})
@@ -280,7 +423,7 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 	}
 	if len(articles) > pageSize {
 		last := articles[pageSize-1]
-		next := followCursor{Version: 1, SpaceID: spaceID, Cutoff: cutoff, Since: since, Targets: request.TargetIDs, Collapse: request.CollapseSimilar == nil || *request.CollapseSimilar, IncludeSeen: request.IncludeSeen, CollectedAt: collected[last.EntryID], EntryID: last.EntryID}
+		next := followCursor{Checkpoints: checkpoints, EnteredAt: entered[last.EntryID], Version: 1, SpaceID: spaceID, Cutoff: cutoff, Since: since, Targets: request.TargetIDs, Libraries: request.Libraries, Collapse: request.CollapseSimilar == nil || *request.CollapseSimilar, IncludeSeen: request.IncludeSeen, CollectedAt: collected[last.EntryID], EntryID: last.EntryID}
 		data, err := json.Marshal(next)
 		if err != nil {
 			return nil, err

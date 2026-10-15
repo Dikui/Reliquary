@@ -48,9 +48,9 @@ async function renderConfirmation(locale: keyof typeof messages, kind: 'mine' | 
     onServerPrefetch(() => action(state))
     return state
   }
-  const label = i18n.global.t(kind === 'mine' ? 'personalDocument.delete' : 'knowledgeBase.deleteDocument')
+  const label = i18n.global.t(kind === 'mine' ? 'personalDocument.delete' : 'library.deleteDocument')
   const title = 'A complete document title for confirmation'
-  const confirmation = i18n.global.t(kind === 'mine' ? 'personalDocument.deleteConfirm' : 'knowledgeBase.confirmDeleteDocument',
+  const confirmation = i18n.global.t(kind === 'mine' ? 'personalDocument.deleteConfirm' : 'library.confirmDeleteDocument',
     { title, fileName: title })
   const deleted: string[] = [], errors: unknown[] = [], warnings: string[] = []
   let dialogProps: any, dialogInstance: any

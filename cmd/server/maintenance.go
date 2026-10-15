@@ -22,9 +22,11 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/container"
 	"reliquary/internal/database"
+	"reliquary/internal/graphreplica"
 	applogger "reliquary/internal/logger"
 	"reliquary/internal/maintenance"
 	"reliquary/internal/maintenanceops"
+	"reliquary/internal/queue"
 	"reliquary/internal/types"
 	"sort"
 )
@@ -53,7 +55,7 @@ func maintenanceDatabase() (*gorm.DB, string, error) {
 func runMaintenance(args []string, input io.Reader, output io.Writer) error {
 	applogger.SetOutput(os.Stderr)
 	if len(args) == 0 {
-		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|reindex|export-sources|migrate|rebuild|pause|resume|status|record|configure|due")
+		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|graph-rebuild|graph-check|graph-verify|graph-clear-drill|audit|queue-replay|queue-probe-drill|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -96,6 +98,72 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		return v.Flush(ctx)
 	}
 	switch args[0] {
+	case "graph-rebuild", "graph-check", "graph-verify", "graph-clear-drill":
+		flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
+		namespace := flags.String("namespace", "", "isolated drill namespace")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			return err
+		}
+		store := graphreplica.NewStore(config.ResolveNeo4j(cfg))
+		if *namespace != "" {
+			store.Close()
+			store, err = graphreplica.NewDrillStore(config.ResolveNeo4j(cfg), *namespace)
+			if err != nil {
+				return err
+			}
+		}
+		defer store.Close()
+		if args[0] == "graph-clear-drill" {
+			if err := store.ClearDrill(ctx); err != nil {
+				return err
+			}
+			return emit(map[string]bool{"ok": true})
+		}
+		svc := graphreplica.NewService(db, store, nil)
+		var result graphreplica.CheckResult
+		if args[0] == "graph-rebuild" {
+			result, err = svc.Rebuild(ctx)
+		} else if args[0] == "graph-verify" {
+			result, err = svc.Verify(ctx)
+		} else {
+			result, err = svc.Check(ctx)
+		}
+		if err != nil {
+			return err
+		}
+		if err := emit(result); err != nil {
+			return err
+		}
+		if args[0] == "graph-verify" && len(result.Differences) > 0 {
+			return errors.New("Neo4j verification failed")
+		}
+		return nil
+	case "audit":
+		result, err := maintenance.Audit(ctx, db)
+		if err != nil {
+			return err
+		}
+		return emit(result)
+	case "queue-probe-drill":
+		client := queue.NewClient(db)
+		defer client.Close()
+		result, err := client.DrillProbe(ctx)
+		if err != nil {
+			return err
+		}
+		return emit(result)
+	case "queue-replay":
+		client := queue.NewClient(db)
+		defer client.Close()
+		result, err := client.ReplayPaused(ctx)
+		if err != nil {
+			return err
+		}
+		return emit(result)
 	case "credentials":
 		return runMaintenanceCredentials(ctx, db, args[1:], input, output)
 	case "chatgpt-login", "chatgpt-complete":
@@ -128,6 +196,18 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			return err
 		}
 		return emit(map[string]bool{"flushed": true})
+	case "rebuild-files":
+		v, err := vault()
+		if err != nil {
+			return err
+		}
+		result, rebuildErr := v.RebuildFilesWithResult(ctx)
+		if result != nil {
+			if err := emit(result); err != nil {
+				return err
+			}
+		}
+		return rebuildErr
 	case "manifest":
 		manifest, err := maintenance.BuildManifest(ctx, db, root, uploads)
 		if err != nil {
@@ -217,26 +297,46 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		if err != nil {
 			return err
 		}
-		var kb types.KnowledgeBase
-		if err := db.Table("knowledge_bases").Where("deleted_at IS NULL").First(&kb).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		var libraries []types.Library
+		if err := db.Table("libraries").Where("deleted_at IS NULL").Find(&libraries).Error; err != nil {
 			return err
 		}
-		selected := map[string]any{"id": kb.EmbeddingModelID}
+		embeddingID := ""
+		if db.Migrator().HasColumn("spaces", "embedding_model_id") {
+			if err := db.Table("spaces").Where("id=?", types.SingleSpaceID).Pluck("embedding_model_id", &embeddingID).Error; err != nil {
+				return err
+			}
+		} else {
+			// Historical schemas enforce one library. This offline compatibility branch
+			// only runs before migration 10; current selection always comes from space.
+			for _, library := range libraries {
+				embeddingID = library.EmbeddingModelID
+				if library.ModelTiers.Embedding != "" {
+					embeddingID = library.ModelTiers.Embedding
+				}
+			}
+		}
+		selected := map[string]any{"id": embeddingID}
 		for _, model := range models {
-			if model["id"] == kb.EmbeddingModelID {
+			if model["id"] == embeddingID {
 				selected["profile_hash"] = maintenance.ModelProfile(model)
 			}
 		}
 		ids := map[string]bool{}
 		generation := map[string]bool{}
-		for _, id := range []string{kb.EmbeddingModelID, kb.SummaryModelID, kb.ModelTiers.Light, kb.ModelTiers.EntityResolution, kb.ModelTiers.Generation, kb.ModelTiers.Embedding, kb.ModelTiers.Rerank} {
-			if id != "" {
-				ids[id] = true
-			}
+		if embeddingID != "" {
+			ids[embeddingID] = true
 		}
-		for _, id := range []string{kb.SummaryModelID, kb.ModelTiers.Light, kb.ModelTiers.EntityResolution, kb.ModelTiers.Generation} {
-			if id != "" {
-				generation[id] = true
+		for _, library := range libraries {
+			for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation, library.ModelTiers.Rerank} {
+				if id != "" {
+					ids[id] = true
+				}
+			}
+			for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation} {
+				if id != "" {
+					generation[id] = true
+				}
 			}
 		}
 		var fallback string
@@ -275,6 +375,9 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			}
 		}
 		if err := db.WithContext(ctx).Exec("ANALYZE public.entries,public.chunks").Error; err != nil {
+			return err
+		}
+		if err := service.BackfillBodyLocations(ctx, db); err != nil {
 			return err
 		}
 		return emit(map[string]bool{"reindexed": true})

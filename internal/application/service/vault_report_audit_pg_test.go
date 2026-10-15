@@ -17,6 +17,14 @@ func TestVaultReportAuditAndFailureRollback(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Minute)
 	report, err := h.documents.CreateReport(h.ctx, "Successful report", "# Successful report\n\nAudit fixture report.", nil)
 	require.NoError(t, err)
+	h.embedder.mu.Lock()
+	require.NotEmpty(t, h.embedder.callContexts)
+	for _, ctx := range h.embedder.callContexts {
+		stage, _ := types.LLMCallMetadataFromContext(ctx)
+		require.Equal(t, types.CallPurposeBodyEmbedding, types.NormalizeModelCallPurpose(stage, types.ModelTierFromContext(ctx)))
+		require.Equal(t, report.ID, *types.ModelCallEntryFromContext(ctx))
+	}
+	h.embedder.mu.Unlock()
 	var logs []types.OperationLog
 	require.NoError(t, h.db.Find(&logs).Error)
 	require.Len(t, logs, 1)
@@ -65,7 +73,7 @@ func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
 	require.Equal(t, "pending_retry", report.IndexStatus)
 	require.Contains(t, report.ErrorMessage, "fixture embedding is unavailable")
 	files := []string{}
-	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "reports"), func(path string, entry fs.DirEntry, err error) error {
+	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "ai-reports"), func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -92,8 +100,8 @@ BEGIN
   IF NEW.task_type = 'report:index' THEN RAISE EXCEPTION 'fixture refuses report queue'; END IF;
   RETURN NEW;
 END $$`).Error)
-	require.NoError(t, h.db.Exec(`CREATE TRIGGER reject_report_queue BEFORE INSERT ON task_jobs FOR EACH ROW EXECUTE FUNCTION reject_report_queue()`).Error)
-	_, err := h.documents.CreateReport(h.ctx, "Unqueued report", "# Unqueued report\n\nA saved report must have durable recovery.", nil)
+	require.NoError(t, h.db.Exec(`CREATE TRIGGER reject_report_queue BEFORE INSERT ON task_pending_ops FOR EACH ROW EXECUTE FUNCTION reject_report_queue()`).Error)
+	_, err := h.documents.CreateReport(h.ctx, "Unqueued report", "# Unqueued report\n\nA saved report must have durable recovery.\n\n![image]("+articleImageDataURI(t, 5)+")", nil)
 	require.ErrorContains(t, err, "fixture refuses report queue")
 	require.Equal(t, before, vaultFileHashes(t, h.root))
 	var count int64

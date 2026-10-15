@@ -248,6 +248,16 @@
               >{{ row.completed }}<t-icon name="chevron-right" /></t-button>
               <span v-else class="rq-number">0</span>
             </template>
+            <template #cancelled="{ row }">
+              <t-button
+                v-if="row.cancelled > 0"
+                variant="text"
+                size="small"
+                class="rq-task-count"
+                @click="openRuntimeTasks(row, 'cancelled')"
+              >{{ row.cancelled }}<t-icon name="chevron-right" /></t-button>
+              <span v-else class="rq-number">0</span>
+            </template>
             <template #latency_ms="{ row }">
               <span class="rq-latency">{{ formatLatency(row.latency_ms) }}</span>
             </template>
@@ -419,6 +429,9 @@
               <p v-else class="rq-failed-row-unknown">
                 {{ t('system.globalSettings.runtime.tasks.unknownTarget') }}
               </p>
+              <p v-if="task.cancellation_unavailable_reason" class="rq-failed-guide-desc">
+                {{ t('system.globalSettings.runtime.tasks.cancelUnavailable', { state: task.cancellation_unavailable_reason === 'completed' ? t('system.globalSettings.runtime.tasks.states.completed') : t('system.globalSettings.runtime.tasks.businessDeleting') }) }}
+              </p>
               <p v-if="task.last_error" class="rq-failed-row-error">
                 {{ task.last_error }}
               </p>
@@ -465,7 +478,7 @@
               <t-popconfirm
                 v-if="task.allowed_actions.includes('delete')"
                 theme="danger"
-                :content="t('system.globalSettings.runtime.tasks.deleteConfirm')"
+                :content="t(task.state === 'cancelled' ? 'system.globalSettings.runtime.tasks.deleteCancelledConfirm' : 'system.globalSettings.runtime.tasks.deleteConfirm')"
                 @confirm="runTaskAction(task, 'delete')"
               >
                 <t-button
@@ -589,7 +602,7 @@ const taskAction = ref<RuntimeTaskAction | ''>('')
 const purging = ref(false)
 
 const TASK_PAGE_SIZE = 20
-const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry', 'archived', 'completed']
+const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry', 'archived', 'completed', 'cancelled']
 const runtimeTaskTypeKeys: Record<string, string> = {
   'document:process': 'documentProcess',
   'manual:process': 'manualProcess',
@@ -613,6 +626,7 @@ const columns = computed(() => [
   { colKey: 'retry', title: t('system.globalSettings.runtime.columns.retry'), width: 68, align: 'center' as const },
   { colKey: 'archived', title: t('system.globalSettings.runtime.columns.archived'), width: 96, align: 'center' as const },
   { colKey: 'completed', title: t('system.globalSettings.runtime.columns.completed'), width: 84, align: 'center' as const },
+  { colKey: 'cancelled', title: t('system.globalSettings.runtime.tasks.states.cancelled'), width: 84, align: 'center' as const },
   { colKey: 'latency_ms', title: t('system.globalSettings.runtime.columns.latency'), width: 104, align: 'center' as const },
   { colKey: 'status', title: t('system.globalSettings.runtime.columns.status'), width: 96 },
 ])
@@ -702,11 +716,11 @@ function formatTaskTime(value?: string): string {
 
 function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   const refs: RuntimeTaskMeta[] = []
-  if (task.knowledge_base_id) {
+  if (task.library_id) {
     refs.push({
-      key: 'kb',
-      label: t('system.globalSettings.runtime.tasks.knowledgeBaseLabel'),
-      value: task.knowledge_base_id,
+      key: 'library',
+      label: t('system.globalSettings.runtime.tasks.libraryLabel'),
+      value: task.library_id,
     })
   }
   if (task.entry_id) {
@@ -723,8 +737,8 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
       value: task.task_id,
     })
   }
-  if (task.source_kb_id) refs.push({ key: 'source-kb', label: t('system.globalSettings.runtime.tasks.sourceKBLabel'), value: task.source_kb_id })
-  if (task.target_kb_id) refs.push({ key: 'target-kb', label: t('system.globalSettings.runtime.tasks.targetKBLabel'), value: task.target_kb_id })
+  if (task.source_library_id) refs.push({ key: 'source-library', label: t('system.globalSettings.runtime.tasks.sourceLibraryLabel'), value: task.source_library_id })
+  if (task.target_library_id) refs.push({ key: 'target-library', label: t('system.globalSettings.runtime.tasks.targetLibraryLabel'), value: task.target_library_id })
   if (task.entry_count) {
     refs.push({ key: 'entry-count', label: t('system.globalSettings.runtime.tasks.knowledgeCountLabel'), value: String(task.entry_count) })
   }
@@ -921,17 +935,11 @@ async function purgeArchivedTasks() {
 async function load(showSpinner: boolean) {
   if (showSpinner) loading.value = true
   try {
-    const connection = await getQueueConnectionStatus()
+    const connection = await getQueueConnectionStatus().catch(() => undefined)
     queueConnection.value = connection
-    if (connection?.state === 'reconnecting') {
-      available.value = false
-      loadedOnce.value = true
-      error.value = ''
-      return
-    }
     loadChatGPTStatus()
     const resp = await getRuntimeQueues()
-    queueConnection.value = resp.queue_connection
+    queueConnection.value = resp.queue_connection ?? connection
     available.value = resp.available
     pools.value = resp.pools || []
     queues.value = resp.queues || []
@@ -1052,6 +1060,7 @@ onUnmounted(() => {
 }
 
 .rq-actions {
+  padding-right: 48px;
   display: flex;
   align-items: center;
   gap: 10px;

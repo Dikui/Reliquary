@@ -2,32 +2,38 @@ package config
 
 import (
 	"fmt"
-	"github.com/go-viper/mapstructure/v2"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
+
 	"github.com/spf13/viper"
 )
 
 // Config 应用程序总配置
 type Config struct {
+	Neo4j                  *Neo4jConfig             `yaml:"neo4j" json:"neo4j"`
 	Vault                  *VaultConfig             `yaml:"vault" json:"vault"`
 	ArticleProcessing      *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
 	TopicBackfillBatchSize int                      `yaml:"topic_backfill_batch_size" json:"topic_backfill_batch_size"`
 	Server                 *ServerConfig            `yaml:"server"           json:"server"`
-	KnowledgeBase          *KnowledgeBaseConfig     `yaml:"knowledge_base"   json:"knowledge_base"`
+	Library                *LibraryConfig           `yaml:"library"   json:"library"`
 
 	Models []ModelConfig `yaml:"models"           json:"models"`
 }
 
-// ArticleProcessingConfig bounds the single article processing call.
+// ArticleProcessingConfig bounds review, processing and segmented input.
 type ArticleProcessingConfig struct {
-	MaxBodyChars        int `yaml:"max_body_chars" json:"max_body_chars"`
-	MaxImages           int `yaml:"max_images" json:"max_images"`
-	MaxCompletionTokens int `yaml:"max_completion_tokens" json:"max_completion_tokens"`
+	RelationTypeSimilarityThreshold float64 `yaml:"relation_type_similarity_threshold" json:"relation_type_similarity_threshold"`
+	MaxBodyChars                    int     `yaml:"max_body_chars" json:"max_body_chars"`
+	MaxImages                       int     `yaml:"max_images" json:"max_images"`
+	MaxCompletionTokens             int     `yaml:"max_completion_tokens" json:"max_completion_tokens"`
+	MaxSegments                     int     `yaml:"max_segments" json:"max_segments"`
+	SegmentOverlapChars             int     `yaml:"segment_overlap_chars" json:"segment_overlap_chars"`
+	ContextReservePercent           int     `yaml:"context_reserve_percent" json:"context_reserve_percent"`
 }
 
 // ServerConfig 服务器配置
@@ -38,19 +44,13 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout" default:"30s"`
 }
 
-// KnowledgeBaseConfig 知识库配置
-type KnowledgeBaseConfig struct {
+// LibraryConfig 库配置
+type LibraryConfig struct {
 	ChunkSize              int           `yaml:"chunk_size"       json:"chunk_size"`
 	ChunkOverlap           int           `yaml:"chunk_overlap"    json:"chunk_overlap"`
 	SplitMarkers           []string      `yaml:"split_markers"    json:"split_markers"`
 	KeepSeparator          bool          `yaml:"keep_separator"   json:"keep_separator"`
 	DocumentProcessTimeout time.Duration `yaml:"document_process_timeout"  json:"document_process_timeout"`
-	// ParserCallTimeout caps a single parser call. Without this the
-	// gRPC call inherits the queue task context (whole DocumentProcessTimeout,
-	// default 2h+), so a hung parser would block a worker for hours and
-	// leave entry in "processing". Default 30 minutes is generous enough
-	// for OCR-heavy large PDFs while ensuring forward progress.
-	ParserCallTimeout time.Duration `yaml:"parser_call_timeout"   json:"parser_call_timeout"`
 }
 
 // DefaultDocumentProcessTimeout is the ceiling for a single document:process
@@ -60,8 +60,8 @@ const DefaultDocumentProcessTimeout = 2 * time.Hour
 // DocumentProcessTimeout returns the effective document-process task timeout.
 // Partial configs (e.g. unit tests) receive the default when unset.
 func DocumentProcessTimeout(cfg *Config) time.Duration {
-	if cfg != nil && cfg.KnowledgeBase != nil && cfg.KnowledgeBase.DocumentProcessTimeout > 0 {
-		return cfg.KnowledgeBase.DocumentProcessTimeout
+	if cfg != nil && cfg.Library != nil && cfg.Library.DocumentProcessTimeout > 0 {
+		return cfg.Library.DocumentProcessTimeout
 	}
 	return DefaultDocumentProcessTimeout
 }
@@ -143,7 +143,7 @@ func LoadConfig() (*Config, error) {
 	resolvedConfigDir = filepath.Dir(viper.ConfigFileUsed())
 
 	// Validate configuration values
-	applyKnowledgeBaseEnvOverrides(&cfg)
+	applyLibraryEnvOverrides(&cfg)
 	if raw := os.Getenv("TOPIC_BACKFILL_BATCH_SIZE"); raw != "" {
 		if _, err := fmt.Sscan(raw, &cfg.TopicBackfillBatchSize); err != nil {
 			return nil, fmt.Errorf("invalid TOPIC_BACKFILL_BATCH_SIZE: %w", err)
@@ -167,19 +167,19 @@ func ValidateConfig(cfg *Config) error {
 	if cfg.TopicBackfillBatchSize < 0 || cfg.TopicBackfillBatchSize > 1000 {
 		errs = append(errs, "topic_backfill_batch_size must be between 0 and 1000")
 	}
-	if cfg.ArticleProcessing != nil && (cfg.ArticleProcessing.MaxBodyChars < 0 || cfg.ArticleProcessing.MaxImages < 0 || cfg.ArticleProcessing.MaxCompletionTokens < 0) {
+	if cfg.ArticleProcessing != nil && (cfg.ArticleProcessing.RelationTypeSimilarityThreshold < 0 || cfg.ArticleProcessing.RelationTypeSimilarityThreshold > 1 || cfg.ArticleProcessing.MaxBodyChars < 0 || cfg.ArticleProcessing.MaxImages < 0 || cfg.ArticleProcessing.MaxCompletionTokens < 0 || cfg.ArticleProcessing.MaxSegments < 0 || cfg.ArticleProcessing.SegmentOverlapChars < 0 || cfg.ArticleProcessing.ContextReservePercent < 0 || cfg.ArticleProcessing.ContextReservePercent > 90) {
 		errs = append(errs, "article_processing limits must be nonnegative")
 	}
 
-	if cfg.KnowledgeBase != nil {
-		if cfg.KnowledgeBase.ChunkSize <= 0 {
-			errs = append(errs, "knowledge_base.chunk_size must be > 0")
+	if cfg.Library != nil {
+		if cfg.Library.ChunkSize <= 0 {
+			errs = append(errs, "library.chunk_size must be > 0")
 		}
-		if cfg.KnowledgeBase.ChunkOverlap < 0 {
-			errs = append(errs, "knowledge_base.chunk_overlap must be >= 0")
+		if cfg.Library.ChunkOverlap < 0 {
+			errs = append(errs, "library.chunk_overlap must be >= 0")
 		}
-		if cfg.KnowledgeBase.ChunkOverlap >= cfg.KnowledgeBase.ChunkSize {
-			errs = append(errs, "knowledge_base.chunk_overlap must be less than chunk_size")
+		if cfg.Library.ChunkOverlap >= cfg.Library.ChunkSize {
+			errs = append(errs, "library.chunk_overlap must be less than chunk_size")
 		}
 	}
 
@@ -195,24 +195,17 @@ func ValidateConfig(cfg *Config) error {
 	return nil
 }
 
-func applyKnowledgeBaseEnvOverrides(cfg *Config) {
-	if cfg.KnowledgeBase == nil {
-		cfg.KnowledgeBase = &KnowledgeBaseConfig{}
+func applyLibraryEnvOverrides(cfg *Config) {
+	if cfg.Library == nil {
+		cfg.Library = &LibraryConfig{}
 	}
-	if cfg.KnowledgeBase.DocumentProcessTimeout <= 0 {
-		cfg.KnowledgeBase.DocumentProcessTimeout = DefaultDocumentProcessTimeout
+	if cfg.Library.DocumentProcessTimeout <= 0 {
+		cfg.Library.DocumentProcessTimeout = DefaultDocumentProcessTimeout
 	}
 	if value := strings.TrimSpace(os.Getenv("RELIQUARY_DOCUMENT_PROCESS_TIMEOUT")); value != "" {
 		if d, err := time.ParseDuration(value); err == nil {
-			cfg.KnowledgeBase.DocumentProcessTimeout = d
+			cfg.Library.DocumentProcessTimeout = d
 		}
 	}
-	if cfg.KnowledgeBase.ParserCallTimeout <= 0 {
-		cfg.KnowledgeBase.ParserCallTimeout = 30 * time.Minute
-	}
-	if value := strings.TrimSpace(os.Getenv("PARSER_CALL_TIMEOUT")); value != "" {
-		if d, err := time.ParseDuration(value); err == nil && d > 0 {
-			cfg.KnowledgeBase.ParserCallTimeout = d
-		}
-	}
+
 }

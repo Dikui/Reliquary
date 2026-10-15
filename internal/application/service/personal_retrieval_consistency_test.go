@@ -24,13 +24,13 @@ type personalRetrievalHit struct {
 
 func TestPersonalPostgresRetrievalResults(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
-	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business) VALUES (?, ?, 'personal')", types.SingleSpaceID, "Retrieval fixture").Error)
-	first := f.createKB(t, true, true)
+	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business,embedding_model_id) VALUES (?, ?, 'personal','chunk-search-fixed')", types.SingleSpaceID, "Retrieval fixture").Error)
+	first := f.createLibrary(t, true, true)
 	second := first
 	definitions := []struct {
-		kb     *types.KnowledgeBase
-		body   string
-		vector []float32
+		library *types.Library
+		body    string
+		vector  []float32
 	}{
 		{first, "retrieval retrieval retrieval retrieval retrieval postgres postgres postgres postgres", []float32{1, 0, 0}},
 		{second, "retrieval retrieval retrieval postgres postgres context budgets keyword vector", []float32{0.9, 0.2, 0}},
@@ -38,14 +38,14 @@ func TestPersonalPostgresRetrievalResults(t *testing.T) {
 		{second, "personal entry local files queue background processing task worker", []float32{0.1, 1, 0}},
 	}
 	for _, definition := range definitions {
-		entry := f.createEntry(t, definition.kb, "Sample document")
+		entry := f.createEntry(t, definition.library, "Sample document")
 		chunk := f.createChunk(t, entry, definition.body, "", types.ChunkTypeText)
 		require.NoError(t, f.indices.Save(f.ctx, &types.IndexInfo{
 			Content: chunk.Content, SourceID: chunk.ID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID,
-			EntryID: entry.ID, KnowledgeBaseID: definition.kb.ID, IsEnabled: true,
+			EntryID: entry.ID, LibraryID: definition.library.ID, IsEnabled: true,
 		}, map[string]any{"embedding": map[string][]float32{chunk.ID: definition.vector}}))
 	}
-	service := &knowledgeBaseService{db: f.db, repo: f.kbs, entryRepo: f.entry, chunkRepo: f.chunks,
+	service := &libraryService{db: f.db, repo: f.libraries, entryRepo: f.entry, chunkRepo: f.chunks,
 		modelService: personalRetrievalModels{}, retrieveEngine: f.retrieval}
 	recorded := make(map[string][]personalRetrievalHit)
 	for _, query := range []string{"retrieval", "postgres"} {
@@ -95,24 +95,24 @@ func TestPersonalPostgresRetrievalResults(t *testing.T) {
 	}
 }
 
-func TestPersonalKnowledgeBasePostgresSchemaAndEmbedding(t *testing.T) {
+func TestPersonalLibraryPostgresSchemaAndEmbedding(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
-	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business) VALUES (?, ?, 'personal')", types.SingleSpaceID, "Personal fixture").Error)
-	service := &knowledgeBaseService{db: f.db, repo: f.kbs}
-	created := &types.KnowledgeBase{ID: "personal-kb", SpaceID: types.SingleSpaceID, Name: "Personal knowledge base", EmbeddingModelID: "chunk-search-fixed"}
+	require.NoError(t, f.db.Exec("INSERT INTO spaces (id, name, business,embedding_model_id) VALUES (?, ?, 'personal','chunk-search-fixed')", types.SingleSpaceID, "Personal fixture").Error)
+	service := &libraryService{db: f.db, repo: f.libraries}
+	created := &types.Library{ID: "personal-library", SpaceID: types.SingleSpaceID, Name: "Personal library", EmbeddingModelID: "chunk-search-fixed"}
 	created.EnsureDefaults()
-	require.NoError(t, f.kbs.CreateKnowledgeBase(f.ctx, created))
-	loaded, err := service.GetKnowledgeBaseByID(f.ctx, created.ID)
+	require.NoError(t, f.libraries.CreateLibrary(f.ctx, created))
+	loaded, err := service.GetLibraryByID(f.ctx, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "chunk-search-fixed", loaded.EmbeddingModelID)
-	for _, kb := range []*types.KnowledgeBase{created, loaded} {
-		encoded, err := json.Marshal(kb)
+	for _, library := range []*types.Library{created, loaded} {
+		encoded, err := json.Marshal(library)
 		require.NoError(t, err)
 		var fields map[string]any
 		require.NoError(t, json.Unmarshal(encoded, &fields))
 		require.NotContains(t, fields, "vector_store_id")
 	}
 	require.False(t, f.db.Migrator().HasTable("vector_stores"))
-	require.False(t, f.db.Migrator().HasColumn("knowledge_bases", "vector_store_id"))
+	require.False(t, f.db.Migrator().HasColumn("libraries", "vector_store_id"))
 	require.False(t, f.db.Migrator().HasColumn("spaces", "retriever_engines"))
 }

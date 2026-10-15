@@ -118,7 +118,7 @@ func (r *chunkRepository) ListChunksByID(
 	return chunks, nil
 }
 
-// ListChunksByIDOnly retrieves multiple chunks by their IDs without space filter (for shared KB resolution).
+// ListChunksByIDOnly retrieves multiple chunks by their IDs without space filter (for shared Library resolution).
 func (r *chunkRepository) ListChunksByIDOnly(ctx context.Context, ids []string) ([]*types.Chunk, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -437,15 +437,15 @@ func (r *chunkRepository) DeleteByEntryList(ctx context.Context, spaceID uint64,
 	).Delete(&types.Chunk{}).Error
 }
 
-// CountChunksByKnowledgeBaseID counts the number of chunks in a knowledge base
-func (r *chunkRepository) CountChunksByKnowledgeBaseID(
+// CountChunksByLibraryID counts the number of chunks in a library
+func (r *chunkRepository) CountChunksByLibraryID(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 ) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&types.Chunk{}).
-		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
+		Where("space_id = ? AND library_id = ?", spaceID, libraryID).
 		Count(&count).Error
 	return count, err
 }

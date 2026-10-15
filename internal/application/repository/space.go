@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrSpaceNotFound         = errors.New("space not found")
-	ErrSpaceHasKnowledgeBase = errors.New("space has associated knowledge bases")
+	ErrSpaceNotFound   = errors.New("space not found")
+	ErrSpaceHasLibrary = errors.New("space has associated libraries")
 )
 
 // spaceRepository implements space repository interface
@@ -75,7 +75,7 @@ func (r *spaceRepository) ListSpaces(ctx context.Context) ([]*types.Space, error
 
 // UpdateSpace updates space.
 func (r *spaceRepository) UpdateSpace(ctx context.Context, space *types.Space) error {
-	return r.db.WithContext(ctx).Model(&types.Space{}).Where("id = ?", space.ID).Updates(space).Error
+	return r.db.WithContext(ctx).Model(&types.Space{}).Where("id = ?", space.ID).Omit("EmbeddingModelID").Updates(space).Error
 }
 
 // DeleteSpace soft-deletes the workspace.

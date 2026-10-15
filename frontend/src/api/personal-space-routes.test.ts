@@ -42,17 +42,15 @@ test('settings, runtime queues and space key values use the current API routes',
   const requests: Request[] = [], api = loadAPI('./system.ts', requests)
   await api.listSystemSettings(); await api.getSystemSetting('key/a'); await api.updateSystemSetting('key/a', true); await api.resetSystemSetting('key/a')
   await api.getRuntimeQueues(); await api.getRuntimeTasks('entity', 'pending'); await api.mutateRuntimeTask('entity', 'task/a', 'cancel'); await api.purgeArchivedRuntimeTasks('entity')
-  await api.getParserEngineConfig(); await api.updateParserEngineConfig({ mineru_endpoint: 'http://localhost' })
   assert.deepEqual(requests.map(({ url }) => url), [
     '/api/v1/system/settings', '/api/v1/system/settings/key%2Fa', '/api/v1/system/settings/key%2Fa', '/api/v1/system/settings/key%2Fa',
     '/api/v1/system/runtime/queues', '/api/v1/system/runtime/queues/entity/tasks', '/api/v1/system/runtime/queues/entity/tasks/task%2Fa/actions/cancel', '/api/v1/system/runtime/queues/entity/archived',
-    '/api/v1/space/kv/parser-engine-config', '/api/v1/space/kv/parser-engine-config',
   ])
 })
 
 test('the platform knowledge list remains the entry point after removing the standalone home route', () => {
   const routes = createApplicationRoutes()
   assert.equal(routes.find(route => route.path === '/')?.redirect, '/platform/entries')
-  assert.ok(!routes.some(route => route.path === '/knowledgeBase' || route.name === 'home'))
+  assert.ok(!routes.some(route => route.path === '/library' || route.name === 'home'))
   assert.ok(routes.find(route => route.path === '/platform')?.children?.some(route => route.path === 'entries'))
 })

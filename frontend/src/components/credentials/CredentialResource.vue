@@ -31,8 +31,7 @@
         Per-field label, rendered only when there is more than one credential
         (e.g. a signed provider's api_key + app_secret) so a single-field card
         doesn't double up with the parent's outer .form-label. Single-field
-        consumers (ModelEditorDialog API key, parser provider api_key,
-        parser engine api_key) keep showing the parent label only.
+        consumers (ModelEditorDialog API key and provider api_key) keep showing the parent label only.
       -->
       <div v-if="fields.length > 1" class="credential-row-label">{{ field.label }}</div>
 

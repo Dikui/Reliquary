@@ -20,10 +20,10 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(follows))
 	r := personalRequest(t, f.router, http.MethodGet, "/api/v1/follows", "", "", false)
 	require.Equal(t, http.StatusUnauthorized, r.Code)
-	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-base", "", f.key, true)
+	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/library", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code)
-	var kb struct{ Data types.KnowledgeBase }
-	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &kb))
+	var library struct{ Data types.Library }
+	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &library))
 	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "HTTP followed entity", NormalizedName: "http followed entity", EntityType: "company"}
 	topic := types.Topic{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "HTTP followed topic"}
 	require.NoError(t, f.db.Create(&entity).Error)
@@ -39,7 +39,7 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	var targets struct{ Data []types.FollowTarget }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &targets))
 	require.Len(t, targets.Data, 2)
-	article := types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, KnowledgeBaseID: kb.Data.ID, Type: "manual", Title: "HTTP feed article", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now().UTC().Add(-time.Hour)}
+	article := types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.Data.ID, Type: "manual", Title: "HTTP feed article", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now().UTC().Add(-time.Hour)}
 	require.NoError(t, f.db.Create(&article).Error)
 	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entity.ID}).Error)
 	require.NoError(t, f.db.Create(&types.EntryTopic{SpaceID: types.SingleSpaceID, EntryID: article.ID, TopicID: topic.ID}).Error)

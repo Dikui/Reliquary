@@ -2,13 +2,8 @@ import type { RouteRecordRaw } from 'vue-router'
 import { normalizeSettingsSection } from '../config/settingsRoute'
 import { removedPlatformRoutes, removedRootRoutes } from './routeFallbacks'
 
-const libraryPage = () => import('../views/knowledge-base/KnowledgeBase.vue')
-const legacyEntryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => {
-  const query = { ...to.query }
-  if (query.entry_id == null && query.knowledge_id != null) query.entry_id = query.knowledge_id
-  delete query.knowledge_id
-  return { path, query, hash: to.hash }
-}
+const libraryPage = () => import('../views/library/Library.vue')
+const entryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => ({ path, query: { ...to.query }, hash: to.hash })
 const notFound = () => import('../views/NotFound.vue')
 
 // Settings is owned by the platform layout. Its route supplies only the background.
@@ -33,14 +28,6 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       children: [
         ...removedPlatformRoutes,
         {
-          path: 'knowledge',
-          redirect: to => legacyEntryLocation('/platform/entries', to),
-        },
-        {
-          path: 'knowledge-search',
-          redirect: to => legacyEntryLocation('/platform/search', to),
-        },
-        {
           path: "space",
           redirect: "/platform/settings"
         },
@@ -51,13 +38,13 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
-          path: "knowledge-bases",
+          path: "libraries",
           redirect: "/platform/entries",
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
-          path: "knowledge-bases/:legacyKnowledgeBaseId/:pathMatch(.*)*",
-          redirect: to => legacyEntryLocation('/platform/entries', to),
+          path: "libraries/:legacyLibraryId/:pathMatch(.*)*",
+          redirect: to => entryLocation('/platform/entries', to),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -66,16 +53,18 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           component: libraryPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
+        { path: 'evaluation', name: 'evaluation', component: () => import('../views/insights/EvaluationPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
+        { path: 'model-calls', name: 'modelCalls', component: () => import('../views/insights/ModelCallsPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
         {
           path: "topics",
           name: "topics",
-          component: () => import('../views/knowledge-base/TopicManagement.vue'),
+          component: () => import('../views/library/TopicManagement.vue'),
           meta: { requiresInit: true, requiresAuth: true },
         },
         {
           path: "follows",
           name: "follows",
-          component: () => import('../views/knowledge-base/FollowFeed.vue'),
+          component: () => import('../views/library/FollowFeed.vue'),
           meta: { requiresInit: true, requiresAuth: true },
         },
         {
@@ -87,7 +76,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "search",
           name: "search",
-          component: () => import('../views/knowledge-base/SearchView.vue'),
+          component: () => import('../views/library/SearchView.vue'),
           meta: { requiresInit: true, requiresAuth: true },
         },
         {

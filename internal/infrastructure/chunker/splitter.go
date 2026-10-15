@@ -77,7 +77,7 @@ type SplitterConfig struct {
 
 // Default chunk sizing constants. Single source of truth for the entire
 // chunker package and (via entry.go::buildSplitterConfig) the
-// entry service. The frontend KnowledgeBaseEditorModal mirrors these
+// entry service. The frontend LibraryEditorModal mirrors these
 // numbers in its initial form state — keep them in sync if you change
 // either value here.
 //

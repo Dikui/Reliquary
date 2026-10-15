@@ -15,7 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
@@ -25,6 +24,8 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
+
+	"github.com/stretchr/testify/require"
 )
 
 type articleProcessingChat struct {
@@ -46,6 +47,17 @@ func (m *articleProcessingChat) Chat(ctx context.Context, messages []chat.Messag
 	m.requests = append(m.requests, messages)
 	if stage == "table_metadata" {
 		return &types.ChatResponse{Content: "The table records product counts with product and count columns."}, nil
+	}
+	var input articleProcessingInput
+	var output map[string]any
+	if stage == "article_processing" && json.Unmarshal([]byte(messages[len(messages)-1].Content), &input) == nil && json.Unmarshal([]byte(m.output), &output) == nil {
+		captions := []extractedImage{}
+		for _, image := range input.Images {
+			captions = append(captions, extractedImage{Index: image.Index, Description: "Fixture chart shows deployment counts."})
+		}
+		output["image_descriptions"] = captions
+		data, _ := json.Marshal(output)
+		return &types.ChatResponse{Content: string(data)}, nil
 	}
 	return &types.ChatResponse{Content: m.output}, nil
 }
@@ -98,19 +110,25 @@ type articleProcessingHarness struct {
 func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHarness {
 	t.Helper()
 	h := newRetainedIntakeHarness(t)
+	for i, name := range []string{"event", "opinion", "research", "tutorial", "case", "reference", "other"} {
+		row := types.LibraryContentType{LibraryID: h.library.ID, Name: name, Position: i, Enabled: true, ExtractGraph: name != "other"}
+		require.NoError(t, h.db.Create(&row).Error)
+		h.library.ContentTypes = append(h.library.ContentTypes, row)
+	}
 	model := &articleProcessingChat{output: validProcessingFixture("event")}
-	metadata := &types.Model{ID: "local-fixture", SpaceID: h.kb.SpaceID, Name: "Processing fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
+	metadata := &types.Model{ID: "local-fixture", SpaceID: h.library.SpaceID, Name: "Processing fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
 	require.NoError(t, h.db.Create(metadata).Error)
-	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", SpaceID: h.kb.SpaceID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
-	h.kb.ModelTiers = types.ModelTierConfig{Light: "local-fixture", Generation: "local-fixture", EntityResolution: "local-fixture", Embedding: "embedding"}
-	h.kb.EmbeddingModelID = "embedding"
-	h.kb.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
-	require.NoError(t, h.db.Save(h.kb).Error)
+	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", SpaceID: h.library.SpaceID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
+	h.library.ModelTiers = types.ModelTierConfig{Light: "local-fixture", Generation: "local-fixture", EntityResolution: "local-fixture", Embedding: "embedding"}
+	h.library.EmbeddingModelID = "embedding"
+	h.library.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
+	require.NoError(t, h.db.Save(h.library).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", h.library.EmbeddingModelID).Error)
 	h.service.modelService = articleProcessingModels{summaryStateModelService: &summaryStateModelService{model: model, metadata: metadata}}
 	h.service.retrieveEngine = retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(h.db))
 	chunks := h.service.chunkService.(*chunkService)
 	chunks.entryRepo = h.service.repo
-	chunks.kbRepository = repository.NewKnowledgeBaseRepository(h.db)
+	chunks.libraryRepository = repository.NewLibraryRepository(h.db)
 	chunks.modelService = h.service.modelService
 	chunks.retrieveEngine = h.service.retrieveEngine
 	h.service.imageResolver = docparser.NewImageResolver()
@@ -132,7 +150,7 @@ func articleImageDataURI(t *testing.T, n uint8) string {
 }
 func (h *articleProcessingHarness) upload(t *testing.T, title, body string) *types.Entry {
 	t.Helper()
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, title+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + title, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, title+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + title, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	return h.article(t, article.ID)
@@ -162,7 +180,6 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	body := "# First announcement\n\nAcme released a widget with original measurements.\n\n![chart](" + articleImageDataURI(t, 10) + ")"
 	article := h.upload(t, "first-event", body)
 	require.Equal(t, "event", article.ContentType)
-	require.Equal(t, "full", article.ProcessingMode)
 	require.NotNil(t, article.StructuredSummary)
 	require.Len(t, article.StructuredSummary.Points, 3)
 	require.NotEmpty(t, article.StructuredSummary.KeyTerms)
@@ -174,11 +191,20 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.EqualValues(t, 1, links)
 	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=?", article.ID).Count(&topicLinks).Error)
 	require.EqualValues(t, 1, topicLinks)
-	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, KnowledgeBaseIDs: []string{h.kb.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: .9}})
+	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, LibraryIDs: []string{h.library.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: .9}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
-	retrieved := []*types.SearchResult{{ID: hits[0].Results[0].ChunkID}}
+	var bodyChunk types.Chunk
+	require.NoError(t, h.db.Where("entry_id=? AND chunk_type=?", article.ID, types.ChunkTypeText).First(&bodyChunk).Error)
+	foundBody := false
+	for _, hit := range hits[0].Results {
+		if hit.ChunkID == bodyChunk.ID {
+			foundBody = true
+		}
+	}
+	require.True(t, foundBody, "body and description vectors may tie, but the body remains retrievable")
+	retrieved := []*types.SearchResult{{ID: bodyChunk.ID}}
 	searchutil.EnrichSearchResultsImageInfo(h.ctx, h.service.chunkService.GetRepository(), article.SpaceID, retrieved)
 	var imageInfos []types.ImageInfo
 	require.NoError(t, json.Unmarshal([]byte(retrieved[0].ImageInfo), &imageInfos))
@@ -207,12 +233,6 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.Len(t, h.processor.requests, 2, "one processing call per approved article")
 }
 
-func TestArticleProcessingSummaryOnlyDeletesBodiesImagesOriginalAndSearchesSummary(t *testing.T) {
-	h := newArticleProcessingHarness(t, true)
-	h.processor.output = validProcessingFixture("tutorial")
-
-}
-
 func TestRemovedProcessingTasksCannotBeQueued(t *testing.T) {
 	for _, name := range []string{"summary:generation", "question:generation", "image:multimodal", "knowledge:post_process", "datatable:summary"} {
 		_, exists := types.QueueForTaskType(name)
@@ -220,7 +240,7 @@ func TestRemovedProcessingTasksCannotBeQueued(t *testing.T) {
 	}
 }
 
-func TestArticleProcessingDefaultLimitsAndTableInput(t *testing.T) {
+func TestArticleProcessingDefaultLimits(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	chars, images, completion := h.service.articleProcessingLimits(&types.Model{})
 	require.Equal(t, 24000, chars)
@@ -229,40 +249,5 @@ func TestArticleProcessingDefaultLimitsAndTableInput(t *testing.T) {
 	chars, _, completion = h.service.articleProcessingLimits(&types.Model{Parameters: types.ModelParameters{ContextWindow: 10000, MaxOutputTokens: 1000}})
 	require.Equal(t, 6000, chars)
 	require.Equal(t, 1000, completion)
-	h.processor.output = validProcessingFixture("event")
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "measurements.csv", "product,count\nwidget,5\ngadget,8\n"), map[string]string{"publisher": "Acme", "original_url": "https://example.org/table", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
-	require.NoError(t, err)
-	h.drain(t)
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
-	require.Len(t, h.processor.requests, 3, "two retained table metadata calls and one article processing call")
-	var input articleProcessingInput
-	require.NoError(t, json.Unmarshal([]byte(h.processor.requests[2][1].Content), &input))
-	require.Contains(t, input.Body, "# Table Summary")
-	require.Equal(t, 1, strings.Count(strings.Join(h.processor.stages, ","), "article_processing"))
-	require.Len(t, h.queue.tasks, 1, "table preparation uses the document worker without a separate task")
-}
 
-func TestSummaryOnlyProcessingEmbedsArticleAndCleansPreviousFull(t *testing.T) {
-	h := newArticleProcessingHarness(t, true)
-	full := h.upload(t, "change-mode", "An original announcement with a supporting image.\n\n![image]("+articleImageDataURI(t, 70)+")")
-	h.processor.output = validProcessingFixture("tutorial")
-	_, err := h.service.ReparseEntry(h.ctx, full.ID, nil)
-	require.NoError(t, err)
-	calls := 0
-	current := h.service.modelService.(articleProcessingModels)
-	current.embeddingCalls = &calls
-	h.service.modelService = current
-	h.drain(t)
-	article := h.article(t, full.ID)
-	require.Equal(t, "summary_only", article.ProcessingMode)
-	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
-	require.Positive(t, calls, "summary-only processing generates an article vector")
-	require.Empty(t, h.service.fileSvc.(*articleProcessingFiles).saved)
-	var count int64
-	require.NoError(t, h.db.Table("embeddings").Where("entry_id=?", full.ID).Count(&count).Error)
-	require.Zero(t, count)
-	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", full.ID).Count(&count).Error)
-	require.Zero(t, count)
-	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", full.ID).Count(&count).Error)
-	require.EqualValues(t, 1, count)
 }

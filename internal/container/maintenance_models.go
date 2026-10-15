@@ -47,7 +47,7 @@ func checkMaintenanceModels(ctx context.Context, db *gorm.DB, modelID string, tr
 	if err != nil {
 		return nil, err
 	}
-	models := service.NewModelServiceWithChatGPT(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), ollama,
+	models := service.NewModelServiceWithChatGPT(repository.NewModelRepository(db), repository.NewLibraryRepository(db), ollama,
 		embedding.NewBatchEmbedder(pool), service.NewSpaceService(repository.NewSpaceRepository(db)), db,
 		chatgpt.NewManager(db), service.NewChatGPTPolicyService(db))
 	if transport != nil {

@@ -92,21 +92,21 @@ func TestValidateStoragePathSpace(t *testing.T) {
 	assert.Error(t, ValidateStoragePathSpace("local://docs/example.txt", 42))
 }
 
-func TestValidateKBScopedStoragePath(t *testing.T) {
+func TestValidateLibraryScopedStoragePath(t *testing.T) {
 	const spaceID uint64 = 10008
 
-	assert.NoError(t, ValidateKBScopedStoragePath("local://10008/exports/img.jpg", spaceID))
-	assert.NoError(t, ValidateKBScopedStoragePath("minio://bucket/10008/exports/uuid.png", spaceID))
-	assert.NoError(t, ValidateKBScopedStoragePath("s3://bucket/exports/10008/uuid.png", spaceID))
+	assert.NoError(t, ValidateLibraryScopedStoragePath("local://10008/exports/img.jpg", spaceID))
+	assert.NoError(t, ValidateLibraryScopedStoragePath("minio://bucket/10008/exports/uuid.png", spaceID))
+	assert.NoError(t, ValidateLibraryScopedStoragePath("s3://bucket/exports/10008/uuid.png", spaceID))
 
 	// storage://<backendID>/ wrapped paths must resolve to the same space/exports scope.
-	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/local://10008/exports/img.jpg", spaceID))
-	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/s3://bucket/ap-test/10008/exports/a.png", spaceID))
+	assert.NoError(t, ValidateLibraryScopedStoragePath("storage://backend-a/local://10008/exports/img.jpg", spaceID))
+	assert.NoError(t, ValidateLibraryScopedStoragePath("storage://backend-a/s3://bucket/ap-test/10008/exports/a.png", spaceID))
 
-	assert.Error(t, ValidateKBScopedStoragePath("local://10008/entry-id/123.pdf", spaceID))
-	assert.Error(t, ValidateKBScopedStoragePath("local://9999/exports/img.jpg", spaceID))
-	assert.Error(t, ValidateKBScopedStoragePath("local://10008/other/img.jpg", spaceID))
-	assert.Error(t, ValidateKBScopedStoragePath("storage://backend-a/local://9999/exports/img.jpg", spaceID))
+	assert.Error(t, ValidateLibraryScopedStoragePath("local://10008/entry-id/123.pdf", spaceID))
+	assert.Error(t, ValidateLibraryScopedStoragePath("local://9999/exports/img.jpg", spaceID))
+	assert.Error(t, ValidateLibraryScopedStoragePath("local://10008/other/img.jpg", spaceID))
+	assert.Error(t, ValidateLibraryScopedStoragePath("storage://backend-a/local://9999/exports/img.jpg", spaceID))
 }
 
 func TestParseSpaceIDFromStoragePath(t *testing.T) {

@@ -7,16 +7,27 @@ server:
 article_processing:
   max_body_chars: 0
   max_images: 8
+  # Canonical relation names use normalized containment or cosine above this value.
+  relation_type_similarity_threshold: 0.92
   # Zero chooses up to 4096 output tokens within the model context and output limits.
   max_completion_tokens: 0
+  max_segments: 128
+  segment_overlap_chars: 128
+  context_reserve_percent: 40
 
 # Markdown library. Compose binds RELIQUARY_VAULT_DIR to the required VAULT_ROOT.
 vault:
   header_debounce: 5s
 
-# Knowledge base configuration
-knowledge_base:
+# Library configuration
+library:
   chunk_size: 512
   chunk_overlap: 50
   split_markers: ["\n\n", "\n", "。"]
   document_process_timeout: 2h
+
+# Disposable read replica; connection failure does not block startup.
+neo4j:
+  uri: "bolt://127.0.0.1:7687"
+  username: "neo4j"
+  password: ""

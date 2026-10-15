@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/types"
 )
 
@@ -20,7 +21,7 @@ func (v *VaultService) OpenAttachment(ctx context.Context, id, reference string)
 		return nil, werrors.NewUnauthorizedError("authenticated attachment reader required")
 	}
 	var entry types.Entry
-	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind IN ('article','mine')", id, space).First(&entry).Error; err != nil {
+	if err := v.db.WithContext(ctx).Where("id=? AND space_id=? AND source_kind IN ('article','mine','report')", id, space).First(&entry).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, werrors.NewNotFoundError("article not found")
 		}
@@ -32,6 +33,9 @@ func (v *VaultService) OpenAttachment(ctx context.Context, id, reference string)
 	relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(entry.VaultPath)), filepath.FromSlash(reference))))
 	if !strings.HasPrefix(relative, "attachments/"+entry.ID+"/") {
 		return nil, werrors.NewBadRequestError("attachment path must belong to the article")
+	}
+	if !docparser.IsImageFormat(filepath.Ext(relative)) {
+		return nil, werrors.NewNotFoundError("image attachment not found")
 	}
 	abs, err := vaultAbsolute(v.root, relative)
 	if err != nil {

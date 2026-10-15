@@ -56,7 +56,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
 }
 
 async function renderView(name: 'DocumentCardView' | 'DocumentListView', record: Record<string, unknown>, locale: keyof typeof messages) {
-  const component = createComponent(`../views/knowledge-base/components/${name}.vue`, {
+  const component = createComponent(`../views/library/components/${name}.vue`, {
     '@/utils/entrySourceLabels': entrySourceLabels,
     '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
@@ -76,28 +76,28 @@ async function renderDetail(details: Record<string, unknown>, locale: keyof type
     'highlight.js': { __esModule: true, default: {} },
     mermaid: { __esModule: true, default: { initialize() {} } },
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedRequest, warning: unexpectedRequest } },
-    '@/api/knowledge-base': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedRequest },
+    '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedRequest },
     '@/utils/security': { isValidURL: () => false, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value },
     '@/utils/mermaidViewer': {}, '@/utils/clipboard': {},
-    '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+    '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   })
   return renderComponent(component, { visible: true, details }, locale)
 }
 
 function createLoadingHook(read: (id: string) => Promise<unknown>, records: object[] = []) {
-  return evaluate(readFileSync(new URL('../composables/useKnowledgeBase.ts', import.meta.url), 'utf8'), {
+  return evaluate(readFileSync(new URL('../composables/useLibrary.ts', import.meta.url), 'utf8'), {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-12' },
     'tdesign-vue-next': { MessagePlugin: {} },
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
-    '@/api/knowledge-base': {
+    '@/api/library': {
       listEntryFiles: async () => ({ success: true, data: records, total: records.length }),
       getEntryDetails: read,
       getEntryDetailsCon: async () => ({ success: true, data: [], total: 0 }),
     },
-  }).default('kb-source-labels')
+  }).default('library-source-labels')
 }
 
 test('ingest labels use original intake evidence and preserve legacy manual, RSS and web origins', () => {
@@ -165,11 +165,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     hook.getCardDetails(record)
     await settle()
     const html = await renderDetail(hook.details, locale)
-    assert.ok(html.includes(messages[locale].knowledgeBase.typeIngestAPI))
-    assert.ok(html.includes(messages[locale].knowledgeBase.externalTool))
+    assert.ok(html.includes(messages[locale].library.typeIngestAPI))
+    assert.ok(html.includes(messages[locale].library.externalTool))
     assert.ok(html.includes('Research &amp; Analysis Bot'))
     assert.ok(!html.includes('Supplement Bot'))
-    assert.ok(!html.includes(messages[locale].knowledgeBase.typeManual))
+    assert.ok(!html.includes(messages[locale].library.typeManual))
     const fallback = await renderDetail({ ...record, ingest_api_key_name: ' ', last_ingest_api_key_name: ' Supplement Bot ' }, locale)
     assert.ok(fallback.includes('Supplement Bot'))
     for (const record of [
@@ -177,12 +177,12 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       { ...hook.details, metadata: null, acquisition: '', ingest_api_key_name: '', last_ingest_api_key_name: '' },
     ]) {
       const empty = await renderDetail(record, locale)
-      assert.ok(!empty.includes(messages[locale].knowledgeBase.externalTool), 'empty tool names do not create an empty detail row')
+      assert.ok(!empty.includes(messages[locale].library.externalTool), 'empty tool names do not create an empty detail row')
     }
     for (const channel of ['web', 'api']) {
       const legacy = await renderDetail({ ...hook.details, metadata: { intake: { source: 'manual' } }, acquisition: 'verbatim', channel, ingest_api_key_name: '', last_ingest_api_key_name: 'Supplement Bot' }, locale)
-      assert.ok(legacy.includes(messages[locale].knowledgeBase.typeManual), channel)
-      assert.ok(!legacy.includes(messages[locale].knowledgeBase.typeIngestAPI), channel)
+      assert.ok(legacy.includes(messages[locale].library.typeManual), channel)
+      assert.ok(!legacy.includes(messages[locale].library.typeIngestAPI), channel)
       assert.ok(legacy.includes('Supplement Bot'))
     }
   })
@@ -193,21 +193,21 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(hook.cardList.value[0].ingest_api_key_name, 'Research Bot')
     for (const view of ['DocumentCardView', 'DocumentListView'] as const) {
       const html = await renderView(view, hook.cardList.value[0], locale)
-      assert.ok(html.includes(messages[locale].knowledgeBase.typeIngestAPI), view)
-      assert.ok(!html.includes(view === 'DocumentCardView' ? messages[locale].knowledgeBase.typeManual : messages[locale].knowledgeBase.channelManual), view)
+      assert.ok(html.includes(messages[locale].library.typeIngestAPI), view)
+      assert.ok(!html.includes(view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual), view)
       const cases = [
-        { record: { type: 'manual', channel: 'web' }, copy: view === 'DocumentCardView' ? messages[locale].knowledgeBase.typeManual : messages[locale].knowledgeBase.channelManual },
-        { record: { type: 'manual', channel: 'api', last_ingest_api_key_name: 'Supplement Bot' }, copy: view === 'DocumentCardView' ? messages[locale].knowledgeBase.typeManual : messages[locale].knowledgeBase.channelManual },
-        { record: { type: 'manual', channel: 'api', acquisition: 'verbatim', metadata: { intake: { source: 'manual' } }, last_ingest_api_key_name: 'Supplement Bot' }, copy: view === 'DocumentCardView' ? messages[locale].knowledgeBase.typeManual : messages[locale].knowledgeBase.channelManual },
-        { record: { type: 'manual', channel: 'rss', acquisition: 'extracted', last_ingest_api_key_name: 'Supplement Bot' }, copy: messages[locale].knowledgeBase.channelRSS },
-        { record: { type: 'url', channel: 'web' }, copy: view === 'DocumentCardView' ? messages[locale].knowledgeBase.typeURL : messages[locale].knowledgeBase.channelUrl },
-        { record: { source_kind: 'mine', channel: 'api', acquisition: 'verbatim', type: 'manual' }, copy: messages[locale].knowledgeBase.sourceKinds.mine },
-        { record: { source_kind: 'report', channel: 'api', acquisition: 'verbatim', type: 'manual' }, copy: messages[locale].knowledgeBase.sourceKinds.report },
+        { record: { type: 'manual', channel: 'web' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual },
+        { record: { type: 'manual', channel: 'api', last_ingest_api_key_name: 'Supplement Bot' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual },
+        { record: { type: 'manual', channel: 'api', acquisition: 'verbatim', metadata: { intake: { source: 'manual' } }, last_ingest_api_key_name: 'Supplement Bot' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual },
+        { record: { type: 'manual', channel: 'rss', acquisition: 'extracted', last_ingest_api_key_name: 'Supplement Bot' }, copy: messages[locale].library.channelRSS },
+        { record: { type: 'url', channel: 'web' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeURL : messages[locale].library.channelUrl },
+        { record: { source_kind: 'mine', channel: 'api', acquisition: 'verbatim', type: 'manual' }, copy: messages[locale].library.sourceKinds.mine },
+        { record: { source_kind: 'report', channel: 'api', acquisition: 'verbatim', type: 'manual' }, copy: messages[locale].library.sourceKinds.report },
       ]
       for (const item of cases) {
         const legacyHTML = await renderView(view, item.record, locale)
         assert.ok(legacyHTML.includes(item.copy), `${view}: ${JSON.stringify(item.record)}`)
-        assert.ok(!legacyHTML.includes(messages[locale].knowledgeBase.typeIngestAPI), `${view}: historical origin remains visible`)
+        assert.ok(!legacyHTML.includes(messages[locale].library.typeIngestAPI), `${view}: historical origin remains visible`)
       }
     }
   })

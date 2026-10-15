@@ -194,7 +194,7 @@ func TestChatGPTConfiguredFallbackAndPausePersists(t *testing.T) {
 func TestChatGPTFallbackModelReferenceAndSeparateCredentials(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
-	models := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), nil, nil, nil, db)
+	models := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewLibraryRepository(db), nil, nil, nil, db)
 	local := &types.Model{ID: "fallback-reference", SpaceID: types.SingleSpaceID, Name: "local-fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceLocal, Status: types.ModelStatusActive}
 	require.NoError(t, db.Create(local).Error)
 	policy := NewChatGPTPolicyService(db)

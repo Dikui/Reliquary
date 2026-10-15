@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"sync"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func TestCollectionPauseWaitsForAcceptedTransaction(t *testing.T) {
 
 func TestDrainTimeoutResumesCollectionAndRecordsAlert(t *testing.T) {
 	db := pgtest.Open(t)
-	require.NoError(t, db.Exec("INSERT INTO task_jobs(id,task_type,queue,state) VALUES('processing-article','document:process','default','active')").Error)
+	require.NoError(t, db.Exec("INSERT INTO task_pending_ops(id,task_type,queue,state) VALUES('processing-article','document:process','default','active')").Error)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err := Pause(ctx, db, "drain", "pack", nil)
@@ -59,21 +60,21 @@ func TestDrainTimeoutResumesCollectionAndRecordsAlert(t *testing.T) {
 	require.Equal(t, "skipped", state.BackupStatus)
 	require.Equal(t, "queue wait exceeded 1s", state.BackupError)
 	var rows int64
-	require.NoError(t, db.Table("task_jobs").Where("id='processing-article' AND state='active'").Count(&rows).Error)
+	require.NoError(t, db.Table("task_pending_ops").Where("id='processing-article' AND state='active'").Count(&rows).Error)
 	require.EqualValues(t, 1, rows)
 }
 
 func TestSnapshotDoesNotWaitForArticleOrLongTasks(t *testing.T) {
 	db := pgtest.Open(t)
-	require.NoError(t, db.Exec("INSERT INTO task_jobs(id,task_type,queue,state) VALUES('article','document:process','default','active'),('vectors','entry:embedding_rebuild','entity','active'),('topics','topic:backfill','entity','active')").Error)
+	require.NoError(t, db.Exec("INSERT INTO task_pending_ops(id,task_type,queue,state) VALUES('article','document:process','default','active'),('vectors','entry:embedding_rebuild','entity','active'),('topics','topic:backfill','entity','active')").Error)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	require.NoError(t, Pause(ctx, db, "snapshot", "backup", nil))
 	require.NoError(t, Resume(context.Background(), db))
-	require.NoError(t, db.Exec("DELETE FROM task_jobs WHERE id='article'").Error)
+	require.NoError(t, db.Exec("DELETE FROM task_pending_ops WHERE id='article'").Error)
 	require.NoError(t, Pause(ctx, db, "drain", "pack", nil))
 	var rows int64
-	require.NoError(t, db.Table("task_jobs").Count(&rows).Error)
+	require.NoError(t, db.Table("task_pending_ops").Count(&rows).Error)
 	require.EqualValues(t, 2, rows)
 }
 
@@ -154,19 +155,19 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	ctx := context.Background()
 	const original = "Exact original content admitted before the power interruption."
 	require.NoError(t, source.Exec(`INSERT INTO entries
-		(id,space_id,knowledge_base_id,type,title,source,parse_status,vault_body)
-		VALUES ('backup-processing',1,'backup-kb','manual','Interrupted article','','processing',?)`, original).Error)
+		(id,space_id,library_id,type,title,source,parse_status,vault_body)
+		VALUES ('backup-processing',1,'backup-library','manual','Interrupted article','','processing',?)`, original).Error)
 	payload, err := json.Marshal(map[string]any{"entry_id": "backup-processing", "content": original})
 	require.NoError(t, err)
-	require.NoError(t, source.Exec(`INSERT INTO task_jobs
-		(id,task_type,queue,state,payload,max_retry,retried,fail_count,claim_token,lease_until,retention_ns)
+	require.NoError(t, source.Exec(`INSERT INTO task_pending_ops
+		(id,task_type,queue,state,payload,max_retry,retried,fail_count,worker_pool,dispatched_at,retention_ns)
 		VALUES ('backup-job','manual:process','default','active',?::jsonb,3,1,1,'interrupted-process',now()+interval '1 hour',?)`, string(payload), int64(time.Hour)).Error)
 	// Backup does not wait for this interrupted active job. Full PostgreSQL
 	// records, including payload and retry budget, are exported and read back.
 	require.NoError(t, Pause(ctx, source, "snapshot", "automatic backup", nil))
 	var articleJSON, taskJSON string
 	require.NoError(t, source.Raw("SELECT jsonb_agg(to_jsonb(t))::text FROM entries t WHERE id='backup-processing'").Scan(&articleJSON).Error)
-	require.NoError(t, source.Raw("SELECT jsonb_agg(to_jsonb(t))::text FROM task_jobs t WHERE id='backup-job'").Scan(&taskJSON).Error)
+	require.NoError(t, source.Raw("SELECT jsonb_agg(to_jsonb(t))::text FROM task_pending_ops t WHERE id='backup-job'").Scan(&taskJSON).Error)
 	archive := struct {
 		Articles json.RawMessage `json:"articles"`
 		Tasks    json.RawMessage `json:"tasks"`
@@ -179,7 +180,7 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(readback, &archive))
 	require.NoError(t, restored.Exec("INSERT INTO entries SELECT * FROM jsonb_populate_recordset(NULL::entries,?::jsonb)", string(archive.Articles)).Error)
-	require.NoError(t, restored.Exec("INSERT INTO task_jobs SELECT * FROM jsonb_populate_recordset(NULL::task_jobs,?::jsonb)", string(archive.Tasks)).Error)
+	require.NoError(t, restored.Exec("INSERT INTO task_pending_ops SELECT * FROM jsonb_populate_recordset(NULL::task_pending_ops,?::jsonb)", string(archive.Tasks)).Error)
 	var restoredJob taskqueue.Job
 	require.NoError(t, restored.First(&restoredJob, "id='backup-job'").Error)
 	require.Equal(t, taskqueue.TaskStateActive, restoredJob.State)
@@ -187,7 +188,7 @@ func TestProcessingArticleSnapshotRestoresAndQueueResumes(t *testing.T) {
 	require.Equal(t, 1, restoredJob.FailCount)
 	require.JSONEq(t, string(payload), string(restoredJob.Payload))
 
-	client := taskqueue.NewClient(restored)
+	client := redistest.NewClient(t, restored)
 	completed := make(chan error, 1)
 	handler := taskqueue.HandlerFunc(func(ctx context.Context, task *taskqueue.Task) error {
 		var input struct {

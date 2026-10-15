@@ -251,29 +251,29 @@ func TestServeFilesRejectsPathWithoutSpaceSegment(t *testing.T) {
 	}
 }
 
-func newKBScopedFilesTestEngine(
+func newLibraryScopedFilesTestEngine(
 	effectiveSpaceID uint64,
 	spaceSvc interfaces.SpaceService,
 	global interfaces.FileService,
 ) *gin.Engine {
 	engine := gin.New()
-	engine.GET("/knowledge-bases/:id/files",
+	engine.GET("/libraries/:id/files",
 		func(c *gin.Context) {
 			ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, effectiveSpaceID)
 			c.Request = c.Request.WithContext(ctx)
 			c.Next()
 		},
-		newKBScopedFileServeHandler(spaceSvc, global),
+		newLibraryScopedFileServeHandler(spaceSvc, global),
 	)
 	return engine
 }
 
-func TestKBScopedFilesServesOwnerSpacePath(t *testing.T) {
+func TestLibraryScopedFilesServesOwnerSpacePath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	const ownerSpaceID = uint64(10008)
 	var requestedPath string
-	engine := newKBScopedFilesTestEngine(
+	engine := newLibraryScopedFilesTestEngine(
 		ownerSpaceID,
 		&stubSpaceService{get: func(_ context.Context, id uint64) (*types.Space, error) {
 			return &types.Space{ID: id}, nil
@@ -285,7 +285,7 @@ func TestKBScopedFilesServesOwnerSpacePath(t *testing.T) {
 	)
 
 	filePath := "local://10008/exports/img.jpg"
-	req := httptest.NewRequest(http.MethodGet, "/knowledge-bases/kb-1/files?file_path="+url.QueryEscape(filePath), nil)
+	req := httptest.NewRequest(http.MethodGet, "/libraries/library-1/files?file_path="+url.QueryEscape(filePath), nil)
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)
 
@@ -301,13 +301,13 @@ func TestKBScopedFilesServesOwnerSpacePath(t *testing.T) {
 }
 
 // The path must belong to the effective (owner) space. A path pointing at a
-// different space than the resolved KB owner is still rejected, so the guard
+// different space than the resolved Library owner is still rejected, so the guard
 // cannot be used to reach arbitrary spaces' files.
-func TestKBScopedFilesRejectsPathNotOwnedByKBSpace(t *testing.T) {
+func TestLibraryScopedFilesRejectsPathNotOwnedByLibrarySpace(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	const ownerSpaceID = uint64(10008)
-	engine := newKBScopedFilesTestEngine(
+	engine := newLibraryScopedFilesTestEngine(
 		ownerSpaceID,
 		&stubSpaceService{get: func(_ context.Context, id uint64) (*types.Space, error) {
 			t.Fatalf("GetSpaceByID should not be called for mismatched path, got %d", id)
@@ -320,7 +320,7 @@ func TestKBScopedFilesRejectsPathNotOwnedByKBSpace(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet,
-		"/knowledge-bases/kb-1/files?file_path="+url.QueryEscape("local://9999/exports/other.jpg"), nil)
+		"/libraries/library-1/files?file_path="+url.QueryEscape("local://9999/exports/other.jpg"), nil)
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)
 
@@ -329,13 +329,13 @@ func TestKBScopedFilesRejectsPathNotOwnedByKBSpace(t *testing.T) {
 	}
 }
 
-// KB-scoped proxy is for embedded exports/ images only; raw entry uploads
+// Library-scoped proxy is for embedded exports/ images only; raw entry uploads
 // must use /entries/:id/download even when the space matches.
-func TestKBScopedFilesRejectsNonExportsPath(t *testing.T) {
+func TestLibraryScopedFilesRejectsNonExportsPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	const ownerSpaceID = uint64(10008)
-	engine := newKBScopedFilesTestEngine(
+	engine := newLibraryScopedFilesTestEngine(
 		ownerSpaceID,
 		&stubSpaceService{get: func(_ context.Context, id uint64) (*types.Space, error) {
 			t.Fatalf("GetSpaceByID should not be called for non-exports path, got %d", id)
@@ -348,7 +348,7 @@ func TestKBScopedFilesRejectsNonExportsPath(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet,
-		"/knowledge-bases/kb-1/files?file_path="+url.QueryEscape("local://10008/entry-id/123.pdf"), nil)
+		"/libraries/library-1/files?file_path="+url.QueryEscape("local://10008/entry-id/123.pdf"), nil)
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)
 
@@ -357,16 +357,16 @@ func TestKBScopedFilesRejectsNonExportsPath(t *testing.T) {
 	}
 }
 
-func TestKBScopedFilesRequiresFilePath(t *testing.T) {
+func TestLibraryScopedFilesRequiresFilePath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	engine := newKBScopedFilesTestEngine(
+	engine := newLibraryScopedFilesTestEngine(
 		10008,
 		&stubSpaceService{},
 		&stubFileService{},
 	)
 
-	req := httptest.NewRequest(http.MethodGet, "/knowledge-bases/kb-1/files", nil)
+	req := httptest.NewRequest(http.MethodGet, "/libraries/library-1/files", nil)
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)
 

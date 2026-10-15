@@ -15,14 +15,14 @@ import (
 
 // indexArticleEmbedding is also used when rebuilding from the vault. Documents
 // in reports only have chunk vectors; imported user documents also have summaries.
-func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, article *types.Entry) error {
+func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.ModelService, library *types.Library, article *types.Entry) error {
 	if db == nil || article == nil || article.SourceKind == "report" {
 		return nil
 	}
-	if article.StructuredSummary == nil || kb == nil || !kb.IndexingStrategy.VectorEnabled {
+	if article.StructuredSummary == nil || library == nil || !library.IndexingStrategy.VectorEnabled {
 		return db.WithContext(ctx).Exec("DELETE FROM article_embeddings WHERE space_id=? AND entry_id=?", article.SpaceID, article.ID).Error
 	}
-	embedder, err := GetTierEmbeddingModel(ctx, db, models, kb)
+	embedder, err := GetTierEmbeddingModel(ctx, db, models, library)
 	if err != nil {
 		return fmt.Errorf("get article embedding model: %w", err)
 	}
@@ -30,6 +30,7 @@ func indexArticleEmbedding(ctx context.Context, db *gorm.DB, models interfaces.M
 }
 
 func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.Embedder, article *types.Entry) error {
+	ctx = types.WithModelCallEntry(ctx, article.ID)
 	summary := ""
 	if article.StructuredSummary != nil {
 		summary = article.StructuredSummary.RenderText()
@@ -68,11 +69,11 @@ func saveArticleEmbedding(ctx context.Context, db *gorm.DB, embedder embedding.E
 			return err
 		}
 		return tx.Exec(`INSERT INTO article_embeddings
-		(space_id, entry_id, knowledge_base_id, model_id, dimension, embedding, content_hash)
+		(space_id, entry_id, library_id, model_id, dimension, embedding, content_hash)
 		VALUES (?, ?, ?, ?, ?, ?::halfvec, ?)
 		ON CONFLICT (entry_id) DO UPDATE SET
 		model_id=EXCLUDED.model_id, dimension=EXCLUDED.dimension,
 		embedding=EXCLUDED.embedding, content_hash=EXCLUDED.content_hash, updated_at=NOW()`,
-			article.SpaceID, article.ID, article.KnowledgeBaseID, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
+			article.SpaceID, article.ID, article.LibraryID, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
 	})
 }

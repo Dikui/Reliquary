@@ -6,10 +6,12 @@ export interface FollowTarget {
   target_id: string
   name: string
   created_at: string
-  recent_article_count: number
+  recent_entry_count: number
 }
-export interface FollowState { new_count: number; last_viewed_at: string | null }
+export interface FollowLibraryState { library_id: string; library_name: string; display_name: string; new_count: number; last_viewed_at: string | null }
+export interface FollowState { libraries?: FollowLibraryState[]; new_count: number; last_viewed_at: string | null }
 export interface FollowFeedRequest {
+  libraries?: string[]
   cursor?: string
   since?: string
   target_ids?: string[]
@@ -17,11 +19,11 @@ export interface FollowFeedRequest {
   collapse_similar?: boolean
   include_seen?: boolean
 }
-export interface FollowFeedArticle extends SearchEntry {
+export interface FollowFeedEntry extends SearchEntry {
   entered_at: string | null
   collected_at: string
   is_new: boolean
   matched_follows: FollowTarget[]
-  similar_reports: FollowFeedArticle[]
+  similar_reports: FollowFeedEntry[]
 }
-export interface FollowFeedData extends FollowState { results: FollowFeedArticle[]; next_cursor?: string; viewed_at: string; total: number }
+export interface FollowFeedData extends FollowState { results: FollowFeedEntry[]; next_cursor?: string; viewed_at: string; total: number }

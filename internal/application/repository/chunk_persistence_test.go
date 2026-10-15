@@ -22,15 +22,15 @@ func setupChunkTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func makeChunk(kbID, entryID string, chunkType string) *types.Chunk {
+func makeChunk(libraryID, entryID string, chunkType string) *types.Chunk {
 	return &types.Chunk{
-		ID:              uuid.New().String(),
-		SpaceID:         1,
-		KnowledgeBaseID: kbID,
-		EntryID:         entryID,
-		Content:         "test content",
-		ChunkType:       chunkType,
-		IsEnabled:       true,
+		ID:        uuid.New().String(),
+		SpaceID:   1,
+		LibraryID: libraryID,
+		EntryID:   entryID,
+		Content:   "test content",
+		ChunkType: chunkType,
+		IsEnabled: true,
 	}
 }
 
@@ -58,8 +58,8 @@ func TestListPagedChunksByEntryID_FiltersEnabledState(t *testing.T) {
 	repo := NewChunkRepository(db)
 	ctx := context.Background()
 
-	enabledChunk := makeChunk("kb-1", "document-entry", types.ChunkTypeText)
-	disabledChunk := makeChunk("kb-1", "document-entry", types.ChunkTypeText)
+	enabledChunk := makeChunk("library-1", "document-entry", types.ChunkTypeText)
+	disabledChunk := makeChunk("library-1", "document-entry", types.ChunkTypeText)
 	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{enabledChunk, disabledChunk}))
 	require.NoError(t, db.Model(&types.Chunk{}).
 		Where("id = ?", disabledChunk.ID).
@@ -96,10 +96,10 @@ func TestUpdateChunkPersistsContent(t *testing.T) {
 	db := setupChunkTestDB(t)
 	ctx := context.Background()
 
-	kbID := uuid.New().String()
+	libraryID := uuid.New().String()
 	entryID := uuid.New().String()
 
-	chunk := makeChunk(kbID, entryID, "text")
+	chunk := makeChunk(libraryID, entryID, "text")
 	require.NoError(t, db.WithContext(ctx).Create(chunk).Error)
 
 	// Test updating a chunk field ; verifies no NOW() related errors

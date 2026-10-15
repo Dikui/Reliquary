@@ -7,7 +7,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../knowledge-base/componentTestHarness'
+import { descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
@@ -21,8 +21,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {
           get: async (url: string) => {
             calls.push(url)
-            assert.equal(url, '/health', 'database-dependent requests must wait during reconnect')
-            return { status: 'ok', queue_connection: { state: 'reconnecting', last_error: 'PostgreSQL queue connection is unavailable', alert, alert_after_seconds: 300 } }
+            if (page === 'RuntimeQueues' && url === '/api/v1/system/runtime/queues') return { available: true, queues: [], pools: [] }
+            assert.equal(url, '/health')
+            return { status: 'ok', queue_connection: { state: 'reconnecting', last_error: 'Task delivery connection is unavailable', alert, alert_after_seconds: 300 } }
           },
         } : require(name), api, api.exports)
         const notice = loadComponent(new URL('./QueueConnectionNotice.vue', import.meta.url), { '@/api/system': api.exports })
@@ -32,7 +33,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           './systemSettingsEdit': require('./systemSettingsEdit'),
           './runtimeTaskPagination': require('./runtimeTaskPagination'), '@/i18n/countCopy': require('../../i18n/countCopy'),
           'tdesign-vue-next': { MessagePlugin: {} },
-          '@/api/chatgpt': {}, '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })),
+          '@/api/chatgpt': { getChatGPTAccounts: async () => ({ accounts: [] }), getChatGPTPolicy: async () => ({ paused: false }) }, '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })),
           '@/components/settings/SettingDrawer.vue': moduleOf(defineComponent({ setup: () => () => null })),
         })
         const app = renderer.createApp(component)
@@ -48,7 +49,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           const text = messages[locale].system.globalSettings.runtime
           assert.ok(visibleText(banner).includes(alert ? text.reconnectAlert : text.reconnecting))
           assert.ok(visibleText(banner).includes(text.latestConnectionError))
-          assert.ok(visibleText(banner).includes('PostgreSQL queue connection is unavailable'))
+          assert.ok(visibleText(banner).includes('Task delivery connection is unavailable'))
           assert.ok(calls.includes('/health'))
           assert.deepEqual(errors, [])
         } finally { app.unmount() }

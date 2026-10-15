@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/config"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
+	"github.com/stretchr/testify/require"
 )
 
 type allRebuildEmbedder struct {
@@ -66,6 +67,8 @@ type allRebuildFixture struct {
 func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	t.Helper()
 	h := newEntrySearchFixture(t)
+	h.config.ImageVectorEnabled = images
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("retrieval_config", h.config).Error)
 	full := h.add(t, "full", "article", "2026-10-01", "event", "semanticlaunch", 2)
 	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
 	h.add(t, "mine", "mine", "", "", "personal", 1)
@@ -84,11 +87,12 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, "data:image/png;base64,"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "attachments", full.ID, "photo.png"), data, 0644))
-	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,entry_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
-		VALUES(1,?, ?, ?, 'fixture-model',3,?,'old')`, full.ID, h.kb.ID, imagePath, pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
+	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,entry_id,library_id,attachment_path,model_id,dimension,embedding,content_hash)
+		VALUES(1,?, ?, ?, 'fixture-model',3,?,'old')`, full.ID, h.library.ID, imagePath, pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
 	configureNameEmbedding(t, h.db, "replacement-model", 3)
-	h.kb.EmbeddingModelID, h.kb.ModelTiers.Embedding = "replacement-model", "replacement-model"
-	require.NoError(t, h.db.Save(h.kb).Error)
+	h.library.EmbeddingModelID, h.library.ModelTiers.Embedding = "replacement-model", "replacement-model"
+	require.NoError(t, h.db.Save(h.library).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", h.library.EmbeddingModelID).Error)
 	embedder := &allRebuildEmbedder{nameRebuildEmbedder: nameRebuildEmbedder{id: "replacement-model", dimension: 3}, supportImages: images}
 	models := &nameRebuildModels{models: map[string]embedding.Embedder{"replacement-model": embedder}}
 	queue := &nameRebuildQueue{}
@@ -129,7 +133,7 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	require.Equal(t, 3, entity.EmbeddingDimension)
 	require.False(t, entity.EmbeddingNeedsRebuild)
 	var documents []types.Entry
-	require.NoError(t, h.db.Where("processing_mode='full'").Find(&documents).Error)
+	require.NoError(t, h.db.Find(&documents).Error)
 	for _, document := range documents {
 		require.Equal(t, "replacement-model", document.EmbeddingModelID)
 	}
@@ -413,7 +417,6 @@ func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *te
 	var personal types.Entry
 	require.NoError(t, h.db.Where("id='mine'").First(&personal).Error)
 	personal.ContentType = "tutorial"
-	personal.ProcessingMode = types.ProcessingModeFull
 	personal.VaultPath = "mine/personal.md"
 	personal.VaultBody = "# Personal procedure\n\n![Personal image](../attachments/mine/personal.png)"
 	personal.StructuredSummary = &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Retain the complete instructions"}, KeyTerms: []string{"Personal"}}

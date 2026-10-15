@@ -9,8 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	taskqueue "reliquary/internal/queue"
+
+	"github.com/stretchr/testify/require"
 
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -27,7 +28,7 @@ type createEntryFileRepoStub struct {
 func (r *createEntryFileRepoStub) CheckEntryExists(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 	params *types.EntryCheckParams,
 ) (bool, *types.Entry, error) {
 	return false, nil, nil
@@ -40,11 +41,11 @@ func (r *createEntryFileRepoStub) CreateEntry(ctx context.Context, entry *types.
 	return r.createErr
 }
 
-func (s *createEntryFileKBServiceStub) GetKnowledgeBaseByID(
+func (s *createEntryFileLibraryServiceStub) GetLibraryByID(
 	ctx context.Context,
 	id string,
-) (*types.KnowledgeBase, error) {
-	return s.kb, nil
+) (*types.Library, error) {
+	return s.library, nil
 }
 
 type createEntryFileServiceStub struct {
@@ -136,8 +137,12 @@ func newMultipartFileHeader(t *testing.T, filename string, content string) *mult
 	return req.MultipartForm.File["file"][0]
 }
 
-type createEntryFileKBServiceStub struct {
-	interfaces.KnowledgeBaseService
+type createEntryFileLibraryServiceStub struct {
+	interfaces.LibraryService
 
-	kb *types.KnowledgeBase
+	library *types.Library
+}
+
+func (r *createEntryFileRepoStub) GetEntryByID(_ context.Context, _ uint64, _ string) (*types.Entry, error) {
+	return r.createdEntry, nil
 }

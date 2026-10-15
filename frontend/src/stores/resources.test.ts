@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript'
 
-test('an invalidated knowledge base request cannot restore the previous account cache', async () => {
+test('an invalidated library request cannot restore the previous account cache', async () => {
   const pending: Array<(value: unknown) => void> = []
   const dependencies = {
     defineStore: (_id: string, setup: () => unknown) => setup,
@@ -11,7 +11,7 @@ test('an invalidated knowledge base request cannot restore the previous account 
     computed: (get: () => unknown) => ({ get value() { return get() } }),
     watch: () => {},
     getCurrentLanguage: () => 'en-US',
-    getKnowledgeBase: () => new Promise(resolve => pending.push(resolve)),
+    getLibrary: () => new Promise(resolve => pending.push(resolve)),
   }
   // Execute the actual store setup with controlled API timing, without browser dependencies.
   const source = readFileSync(new URL('./resources.ts', import.meta.url), 'utf8')
@@ -21,16 +21,16 @@ test('an invalidated knowledge base request cannot restore the previous account 
   const exports: any = {}
   new Function('require', 'exports', outputText)(() => dependencies, exports)
   const store = exports.useResourcesStore()
-  const previous = store.fetchKnowledgeBase()
+  const previous = store.fetchLibrary()
   store.invalidate()
-  pending.shift()!({ data: { id: 'previous-account-kb' } })
+  pending.shift()!({ data: { id: 'previous-account-library' } })
   assert.equal(await previous, null)
-  assert.equal(store.knowledgeBase.value, null)
-  assert.equal(store.isFresh('knowledgeBase'), false)
+  assert.equal(store.library.value, null)
+  assert.equal(store.isFresh('library'), false)
 
-  const current = store.fetchKnowledgeBase()
-  pending.shift()!({ data: { id: 'current-account-kb' } })
-  assert.deepEqual(await current, { id: 'current-account-kb' })
-  assert.deepEqual(await store.fetchKnowledgeBase(), { id: 'current-account-kb' })
+  const current = store.fetchLibrary()
+  pending.shift()!({ data: { id: 'current-account-library' } })
+  assert.deepEqual(await current, { id: 'current-account-library' })
+  assert.deepEqual(await store.fetchLibrary(), { id: 'current-account-library' })
   assert.equal(pending.length, 0)
 })

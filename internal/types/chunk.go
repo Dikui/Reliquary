@@ -14,7 +14,8 @@ type ChunkType = string
 
 const (
 	// ChunkTypeText 表示普通的文本 Chunk
-	ChunkTypeText ChunkType = "text"
+	ChunkTypeText             ChunkType = "text"
+	ChunkTypeImageDescription ChunkType = "image_description"
 	// ChunkTypeParentText 表示父子分块策略中的父文本 Chunk（仅用于上下文，不参与向量索引）
 	ChunkTypeParentText ChunkType = "parent_text"
 	// ChunkTypeSummary 表示摘要类型的 Chunk
@@ -67,11 +68,12 @@ type VideoInfo struct {
 
 // Chunk represents a document chunk
 // Chunks are meaningful text segments extracted from original documents
-// and are the basic units of knowledge base retrieval
+// and are the basic units of library retrieval
 // Each chunk contains a portion of the original content
 // and maintains its positional relationship with the original text
 // Chunks can be independently embedded as vectors and retrieved, supporting precise content localization
 type Chunk struct {
+	SourceLocations []SourceLocation `json:"source_locations" gorm:"serializer:json;type:jsonb"`
 	// Unique identifier of the chunk, using UUID format
 	ID    string `json:"id"                       gorm:"type:varchar(36);primaryKey"`
 	SeqID int64  `json:"seq_id"                   gorm:"type:bigint;uniqueIndex;autoIncrement"`
@@ -79,8 +81,8 @@ type Chunk struct {
 	SpaceID uint64 `json:"space_id"`
 	// ID of the parent entry, associated with the Entry model
 	EntryID string `json:"entry_id"`
-	// ID of the knowledge base, for quick location
-	KnowledgeBaseID string `json:"knowledge_base_id"`
+	// ID of the library, for quick location
+	LibraryID string `json:"library_id"`
 	// Actual text content of the chunk
 	Content string `json:"content"`
 	// Index position of the chunk in the original document
@@ -135,4 +137,21 @@ func (c *Chunk) EmbeddingContent() string {
 		return body
 	}
 	return c.ContextHeader + "\n\n" + body
+}
+
+// BeforeSave keeps absent generated-text locations as an empty JSON array.
+func (c *Chunk) BeforeSave(tx *gorm.DB) error {
+	if c.EntryID != "" && c.Content != "" && c.SourceLocations == nil {
+		var entry Entry
+		if err := tx.Session(&gorm.Session{NewDB: true, SkipHooks: true}).Select("vault_body").Where("id=? AND space_id=?", c.EntryID, c.SpaceID).Find(&entry).Error; err != nil {
+			return err
+		}
+		if entry.VaultBody != "" {
+			AssignStoredBodyLocations(entry.VaultBody, c)
+		}
+	}
+	if c.SourceLocations == nil {
+		c.SourceLocations = []SourceLocation{}
+	}
+	return nil
 }

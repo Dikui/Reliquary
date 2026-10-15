@@ -36,7 +36,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       id: 'open-entry',
       label: t('commandPalette.quick.knowledge'),
       icon: 'file',
-      keywords: ['kb', 'entry', 'base', '知识库', '文档'],
+      keywords: ['library', 'entry', 'base', '库', '文档'],
       run: () => {
         close()
         router.push('/platform/entries')

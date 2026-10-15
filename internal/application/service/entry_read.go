@@ -12,11 +12,18 @@ import (
 
 // EntryReadResult exposes the database-owned header and a Unicode-safe body slice.
 type EntryReadResult struct {
+	LibraryID        string             `json:"library_id"`
+	LibraryName      string             `json:"library_name"`
+	SourceRef        string             `json:"source_ref,omitempty"`
+	Identifier       string             `json:"identifier,omitempty"`
+	Graph            *bool              `json:"graph"`
+	HasUpdate        bool               `json:"has_update"`
+	LatestEntryID    string             `json:"latest_entry_id,omitempty"`
 	Header           VaultArticleHeader `json:"header"`
 	Body             string             `json:"body"`
 	OriginalURL      string             `json:"original_url"`
-	ProcessingMode   string             `json:"processing_mode"`
 	ParseStatus      string             `json:"parse_status"`
+	CannotBeFact     bool               `json:"cannot_be_fact,omitempty"`
 	SourceUnverified bool               `json:"source_unverified"`
 	Acquisition      string             `json:"acquisition"`
 	Offset           int                `json:"offset"`
@@ -53,14 +60,8 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	}
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
-	result := &EntryReadResult{Header: header, OriginalURL: header.URL,
-		ProcessingMode: entry.ProcessingMode, ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
-	if entry.ProcessingMode == "summary_only" {
-		if offset > 0 {
-			return nil, werrors.NewBadRequestError("offset exceeds the stored body length")
-		}
-		return result, nil
-	}
+	result := &EntryReadResult{LibraryID: entry.LibraryID, LibraryName: entry.LibraryName, SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID, Header: header, OriginalURL: header.URL,
+		CannotBeFact: entry.SourceKind == "report", ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
 	reader, _, err := s.GetEntryBody(ctx, id)
 	if err != nil {
 		return nil, err
@@ -100,28 +101,23 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 	if len(kinds) > 0 {
 		kind = kinds[0]
 	}
-	if kind != "" && kind != "intake" && kind != "processing" {
-		return nil, werrors.NewBadRequestError("kind must be intake or processing")
+	if kind != "" && kind != "intake" {
+		return nil, werrors.NewBadRequestError("kind must be intake")
 	}
-	kb, err := s.kbService.GetKnowledgeBase(ctx)
-	if err != nil {
-		return nil, err
+	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND source_kind IN ('article','mine')", types.MustSpaceIDFromContext(ctx))
+	if ids := types.LibraryReadScope(ctx); len(ids) > 0 {
+		query = query.Where("library_id IN ?", ids)
 	}
-	query := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND knowledge_base_id=? AND source_kind IN ('article','mine')", kb.SpaceID, kb.ID)
-	switch kind {
-	case "intake":
-		query = query.Where("parse_status=?", types.ParseStatusRejected)
-	case "processing":
-		query = query.Where("processing_review_status='pending' AND parse_status=?", types.ParseStatusCompleted)
-	default:
-		query = query.Where("parse_status=? OR (processing_review_status='pending' AND parse_status=?)", types.ParseStatusRejected, types.ParseStatusCompleted)
-	}
+	query = query.Where("parse_status=?", types.ParseStatusRejected)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
 	items := []*types.Entry{}
 	if err := query.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
+		return nil, err
+	}
+	if err := populateEntryLibraryNames(ctx, s.db, items); err != nil {
 		return nil, err
 	}
 	for _, item := range items {

@@ -15,7 +15,7 @@ import (
 // Parameters:
 //   - taskType: Type of task (e.g., "document_process", "entry_move")
 //   - spaceID: Space ID for multi-tenancy isolation
-//   - businessID: Optional business-specific ID (e.g., knowledge base ID)
+//   - businessID: Optional business-specific ID (e.g., library ID)
 //
 // Returns a task ID like: "document_process_12345_1704628851692_a1b2c3d4_kb789"
 func GenerateTaskID(taskType string, spaceID uint64, businessID ...string) string {

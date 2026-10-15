@@ -18,6 +18,7 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
 	"reliquary/internal/maintenanceops"
+	"reliquary/internal/modelcalls"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -104,6 +105,9 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 	}
 	if paused {
 		return
+	}
+	if err := modelcalls.NewStore(h.db).Prune(ctx); err != nil {
+		logger.Warnf(ctx, "model call retention failed: %v", err)
 	}
 	threshold := h.staleThreshold()
 	cutoff := time.Now().Add(-threshold)
@@ -327,8 +331,8 @@ func parseHeartbeatTime(s string) (time.Time, bool) {
 // buffer to absorb scheduling jitter.
 func (h *HousekeepingService) staleThreshold() time.Duration {
 	base := 1 * time.Hour
-	if h.cfg != nil && h.cfg.KnowledgeBase != nil && h.cfg.KnowledgeBase.DocumentProcessTimeout > base {
-		base = h.cfg.KnowledgeBase.DocumentProcessTimeout
+	if h.cfg != nil && h.cfg.Library != nil && h.cfg.Library.DocumentProcessTimeout > base {
+		base = h.cfg.Library.DocumentProcessTimeout
 	}
 	return base + 10*time.Minute
 }

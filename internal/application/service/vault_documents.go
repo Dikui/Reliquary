@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,12 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
-	"github.com/fsnotify/fsnotify"
-	"github.com/google/uuid"
-	"gopkg.in/yaml.v3"
-	"gorm.io/gorm"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/logger"
 	"reliquary/internal/maintenanceops"
@@ -27,10 +21,15 @@ import (
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/vaultpath"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // VaultDirectoryStatus describes indexing of one directory, including the last scan failure.
 type VaultDirectoryStatus struct {
+	Directory    string     `json:"directory"`
 	LastScanAt   *time.Time `json:"last_scan_at"`
 	IndexedFiles int64      `json:"indexed_files"`
 	LastError    string     `json:"last_error"`
@@ -74,31 +73,25 @@ func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrie
 	if err != nil {
 		return nil, err
 	}
-	for _, directory := range []string{"articles", "mine", "reports", "attachments"} {
-		path, err := vaultAbsolute(root, directory)
-		if err != nil {
-			return nil, err
-		}
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			return nil, fmt.Errorf("create vault directory %s: %w", directory, err)
-		}
+	if err := ensureVaultDirectories(db, root); err != nil {
+		return nil, err
 	}
 	return &VaultDocumentService{db: db, models: models, retrieval: retrieval, root: root,
 		reportStableWait: 10 * time.Minute, reportScanInterval: time.Minute, observations: make(map[string]vaultObservation),
 		status: VaultStatus{Root: root}}, nil
 }
 
-func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *types.KnowledgeBase, error) {
+func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *types.Library, error) {
 	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok || spaceID == 0 {
 		spaceID = types.SingleSpaceID
 		ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	}
-	var kb types.KnowledgeBase
-	if err := s.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&kb).Error; err != nil {
-		return ctx, nil, fmt.Errorf("vault indexing requires an initialized knowledge base: %w", err)
+	var library types.Library
+	if err := s.db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "ai-reports").First(&library).Error; err != nil {
+		return ctx, nil, fmt.Errorf("vault indexing requires an initialized library: %w", err)
 	}
-	return ctx, &kb, nil
+	return ctx, &library, nil
 }
 
 // Start watches reports and schedules scans to recover missed report events.
@@ -112,9 +105,17 @@ func (s *VaultDocumentService) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := s.watchTree(watcher, filepath.Join(s.root, "reports")); err != nil {
+
+	var libraries []types.Library
+	if err := s.db.WithContext(ctx).Where("template=?", types.TemplateGenerated).Find(&libraries).Error; err != nil {
 		_ = watcher.Close()
 		return err
+	}
+	for _, library := range libraries {
+		if err := s.watchTree(watcher, filepath.Join(s.root, library.Directory)); err != nil {
+			_ = watcher.Close()
+			return err
+		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel, s.watcher, s.done = cancel, watcher, make(chan struct{})
@@ -255,127 +256,50 @@ func (s *VaultDocumentService) Scan(ctx context.Context, force bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	ctx, kb, err := s.scope(ctx)
+	ctx, library, err := s.scope(ctx)
 	if err != nil {
 		s.recordReportWatchError(ctx, err)
 		return err
 	}
-	return s.scanReports(ctx, kb, force)
+	return s.scanReports(ctx, library, force)
 }
 
-func (s *VaultDocumentService) scanReports(ctx context.Context, kb *types.KnowledgeBase, force bool, skipped ...*[]VaultRebuildSkippedFile) error {
-	directory := "reports"
-	kind := "report"
-	seen := make(map[string]bool)
-	var scanErrors []error
-	recordFileError := func(path string, err error) {
-		if len(skipped) > 0 {
-			*skipped[0] = append(*skipped[0], VaultRebuildSkippedFile{path, err.Error()})
-		} else {
-			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", path, err))
+func (s *VaultDocumentService) scanReports(ctx context.Context, library *types.Library, force bool, skipped ...*[]VaultRebuildSkippedFile) error {
+	var reports []types.Entry
+	if err := s.db.WithContext(ctx).Where("space_id=? AND source_kind='report' AND vault_path<>''", library.SpaceID).Find(&reports).Error; err != nil {
+		return err
+	}
+	vault := &VaultService{db: s.db, root: s.root}
+	for _, report := range reports {
+		if err := vault.RefreshHeader(ctx, report.ID); err != nil {
+			return err
+		}
+		if report.ParseStatus != types.ParseStatusCompleted {
+			if !force {
+				managed, err := s.reportIndexManagedByQueue(ctx, report.SpaceID, report.VaultPath)
+				if err != nil {
+					return err
+				}
+				if managed {
+					continue
+				}
+			}
+			var actual types.Library
+			if err := s.db.WithContext(ctx).First(&actual, "id=?", report.LibraryID).Error; err != nil {
+				return err
+			}
+			if _, err := s.retryReportIndex(ctx, &actual, &report); err != nil {
+				return err
+			}
 		}
 	}
 	now := time.Now().UTC()
-	directoryPath, directoryErr := vaultAbsolute(s.root, directory)
-	if directoryErr != nil {
-		s.recordReportWatchError(ctx, directoryErr)
-		return directoryErr
-	}
-	walkErr := filepath.WalkDir(directoryPath, func(path string, entry fs.DirEntry, walkErr error) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, err := filepath.Rel(s.root, path)
-		if err != nil {
-			return err
-		}
-		if vaultpath.UserMetadata(rel) {
-			if entry.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		// Symlinks are not followed, so indexing never leaves the local vault.
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") {
-			return nil
-		}
-		rel = filepath.ToSlash(rel)
-		seen[rel] = true
-		body, err := os.ReadFile(path)
-		if err != nil {
-			recordFileError(rel, err)
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		hash := vaultContentHash(string(body))
-		observation, observed := s.observations[rel]
-		if !observed {
-			observation.changedAt = info.ModTime()
-		} else if observation.hash != "" && observation.hash != hash {
-			observation.changedAt = now
-		}
-		observation.hash = hash
-		s.observations[rel] = observation
-		if !force && now.Sub(observation.changedAt) < s.reportStableWait {
-			return nil
-		}
-		if !utf8.Valid(body) {
-			recordFileError(rel, fmt.Errorf("Markdown must be valid UTF-8"))
-			return nil
-		}
-		if !force {
-			managed, err := s.reportIndexManagedByQueue(ctx, kb.SpaceID, rel)
-			if err != nil {
-				recordFileError(rel, err)
-				return nil
-			}
-			if managed {
-				return nil
-			}
-		}
-		if _, err := s.indexReport(ctx, kb, rel, string(body), info.ModTime()); err != nil {
-			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", rel, err))
-		}
-		return nil
-	})
-	if walkErr != nil {
-		scanErrors = append(scanErrors, walkErr)
-	} else {
-		// Only remove missing records after a complete traversal of the directory.
-		var existing []types.Entry
-		if err := s.db.WithContext(ctx).Where("space_id = ? AND source_kind = ?", kb.SpaceID, kind).Find(&existing).Error; err != nil {
-			scanErrors = append(scanErrors, err)
-		} else {
-			for _, entry := range existing {
-				if !seen[entry.VaultPath] {
-					if err := s.deleteDocument(ctx, &entry); err != nil {
-						scanErrors = append(scanErrors, err)
-					}
-					delete(s.observations, entry.VaultPath)
-				}
-			}
-		}
-	}
 	s.statusMu.Lock()
-	if err := ctx.Err(); err != nil {
-		s.statusMu.Unlock()
-		return err
-	}
-	status := &s.status.Reports
-	status.LastScanAt = &now
-	if len(scanErrors) > 0 {
-		status.LastError = errors.Join(scanErrors...).Error()
-	} else {
-		status.LastError = ""
-	}
+	s.status.Reports.LastScanAt = &now
+	s.status.Reports.IndexedFiles = int64(len(reports))
+	s.status.Reports.LastError = ""
 	s.statusMu.Unlock()
-	return errors.Join(scanErrors...)
+	return nil
 }
 
 func vaultContentHash(content string) string {
@@ -416,50 +340,28 @@ func vaultTrimTitle(title string) string {
 	return title
 }
 
-func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.KnowledgeBase, path, body string, modified time.Time) (*types.Entry, error) {
+func (s *VaultDocumentService) indexReport(ctx context.Context, library *types.Library, path, body string, modified time.Time) (*types.Entry, error) {
 	var entry types.Entry
-	err := s.db.WithContext(ctx).Where("space_id = ? AND vault_path = ?", kb.SpaceID, path).First(&entry).Error
+	err := s.db.WithContext(ctx).Where("space_id = ? AND vault_path = ?", library.SpaceID, path).First(&entry).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	hash := vaultContentHash(body)
-	if err == nil && entry.SourceKind != "report" {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("report is not registered in the database")
+	}
+	if entry.SourceKind != "report" {
 		return nil, fmt.Errorf("vault path already belongs to a different source kind")
 	}
-	if err == nil && entry.FileHash == hash && entry.ParseStatus == types.ParseStatusCompleted {
+	hash := vaultContentHash(body)
+	if entry.FileHash == hash && entry.ParseStatus == types.ParseStatusCompleted {
 		return &entry, nil
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		entry = types.Entry{ID: uuid.NewString(), SpaceID: kb.SpaceID, KnowledgeBaseID: kb.ID,
-			Type: types.EntryTypeManual, SourceKind: "report", VaultPath: path, Source: path,
-			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
-			CreatedAt: modified.UTC(), ProcessingMode: types.ProcessingModeFull}
-		if err := s.db.WithContext(ctx).Create(&entry).Error; err != nil {
-			return nil, err
-		}
-	}
-	entry.Title = vaultDocumentTitle(path, body)
-	// Reports have a single original in the file library.
-	// Their text is used for indexing without a recovery copy in SQL.
-	entry.VaultBody = ""
 	entry.FileSize = int64(len(body))
 	entry.FileHash = hash
 	entry.UpdatedAt = time.Now().UTC()
-	indexBody := body
-	if header, content, err := splitVaultHeader([]byte(body)); err == nil {
-		var report struct {
-			Title             string   `yaml:"title"`
-			RelatedArticleIDs []string `yaml:"related_article_ids"`
-		}
-		if yaml.Unmarshal(header, &report) == nil {
-			metadata, _ := json.Marshal(map[string]interface{}{"related_article_ids": report.RelatedArticleIDs,
-				"report_fingerprint": reportFingerprint(report.Title, string(content))})
-			entry.Metadata = types.JSON(metadata)
-			indexBody = string(content)
-		}
-	}
-	if err := s.indexVaultChunks(ctx, kb, &entry, indexBody); err != nil {
-		_ = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", entry.ID, kb.SpaceID).
+	indexBody := entry.VaultBody
+	if err := s.indexVaultChunks(ctx, library, &entry, indexBody); err != nil {
+		_ = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", entry.ID, library.SpaceID).
 			Updates(map[string]interface{}{"parse_status": types.ParseStatusFailed, "error_message": err.Error()}).Error
 		return nil, err
 	}
@@ -473,11 +375,12 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, kb *types.Knowle
 }
 
 // indexVaultChunks matches content hashes across positions, keeping unchanged vectors.
-func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.KnowledgeBase, entry *types.Entry, body string) error {
+func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, library *types.Library, entry *types.Entry, body string) error {
+	ctx = types.WithLLMCallMetadata(types.WithModelCallEntry(ctx, entry.ID), string(types.CallPurposeBodyEmbedding), "")
 	var embedder embedding.Embedder
-	if kb.IndexingStrategy.VectorEnabled {
+	if library.IndexingStrategy.VectorEnabled {
 		var err error
-		embedder, err = GetTierEmbeddingModel(ctx, s.db, s.models, kb)
+		embedder, err = GetTierEmbeddingModel(ctx, s.db, s.models, library)
 		if err != nil {
 			return err
 		}
@@ -489,9 +392,12 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 	}
 	byHash := make(map[string][]*types.Chunk)
 	for _, chunk := range previous {
+		if chunk.ChunkType != types.ChunkTypeText {
+			continue
+		}
 		byHash[chunk.ContentHash] = append(byHash[chunk.ContentHash], chunk)
 	}
-	parts := chunker.Split(chunker.NormalizeLineEndings(body), buildSplitterConfig(kb))
+	parts := chunker.Split(chunker.NormalizeLineEndings(body), buildSplitterConfig(library))
 	current := make([]*types.Chunk, 0, len(parts))
 	added := make([]*types.Chunk, 0, len(parts))
 	used := make(map[string]bool)
@@ -509,13 +415,14 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 			used[chunk.ID] = true
 		} else {
 			chunk = &types.Chunk{ID: uuid.NewString(), SpaceID: entry.SpaceID, EntryID: entry.ID,
-				KnowledgeBaseID: kb.ID, IsEnabled: true, ChunkType: types.ChunkTypeText,
+				LibraryID: library.ID, IsEnabled: true, ChunkType: types.ChunkTypeText,
 				ContentHash: hash, CreatedAt: now}
 			added = append(added, chunk)
 		}
 		chunk.Content, chunk.ContextHeader = part.Content, part.ContextHeader
 		chunk.ChunkIndex, chunk.StartAt, chunk.EndAt = len(current), part.Start, part.End
 		chunk.PreChunkID, chunk.NextChunkID = "", ""
+		types.AssignStoredBodyLocations(body, chunk)
 		current = append(current, chunk)
 	}
 	for i, chunk := range current {
@@ -524,6 +431,28 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 		}
 		if i+1 < len(current) {
 			chunk.NextChunkID = current[i+1].ID
+		}
+	}
+	output, err := ReadEntryProcessingOutput(ctx, s.db, entry.SpaceID, entry.ID)
+	if err != nil {
+		return err
+	}
+	if output != nil && output.BodyHash == fmt.Sprintf("%x", sha256.Sum256([]byte(body))) {
+		for _, caption := range imageDescriptionChunks(entry, output.Images, len(current)) {
+			caption.ContentHash = vaultContentHash(buildEntryIndexContent(entry, caption.Content))
+			reused := false
+			for _, old := range previous {
+				if !used[old.ID] && old.ChunkType == types.ChunkTypeImageDescription && old.ContentHash == caption.ContentHash {
+					caption.ID, caption.CreatedAt = old.ID, old.CreatedAt
+					used[old.ID] = true
+					reused = true
+					break
+				}
+			}
+			current = append(current, caption)
+			if !reused {
+				added = append(added, caption)
+			}
 		}
 	}
 	removed := make([]string, 0)
@@ -547,7 +476,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 		for _, chunk := range added {
 			indices = append(indices, &types.IndexInfo{Content: buildEntryIndexContent(entry, chunk.Content), SourceID: chunk.ID,
 				SourceType: types.ChunkSourceType, ChunkID: chunk.ID, EntryID: entry.ID,
-				KnowledgeBaseID: kb.ID, IsEnabled: true})
+				LibraryID: library.ID, IsEnabled: true})
 		}
 		if err := s.retrieval.BatchIndex(ctx, embedder, indices); err != nil {
 			// Failed new chunks must not be reused as if their vectors were complete.
@@ -596,12 +525,18 @@ func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) 
 		spaceID = types.SingleSpaceID
 	}
 	for _, target := range []struct {
-		kind  string
-		count *int64
-	}{{"mine", &result.Mine.IndexedFiles}, {"report", &result.Reports.IndexedFiles}} {
+		kind   string
+		role   string
+		status *VaultDirectoryStatus
+	}{{"mine", "mine", &result.Mine}, {"report", "ai-reports", &result.Reports}} {
+		var library types.Library
+		if err := s.db.WithContext(ctx).Select("directory").Where("space_id=? AND system_role=?", spaceID, target.role).First(&library).Error; err != nil {
+			return result, err
+		}
+		target.status.Directory = library.Directory
 		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
 			Where("space_id=? AND source_kind=? AND parse_status=?", spaceID, target.kind, types.ParseStatusCompleted).
-			Count(target.count).Error; err != nil {
+			Count(&target.status.IndexedFiles).Error; err != nil {
 			return result, err
 		}
 	}

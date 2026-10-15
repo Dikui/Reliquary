@@ -1,16 +1,21 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // Topic describes a user-defined direction within the personal space.
 type Topic struct {
-	ID           string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	SpaceID      uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_topics_space_name"`
-	Name         string    `json:"name" gorm:"type:varchar(255);not null;uniqueIndex:idx_topics_space_name"`
-	Description  string    `json:"description" gorm:"type:text;not null;default:''"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	ArticleCount int64     `json:"article_count" gorm:"->"`
+	LibraryIDs  []string  `json:"library_ids" gorm:"serializer:json;type:jsonb;not null"`
+	ID          string    `json:"id" gorm:"type:varchar(36);primaryKey"`
+	SpaceID     uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_topics_space_name"`
+	Name        string    `json:"name" gorm:"type:varchar(255);not null;uniqueIndex:idx_topics_space_name"`
+	Description string    `json:"description" gorm:"type:text;not null;default:''"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	EntryCount  int64     `json:"entry_count" gorm:"->"`
 }
 
 func (Topic) TableName() string { return "topics" }
@@ -41,7 +46,7 @@ type TopicBackfillJob struct {
 	Status           string               `json:"status"`
 	Total            int                  `json:"total"`
 	Processed        int                  `json:"processed"`
-	FailedArticles   int                  `json:"failed_articles"`
+	FailedEntries    int                  `json:"failed_entries"`
 	FailedBatches    int                  `json:"failed_batches"`
 	CreatedAt        time.Time            `json:"created_at"`
 	UpdatedAt        time.Time            `json:"updated_at"`
@@ -51,17 +56,24 @@ type TopicBackfillJob struct {
 func (TopicBackfillJob) TableName() string { return "topic_backfill_jobs" }
 
 type TopicBackfillBatch struct {
-	RetryAt      *time.Time `json:"retry_at,omitempty"`
-	ID           string     `json:"id" gorm:"type:varchar(36);primaryKey"`
-	JobID        string     `json:"-"`
-	Ordinal      int        `json:"ordinal"`
-	EntryIDs     JSON       `json:"-" gorm:"type:jsonb"`
-	ArticleCount int        `json:"article_count"`
-	Status       string     `json:"status"`
-	Attempts     int        `json:"attempts"`
-	Error        string     `json:"error"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	RetryAt    *time.Time `json:"retry_at,omitempty"`
+	ID         string     `json:"id" gorm:"type:varchar(36);primaryKey"`
+	JobID      string     `json:"-"`
+	Ordinal    int        `json:"ordinal"`
+	EntryIDs   JSON       `json:"-" gorm:"type:jsonb"`
+	EntryCount int        `json:"entry_count"`
+	Status     string     `json:"status"`
+	Attempts   int        `json:"attempts"`
+	Error      string     `json:"error"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 func (TopicBackfillBatch) TableName() string { return "topic_backfill_batches" }
+
+func (t *Topic) BeforeCreate(_ *gorm.DB) error {
+	if t.LibraryIDs == nil {
+		t.LibraryIDs = []string{}
+	}
+	return nil
+}

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-// IndexingStrategy controls which indexing pipelines are active for a knowledge base.
+// IndexingStrategy controls which indexing pipelines are active for a library.
 // Each boolean flag independently enables/disables a processing pipeline.
 // When a document is uploaded, only the enabled pipelines will run.
 type IndexingStrategy struct {

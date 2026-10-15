@@ -1,9 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
-  getParserEngines,
   getSystemInfo,
-  type ParserEngineInfo,
   type SystemInfo,
 } from '@/api/system'
 import { getSpaceRetrievalConfig } from '@/api/retrieval'
@@ -12,12 +10,10 @@ const CACHE_TTL_MS = 60_000
 
 type EditorResourceKey =
   | 'spaceRetrievalConfig'
-  | 'parserEngines'
   | 'systemInfo'
 
 export const useEditorResourcesStore = defineStore('editorResources', () => {
   const spaceRetrievalConfig = ref<Record<string, unknown> | null>(null)
-  const parserEngines = ref<ParserEngineInfo[]>([])
   const systemInfo = ref<SystemInfo | null>(null)
 
   const loadedAt = ref<Partial<Record<EditorResourceKey, number>>>({})
@@ -45,14 +41,6 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
     })
   }
 
-  async function ensureParserEngines(force = false): Promise<void> {
-    return runOnce('parserEngines', force, async () => {
-      const resp = await getParserEngines()
-      parserEngines.value = resp?.data && Array.isArray(resp.data) ? resp.data : []
-      loadedAt.value.parserEngines = Date.now()
-    })
-  }
-
   async function ensureSystemInfo(force = false): Promise<void> {
     return runOnce('systemInfo', force, async () => {
       const response = await getSystemInfo()
@@ -65,7 +53,6 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
     if (keys.length === 0) {
       loadedAt.value = {}
       spaceRetrievalConfig.value = null
-      parserEngines.value = []
       systemInfo.value = null
       inflight.clear()
       return
@@ -78,10 +65,8 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
 
   return {
     spaceRetrievalConfig,
-    parserEngines,
     systemInfo,
     ensureSpaceRetrievalConfig,
-    ensureParserEngines,
     ensureSystemInfo,
     invalidate,
   }

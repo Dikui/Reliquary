@@ -26,8 +26,9 @@ func (h *EmbeddingRebuildHandler) Status(c *gin.Context) {
 
 func (h *EmbeddingRebuildHandler) Action(c *gin.Context) {
 	var input struct {
-		Action string `json:"action" binding:"required"`
-		RunID  string `json:"run_id"`
+		Action  string `json:"action" binding:"required"`
+		ModelID string `json:"model_id"`
+		RunID   string `json:"run_id"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.Error(apperrors.NewBadRequestError("embedding rebuild action is required"))
@@ -38,7 +39,17 @@ func (h *EmbeddingRebuildHandler) Action(c *gin.Context) {
 	var err error
 	switch input.Action {
 	case "start":
-		_, err = h.rebuilder.StartAndEnqueue(ctx, spaceID)
+		if input.ModelID != "" {
+			_, err = h.rebuilder.StartCandidateAndEnqueue(ctx, spaceID, input.ModelID)
+		} else {
+			_, err = h.rebuilder.StartAndEnqueue(ctx, spaceID)
+		}
+	case "cancel":
+		err = h.rebuilder.CancelCandidate(ctx, spaceID, input.RunID)
+	case "switch":
+		err = h.rebuilder.SwitchCandidate(ctx, spaceID, input.RunID)
+	case "delete_old":
+		err = h.rebuilder.DeleteOldVectors(ctx, spaceID, input.RunID)
 	case "pause":
 		err = h.rebuilder.Pause(ctx, spaceID, input.RunID)
 	case "resume", "retry_failed":

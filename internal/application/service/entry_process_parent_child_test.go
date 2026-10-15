@@ -124,10 +124,10 @@ func (parentChildTaskEnqueuer) Enqueue(*taskqueue.Task, ...taskqueue.Option) (*t
 
 func TestProcessChunksIndexesEveryTextChild(t *testing.T) {
 	entry := &types.Entry{
-		ID:              "entry-1",
-		SpaceID:         1,
-		KnowledgeBaseID: "kb-1",
-		ParseStatus:     types.ParseStatusProcessing,
+		ID:          "entry-1",
+		SpaceID:     1,
+		LibraryID:   "library-1",
+		ParseStatus: types.ParseStatusProcessing,
 	}
 	chunkService := &parentChildChunkService{}
 	retrieveEngine := &parentChildRetrieveEngine{}
@@ -141,8 +141,8 @@ func TestProcessChunksIndexesEveryTextChild(t *testing.T) {
 		spaceRepo:      parentChildSpaceRepo{},
 		task:           parentChildTaskEnqueuer{},
 	}
-	kb := &types.KnowledgeBase{
-		ID:               "kb-1",
+	library := &types.Library{
+		ID:               "library-1",
 		SpaceID:          1,
 		EmbeddingModelID: "embedding-1",
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
@@ -152,7 +152,7 @@ func TestProcessChunksIndexesEveryTextChild(t *testing.T) {
 		{Content: "standalone child", Seq: 1, Start: 12, End: 28, ParentIndex: -1},
 	}
 
-	svc.processChunks(ctx, kb, entry, chunks, ProcessChunksOptions{
+	svc.processChunks(ctx, library, entry, chunks, ProcessChunksOptions{
 		ParentChunks: []types.ParsedParentChunk{
 			{Content: "parent context", Seq: 0, Start: 0, End: 28},
 		},

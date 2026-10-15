@@ -9,6 +9,7 @@ const removedFeatures = /沙箱|docker\.sock|\b(?:sandbox|wiki|memory|memories|a
 
 // These words describe retained functions, rather than multi-user permissions.
 const allowed: Record<string, string> = {
+  'ikb18.systemRole': 'System library identity is read only and does not describe user permissions.',
   'agent.editor.systemPromptPlaceholder': 'The model persona in a system prompt is still configurable.',
   'agentEditor.desc.systemPrompt': 'The role describes a model persona, not a user permission.',
   'knowledgeWorkbench.subtitle': '组织 is a verb meaning organize documents.',
@@ -80,6 +81,6 @@ test('both locales remove knowledge labels and retired interaction sections with
   const retired = /^(?:knowledgeStrategy|chatHeader|agent|chatHistorySettings|mentionDetail|input|createChat|chat|mcp|agentSettings|conversationSettings|mcpSettings|mcpServiceDialog|tools|agentStream|agentEditor|promptTemplate)\./
   for (const key of english) {
     assert.doesNotMatch(key, retired)
-    assert.doesNotMatch(key, /^knowledgeBase\.(?:tag|batchTag|anomalies|strategy|chunkHistory|sourceUpdate|rssUpdate)/)
+    assert.doesNotMatch(key, /^library\.(?:tag|batchTag|anomalies|strategy|chunkHistory|sourceUpdate|rssUpdate)/)
   }
 })

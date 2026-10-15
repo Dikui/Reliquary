@@ -56,7 +56,7 @@ type APIKeyCreateResult struct {
 }
 
 // APIKeyUpdateRequest 修改已创建租户 API Key 的可配置属性。
-// 配置语义与创建接口一致：FullAccess 为 true 时忽略细粒度能力和知识库范围。
+// 配置语义与创建接口一致：FullAccess 为 true 时忽略细粒度能力和库范围。
 type APIKeyUpdateRequest struct {
 	SpaceID   uint64
 	APIKeyID  uint64

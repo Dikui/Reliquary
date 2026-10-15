@@ -63,26 +63,26 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), apprepo.NewAuthTokenRepository(db), spaceSvc)
 	keys := service.NewAPIKeyService(apprepo.NewAPIKeyRepository(db))
 	entryRepo := apprepo.NewEntryRepository(db)
-	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
-	kb := service.NewKnowledgeBaseService(db, kbRepo, entryRepo, nil, nil, nil, nil)
-	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, spaceSvc)
-	entry, err := service.NewEntryService(db, cfg, entryRepo, kb, spaceRepo, spaceSvc,
+	libraryRepo := apprepo.NewLibraryRepository(db)
+	library := service.NewLibraryService(db, libraryRepo, entryRepo, nil, nil, nil, nil)
+	models := service.NewModelService(apprepo.NewModelRepository(db), libraryRepo, nil, nil, spaceSvc)
+	entry, err := service.NewEntryService(db, cfg, entryRepo, library, spaceRepo, spaceSvc,
 		nil, nil, nil, nil, models, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), cfg)
 	system := handler.NewSystemHandler(cfg, spaceSvc, users, settings, keys, nil, nil)
 	params := RouterParams{
 		Config: cfg, UserService: users, SpaceService: spaceSvc,
-		APIKeyService: keys, KBService: kb, EntryService: entry,
-		KBHandler:     handler.NewKnowledgeBaseHandler(kb),
-		EntryHandler:  handler.NewEntryHandler(cfg, entry, kb, nil, nil),
-		SearchHandler: &handler.SearchHandler{},
-		ModelHandler:  handler.NewModelHandler(models),
-		EntityHandler: handler.NewEntityHandler(service.NewEntityService(db, nil)),
-		SpaceHandler:  handler.NewSpaceHandler(spaceSvc, keys, users, kb, cfg, settings),
-		AuthHandler:   handler.NewAuthHandler(users, spaceSvc), SystemHandler: system,
+		APIKeyService: keys, LibraryService: library, EntryService: entry,
+		LibraryHandler: handler.NewLibraryHandler(library),
+		EntryHandler:   handler.NewEntryHandler(cfg, entry, library, nil, nil),
+		SearchHandler:  &handler.SearchHandler{},
+		ModelHandler:   handler.NewModelHandler(models),
+		EntityHandler:  handler.NewEntityHandler(service.NewEntityService(db, nil)),
+		SpaceHandler:   handler.NewSpaceHandler(spaceSvc, keys, users, library, cfg, settings),
+		AuthHandler:    handler.NewAuthHandler(users, spaceSvc), SystemHandler: system,
 	}
-	guards := newAccessGuards(kb, entry, nil)
+	guards := newAccessGuards(library, entry, nil)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), middleware.Auth(spaceSvc, users, keys))
 	v1 := r.Group("/api/v1")
@@ -92,7 +92,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	RegisterModelRoutes(v1, params.ModelHandler, nil, guards)
 	RegisterEntityRoutes(v1, params.EntityHandler)
 	RegisterEntryRoutes(v1, params.EntryHandler, guards)
-	RegisterKnowledgeBaseRoutes(v1, params.KBHandler, guards)
+	RegisterLibraryRoutes(v1, params.LibraryHandler, guards)
 	f := &personalAuthFixture{db: db, router: r, params: params}
 	register := personalRequest(t, r, http.MethodPost, "/api/v1/auth/register", `{"username":"personal","email":"personal@example.test","password":"initial-password"}`, "", false)
 	require.Equal(t, http.StatusCreated, register.Code, register.Body.String())
@@ -159,13 +159,13 @@ func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 	t.Helper()
 	now := time.Now().UTC()
-	kb, err := f.params.KBService.GetKnowledgeBase(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
+	library, err := f.params.LibraryService.GetSystemLibrary(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
 	require.NoError(t, err)
 	for i := 1; i <= 2; i++ {
-		kbID := kb.ID
+		libraryID := library.ID
 		entryID := fmt.Sprintf("personal-message-%d", i)
 		entityID := fmt.Sprintf("personal-entity-%d", i)
-		require.NoError(t, f.db.Create(&types.Entry{ID: entryID, SpaceID: 1, KnowledgeBaseID: kbID, Type: types.EntryTypeManual, Title: "Acme source", FileName: entryID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
+		require.NoError(t, f.db.Create(&types.Entry{ID: entryID, SpaceID: 1, LibraryID: libraryID, Type: types.EntryTypeManual, Title: "Acme source", FileName: entryID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
 		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, SpaceID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
 
 		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entryID, EntityID: entityID, CreatedAt: now}).Error)
@@ -201,7 +201,7 @@ func TestEntityRoutesIgnoreRemovedScopeParameter(t *testing.T) {
 	seedPersonalEntities(t, f)
 	expected := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", f.token, false)
 	require.Equal(t, http.StatusOK, expected.Code, expected.Body.String())
-	for _, query := range []string{"scope=team", "scope=knowledge_base&knowledge_base_id=missing", "scope=all"} {
+	for _, query := range []string{"scope=team", "scope=library&library_id=missing", "scope=all"} {
 		got := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?"+query, "", f.key, true)
 		require.Equal(t, http.StatusOK, got.Code, got.Body.String())
 		require.JSONEq(t, expected.Body.String(), got.Body.String())

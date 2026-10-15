@@ -20,7 +20,7 @@ func maintenanceModelFixture(t *testing.T, fields []string) (*modelService, cont
 	require.NoError(t, err)
 	model := &types.Model{ID: "migration-paused-model", SpaceID: 1, Name: "fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusNeedsConfiguration, Parameters: types.ModelParameters{InterfaceType: "openai", ExtraConfig: map[string]string{maintenanceRequiredFields: string(encoded)}}}
 	require.NoError(t, db.Create(model).Error)
-	s := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), nil, nil, nil, db).(*modelService)
+	s := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), repository.NewLibraryRepository(db), nil, nil, nil, db).(*modelService)
 	return s, ctx, model
 }
 

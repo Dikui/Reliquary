@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/redistest"
 	"sort"
 	"strings"
 	"sync"
@@ -81,7 +82,7 @@ func historicalTopicArticles(t *testing.T, h *articleProcessingHarness, count in
 	t.Helper()
 	articles := make([]types.Entry, 0, count)
 	for i := 0; i < count; i++ {
-		article := types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: fmt.Sprintf("Historical article %02d", i), Description: fmt.Sprintf("Historical summary %02d about products", i), SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+		article := types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", Title: fmt.Sprintf("Historical article %02d", i), Description: fmt.Sprintf("Historical summary %02d about products", i), SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 		require.NoError(t, h.db.Create(&article).Error)
 		articles = append(articles, article)
 	}
@@ -136,7 +137,7 @@ func TestTopicManagementUniqueScopeDeletionRefreshAndUserLogs(t *testing.T) {
 	items, err := svc.ListTopics(ctx)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	require.Equal(t, int64(1), items[0].ArticleCount)
+	require.Equal(t, int64(1), items[0].EntryCount)
 	name := "Research renamed"
 	_, err = svc.UpdateTopic(ctx, topic.ID, &name, nil)
 	require.NoError(t, err)
@@ -186,9 +187,9 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 	svc, model, ctx := newTopicManagementService(t, h)
 	articles := historicalTopicArticles(t, h, 65)
 	for _, kind := range []string{"mine", "report"} {
-		require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: types.EntryTypeManual, SourceKind: kind, Title: kind + " document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
+		require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: types.EntryTypeManual, SourceKind: kind, Title: kind + " document", Description: "Also about products", ParseStatus: types.ParseStatusCompleted}).Error)
 	}
-	require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "url", Title: "Rejected article", Description: "Also about products", ParseStatus: types.ParseStatusRejected}).Error)
+	require.NoError(t, h.db.Create(&types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", Title: "Rejected article", Description: "Also about products", ParseStatus: types.ParseStatusRejected}).Error)
 	_, err := svc.CreateTopic(ctx, &types.Topic{Name: "Other topic", Description: "Other description"})
 	require.NoError(t, err)
 	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Target topic", Description: "Product announcements"})
@@ -197,7 +198,7 @@ func TestTopicHistoricalBackfillDefaultBatchSingleTopicAndDescriptionRecompute(t
 	require.Equal(t, "completed", job.Status)
 	require.Equal(t, 66, job.Total)
 	require.Equal(t, 66, job.Processed)
-	require.Zero(t, job.FailedArticles)
+	require.Zero(t, job.FailedEntries)
 	calls := model.calls()
 	require.Len(t, calls, 3)
 	var sizes []int
@@ -249,7 +250,7 @@ func TestTopicHistoricalBackfillConfiguredBatchesFailureAndRetry(t *testing.T) {
 	require.Equal(t, "failed", job.Status)
 	require.Equal(t, 5, job.Total)
 	require.Equal(t, 5, job.Processed)
-	require.Equal(t, 2, job.FailedArticles)
+	require.Equal(t, 2, job.FailedEntries)
 	require.Equal(t, 1, job.FailedBatches)
 	require.Len(t, topicLinks(t, svc, topic.ID), 3)
 	require.Len(t, model.calls(), 3)
@@ -262,7 +263,7 @@ func TestTopicHistoricalBackfillConfiguredBatchesFailureAndRetry(t *testing.T) {
 	require.Equal(t, "completed", job.Status)
 	require.Equal(t, 5, job.Processed)
 	require.Zero(t, job.FailedBatches)
-	require.Zero(t, job.FailedArticles)
+	require.Zero(t, job.FailedEntries)
 	require.Len(t, topicLinks(t, svc, topic.ID), 5)
 	require.Len(t, model.calls(), 4)
 	require.Len(t, model.calls()[3].Articles, 2)
@@ -275,7 +276,7 @@ func TestTopicHistoricalBackfillConfiguredBatchesFailureAndRetry(t *testing.T) {
 func TestTopicHistoricalBackfillWorkerRestartsPersistedRunningBatch(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	svc, _, ctx := newTopicManagementService(t, h)
-	queue := taskqueue.NewClient(h.db)
+	queue := redistest.NewClient(t, h.db)
 	svc.SetTaskEnqueuer(queue)
 	historicalTopicArticles(t, h, 3)
 	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Restart topic", Description: "Product announcements"})
@@ -284,7 +285,7 @@ func TestTopicHistoricalBackfillWorkerRestartsPersistedRunningBatch(t *testing.T
 	require.NoError(t, err)
 	require.NoError(t, h.db.Model(&types.TopicBackfillJob{}).Where("id=?", job.ID).Update("status", "running").Error)
 	require.NoError(t, h.db.Model(&types.TopicBackfillBatch{}).Where("job_id=?", job.ID).Update("status", "running").Error)
-	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("task_type=?", types.TypeTopicBackfill).Updates(map[string]any{"state": taskqueue.TaskStateActive, "lease_until": time.Now().Add(time.Hour), "claim_token": "crashed-process"}).Error)
+	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("task_type=?", types.TypeTopicBackfill).Updates(map[string]any{"state": taskqueue.TaskStateActive, "dispatched_at": time.Now().Add(time.Hour), "worker_pool": "crashed-process"}).Error)
 	require.NoError(t, queue.Start(context.Background(), taskqueue.HandlerFunc(svc.HandleBackfill), taskqueue.Config{}))
 	t.Cleanup(func() { require.NoError(t, queue.Close()) })
 	require.Eventually(t, func() bool {

@@ -122,7 +122,7 @@ func secretColumn(table, column string) bool {
 
 func configTable(table string) bool {
 	switch table {
-	case "users", "spaces", "api_keys", "models", "data_sources", "knowledge_bases", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_policy", "maintenance_state":
+	case "users", "spaces", "api_keys", "models", "data_sources", "libraries", "system_settings", "chatgpt_hosts", "chatgpt_accounts", "chatgpt_policy", "maintenance_state":
 		return true
 	}
 	return false

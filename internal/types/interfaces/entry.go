@@ -17,15 +17,15 @@ type EntryService interface {
 
 	// GetEntryBatch retrieves a batch of entry by IDs.
 	GetEntryBatch(ctx context.Context, spaceID uint64, ids []string) ([]*types.Entry, error)
-	// ListEntryByKnowledgeBaseID lists all entry under a knowledge base.
-	ListEntryByKnowledgeBaseID(ctx context.Context, kbID string) ([]*types.Entry, error)
-	// ListPagedEntryByKnowledgeBaseID lists all entry under a knowledge base
+	// ListEntryByLibraryID lists all entry under a library.
+	ListEntryByLibraryID(ctx context.Context, libraryID string) ([]*types.Entry, error)
+	// ListPagedEntryByLibraryID lists all entry under a library
 	// with pagination and optional keyword, file type, parse status, source channel
 	// and updated time filters. Pass a zero
 	// struct to disable all filters.
-	ListPagedEntryByKnowledgeBaseID(
+	ListPagedEntryByLibraryID(
 		ctx context.Context,
-		kbID string,
+		libraryID string,
 		page *types.Pagination,
 		filter types.EntryListFilter,
 	) (*types.PageResult, error)
@@ -33,8 +33,6 @@ type EntryService interface {
 	DeleteEntry(ctx context.Context, id string) error
 	// DeleteEntryList deletes multiple entry entries by IDs.
 	DeleteEntryList(ctx context.Context, ids []string) error
-	// GetEntryFile retrieves the file associated with the entry.
-	GetEntryFile(ctx context.Context, id string) (io.ReadCloser, string, error)
 	// GetEntryBody retrieves the immutable parsed text.
 	GetEntryBody(ctx context.Context, id string) (io.ReadCloser, string, error)
 	ReviewEntryIntake(ctx context.Context, id, action string, sourceInfo types.SourceInfo) (*types.Entry, error)
@@ -78,13 +76,13 @@ type EntryRepository interface {
 	GetEntryByID(ctx context.Context, spaceID uint64, id string) (*types.Entry, error)
 	// GetEntryByIDOnly returns entry by ID without space filter (for permission resolution).
 	GetEntryByIDOnly(ctx context.Context, id string) (*types.Entry, error)
-	ListEntryByKnowledgeBaseID(ctx context.Context, spaceID uint64, kbID string) ([]*types.Entry, error)
-	// ListPagedEntryByKnowledgeBaseID lists all entry in a knowledge base
+	ListEntryByLibraryID(ctx context.Context, spaceID uint64, libraryID string) ([]*types.Entry, error)
+	// ListPagedEntryByLibraryID lists all entry in a library
 	// with pagination and optional keyword, file type, parse status, source channel
 	// and updated time filters. Pass a zero
 	// struct to disable all filters.
-	ListPagedEntryByKnowledgeBaseID(ctx context.Context,
-		spaceID uint64, kbID string, page *types.Pagination, filter types.EntryListFilter,
+	ListPagedEntryByLibraryID(ctx context.Context,
+		spaceID uint64, libraryID string, page *types.Pagination, filter types.EntryListFilter,
 	) ([]*types.Entry, int64, error)
 	UpdateEntry(ctx context.Context, entry *types.Entry) error
 	// UpdateEntryBatch updates entry items in batch
@@ -98,7 +96,7 @@ type EntryRepository interface {
 	CheckEntryExists(
 		ctx context.Context,
 		spaceID uint64,
-		kbID string,
+		libraryID string,
 		params *types.EntryCheckParams,
 	) (bool, *types.Entry, error)
 	UpdateEntryColumn(ctx context.Context, id string, column string, value interface{}) error
@@ -120,10 +118,10 @@ type EntryRepository interface {
 	// whether the transition took place (false when the row's parse_status
 	// was no longer "processing", e.g. user cancelled / deleted in flight).
 	SetFinalizing(ctx context.Context, id string, expectedSubtasks int) (bool, error)
-	// CountEntryByKnowledgeBaseID counts the number of entry items in a knowledge base.
-	CountEntryByKnowledgeBaseID(ctx context.Context, spaceID uint64, kbID string) (int64, error)
+	// CountEntryByLibraryID counts the number of entry items in a library.
+	CountEntryByLibraryID(ctx context.Context, spaceID uint64, libraryID string) (int64, error)
 	// CountEntryByStatus counts the number of entry items with the specified parse status.
-	CountEntryByStatus(ctx context.Context, spaceID uint64, kbID string, parseStatuses []string) (int64, error)
+	CountEntryByStatus(ctx context.Context, spaceID uint64, libraryID string, parseStatuses []string) (int64, error)
 	// SearchEntry searches entry items by keyword across the space.
 	// fileTypes: optional list of file extensions to filter by (e.g., ["csv", "xlsx"])
 	SearchEntry(ctx context.Context, spaceID uint64, keyword string, offset, limit int, fileTypes []string) ([]*types.Entry, bool, error)
@@ -131,6 +129,6 @@ type EntryRepository interface {
 	// HardDeleteEntry physically removes a row after DeleteEntry's soft-delete
 	// cascade. Sync-internal deletions use this so rows never become tombstones.
 	HardDeleteEntry(ctx context.Context, spaceID uint64, id string) error
-	// SearchEntryInScopes searches articles inside explicit space and knowledge base boundaries.
+	// SearchEntryInScopes searches articles inside explicit space and library boundaries.
 	SearchEntryInScopes(ctx context.Context, scopes []types.SearchScope, keyword string, offset, limit int, fileTypes []string) ([]*types.Entry, bool, int64, error)
 }

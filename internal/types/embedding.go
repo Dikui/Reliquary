@@ -27,14 +27,14 @@ const (
 
 // IndexInfo contains information about indexed content
 type IndexInfo struct {
-	ID              string     // Unique identifier
-	Content         string     // Content text
-	SourceID        string     // ID of the source document
-	SourceType      SourceType // Type of the source
-	ChunkID         string     // ID of the text chunk
-	EntryID         string     // ID of the entry
-	KnowledgeBaseID string     // ID of the knowledge base
-	EntryType       string     // Type of the entry (e.g., "manual", "file")
-	IsEnabled       bool       // Whether the chunk is enabled for retrieval
-	IsRecommended   bool       // Whether the chunk is recommended
+	ID            string     // Unique identifier
+	Content       string     // Content text
+	SourceID      string     // ID of the source document
+	SourceType    SourceType // Type of the source
+	ChunkID       string     // ID of the text chunk
+	EntryID       string     // ID of the entry
+	LibraryID     string     // ID of the library
+	EntryType     string     // Type of the entry (e.g., "manual", "file")
+	IsEnabled     bool       // Whether the chunk is enabled for retrieval
+	IsRecommended bool       // Whether the chunk is recommended
 }

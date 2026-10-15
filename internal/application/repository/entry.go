@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"reliquary/internal/application/graph"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -44,10 +46,10 @@ func escapeLikeKeyword(keyword string) string {
 // the column here means Save can never touch it.
 // User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
-var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified", "ContentTypeUncertain", "ProcessingReviewStatus", "ProcessingReviewContentType", "ProcessingReviewReason",
-	"Acquisition", "Incomplete", "ExternalCompletionAttempted", "MissingMaterials", "IngestAttachments", "ContentTypeHint", "RelatedArticleID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
+var omitFieldsOnUpdate = []string{"SourceRef", "SourceBodyHash", "Identifier", "Graph", "DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified",
+	"Acquisition", "Incomplete", "ExternalCompletionAttempted", "MissingMaterials", "ContentTypeHint", "RelatedEntryID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
 
-// entryRepository implements knowledge base and entry repository interface
+// entryRepository implements library and entry repository interface
 type entryRepository struct {
 	db *gorm.DB
 }
@@ -92,12 +94,12 @@ func (r *entryRepository) GetEntryByIDOnly(ctx context.Context, id string) (*typ
 	return &entry, nil
 }
 
-// ListEntryByKnowledgeBaseID lists all entry in a knowledge base
-func (r *entryRepository) ListEntryByKnowledgeBaseID(
-	ctx context.Context, spaceID uint64, kbID string,
+// ListEntryByLibraryID lists all entry in a library
+func (r *entryRepository) ListEntryByLibraryID(
+	ctx context.Context, spaceID uint64, libraryID string,
 ) ([]*types.Entry, error) {
 	var entries []*types.Entry
-	if err := r.db.WithContext(ctx).Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
+	if err := r.db.WithContext(ctx).Where("space_id = ? AND library_id = ?", spaceID, libraryID).
 		Order("created_at DESC").Find(&entries).Error; err != nil {
 		return nil, err
 	}
@@ -105,24 +107,25 @@ func (r *entryRepository) ListEntryByKnowledgeBaseID(
 }
 
 // applyEntryListFilter applies the optional filter dimensions of
-// EntryListFilter to a GORM query. Space / knowledge base scoping must be
+// EntryListFilter to a GORM query. Space / library scoping must be
 // applied by the caller before invoking this helper.
 func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB {
+	if len(filter.LibraryIDs) > 0 {
+		query = query.Where("library_id IN ?", filter.LibraryIDs)
+	}
 	if filter.SourceKind != "" {
 		query = query.Where("source_kind = ?", filter.SourceKind)
 	}
 	if filter.Starred != nil {
 		query = query.Where("source_kind IN ('article','mine') AND starred=?", *filter.Starred)
 	}
-	if filter.ContentType == "unclassified" {
-		query = query.Where("(content_type IS NULL OR content_type = '')")
-	} else if filter.ContentType != "" {
+	if filter.ContentType != "" {
 		query = query.Where("content_type = ?", filter.ContentType)
 	}
 	if filter.Keyword != "" {
 		// Case-insensitive (LOWER … LIKE LOWER) so keyword search matches
 		// regardless of the stored casing — consistent with the sibling
-		// LOWER() filters in this file and with the client-side `search kb`
+		// LOWER() filters in this file and with the client-side `search library`
 		// and article filters. Plain LIKE is case-sensitive in
 		// Postgres, which surprised callers searching with lowercase.
 		escaped := strings.ToLower(escapeLikeKeyword(filter.Keyword))
@@ -168,11 +171,11 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	return query
 }
 
-// ListPagedEntryByKnowledgeBaseID lists all entry in a knowledge base with pagination
-func (r *entryRepository) ListPagedEntryByKnowledgeBaseID(
+// ListPagedEntryByLibraryID lists all entry in a library with pagination
+func (r *entryRepository) ListPagedEntryByLibraryID(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 	page *types.Pagination,
 	filter types.EntryListFilter,
 ) ([]*types.Entry, int64, error) {
@@ -181,7 +184,13 @@ func (r *entryRepository) ListPagedEntryByKnowledgeBaseID(
 
 	scope := func(q *gorm.DB) *gorm.DB {
 		return applyEntryListFilter(
-			q.Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID),
+			func() *gorm.DB {
+				q = q.Where("space_id=?", spaceID)
+				if libraryID != "" {
+					q = q.Where("library_id=?", libraryID)
+				}
+				return q
+			}(),
 			filter,
 		)
 	}
@@ -190,11 +199,11 @@ func (r *entryRepository) ListPagedEntryByKnowledgeBaseID(
 		return nil, 0, err
 	}
 
-	if err := scope(r.db.WithContext(ctx)).
-		Order("created_at DESC").
-		Offset(page.Offset()).
-		Limit(page.Limit()).
-		Find(&entries).Error; err != nil {
+	query := scope(r.db.WithContext(ctx)).Order("created_at DESC, id DESC")
+	if page != nil {
+		query = query.Offset(page.Offset()).Limit(page.Limit())
+	}
+	if err := query.Find(&entries).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -203,6 +212,9 @@ func (r *entryRepository) ListPagedEntryByKnowledgeBaseID(
 
 // UpdateEntry updates entry
 func (r *entryRepository) UpdateEntry(ctx context.Context, entry *types.Entry) error {
+	if err := r.checkEntryLibrary(ctx, entry); err != nil {
+		return err
+	}
 	entry.ErrorMessage = utils.CleanInvalidUTF8(entry.ErrorMessage)
 	omit := omitFieldsOnUpdate
 	// Legacy/unit-test schemas created before custom_metadata should continue
@@ -221,6 +233,9 @@ func (r *entryRepository) UpdateEntryBatch(ctx context.Context, entryList []*typ
 	}
 	for _, entry := range entryList {
 		if entry != nil {
+			if err := r.checkEntryLibrary(ctx, entry); err != nil {
+				return err
+			}
 			entry.ErrorMessage = utils.CleanInvalidUTF8(entry.ErrorMessage)
 		}
 	}
@@ -238,6 +253,9 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 		return nil
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := graph.Lock(tx, spaceID); err != nil {
+			return err
+		}
 		var articles []types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("space_id=? AND id IN ?", spaceID, ids).Order("id").Find(&articles).Error; err != nil {
 			return err
@@ -248,7 +266,7 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 		if err := tx.Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryTopic{}).Error; err != nil {
 			return err
 		}
-		return tx.Where("space_id=? AND id IN ?", spaceID, ids).Delete(&types.Entry{}).Error
+		return graph.DeleteEntriesTx(tx, spaceID, ids, false)
 	})
 }
 
@@ -269,11 +287,11 @@ func (r *entryRepository) GetEntryBatch(
 func (r *entryRepository) CheckEntryExists(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 	params *types.EntryCheckParams,
 ) (bool, *types.Entry, error) {
 	query := r.db.WithContext(ctx).Model(&types.Entry{}).
-		Where("space_id = ? AND knowledge_base_id = ? AND parse_status <> ?", spaceID, kbID, "failed")
+		Where("space_id = ? AND library_id = ? AND parse_status <> ?", spaceID, libraryID, "failed")
 
 	switch params.Type {
 	case "file":
@@ -351,6 +369,9 @@ func (r *entryRepository) UpdateEntryColumn(
 	column string,
 	value interface{},
 ) error {
+	if column == "library_id" || column == "LibraryID" {
+		return fmt.Errorf("entry library_id is immutable")
+	}
 	if column == "error_message" {
 		switch v := value.(type) {
 		case string:
@@ -372,6 +393,12 @@ func (r *entryRepository) UpdateEntryColumns(
 	id string,
 	values map[string]interface{},
 ) error {
+	if _, ok := values["library_id"]; ok {
+		return fmt.Errorf("entry library_id is immutable")
+	}
+	if _, ok := values["LibraryID"]; ok {
+		return fmt.Errorf("entry library_id is immutable")
+	}
 	if len(values) == 0 {
 		return nil
 	}
@@ -393,6 +420,12 @@ func (r *entryRepository) UpdateActiveDeletingEntryColumns(
 	id string,
 	values map[string]interface{},
 ) (bool, error) {
+	if _, ok := values["library_id"]; ok {
+		return false, fmt.Errorf("entry library_id is immutable")
+	}
+	if _, ok := values["LibraryID"]; ok {
+		return false, fmt.Errorf("entry library_id is immutable")
+	}
 	if len(values) == 0 {
 		return false, nil
 	}
@@ -508,15 +541,15 @@ func (r *entryRepository) SetFinalizing(
 	return res.RowsAffected > 0, nil
 }
 
-// CountEntryByKnowledgeBaseID counts the number of entry items in a knowledge base
-func (r *entryRepository) CountEntryByKnowledgeBaseID(
+// CountEntryByLibraryID counts the number of entry items in a library
+func (r *entryRepository) CountEntryByLibraryID(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 ) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&types.Entry{}).
-		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
+		Where("space_id = ? AND library_id = ?", spaceID, libraryID).
 		Count(&count).Error
 	return count, err
 }
@@ -525,7 +558,7 @@ func (r *entryRepository) CountEntryByKnowledgeBaseID(
 func (r *entryRepository) CountEntryByStatus(
 	ctx context.Context,
 	spaceID uint64,
-	kbID string,
+	libraryID string,
 	parseStatuses []string,
 ) (int64, error) {
 	if len(parseStatuses) == 0 {
@@ -534,7 +567,7 @@ func (r *entryRepository) CountEntryByStatus(
 
 	var count int64
 	query := r.db.WithContext(ctx).Model(&types.Entry{}).
-		Where("space_id = ? AND knowledge_base_id = ?", spaceID, kbID).
+		Where("space_id = ? AND library_id = ?", spaceID, libraryID).
 		Where("parse_status IN ?", parseStatuses)
 
 	if err := query.Count(&count).Error; err != nil {
@@ -548,9 +581,7 @@ func (r *entryRepository) CountEntryByStatus(
 // DeleteEntry's soft-delete cascade so sync-internal deletions never
 // become tombstones that block a later re-sync of the same external item.
 func (r *entryRepository) HardDeleteEntry(ctx context.Context, spaceID uint64, id string) error {
-	return r.db.Unscoped().WithContext(ctx).
-		Where("space_id = ? AND id = ?", spaceID, id).
-		Delete(&types.Entry{}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return graph.DeleteEntriesTx(tx, spaceID, []string{id}, true) })
 }
 
 func (r *entryRepository) SearchEntry(
@@ -560,19 +591,19 @@ func (r *entryRepository) SearchEntry(
 	offset, limit int,
 	fileTypes []string,
 ) ([]*types.Entry, bool, error) {
-	// Use raw query to properly map knowledge_base_name
-	type EntryWithKBName struct {
+	// Use raw query to properly map library_name
+	type EntryWithLibraryName struct {
 		types.Entry
-		KnowledgeBaseName string `gorm:"column:knowledge_base_name"`
+		LibraryName string `gorm:"column:library_name"`
 	}
 
-	var results []EntryWithKBName
+	var results []EntryWithLibraryName
 	query := r.db.WithContext(ctx).
 		Table("entries").
-		Select("entries.*, knowledge_bases.name as knowledge_base_name").
-		Joins("JOIN knowledge_bases ON knowledge_bases.id = entries.knowledge_base_id").
+		Select("entries.*, libraries.name as library_name").
+		Joins("JOIN libraries ON libraries.id = entries.library_id").
 		Where("entries.space_id = ?", spaceID).
-		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
+		Where("libraries.type = ?", types.LibraryTypeDocument).
 		Where("entries.deleted_at IS NULL").
 		Where("entries.parse_status <> ?", types.ParseStatusRejected)
 
@@ -657,13 +688,13 @@ func (r *entryRepository) SearchEntry(
 	entries := make([]*types.Entry, len(results))
 	for i, r := range results {
 		k := r.Entry
-		k.KnowledgeBaseName = r.KnowledgeBaseName
+		k.LibraryName = r.LibraryName
 		entries[i] = &k
 	}
 	return entries, hasMore, nil
 }
 
-// SearchEntryInScopes searches articles inside explicit space and knowledge base boundaries.
+// SearchEntryInScopes searches articles inside explicit space and library boundaries.
 func (r *entryRepository) SearchEntryInScopes(
 	ctx context.Context,
 	scopes []types.SearchScope,
@@ -675,25 +706,25 @@ func (r *entryRepository) SearchEntryInScopes(
 		return nil, false, 0, nil
 	}
 
-	type EntryWithKBName struct {
+	type EntryWithLibraryName struct {
 		types.Entry
-		KnowledgeBaseName string `gorm:"column:knowledge_base_name"`
+		LibraryName string `gorm:"column:library_name"`
 	}
 
 	placeholders := make([]string, len(scopes))
 	args := make([]interface{}, 0, len(scopes)*2)
 	for i, s := range scopes {
 		placeholders[i] = "(?,?)"
-		args = append(args, s.SpaceID, s.KBID)
+		args = append(args, s.SpaceID, s.LibraryID)
 	}
-	scopeCondition := "(entries.space_id, entries.knowledge_base_id) IN (" + strings.Join(placeholders, ",") + ")"
+	scopeCondition := "(entries.space_id, entries.library_id) IN (" + strings.Join(placeholders, ",") + ")"
 
 	query := r.db.WithContext(ctx).
 		Table("entries").
-		Select("entries.*, knowledge_bases.name as knowledge_base_name").
-		Joins("JOIN knowledge_bases ON knowledge_bases.id = entries.knowledge_base_id AND knowledge_bases.space_id = entries.space_id").
+		Select("entries.*, libraries.name as library_name").
+		Joins("JOIN libraries ON libraries.id = entries.library_id AND libraries.space_id = entries.space_id").
 		Where(scopeCondition, args...).
-		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
+		Where("libraries.type = ?", types.LibraryTypeDocument).
 		Where("entries.deleted_at IS NULL").
 		Where("entries.parse_status <> ?", types.ParseStatusRejected)
 
@@ -761,7 +792,7 @@ func (r *entryRepository) SearchEntryInScopes(
 		return nil, false, 0, err
 	}
 
-	var results []EntryWithKBName
+	var results []EntryWithLibraryName
 	err := query.Order("entries.created_at DESC").
 		Offset(offset).
 		Limit(limit + 1).
@@ -778,8 +809,19 @@ func (r *entryRepository) SearchEntryInScopes(
 	entries := make([]*types.Entry, len(results))
 	for i, r := range results {
 		k := r.Entry
-		k.KnowledgeBaseName = r.KnowledgeBaseName
+		k.LibraryName = r.LibraryName
 		entries[i] = &k
 	}
 	return entries, hasMore, total, nil
+}
+
+func (r *entryRepository) checkEntryLibrary(ctx context.Context, entry *types.Entry) error {
+	var previous types.Entry
+	if err := r.db.WithContext(ctx).Unscoped().Select("id", "library_id").First(&previous, "id=?", entry.ID).Error; err != nil {
+		return err
+	}
+	if entry.LibraryID != previous.LibraryID {
+		return fmt.Errorf("entry library_id is immutable")
+	}
+	return nil
 }

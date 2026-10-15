@@ -1,10 +1,10 @@
 # Reliquary
 
-Background jobs and application data persist in PostgreSQL, with transactional enqueue and crash recovery. Deployments require no separate queue service. See [ADR 0010](docs/adr/0010-postgres-task-queue.md).
+The four core services are PostgreSQL, Redis, Neo4j, and Reliquary. PostgreSQL owns business data and pending operations, Redis schedules tasks, and Neo4j provides a rebuildable graph projection. See [ADR 0014](docs/adr/0014-internal-knowledge-base.md).
 
 [简体中文](README_CN.md)
 
-Reliquary is a personal information component for collecting, storing, deduplicating, and retrieving articles. One personal space contains one knowledge base. External AI tools perform analysis and write reports through the intake API and MCP.
+Reliquary is an internal knowledge repository for a personal AI workspace. It stores and retrieves entries across five system libraries and libraries created from templates. External AI tools use HTTP and MCP for retrieval, analysis, and report writing. Start with the [external integration guide](docs/external-integration.md) for Grok Bot and other callers.
 
 The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0), commit `1edcd54b43606d9079bb36650efe3f68707a79ea`. See [UPSTREAM.md](UPSTREAM.md) for provenance and retained licensing.
 
@@ -14,17 +14,19 @@ The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/W
 | --- | --- |
 | Intake | External tools send complete content through the authenticated HTTP intake API or MCP; Reliquary does not fetch source content |
 | Intake review | Submitted content passes intake review; rejected content and missing bodies remain pending until you approve, supplement, or discard them |
-| Article processing | One processing call produces a content type, a common summary, entities, and user-defined topics; processing models with vision can read article images in the same call |
-| Storage modes | Events, opinions, and research retain their full text, images, and original files; tutorials, cases, and references retain a summary and original link |
-| File library | Approved articles become Markdown files with generated headers; `mine/` contains your documents and `reports/` contains saved analysis |
-| Search | Hybrid full-text and vector retrieval, merged article results, filters for content type, entities, topics, publication dates, stars, and source directory; similar reporting can be collapsed |
-| Personal decisions | Star articles, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical article summaries |
-| External AI | MCP supports search, article reading, collection, pending review, stars, entity/topic lookup, and writing saved analysis |
-| Administration | Knowledge base, models, file library status, operation log, API integration, and runtime queues |
+| Entry processing | Joint output includes summary, library content type, entities, topics, relations, and image descriptions; long content uses durable segment checkpoints; AI reports only build indexes |
+| Storage | Every content type retains the full Markdown text and supplied images |
+| File library | Every library has its own English directory: `institutional/`, `opinions/`, `references/`, `mine/`, `ai-reports/`, or a custom directory. All use the same database-owned header and full Markdown body; images live in `attachments/<entry-id>/` |
+| Search | Hybrid full-text and vector retrieval, merged entry results, filters for content type, entities, topics, publication dates, stars, and library; similar reporting can be collapsed |
+| Personal decisions | Star entries, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical entry summaries |
+| External AI | MCP supports search, entry reading, collection, pending review, stars, entity/topic lookup, and writing AI reports |
+| Graph search | Query 1 to 3 hops or paths within selected libraries, with source entries and body positions; no model calls |
+| Evaluation and accounting | Question sets, five retrieval metrics, run comparison, and model call price snapshots |
+| Administration | Library, models, file library status, operation log, API integration, and runtime queues |
 
-Article bodies become final when all missing material is supplied or you accept the missing material. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates article headers in one direction; manual header edits in Obsidian may be overwritten. Your documents are indexed without being edited by the application.
+Article bodies become final when all missing material is supplied or you accept the missing material. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates all library headers in one direction; refresh and rebuild overwrite manual edits in Obsidian. File names use a title slug and the first eight ID characters, with no monthly subdirectories. See [header fields and replica registration](docs/maintenance-data.md#按库文件与统一表头).
 
-The Web UI provides article management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. Content enters only through external tools using HTTP intake or MCP, including original files and images. When reading articles, the browser still loads images directly from the original website. The backend does not download or proxy them, and missing material records remain unchanged. RSS subscriptions, URL imports, browser uploads, and manual entry are removed. Existing articles and their RSS or Web source labels remain readable. See [ADR 0012](docs/adr/0012-ingest-only-no-collection.md), [CONTEXT.md](CONTEXT.md), and the intake API reference planned for task 4 at `docs/ingest-api.md`.
+The Web UI provides entry management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. Content enters only through external tools using HTTP intake or MCP, as required Markdown text with supplied images. Images are uploaded by the caller. Missing images remain visible as missing material. RSS subscriptions, URL imports, browser uploads, and manual entry are removed. Existing entries and their RSS or Web source labels remain readable. See [ADR 0012](docs/adr/0012-ingest-only-no-collection.md), [CONTEXT.md](CONTEXT.md), and the [intake](docs/ingest-api.md), [ordinary and graph search](docs/search-api.md), [relations](docs/relations-api.md), [evaluation](docs/search-evaluation-api.md), and [model calls](docs/model-calls.md) references.
 
 ## Run from source
 
@@ -37,7 +39,7 @@ cp .env.example .env
 # Configure database credentials, JWT_SECRET, SYSTEM_AES_KEY, and model endpoints.
 ./scripts/build-frontend-dist.sh
 ./reliquary-admin check-deployment
-docker compose up -d --wait postgres
+docker compose up -d --wait postgres redis neo4j
 ./reliquary-admin check-deployment
 docker compose up -d --build
 ```
@@ -46,7 +48,7 @@ The frontend build helper installs dependencies with `npm ci` during a normal in
 
 Keep the file library, uploaded resources, and backups outside the Desktop and Documents folders.
 
-Open the `vault/` directory itself in Obsidian. Exclude `attachments/` and `.reliquary/` from Obsidian search, and leave generated article headers and `.reliquary/` unchanged. Reading settings in `.obsidian/` are backed up and ignored during verification and indexing.
+Open the `vault/` directory itself in Obsidian. Exclude `attachments/` and `.reliquary/` from Obsidian search, and leave generated entry headers and `.reliquary/` unchanged. Reading settings in `.obsidian/` are backed up and ignored during verification and indexing.
 
 By default the Web UI is at `http://localhost`, and the backend API is at `http://localhost:8080`. The first successful registration closes further registration. The single user and valid API keys have full access to the personal space. Deploy on your private network.
 
@@ -63,7 +65,7 @@ Use `./reliquary-admin upgrade` for upgrades. It pauses intake and creates a com
 ./reliquary-admin export-sources
 ```
 
-Backups retain host files and Obsidian reading settings while excluding operational credentials. `unpack` and `restore` require empty or nonexistent host file library and resource directories. Configure model and parser credentials again after restoring. See [the personal use guide](docs/personal-use.md), [migration rules](docs/database-migrations.md), and [maintenance data ownership](docs/maintenance-data.md).
+Backups retain host files and Obsidian reading settings while excluding operational credentials. `unpack` and `restore` require empty or nonexistent host file library and resource directories. Configure model credentials again after restoring. See [the personal use guide](docs/personal-use.md), [migration rules](docs/database-migrations.md), and [maintenance data ownership](docs/maintenance-data.md).
 
 ## Development and validation
 
@@ -78,15 +80,17 @@ See [the development guide](./docs/development.md). Issues and specs are local M
 ```bash
 go build ./...
 go vet ./...
-go test -count=1 ./...
+GOFLAGS=-p=1 go test -count=1 -timeout=40m ./...
 cd frontend
 npm run type-check
 npm run build
 npm test
 ```
 
-Database integration tests require the PostgreSQL test DSN in `RELIQUARY_TEST_PG_DSN`. Format changed Go files with `gofmt` and report baseline or environment failures with the exact command.
+Integration tests require PostgreSQL, Redis, and Neo4j endpoints documented in the [development guide](docs/development.md#系列联合验证). Format changed Go files with `gofmt` and report baseline or environment failures with the exact command.
 
 ## License
 
 [MIT](LICENSE). Upstream attribution and third-party licenses remain in the repository.
+
+Entry IDs use `entry_id` and lists use `entry_ids` across HTTP and MCP. Read content with `get_entry` and cite report sources with `related_entry_ids`. Retired field and tool aliases are not accepted.

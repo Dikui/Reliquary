@@ -12,38 +12,38 @@ import (
 	"reliquary/internal/types"
 )
 
-type stubKBRepoForModelDelete struct {
+type stubLibraryRepoForModelDelete struct {
 	usages   []types.ModelUsageResource
 	count    *int64
 	usageErr error
 }
 
-func (s *stubKBRepoForModelDelete) CreateKnowledgeBase(context.Context, *types.KnowledgeBase) error {
+func (s *stubLibraryRepoForModelDelete) CreateLibrary(context.Context, *types.Library) error {
 	return nil
 }
-func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
+func (s *stubLibraryRepoForModelDelete) GetLibraryByID(context.Context, string) (*types.Library, error) {
 	return nil, nil
 }
-func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByIDAndSpace(context.Context, string, uint64) (*types.KnowledgeBase, error) {
+func (s *stubLibraryRepoForModelDelete) GetLibraryByIDAndSpace(context.Context, string, uint64) (*types.Library, error) {
 	return nil, nil
 }
-func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByIDs(context.Context, []string) ([]*types.KnowledgeBase, error) {
+func (s *stubLibraryRepoForModelDelete) GetLibraryByIDs(context.Context, []string) ([]*types.Library, error) {
 	return nil, nil
 }
-func (s *stubKBRepoForModelDelete) GetKnowledgeBaseBySpaceID(context.Context, uint64) (*types.KnowledgeBase, error) {
+func (s *stubLibraryRepoForModelDelete) GetSystemLibraryByRole(context.Context, uint64, ...string) (*types.Library, error) {
 	return nil, nil
 }
-func (s *stubKBRepoForModelDelete) UpdateKnowledgeBase(context.Context, *types.KnowledgeBase) error {
+func (s *stubLibraryRepoForModelDelete) UpdateLibrary(context.Context, *types.Library) error {
 	return nil
 }
-func (s *stubKBRepoForModelDelete) CountByModelID(context.Context, uint64, string) (int64, error) {
+func (s *stubLibraryRepoForModelDelete) CountByModelID(context.Context, uint64, string) (int64, error) {
 	if s.count != nil {
 		return *s.count, s.usageErr
 	}
 	return int64(len(s.usages)), s.usageErr
 }
 
-func (s *stubKBRepoForModelDelete) ListModelUsages(
+func (s *stubLibraryRepoForModelDelete) ListModelUsages(
 	context.Context, uint64, string,
 ) ([]types.ModelUsageResource, error) {
 	return s.usages, s.usageErr
@@ -87,9 +87,9 @@ func TestDeleteModel_RejectsWhenReferenced(t *testing.T) {
 
 	svc := NewModelService(
 		&stubModelRepoForDelete{model: &types.Model{ID: modelID, SpaceID: 1}},
-		&stubKBRepoForModelDelete{usages: []types.ModelUsageResource{
-			{ID: "kb-1", Name: "Product docs", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
-			{ID: "kb-2", Name: "Engineering", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
+		&stubLibraryRepoForModelDelete{usages: []types.ModelUsageResource{
+			{ID: "library-1", Name: "Product docs", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
+			{ID: "library-2", Name: "Engineering", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
 		}},
 		nil, nil, nil,
 	)
@@ -99,15 +99,15 @@ func TestDeleteModel_RejectsWhenReferenced(t *testing.T) {
 	appErr, ok := apperrors.IsAppError(err)
 	require.True(t, ok)
 	assert.Equal(t, apperrors.ErrModelInUse, appErr.Code)
-	assert.Contains(t, appErr.Message, "2 knowledge base(s)")
+	assert.Contains(t, appErr.Message, "2 library(s)")
 	details, ok := appErr.Details.(types.ModelUsageDetails)
 	require.True(t, ok)
-	require.Len(t, details.KnowledgeBases, 2)
-	assert.Equal(t, int64(2), details.KnowledgeBaseTotal)
-	assert.Equal(t, "Product docs", details.KnowledgeBases[0].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, details.KnowledgeBases[0].Bindings)
-	assert.Equal(t, "Engineering", details.KnowledgeBases[1].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, details.KnowledgeBases[1].Bindings)
+	require.Len(t, details.Libraries, 2)
+	assert.Equal(t, int64(2), details.LibraryTotal)
+	assert.Equal(t, "Product docs", details.Libraries[0].Name)
+	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, details.Libraries[0].Bindings)
+	assert.Equal(t, "Engineering", details.Libraries[1].Name)
+	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, details.Libraries[1].Bindings)
 }
 
 func TestDeleteModel_SucceedsWhenUnreferenced(t *testing.T) {
@@ -124,7 +124,7 @@ func TestDeleteModel_SucceedsWhenUnreferenced(t *testing.T) {
 				return nil
 			},
 		},
-		&stubKBRepoForModelDelete{},
+		&stubLibraryRepoForModelDelete{},
 		nil, nil, nil,
 	)
 
@@ -135,14 +135,14 @@ func TestDeleteModel_SucceedsWhenUnreferenced(t *testing.T) {
 func TestGetModelUsageDetails_NormalizesEmptyCollections(t *testing.T) {
 	svc := NewModelService(
 		&stubModelRepoForDelete{},
-		&stubKBRepoForModelDelete{},
+		&stubLibraryRepoForModelDelete{},
 		nil, nil, nil,
 	)
 
 	details, err := svc.(*modelService).getModelUsageDetails(context.Background(), 1, "unused-model")
 	require.NoError(t, err)
-	assert.NotNil(t, details.KnowledgeBases)
-	assert.Equal(t, int64(0), details.KnowledgeBaseTotal)
+	assert.NotNil(t, details.Libraries)
+	assert.Equal(t, int64(0), details.LibraryTotal)
 }
 
 func TestDeleteModel_DoesNotDeleteWhenUsageLookupFails(t *testing.T) {
@@ -159,7 +159,7 @@ func TestDeleteModel_DoesNotDeleteWhenUsageLookupFails(t *testing.T) {
 				return nil
 			},
 		},
-		&stubKBRepoForModelDelete{usageErr: wantErr},
+		&stubLibraryRepoForModelDelete{usageErr: wantErr},
 		nil, nil, nil,
 	)
 
@@ -171,15 +171,15 @@ func TestDeleteModel_DoesNotDeleteWhenUsageLookupFails(t *testing.T) {
 func TestDeleteModel_ReportsUntruncatedTotalsWhenListsAreCapped(t *testing.T) {
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	modelID := "popular-embedding"
-	kbTotal := int64(80)
+	libraryTotal := int64(80)
 
 	svc := NewModelService(
 		&stubModelRepoForDelete{model: &types.Model{ID: modelID, SpaceID: 1}},
-		&stubKBRepoForModelDelete{
-			count: &kbTotal,
+		&stubLibraryRepoForModelDelete{
+			count: &libraryTotal,
 			usages: []types.ModelUsageResource{
-				{ID: "kb-1", Name: "Alpha", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingEmbeddingModel}},
-				{ID: "kb-2", Name: "Beta", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingEmbeddingModel}},
+				{ID: "library-1", Name: "Alpha", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingEmbeddingModel}},
+				{ID: "library-2", Name: "Beta", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingEmbeddingModel}},
 			},
 		},
 
@@ -190,11 +190,11 @@ func TestDeleteModel_ReportsUntruncatedTotalsWhenListsAreCapped(t *testing.T) {
 	require.Error(t, err)
 	appErr, ok := apperrors.IsAppError(err)
 	require.True(t, ok)
-	assert.Contains(t, appErr.Message, "80 knowledge base(s)")
+	assert.Contains(t, appErr.Message, "80 library(s)")
 	details, ok := appErr.Details.(types.ModelUsageDetails)
 	require.True(t, ok)
-	assert.Equal(t, int64(80), details.KnowledgeBaseTotal)
-	assert.Len(t, details.KnowledgeBases, 2)
+	assert.Equal(t, int64(80), details.LibraryTotal)
+	assert.Len(t, details.Libraries, 2)
 }
 
 type stubSpaceServiceForModelDelete struct {
@@ -231,20 +231,24 @@ func (s *stubSpaceServiceForModelDelete) GetSpaceByIDForUser(context.Context, ui
 func TestFormatModelInUseMessage(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t,
-		"model is used by 1 knowledge base(s); reconfigure or remove those references before deleting",
+		"model is used by 1 library(s); reconfigure or remove those references before deleting",
 		formatModelInUseMessage(1),
 	)
 	assert.Equal(t,
-		"model is used by 2 knowledge base(s); reconfigure or remove those references before deleting",
+		"model is used by 2 library(s); reconfigure or remove those references before deleting",
 		formatModelInUseMessage(2),
 	)
 	assert.Equal(t,
-		"model is used by 1 knowledge base(s); reconfigure or remove those references before deleting",
+		"model is used by 1 library(s); reconfigure or remove those references before deleting",
 		formatModelInUseMessage(1),
 	)
 
 }
 
-func (r *stubKBRepoForModelDelete) UpdateKnowledgeBasePin(context.Context, *types.KnowledgeBase) error {
+func (r *stubLibraryRepoForModelDelete) UpdateLibraryPin(context.Context, *types.Library) error {
 	return nil
+}
+
+func (s *stubLibraryRepoForModelDelete) ListLibraries(context.Context, uint64) ([]*types.Library, error) {
+	return nil, nil
 }

@@ -13,14 +13,14 @@ import (
 )
 
 // chunkService implements the ChunkService interface
-// It provides operations for managing document chunks in the knowledge base
+// It provides operations for managing document chunks in the library
 // Chunks are segments of documents that have been processed and prepared for indexing
 type chunkService struct {
-	chunkRepository interfaces.ChunkRepository // Repository for chunk data persistence
-	entryRepo       interfaces.EntryRepository
-	kbRepository    interfaces.KnowledgeBaseRepository
-	modelService    interfaces.ModelService
-	retrieveEngine  interfaces.RetrievalService
+	chunkRepository   interfaces.ChunkRepository // Repository for chunk data persistence
+	entryRepo         interfaces.EntryRepository
+	libraryRepository interfaces.LibraryRepository
+	modelService      interfaces.ModelService
+	retrieveEngine    interfaces.RetrievalService
 }
 
 // NewChunkService creates a new chunk service
@@ -33,16 +33,16 @@ type chunkService struct {
 func NewChunkService(
 	chunkRepository interfaces.ChunkRepository,
 	entryRepo interfaces.EntryRepository,
-	kbRepository interfaces.KnowledgeBaseRepository,
+	libraryRepository interfaces.LibraryRepository,
 	modelService interfaces.ModelService,
 	retrieveEngine interfaces.RetrievalService,
 ) interfaces.ChunkService {
 	return &chunkService{
-		chunkRepository: chunkRepository,
-		entryRepo:       entryRepo,
-		kbRepository:    kbRepository,
-		modelService:    modelService,
-		retrieveEngine:  retrieveEngine,
+		chunkRepository:   chunkRepository,
+		entryRepo:         entryRepo,
+		libraryRepository: libraryRepository,
+		modelService:      modelService,
+		retrieveEngine:    retrieveEngine,
 	}
 }
 

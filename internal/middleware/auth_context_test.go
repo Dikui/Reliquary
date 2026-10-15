@@ -16,7 +16,7 @@ import (
 func TestApplyAuthSessionSetsBothSurfaces(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/knowledge-bases", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/libraries", nil)
 
 	user := &types.User{ID: "u1"}
 	space := &types.Space{ID: 1}

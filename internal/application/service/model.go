@@ -33,29 +33,29 @@ type modelService struct {
 	chatGPTHTTPClient      *http.Client
 	db                     *gorm.DB
 	repo                   interfaces.ModelRepository
-	kbRepo                 interfaces.KnowledgeBaseRepository
+	libraryRepo            interfaces.LibraryRepository
 	ollamaService          *ollama.OllamaService
 	pooler                 embedding.EmbedderPooler
 	spaceService           interfaces.SpaceService
 	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
 }
 
-func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB) interfaces.ModelService {
-	s := NewModelService(repo, kbRepo, ollamaService, pooler, spaceService).(*modelService)
+func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, libraryRepo interfaces.LibraryRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB) interfaces.ModelService {
+	s := NewModelService(repo, libraryRepo, ollamaService, pooler, spaceService).(*modelService)
 	s.db = db
 	return s
 }
 
 // NewModelService creates a new model service instance
 func NewModelService(repo interfaces.ModelRepository,
-	kbRepo interfaces.KnowledgeBaseRepository,
+	libraryRepo interfaces.LibraryRepository,
 	ollamaService *ollama.OllamaService,
 	pooler embedding.EmbedderPooler,
 	spaceService interfaces.SpaceService,
 ) interfaces.ModelService {
 	return &modelService{
 		repo:          repo,
-		kbRepo:        kbRepo,
+		libraryRepo:   libraryRepo,
 		ollamaService: ollamaService,
 		pooler:        pooler,
 		spaceService:  spaceService,
@@ -84,6 +84,9 @@ func (s *modelService) CreateModel(ctx context.Context, model *types.Model) erro
 	}
 	if err := s.validateChatGPTModel(ctx, model); err != nil {
 		return err
+	}
+	if err := model.Parameters.Pricing.Validate(); err != nil {
+		return apperrors.NewValidationError(err.Error())
 	}
 	if err := validateImageEmbeddingModel(model); err != nil {
 		return err
@@ -244,7 +247,7 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 			copy := *s
 			copy.db = tx
 			copy.repo = repository.NewModelRepository(tx)
-			copy.kbRepo = repository.NewKnowledgeBaseRepository(tx)
+			copy.libraryRepo = repository.NewLibraryRepository(tx)
 			bound, err := s.nameEmbeddingRebuilder.BindTransaction(ctx, tx)
 			if err != nil {
 				return err
@@ -259,6 +262,9 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	}
 	if err := s.validateChatGPTModel(ctx, model); err != nil {
 		return err
+	}
+	if err := model.Parameters.Pricing.Validate(); err != nil {
+		return apperrors.NewValidationError(err.Error())
 	}
 	if err := validateImageEmbeddingModel(model); err != nil {
 		return err
@@ -505,13 +511,13 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 		return err
 	}
 	if usage.InUse() {
-		kbCount := usage.KnowledgeBaseTotal
-		if kbCount == 0 {
-			kbCount = int64(len(usage.KnowledgeBases))
+		libraryCount := usage.LibraryTotal
+		if libraryCount == 0 {
+			libraryCount = int64(len(usage.Libraries))
 		}
-		logger.Warnf(ctx, "Model %s is in use: kb=%d", id, kbCount)
+		logger.Warnf(ctx, "Model %s is in use: library=%d", id, libraryCount)
 		return apperrors.NewModelInUseError(
-			formatModelInUseMessage(kbCount),
+			formatModelInUseMessage(libraryCount),
 			usage,
 		)
 	}
@@ -534,21 +540,21 @@ func (s *modelService) getModelUsageDetails(
 	ctx context.Context, spaceID uint64, modelID string,
 ) (types.ModelUsageDetails, error) {
 	details := types.ModelUsageDetails{
-		KnowledgeBases: make([]types.ModelUsageResource, 0),
+		Libraries: make([]types.ModelUsageResource, 0),
 	}
 
-	kbCount, err := s.kbRepo.CountByModelID(ctx, spaceID, modelID)
+	libraryCount, err := s.libraryRepo.CountByModelID(ctx, spaceID, modelID)
 	if err != nil {
 		return details, err
 	}
-	details.KnowledgeBaseTotal = kbCount
-	if kbCount > 0 {
-		details.KnowledgeBases, err = s.kbRepo.ListModelUsages(ctx, spaceID, modelID)
+	details.LibraryTotal = libraryCount
+	if libraryCount > 0 {
+		details.Libraries, err = s.libraryRepo.ListModelUsages(ctx, spaceID, modelID)
 		if err != nil {
 			return details, err
 		}
-		if details.KnowledgeBases == nil {
-			details.KnowledgeBases = make([]types.ModelUsageResource, 0)
+		if details.Libraries == nil {
+			details.Libraries = make([]types.ModelUsageResource, 0)
 		}
 	}
 
@@ -572,7 +578,9 @@ func (s *modelService) GetEmbeddingModel(ctx context.Context, modelId string) (e
 		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
 	}
 
-	embedder, err := embedding.NewEmbedder(embedding.ConfigFromModel(model), s.pooler, s.ollamaService)
+	cfg := embedding.ConfigFromModel(model)
+	cfg.Accounting = s.callAccounting(model)
+	embedder, err := embedding.NewEmbedder(cfg, s.pooler, s.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,
@@ -602,7 +610,9 @@ func (s *modelService) GetRerankModel(ctx context.Context, modelId string) (rera
 		return nil, apperrors.NewServiceUnavailableError("This model is paused until its migration credentials are configured.")
 	}
 
-	reranker, err := rerank.NewReranker(rerank.ConfigFromModel(model, s.decryptAppSecret(model.Parameters.AppSecret)))
+	cfg := rerank.ConfigFromModel(model, s.decryptAppSecret(model.Parameters.AppSecret))
+	cfg.Accounting = s.callAccounting(model)
+	reranker, err := rerank.NewReranker(cfg)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,
@@ -658,7 +668,9 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 	if model.Source == types.ModelSourceChatGPT {
 		return s.chatGPTModel(ctx, model)
 	}
-	chatModel, err := chat.NewChat(chat.ConfigFromModel(model), s.ollamaService)
+	cfg := chat.ConfigFromModel(model)
+	cfg.Accounting = s.callAccounting(model)
+	chatModel, err := chat.NewChat(cfg, s.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id":   model.ID,
@@ -670,10 +682,10 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 	return chatModel, nil
 }
 
-func formatModelInUseMessage(kbCount int64) string {
+func formatModelInUseMessage(libraryCount int64) string {
 	var parts []string
-	if kbCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d knowledge base(s)", kbCount))
+	if libraryCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d library(s)", libraryCount))
 	}
 
 	joined := strings.Join(parts, " and ")

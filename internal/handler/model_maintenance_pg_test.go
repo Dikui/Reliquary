@@ -38,7 +38,7 @@ func TestSnapshotChatGPTModelDebugAuditsRealQuotaIncludingFailedCalls(t *testing
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
 	db := pgtest.Open(t)
 	ctx := context.Background()
-	_, err := repository.EnsureSpaceKnowledgeBase(ctx, db, types.SingleSpaceID, "")
+	_, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	credential, err := utils.EncryptAESGCM(`{"access_token":"debug-access-secret","refresh_token":"debug-refresh-secret","id_token":"debug-id-secret"}`, utils.GetAESKey())
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestSnapshotChatGPTModelDebugAuditsRealQuotaIncludingFailedCalls(t *testing
 	defer upstream.Close()
 	endpoint, err := url.Parse(upstream.URL)
 	require.NoError(t, err)
-	models := service.NewModelServiceWithChatGPT(repository.NewModelRepository(db), repository.NewKnowledgeBaseRepository(db), nil, nil, nil, db, chatgpt.NewManager(db), service.NewChatGPTPolicyService(db))
+	models := service.NewModelServiceWithChatGPT(repository.NewModelRepository(db), repository.NewLibraryRepository(db), nil, nil, nil, db, chatgpt.NewManager(db), service.NewChatGPTPolicyService(db))
 	models.(interface{ SetChatGPTTransport(*http.Client) }).SetChatGPTTransport(&http.Client{Transport: modelMaintenanceTransport(func(request *http.Request) (*http.Response, error) {
 		copy := request.Clone(request.Context())
 		address := *request.URL

@@ -65,7 +65,7 @@ func (h *EntryHandler) CheckIngestURLs(c *gin.Context) {
 	if collector == nil {
 		return
 	}
-	items, err := collector.CheckURLs(c.Request.Context(), input.URLs)
+	items, err := collector.CheckURLs(c.Request.Context(), input.URLs, input.Library)
 	if err != nil {
 		c.Error(err)
 		return
@@ -122,6 +122,9 @@ func (h *EntryHandler) UploadIngestAsset(c *gin.Context) {
 }
 
 func (h *EntryHandler) ListIncomplete(c *gin.Context) {
+	if !h.applyLibraryReadScope(c) {
+		return
+	}
 	page, size := 0, 0
 	for key, target := range map[string]*int{"page": &page, "page_size": &size} {
 		if raw := c.Query(key); raw != "" {
@@ -182,7 +185,7 @@ func (h *EntryHandler) DiscardIngest(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"article_id": c.Param("id"), "status": "discarded", "message": "已丢弃"}})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"entry_id": c.Param("id"), "status": "discarded", "message": "已丢弃"}})
 }
 
 func (h *EntryHandler) DeleteDocument(c *gin.Context) {

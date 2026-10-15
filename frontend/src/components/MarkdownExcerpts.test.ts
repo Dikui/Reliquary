@@ -56,19 +56,19 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: API-loaded card hover uses plain text and article detail keeps rendering Markdown`, async () => {
     const requests: string[] = []
-    const api = evaluate(readFileSync(new URL('../api/knowledge-base.ts', import.meta.url), 'utf8'), {
+    const api = evaluate(readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8'), {
       '../utils/request': { get: async (url: string) => {
         requests.push(url)
-        if (url.startsWith('/api/v1/knowledge-bases/excerpts/entries?')) return { success: true, data: [structuredClone(record)], total: 1 }
+        if (url.startsWith('/api/v1/entries?')) return { success: true, data: [structuredClone(record)], total: 1 }
         if (url === '/api/v1/entries/excerpt-article') return { success: true, data: structuredClone(record) }
         if (url.startsWith('/api/v1/chunks/excerpt-article?')) return { success: true, data: [{ id: 'body', content: source, chunk_index: 0 }], total: 1 }
         throw new Error(`Unexpected request: ${url}`)
       } },
     })
-    const hookModule = evaluate(readFileSync(new URL('../composables/useKnowledgeBase.ts', import.meta.url), 'utf8'), {
+    const hookModule = evaluate(readFileSync(new URL('../composables/useLibrary.ts', import.meta.url), 'utf8'), {
       pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
       '@/stores/entry': { entryStore: () => ({}) },
-      '@/api/knowledge-base': api,
+      '@/api/library': api,
       '../utils/index': { formatStringDate: () => '2026-10-13' },
       'tdesign-vue-next': { MessagePlugin: {} },
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
@@ -78,7 +78,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     hook.getCardDetails(hook.cardList.value[0])
     await new Promise<void>(resolve => setImmediate(resolve))
     assert.equal(hook.details.md[0].content, source)
-    const card = component('../views/knowledge-base/components/DocumentCardView.vue', {
+    const card = component('../views/library/components/DocumentCardView.vue', {
       '@/utils/markdownPlainText': markdownPlainText,
       '@/utils/entrySourceLabels': entrySourceLabels,
       '@/utils/files': { formatFileSize: () => '' },
@@ -104,7 +104,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'highlight.js': { __esModule: true, default: {} },
       mermaid: { __esModule: true, default: { initialize() {} } },
       'tdesign-vue-next': { MessagePlugin: {} },
-      '@/api/knowledge-base': api,
+      '@/api/library': api,
       '@/utils/entrySourceLabels': entrySourceLabels,
       '@/utils/security': {
         isValidURL: () => true, isValidImageURL: () => true, safeMarkdownToHTML: identity, sanitizeHTML: identity,
@@ -112,7 +112,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: identity },
       '@/utils/mermaidViewer': {}, '@/utils/clipboard': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
-      '@/views/knowledge-base/entryDownloadFileName': {},
+      '@/views/library/entryDownloadFileName': {},
     })
     const html = await render(detail, { visible: true, details: hook.details }, locale)
     assert.match(html, /<h1>Article heading<\/h1>/)

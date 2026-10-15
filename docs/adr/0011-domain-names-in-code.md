@@ -1,6 +1,6 @@
 # 0011 代码中的领域命名
 
-Status: accepted
+Status: accepted；对外契约保留旧名一节被 ikb-22 取代：HTTP、MCP、请求头与数据库统一为 `entry`，不留别名（2026-10-15）
 日期：2026-10-12
 
 ## 背景

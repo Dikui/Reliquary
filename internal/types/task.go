@@ -1,7 +1,7 @@
 package types
 
 // Worker-pool names are part of the runtime observability API. Each pool is
-// backed by an independent PostgreSQL worker pool, so concurrency is hard-isolated
+// backed by an independent asynq server, so concurrency is hard-isolated
 // between pools instead of being only a weighted dequeue preference.
 const (
 	WorkerPoolCore        = "core"
@@ -43,10 +43,10 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
-	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill}},
+	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeEntryVector, TypeTopicBackfill}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeEntryListDelete, TypeEntryListReparse,
-		TypeIngestAssetCleanup, TypeReportIndex,
+		TypeIngestAssetCleanup, TypeReportIndex, "graph:sync", "graph:check", "graph:rebuild",
 	}},
 }
 
@@ -165,6 +165,7 @@ type QueueStat struct {
 	Retry     int `json:"retry"`
 	Archived  int `json:"archived"`
 	Completed int `json:"completed"`
+	Cancelled int `json:"cancelled"`
 	// Processed / Failed are today's counters (reset daily).
 	Processed int `json:"processed"`
 	Failed    int `json:"failed"`
@@ -174,7 +175,7 @@ type QueueStat struct {
 	LatencyMs int64 `json:"latency_ms"`
 }
 
-// WorkerServerStat is one live PostgreSQL worker pool snapshot. Queue weights identify
+// WorkerServerStat is one live asynq worker pool snapshot. Queue weights identify
 // which logical pool the server belongs to; the runtime handler aggregates
 // these records across pools so configured per-instance capacity is not
 // confused with actual cluster capacity.
@@ -190,6 +191,7 @@ const (
 	TypeEntryListDelete            = "knowledge:list_delete"  // 批量删除知识任务
 	TypeEntryListReparse           = "knowledge:list_reparse" // 批量重解析知识任务
 	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
+	TypeEntryVector                = "entry:vector"
 	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
 	TypeManualProcess              = "manual:process" // 文章正文处理任务，兼容已有持久队列名称
 	TypeIngestAssetCleanup         = "ingest:asset_cleanup"
@@ -198,17 +200,17 @@ const (
 
 // DocumentProcessPayload represents the document process task payload
 type DocumentProcessPayload struct {
-	RequestId       string   `json:"request_id"`
-	SpaceID         uint64   `json:"tenant_id"`
-	EntryID         string   `json:"knowledge_id"`
-	KnowledgeBaseID string   `json:"knowledge_base_id"`
-	FilePath        string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
-	FileName        string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
-	FileType        string   `json:"file_type,omitempty"` // 文件类型（文件导入时使用）
-	URL             string   `json:"url,omitempty"`       // URL（URL导入时使用）
-	FileURL         string   `json:"file_url,omitempty"`  // 文件资源链接（file_url导入时使用）
-	Passages        []string `json:"passages,omitempty"`  // 文本段落（文本导入时使用）
-	Language        string   `json:"language,omitempty"`  // Request locale for {{language}} in prompt templates
+	RequestId string   `json:"request_id"`
+	SpaceID   uint64   `json:"tenant_id"`
+	EntryID   string   `json:"entry_id"`
+	LibraryID string   `json:"library_id"`
+	FilePath  string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
+	FileName  string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
+	FileType  string   `json:"file_type,omitempty"` // 文件类型（文件导入时使用）
+	URL       string   `json:"url,omitempty"`       // URL（URL导入时使用）
+	FileURL   string   `json:"file_url,omitempty"`  // 文件资源链接（file_url导入时使用）
+	Passages  []string `json:"passages,omitempty"`  // 文本段落（文本导入时使用）
+	Language  string   `json:"language,omitempty"`  // Request locale for {{language}} in prompt templates
 	// Attempt is the per-entry attempt number this task belongs to.
 	// Set on enqueue (initial parse → attempt 1; reparse → max+1) so
 	// every span recorded by this task lands on the right attempt
@@ -221,14 +223,14 @@ type DocumentProcessPayload struct {
 // EntryListDeletePayload represents the batch entry delete task payload
 type EntryListDeletePayload struct {
 	SpaceID   uint64        `json:"tenant_id"`
-	EntryIDs  []string      `json:"knowledge_ids"`
+	EntryIDs  []string      `json:"entry_ids"`
 	Initiator TaskInitiator `json:"initiator,omitempty"`
 }
 
 // EntryListReparsePayload represents the batch entry reparse task payload
 type EntryListReparsePayload struct {
 	SpaceID       uint64                 `json:"tenant_id"`
-	EntryIDs      []string               `json:"knowledge_ids"`
+	EntryIDs      []string               `json:"entry_ids"`
 	ProcessConfig *EntryProcessOverrides `json:"process_config,omitempty"`
 	Initiator     TaskInitiator          `json:"initiator,omitempty"`
 }
@@ -236,12 +238,12 @@ type EntryListReparsePayload struct {
 // ManualProcessPayload carries supplied or already stored article text.
 // Used by ingest processing and local article reprocessing.
 type ManualProcessPayload struct {
-	RequestId       string `json:"request_id"`
-	SpaceID         uint64 `json:"tenant_id"`
-	EntryID         string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	Content         string `json:"content"`      // cleaned markdown content
-	NeedCleanup     bool   `json:"need_cleanup"` // true for update, false for create
+	RequestId   string `json:"request_id"`
+	SpaceID     uint64 `json:"tenant_id"`
+	EntryID     string `json:"entry_id"`
+	LibraryID   string `json:"library_id"`
+	Content     string `json:"content"`      // cleaned markdown content
+	NeedCleanup bool   `json:"need_cleanup"` // true for update, false for create
 }
 
 const TypeTopicBackfill = "topic:backfill"
@@ -253,7 +255,7 @@ type TopicBackfillPayload struct {
 
 // ReportIndexPayload identifies the saved report to index without embedding its body.
 type ReportIndexPayload struct {
-	SpaceID         uint64 `json:"tenant_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	EntryID         string `json:"knowledge_id"`
+	SpaceID   uint64 `json:"tenant_id"`
+	LibraryID string `json:"library_id"`
+	EntryID   string `json:"entry_id"`
 }

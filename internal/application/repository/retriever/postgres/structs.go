@@ -13,38 +13,38 @@ import (
 
 // pgVector defines the database model for vector embeddings storage
 type pgVector struct {
-	ID              uint                `json:"id"                gorm:"primarykey"`
-	CreatedAt       time.Time           `json:"created_at"        gorm:"column:created_at"`
-	UpdatedAt       time.Time           `json:"updated_at"        gorm:"column:updated_at"`
-	SourceID        string              `json:"source_id"         gorm:"column:source_id;not null"`
-	SourceType      int                 `json:"source_type"       gorm:"column:source_type;not null"`
-	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
-	EntryID         string              `json:"entry_id"      gorm:"column:entry_id"`
-	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
-	ModelID         string              `json:"model_id" gorm:"column:model_id"`
-	Dimension       int                 `json:"dimension"         gorm:"column:dimension;not null"`
-	Embedding       pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
-	IsEnabled       bool                `json:"is_enabled"        gorm:"column:is_enabled;index"`
+	ID         uint                `json:"id"                gorm:"primarykey"`
+	CreatedAt  time.Time           `json:"created_at"        gorm:"column:created_at"`
+	UpdatedAt  time.Time           `json:"updated_at"        gorm:"column:updated_at"`
+	SourceID   string              `json:"source_id"         gorm:"column:source_id;not null"`
+	SourceType int                 `json:"source_type"       gorm:"column:source_type;not null"`
+	ChunkID    string              `json:"chunk_id"          gorm:"column:chunk_id"`
+	EntryID    string              `json:"entry_id"      gorm:"column:entry_id"`
+	LibraryID  string              `json:"library_id" gorm:"column:library_id"`
+	ModelID    string              `json:"model_id" gorm:"column:model_id"`
+	Dimension  int                 `json:"dimension"         gorm:"column:dimension;not null"`
+	Embedding  pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
+	IsEnabled  bool                `json:"is_enabled"        gorm:"column:is_enabled;index"`
 }
 
 // pgVectorWithScore extends pgVector with similarity score field
 type pgVectorWithScore struct {
-	ID              uint                `json:"id"                gorm:"primarykey"`
-	CreatedAt       time.Time           `json:"created_at"        gorm:"column:created_at"`
-	UpdatedAt       time.Time           `json:"updated_at"        gorm:"column:updated_at"`
-	SourceID        string              `json:"source_id"         gorm:"column:source_id;not null"`
-	SourceType      int                 `json:"source_type"       gorm:"column:source_type;not null"`
-	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
-	EntryID         string              `json:"entry_id"      gorm:"column:entry_id"`
-	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
-	Content         string              `json:"content"           gorm:"column:content;->"`
-	ContextHeader   string              `json:"-"                 gorm:"column:context_header;->"`
-	Title           string              `json:"-"                 gorm:"column:title;->"`
-	Metadata        types.JSON          `json:"-"                 gorm:"column:metadata;->"`
-	Dimension       int                 `json:"dimension"         gorm:"column:dimension;not null"`
-	Embedding       pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
-	IsEnabled       bool                `json:"is_enabled"        gorm:"column:is_enabled;default:true;index"`
-	Score           float64             `json:"score"             gorm:"column:score"`
+	ID            uint                `json:"id"                gorm:"primarykey"`
+	CreatedAt     time.Time           `json:"created_at"        gorm:"column:created_at"`
+	UpdatedAt     time.Time           `json:"updated_at"        gorm:"column:updated_at"`
+	SourceID      string              `json:"source_id"         gorm:"column:source_id;not null"`
+	SourceType    int                 `json:"source_type"       gorm:"column:source_type;not null"`
+	ChunkID       string              `json:"chunk_id"          gorm:"column:chunk_id"`
+	EntryID       string              `json:"entry_id"      gorm:"column:entry_id"`
+	LibraryID     string              `json:"library_id" gorm:"column:library_id"`
+	Content       string              `json:"content"           gorm:"column:content;->"`
+	ContextHeader string              `json:"-"                 gorm:"column:context_header;->"`
+	Title         string              `json:"-"                 gorm:"column:title;->"`
+	Metadata      types.JSON          `json:"-"                 gorm:"column:metadata;->"`
+	Dimension     int                 `json:"dimension"         gorm:"column:dimension;not null"`
+	Embedding     pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
+	IsEnabled     bool                `json:"is_enabled"        gorm:"column:is_enabled;default:true;index"`
+	Score         float64             `json:"score"             gorm:"column:score"`
 }
 
 // TableName specifies the database table name for pgVectorWithScore
@@ -60,11 +60,11 @@ func (pgVector) TableName() string {
 // toDBVectorEmbedding converts IndexInfo to pgVector database model
 func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string]any) *pgVector {
 	pgVector := &pgVector{
-		SourceID:        indexInfo.SourceID,
-		SourceType:      int(indexInfo.SourceType),
-		ChunkID:         indexInfo.ChunkID,
-		EntryID:         indexInfo.EntryID,
-		KnowledgeBaseID: indexInfo.KnowledgeBaseID,
+		SourceID:   indexInfo.SourceID,
+		SourceType: int(indexInfo.SourceType),
+		ChunkID:    indexInfo.ChunkID,
+		EntryID:    indexInfo.EntryID,
+		LibraryID:  indexInfo.LibraryID,
 		// Preserve the historical default for callers that omit IsEnabled.
 		// Disabled chunks are filtered from chunks and explicit status maps win below.
 		IsEnabled: true,
@@ -103,14 +103,14 @@ func fromDBVectorEmbeddingWithScore(embedding *pgVectorWithScore, matchType type
 		content = title + "\n" + content
 	}
 	return &types.IndexWithScore{
-		ID:              strconv.FormatInt(int64(embedding.ID), 10),
-		SourceID:        embedding.SourceID,
-		SourceType:      types.SourceType(embedding.SourceType),
-		ChunkID:         embedding.ChunkID,
-		EntryID:         embedding.EntryID,
-		KnowledgeBaseID: embedding.KnowledgeBaseID,
-		Content:         content,
-		Score:           embedding.Score,
-		MatchType:       matchType,
+		ID:         strconv.FormatInt(int64(embedding.ID), 10),
+		SourceID:   embedding.SourceID,
+		SourceType: types.SourceType(embedding.SourceType),
+		ChunkID:    embedding.ChunkID,
+		EntryID:    embedding.EntryID,
+		LibraryID:  embedding.LibraryID,
+		Content:    content,
+		Score:      embedding.Score,
+		MatchType:  matchType,
 	}
 }

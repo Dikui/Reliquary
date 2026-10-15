@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ReparseConfirmDialog from '@/views/knowledge-base/components/ReparseConfirmDialog.vue'
+import ReparseConfirmDialog from '@/views/library/components/ReparseConfirmDialog.vue'
 import { useReparseConfirmStore } from '@/stores/reparseConfirm'
 
 const reparseConfirmStore = useReparseConfirmStore()
@@ -8,7 +8,7 @@ const reparseConfirmStore = useReparseConfirmStore()
 <template>
   <ReparseConfirmDialog
     v-model:visible="reparseConfirmStore.visible"
-    :kb-info="reparseConfirmStore.kbInfo"
+    :library-info="reparseConfirmStore.libraryInfo"
     :reparse-preview="reparseConfirmStore.reparse"
     @confirm="reparseConfirmStore.resolveConfirm"
     @cancel="reparseConfirmStore.rejectConfirm"

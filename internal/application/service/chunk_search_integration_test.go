@@ -50,13 +50,13 @@ func (chunkSearchModels) GetEmbeddingModel(context.Context, string) (embedding.E
 	return chunkSearchEmbedder{}, nil
 }
 
-type chunkSearchKBReader struct {
-	interfaces.KnowledgeBaseService
-	repo interfaces.KnowledgeBaseRepository
+type chunkSearchLibraryReader struct {
+	interfaces.LibraryService
+	repo interfaces.LibraryRepository
 }
 
-func (r chunkSearchKBReader) GetKnowledgeBaseByID(ctx context.Context, id string) (*types.KnowledgeBase, error) {
-	return r.repo.GetKnowledgeBaseByID(ctx, id)
+func (r chunkSearchLibraryReader) GetLibraryByID(ctx context.Context, id string) (*types.Library, error) {
+	return r.repo.GetLibraryByID(ctx, id)
 }
 
 type chunkSearchFixture struct {
@@ -64,7 +64,7 @@ type chunkSearchFixture struct {
 	ctx       context.Context
 	chunks    interfaces.ChunkRepository
 	entry     interfaces.EntryRepository
-	kbs       interfaces.KnowledgeBaseRepository
+	libraries interfaces.LibraryRepository
 	indices   interfaces.RetrieveEngineRepository
 	retrieval interfaces.RetrievalService
 	service   *chunkService
@@ -79,37 +79,37 @@ func newChunkSearchFixture(t *testing.T, vectorEnabled bool) *chunkSearchFixture
 	f := &chunkSearchFixture{
 		db: db, ctx: ctx,
 		chunks: repository.NewChunkRepository(db), entry: repository.NewEntryRepository(db),
-		kbs:     repository.NewKnowledgeBaseRepository(db),
-		indices: pgretriever.NewPostgresRetrieveEngineRepository(db),
+		libraries: repository.NewLibraryRepository(db),
+		indices:   pgretriever.NewPostgresRetrieveEngineRepository(db),
 	}
 	f.retrieval = retriever.NewPostgresRetrievalService(f.indices)
 	f.service = &chunkService{
-		chunkRepository: f.chunks, entryRepo: f.entry, kbRepository: f.kbs,
+		chunkRepository: f.chunks, entryRepo: f.entry, libraryRepository: f.libraries,
 		modelService: chunkSearchModels{}, retrieveEngine: f.retrieval,
 	}
 	return f
 }
 
-func (f *chunkSearchFixture) createKB(t *testing.T, vectorEnabled, keywordEnabled bool) *types.KnowledgeBase {
+func (f *chunkSearchFixture) createLibrary(t *testing.T, vectorEnabled, keywordEnabled bool) *types.Library {
 	t.Helper()
 	id := uuid.NewString()
 	strategy, err := json.Marshal(types.IndexingStrategy{VectorEnabled: vectorEnabled, KeywordEnabled: keywordEnabled})
 	require.NoError(t, err)
-	require.NoError(t, f.db.Exec(`INSERT INTO knowledge_bases
+	require.NoError(t, f.db.Exec(`INSERT INTO libraries
 		(id, space_id, name, embedding_model_id, summary_model_id, indexing_strategy)
 		VALUES (?, ?, ?, ?, '', ?::jsonb)`, id, types.SingleSpaceID,
-		"Chunk search knowledge base", "chunk-search-fixed", string(strategy)).Error)
-	kb, err := f.kbs.GetKnowledgeBaseByID(f.ctx, id)
+		"Chunk search library", "chunk-search-fixed", string(strategy)).Error)
+	library, err := f.libraries.GetLibraryByID(f.ctx, id)
 	require.NoError(t, err)
-	return kb
+	return library
 }
 
-func (f *chunkSearchFixture) createEntry(t *testing.T, kb *types.KnowledgeBase, title string) *types.Entry {
+func (f *chunkSearchFixture) createEntry(t *testing.T, library *types.Library, title string) *types.Entry {
 	t.Helper()
 	id := uuid.NewString()
 	require.NoError(t, f.db.Exec(`INSERT INTO entries
-		(id, space_id, knowledge_base_id, type, title, source, parse_status, embedding_model_id)
-		VALUES (?, ?, ?, 'manual', ?, '', ?, ?)`, id, types.SingleSpaceID, kb.ID,
+		(id, space_id, library_id, type, title, source, parse_status, embedding_model_id)
+		VALUES (?, ?, ?, 'manual', ?, '', ?, ?)`, id, types.SingleSpaceID, library.ID,
 		title, types.ParseStatusCompleted, "chunk-search-fixed").Error)
 	entry, err := f.entry.GetEntryByID(f.ctx, types.SingleSpaceID, id)
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func (f *chunkSearchFixture) createChunk(t *testing.T, entry *types.Entry, body,
 	t.Helper()
 	chunk := &types.Chunk{
 		ID: uuid.NewString(), SpaceID: types.SingleSpaceID,
-		EntryID: entry.ID, KnowledgeBaseID: entry.KnowledgeBaseID,
+		EntryID: entry.ID, LibraryID: entry.LibraryID,
 		Content: body, ContextHeader: header, ChunkType: chunkType,
 		IsEnabled: true, Status: int(types.ChunkStatusIndexed),
 	}
@@ -146,9 +146,9 @@ func (f *chunkSearchFixture) retrieve(t *testing.T, params types.RetrieveParams)
 	return hits
 }
 
-func (f *chunkSearchFixture) assertKeywordHits(t *testing.T, kbID, query string, chunkIDs ...string) {
+func (f *chunkSearchFixture) assertKeywordHits(t *testing.T, libraryID, query string, chunkIDs ...string) {
 	t.Helper()
-	hits := f.retrieve(t, types.RetrieveParams{Query: query, KnowledgeBaseIDs: []string{kbID}})
+	hits := f.retrieve(t, types.RetrieveParams{Query: query, LibraryIDs: []string{libraryID}})
 	got := make([]string, len(hits))
 	for i, hit := range hits {
 		got[i] = hit.ChunkID
@@ -159,20 +159,20 @@ func (f *chunkSearchFixture) assertKeywordHits(t *testing.T, kbID, query string,
 
 func TestChunkKeywordSearchPreservesFieldsWithoutEmbeddings(t *testing.T) {
 	f := newChunkSearchFixture(t, false)
-	kb := f.createKB(t, false, true)
-	entry := f.createEntry(t, kb, "Oriontitlemarker 量子计算消息")
+	library := f.createLibrary(t, false, true)
+	entry := f.createEntry(t, library, "Oriontitlemarker 量子计算消息")
 	chunk := f.createChunk(t, entry, "Nebulabodymarker 正文介绍向量检索。", "## Pulsarsectionmarker / 章节路径", types.ChunkTypeText)
 	chunk.Metadata = types.JSON(`{"private_notes":"privatenotemarker"}`)
 	require.NoError(t, f.chunks.UpdateChunk(f.ctx, chunk))
 	for _, query := range []string{
 		"Oriontitlemarker", "量子计算", "Pulsarsectionmarker", "章节", "Nebulabodymarker", "向量检索",
 	} {
-		f.assertKeywordHits(t, kb.ID, query, chunk.ID)
+		f.assertKeywordHits(t, library.ID, query, chunk.ID)
 	}
-	f.assertKeywordHits(t, kb.ID, "privatenotemarker")
+	f.assertKeywordHits(t, library.ID, "privatenotemarker")
 	index := &types.IndexInfo{
 		Content: chunk.Content, SourceID: chunk.ID, ChunkID: chunk.ID,
-		EntryID: entry.ID, KnowledgeBaseID: kb.ID, IsEnabled: true,
+		EntryID: entry.ID, LibraryID: library.ID, IsEnabled: true,
 	}
 	require.NoError(t, f.indices.Save(f.ctx, index, nil))
 	require.NoError(t, f.indices.BatchSave(f.ctx, []*types.IndexInfo{index}, nil))
@@ -182,22 +182,22 @@ func TestChunkKeywordSearchPreservesFieldsWithoutEmbeddings(t *testing.T) {
 
 	entry.Title = "Vegalatermarker 标题更新"
 	require.NoError(t, f.entry.UpdateEntry(f.ctx, entry))
-	f.assertKeywordHits(t, kb.ID, "Oriontitlemarker")
-	f.assertKeywordHits(t, kb.ID, "Vegalatermarker", chunk.ID)
+	f.assertKeywordHits(t, library.ID, "Oriontitlemarker")
+	f.assertKeywordHits(t, library.ID, "Vegalatermarker", chunk.ID)
 }
 
 func TestChunkKeywordSearchUpdatesThroughChunkService(t *testing.T) {
 	f := newChunkSearchFixture(t, false)
-	kb := f.createKB(t, false, true)
-	entry := f.createEntry(t, kb, "Editable document")
+	library := f.createLibrary(t, false, true)
+	entry := f.createEntry(t, library, "Editable document")
 	chunk := f.createChunk(t, entry, "Beforebodymarker immutable source", "## Chaptermarker", types.ChunkTypeText)
-	f.assertKeywordHits(t, kb.ID, "Beforebodymarker", chunk.ID)
+	f.assertKeywordHits(t, library.ID, "Beforebodymarker", chunk.ID)
 
 	chunk.Content = "Afterbodymarker stored source"
 	require.NoError(t, f.service.UpdateChunk(f.ctx, chunk))
-	f.assertKeywordHits(t, kb.ID, "Beforebodymarker")
-	f.assertKeywordHits(t, kb.ID, "Afterbodymarker", chunk.ID)
-	f.assertKeywordHits(t, kb.ID, "Chaptermarker", chunk.ID)
+	f.assertKeywordHits(t, library.ID, "Beforebodymarker")
+	f.assertKeywordHits(t, library.ID, "Afterbodymarker", chunk.ID)
+	f.assertKeywordHits(t, library.ID, "Chaptermarker", chunk.ID)
 	var count int64
 	require.NoError(t, f.db.Table("embeddings").Count(&count).Error)
 	require.Zero(t, count, "keyword indexing does not need vector placeholder rows")
@@ -205,8 +205,8 @@ func TestChunkKeywordSearchUpdatesThroughChunkService(t *testing.T) {
 
 func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	f := newChunkSearchFixture(t, false)
-	kb := f.createKB(t, false, true)
-	entry := f.createEntry(t, kb, "Filter document")
+	library := f.createLibrary(t, false, true)
+	entry := f.createEntry(t, library, "Filter document")
 	var expected []string
 	for _, chunkType := range []string{
 		types.ChunkTypeText, types.ChunkTypeSummary,
@@ -224,15 +224,15 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	require.NoError(t, f.db.Model(&types.Chunk{}).Where("id = ?", disabled.ID).Update("is_enabled", false).Error)
 	deleted := f.createChunk(t, entry, "Filterbodymarker deleted content", "", types.ChunkTypeText)
 	require.NoError(t, f.db.Delete(deleted).Error)
-	f.assertKeywordHits(t, kb.ID, "Filterbodymarker", expected...)
-	hits := f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, EntryIDs: []string{"missing-article"}})
-	require.Empty(t, hits, "article restrictions are applied within the knowledge base")
-	hits = f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", KnowledgeBaseIDs: []string{"missing-kb"}, EntryIDs: []string{entry.ID}})
-	require.Empty(t, hits, "entry and knowledge base restrictions combine with AND")
+	f.assertKeywordHits(t, library.ID, "Filterbodymarker", expected...)
+	hits := f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", LibraryIDs: []string{library.ID}, EntryIDs: []string{"missing-article"}})
+	require.Empty(t, hits, "article restrictions are applied within the library")
+	hits = f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", LibraryIDs: []string{"missing-library"}, EntryIDs: []string{entry.ID}})
+	require.Empty(t, hits, "entry and library restrictions combine with AND")
 	strategy, err := json.Marshal(types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: false})
 	require.NoError(t, err)
-	require.NoError(t, f.db.Model(&types.KnowledgeBase{}).Where("id = ?", kb.ID).Update("indexing_strategy", string(strategy)).Error)
-	f.assertKeywordHits(t, kb.ID, "Filterbodymarker")
+	require.NoError(t, f.db.Model(&types.Library{}).Where("id = ?", library.ID).Update("indexing_strategy", string(strategy)).Error)
+	f.assertKeywordHits(t, library.ID, "Filterbodymarker")
 
 }
 
@@ -263,19 +263,19 @@ func (l *chunkSearchSQLTrace) Trace(_ context.Context, _ time.Time, statement fu
 
 func TestChunkVectorSearchKeepsHNSWLimitBeforeHydration(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
-	kb := f.createKB(t, true, true)
-	entry := f.createEntry(t, kb, "HNSW candidate document")
+	library := f.createLibrary(t, true, true)
+	entry := f.createEntry(t, library, "HNSW candidate document")
 	chunk := f.createChunk(t, entry, "Body hydrated after vector candidates", "", types.ChunkTypeText)
 	vector := make([]float32, 1024)
 	vector[0] = 1
 	require.NoError(t, f.indices.Save(f.ctx, &types.IndexInfo{
 		Content: chunk.Content, SourceID: chunk.ID, ChunkID: chunk.ID,
-		EntryID: entry.ID, KnowledgeBaseID: kb.ID, IsEnabled: true,
+		EntryID: entry.ID, LibraryID: library.ID, IsEnabled: true,
 	}, map[string]any{"embedding": map[string][]float32{chunk.ID: vector}}))
 	trace := &chunkSearchSQLTrace{Interface: gormlogger.Default.LogMode(gormlogger.Silent)}
 	f.indices = pgretriever.NewPostgresRetrieveEngineRepository(f.db.Session(&gorm.Session{Logger: trace}))
 	hits := f.retrieve(t, types.RetrieveParams{
-		RetrieverType: types.VectorRetrieverType, KnowledgeBaseIDs: []string{kb.ID},
+		RetrieverType: types.VectorRetrieverType, LibraryIDs: []string{library.ID},
 		Embedding: vector, TopK: 1, Threshold: 0.99,
 	})
 	require.Len(t, hits, 1)

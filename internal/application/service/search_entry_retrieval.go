@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/pgvector/pgvector-go"
-	"gorm.io/gorm"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
+
+	"github.com/pgvector/pgvector-go"
+	"gorm.io/gorm"
 )
 
 type entrySearchHit struct {
@@ -22,35 +23,42 @@ type entrySearchHit struct {
 }
 
 const entrySearchableChunks = `c.deleted_at IS NULL AND (c.is_enabled IS NULL OR c.is_enabled = true)
-	AND c.chunk_type IN ('text','summary','table_summary','table_column')`
+	AND c.chunk_type IN ('text','summary','table_summary','table_column','image_description')`
 
-func (s *searchService) entryChunkVectorQuery(ctx context.Context, spaceID uint64, kbID string, f entrySearchFilters, dates bool, vector []float32, config *types.RetrievalConfig) *gorm.DB {
+func (s *searchService) entryChunkVectorQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool, vector []float32, config *types.RetrievalConfig) *gorm.DB {
 	expression := fmt.Sprintf("e.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
-	return s.eligibleEntries(ctx, spaceID, kbID, f, dates).
+	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
 		Joins("JOIN chunks c ON c.entry_id=k.id AND c.space_id=k.space_id").
-		Joins("JOIN embeddings e ON e.chunk_id=c.id AND e.entry_id=k.id").
+		Joins("JOIN "+vectorRelation(f.request.VectorSet, "chunk", "e")+" ON e.chunk_id=c.id AND e.entry_id=k.id").
 		Where(entrySearchableChunks).
-		Where("k.processing_mode='full' AND e.dimension=? AND e.embedding IS NOT NULL AND (e.is_enabled IS NULL OR e.is_enabled=true)", len(vector)).
+		Where("e.dimension=? AND e.embedding IS NOT NULL AND (e.is_enabled IS NULL OR e.is_enabled=true)", len(vector)).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 
-func (s *searchService) articleVectorQuery(ctx context.Context, spaceID uint64, kbID string, f entrySearchFilters, dates bool, vector []float32, modelID string, config *types.RetrievalConfig) *gorm.DB {
+func (s *searchService) articleVectorQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool, vector []float32, modelID string, config *types.RetrievalConfig) *gorm.DB {
 	expression := fmt.Sprintf("a.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
-	return s.eligibleEntries(ctx, spaceID, kbID, f, dates).
-		Joins("JOIN article_embeddings a ON a.entry_id=k.id AND a.space_id=k.space_id").
+	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
+		Joins("JOIN "+vectorRelation(f.request.VectorSet, "article", "a")+" ON a.entry_id=k.id AND a.space_id=k.space_id").
 		Where("k.source_kind IN ('article','mine') AND a.dimension=? AND a.model_id=?", len(vector), modelID).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 
-func (s *searchService) imageVectorQuery(ctx context.Context, spaceID uint64, kbID string, f entrySearchFilters, dates bool, vector []float32, modelID string, config *types.RetrievalConfig) *gorm.DB {
+func (s *searchService) imageVectorQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool, vector []float32, modelID string, config *types.RetrievalConfig) *gorm.DB {
 	expression := fmt.Sprintf("i.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
-	return s.eligibleEntries(ctx, spaceID, kbID, f, dates).
-		Joins("JOIN image_embeddings i ON i.entry_id=k.id AND i.space_id=k.space_id").
-		Where("k.source_kind IN ('article','mine') AND k.processing_mode='full' AND i.dimension=? AND i.model_id=?", len(vector), modelID).
+	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
+		Joins("JOIN "+vectorRelation(f.request.VectorSet, "image", "i")+" ON i.entry_id=k.id AND i.space_id=k.space_id").
+		Where("k.source_kind IN ('article','mine') AND i.dimension=? AND i.model_id=?", len(vector), modelID).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 
 func (s *searchService) imageSearchEnabled(ctx context.Context, spaceID uint64, modelID string) (bool, error) {
+	enabled := imageVectorsEnabled(ctx, s.db, spaceID)
+	if execution, ok := types.SearchExecution(ctx); ok && execution.RetrievalConfig != nil {
+		enabled = execution.RetrievalConfig.ImageVectorEnabled
+	}
+	if !enabled {
+		return false, nil
+	}
 	var model types.Model
 	query := s.db.WithContext(ctx).Where("id=? AND (space_id=? OR is_builtin=true) AND type=?", modelID, spaceID, types.ModelTypeEmbedding).Limit(1).Find(&model)
 	if query.Error != nil {
@@ -59,27 +67,26 @@ func (s *searchService) imageSearchEnabled(ctx context.Context, spaceID uint64, 
 	return query.RowsAffected > 0 && model.Parameters.EmbeddingParameters.SupportsImages, nil
 }
 
-func (s *searchService) entryChunkKeywordQuery(ctx context.Context, spaceID uint64, kbID string, f entrySearchFilters, dates bool) *gorm.DB {
-	return s.eligibleEntries(ctx, spaceID, kbID, f, dates).
+func (s *searchService) entryChunkKeywordQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool) *gorm.DB {
+	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
 		Joins("JOIN chunks c ON c.entry_id=k.id AND c.space_id=k.space_id").
 		Where(entrySearchableChunks).
-		Where("k.processing_mode='full'").
 		Where(`c.seq_id @@@ paradedb.match_disjunction('content', ?)`, f.request.Query)
 }
 
-func (s *searchService) entryHeaderKeywordQuery(ctx context.Context, spaceID uint64, kbID string, f entrySearchFilters, dates bool) *gorm.DB {
-	return s.eligibleEntries(ctx, spaceID, kbID, f, dates).
+func (s *searchService) entryHeaderKeywordQuery(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool) *gorm.DB {
+	return s.eligibleEntries(ctx, spaceID, libraryID, f, dates).
 		Where(`k.search_seq_id @@@ paradedb.boolean(should => ARRAY[
 			paradedb.match_disjunction('title', ?),
 			paradedb.match_disjunction('description', ?),
 			paradedb.match_disjunction('search_text', ?)])`, f.request.Query, f.request.Query, f.request.Query)
 }
 
-func (s *searchService) retrieveEntryLanes(ctx context.Context, spaceID uint64, kb *types.KnowledgeBase, f entrySearchFilters, vector []float32, modelID string, config *types.RetrievalConfig, pool int, dates bool) ([][]entrySearchHit, error) {
+func (s *searchService) retrieveEntryLanes(ctx context.Context, spaceID uint64, library *types.Library, f entrySearchFilters, vector []float32, modelID string, config *types.RetrievalConfig, pool int, dates bool) ([][]entrySearchHit, error) {
 	lanes := make([][]entrySearchHit, 4)
 	if len(vector) > 0 {
 		expression := fmt.Sprintf("e.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
-		query := s.entryChunkVectorQuery(ctx, spaceID, kb.ID, f, dates, vector, config).
+		query := s.entryChunkVectorQuery(ctx, spaceID, library.ID, f, dates, vector, config).
 			Where("e.model_id=? OR (e.model_id='' AND k.embedding_model_id=?)", modelID, modelID).
 			Select("k.id AS entry_id,c.id AS chunk_id,c.chunk_index,c.content,1-("+expression+") AS score,ROW_NUMBER() OVER (PARTITION BY k.id ORDER BY "+expression+",c.id) AS article_rank", pgvector.NewHalfVector(vector), pgvector.NewHalfVector(vector))
 		if err := s.db.WithContext(ctx).Table("(?) AS candidates", query).Where("article_rank <= 3").
@@ -87,7 +94,7 @@ func (s *searchService) retrieveEntryLanes(ctx context.Context, spaceID uint64, 
 			return nil, err
 		}
 		expression = fmt.Sprintf("a.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
-		query = s.articleVectorQuery(ctx, spaceID, kb.ID, f, dates, vector, modelID, config)
+		query = s.articleVectorQuery(ctx, spaceID, library.ID, f, dates, vector, modelID, config)
 		if err := query.Select("k.id AS entry_id,1-("+expression+") AS score", pgvector.NewHalfVector(vector)).
 			Order("score DESC, k.id ASC").Limit(poolLimit(pool)).Scan(&lanes[1]).Error; err != nil {
 			return nil, err
@@ -98,7 +105,7 @@ func (s *searchService) retrieveEntryLanes(ctx context.Context, spaceID uint64, 
 		}
 		if enabled {
 			expression = fmt.Sprintf("i.embedding::halfvec(%d) <=> ?::halfvec(%d)", len(vector), len(vector))
-			query = s.imageVectorQuery(ctx, spaceID, kb.ID, f, dates, vector, modelID, config).
+			query = s.imageVectorQuery(ctx, spaceID, library.ID, f, dates, vector, modelID, config).
 				Select("k.id AS entry_id,i.attachment_path AS image_path,1-("+expression+") AS score,ROW_NUMBER() OVER (PARTITION BY k.id ORDER BY "+expression+",i.attachment_path) AS article_rank", pgvector.NewHalfVector(vector), pgvector.NewHalfVector(vector))
 			if err := s.db.WithContext(ctx).Table("(?) AS candidates", query).Where("article_rank <= 3").
 				Order("score DESC,image_path ASC").Limit(poolLimit(pool)).Scan(&lanes[3]).Error; err != nil {
@@ -106,15 +113,15 @@ func (s *searchService) retrieveEntryLanes(ctx context.Context, spaceID uint64, 
 			}
 		}
 	}
-	if kb.IsKeywordEnabled() {
+	if library.IsKeywordEnabled() {
 		var chunks, headers []entrySearchHit
-		query := s.entryChunkKeywordQuery(ctx, spaceID, kb.ID, f, dates).
+		query := s.entryChunkKeywordQuery(ctx, spaceID, library.ID, f, dates).
 			Select("k.id AS entry_id,c.id AS chunk_id,c.chunk_index,c.content,paradedb.score(c.seq_id) AS score,ROW_NUMBER() OVER (PARTITION BY k.id ORDER BY paradedb.score(c.seq_id) DESC,c.id) AS article_rank")
 		if err := s.db.WithContext(ctx).Table("(?) AS candidates", query).Where("article_rank <= 3").
 			Order("score DESC,chunk_id ASC").Limit(poolLimit(pool)).Scan(&chunks).Error; err != nil {
 			return nil, err
 		}
-		if err := s.entryHeaderKeywordQuery(ctx, spaceID, kb.ID, f, dates).
+		if err := s.entryHeaderKeywordQuery(ctx, spaceID, library.ID, f, dates).
 			Select("k.id AS entry_id,paradedb.score(k.search_seq_id) AS score").
 			Order("score DESC,k.id ASC").Limit(poolLimit(pool)).Scan(&headers).Error; err != nil {
 			return nil, err
@@ -161,8 +168,8 @@ func poolLimit(pool int) int {
 
 // Count query matches before publication filtering, ranking limits, and folding.
 // Imported documents use their recorded publication date; reports are not counted.
-func (s *searchService) countMissingArticleDates(ctx context.Context, spaceID uint64, kb *types.KnowledgeBase, f entrySearchFilters, vector []float32, modelID string, config *types.RetrievalConfig) (int64, error) {
-	lanes, err := s.retrieveEntryLanes(ctx, spaceID, kb, f, vector, modelID, config, 0, false)
+func (s *searchService) countMissingArticleDates(ctx context.Context, spaceID uint64, library *types.Library, f entrySearchFilters, vector []float32, modelID string, config *types.RetrievalConfig) (int64, error) {
+	lanes, err := s.retrieveEntryLanes(ctx, spaceID, library, f, vector, modelID, config, 0, false)
 	if err != nil {
 		return 0, err
 	}

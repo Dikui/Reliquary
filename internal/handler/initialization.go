@@ -424,7 +424,7 @@ func (h *InitializationHandler) updateTaskStatus(
 	}
 }
 
-// GetCurrentConfigByKB godoc
+// GetCurrentConfigByLibrary godoc
 // ModelTestRequest 统一的"测试连接"请求体。
 //
 // 三种模型（chat/embedding/rerank）的测试接口共享同一份结构，以便：
@@ -618,7 +618,9 @@ func (h *InitializationHandler) TestEmbeddingModel(c *gin.Context) {
 	}
 
 	model := h.buildTestModel(&req, types.ModelTypeEmbedding, types.ModelSourceRemote)
-	emb, err := embedding.NewEmbedder(embedding.ConfigFromModel(model), h.pooler, h.ollamaService)
+	cfg := embedding.ConfigFromModel(model)
+	cfg.Accounting = modelCallAccounting(h.modelService, model)
+	emb, err := embedding.NewEmbedder(cfg, h.pooler, h.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{"model": utils.SanitizeForLog(req.ModelName)})
 		c.JSON(http.StatusOK, gin.H{
@@ -682,7 +684,9 @@ func (h *InitializationHandler) checkChatModelConnection(
 		}
 		chatInstance, err = h.modelService.GetChatModel(ctx, model.ID)
 	} else {
-		chatInstance, err = chat.NewChat(chat.ConfigFromModel(model), h.ollamaService)
+		cfg := chat.ConfigFromModel(model)
+		cfg.Accounting = modelCallAccounting(h.modelService, model)
+		chatInstance, err = chat.NewChat(cfg, h.ollamaService)
 	}
 	if err != nil {
 		return false, fmt.Sprintf("创建聊天实例失败: %v", err)
@@ -719,7 +723,9 @@ func (h *InitializationHandler) checkChatModelConnection(
 func (h *InitializationHandler) checkRerankModelConnection(
 	ctx context.Context, model *types.Model,
 ) (bool, string) {
-	reranker, err := rerank.NewReranker(rerank.ConfigFromModel(model, decryptModelAppSecret(model.Parameters.AppSecret)))
+	cfg := rerank.ConfigFromModel(model, decryptModelAppSecret(model.Parameters.AppSecret))
+	cfg.Accounting = modelCallAccounting(h.modelService, model)
+	reranker, err := rerank.NewReranker(cfg)
 	if err != nil {
 		return false, fmt.Sprintf("创建Reranker失败: %v", err)
 	}
@@ -772,4 +778,13 @@ func (h *InitializationHandler) CheckRerankModel(c *gin.Context) {
 			"message":   message,
 		},
 	})
+}
+
+func modelCallAccounting(models interfaces.ModelService, model *types.Model) *types.ModelCallAccounting {
+	if provider, ok := models.(interface {
+		ModelCallAccounting(*types.Model) *types.ModelCallAccounting
+	}); ok {
+		return provider.ModelCallAccounting(model)
+	}
+	return nil
 }

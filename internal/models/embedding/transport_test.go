@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"reliquary/internal/modelcalls"
 	secutils "reliquary/internal/utils"
 )
 
@@ -18,11 +19,11 @@ func TestNewEmbeddingHTTPClient_ReusesTransport(t *testing.T) {
 	if first == second {
 		t.Fatal("expected distinct HTTP clients")
 	}
-	firstGuard, ok := first.Transport.(*secutils.SSRFValidatingRoundTripper)
+	firstGuard, ok := first.Transport.(*modelcalls.Transport).Inner.(*secutils.SSRFValidatingRoundTripper)
 	if !ok {
 		t.Fatalf("expected SSRF-validating transport, got %T", first.Transport)
 	}
-	secondGuard, ok := second.Transport.(*secutils.SSRFValidatingRoundTripper)
+	secondGuard, ok := second.Transport.(*modelcalls.Transport).Inner.(*secutils.SSRFValidatingRoundTripper)
 	if !ok {
 		t.Fatalf("expected SSRF-validating transport, got %T", second.Transport)
 	}

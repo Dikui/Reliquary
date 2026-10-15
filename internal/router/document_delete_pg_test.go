@@ -2,17 +2,17 @@ package router
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
@@ -21,8 +21,8 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			f := newMCPFixture(t)
 			f.seedProcessingModels(t)
 			router := ingestAuthHTTPRouter(f)
-			body := "# Personal source\n\nMy original measurements for " + protocol + "."
-			input := map[string]any{"items": []any{map[string]any{"kind": "mine", "content": body, "acquisition": "verbatim", "title": "Personal source", "file": map[string]any{"name": "original.md", "data": base64.StdEncoding.EncodeToString([]byte(body))}}}}
+			body := "# Personal source\n\nMy original measurements for " + protocol + ".\n\n![photo](https://example.org/photo.png)"
+			input := map[string]any{"items": []any{map[string]any{"library": "mine", "content": body, "acquisition": "verbatim", "title": "Personal source", "images": []any{map[string]any{"source_url": "https://example.org/photo.png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="}}}}}
 			encoded, err := json.Marshal(input)
 			require.NoError(t, err)
 			var result types.IngestBatchResult
@@ -58,7 +58,7 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			require.Positive(t, spans)
 			// Deletion must remain available after the indexing model is removed.
 			require.NoError(t, f.db.Model(&document).Update("embedding_model_id", "missing-embedding").Error)
-			article := f.seedArticle(t, "Article deletion must fail", types.ProcessingModeFull, "Article body")
+			article := f.seedArticle(t, "Article deletion must fail", "full", "Article body")
 			rejected := personalRequest(t, router, http.MethodDelete, "/api/v1/documents/"+article.ID, "", f.key, true)
 			require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
 			toolRejected, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "delete_document", Arguments: map[string]any{"document_id": article.ID}})
@@ -69,8 +69,11 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, toolMissing.IsError)
 			}
-			immutable := personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+id, `{"title":"Changed"}`, f.key, true)
-			require.Equal(t, http.StatusBadRequest, immutable.Code, immutable.Body.String())
+			updated := personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+id, `{"title":"Changed"}`, f.key, true)
+			require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+			var edited types.Entry
+			require.NoError(t, f.db.First(&edited, "id=?", id).Error)
+			require.Equal(t, "Changed", edited.Title)
 			switch protocol {
 			case "mcp":
 				var removed struct {
@@ -101,8 +104,8 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 				require.Zero(t, count, table)
 			}
 			var discards int64
-			require.NoError(t, f.db.Table("ingest_discards").Where("article_id=?", id).Count(&discards).Error)
-			require.Zero(t, discards)
+			require.NoError(t, f.db.Table("ingest_discards").Where("entry_id=?", id).Count(&discards).Error)
+			require.EqualValues(t, 1, discards)
 			var log types.OperationLog
 			require.NoError(t, f.db.Where("operation_type=? AND object_id=?", "delete_document", id).First(&log).Error)
 			require.Contains(t, string(log.Before), "mine")
@@ -111,8 +114,8 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 			var reimport struct{ Data types.IngestBatchResult }
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &reimport))
-			require.Equal(t, "accepted", reimport.Data.Items[0].Status)
-			require.NotEqual(t, id, reimport.Data.Items[0].EntryID)
+			require.Equal(t, "discarded", reimport.Data.Items[0].Status)
+			require.Equal(t, id, reimport.Data.Items[0].EntryID)
 		})
 	}
 }

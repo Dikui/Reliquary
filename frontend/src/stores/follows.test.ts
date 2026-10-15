@@ -18,7 +18,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
   return value.exports
 }
 const envelope = (data: unknown) => ({ success: true, data })
-const target = (type = 'entity', id = 'entity-a', name = 'Aurora') => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00.123456Z', recent_article_count: 3 })
+const target = (type = 'entity', id = 'entity-a', name = 'Aurora') => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00.123456Z', recent_entry_count: 3 })
 type PendingRequest = {
   config: InternalAxiosRequestConfig
   finished: boolean

@@ -23,15 +23,15 @@ func entityFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService) {
 	t.Helper()
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entities"}).Error)
-	kb := types.KnowledgeBase{ID: "entity-kb", SpaceID: 1, Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
-	require.NoError(t, db.Create(&kb).Error)
+	library := types.Library{ID: "entity-library", SpaceID: 1, SystemRole: "institutional", Template: types.TemplateExternalTimely, Directory: "institutional", SourceEvidenceRule: "link_required", Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
+	require.NoError(t, db.Create(&library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "entity-reviewer")
 	return db, ctx, NewEntityService(db, nil)
 }
 func entityArticle(t *testing.T, db *gorm.DB, id string) *types.Entry {
 	t.Helper()
-	article := &types.Entry{ID: id, SpaceID: 1, KnowledgeBaseID: "entity-kb", Title: id, Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	article := &types.Entry{ID: id, SpaceID: 1, LibraryID: "entity-library", Title: id, Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	require.NoError(t, db.Create(article).Error)
 	return article
 }
@@ -113,7 +113,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 		return `{"decision":"new","confidence":1}`
 	}}
 	input := []entityResolutionInput{{Mention: "MOONSHOT AI", Canonical: "Moonshot AI", EntityType: "company"}, {Mention: "月之暗面", Canonical: "Moonshot AI", EntityType: "company"}, {Mention: "MoonshotAI", Canonical: "MoonshotAI", EntityType: "company"}, {Mention: "Kimi K2.5", Canonical: "Kimi K2", EntityType: "product"}, {Mention: "Same Name", Canonical: "Same Name", EntityType: "company"}}
-	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-kb", input)
+	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", input)
 	require.NoError(t, err)
 	require.Equal(t, 3, model.count())
 	require.Equal(t, "moonshot", mentions[normalizeEntityName("MoonshotAI")].ID)
@@ -125,14 +125,14 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 	require.NoError(t, db.First(&alias, "normalized_alias=?", "moonshotai").Error)
 	require.Equal(t, "model", alias.ResolutionMethod)
 	before := model.count()
-	_, _, err = svc.resolveEntities(ctx, model, 1, "entity-kb", []entityResolutionInput{input[2]})
+	_, _, err = svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{input[2]})
 	require.NoError(t, err)
 	require.Equal(t, before, model.count())
 }
 
 func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
-	require.NoError(t, db.Model(&types.KnowledgeBase{}).Where("id='entity-kb'").Update("model_tiers", types.ModelTierConfig{Embedding: "entity-embedding"}).Error)
+	require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", "entity-embedding").Error)
 	records := []types.Entity{entityRecord("vector-good", "Unique unrelated canonical", "product"), entityRecord("vector-wrong-dimension", "Foreign vector dimension", "product"), entityRecord("vector-stale-model", "Obsolete model vector", "product")}
 	records[0].NameEmbedding = types.EntityNameEmbedding{1, 0}
 	records[0].EmbeddingModelID = "entity-embedding"
@@ -157,7 +157,7 @@ func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T)
 		require.Equal(t, "vector-good", payload.Candidates[0].ID)
 		return `{"decision":"match","entity_id":"vector-good","confidence":0.99}`
 	}}
-	_, mentions, err := svc.resolveEntities(ctx, judgment, 1, "entity-kb", []entityResolutionInput{{Mention: "中文不同名称", Canonical: "中文不同名称", EntityType: "product"}})
+	_, mentions, err := svc.resolveEntities(ctx, judgment, 1, "entity-library", []entityResolutionInput{{Mention: "中文不同名称", Canonical: "中文不同名称", EntityType: "product"}})
 	require.NoError(t, err)
 	require.Equal(t, "vector-good", mentions["中文不同名称"].ID)
 	require.Equal(t, 1, embedder.calls)
@@ -171,7 +171,7 @@ func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T)
 func TestEntityDifferentMentionsOfOneNewCanonicalEntityEachReceiveJudgment(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
-	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-kb", []entityResolutionInput{{Mention: "Alpha Inc", Canonical: "Alpha", EntityType: "company"}, {Mention: "A Corp", Canonical: "Alpha", EntityType: "company"}})
+	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{{Mention: "Alpha Inc", Canonical: "Alpha", EntityType: "company"}, {Mention: "A Corp", Canonical: "Alpha", EntityType: "company"}})
 	require.NoError(t, err)
 	require.Equal(t, 2, model.count())
 	require.Len(t, resolved, 1)

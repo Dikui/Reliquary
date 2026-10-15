@@ -12,7 +12,7 @@ func TestDecodeIngestBatchSeparatesEnvelopeAndItemErrors(t *testing.T) {
 		_, err := DecodeIngestBatch(strings.NewReader(raw))
 		require.Error(t, err, raw)
 	}
-	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"url":"https://example.org/valid","acquisition":"verbatim","content":"原文"},{"content":42},{"unknown":true},null,[]]}`))
+	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"url":"https://example.org/valid","library":"institutional","acquisition":"verbatim","content":"原文"},{"content":42},{"unknown":true},null,[]]}`))
 	require.NoError(t, err)
 	require.Len(t, request.Items, 5)
 	require.Equal(t, "原文", request.Items[0].Content)
@@ -32,32 +32,23 @@ func TestDecodeIngestBatchSeparatesEnvelopeAndItemErrors(t *testing.T) {
 	}
 }
 
-func TestDecodeIngestFileAcceptsAssetIDInlineAndObject(t *testing.T) {
-	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"url":"","file":"11111111-1111-4111-8111-111111111111"},{"url":"","file":"JVBERi0xLjQK"},{"url":"","file":{"data":"JVBERi0xLjQK","name":"original.pdf"}},{"url":"","file":{"data":"JVBERi0xLjQK","name":"original.pdf","unknown":true}}]}`))
-	require.NoError(t, err)
-	require.Equal(t, "11111111-1111-4111-8111-111111111111", request.Items[0].File.AssetID)
-	require.Equal(t, "JVBERi0xLjQK", request.Items[1].File.Data)
-	require.Equal(t, "original.pdf", request.Items[2].File.Name)
-	require.NotEmpty(t, request.Items[3].InputError)
-}
-
-func TestDecodeIngestRequiresURLFieldAndAllowsExplicitEmpty(t *testing.T) {
-	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"acquisition":"extracted","content":"原文"},{"url":"","acquisition":"extracted","content":"原文"},{"url":null,"acquisition":"extracted","content":"原文"}]}`))
+func TestDecodeIngestAllowsOptionalURL(t *testing.T) {
+	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"library":"institutional","acquisition":"extracted","content":"原文"},{"url":"","acquisition":"extracted","content":"原文"},{"url":null,"acquisition":"extracted","content":"原文"}]}`))
 	require.NoError(t, err)
 	require.Len(t, request.Items, 3)
-	require.Contains(t, request.Items[0].InputError, "url 必填")
+	require.Empty(t, request.Items[0].InputError)
 	require.Empty(t, request.Items[1].InputError)
 	require.Empty(t, request.Items[1].URL)
-	require.Contains(t, request.Items[2].InputError, "url 必须是字符串")
+	require.Empty(t, request.Items[2].InputError)
 }
 
-func TestDecodeIngestMineAllowsOmittedURLAndDocumentSupplementID(t *testing.T) {
-	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"kind":"mine","acquisition":"verbatim","content":"本人原文"},{"kind":"mine","document_id":"11111111-1111-4111-8111-111111111111","url":"","acquisition":"verbatim"},{"kind":"mine","url":null,"acquisition":"verbatim"}]}`))
+func TestDecodeIngestMineAllowsOmittedURLAndEntrySupplementID(t *testing.T) {
+	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"library":"mine","acquisition":"verbatim","content":"本人原文"},{"library":"mine","entry_id":"11111111-1111-4111-8111-111111111111","url":"","acquisition":"verbatim"},{"library":"mine","url":null,"acquisition":"verbatim"}]}`))
 	require.NoError(t, err)
 	require.Empty(t, request.Items[0].InputError)
-	require.Equal(t, "mine", request.Items[0].Kind)
+	require.Equal(t, "mine", request.Items[0].Library)
 	require.Empty(t, request.Items[0].URL)
 	require.Empty(t, request.Items[1].InputError)
-	require.Equal(t, "11111111-1111-4111-8111-111111111111", request.Items[1].DocumentID)
-	require.Contains(t, request.Items[2].InputError, "url 必须是字符串")
+	require.Equal(t, "11111111-1111-4111-8111-111111111111", request.Items[1].EntryID)
+	require.Empty(t, request.Items[2].InputError)
 }

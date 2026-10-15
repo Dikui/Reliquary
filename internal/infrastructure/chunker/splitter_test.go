@@ -134,7 +134,7 @@ func TestSplitText_ProtectedPattern_ChineseContext(t *testing.T) {
 func TestSplitText_SimulateMergeSlicing(t *testing.T) {
 	// Simulate what merge.go:104-106 does to ensure it won't panic.
 	// This is the exact pattern that caused the production crash.
-	line := "这是第一段内容用于模拟知识库问答的文本"
+	line := "这是第一段内容用于模拟库问答的文本"
 	text := line + "\n\n" + line + "\n\n" + line
 
 	cfg := SplitterConfig{ChunkSize: 25, ChunkOverlap: 5, Separators: []string{"\n\n", "\n"}}

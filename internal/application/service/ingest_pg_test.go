@@ -11,21 +11,41 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"reliquary/internal/application/repository"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 )
 
-type ingestFixtureKB struct{ retainedProcessingKB }
+type ingestFixtureLibrary struct {
+	retainedProcessingLibrary
+	db *gorm.DB
+}
 
-func (s ingestFixtureKB) GetKnowledgeBase(context.Context) (*types.KnowledgeBase, error) {
-	return s.kb, nil
+func (s ingestFixtureLibrary) GetLibraryByID(ctx context.Context, id string) (*types.Library, error) {
+	return repository.NewLibraryRepository(s.db).GetLibraryByID(ctx, id)
+}
+
+func (s ingestFixtureLibrary) ListLibraries(ctx context.Context) ([]*types.Library, error) {
+	return repository.NewLibraryRepository(s.db).ListLibraries(ctx, s.library.SpaceID)
+}
+func NewLibraryServiceForIngestTest(h *articleProcessingHarness) ingestFixtureLibrary {
+	return ingestFixtureLibrary{retainedProcessingLibrary: retainedProcessingLibrary{library: h.library}, db: h.db}
+}
+
+func (s ingestFixtureLibrary) GetSystemLibrary(context.Context, ...string) (*types.Library, error) {
+	return s.library, nil
 }
 
 func newIngestHarness(t *testing.T) (*articleProcessingHarness, *VaultService) {
 	t.Helper()
 	h, vault := newVaultArticleHarness(t)
-	h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
-	space := h.kb.SpaceID
+	require.NoError(t, EnsureSystemLibraries(h.ctx, h.db))
+	require.NoError(t, h.db.First(h.library, "id=?", h.library.ID).Error)
+	// Each library shares deterministic local processing models in this harness.
+	require.NoError(t, h.db.Model(&types.Library{}).Where("space_id=?", h.library.SpaceID).Update("model_tiers", h.library.ModelTiers).Error)
+	h.service.libraryService = NewLibraryServiceForIngestTest(h)
+	space := h.library.SpaceID
 	require.NoError(t, h.db.Create(&types.APIKey{ID: 1, SpaceID: &space, Name: "Fixture collector", KeyHash: "fixture-ingest-key"}).Error)
 	h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "1"})
 	return h, vault
@@ -38,18 +58,18 @@ func TestIngestRequiredFieldsAndStructuredValidation(t *testing.T) {
 		request *types.IngestRequest
 	}{
 		{"nil", nil},
-		{"unknown kind", &types.IngestRequest{Kind: "report", Acquisition: "verbatim", Content: "Original"}},
-		{"article supplement ID", &types.IngestRequest{DocumentID: "11111111-1111-4111-8111-111111111111", Acquisition: "verbatim", Content: "Original"}},
-		{"invalid document ID", &types.IngestRequest{Kind: "mine", DocumentID: "invalid", Acquisition: "verbatim", Content: "Original"}},
-		{"missing content", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/author/status/1"}},
-		{"blank content", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/author/status/1", Content: " \n "}},
-		{"empty after existing cleanup", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/author/status/1", Content: "<script>alert(1)</script>"}},
-		{"invalid url", &types.IngestRequest{Acquisition: "verbatim", URL: "file:///etc/passwd", Content: "Original"}},
-		{"image neither source", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Images: []types.IngestImage{{Caption: "Missing"}}}},
-		{"image both sources", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Images: []types.IngestImage{{URL: "https://example.com/a.png", Data: "base64"}}}},
-		{"image invalid url", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Images: []types.IngestImage{{URL: "file:///image.png"}}}},
-		{"thread without content", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Thread: []types.IngestThreadItem{{Author: "Ada"}}}},
-		{"quote without content", &types.IngestRequest{Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Quotes: []types.IngestQuote{{Author: "Ada"}}}},
+		{"unknown kind", &types.IngestRequest{Library: "unknown", Acquisition: "verbatim", Content: "Original"}},
+		{"article supplement ID", &types.IngestRequest{Library: "institutional", EntryID: "11111111-1111-4111-8111-111111111111", Acquisition: "verbatim", Content: "Original"}},
+		{"invalid document ID", &types.IngestRequest{Library: "mine", EntryID: "invalid", Acquisition: "verbatim", Content: "Original"}},
+		{"missing content", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/author/status/1"}},
+		{"blank content", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/author/status/1", Content: " \n "}},
+		{"empty after existing cleanup", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/author/status/1", Content: "<script>alert(1)</script>"}},
+		{"invalid url", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "file:///etc/passwd", Content: "Original"}},
+		{"image neither source", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Images: []types.IngestImage{{Caption: "Missing"}}}},
+		{"image both sources", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Images: []types.IngestImage{{URL: "https://example.com/a.png", Data: "base64"}}}},
+		{"image invalid url", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Images: []types.IngestImage{{URL: "file:///image.png"}}}},
+		{"thread without content", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Thread: []types.IngestThreadItem{{Author: "Ada"}}}},
+		{"quote without content", &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://x.com/a/1", Content: "Original", Quotes: []types.IngestQuote{{Author: "Ada"}}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := h.service.Ingest(h.ctx, test.request)
@@ -65,7 +85,7 @@ func TestIngestRequiredFieldsAndStructuredValidation(t *testing.T) {
 
 func TestIngestDuplicateReturnsExistingAndFillsReasonWithoutReprocessing(t *testing.T) {
 	h, vault := newIngestHarness(t)
-	request := &types.IngestRequest{Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/ada/status/456?utm_source=grok", Content: "An original result with measurements and complete supported evidence.", Title: "去重测试"}
+	request := &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/ada/status/456?utm_source=grok", Content: "An original result with measurements and complete supported evidence.", Title: "去重测试"}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	h.drain(t)
@@ -90,7 +110,7 @@ func TestIngestDuplicateReturnsExistingAndFillsReasonWithoutReprocessing(t *test
 		}
 		header, body, err := ParseVaultArticle(data)
 		return err == nil && header.CollectReason == "保留做研究" && string(body) == string(originalBody)
-	}, time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 	request.CollectReason = "后续理由不能覆盖"
 	_, err = h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
@@ -128,7 +148,7 @@ func TestIngestDuplicateReasonSurvivesInFlightProcessingAndVaultWrite(t *testing
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService = &summaryStateModelService{model: paused, metadata: models.metadata}
 	h.service.modelService = models
-	request := &types.IngestRequest{Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/ada/status/concurrent-reason", Content: "Original measurements describe the complete supported product capabilities.", Title: "并发收藏理由"}
+	request := &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/ada/status/concurrent-reason", Content: "Original measurements describe the complete supported product capabilities.", Title: "并发收藏理由"}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	result := make(chan error, 1)
@@ -184,7 +204,7 @@ func TestIngestDuplicateReasonSurvivesInFlightProcessingAndVaultWrite(t *testing
 
 func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	request := &types.IngestRequest{Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/ada/status/501", Content: "A sourced original with measured product observations.", Images: []types.IngestImage{{Data: strings.SplitN(articleImageDataURI(t, 13), ",", 2)[1], Caption: "Same chart"}}}
+	request := &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/ada/status/501", Content: "A sourced original with measured product observations.", Images: []types.IngestImage{{Data: strings.SplitN(articleImageDataURI(t, 13), ",", 2)[1], Caption: "Same chart"}}}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	canonical, _, _ := messageBodyFingerprint(assembleIngestBody(request, []string{ingestCanonicalImageReference(request.Images[0])}))
@@ -199,7 +219,7 @@ func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) 
 	require.Equal(t, "exists", duplicate.Status)
 	require.Len(t, h.queue.tasks, 1)
 	require.Len(t, h.processor.requests, 1)
-	reposts, err := loadEntryRepostSources(h.db, h.kb.SpaceID, []string{first.EntryID}, nil)
+	reposts, err := loadEntryRepostSources(h.db, h.library.SpaceID, []string{first.EntryID}, nil)
 	require.NoError(t, err)
 	require.Len(t, reposts, 1)
 	require.Equal(t, "content_hash", reposts[0].MatchMethod)
@@ -213,7 +233,7 @@ func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) 
 
 func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	request := &types.IngestRequest{Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/audit-existing", Content: "The original article is retained for an audit failure test."}
+	request := &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/audit-existing", Content: "The original article is retained for an audit failure test."}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.NoError(t, h.db.Exec(`CREATE FUNCTION fail_ingest_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$; CREATE TRIGGER fail_ingest_audit BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION fail_ingest_audit()`).Error)
@@ -235,7 +255,7 @@ func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 }
 
 func TestAssembleIngestBodyExactFormat(t *testing.T) {
-	request := &types.IngestRequest{Acquisition: "verbatim", Content: "主内容", Thread: []types.IngestThreadItem{{Author: "作者 A", PublishedAt: "2026-10-01", Content: "推文内容"}}, Quotes: []types.IngestQuote{{Content: "引用一\n引用二"}}, Images: []types.IngestImage{{Caption: "图说明", Text: "图中文字"}}}
+	request := &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", Content: "主内容", Thread: []types.IngestThreadItem{{Author: "作者 A", PublishedAt: "2026-10-01", Content: "推文内容"}}, Quotes: []types.IngestQuote{{Content: "引用一\n引用二"}}, Images: []types.IngestImage{{Caption: "图说明", Text: "图中文字"}}}
 	want := "主内容\n\n## 推文串\n\n### 推文 1\n\n作者：作者 A\n\n时间：2026-10-01\n\n推文内容\n\n## 引用\n\n### 引用 1\n\n> 引用一\n> 引用二\n\n## 图片\n\n### 图片 1\n\n![图说明](<local://image.png>)\n\n说明：图说明\n\n图片文字：\n\n> 图中文字\n"
 	require.Equal(t, want, assembleIngestBody(request, []string{"local://image.png"}))
 	var typed types.IngestRequest

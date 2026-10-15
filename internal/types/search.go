@@ -9,23 +9,23 @@ import (
 type SearchTargetType string
 
 const (
-	// SearchTargetTypeKnowledgeBase - search entire knowledge base
-	SearchTargetTypeKnowledgeBase SearchTargetType = "knowledge_base"
-	// SearchTargetTypeEntry - search specific entry files within a knowledge base
+	// SearchTargetTypeLibrary - search entire library
+	SearchTargetTypeLibrary SearchTargetType = "library"
+	// SearchTargetTypeEntry - search specific entry files within a library
 	SearchTargetTypeEntry SearchTargetType = "knowledge"
 )
 
 // SearchTarget represents a unified search target
-// Either search an entire knowledge base, or specific entry files within a knowledge base
+// Either search an entire library, or specific entry files within a library
 type SearchTarget struct {
 	// Type of search target
 	Type SearchTargetType `json:"type"`
-	// KnowledgeBaseID is the ID of the knowledge base to search
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	// SpaceID is the space ID that owns this knowledge base
-	// Required for cross-space shared KB queries
+	// LibraryID is the ID of the library to search
+	LibraryID string `json:"library_id"`
+	// SpaceID is the space ID that owns this library
+	// Required for cross-space shared Library queries
 	SpaceID uint64 `json:"space_id"`
-	// EntryIDs is the list of specific entry IDs to search within the knowledge base
+	// EntryIDs is the list of specific entry IDs to search within the library
 	// Only used when Type is SearchTargetTypeEntry
 	EntryIDs []string `json:"entry_ids,omitempty"`
 	// DisableRecallThresholds keeps recall broad inside an already constrained,
@@ -60,10 +60,10 @@ func (st SearchTargets) HasRecallThresholdOverride() bool {
 // entry retrieval scope.
 func HasEntryRetrievalScope(
 	searchTargets SearchTargets,
-	knowledgeBaseIDs []string,
+	libraryIDs []string,
 	entryIDs []string,
 ) bool {
-	for _, id := range knowledgeBaseIDs {
+	for _, id := range libraryIDs {
 		if id != "" {
 			return true
 		}
@@ -74,58 +74,58 @@ func HasEntryRetrievalScope(
 		}
 	}
 	for _, target := range searchTargets {
-		if target == nil || target.KnowledgeBaseID == "" {
+		if target == nil || target.LibraryID == "" {
 			continue
 		}
-		if target.Type == SearchTargetTypeKnowledgeBase || len(target.EntryIDs) > 0 {
+		if target.Type == SearchTargetTypeLibrary || len(target.EntryIDs) > 0 {
 			return true
 		}
 	}
 	return false
 }
 
-// GetAllKnowledgeBaseIDs returns all unique knowledge base IDs from the search targets
-func (st SearchTargets) GetAllKnowledgeBaseIDs() []string {
+// GetAllLibraryIDs returns all unique library IDs from the search targets
+func (st SearchTargets) GetAllLibraryIDs() []string {
 	seen := make(map[string]bool)
 	var result []string
 	for _, t := range st {
-		if t == nil || t.KnowledgeBaseID == "" {
+		if t == nil || t.LibraryID == "" {
 			continue
 		}
-		if !seen[t.KnowledgeBaseID] {
-			seen[t.KnowledgeBaseID] = true
-			result = append(result, t.KnowledgeBaseID)
+		if !seen[t.LibraryID] {
+			seen[t.LibraryID] = true
+			result = append(result, t.LibraryID)
 		}
 	}
 	return result
 }
 
-// GetKBSpaceMap returns a map from knowledge base ID to space ID
-func (st SearchTargets) GetKBSpaceMap() map[string]uint64 {
+// GetLibrarySpaceMap returns a map from library ID to space ID
+func (st SearchTargets) GetLibrarySpaceMap() map[string]uint64 {
 	result := make(map[string]uint64)
 	for _, t := range st {
-		if t != nil && t.KnowledgeBaseID != "" {
-			result[t.KnowledgeBaseID] = t.SpaceID
+		if t != nil && t.LibraryID != "" {
+			result[t.LibraryID] = t.SpaceID
 		}
 	}
 	return result
 }
 
-// GetSpaceIDForKB returns the space ID for a given knowledge base ID
+// GetSpaceIDForLibrary returns the space ID for a given library ID
 // Returns 0 if not found
-func (st SearchTargets) GetSpaceIDForKB(kbID string) uint64 {
+func (st SearchTargets) GetSpaceIDForLibrary(libraryID string) uint64 {
 	for _, t := range st {
-		if t != nil && t.KnowledgeBaseID == kbID {
+		if t != nil && t.LibraryID == libraryID {
 			return t.SpaceID
 		}
 	}
 	return 0
 }
 
-// ContainsKB checks if the search targets contain a given knowledge base ID
-func (st SearchTargets) ContainsKB(kbID string) bool {
+// ContainsLibrary checks if the search targets contain a given library ID
+func (st SearchTargets) ContainsLibrary(libraryID string) bool {
 	for _, t := range st {
-		if t != nil && t.KnowledgeBaseID == kbID {
+		if t != nil && t.LibraryID == libraryID {
 			return true
 		}
 	}
@@ -189,8 +189,8 @@ type SearchResult struct {
 	// EntryCustomMetadata is user-authored context safe to expose to models.
 	EntryCustomMetadata string `json:"entry_custom_metadata,omitempty"`
 
-	// KnowledgeBaseID is the ID of the knowledge base this result belongs to
-	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"`
+	// LibraryID is the ID of the library this result belongs to
+	LibraryID string `json:"library_id,omitempty"`
 
 	// ContentRewritten reports that the merge pipeline replaced Content
 	// (parent or neighbor expansion) after retrieval, so StartAt/EndAt no

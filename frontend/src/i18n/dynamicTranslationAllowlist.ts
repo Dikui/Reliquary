@@ -3,6 +3,21 @@ import type { TranslationCall } from './translationCallAudit.ts'
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
+    file: 'views/library/components/PendingReviews.vue',
+    expressions: ['`ingestStatus.acquisition.${item.acquisition}`'],
+    reason: 'Acquisition values are the three ingest enums already audited in both locale bundles.',
+  },
+  {
+    file: 'views/library/components/EntityRelations.vue',
+    expressions: ['`ikb18.${relation.direction}`'],
+    reason: 'Relation direction has two HTTP enum values covered by ikb18 component tests.',
+  },
+  {
+    file: 'views/settings/LibraryCatalogSettings.vue',
+    expressions: ['`ikb18.${draft.template}`', '`ikb18.${draft.template}Hint`', '`ikb18.${value}`', '`ikb18.${value}Hint`', '`ikb18.${newLibrary.template}Hint`'],
+    reason: 'Four immutable library template enums and their descriptions are tested in both locales.',
+  },
+  {
     "file": "api/auth.ts",
     "expressions": [
       "key"
@@ -40,7 +55,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/DocContent.vue",
     "expressions": [
-      "`knowledgeBase.sourceKinds.${props.details.source_kind}`"
+      "`library.sourceKinds.${props.details.source_kind}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -53,16 +68,9 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "components/EntryArticleJudgments.vue",
-    "expressions": [
-      "`knowledgeBase.contentTypes.${value}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
     "file": "components/EntryClassification.vue",
     "expressions": [
-      "`knowledgeBase.contentTypes.${type}`"
+      "`library.contentTypes.${type}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -79,7 +87,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Backend stage, status and error enums are covered by localeKeyAudit; detail tabs use a finite key set."
   },
   {
-    "file": "components/KBInfoPopover.vue",
+    "file": "components/LibraryInfoPopover.vue",
     "expressions": [
       "path"
     ],
@@ -130,8 +138,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/ReviewActions.vue",
     "expressions": [
-      "`knowledgeBase.contentTypes.${CONTENT_TYPES.includes(value as ContentType) ? value : 'unclassified'}`",
-      "`knowledgeBase.contentTypes.${value}`",
       "`knowledgeReview.actions.${confirmation.value}`",
       "`knowledgeReview.confirmations.${confirmation.value}.description`",
       "`knowledgeReview.confirmations.${confirmation.value}.title`"
@@ -149,7 +155,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/SearchFilters.vue",
     "expressions": [
-      "`knowledgeBase.contentTypes.${value}`",
+      "`library.contentTypes.${value}`",
       "`knowledgeSearch.sources.${value}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
@@ -192,22 +198,22 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Shared helpers receive caller keys or map server errors to existing localized fallbacks."
   },
   {
-    "file": "views/knowledge-base/FollowFeed.vue",
+    "file": "views/library/FollowFeed.vue",
     "expressions": [
       "`follows.targetTypes.${target.target_type}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/KnowledgeBase.vue",
+    "file": "views/library/Library.vue",
     "expressions": [
-      "`knowledgeBase.contentTypes.${value}`",
+      "`library.contentTypes.${value}`",
       "`knowledgeSearch.sources.${value}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/OperationLogs.vue",
+    "file": "views/library/OperationLogs.vue",
     "expressions": [
       "`operationLogs.types.${item.operation_type}`",
       "`operationLogs.types.${value}`"
@@ -215,28 +221,28 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/TopicManagement.vue",
+    "file": "views/library/TopicManagement.vue",
     "expressions": [
       "`topicManagement.status.${progress[topic.id]!.status}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/components/DocumentCardView.vue",
+    "file": "views/library/components/DocumentCardView.vue",
     "expressions": [
-      "`knowledgeBase.sourceKinds.${item.source_kind}`"
+      "`library.sourceKinds.${item.source_kind}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/components/DocumentListView.vue",
+    "file": "views/library/components/DocumentListView.vue",
     "expressions": [
-      "`knowledgeBase.sourceKinds.${item.source_kind}`"
+      "`library.sourceKinds.${item.source_kind}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/components/EntryWorkbench.vue",
+    "file": "views/library/components/EntryWorkbench.vue",
     "expressions": [
       "`knowledgeWorkbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`",
       "`knowledgeWorkbench.nameEmbeddings.status.${status}`",
@@ -245,7 +251,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/components/MergeSuggestions.vue",
+    "file": "views/library/components/MergeSuggestions.vue",
     "expressions": [
       "`mergeSuggestions.empty.${status}`",
       "`mergeSuggestions.feedback.${action}`",
@@ -255,32 +261,17 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/components/PendingReviews.vue",
-    "expressions": [
-      "`ingestStatus.acquisition.${item.acquisition}`",
-      "`knowledgeReview.${kind}Hint`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/knowledge-base/components/RepostSources.vue",
+    "file": "views/library/components/RepostSources.vue",
     "expressions": [
       "`knowledgeWorkbench.sourceTime.matchMethods.${known ? method : 'other'}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/knowledge-base/settings/KBChunkingDebug.vue",
+    "file": "views/library/settings/LibraryChunkingDebug.vue",
     "expressions": [
       "`knowledgeEditor.chunking.debug.${p.labelKey}`",
       "`knowledgeEditor.chunking.strategies.${normalizeTier(tier)}.label`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/knowledge-base/settings/KBParserSettings.vue",
-    "expressions": [
-      "key"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -293,9 +284,9 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/settings/KnowledgeBaseSettings.vue",
+    "file": "views/settings/LibrarySettings.vue",
     "expressions": [
-      "tab === 'parser' ? 'settings.parserEngine' : `knowledgeEditor.sidebar.${tab}`"
+      "`knowledgeEditor.sidebar.${tab}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -304,13 +295,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "expressions": [
       "key",
       "modelUsageBindingI18nKey(binding)"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/settings/ParserEngineSettings.vue",
-    "expressions": [
-      "key"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

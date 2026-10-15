@@ -12,14 +12,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pgvector/pgvector-go"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+
+	"github.com/pgvector/pgvector-go"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // articleImagePaths uses the saved body rather than parser output. Only images
@@ -27,7 +28,7 @@ import (
 // Reports keep their separate indexing path.
 func articleImagePaths(article *types.Entry) []string {
 	paths := []string{}
-	if !isIngestArticle(article) || article.ProcessingMode != types.ProcessingModeFull || article.VaultPath == "" {
+	if !isIngestArticle(article) || article.VaultPath == "" {
 		return paths
 	}
 	add := func(reference string) {
@@ -51,16 +52,19 @@ func articleImagePaths(article *types.Entry) []string {
 	return paths
 }
 
-func indexArticleImages(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, vault *VaultService, article *types.Entry) error {
+func indexArticleImages(ctx context.Context, db *gorm.DB, models interfaces.ModelService, library *types.Library, vault *VaultService, article *types.Entry) error {
 	if db == nil || article == nil {
+		return nil
+	}
+	if !imageVectorsEnabled(ctx, db, article.SpaceID) {
 		return nil
 	}
 	paths := articleImagePaths(article)
 	query := db.WithContext(ctx).Table("image_embeddings").Where("space_id=? AND entry_id=?", article.SpaceID, article.ID)
-	if len(paths) == 0 || kb == nil || !kb.IsVectorEnabled() || vault == nil {
+	if len(paths) == 0 || library == nil || !library.IsVectorEnabled() || vault == nil {
 		return query.Delete(nil).Error
 	}
-	embedder, err := GetTierEmbeddingModel(ctx, db, models, kb)
+	embedder, err := GetTierEmbeddingModel(ctx, db, models, library)
 	if err != nil {
 		return fmt.Errorf("get image embedding model: %w", err)
 	}
@@ -90,6 +94,7 @@ func saveArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *VaultSer
 // prepareArticleImageEmbedding performs file reads and the model call before
 // a rebuild checkpoint transaction acquires its progress and profile locks.
 func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *VaultService, embedder embedding.Embedder, article *types.Entry, attachmentPath string, force bool) (func(*gorm.DB) error, error) {
+	ctx = types.WithModelCallEntry(ctx, article.ID)
 	source := *article
 	article = &source
 	images, ok := embedder.(embedding.ImageEmbedder)
@@ -165,11 +170,11 @@ func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *Vault
 			return fmt.Errorf("article image bytes changed during embedding")
 		}
 		return tx.WithContext(ctx).Exec(`INSERT INTO image_embeddings
-		(space_id,entry_id,knowledge_base_id,attachment_path,model_id,dimension,embedding,content_hash)
+		(space_id,entry_id,library_id,attachment_path,model_id,dimension,embedding,content_hash)
 		VALUES (?,?,?,?,?,?,?::halfvec,?)
 		ON CONFLICT (entry_id,attachment_path) DO UPDATE SET
 		model_id=EXCLUDED.model_id,dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,
 		content_hash=EXCLUDED.content_hash,updated_at=NOW()`, article.SpaceID, article.ID,
-			article.KnowledgeBaseID, attachmentPath, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
+			article.LibraryID, attachmentPath, embedder.GetModelID(), len(vector), pgvector.NewHalfVector(vector), hash).Error
 	}, nil
 }

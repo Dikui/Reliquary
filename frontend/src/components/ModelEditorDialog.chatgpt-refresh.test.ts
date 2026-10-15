@@ -10,7 +10,7 @@ import zhCN from '../i18n/locales/zh-CN'
 import { DEFAULT_MODEL_CONTEXT_WINDOW } from '../utils/contextWindow'
 import { defaultThinkingControl, resolveThinkingControl } from '../utils/thinkingControl'
 import { shouldShowOllamaUnavailableTip } from './modelEditorSourceState'
-import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../views/knowledge-base/componentTestHarness'
+import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../views/library/componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }

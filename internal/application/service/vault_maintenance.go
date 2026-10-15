@@ -3,13 +3,14 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/repository"
 	"strings"
 
 	"reliquary/internal/maintenance"
@@ -27,8 +28,14 @@ func (v *VaultService) StartReplica() error {
 // Flush is the common barrier for shutdown, backup and migration. The caller
 // first pauses intake and stops writes; this then persists all database headers.
 func (v *VaultService) Flush(ctx context.Context) error {
+	if !v.db.Migrator().HasColumn("libraries", "directory") {
+		if v.replica == nil {
+			return nil
+		}
+		return v.replica.Flush(ctx)
+	}
 	var ids []string
-	if err := v.db.WithContext(ctx).Model(&types.Entry{}).Where("source_kind IN ('article','mine') AND vault_path<>'' AND parse_status<>'deleting'").Pluck("id", &ids).Error; err != nil {
+	if err := v.db.WithContext(ctx).Model(&types.Entry{}).Where("source_kind IN ('article','mine','report') AND vault_path<>'' AND parse_status<>'deleting'").Pluck("id", &ids).Error; err != nil {
 		return err
 	}
 	for _, id := range ids {
@@ -44,6 +51,15 @@ func (v *VaultService) Flush(ctx context.Context) error {
 
 func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Verification, error) {
 	result := &maintenance.Verification{OK: true, Differences: []string{}, Repaired: []string{}}
+	legacy := !v.db.Migrator().HasColumn("libraries", "directory")
+	if legacy && repair {
+		return result, fmt.Errorf("legacy vault repair requires its matching release")
+	}
+	// Historical offline verification must not assume migration 10 has run.
+	embeddingModelSQL := "(SELECT s.embedding_model_id FROM spaces s WHERE s.id=b.space_id)"
+	if !v.db.Migrator().HasColumn("spaces", "embedding_model_id") {
+		embeddingModelSQL = "COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)"
+	}
 	var pendingImages int64
 	var articles []types.Entry
 	if err := v.db.WithContext(ctx).Unscoped().Where("vault_path<>'' AND deleted_at IS NULL").Find(&articles).Error; err != nil {
@@ -58,7 +74,14 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			continue
 		}
 		actual, readErr := os.ReadFile(path)
-		if article.SourceKind != "article" && article.SourceKind != "mine" {
+		if legacy {
+			if readErr != nil {
+				result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
+			}
+			// The original replica's checksums and SQL rows are verified below.
+			continue
+		}
+		if article.SourceKind != "article" && article.SourceKind != "mine" && article.SourceKind != "report" {
 			if readErr != nil {
 				result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
 			} else if article.FileHash != "" && vaultContentHash(string(actual)) != article.FileHash {
@@ -71,9 +94,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			return result, err
 		}
 		body := []byte(article.VaultBody)
-		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.SourceKind != "mine" {
-			body = nil
-		}
+
 		expected := append(RenderVaultArticleHeader(header), body...)
 		if readErr != nil || !bytes.Equal(actual, expected) {
 			if repair {
@@ -85,20 +106,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 				result.Differences = append(result.Differences, article.VaultPath+": article file differs from database")
 			}
 		}
-		if article.VaultOriginalPath != "" {
-			path, err := vaultAbsolute(v.root, article.VaultOriginalPath)
-			if err != nil {
-				return result, err
-			}
-			if original, err := os.ReadFile(path); err != nil {
-				result.Differences = append(result.Differences, article.VaultOriginalPath+": "+err.Error())
-			} else if article.Type == "file" && len(article.FileHash) == 32 && fmt.Sprintf("%x", md5.Sum(original)) != article.FileHash {
-				result.Differences = append(result.Differences, article.VaultOriginalPath+": original attachment hash differs")
-			}
-		}
-		if article.SourceKind == "mine" {
-			v.verifyPersonalAttachments(&article, result)
-		}
+
 		for _, reference := range articleImagePaths(&article) {
 			reader, err := v.ReadImage(&article, reference)
 			if err != nil {
@@ -116,7 +124,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 				result.Differences = append(result.Differences, article.VaultPath+": image content hash differs: "+reference)
 			}
 			var expected string
-			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("entry_id=? AND attachment_path=? AND model_id=(SELECT COALESCE(NULLIF(model_tiers->>'embedding',''),embedding_model_id) FROM knowledge_bases WHERE id=?)", article.ID, reference, article.KnowledgeBaseID).Scan(&expected).Error; err != nil {
+			if err := v.db.WithContext(ctx).Table("image_embeddings").Select("content_hash").Where("entry_id=? AND attachment_path=? AND model_id=(SELECT "+embeddingModelSQL+" FROM libraries b WHERE b.id=?)", article.ID, reference, article.LibraryID).Scan(&expected).Error; err != nil {
 				return result, err
 			}
 			if expected != "" && expected != hash {
@@ -124,7 +132,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			}
 			if expected == "" {
 				var supports bool
-				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM knowledge_bases b JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id) WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.KnowledgeBaseID).Scan(&supports).Error; err != nil {
+				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM libraries b JOIN models m ON m.id=`+embeddingModelSQL+` WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.LibraryID).Scan(&supports).Error; err != nil {
 					return result, err
 				}
 				if supports {
@@ -178,10 +186,10 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		result.PendingVectors["images"] = pendingImages
 	}
 	for key, query := range map[string]string{
-		"articles": `SELECT count(*) FROM entries k JOIN knowledge_bases b ON b.id=k.knowledge_base_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
-		"chunks":   `SELECT count(*) FROM chunks c JOIN knowledge_bases b ON b.id=c.knowledge_base_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id))`,
+		"articles": `SELECT count(*) FROM entries k JOIN libraries b ON b.id=k.library_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
+		"chunks":   `SELECT count(*) FROM chunks c JOIN libraries b ON b.id=c.library_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
 		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
- SELECT 1 FROM knowledge_bases b LEFT JOIN models m ON m.id=COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)
+ SELECT 1 FROM libraries b LEFT JOIN models m ON m.id=EMBEDDING_MODEL_SQL
  WHERE b.space_id=e.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
  e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
  OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
@@ -189,7 +197,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
  AND e.embedding_dimension<>COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0))))`,
 	} {
 		var count int64
-		if err := v.db.WithContext(ctx).Raw(query).Scan(&count).Error; err != nil {
+		if err := v.db.WithContext(ctx).Raw(strings.ReplaceAll(query, "EMBEDDING_MODEL_SQL", embeddingModelSQL)).Scan(&count).Error; err != nil {
 			return result, err
 		}
 		if count > 0 {
@@ -199,46 +207,17 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 	return result, nil
 }
 
-func (v *VaultService) verifyPersonalAttachments(document *types.Entry, result *maintenance.Verification) {
-	seen := map[string]bool{}
-	for _, attachment := range document.IngestAttachmentRecords() {
-		if seen[attachment.Path] {
-			continue
-		}
-		seen[attachment.Path] = true
-		if !isArticleAttachmentReference(document.ID, document.VaultPath, attachment.Path) {
-			result.Differences = append(result.Differences, document.VaultPath+": invalid personal attachment: "+attachment.Path)
-			continue
-		}
-		relative := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(filepath.FromSlash(document.VaultPath)), filepath.FromSlash(attachment.Path))))
-		path, err := vaultAbsolute(v.root, relative)
-		if err != nil {
-			result.Differences = append(result.Differences, relative+": "+err.Error())
-			continue
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			result.Differences = append(result.Differences, relative+": "+err.Error())
-			continue
-		}
-		if !info.Mode().IsRegular() {
-			result.Differences = append(result.Differences, relative+": personal attachment must be a regular file")
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			result.Differences = append(result.Differences, relative+": "+err.Error())
-			continue
-		}
-		if attachment.Size > 0 && int64(len(data)) != attachment.Size {
-			result.Differences = append(result.Differences, relative+": personal attachment size differs")
-		}
-	}
-}
-
 func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuildResult, error) {
 	result := &VaultRebuildResult{Skipped: []VaultRebuildSkippedFile{}}
-	_, err := maintenance.Import(ctx, s.db, s.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), func(row map[string]any) error {
+	if err := maintenance.RequireCurrentVaultReplica(s.root); err != nil {
+		return result, err
+	}
+	original, err := maintenance.Load(s.root)
+	if err != nil {
+		return result, err
+	}
+	legacyEntryNames := original.UsesLegacyEntryNames()
+	_, err = maintenance.Import(ctx, s.db, s.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), func(row map[string]any) error {
 		path, _ := row["vault_path"].(string)
 		if path == "" {
 			return nil
@@ -251,19 +230,19 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		if err != nil {
 			return fmt.Errorf("restore original %s: %w", path, err)
 		}
-		if row["source_kind"] != "article" && row["source_kind"] != "mine" {
+		if row["source_kind"] != "article" && row["source_kind"] != "mine" && row["source_kind"] != "report" {
 			row["vault_body"] = ""
 			return nil
 		}
-		header, body, err := ParseVaultArticle(data)
+		header, body, err := parseVaultReplicaHeader(data, legacyEntryNames)
 		if err != nil {
 			return err
 		}
 		if err := validateVaultRebuildHeader(header, body); err != nil {
 			return err
 		}
-		if (row["source_kind"] == "mine" && header.SourceKind != "mine") || (header.SourceKind != "" && header.SourceKind != row["source_kind"]) {
-			return fmt.Errorf("document source kind differs from replica: %s", path)
+		if header.LibraryID != "" && header.LibraryID != fmt.Sprint(row["library_id"]) {
+			return fmt.Errorf("header library differs from replica: %s", path)
 		}
 		if fmt.Sprint(row["id"]) != header.ID {
 			return fmt.Errorf("article ID differs from replica: %s", path)
@@ -275,14 +254,25 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		} else if header.Acquisition != "" {
 			return fmt.Errorf("article acquisition differs from replica: %s", path)
 		}
+		for key, value := range map[string]string{"source_ref": header.SourceRef, "identifier": header.Identifier} {
+			if _, present := row[key]; present {
+				checks[key] = value
+			}
+		}
+		if value, present := row["graph"]; present {
+			if (header.Graph == nil) != (value == nil) || (header.Graph != nil && value != *header.Graph) {
+				return fmt.Errorf("header graph differs from replica: %s", path)
+			}
+		}
 		for key, value := range checks {
+			if text, ok := value.(string); ok && text == "" && row[key] == nil {
+				continue
+			}
 			if row[key] != value {
 				return fmt.Errorf("article header %s differs from replica field %s", path, key)
 			}
 		}
-		if header.ProcessingMode == types.ProcessingModeSummaryOnly && row["source_kind"] != "mine" {
-			body = nil
-		}
+
 		if row["source_kind"] == "mine" {
 			if original, present := row["vault_body"]; present && original != string(body) {
 				return fmt.Errorf("personal document body differs from replica: %s", path)
@@ -297,20 +287,20 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 	if err := maintenance.VerifyImportedReplica(ctx, s.db, s.root); err != nil {
 		return result, err
 	}
-	ctx, kb, err := s.scope(ctx)
-	if err != nil {
-		return result, err
-	}
-	// Keyword reconstruction works while model credentials are being entered.
-	// Available-model vector rebuilding is a separate explicit maintenance step.
-	indexing := *kb
-	indexing.IndexingStrategy.VectorEnabled = false
+	// Keyword reconstruction uses each entry's library while model credentials
+	// are being entered. Vector rebuilding is a separate maintenance step.
 	var articles []types.Entry
 	if err := s.db.WithContext(ctx).Where("vault_path<>'' AND parse_status=?", types.ParseStatusCompleted).Find(&articles).Error; err != nil {
 		return result, err
 	}
 	for i := range articles {
 		article := &articles[i]
+		actual, err := repository.NewLibraryRepository(s.db).GetLibraryByID(ctx, article.LibraryID)
+		if err != nil {
+			return result, err
+		}
+		indexing := *actual
+		indexing.IndexingStrategy.VectorEnabled = false
 		path, err := vaultAbsolute(s.root, article.VaultPath)
 		if err != nil {
 			return result, err
@@ -320,13 +310,15 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 			return result, err
 		}
 		body := string(data)
-		if article.SourceKind == "article" || article.SourceKind == "mine" {
+		if article.SourceKind == "article" || article.SourceKind == "mine" || article.SourceKind == "report" {
 			_, content, err := SplitVaultArticle(data)
 			if err != nil {
 				return result, err
 			}
 			body = string(content)
-			if article.SourceKind == "mine" {
+			if article.SourceKind == "report" {
+				result.Reports++
+			} else if article.SourceKind == "mine" {
 				result.Mine++
 			} else {
 				result.Articles++
@@ -334,66 +326,77 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		} else {
 			result.Reports++
 		}
-		if article.ProcessingMode == types.ProcessingModeSummaryOnly && article.SourceKind == "article" {
-			continue
-		}
+
 		if err := s.indexVaultChunks(ctx, &indexing, article, body); err != nil {
 			return result, err
 		}
 	}
-	if err := s.listReplicaUnmanagedPersonalFiles(ctx, result); err != nil {
+	if err := s.listReplicaUnmanagedFiles(ctx, result); err != nil {
 		return result, err
 	}
 	return result, nil
 }
 
-func (s *VaultDocumentService) listReplicaUnmanagedPersonalFiles(ctx context.Context, result *VaultRebuildResult) error {
+func (s *VaultDocumentService) listReplicaUnmanagedFiles(ctx context.Context, result *VaultRebuildResult) error {
 	var paths []string
 	if err := s.db.WithContext(ctx).Unscoped().Model(&types.Entry{}).
-		Where("source_kind='mine' AND vault_path<>''").Pluck("vault_path", &paths).Error; err != nil {
+		Where("vault_path<>''").Pluck("vault_path", &paths).Error; err != nil {
 		return err
 	}
 	managed := make(map[string]bool, len(paths))
 	for _, path := range paths {
 		managed[path] = true
 	}
-	directory, err := vaultAbsolute(s.root, "mine")
-	if err != nil {
+	var libraries []types.Library
+	if err := s.db.WithContext(ctx).Order("directory").Find(&libraries).Error; err != nil {
 		return err
 	}
-	return filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(s.root, path)
+	for _, library := range libraries {
+		directory, err := vaultAbsolute(s.root, library.Directory)
 		if err != nil {
 			return err
 		}
-		relative = filepath.ToSlash(relative)
-		if vaultpath.UserMetadata(relative) {
-			if entry.IsDir() {
-				return filepath.SkipDir
+		err = filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
+			if errors.Is(walkErr, os.ErrNotExist) {
+				return nil
 			}
-			return nil
-		}
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") || managed[relative] {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err == nil {
-			var header VaultArticleHeader
-			var body []byte
-			header, body, err = ParseVaultArticle(data)
+			if walkErr != nil {
+				return walkErr
+			}
+			relative, err := filepath.Rel(s.root, path)
+			if err != nil {
+				return err
+			}
+			relative = filepath.ToSlash(relative)
+			if vaultpath.UserMetadata(relative) {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(path), ".md") || managed[relative] {
+				return nil
+			}
+			data, err := os.ReadFile(path)
 			if err == nil {
-				err = validateVaultRebuildHeader(header, body)
+				var header VaultArticleHeader
+				var body []byte
+				header, body, err = ParseVaultArticle(data)
+				if err == nil {
+					err = validateVaultRebuildHeader(header, body)
+				}
+				if err == nil {
+					err = fmt.Errorf("document is not recorded in the vault replica")
+				}
 			}
-			if err == nil {
-				err = fmt.Errorf("personal document is not recorded in the vault replica")
-			}
+			result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{Path: relative, Error: err.Error()})
+			return nil
+		})
+		if err != nil {
+			return err
 		}
-		result.Skipped = append(result.Skipped, VaultRebuildSkippedFile{Path: relative, Error: err.Error()})
-		return nil
-	})
+	}
+	return nil
 }
 
 func HasVaultReplica(root string) bool {

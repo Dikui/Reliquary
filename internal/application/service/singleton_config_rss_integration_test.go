@@ -21,7 +21,7 @@ func (singletonIngestionModels) GetEmbeddingModel(context.Context, string) (embe
 	return chunkSearchEmbedder{}, nil
 }
 
-func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *knowledgeBaseService {
+func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *libraryService {
 	t.Helper()
 	models := singletonIngestionModels{h.service.modelService.(*summaryStateModelService)}
 	h.service.modelService = models
@@ -29,24 +29,24 @@ func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *knowledgeB
 	h.service.retrieveEngine = retriever.NewPostgresRetrievalService(indices)
 	chunks := h.service.chunkService.(*chunkService)
 	chunks.entryRepo = h.service.repo
-	chunks.kbRepository = repository.NewKnowledgeBaseRepository(h.db)
+	chunks.libraryRepository = repository.NewLibraryRepository(h.db)
 	chunks.modelService = models
 	chunks.retrieveEngine = h.service.retrieveEngine
-	require.NoError(t, h.db.Create(&types.Model{ID: "saved-embedding", SpaceID: h.kb.SpaceID, Name: "Fixture embedding", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
-	require.NoError(t, h.db.Model(h.kb).Update("embedding_model_id", "saved-embedding").Error)
-	bases := &knowledgeBaseService{db: h.db, repo: repository.NewKnowledgeBaseRepository(h.db), entryRepo: h.service.repo}
-	h.service.kbService = bases
+	require.NoError(t, h.db.Create(&types.Model{ID: "saved-embedding", SpaceID: h.library.SpaceID, Name: "Fixture embedding", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", "saved-embedding").Error)
+	bases := &libraryService{db: h.db, repo: repository.NewLibraryRepository(h.db), entryRepo: h.service.repo}
+	h.service.libraryService = bases
 	return bases
 }
 
-func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testing.T) {
+func TestSavedLibraryConfigurationControlsUploadedMarkdownChunks(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	bases := singletonIntakeSettings(t, h)
-	require.NoError(t, h.db.Create(&types.Model{ID: "saved-light", SpaceID: h.kb.SpaceID, Name: "Fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive}).Error)
-	config := &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Light: "saved-light", Generation: "saved-light", Embedding: "saved-embedding"}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: "recursive", Separators: []string{"\n\n", "\n", " "}}}
-	_, err := bases.UpdateKnowledgeBase(h.ctx, h.kb.ID, h.kb.Name, "", config)
+	require.NoError(t, h.db.Create(&types.Model{ID: "saved-light", SpaceID: h.library.SpaceID, Name: "Fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive}).Error)
+	config := &types.LibraryConfig{ModelTiers: &types.ModelTierConfig{Light: "saved-light", Generation: "saved-light", Embedding: "saved-embedding"}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 0, ChunkOverlapSet: true, Strategy: "recursive", Separators: []string{"\n\n", "\n", " "}}}
+	_, err := bases.UpdateLibrary(h.ctx, h.library.ID, h.library.Name, "", config)
 	require.NoError(t, err)
-	persisted, err := bases.GetKnowledgeBase(h.ctx)
+	persisted, err := bases.GetSystemLibrary(h.ctx)
 	require.NoError(t, err)
 	require.Equal(t, "saved-light", persisted.ModelTiers.Light)
 	require.Equal(t, "saved-light", persisted.SummaryModelID)
@@ -60,44 +60,44 @@ func TestSavedKnowledgeBaseConfigurationControlsUploadedMarkdownChunks(t *testin
 			text = "Researchers published original experimental measurements on telescope optics, detector sensitivity and observatory calibration. "
 		}
 		body := "# " + marker + "\n\n" + strings.Repeat(text, 28)
-		article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, marker+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + marker, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+		article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, marker+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + marker, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 		require.NoError(t, err)
 		h.drain(t)
 		require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
-		chunks, err := h.service.chunkRepo.ListChunksByEntryIDAndTypes(h.ctx, h.kb.SpaceID, article.ID, []types.ChunkType{types.ChunkTypeText})
+		chunks, err := h.service.chunkRepo.ListChunksByEntryIDAndTypes(h.ctx, h.library.SpaceID, article.ID, []types.ChunkType{types.ChunkTypeText})
 		require.NoError(t, err)
 		return chunks
 	}
 	large := ingest("Largefixture")
 	config.ChunkingConfig.ChunkSize = 128
-	_, err = bases.UpdateKnowledgeBase(h.ctx, h.kb.ID, h.kb.Name, "", config)
+	_, err = bases.UpdateLibrary(h.ctx, h.library.ID, h.library.Name, "", config)
 	require.NoError(t, err)
 	small := ingest("Smallfixture")
 	require.Greater(t, len(small), len(large), "saved chunk size must affect the actual ingestion pipeline")
 	for _, chunk := range small {
 		require.LessOrEqual(t, len([]rune(chunk.Content)), 128)
-		require.Equal(t, h.kb.ID, chunk.KnowledgeBaseID)
+		require.Equal(t, h.library.ID, chunk.LibraryID)
 	}
-	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, KnowledgeBaseIDs: []string{h.kb.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: 0.9}})
+	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, LibraryIDs: []string{h.library.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: 0.9}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits, "configured model must produce searchable vectors")
 	for _, group := range hits {
 		require.NoError(t, group.Error)
 		require.NotEmpty(t, group.Results)
 		for _, hit := range group.Results {
-			require.Equal(t, h.kb.ID, hit.KnowledgeBaseID)
+			require.Equal(t, h.library.ID, hit.LibraryID)
 		}
 	}
 	// Saving model choices alone must preserve the ingestion settings.
-	_, err = bases.UpdateKnowledgeBase(h.ctx, h.kb.ID, h.kb.Name, "", &types.KnowledgeBaseConfig{ModelTiers: config.ModelTiers})
+	_, err = bases.UpdateLibrary(h.ctx, h.library.ID, h.library.Name, "", &types.LibraryConfig{ModelTiers: config.ModelTiers})
 	require.NoError(t, err)
-	persisted, err = bases.GetKnowledgeBase(h.ctx)
+	persisted, err = bases.GetSystemLibrary(h.ctx)
 	require.NoError(t, err)
 	require.Equal(t, 128, persisted.ChunkingConfig.ChunkSize)
 	require.Zero(t, persisted.ChunkingConfig.ChunkOverlap)
-	_, err = bases.UpdateKnowledgeBase(h.ctx, h.kb.ID, h.kb.Name, "", &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{}})
+	_, err = bases.UpdateLibrary(h.ctx, h.library.ID, h.library.Name, "", &types.LibraryConfig{ModelTiers: &types.ModelTierConfig{}})
 	require.NoError(t, err)
-	cleared, err := bases.GetKnowledgeBase(h.ctx)
+	cleared, err := bases.GetSystemLibrary(h.ctx)
 	require.NoError(t, err)
 	require.Empty(t, cleared.SummaryModelID)
 	require.Empty(t, cleared.EmbeddingModelID)

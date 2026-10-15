@@ -128,8 +128,8 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('reliquary_tenant')
     localStorage.removeItem('reliquary_token')
     localStorage.removeItem('reliquary_refresh_token')
-    localStorage.removeItem('reliquary_knowledge_bases')
-    localStorage.removeItem('reliquary_current_kb')
+    localStorage.removeItem('reliquary_libraries')
+    localStorage.removeItem('reliquary_current_library')
     reloadUserPreferences()
   }
 

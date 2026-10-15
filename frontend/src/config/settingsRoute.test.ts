@@ -84,6 +84,6 @@ test('deleted and unknown settings sections fall back to the default section', (
   assert.equal(normalizeSettingsSection('integrations', 'embed'), 'integration-api')
 })
 
-test('legacy knowledge settings bookmark selects the knowledge base section', () => {
-  assert.equal(normalizeSettingsSection('knowledge'), 'knowledge-base')
+test('legacy knowledge settings bookmark selects the library section', () => {
+  assert.equal(normalizeSettingsSection('knowledge'), 'library')
 })

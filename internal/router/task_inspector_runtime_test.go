@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reliquary/internal/testutil/redistest"
 	"strconv"
 	"strings"
 	"testing"
@@ -24,16 +25,16 @@ import (
 
 func newPostgresInspectorTest(t *testing.T) *postgresTaskInspector {
 	t.Helper()
-	client := task.NewClient(pgtest.Open(t))
+	client := redistest.NewClient(t, pgtest.Open(t))
 	t.Cleanup(func() { _ = client.Close() })
 	return NewPostgresTaskInspector(client).(*postgresTaskInspector)
 }
 
 func insertRuntimeJob(t *testing.T, inspector *postgresTaskInspector, id, payload, queue string, state types.RuntimeTaskState, orderTime time.Time) {
 	t.Helper()
-	_, err := inspector.client.Enqueue(task.NewTask(types.TypeDocumentProcess, []byte(payload)), task.Queue(queue), task.TaskID(id), task.MaxRetry(3))
+	err := inspector.db.Create(&task.Job{ID: id, TaskType: types.TypeDocumentProcess, Queue: queue, Payload: []byte(payload), Headers: []byte("{}"), State: task.TaskState(state), MaxRetry: 3, Generation: 1, Delivery: 1, CreatedAt: orderTime, UpdatedAt: orderTime, ProcessAt: orderTime}).Error
 	if err != nil {
-		t.Fatalf("enqueue %s: %v", id, err)
+		t.Fatalf("insert %s: %v", id, err)
 	}
 	updates := map[string]any{"state": string(state), "created_at": orderTime, "process_at": orderTime, "last_failed_at": orderTime, "completed_at": orderTime, "started_at": orderTime}
 	if err := inspector.db.Model(&task.Job{}).Where("id = ?", id).Updates(updates).Error; err != nil {
@@ -65,10 +66,10 @@ func TestQueueStatsDoesNotWarnForQueuesThatDoNotExist(t *testing.T) {
 
 func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 	payload, err := json.Marshal(map[string]any{
-		"space_id":          types.SingleSpaceID,
-		"knowledge_base_id": "kb-1",
-		"entry_id":          "entry-1",
-		"file_url":          "secret://signed-document-url",
+		"space_id":   types.SingleSpaceID,
+		"library_id": "library-1",
+		"entry_id":   "entry-1",
+		"file_url":   "secret://signed-document-url",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +84,7 @@ func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 		t.Fatalf("project task: %v", err)
 	}
 	if info.State != types.RuntimeTaskActive || info.SpaceID != types.SingleSpaceID ||
-		info.KnowledgeBaseID != "kb-1" || info.EntryID != "entry-1" {
+		info.LibraryID != "library-1" || info.EntryID != "entry-1" {
 		t.Fatalf("safe routing metadata missing: %+v", info)
 	}
 	if info.StartedAt == nil || !info.StartedAt.Equal(started) || info.Worker != "core" {
@@ -168,7 +169,7 @@ func TestProjectRuntimeTaskUsesAllowListedBatchMetadata(t *testing.T) {
 	payload := []byte(`{
 		"tenant_id":9,
 		"task_id":"reparse-1",
-		"knowledge_base_id":"kb",
+		"library_id":"library",
 		"entry_ids":["a","b"],
 		"created_at":1700000000,
 		"content":"must-not-be-projected"
@@ -180,7 +181,7 @@ func TestProjectRuntimeTaskUsesAllowListedBatchMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.TaskID != "reparse-1" || info.KnowledgeBaseID != "kb" || info.EntryCount != 2 || info.EnqueuedAt == nil {
+	if info.TaskID != "reparse-1" || info.LibraryID != "library" || info.EntryCount != 2 || info.EnqueuedAt == nil {
 		t.Fatalf("batch projection mismatch: %+v", info)
 	}
 	if len(info.AllowedActions) != 0 {

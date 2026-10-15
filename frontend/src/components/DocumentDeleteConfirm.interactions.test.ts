@@ -50,11 +50,11 @@ async function mountFlow(path: string, props: Record<string, any>, locale: 'zh-C
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
   const passthrough = (text: string) => text
   const empty = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
-  const api = evaluate(read('../api/knowledge-base.ts'), { '../utils/request': { del: (url: string) => { calls.push(url); return response() } } })
+  const api = evaluate(read('../api/library.ts'), { '../utils/request': { del: (url: string) => { calls.push(url); return response() } } })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
     'tdesign-vue-next': { MessagePlugin: { success: (message: string) => notices.push(message), info: (message: string) => notices.push(message), warning() {}, error() {} } },
-    '@/api/knowledge-base': api,
+    '@/api/library': api,
     '@/utils/entrySourceLabels': entrySourceLabels,
     '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
@@ -64,7 +64,7 @@ async function mountFlow(path: string, props: Record<string, any>, locale: 'zh-C
     '@/utils/clipboard': { copyWithToast() {} },
     '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => {} },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
-    '@/views/knowledge-base/entryDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
+    '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
   }
   const compile = (filename: string) => {
     const text = read(filename), { descriptor, errors } = parse(text, { filename })
@@ -84,8 +84,8 @@ async function mountFlow(path: string, props: Record<string, any>, locale: 'zh-C
   }
   modules['@/components/DocumentDeleteConfirm.vue'] = compile('./DocumentDeleteConfirm.vue')
   modules['@/components/PersonalDocumentDelete.vue'] = compile('./PersonalDocumentDelete.vue')
-  modules['./DocumentActionMenu.vue'] = compile('../views/knowledge-base/components/DocumentActionMenu.vue')
-  modules['./DocumentMenuDelete.vue'] = compile('../views/knowledge-base/components/DocumentMenuDelete.vue')
+  modules['./DocumentActionMenu.vue'] = compile('../views/library/components/DocumentActionMenu.vue')
+  modules['./DocumentMenuDelete.vue'] = compile('../views/library/components/DocumentMenuDelete.vue')
   const component = compile(path).default
   const Drawer = defineComponent({
     props: ['visible', 'closeBtn', 'closeOnOverlayClick', 'closeOnEscKeydown'],
@@ -181,12 +181,12 @@ for (const view of ['DocumentCardView', 'DocumentListView'] as const) for (const
     let removeArticle = async () => false
     const fixture = item(source_kind)
     const props = reactive({ items: [fixture], selectedIds: new Set(), ...(view === 'DocumentCardView' ? { batchMode: false, traceAvailableById: {} } : { traceVisibleIds: {} }), onOpen: () => { opened++ }, onDeleted: (id: string) => { assert.equal(id, fixture.id); removed++ }, deleteEntry: () => removeArticle() })
-    const flow = await mountFlow(`../views/knowledge-base/components/${view}.vue`, props, 'en-US', () => new Promise(resolve => { finish = resolve }))
+    const flow = await mountFlow(`../views/library/components/${view}.vue`, props, 'en-US', () => new Promise(resolve => { finish = resolve }))
     try {
       if (source_kind === 'article') {
-        const hook = evaluate(read('../composables/useKnowledgeBase.ts'), { ...flow.modules,
+        const hook = evaluate(read('../composables/useLibrary.ts'), { ...flow.modules,
           pinia: { storeToRefs: () => ({ cardList: ref([fixture]), total: ref(1) }) }, '@/stores/entry': { entryStore: () => ({}) }, '../utils/index': { formatStringDate: () => '' },
-        }).default('kb')
+        }).default('library')
         removeArticle = () => hook.delEntry(0, fixture, () => { removed++ })
       }
       const state = flow.controls.confirmations[0], dialog = flow.controls.dialogs[0], popup = flow.controls.popups[0]
@@ -214,7 +214,7 @@ for (const view of ['DocumentCardView', 'DocumentListView'] as const) for (const
       assert.equal(state.visible.value, true)
       finish({ success: false, message: 'Storage busy' }); await settle()
       assert.equal(state.visible.value, true); assert.equal(state.busy.value, false)
-      assert.ok(flow.allNodes().some(node => node.text === (source_kind === 'mine' ? 'Storage busy' : en.knowledgeBase.deleteFailed)))
+      assert.ok(flow.allNodes().some(node => node.text === (source_kind === 'mine' ? 'Storage busy' : en.library.deleteFailed)))
       dialog.confirm(); await settle(); finish({ success: true }); await settle()
       assert.equal(flow.calls.length, 2); assert.equal(removed, 1); assert.equal(state.visible.value, false)
     } finally { flow.dispose() }

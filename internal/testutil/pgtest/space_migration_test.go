@@ -37,8 +37,8 @@ func TestSpaceNamingMigrationPreservesDataAndConstraints(t *testing.T) {
 INSERT INTO tenants(id,name,business) VALUES(1,'Naming fixture','personal');
 INSERT INTO tenant_api_keys(tenant_id,name,key_hash,api_key) VALUES(1,'Original key','fixture-hash','fixture-secret');
 INSERT INTO users(id,username,email,password_hash) VALUES('owner','Owner','naming@example.invalid','original-hash');
-INSERT INTO knowledge_bases(id,name,tenant_id,embedding_model_id,summary_model_id) VALUES('kb','Original library',1,'','');
-INSERT INTO knowledges(id,tenant_id,knowledge_base_id,type,title,source,parse_status,metadata) VALUES('item',1,'kb','manual','Original observations','','completed','{"tenant_id":"opaque metadata"}');
+INSERT INTO knowledge_bases(id,name,tenant_id,embedding_model_id,summary_model_id) VALUES('library','Original library',1,'','');
+INSERT INTO knowledges(id,tenant_id,knowledge_base_id,type,title,source,parse_status,metadata) VALUES('item',1,'library','manual','Original observations','','completed','{"tenant_id":"opaque metadata"}');
 INSERT INTO entities(id,tenant_id,canonical_name,normalized_name,entity_type,created_at,updated_at) VALUES('entity',1,'Original entity','original entity','company',now(),now());
 INSERT INTO topics(id,tenant_id,name,description) VALUES('topic',1,'Original topic','Keep description');
 INSERT INTO knowledge_entities(tenant_id,knowledge_id,entity_id) VALUES(1,'item','entity');

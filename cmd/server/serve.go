@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"reliquary/internal/logger"
+	"reliquary/internal/modelcalls"
 	"reliquary/internal/types/interfaces"
 )
 
@@ -61,6 +62,9 @@ func serveUntilShutdown(server *http.Server, listener net.Listener, timeout time
 		logger.Info(context.Background(), "Cleaning up resources...")
 		if errs := cleaner.Cleanup(shutdownCtx); len(errs) > 0 {
 			logger.Errorf(context.Background(), "Errors occurred during resource cleanup: %v", errs)
+		}
+		if err := modelcalls.FlushWrites(shutdownCtx); err != nil {
+			logger.Warnf(shutdownCtx, "model call storage flush failed: %v", err)
 		}
 		logger.Info(context.Background(), "Server has exited")
 		done()

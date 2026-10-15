@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"mime/multipart"
 	"path"
@@ -17,6 +16,8 @@ import (
 	secutils "reliquary/internal/utils"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Legacy shapes let processing tests exercise already stored articles without a production creation entry point.
@@ -28,12 +29,12 @@ type legacyManualFixturePayload struct {
 }
 
 func (s *entryService) createLegacyFileFixture(ctx context.Context,
-	kbID string, file *multipart.FileHeader, metadata map[string]string, enableMultimodel *bool, customFileName string, channel string,
+	libraryID string, file *multipart.FileHeader, metadata map[string]string, enableMultimodel *bool, customFileName string, channel string,
 	processOverrides *types.EntryProcessOverrides,
 ) (*types.Entry, error) {
 	if s.needsTaskTransaction() {
 		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.Entry, error) {
-			return copy.createLegacyFileFixture(ctx, kbID, file, metadata, enableMultimodel, customFileName, channel, processOverrides)
+			return copy.createLegacyFileFixture(ctx, libraryID, file, metadata, enableMultimodel, customFileName, channel, processOverrides)
 		})
 	}
 
@@ -44,26 +45,18 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 		fileName = path.Base(strings.ReplaceAll(customFileName, "\\", "/"))
 	}
 
-	logger.Infof(ctx, "Knowledge base ID: %s, file: %s", kbID, fileName)
+	logger.Infof(ctx, "Library ID: %s, file: %s", libraryID, fileName)
 
-	if IsVideoType(getFileType(fileName)) {
-		logger.Error(ctx, "Video file upload is not supported")
-		return nil, werrors.NewBadRequestError("暂不支持上传视频文件")
-	}
-
-	// Get knowledge base configuration
-	logger.Info(ctx, "Getting knowledge base configuration")
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, kbID)
+	// Get library configuration
+	logger.Info(ctx, "Getting library configuration")
+	library, err := s.libraryService.GetLibraryByID(ctx, libraryID)
 	if err != nil {
-		logger.Errorf(ctx, "Failed to get knowledge base: %v", err)
+		logger.Errorf(ctx, "Failed to get library: %v", err)
 		return nil, err
 	}
 
 	// Early reject before the whole-file hash below. resolveFileImportProcessConfig
 	// gates the same extension set and provides a clear unsupported-type error.
-	if err := validateImportFileType(getFileType(fileName)); err != nil {
-		return nil, err
-	}
 
 	// Calculate file hash for deduplication
 	logger.Info(ctx, "Calculating file hash")
@@ -76,7 +69,7 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 	// Check if file already exists
 	spaceID := ctx.Value(types.SpaceIDContextKey).(uint64)
 	logger.Infof(ctx, "Checking if file exists, space ID: %d", spaceID)
-	exists, existingEntry, err := s.repo.CheckEntryExists(ctx, spaceID, kbID, &types.EntryCheckParams{
+	exists, existingEntry, err := s.repo.CheckEntryExists(ctx, spaceID, libraryID, &types.EntryCheckParams{
 		Type:     "file",
 		FileName: fileName,
 		FileType: getFileType(fileName),
@@ -88,7 +81,7 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 		return nil, err
 	}
 	if exists {
-		if err := s.recordKnownMessageRepost(ctx, existingEntry, kbID, types.SourceInfo{Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: metadata["original_url"], PublishedAt: metadata["published_at"]}, "file_hash"); err != nil {
+		if err := s.recordKnownMessageRepost(ctx, existingEntry, libraryID, types.SourceInfo{Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: metadata["original_url"], PublishedAt: metadata["published_at"]}, "file_hash"); err != nil {
 			return nil, err
 		}
 		logger.Infof(ctx, "File already exists: %s", fileName)
@@ -118,7 +111,7 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 		return nil, werrors.NewValidationError("文件名包含非法字符")
 	}
 
-	_, err = resolveFileImportProcessConfig(ctx, kb, getFileType(safeFilename), processOverrides, enableMultimodel)
+	_, err = resolveFileImportProcessConfig(ctx, library, getFileType(safeFilename), processOverrides, enableMultimodel)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +121,7 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 	entry := &types.Entry{
 		ID:               uuid.New().String(),
 		SpaceID:          spaceID,
-		KnowledgeBaseID:  kbID,
+		LibraryID:        libraryID,
 		Type:             "file",
 		Channel:          defaultChannel(channel),
 		Title:            safeFilename,
@@ -140,7 +133,7 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 		EnableStatus:     "disabled",
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
-		EmbeddingModelID: kb.EmbeddingModelID,
+		EmbeddingModelID: library.EmbeddingModelID,
 		Metadata:         metadataJSON,
 	}
 
@@ -151,9 +144,9 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 		}
 	}
 
-	// Save the file to storage (use KB-level storage engine if configured)
+	// Save the file to storage (use Library-level storage engine if configured)
 	logger.Infof(ctx, "Saving file, entry ID: %s", entry.ID)
-	fileSvc := s.resolveFileService(ctx, kb)
+	fileSvc := s.resolveFileService(ctx, library)
 	filePath, err := fileSvc.SaveFile(ctx, file, entry.SpaceID, entry.ID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to save file, entry ID: %s, error: %v", entry.ID, err)
@@ -188,14 +181,24 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 	logger.Info(ctx, "Enqueuing document processing task to PostgreSQL")
 
 	lang := types.LanguageFromContextOrDefault(ctx)
+	sourceReader, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	sourceBody, err := io.ReadAll(sourceReader)
+	sourceReader.Close()
+	if err != nil {
+		return nil, err
+	}
 	taskPayload := types.DocumentProcessPayload{
-		SpaceID:         spaceID,
-		EntryID:         entry.ID,
-		KnowledgeBaseID: kbID,
-		FilePath:        filePath,
-		FileName:        safeFilename,
-		FileType:        getFileType(safeFilename),
-		Language:        lang,
+		SpaceID:   spaceID,
+		EntryID:   entry.ID,
+		LibraryID: libraryID,
+		FilePath:  filePath,
+		Passages:  []string{string(sourceBody)},
+		FileName:  safeFilename,
+		FileType:  getFileType(safeFilename),
+		Language:  lang,
 	}
 
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -231,11 +234,11 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 }
 
 func (s *entryService) createLegacyManualFixture(ctx context.Context,
-	kbID string, payload *legacyManualFixturePayload, channel string,
+	libraryID string, payload *legacyManualFixturePayload, channel string,
 ) (*types.Entry, error) {
 	if s.needsTaskTransaction() {
 		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.Entry, error) {
-			return copy.createLegacyManualFixture(ctx, kbID, payload, channel)
+			return copy.createLegacyManualFixture(ctx, libraryID, payload, channel)
 		})
 	}
 
@@ -266,9 +269,9 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 		return nil, werrors.NewValidationError("状态仅支持 draft 或 publish")
 	}
 
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, kbID)
+	library, err := s.libraryService.GetLibraryByID(ctx, libraryID)
 	if err != nil {
-		logger.Errorf(ctx, "Failed to get knowledge base: %v", err)
+		logger.Errorf(ctx, "Failed to get library: %v", err)
 		return nil, err
 	}
 
@@ -280,7 +283,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 	}
 
 	if status == types.ManualEntryStatusPublish {
-		incoming := &types.Entry{SpaceID: spaceID, KnowledgeBaseID: kbID}
+		incoming := &types.Entry{SpaceID: spaceID, LibraryID: libraryID}
 		if len(payload.SourceMetadata) > 0 {
 			metadata, err := json.Marshal(payload.SourceMetadata)
 			if err != nil {
@@ -306,7 +309,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 	entry := &types.Entry{
 		ID:               uuid.New().String(),
 		SpaceID:          spaceID,
-		KnowledgeBaseID:  kbID,
+		LibraryID:        libraryID,
 		Type:             types.EntryTypeManual,
 		Channel:          defaultChannel(channel),
 		Title:            title,
@@ -316,7 +319,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 		EnableStatus:     "disabled",
 		CreatedAt:        now,
 		UpdatedAt:        now,
-		EmbeddingModelID: kb.EmbeddingModelID,
+		EmbeddingModelID: library.EmbeddingModelID,
 		FileName:         fileName,
 		FileType:         types.EntryTypeManual,
 	}
@@ -335,7 +338,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 	// outside the row so a rejected message can be previewed/retried without
 	// turning the metadata column into an unbounded original archive.
 	{
-		fileSvc := s.resolveFileService(ctx, kb)
+		fileSvc := s.resolveFileService(ctx, library)
 		originalPath, err := fileSvc.SaveBytes(ctx, []byte(cleanContent), spaceID, fileName, false)
 		if err != nil {
 			return nil, err
@@ -358,7 +361,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 	}
 
 	if status == types.ManualEntryStatusPublish {
-		if _, err := ApplyEntryProcessOverrides(ctx, kb, entry, payload.ProcessConfig, nil, nil); err != nil {
+		if err := entry.SetProcessOverrides(payload.ProcessConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -371,7 +374,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 	}
 	if err != nil || existing != nil {
 		if intake, _ := entry.IntakeMetadata(); intake != nil && intake.OriginalPath != "" {
-			if cleanupErr := s.resolveFileService(ctx, kb).DeleteFile(ctx, intake.OriginalPath); cleanupErr != nil {
+			if cleanupErr := s.resolveFileService(ctx, library).DeleteFile(ctx, intake.OriginalPath); cleanupErr != nil {
 				return nil, cleanupErr
 			}
 		}
@@ -433,28 +436,19 @@ func ensureManualFileName(title string) string {
 
 func resolveFileImportProcessConfig(
 	ctx context.Context,
-	kb *types.KnowledgeBase,
+	library *types.Library,
 	fileType string,
 	processOverrides *types.EntryProcessOverrides,
 	enableMultimodel *bool,
 ) (types.EffectiveProcessConfig, error) {
-	if err := validateImportFileType(fileType); err != nil {
-		return types.EffectiveProcessConfig{}, err
-	}
 
-	eff := ResolveProcessConfig(kb, processOverrides)
-
-	if processOverrides != nil {
-		if err := ValidateProcessOverrides(ctx, kb, processOverrides, []string{fileType}); err != nil {
-			return eff, err
-		}
-	}
+	eff := ResolveProcessConfig(library, processOverrides)
 
 	return eff, nil
 }
 
 func isValidFileType(filename string) bool {
-	return isSupportedImportExtension(getFileType(filename))
+	return getFileType(filename) == "md"
 }
 
 func calculateStr(strList ...string) string {

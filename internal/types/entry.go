@@ -84,11 +84,14 @@ const (
 )
 
 // EntryListFilter aggregates optional filters for listing entry entries
-// under a knowledge base. Empty / zero fields mean "no filter on that dimension".
+// under a library. Empty / zero fields mean "no filter on that dimension".
 type EntryListFilter struct {
+	LibraryIDs      []string
+	CollapseSimilar *bool
+
 	// SourceKind selects article, mine or report independently of ingestion channel.
 	SourceKind string
-	// ContentType filters the article purpose; unclassified matches an empty classification.
+	// ContentType filters the article purpose.
 	ContentType string
 	// Starred filters the user's article marker when supplied.
 	Starred *bool
@@ -112,12 +115,22 @@ type EntryListFilter struct {
 // It contains metadata about the entry source, its processing status,
 // and references to the physical file if applicable.
 type Entry struct {
+	ImageDescriptions   []ProcessingImage    `json:"image_descriptions,omitempty" gorm:"-"`
+	LibraryContentTypes []LibraryContentType `json:"library_content_types,omitempty" gorm:"-"`
+	SimilarReports      []*Entry             `json:"similar_reports,omitempty" gorm:"-"`
+
+	SourceRef      string `json:"source_ref,omitempty" gorm:"not null;default:''"`
+	SourceBodyHash string `json:"-" gorm:"not null;default:''"`
+	Identifier     string `json:"identifier,omitempty" gorm:"not null;default:''"`
+	Graph          *bool  `json:"graph"`
+	HasUpdate      bool   `json:"has_update" gorm:"-"`
+	LatestEntryID  string `json:"latest_entry_id,omitempty" gorm:"-"`
 	// Unique identifier of the entry
 	ID string `json:"id"                 gorm:"type:varchar(36);primaryKey"`
 	// Workspace ID
 	SpaceID uint64 `json:"space_id"`
-	// ID of the knowledge base
-	KnowledgeBaseID string `json:"knowledge_base_id"`
+	// ID of the library
+	LibraryID string `json:"library_id"`
 	// Type of the entry
 	Type string `json:"type"`
 	// Title of the entry
@@ -126,17 +139,12 @@ type Entry struct {
 	Description                 string        `json:"description"`
 	ContentType                 string        `json:"content_type" gorm:"type:varchar(16)"`
 	ContentTypeCorrected        bool          `json:"content_type_corrected" gorm:"not null;default:false"`
-	ContentTypeUncertain        bool          `json:"content_type_uncertain" gorm:"not null;default:false"`
-	ProcessingReviewStatus      string        `json:"processing_review_status" gorm:"type:varchar(16);not null;default:''"`
-	ProcessingReviewContentType string        `json:"processing_review_content_type" gorm:"type:varchar(16);not null;default:''"`
-	ProcessingReviewReason      string        `json:"processing_review_reason" gorm:"type:text;not null;default:''"`
+	CannotBeFact                bool          `json:"cannot_be_fact,omitempty" gorm:"-"`
 	SourceUnverified            bool          `json:"source_unverified" gorm:"not null;default:false"`
 	ReviewKind                  string        `json:"review_kind,omitempty" gorm:"-"`
-	ProcessingMode              string        `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
 	SourceKind                  string        `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
 	VaultPath                   string        `json:"vault_path" gorm:"type:text;not null;default:''"`
 	VaultBody                   string        `json:"-" gorm:"type:text;not null;default:''"`
-	VaultOriginalPath           string        `json:"-" gorm:"type:text;not null;default:''"`
 	Starred                     bool          `json:"starred" gorm:"not null;default:false"`
 	CollectReason               string        `json:"collect_reason" gorm:"type:text;not null;default:''"`
 	AgentSummary                string        `json:"agent_summary" gorm:"type:text;not null;default:''"`
@@ -150,9 +158,8 @@ type Entry struct {
 	LastIngestAPIKeyID          uint64        `json:"last_ingest_api_key_id" gorm:"not null;default:0"`
 	LastIngestAPIKeyName        string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
 	MissingMaterials            JSON          `json:"missing_materials" gorm:"type:jsonb;not null"`
-	IngestAttachments           JSON          `json:"ingest_attachments" gorm:"type:jsonb;not null"`
 	ContentTypeHint             string        `json:"content_type_hint" gorm:"type:varchar(16);not null;default:''"`
-	RelatedArticleID            string        `json:"related_article_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
+	RelatedEntryID              string        `json:"related_entry_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	StructuredSummary           *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
 	Entities                    []Entity      `json:"entities" gorm:"-"`
 	Topics                      []Topic       `json:"topics" gorm:"-"`
@@ -209,8 +216,8 @@ type Entry struct {
 	ErrorMessage string `json:"error_message"`
 	// Deletion time of the entry
 	DeletedAt gorm.DeletedAt `json:"deleted_at"         gorm:"index"`
-	// Knowledge base name (not stored in database, populated on query)
-	KnowledgeBaseName string `json:"knowledge_base_name" gorm:"-"`
+	// Library name (not stored in database, populated on query)
+	LibraryName string `json:"library_name" gorm:"-"`
 }
 
 // CustomMetadataText returns stable human-readable metadata for summaries and
@@ -276,9 +283,7 @@ func (k *Entry) BeforeCreate(tx *gorm.DB) (err error) {
 	if len(k.MissingMaterials) == 0 {
 		k.MissingMaterials = JSON(`[]`)
 	}
-	if len(k.IngestAttachments) == 0 {
-		k.IngestAttachments = JSON(`[]`)
-	}
+
 	return nil
 }
 
@@ -302,28 +307,7 @@ func (k *Entry) SetIngestMissing(items []IngestMissing) error {
 	}
 	return err
 }
-func (k *Entry) IngestAttachmentRecords() []IngestAttachment {
-	items := []IngestAttachment{}
-	if k != nil && len(k.IngestAttachments) != 0 {
-		_ = json.Unmarshal(k.IngestAttachments, &items)
-	}
-	if items == nil {
-		items = []IngestAttachment{}
-	}
-	return items
-}
-func (k *Entry) SetIngestAttachments(items []IngestAttachment) error {
-	if items == nil {
-		items = []IngestAttachment{}
-	}
-	data, err := json.Marshal(items)
-	if err == nil {
-		k.IngestAttachments = JSON(data)
-	}
-	return err
-}
 
-// ManualEntryMetadata stores metadata for manual Markdown entry content.
 type ManualEntryMetadata struct {
 	Content   string `json:"content"`
 	Format    string `json:"format"`
@@ -394,10 +378,10 @@ func (k *Entry) SetIntakeMetadata(intake *EntryIntakeMetadata) error {
 	return nil
 }
 
-// SearchScope keeps space and knowledge base boundaries explicit for repository queries.
+// SearchScope keeps space and library boundaries explicit for repository queries.
 type SearchScope struct {
-	SpaceID uint64
-	KBID    string
+	SpaceID   uint64
+	LibraryID string
 }
 
 // NewManualEntryMetadata creates a new ManualEntryMetadata instance.

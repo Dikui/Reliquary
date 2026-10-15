@@ -7,7 +7,7 @@ import "time"
 type EntryRepostSource struct {
 	ID                 string    `json:"id" gorm:"type:varchar(36);primaryKey"`
 	SpaceID            uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_repost_origin"`
-	KnowledgeBaseID    string    `json:"knowledge_base_id" gorm:"type:varchar(36);not null"`
+	LibraryID          string    `json:"library_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_repost_origin"`
 	EntryID            string    `json:"entry_id" gorm:"type:varchar(36);not null;index;uniqueIndex:idx_repost_origin"`
 	OriginalURL        string    `json:"original_url" gorm:"type:text;not null;default:''"`
 	NormalizedURL      string    `json:"-" gorm:"type:text;not null;default:''"`

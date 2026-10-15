@@ -110,9 +110,10 @@ const createdToken = ref('')
 const playgroundVisible = ref(false)
 const playground = reactive({ apiKey: '', query: '' })
 const playgroundFilters = ref(defaultSearchFilters())
+const playgroundLibraries = ref<string[]>([])
 const searchOptions = ref<SearchOptions>({ entities: [], topics: [] })
 const searchOptionsLoading = ref(false), searchOptionsError = ref('')
-const playgroundRequestPreview = computed(() => JSON.stringify(buildSearchRequest(playground.query, playgroundFilters.value), null, 2))
+const playgroundRequestPreview = computed(() => JSON.stringify({ ...buildSearchRequest(playground.query, playgroundFilters.value), libraries: playgroundLibraries.value }, null, 2))
 const running = ref(false)
 const playgroundError = ref('')
 const playgroundResult = ref('')
@@ -186,7 +187,13 @@ async function runQuery() {
   playgroundError.value = ''
   try {
     playgroundResult.value = ''
-    const response = await fetch(`${apiBaseUrl.value}/api/v1/search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify(buildSearchRequest(playground.query, playgroundFilters.value)) })
+    playgroundLibraries.value = []
+    const headers = { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }
+    const catalogResponse = await fetch(`${apiBaseUrl.value}/api/v1/libraries`, { headers })
+    const catalog = await catalogResponse.json()
+    if (!catalogResponse.ok || catalog.success === false) throw catalog
+    playgroundLibraries.value = (catalog.data as Array<{ id: string }>).map(library => library.id)
+    const response = await fetch(`${apiBaseUrl.value}/api/v1/search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: playgroundRequestPreview.value })
     const body = await response.json()
     if (!response.ok || body.success === false) throw body
     playgroundResult.value = JSON.stringify(body, null, 2)

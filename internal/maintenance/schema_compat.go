@@ -14,14 +14,20 @@ import (
 // any scrub changes share one transaction; failures roll everything back.
 // The exact old application remains responsible for running the old deployment.
 func WithCurrentNames(db *gorm.DB, run func(*gorm.DB) error) error {
-	var legacy, oldEntries bool
+	var legacy, oldEntries, oldLibrary, oldSources bool
 	if err := db.Raw("SELECT to_regclass('public.tenants') IS NOT NULL").Scan(&legacy).Error; err != nil {
 		return err
 	}
 	if err := db.Raw("SELECT to_regclass('public.knowledges') IS NOT NULL").Scan(&oldEntries).Error; err != nil {
 		return err
 	}
-	if !legacy && !oldEntries {
+	if err := db.Raw("SELECT to_regclass('public.knowledge_bases') IS NOT NULL").Scan(&oldLibrary).Error; err != nil {
+		return err
+	}
+	if err := db.Raw("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='data_sources' AND column_name='knowledge_base_id')").Scan(&oldSources).Error; err != nil {
+		return err
+	}
+	if !legacy && !oldEntries && !oldLibrary {
 		return run(db)
 	}
 	read := func(version, direction string) (string, error) {
@@ -49,6 +55,9 @@ func WithCurrentNames(db *gorm.DB, run func(*gorm.DB) error) error {
 	if oldEntries {
 		versions = append(versions, "000003_entry_naming")
 	}
+	if oldLibrary {
+		versions = append(versions, "000007_library_naming")
+	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		for _, version := range versions {
 			up, err := read(version, "up")
@@ -59,8 +68,18 @@ func WithCurrentNames(db *gorm.DB, run func(*gorm.DB) error) error {
 				return err
 			}
 		}
+		if oldSources {
+			if err := tx.Exec("ALTER TABLE public.data_sources RENAME COLUMN knowledge_base_id TO library_id").Error; err != nil {
+				return err
+			}
+		}
 		if err := run(tx); err != nil {
 			return err
+		}
+		if oldSources {
+			if err := tx.Exec("ALTER TABLE public.data_sources RENAME COLUMN library_id TO knowledge_base_id").Error; err != nil {
+				return err
+			}
 		}
 		for i := len(versions) - 1; i >= 0; i-- {
 			down, err := read(versions[i], "down")

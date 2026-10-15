@@ -36,7 +36,7 @@ function isBareIntegrationTab(section: string): section is IntegrationTab {
  * `api`, and bare tab names remain aliases.
  */
 export function normalizeSettingsSection(section: string, tab?: string | null): string {
-  if (section === 'knowledge') return 'knowledge-base'
+  if (section === 'knowledge') return 'library'
   if (section === 'integrations') {
     return integrationSectionKey(integrationTabFromSection(tab || 'api'))
   }

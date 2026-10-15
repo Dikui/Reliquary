@@ -16,9 +16,9 @@ func TestUpdateChunksPostgresCastsBooleansAndIntegers(t *testing.T) {
 	repo := NewChunkRepository(db)
 	ctx := context.Background()
 	previousTime := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	first := makeChunk("kb-batch", "doc", types.ChunkTypeText)
-	second := makeChunk("kb-batch", "doc", types.ChunkTypeText)
-	untouched := makeChunk("kb-batch", "doc", types.ChunkTypeText)
+	first := makeChunk("library-batch", "doc", types.ChunkTypeText)
+	second := makeChunk("library-batch", "doc", types.ChunkTypeText)
+	untouched := makeChunk("library-batch", "doc", types.ChunkTypeText)
 	for _, chunk := range []*types.Chunk{first, second, untouched} {
 		chunk.UpdatedAt = previousTime
 	}

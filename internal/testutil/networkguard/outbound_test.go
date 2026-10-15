@@ -20,36 +20,30 @@ import (
 // Counts also reject a second call added to an already reviewed function.
 var allowedOutboundCalls = map[string]int{
 	// Service requests and parser result transfers.
-	"internal/chatgpt/http.go|request|http.NewRequestWithContext":                                             1,
-	"internal/chatgpt/http.go|request|m.client.Do":                                                            1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|PingMinerUCloud|client.Do":                   1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|PingMinerUCloud|http.NewRequest":             1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|applyUploadURLs|client.Do":                   1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|applyUploadURLs|http.NewRequestWithContext":  1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|downloadAndExtractZip|client.Get":            1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|fetchBatchStatus|client.Do":                  1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|fetchBatchStatus|http.NewRequestWithContext": 1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|uploadFile|client.Do":                        1,
-	"internal/infrastructure/docparser/mineru_cloud_converter.go|uploadFile|http.NewRequestWithContext":       1,
-	"internal/infrastructure/docparser/mineru_converter.go|PingMinerU|client.Get":                             1,
-	"internal/infrastructure/docparser/mineru_converter.go|callFileParse|client.Do":                           1,
-	"internal/infrastructure/docparser/mineru_converter.go|callFileParse|http.NewRequestWithContext":          1,
-	"internal/models/chat/anthropic.go|ChatStream|http.NewRequestWithContext":                                 1,
-	"internal/models/chat/anthropic.go|ChatStream|rawHTTPClient.Do":                                           1,
-	"internal/models/chat/anthropic.go|Chat|http.NewRequestWithContext":                                       1,
-	"internal/models/chat/anthropic.go|Chat|rawHTTPClient.Do":                                                 1,
-	"internal/models/chat/chatgpt.go|open|c.client.Do":                                                        1,
-	"internal/models/chat/chatgpt.go|open|http.NewRequestWithContext":                                         1,
-	"internal/models/chat/remote_api.go|chatStreamWithRawHTTP|http.NewRequestWithContext":                     1,
-	"internal/models/chat/remote_api.go|chatStreamWithRawHTTP|rawHTTPClient.Do":                               1,
-	"internal/models/chat/remote_api.go|chatWithRawHTTP|http.NewRequestWithContext":                           1,
-	"internal/models/chat/remote_api.go|chatWithRawHTTP|rawHTTPClient.Do":                                     1,
-	"internal/models/embedding/openai.go|doRequestWithRetry|e.httpClient.Do":                                  1,
-	"internal/models/embedding/openai.go|doRequestWithRetry|http.NewRequestWithContext":                       1,
-	"internal/models/rerank/aliyun_reranker.go|Rerank|http.NewRequestWithContext":                             1,
-	"internal/models/rerank/aliyun_reranker.go|Rerank|r.client.Do":                                            1,
-	"internal/models/rerank/remote_api.go|Rerank|http.NewRequestWithContext":                                  1,
-	"internal/models/rerank/remote_api.go|Rerank|r.client.Do":                                                 1,
+	"internal/chatgpt/http.go|request|http.NewRequestWithContext":                         1,
+	"internal/chatgpt/http.go|request|m.client.Do":                                        1,
+	"internal/models/chat/anthropic.go|ChatStream|http.NewRequestWithContext":             1,
+	"internal/models/chat/anthropic.go|ChatStream|rawHTTPClient.Do":                       1,
+	"internal/models/chat/anthropic.go|Chat|http.NewRequestWithContext":                   1,
+	"internal/models/chat/anthropic.go|Chat|rawHTTPClient.Do":                             1,
+	"internal/models/chat/chatgpt.go|open|c.client.Do":                                    1,
+	"internal/models/chat/chatgpt.go|open|http.NewRequestWithContext":                     1,
+	"internal/models/chat/remote_api.go|chatStreamWithRawHTTP|http.NewRequestWithContext": 1,
+	"internal/models/chat/remote_api.go|chatStreamWithRawHTTP|rawHTTPClient.Do":           1,
+	"internal/models/chat/remote_api.go|chatWithRawHTTP|http.NewRequestWithContext":       1,
+	"internal/models/chat/remote_api.go|chatWithRawHTTP|rawHTTPClient.Do":                 1,
+	"internal/models/embedding/openai.go|doRequestWithRetry|e.httpClient.Do":              1,
+	"internal/models/embedding/openai.go|doRequestWithRetry|http.NewRequestWithContext":   1,
+	"internal/models/rerank/aliyun_reranker.go|Rerank|http.NewRequestWithContext":         1,
+	"internal/models/rerank/aliyun_reranker.go|Rerank|r.client.Do":                        1,
+	"internal/models/rerank/remote_api.go|Rerank|http.NewRequestWithContext":              1,
+	"internal/models/rerank/remote_api.go|Rerank|r.client.Do":                             1,
+	// Accounting delegates only to the existing guarded transport; no new endpoints.
+	"internal/modelcalls/transport.go|RoundTrip|t.Inner.RoundTrip": 3,
+	"internal/modelcalls/transport.go|RoundTrip|resp.Header.Get":   3,
+	"internal/modelcalls/transport.go|finish|b.once.Do":            1,
+	// Local worker initialization uses sync.Once and creates no network request.
+	"internal/modelcalls/content.go|startContentWorker|contentWorker.Do": 1,
 	// Shared guarded transports.
 	"internal/utils/extraheaders.go|RoundTrip|base.RoundTrip":             2,
 	"internal/utils/security.go|RoundTrip|t.Base.RoundTrip":               1,
@@ -65,16 +59,14 @@ var allowedOutboundCalls = map[string]int{
 	"internal/handler/chatgpt_policy.go|Get|h.service.Get":                                             1,
 	"internal/handler/entry.go|GetEntryBatch|c.Get":                                                    1,
 	"internal/handler/entry.go|SearchEntry|c.Get":                                                      1,
-	"internal/handler/entry.go|resolveEntryAndValidateKBAccess|c.Get":                                  1,
-	"internal/handler/entry.go|validateKnowledgeBaseAccessWithKBID|c.Get":                              1,
-	"internal/handler/knowledgebase.go|validateAndGetKnowledgeBase|c.Get":                              1,
+	"internal/handler/entry.go|resolveEntryAndValidateLibraryAccess|c.Get":                             1,
+	"internal/handler/entry.go|validateLibraryAccessWithLibraryID|c.Get":                               1,
+	"internal/handler/library.go|validateAndGetLibrary|c.Get":                                          1,
 	"internal/handler/model.go|DebugModel|c.PostForm":                                                  3,
-	"internal/handler/system.go|CheckParserEngines|c.Get":                                              1,
 	"internal/handler/system.go|GetSystemSetting|h.systemSettingSvc.Get":                               1,
-	"internal/handler/system.go|ListParserEngines|c.Get":                                               1,
 	"internal/mcpserver/server.go|ServeHTTP|r.Header.Get":                                              1,
 	"internal/middleware/error_handler.go|ErrorHandler|c.Writer.Header().Get":                          1,
-	"internal/middleware/kb_access.go|KBAccessFromContext|c.Get":                                       1,
+	"internal/middleware/library_access.go|LibraryAccessFromContext|c.Get":                             1,
 	"internal/middleware/logger.go|Logger|c.Get":                                                       1,
 	"internal/middleware/logger.go|Logger|c.Writer.Header().Get":                                       1,
 	"internal/middleware/recovery.go|Recovery|c.Get":                                                   1,
@@ -126,6 +118,12 @@ func TestProductionOutboundCallsMatchReviewedAllowlist(t *testing.T) {
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../.."))
 	found := map[string]int{}
 	for _, directory := range []string{"cmd", "internal", "third_party"} {
+		// The optional vendored parser tree was removed for Markdown-only intake.
+		if directory == "third_party" {
+			if _, err := os.Stat(filepath.Join(root, directory)); os.IsNotExist(err) {
+				continue
+			}
+		}
 		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -181,31 +179,6 @@ func TestScannerDetectsRequestConstructorsAndAliasedClients(t *testing.T) {
 	}
 	if len(calls) != 7 {
 		t.Fatalf("scanner missed a request call: %#v", calls)
-	}
-}
-
-func TestRuntimeDuckDBCannotInstallExtensions(t *testing.T) {
-	_, file, _, _ := runtime.Caller(0)
-	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../.."))
-	data, err := os.ReadFile(filepath.Join(root, "internal/container/container.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	parsed, err := parser.ParseFile(token.NewFileSet(), "container.go", data, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ast.Inspect(parsed, func(node ast.Node) bool {
-		literal, ok := node.(*ast.BasicLit)
-		if ok && literal.Kind == token.STRING && strings.Contains(strings.ToUpper(literal.Value), "INSTALL %S") {
-			t.Error("runtime DuckDB must load preinstalled extensions without downloading them")
-		}
-		return true
-	})
-	for _, setting := range []string{"autoinstall_known_extensions=false", "autoload_known_extensions=false"} {
-		if !bytes.Contains(data, []byte(setting)) {
-			t.Errorf("runtime DuckDB must disable %s", setting)
-		}
 	}
 }
 

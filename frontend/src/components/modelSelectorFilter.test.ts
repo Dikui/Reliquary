@@ -7,7 +7,7 @@ import type { ModelConfig } from '@/api/model'
 import { filterModelsByType } from './modelSelectorFilter.ts'
 
 const selectorSource = readFileSync(new URL('./ModelSelector.vue', import.meta.url), 'utf8')
-const kbEditorSource = readFileSync(new URL('../views/settings/KnowledgeBaseSettings.vue', import.meta.url), 'utf8')
+const libraryEditorSource = readFileSync(new URL('../views/settings/LibrarySettings.vue', import.meta.url), 'utf8')
 const modelSettingsSource = readFileSync(new URL('../views/settings/ModelSettings.vue', import.meta.url), 'utf8')
 
 function model(overrides: Partial<ModelConfig> & Pick<ModelConfig, 'id' | 'type'>): ModelConfig {

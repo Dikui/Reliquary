@@ -34,11 +34,11 @@ func TestArticleStarPersistsHeaderLogsAndListFilter(t *testing.T) {
 			header, got, err := ParseVaultArticle(data)
 			return err == nil && header.Starred == starred && string(got) == string(body)
 		}, time.Second, 10*time.Millisecond)
-		_, total, err := repository.NewEntryRepository(h.db).ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.EntryListFilter{Starred: &starred})
+		_, total, err := repository.NewEntryRepository(h.db).ListPagedEntryByLibraryID(h.ctx, h.library.SpaceID, h.library.ID, &types.Pagination{Page: 1, PageSize: 20}, types.EntryListFilter{Starred: &starred})
 		require.NoError(t, err)
 		require.EqualValues(t, 1, total)
 		opposite := !starred
-		_, total, err = repository.NewEntryRepository(h.db).ListPagedEntryByKnowledgeBaseID(h.ctx, h.kb.SpaceID, h.kb.ID, &types.Pagination{Page: 1, PageSize: 20}, types.EntryListFilter{Starred: &opposite})
+		_, total, err = repository.NewEntryRepository(h.db).ListPagedEntryByLibraryID(h.ctx, h.library.SpaceID, h.library.ID, &types.Pagination{Page: 1, PageSize: 20}, types.EntryListFilter{Starred: &opposite})
 		require.NoError(t, err)
 		require.Zero(t, total)
 	}
@@ -65,18 +65,18 @@ func TestEntrySearchStarredFiltersAndMissingCount(t *testing.T) {
 	require.NoError(t, h.db.Model(a).Update("starred", true).Error)
 	require.NoError(t, h.db.Model(missing).Update("starred", true).Error)
 	starred := true
-	result, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, CollapseSimilar: boolPointer(false), Limit: 100})
+	result, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", Starred: &starred, CollapseSimilar: boolPointer(false), Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 2)
 	for _, r := range result.Results {
 		require.True(t, r.Starred)
 	}
-	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, PublishedFrom: "2026-10-01", Limit: 100})
+	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", Starred: &starred, PublishedFrom: "2026-10-01", Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)
 	starred = false
-	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Starred: &starred, Limit: 100})
+	result, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", Starred: &starred, Limit: 100})
 	require.NoError(t, err)
 	require.Equal(t, []string{"mine", "plain"}, entrySearchIDs(result))
 }
@@ -91,12 +91,13 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, err)
 			h.service.SetVault(v)
 			t.Cleanup(func() { require.NoError(t, v.Close()) })
-			a, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
+			a, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "undated.md", "# Undatedfixture\n\nAcme publishes original observations and complete measurements about product capabilities."), map[string]string{"publisher": "Acme", "original_url": "https://example.com/undatedfixture", "published_at": date}, nil, "", types.ChannelWeb, nil)
 			require.NoError(t, err)
 			h.drain(t)
 			a = h.article(t, a.ID)
-			h.kb.IndexingStrategy.KeywordEnabled = true
-			require.NoError(t, h.db.Save(h.kb).Error)
+			h.library.IndexingStrategy.KeywordEnabled = true
+			require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
+			require.NoError(t, h.db.Save(h.library).Error)
 			require.Equal(t, types.ParseStatusCompleted, a.ParseStatus)
 			intake, err := a.IntakeMetadata()
 			require.NoError(t, err)
@@ -108,15 +109,15 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, h.db.Table("entries").Select("search_published_at").Where("id=?", a.ID).Scan(&row).Error)
 			require.Nil(t, row.PublishedAt)
 			_, header, _ := readVaultArticle(t, v, a)
-			require.Contains(t, string(header), "published_at: null\n")
-			search := NewSearchService(entrySearchFixtureBases{kb: h.kb}, nil, nil, h.db)
+			require.NotContains(t, string(header), "\npublished_at:")
+			search := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, nil, h.db)
 			space, _ := types.SpaceInfoFromContext(h.ctx)
 			space.RetrievalConfig = &types.RetrievalConfig{KeywordThreshold: .00001, RerankTopK: 20}
-			result, err := search.Search(h.ctx, types.EntrySearchRequest{Query: "Undatedfixture", PublishedFrom: "2026-10-01", Limit: 20})
+			result, err := search.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "Undatedfixture", PublishedFrom: "2026-10-01", Limit: 20})
 			require.NoError(t, err)
 			require.Empty(t, result.Results)
 			require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)
-			require.Contains(t, h.model.prompts[0], "must not cause rejection")
+			require.Contains(t, h.model.prompts[0], "do not invent additional URL, publisher or date requirements")
 		})
 	}
 }
@@ -124,8 +125,8 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		a := &types.Entry{ID: "review-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
-		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.SpaceID, a.ID+".md", false)
+		a := &types.Entry{ID: "review-" + action, SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
+		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.library.SpaceID, a.ID+".md", false)
 		require.NoError(t, err)
 		require.NoError(t, a.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", Reason: "Needs human judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/" + action}}))
 		require.NoError(t, h.db.Create(a).Error)
@@ -162,8 +163,8 @@ func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 func TestIntakeReviewAuditFailurePreservesDecisionAndOriginal(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		a := &types.Entry{ID: "audit-failure-" + action, SpaceID: h.kb.SpaceID, KnowledgeBaseID: h.kb.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
-		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.kb.SpaceID, a.ID, false)
+		a := &types.Entry{ID: "audit-failure-" + action, SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "manual", Title: action, ParseStatus: types.ParseStatusRejected}
+		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), h.library.SpaceID, a.ID, false)
 		require.NoError(t, err)
 		require.NoError(t, a.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", Reason: "Needs judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/" + action}}))
 		require.NoError(t, h.db.Create(a).Error)

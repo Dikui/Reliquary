@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reliquary/internal/testutil/redistest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,9 +44,9 @@ type chatGPTGenerationRequest struct {
 
 func (r chatGPTGenerationRequest) stage() string {
 	switch {
-	case r.Instructions == intakeReviewPrompt():
+	case strings.HasPrefix(r.Instructions, intakeReviewPrompt()):
 		return "intake_review"
-	case r.Instructions == articleProcessingPrompt:
+	case strings.HasPrefix(r.Instructions, articleProcessingPrompt):
 		return "article_processing"
 	case r.Instructions == topicBackfillPrompt:
 		return "topic_backfill"
@@ -139,6 +140,19 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 		h.calls = append(h.calls, request)
 		h.mu.Unlock()
 		output, code := reply(request)
+		if code == "" && request.stage() == "article_processing" {
+			var input articleProcessingInput
+			var result map[string]any
+			if json.Unmarshal([]byte(request.userText()), &input) == nil && json.Unmarshal([]byte(output), &result) == nil {
+				descriptions := []extractedImage{}
+				for _, image := range input.Images {
+					descriptions = append(descriptions, extractedImage{Index: image.Index, Description: "Fixture chart contains calibration counts."})
+				}
+				result["image_descriptions"] = descriptions
+				encoded, _ := json.Marshal(result)
+				output = string(encoded)
+			}
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("x-request-id", "req_generation_fixture")
 		if code != "" {
@@ -162,11 +176,11 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 		Issuer: server.URL, Authorization: server.URL + "/authorize", Token: server.URL + "/token", Discovery: server.URL + "/discovery", Models: server.URL + "/v1/models",
 	}))
 	h.policy = NewChatGPTPolicyService(h.db)
-	h.models = NewModelServiceWithChatGPT(repository.NewModelRepository(h.db), repository.NewKnowledgeBaseRepository(h.db), nil, chatGPTGenerationPooler{}, nil, h.db, manager, h.policy).(*modelService)
+	h.models = NewModelServiceWithChatGPT(repository.NewModelRepository(h.db), repository.NewLibraryRepository(h.db), nil, chatGPTGenerationPooler{}, nil, h.db, manager, h.policy).(*modelService)
 	parsed, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	h.models.SetChatGPTTransport(&http.Client{Transport: chatGPTGenerationTransport{parsed, server.Client().Transport}})
-	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.kb.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT,
+	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.library.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT,
 		Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 32768, ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
 	require.NoError(t, h.models.CreateModel(h.ctx, model))
 	// Embeddings retain their own supported billing route and httptest fixture.
@@ -175,9 +189,10 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 	embedding.Source = types.ModelSourceRemote
 	embedding.Parameters.BaseURL, embedding.Parameters.Provider = server.URL+"/v1", "generic"
 	require.NoError(t, h.db.Save(&embedding).Error)
-	h.kb.ModelTiers = types.ModelTierConfig{Light: model.ID, Generation: model.ID, EntityResolution: model.ID, Embedding: embedding.ID}
-	h.kb.SummaryModelID, h.kb.EmbeddingModelID = model.ID, embedding.ID
-	require.NoError(t, h.db.Save(h.kb).Error)
+	h.library.ModelTiers = types.ModelTierConfig{Light: model.ID, Generation: model.ID, EntityResolution: model.ID, Embedding: embedding.ID}
+	h.library.SummaryModelID, h.library.EmbeddingModelID = model.ID, embedding.ID
+	require.NoError(t, h.db.Save(h.library).Error)
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", h.library.EmbeddingModelID).Error)
 	h.service.modelService = h.models
 	h.service.chunkService.(*chunkService).modelService = h.models
 	return h
@@ -248,7 +263,7 @@ func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHisto
 			require.NotEqual(t, "system", input.Role)
 		}
 		if request.stage() == "article_processing" {
-			require.Equal(t, articleProcessingPrompt, request.Instructions)
+			require.Equal(t, libraryProcessingPrompt(h.library, &types.Entry{}), request.Instructions)
 			require.Len(t, request.Input, 1)
 			require.Len(t, request.Input[0].Content, 2)
 			require.Equal(t, "input_image", request.Input[0].Content[1].Type)
@@ -275,7 +290,7 @@ func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecove
 					}
 					return chatGPTGenerationSuccess(t, request)
 				})
-				article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+				article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 					newMultipartFileHeader(t, "quota-original.md", "Fixture Acme published an original product announcement with measured capabilities."),
 					map[string]string{"publisher": "Fixture Acme", "original_url": "https://example.org/quota-original", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 				require.NoError(t, err)
@@ -351,7 +366,7 @@ func TestChatGPTQuotaDefersHistoricalTopicBatchWithoutOrdinaryFailureAttempt(t *
 
 func chatGPTScheduledQueue(t *testing.T, h *chatGPTGenerationHarness) *taskqueue.Client {
 	t.Helper()
-	client := taskqueue.NewClient(h.db)
+	client := redistest.NewClient(t, h.db)
 	h.service.task = client
 	return client
 }
@@ -377,12 +392,12 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 				}
 				return chatGPTGenerationSuccess(t, request)
 			})
-			h.service.kbService = ingestFixtureKB{retainedProcessingKB{kb: h.kb}}
-			spaceID := h.kb.SpaceID
+			h.service.libraryService = ingestFixtureLibrary{retainedProcessingLibrary: retainedProcessingLibrary{library: h.library}, db: h.db}
+			spaceID := h.library.SpaceID
 			require.NoError(t, h.db.Create(&types.APIKey{ID: 19, SpaceID: &spaceID, Name: "ChatGPT fixture collector", KeyHash: "chatgpt-fixture-collector"}).Error)
 			h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "19"})
 			inspector := chatGPTScheduledQueue(t, h)
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Acquisition: "verbatim", URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
+			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
 			require.NoError(t, err)
 			require.Equal(t, "accepted", result.Status)
 			pending := h.article(t, result.EntryID)
@@ -422,7 +437,7 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 		}
 		return chatGPTGenerationSuccess(t, request)
 	})
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.kb.ID,
+	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
 		newMultipartFileHeader(t, "missing-link.md", "Fixture Acme published a complete original announcement with product measurements and documented deployment choices."),
 		map[string]string{"publisher": "Fixture Acme"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)

@@ -11,15 +11,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"gorm.io/gorm"
 	"reliquary/internal/application/service/file"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	"reliquary/internal/utils"
+
+	"gorm.io/gorm"
 )
 
 type ingestIdentityError struct{ *werrors.AppError }
@@ -99,25 +100,25 @@ func decodeIngestInline(raw string) ([]byte, error) {
 	if strings.HasPrefix(payload, "data:") {
 		parts := strings.SplitN(payload, ",", 2)
 		if len(parts) != 2 || !strings.HasSuffix(parts[0], ";base64") {
-			return nil, fmt.Errorf("file data must be base64")
+			return nil, fmt.Errorf("image data must be base64")
 		}
 		payload = parts[1]
 	}
 	// Reject before allocating the decoded buffer.
 	if base64.StdEncoding.DecodedLen(len(payload)) > types.MaxIngestInlineAssetBytes+2 {
-		return nil, fmt.Errorf("inline file exceeds the 10 MiB item limit")
+		return nil, fmt.Errorf("inline image exceeds the 10 MiB item limit")
 	}
 	data, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
-		return nil, fmt.Errorf("decode file data: %w", err)
+		return nil, fmt.Errorf("decode image data: %w", err)
 	}
 	if len(data) > types.MaxIngestInlineAssetBytes {
-		return nil, fmt.Errorf("inline file exceeds the 10 MiB item limit")
+		return nil, fmt.Errorf("inline image exceeds the 10 MiB item limit")
 	}
 	return data, nil
 }
 
-func ingestInlineSize(file *types.IngestFile, images []types.IngestImage) int64 {
+func ingestInlineSize(images []types.IngestImage) int64 {
 	size := func(raw string) int64 {
 		if strings.HasPrefix(raw, "data:") {
 			if parts := strings.SplitN(raw, ",", 2); len(parts) == 2 {
@@ -129,9 +130,6 @@ func ingestInlineSize(file *types.IngestFile, images []types.IngestImage) int64 
 		return int64(base64.StdEncoding.DecodedLen(len(raw))) - int64(len(raw)-len(strings.TrimRight(raw, "=")))
 	}
 	var total int64
-	if file != nil && file.Data != "" {
-		total += size(file.Data)
-	}
 	for _, image := range images {
 		if image.Data != "" {
 			total += size(image.Data)
@@ -167,67 +165,13 @@ func stampIngestMissing(items []types.IngestMissing, id uint64, name string) []t
 	return result
 }
 
-// Content must be actual supplied material, rather than the link that locates it.
-func hasIngestBody(request *types.IngestRequest, parsed string) bool {
-	content := strings.TrimSpace(utils.CleanMarkdown(request.Content))
-	if content != "" && !validIngestURL(content) {
-		return true
-	}
-	return request.File != nil && (request.File.AssetID != "" || request.File.Data != "") && strings.TrimSpace(parsed) != ""
-}
-
-func (s *entryService) readIngestFile(ctx context.Context, file *types.IngestFile) (*types.IngestAsset, []byte, error) {
-	if file.AssetID != "" {
-		return s.loadIngestAsset(ctx, file.AssetID)
-	}
-	data, err := decodeIngestInline(file.Data)
-	if err != nil {
-		return nil, nil, werrors.NewBadRequestError(err.Error())
-	}
-	name := strings.TrimSpace(file.Name)
-	if name == "" {
-		switch http.DetectContentType(data) {
-		case "application/pdf":
-			name = "original.pdf"
-		case "image/png":
-			name = "original.png"
-		case "image/jpeg":
-			name = "original.jpg"
-		case "image/gif":
-			name = "original.gif"
-		case "text/plain; charset=utf-8":
-			name = "original.txt"
-		default:
-			return nil, nil, werrors.NewBadRequestError("base64 file requires name including its extension")
-		}
-	}
-
-	if err := validateImportFileType(getFileType(name)); err != nil {
-		return nil, nil, err
-	}
-	return &types.IngestAsset{Name: name, Type: getFileType(name), Size: int64(len(data))}, data, nil
-}
-
-// The optional reader is an injected parsing dependency for integration tests.
-// Production always selects an in-process parser with no URL or OCR fallback.
-func (s *entryService) parseIngestDocument(ctx context.Context, asset *types.IngestAsset, data []byte) (*types.ReadResult, error) {
-	reader := s.ingestDocReader
-	if reader == nil {
-		reader = &docparser.SimpleFormatReader{}
-		if !docparser.IsSimpleFormat(asset.Type) {
-			reader = docparser.NewAnydocReader(nil, nil)
-		}
-	}
-	return reader.Read(ctx, &types.ReadRequest{FileContent: data, FileName: asset.Name, FileType: asset.Type})
-}
-
-func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.KnowledgeBase, article *types.Entry, request *types.IngestRequest) (string, string, error) {
+func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.Library, article *types.Entry, request *types.IngestRequest) (string, string, error) {
 	copy := *request
 	if validIngestURL(strings.TrimSpace(copy.Content)) {
 		copy.Content = ""
 	}
 	intake, _ := article.IntakeMetadata()
-	files := s.resolveFileService(ctx, kb)
+	files := s.resolveFileService(ctx, library)
 	missing := stampIngestMissing(request.Missing, article.LastIngestAPIKeyID, article.LastIngestAPIKeyName)
 	canonicalRefs := make([]string, len(copy.Images))
 	imageInputs := append([]types.IngestImage(nil), copy.Images...)
@@ -244,51 +188,6 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 		}
 		canonicalRefs[i] = ingestCanonicalImageReference(imageInputs[i])
 	}
-	if request.File != nil && (request.File.AssetID != "" || request.File.Data != "") {
-		asset, data, err := s.readIngestFile(ctx, request.File)
-		if err != nil {
-			return "", "", err
-		}
-		path, err := files.SaveBytes(ctx, data, article.SpaceID, asset.Name, false)
-		if err != nil {
-			return "", "", err
-		}
-		if err := rememberIngestStoredFile(ctx, files, path); err != nil {
-			return "", "", err
-		}
-		article.FilePath, article.FileName, article.FileType, article.FileSize = path, asset.Name, asset.Type, int64(len(data))
-		attachments := []types.IngestAttachment{{AssetID: asset.ID, Name: asset.Name, Type: asset.Type, Path: path, Size: int64(len(data)), SourceURL: request.File.SourceURL}}
-		if err := article.SetIngestAttachments(attachments); err != nil {
-			return "", "", err
-		}
-		if strings.TrimSpace(copy.Content) == "" {
-			parsed, err := s.parseIngestDocument(ctx, asset, data)
-			if err != nil {
-				return "", "", werrors.NewBadRequestError("attachment could not be parsed locally: " + err.Error())
-			}
-			if parsed == nil {
-				return "", "", werrors.NewBadRequestError("attachment parser returned no content")
-			}
-			parsedBody, parsedImages, err := docparser.NewImageResolver().ResolveAndStore(ctx, parsed, files, article.SpaceID)
-			if err != nil {
-				return "", "", err
-			}
-			copy.Content = parsedBody
-			for _, image := range parsedImages {
-				intake.Images = append(intake.Images, image.ServingURL)
-				if err := rememberIngestStoredFile(ctx, files, image.ServingURL); err != nil {
-					return "", "", err
-				}
-			}
-			if err := article.SetIntakeMetadata(intake); err != nil {
-				return "", "", err
-			}
-		}
-		if err := extractIntakeOriginalLink(article, copy.Content, data, asset.Type, nil); err != nil {
-			return "", "", err
-		}
-		intake, _ = article.IntakeMetadata()
-	}
 	refs, stored, failures := s.resolveIngestImages(ctx, imageInputs, files, article.SpaceID)
 	if len(failures) > 0 {
 		return "", "", werrors.NewBadRequestError("provided image file could not be stored: " + failures[0].Reason)
@@ -300,6 +199,9 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 		}
 	}
 	body := assembleIngestBody(&copy, refs)
+	if utf8.RuneCountInString(strings.TrimSpace(body)) > types.MaxIngestContentRunes {
+		return "", "", werrors.NewBadRequestError("assembled content exceeds 5000000 Unicode code points")
+	}
 	canonical := assembleIngestBody(&copy, canonicalRefs)
 	for i, ref := range refs {
 		source := ingestImageSource(copy.Images[i])
@@ -309,9 +211,6 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 		}
 	}
 	missing = addRemoteIngestImageMissing(body, missing, article.LastIngestAPIKeyID, article.LastIngestAPIKeyName)
-	if !hasIngestBody(request, body) && !hasIngestMissing(missing, "content", "") {
-		missing = append(missing, types.IngestMissing{Type: "content", SourceURL: request.URL, Reason: "未提供正文", APIKeyID: article.LastIngestAPIKeyID, APIKeyName: article.LastIngestAPIKeyName, SubmittedAt: time.Now()})
-	}
 	article.Incomplete = len(missing) > 0
 	if err := article.SetIngestMissing(missing); err != nil {
 		return "", "", err
@@ -332,9 +231,6 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, kb *types.Knowl
 
 func (s *entryService) referenceIngestMaterials(ctx context.Context, article *types.Entry, request *types.IngestRequest) error {
 	ids := []string{}
-	if request.File != nil && request.File.AssetID != "" {
-		ids = append(ids, request.File.AssetID)
-	}
 	for _, image := range request.Images {
 		if image.AssetID != "" {
 			ids = append(ids, image.AssetID)
@@ -406,8 +302,8 @@ func (s *entryService) recordMissingIngestImages(ctx context.Context, k *types.E
 	return s.repo.UpdateEntryColumns(ctx, k.ID, map[string]any{"missing_materials": k.MissingMaterials, "incomplete": true, "updated_at": time.Now()})
 }
 
-func (s *entryService) readIngestBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Entry) (string, error) {
-	if k.VaultPath != "" && !(k.Incomplete && k.ProcessingMode == types.ProcessingModeSummaryOnly) {
+func (s *entryService) readIngestBody(ctx context.Context, library *types.Library, k *types.Entry) (string, error) {
+	if k.VaultPath != "" {
 		return k.VaultBody, nil
 	}
 	intake, err := k.IntakeMetadata()
@@ -417,7 +313,7 @@ func (s *entryService) readIngestBody(ctx context.Context, kb *types.KnowledgeBa
 	if intake == nil || intake.OriginalPath == "" {
 		return "", nil
 	}
-	file, err := s.resolveFileServiceForPath(ctx, kb, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
+	file, err := s.resolveFileServiceForPath(ctx, library, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
 	if err != nil {
 		return "", err
 	}

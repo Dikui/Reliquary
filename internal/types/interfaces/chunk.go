@@ -63,8 +63,8 @@ type ChunkRepository interface {
 	DeleteByEntryList(ctx context.Context, spaceID uint64, entryIDs []string) error
 	// ListImageInfoByEntryIDs returns non-empty (entry_id, image_info) pairs for image cleanup.
 	ListImageInfoByEntryIDs(ctx context.Context, spaceID uint64, entryIDs []string) ([]ChunkImageInfo, error)
-	// CountChunksByKnowledgeBaseID counts the number of chunks in a knowledge base.
-	CountChunksByKnowledgeBaseID(ctx context.Context, spaceID uint64, kbID string) (int64, error)
+	// CountChunksByLibraryID counts the number of chunks in a library.
+	CountChunksByLibraryID(ctx context.Context, spaceID uint64, libraryID string) (int64, error)
 	// DeleteUnindexedChunks deletes unindexed chunks by entry id and chunk index range
 	DeleteUnindexedChunks(ctx context.Context, spaceID uint64, entryID string) ([]*types.Chunk, error)
 }

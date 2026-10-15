@@ -281,14 +281,14 @@ func TestGetRuntimeQueuesFallsBackFromInvalidHistoricalConcurrency(t *testing.T)
 func TestListRuntimeTasksReturnsSafeTaskDetails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
-		ID:              "task-1",
-		Queue:           types.QueueDefault,
-		Type:            types.TypeDocumentProcess,
-		LastError:       "model unavailable",
-		Retried:         5,
-		MaxRetry:        5,
-		KnowledgeBaseID: "kb-1",
-		EntryID:         "entry-1",
+		ID:        "task-1",
+		Queue:     types.QueueDefault,
+		Type:      types.TypeDocumentProcess,
+		LastError: "model unavailable",
+		Retried:   5,
+		MaxRetry:  5,
+		LibraryID: "library-1",
+		EntryID:   "entry-1",
 	}}}
 	handler := &SystemHandler{taskInspector: inspector}
 	recorder := httptest.NewRecorder()

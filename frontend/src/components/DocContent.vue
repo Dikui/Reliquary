@@ -10,27 +10,29 @@ import "highlight.js/styles/github.css";
 import mermaid from "mermaid";
 import { onMounted, ref, nextTick, onUnmounted, watch, computed } from "vue";
 import {
-  downEntryDetails, getChunkByIdOnly, previewEntryFile,
+  getChunkByIdOnly,
   updateEntryMetadata,
-  reprocessEntry, getEntryDetails,
+  reparseEntry, getEntryDetails,
   ENTRY_CHUNK_PAGE_SIZE,
-} from "@/api/knowledge-base";
+} from "@/api/library";
 import { MessagePlugin } from "tdesign-vue-next";
 import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages, isValidURL } from '@/utils/security';
 import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
 import { useI18n } from 'vue-i18n';
-import DocumentPreview from '@/components/DocumentPreview.vue';
-import RepostSources from '@/views/knowledge-base/components/RepostSources.vue';
+import RepostSources from '@/views/library/components/RepostSources.vue';
+import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import ReportAssociations from '@/components/ReportAssociations.vue';
+import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import MissingMaterials from '@/components/MissingMaterials.vue';
 import IncompleteActions from '@/components/IncompleteActions.vue';
+import BodyReference from './BodyReference.vue';
+import type { SourceLocation } from '@/types/search';
 import ReviewActions from '@/components/ReviewActions.vue';
 import EntryArticleJudgments from '@/components/EntryArticleJudgments.vue';
 import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
 import PersonalDocumentDelete from '@/components/PersonalDocumentDelete.vue';
-import { resolveEntryDownloadFileName } from '@/views/knowledge-base/entryDownloadFileName';
-import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
 import { getApiBaseUrl } from '@/utils/api-base';
 import { copyWithToast } from '@/utils/clipboard';
 import { isIngestAPIEntry, getExternalToolName } from '@/utils/entrySourceLabels';
@@ -51,10 +53,10 @@ const metadataEditing = ref(false);
 const metadataDraft = ref<MetadataDraftRow[]>([]);
 const metadataSaving = ref(false);
 const metadataTypeOptions = computed(() => [
-  { label: t('knowledgeBase.metadataTypeText'), value: 'text' },
-  { label: t('knowledgeBase.metadataTypeNumber'), value: 'number' },
-  { label: t('knowledgeBase.metadataTypeBoolean'), value: 'boolean' },
-  { label: t('knowledgeBase.metadataTypeNull'), value: 'null' },
+  { label: t('library.metadataTypeText'), value: 'text' },
+  { label: t('library.metadataTypeNumber'), value: 'number' },
+  { label: t('library.metadataTypeBoolean'), value: 'boolean' },
+  { label: t('library.metadataTypeNull'), value: 'null' },
 ]);
 
 const makeMetadataRow = (key = '', value: unknown = ''): MetadataDraftRow => {
@@ -76,7 +78,6 @@ const syncMetadataDraft = () => {
 };
 
 const startMetadataEdit = () => {
-  if (props.details?.source_kind === 'mine') return;
   syncMetadataDraft();
   if (!metadataDraft.value.length) metadataDraft.value.push(makeMetadataRow());
   metadataEditing.value = true;
@@ -97,7 +98,7 @@ const parseMetadataValue = (row: MetadataDraftRow): unknown => {
   if (row.type === 'number') {
     const value = Number(row.value);
     if (!row.value.trim() || !Number.isFinite(value)) {
-      throw new Error(t('knowledgeBase.metadataNumberRequired', { key: row.key }));
+      throw new Error(t('library.metadataNumberRequired', { key: row.key }));
     }
     return value;
   }
@@ -111,14 +112,13 @@ const formatMetadataValue = (value: unknown) => {
 };
 
 const saveMetadata = async () => {
-  if (props.details?.source_kind === 'mine') return;
   try {
     const value: Record<string, unknown> = {};
     for (const row of metadataDraft.value) {
       const key = row.key.trim();
-      if (!key) throw new Error(t('knowledgeBase.metadataKeyRequired'));
+      if (!key) throw new Error(t('library.metadataKeyRequired'));
       if (Object.prototype.hasOwnProperty.call(value, key)) {
-        throw new Error(t('knowledgeBase.metadataKeyDuplicate', { key }));
+        throw new Error(t('library.metadataKeyDuplicate', { key }));
       }
       value[key] = parseMetadataValue(row);
     }
@@ -140,14 +140,15 @@ const saveMetadata = async () => {
 const reprocessing = ref(false);
 const articleJudgmentsBusy = ref(false);
 const incompleteBusy = ref(false);
-const canReprocess = computed(() => !['mine', 'report'].includes(props.details?.source_kind || ''));
+const canReprocess = computed(() => Boolean(props.details?.id));
+const isIndexOnly = computed(() => props.details?.source_kind === 'report' || props.details?.library_template === 'generated');
 const reprocess = async () => {
   if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value || incompleteBusy.value) return;
   reprocessing.value = true;
   try {
-    const result: any = await reprocessEntry(props.details.id);
+    const result: any = await reparseEntry(props.details.id);
     applyProcessingState(result?.data || { parse_status: 'pending' });
-    MessagePlugin.success(t('knowledgeBase.reprocessQueued'));
+    MessagePlugin.success(t('library.reprocessQueued'));
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('common.error'));
   } finally { reprocessing.value = false; }
@@ -198,9 +199,15 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "kbId"]);
+const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "libraryId", "reference"]);
 const externalToolName = computed(() => getExternalToolName(props.details));
-const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "reviewChanged"]);
+const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "openTopic", "reviewChanged"]);
+const reportRelatedEntryIds = computed(() => Array.isArray(props.details?.metadata?.related_entry_ids)
+  ? props.details.metadata.related_entry_ids
+  : []);
+const reportRelatedEntities = computed(() => Array.isArray(props.details?.metadata?.related_entities)
+  ? props.details.metadata.related_entities
+  : []);
 const personalDocumentDeleteBusy = ref(false);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
@@ -237,7 +244,7 @@ const loadIntakeOriginal = async () => {
   intakeOriginalError.value = '';
   try {
     const start = intakeOriginalOffset.value;
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${props.details.id}/preview`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${props.details.id}/body`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('reliquary_token') || ''}`,
         Range: `bytes=${start}-${start + 65535}`,
@@ -259,7 +266,7 @@ const loadIntakeOriginal = async () => {
     await nextTick();
     await runMarkdownPostRenderPipeline();
   } catch (error: any) {
-    if (!controller.signal.aborted && props.details?.id === id) intakeOriginalError.value = error?.message || t('knowledgeBase.chunkLoadFailed');
+    if (!controller.signal.aborted && props.details?.id === id) intakeOriginalError.value = error?.message || t('library.chunkLoadFailed');
   } finally {
     if (intakePreviewController === controller) intakeOriginalLoading.value = false;
   }
@@ -274,13 +281,8 @@ const applyIncompleteChange = () => {
   applyProcessingState({ incomplete: false, missing_materials: [] });
   emit('reviewChanged', props.details, false);
 };
-const applyArticleJudgment = (value: Record<string, unknown>) => {
-  const previousMode = props.details.processing_mode;
+const applyEntryJudgment = (value: Record<string, unknown>) => {
   applyProcessingState(value);
-  if (props.details.processing_mode === 'summary_only') {
-    props.details.md = [];
-    props.details.total = 0;
-  } else if (previousMode === 'summary_only' && !isProcessing.value) emit('getDoc', 1);
   emit('reviewChanged', props.details, false);
 };
 let processingPollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -300,7 +302,7 @@ const scheduleProcessingPoll = () => {
       const result: any = await getEntryDetails(id);
       if (generation === processingPollGeneration && props.details?.id === id && result?.success && result.data) {
         applyProcessingState(result.data);
-        if (!isProcessing.value && props.details.processing_mode !== 'summary_only') emit('getDoc', 1);
+        if (!isProcessing.value) emit('getDoc', 1);
       }
     } catch { /* Preserve status and retry while the drawer is visible. */ }
     if (generation === processingPollGeneration && isProcessing.value) scheduleProcessingPoll();
@@ -312,7 +314,6 @@ watch(() => [props.visible, props.details?.id, props.details?.parse_status], ([v
   else stopProcessingPolling();
 }, { immediate: true });
 watch(() => props.details?.id, syncMetadataDraft, { immediate: true });
-watch(() => props.details?.source_kind, value => { if (value === 'mine') metadataEditing.value = false; });
 
 const hasTimelineSpans = ref(false);
 const timelineDrawerVisible = ref(false);
@@ -349,16 +350,17 @@ const TRACE_DRAWER_MIN_WIDTH = 560;
 
 const timelineDrawerWidth = ref(TRACE_DRAWER_DEFAULT_WIDTH);
 const timelineDrawerResizing = ref(false);
+const timelineDrawerSize = computed(() => `min(${timelineDrawerWidth.value}px, 100vw)`);
 
 let traceResizeStartX = 0;
 let traceResizeStartWidth = 0;
 
 function traceDrawerMaxWidth() {
-  return Math.min(1400, Math.max(TRACE_DRAWER_MIN_WIDTH, Math.floor(window.innerWidth * 0.92)));
+  return Math.min(1400, window.innerWidth, Math.max(TRACE_DRAWER_MIN_WIDTH, Math.floor(window.innerWidth * 0.92)));
 }
 
 function clampTraceDrawerWidth(width: number) {
-  return Math.max(TRACE_DRAWER_MIN_WIDTH, Math.min(traceDrawerMaxWidth(), width));
+  return Math.min(traceDrawerMaxWidth(), Math.max(TRACE_DRAWER_MIN_WIDTH, width));
 }
 
 function loadTraceDrawerWidth() {
@@ -554,7 +556,7 @@ const getMarkdownRenderRoot = (): ParentNode | null =>
 let url = ref('')
 // 视图模式：chunks / merged / preview
 // file 类型默认「预览」，URL / 手动创建 默认「全文」
-const viewMode = ref<'chunks' | 'merged' | 'preview'>('merged');
+const viewMode = ref<'chunks' | 'merged'>('merged');
 
 // 合并后的文档内容（在下方通过 computed 定义）
 
@@ -665,9 +667,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', onTraceDrawerWindowResize);
   cleanupTraceDrawerResize();
   cleanupMainDrawerResize();
-  if (audioBlobUrl.value) {
-    URL.revokeObjectURL(audioBlobUrl.value);
-  }
+
 })
 const checkImage = (url) => {
   return new Promise((resolve) => {
@@ -760,65 +760,8 @@ const processedChunks = computed(() => {
   });
 });
 
-const canPreview = (): boolean => {
-  if (isLegacyManualDraft.value && !legacyManualBody.value && props.details?.metadata?.intake?.original_path) return true;
-  if (props.details?.type !== 'file') return false;
-  const ft = resolveFilePreviewExt(props.details?.title, props.details?.file_type);
-  if (!ft) return false;
-  if (audioExtensions.has(ft)) return false; // 音频不走预览tab，播放器已内嵌
-  return isKnownPreviewableExt(ft);
-};
+watch(() => props.details?.id, () => { viewMode.value = 'merged'; });
 
-// 当文档详情加载完成时，file 类型自动切换到「预览」；音频类型使用 merged + 播放器
-watch(() => props.details?.id, (newId) => {
-  // 清理旧音频
-  if (audioBlobUrl.value) {
-    URL.revokeObjectURL(audioBlobUrl.value);
-    audioBlobUrl.value = '';
-  }
-  if (!newId) return;
-  if (isAudioFile(props.details?.file_type)) {
-    viewMode.value = 'merged'; // 音频默认全文视图，播放器已内嵌
-    loadAudioPreview();
-  } else if (canPreview()) {
-    viewMode.value = 'preview';
-  } else {
-    viewMode.value = 'merged';
-  }
-});
-
-const isTextFile = (fileType?: string): boolean => {
-  if (!fileType) return false;
-  const textTypes = ['txt', 'md', 'markdown', 'json', 'xml', 'html', 'css', 'js', 'ts', 'py', 'java', 'go', 'cpp', 'c', 'h', 'sh', 'yaml', 'yml', 'ini', 'conf', 'log'];
-  return textTypes.includes(fileType.toLowerCase());
-};
-const isMarkdownFile = (fileType?: string): boolean => {
-  if (!fileType) return false;
-  const markdownTypes = ['md', 'markdown'];
-  return markdownTypes.includes(fileType.toLowerCase());
-};
-
-// 音频文件判断与播放器状态
-const audioExtensions = new Set(['mp3', 'wav', 'm4a', 'flac', 'ogg']);
-const isAudioFile = (fileType?: string): boolean => {
-  if (!fileType) return false;
-  return audioExtensions.has(fileType.toLowerCase());
-};
-const audioBlobUrl = ref('');
-const audioLoading = ref(false);
-
-const loadAudioPreview = async () => {
-  if (!props.details?.id || audioBlobUrl.value) return;
-  audioLoading.value = true;
-  try {
-    const blob = await previewEntryFile(props.details.id);
-    audioBlobUrl.value = URL.createObjectURL(blob);
-  } catch (err) {
-    console.error('Audio preview load failed:', err);
-  } finally {
-    audioLoading.value = false;
-  }
-};
 const runMarkdownPostRenderPipeline = async () => {
   await nextTick();
   const renderRoot = getMarkdownRenderRoot();
@@ -827,7 +770,7 @@ const runMarkdownPostRenderPipeline = async () => {
   }
   await hydrateProtectedFileImages(
     renderRoot,
-    props.kbId ? { mode: 'knowledgeBase', kbId: props.kbId } : undefined,
+    props.libraryId ? { mode: 'library', libraryId: props.libraryId } : undefined,
   );
   const images = renderRoot?.querySelectorAll?.('img.markdown-image') as NodeListOf<HTMLImageElement> | undefined;
   if (images) {
@@ -980,30 +923,30 @@ const getDisplayTitle = () => {
 };
 
 const channelLabelMap: Record<string, string> = {
-  web: 'knowledgeBase.channelWeb',
-  api: 'knowledgeBase.channelApi',
-  browser_extension: 'knowledgeBase.channelBrowserExtension',
-  rss: 'knowledgeBase.channelRSS',
+  web: 'library.channelWeb',
+  api: 'library.channelApi',
+  browser_extension: 'library.channelBrowserExtension',
+  rss: 'library.channelRSS',
 };
 
 const getChannelLabel = (channel: string) => {
-  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return t(`knowledgeBase.sourceKinds.${props.details.source_kind}`);
+  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return t(`library.sourceKinds.${props.details.source_kind}`);
   const key = channelLabelMap[channel];
-  return key ? t(key) : t('knowledgeBase.channelUnknown');
+  return key ? t(key) : t('library.channelUnknown');
 };
 
 // 获取类型标签
 const getTypeLabel = () => {
-  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return props.details.file_type?.toUpperCase() || t('knowledgeBase.typeFile');
-  if (isIngestAPIEntry(props.details)) return t('knowledgeBase.typeIngestAPI');
-  if (props.details.channel === 'rss') return t('knowledgeBase.channelRSS');
+  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return ['manual', 'md', 'markdown'].includes(props.details.file_type?.toLowerCase()) ? t('ikb18.markdown') : (props.details.file_type?.toUpperCase() || t('library.typeFile'));
+  if (isIngestAPIEntry(props.details)) return t('library.typeIngestAPI');
+  if (props.details.channel === 'rss') return t('library.channelRSS');
   switch (props.details.type) {
     case 'url':
-      return t('knowledgeBase.typeURL');
+      return t('library.typeURL');
     case 'manual':
-      return t('knowledgeBase.typeManual');
+      return t('library.typeManual');
     case 'file':
-      return props.details.file_type ? props.details.file_type.toUpperCase() : t('knowledgeBase.typeFile');
+      return props.details.file_type ? props.details.file_type.toUpperCase() : t('library.typeFile');
     default:
       return '';
   }
@@ -1027,12 +970,12 @@ const getTypeTheme = () => {
 const getContentLabel = () => {
   switch (props.details.type) {
     case 'url':
-      return t('knowledgeBase.webContent');
+      return t('library.webContent');
     case 'manual':
-      return t('knowledgeBase.documentContent');
+      return t('library.documentContent');
     case 'file':
     default:
-      return t('knowledgeBase.fileContent');
+      return t('library.fileContent');
   }
 };
 
@@ -1040,12 +983,12 @@ const getContentLabel = () => {
 const getTimeLabel = () => {
   switch (props.details.type) {
     case 'url':
-      return t('knowledgeBase.importTime');
+      return t('library.importTime');
     case 'manual':
-      return t('knowledgeBase.createTime');
+      return t('library.createTime');
     case 'file':
     default:
-      return t('knowledgeBase.uploadTime');
+      return t('library.uploadTime');
   }
 };
 
@@ -1059,7 +1002,7 @@ const getChunkMeta = (item: any) => {
   if (!item) return '';
   const parts = [];
   if (item.char_count) {
-    parts.push(`${item.char_count} ${t('knowledgeBase.characters', item.char_count)}`);
+    parts.push(`${item.char_count} ${t('library.characters', item.char_count)}`);
   }
   if (item.token_count) {
     parts.push(t('countCopy.tokens', { count: item.token_count }));
@@ -1086,7 +1029,7 @@ const loadParentContext = async (item: any, index: number) => {
         parentContextCache.value = new Map(parentContextCache.value);
       }
     } catch (err) {
-      MessagePlugin.error(t('knowledgeBase.parentContextLoadFailed'));
+      MessagePlugin.error(t('library.parentContextLoadFailed'));
       parentContextPopup.value = '';
       return;
     } finally {
@@ -1110,30 +1053,6 @@ const getParentContent = (item: any) => {
   return parentContextCache.value.get(item.parent_chunk_id) || '';
 };
 
-const downloadFile = () => {
-  downEntryDetails(props.details.id)
-    .then((result) => {
-      if (result) {
-        if (url.value) {
-          URL.revokeObjectURL(url.value);
-        }
-        url.value = URL.createObjectURL(result);
-        const link = document.createElement("a");
-        link.style.display = "none";
-        link.setAttribute("href", url.value);
-        link.setAttribute("download", resolveEntryDownloadFileName(props.details));
-        document.body.appendChild(link);
-        link.click();
-        nextTick(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url.value);
-        })
-      }
-    })
-    .catch((err) => {
-      MessagePlugin.error(t('file.downloadFailed'));
-    });
-};
 const handleChunkPageChange = (pageInfo: { current: number }) => {
   if (props.details?.chunkLoading || pageInfo.current === loadedChunkPage.value) return;
   pendingChunkPage = pageInfo.current;
@@ -1162,18 +1081,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <div class="doc-drawer-header-title">{{ getDisplayTitle() }}</div>
           </div>
           <div class="header-actions">
+            <a v-if="details.id" :href="`/platform/model-calls?entry_id=${encodeURIComponent(details.id)}`" :title="t('ikb19.viewEntryCalls')" :aria-label="t('ikb19.viewEntryCalls')" class="header-action-btn"><t-icon name="chart-bar" size="16px" /></a>
 
             <PersonalDocumentDelete v-if="details.source_kind === 'mine' && details.id" :document-id="details.id" :title="getDisplayTitle()"
               :disabled="articleJudgmentsBusy || incompleteBusy" @busy-change="personalDocumentDeleteBusy = $event"
               @deleted="() => emit('reviewChanged', details, true)" />
 
-            <t-button v-if="details.processing_mode !== 'summary_only' && (details.type === 'file' || details.type === 'manual')" class="header-action-btn" size="small"
-              variant="text" shape="square" theme="default" :title="$t('common.download') || 'Download'"
-              @click="downloadFile()">
-              <template #icon>
-                <t-icon name="download" size="16px" />
-              </template>
-            </t-button>
             <t-button v-if="details.id && hasTimelineSpans" class="header-action-btn trace-entry-btn" size="small"
               variant="text" shape="square" :theme="traceEntryTheme" :title="traceEntryTitle" @click="openTimeline">
               <template #icon>
@@ -1195,14 +1108,14 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
       <!-- 二级抽屉：完整 processing waterfall -->
       <teleport to="body">
-        <div v-if="timelineDrawerVisible" class="trace-drawer-resize-handle"
+        <div v-if="timelineDrawerVisible && !isMainDrawerNarrow" class="trace-drawer-resize-handle"
           :style="{ right: `${timelineDrawerWidth}px` }" role="separator" aria-orientation="vertical"
           :aria-label="$t('knowledgeStages.resizeDrawer')" :title="$t('knowledgeStages.resizeDrawer')"
           @mousedown.prevent="onTraceDrawerResizeStart">
           <div class="trace-drawer-resize-line" />
         </div>
       </teleport>
-      <t-drawer :visible="timelineDrawerVisible" :zIndex="2100" :size="`${timelineDrawerWidth}px`" attach="body"
+      <t-drawer :visible="timelineDrawerVisible" :zIndex="2100" :size="timelineDrawerSize" attach="body"
         :closeBtn="false" :footer="false" :header="false" :showOverlay="true" :closeOnOverlayClick="true"
         placement="right" :class="['kp-secondary-drawer', { 'kp-secondary-drawer--resizing': timelineDrawerResizing }]"
         @close="closeTimeline">
@@ -1213,38 +1126,40 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
       </t-drawer>
 
       <div ref="docMarkdownRoot" class="doc-markdown-root doc-drawer-body setting-drawer__body">
+        <BodyReference v-if="visible && details.id && reference" :key="details.id" :entry-id="details.id" :location="reference as SourceLocation" />
         <section v-if="details.id" class="setting-drawer__section">
-          <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.detailSectionMeta') }}</h4>
+          <h4 class="setting-drawer__section-title">{{ $t('library.detailSectionMeta') }}</h4>
           <div class="doc-detail-rows">
+            <div v-if="details.library_name" class="doc-detail-row"><span class="doc-detail-label">{{ $t('ikb18.library') }}</span><span class="doc-detail-value">{{ details.library_name }}</span></div>
             <div v-if="details.time" class="doc-detail-row">
               <span class="doc-detail-label">{{ getTimeLabel() }}</span>
               <span class="doc-detail-value">{{ details.time }}</span>
             </div>
             <div v-if="details.type" class="doc-detail-row">
-              <span class="doc-detail-label">{{ $t('knowledgeBase.infoCard.type') }}</span>
+              <span class="doc-detail-label">{{ $t('library.infoCard.type') }}</span>
               <span class="doc-detail-value">
                 <t-tag size="small" :theme="getTypeTheme()" variant="light">{{ getTypeLabel() }}</t-tag>
               </span>
             </div>
             <div v-if="['mine', 'report'].includes(details.source_kind || '') || (details.channel && details.channel !== 'web')" class="doc-detail-row">
-              <span class="doc-detail-label">{{ $t('knowledgeBase.infoCard.source') }}</span>
+              <span class="doc-detail-label">{{ $t('library.infoCard.source') }}</span>
               <span class="doc-detail-value">
                 <t-tag size="small" variant="light" theme="warning">{{ getChannelLabel(details.channel) }}</t-tag>
               </span>
             </div>
             <div v-if="details.collect_reason?.trim()" class="doc-detail-row doc-collect-reason-row">
-              <span class="doc-detail-label">{{ $t('knowledgeBase.collectReason') }}</span>
+              <span class="doc-detail-label">{{ $t('library.collectReason') }}</span>
               <span class="doc-detail-value">{{ details.collect_reason }}</span>
             </div>
             <div v-if="externalToolName" class="doc-detail-row doc-external-tool-row">
-              <span class="doc-detail-label">{{ $t('knowledgeBase.externalTool') }}</span>
+              <span class="doc-detail-label">{{ $t('library.externalTool') }}</span>
               <span class="doc-detail-value">{{ externalToolName }}</span>
             </div>
             <div v-if="details.vault_path" class="doc-detail-row doc-vault-path-row">
-              <span class="doc-detail-label">{{ $t('knowledgeBase.vaultPath') }}</span>
+              <span class="doc-detail-label">{{ $t('library.vaultPath') }}</span>
               <span class="doc-detail-value doc-vault-path-value">
                 <code>{{ details.vault_path }}</code>
-                <t-button size="small" variant="text" :aria-label="$t('knowledgeBase.copyVaultPath')" @click="copyWithToast(details.vault_path, 'common.copySuccess')">{{ $t('common.copy') }}</t-button>
+                <t-button size="small" variant="text" :aria-label="$t('library.copyVaultPath')" @click="copyWithToast(details.vault_path, 'common.copySuccess')">{{ $t('common.copy') }}</t-button>
               </span>
             </div>
 
@@ -1252,67 +1167,61 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         </section>
 
         <section v-if="hasIntake" class="setting-drawer__section intake-review-panel">
-          <h4 class="setting-drawer__section-title">{{ isIntakeRejected ? $t('knowledgeBase.intakeWaiting') : $t('knowledgeBase.intakePreviewOriginal') }}</h4>
+          <h4 class="setting-drawer__section-title">{{ isIntakeRejected ? $t('library.intakeWaiting') : $t('library.intakePreviewOriginal') }}</h4>
           <p v-if="intake.reason">{{ intake.reason }}</p>
-          <p v-if="intakeSourceInfo.author">{{ $t('knowledgeBase.intakeAuthor') }}: {{ intakeSourceInfo.author }}</p>
-          <p v-if="intakeSourceInfo.publisher">{{ $t('knowledgeBase.intakePublisher') }}: {{ intakeSourceInfo.publisher }}</p>
+          <p v-if="intakeSourceInfo.author">{{ $t('library.intakeAuthor') }}: {{ intakeSourceInfo.author }}</p>
+          <p v-if="intakeSourceInfo.publisher">{{ $t('library.intakePublisher') }}: {{ intakeSourceInfo.publisher }}</p>
           <a v-if="intakeOriginalURL" :href="intakeOriginalURL" target="_blank" rel="noopener">{{ intakeOriginalURL }}</a>
-          <p v-if="intakeSourceInfo.original_url_source === 'from_file'">{{ $t('knowledgeReview.extractedLink') }}</p>
-          <p v-if="intakeSourceInfo.published_at">{{ $t('knowledgeBase.intakePublishedAt') }}: {{ intakeSourceInfo.published_at }}</p>
-          <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('knowledgeBase.intakePreviewOriginal') : $t('knowledgeBase.intakeLoadMore')) : $t('knowledgeBase.intakePreviewOriginal') }}</t-button>
+          <p v-if="intakeSourceInfo.published_at">{{ $t('library.intakePublishedAt') }}: {{ intakeSourceInfo.published_at }}</p>
+          <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('library.intakePreviewOriginal') : $t('library.intakeLoadMore')) : $t('library.intakePreviewOriginal') }}</t-button>
           <p v-if="intakeOriginalError" class="field-hint field-hint--error">{{ intakeOriginalError }}</p>
           <div v-if="intakeOriginal" class="md-content" v-html="processMarkdown(intakeOriginal)" />
           <ReviewActions v-if="isIntakeRejected" :entry="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
-        </section>
-
-        <section v-if="details.processing_review_status === 'pending'" class="setting-drawer__section">
-          <h4 class="setting-drawer__section-title">{{ $t('knowledgeReview.processing') }}</h4>
-          <ReviewActions :entry="details" @busy-change="articleJudgmentsBusy = $event" @changed="(value, removed) => emit('reviewChanged', value, removed)" />
         </section>
 
         <section v-if="details.repost_sources?.length" class="setting-drawer__section doc-repost-section">
           <RepostSources :sources="details.repost_sources" />
         </section>
 
-        <section v-if="details.id && (details.source_kind !== 'mine' || Object.keys(details.custom_metadata || {}).length)" class="setting-drawer__section metadata-section">
+        <section v-if="details.id" class="setting-drawer__section metadata-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">
-              <span>{{ $t('knowledgeBase.customMetadata') }}</span>
-              <t-tooltip v-if="details.source_kind !== 'mine'" :content="$t('knowledgeBase.metadataCapabilityHint')" placement="top">
+              <span>{{ $t('library.customMetadata') }}</span>
+              <t-tooltip :content="$t('library.metadataCapabilityHint')" placement="top">
                 <t-icon name="info-circle" size="14px" class="metadata-capability-icon" />
               </t-tooltip>
               <span v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-count">
                 {{ Object.keys(details.custom_metadata || {}).length }}/20
               </span>
             </h4>
-            <t-tooltip v-if="!metadataEditing && details.source_kind !== 'mine'" :content="$t('common.edit')" placement="top">
+            <t-tooltip v-if="!metadataEditing" :content="$t('common.edit')" placement="top">
               <t-button class="icon-action-btn" size="small" variant="text" shape="square" @click="startMetadataEdit">
                 <template #icon><t-icon name="edit" size="15px" /></template>
               </t-button>
             </t-tooltip>
           </div>
 
-          <div v-if="!metadataEditing || details.source_kind === 'mine'" class="metadata-display">
+          <div v-if="!metadataEditing" class="metadata-display">
             <div v-if="Object.keys(details.custom_metadata || {}).length" class="metadata-grid">
               <div v-for="(value, key) in (details.custom_metadata || {})" :key="key" class="metadata-item">
                 <span class="metadata-item-key">{{ key }}</span>
                 <span class="metadata-item-value">{{ formatMetadataValue(value) }}</span>
               </div>
             </div>
-            <button v-else-if="details.source_kind !== 'mine'" type="button" class="metadata-empty-action" @click="startMetadataEdit">
+            <button v-else type="button" class="metadata-empty-action" @click="startMetadataEdit">
               <t-icon name="add" size="15px" />
-              <span>{{ $t('knowledgeBase.addMetadataField') }}</span>
+              <span>{{ $t('library.addMetadataField') }}</span>
             </button>
           </div>
 
           <div v-else class="metadata-editor">
             <div v-for="row in metadataDraft" :key="row.id" class="metadata-editor-row">
-              <t-input v-model="row.key" class="metadata-key-input" :placeholder="$t('knowledgeBase.metadataKeyPlaceholder')" />
+              <t-input v-model="row.key" class="metadata-key-input" :placeholder="$t('library.metadataKeyPlaceholder')" />
               <t-select v-model="row.type" class="metadata-type-select" :options="metadataTypeOptions" />
               <t-select v-if="row.type === 'boolean'" v-model="row.value" class="metadata-value-input"
                 :options="[{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }]" />
               <t-input v-else-if="row.type !== 'null'" v-model="row.value" class="metadata-value-input"
-                :placeholder="$t('knowledgeBase.metadataValuePlaceholder')" />
+                :placeholder="$t('library.metadataValuePlaceholder')" />
               <div v-else class="metadata-null-value">null</div>
               <t-tooltip :content="$t('common.delete')" placement="top">
                 <t-button class="icon-action-btn metadata-remove-btn" size="small" variant="text" shape="square"
@@ -1323,7 +1232,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             </div>
             <button v-if="metadataDraft.length < 20" type="button" class="metadata-add-row" @click="addMetadataRow">
               <t-icon name="add" size="15px" />
-              <span>{{ $t('knowledgeBase.addMetadataField') }}</span>
+              <span>{{ $t('library.addMetadataField') }}</span>
             </button>
             <div class="metadata-actions">
               <t-button size="small" variant="outline" :disabled="metadataSaving" @click="metadataEditing = false; syncMetadataDraft()">
@@ -1336,8 +1245,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
         </section>
 
-        <section v-if="details.type === 'url' && details.processing_mode !== 'summary_only'" class="setting-drawer__section">
-          <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.urlSource') }}</h4>
+        <ReportAssociations v-if="details.source_kind === 'report'"
+          :entry-ids="reportRelatedEntryIds" :entities="reportRelatedEntities" :topics="details.topics || []"
+          @open-entry="emit('openEntry', $event)" @open-entity="emit('openEntity', $event)" @open-topic="emit('openTopic', $event)" />
+
+        <section v-if="details.type === 'url'" class="setting-drawer__section">
+          <h4 class="setting-drawer__section-title">{{ $t('library.urlSource') }}</h4>
           <div class="url_link_box">
             <a :href="isValidURL(details.source) ? details.source : 'javascript:void(0)'"
               :target="isValidURL(details.source) ? '_blank' : undefined" class="url_link">
@@ -1350,61 +1263,53 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
-            <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.documentSummary') }}</h4>
+            <h4 class="setting-drawer__section-title">{{ $t('library.documentSummary') }}</h4>
             <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy || incompleteBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
-              {{ $t('knowledgeBase.reprocess') }}
+              {{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.reprocess') }}
             </t-button>
           </div>
-          <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
+          <details v-if="details.image_descriptions?.some(image => image.description)" class="image-descriptions">
+            <summary>{{ t('articleJudgments.imageDescriptions') }}</summary>
+            <div v-for="image in details.image_descriptions.filter(image => image.description)" :key="image.ordinal">
+              <p>{{ t('articleJudgments.imageNumber', { number: image.ordinal }) }}</p>
+              <p>{{ image.description }}</p>
+            </div>
+          </details>
+          <EntryClassification :entry="details" followable :hide-relations="details.source_kind === 'report'" @open-entity="emit('openEntity', $event)" />
+        <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
           <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
             <MissingMaterials :items="details.missing_materials || []" />
             <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />
           </section>
-          <EntryArticleJudgments v-if="canReprocess && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
-          <p v-if="isProcessing" role="status">{{ $t('knowledgeBase.statusProcessing') }}</p>
-          <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('knowledgeBase.parsingFailed') }}</p>
+          <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" />
+          <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <p v-if="isProcessing" role="status">{{ $t('library.statusProcessing') }}</p>
+          <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('library.parsingFailed') }}</p>
         </section>
 
-        <section v-if="details.processing_mode !== 'summary_only'" class="setting-drawer__section doc-content-section">
+        <section class="setting-drawer__section doc-content-section">
           <div class="doc-content-section-head">
             <div class="doc-content-section-head-left">
               <h4 class="setting-drawer__section-title">{{ getContentLabel() }}</h4>
               <span v-if="details.total > 0" class="chunk-count">
-                {{ $t('knowledgeBase.chunkCount', { count: details.total }) }}
+                {{ $t('library.chunkCount', { count: details.total }) }}
               </span>
             </div>
             <div class="view-mode-buttons">
-              <t-button v-if="canPreview()" size="small" :variant="viewMode === 'preview' ? 'base' : 'outline'"
-                :theme="viewMode === 'preview' ? 'primary' : 'default'" @click="viewMode = 'preview'"
-                class="view-mode-btn">
-                {{ $t('preview.tab') }}
-              </t-button>
-              <t-button v-if="!canPreview()" size="small" :variant="viewMode === 'merged' ? 'base' : 'outline'"
+              <t-button size="small" :variant="viewMode === 'merged' ? 'base' : 'outline'"
                 :theme="viewMode === 'merged' ? 'primary' : 'default'" @click="viewMode = 'merged'"
                 class="view-mode-btn">
-                {{ $t('knowledgeBase.viewMerged') }}
+                {{ $t('library.viewMerged') }}
               </t-button>
               <t-button size="small" :variant="viewMode === 'chunks' ? 'base' : 'outline'"
                 :theme="viewMode === 'chunks' ? 'primary' : 'default'" @click="viewMode = 'chunks'"
                 class="view-mode-btn">
-                {{ $t('knowledgeBase.viewChunks') }}
+                {{ $t('library.viewChunks') }}
               </t-button>
             </div>
           </div>
 
-          <!-- 音频播放器（音频文件时固定显示在内容区顶部） -->
-          <div v-if="isAudioFile(details.file_type)" class="audio-player-section">
-            <div v-if="audioLoading" class="audio-loading">
-              <t-loading size="small" />
-              <span>{{ $t('preview.audioLoading') }}</span>
-            </div>
-            <audio v-else-if="audioBlobUrl" controls class="audio-player" :src="audioBlobUrl">
-              {{ $t('preview.audioNotSupported') }}
-            </audio>
-          </div>
-
-          <!-- 合并视图 -->
           <div v-if="viewMode === 'merged'">
             <div v-if="isChunkPageTransition" class="chunk-page-loading">
               <t-loading size="small" />
@@ -1429,7 +1334,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                 v-for="(chunk, index) in processedChunks" :key="chunk.original.id || index">
                 <div class="chunk-header">
                   <div class="chunk-heading">
-                    <span class="chunk-index">{{ $t('knowledgeBase.segment') }} {{ (loadedChunkPage - 1) * CHUNK_PAGE_SIZE + index + 1 }}</span>
+                    <span class="chunk-index">{{ $t('library.segment') }} {{ (loadedChunkPage - 1) * CHUNK_PAGE_SIZE + index + 1 }}</span>
                     <span class="chunk-meta">{{ chunk.meta }}</span>
                   </div>
                   <div class="chunk-header-right">
@@ -1439,7 +1344,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                       :overlay-inner-style="{ padding: 0 }" overlay-class-name="chunk-context-popup-overlay"
                       @visible-change="(visible: boolean) => setParentContextPopupVisible(chunk.original, index, visible)">
                       <t-button class="icon-action-btn" :class="{ 'is-active': parentContextPopup === chunk.original.id }"
-                        size="small" variant="text" shape="square" :title="$t('knowledgeBase.viewParentContext')">
+                        size="small" variant="text" shape="square" :title="$t('library.viewParentContext')">
                         <template #icon><t-icon name="git-branch" size="15px" /></template>
                       </t-button>
                       <template #content>
@@ -1447,7 +1352,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                           <div class="chunk-popup-head">
                             <div class="chunk-popup-title">
                               <t-icon name="git-branch" size="15px" />
-                              <span>{{ $t('knowledgeBase.viewParentContext') }}</span>
+                              <span>{{ $t('library.viewParentContext') }}</span>
                             </div>
                           </div>
                           <div v-if="parentContextLoading.has(index)" class="chunk-popup-state">
@@ -1479,10 +1384,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               @change="handleChunkPageChange" />
           </div>
 
-          <div v-else-if="viewMode === 'preview'">
-            <DocumentPreview :entryId="details.id" :fileType="isLegacyManualDraft ? 'md' : details.file_type" :fileName="details.title"
-              :active="viewMode === 'preview'" />
-          </div>
         </section>
       </div>
 

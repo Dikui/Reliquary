@@ -14,6 +14,7 @@ import (
 
 	"github.com/ollama/ollama/api"
 	"reliquary/internal/logger"
+	"reliquary/internal/modelcalls"
 )
 
 // OllamaService manages Ollama service
@@ -52,7 +53,7 @@ func GetOllamaService() (*OllamaService, error) {
 			MaxIdleConns:        10,
 		},
 	}
-	client := api.NewClient(parsedURL, ollamaHTTPClient)
+	client := api.NewClient(parsedURL, modelcalls.WrapClient(ollamaHTTPClient))
 
 	// Check if Ollama is set as optional
 	isOptional := false

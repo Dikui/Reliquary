@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"reliquary/internal/logger"
 	secutils "reliquary/internal/utils"
@@ -37,6 +38,7 @@ func (r *OpenAIReranker) SetCustomHeaders(headers map[string]string) {
 
 // RerankRequest represents a request to rerank documents based on relevance to a query
 type RerankRequest struct {
+	TopN                 int                    `json:"top_n"`
 	Model                string                 `json:"model"`                            // Model to use for reranking
 	Query                string                 `json:"query"`                            // Query text to compare documents against
 	Documents            []string               `json:"documents"`                        // List of document texts to rerank
@@ -46,9 +48,10 @@ type RerankRequest struct {
 
 // RerankResponse represents the response from a reranking request
 type RerankResponse struct {
-	ID      string       `json:"id"`      // Request ID
-	Model   string       `json:"model"`   // Model used for reranking
-	Usage   UsageInfo    `json:"usage"`   // Token usage information
+	ID      string       `json:"id"`    // Request ID
+	Model   string       `json:"model"` // Model used for reranking
+	Usage   UsageInfo    `json:"usage"` // Token usage information
+	Data    []RankResult `json:"data"`
 	Results []RankResult `json:"results"` // Ranked results with relevance scores
 }
 
@@ -87,7 +90,7 @@ func NewOpenAIReranker(config *RerankerConfig) (*OpenAIReranker, error) {
 		modelID:              config.ModelID,
 		apiKey:               apiKey,
 		baseURL:              baseURL,
-		client:               newRerankHTTPClient(0),
+		client:               newRerankHTTPClient(5 * time.Second),
 		truncatePromptTokens: truncatePromptTokens,
 	}, nil
 }
@@ -98,6 +101,7 @@ func (r *OpenAIReranker) Rerank(ctx context.Context, query string, documents []s
 	// explicitly configured: sending it unconditionally corrupts scores on
 	// providers that honor it (see OpenAIReranker.truncatePromptTokens).
 	requestBody := &RerankRequest{
+		TopN:                 len(documents),
 		Model:                r.modelName,
 		Query:                query,
 		Documents:            documents,
@@ -139,6 +143,9 @@ func (r *OpenAIReranker) Rerank(ctx context.Context, query string, documents []s
 	var response RerankResponse
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if response.Results == nil {
+		response.Results = response.Data
 	}
 	return response.Results, nil
 }

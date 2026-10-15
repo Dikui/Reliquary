@@ -96,9 +96,16 @@ type EntityQuery struct {
 	Offset     int    `json:"offset,omitempty"`
 }
 
+type EntityLibraryGroup struct {
+	LibraryID   string  `json:"library_id"`
+	LibraryName string  `json:"library_name"`
+	Count       int     `json:"count"`
+	Entries     []Entry `json:"entries"`
+}
 type EntityDetail struct {
-	Entity  Entity  `json:"entity"`
-	Entries []Entry `json:"entries"`
+	LibraryGroups []EntityLibraryGroup `json:"library_groups"`
+	Entity        Entity               `json:"entity"`
+	Entries       []Entry              `json:"entries"`
 }
 
 var EntityTypes = []string{"company", "person", "product", "project", "organization", "other"}

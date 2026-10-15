@@ -32,13 +32,13 @@ func TestEntrySourceSchemaAllowsObjectStorageURLs(t *testing.T) {
 	longURL := "https://example-bucket.cos.ap-beijing.myqcloud.com/test/" +
 		strings.Repeat("encoded-path-segment-", 20) + ".docx"
 	entry := &types.Entry{
-		SpaceID:         1,
-		KnowledgeBaseID: "kb-1",
-		Type:            types.EntryTypeManual,
-		Title:           "long source",
-		Source:          longURL,
-		ParseStatus:     types.ParseStatusPending,
-		EnableStatus:    "enabled",
+		SpaceID:      1,
+		LibraryID:    "library-1",
+		Type:         types.EntryTypeManual,
+		Title:        "long source",
+		Source:       longURL,
+		ParseStatus:  types.ParseStatusPending,
+		EnableStatus: "enabled",
 	}
 	if err := db.Create(entry).Error; err != nil {
 		t.Fatalf("create entry with long source: %v", err)
