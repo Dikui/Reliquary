@@ -18,4 +18,4 @@ Issues 和 specs 使用本地 Markdown，存放于 `.scratch/<feature-slug>/`。
 
 ### Commit rules
 
-禁止 `--no-verify`、`git add -A` / `git add .` 和强推。hooks 由 `.githooks/` 提供。
+禁止 `--no-verify`、`git add -A` / `git add .` 和强推。

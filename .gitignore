@@ -65,7 +65,6 @@ fix-docker.sh
 .maintenance-tools/
 compose.images.json
 !CLAUDE.md
-!.githooks/
 !.scratch/
 !.out-of-scope/
 # 须在 !.scratch/ 之后，否则会被重新放出
