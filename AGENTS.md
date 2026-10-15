@@ -10,4 +10,12 @@ Issues 和 specs 使用本地 Markdown，存放于 `.scratch/<feature-slug>/`。
 
 ### Domain docs
 
-采用 single-context：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+采用 single-context：根目录 `CONTEXT.md` + `docs/adr/`。涉及业务或架构设计时，参阅 `docs/agents/domain.md` 中的资料入口与按需读取规则。
+
+### Document layout
+
+文档放置约定见 `docs/agents/layout.md`。
+
+### Commit rules
+
+禁止 `--no-verify`、`git add -A` / `git add .` 和强推。hooks 由 `.githooks/` 提供。
