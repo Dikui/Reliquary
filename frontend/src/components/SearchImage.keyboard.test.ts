@@ -70,7 +70,7 @@ let harness: BrowserHarness
 before(async () => {
   if (!browserTestsEnabled) return
   harness = await createBrowserHarness(clientSource, { routes(request, response) {
-    if (!/^\/api\/v1\/entry\/keyboard-(?:new-)?article\/vault-attachment\?/.test(request.url || '')) return false
+    if (!/^\/api\/v1\/entries\/keyboard-(?:new-)?article\/vault-attachment\?/.test(request.url || '')) return false
     requests.push({ url: request.url!, authorization: request.headers.authorization })
     response.setHeader('Content-Type', 'image/svg+xml')
     response.end('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="blue"/></svg>')
