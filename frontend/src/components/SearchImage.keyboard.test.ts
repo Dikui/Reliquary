@@ -4,7 +4,9 @@ import test from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { browserAvailable, createBrowserHarness, type BrowserHarness, type BrowserPage } from '../../test/browserHarness.mjs'
+import { browserTestsEnabled, createBrowserHarness, type BrowserHarness, type BrowserPage } from '../../test/browserHarness.mjs'
+
+const skipBrowser = !browserTestsEnabled && 'Skipped: browser tests launch a visible Playwright Chrome for Testing window and run only when BROWSER_TESTS=1. Do not set that inside the sandbox.'
 
 const clientSource = `
 import { createApp, defineComponent, h, ref } from 'vue'
@@ -66,7 +68,7 @@ window.__fixtureReady = true
 const requests: { url: string; authorization: string | undefined }[] = []
 let harness: BrowserHarness
 before(async () => {
-  if (!browserAvailable) return
+  if (!browserTestsEnabled) return
   harness = await createBrowserHarness(clientSource, { routes(request, response) {
     if (!/^\/api\/v1\/entry\/keyboard-(?:new-)?article\/vault-attachment\?/.test(request.url || '')) return false
     requests.push({ url: request.url!, authorization: request.headers.authorization })
@@ -88,21 +90,29 @@ const viewerProbe = `(() => {
   }
 })()`
 
+async function waitFor(page: BrowserPage, expression: string, description: string) {
+  try {
+    await page.waitForFunction(expression)
+  } catch (error) {
+    throw new Error(`Timed out waiting for ${description}`, { cause: error })
+  }
+}
+
 const thumbnailSelector = '.article-snippet:nth-child(3) .search-image-open'
 async function searchPage(query = '') {
   const page = await harness.page(query)
-  await page.waitFor(`window.__fixtureReady && document.querySelectorAll('.search-image-open img').length === 2
+  await waitFor(page, `window.__fixtureReady && document.querySelectorAll('.search-image-open img').length === 2
     && [...document.querySelectorAll('.search-image-open img')].every(image => image.complete && image.naturalWidth > 0)`, 'both authorized thumbnail images')
   await page.evaluate(`window.__previewTrigger = document.querySelector(${JSON.stringify(thumbnailSelector)})`)
   return page
 }
 async function openSearchPreview(page: BrowserPage) {
   await page.click(thumbnailSelector)
-  await page.waitFor(`(${viewerProbe}).viewerVisible`, 'visible real TDesign image viewer')
+  await waitFor(page, `(${viewerProbe}).viewerVisible`, 'visible real TDesign image viewer')
   await delay(250)
 }
 async function waitForClosedPreview(page: BrowserPage, restoreFocus = true) {
-  await page.waitFor(`!(${viewerProbe}).viewerVisible${restoreFocus ? ' && document.activeElement === window.__previewTrigger' : ''}`, 'closed preview and settled focus')
+  await waitFor(page, `!(${viewerProbe}).viewerVisible${restoreFocus ? ' && document.activeElement === window.__previewTrigger' : ''}`, 'closed preview and settled focus')
 }
 async function saveEvidence(page: BrowserPage, name: string, probe: unknown) {
   if (!process.env.BROWSER_EVIDENCE_DIR) return
@@ -113,11 +123,11 @@ async function saveEvidence(page: BrowserPage, name: string, probe: unknown) {
 
 for (const locale of ['zh-CN', 'en-US']) {
   test(`${locale}: actual search result preview closes on Escape and restores its thumbnail focus`, {
-    skip: !browserAvailable && 'Chrome is required; set CHROME_BIN or BROWSER_CDP_URL',
+    skip: skipBrowser,
   }, async t => {
     const theme = locale === 'en-US' ? 'dark' : 'light'
     const page = await searchPage(`?locale=${locale}&theme=${theme}`)
-    if (locale === 'en-US') await page.viewport(390)
+    if (locale === 'en-US') await page.setViewportSize({ width: 390, height: 900 })
     const thumbnailRequestCount = requests.length
     await openSearchPreview(page)
     const opened = await page.evaluate(viewerProbe)
@@ -129,7 +139,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       return { width: image.naturalWidth, height: image.naturalHeight, fit: getComputedStyle(image).objectFit }
     })()`), { width: 40, height: 20, fit: 'contain' }, 'the viewer displays the complete original image')
     await saveEvidence(page, `search-${locale}-${theme}-open`, opened)
-    await page.pressEscape()
+    await page.keyboard.press('Escape')
     await waitForClosedPreview(page)
     const closed = await page.evaluate(viewerProbe)
     const focusRestored = await page.evaluate('document.activeElement === window.__previewTrigger')
@@ -153,7 +163,7 @@ for (const locale of ['zh-CN', 'en-US']) {
     const reopened = await page.evaluate(viewerProbe)
     t.diagnostic(JSON.stringify({ locale, reopened }))
     assert.equal(reopened.focusInViewer, true, 'reopening the second thumbnail also enters the preview')
-    await page.pressEscape()
+    await page.keyboard.press('Escape')
     await waitForClosedPreview(page)
     assert.equal((await page.evaluate(viewerProbe)).viewerVisible, false)
     assert.equal(await page.evaluate('document.activeElement === window.__previewTrigger'), true)
@@ -163,14 +173,18 @@ for (const locale of ['zh-CN', 'en-US']) {
 }
 
 test('actual preview close button and overlay both retain close behavior and restore thumbnail focus', {
-  skip: !browserAvailable && 'Chrome is required; set CHROME_BIN or BROWSER_CDP_URL',
+  skip: skipBrowser,
 }, async () => {
   const page = await searchPage()
   for (const closeMethod of ['button', 'overlay']) {
     await openSearchPreview(page)
     assert.equal((await page.evaluate(viewerProbe)).focusInViewer, true)
     if (closeMethod === 'button') await page.click('.t-image-viewer__modal-close-bt')
-    else await page.click('.t-image-viewer__modal-mask', { x: 0.01, y: 0.5 })
+    else {
+      const box = await page.locator('.t-image-viewer__modal-mask').boundingBox()
+      assert.ok(box, 'overlay')
+      await page.click('.t-image-viewer__modal-mask', { position: { x: box.width * 0.01, y: box.height * 0.5 } })
+    }
     await waitForClosedPreview(page)
     assert.equal((await page.evaluate(viewerProbe)).viewerVisible, false, closeMethod)
     assert.equal(await page.evaluate('document.activeElement === window.__previewTrigger'), true, closeMethod)
@@ -180,25 +194,25 @@ test('actual preview close button and overlay both retain close behavior and res
 
 for (const transition of ['changeArticle', 'removeResults']) {
   test(`actual preview closes and releases blobs when results ${transition}`, {
-    skip: !browserAvailable && 'Chrome is required; set CHROME_BIN or BROWSER_CDP_URL',
+    skip: skipBrowser,
   }, async () => {
     const page = await searchPage()
     const previousSources = await page.evaluate(`[...document.querySelectorAll('.search-image-open img')].map(image => image.src)`)
     await openSearchPreview(page)
     await page.evaluate(`window.__fixture.${transition}()`)
     await waitForClosedPreview(page, false)
-    await page.waitFor(`window.__revokedImageURLs.length === 2 && !window.__previewTrigger.isConnected`, 'released blobs and removed original trigger')
+    await waitFor(page, `window.__revokedImageURLs.length === 2 && !window.__previewTrigger.isConnected`, 'released blobs and removed original trigger')
     assert.equal((await page.evaluate(viewerProbe)).viewerVisible, false)
     assert.deepEqual(await page.evaluate('window.__revokedImageURLs'), previousSources)
     assert.equal(await page.evaluate('window.__previewTrigger.isConnected'), false)
     assert.equal(await page.evaluate('document.activeElement === window.__previewTrigger'), false)
     if (transition === 'changeArticle') {
-      await page.waitFor(`document.querySelectorAll('.search-image-open img').length === 2
+      await waitFor(page, `document.querySelectorAll('.search-image-open img').length === 2
         && [...document.querySelectorAll('.search-image-open img')].every(image => image.complete && image.naturalWidth > 0)`, 'replacement thumbnails')
       assert.equal(await page.evaluate(`[...document.querySelectorAll('.search-image-open img')].some(image => ${JSON.stringify(previousSources)}.includes(image.src))`), false)
       await page.evaluate(`window.__previewTrigger = document.querySelector(${JSON.stringify(thumbnailSelector)})`)
       await openSearchPreview(page)
-      await page.pressEscape()
+      await page.keyboard.press('Escape')
       await waitForClosedPreview(page)
       assert.equal((await page.evaluate(viewerProbe)).viewerVisible, false)
       assert.equal(await page.evaluate('document.activeElement === window.__previewTrigger'), true)
@@ -208,29 +222,29 @@ for (const transition of ['changeArticle', 'removeResults']) {
 }
 
 test('compact search image stays a thumbnail without a viewer trigger', {
-  skip: !browserAvailable && 'Chrome is required; set CHROME_BIN or BROWSER_CDP_URL',
+  skip: skipBrowser,
 }, async () => {
   const page = await harness.page('?fixture=compact')
-  await page.waitFor(`window.__fixtureReady && document.querySelector('.search-image.compact img')?.naturalWidth > 0`, 'compact thumbnail')
+  await waitFor(page, `window.__fixtureReady && document.querySelector('.search-image.compact img')?.naturalWidth > 0`, 'compact thumbnail')
   assert.equal(await page.evaluate(`document.querySelectorAll('.search-image-open').length`), 0)
   assert.equal(await page.evaluate(`getComputedStyle(document.querySelector('.search-image.compact img')).objectFit`), 'contain')
   await page.click('.search-image.compact img')
-  await page.pressEscape()
+  await page.keyboard.press('Escape')
   assert.equal((await page.evaluate(viewerProbe)).viewerVisible, false)
   assert.deepEqual(page.errors, [])
 })
 
 test('actual shared picture preview mounted open closes on Escape and returns focus to its trigger', {
-  skip: !browserAvailable && 'Chrome is required; set CHROME_BIN or BROWSER_CDP_URL',
+  skip: skipBrowser,
 }, async t => {
   const page = await harness.page('?fixture=picture')
-  await page.waitFor(`window.__fixtureReady && !!document.querySelector('#picture-trigger')`, 'picture preview trigger')
+  await waitFor(page, `window.__fixtureReady && !!document.querySelector('#picture-trigger')`, 'picture preview trigger')
   await page.click('#picture-trigger')
-  await page.waitFor(`!!document.querySelector('.t-image-viewer')`, 'real shared picture viewer')
+  await waitFor(page, `!!document.querySelector('.t-image-viewer')`, 'real shared picture viewer')
   await delay(250)
   const opened = await page.evaluate(viewerProbe)
-  await page.pressEscape()
-  await page.waitFor(`!(${viewerProbe}).viewerVisible && document.activeElement === document.querySelector('#picture-trigger')`, 'closed picture preview and returned focus')
+  await page.keyboard.press('Escape')
+  await waitFor(page, `!(${viewerProbe}).viewerVisible && document.activeElement === document.querySelector('#picture-trigger')`, 'closed picture preview and returned focus')
   const closed = await page.evaluate(viewerProbe)
   const focusRestored = await page.evaluate(`document.activeElement === document.querySelector('#picture-trigger')`)
   t.diagnostic(JSON.stringify({ fixture: 'picture', opened, closed, focusRestored }))
