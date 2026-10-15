@@ -51,6 +51,7 @@ var allowedOutboundCalls = map[string]int{
 	// Local selectors with HTTP-like method names.
 	"cmd/server/maintenance_chatgpt.go|runMaintenanceChatGPT|query.Get":                                6,
 	"internal/application/service/search/search.go|searchByTargets|errOnce.Do":                         1,
+	"internal/application/service/vault_file_rebuild.go|lockFileRebuild|once.Do":                       1,
 	"internal/application/service/system_setting.go|Get|s.repo.Get":                                    1,
 	"internal/application/service/system_setting.go|Update|s.repo.Get":                                 2,
 	"internal/application/service/system_setting.go|resolveRaw|s.repo.Get":                             1,
