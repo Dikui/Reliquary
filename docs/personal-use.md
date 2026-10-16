@@ -102,10 +102,12 @@ Reliquary 提供资料，不生成周报或推送通知。下面是外部 AI 通
 
 ## 部署在 Mac mini
 
+长期运行建议使用[源码与运行分离的本地部署](local-deployment.md)。下文保留直接从源码目录部署的方式。
+
 Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。四个核心服务为应用、PostgreSQL（ParadeDB）、Redis 与 Neo4j，均使用 Compose；网页静态资源由独立 frontend 容器代理，模型服务可在 macOS 原生或其他端点运行。应用镜像从当前仓库构建，未发布公共应用镜像。
 
 ```bash
-git clone http://192.168.1.146:3000/dikui/Reliquary.git
+git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
 ```

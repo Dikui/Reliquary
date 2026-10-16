@@ -30,10 +30,12 @@ The Web UI provides entry management and simple reading. Open the file library i
 
 ## Run from source
 
+For regular use, follow the [source-independent deployment guide](docs/local-deployment.md) to keep runtime configuration and data outside the checkout. The commands below run directly from the source directory.
+
 Requirements: Git, Node.js/npm, a runtime compatible with Docker (such as OrbStack or Docker Desktop), and Docker Compose. Application images are built locally; this repository does not publish installation packages or public application images.
 
 ```bash
-git clone http://192.168.1.146:3000/dikui/Reliquary.git
+git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
 # Configure database credentials, SYSTEM_AES_KEY, and model endpoints.

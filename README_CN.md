@@ -30,10 +30,12 @@ Reliquary 是个人 AI 工作平台的内部资料库，负责资料的收录、
 
 ## 从源码启动
 
+长期使用建议按[源码与运行分离的部署指南](docs/local-deployment.md)安装，将运行配置和数据放在源码之外。以下命令用于直接从源码目录启动。
+
 需要 Git、Node.js/npm、Docker 兼容运行环境（如 OrbStack、Docker Desktop）与 Docker Compose。应用镜像从本仓库构建，尚未发布安装包或公共应用镜像。
 
 ```bash
-git clone http://192.168.1.146:3000/dikui/Reliquary.git
+git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env
 # 配置数据库密码、SYSTEM_AES_KEY 与模型服务地址。
