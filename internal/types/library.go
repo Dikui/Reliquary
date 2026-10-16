@@ -179,6 +179,10 @@ func (library *Library) EnsureDefaults() {
 	if len(library.ChunkingConfig.Separators) == 0 {
 		library.ChunkingConfig.Separators = []string{"\n\n", "\n", "。"}
 	}
+	// Long references match on small child chunks but need the parent's context; fixed by template.
+	if library.Template == TemplateExternalDurable {
+		library.ChunkingConfig.EnableParentChild = true
+	}
 
 	// Ensure IndexingStrategy has defaults.
 	// For existing rows where indexing_strategy is NULL, GORM Scan() returns

@@ -28,3 +28,13 @@ func TestParseProviderScheme(t *testing.T) {
 
 // strPtr returns a pointer to the given string, used to express *string literals in tests.
 func strPtr(s string) *string { return &s }
+
+func TestEnsureDefaultsFixesParentChildByTemplate(t *testing.T) {
+	for template, want := range map[string]bool{TemplateExternalDurable: true, TemplateExternalTimely: false, TemplateOwn: false, TemplateGenerated: false} {
+		library := &Library{Template: template}
+		library.EnsureDefaults()
+		if library.ChunkingConfig.EnableParentChild != want {
+			t.Errorf("%s: EnableParentChild = %v, want %v", template, library.ChunkingConfig.EnableParentChild, want)
+		}
+	}
+}
