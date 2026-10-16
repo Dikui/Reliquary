@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: reliquary-ui:${RELIQUARY_VERSION:-0.8.0}
+    image: reliquary-ui:${RELIQUARY_VERSION:-0.8.1}
     pull_policy: build
     # Requires frontend/dist — run ./scripts/build-frontend-dist.sh before --build
     build:
@@ -40,14 +40,14 @@ services:
     restart: unless-stopped
 
   app:
-    image: reliquary-app:${RELIQUARY_VERSION:-0.8.0}
+    image: reliquary-app:${RELIQUARY_VERSION:-0.8.1}
     pull_policy: build
     build:
       context: .
       dockerfile: docker/Dockerfile.app
       args:
         - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
-        - VERSION_ARG=${RELIQUARY_VERSION:-0.8.0}
+        - VERSION_ARG=${RELIQUARY_VERSION:-0.8.1}
         - COMMIT_ID_ARG=${RELIQUARY_COMMIT:-}
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"

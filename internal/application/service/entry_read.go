@@ -109,6 +109,9 @@ func (s *entryService) ListPending(ctx context.Context, page, pageSize int, kind
 		query = query.Where("library_id IN ?", ids)
 	}
 	query = query.Where("parse_status=?", types.ParseStatusRejected)
+	query = query.Where("COALESCE(metadata::jsonb->'intake'->>'user_rejected', 'false') <> 'true'")
+	// Older user rejections only recorded this reason, without a separate flag.
+	query = query.Where("COALESCE(metadata::jsonb->'intake'->>'reason', '') <> ?", "Rejected by user")
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err

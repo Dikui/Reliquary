@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -183,6 +184,44 @@ func TestIntakeReviewAuditFailurePreservesDecisionAndOriginal(t *testing.T) {
 		reader.Close()
 	}
 	require.Empty(t, h.queue.tasks)
+}
+
+func TestUserRejectedIntakeLeavesPendingQueueAndKeepsOriginal(t *testing.T) {
+	h := newRetainedIntakeHarness(t)
+	for _, id := range []string{"awaiting-review", "user-rejected", "legacy-user-rejected"} {
+		a := &types.Entry{ID: id, SpaceID: h.library.SpaceID, LibraryID: h.library.ID, SourceKind: "mine", Type: "manual", ParseStatus: types.ParseStatusRejected}
+		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), a.SpaceID, id+".md", false)
+		require.NoError(t, err)
+		reason := "Needs human judgment"
+		if id == "legacy-user-rejected" {
+			reason = "Rejected by user"
+		}
+		require.NoError(t, a.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", Reason: reason, OriginalPath: path}))
+		require.NoError(t, h.db.Create(a).Error)
+	}
+	pending, err := h.service.ListPending(h.ctx, 1, 20, "intake")
+	require.NoError(t, err)
+	require.EqualValues(t, 2, pending.Total)
+	_, err = h.service.ReviewEntryIntake(h.ctx, "user-rejected", "reject", types.SourceInfo{})
+	require.NoError(t, err)
+	stored := h.article(t, "user-rejected")
+	intake, err := stored.IntakeMetadata()
+	require.NoError(t, err)
+	require.True(t, intake.UserRejected)
+	reader, err := h.service.fileSvc.GetFile(h.ctx, intake.OriginalPath)
+	require.NoError(t, err)
+	body, err := io.ReadAll(reader)
+	reader.Close()
+	require.NoError(t, err)
+	require.Equal(t, "Original complete evidence.", string(body))
+	for _, kind := range []string{"", "intake"} {
+		pending, err = h.service.ListPending(h.ctx, 1, 1, kind)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pending.Total)
+		items := pending.Data.([]*types.Entry)
+		require.Len(t, items, 1)
+		require.Equal(t, "awaiting-review", items[0].ID)
+	}
 }
 
 func TestIntakePublicationNormalizationMatchesSearchFormat(t *testing.T) {

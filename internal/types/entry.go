@@ -337,6 +337,7 @@ type EntryIntakeMetadata struct {
 	Images       []string         `json:"images,omitempty"`
 	Reason       string           `json:"reason,omitempty"`
 	Decision     string           `json:"decision"`
+	UserRejected bool             `json:"user_rejected,omitempty"`
 	SourceInfo   SourceInfo       `json:"source_info,omitempty"`
 }
 

@@ -265,6 +265,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 	}
 	if action == "reject" {
 		intake.Decision = "rejected"
+		intake.UserRejected = true
 		intake.Reason = "Rejected by user"
 		if err := entry.SetIntakeMetadata(intake); err != nil {
 			return nil, err
@@ -294,7 +295,7 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 		intake.SourceInfo.PublishedAt = source.PublishedAt
 	}
 	intake.SourceInfo.PublishedAt = normalizeIntakePublicationDate(intake.SourceInfo.PublishedAt)
-	intake.Decision, intake.Reason = "pending", ""
+	intake.Decision, intake.Reason, intake.UserRejected = "pending", "", false
 	if action == "approve" || action == "admit_unverified" {
 		intake.Decision = "approved"
 	}
