@@ -149,7 +149,7 @@ export function testEmbeddingModel(modelConfig: {
     dimension?: number;
     supportsDimensionOverride?: boolean;
     supportsImages?: boolean;
-    multimodalFormat?: 'jina' | '';
+    multimodalFormat?: 'jina' | 'dashscope' | '';
     provider?: string;
     modelId?: string;
 } & BaseModelTestPayload): Promise<{ available: boolean; message?: string; dimension?: number }> {

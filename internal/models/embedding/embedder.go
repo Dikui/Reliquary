@@ -127,7 +127,7 @@ func newEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 		if config.Source != types.ModelSourceRemote {
 			return nil, fmt.Errorf("image embedding requires a remote HTTP model")
 		}
-		if format := strings.TrimSpace(config.MultimodalFormat); format != "" && format != "jina" {
+		if format := strings.TrimSpace(config.MultimodalFormat); format != "" && format != "jina" && format != multimodalFormatDashScope {
 			return nil, fmt.Errorf("unsupported multimodal embedding format: %s", format)
 		}
 	}
@@ -153,6 +153,7 @@ func newEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 		}
 		embedder.SetCustomHeaders(config.CustomHeaders)
 		embedder.supportsImages = config.SupportsImages
+		embedder.multimodalFormat = strings.TrimSpace(config.MultimodalFormat)
 		return embedder, nil
 	default:
 		return nil, fmt.Errorf("unsupported embedder source: %s", config.Source)

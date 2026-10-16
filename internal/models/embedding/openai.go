@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,7 +31,37 @@ type OpenAIEmbedder struct {
 	customHeaders             map[string]string
 	supportsDimensionOverride bool
 	supportsImages            bool
+	multimodalFormat          string
 	EmbedderPooler
+}
+
+// DashScope serves multimodal embeddings on its native API, not under the
+// OpenAI-compatible base URL, and caps one request at 20 content elements.
+const (
+	dashscopeMultimodalPath   = "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding"
+	dashscopeMaxContents      = 20
+	multimodalFormatDashScope = "dashscope"
+)
+
+type dashscopeEmbedRequest struct {
+	Model string `json:"model"`
+	Input struct {
+		Contents []multimodalEmbedInput `json:"contents"`
+	} `json:"input"`
+	Parameters *dashscopeEmbedParameters `json:"parameters,omitempty"`
+}
+
+type dashscopeEmbedParameters struct {
+	Dimension int `json:"dimension"`
+}
+
+type dashscopeEmbedResponse struct {
+	Output struct {
+		Embeddings []struct {
+			Embedding []float32 `json:"embedding"`
+			Index     int       `json:"index"`
+		} `json:"embeddings"`
+	} `json:"output"`
 }
 
 type multimodalEmbedInput struct {
@@ -67,11 +98,34 @@ func (e *OpenAIEmbedder) EmbedImage(ctx context.Context, image string) ([]float3
 }
 
 func (e *OpenAIEmbedder) multimodalEmbed(ctx context.Context, inputs []multimodalEmbedInput) ([][]float32, error) {
-	request := multimodalEmbedRequest{Model: e.modelName, Input: inputs, EncodingFormat: "float"}
-	if e.supportsDimensionsParam() {
-		request.Dimensions = e.dimensions
+	dashscope := e.multimodalFormat == multimodalFormatDashScope
+	if dashscope && len(inputs) > dashscopeMaxContents {
+		vectors := make([][]float32, 0, len(inputs))
+		for start := 0; start < len(inputs); start += dashscopeMaxContents {
+			part, err := e.multimodalEmbed(ctx, inputs[start:min(start+dashscopeMaxContents, len(inputs))])
+			if err != nil {
+				return nil, err
+			}
+			vectors = append(vectors, part...)
+		}
+		return vectors, nil
 	}
-	data, err := json.Marshal(request)
+	var data []byte
+	var err error
+	if dashscope {
+		request := dashscopeEmbedRequest{Model: e.modelName}
+		request.Input.Contents = inputs
+		if e.supportsDimensionsParam() {
+			request.Parameters = &dashscopeEmbedParameters{Dimension: e.dimensions}
+		}
+		data, err = json.Marshal(request)
+	} else {
+		request := multimodalEmbedRequest{Model: e.modelName, Input: inputs, EncodingFormat: "float"}
+		if e.supportsDimensionsParam() {
+			request.Dimensions = e.dimensions
+		}
+		data, err = json.Marshal(request)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("marshal multimodal embedding request: %w", err)
 	}
@@ -91,7 +145,14 @@ func (e *OpenAIEmbedder) multimodalEmbed(ctx context.Context, inputs []multimoda
 		return nil, fmt.Errorf("multimodal embedding HTTP %d: %s", response.StatusCode, body)
 	}
 	var result OpenAIEmbedResponse
-	if err := json.Unmarshal(body, &result); err != nil {
+	if dashscope {
+		var native dashscopeEmbedResponse
+		err = json.Unmarshal(body, &native)
+		result.Data = native.Output.Embeddings
+	} else {
+		err = json.Unmarshal(body, &result)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("decode multimodal embedding response: %w", err)
 	}
 	if len(result.Data) != len(inputs) {
@@ -202,7 +263,12 @@ func (e *OpenAIEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 func (e *OpenAIEmbedder) doRequestWithRetry(ctx context.Context, jsonData []byte) (*http.Response, error) {
 	var resp *http.Response
 	var err error
-	url := e.baseURL + "/embeddings"
+	endpoint := e.baseURL + "/embeddings"
+	if e.multimodalFormat == multimodalFormatDashScope {
+		if base, parseErr := url.Parse(e.baseURL); parseErr == nil {
+			endpoint = base.Scheme + "://" + base.Host + dashscopeMultimodalPath
+		}
+	}
 
 	for i := 0; i <= e.maxRetries; i++ {
 		if i > 0 {
@@ -233,7 +299,7 @@ func (e *OpenAIEmbedder) doRequestWithRetry(ctx context.Context, jsonData []byte
 		// Reproduce: stop the embedding upstream (e.g. localhost:3130), make
 		// any RAG query → backend SIGSEGV instead of returning HTTP 500.
 		var req *http.Request
-		req, err = http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonData))
+		req, err = http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(jsonData))
 		if err != nil {
 			logger.GetLogger(ctx).Errorf("OpenAIEmbedder failed to create request: %v", err)
 			continue

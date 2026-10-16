@@ -374,8 +374,8 @@ func validateImageEmbeddingModel(model *types.Model) error {
 	if model.Type != types.ModelTypeEmbedding || model.Source != types.ModelSourceRemote {
 		return apperrors.NewValidationError("image embedding requires a remote HTTP embedding model")
 	}
-	if format := strings.TrimSpace(parameters.MultimodalFormat); format != "" && format != "jina" {
-		return apperrors.NewValidationError("multimodal_format must be jina")
+	if format := strings.TrimSpace(parameters.MultimodalFormat); format != "" && format != "jina" && format != "dashscope" {
+		return apperrors.NewValidationError("multimodal_format must be jina or dashscope")
 	}
 	return nil
 }

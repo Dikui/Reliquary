@@ -64,6 +64,50 @@ func TestMultimodalEmbeddingUsesJinaInputsAndSharedModel(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestMultimodalEmbeddingUsesDashScopeNativeAPI(t *testing.T) {
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
+	utils.ResetSSRFWhitelistForTest()
+	requests := []map[string]any{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding", r.URL.Path, "compatible-mode prefix is dropped")
+		require.Equal(t, "Bearer fixture-key", r.Header.Get("Authorization"))
+		var request map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		requests = append(requests, request)
+		contents := request["input"].(map[string]any)["contents"].([]any)
+		items := []map[string]any{}
+		for i := len(contents) - 1; i >= 0; i-- {
+			items = append(items, map[string]any{"index": i, "embedding": []float32{1, float32(i), 0}, "type": "vl"})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"output": map[string]any{"embeddings": items}})
+	}))
+	t.Cleanup(server.Close)
+	model := &types.Model{ID: "bailian", Name: "qwen3-vl-embedding", Source: types.ModelSourceRemote,
+		Parameters: types.ModelParameters{BaseURL: server.URL + "/compatible-mode/v1", APIKey: "fixture-key",
+			EmbeddingParameters: types.EmbeddingParameters{Dimension: 3, SupportsDimensionOverride: true, SupportsImages: true, MultimodalFormat: "dashscope"}}}
+	embedder, err := NewEmbedder(ConfigFromModel(model), nil, nil)
+	require.NoError(t, err)
+
+	texts := make([]string, 25)
+	for i := range texts {
+		texts[i] = "text"
+	}
+	vectors, err := embedder.BatchEmbed(context.Background(), texts)
+	require.NoError(t, err)
+	require.Len(t, requests, 2, "requests are split at the 20 content limit")
+	require.Len(t, requests[0]["input"].(map[string]any)["contents"], 20)
+	require.Equal(t, []float32{1, 19, 0}, vectors[19], "indexes map back within each request")
+	require.Equal(t, []float32{1, 4, 0}, vectors[24])
+	require.Equal(t, map[string]any{"dimension": float64(3)}, requests[0]["parameters"])
+
+	const dataURI = "data:image/png;base64,iVBORw0KGgo="
+	_, err = embedder.(ImageEmbedder).EmbedImage(context.Background(), dataURI)
+	require.NoError(t, err)
+	require.Equal(t, []any{map[string]any{"image": dataURI}}, requests[2]["input"].(map[string]any)["contents"])
+	require.Equal(t, "qwen3-vl-embedding", requests[2]["model"])
+}
+
 func TestMultimodalEmbeddingRejectsInvalidResponseAndInput(t *testing.T) {
 	for _, test := range []struct {
 		name, body, message string

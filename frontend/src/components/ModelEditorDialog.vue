@@ -318,6 +318,7 @@
           <label class="form-label">{{ $t('model.editor.multimodalFormatLabel') }}</label>
           <t-select v-model="formData.multimodalFormat" :aria-label="$t('model.editor.multimodalFormatLabel')">
             <t-option value="jina" :label="$t('model.editor.multimodalFormatJina')" />
+            <t-option value="dashscope" :label="$t('model.editor.multimodalFormatDashScope')" />
           </t-select>
           <p class="form-desc">{{ $t('model.editor.multimodalFormatHint') }}</p>
         </div>
@@ -439,7 +440,7 @@ interface ModelFormData {
   dimension?: number
   supportsDimensionOverride?: boolean
   supportsImages?: boolean
-  multimodalFormat?: 'jina' | ''
+  multimodalFormat?: 'jina' | 'dashscope' | ''
   interfaceType?: 'ollama' | 'openai'
   isDefault: boolean
   supportsVision?: boolean

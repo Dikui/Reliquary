@@ -600,23 +600,6 @@ func (h *InitializationHandler) TestEmbeddingModel(c *gin.Context) {
 		}
 	}
 
-	// 阿里云多模态 Embedding 模型暂不支持
-	if strings.ToLower(req.Provider) == "aliyun" {
-		modelNameLower := strings.ToLower(req.ModelName)
-		if strings.Contains(modelNameLower, "vision") || strings.Contains(modelNameLower, "multimodal") {
-			logger.Infof(ctx, "Aliyun multimodal embedding model not supported: %s", req.ModelName)
-			c.JSON(http.StatusOK, gin.H{
-				"success": true,
-				"data": gin.H{
-					"available": false,
-					"message":   "阿里云多模态 Embedding 模型暂不支持，请使用纯文本 Embedding 模型（如 text-embedding-v4）",
-					"dimension": 0,
-				},
-			})
-			return
-		}
-	}
-
 	model := h.buildTestModel(&req, types.ModelTypeEmbedding, types.ModelSourceRemote)
 	cfg := embedding.ConfigFromModel(model)
 	cfg.Accounting = modelCallAccounting(h.modelService, model)

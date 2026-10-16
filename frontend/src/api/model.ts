@@ -31,7 +31,7 @@ export interface ModelConfig {
       truncate_prompt_tokens?: number;
       supports_dimension_override?: boolean;
       supports_images?: boolean;
-      multimodal_format?: 'jina' | '';
+      multimodal_format?: 'jina' | 'dashscope' | '';
     };
     parameter_size?: string; // Ollama模型参数大小 (e.g., "7B", "13B", "70B")
     extra_config?: Record<string, string>; // Provider-specific configuration
