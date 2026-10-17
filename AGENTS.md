@@ -16,6 +16,10 @@ Issues 和 specs 使用本地 Markdown，存放于 `.scratch/<feature-slug>/`。
 
 文档放置约定见 `docs/agents/layout.md`。
 
+### Local deployment
+
+更新本机部署前，读取源码根目录的 `.deploy.env`，以 `RELIQUARY_DEPLOY_DIR` 定位运行目录；该文件不提交。不要将源码目录当成运行目录。目录结构与维护步骤见 `docs/local-deployment.md`。
+
 ### Commit rules
 
 禁止 `--no-verify`、`git add -A` / `git add .` 和强推。

@@ -602,19 +602,23 @@ class Context:
 
 
 def source_copy(ctx, target, include_worktree, runtime_commit=None, runtime_source=None, runtime_code=None):
+    if runtime_source is not None and not include_worktree:
+        cached = checked_runtime_source(Path(runtime_source).parent)
+        if cached["code"] != runtime_code:
+            raise AdminError("Stored runtime source identity changed; run record-runtime again")
+        snapshot_tree(runtime_source, target / "source")
+        for name in ("source.bundle", "source-files.json"):
+            shutil.copy2(Path(runtime_source).parent / name, target / name)
+        return cached["code"]
     commit = run(["git", "rev-parse", runtime_commit or "HEAD"], cwd=ctx.root).decode().strip()
     dirty = bool(run(["git", "status", "--porcelain"], cwd=ctx.root).strip())
     if dirty and not include_worktree and not runtime_commit:
         raise AdminError("Working tree has uncommitted changes; commit first or explicitly use --include-worktree")
-    check_git_credentials(ctx)
-    run(["git", "bundle", "create", target / "source.bundle", "--all"], cwd=ctx.root)
+    check_git_credentials(ctx, commit)
+    run(["git", "bundle", "create", target / "source.bundle", "--all", commit], cwd=ctx.root)
     run(["git", "bundle", "verify", target / "source.bundle"], cwd=ctx.root)
     source = target / "source"
     source.mkdir()
-    if runtime_source is not None and not include_worktree:
-        snapshot_tree(runtime_source, source)
-        json_write(target / "source-files.json", {"removed": []})
-        return runtime_code
     if runtime_commit and not include_worktree:
         with tarfile.open(fileobj=io.BytesIO(run(["git", "archive", commit], cwd=ctx.root))) as archive:
             for member in archive:
@@ -661,12 +665,62 @@ def source_copy(ctx, target, include_worktree, runtime_commit=None, runtime_sour
     return {"commit": commit, "dirty": dirty, "mode": "sanitized-worktree" if dirty else "commit"}
 
 
-def check_git_credentials(ctx):
+def runtime_images(ctx):
+    config = json.loads(ctx.compose("config", "--format", "json"))
+    images = {}
+    for service, spec in config["services"].items():
+        if not spec.get("image"):
+            raise AdminError(f"Compose service has no image: {service}")
+        info = json.loads(run(["docker", "image", "inspect", spec["image"]]))[0]
+        images[service] = {"reference": spec["image"], "id": info["Id"], "labels": info.get("Config", {}).get("Labels") or {}}
+    if ctx.app not in images:
+        raise AdminError("Configured app service has no image")
+    container = ctx.compose("ps", "--all", "--quiet", ctx.app).decode().strip()
+    if container:
+        running = json.loads(run(["docker", "inspect", container]))[0]
+        if running["Image"] != images[ctx.app]["id"]:
+            raise AdminError("App container and configured image differ; finish or revert the deployment before backing up")
+    return images
+
+
+def checked_runtime_source(cache, image_id=None, app="app"):
+    instruction = "run record-runtime --source <source-checkout> before backing up"
+    try:
+        cached = json.loads((cache / "manifest.json").read_text())
+        if image_id is not None and cached["images"].get(app, {}).get("id") != image_id:
+            raise AdminError("Stored runtime source does not match the configured app image; " + instruction)
+        if hashes(cache / "source") != cached["files"]:
+            raise AdminError("Stored runtime source materials are damaged; " + instruction)
+        for name in ("source.bundle", "source-files.json"):
+            if digest(cache / name) != cached["artifacts"][name]:
+                raise AdminError("Stored runtime source materials are damaged; " + instruction)
+        return cached
+    except (OSError, ValueError, KeyError) as error:
+        raise AdminError("Stored runtime source materials are missing or invalid; " + instruction) from error
+
+
+def record_runtime(ctx, source):
+    if ctx.direct or ctx.local_server:
+        raise AdminError("record-runtime requires a Compose image deployment")
+    images = runtime_images(ctx)
+    revision = images[ctx.app]["labels"].get("org.opencontainers.image.revision")
+    if not revision:
+        raise AdminError("App image has no source revision; rebuild it with its exact Git commit")
+    source_ctx = argparse.Namespace(root=Path(source).resolve(), runtime_env=ctx.runtime_env)
+    revision = run(["git", "rev-parse", "--verify", revision + "^{commit}"], cwd=source_ctx.root).decode().strip()
+    with tempfile.TemporaryDirectory(prefix=".capture-source-", dir=ctx.root) as temporary:
+        stage = Path(temporary)
+        code = source_copy(source_ctx, stage, False, revision)
+        remember_runtime(ctx, stage / "source", code, images)
+    print(json.dumps({"commit": code["commit"], "image_id": images[ctx.app]["id"], "source_cache": str(ctx.root / ".maintenance-runtime")}, indent=2))
+
+
+def check_git_credentials(ctx, commit):
     """Inspect decompressed Git objects before writing the portable history."""
     needles = [value.encode() for key, value in ctx.runtime_env().items() if SECRET.search(key) and len(value) >= 8]
     if not needles:
         return
-    producer = subprocess.Popen(["git", "rev-list", "--objects", "--all", "--no-object-names"], cwd=ctx.root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    producer = subprocess.Popen(["git", "rev-list", "--objects", "--all", "--no-object-names", commit], cwd=ctx.root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     objects = subprocess.Popen(["git", "cat-file", "--batch"], cwd=ctx.root, stdin=producer.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     producer.stdout.close()
     try:
@@ -697,6 +751,7 @@ def check_git_credentials(ctx):
             producer.terminate()
         objects.wait()
         producer.wait()
+        objects.stdout.close()
 
 
 def images_save(ctx, target, code):
@@ -800,39 +855,36 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
     destination = empty_directory(destination)
     result = {"status": "failed", "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "path": str(destination)}
     try:
-        with ctx.stopped("drain" if kind == "pack" else "snapshot", args.timeout, args.keep_paused,
-                         getattr(args, "automatic", False), destination):
-            before = ctx.cli_json("manifest")
-            with tempfile.TemporaryDirectory(prefix=".stage-reliquary-", dir=destination.parent) as stage_dir:
-                stage = Path(stage_dir)
+        with tempfile.TemporaryDirectory(prefix=".stage-reliquary-", dir=destination.parent) as stage_dir:
+            stage = Path(stage_dir)
+            effective = ctx.runtime_env()
+            safe_env, required = sanitized_env(effective)
+            write_env(stage / ".env.template", safe_env)
+            runtime_commit, runtime_source, runtime_code = None, None, None
+            images = None
+            if not ctx.direct and not ctx.local_server and (kind == "pack" or getattr(args, "with_images", False) or not args.include_worktree):
+                images = runtime_images(ctx)
+            if kind == "backup" and not args.include_worktree:
+                runtime_commit = "HEAD"
+                if images is not None:
+                    info = images[ctx.app]
+                    runtime_commit = info["labels"].get("org.opencontainers.image.revision") or "HEAD"
+                    cache = ctx.root / ".maintenance-runtime"
+                    if (cache / "manifest.json").is_file():
+                        cached = checked_runtime_source(cache, info["id"], ctx.app)
+                        runtime_source, runtime_code = cache / "source", cached["code"]
+                    elif not (ctx.root / ".git").exists():
+                        raise AdminError("Runtime source materials are missing; run record-runtime --source <source-checkout> before backing up")
+            # Export and validate code and image availability while writers are still running.
+            code = source_copy(ctx, stage, args.include_worktree, runtime_commit, runtime_source, runtime_code)
+            with ctx.stopped("drain" if kind == "pack" else "snapshot", args.timeout, args.keep_paused,
+                             getattr(args, "automatic", False), destination):
+                before = ctx.cli_json("manifest")
                 owner_path = ctx.root / ".maintenance-schedule/active.json"
                 if getattr(args, "automatic", False) and owner_path.exists():
                     owner = json.loads(owner_path.read_text())
                     owner["stage"] = str(stage)
                     json_write(owner_path, owner)
-                effective = ctx.runtime_env()
-                safe_env, required = sanitized_env(effective)
-                write_env(stage / ".env.template", safe_env)
-                runtime_commit = None
-                runtime_source, runtime_code = None, None
-                if kind == "backup" and not args.include_worktree:
-                    runtime_commit = "HEAD"
-                    if not ctx.direct and not ctx.local_server:
-                        config = json.loads(ctx.compose("config", "--format", "json"))
-                        image = config["services"][ctx.app]["image"]
-                        info = json.loads(run(["docker", "image", "inspect", image]))[0]
-                        revision = info.get("Config", {}).get("Labels", {}).get("org.opencontainers.image.revision")
-                        if revision:
-                            runtime_commit = revision
-                        cached_manifest = ctx.root / ".maintenance-runtime/manifest.json"
-                        if cached_manifest.is_file():
-                            cached = json.loads(cached_manifest.read_text())
-                            if cached.get("images", {}).get(ctx.app, {}).get("id") == info["Id"]:
-                                runtime_source = ctx.root / ".maintenance-runtime/source"
-                                if hashes(runtime_source) != cached.get("files"):
-                                    raise AdminError("Stored running-version source is damaged; stop and repair from the original migration package")
-                                runtime_code = cached["code"]
-                code = source_copy(ctx, stage, args.include_worktree, runtime_commit, runtime_source, runtime_code)
                 for path in (ctx.root / "config").glob("*.y*ml"):
                     sanitize_config(path, stage / "config" / path.name)
                 ctx.copy_storage("vault", stage / "vault")
@@ -893,9 +945,9 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                 for child in stage.iterdir():
                     shutil.move(str(child), destination / child.name)
                 check_files(destination)
-            # Verify while writers remain stopped. Resumed workers can change
-            # PG immediately, before the debounced replica catches up.
-            ctx.cli_json("verify")
+                # Verify while writers remain stopped. Resumed workers can change
+                # PG immediately, before the debounced replica catches up.
+                ctx.cli_json("verify")
         result.update(status="success", size_bytes=sum(p.stat().st_size for p in destination.rglob("*") if p.is_file()))
         print(f"{kind} complete and read-back verified: {destination}")
         return destination
@@ -1072,7 +1124,14 @@ def remember_runtime(ctx, source, code, images):
     with tempfile.TemporaryDirectory(prefix=".runtime-source-", dir=ctx.root) as temp:
         staged = Path(temp) / "cache"
         snapshot_tree(source, staged / "source")
-        json_write(staged / "manifest.json", {"code": code, "images": images, "files": hashes(staged / "source")})
+        shutil.copy2(Path(source).parent / "source.bundle", staged / "source.bundle")
+        source_files = Path(source).parent / "source-files.json"
+        if source_files.is_file():
+            shutil.copy2(source_files, staged / "source-files.json")
+        else:
+            json_write(staged / "source-files.json", {"removed": []})
+        artifacts = {name: digest(staged / name) for name in ("source.bundle", "source-files.json")}
+        json_write(staged / "manifest.json", {"code": code, "images": images, "files": hashes(staged / "source"), "artifacts": artifacts})
         previous = ctx.root / ".maintenance-runtime.previous"
         if previous.exists():
             shutil.rmtree(previous)
@@ -1887,6 +1946,8 @@ def parser():
     sub = cli.add_subparsers(dest="command", required=True)
     p = sub.add_parser("check-deployment", help="Create and check host storage and backup directories before starting services")
     p.add_argument("--backup-directory")
+    p = sub.add_parser("record-runtime", help="Record verified source and Git bundle for the configured app image without stopping services")
+    p.add_argument("--source", required=True, help="Git checkout containing the app image's exact revision")
     sub.add_parser("export-sources", help="Export retired source configuration and synchronization history without credentials")
     for name in ("pack", "backup"):
         p = sub.add_parser(name)
@@ -1949,6 +2010,8 @@ def main(argv=None):
     if args.command == "check-deployment":
         checked = ctx.check_host_directories(args.backup_directory)
         print(json.dumps({"ok": True, "directories": {name: str(path) for name, path in checked.items()}}, ensure_ascii=False, indent=2))
+    elif args.command == "record-runtime":
+        record_runtime(ctx, args.source)
     elif args.command == "export-sources":
         print(json.dumps(ctx.cli_json("export-sources"), ensure_ascii=False, indent=2))
     elif args.command == "pack":

@@ -36,6 +36,64 @@ class AdminStorageTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_recorded_runtime_sources_survive_without_a_git_checkout(self):
+        source = self.root / "checkout"
+        source.mkdir()
+        admin.run(["git", "init", "-b", "main"], cwd=source)
+        for content in ("Earlier source\n", "Reviewed release source\n"):
+            (source / "README.md").write_text(content)
+            admin.run(["git", "add", "--", "README.md"], cwd=source)
+            admin.run(["git", "-c", "user.name=Backup fixture", "-c", "user.email=fixture@example.invalid",
+                       "-c", "commit.gpgsign=false", "commit", "-m", "Release fixture"], cwd=source)
+        revision = admin.run(["git", "rev-parse", "HEAD"], cwd=source).decode().strip()
+        admin.run(["git", "reset", "--hard", "HEAD^"], cwd=source)
+        runtime = self.root / "deploy"
+        runtime.mkdir()
+        ctx = admin.Context(runtime)
+        ctx.runtime_env = lambda: {}
+        images = {"app": {"reference": "fixture:release", "id": "sha256:fixture",
+                           "labels": {"org.opencontainers.image.revision": revision}}}
+        with mock.patch.object(admin, "runtime_images", return_value=images), contextlib.redirect_stdout(io.StringIO()):
+            admin.record_runtime(ctx, source)
+        source.rename(self.root / "checkout-offline")
+        package = self.root / "source-package"
+        package.mkdir()
+        cache = runtime / ".maintenance-runtime"
+        recorded = json.loads((cache / "manifest.json").read_text())
+        with mock.patch.object(admin, "run", side_effect=AssertionError("Runtime backup must not invoke Git")):
+            code = admin.source_copy(ctx, package, False, revision, cache / "source", recorded["code"])
+        self.assertEqual(code["commit"], revision)
+        restored = self.root / "restored-source"
+        admin.run(["git", "clone", str(package / "source.bundle"), str(restored)])
+        admin.run(["git", "checkout", "--detach", code["commit"]], cwd=restored)
+        admin.snapshot_tree(package / "source", restored)
+        self.assertEqual((restored / "README.md").read_text(), "Reviewed release source\n")
+        self.assertEqual(json.loads((package / "source-files.json").read_text()), {"removed": []})
+        rejected = self.root / "credential-rejected"
+        rejected.mkdir()
+        source_ctx = argparse.Namespace(root=self.root / "checkout-offline",
+                                        runtime_env=lambda: {"DB_PASSWORD": (restored / "README.md").read_text().strip()})
+        with self.assertRaisesRegex(admin.AdminError, "Git history contains"):
+            admin.source_copy(source_ctx, rejected, False, revision)
+        self.assertFalse((rejected / "source.bundle").exists())
+        (cache / "source.bundle").write_bytes(b"Damaged release materials")
+        with self.assertRaisesRegex(admin.AdminError, "source.*damaged"):
+            admin.source_copy(ctx, self.root / "rejected", False, revision, cache / "source", recorded["code"])
+
+    def test_backup_rejects_missing_runtime_materials_before_stopping(self):
+        runtime = self.root / "deploy"
+        runtime.mkdir()
+        ctx = argparse.Namespace(root=runtime, direct=False, local_server=None, app="app", env={},
+                                 runtime_env=lambda: {}, cli_json=mock.Mock(return_value={}),
+                                 stopped=mock.Mock(side_effect=AssertionError("Preflight must finish before stopping")))
+        options = argparse.Namespace(timeout=30, keep_paused=False, include_worktree=False, automatic=False)
+        images = {"app": {"reference": "fixture:release", "id": "sha256:fixture", "labels": {}}}
+        with mock.patch.object(admin, "runtime_images", return_value=images):
+            with self.assertRaisesRegex(admin.AdminError, "record-runtime"):
+                admin.create_package(ctx, self.root / "backup", options, "backup")
+        ctx.stopped.assert_not_called()
+        self.assertNotIn(mock.call("manifest"), ctx.cli_json.call_args_list)
+
     def host_context(self, **overrides):
         source = self.root / "source"
         source.mkdir(exist_ok=True)
@@ -301,7 +359,7 @@ class AdminStorageTests(unittest.TestCase):
             (stage / "source").mkdir()
             (stage / "source/application.txt").write_text("Reviewed source")
             return {"commit": "test-commit"}
-        with mock.patch.object(admin, "source_copy", side_effect=source_copy), mock.patch.object(admin, "images_save", return_value={}), contextlib.redirect_stdout(io.StringIO()):
+        with mock.patch.object(admin, "source_copy", side_effect=source_copy), mock.patch.object(admin, "runtime_images", return_value={}), mock.patch.object(admin, "images_save", return_value={}), contextlib.redirect_stdout(io.StringIO()):
             packed = admin.create_package(ctx, self.root / "packed", options)
             backed_up = admin.backup(ctx, options)
         for package in (packed, backed_up):
@@ -485,12 +543,16 @@ class AdminStorageTests(unittest.TestCase):
 
     def test_wait_timeout_skips_backup_and_records_alert(self):
         class FakeContext:
+            direct = True
+            local_server = None
+            def runtime_env(self):
+                return {}
             @contextlib.contextmanager
             def stopped(self, *args):
                 raise admin.AdminError("queue drain timeout")
                 yield
         args = argparse.Namespace(timeout=1, keep_paused=False, include_worktree=False, automatic=True)
-        with mock.patch.object(admin, "record") as record:
+        with mock.patch.object(admin, "source_copy", return_value={"commit": "test-commit"}), mock.patch.object(admin, "record") as record:
             with self.assertRaisesRegex(admin.AdminError, "timeout"):
                 admin.create_package(FakeContext(), self.root / "backup-timeout", args, kind="backup")
             result = record.call_args.args[2]

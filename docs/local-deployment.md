@@ -1,10 +1,10 @@
 # 源码与运行分离的本地部署
 
-长期使用推荐一个总目录。仓库保存部署脚本和模板，机器生成实际配置。以下示例使用 `~/Reliquary`，可以换成其他绝对路径。
+源码放在项目目录，运行环境单独保存。仓库保存部署脚本和模板，机器生成实际配置。以下示例使用 `~/Project/Reliquary` 和 `~/Reliquary`，可以换成其他绝对路径。
 
 ```text
+~/Project/Reliquary/ Git 源码，仅更新、构建和登记发布源码时需要
 ~/Reliquary/
-├── source/          Git 源码，仅更新和构建时需要
 ├── deploy/          .env、运行用 Compose、config/、维护工具
 ├── scripts/         登录后启动脚本
 ├── data/
@@ -14,7 +14,13 @@
 └── backups/         本地备份
 ```
 
-已有工作区可以保留原物理位置，用总目录下的 `source` 符号链接指向它；运行不依赖这个链接。脚本按自身位置定位 `deploy/`，Compose 相对引用 `.env` 与 `config/`；宿主机数据路径和系统启动入口则在安装时生成绝对路径，不把个人路径写进仓库。
+运行不依赖源码目录。脚本按自身位置定位 `deploy/`，Compose 相对引用 `.env` 与 `config/`；宿主机数据路径和系统启动入口则在安装时生成绝对路径，不把个人路径写进仓库。
+
+在源码仓库的本机文件 `.deploy.env` 中记录部署位置，后续更新部署前先读取该文件。它不提交到 Git，也不保存运行凭据：
+
+```sh
+RELIQUARY_DEPLOY_DIR="$HOME/Reliquary/deploy"
+```
 
 Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模型可供多个项目共用，继续由 Ollama 管理。macOS 的 LaunchAgent 文件仍安装在 `~/Library/LaunchAgents/`，引用本目录的脚本。启动无需保留打开的终端或 Codex 对话。
 
@@ -22,34 +28,36 @@ Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模�
 
 需要 Python 3.9+、Git、Node.js/npm、Docker Compose v2（支持 `config --no-env-resolution`）。macOS 自启动使用 Docker Desktop；如需本机 Ollama，同时安装 Ollama 桌面应用并准备模型。其他系统可使用相同运行目录，自启动需自行配置。
 
-1. 将仓库克隆到 `~/Reliquary/source`，启动 Docker，然后生成运行配置：
+1. 将仓库克隆到 `~/Project/Reliquary`，启动 Docker，然后生成运行配置：
 
    ```sh
-   cd ~/Reliquary/source
+   cd ~/Project/Reliquary
    python3 scripts/install-local.py --root "$HOME/Reliquary"
    ```
 
    脚本先在临时目录验证配置，通过后才生成 `deploy/`；失败后可修正原因并重新运行。脚本生成随机数据库密码和 32 字节加密密钥。检查 `~/Reliquary/deploy/.env` 中的端口、镜像版本和模型地址。使用 ChatGPT 时按[个人使用指南](personal-use.md#使用-chatgpt-订阅)配置白名单并完成授权。脚本不自动修改模型策略或系统安全设置。
 
-2. 从源码构建镜像，再从运行目录启动：
+2. 确认源码已提交且工作区干净后构建镜像，再从运行目录启动：
 
    ```sh
-   cd ~/Reliquary/source
+   cd ~/Project/Reliquary
    ./scripts/build-frontend-dist.sh
-   docker compose --env-file "$HOME/Reliquary/deploy/.env" build app frontend
+   RELIQUARY_COMMIT="$(git rev-parse HEAD)" \
+     docker compose --env-file "$HOME/Reliquary/deploy/.env" build app frontend
    cd "$HOME/Reliquary/deploy"
    ./reliquary-admin check-deployment
    docker compose up -d --wait postgres redis neo4j
    ./reliquary-admin check-deployment
    docker compose up -d --no-build --wait
+   ./reliquary-admin record-runtime --source "$HOME/Project/Reliquary"
    ```
 
-   运行 Compose 从源码模板生成，保留环境变量引用，去掉 `build`，应用镜像禁止自动拉取。日常启动、模型授权和数据读写均不依赖 `source/`。维护工具也复制到 `deploy/`；需要源码的构建、开发和源码导出仍在 `source/` 进行。
+   运行 Compose 从源码模板生成，保留环境变量引用，去掉 `build`，应用镜像禁止自动拉取。维护工具也复制到 `deploy/`。`record-runtime` 按应用镜像的提交标记保存源码、Git bundle 和文件删除清单，绑定镜像 ID 并记录文件校验值，写入 `deploy/.maintenance-runtime/`。它不停止服务；登记后备份也无需保留源码仓库。
 
 3. macOS 注册登录后启动。使用本机 Ollama 时加 `--ollama`：
 
    ```sh
-   python3 ~/Reliquary/source/scripts/install-local.py \
+   python3 ~/Project/Reliquary/scripts/install-local.py \
      --root "$HOME/Reliquary" --install-autostart --ollama
    ```
 
@@ -75,6 +83,10 @@ cd ~/Reliquary/deploy
 docker compose stop
 ```
 
-恢复时用 `launchctl bootstrap` 加载同一 plist。升级前备份，更新 `source/` 并构建新版本镜像；核对新版 Compose 模板与运行配置的差异，再调整 `deploy/.env` 镜像标签并启动。安装脚本不自动覆盖现有配置，也不提供自动升级。若移动总目录，须同步更新 `.env` 中的数据路径和系统已注册的启动路径。
+恢复时用 `launchctl bootstrap` 加载同一 plist。升级前备份，更新源码并构建新版本镜像；核对新版 Compose 模板与运行配置的差异，再调整 `deploy/.env` 镜像标签并启动。每次手动发布后，从运行目录执行 `./reliquary-admin record-runtime --source /源码仓库的绝对路径`，登记新镜像对应的源码材料。安装脚本不自动覆盖现有配置，也不提供自动升级。
+
+已有安装需先将新版 `scripts/reliquary_admin.py` 复制到 `deploy/scripts/`，再执行一次 `record-runtime`。备份会在暂停任务和停服前检查源码材料的完整性、镜像是否存在，以及登记的镜像 ID 是否与当前应用一致；检查失败时提示修复，不进入停服步骤。
+
+若移动运行目录，须同步更新 `.deploy.env`、`deploy/.env` 中的数据路径、系统已注册的启动路径，以及已保存的备份目录设置。不要只改文件夹名称。
 
 只提交源码、脚本、示例配置和文档。`deploy/.env`、业务数据、授权、日志及备份不进入 Git，也不推送远程仓库。
