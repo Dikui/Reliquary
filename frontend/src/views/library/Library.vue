@@ -39,7 +39,7 @@ import PendingReviews from './components/PendingReviews.vue';
 import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
 import LibraryReviewAction from '@/components/LibraryReviewAction.vue';
-import type { LibraryContentType } from '@/api/library';
+import type { LibraryContentType, LibraryRebuildScope } from '@/api/library';
 import { CONTENT_TYPES } from '@/types/entryClassification';
 import { SEARCH_SOURCES } from '@/types/search';
 import {
@@ -69,6 +69,7 @@ const selectedLibrary = computed(() => libraryScope.value.length === 1
   ? libraryCatalog.value.find(item => item.id === libraryScope.value[0])
   : undefined);
 const libraryRebuilding = ref(false);
+const libraryRebuildScope = ref<LibraryRebuildScope>('failed');
 const libraryRebuildError = ref('');
 const libraryRebuildNotice = ref('');
 const libraryRebuildConfirming = ref(false);
@@ -705,7 +706,7 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
 const handleOpenLibrarySettings = () => uiStore.openSettings('library');
 const reparseConfirmStore = useReparseConfirmStore();
 
-const confirmLibraryRebuild = () => {
+const confirmLibraryRebuild = (scope: LibraryRebuildScope = 'failed') => {
   const target = selectedLibrary.value;
   if (!target || target.template === 'generated' || libraryRebuilding.value || libraryRebuildConfirming.value) return;
   libraryRebuildConfirming.value = true;
@@ -715,25 +716,26 @@ const confirmLibraryRebuild = () => {
     libraryRebuildConfirming.value = false;
   };
   libraryRebuildDialog = DialogPlugin.confirm({
-    header: t('library.rebuildLibrary'),
-    body: t('library.rebuildLibraryConfirm', { name: target.display_name || target.name }),
-    confirmBtn: t('library.rebuildLibrary'),
+    header: t(scope === 'all' ? 'library.rebuildLibraryAll' : 'library.rebuildLibrary'),
+    body: t(scope === 'all' ? 'library.rebuildLibraryAllConfirm' : 'library.rebuildLibraryConfirm', { name: target.display_name || target.name }),
+    confirmBtn: t(scope === 'all' ? 'library.rebuildLibraryAll' : 'library.rebuildLibrary'),
     cancelBtn: t('common.cancel'),
-    onConfirm: () => { close(); void submitLibraryRebuild(target.id); },
+    onConfirm: () => { close(); void submitLibraryRebuild(target.id, scope); },
     onCancel: close,
     onClose: close,
   });
 };
 
-const submitLibraryRebuild = async (targetId: string) => {
+const submitLibraryRebuild = async (targetId: string, scope: LibraryRebuildScope) => {
   if (libraryRebuilding.value) return;
+  libraryRebuildScope.value = scope;
   libraryRebuilding.value = true;
   libraryRebuildError.value = '';
   libraryRebuildNotice.value = '';
   try {
-    const result = await rebuildCatalogLibrary(targetId);
+    const result = await rebuildCatalogLibrary(targetId, scope);
     if (!result.success) throw new Error(result.message || t('library.rebuildFailed'));
-    libraryRebuildNotice.value = t('library.rebuildLibrarySubmitted', { count: result.data.total });
+    libraryRebuildNotice.value = t(scope === 'all' ? 'library.rebuildLibraryAllSubmitted' : 'library.rebuildLibrarySubmitted', { count: result.data.total });
     MessagePlugin.success(libraryRebuildNotice.value);
   } catch (error: any) {
     libraryRebuildError.value = error?.message || t('library.rebuildFailed');
@@ -1189,9 +1191,13 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-bar__trailing">
                   <t-tooltip v-if="selectedLibrary?.template !== 'generated'" :content="selectedLibrary ? (selectedLibrary.display_name || selectedLibrary.name) : $t('library.rebuildLibrarySelectOne')">
                     <span>
-                      <t-button variant="text" size="small" :loading="libraryRebuilding"
-                        :disabled="!selectedLibrary || libraryRebuilding || libraryRebuildConfirming" @click="confirmLibraryRebuild">
+                      <t-button variant="outline" theme="primary" size="small" :loading="libraryRebuilding && libraryRebuildScope === 'failed'"
+                        :disabled="!selectedLibrary || libraryRebuilding || libraryRebuildConfirming" @click="confirmLibraryRebuild()">
                         {{ $t('library.rebuildLibrary') }}
+                      </t-button>
+                      <t-button variant="text" size="small" :loading="libraryRebuilding && libraryRebuildScope === 'all'"
+                        :disabled="!selectedLibrary || libraryRebuilding || libraryRebuildConfirming" @click="confirmLibraryRebuild('all')">
+                        {{ $t('library.rebuildLibraryAll') }}
                       </t-button>
                     </span>
                   </t-tooltip>

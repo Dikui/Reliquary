@@ -235,6 +235,7 @@ type EntryListReparsePayload struct {
 	Initiator     TaskInitiator          `json:"initiator,omitempty"`
 	LibraryID     string                 `json:"library_id,omitempty"`
 	RebuildID     string                 `json:"rebuild_id,omitempty"`
+	RebuildScope  string                 `json:"rebuild_scope,omitempty"`
 	ReviewID      string                 `json:"review_id,omitempty"`
 	ReviewScope   string                 `json:"review_scope,omitempty"`
 }

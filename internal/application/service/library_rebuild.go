@@ -20,23 +20,32 @@ func libraryRebuildGroup(id string) string { return "library-rebuild:" + id }
 
 type libraryRebuildContextKey struct{}
 
-func libraryRebuildEligible(entry *types.Entry) (bool, error) {
-	if entry.ParseStatus != types.ParseStatusFailed || (entry.SourceKind != "article" && entry.SourceKind != "mine") {
+func libraryRebuildEligible(entry *types.Entry, scope string) (bool, error) {
+	if entry.SourceKind != "article" && entry.SourceKind != "mine" {
+		return false, nil
+	}
+	if entry.ParseStatus != types.ParseStatusFailed && (scope != "all" || (entry.ParseStatus != types.ParseStatusCompleted && entry.ParseStatus != types.ParseStatusCancelled)) {
 		return false, nil
 	}
 	intake, err := entry.IntakeMetadata()
 	if err != nil {
 		return false, err
 	}
-	return intake == nil || intake.Decision == "approved" || intake.Decision == "pending", nil
+	return intake == nil || intake.Decision == "approved" || (entry.ParseStatus == types.ParseStatusFailed && intake.Decision == "pending"), nil
 }
 
 // RebuildLibrary freezes only the membership. Each worker uses the saved library
 // settings when it starts; users must keep settings stable during the rebuild.
-func (s *entryService) RebuildLibrary(ctx context.Context, libraryID string) (*types.LibraryRebuildResult, error) {
+func (s *entryService) RebuildLibrary(ctx context.Context, libraryID, scope string) (*types.LibraryRebuildResult, error) {
+	if scope == "" {
+		scope = "failed"
+	}
+	if scope != "failed" && scope != "all" {
+		return nil, apperrors.NewBadRequestError("scope must be failed or all")
+	}
 	if s.needsTaskTransaction() {
 		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.LibraryRebuildResult, error) {
-			return copy.RebuildLibrary(ctx, libraryID)
+			return copy.RebuildLibrary(ctx, libraryID, scope)
 		})
 	}
 	spaceID, ok := types.SpaceIDFromContext(ctx)
@@ -78,7 +87,7 @@ func (s *entryService) RebuildLibrary(ctx context.Context, libraryID string) (*t
 		if entry.ParseStatus == types.ParseStatusPending || entry.ParseStatus == types.ParseStatusProcessing || entry.ParseStatus == types.ParseStatusFinalizing || entry.ParseStatus == types.ParseStatusDeleting {
 			return nil, apperrors.NewConflictError("This library has unfinished processing tasks; finish or cancel them before rebuilding")
 		}
-		eligible, err := libraryRebuildEligible(entry)
+		eligible, err := libraryRebuildEligible(entry, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -87,10 +96,10 @@ func (s *entryService) RebuildLibrary(ctx context.Context, libraryID string) (*t
 		}
 	}
 	if len(ids) == 0 {
-		return nil, apperrors.NewBadRequestError("This library has no failed documents eligible for rebuilding")
+		return nil, apperrors.NewBadRequestError("This library has no documents eligible for the selected rebuild scope")
 	}
 	runID := uuid.NewString()
-	payload, err := json.Marshal(types.EntryListReparsePayload{SpaceID: spaceID, LibraryID: libraryID, EntryIDs: ids, RebuildID: runID, Initiator: types.TaskInitiatorFromContext(ctx)})
+	payload, err := json.Marshal(types.EntryListReparsePayload{SpaceID: spaceID, LibraryID: libraryID, EntryIDs: ids, RebuildID: runID, RebuildScope: scope, Initiator: types.TaskInitiatorFromContext(ctx)})
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +128,7 @@ func (s *entryService) submitLibraryRebuildEntry(ctx context.Context, payload ty
 			if err := copy.db.Model(&taskqueue.Job{}).Where("id=?", taskID).Count(&submitted).Error; err != nil || submitted > 0 {
 				return &entry, err
 			}
-			eligible, err := libraryRebuildEligible(&entry)
+			eligible, err := libraryRebuildEligible(&entry, payload.RebuildScope)
 			if err != nil {
 				return nil, err
 			}

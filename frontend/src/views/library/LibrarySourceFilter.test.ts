@@ -45,7 +45,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const t = i18n.global.t
   const requests: URLSearchParams[] = []
   const scope = ref<string[]>([])
-  const rebuildRequests: string[] = [], notices: string[] = []
+  const rebuildRequests: Array<{ path: string; data: unknown }> = [], notices: string[] = []
   let rebuildResponse: () => Promise<any> = async () => ({ success: true, data: { task_id: 'rebuild', total: 41 } })
   let confirmation: any
   const records = [
@@ -62,7 +62,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     records.push({ ...target, id: `mine-other-${field}`, [field]: value })
   }
   const transport = {
-    async post(path: string) { rebuildRequests.push(path); return rebuildResponse() },
+    async post(path: string, data: unknown) { rebuildRequests.push({ path, data }); return rebuildResponse() },
     async get(path: string) {
       const url = new URL(path, 'http://localhost')
       assert.equal(url.pathname, '/api/v1/entries')
@@ -465,7 +465,7 @@ test('library rebuild confirms one selected library, prevents duplicate submissi
     assert.equal(button()?.props.disabled, true)
     assert.equal(button()?.props['data-loading'], true)
     button()!.props.onClick()
-    assert.deepEqual(env.rebuildRequests, ['/api/v1/libraries/library-source/rebuild'])
+    assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/libraries/library-source/rebuild', data: { scope: 'failed' } }])
     finish({ success: true, data: { task_id: 'rebuild', total: 41 } })
     await settle()
     assert.ok(visibleText(env.root).includes(env.t('library.rebuildLibrarySubmitted', { count: 41 })))
@@ -473,6 +473,43 @@ test('library rebuild confirms one selected library, prevents duplicate submissi
     env.scope.value = ['reports']
     await settle()
     assert.equal(button(), undefined)
+  } finally { env.cleanup() }
+})
+
+test('full library rebuild requires confirmation, sends its scope and can be cancelled', async () => {
+  const env = await mountLibrary('en-US')
+  const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))
+  try {
+    assert.equal(button('library.rebuildLibraryAll')?.props.disabled, true)
+    env.scope.value = ['library-source']
+    await settle()
+    button('library.rebuildLibraryAll')!.props.onClick()
+    assert.equal(env.confirmation.header, env.t('library.rebuildLibraryAll'))
+    assert.equal(env.confirmation.confirmBtn, env.t('library.rebuildLibraryAll'))
+    assert.match(env.confirmation.body, /Research/)
+    assert.match(env.confirmation.body, /Completed materials will be processed again/)
+    assert.match(env.confirmation.body, /incurs costs/)
+    assert.deepEqual(env.rebuildRequests, [])
+    await settle()
+    assert.equal(button('library.rebuildLibrary')?.props.disabled, true)
+    env.confirmation.onCancel()
+    await settle()
+    assert.deepEqual(env.rebuildRequests, [])
+    assert.equal(button('library.rebuildLibraryAll')?.props.disabled, false)
+    button('library.rebuildLibraryAll')!.props.onClick()
+    let finish!: (response: unknown) => void
+    env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
+    env.confirmation.onConfirm()
+    await settle()
+    assert.equal(button('library.rebuildLibraryAll')?.props['data-loading'], true)
+    assert.equal(button('library.rebuildLibrary')?.props.disabled, true)
+    assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/libraries/library-source/rebuild', data: { scope: 'all' } }])
+    finish({ success: true, data: { task_id: 'rebuild', total: 41 } })
+    await settle()
+    assert.ok(visibleText(env.root).includes(env.t('library.rebuildLibraryAllSubmitted', { count: 41 })))
+    env.scope.value = ['reports']
+    await settle()
+    assert.equal(button('library.rebuildLibraryAll'), undefined)
   } finally { env.cleanup() }
 })
 

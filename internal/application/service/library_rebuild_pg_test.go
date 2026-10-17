@@ -120,10 +120,12 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, err)
 	h.processor.output = string(data)
 	h.service.task = &libraryRebuildQueue{db: h.db}
-	run, err := h.service.RebuildLibrary(h.ctx, k.LibraryID)
+	_, err = h.service.RebuildLibrary(h.ctx, k.LibraryID, "invalid")
+	require.ErrorContains(t, err, "scope must be failed or all")
+	run, err := h.service.RebuildLibrary(h.ctx, k.LibraryID, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, run.Total)
-	_, err = h.service.RebuildLibrary(h.ctx, k.LibraryID)
+	_, err = h.service.RebuildLibrary(h.ctx, k.LibraryID, "")
 	require.ErrorContains(t, err, "unfinished processing")
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	childID := run.TaskID + ":" + k.ID
@@ -171,6 +173,22 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.EqualValues(t, 1, count)
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, completed.ID).ParseStatus)
 	require.Equal(t, types.ParseStatusCancelled, h.article(t, cancelled.ID).ParseStatus)
+
+	// The explicit full scope includes completed and cancelled sources, and is
+	// retained in the parent task so dispatch does not fall back to failed-only.
+	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("group_name=?", libraryRebuildGroup(k.LibraryID)).Update("state", taskqueue.TaskStateCompleted).Error)
+	full, err := h.service.RebuildLibrary(h.ctx, k.LibraryID, "all")
+	require.NoError(t, err)
+	require.Equal(t, 3, full.Total)
+	parent := rebuildTask(t, h.db, full.TaskID)
+	var payload types.EntryListReparsePayload
+	require.NoError(t, json.Unmarshal(parent.Payload(), &payload))
+	require.Equal(t, "all", payload.RebuildScope)
+	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, parent))
+	for _, id := range []string{k.ID, completed.ID, cancelled.ID} {
+		require.Equal(t, types.ParseStatusPending, h.article(t, id).ParseStatus)
+		require.NotNil(t, rebuildTask(t, h.db, full.TaskID+":"+id))
+	}
 }
 
 func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
@@ -183,7 +201,7 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	require.NoError(t, h.db.Model(k).Update("parse_status", types.ParseStatusFailed).Error)
 	q := &libraryRebuildQueue{db: h.db}
 	h.service.task = q
-	run, err := h.service.RebuildLibrary(h.ctx, k.LibraryID)
+	run, err := h.service.RebuildLibrary(h.ctx, k.LibraryID, "")
 	require.NoError(t, err)
 	parent := rebuildTask(t, h.db, run.TaskID)
 	q.failID = k.ID
@@ -247,7 +265,7 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	h.processor.stages = nil
 
 	h.service.task = &libraryRebuildQueue{db: h.db}
-	run, err := h.service.RebuildLibrary(h.ctx, before.LibraryID)
+	run, err := h.service.RebuildLibrary(h.ctx, before.LibraryID, "failed")
 	require.NoError(t, err)
 	require.Equal(t, 1, run.Total)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
@@ -260,6 +278,21 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	require.True(t, after.Incomplete)
 	require.JSONEq(t, string(before.MissingMaterials), string(after.MissingMaterials))
 	rebuilt, err := vault.ReadBody(after)
+	require.NoError(t, err)
+	require.Equal(t, original, rebuilt)
+	require.Zero(t, transport.calls.Load())
+
+	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("group_name=?", libraryRebuildGroup(before.LibraryID)).Update("state", taskqueue.TaskStateCompleted).Error)
+	full, err := h.service.RebuildLibrary(h.ctx, before.LibraryID, "all")
+	require.NoError(t, err)
+	require.Equal(t, 1, full.Total, "full rebuild includes completed material with missing images")
+	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, full.TaskID)))
+	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, full.TaskID+":"+before.ID)))
+	completed := h.article(t, before.ID)
+	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
+	require.True(t, completed.Incomplete)
+	require.JSONEq(t, string(before.MissingMaterials), string(completed.MissingMaterials))
+	rebuilt, err = vault.ReadBody(completed)
 	require.NoError(t, err)
 	require.Equal(t, original, rebuilt)
 	require.Zero(t, transport.calls.Load())
@@ -312,7 +345,7 @@ func TestLibraryReviewScopesPreserveSourcesAndApplyCurrentPolicy(t *testing.T) {
 	run, err = h.service.ReviewLibrary(h.ctx, h.library.ID, "all")
 	require.NoError(t, err)
 	require.Equal(t, 3, run.Total)
-	_, err = h.service.RebuildLibrary(h.ctx, h.library.ID)
+	_, err = h.service.RebuildLibrary(h.ctx, h.library.ID, "all")
 	require.ErrorContains(t, err, "unfinished processing")
 	parent := rebuildTask(t, h.db, run.TaskID)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, parent))

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	goerrors "errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1191,15 +1192,22 @@ func (h *EntryHandler) ReviewLibrary(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": result})
 }
 
-// RebuildLibrary schedules source-preserving reprocessing for a whole library.
+// RebuildLibrary schedules source-preserving reprocessing in the selected scope.
 func (h *EntryHandler) RebuildLibrary(c *gin.Context) {
 	library, _, spaceID, err := h.validateLibraryAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
+	var request struct {
+		Scope string `json:"scope"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil && !goerrors.Is(err, io.EOF) {
+		c.Error(errors.NewBadRequestError("scope must be failed or all"))
+		return
+	}
 	ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, spaceID)
-	result, err := h.kgService.RebuildLibrary(ctx, library.ID)
+	result, err := h.kgService.RebuildLibrary(ctx, library.ID, request.Scope)
 	if err != nil {
 		if appErr, ok := errors.IsAppError(err); ok {
 			c.Error(appErr)
