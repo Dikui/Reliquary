@@ -23,6 +23,41 @@ type jointProcessingChat struct {
 	calls     int
 }
 
+func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *testing.T) {
+	body := "# 公告\r\n\r\n[Acme](https://example.org/acme) 与 **Beta** 合作。\r\nAcme 的产品是 Suite。\r\n"
+	numbered, blocks := articleEvidenceBody(body)
+	require.Contains(t, numbered, "[P2]\n[Acme](https://example.org/acme)")
+	company := "company"
+	product := "product"
+	result, err := parseArticleProcessingResult(validProcessingFixture("公告"))
+	require.NoError(t, err)
+	result.Entities = []articleProcessingEntity{
+		{Name: "Acme", Type: &company, Description: "Beta 的合作方。", Relevance: "central", EvidenceIDs: []int{2}},
+		{Name: "Beta", Type: &company, Description: "Acme 的合作方。", Relevance: "participant", EvidenceIDs: []int{2}},
+		{Name: "Suite", Type: &product, Description: "Acme 的产品。", Relevance: "participant", EvidenceIDs: []int{2}},
+		{Name: "Footer", Type: &company, Description: "导航项。", Relevance: "incidental", EvidenceIDs: []int{1}},
+		{Name: "Uncited", Type: &company, Description: "没有原文支持。", Relevance: "central", EvidenceIDs: []int{999}},
+		{Name: "Empty", Type: &company, Relevance: "central", EvidenceIDs: []int{2}},
+	}
+	result.Relations = []extractedRelation{
+		{Subject: "Acme", Object: "Beta", Type: "合作", EvidenceIDs: []int{2, 2}},
+		{Subject: "Acme", Object: "Beta", Type: "投资", EvidenceIDs: []int{999}},
+		{Subject: "Acme", Object: "Footer", Type: "合作", EvidenceIDs: []int{2}},
+		{Subject: "Suite", Object: "Acme", Type: "隶属", EvidenceIDs: []int{2}},
+		{Subject: "Acme", Object: "Suite", Type: "隶属", EvidenceIDs: []int{2}},
+	}
+	library := &types.Library{ContentTypes: []types.LibraryContentType{{Name: "公告", Enabled: true, ExtractGraph: true}}}
+	qualifySegmentOutput(library, &types.Entry{}, body, types.ProcessingSegment{End: len([]rune(body))}, result)
+	require.Len(t, result.Entities, 3)
+	require.Len(t, result.Relations, 2)
+	require.Equal(t, "Suite", result.Relations[1].Subject)
+	require.Equal(t, "Acme", result.Relations[1].Object)
+	require.Equal(t, blocks[1:2], result.Relations[0].Evidence[0].Locations)
+	require.Equal(t, blocks[1:2], result.Entities[0].Evidence)
+	location := result.Relations[0].Evidence[0].Locations[0]
+	require.Equal(t, "[Acme](https://example.org/acme) 与 **Beta** 合作。\r\nAcme 的产品是 Suite。\r\n", string([]rune(body)[location.Start:location.End]))
+}
+
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	if stage == "intake_review" {
@@ -57,10 +92,10 @@ func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message,
 	output, _ := parseArticleProcessingResult(validProcessingFixture(m.kind))
 	company := "company"
 	person := "person"
-	output.Entities = []articleProcessingEntity{{Name: "Acme", Type: &company}, {Name: "Beta", Type: &company}, {Name: "Alice", Type: &person}}
+	output.Entities = []articleProcessingEntity{{Name: "Acme", Type: &company, Description: "A partner of Beta.", Relevance: "central", EvidenceIDs: []int{1}}, {Name: "Beta", Type: &company, Description: "A partner of Acme.", Relevance: "participant", EvidenceIDs: []int{1}}, {Name: "Alice", Type: &person, Description: "The speaker.", Relevance: "attribution", EvidenceIDs: []int{1}}}
 	output.Relations = []extractedRelation{}
 	if m.malicious || libraryGraphEnabled(l, libraryContentType(l, m.kind), override) {
-		output.Relations = append(output.Relations, extractedRelation{Subject: "Acme", Object: "Beta", Type: "合作", Start: 0, End: min(4, len([]rune(input.Body))), Speaker: "Alice"})
+		output.Relations = append(output.Relations, extractedRelation{Subject: "Acme", Object: "Beta", Type: "合作", EvidenceIDs: []int{1}, Speaker: "Alice"})
 	}
 	output.ImageDescriptions = []extractedImage{}
 	for _, image := range input.Images {
@@ -126,23 +161,41 @@ func TestIKB11PromptSnapshotsAndSwitchMatrix(t *testing.T) {
 func TestIKB11SegmentRelationsResolveGlobalIDsAndKeepAllEvidence(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	k := segmentedEntry(t, h)
-	kind := "company"
+	kind := "organization"
 	ct := "event"
 	body := "# 新闻\n\nAcme 与 Beta 合作。\n\nAcme 与 Beta 再次合作。"
 	parts := []*articleProcessingResult{}
 	for _, p := range []types.ProcessingSegment{{Number: 1, Start: 0, End: 22}, {Number: 2, Start: 22, End: len([]rune(body))}} {
 		part, _ := parseArticleProcessingResult(validProcessingFixture(ct))
-		part.Entities = []articleProcessingEntity{{Name: "Acme", Type: &kind}, {Name: "Beta", Type: &kind}}
-		part.Relations = []extractedRelation{{Subject: "Acme", Object: "Beta", Type: "合作", Start: 0, End: 4}}
+		evidenceID := 1
+		if p.Number == 1 {
+			evidenceID = 2
+		}
+		part.Entities = []articleProcessingEntity{{Name: "Acme", Type: &kind, Description: "A partner of Beta.", Relevance: "central", EvidenceIDs: []int{evidenceID}}, {Name: "Beta", Type: &kind, Description: "A partner of Acme.", Relevance: "participant", EvidenceIDs: []int{evidenceID}}}
+		part.Relations = []extractedRelation{{Subject: "Acme", Object: "Beta", Type: "合作", EvidenceIDs: []int{evidenceID}}}
 		qualifySegmentOutput(h.library, k, body, p, part)
 		parts = append(parts, part)
 	}
 	result := mergeArticleSegments(parts)
 	require.Len(t, result.Relations, 1)
 	require.Len(t, result.Relations[0].Evidence, 2)
+	stored := entityRecord("acme-existing", "Acme", "company")
+	require.NoError(t, h.db.Create(&stored).Error)
+	models := h.service.modelService.(articleProcessingModels)
+	models.summaryStateModelService.model = &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {
+		var payload struct {
+			Mention string `json:"mention"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(messages[1].Content), &payload))
+		if payload.Mention == "Acme" {
+			return `{"decision":"match","entity_id":"acme-existing","confidence":1}`
+		}
+		return `{"decision":"new","confidence":1}`
+	}}
 	candidates := []types.EntityCandidate{{Name: "Acme", EntityType: kind}, {Name: "Beta", EntityType: kind}}
 	resolved, err := h.service.resolveProcessingEntities(h.ctx, k, candidates, result)
 	require.NoError(t, err)
+	require.Equal(t, []int{1, 2}, result.Provenance.ResolvedEntities[stored.ID])
 	k.ContentType = ct
 	relationCalls := 0
 	fixture := &relationVectorFixture{vectors: map[string][]float32{"合作": {1, 0, 0}}, onCall: func(ctx context.Context) {
@@ -163,6 +216,8 @@ func TestIKB11SegmentRelationsResolveGlobalIDsAndKeepAllEvidence(t *testing.T) {
 	var subject types.Entity
 	require.NoError(t, h.db.First(&subject, "id=?", out.Relations[0].SubjectID).Error)
 	require.Equal(t, "Acme", subject.CanonicalName)
+	require.Equal(t, "company", subject.EntityType)
+	require.Equal(t, stored.ID, out.Relations[0].SubjectID)
 	require.Equal(t, 22, out.Relations[0].Evidence[1].Locations[0].Start)
 	// Final majority type and current graph override are validated again before saving.
 	k.Graph = entrySearchBool(false)

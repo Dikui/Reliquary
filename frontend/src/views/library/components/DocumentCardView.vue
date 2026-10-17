@@ -2,7 +2,7 @@
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize } from '@/utils/files';
-import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
+import { entryFileFormatLabel, entryChannelLabel } from '@/utils/entrySourceLabels';
 import { markdownToPlainText } from '@/utils/markdownPlainText';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import DocumentMenuDelete from './DocumentMenuDelete.vue';
@@ -99,28 +99,8 @@ const formatDocTime = (time?: string) => {
   return `${yy}-${MM}-${dd} ${hh}:${mm}`;
 };
 
-const getEntryType = (item: EntryCard) => {
-  if (item.source_kind === 'mine' || item.source_kind === 'report') return t(`library.sourceKinds.${item.source_kind}`);
-  if (item.channel === 'rss') return t('library.channelRSS');
-  if (isIngestAPIEntry(item)) return t('library.typeIngestAPI');
-  if (item.type === 'url') return t('library.typeURL') || 'URL';
-  if (item.type === 'manual') return t('library.typeManual');
-  if (item.file_type?.toLowerCase() === 'manual') return t('ikb18.markdown');
-  if (item.file_type) return item.file_type.toUpperCase();
-  return '--';
-};
-
-const channelLabelMap: Record<string, string> = {
-  web: 'library.channelWeb',
-  api: 'library.channelApi',
-  browser_extension: 'library.channelBrowserExtension',
-  rss: 'library.channelRSS',
-};
-
-const getChannelLabel = (channel: string) => {
-  const key = channelLabelMap[channel];
-  return key ? t(key) : t('library.channelUnknown');
-};
+const getEntryType = (item: EntryCard) => entryFileFormatLabel(item, t);
+const getChannelLabel = (item: EntryCard) => entryChannelLabel(item, t);
 
 // --- Card click handler ---
 const onCardClick = (item: EntryCard) => {
@@ -385,6 +365,7 @@ const openDelete = async (item: EntryCard) => {
 
           <div class="card-type">
             <span>{{ getEntryType(item) }}</span>
+            <span>· {{ getChannelLabel(item) }}</span>
           </div>
         </div>
       </div>
@@ -443,7 +424,7 @@ const openDelete = async (item: EntryCard) => {
           <span
             v-if="!(['mine', 'report'].includes(hoveredCardItem.source_kind || '')) && (hoveredCardItem as any).channel && (hoveredCardItem as any).channel !== 'web'"
             class="card-popover-channel"
-          >{{ getChannelLabel((hoveredCardItem as any).channel) }}</span>
+          >{{ getChannelLabel(hoveredCardItem) }}</span>
 
           <span class="card-popover-type">{{ getEntryType(hoveredCardItem) }}</span>
         </div>

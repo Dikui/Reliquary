@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize, getFileIcon } from '@/utils/files';
-import { isIngestAPIEntry } from '@/utils/entrySourceLabels';
+import { entryFileFormatLabel, entryChannelLabel } from '@/utils/entrySourceLabels';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import DocumentMenuDelete from './DocumentMenuDelete.vue';
 import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
@@ -60,15 +60,7 @@ const formatTime = (time?: string) => {
   return `${yy}-${MM}-${dd} ${hh}:${mm}`;
 };
 
-const getSourceInfo = (item: EntryItem): { icon: string; label: string } => {
-  if (item.source_kind === 'mine' || item.source_kind === 'report') return { icon: 'file', label: t(`library.sourceKinds.${item.source_kind}`) };
-  const ch = item.channel;
-  if (ch === 'rss') return { icon: 'cloud-download', label: t('library.channelRSS') };
-  if (isIngestAPIEntry(item)) return { icon: 'upload', label: t('library.typeIngestAPI') };
-  if (item.type === 'url') return { icon: 'link', label: t('library.channelUrl') };
-  if (item.type === 'manual') return { icon: 'edit', label: t('library.channelManual') };
-  return { icon: 'upload', label: t('library.channelUpload') };
-};
+const getSourceInfo = (item: EntryItem) => ({ icon: 'link', label: entryChannelLabel(item, t) });
 
 interface StatusInfo {
   label: string;
@@ -198,6 +190,7 @@ const openDelete = async (item: EntryItem) => {
           </span>
           <div class="row-file-text">
             <span class="row-file-name" :title="item.file_name">{{ item.file_name }}</span>
+            <span class="row-muted">{{ entryFileFormatLabel(item, t) }}</span>
 
             <EntryClassification :entry="item" compact @open-entity="emit('open-entity', $event)" />
         <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_entry_id" />

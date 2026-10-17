@@ -23,11 +23,10 @@ type extractedRelation struct {
 	Subject     string                   `json:"subject"`
 	Type        string                   `json:"type"`
 	Object      string                   `json:"object"`
-	Start       int                      `json:"start"`
-	End         int                      `json:"end"`
 	Speaker     string                   `json:"speaker,omitempty"`
 	SubjectType string                   `json:"subject_type,omitempty"`
 	ObjectType  string                   `json:"object_type,omitempty"`
+	EvidenceIDs []int                    `json:"evidence_ids,omitempty"`
 	Evidence    []types.RelationEvidence `json:"evidence,omitempty"`
 }
 type extractedImage struct {
@@ -55,10 +54,11 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	override, _ := json.Marshal(graphOverride)
 	return articleProcessingPrompt + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + corrected + `
 先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。先定类型再决定是否抽关系：graph_override=true 总是抽，false 总是不抽，null 时依照所选类型的 extract_graph，其他默认不抽。关闭时 relations=[]。
-关系优先使用 relation_types 中的名称，无相近类型才提出新名称。relations 的 subject、object 必须是本次 entities 中的 name；start/end 是证据在本段 body 内的 Unicode 字符范围 [start,end)，不要用字节或 context_before 的位置。
+关系只保留原文明示、对本文有价值的联系；subject、object 必须是本次 entities 中的 name。evidence_ids 引用足以支持主体、关系含义和客体的段落，可多选以补充指代上下文。先确定原文表达的具体联系，再选 relation_types 中语义一致的名称；没有一致名称就使用精确的新名称，不能为套用清单而改写原意。每条边必须能从所选段落直接读出，不能依赖常识或“这个产品总归由它发布过”的推断。特别是“发布”必须有发布/宣布/推出该对象的动作证据：“甲的产品乙”“第一方部署如乙”“甲的安全框架乙”均不是发布证据，只能按原文明示的隶属等含义处理或不抽关系。仅同文出现不构成关系。基准比较应写“基准比较”或“基准优于”，不能改成商业竞争。原文有限定的比较应保留其范围，不扩展为全方面优于。
+逐条按“subject type object”读回核对方向：“隶属”是下级/产品指向上级/所属组织，“发布”是发布者指向发布对象，“客户”是客户指向供应方或所用产品，“投资”是投资方指向被投资方；“甲的产品乙”应为“乙 隶属 甲”，不能反过来。
 人物观点库每条关系必须输出 speaker：有明确发言人时使用本次 entities 的人物 name，否则使用输入 author，不将被评论对象当作发言人。
 为 images 中每一张可读图片输出 image_descriptions，一图一段文字，结合上下文说明图中文字、数字及图表含义，index 使用输入图片的 index。不可读图片不猜测。
-附加输出格式："relations":[{"subject":"实体名称","type":"合作","object":"另一实体名称","start":0,"end":20,"speaker":"发言人"}],"image_descriptions":[{"index":1,"description":"图片说明"}]。`
+附加输出格式："relations":[{"subject":"实体名称","type":"合作","object":"另一实体名称","evidence_ids":[1],"speaker":"发言人"}],"image_descriptions":[{"index":1,"description":"图片说明"}]。`
 }
 
 func libraryContentType(l *types.Library, value string) string {
@@ -102,12 +102,60 @@ func bodyRangeLocations(body string, start, end int, mapping string) []types.Sou
 	return c.SourceLocations
 }
 
+// Number existing Markdown blocks without changing stored text or coordinates.
+func articleEvidenceBody(body string) (string, []types.SourceLocation) {
+	runes := []rune(body)
+	locations := bodyRangeLocations(body, 0, len(runes), "exact")
+	var numbered strings.Builder
+	for i, location := range locations {
+		fmt.Fprintf(&numbered, "[P%d]\n%s\n", i+1, string(runes[location.Start:location.End]))
+	}
+	return numbered.String(), locations
+}
+
+func articleEvidenceLocations(ids []int, blocks []types.SourceLocation) []types.SourceLocation {
+	if len(ids) == 0 {
+		return nil
+	}
+	locations := []types.SourceLocation{}
+	seen := map[int]bool{}
+	for _, id := range ids {
+		if id < 1 || id > len(blocks) {
+			return nil
+		}
+		if !seen[id] {
+			locations = append(locations, blocks[id-1])
+			seen[id] = true
+		}
+	}
+	return locations
+}
+
 func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types.ProcessingSegment, result *articleProcessingResult) {
 	ct := libraryContentType(l, *result.ContentType)
 	if k.ContentTypeCorrected {
 		ct = libraryContentType(l, k.ContentType)
 	}
 	result.ContentType = &ct
+	runes := []rune(body)
+	_, blocks := articleEvidenceBody(string(runes[p.Start:p.End]))
+	accepted := []articleProcessingEntity{}
+	for _, entity := range result.Entities {
+		if entity.Relevance != "central" && entity.Relevance != "participant" && entity.Relevance != "attribution" {
+			continue
+		}
+		entity.Description = strings.TrimSpace(entity.Description)
+		locations := articleEvidenceLocations(entity.EvidenceIDs, blocks)
+		if entity.Description == "" || len(locations) == 0 {
+			continue
+		}
+		entity.Evidence = []types.SourceLocation{}
+		for _, location := range locations {
+			entity.Evidence = append(entity.Evidence, bodyRangeLocations(body, p.Start+location.Start, p.Start+location.End, "exact")...)
+		}
+		accepted = append(accepted, entity)
+	}
+	result.Entities = accepted
 	entities := map[string]articleProcessingEntity{}
 	ambiguous := map[string]bool{}
 	for _, e := range result.Entities {
@@ -122,11 +170,24 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 		for _, rel := range result.Relations {
 			a, okA := entities[normalizeEntityName(rel.Subject)]
 			b, okB := entities[normalizeEntityName(rel.Object)]
-			if !okA || !okB || ambiguous[normalizeEntityName(rel.Subject)] || ambiguous[normalizeEntityName(rel.Object)] || strings.TrimSpace(rel.Type) == "" || len([]rune(rel.Type)) > 100 || rel.Start < 0 || rel.End <= rel.Start || rel.End > p.End-p.Start {
+			if !okA || !okB || ambiguous[normalizeEntityName(rel.Subject)] || ambiguous[normalizeEntityName(rel.Object)] || strings.TrimSpace(rel.Type) == "" || len([]rune(rel.Type)) > 100 {
 				continue
 			}
+			locations := articleEvidenceLocations(rel.EvidenceIDs, blocks)
+			if len(locations) == 0 {
+				continue
+			}
+			global := []types.SourceLocation{}
+			for _, location := range locations {
+				global = append(global, bodyRangeLocations(body, p.Start+location.Start, p.Start+location.End, "exact")...)
+			}
 			rel.SubjectType, rel.ObjectType = types.NormalizeEntityType(*a.Type), types.NormalizeEntityType(*b.Type)
-			rel.Evidence = []types.RelationEvidence{{Locations: bodyRangeLocations(body, p.Start+rel.Start, p.Start+rel.End, "exact")}}
+			// An organization cannot belong to its product or project. Reject
+			// reversed ownership edges rather than inventing a corrected claim.
+			if strings.TrimSpace(rel.Type) == "隶属" && (rel.SubjectType == "company" || rel.SubjectType == "organization") && (rel.ObjectType == "product" || rel.ObjectType == "project") {
+				continue
+			}
+			rel.Evidence = []types.RelationEvidence{{Locations: global}}
 			if l.SystemRole == "opinions" {
 				source, _ := entrySourceInfo(k)
 				speaker := &types.ProcessingSpeaker{Name: source.Author, Selection: "author"}
@@ -294,6 +355,9 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 		for _, name := range append([]string{e.CanonicalName}, e.Aliases...) {
 			ids[entityNameKey(e.EntityType, name)] = e.ID
 		}
+	}
+	for key, id := range result.ResolvedEntities {
+		ids[key] = id
 	}
 	out := &types.EntryProcessingOutput{EntryID: k.ID, SpaceID: k.SpaceID, LibraryID: k.LibraryID, RunID: result.RunID, BodyHash: fmt.Sprintf("%x", sha256.Sum256([]byte(body))), ContentType: k.ContentType, Relations: []types.ProcessingRelation{}, Images: result.Images, UpdatedAt: time.Now()}
 	if out.Images == nil {

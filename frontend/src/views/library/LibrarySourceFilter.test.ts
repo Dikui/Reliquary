@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
-import { defineComponent, h, ref } from 'vue'
+import { defineComponent, h, onMounted, ref } from 'vue'
 import ts from 'typescript'
 import { CONTENT_TYPES } from '../../types/entryClassification'
 import { SEARCH_SOURCES } from '../../types/search'
@@ -32,7 +32,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
 }
 const moduleOf = <T>(value: T) => ({ __esModule: true, default: value })
 
-async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'grid', unavailable = false) {
+async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'grid', unavailable = false, customType = false) {
   const previous = { window: globalThis.window, document: globalThis.document,
     storage: Object.getOwnPropertyDescriptor(globalThis, 'localStorage') }
   globalThis.window = { innerHeight: 900, setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} } as any
@@ -51,6 +51,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     ...Array.from({ length: 38 }, (_, index) => ({ id: `mine-${index}`, source_kind: 'mine', title: `Document ${index}`, content_type: 'event', starred: false })),
   ].map(record => ({ ...record, file_name: `${record.title}.md`, type: 'manual', file_type: 'md', channel: 'api',
     parse_status: 'completed', created_at: '2026-10-13T08:00:00Z', updated_at: '2026-10-13T08:00:00Z' }))
+  if (customType) records.push({ ...records[0], id: 'sop', content_type: 'SOP' })
   const target = records.find(record => record.id === 'mine')!
   for (const [field, value] of Object.entries({ channel: 'web', file_type: 'pdf', parse_status: 'failed',
     updated_at: '2026-09-01T08:00:00Z', title: 'Unrelated document', starred: false, content_type: 'opinion' })) {
@@ -116,6 +117,12 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   for (const path of ['./Library.vue', './components/DocumentCardView.vue', './components/DocumentListView.vue']) {
     for (const match of readFileSync(new URL(path, import.meta.url), 'utf8').matchAll(/from\s+['"]([^'"]+\.vue)['"]/g)) modules[match[1]] = empty
   }
+  modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
+    emits: ['loaded'], setup: (_, { emit }) => {
+      onMounted(() => emit('loaded', [{ id: 'library-source', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) }]))
+      return () => null
+    },
+  }))
   modules['@/components/SelectionCheckbox.vue'] = moduleOf(loadComponent(new URL('../../components/SelectionCheckbox.vue', import.meta.url), modules))
   for (const view of ['Card', 'List']) modules[`./components/Document${view}View.vue`] = moduleOf(
     loadComponent(new URL(`./components/Document${view}View.vue`, import.meta.url), modules),
@@ -207,9 +214,9 @@ for (const locale of ['zh-CN', 'en-US']) {
   test(`${locale}: source filter loads cards and rows through the real hook and API with pagination`, async () => {
     const env = await mountLibrary(locale)
     try {
-      const source = env.control('knowledgeSearch.source')
+      const source = env.control('library.materialCategory')
       assert.deepEqual(source.props['data-options'], [
-        { value: '', label: env.t('knowledgeSearch.all') },
+        { value: '', label: env.t('library.allMaterialCategories') },
         ...SEARCH_SOURCES.map(value => ({ value, label: env.t(`knowledgeSearch.sources.${value}`) })),
       ])
       assert.equal(env.requests[0].has('source_kind'), false)
@@ -267,10 +274,10 @@ test('source filters combine with existing filters and retain URL state on reloa
       start_time: '2026-10-01 00:00:00', end_time: '2026-10-13 23:59:59' })) assert.equal(query.get(key), value)
     await env.navigate({ ...env.route.query, source_kind: 'article' })
     assert.deepEqual(env.ids(), ['article'])
-    assert.equal(env.control('knowledgeSearch.source').props.value, 'article')
+    assert.equal(env.control('library.materialCategory').props.value, 'article')
     assert.equal(env.requests.at(-1)!.get('source_kind'), 'article')
     await env.navigate({ ...env.route.query, source_kind: 'invalid' })
-    assert.equal(env.control('knowledgeSearch.source').props.value, '')
+    assert.equal(env.control('library.materialCategory').props.value, '')
     assert.equal(env.requests.at(-1)!.has('source_kind'), false)
     assert.equal(env.route.query.source_kind, undefined)
     assert.deepEqual(env.errors, [])
@@ -289,7 +296,7 @@ const combinedAPIQuery = {
 }
 function assertFilters(env: Awaited<ReturnType<typeof mountLibrary>>, filters: Partial<typeof combinedQuery>) {
   for (const [key, node] of Object.entries({
-    source_kind: env.control('knowledgeSearch.source'), content_type: env.byOptions('tutorial'),
+    source_kind: env.control('library.materialCategory'), content_type: env.byOptions('tutorial'),
     starred: env.byOptions('true'), file_type: env.byOptions('md'),
     parse_status: env.byOptions('completed'), source: env.control('library.channelLabel'),
     keyword: descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!,
@@ -312,7 +319,7 @@ for (const locale of ['zh-CN', 'en-US']) for (const view of ['grid', 'list']) {
   test(`${locale} ${view}: every filter persists and restores through reload, route return, history back and forward`, async () => {
     let env = await mountLibrary(locale, { tab: 'documents' }, view)
     try {
-      await env.change(env.control('knowledgeSearch.source'), combinedQuery.source_kind)
+      await env.change(env.control('library.materialCategory'), combinedQuery.source_kind)
       await env.change(env.byOptions('tutorial'), combinedQuery.content_type)
       await env.change(env.byOptions('true'), combinedQuery.starred)
       await env.change(env.byOptions('md'), combinedQuery.file_type)
@@ -358,7 +365,7 @@ for (const locale of ['zh-CN', 'en-US']) for (const view of ['grid', 'list']) {
 
 test('default and invalid URL filters are omitted while unrelated query parameters survive', async () => {
   const env = await mountLibrary('zh-CN', {
-    source_kind: 'invalid', content_type: 'unknown', starred: '', file_type: null,
+    source_kind: 'invalid', content_type: ['invalid'], starred: '', file_type: null,
     parse_status: ['completed', 'failed'], source: '', keyword: '   ',
     start_date: '2026-02-30', end_date: 'invalid', tab: 'documents', preserved: 'value', custom: ['one', 'two'],
   })
@@ -393,7 +400,7 @@ test('source and star filter changes clear selected entries before loading the f
     select('mine')
     await settle()
     assert.equal(selected().length, 1)
-    await env.change(env.control('knowledgeSearch.source'), 'mine')
+    await env.change(env.control('library.materialCategory'), 'mine')
     assert.equal(selected().length, 0)
     assert.ok(env.ids().every(id => id.startsWith('mine')))
   } finally { env.cleanup() }
@@ -409,4 +416,20 @@ for (const locale of ['zh-CN','en-US']) test(`${locale}: entity page mounts on i
   assert.ok(visibleText(page.root).includes('Recovered entity'))
   assert.ok(!visibleText(page.root).includes('Backend unavailable'))
  } finally { page.cleanup() }
+})
+
+test('library-defined content types and Markdown aliases survive a shared URL and reload', async () => {
+  const env = await mountLibrary('zh-CN', { content_type: 'SOP', file_type: 'manual', source: 'api' }, 'grid', false, true)
+  try {
+    assert.deepEqual(env.ids(), ['sop'])
+    assert.equal(env.byOptions('SOP').props.value, 'SOP')
+    assert.equal(env.byOptions('md').props.value, 'md')
+    assert.equal(env.route.query.content_type, 'SOP')
+    assert.equal(env.route.query.file_type, 'md')
+    assert.equal(env.requests.at(-1)!.get('content_type'), 'SOP')
+    assert.equal(env.requests.at(-1)!.get('file_type'), 'md')
+    const channels = env.control('library.channelLabel').props['data-options'] as Array<{ value: string }>
+    assert.ok(!channels.some(item => ['manual', 'url'].includes(item.value)))
+    assert.ok(env.control('library.materialCategory'))
+  } finally { env.cleanup() }
 })

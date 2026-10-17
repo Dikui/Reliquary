@@ -53,13 +53,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "components/DocContent.vue",
-    "expressions": [
-      "`library.sourceKinds.${props.details.source_kind}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
     "file": "components/EmbeddingRebuild.vue",
     "expressions": [
       "`embeddingRebuild.kinds.${item.kind}`",
@@ -224,20 +217,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "file": "views/library/TopicManagement.vue",
     "expressions": [
       "`topicManagement.status.${progress[topic.id]!.status}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/library/components/DocumentCardView.vue",
-    "expressions": [
-      "`library.sourceKinds.${item.source_kind}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/library/components/DocumentListView.vue",
-    "expressions": [
-      "`library.sourceKinds.${item.source_kind}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

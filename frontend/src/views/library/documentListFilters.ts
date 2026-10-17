@@ -1,5 +1,5 @@
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
-import { CONTENT_TYPES } from '../../types/entryClassification'
+import { normalizeEntryFileType } from '../../utils/entrySourceLabels'
 import { SEARCH_SOURCES, type SearchSource } from '../../types/search'
 
 export interface DocumentListFilters {
@@ -19,9 +19,9 @@ const queryFields = {
   parseStatus: 'parse_status', source: 'source', sourceKind: 'source_kind',
   startDate: 'start_date', endDate: 'end_date',
 } as const
-const fileTypes = ['pdf', 'docx', 'doc', 'pptx', 'ppt', 'epub', 'txt', 'md', 'url', 'manual', 'mp3', 'wav', 'm4a', 'flac', 'ogg']
+const fileTypes = ['pdf', 'docx', 'doc', 'pptx', 'ppt', 'epub', 'txt', 'md', 'markdown', 'url', 'manual', 'mp3', 'wav', 'm4a', 'flac', 'ogg']
 const parseStatuses = ['pending', 'processing', 'completed', 'failed', 'cancelled', 'finalizing', 'draft', 'rejected']
-const sources = ['web', 'url', 'manual', 'rss', 'api', 'browser_extension']
+const sources = ['web', 'rss', 'api', 'browser_extension']
 
 const queryString = (value: unknown): string => typeof value === 'string' ? value : ''
 const choice = (value: unknown, choices: readonly string[]): string => {
@@ -38,8 +38,8 @@ const date = (value: unknown): string => {
 export function documentListFiltersFromQuery(query: LocationQuery): DocumentListFilters {
   return {
     keyword: queryString(query.keyword).trim(),
-    fileType: choice(query.file_type, fileTypes),
-    contentType: choice(query.content_type, CONTENT_TYPES),
+    fileType: normalizeEntryFileType(choice(query.file_type, fileTypes)),
+    contentType: queryString(query.content_type).trim(),
     starred: choice(query.starred, ['true', 'false']) as DocumentListFilters['starred'],
     parseStatus: choice(query.parse_status, parseStatuses),
     source: choice(query.source, sources),

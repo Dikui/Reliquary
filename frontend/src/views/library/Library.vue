@@ -252,9 +252,7 @@ const fileTypeOptions = computed(() => [
   { label: 'PPT', value: 'ppt' },
   { label: 'EPUB', value: 'epub' },
   { label: 'TXT', value: 'txt' },
-  { label: 'MD', value: 'md' },
-  { label: 'URL', value: 'url' },
-  { label: t('library.typeManual'), value: 'manual' },
+  { label: 'Markdown', value: 'md' },
   { label: 'MP3', value: 'mp3' },
   { label: 'WAV', value: 'wav' },
   { label: 'M4A', value: 'm4a' },
@@ -276,19 +274,16 @@ const parseStatusOptions = computed(() => [
 const selectedSource = ref(initialDocumentFilters.source);
 const selectedSourceKind = ref(initialDocumentFilters.sourceKind);
 const sourceKindOptions = computed(() => [
-  { label: t('knowledgeSearch.all'), value: '' },
+  { label: t('library.allMaterialCategories'), value: '' },
   ...SEARCH_SOURCES.map(value => ({ value, label: t(`knowledgeSearch.sources.${value}`) })),
 ]);
-// Source filter combines ingestion channels and the "manual"/"url" virtual
-// sources that the backend routes onto the `type` column.
+// Submission channels are independent of file format and material category.
 const sourceOptions = computed(() => [
   { label: t('library.allSources'), value: '' },
-  { label: t('library.sourceUpload'), value: 'web' },
-  { label: t('library.sourceUrl'), value: 'url' },
-  { label: t('library.sourceManual'), value: 'manual' },
+  { label: t('library.channelApi'), value: 'api' },
+  { label: t('library.channelWeb'), value: 'web' },
   { label: t('library.channelRSS'), value: 'rss' },
-  { label: t('library.sourceApi'), value: 'api' },
-  { label: t('library.sourceBrowserExtension'), value: 'browser_extension' },
+  { label: t('library.channelBrowserExtension'), value: 'browser_extension' },
 ]);
 // Date range as [start, end] in "YYYY-MM-DD" form (t-date-range-picker default).
 const updatedTimeRange = ref<string[]>(
@@ -1095,7 +1090,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 <div class="doc-filter-field">
                   <t-select v-model="selectedFileType" :options="fileTypeOptions"
-                    :placeholder="$t('library.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
+                    :placeholder="$t('library.fileTypeFilter')" :aria-label="$t('library.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
                     clearable>
                     <template #prefixIcon>
                       <t-icon name="file" size="16px" />
@@ -1113,7 +1108,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 <div class="doc-filter-field">
                   <t-select v-model="selectedSourceKind" :options="sourceKindOptions"
-                    :placeholder="$t('knowledgeSearch.source')" :aria-label="$t('knowledgeSearch.source')"
+                    :placeholder="$t('library.materialCategory')" :aria-label="$t('library.materialCategory')"
                     class="doc-type-select doc-filter-field__control" clearable />
                 </div>
                 <div class="doc-filter-field">

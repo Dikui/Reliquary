@@ -32,7 +32,7 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 		if m.mergeFail {
 			return nil, fmt.Errorf("merge failed")
 		}
-		return &types.ChatResponse{Content: validProcessingFixture("event")}, nil
+		return &types.ChatResponse{Content: "```json\n" + validProcessingFixture("event") + "\n```"}, nil
 	}
 	if stage != "intake_review" && stage != "article_processing" {
 		return &types.ChatResponse{Content: `{"decision":"new","confidence":1}`}, nil
@@ -76,7 +76,7 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 	}
 	result, _ := parseArticleProcessingResult(validProcessingFixture(kind))
 	entityType := "company"
-	result.Entities = []articleProcessingEntity{{Name: "Acme", Type: &entityType, Aliases: []string{fmt.Sprintf("Alias%d", n)}}}
+	result.Entities = []articleProcessingEntity{{Name: "Acme", Type: &entityType, Aliases: []string{fmt.Sprintf("Alias%d", n)}, Description: "Acme is the publisher.", Relevance: "central", EvidenceIDs: []int{1}}}
 	if m.topic != "" {
 		result.Topics = []string{m.topic, m.topic}
 	}
@@ -257,6 +257,18 @@ func TestSegmentInlineReviewUsesTheFullEnvelopeBudget(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, h.service.singleReviewSegment(h.ctx, h.library, k, strings.Repeat("字", budget)))
 	require.False(t, h.service.singleReviewSegment(h.ctx, h.library, k, strings.Repeat("字", budget+1)))
+}
+
+func TestSegmentEvidenceNumberingFitsModelContext(t *testing.T) {
+	h, m := segmentedHarness(t)
+	k := segmentedEntry(t, h)
+	h.service.config.ArticleProcessing.MaxBodyChars = 0
+	models := h.service.modelService.(articleProcessingModels)
+	models.metadata.Parameters.ContextWindow = 16000
+	_, err := h.service.callArticleProcessing(h.ctx, h.library, k, strings.Repeat("- x\n", 1500), nil)
+	require.NoError(t, err)
+	require.Greater(t, len(m.calls["article_processing"]), 1)
+	require.Equal(t, 1, m.mergeCalls)
 }
 
 func TestSegmentExplicitCompletedReparseStartsNewRun(t *testing.T) {

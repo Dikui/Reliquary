@@ -115,11 +115,11 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 	input := []entityResolutionInput{{Mention: "MOONSHOT AI", Canonical: "Moonshot AI", EntityType: "company"}, {Mention: "月之暗面", Canonical: "Moonshot AI", EntityType: "company"}, {Mention: "MoonshotAI", Canonical: "MoonshotAI", EntityType: "company"}, {Mention: "Kimi K2.5", Canonical: "Kimi K2", EntityType: "product"}, {Mention: "Same Name", Canonical: "Same Name", EntityType: "company"}}
 	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", input)
 	require.NoError(t, err)
-	require.Equal(t, 3, model.count())
-	require.Equal(t, "moonshot", mentions[normalizeEntityName("MoonshotAI")].ID)
-	require.NotEqual(t, "kimi-k2", mentions[normalizeEntityName("Kimi K2.5")].ID)
-	require.Equal(t, "Kimi K2.5", mentions[normalizeEntityName("Kimi K2.5")].CanonicalName)
-	require.NotEqual(t, "different-type", mentions[normalizeEntityName("Same Name")].ID)
+	require.Equal(t, 2, model.count())
+	require.Equal(t, "moonshot", mentions[entityNameKey("company", "MoonshotAI")].ID)
+	require.NotEqual(t, "kimi-k2", mentions[entityNameKey("product", "Kimi K2.5")].ID)
+	require.Equal(t, "Kimi K2.5", mentions[entityNameKey("product", "Kimi K2.5")].CanonicalName)
+	require.NotEqual(t, "different-type", mentions[entityNameKey("company", "Same Name")].ID)
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistEntities(tx, resolved); return err }))
 	var alias types.EntityAlias
 	require.NoError(t, db.First(&alias, "normalized_alias=?", "moonshotai").Error)
@@ -159,7 +159,7 @@ func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T)
 	}}
 	_, mentions, err := svc.resolveEntities(ctx, judgment, 1, "entity-library", []entityResolutionInput{{Mention: "中文不同名称", Canonical: "中文不同名称", EntityType: "product"}})
 	require.NoError(t, err)
-	require.Equal(t, "vector-good", mentions["中文不同名称"].ID)
+	require.Equal(t, "vector-good", mentions[entityNameKey("product", "中文不同名称")].ID)
 	require.Equal(t, 1, embedder.calls)
 	for _, id := range []string{"vector-wrong-dimension", "vector-stale-model"} {
 		var record types.Entity
@@ -168,14 +168,14 @@ func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T)
 	}
 }
 
-func TestEntityDifferentMentionsOfOneNewCanonicalEntityEachReceiveJudgment(t *testing.T) {
+func TestEntityDifferentMentionsOfOneNewCanonicalEntityWithoutCandidatesShareCreationPlan(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
 	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{{Mention: "Alpha Inc", Canonical: "Alpha", EntityType: "company"}, {Mention: "A Corp", Canonical: "Alpha", EntityType: "company"}})
 	require.NoError(t, err)
-	require.Equal(t, 2, model.count())
+	require.Zero(t, model.count())
 	require.Len(t, resolved, 1)
-	require.Equal(t, mentions["alpha inc"].ID, mentions["a corp"].ID)
+	require.Equal(t, mentions[entityNameKey("company", "alpha inc")].ID, mentions[entityNameKey("company", "a corp")].ID)
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistEntities(tx, resolved); return err }))
 	var count int64
 	require.NoError(t, db.Model(&types.Entity{}).Count(&count).Error)
@@ -202,7 +202,10 @@ func TestEntityResolutionCreatesAliasesAndIdempotentArticleMentions(t *testing.T
 	var count int64
 	require.NoError(t, db.Model(&types.EntryEntity{}).Where("entry_id=?", article.ID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
-	require.Equal(t, 1, model.count(), "exact names and aliases reuse the identity without further judgment")
+	require.Zero(t, model.count(), "empty candidates and exact identities need no judgment")
+	var alias types.EntityAlias
+	require.NoError(t, db.Where("entity_id=? AND normalized_alias=?", first[0].ID, "艾克米").First(&alias).Error)
+	require.Equal(t, "new", alias.ResolutionMethod)
 	detail, err := svc.EntityDetail(ctx, first[0].ID)
 	require.NoError(t, err)
 	require.Len(t, detail.Entries, 1)
@@ -355,7 +358,7 @@ func TestEntityJudgmentBudgetDoesNotGrowWithRegistry(t *testing.T) {
 			article := entityArticle(t, db, "scale-article")
 			_, err := svc.ResolveEntities(ctx, article.ID, candidates)
 			require.NoError(t, err)
-			require.Equal(t, 7, model.count())
+			require.Zero(t, model.count(), "new mentions without recalled candidates need no judgment")
 			counts[size] = model.count()
 		})
 	}
@@ -403,6 +406,8 @@ func TestEntityMergeAliasCollisionRollsBackGlobalChanges(t *testing.T) {
 func TestEntityResolutionCannotRecreateMentionsAfterConcurrentArticleDeletion(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	article := entityArticle(t, db, "deleted-during-judgment")
+	prior := entityRecord("late-prior", "Late entity prior", "company")
+	require.NoError(t, db.Create(&prior).Error)
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var once sync.Once
@@ -469,4 +474,108 @@ func TestEntityEntryDeletionWaitsForResolutionAndRemovesItsCommittedMentions(t *
 	require.Zero(t, count)
 	require.NoError(t, db.Model(&types.Entity{}).Where("normalized_name=?", "persisted identity").Count(&count).Error)
 	require.EqualValues(t, 1, count, "deleting the article preserves the committed entity")
+}
+
+func TestEntityResolutionJudgesOrganizationIdentityAndFillsOnlyEmptyDescription(t *testing.T) {
+	db, ctx, svc := entityFixture(t)
+	article := entityArticle(t, db, "identity-descriptions")
+	acme := entityRecord("acme-organization", "Acme", "organization")
+	acme.Description = "   "
+	known := entityRecord("known-company", "Known", "company")
+	known.Description = "Edited by the owner."
+	other := entityRecord("shared-organization", "Shared", "organization")
+	other.Description = "A local nonprofit."
+	require.NoError(t, db.Create(&[]types.Entity{acme, known, other}).Error)
+	model := &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {
+		var payload struct {
+			Mention     string         `json:"mention"`
+			EntityType  string         `json:"entity_type"`
+			Description string         `json:"description"`
+			Candidates  []types.Entity `json:"candidates"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(messages[1].Content), &payload))
+		if payload.Mention == "OpenAI" && payload.EntityType == "organization" {
+			require.Len(t, payload.Candidates, 1)
+			return fmt.Sprintf(`{"decision":"match","entity_id":%q,"confidence":0.99}`, payload.Candidates[0].ID)
+		}
+		if payload.Mention == "Acme" {
+			require.Equal(t, "An AI company.", payload.Description)
+			require.Len(t, payload.Candidates, 1)
+			require.Equal(t, acme.ID, payload.Candidates[0].ID)
+			return `{"decision":"match","entity_id":"acme-organization","confidence":0.99}`
+		}
+		if payload.Mention == "Shared" && payload.Description == "A software company." {
+			require.Len(t, payload.Candidates, 1)
+			require.Equal(t, other.ID, payload.Candidates[0].ID)
+		}
+		return `{"decision":"new","confidence":1}`
+	}}
+	svc.models = entityTestModels{model: model}
+	resolved, ids, err := svc.resolveEntityCandidates(ctx, article.ID, []types.EntityCandidate{
+		{Name: "Acme", EntityType: " COMPANY ", Description: " An AI company. "},
+		{Name: "Known", EntityType: "company", Description: "An extracted replacement."},
+		{Name: "Shared", EntityType: "company", Description: "A software company."},
+		{Name: "Shared", EntityType: "product", Description: "A software product."},
+		{Name: "OpenAI", EntityType: "company", Description: "An AI company."},
+		{Name: "OpenAI", EntityType: "organization", Description: "An AI research organization."},
+	})
+	require.NoError(t, err)
+	require.Len(t, resolved, 5)
+	require.Len(t, ids, 6)
+	require.Equal(t, ids[entityNameKey("company", "OpenAI")], ids[entityNameKey("organization", "OpenAI")])
+	require.Equal(t, "company", readNameEntity(t, db, ids[entityNameKey("organization", "OpenAI")]).EntityType)
+	require.Equal(t, acme.ID, ids[entityNameKey("company", "Acme")])
+	require.Equal(t, known.ID, ids[entityNameKey("company", "Known")])
+	require.NotEqual(t, other.ID, ids[entityNameKey("company", "Shared")])
+	require.NotEqual(t, ids[entityNameKey("company", "Shared")], ids[entityNameKey("product", "Shared")])
+	stored := readNameEntity(t, db, acme.ID)
+	require.Equal(t, "organization", stored.EntityType)
+	require.Equal(t, "An AI company.", stored.Description)
+	require.True(t, stored.EmbeddingNeedsRebuild)
+	require.Equal(t, known.Description, readNameEntity(t, db, known.ID).Description)
+	var notifications int64
+	require.NoError(t, db.Model(&types.GraphPendingSync{}).Where("entity_id=?", acme.ID).Count(&notifications).Error)
+	require.EqualValues(t, 1, notifications)
+	require.Equal(t, 3, model.count())
+}
+
+func TestEntityResolutionProtectsConcurrentDescriptionsAndReturnsPersistedIDs(t *testing.T) {
+	db, ctx, svc := entityFixture(t)
+	article := entityArticle(t, db, "identity-races")
+	guarded := entityRecord("guarded-organization", "Guarded", "organization")
+	uncertain := entityRecord("uncertain-organization", "Uncertain", "organization")
+	require.NoError(t, db.Create(&[]types.Entity{guarded, uncertain}).Error)
+	concurrent := entityRecord("concurrent-persisted", "Concurrent New", "company")
+	prior := entityRecord("concurrent-prior", "Concurrent New Previous", "company")
+	require.NoError(t, db.Create(&prior).Error)
+	svc.models = entityTestModels{model: &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {
+		var payload struct {
+			Mention string `json:"mention"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(messages[1].Content), &payload))
+		switch payload.Mention {
+		case "Guarded":
+			require.NoError(t, db.Model(&types.Entity{}).Where("id=?", guarded.ID).Update("description", "Saved while judgment ran.").Error)
+			return `{"decision":"match","entity_id":"guarded-organization","confidence":0.99}`
+		case "Uncertain":
+			return `{"decision":"match","entity_id":"uncertain-organization","confidence":0.89}`
+		case "Concurrent New":
+			require.NoError(t, db.Create(&concurrent).Error)
+		}
+		return `{"decision":"new","confidence":1}`
+	}}}
+	_, ids, err := svc.resolveEntityCandidates(ctx, article.ID, []types.EntityCandidate{
+		{Name: "Guarded", EntityType: "company", Description: "Extracted description."},
+		{Name: "Uncertain", EntityType: "company", Description: "Identity is unclear."},
+		{Name: "Concurrent New", EntityType: "company"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, guarded.ID, ids[entityNameKey("company", "Guarded")])
+	require.Equal(t, "Saved while judgment ran.", readNameEntity(t, db, guarded.ID).Description)
+	require.False(t, readNameEntity(t, db, guarded.ID).EmbeddingNeedsRebuild)
+	require.NotEqual(t, uncertain.ID, ids[entityNameKey("company", "Uncertain")])
+	require.Equal(t, concurrent.ID, ids[entityNameKey("company", "Concurrent New")])
+	var notifications int64
+	require.NoError(t, db.Model(&types.GraphPendingSync{}).Where("entity_id=?", guarded.ID).Count(&notifications).Error)
+	require.Zero(t, notifications)
 }

@@ -66,6 +66,10 @@ type entityScored struct {
 }
 
 func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, item entityResolutionInput, vector types.EntityNameEmbedding, modelID string, limit int) ([]types.Entity, error) {
+	recallTypes := compatibleEntityTypes(item.EntityType)
+	if item.EntityType == "company" || item.EntityType == "organization" {
+		recallTypes = []string{"company", "organization"}
+	}
 	names := []string{normalizeEntityName(item.Mention), normalizeEntityName(item.Canonical)}
 	var namesResult []entityScored
 	err := s.db.WithContext(ctx).Raw(`WITH scores AS (
@@ -76,7 +80,7 @@ func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, item
  FROM entity_aliases a JOIN entities matched ON matched.space_id=a.space_id AND matched.id=a.entity_id
  WHERE a.space_id=? AND matched.merged_into_id='' AND lower(matched.entity_type) IN ? AND (a.normalized_alias % ? OR a.normalized_alias % ?))
  SELECT e.*, MAX(scores.score) AS recall_score FROM scores JOIN entities e ON e.id=scores.entity_id AND e.space_id=?
- GROUP BY e.id ORDER BY recall_score DESC,e.id LIMIT ?`, names[0], names[1], spaceID, compatibleEntityTypes(item.EntityType), names[0], names[1], names[0], names[1], spaceID, compatibleEntityTypes(item.EntityType), names[0], names[1], spaceID, limit).Scan(&namesResult).Error
+ GROUP BY e.id ORDER BY recall_score DESC,e.id LIMIT ?`, names[0], names[1], spaceID, recallTypes, names[0], names[1], names[0], names[1], spaceID, recallTypes, names[0], names[1], spaceID, limit).Scan(&namesResult).Error
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +96,7 @@ func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, item
    SELECT * FROM entities WHERE space_id=? AND merged_into_id='' AND lower(entity_type) IN ?
     AND embedding_model_id=? AND embedding_dimension=? AND vector_dims(name_embedding)=? AND NOT embedding_needs_rebuild)
    SELECT compatible.*, 1 - (name_embedding <=> ?::vector) AS recall_score FROM compatible
-   ORDER BY name_embedding <=> ?::vector,id LIMIT ?`, spaceID, compatibleEntityTypes(item.EntityType), modelID, len(vector), len(vector), string(encoded), string(encoded), limit).Scan(&vectorResult).Error
+   ORDER BY name_embedding <=> ?::vector,id LIMIT ?`, spaceID, recallTypes, modelID, len(vector), len(vector), string(encoded), string(encoded), limit).Scan(&vectorResult).Error
 		if err != nil {
 			return nil, err
 		}
@@ -170,8 +174,8 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 		if item.Canonical == "" {
 			item.Canonical = item.Mention
 		}
-		mentionKey := normalizeEntityName(item.Mention)
-		if mentionKey == "" {
+		mentionKey := entityNameKey(item.EntityType, item.Mention)
+		if item.Mention == "" {
 			continue
 		}
 		entity := types.Entity{}
@@ -199,11 +203,37 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 			if recallErr != nil {
 				return nil, nil, recallErr
 			}
-			decision, judgeErr := s.judgeEntity(ctx, model, item, candidates)
-			if judgeErr != nil {
-				return nil, nil, judgeErr
+			if item.EntityType == "company" || item.EntityType == "organization" {
+				otherType := "company"
+				if item.EntityType == "company" {
+					otherType = "organization"
+				}
+				localCandidates := []types.Entity{}
+				seen := map[string]bool{}
+				for _, name := range []string{item.Mention, item.Canonical} {
+					if id, ok := localNames[entityNameKey(otherType, name)]; ok && !seen[id] && touched[id].EntityType == otherType {
+						localCandidates = append(localCandidates, touched[id])
+						seen[id] = true
+					}
+				}
+				for _, candidate := range candidates {
+					if !seen[candidate.ID] {
+						localCandidates = append(localCandidates, candidate)
+						seen[candidate.ID] = true
+					}
+				}
+				candidates = localCandidates[:min(len(localCandidates), limit)]
 			}
-			method = "model"
+			decision := entityMatch{Decision: "new", Confidence: 1}
+			method = "new"
+			if len(candidates) > 0 {
+				var judgeErr error
+				decision, judgeErr = s.judgeEntity(ctx, model, item, candidates)
+				if judgeErr != nil {
+					return nil, nil, judgeErr
+				}
+				method = "model"
+			}
 			if decision.Decision == "match" {
 				for _, candidate := range candidates {
 					if candidate.ID == decision.EntityID {
@@ -233,8 +263,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 					}
 				}
 				entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: canonical, NormalizedName: normalizeEntityName(canonical), EntityType: normalizeEntityName(item.EntityType), Description: strings.TrimSpace(item.Description), CreatedAt: time.Now(), UpdatedAt: time.Now(), NameEmbedding: vector, NameEmbeddingProfileHash: embeddingHash, EmbeddingModelID: embeddingModelID, EmbeddingDimension: len(vector), EmbeddingNeedsRebuild: len(vector) == 0}
-				// A distinct source spelling still receives its own judgment. Equal
-				// canonical identities in this message share one creation plan afterward.
+				// Equal canonical identities in this message share one creation plan.
 				if id, ok := localNames[entityNameKey(item.EntityType, canonical)]; ok && decision.Decision == "new" && entityIdentityVersionsCompatible(item.Mention, canonical) {
 					entity = touched[id]
 				}
@@ -263,6 +292,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 		}
 		if previous, ok := touched[entity.ID]; ok {
 			entity.AliasResolutions = previous.AliasResolutions
+			entity.Description = previous.Description
 			suggestions := append([]types.EntityMergeSuggestion{}, previous.MergeSuggestions...)
 			seen := make(map[string]bool, len(suggestions))
 			for _, suggestion := range suggestions {
@@ -277,6 +307,10 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 			entity.MergeSuggestions = suggestions
 			entity.Aliases = unionEntityStrings(previous.Aliases, entity.Aliases)
 		}
+		if strings.TrimSpace(entity.Description) == "" && item.Description != "" {
+			entity.Description = item.Description
+			entity.EmbeddingNeedsRebuild = true
+		}
 		aliases := []string{item.Mention}
 		aliases = append(aliases, item.Aliases...)
 		for _, aliasText := range aliases {
@@ -286,6 +320,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 			localNames[entityNameKey(entity.EntityType, aliasText)] = entity.ID
 		}
 		localNames[entityNameKey(entity.EntityType, entity.CanonicalName)] = entity.ID
+		localNames[mentionKey] = entity.ID
 		mentions[mentionKey] = entity
 		touched[entity.ID] = entity
 	}
@@ -312,8 +347,8 @@ func (s *EntityService) judgeEntity(ctx context.Context, model chat.Chat, item e
 	for _, candidate := range candidates {
 		payload = append(payload, map[string]any{"id": candidate.ID, "name": candidate.CanonicalName, "type": candidate.EntityType, "description": candidate.Description, "aliases": candidate.Aliases})
 	}
-	encoded, _ := json.Marshal(map[string]any{"mention": item.Mention, "canonical_name": item.Canonical, "entity_type": item.EntityType, "candidates": payload})
-	response, err := model.Chat(ctx, []chat.Message{{Role: "system", Content: `Decide whether the source mention is the exact same real-world entity as one candidate. Similar names, different versions, or a shared topic do not prove identity. Return {"decision":"match|new|uncertain","entity_id":"listed ID for match, otherwise empty","candidate_ids":["listed IDs relevant to uncertainty"],"confidence":0.0,"reason":"brief reason"}. Match requires confidence at least 0.9. Empty candidates still require one decision and normally mean new.`}, {Role: "user", Content: string(encoded)}}, &chat.ChatOptions{Temperature: 0})
+	encoded, _ := json.Marshal(map[string]any{"mention": item.Mention, "canonical_name": item.Canonical, "entity_type": item.EntityType, "description": item.Description, "candidates": payload})
+	response, err := model.Chat(ctx, []chat.Message{{Role: "system", Content: `Decide whether the source mention is the exact same real-world entity as one candidate. Compare the source description with candidate descriptions and aliases to establish identity. A difference in type labels alone proves neither a different nor the same identity. Similar names, different versions, or a shared topic do not prove identity. Return {"decision":"match|new|uncertain","entity_id":"listed ID for match, otherwise empty","candidate_ids":["listed IDs relevant to uncertainty"],"confidence":0.0,"reason":"brief reason"}. Match requires confidence at least 0.9.`}, {Role: "user", Content: string(encoded)}}, &chat.ChatOptions{Temperature: 0})
 	if err != nil || response == nil {
 		if err == nil {
 			err = errors.New("empty entity resolution response")
@@ -417,6 +452,18 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 				return nil, err
 			}
 			entity = existing
+		}
+		if description := strings.TrimSpace(planned.Description); description != "" {
+			updated := tx.Model(&types.Entity{}).Where("space_id=? AND id=? AND btrim(description)=''", entity.SpaceID, entity.ID).
+				Updates(map[string]any{"description": description, "embedding_needs_rebuild": true, "updated_at": time.Now()})
+			if updated.Error != nil {
+				return nil, updated.Error
+			}
+			if updated.RowsAffected > 0 {
+				if err := notifyEntityProjection(tx, entity.SpaceID, entity.ID); err != nil {
+					return nil, err
+				}
+			}
 		}
 		ids[planned.ID] = entity.ID
 		resolutions := map[string]types.EntityAlias{}

@@ -131,26 +131,17 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 		escaped := strings.ToLower(escapeLikeKeyword(filter.Keyword))
 		query = query.Where("(LOWER(file_name) LIKE ? OR LOWER(title) LIKE ?)", "%"+escaped+"%", "%"+escaped+"%")
 	}
-	// FileType and Source share the same special-case routing onto `type` for
-	// the "manual" / "url" values, so callers can pick either control.
-	applyTypeOrFileType := func(q *gorm.DB, val string) *gorm.DB {
-		switch val {
-		case "":
-			return q
-		case "manual", "url":
-			return q.Where("type = ?", val)
+	if filter.FileType != "" {
+		switch strings.ToLower(filter.FileType) {
+		case "md", "markdown", "manual", "url":
+			query = query.Where("(LOWER(file_type) IN ? OR (COALESCE(file_type, '') = '' AND type IN ?))",
+				[]string{"md", "markdown", "manual", "url"}, []string{"manual", "url"})
 		default:
-			return q.Where("file_type = ?", val)
+			query = query.Where("LOWER(file_type) = ?", strings.ToLower(filter.FileType))
 		}
 	}
-	query = applyTypeOrFileType(query, filter.FileType)
 	if filter.Source != "" {
-		switch filter.Source {
-		case "manual", "url":
-			query = query.Where("type = ?", filter.Source)
-		default:
-			query = query.Where("channel = ?", filter.Source)
-		}
+		query = query.Where("channel = ?", filter.Source)
 	}
 	if filter.ParseStatus != "" {
 		query = query.Where("parse_status = ?", filter.ParseStatus)

@@ -35,7 +35,7 @@ import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
 import PersonalDocumentDelete from '@/components/PersonalDocumentDelete.vue';
 import { getApiBaseUrl } from '@/utils/api-base';
 import { copyWithToast } from '@/utils/clipboard';
-import { isIngestAPIEntry, getExternalToolName } from '@/utils/entrySourceLabels';
+import { entryFileFormatLabel, entryChannelLabel, getExternalToolName } from '@/utils/entrySourceLabels';
 
 const { t } = useI18n();
 
@@ -921,33 +921,13 @@ const getDisplayTitle = () => {
   return props.details.title;
 };
 
-const channelLabelMap: Record<string, string> = {
-  web: 'library.channelWeb',
-  api: 'library.channelApi',
-  browser_extension: 'library.channelBrowserExtension',
-  rss: 'library.channelRSS',
-};
-
-const getChannelLabel = (channel: string) => {
-  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return t(`library.sourceKinds.${props.details.source_kind}`);
-  const key = channelLabelMap[channel];
-  return key ? t(key) : t('library.channelUnknown');
-};
-
-// 获取类型标签
-const getTypeLabel = () => {
-  if (props.details.source_kind === 'mine' || props.details.source_kind === 'report') return ['manual', 'md', 'markdown'].includes(props.details.file_type?.toLowerCase()) ? t('ikb18.markdown') : (props.details.file_type?.toUpperCase() || t('library.typeFile'));
-  if (isIngestAPIEntry(props.details)) return t('library.typeIngestAPI');
-  if (props.details.channel === 'rss') return t('library.channelRSS');
-  switch (props.details.type) {
-    case 'url':
-      return t('library.typeURL');
-    case 'manual':
-      return t('library.typeManual');
-    case 'file':
-      return props.details.file_type ? props.details.file_type.toUpperCase() : t('library.typeFile');
-    default:
-      return '';
+const getChannelLabel = () => entryChannelLabel(props.details, t);
+const getTypeLabel = () => entryFileFormatLabel(props.details, t);
+const getMaterialCategoryLabel = () => {
+  switch (props.details.source_kind) {
+    case 'mine': return t('knowledgeSearch.sources.mine');
+    case 'report': return t('knowledgeSearch.sources.report');
+    default: return t('knowledgeSearch.sources.article');
   }
 };
 
@@ -1130,20 +1110,24 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <h4 class="setting-drawer__section-title">{{ $t('library.detailSectionMeta') }}</h4>
           <div class="doc-detail-rows">
             <div v-if="details.library_name" class="doc-detail-row"><span class="doc-detail-label">{{ $t('ikb18.library') }}</span><span class="doc-detail-value">{{ details.library_name }}</span></div>
+            <div v-if="details.source_kind" class="doc-detail-row">
+              <span class="doc-detail-label">{{ $t('library.materialCategory') }}</span>
+              <span class="doc-detail-value">{{ getMaterialCategoryLabel() }}</span>
+            </div>
             <div v-if="details.time" class="doc-detail-row">
               <span class="doc-detail-label">{{ getTimeLabel() }}</span>
               <span class="doc-detail-value">{{ details.time }}</span>
             </div>
             <div v-if="details.type" class="doc-detail-row">
-              <span class="doc-detail-label">{{ $t('library.infoCard.type') }}</span>
+              <span class="doc-detail-label">{{ $t('library.fileTypeFilter') }}</span>
               <span class="doc-detail-value">
                 <t-tag size="small" :theme="getTypeTheme()" variant="light">{{ getTypeLabel() }}</t-tag>
               </span>
             </div>
-            <div v-if="['mine', 'report'].includes(details.source_kind || '') || (details.channel && details.channel !== 'web')" class="doc-detail-row">
-              <span class="doc-detail-label">{{ $t('library.infoCard.source') }}</span>
+            <div v-if="details.channel" class="doc-detail-row">
+              <span class="doc-detail-label">{{ $t('library.channelLabel') }}</span>
               <span class="doc-detail-value">
-                <t-tag size="small" variant="light" theme="warning">{{ getChannelLabel(details.channel) }}</t-tag>
+                <t-tag size="small" variant="light" theme="warning">{{ getChannelLabel() }}</t-tag>
               </span>
             </div>
             <div v-if="details.collect_reason?.trim()" class="doc-detail-row doc-collect-reason-row">

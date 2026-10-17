@@ -752,8 +752,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const html = await renderDetails([], locale, { loadedDetails: await loader.load(id) })
       assert.ok(html.includes(messages[locale].library.sourceKinds[kind]), id)
       assert.ok(!html.includes(messages[locale].library.typeManual), id)
-      assert.ok(!html.includes(`>${messages[locale].library.channelApi}<`), id)
-      assert.ok(html.includes(messages[locale].ikb18.markdown), id)
+      assert.ok(html.includes(`>${messages[locale].library.channelApi}<`), id)
+      assert.ok(html.includes('Markdown'), id)
     }
     assert.deepEqual(loader.calls, ['converted', 'direct', 'report'])
   })

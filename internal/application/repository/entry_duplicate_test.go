@@ -61,3 +61,23 @@ func TestCheckEntryExists_FileHashIsScopedByFileType(t *testing.T) {
 		assert.Equal(t, "md", entry.FileType)
 	})
 }
+
+func TestEntryListSeparatesMarkdownFormatFromSubmissionChannel(t *testing.T) {
+	db := setupEntryTestDB(t)
+	require.NoError(t, db.Exec(`INSERT INTO entries (id, space_id, library_id, type, file_type, channel, parse_status) VALUES
+		('ingest',1,'library','manual','manual','api','completed'),
+		('markdown',1,'library','file','MD','web','completed'),
+		('legacy',1,'library','manual','pdf','web','completed')`).Error)
+	var ids []string
+	query := applyEntryListFilter(db.Model(&types.Entry{}), types.EntryListFilter{FileType: "md"})
+	require.NoError(t, query.Order("id").Pluck("id", &ids).Error)
+	require.Equal(t, []string{"ingest", "markdown"}, ids)
+	ids = nil
+	query = applyEntryListFilter(db.Model(&types.Entry{}), types.EntryListFilter{FileType: "md", Source: "api"})
+	require.NoError(t, query.Pluck("id", &ids).Error)
+	require.Equal(t, []string{"ingest"}, ids)
+	var count int64
+	query = applyEntryListFilter(db.Model(&types.Entry{}), types.EntryListFilter{Source: "manual"})
+	require.NoError(t, query.Count(&count).Error)
+	require.Zero(t, count, "manual storage type must not match a submission channel")
+}

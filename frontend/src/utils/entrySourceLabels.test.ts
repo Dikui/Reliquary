@@ -159,56 +159,22 @@ test('actual detail loading preserves API key names and clears them immediately 
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: actual article details show the ingest label and external tool name without relabeling old manual articles`, async () => {
-    const record = { id: 'article', title: 'Article', source_kind: 'article', type: 'manual', channel: 'api', parse_status: 'completed', md: [], total: 0, metadata: { intake: { source: 'ingest' } }, ingest_api_key_name: 'Research & Analysis Bot', last_ingest_api_key_name: 'Supplement Bot' }
-    const hook = createLoadingHook(async () => ({ success: true, data: record }))
+  test(`${locale}: cards, rows and details separate Markdown format from submission channel`, async () => {
+    const record = { id: 'ingest', title: 'Article', file_name: 'Article.md', source_kind: 'article', type: 'manual', file_type: 'manual', channel: 'api', parse_status: 'completed', md: [], total: 0,
+      acquisition: 'verbatim', metadata: { intake: { source: 'ingest' } }, ingest_api_key_name: 'Research Bot' }
+    const hook = createLoadingHook(async () => ({ success: true, data: record }), [record])
+    await hook.loadEntries()
     hook.getCardDetails(record)
     await settle()
-    const html = await renderDetail(hook.details, locale)
-    assert.ok(html.includes(messages[locale].library.typeIngestAPI))
-    assert.ok(html.includes(messages[locale].library.externalTool))
-    assert.ok(html.includes('Research &amp; Analysis Bot'))
-    assert.ok(!html.includes('Supplement Bot'))
-    assert.ok(!html.includes(messages[locale].library.typeManual))
-    const fallback = await renderDetail({ ...record, ingest_api_key_name: ' ', last_ingest_api_key_name: ' Supplement Bot ' }, locale)
-    assert.ok(fallback.includes('Supplement Bot'))
-    for (const record of [
-      { ...hook.details, metadata: { intake: { source: 'ingest' } }, ingest_api_key_name: ' ', last_ingest_api_key_name: ' ' },
-      { ...hook.details, metadata: null, acquisition: '', ingest_api_key_name: '', last_ingest_api_key_name: '' },
-    ]) {
-      const empty = await renderDetail(record, locale)
-      assert.ok(!empty.includes(messages[locale].library.externalTool), 'empty tool names do not create an empty detail row')
+    const views = [await renderView('DocumentCardView', hook.cardList.value[0], locale), await renderView('DocumentListView', hook.cardList.value[0], locale), await renderDetail(hook.details, locale)]
+    for (const html of views) {
+      assert.ok(html.includes('Markdown'))
+      assert.ok(html.includes(messages[locale].library.channelApi))
+      assert.ok(!html.includes(`>${messages[locale].library.typeManual}<`))
     }
-    for (const channel of ['web', 'api']) {
-      const legacy = await renderDetail({ ...hook.details, metadata: { intake: { source: 'manual' } }, acquisition: 'verbatim', channel, ingest_api_key_name: '', last_ingest_api_key_name: 'Supplement Bot' }, locale)
-      assert.ok(legacy.includes(messages[locale].library.typeManual), channel)
-      assert.ok(!legacy.includes(messages[locale].library.typeIngestAPI), channel)
-      assert.ok(legacy.includes('Supplement Bot'))
-    }
-  })
-  test(`${locale}: production list loading renders ingest labels in cards and rows while keeping historical labels`, async () => {
-    const ingest = { id: 'ingest', source_kind: 'article', type: 'manual', channel: 'api', acquisition: 'verbatim', ingest_api_key_name: 'Research Bot', last_ingest_api_key_name: 'Supplement Bot', metadata: { intake: { source: 'ingest' } }, updated_at: '2026-10-12T08:00:00Z' }
-    const hook = createLoadingHook(async () => ({ success: true, data: ingest }), [ingest])
-    await hook.loadEntries()
-    assert.equal(hook.cardList.value[0].ingest_api_key_name, 'Research Bot')
-    for (const view of ['DocumentCardView', 'DocumentListView'] as const) {
-      const html = await renderView(view, hook.cardList.value[0], locale)
-      assert.ok(html.includes(messages[locale].library.typeIngestAPI), view)
-      assert.ok(!html.includes(view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual), view)
-      const cases = [
-        { record: { type: 'manual', channel: 'web' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual },
-        { record: { type: 'manual', channel: 'api', last_ingest_api_key_name: 'Supplement Bot' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual },
-        { record: { type: 'manual', channel: 'api', acquisition: 'verbatim', metadata: { intake: { source: 'manual' } }, last_ingest_api_key_name: 'Supplement Bot' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeManual : messages[locale].library.channelManual },
-        { record: { type: 'manual', channel: 'rss', acquisition: 'extracted', last_ingest_api_key_name: 'Supplement Bot' }, copy: messages[locale].library.channelRSS },
-        { record: { type: 'url', channel: 'web' }, copy: view === 'DocumentCardView' ? messages[locale].library.typeURL : messages[locale].library.channelUrl },
-        { record: { source_kind: 'mine', channel: 'api', acquisition: 'verbatim', type: 'manual' }, copy: messages[locale].library.sourceKinds.mine },
-        { record: { source_kind: 'report', channel: 'api', acquisition: 'verbatim', type: 'manual' }, copy: messages[locale].library.sourceKinds.report },
-      ]
-      for (const item of cases) {
-        const legacyHTML = await renderView(view, item.record, locale)
-        assert.ok(legacyHTML.includes(item.copy), `${view}: ${JSON.stringify(item.record)}`)
-        assert.ok(!legacyHTML.includes(messages[locale].library.typeIngestAPI), `${view}: historical origin remains visible`)
-      }
-    }
+    assert.ok(views[2].includes('Research Bot'))
+    const legacy = await renderView('DocumentListView', { ...record, channel: 'web', metadata: { intake: { source: 'manual' } } }, locale)
+    assert.ok(legacy.includes(messages[locale].library.channelWeb))
+    assert.ok(legacy.includes('Markdown'))
   })
 }

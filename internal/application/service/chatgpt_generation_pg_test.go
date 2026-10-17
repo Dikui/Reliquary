@@ -231,8 +231,15 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 
 func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHistory(t *testing.T) {
 	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
+		if request.stage() == "entity_resolution" {
+			return `{"decision":"match","entity_id":"existing-acme","confidence":0.99}`, ""
+		}
 		return chatGPTGenerationSuccess(t, request)
 	})
+	// Identity judgment needs a candidate; empty recall now creates directly.
+	existing := entityRecord("existing-acme", "Fixture Acme", "organization")
+	existing.SpaceID = h.library.SpaceID
+	require.NoError(t, h.db.Create(&existing).Error)
 	image := articleImageDataURI(t, 22)
 	article := h.upload(t, "chatgpt-original", "# Original product announcement\n\nFixture Acme published measured product capabilities and deployment details.\n\n![chart]("+image+")")
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)

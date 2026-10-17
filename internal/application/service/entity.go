@@ -41,60 +41,66 @@ func (s *EntityService) requireSpace(ctx context.Context) (uint64, error) {
 // ResolveEntities resolves caller-provided candidates and records article associations.
 // It is intentionally independent from article intake.
 func (s *EntityService) ResolveEntities(ctx context.Context, entryID string, input []types.EntityCandidate) ([]types.Entity, error) {
+	entities, _, err := s.resolveEntityCandidates(ctx, entryID, input)
+	return entities, err
+}
+
+func (s *EntityService) resolveEntityCandidates(ctx context.Context, entryID string, input []types.EntityCandidate) ([]types.Entity, map[string]string, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var article types.Entry
 	if err = s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, entryID).First(&article).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, werrors.NewNotFoundError("article not found")
+		return nil, nil, werrors.NewNotFoundError("article not found")
 	} else if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(input) > 500 {
-		return nil, werrors.NewBadRequestError("at most 500 entity candidates")
+		return nil, nil, werrors.NewBadRequestError("at most 500 entity candidates")
 	}
 	candidates := make([]entityResolutionInput, 0, len(input))
 	for _, item := range input {
 		if strings.TrimSpace(item.Name) == "" {
-			return nil, werrors.NewBadRequestError("entity name is required")
+			return nil, nil, werrors.NewBadRequestError("entity name is required")
 		}
 		if len([]rune(item.Name)) > 512 {
-			return nil, werrors.NewBadRequestError("entity name exceeds 512 characters")
+			return nil, nil, werrors.NewBadRequestError("entity name exceeds 512 characters")
 		}
 		for _, alias := range item.Aliases {
 			if len([]rune(alias)) > 512 {
-				return nil, werrors.NewBadRequestError("entity alias exceeds 512 characters")
+				return nil, nil, werrors.NewBadRequestError("entity alias exceeds 512 characters")
 			}
 		}
 		candidates = append(candidates, entityResolutionInput{Mention: item.Name, Canonical: item.Name, EntityType: types.NormalizeEntityType(item.EntityType), Aliases: item.Aliases, Description: item.Description})
 	}
 	if len(candidates) == 0 {
-		return []types.Entity{}, nil
+		return []types.Entity{}, map[string]string{}, nil
 	}
 	if s.models == nil {
-		return nil, errors.New("entity judgment model service is unavailable")
+		return nil, nil, errors.New("entity judgment model service is unavailable")
 	}
 	var library types.Library
 	if err = s.db.WithContext(ctx).Where("id=? AND space_id=?", article.LibraryID, spaceID).First(&library).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	modelID, err := ResolveModelTier(ctx, s.db, &library, types.ModelTierEntityResolution)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if modelID == "" {
-		return nil, errors.New("entity judgment model is not configured")
+		return nil, nil, errors.New("entity judgment model is not configured")
 	}
 	model, err := s.models.GetChatModel(types.WithModelTier(ctx, types.ModelTierEntityResolution), modelID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	planned, _, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, spaceID, entryID, candidates)
+	planned, mentions, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, spaceID, entryID, candidates)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	resolvedIDs := []string{}
+	resolvedMentions := map[string]string{}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Recheck the article while writing so a concurrent deletion cannot leave mentions.
 		var current types.Entry
@@ -104,6 +110,9 @@ func (s *EntityService) ResolveEntities(ctx context.Context, entryID string, inp
 		ids, err := persistEntities(tx, planned)
 		if err != nil {
 			return err
+		}
+		for key, entity := range mentions {
+			resolvedMentions[key] = ids[entity.ID]
 		}
 		for _, entity := range planned {
 			id := ids[entity.ID]
@@ -116,13 +125,16 @@ func (s *EntityService) ResolveEntities(ctx context.Context, entryID string, inp
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	entities := []types.Entity{}
 	if err = s.db.WithContext(ctx).Where("space_id=? AND id IN ?", spaceID, resolvedIDs).Order("canonical_name,id").Find(&entities).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return entities, s.loadAliases(ctx, spaceID, entities)
+	if err := s.loadAliases(ctx, spaceID, entities); err != nil {
+		return nil, nil, err
+	}
+	return entities, resolvedMentions, nil
 }
 
 func (s *EntityService) resolveLibrary(ctx context.Context) (uint64, string, error) {

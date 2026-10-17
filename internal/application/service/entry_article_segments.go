@@ -8,6 +8,7 @@ import (
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
 // SegmentContribution is the extension boundary for ikb-11. New extractors
@@ -18,9 +19,13 @@ type SegmentContribution struct {
 }
 
 type articleProcessingEntity struct {
-	Name    string   `json:"name"`
-	Type    *string  `json:"type"`
-	Aliases []string `json:"aliases,omitempty"`
+	Name        string                 `json:"name"`
+	Type        *string                `json:"type"`
+	Aliases     []string               `json:"aliases,omitempty"`
+	Description string                 `json:"description"`
+	Relevance   string                 `json:"relevance"`
+	EvidenceIDs []int                  `json:"evidence_ids"`
+	Evidence    []types.SourceLocation `json:"evidence,omitempty"`
 }
 
 type articleProcessingProvenance struct {
@@ -88,6 +93,39 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	budget, err := s.segmentBudget(model, prompt, input, imageCount)
 	if err != nil {
 		return nil, err
+	}
+	if model.Parameters.ContextWindow > 0 {
+		// Numbering and JSON escaping consume input space too. Keep planning in
+		// original coordinates, reducing the source budget until every part fits.
+		limit, overlap, _ := s.segmentSettings()
+		_, _, completion := s.articleProcessingLimits(model)
+		metadata, _ := json.Marshal(input)
+		inputBudget := model.Parameters.ContextWindow - completion - len([]rune(prompt)) - len([]rune(string(metadata))) - imageCount*1024 - segmentEnvelopeReserve - overlap
+		_, imageLimit, _ := s.articleProcessingLimits(nil)
+		runes := []rune(body)
+		for {
+			plan, err := types.PlanProcessingSegments(body, budget, overlap, limit)
+			if err != nil {
+				return nil, err
+			}
+			plan, err = imageBoundedSegments(body, plan, imageLimit, limit)
+			if err != nil {
+				return nil, err
+			}
+			largest := 0
+			for _, part := range plan {
+				numbered, _ := articleEvidenceBody(string(runes[part.Start:part.End]))
+				encoded, _ := json.Marshal(numbered)
+				largest = max(largest, len([]rune(string(encoded)))-2)
+			}
+			if largest <= inputBudget {
+				break
+			}
+			if budget == 1 {
+				return nil, errors.New("model context is too small for evidence numbering")
+			}
+			budget = max(1, min(budget-1, budget*inputBudget/largest))
+		}
 	}
 	// Topic eligibility is live catalog state, not a document processing revision.
 	// Completed segment results are retained when the catalog changes; new
@@ -169,20 +207,23 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 
 func (s *entryService) resolveProcessingEntities(ctx context.Context, k *types.Entry, candidates []types.EntityCandidate, result *articleProcessingResult) ([]types.Entity, error) {
 	resolved := []types.Entity{}
+	identities := map[string]string{}
 	for offset := 0; offset < len(candidates); offset += 500 {
-		batch, err := NewEntityService(s.db, s.modelService).ResolveEntities(ctx, k.ID, candidates[offset:min(offset+500, len(candidates))])
+		batch, mapping, err := NewEntityService(s.db, s.modelService).resolveEntityCandidates(ctx, k.ID, candidates[offset:min(offset+500, len(candidates))])
 		if err != nil {
 			return nil, err
 		}
 		resolved = append(resolved, batch...)
+		for key, id := range mapping {
+			identities[key] = id
+		}
 	}
+	result.ResolvedEntities = identities
 	if result.Provenance != nil {
 		result.Provenance.ResolvedEntities = map[string][]int{}
-		for _, entity := range resolved {
-			for _, name := range append([]string{entity.CanonicalName}, entity.Aliases...) {
-				for _, n := range result.Provenance.Entities[entityNameKey(entity.EntityType, name)] {
-					result.Provenance.ResolvedEntities[entity.ID] = appendSegmentNumber(result.Provenance.ResolvedEntities[entity.ID], n)
-				}
+		for key, id := range identities {
+			for _, n := range result.Provenance.Entities[key] {
+				result.Provenance.ResolvedEntities[id] = appendSegmentNumber(result.Provenance.ResolvedEntities[id], n)
 			}
 		}
 		if result.RunID != "" {
@@ -233,6 +274,11 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 		for _, entity := range part.Entities {
 			key := entityNameKey(*entity.Type, entity.Name)
 			if index, ok := entityIndex[key]; ok {
+				if merged.Entities[index].Description == "" {
+					merged.Entities[index].Description = entity.Description
+					merged.Entities[index].Evidence = entity.Evidence
+					merged.Entities[index].EvidenceIDs = entity.EvidenceIDs
+				}
 				for _, alias := range entity.Aliases {
 					merged.Entities[index].Aliases = appendUniqueEntityString(merged.Entities[index].Aliases, alias)
 				}
@@ -298,7 +344,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		var output struct {
 			Summary *types.EntrySummary `json:"summary"`
 		}
-		err = json.Unmarshal([]byte(response.Content), &output)
+		err = utils.ParseLLMJsonResponse(response.Content, &output)
 		if err == nil {
 			encoded, _ := json.Marshal(map[string]any{"summary": output.Summary, "entities": []any{}, "topics": []string{}, "relations": []extractedRelation{}, "image_descriptions": []extractedImage{}})
 			var checked *articleProcessingResult

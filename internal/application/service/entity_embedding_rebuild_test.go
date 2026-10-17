@@ -168,7 +168,7 @@ func TestEntityNameEmbeddingRebuildAfterInitialConfiguration(t *testing.T) {
 	}}
 	_, mentions, err := svc.resolveEntities(ctx, judge, 1, "entity-library", []entityResolutionInput{{Mention: "完全不同的中文叫法", Canonical: "完全不同的中文叫法", EntityType: "company"}})
 	require.NoError(t, err)
-	require.Equal(t, stored.ID, mentions["完全不同的中文叫法"].ID, "rebuilt vectors must participate in candidate recall")
+	require.Equal(t, stored.ID, mentions[entityNameKey("company", "完全不同的中文叫法")].ID, "rebuilt vectors must participate in candidate recall")
 }
 
 func TestEntityNameEmbeddingRebuildSwitchesDimensionsAndUsesBatches(t *testing.T) {

@@ -1,6 +1,7 @@
 export interface EntrySourceLabelInput {
   source_kind?: string
   type?: string
+  file_type?: string
   channel?: string
   acquisition?: string
   ingest_api_key_id?: number
@@ -28,4 +29,26 @@ export function isIngestAPIEntry(entry: EntrySourceLabelInput): boolean {
 
 export function getExternalToolName(entry: EntrySourceLabelInput): string {
   return entry.ingest_api_key_name?.trim() || entry.last_ingest_api_key_name?.trim() || ''
+}
+
+// Storage aliases describe Markdown, not how the material was submitted.
+export function normalizeEntryFileType(value: string): string {
+  const type = value.trim().toLowerCase()
+  return ['manual', 'markdown', 'url'].includes(type) ? 'md' : type
+}
+
+export function entryFileFormatLabel(entry: EntrySourceLabelInput, t: (key: string) => string): string {
+  const format = normalizeEntryFileType(entry.file_type || '')
+  if (format === 'md' || (!format && ['manual', 'url'].includes(entry.type || ''))) return 'Markdown'
+  return format ? format.toUpperCase() : t('library.typeFile')
+}
+
+export function entryChannelLabel(entry: EntrySourceLabelInput, t: (key: string) => string): string {
+  switch (entry.channel) {
+    case 'api': return t('library.channelApi')
+    case 'web': return t('library.channelWeb')
+    case 'rss': return t('library.channelRSS')
+    case 'browser_extension': return t('library.channelBrowserExtension')
+    default: return t('library.channelUnknown')
+  }
 }

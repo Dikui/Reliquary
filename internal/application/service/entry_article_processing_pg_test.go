@@ -161,7 +161,11 @@ func articleProcessingOutput(t *testing.T, contentType string, entities []types.
 	require.NoError(t, json.Unmarshal([]byte(validProcessingFixture(contentType)), &result))
 	values := make([]map[string]interface{}, 0, len(entities))
 	for _, e := range entities {
-		values = append(values, map[string]interface{}{"name": e.Name, "type": e.EntityType, "aliases": e.Aliases})
+		description := e.Description
+		if description == "" {
+			description = e.Name + " is a participant in this announcement."
+		}
+		values = append(values, map[string]interface{}{"name": e.Name, "type": e.EntityType, "aliases": e.Aliases, "description": description, "relevance": "central", "evidence_ids": []int{1}})
 	}
 	result["entities"] = values
 	result["topics"] = topics
@@ -219,6 +223,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	firstEntities, err := NewEntityService(h.db, h.service.modelService).ListEntities(h.ctx, types.EntityQuery{})
 	require.NoError(t, err)
 	require.Len(t, firstEntities, 1)
+	require.NotEmpty(t, firstEntities[0].Description)
 	h.processor.output = articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Acme", EntityType: "company"}}, []string{})
 	second := h.upload(t, "second-event", "# Second announcement\n\nAcme opened a new office on a different continent. This is an original report of the expansion and its date.")
 	var entityLinks []types.EntryEntity
