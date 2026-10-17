@@ -49,8 +49,12 @@ func finalizeImageDescriptions(records []types.ProcessingImage, descriptions []e
 	seen := map[int]bool{}
 	for _, description := range descriptions {
 		i := description.Index - 1
-		if i < 0 || i >= len(records) || records[i].SkipReason != "" || seen[i] {
+		if i < 0 || i >= len(records) || seen[i] {
 			return nil, fmt.Errorf("invalid or duplicate image description index %d", description.Index)
+		}
+		// A model cannot supply evidence for an image it did not receive.
+		if records[i].SkipReason != "" {
+			continue
 		}
 		if strings.TrimSpace(description.Description) == "" {
 			return nil, fmt.Errorf("empty image description %d", description.Index)

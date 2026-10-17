@@ -51,7 +51,7 @@ HTTP `POST /api/v1/ingest` 对应 MCP `ingest`，参数相同：
 图片先经 `POST /api/v1/ingest/assets` 上传 multipart 的 file，再用 asset_id 和 source_url 对应正文图片地址，也可提交受限的 base64。服务端不下载远程图片。暂缺图片时提交 missing，后续按资料 ID 补全：
 
 ```json
-{"items":[{"library":"mine","entry_id":"已有待补全ID","images":[{"asset_id":"上传返回ID","source_url":"https://example.org/chart.png"}]}]}
+{"items":[{"library":"mine","entry_id":"缺少图片的已有资料ID","images":[{"asset_id":"上传返回ID","source_url":"https://example.org/chart.png"}]}]}
 ```
 
 普通 URL 查重使用 HTTP `POST /api/v1/ingest/check` 或 MCP `check_urls`，参数为 library 与 urls；不是图片补全入口。完整状态、长度上限、重试及来源规则见 [收录接口](ingest-api.md)。

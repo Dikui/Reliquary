@@ -21,7 +21,7 @@ func libraryRebuildGroup(id string) string { return "library-rebuild:" + id }
 type libraryRebuildContextKey struct{}
 
 func libraryRebuildEligible(entry *types.Entry) (bool, error) {
-	if entry.Incomplete || (entry.SourceKind != "article" && entry.SourceKind != "mine") {
+	if entry.SourceKind != "article" && entry.SourceKind != "mine" {
 		return false, nil
 	}
 	intake, err := entry.IntakeMetadata()

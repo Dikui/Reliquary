@@ -94,7 +94,7 @@ docker compose restart app
 
 ## 18. 重新处理时如何自定义解析配置（process_config）？
 
-已有文章重新处理可携带 `process_config`（`EntryProcessOverrides`），在本次处理内覆盖唯一库默认的解析引擎与分块设置，不改动持久化配置。网页的重新处理确认对话框提供这些参数。缺正文时标记待补全，理由为“重新处理需要正文”，不按链接抓取。
+已有文章重新处理可携带 `process_config`（`EntryProcessOverrides`），在本次处理内覆盖唯一库默认的解析引擎与分块设置，不改动持久化配置。网页的重新处理确认对话框提供这些参数。缺少已保存的正文时返回错误，需重新提交 Markdown，不按链接抓取。
 
 - **与 Library 默认配置的关系**：未传的字段沿用 Library 默认值。
 - **重新处理**：`POST /entries/:id/reparse` 可在 body 中传 `process_config` 以新配置重跑处理，覆盖项会写入 `entries.metadata.process_overrides`。缺少已保存正文时返回校验错误，调用方需要先准备 Markdown 正文再收录，不抓取原链接。

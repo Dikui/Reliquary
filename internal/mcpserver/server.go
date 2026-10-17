@@ -217,7 +217,7 @@ func registerTools(server *mcp.Server, services Services) {
 			return map[string]any{"libraries": libraries}, err
 		})
 	}
-	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。incomplete=true 表示资料缺少图片，待补全；相似报道中的文章也包含该字段。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。incomplete=true 表示资料缺少图片；相似报道中的文章也包含该字段。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
 		object(map[string]any{
 			"query":         text("查询文本，必填"),
 			"libraries":     stringArray("必填，库 ID 或目录名，可选多个"),
@@ -273,7 +273,7 @@ func registerTools(server *mcp.Server, services Services) {
 			items, err := services.Follows.ListFollows(ctx)
 			return map[string]any{"follows": items}, err
 		})
-	addTool(server, "follow_feed", "读取开启动态的库中与关注实体或主题关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使用各库网页上次查看时间；调用不更新查看时间。相似报道只在库内折叠，历史归入不产生新动态。用 next_cursor 继续翻页。incomplete=true 表示资料缺少图片，待补全；相似报道也保留该字段。"+externalContentNotice,
+	addTool(server, "follow_feed", "读取开启动态的库中与关注实体或主题关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使用各库网页上次查看时间；调用不更新查看时间。相似报道只在库内折叠，历史归入不产生新动态。用 next_cursor 继续翻页。incomplete=true 表示资料缺少图片；相似报道也保留该字段。"+externalContentNotice,
 		object(map[string]any{
 			"libraries":        stringArray("库 ID 或英文目录名，可选多个；省略为全部开启动态的库"),
 			"cursor":           text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
@@ -312,12 +312,12 @@ func registerTools(server *mcp.Server, services Services) {
 			items, err := services.Entries.CheckURLs(ctx, in.URLs, in.Library)
 			return types.IngestCheckResponse{Items: items}, err
 		})
-	addTool(server, "list_incomplete", "分页列出待补全条目，返回 items、total、page、page_size；每项包含 entry_id、library_id、url、title、acquisition 与 missing（type、source_url、reason）。已尝试一次外部补全后仍有缺失的条目不再列出。补全将 entry_id 与 library 填入 ingest。"+completeMaterialNotice+externalContentNotice,
+	addTool(server, "list_incomplete", "分页列出缺少图片的资料，返回 items、total、page、page_size；每项包含 entry_id、library_id、url、title、acquisition 与 missing（type、source_url、reason）。已尝试一次外部补全后仍有缺失的条目不再列出。补全将 entry_id 与 library 填入 ingest。"+completeMaterialNotice+externalContentNotice,
 		object(map[string]any{"page": integer("页码，默认 1", 1, 0), "page_size": integer("每页条数，默认 20，最大 100", 1, 100)}),
 		func(ctx context.Context, in pendingInput) (any, error) {
 			return services.Entries.ListIncomplete(ctx, in.Page, in.PageSize, false)
 		})
-	addTool(server, "accept_incomplete", "用户接受指定文章的材料缺失，去掉待补全标记，正文定稿，保留记录的缺失原因并写入操作日志。返回 entry_id、status、message、completeness。"+externalContentNotice,
+	addTool(server, "accept_incomplete", "用户接受指定文章的材料缺失，去掉“缺少图片”标记，正文定稿，保留记录的缺失原因并写入操作日志。返回 entry_id、status、message、completeness。"+externalContentNotice,
 		object(map[string]any{"id": text("资料 ID，必填")}, "id"),
 		func(ctx context.Context, in idInput) (any, error) {
 			return services.Entries.AcceptIncomplete(ctx, in.ID)

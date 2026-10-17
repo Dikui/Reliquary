@@ -144,6 +144,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     })
     assert.deepEqual(calls, [{ method: 'get', url: '/api/v1/ingest/incomplete?page=1&page_size=20&include_attempted=true' }])
     assert.ok(html.includes(records[0].title)); assert.ok(html.includes(records[1].title))
+    const missingLabel = locale === 'zh-CN' ? '缺少图片' : 'Missing images'
+    assert.equal(messages[locale].ingestStatus.incomplete, missingLabel)
+    assert.equal(messages[locale].knowledgeReview.incomplete, missingLabel)
+    assert.ok(html.includes(missingLabel))
     assert.ok(html.includes(messages[locale].library.sourceKinds.mine))
     const instructions = locale === 'zh-CN'
       ? '按资料 ID 补交图片'

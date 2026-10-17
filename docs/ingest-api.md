@@ -89,7 +89,7 @@ AI 报告：
 
 来源未核实标记在 HTTP/MCP 收录结果、资料列表、详情、正文读取、检索和关注动态返回中保留。网页沿用已有标记位置。缺链接的待审条目继续支持补链接并重新审核、明确确认无链接入库、确认不收录。补上链接后清除未核实标记；无链接手工入库仍标记未核实。
 
-图片缺失继续进入待补全。调用方按 `library` 与 `entry_id` 定位原资料，补全成功后重新处理，撤换旧关系证据并重新计算正文位置；缺少图片与来源证据不足分别处理。长文按文末规则分段审核。
+图片缺失继续标记为“缺少图片”。调用方按 `library` 与 `entry_id` 定位原资料，补全成功后重新处理，撤换旧关系证据并重新计算正文位置；缺少图片与来源证据不足分别处理。长文按文末规则分段审核。
 
 ## 来源标识与结果
 
@@ -103,7 +103,7 @@ AI 报告：
 | --- | --- |
 | 缺库或库不存在 | HTTP 200 的对应项 `invalid`，原因包含 `library` 与 `call list_libraries` |
 | 字段不适用于库 | 对应项 `invalid`，原因包含 `source_ref is only accepted by own libraries` 或 `identifier is only accepted by external_durable libraries` |
-| 错误、跨库或非待补全 ID | 对应项 `invalid`，原因分别包含 `does not identify an existing entry`、`different library`、`not awaiting image completion` |
+| 错误、跨库或未标记缺少图片的 ID | 对应项 `invalid`，原因分别包含 `does not identify an existing entry`、`different library`、`not awaiting image completion` |
 | 正文缺失或超长、标识格式无效 | 对应项 `invalid`，或流式读取时立即拒绝超长请求；给出具体字段与上限 |
 | JSON 语法、批量包络或字节上限错误 | HTTP 400，应用错误码 `1000`；MCP 返回工具错误，流式读取超限为带具体原因的 HTTP 400 |
 
@@ -134,7 +134,7 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 
 补全把正文中匹配的图片引用替换为本地路径，文字保持原样。可选 `content` 用于旧有正文冲突检查；不同正文另存关联收录待审，返回 `conflict`，不覆盖原资料。保留原有规范化与近似正文比较规则。不能用相同 URL 自动补全。图片替换后重新计算保存正文的哈希和位置，检索与关系证据使用更新后的坐标。
 
-`GET /api/v1/ingest/incomplete?page=1&page_size=20` 列出待补全资料，含 `entry_id`、`library_id` 与缺失图片。`include_attempted=false` 排除已尝试补全一次的资料。`POST /api/v1/ingest/:id/accept-incomplete` 接受缺失，`POST /api/v1/ingest/:id/discard` 丢弃资料，可附 `reason`。
+`GET /api/v1/ingest/incomplete?page=1&page_size=20` 列出缺少图片的资料，含 `entry_id`、`library_id` 与缺失图片。`include_attempted=false` 排除已尝试补全一次的资料。`POST /api/v1/ingest/:id/accept-incomplete` 接受缺失，`POST /api/v1/ingest/:id/discard` 丢弃资料，可附 `reason`。
 
 ## 长度和传输上限
 

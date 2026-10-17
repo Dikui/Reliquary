@@ -455,6 +455,7 @@ test('library rebuild confirms one selected library, prevents duplicate submissi
     button()!.props.onClick()
     assert.match(env.confirmation.body, /Research/)
     assert.match(env.confirmation.body, /保留正文、图片和人工判断/)
+    assert.match(env.confirmation.body, /已通过审核且正文完整的资料即使缺少图片也会参与/)
     let finish!: (response: unknown) => void
     env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
     env.confirmation.onConfirm()

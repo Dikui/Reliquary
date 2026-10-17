@@ -25,7 +25,7 @@ HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 A
 | `entry_id` | HTTP 与 MCP 的资料 ID |
 | `library_id`, `library_name`, `library_directory` | 所属库 |
 | `title`, `summary`, `entities`, `topics`, `starred` | 资料信息 |
-| `source_unverified`, `incomplete` | 来源未核实、待补全 |
+| `source_unverified`, `incomplete` | 来源未核实、缺少图片 |
 | `has_update`, `latest_entry_id` | 同一来源标识是否有新记录及最新记录 ID |
 | `score`, `similar_reports` | 最终排序分数及同库相似报道 |
 | `snippets` | 最多三个命中片段 |
@@ -86,7 +86,7 @@ const exactText = body.slice(utf16Start, utf16End)
 
 ## 资料返回中的库名
 
-资料详情、列表、批量读取、待审列表、待补全列表、实体关联资料、检索、关注动态及 MCP 返回中的 `library_name` 均使用所属库当前保存的 `libraries.name`，与 `library_id` 对应。改名后下次读取立即生效，库名不写入资料表。MCP `get_entry` 在顶层返回 `library_id`、`library_name`，同时保留原有 `header.library_id` 和 `header.library`。
+资料详情、列表、批量读取、待审列表、缺少图片列表、实体关联资料、检索、关注动态及 MCP 返回中的 `library_name` 均使用所属库当前保存的 `libraries.name`，与 `library_id` 对应。改名后下次读取立即生效，库名不写入资料表。MCP `get_entry` 在顶层返回 `library_id`、`library_name`，同时保留原有 `header.library_id` 和 `header.library`。
 
 `library_name` 不随请求语言翻译，与检索结果保持一致。库列表接口另外提供 `display_name`：未改名的系统库按请求语言本地化，已改名的系统库和自定义库保留所保存的名称。需要本地化的客户端可以通过 `library_id` 对应库列表的 `display_name`。
 

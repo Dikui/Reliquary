@@ -9,6 +9,7 @@ import (
 
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
 type segmentReviewDecision struct {
@@ -151,16 +152,22 @@ func (s *entryService) reviewSegments(ctx context.Context, library *types.Librar
 			return nil, e
 		}
 		_, _, completion := s.articleProcessingLimits(model)
-		response, e := llm.Chat(types.WithLLMCallMetadata(ctx, "intake_review", ""), []chat.Message{{Role: "system", Content: prompt}, {Role: "user", Content: string(encoded)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion})
+		var decision segmentReviewDecision
+		e = chatWithOutputValidation(types.WithLLMCallMetadata(ctx, "intake_review", ""), llm, []chat.Message{{Role: "system", Content: prompt}, {Role: "user", Content: string(encoded)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion}, func(raw string) error {
+			decision = segmentReviewDecision{}
+			if err := utils.ParseLLMJsonResponse(raw, &decision); err != nil {
+				return fmt.Errorf("invalid intake review response: %w", err)
+			}
+			if decision.Approved == nil {
+				return errors.New("invalid intake review response: approved must be a boolean")
+			}
+			if strings.TrimSpace(decision.Reason) == "" {
+				return errors.New("invalid intake review response: reason must be non-empty")
+			}
+			return nil
+		})
 		if e != nil {
 			return nil, e
-		}
-		if response == nil {
-			return nil, errors.New("empty intake review response")
-		}
-		var decision segmentReviewDecision
-		if e = json.Unmarshal([]byte(response.Content), &decision); e != nil || decision.Approved == nil || strings.TrimSpace(decision.Reason) == "" {
-			return nil, errors.New("invalid intake review response")
 		}
 		return json.Marshal(decision)
 	})

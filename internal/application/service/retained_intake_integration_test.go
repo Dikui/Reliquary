@@ -150,7 +150,7 @@ func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 		map[string]string{"publisher": "Acme", "original_url": "https://example.com/malformedfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
 	require.Len(t, h.queue.tasks, 1)
-	require.ErrorContains(t, h.service.ProcessDocument(h.ctx, h.queue.tasks[0]), "invalid intake review response")
+	require.ErrorContains(t, h.service.ProcessDocument(h.ctx, h.queue.tasks[0]), "invalid intake review response: reason must be non-empty")
 	failed := h.article(t, article.ID)
 	require.Equal(t, types.ParseStatusFailed, failed.ParseStatus)
 	intake, err := failed.IntakeMetadata()
@@ -158,9 +158,10 @@ func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	require.Equal(t, "pending", intake.Decision)
 	require.NotEmpty(t, intake.OriginalPath)
 	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
-	require.Equal(t, []string{segmentReviewPrompt(h.library)}, h.model.prompts)
+	require.Len(t, h.model.prompts, 2, "invalid output gets one corrective call")
+	require.Contains(t, h.model.prompts[1], "reason must be non-empty")
 	h.model.malformed = false
 	require.NoError(t, h.service.ProcessDocument(h.ctx, h.queue.tasks[0]))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
-	require.Len(t, h.model.prompts, 2)
+	require.Len(t, h.model.prompts, 3)
 }

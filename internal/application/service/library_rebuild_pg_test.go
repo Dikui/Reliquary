@@ -214,6 +214,42 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	require.Equal(t, images, rebuildAttachments(t, vault.root, k.ID))
 }
 
+func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
+	h, vault := newIngestHarness(t)
+	transport := forbidIngestNetwork(t, h)
+	body := "# Original observations\n\nThe experiment reports complete instrument measurements.\n\n![chart](https://example.org/missing-chart.png)"
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{
+		Library: "institutional", URL: "https://example.org/rebuild-missing-images",
+		Acquisition: "verbatim", Publisher: "Fixture Journal", Content: body,
+	})
+	require.NoError(t, err)
+	h.drain(t)
+	before := h.article(t, result.EntryID)
+	require.Equal(t, types.ParseStatusCompleted, before.ParseStatus)
+	require.True(t, before.Incomplete)
+	require.Len(t, before.IngestMissing(), 1)
+	original, err := vault.ReadBody(before)
+	require.NoError(t, err)
+	processingCalls := len(h.processor.requests)
+
+	h.service.task = &libraryRebuildQueue{db: h.db}
+	run, err := h.service.RebuildLibrary(h.ctx, before.LibraryID)
+	require.NoError(t, err)
+	require.Equal(t, 1, run.Total)
+	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
+	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, run.TaskID+":"+before.ID)))
+
+	after := h.article(t, before.ID)
+	require.Equal(t, types.ParseStatusCompleted, after.ParseStatus)
+	require.Greater(t, len(h.processor.requests), processingCalls)
+	require.True(t, after.Incomplete)
+	require.JSONEq(t, string(before.MissingMaterials), string(after.MissingMaterials))
+	rebuilt, err := vault.ReadBody(after)
+	require.NoError(t, err)
+	require.Equal(t, original, rebuilt)
+	require.Zero(t, transport.calls.Load())
+}
+
 func TestLibraryReviewScopesPreserveSourcesAndApplyCurrentPolicy(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)

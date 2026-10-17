@@ -35,6 +35,63 @@ type articleProcessingChat struct {
 	reject   bool
 }
 
+type correctedProcessingChat struct {
+	retainedProcessingChat
+	calls map[string]int
+}
+
+func (m *correctedProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
+	stage, _ := types.LLMCallMetadataFromContext(ctx)
+	m.calls[stage]++
+	if stage == "intake_review" {
+		return &types.ChatResponse{Content: "```json\n{\"approved\":true,\"reason\":\"Original measurements\"}\n```"}, nil
+	}
+	result, err := parseArticleProcessingResult(validProcessingFixture("event"))
+	if err != nil {
+		return nil, err
+	}
+	if m.calls[stage] == 1 {
+		result.Summary.Points = result.Summary.Points[:1]
+	} else if m.calls[stage] == 2 && !strings.Contains(messages[0].Content, "summary must contain 3 to 5 points") {
+		return nil, fmt.Errorf("missing summary validation feedback")
+	}
+	raw, err := json.Marshal(result)
+	return &types.ChatResponse{Content: "```json\n" + string(raw) + "\n```"}, err
+}
+
+func TestProcessingModelOutputAcceptsFencesAndCorrectsInvalidSummary(t *testing.T) {
+	h := newArticleProcessingHarness(t, false)
+	h.service.config.ArticleProcessing.MaxBodyChars = 140
+	k := segmentedEntry(t, h)
+	model := &correctedProcessingChat{calls: map[string]int{}}
+	h.service.modelService.(articleProcessingModels).summaryStateModelService.model = model
+	body := strings.Repeat("Original instrument measurements and observations. ", 12)
+	approved, _, err := h.service.reviewSegments(h.ctx, h.library, k, body, types.SourceInfo{OriginalURL: "https://example.org/measurements"})
+	require.NoError(t, err)
+	require.True(t, approved)
+	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
+	require.NoError(t, err)
+	require.Len(t, result.Summary.Points, 3)
+	require.Equal(t, 2, model.calls["article_summary_merge"])
+	var run entrySegmentRun
+	require.NoError(t, h.db.Where("entry_id=? AND phase=?", k.ID, "processing").First(&run).Error)
+	var parts []segmentCheckpoint
+	require.NoError(t, json.Unmarshal(run.Plan, &parts))
+	require.Equal(t, len(parts)+1, model.calls["article_processing"], "only the invalid response gets one corrective call")
+}
+
+func TestSummaryMergeReservesSpaceForOutputCorrection(t *testing.T) {
+	h, model := segmentedHarness(t)
+	k := segmentedEntry(t, h)
+	parts := []*articleProcessingResult{{Summary: &types.EntrySummary{
+		Overview: strings.Repeat("x", 400), Points: []string{"one", "two", "three"}, KeyTerms: []string{},
+	}}}
+	metadata := &types.Model{Parameters: types.ModelParameters{ContextWindow: 1024, MaxOutputTokens: 16}}
+	_, err := h.service.mergeSegmentSummaries(h.ctx, h.library, k, parts, metadata)
+	require.ErrorContains(t, err, "超过合并模型上下文")
+	require.Zero(t, model.mergeCalls, "reject before sending a request with no room for correction")
+}
+
 func (m *articleProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.stages = append(m.stages, stage)

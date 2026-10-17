@@ -18,9 +18,10 @@ import (
 // The fixture chooses the library type first and obeys switches in the prompt.
 type jointProcessingChat struct {
 	retainedProcessingChat
-	kind      string
-	malicious bool
-	calls     int
+	kind            string
+	malicious       bool
+	calls           int
+	describeMissing bool
 }
 
 func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *testing.T) {
@@ -100,6 +101,9 @@ func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message,
 	output.ImageDescriptions = []extractedImage{}
 	for _, image := range input.Images {
 		output.ImageDescriptions = append(output.ImageDescriptions, extractedImage{Index: image.Index, Description: "SpectralChart 图表显示 2026 年增长 42%，收入为 120 万。"})
+	}
+	if m.describeMissing {
+		output.ImageDescriptions = append(output.ImageDescriptions, extractedImage{Index: 1, Description: "Unsupported description for an image that was not supplied."})
 	}
 	data, err := json.Marshal(output)
 	return &types.ChatResponse{Content: string(data)}, err
@@ -285,17 +289,20 @@ func TestIKB11OpinionsSpeakerUsesExtractedPersonOrAuthor(t *testing.T) {
 func TestIKB11ImagesIndexedSearchMarkedBodyUnchangedAndUnreadableSkipped(t *testing.T) {
 	h := newArticleProcessingHarness(t, true)
 	k := segmentedEntry(t, h)
-	fixture := &jointProcessingChat{kind: "event"}
+	fixture := &jointProcessingChat{kind: "event", describeMissing: true}
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService.model = fixture
-	body := "# 图片新闻\n\nAcme 与 Beta 合作。\n\n![统计](" + articleImageDataURI(t, 30) + ")\n\n![缺图](https://example.org/missing.png)\n\n![损坏图](data:image/png;base64,bm90LWltYWdl)\n"
+	body := "# 图片新闻\n\nAcme 与 Beta 合作。\n\n![缺图](https://example.org/missing.png)\n\n![统计](" + articleImageDataURI(t, 30) + ")\n\n![损坏图](data:image/png;base64,bm90LWltYWdl)\n"
 	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
 	require.Equal(t, 1, fixture.calls)
 	require.Len(t, result.Images, 3)
 	require.Contains(t, result.Images[2].SkipReason, "不可读")
-	require.NotEmpty(t, result.Images[0].Description)
-	require.Contains(t, result.Images[1].SkipReason, "未提供图片")
+	require.NotEmpty(t, result.Images[1].Description)
+	require.Contains(t, result.Images[0].SkipReason, "未提供图片")
+	require.Empty(t, result.Images[0].Description, "a missing image cannot have model-generated evidence")
+	_, err = finalizeImageDescriptions(append([]types.ProcessingImage(nil), result.Images...), []extractedImage{{Index: 2, Description: "first"}, {Index: 2, Description: "duplicate"}})
+	require.ErrorContains(t, err, "duplicate image description index 2")
 	require.NoError(t, h.service.persistArticleProcessingResult(h.ctx, h.library, k, body, nil, types.EffectiveProcessConfig{ChunkingConfig: h.library.ChunkingConfig}, result, false))
 	require.Empty(t, k.VaultBody, "processing does not write descriptions into the body")
 	var chunks []types.Chunk
@@ -319,13 +326,13 @@ func TestIKB11ImagesIndexedSearchMarkedBodyUnchangedAndUnreadableSkipped(t *test
 	require.NoError(t, recalculateBodyLocations(h.ctx, h.db, k, body, next, nil))
 	out, err := ReadEntryProcessingOutput(h.ctx, h.db, k.SpaceID, k.ID)
 	require.NoError(t, err)
-	require.Equal(t, "../attachments/chart.png", out.Images[0].URL)
+	require.Equal(t, "../attachments/chart.png", out.Images[1].URL)
 	require.NoError(t, h.db.First(&chunks[0], "id=?", chunks[0].ID).Error)
 	require.Contains(t, chunks[0].Content, "42%")
 	require.Contains(t, chunks[0].ImageInfo, "../attachments/chart.png")
 	require.NotContains(t, next, "SpectralChart")
-	require.NotEmpty(t, out.Images[0].Locations)
-	require.Equal(t, out.Images[0].Locations, chunks[0].SourceLocations)
+	require.NotEmpty(t, out.Images[1].Locations)
+	require.Equal(t, out.Images[1].Locations, chunks[0].SourceLocations)
 }
 
 func TestIKB11RelationVectorThresholdAndLexicalPriority(t *testing.T) {
