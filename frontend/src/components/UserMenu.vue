@@ -172,13 +172,13 @@ const closeAll = () => {
 
 const openDocs = () => {
   menuVisible.value = false
-  window.open('http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs', '_blank')
+  window.open('https://github.com/Dikui/Reliquary/tree/main/docs', '_blank', 'noopener,noreferrer')
 }
 
 // 打开 GitHub
 const openGithub = () => {
   menuVisible.value = false
-  window.open('http://192.168.1.146:3000/dikui/reliquary', '_blank')
+  window.open('https://github.com/Dikui/Reliquary', '_blank', 'noopener,noreferrer')
 }
 
 // 加载用户信息
