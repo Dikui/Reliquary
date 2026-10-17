@@ -6,6 +6,8 @@ import { listIncompleteEntrys } from '@/api/ingest'
 import type { IncompleteEntry } from '@/types/ingest'
 import { isValidURL } from '@/utils/security'
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
+import LibraryReviewAction from '@/components/LibraryReviewAction.vue'
+import type { LibraryCatalogItem } from '@/api/library'
 import { useLibraryScope } from '@/composables/useLibraryScope'
 import ReviewActions from '@/components/ReviewActions.vue'
 import MissingMaterials from '@/components/MissingMaterials.vue'
@@ -14,6 +16,8 @@ import IncompleteActions from '@/components/IncompleteActions.vue'
 const emit = defineEmits<{ 'open-source': [id: string]; changed: []; refreshed: [] }>()
 const { t } = useI18n()
 const libraryScope = useLibraryScope()
+const libraries = ref<LibraryCatalogItem[]>([])
+const selectedLibrary = computed(() => libraryScope.value.length === 1 ? libraries.value.find(item => item.id === libraryScope.value[0]) : undefined)
 type PendingKind = ReviewKind | 'incomplete'
 const kind = ref<PendingKind>('intake'), records = ref<ReviewEntry[]>([]), incompleteRecords = ref<IncompleteEntry[]>([]), total = ref(0), page = ref(1)
 const loading = ref(false), error = ref(''), busyIds = ref(new Set<string>())
@@ -57,7 +61,10 @@ defineExpose({ refresh: load })
 <template>
   <section class="pending-reviews" :aria-label="t('knowledgeReview.title')">
     <div class="review-heading"><h3>{{ t('knowledgeReview.title') }}</h3><t-button variant="outline" :loading="loading" :disabled="busy" @click="refresh">{{ t('knowledgeWorkbench.refresh') }}</t-button></div>
-    <LibraryScopeSelect v-model="libraryScope" :disabled="busy" />
+    <div class="review-scope-controls">
+      <LibraryScopeSelect v-model="libraryScope" :disabled="busy" @loaded="libraries = $event" />
+      <LibraryReviewAction v-if="kind === 'intake'" :library="selectedLibrary" scope="pending" :disabled="busy" @submitted="refresh" />
+    </div>
     <t-tabs :value="kind" @change="changeKind">
       <t-tab-panel value="intake" :label="t('knowledgeReview.intake')" :disabled="busy" />
       <t-tab-panel value="incomplete" :label="t('knowledgeReview.incomplete')" :disabled="busy" />
@@ -97,6 +104,8 @@ defineExpose({ refresh: load })
 .pending-reviews { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 0 0 24px; min-width: 0; color: var(--td-text-color-primary); }
 .review-heading, .review-record-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .review-heading h3, .review-record h4 { margin: 0; }
+.review-scope-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.review-scope-controls > .library-scope { flex: 1 1 220px; }
 .review-heading { margin-bottom: 16px; }
 .review-description, .review-record > p { color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.7; }
 .review-list { display: grid; gap: 16px; min-height: 160px; margin: 16px 0; }

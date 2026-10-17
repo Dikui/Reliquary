@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/url"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/infrastructure/docparser"
@@ -86,12 +85,12 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 		if err := entry.SetIntakeMetadata(intake); err != nil {
 			return false, err
 		}
-		return false, s.repo.UpdateEntry(ctx, entry)
+		return false, s.saveIntakeReview(ctx, entry)
 	}
 	intake.SourceInfo.PublishedAt = normalizeIntakePublicationDate(intake.SourceInfo.PublishedAt)
 	reason, unverified := rules.SourceEvidenceDecision(library.SourceEvidenceRule, intake.SourceInfo, entry.Identifier)
 	entry.SourceUnverified = unverified
-	if s.db != nil {
+	if s.db != nil && ctx.Value(libraryReviewContextKey{}) != true {
 		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Where("space_id=? AND library_id=? AND id=?", entry.SpaceID, entry.LibraryID, entry.ID).UpdateColumn("source_unverified", unverified).Error; err != nil {
 			return false, err
 		}
@@ -102,7 +101,7 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 		if err := entry.SetIntakeMetadata(intake); err != nil {
 			return false, err
 		}
-		return true, s.repo.UpdateEntry(ctx, entry)
+		return true, s.saveIntakeReview(ctx, entry)
 	}
 	ctx, calls := types.WithModelCallCollector(ctx)
 	reviewAttempt := s.tracker().LatestAttempt(ctx, entry.ID)
@@ -157,7 +156,7 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 		if err := entry.SetIntakeMetadata(intake); err != nil {
 			return false, err
 		}
-		return true, s.repo.UpdateEntry(ctx, entry)
+		return true, s.saveIntakeReview(ctx, entry)
 	}
 	reviewSource := intake.SourceInfo
 	reviewSource.Confirmed = false
@@ -179,11 +178,19 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 	if err := entry.SetIntakeMetadata(intake); err != nil {
 		return false, err
 	}
-	return !approved, s.repo.UpdateEntry(ctx, entry)
+	return !approved, s.saveIntakeReview(ctx, entry)
 }
 
-// ReviewEntryIntake retries an initially rejected message or discards its
-// stored source. It deliberately does not alter previously approved records.
+func (s *entryService) saveIntakeReview(ctx context.Context, entry *types.Entry) error {
+	if ctx.Value(libraryReviewContextKey{}) == true {
+		// A library review commits its verdict and graph visibility together.
+		return nil
+	}
+	return s.repo.UpdateEntry(ctx, entry)
+}
+
+// ReviewEntryIntake reviews pending material or deletes it on user rejection.
+// It deliberately does not alter previously approved records.
 func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string, source types.SourceInfo) (reviewed *types.Entry, reviewErr error) {
 	if s.needsTaskTransaction() {
 		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.Entry, error) {
@@ -231,13 +238,22 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 			s.vault.ScheduleRefresh(ctx, id)
 		}
 	}()
-	if action == "discard" {
+	if action == "reject" && !source.Confirmed {
+		return nil, werrors.NewBadRequestError("rejecting intake deletes its stored source and requires confirmation")
+	}
+	if action == "reject" || action == "discard" {
 		discard := func(svc *entryService) error {
 			if svc.db != nil {
 				if err := svc.rememberIngestDiscard(ctx, entry, ingestDiscardReason(ctx)); err != nil {
 					return err
 				}
-				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", id, before, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_"+action, id, before, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+					return err
+				}
+				if err := svc.cleanupLibraryRebuild(ctx, entry); err != nil {
+					return err
+				}
+				if err := svc.db.Unscoped().Where("entry_id=? AND space_id=?", id, spaceID).Delete(&types.Chunk{}).Error; err != nil {
 					return err
 				}
 			}
@@ -250,7 +266,13 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 			if err := deleteEntryAssociations(ctx, svc.db, spaceID, []string{id}); err != nil {
 				return err
 			}
-			return svc.repo.HardDeleteEntry(ctx, spaceID, id)
+			if err := svc.repo.HardDeleteEntry(ctx, spaceID, id); err != nil {
+				return err
+			}
+			if svc.vault != nil {
+				return svc.vault.DeleteArticle(ctx, entry)
+			}
+			return nil
 		}
 		if s.db == nil {
 			return entry, discard(s)
@@ -262,15 +284,6 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 			return discard(&copy)
 		})
 		return entry, err
-	}
-	if action == "reject" {
-		intake.Decision = "rejected"
-		intake.UserRejected = true
-		intake.Reason = "Rejected by user"
-		if err := entry.SetIntakeMetadata(intake); err != nil {
-			return nil, err
-		}
-		return entry, s.saveIntakeUserDecision(ctx, entry, action, before)
 	}
 	if action != "retry" && action != "approve" && action != "supplement_url" && action != "admit_unverified" {
 		return nil, werrors.NewBadRequestError("invalid intake review action")
@@ -323,32 +336,27 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 			s.failIntake(ctx, entry)
 		}
 	}()
-	if intake.OriginalPath != "" {
-		file, err := s.resolveFileServiceForPath(ctx, library, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
-		if err != nil {
-			return nil, err
+	body, available, err := s.reprocessStoredBody(ctx, entry)
+	if err != nil {
+		return nil, err
+	}
+	if available {
+		if entry.VaultPath != "" || entry.VaultBody != "" {
+			return entry, s.enqueueRetainedIntakeReview(ctx, entry, body, action == "approve" || action == "admit_unverified")
 		}
-		defer file.Close()
-		body, err := io.ReadAll(file)
-		if err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(string(body)) == "" {
-			return nil, werrors.NewBadRequestError("stored original is empty")
-		}
-		if action == "supplement_url" && s.singleReviewSegment(ctx, library, entry, string(body)) {
-			rejected, err := s.reviewIntake(ctx, library, entry, string(body))
+		if action == "supplement_url" && s.singleReviewSegment(ctx, library, entry, body) {
+			rejected, err := s.reviewIntake(ctx, library, entry, body)
 			var deferred *types.ChatGPTDeferredError
 			if errors.As(err, &deferred) {
 				s.markArticleProcessingFailed(ctx, entry, err)
-				_, enqueueErr := s.enqueueManualProcessing(ctx, entry, string(body), false, taskqueue.ProcessAt(deferred.RetryAt))
+				_, enqueueErr := s.enqueueManualProcessing(ctx, entry, body, false, taskqueue.ProcessAt(deferred.RetryAt))
 				return entry, enqueueErr
 			}
 			if err != nil || rejected {
 				return entry, err
 			}
 		}
-		_, err = s.enqueueManualProcessing(ctx, entry, string(body), false)
+		_, err = s.enqueueManualProcessing(ctx, entry, body, false)
 		return entry, err
 	}
 	return nil, werrors.NewBadRequestError("original is not available")

@@ -276,18 +276,21 @@ func (s *entryService) markArticleProcessingFailed(ctx context.Context, k *types
 
 func (s *entryService) processArticleBody(ctx context.Context, library *types.Library, k *types.Entry, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig) error {
 	ctx = types.WithModelCallEntry(ctx, k.ID)
+	writeFiles := ctx.Value(libraryRebuildContextKey{}) != true
 	if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
 	}
 	result, err := s.callArticleProcessing(ctx, library, k, body, images)
 	if err != nil {
-		if rejected, limitErr := s.rejectSegmentLimit(ctx, k, err); rejected {
-			s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"intake_decision": "rejected"}, "", "")
-			return limitErr
+		if writeFiles {
+			if rejected, limitErr := s.rejectSegmentLimit(ctx, k, err); rejected {
+				s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"intake_decision": "rejected"}, "", "")
+				return limitErr
+			}
 		}
 		return err
 	}
-	return s.persistArticleProcessingResult(ctx, library, k, body, images, eff, result, true)
+	return s.persistArticleProcessingResult(ctx, library, k, body, images, eff, result, writeFiles)
 }
 
 // persistArticleProcessingResult is shared by ingestion and a user conversion.

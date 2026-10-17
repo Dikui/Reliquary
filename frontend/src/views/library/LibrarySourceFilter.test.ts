@@ -44,6 +44,10 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const t = i18n.global.t
   const requests: URLSearchParams[] = []
+  const scope = ref<string[]>([])
+  const rebuildRequests: string[] = [], notices: string[] = []
+  let rebuildResponse: () => Promise<any> = async () => ({ success: true, data: { task_id: 'rebuild', total: 41 } })
+  let confirmation: any
   const records = [
     { id: 'article', source_kind: 'article', title: 'Needle article', content_type: 'tutorial', starred: true },
     { id: 'mine', source_kind: 'mine', title: 'Needle document', content_type: 'tutorial', starred: true },
@@ -58,6 +62,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     records.push({ ...target, id: `mine-other-${field}`, [field]: value })
   }
   const transport = {
+    async post(path: string) { rebuildRequests.push(path); return rebuildResponse() },
     async get(path: string) {
       const url = new URL(path, 'http://localhost')
       assert.equal(url.pathname, '/api/v1/entries')
@@ -91,7 +96,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   let backendAvailable = !unavailable
   const modules: Record<string, any> = {
     '@/utils/bodyReference': bodyReference,
-    '@/composables/useLibraryScope': { useLibraryScope: () => ref([]) },
+    '@/composables/useLibraryScope': { useLibraryScope: () => scope },
     'vue-router': vueRouter,
     '@/composables/useLibrary': hook,
     '@/stores/ui': { useUIStore: () => ({}) },
@@ -109,7 +114,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => '' },
     '@/assets/img/more-actions.png': moduleOf(''),
-    'tdesign-vue-next': { MessagePlugin: {} },
+    'tdesign-vue-next': { MessagePlugin: { success: (message: string) => notices.push(message) }, DialogPlugin: { confirm: (options: unknown) => { confirmation = options; return { destroy() { confirmation = undefined } } } } },
     './entryStatusPolling': polling,
     './entryDownloadFileName': {},
     './documentListFilters': documentListFilters,
@@ -119,7 +124,10 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   }
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
     emits: ['loaded'], setup: (_, { emit }) => {
-      onMounted(() => emit('loaded', [{ id: 'library-source', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) }]))
+      onMounted(() => emit('loaded', [
+        { id: 'library-source', name: 'Research', display_name: 'Research', template: 'own', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) },
+        { id: 'reports', name: 'AI Reports', template: 'generated', content_types: [] },
+      ]))
       return () => null
     },
   }))
@@ -146,7 +154,6 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   app.use(pinia)
   app.use(i18n)
   registerPrimitives(app)
-  if (unavailable) app.component('t-alert',defineComponent({props:['message'],setup:(props,{attrs,slots})=>()=>h('div',attrs,[props.message,slots.operation?.()])}))
   delete app._context.components['t-select']
   delete app._context.components['t-input']
   app.component('t-select', defineComponent({
@@ -171,6 +178,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     setup: (props, { attrs, emit }) => () => h('input', { ...attrs, type: 'checkbox', checked: props.checked, disabled: props.disabled,
       onChange: (event: any) => emit('change', event.checked, { e: event }) }),
   }))
+  delete app._context.components['t-alert']
+  app.component('t-alert', defineComponent({ props: ['message'], setup: (props, { attrs, slots }) => () => h('div', attrs, [props.message, slots.operation?.()]) }))
   for (const name of ['t-dropdown', 't-skeleton']) app.component(name, empty.default)
   const errors: unknown[] = []
   app.config.errorHandler = error => errors.push(error)
@@ -187,7 +196,9 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     node.tag === 'select' && node.props['data-options']?.some((option: any) => option.value === value))!
   const ids = () => descendants(root).filter(node => node.props['data-select-id']).map(node => node.props['data-select-id'])
   return {
-    root, router, requests, records, errors, control, byOptions, ids, t,
+    root, router, requests, records, errors, control, byOptions, ids, t, scope, rebuildRequests, notices,
+    get confirmation() { return confirmation },
+    setRebuildResponse(response: () => Promise<any>) { rebuildResponse = response },
     recover() { backendAvailable = true },
     get route() { return router.currentRoute.value },
     async change(node: ReturnType<typeof element>, value: unknown) { node.props.onChange({ value }); await waitForLoad() },
@@ -431,5 +442,51 @@ test('library-defined content types and Markdown aliases survive a shared URL an
     const channels = env.control('library.channelLabel').props['data-options'] as Array<{ value: string }>
     assert.ok(!channels.some(item => ['manual', 'url'].includes(item.value)))
     assert.ok(env.control('library.materialCategory'))
+  } finally { env.cleanup() }
+})
+
+test('library rebuild confirms one selected library, prevents duplicate submission and reports queued work', async () => {
+  const env = await mountLibrary()
+  const button = () => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t('library.rebuildLibrary'))
+  try {
+    assert.equal(button()?.props.disabled, true)
+    env.scope.value = ['library-source']
+    await settle()
+    button()!.props.onClick()
+    assert.match(env.confirmation.body, /Research/)
+    assert.match(env.confirmation.body, /保留正文、图片和人工判断/)
+    let finish!: (response: unknown) => void
+    env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
+    env.confirmation.onConfirm()
+    await settle()
+    assert.equal(button()?.props.disabled, true)
+    assert.equal(button()?.props['data-loading'], true)
+    button()!.props.onClick()
+    assert.deepEqual(env.rebuildRequests, ['/api/v1/libraries/library-source/rebuild'])
+    finish({ success: true, data: { task_id: 'rebuild', total: 41 } })
+    await settle()
+    assert.ok(visibleText(env.root).includes(env.t('library.rebuildLibrarySubmitted', { count: 41 })))
+    assert.equal(button()?.props.disabled, false)
+    env.scope.value = ['reports']
+    await settle()
+    assert.equal(button(), undefined)
+  } finally { env.cleanup() }
+})
+
+test('library rebuild retains a readable conflict and allows a deliberate retry', async () => {
+  const env = await mountLibrary('en-US')
+  const button = () => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t('library.rebuildLibrary'))!
+  try {
+    env.scope.value = ['library-source']
+    await settle()
+    env.setRebuildResponse(async () => { throw { status: 409, message: 'A processing task is already running in this library.' } })
+    button().props.onClick()
+    env.confirmation.onConfirm()
+    await settle()
+    assert.ok(visibleText(env.root).includes('A processing task is already running in this library.'))
+    assert.deepEqual(env.notices, [])
+    assert.equal(button().props.disabled, false)
+    button().props.onClick()
+    assert.equal(env.confirmation.confirmBtn, 'Rebuild this library')
   } finally { env.cleanup() }
 })

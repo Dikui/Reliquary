@@ -81,8 +81,11 @@ function missingComponent() { return component('../../components/MissingMaterial
 function incompleteActions(api: object) {
   return component('../../components/IncompleteActions.vue', { '@/api/ingest': api, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
 }
+function libraryReviewComponent(api: object = {}) {
+  return component('../../components/LibraryReviewAction.vue', { '@/api/library': api, '@/stores/ui': { useUIStore: () => ({ openSettings() {} }) } })
+}
 function pendingComponent(api: object, child = reviewComponent(api), ingest = createIngestAPI(async () => ({ success: true, data: [], total: 0 })).api, incompleteChild = incompleteActions(ingest)) {
-  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/api/ingest': ingest, '@/utils/security': security, '@/components/ReviewActions.vue': moduleOf(child), '@/components/MissingMaterials.vue': moduleOf(missingComponent()), '@/components/IncompleteActions.vue': moduleOf(incompleteChild) })
+  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/api/ingest': ingest, '@/utils/security': security, '@/components/LibraryReviewAction.vue': moduleOf(libraryReviewComponent()), '@/components/ReviewActions.vue': moduleOf(child), '@/components/MissingMaterials.vue': moduleOf(missingComponent()), '@/components/IncompleteActions.vue': moduleOf(incompleteChild) })
 }
 const settle = () => new Promise<void>(resolve => setImmediate(resolve))
 const incomplete = {
@@ -207,7 +210,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const conflict = { ...intake, id: 'conflict', acquisition: 'model_written', related_entry_id: 'existing/article', metadata: { intake: { reason: 'A conflicting supplement', source_info: { original_url: 'https://example.com/same' } } } }
     const { api, calls } = createReviewAPI(async call => call.method === 'get' ? { success: true, data: [conflict], total: 1 } : { success: true, data: conflict })
     const html = await render(pendingComponent(api), {}, locale, async state => { await state.load() })
-    for (const text of [messages[locale].knowledgeReview.conflictReason, messages[locale].knowledgeReview.relatedArticle, '/platform/entries?entry_id=existing%2Farticle', messages[locale].knowledgeReview.saveAsNew, messages[locale].ingestStatus.modelWritten, messages[locale].ingestStatus.modelWrittenHint, messages[locale].library.intakeDiscard]) assert.ok(html.includes(text.replaceAll("'", '&#39;')), text)
+    for (const text of [messages[locale].knowledgeReview.conflictReason, messages[locale].knowledgeReview.relatedArticle, '/platform/entries?entry_id=existing%2Farticle', messages[locale].knowledgeReview.saveAsNew, messages[locale].ingestStatus.modelWritten, messages[locale].ingestStatus.modelWrittenHint, messages[locale].articleJudgments.rejectReview]) assert.ok(html.includes(text.replaceAll("'", '&#39;')), text)
     assert.ok(!html.includes(messages[locale].articleJudgments.approveReview))
     await render(reviewComponent(api), { entry: (await api.listPendingEntry({ kind: 'intake', page: 1, page_size: 20 })).data[0] }, locale, async state => { await state.submit('approve') })
     assert.deepEqual(calls.at(-1), { method: 'post', url: '/api/v1/entries/conflict/review', body: { action: 'approve', source_info: { original_url: 'https://example.com/same' } } })
@@ -229,6 +232,67 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.confirmation.value, 'admit_unverified'); assert.equal(state.sourceDraft.value.original_url, 'https://example.com/kept')
     })
     assert.ok(html.includes('Temporary server failure')); assert.ok(html.includes(messages[locale].knowledgeReview.confirmations.admit_unverified.description))
+  })
+
+  test(`${locale}: every pending entry can retry and rejection deletes only after confirmation`, async () => {
+    let fail = false, removed = false
+    const { api, calls } = createReviewAPI(async () => {
+      if (fail) throw new Error('Delete failed')
+      return { success: true, data: intake }
+    })
+    const html = await render(reviewComponent(api), { entry: intake, onChanged: (_entry: unknown, deleted: boolean) => { removed = deleted } }, locale, async state => {
+      await state.submit('retry')
+      assert.deepEqual(calls[0].body, { action: 'retry', source_info: {} })
+      await state.submit('reject')
+      assert.equal(calls.length, 1)
+      assert.equal(state.confirmation.value, 'reject')
+      state.confirmation.value = ''
+      assert.equal(removed, false)
+      await state.submit('reject')
+      fail = true
+      await state.submit('reject', true)
+      assert.equal(state.confirmation.value, 'reject')
+      assert.equal(state.error.value, 'Delete failed')
+      fail = false
+      await state.submit('reject', true)
+      assert.equal(removed, true)
+      assert.equal(state.confirmation.value, '')
+      assert.deepEqual(calls.at(-1)!.body, { action: 'reject', confirmed: true })
+    })
+    assert.ok(html.includes(messages[locale].library.intakeRetry))
+    assert.ok(!html.includes('确认不收录'))
+    const confirmation = await render(reviewComponent(api), { entry: intake }, locale, async state => { await state.submit('reject') })
+    assert.ok(confirmation.includes(messages[locale].knowledgeReview.confirmations.reject.description))
+  })
+
+  test(`${locale}: library reviews keep the selected scope and require confirmation before submission`, async () => {
+    for (const scope of ['all', 'pending'] as const) {
+      const requests: unknown[] = []
+      let fail = true
+      const api = { reviewLibrary: async (id: string, value: string) => {
+        requests.push({ id, scope: value })
+        if (fail) throw new Error('Review already running')
+        return { success: true, data: { task_id: 'review-task', total: 71 } }
+      } }
+      const library = { id: 'selected-library', name: 'Research', template: 'external_timely' }
+      const html = await render(libraryReviewComponent(api), { library, scope }, locale, async state => {
+        state.open()
+        assert.equal(requests.length, 0)
+        state.close()
+        await state.confirm()
+        assert.equal(requests.length, 0)
+        state.open()
+        await state.confirm()
+        assert.equal(state.visible.value, true)
+        assert.equal(state.error.value, 'Review already running')
+        fail = false
+        await state.confirm()
+        assert.deepEqual(state.result.value, { task_id: 'review-task', total: 71 })
+      })
+      assert.deepEqual(requests, [{ id: library.id, scope }, { id: library.id, scope }])
+      assert.ok(html.includes('71'))
+      assert.ok(html.includes(messages[locale].settings.taskQueue))
+    }
   })
 
 }

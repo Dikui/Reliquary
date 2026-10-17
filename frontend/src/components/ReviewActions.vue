@@ -31,16 +31,16 @@ async function submit(action: IntakeReviewAction, confirmed = false) {
     if (!/^https?:\/\//i.test(url) || !isValidURL(url)) { invalidURL.value = true; error.value = t('knowledgeReview.invalidLink'); urlInput.value?.focus(); return }
     sourceDraft.value.original_url = url
   }
-  if (!confirmed && ['admit_unverified', 'discard'].includes(action)) { confirmation.value = action; return }
+  if (!confirmed && ['admit_unverified', 'reject'].includes(action)) { confirmation.value = action; return }
   const id = props.entry.id
   busy.value = true
   try {
-    const response = await resolveIntakeReview(id, { action, ...(['admit_unverified', 'discard'].includes(action) ? { confirmed } : { source_info: { ...sourceDraft.value } }) })
+    const response = await resolveIntakeReview(id, { action, ...(['admit_unverified', 'reject'].includes(action) ? { confirmed } : { source_info: { ...sourceDraft.value } }) })
     if (!response.success) throw new Error(response.message || t('knowledgeReview.failed'))
     if (disposed || props.entry.id !== id) return
     confirmation.value = ''
     MessagePlugin.success(t('knowledgeReview.saved'))
-    emit('changed', response.data, action === 'discard')
+    emit('changed', response.data, action === 'reject')
   } catch (cause: any) { if (!disposed && props.entry.id === id) error.value = cause?.message || t('knowledgeReview.failed') }
   finally { busy.value = false }
 }
@@ -55,18 +55,17 @@ async function submit(action: IntakeReviewAction, confirmed = false) {
         <label :for="`review-original-url-${fieldID}`"><span>{{ t('library.intakeOriginalUrl') }}</span><t-input :id="`review-original-url-${fieldID}`" ref="urlInput" v-model="sourceDraft.original_url" :disabled="busy" type="url" :aria-label="t('library.intakeOriginalUrl')" :aria-invalid="invalidURL" :aria-describedby="invalidURL ? `review-error-${fieldID}` : undefined" /></label>
         <label v-if="!missingLink"><span>{{ t('library.intakePublishedAt') }}</span><t-input v-model="sourceDraft.published_at" :disabled="busy" :aria-label="t('library.intakePublishedAt')" /></label>
       </div>
-      <div v-if="missingLink" class="review-buttons">
-        <t-button theme="primary" :loading="busy" :disabled="busy" @click="submit('supplement_url')">{{ t('knowledgeReview.actions.supplement_url') }}</t-button>
-        <t-button variant="outline" :disabled="busy" @click="submit('admit_unverified')">{{ t('knowledgeReview.actions.admit_unverified') }}</t-button>
-      </div>
-      <div v-else class="review-buttons">
-        <t-button theme="primary" :loading="busy" :disabled="busy" @click="submit('approve')">{{ t(entry.related_entry_id ? 'knowledgeReview.saveAsNew' : 'articleJudgments.approveReview') }}</t-button>
-        <t-button variant="outline" :disabled="busy" @click="submit('reject')">{{ t('articleJudgments.rejectReview') }}</t-button>
+      <div class="review-buttons">
+        <template v-if="missingLink">
+          <t-button theme="primary" :loading="busy" :disabled="busy" @click="submit('supplement_url')">{{ t('knowledgeReview.actions.supplement_url') }}</t-button>
+          <t-button variant="outline" :disabled="busy" @click="submit('admit_unverified')">{{ t('knowledgeReview.actions.admit_unverified') }}</t-button>
+        </template>
+        <t-button v-else theme="primary" :loading="busy" :disabled="busy" @click="submit('approve')">{{ t(entry.related_entry_id ? 'knowledgeReview.saveAsNew' : 'articleJudgments.approveReview') }}</t-button>
         <t-button variant="outline" :disabled="busy" @click="submit('retry')">{{ t('library.intakeRetry') }}</t-button>
       </div>
-      <t-button theme="danger" variant="text" :disabled="busy" @click="submit('discard')">{{ t('library.intakeDiscard') }}</t-button>
+      <t-button theme="danger" variant="text" :disabled="busy" @click="submit('reject')">{{ t('articleJudgments.rejectReview') }}</t-button>
     <p v-if="error" :id="`review-error-${fieldID}`" class="review-error" role="alert">{{ error }}</p>
-    <t-dialog :visible="Boolean(confirmation)" :header="confirmation ? confirmationTitle : ''" :confirm-btn="{ content: confirmation ? confirmationLabel : '', theme: confirmation === 'discard' ? 'danger' : 'primary', loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="false" :close-on-esc-keydown="!busy" :z-index="6500" @close="confirmation = ''" @cancel="confirmation = ''" @confirm="submit(confirmation as IntakeReviewAction, true)">
+    <t-dialog :visible="Boolean(confirmation)" :header="confirmation ? confirmationTitle : ''" :confirm-btn="{ content: confirmation ? confirmationLabel : '', theme: confirmation === 'reject' ? 'danger' : 'primary', loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="false" :close-on-esc-keydown="!busy" :z-index="6500" @close="confirmation = ''" @cancel="confirmation = ''" @confirm="submit(confirmation as IntakeReviewAction, true)">
       <p>{{ entry.title || entry.file_name }}</p>
       <p v-if="confirmation">{{ confirmationDescription }}</p>
       <p v-if="error" class="review-error" role="alert">{{ error }}</p>

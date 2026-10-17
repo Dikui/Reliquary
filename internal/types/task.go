@@ -233,17 +233,31 @@ type EntryListReparsePayload struct {
 	EntryIDs      []string               `json:"entry_ids"`
 	ProcessConfig *EntryProcessOverrides `json:"process_config,omitempty"`
 	Initiator     TaskInitiator          `json:"initiator,omitempty"`
+	LibraryID     string                 `json:"library_id,omitempty"`
+	RebuildID     string                 `json:"rebuild_id,omitempty"`
+	ReviewID      string                 `json:"review_id,omitempty"`
+	ReviewScope   string                 `json:"review_scope,omitempty"`
+}
+
+type LibraryRebuildResult struct {
+	TaskID string `json:"task_id"`
+	Total  int    `json:"total"`
 }
 
 // ManualProcessPayload carries supplied or already stored article text.
 // Used by ingest processing and local article reprocessing.
 type ManualProcessPayload struct {
-	RequestId   string `json:"request_id"`
-	SpaceID     uint64 `json:"tenant_id"`
-	EntryID     string `json:"entry_id"`
-	LibraryID   string `json:"library_id"`
-	Content     string `json:"content"`      // cleaned markdown content
-	NeedCleanup bool   `json:"need_cleanup"` // true for update, false for create
+	RequestId      string `json:"request_id"`
+	SpaceID        uint64 `json:"tenant_id"`
+	EntryID        string `json:"entry_id"`
+	LibraryID      string `json:"library_id"`
+	Content        string `json:"content"`      // cleaned markdown content
+	NeedCleanup    bool   `json:"need_cleanup"` // true for update, false for create
+	RebuildID      string `json:"rebuild_id,omitempty"`
+	ReviewID       string `json:"review_id,omitempty"`
+	ReviewStatus   string `json:"review_status,omitempty"`
+	ReviewEnabled  string `json:"review_enabled,omitempty"`
+	ReviewApproved bool   `json:"review_approved,omitempty"`
 }
 
 const TypeTopicBackfill = "topic:backfill"

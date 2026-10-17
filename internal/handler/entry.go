@@ -1168,6 +1168,50 @@ type batchReparseEntryRequest struct {
 	ProcessConfig *types.EntryProcessOverrides `json:"process_config,omitempty"`
 }
 
+// ReviewLibrary schedules a fresh admission decision for the selected scope.
+func (h *EntryHandler) ReviewLibrary(c *gin.Context) {
+	library, _, spaceID, err := h.validateLibraryAccess(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	var request struct {
+		Scope string `json:"scope" binding:"required,oneof=all pending"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.Error(errors.NewBadRequestError("scope must be all or pending"))
+		return
+	}
+	ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, spaceID)
+	result, err := h.kgService.ReviewLibrary(ctx, library.ID, request.Scope)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": result})
+}
+
+// RebuildLibrary schedules source-preserving reprocessing for a whole library.
+func (h *EntryHandler) RebuildLibrary(c *gin.Context) {
+	library, _, spaceID, err := h.validateLibraryAccess(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, spaceID)
+	result, err := h.kgService.RebuildLibrary(ctx, library.ID)
+	if err != nil {
+		if appErr, ok := errors.IsAppError(err); ok {
+			c.Error(appErr)
+		} else {
+			logger.ErrorWithFields(ctx, err, map[string]interface{}{"library_id": library.ID})
+			c.Error(errors.NewInternalServerError("Failed to submit library rebuild"))
+		}
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": result})
+}
+
 // BatchReparseEntry godoc
 func (h *EntryHandler) BatchReparseEntry(c *gin.Context) {
 	ctx := c.Request.Context()

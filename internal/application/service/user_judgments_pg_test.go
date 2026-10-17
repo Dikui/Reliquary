@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -131,7 +130,7 @@ func TestReviewActionsAndEntityMergeRecordOnlyUserOperations(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, a.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", Reason: "Needs human judgment", OriginalPath: path, SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/" + action}}))
 		require.NoError(t, h.db.Create(a).Error)
-		_, err = h.service.ReviewEntryIntake(h.ctx, a.ID, action, types.SourceInfo{})
+		_, err = h.service.ReviewEntryIntake(h.ctx, a.ID, action, types.SourceInfo{Confirmed: true})
 		require.NoError(t, err)
 	}
 	page, err := NewOperationLogService(h.db).List(h.ctx, "", 1, 100)
@@ -172,7 +171,7 @@ func TestIntakeReviewAuditFailurePreservesDecisionAndOriginal(t *testing.T) {
 	}
 	require.NoError(t, h.db.Exec(`CREATE FUNCTION fail_review_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$; CREATE TRIGGER fail_review_audit BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION fail_review_audit()`).Error)
 	for _, action := range []string{"approve", "reject", "retry", "discard"} {
-		_, err := h.service.ReviewEntryIntake(h.ctx, "audit-failure-"+action, action, types.SourceInfo{})
+		_, err := h.service.ReviewEntryIntake(h.ctx, "audit-failure-"+action, action, types.SourceInfo{Confirmed: true})
 		require.ErrorContains(t, err, "audit unavailable")
 		a := h.article(t, "audit-failure-"+action)
 		intake, err := a.IntakeMetadata()
@@ -186,12 +185,16 @@ func TestIntakeReviewAuditFailurePreservesDecisionAndOriginal(t *testing.T) {
 	require.Empty(t, h.queue.tasks)
 }
 
-func TestUserRejectedIntakeLeavesPendingQueueAndKeepsOriginal(t *testing.T) {
+func TestUserRejectedIntakeRequiresConfirmationAndDeletesOriginal(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
+	var rejectedPath string
 	for _, id := range []string{"awaiting-review", "user-rejected", "legacy-user-rejected"} {
 		a := &types.Entry{ID: id, SpaceID: h.library.SpaceID, LibraryID: h.library.ID, SourceKind: "mine", Type: "manual", ParseStatus: types.ParseStatusRejected}
 		path, err := h.service.fileSvc.SaveBytes(h.ctx, []byte("Original complete evidence."), a.SpaceID, id+".md", false)
 		require.NoError(t, err)
+		if id == "user-rejected" {
+			rejectedPath = path
+		}
 		reason := "Needs human judgment"
 		if id == "legacy-user-rejected" {
 			reason = "Rejected by user"
@@ -203,17 +206,19 @@ func TestUserRejectedIntakeLeavesPendingQueueAndKeepsOriginal(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, pending.Total)
 	_, err = h.service.ReviewEntryIntake(h.ctx, "user-rejected", "reject", types.SourceInfo{})
+	require.ErrorContains(t, err, "requires confirmation")
+	require.Equal(t, types.ParseStatusRejected, h.article(t, "user-rejected").ParseStatus)
+	reader, err := h.service.fileSvc.GetFile(h.ctx, rejectedPath)
 	require.NoError(t, err)
-	stored := h.article(t, "user-rejected")
-	intake, err := stored.IntakeMetadata()
-	require.NoError(t, err)
-	require.True(t, intake.UserRejected)
-	reader, err := h.service.fileSvc.GetFile(h.ctx, intake.OriginalPath)
-	require.NoError(t, err)
-	body, err := io.ReadAll(reader)
 	reader.Close()
+	_, err = h.service.ReviewEntryIntake(h.ctx, "user-rejected", "reject", types.SourceInfo{Confirmed: true})
 	require.NoError(t, err)
-	require.Equal(t, "Original complete evidence.", string(body))
+	var remaining int64
+	require.NoError(t, h.db.Unscoped().Model(&types.Entry{}).Where("id=?", "user-rejected").Count(&remaining).Error)
+	require.Zero(t, remaining)
+	files := h.service.fileSvc.(*retainedIntakeFiles)
+	require.NotContains(t, files.saved, rejectedPath)
+	require.Contains(t, files.deleted, rejectedPath)
 	for _, kind := range []string{"", "intake"} {
 		pending, err = h.service.ListPending(h.ctx, 1, 1, kind)
 		require.NoError(t, err)

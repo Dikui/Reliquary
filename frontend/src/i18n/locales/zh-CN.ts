@@ -364,6 +364,12 @@ export default {
   "saveAsNew": "另存为新资料",
   "title": "待处理",
   "intake": "收录待审",
+  "reviewAll": "全库重新审核",
+  "reviewPending": "收录待审重新审核",
+  "reviewAllConfirm": "按当前策略重新审核“{name}”中的全部资料，包括已收录和收录待审资料。审核通过的已收录资料保留现有处理结果；未通过的转入待审，暂时退出检索和图谱。原文保留，由你决定是否拒绝收录并删除。",
+  "reviewPendingConfirm": "按当前策略重新审核“{name}”中的全部收录待审资料。通过后继续入库处理；未通过的保留原文和原因，继续等待你的决定。",
+  "reviewCost": "审核期间部分资料暂不可检索。任务在后台执行，会调用模型并产生费用。执行期间请保持库策略不变。",
+  "reviewSubmitted": "已提交 {count} 条资料重新审核，可在运行队列查看进度。",
   "intakeHint": "未通过收录审核的内容保留在这里，审核通过后开始处理。",
   "emptyIntake": "没有收录待审的内容。",
   "sourceUnverified": "来源未核实",
@@ -379,7 +385,7 @@ export default {
     "confirm": "确认模型类型",
     "correct": "改为所选类型",
     "ignore": "忽略并移出列表",
-    "discard": "确认不收录"
+    "reject": "拒绝收录"
   },
   "confirmations": {
     "admit_unverified": {
@@ -387,9 +393,9 @@ export default {
       "description": "资料会跳过收录审核，全文保存并标记为来源未核实，原始链接留空。"
     },
 
-    "discard": {
-      "title": "确认不收录",
-      "description": "这条收录记录和暂存内容会被删除。"
+    "reject": {
+      "title": "拒绝收录并删除原始资料？",
+      "description": "这条收录记录、原文和独占附件将被永久删除，无法撤销；相关来源标识将记为不再收录。"
     }
   }
 },
@@ -2299,6 +2305,10 @@ export default {
     rebuildSubmitted: '重建任务已提交',
     rebuildFailed: '重建失败，请稍后再试',
     rebuildInProgress: '当前资料正在处理中，请稍后重试',
+    rebuildLibrary: '重建此库',
+    rebuildLibrarySelectOne: '请先选择一个库',
+    rebuildLibraryConfirm: '重建“{name}”中的全部已入库资料？保留正文、图片和人工判断，按当前配置重新生成分块、摘要、实体、关系和向量。待审、待补全及删除中的资料不参与。处理期间部分资料暂不可检索，请保持库配置稳定。此操作会重新调用模型并产生费用。',
+    rebuildLibrarySubmitted: '已提交 {count} 条资料的重建任务，请在运行队列查看处理进度。',
     cancelParse: '停止处理',
     cancelParseConfirmBody: "确认停止处理\"{title}\"？已写入的分块会保留，可稍后通过\"重建\"重新触发；该资料尚未执行的处理任务会被取消。",
     cancelParseSubmitted: '已停止处理',
@@ -2313,7 +2323,6 @@ export default {
     intakePreviewOriginal: '预览 Markdown 正文',
     intakeLoadMore: '加载更多',
     intakeRetry: '重新审核',
-    intakeDiscard: '确认不收录',
     intakeReviewSubmitted: '已提交审核',
     intakeReviewFailed: '审核操作失败',
     untitledDocument: '未命名资料',

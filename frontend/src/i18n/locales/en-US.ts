@@ -364,6 +364,12 @@ export default {
   "saveAsNew": "Save as a new material",
   "title": "Pending",
   "intake": "Intake review",
+  "reviewAll": "Review entire library",
+  "reviewPending": "Review pending materials",
+  "reviewAllConfirm": "Review all collected and pending materials in “{name}” using its current policy. Collected materials that pass keep their processing results. Materials that fail return to intake review and leave search and the graph. Original sources are retained until you explicitly reject and delete them.",
+  "reviewPendingConfirm": "Review all pending materials in “{name}” using its current policy. Approved materials continue processing. Materials that fail keep their original sources and reasons for your decision.",
+  "reviewCost": "Some materials are temporarily unavailable in search during review. This background task calls models and incurs costs. Keep the library policy unchanged while it runs.",
+  "reviewSubmitted": "Submitted {count} materials for review. View progress in the runtime queue.",
   "intakeHint": "Materials that did not pass intake review stay here. Processing starts after approval.",
   "emptyIntake": "No materials need intake review.",
   "sourceUnverified": "Source unverified",
@@ -379,7 +385,7 @@ export default {
     "confirm": "Confirm model type",
     "correct": "Use selected type",
     "ignore": "Ignore and remove from list",
-    "discard": "Discard collection"
+    "reject": "Reject collection"
   },
   "confirmations": {
     "admit_unverified": {
@@ -387,9 +393,9 @@ export default {
       "description": "This material will skip intake review, be saved in full and marked as source unverified. Its original URL will be empty."
     },
 
-    "discard": {
-      "title": "Discard this collection?",
-      "description": "This intake record and its temporary content will be deleted."
+    "reject": {
+      "title": "Reject collection and delete the source material?",
+      "description": "This intake record, original text and exclusively owned attachments will be permanently deleted. This cannot be undone. Its source identifiers will be marked as excluded from future collection."
     }
   }
 },
@@ -803,6 +809,10 @@ export default {
     rebuildSubmitted: 'Rebuild task submitted',
     rebuildFailed: 'Rebuild failed. Please try again later',
     rebuildInProgress: 'This material is currently being processed. Please try again later',
+    rebuildLibrary: 'Rebuild this library',
+    rebuildLibrarySelectOne: 'Select one library first',
+    rebuildLibraryConfirm: 'Rebuild all collected materials in “{name}”? Keep their body text, images and manual decisions. Regenerate chunks, summaries, entities, relations and vectors with the current settings. Pending, incomplete and deleting materials are excluded. Some materials may be unavailable in search during processing. Keep the library settings unchanged. This calls the models again and incurs costs.',
+    rebuildLibrarySubmitted: 'Submitted a rebuild task for {count} material. View progress in Runtime queues. | Submitted rebuild tasks for {count} materials. View progress in Runtime queues.',
     cancelParse: 'Stop processing',
     cancelParseConfirmBody: "Stop processing \"{title}\"? Saved chunks remain and can be rebuilt later. Pending processing tasks for this material will be cancelled.",
     cancelParseSubmitted: 'Processing stopped',
@@ -817,7 +827,6 @@ export default {
     intakePreviewOriginal: 'Preview Markdown body',
     intakeLoadMore: 'Load more',
     intakeRetry: 'Retry review',
-    intakeDiscard: 'Discard',
     intakeReviewSubmitted: 'Review submitted',
     intakeReviewFailed: 'Review failed',
     untitledDocument: 'Untitled Material',

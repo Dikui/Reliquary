@@ -18,6 +18,9 @@ func imageVectorsEnabled(ctx context.Context, db *gorm.DB, spaceID uint64) bool 
 	return db.WithContext(ctx).Select("retrieval_config").Where("id=?", spaceID).Find(&space).Error == nil && space.RetrievalConfig != nil && space.RetrievalConfig.ImageVectorEnabled
 }
 func (s *entryService) deferEntryVectors(ctx context.Context, entry *types.Entry) error {
+	if ctx.Value(libraryRebuildContextKey{}) == true {
+		return errors.New("library rebuild vectors are incomplete; retry this processing task")
+	}
 	if s.task == nil {
 		return errors.New("vector pending operation queue unavailable")
 	}

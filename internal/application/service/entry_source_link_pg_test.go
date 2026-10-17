@@ -74,6 +74,45 @@ func TestMissingOriginalURLSkipsModelsAndSupplementRechecks(t *testing.T) {
 	require.EqualValues(t, 1, logs.Total)
 }
 
+func TestIntakeRetryUsesCurrentLibraryReviewPolicy(t *testing.T) {
+	h, _ := newIngestHarness(t)
+	capture := captureMineReview(h)
+	const oldCriteria = "Only accept an original publication with a source link."
+	require.NoError(t, h.db.Model(h.library).Updates(map[string]any{
+		"source_evidence_rule": "link_required", "review_criteria": oldCriteria,
+	}).Error)
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{
+		Library: "institutional", Acquisition: "verbatim", Title: "Policy retry",
+		Publisher: "Measured Research", PublishedAt: "2026-10-01",
+		Content: "The original publication reports complete measurements and supporting observations.",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pending_review", result.Status)
+	require.Equal(t, "缺少原文链接", result.Reason)
+	require.Empty(t, capture.reviews)
+
+	const newCriteria = "Accept complete original measurements with an identified publisher and publication date."
+	require.NoError(t, h.db.Model(h.library).Updates(map[string]any{
+		"source_evidence_rule": "link_or_publisher_date", "review_criteria": newCriteria,
+	}).Error)
+	entry, err := h.service.ReviewEntryIntake(h.ctx, result.EntryID, "retry", types.SourceInfo{})
+	require.NoError(t, err)
+	require.Equal(t, types.ParseStatusPending, entry.ParseStatus)
+	require.Empty(t, capture.reviews, "explicit retry queues the current-policy review")
+	h.drain(t)
+
+	entry = h.article(t, result.EntryID)
+	intake, err := entry.IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, types.ParseStatusCompleted, entry.ParseStatus, entry.ErrorMessage)
+	require.Equal(t, "approved", intake.Decision)
+	require.Empty(t, intake.Reason)
+	require.True(t, entry.SourceUnverified)
+	require.Len(t, capture.reviews, 1)
+	require.Contains(t, capture.reviews[0][0].Content, newCriteria)
+	require.NotContains(t, capture.reviews[0][0].Content, oldCriteria)
+}
+
 func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.processor.output = validProcessingFixture("tutorial")

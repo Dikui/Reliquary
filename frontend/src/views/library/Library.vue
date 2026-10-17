@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
-import { MessagePlugin } from "tdesign-vue-next";
+import { DialogPlugin, MessagePlugin } from "tdesign-vue-next";
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue';
 import { useLibraryScope } from '@/composables/useLibraryScope';
 import { parseReference } from '@/utils/bodyReference';
@@ -25,6 +25,7 @@ import {
   cancelEntryParse,
   batchDeleteEntry,
   batchReparseEntry,
+  rebuildCatalogLibrary,
   getEntrySpans,
   getEntryDetails,
 
@@ -37,6 +38,7 @@ import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
 import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
+import LibraryReviewAction from '@/components/LibraryReviewAction.vue';
 import type { LibraryContentType } from '@/api/library';
 import { CONTENT_TYPES } from '@/types/entryClassification';
 import { SEARCH_SOURCES } from '@/types/search';
@@ -63,6 +65,14 @@ const libraryId = computed(() => resources.library?.id || '');
 const libraryInfo = ref<any>(null);
 const libraryScope = useLibraryScope();
 const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
+const selectedLibrary = computed(() => libraryScope.value.length === 1
+  ? libraryCatalog.value.find(item => item.id === libraryScope.value[0])
+  : undefined);
+const libraryRebuilding = ref(false);
+const libraryRebuildError = ref('');
+const libraryRebuildNotice = ref('');
+const libraryRebuildConfirming = ref(false);
+let libraryRebuildDialog: ReturnType<typeof DialogPlugin.confirm> | undefined;
 const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
 const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
@@ -695,6 +705,44 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
 const handleOpenLibrarySettings = () => uiStore.openSettings('library');
 const reparseConfirmStore = useReparseConfirmStore();
 
+const confirmLibraryRebuild = () => {
+  const target = selectedLibrary.value;
+  if (!target || target.template === 'generated' || libraryRebuilding.value || libraryRebuildConfirming.value) return;
+  libraryRebuildConfirming.value = true;
+  const close = () => {
+    libraryRebuildDialog?.destroy();
+    libraryRebuildDialog = undefined;
+    libraryRebuildConfirming.value = false;
+  };
+  libraryRebuildDialog = DialogPlugin.confirm({
+    header: t('library.rebuildLibrary'),
+    body: t('library.rebuildLibraryConfirm', { name: target.display_name || target.name }),
+    confirmBtn: t('library.rebuildLibrary'),
+    cancelBtn: t('common.cancel'),
+    onConfirm: () => { close(); void submitLibraryRebuild(target.id); },
+    onCancel: close,
+    onClose: close,
+  });
+};
+
+const submitLibraryRebuild = async (targetId: string) => {
+  if (libraryRebuilding.value) return;
+  libraryRebuilding.value = true;
+  libraryRebuildError.value = '';
+  libraryRebuildNotice.value = '';
+  try {
+    const result = await rebuildCatalogLibrary(targetId);
+    if (!result.success) throw new Error(result.message || t('library.rebuildFailed'));
+    libraryRebuildNotice.value = t('library.rebuildLibrarySubmitted', { count: result.data.total });
+    MessagePlugin.success(libraryRebuildNotice.value);
+  } catch (error: any) {
+    libraryRebuildError.value = error?.message || t('library.rebuildFailed');
+  } finally {
+    libraryRebuilding.value = false;
+  }
+};
+onUnmounted(() => libraryRebuildDialog?.destroy());
+
 // Opens ONLY the trace drawer for this card — does NOT pop the
 // document detail drawer behind it. The trace drawer attaches to
 // body so it renders independent of its host's visibility; we just
@@ -1058,6 +1106,12 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
         </div>
       </div>
 
+      <t-alert v-if="libraryRebuildError" theme="error" :message="libraryRebuildError" role="alert" />
+      <div v-if="libraryRebuildNotice" role="status">
+        {{ libraryRebuildNotice }}
+        <t-button variant="text" size="small" @click="uiStore.openSettings('runtime-queues')">{{ $t('settings.taskQueue') }}</t-button>
+      </div>
+
       <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
         <EntryWorkbench :initial-entity-id="selectedEntityId"
           @open-source="openSourceDoc" />
@@ -1081,6 +1135,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </t-input>
                 <div class="doc-filter-bar__filters">
                 <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
+                <LibraryReviewAction :library="selectedLibrary" scope="all" :disabled="libraryRebuilding || libraryRebuildConfirming" @submitted="pendingCounts.refresh()" />
 
                 <div class="doc-filter-field">
                   <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
@@ -1132,6 +1187,14 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 </div>
                 <div class="doc-filter-bar__trailing">
+                  <t-tooltip v-if="selectedLibrary?.template !== 'generated'" :content="selectedLibrary ? (selectedLibrary.display_name || selectedLibrary.name) : $t('library.rebuildLibrarySelectOne')">
+                    <span>
+                      <t-button variant="text" size="small" :loading="libraryRebuilding"
+                        :disabled="!selectedLibrary || libraryRebuilding || libraryRebuildConfirming" @click="confirmLibraryRebuild">
+                        {{ $t('library.rebuildLibrary') }}
+                      </t-button>
+                    </span>
+                  </t-tooltip>
                   <t-button  variant="text" size="small" @click="commandPalette.openPalette(docSearchKeyword.trim())">
                     {{ $t('library.searchMessageContent') }}
                   </t-button>

@@ -451,6 +451,10 @@ func (s *entryService) processChunks(ctx context.Context,
 
 	now := time.Now()
 	finalizeIndexedEntryState(entry, totalStorageSize, now)
+	if ctx.Value(libraryRebuildContextKey{}) == true {
+		// Recovery must still run the remaining vector, relation and file steps.
+		entry.ParseStatus, entry.EnableStatus, entry.ProcessedAt = types.ParseStatusProcessing, "disabled", nil
+	}
 	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
 		entry.ParseStatus = types.ParseStatusFailed
 		entry.ErrorMessage = err.Error()
@@ -713,6 +717,9 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 		logger.Warnf(ctx, "ProcessManualUpdate: entry not found: %s", payload.EntryID)
 		return nil
 	}
+	if payload.ReviewID != "" {
+		return s.processLibraryReviewEntry(ctx, entry, payload)
+	}
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
 		if intake.Decision == "rejected" || intake.Decision == "error" {
@@ -785,7 +792,11 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 
 	// Cleanup old resources (indexes and chunks) for update operations
 	if payload.NeedCleanup {
-		if err := s.cleanupEntryResources(ctx, entry); err != nil {
+		cleanup := s.cleanupEntryResources
+		if payload.RebuildID != "" {
+			cleanup = s.cleanupLibraryRebuild
+		}
+		if err := cleanup(ctx, entry); err != nil {
 			logger.ErrorWithFields(ctx, err, map[string]interface{}{
 				"entry_id": payload.EntryID,
 			})
@@ -793,11 +804,17 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 			entry.ErrorMessage = fmt.Sprintf("failed to cleanup old resources: %v", err)
 			entry.UpdatedAt = time.Now()
 			s.repo.UpdateEntry(ctx, entry)
+			if payload.RebuildID != "" {
+				return err
+			}
 			return nil
 		}
 	}
 
 	// Run manual processing (image resolution + chunking + embedding) synchronously within the worker
+	if payload.RebuildID != "" {
+		return s.processLibraryRebuild(ctx, library, entry, payload.Content)
+	}
 	return s.triggerManualProcessing(ctx, library, entry, payload.Content, true)
 }
 
@@ -1108,11 +1125,20 @@ func (s *entryService) ProcessEntryListReparse(ctx context.Context, t *taskqueue
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
 
 	outcome, err := runEntryListReparseSubmissions(payload.EntryIDs, func(id string) error {
+		if payload.ReviewID != "" {
+			return s.submitLibraryReviewEntry(ctx, payload, id)
+		}
+		if payload.RebuildID != "" {
+			return s.submitLibraryRebuildEntry(ctx, payload, id)
+		}
 		_, err := s.ReparseEntry(ctx, id, payload.ProcessConfig)
 		return err
 	})
 	logger.Infof(ctx, "Entry list reparse task finished: %d submitted, %d failed",
 		outcome.Submitted, outcome.Failed)
+	if (payload.RebuildID != "" || payload.ReviewID != "") && ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return err
 }
 
