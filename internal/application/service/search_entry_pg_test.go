@@ -166,6 +166,7 @@ func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 	require.NoError(t, h.db.Create(&types.EntityAlias{ID: "alias-a", SpaceID: 1, EntityID: entity.ID, Alias: "Aliasneedle", NormalizedAlias: "aliasneedle", EntityType: "company"}).Error)
 	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-a", SpaceID: 1, Name: "Topicneedle"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "summary", TopicID: "topic-a"}).Error)
+	h.add(t, "unrelated", "article", "2026-10-01", "reference", "othersemantic", 0)
 	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
 	for _, term := range []string{"Canonicalneedle", "Aliasneedle", "Topicneedle", "Termneedlesummary", "Publisherneedlesummary", "Authorneedlesummary"} {
