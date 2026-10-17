@@ -54,7 +54,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     { id: 'report', source_kind: 'report', title: 'Needle report', content_type: '', starred: false },
     ...Array.from({ length: 38 }, (_, index) => ({ id: `mine-${index}`, source_kind: 'mine', title: `Document ${index}`, content_type: 'event', starred: false })),
   ].map(record => ({ ...record, file_name: `${record.title}.md`, type: 'manual', file_type: 'md', channel: 'api',
-    parse_status: 'completed', created_at: '2026-10-13T08:00:00Z', updated_at: '2026-10-13T08:00:00Z' }))
+    parse_status: 'completed', incomplete: record.id === 'mine', created_at: '2026-10-13T08:00:00Z', updated_at: '2026-10-13T08:00:00Z' }))
   if (customType) records.push({ ...records[0], id: 'sop', content_type: 'SOP' })
   const target = records.find(record => record.id === 'mine')!
   for (const [field, value] of Object.entries({ channel: 'web', file_type: 'pdf', parse_status: 'failed',
@@ -74,6 +74,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
         if (query.has('content_type') && record.content_type !== query.get('content_type')) return false
         if (query.has('file_type') && record.file_type !== query.get('file_type')) return false
         if (query.has('starred') && String(record.starred) !== query.get('starred')) return false
+        if (query.has('incomplete') && String(record.incomplete) !== query.get('incomplete')) return false
         if (query.has('source') && record.channel !== query.get('source')) return false
         if (query.has('parse_status') && record.parse_status !== query.get('parse_status')) return false
         if (query.has('start_time') && record.updated_at < query.get('start_time')!.replace(' ', 'T') + 'Z') return false
@@ -262,13 +263,37 @@ for (const locale of ['zh-CN', 'en-US']) {
   })
 }
 
+test('missing-image filter persists in the URL and combines with processing status', async () => {
+  const env = await mountLibrary('zh-CN', { incomplete: 'true', parse_status: 'completed' })
+  try {
+    const images = env.control('library.imageStatusFilter')
+    assert.equal(images.props.value, 'true')
+    assert.equal(env.requests.at(-1)!.get('incomplete'), 'true')
+    assert.ok(env.ids().length > 0)
+    assert.ok(env.ids().every(id => env.records.find(record => record.id === id)?.incomplete))
+    await env.list()
+    assert.ok(env.ids().every(id => env.records.find(record => record.id === id)?.incomplete))
+    await env.change(images, 'false')
+    assert.equal(env.route.query.incomplete, 'false')
+    assert.equal(env.requests.at(-1)!.get('parse_status'), 'completed')
+    assert.ok(env.ids().every(id => !env.records.find(record => record.id === id)?.incomplete))
+    await env.leave()
+    await env.back()
+    assert.equal(env.control('library.imageStatusFilter').props.value, 'false')
+    assert.equal(env.requests.at(-1)!.get('incomplete'), 'false')
+    await env.change(env.control('library.imageStatusFilter'), '')
+    assert.equal(env.route.query.incomplete, undefined)
+    assert.equal(env.requests.at(-1)!.has('incomplete'), false)
+  } finally { env.cleanup() }
+})
+
 test('source filters combine with existing filters and retain URL state on reload and history changes', async () => {
   const env = await mountLibrary('zh-CN', { source_kind: 'mine', tab: 'documents' })
   try {
     assert.ok(env.ids().every(id => id.startsWith('mine')))
     assert.equal(env.requests[0].get('source_kind'), 'mine')
     await env.change(env.byOptions('tutorial'), 'tutorial')
-    await env.change(env.byOptions('true'), 'true')
+    await env.change(env.control('articleJudgments.starLabel'), 'true')
     await env.change(env.byOptions('md'), 'md')
     await env.change(env.byOptions('completed'), 'completed')
     await env.change(env.control('library.channelLabel'), 'api')
@@ -308,7 +333,7 @@ const combinedAPIQuery = {
 function assertFilters(env: Awaited<ReturnType<typeof mountLibrary>>, filters: Partial<typeof combinedQuery>) {
   for (const [key, node] of Object.entries({
     source_kind: env.control('library.materialCategory'), content_type: env.byOptions('tutorial'),
-    starred: env.byOptions('true'), file_type: env.byOptions('md'),
+    starred: env.control('articleJudgments.starLabel'), file_type: env.byOptions('md'),
     parse_status: env.byOptions('completed'), source: env.control('library.channelLabel'),
     keyword: descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!,
   })) assert.equal(node.props.value, filters[key as keyof typeof combinedQuery] || '', `restored ${key} control`)
@@ -332,7 +357,7 @@ for (const locale of ['zh-CN', 'en-US']) for (const view of ['grid', 'list']) {
     try {
       await env.change(env.control('library.materialCategory'), combinedQuery.source_kind)
       await env.change(env.byOptions('tutorial'), combinedQuery.content_type)
-      await env.change(env.byOptions('true'), combinedQuery.starred)
+      await env.change(env.control('articleJudgments.starLabel'), combinedQuery.starred)
       await env.change(env.byOptions('md'), combinedQuery.file_type)
       await env.change(env.byOptions('completed'), combinedQuery.parse_status)
       await env.change(env.control('library.channelLabel'), combinedQuery.source)
@@ -386,16 +411,16 @@ test('default and invalid URL filters are omitted while unrelated query paramete
     assert.equal(env.route.query.preserved, 'value')
     assert.deepEqual(env.route.query.custom, ['one', 'two'])
     assert.equal(env.ids().length, 35)
-    await env.change(env.byOptions('true'), 'false')
+    await env.change(env.control('articleJudgments.starLabel'), 'false')
     assert.equal(env.route.query.starred, 'false', 'unstarred is an active filter rather than a default')
     assert.ok(env.ids().every(id => !env.records.find(record => record.id === id)!.starred))
-    await env.change(env.byOptions('true'), '')
+    await env.change(env.control('articleJudgments.starLabel'), '')
     assert.equal(env.route.query.starred, undefined)
     assert.deepEqual(env.route.query.custom, ['one', 'two'])
   } finally { env.cleanup() }
 })
 
-test('source and star filter changes clear selected entries before loading the filtered data', async () => {
+test('source, star and image filter changes clear selected entries before loading filtered data', async () => {
   const env = await mountLibrary('zh-CN', {}, 'list')
   try {
     const selected = () => descendants(env.root).filter(node => node.props['data-select-id'] && hasClass(node, 'selected'))
@@ -406,7 +431,7 @@ test('source and star filter changes clear selected entries before loading the f
     select('article')
     await settle()
     assert.equal(selected().length, 1)
-    await env.change(env.byOptions('true'), 'true')
+    await env.change(env.control('articleJudgments.starLabel'), 'true')
     assert.equal(selected().length, 0)
     select('mine')
     await settle()
@@ -414,6 +439,11 @@ test('source and star filter changes clear selected entries before loading the f
     await env.change(env.control('library.materialCategory'), 'mine')
     assert.equal(selected().length, 0)
     assert.ok(env.ids().every(id => id.startsWith('mine')))
+    select('mine')
+    await settle()
+    await env.change(env.control('library.imageStatusFilter'), 'false')
+    assert.equal(selected().length, 0)
+    assert.ok(env.ids().every(id => !env.records.find(record => record.id === id)!.incomplete))
   } finally { env.cleanup() }
 })
 

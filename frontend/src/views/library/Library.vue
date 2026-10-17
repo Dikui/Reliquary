@@ -239,6 +239,12 @@ const docSearchKeyword = ref(initialDocumentFilters.keyword);
 const selectedFileType = ref(initialDocumentFilters.fileType);
 const selectedContentType = ref(initialDocumentFilters.contentType);
 const selectedStarred = ref(initialDocumentFilters.starred);
+const selectedIncomplete = ref(initialDocumentFilters.incomplete);
+const imageStatusOptions = computed(() => [
+  { value: '', label: t('library.allImageStatuses') },
+  { value: 'true', label: t('library.missingImagesOnly') },
+  { value: 'false', label: t('library.noMissingImages') },
+]);
 const starredOptions = computed(() => [
   { value: '', label: t('articleJudgments.allStars') },
   { value: 'true', label: t('articleJudgments.starredOnly') },
@@ -306,6 +312,7 @@ const documentFilters = computed<DocumentListFilters>(() => ({
   fileType: selectedFileType.value || '',
   contentType: selectedContentType.value || '',
   starred: selectedStarred.value || '',
+  incomplete: selectedIncomplete.value || '',
   parseStatus: selectedParseStatus.value || '',
   source: selectedSource.value || '',
   sourceKind: selectedSourceKind.value || '',
@@ -323,6 +330,7 @@ const filterParams = computed(() => {
     file_type: selectedFileType.value || undefined,
     content_type: selectedContentType.value || undefined,
     starred: selectedStarred.value === '' ? undefined : selectedStarred.value === 'true',
+    incomplete: selectedIncomplete.value === '' ? undefined : selectedIncomplete.value === 'true',
     parse_status: selectedParseStatus.value || undefined,
     source: selectedSource.value || undefined,
     source_kind: selectedSourceKind.value || undefined,
@@ -437,6 +445,7 @@ watch(() => route.query, query => {
     selectedFileType.value = restored.fileType;
     selectedContentType.value = restored.contentType;
     selectedStarred.value = restored.starred;
+    selectedIncomplete.value = restored.incomplete;
     selectedParseStatus.value = restored.parseStatus;
     selectedSource.value = restored.source;
     selectedSourceKind.value = restored.sourceKind;
@@ -1049,7 +1058,7 @@ const handleListAction = (
 
 // Clear selection on filter/library change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, libraryId],
+  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedIncomplete, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, libraryId],
   () => {
     clearSelection();
   },
@@ -1137,23 +1146,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </t-input>
                 <div class="doc-filter-bar__filters">
                 <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
-                <LibraryReviewAction :library="selectedLibrary" scope="all" :disabled="libraryRebuilding || libraryRebuildConfirming" @submitted="pendingCounts.refresh()" />
 
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
-                </div>
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
-                </div>
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedFileType" :options="fileTypeOptions"
-                    :placeholder="$t('library.fileTypeFilter')" :aria-label="$t('library.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
-                    clearable>
-                    <template #prefixIcon>
-                      <t-icon name="file" size="16px" />
-                    </template>
-                  </t-select>
-                </div>
                 <div class="doc-filter-field">
                   <t-select v-model="selectedParseStatus" :options="parseStatusOptions"
                     :placeholder="$t('library.parseStatusFilter')" class="doc-type-select doc-filter-field__control"
@@ -1162,6 +1155,16 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                       <t-icon name="check-circle" size="16px" />
                     </template>
                   </t-select>
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedIncomplete" :options="imageStatusOptions"
+                    :aria-label="$t('library.imageStatusFilter')" class="doc-type-select doc-filter-field__control" />
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
                 </div>
                 <div class="doc-filter-field">
                   <t-select v-model="selectedSourceKind" :options="sourceKindOptions"
@@ -1177,6 +1180,15 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                     </template>
                   </t-select>
                 </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedFileType" :options="fileTypeOptions"
+                    :placeholder="$t('library.fileTypeFilter')" :aria-label="$t('library.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
+                    clearable>
+                    <template #prefixIcon>
+                      <t-icon name="file" size="16px" />
+                    </template>
+                  </t-select>
+                </div>
                 <div class="doc-filter-field doc-filter-field--wide">
                   <t-date-range-picker v-model="updatedTimeRange"
                     :placeholder="[$t('library.updatedTimeFrom'), $t('library.updatedTimeTo')]"
@@ -1189,6 +1201,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 </div>
                 <div class="doc-filter-bar__trailing">
+                  <LibraryReviewAction :library="selectedLibrary" scope="all" :disabled="libraryRebuilding || libraryRebuildConfirming" @submitted="pendingCounts.refresh()" />
                   <t-tooltip v-if="selectedLibrary?.template !== 'generated'" :content="selectedLibrary ? (selectedLibrary.display_name || selectedLibrary.name) : $t('library.rebuildLibrarySelectOne')">
                     <span>
                       <t-button variant="text" size="small" :loading="libraryRebuilding && libraryRebuildScope === 'failed'"
@@ -1217,8 +1230,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                         <t-icon name="view-list" size="16px" />
                       </button>
                     </t-tooltip>
-                  </div>
-                  <div class="doc-filter-actions">
                   </div>
                 </div>
               </div>
@@ -1415,17 +1426,21 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
 // 目录树选中路径的面包屑：与顶部库面包屑同一套视觉语言，只是更轻量。
 
-.doc-filter-bar__filters > .library-scope { flex: 0 0 220px; width: 220px; min-width: 220px; }
+.doc-filter-bar__filters > .library-scope { width: 100%; max-width: none; min-width: 0; }
 
 .doc-filter-bar {
-  padding: 0 0 12px 0;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  background: var(--td-bg-color-container);
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(180px, 1fr) auto;
   grid-template-areas:
     'search trailing'
     'filters filters';
-  gap: 8px 12px;
+  gap: 12px;
   align-items: center;
 
   .doc-search-input {
@@ -1436,68 +1451,41 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
   &__filters {
     grid-area: filters;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
-
-    &::-webkit-scrollbar {
-      height: 4px;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      background-color: rgba(0, 0, 0, 0.15);
-      border-radius: 2px;
-    }
   }
 
   &__trailing {
     grid-area: trailing;
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
     position: relative;
     z-index: 1;
   }
 
-  // The document area width can differ from the viewport width.
-  // Switch to a single row only when this content area itself
-  // is wide enough for TDesign's fixed-width filter controls.
-  @container doc-card-area (min-width: 1240px) {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 12px;
+  @container doc-card-area (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'search' 'trailing' 'filters';
 
-    &__filters {
-      flex: 1 1 auto;
-      overflow-x: auto;
-    }
+    &__trailing { justify-content: flex-start; }
   }
 
   .doc-filter-field {
-    width: 140px;
-    flex-shrink: 0;
+    min-width: 0;
 
     &--wide {
-      width: 280px;
+      grid-column: span 2;
     }
 
     &__control {
       width: 100%;
-    }
-  }
-
-  @media (min-width: 1280px) {
-    .doc-search-input {
-      flex: 1 1 220px;
-      min-width: 220px;
     }
   }
 
@@ -2475,10 +2463,8 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
   }
 }
 
-@media (max-width: 640px) {
-  .doc-filter-bar { display: flex; flex-direction: column; gap: 12px; }
-  .doc-filter-bar__filters > .library-scope { width: 100%; min-width: 0; max-width: none; }
-  .doc-filter-bar__filters { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
-  .doc-filter-field, .doc-filter-field__control, .doc-date-range { width: 100%; min-width: 0; }
+@container doc-card-area (max-width: 420px) {
+  .doc-filter-bar__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .doc-filter-bar__filters > .library-scope { grid-column: span 2; }
 }
 </style>

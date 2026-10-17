@@ -119,6 +119,9 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	if filter.Starred != nil {
 		query = query.Where("source_kind IN ('article','mine') AND starred=?", *filter.Starred)
 	}
+	if filter.Incomplete != nil {
+		query = query.Where("incomplete = ?", *filter.Incomplete)
+	}
 	if filter.ContentType != "" {
 		query = query.Where("content_type = ?", filter.ContentType)
 	}

@@ -72,6 +72,7 @@ export default function (defaultLibraryId?: string) {
       file_type?: string;
       content_type?: string;
       starred?: boolean;
+      incomplete?: boolean;
       parse_status?: string;
       source?: string;
       source_kind?: ClassifiedEntry['source_kind'];

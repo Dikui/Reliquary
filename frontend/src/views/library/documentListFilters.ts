@@ -7,6 +7,7 @@ export interface DocumentListFilters {
   fileType: string
   contentType: string
   starred: '' | 'true' | 'false'
+  incomplete: '' | 'true' | 'false'
   parseStatus: string
   source: string
   sourceKind: SearchSource | ''
@@ -15,7 +16,7 @@ export interface DocumentListFilters {
 }
 
 const queryFields = {
-  keyword: 'keyword', fileType: 'file_type', contentType: 'content_type', starred: 'starred',
+  keyword: 'keyword', fileType: 'file_type', contentType: 'content_type', starred: 'starred', incomplete: 'incomplete',
   parseStatus: 'parse_status', source: 'source', sourceKind: 'source_kind',
   startDate: 'start_date', endDate: 'end_date',
 } as const
@@ -41,6 +42,7 @@ export function documentListFiltersFromQuery(query: LocationQuery): DocumentList
     fileType: normalizeEntryFileType(choice(query.file_type, fileTypes)),
     contentType: queryString(query.content_type).trim(),
     starred: choice(query.starred, ['true', 'false']) as DocumentListFilters['starred'],
+    incomplete: choice(query.incomplete, ['true', 'false']) as DocumentListFilters['incomplete'],
     parseStatus: choice(query.parse_status, parseStatuses),
     source: choice(query.source, sources),
     sourceKind: choice(query.source_kind, SEARCH_SOURCES) as DocumentListFilters['sourceKind'],

@@ -95,6 +95,8 @@ type EntryListFilter struct {
 	ContentType string
 	// Starred filters the user's article marker when supplied.
 	Starred *bool
+	// Incomplete filters entries with missing images when supplied.
+	Incomplete *bool
 	// Keyword performs a LIKE match on file_name / title when non-empty.
 	Keyword string
 	// FileType filters by file_type, or by type for the special values "manual" / "url".
