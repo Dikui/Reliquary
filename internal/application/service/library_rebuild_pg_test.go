@@ -98,6 +98,10 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Omit("ContentTypes", "RelationTypes").Create(&otherLibrary).Error)
 	other := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: otherLibrary.ID, Type: "manual", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Other source"}
 	require.NoError(t, h.db.Create(other).Error)
+	completed := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Already completed source"}
+	require.NoError(t, h.db.Create(completed).Error)
+	cancelled := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCancelled, VaultBody: "Cancelled source"}
+	require.NoError(t, h.db.Create(cancelled).Error)
 	otherRelation := oldRelation
 	otherRelation.ID, otherRelation.LibraryID = uuid.NewString(), otherLibrary.ID
 	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: otherLibrary.ID, Name: oldRelation.RelationType, Enabled: true}).Error)
@@ -165,6 +169,8 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)
 	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("task_type=?", types.TypeManualProcess).Count(&count).Error)
 	require.EqualValues(t, 1, count)
+	require.Equal(t, types.ParseStatusCompleted, h.article(t, completed.ID).ParseStatus)
+	require.Equal(t, types.ParseStatusCancelled, h.article(t, cancelled.ID).ParseStatus)
 }
 
 func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
@@ -174,6 +180,7 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	body, err := vault.ReadBody(k)
 	require.NoError(t, err)
 	images := rebuildAttachments(t, vault.root, k.ID)
+	require.NoError(t, h.db.Model(k).Update("parse_status", types.ParseStatusFailed).Error)
 	q := &libraryRebuildQueue{db: h.db}
 	h.service.task = q
 	run, err := h.service.RebuildLibrary(h.ctx, k.LibraryID)
@@ -181,7 +188,7 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	parent := rebuildTask(t, h.db, run.TaskID)
 	q.failID = k.ID
 	require.ErrorContains(t, h.service.ProcessEntryListReparse(h.ctx, parent), "fixture enqueue failure")
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus, "failed enqueue rolls back the entry reset")
+	require.Equal(t, types.ParseStatusFailed, h.article(t, k.ID).ParseStatus, "failed enqueue rolls back the entry reset")
 	q.failID = ""
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, parent))
 	child := rebuildTask(t, h.db, run.TaskID+":"+k.ID)
@@ -231,6 +238,13 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	original, err := vault.ReadBody(before)
 	require.NoError(t, err)
 	processingCalls := len(h.processor.requests)
+	intake, err := before.IntakeMetadata()
+	require.NoError(t, err)
+	intake.Decision = "pending"
+	require.NoError(t, before.SetIntakeMetadata(intake))
+	before.ParseStatus = types.ParseStatusFailed
+	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, before))
+	h.processor.stages = nil
 
 	h.service.task = &libraryRebuildQueue{db: h.db}
 	run, err := h.service.RebuildLibrary(h.ctx, before.LibraryID)
@@ -242,6 +256,7 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	after := h.article(t, before.ID)
 	require.Equal(t, types.ParseStatusCompleted, after.ParseStatus)
 	require.Greater(t, len(h.processor.requests), processingCalls)
+	require.Contains(t, h.processor.stages, "intake_review", "a failed review must complete before rebuilding")
 	require.True(t, after.Incomplete)
 	require.JSONEq(t, string(before.MissingMaterials), string(after.MissingMaterials))
 	rebuilt, err := vault.ReadBody(after)

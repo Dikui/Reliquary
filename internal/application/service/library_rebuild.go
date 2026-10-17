@@ -21,14 +21,14 @@ func libraryRebuildGroup(id string) string { return "library-rebuild:" + id }
 type libraryRebuildContextKey struct{}
 
 func libraryRebuildEligible(entry *types.Entry) (bool, error) {
-	if entry.SourceKind != "article" && entry.SourceKind != "mine" {
+	if entry.ParseStatus != types.ParseStatusFailed || (entry.SourceKind != "article" && entry.SourceKind != "mine") {
 		return false, nil
 	}
 	intake, err := entry.IntakeMetadata()
 	if err != nil {
 		return false, err
 	}
-	return intake == nil || intake.Decision == "approved", nil
+	return intake == nil || intake.Decision == "approved" || intake.Decision == "pending", nil
 }
 
 // RebuildLibrary freezes only the membership. Each worker uses the saved library
@@ -82,12 +82,12 @@ func (s *entryService) RebuildLibrary(ctx context.Context, libraryID string) (*t
 		if err != nil {
 			return nil, err
 		}
-		if eligible && (entry.ParseStatus == types.ParseStatusCompleted || entry.ParseStatus == types.ParseStatusFailed || entry.ParseStatus == types.ParseStatusCancelled) {
+		if eligible {
 			ids = append(ids, entry.ID)
 		}
 	}
 	if len(ids) == 0 {
-		return nil, apperrors.NewBadRequestError("This library has no completed intake documents to rebuild")
+		return nil, apperrors.NewBadRequestError("This library has no failed documents eligible for rebuilding")
 	}
 	runID := uuid.NewString()
 	payload, err := json.Marshal(types.EntryListReparsePayload{SpaceID: spaceID, LibraryID: libraryID, EntryIDs: ids, RebuildID: runID, Initiator: types.TaskInitiatorFromContext(ctx)})
@@ -123,8 +123,8 @@ func (s *entryService) submitLibraryRebuildEntry(ctx context.Context, payload ty
 			if err != nil {
 				return nil, err
 			}
-			if !eligible || (entry.ParseStatus != types.ParseStatusCompleted && entry.ParseStatus != types.ParseStatusFailed && entry.ParseStatus != types.ParseStatusCancelled) {
-				return nil, fmt.Errorf("entry is no longer available for rebuilding")
+			if !eligible {
+				return &entry, nil
 			}
 			body, available, err := copy.reprocessStoredBody(ctx, &entry)
 			if err != nil {
@@ -141,10 +141,21 @@ func (s *entryService) submitLibraryRebuildEntry(ctx context.Context, payload ty
 				return nil, err
 			}
 			resetEntryForReparse(&entry, library)
+			child := types.ManualProcessPayload{SpaceID: entry.SpaceID, LibraryID: entry.LibraryID, EntryID: entry.ID, Content: body, NeedCleanup: true, RebuildID: payload.RebuildID}
+			intake, err := entry.IntakeMetadata()
+			if err != nil {
+				return nil, err
+			}
+			if intake != nil && intake.Decision == "pending" {
+				child.ReviewID, child.RebuildID, child.NeedCleanup = payload.RebuildID, "", false
+				if err := setLibraryReviewMetadata(&entry, "segment_review_generation", payload.RebuildID); err != nil {
+					return nil, err
+				}
+			}
 			if err := copy.repo.UpdateEntry(ctx, &entry); err != nil {
 				return nil, err
 			}
-			data, err := json.Marshal(types.ManualProcessPayload{SpaceID: entry.SpaceID, LibraryID: entry.LibraryID, EntryID: entry.ID, Content: body, NeedCleanup: true, RebuildID: payload.RebuildID})
+			data, err := json.Marshal(child)
 			if err != nil {
 				return nil, err
 			}

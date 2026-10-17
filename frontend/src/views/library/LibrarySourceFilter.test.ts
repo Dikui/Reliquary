@@ -455,7 +455,9 @@ test('library rebuild confirms one selected library, prevents duplicate submissi
     button()!.props.onClick()
     assert.match(env.confirmation.body, /Research/)
     assert.match(env.confirmation.body, /保留正文、图片和人工判断/)
-    assert.match(env.confirmation.body, /已通过审核且正文完整的资料即使缺少图片也会参与/)
+    assert.match(env.confirmation.body, /仅重建.*处理失败的资料/)
+    assert.match(env.confirmation.body, /已完成和已取消的资料不参与/)
+    assert.match(env.confirmation.body, /审核阶段失败的资料会先重新审核/)
     let finish!: (response: unknown) => void
     env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
     env.confirmation.onConfirm()
@@ -488,6 +490,6 @@ test('library rebuild retains a readable conflict and allows a deliberate retry'
     assert.deepEqual(env.notices, [])
     assert.equal(button().props.disabled, false)
     button().props.onClick()
-    assert.equal(env.confirmation.confirmBtn, 'Rebuild this library')
+    assert.equal(env.confirmation.confirmBtn, 'Rebuild failed materials')
   } finally { env.cleanup() }
 })
