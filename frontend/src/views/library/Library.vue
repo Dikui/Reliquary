@@ -1191,7 +1191,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-bar__trailing">
                   <t-tooltip v-if="selectedLibrary?.template !== 'generated'" :content="selectedLibrary ? (selectedLibrary.display_name || selectedLibrary.name) : $t('library.rebuildLibrarySelectOne')">
                     <span>
-                      <t-button variant="outline" theme="primary" size="small" :loading="libraryRebuilding && libraryRebuildScope === 'failed'"
+                      <t-button variant="text" size="small" :loading="libraryRebuilding && libraryRebuildScope === 'failed'"
                         :disabled="!selectedLibrary || libraryRebuilding || libraryRebuildConfirming" @click="confirmLibraryRebuild()">
                         {{ $t('library.rebuildLibrary') }}
                       </t-button>
