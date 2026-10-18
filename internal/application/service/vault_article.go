@@ -261,7 +261,8 @@ func (v *VaultService) copyArticleImages(ctx context.Context, k *types.Entry, ar
 		if _, ok := stored[item.url]; ok {
 			continue
 		}
-		if remoteIngestImage(item.url) {
+		// Browser blob URLs have no server-side file; retain the source reference.
+		if remoteIngestImage(item.url) || strings.HasPrefix(strings.ToLower(item.url), "blob:") {
 			stored[item.url] = item.url
 			continue
 		}

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"testing"
@@ -158,6 +159,15 @@ func TestReviewEntryIntakeCorrectionClearsQwenRejection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, task.calls)
 	require.NotContains(t, string(updated.Metadata), "intake_reject_reason")
+	updated.ParseStatus = types.ParseStatusFailed
+	repo.entry = updated
+	updated, err = svc.ReviewEntryIntake(ctx, entry.ID, "retry", types.SourceInfo{})
+	require.NoError(t, err)
+	require.Equal(t, 2, task.calls)
+	var review types.ManualProcessPayload
+	require.NoError(t, json.Unmarshal(task.last.Payload(), &review))
+	require.NotEmpty(t, review.ReviewID, "retry reviews the stored source before image processing")
+	require.False(t, review.ReviewApproved)
 	library, err := svc.libraryService.GetLibraryByID(ctx, "library")
 	require.NoError(t, err)
 	rejected, err := svc.reviewIntake(ctx, library, updated, "Complete original body")
@@ -189,10 +199,14 @@ type intakeFileService struct {
 	getErr  error
 }
 
-type intakeTask struct{ calls int }
+type intakeTask struct {
+	calls int
+	last  *taskqueue.Task
+}
 
-func (t *intakeTask) Enqueue(*taskqueue.Task, ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+func (t *intakeTask) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	t.calls++
+	t.last = task
 	return &taskqueue.TaskInfo{}, nil
 }
 

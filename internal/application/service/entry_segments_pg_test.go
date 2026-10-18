@@ -15,14 +15,15 @@ import (
 
 type segmentedChat struct {
 	retainedProcessingChat
-	calls      map[string]map[int]int
-	fail       int
-	reject     int
-	mergeCalls int
-	mergeFail  bool
-	cancel     context.CancelFunc
-	topic      string
-	reviewFail int
+	calls         map[string]map[int]int
+	fail          int
+	reject        int
+	mergeCalls    int
+	mergeFail     bool
+	cancel        context.CancelFunc
+	topic         string
+	reviewFail    int
+	auxiliaryFrom int
 }
 
 func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
@@ -62,7 +63,8 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 		if n == m.reviewFail {
 			return nil, fmt.Errorf("review failure %d", n)
 		}
-		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"fixture segment %d"}`, n != m.reject, n)}, nil
+		auxiliary := m.auxiliaryFrom > 0 && n >= m.auxiliaryFrom
+		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"auxiliary":%t,"reason":"fixture segment %d"}`, n != m.reject && !auxiliary, auxiliary, n)}, nil
 	}
 	if n == m.fail {
 		if m.cancel != nil {
@@ -207,6 +209,28 @@ func TestSegmentReviewRejectionAllApprovedAndLimit(t *testing.T) {
 	intake, _ := k.IntakeMetadata()
 	require.Contains(t, intake.Reason, "分段上限 2")
 	require.Empty(t, m.calls)
+}
+
+func TestSegmentReviewAuxiliaryNeedsSubstantiveBody(t *testing.T) {
+	for _, auxiliaryFrom := range []int{2, 1} {
+		t.Run(fmt.Sprint(auxiliaryFrom), func(t *testing.T) {
+			h, m := segmentedHarness(t)
+			k := segmentedEntry(t, h)
+			m.auxiliaryFrom = auxiliaryFrom
+			rejected, err := h.service.reviewIntake(h.ctx, h.library, k, strings.Repeat("Substantive original research. ", 20)+"\n\n## References\n\nReference material.")
+			require.NoError(t, err)
+			intake, err := k.IntakeMetadata()
+			require.NoError(t, err)
+			if auxiliaryFrom == 2 {
+				require.False(t, rejected)
+				require.Equal(t, "approved", intake.Decision)
+			} else {
+				require.True(t, rejected)
+				require.Contains(t, intake.Reason, "缺少符合收录标准的实质正文")
+			}
+			require.Greater(t, len(m.calls["intake_review"]), 1)
+		})
+	}
 }
 
 func TestShortArticleStillOneCallAndTypeTie(t *testing.T) {

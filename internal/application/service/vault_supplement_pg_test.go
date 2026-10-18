@@ -1,12 +1,31 @@
 package service
 
 import (
+	"fmt"
 	"testing"
 
 	"reliquary/internal/types"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestVaultArticlePreservesBrowserBlobImages(t *testing.T) {
+	h, v := newVaultArticleHarness(t)
+	for _, ref := range []string{"blob:http://localhost/source-image", "missing-local.png"} {
+		k := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, SourceKind: "article", Type: "manual", Title: "Source images", ParseStatus: types.ParseStatusCompleted}
+		require.NoError(t, h.db.Create(k).Error)
+		body := fmt.Sprintf("# Original\n\n![source image](%s)\n", ref)
+		err := v.WriteArticle(h.ctx, k, body, nil)
+		if ref == "missing-local.png" {
+			require.ErrorContains(t, err, "image reader is unavailable")
+			continue
+		}
+		require.NoError(t, err)
+		_, _, saved := readVaultArticle(t, v, k)
+		require.Equal(t, body, string(saved))
+	}
+}
 
 func TestVaultPublishedIngestWriteRejectsAnyOtherBody(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
