@@ -3,11 +3,14 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
+	"reliquary/internal/config"
 	taskqueue "reliquary/internal/queue"
 
 	"github.com/stretchr/testify/require"
@@ -56,6 +59,84 @@ func TestReviewIntakeXUsesLibraryCriteria(t *testing.T) {
 				require.Contains(t, intake.Reason, "No substantive opinion")
 			}
 		})
+	}
+}
+
+func TestReviewIntakeSendsSegmentImagesAndReadStatus(t *testing.T) {
+	library := types.SystemLibraryDefaults()[0]
+	library.ModelTiers.Light = "review-model"
+	entry := &types.Entry{ID: "image-review", SpaceID: 1, LibraryID: library.ID}
+	require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
+		Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/report"},
+	}))
+	uri := articleImageDataURI(t, 9)
+	_, payload, _ := strings.Cut(uri, ",")
+	data, err := base64.StdEncoding.DecodeString(payload)
+	require.NoError(t, err)
+	capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: `{"approved":true,"reason":"Chart supports the report"}`}}
+	svc := &entryService{
+		repo: &intakeRepo{entry: entry},
+		modelService: &summaryStateModelService{model: capture, metadata: &types.Model{
+			ID: "review-model", Type: types.ModelTypeGeneration,
+			Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 32768},
+		}},
+		fileSvc: &intakeFileService{saved: map[string][]byte{"chart.png": data}},
+		config:  &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{MaxImages: 2}},
+	}
+	body := "# 结果\n\n![缺失](https://example.org/missing.png)\n\n![得分](chart.png)\n\n## 结论\n\n![对比](chart.png)"
+	ctx := context.Background()
+	require.False(t, svc.singleReviewSegment(ctx, library, entry, body), "image count also requires background segmentation")
+	rejected, err := svc.reviewIntake(ctx, library, entry, body)
+	require.NoError(t, err)
+	require.False(t, rejected)
+	require.Len(t, capture.reviews, 2)
+	for i, messages := range capture.reviews {
+		user := messages[len(messages)-1]
+		require.Equal(t, []string{uri}, user.Images, "each segment sends its readable image bytes")
+		var input struct {
+			Body   string             `json:"body"`
+			Images []reviewImageInput `json:"images"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(user.Content), &input))
+		if i == 0 {
+			require.Len(t, input.Images, 2)
+			require.Equal(t, 1, input.Images[0].Index)
+			require.False(t, input.Images[0].Provided)
+			require.Equal(t, "未提供图片文件", input.Images[0].SkipReason)
+		}
+		image := input.Images[len(input.Images)-1]
+		require.Equal(t, len(input.Images), image.Index, "unreadable images do not renumber the remaining attachment")
+		require.True(t, image.Provided)
+		require.Empty(t, image.SkipReason)
+		require.Equal(t, len([]rune(input.Body[:strings.Index(input.Body, "chart.png")])), image.Start)
+	}
+	intake, err := entry.IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, "approved", intake.Decision)
+}
+
+func TestReviewMissingImagesDoNotReserveVisualTokens(t *testing.T) {
+	entry := &types.Entry{ID: "missing-images", SpaceID: 1}
+	library := &types.Library{ModelTiers: types.ModelTierConfig{Light: "review-model"}}
+	capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: `{"approved":false,"reason":"Fixture review decision"}`}}
+	svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &summaryStateModelService{
+		model: capture, metadata: &types.Model{ID: "review-model", Type: types.ModelTypeGeneration,
+			Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 16384}},
+	}}
+	approved, _, err := svc.reviewSegments(context.Background(), library, entry, strings.Repeat("![图表](https://example.org/missing.png)\n\n", 8), types.SourceInfo{})
+	require.NoError(t, err)
+	require.False(t, approved, "the model still decides whether the supplied material meets the criteria")
+	require.Len(t, capture.reviews, 1)
+	user := capture.reviews[0][1]
+	require.Empty(t, user.Images)
+	var input struct {
+		Images []reviewImageInput `json:"images"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(user.Content), &input))
+	require.Len(t, input.Images, 8)
+	for _, image := range input.Images {
+		require.False(t, image.Provided)
+		require.Equal(t, "未提供图片文件", image.SkipReason)
 	}
 }
 
