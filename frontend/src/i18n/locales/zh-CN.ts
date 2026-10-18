@@ -1,6 +1,19 @@
 import { ikb18Zh } from './ikb18'
 export default {
   entryBatch: {
+    scopeSummary: '范围摘要',
+    currentFilters: '当前筛选条件',
+    checkedFilters: '勾选来源的列表筛选',
+    keyword: '标题关键词',
+    anyDate: '不限',
+    includeRejected: '包含待审资料',
+    countLoading: '正在统计匹配资料…',
+    countFailed: '无法加载匹配数量，请重试。',
+    retryCount: '重试匹配数量',
+    matchedCount: '匹配 {count} 条资料（含未加载及折叠项）',
+    selectedCount: '已选 {selected} 条 · 可找到 {found} 条 · 不可用 {unavailable} 条',
+    checkedHint: '操作仅针对已勾选的资料 ID，不会扩展到下列筛选的其他匹配资料。',
+    countHint: '数量为当前查询结果。确认提交后固定名单，新资料不会加入；执行资格以操作预览为准。',
     updatedFrom: '更新起始日期',
     updatedTo: '更新截止日期',
     updatedDates: '更新时间范围',

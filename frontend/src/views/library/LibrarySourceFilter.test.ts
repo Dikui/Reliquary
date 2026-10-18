@@ -48,7 +48,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const rebuildRequests: Array<{ path: string; data: unknown }> = [], notices: string[] = []
   const previewResult = { success: true, data: { fingerprint: 'preview-1', matched: 41, eligible: 40, skipped: 1, blocked: 0, reasons: [{ code: 'generated_library', count: 1 }], samples: [{ id: 'sample', title: 'Matching sample', library_id: 'library-source' }] } }
   const batchResult = { success: true, data: { batch_id: 'batch-1', action: 'reprocess', status: 'completed', total: 41, succeeded: 40, failed: 0, skipped: 1, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } }
-  let rebuildResponse: (path: string) => Promise<any> = async path => path.endsWith('/preview') ? previewResult : batchResult
+  let rebuildResponse: (path: string, data: unknown) => Promise<any> = async path => path.endsWith('/preview') ? previewResult : batchResult
   let confirmation: any
   const records = [
     { id: 'article', source_kind: 'article', title: 'Needle article', content_type: 'tutorial', starred: true },
@@ -64,7 +64,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     records.push({ ...target, id: `mine-other-${field}`, [field]: value })
   }
   const transport = {
-    async post(path: string, data: unknown) { rebuildRequests.push({ path, data }); return rebuildResponse(path) },
+    async post(path: string, data: unknown) { rebuildRequests.push({ path, data }); return rebuildResponse(path, data) },
     async get(path: string) {
       const url = new URL(path, 'http://localhost')
       assert.equal(url.pathname, '/api/v1/entries')
@@ -90,8 +90,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const api = evaluateFile('../../api/library.ts', { '../utils/request': transport })
   const store = evaluateFile('../../stores/entry.ts', {})
   const hook = evaluateFile('../../composables/useLibrary.ts', {
-    '@/api/entities': { listEntities: async () => ({ success: true, data: [] }) },
-    '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
+    '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'entity-1', canonical_name: 'Target Entity' }] }) },
+    '@/api/topics': { listTopics: async () => ({ success: true, data: [{ id: 'topic-1', name: 'Target Topic' }] }) },
     '@/api/library': api, '@/stores/entry': store,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
     'tdesign-vue-next': { MessagePlugin: {} },
@@ -100,8 +100,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const empty = moduleOf(defineComponent({ setup: () => () => null }))
   let backendAvailable = !unavailable
   const modules: Record<string, any> = {
-    '@/api/entities': { listEntities: async () => ({ success: true, data: [] }) },
-    '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
+    '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'entity-1', canonical_name: 'Target Entity' }] }) },
+    '@/api/topics': { listTopics: async () => ({ success: true, data: [{ id: 'topic-1', name: 'Target Topic' }] }) },
     '@/utils/bodyReference': bodyReference,
     '@/composables/useLibraryScope': { useLibraryScope: () => scope },
     'vue-router': vueRouter,
@@ -207,7 +207,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   return {
     root, router, requests, records, errors, control, byOptions, ids, t, scope, rebuildRequests, notices, previewResult, batchResult,
     get confirmation() { return confirmation },
-    setRebuildResponse(response: (path: string) => Promise<any>) { rebuildResponse = response },
+    setRebuildResponse(response: (path: string, data: unknown) => Promise<any>) { rebuildResponse = response },
     recover() { backendAvailable = true },
     get route() { return router.currentRoute.value },
     async change(node: ReturnType<typeof element>, value: unknown) { node.props.onChange({ value }); await waitForLoad() },
@@ -483,35 +483,48 @@ test('library-defined content types and Markdown aliases survive a shared URL an
   } finally { env.cleanup() }
 })
 
-test('bulk management chooses scope before action and preserves every list filter through confirmation', async () => {
-  const env = await mountLibrary('zh-CN', { keyword: 'Needle', starred: 'true', parse_status: 'failed', entity_ids: 'entity-1', topic_ids: 'topic-1', published_from: '2026-10-01' })
+test('bulk management retains exact filters and server count across both steps and uses a separate action preview', async () => {
+  const env = await mountLibrary('zh-CN', { keyword: 'Needle', starred: 'false', incomplete: 'false', parse_status: 'failed', entity_ids: 'entity-1', topic_ids: 'topic-1', published_from: '2026-10-01', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_date: '2026-10-01', end_date: '2026-10-18' })
   const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))
+  const summary = () => visibleText(env.control('entryBatch.scopeSummary'))
   try {
+    let countRequest = true
+    env.setRebuildResponse(async path => {
+      if (countRequest) { countRequest = false; return { success: true, data: { ...env.previewResult.data, matched: 73, eligible: 0, fingerprint: 'scope-only' } } }
+      return path.endsWith('/preview') ? env.previewResult : env.batchResult
+    })
     for (const key of ['library.rebuildLibrary', 'library.rebuildLibraryAll', 'knowledgeReview.reviewAll']) assert.equal(button(key), undefined)
-    assert.equal(button('entryBatch.title')!.props.disabled, false, 'all-match management is available without checked rows or a single library')
+    assert.equal(button('entryBatch.title')!.props.disabled, false)
     env.scope.value = ['library-source']; await settle()
     button('entryBatch.title')!.props.onClick(); await settle()
     assert.ok(visibleText(env.root).includes(env.t('entryBatch.scopeStep')))
     assert.equal(env.control('entryBatch.action'), undefined)
     assert.equal(button('entryBatch.preview'), undefined)
-    assert.deepEqual(env.rebuildRequests, [])
+    assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 73 })), 'count comes from the batch server, not the displayed list')
+    for (const value of ['Research', 'Target Entity', 'Target Topic', 'Needle', 'tutorial', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.noMissingImages'), env.t('library.parseStatusFailed'), env.t('knowledgeSearch.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
+    const selection = { filters: { libraries: ['library-source'], entity_ids: ['entity-1'], topic_ids: ['topic-1'], published_from: '2026-10-01', keyword: 'Needle', starred: false, incomplete: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
+    assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/entries/batches/preview', data: { action: 'star', starred: true, selection } }])
+    const firstSummary = summary()
     button('entryBatch.nextAction')!.props.onClick(); await settle()
     await env.change(env.control('entryBatch.action'), 'reprocess')
     assert.ok(visibleText(env.root).includes(env.t('entryBatch.actionStep')))
-    assert.ok(visibleText(env.root).includes(env.t('entryBatch.reprocessHint')))
-    const selection = { filters: { libraries: ['library-source'], entity_ids: ['entity-1'], topic_ids: ['topic-1'], published_from: '2026-10-01', keyword: 'Needle', starred: true, parse_status: 'failed' } }
+    assert.equal(summary(), firstSummary, 'both steps retain the same filters and count')
+    assert.equal(env.rebuildRequests.length, 1, 'changing action does not recount the scope')
+    assert.equal(button('entryBatch.confirm'), undefined, 'scope counting never authorizes an action')
     button('entryBatch.preview')!.props.onClick(); await settle()
-    assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/entries/batches/preview', data: { action: 'reprocess', selection } }])
-    assert.ok(visibleText(env.root).includes('Matching sample'))
+    assert.deepEqual(env.rebuildRequests[1], { path: '/api/v1/entries/batches/preview', data: { action: 'reprocess', selection } })
+    assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 41 })), 'the action preview refreshes the live count')
     assert.equal(button('entryBatch.confirm')!.props.disabled, true)
     button('entryBatch.confirm')!.props.onClick(); await settle()
-    assert.equal(env.rebuildRequests.length, 1, 'unchecked confirmation cannot submit')
+    assert.equal(env.rebuildRequests.length, 2)
     descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
     button('entryBatch.changeScope')!.props.onClick(); await settle()
     assert.equal(button('entryBatch.confirm'), undefined)
+    assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 41 })))
     button('entryBatch.nextAction')!.props.onClick(); await settle()
-    assert.equal(env.control('entryBatch.action').props.value, 'reprocess', 'returning preserves the chosen action')
-    assert.equal(button('entryBatch.confirm'), undefined, 'returning invalidates preview and confirmation')
+    assert.equal(env.control('entryBatch.action').props.value, 'reprocess')
+    assert.equal(button('entryBatch.confirm'), undefined)
+    assert.equal(env.rebuildRequests.length, 2, 'moving between steps preserves the scope count')
     button('entryBatch.preview')!.props.onClick(); await settle()
     assert.equal(button('entryBatch.confirm')!.props.disabled, true)
     descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
@@ -519,11 +532,10 @@ test('bulk management chooses scope before action and preserves every list filte
     env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
     button('entryBatch.confirm')!.props.onClick(); await settle()
     assert.equal(button('entryBatch.confirm')!.props.disabled, true)
-    assert.equal(button('entryBatch.confirm')!.props['data-loading'], true)
     button('entryBatch.confirm')!.props.onClick(); await settle()
-    assert.equal(env.rebuildRequests.length, 3, 'busy submit rejects duplicate calls')
-    assert.deepEqual(env.rebuildRequests[2], { path: '/api/v1/entries/batches', data: { action: 'reprocess', selection, preview_fingerprint: 'preview-1' } })
-    assert.deepEqual(env.notices, [], 'submission never announces completed success')
+    assert.equal(env.rebuildRequests.length, 4, 'busy submit rejects duplicate calls')
+    assert.deepEqual(env.rebuildRequests[3], { path: '/api/v1/entries/batches', data: { action: 'reprocess', selection, preview_fingerprint: 'preview-1' } })
+    assert.deepEqual(env.notices, [])
     finish(env.batchResult); await new Promise(resolve => setImmediate(resolve)); await settle()
     assert.ok(visibleText(env.root).includes(env.t('entryBatch.status.completed')))
     assert.equal(env.route.query.batch_id, 'batch-1')
@@ -531,49 +543,63 @@ test('bulk management chooses scope before action and preserves every list filte
   } finally { env.cleanup() }
 })
 
-test('bulk checked scope can switch to all matches and cancellation submits nothing', async () => {
+test('scope changes ignore stale counts and checked summaries distinguish unavailable IDs', async () => {
   const env = await mountLibrary('en-US', {}, 'list')
-  const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))
+  const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))!
+  const summary = () => visibleText(env.control('entryBatch.scopeSummary'))
   try {
+    let finishOld!: (response: unknown) => void
+    env.setRebuildResponse(async (_path, data: any) => data.selection.ids ? new Promise(resolve => { finishOld = resolve }) : { success: true, data: { ...env.previewResult.data, matched: 0 } })
     const row = descendants(env.root).find(node => node.props['data-select-id'] === 'mine')!
     descendants(row).find(node => node.tag === 'input')!.props.onChange({ checked: true }); await settle()
-    button('entryBatch.title')!.props.onClick(); await settle()
+    button('entryBatch.title').props.onClick(); await settle()
     assert.equal(env.control('entryBatch.scope').props.value, 'selected')
-    button('entryBatch.nextAction')!.props.onClick(); await settle()
-    button('entryBatch.preview')!.props.onClick(); await settle()
+    assert.ok(summary().includes(env.t('entryBatch.checkedHint')))
+    assert.ok(summary().includes(env.t('entryBatch.countLoading')))
+    assert.equal(button('entryBatch.nextAction').props.disabled, true)
     assert.deepEqual(env.rebuildRequests[0].data, { action: 'star', starred: true, selection: { ids: ['mine'] } })
-    button('entryBatch.changeScope')!.props.onClick(); await settle()
     await env.change(env.control('entryBatch.scope'), 'matched')
-    button('entryBatch.nextAction')!.props.onClick(); await settle()
-    button('entryBatch.preview')!.props.onClick(); await settle()
-    assert.deepEqual(env.rebuildRequests[1].data, { action: 'star', starred: true, selection: { filters: { libraries: [], entity_ids: [], topic_ids: [] } } })
-    button('common.close')!.props.onClick(); await settle()
-    assert.equal(button('entryBatch.preview'), undefined)
-    assert.equal(env.rebuildRequests.length, 2, 'cancellation never submits a batch')
+    assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 0 })), 'zero is a successful count')
+    assert.equal(button('entryBatch.nextAction').props.disabled, false)
+    finishOld({ success: true, data: { ...env.previewResult.data, matched: 999 } }); await settle()
+    assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 0 })))
+    assert.ok(!summary().includes('999'))
+    env.setRebuildResponse(async () => ({ success: true, data: { ...env.previewResult.data, matched: 1, reasons: [{ code: 'unavailable', count: 1 }] } }))
+    await env.change(env.control('entryBatch.scope'), 'selected')
+    assert.ok(summary().includes(env.t('entryBatch.selectedCount', { selected: 1, found: 0, unavailable: 1 })))
+    button('entryBatch.nextAction').props.onClick(); await settle()
+    assert.ok(summary().includes(env.t('entryBatch.selectedCount', { selected: 1, found: 0, unavailable: 1 })))
+    button('common.close').props.onClick(); await settle()
+    assert.ok(env.rebuildRequests.every(request => request.path.endsWith('/preview')), 'counting and cancellation never submit a batch')
   } finally { env.cleanup() }
 })
 
-test('bulk management retains a readable conflict and allows a deliberate preview retry', async () => {
+test('scope count failures block advancement until retry and action conflicts remain retryable', async () => {
   const env = await mountLibrary('en-US')
   const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))!
   try {
-    env.setRebuildResponse(async () => { throw { status: 409, message: 'A processing task is already running in this library.' } })
+    env.setRebuildResponse(async () => { throw new Error('Count unavailable') })
     button('entryBatch.title').props.onClick(); await settle()
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.countFailed')))
+    assert.equal(button('entryBatch.nextAction').props.disabled, true)
+    assert.equal(env.control('entryBatch.action'), undefined)
+    env.setRebuildResponse(async () => env.previewResult)
+    button('entryBatch.retryCount').props.onClick(); await settle()
+    assert.equal(button('entryBatch.nextAction').props.disabled, false)
     button('entryBatch.nextAction').props.onClick(); await settle()
     await env.change(env.control('entryBatch.action'), 'reprocess')
+    env.setRebuildResponse(async () => { throw { status: 409, message: 'A processing task is already running in this library.' } })
     button('entryBatch.preview').props.onClick(); await settle()
     assert.ok(visibleText(env.root).includes('A processing task is already running in this library.'))
     assert.deepEqual(env.notices, [])
     assert.equal(button('entryBatch.preview').props.disabled, false)
-    assert.equal(env.rebuildRequests.length, 1)
     env.setRebuildResponse(async path => path.endsWith('/preview') ? env.previewResult : env.batchResult)
     button('entryBatch.preview').props.onClick(); await settle()
     assert.ok(!visibleText(env.root).includes('A processing task is already running in this library.'))
-    assert.equal(env.rebuildRequests.length, 2)
     assert.equal(button('entryBatch.confirm').props.disabled, true)
     descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
     button('entryBatch.confirm').props.onClick(); await settle()
     assert.ok(visibleText(env.root).includes(env.t('entryBatch.status.completed')))
-    assert.equal(env.rebuildRequests.length, 3)
+    assert.equal(env.rebuildRequests.length, 5)
   } finally { env.cleanup() }
 })

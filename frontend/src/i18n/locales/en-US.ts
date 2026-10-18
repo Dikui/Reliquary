@@ -1,6 +1,19 @@
 import { ikb18En } from './ikb18'
 export default {
   entryBatch: {
+    scopeSummary: 'Scope summary',
+    currentFilters: 'Current filters',
+    checkedFilters: 'List filters used for selection',
+    keyword: 'Title keyword',
+    anyDate: 'Any date',
+    includeRejected: 'Include intake review',
+    countLoading: 'Counting matching materials…',
+    countFailed: 'Could not load the matching count. Try again.',
+    retryCount: 'Retry matching count',
+    matchedCount: '{count} matching materials (including unloaded materials and similar reports)',
+    selectedCount: '{selected} selected · {found} found · {unavailable} unavailable',
+    checkedHint: 'Only the checked material IDs are included. Other materials matching the filters below are excluded.',
+    countHint: 'This count reflects the current query. Membership is fixed at submission; new materials will not join. Action eligibility is checked in the action preview.',
     updatedFrom: 'Updated from',
     updatedTo: 'Updated to',
     updatedDates: 'Updated date range',

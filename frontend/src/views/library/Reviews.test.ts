@@ -287,9 +287,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) } })
       const html = await render(dialog, forwarded, locale, async state => {
         state.ready.value = true
-        await state.submit(); assert.equal(requests.length, 0)
-        await state.showPreview(); assert.equal(requests.length, 1)
-        await state.submit(); assert.equal(requests.length, 1, 'preview alone cannot submit')
+        await settle()
+        assert.equal(requests.length, 1, 'opening only counts the scope')
+        assert.deepEqual(requests[0], { action: 'star', starred: true, selection })
+        assert.equal(state.scopeCount.value.matched, 71)
+        await state.submit(); assert.equal(requests.length, 1)
+        await state.showPreview(); assert.equal(requests.length, 2)
+        await state.submit(); assert.equal(requests.length, 2, 'preview alone cannot submit')
         state.confirmed.value = true; await state.submit()
         assert.equal(state.error.value, 'Review already running')
         assert.equal(state.batch.value, undefined)
@@ -297,7 +301,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         await state.showPreview(); state.confirmed.value = true; await state.submit()
         assert.equal(state.batch.value.status, 'completed')
       })
-      assert.deepEqual(requests, [{ action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }, { action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }])
+      assert.deepEqual(requests, [{ action: 'star', starred: true, selection }, { action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }, { action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }])
       assert.ok(html.includes('71'))
       assert.ok(html.includes('batch_id=review-batch'))
     }

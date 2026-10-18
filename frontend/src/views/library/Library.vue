@@ -1176,7 +1176,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
+      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" :entity-options="entityFilterOptions" :topic-options="topicFilterOptions" @changed="batchChanged" />
     <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId"
         @openEntry="openSourceDoc" @openEntity="openArticleEntity" @openTopic="openReportTopic"
