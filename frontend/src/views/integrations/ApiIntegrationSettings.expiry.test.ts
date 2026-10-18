@@ -299,9 +299,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         state.openPlayground()
         state.playground.apiKey = 'secret'
         state.playground.query = ' Launch '
-        state.playgroundFilters.value = { ...searchHelpers.defaultSearchFilters(), content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+        state.playgroundFilters.value = { ...searchHelpers.defaultSearchFilters(), content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
         await state.runQuery()
-        const expected = { libraries: ['all-a', 'all-b'], query: 'Launch', content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+        const expected = { libraries: ['all-a', 'all-b'], query: 'Launch', content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
         assert.deepEqual(JSON.parse(calls[1].body), expected)
         assert.deepEqual(JSON.parse(state.playgroundRequestPreview.value), expected)
         assert.doesNotMatch(state.playgroundRequestPreview.value, /secret|apiKey/)

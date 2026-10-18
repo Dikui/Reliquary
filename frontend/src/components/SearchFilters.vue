@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CONTENT_TYPES } from '@/types/entryClassification'
-import { SEARCH_SOURCES, type SearchFilters, type SearchOptions } from '@/types/search'
+import type { SearchFilters, SearchOptions } from '@/types/search'
 
 const model = defineModel<SearchFilters>({ required: true })
 const props = withDefaults(defineProps<{ options?: SearchOptions; loading?: boolean; disabled?: boolean }>(), {
@@ -10,7 +10,6 @@ const props = withDefaults(defineProps<{ options?: SearchOptions; loading?: bool
 })
 const { t } = useI18n()
 const contentTypeOptions = computed(() => props.options.content_types?.map(value => ({ value, label: value })) || CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })))
-const sourceOptions = computed(() => SEARCH_SOURCES.map(value => ({ value, label: t(`knowledgeSearch.sources.${value}`) })))
 const entityOptions = computed(() => props.options.entities.map(entity => ({ value: entity.id, label: entity.canonical_name })))
 const topicOptions = computed(() => props.options.topics.map(topic => ({ value: topic.id, label: topic.name })))
 const starOptions = computed(() => [
@@ -26,7 +25,6 @@ const starFilter = computed({ get: () => typeof model.value.starred === 'boolean
     <label class="filter-field"><span>{{ t('knowledgeSearch.contentTypes') }}</span><t-select v-model="model.content_types" multiple clearable :options="contentTypeOptions" :disabled="disabled" :aria-label="t('knowledgeSearch.contentTypes')" :placeholder="t('knowledgeSearch.all')" /></label>
     <label class="filter-field"><span>{{ t('knowledgeSearch.entities') }}</span><t-select v-model="model.entity_ids" multiple clearable filterable :options="entityOptions" :loading="loading" :disabled="disabled" :aria-label="t('knowledgeSearch.entities')" :placeholder="t('knowledgeSearch.all')" /></label>
     <label class="filter-field"><span>{{ t('knowledgeSearch.topics') }}</span><t-select v-model="model.topic_ids" multiple clearable filterable :options="topicOptions" :loading="loading" :disabled="disabled" :aria-label="t('knowledgeSearch.topics')" :placeholder="t('knowledgeSearch.all')" /></label>
-    <label class="filter-field"><span>{{ t('knowledgeSearch.source') }}</span><t-select v-model="model.sources" multiple clearable :options="sourceOptions" :disabled="disabled" :aria-label="t('knowledgeSearch.source')" :placeholder="t('knowledgeSearch.all')" /></label>
     <label class="filter-field"><span>{{ t('articleJudgments.starLabel') }}</span><t-select v-model="starFilter" :options="starOptions" :disabled="disabled" :aria-label="t('articleJudgments.starLabel')" /></label>
     <label class="filter-field"><span>{{ t('knowledgeSearch.publishedFrom') }}</span><t-date-picker v-model="model.published_from" clearable allow-input format="YYYY-MM-DD" value-type="YYYY-MM-DD" :disabled="disabled" :aria-label="t('knowledgeSearch.publishedFrom')" :popup-props="{ zIndex: 6200 }" /></label>
     <label class="filter-field"><span>{{ t('knowledgeSearch.publishedTo') }}</span><t-date-picker v-model="model.published_to" clearable allow-input format="YYYY-MM-DD" value-type="YYYY-MM-DD" :disabled="disabled" :aria-label="t('knowledgeSearch.publishedTo')" :popup-props="{ zIndex: 6200 }" /></label>

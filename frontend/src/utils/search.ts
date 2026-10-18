@@ -1,13 +1,13 @@
-import { SEARCH_SOURCES, type SearchFilters, type SearchRequest, type SearchSource } from '../types/search'
+import type { SearchFilters, SearchRequest } from '../types/search'
 
 export function defaultSearchFilters(): SearchFilters {
-  return { content_types: [], entity_ids: [], topic_ids: [], sources: [], published_from: '', published_to: '', collapse_similar: true, limit: 20 }
+  return { content_types: [], entity_ids: [], topic_ids: [], published_from: '', published_to: '', collapse_similar: true, limit: 20 }
 }
 export function buildSearchRequest(query: string, filters: SearchFilters): SearchRequest {
   return {
     query: query.trim(),
-    ...Object.fromEntries(['content_types', 'entity_ids', 'topic_ids', 'sources'].flatMap(key => {
-      const value = filters[key as 'content_types' | 'entity_ids' | 'topic_ids' | 'sources']
+    ...Object.fromEntries(['content_types', 'entity_ids', 'topic_ids'].flatMap(key => {
+      const value = filters[key as 'content_types' | 'entity_ids' | 'topic_ids']
       return value.length ? [[key, [...value]]] : []
     })),
     ...(filters.published_from ? { published_from: filters.published_from } : {}),
@@ -23,7 +23,6 @@ export function searchStateFromURL(query: Record<string, URLValue>): { query: st
   const list = (key: string) => (Array.isArray(query[key]) ? query[key] as (string | null)[] : first(key).split(',')).filter((value): value is string => !!value)
   const filters = defaultSearchFilters()
   filters.content_types = list('content_types').filter(value => value.trim() && [...value].length <= 100)
-  filters.sources = list('sources').filter((value): value is SearchSource => SEARCH_SOURCES.includes(value as SearchSource))
   filters.entity_ids = list('entity_ids')
   filters.topic_ids = list('topic_ids')
   filters.published_from = first('published_from')

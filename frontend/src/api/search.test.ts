@@ -72,7 +72,7 @@ test('article search and filter options use the shared HTTP service routes', asy
     assert.equal(name, '@/utils/request')
     return Object.fromEntries(['get', 'post'].map(method => [method, (url: string, body?: unknown) => { calls.push({ method, url, body }); return Promise.resolve({ success: true }) }]))
   }, module, module.exports)
-  const request = { libraries: ['selected'], query: 'Launch', content_types: ['event'], entity_ids: ['e1'], topic_ids: ['t1'], published_from: '2026-10-01', sources: ['article'], collapse_similar: false, limit: 20 }
+  const request = { libraries: ['selected'], query: 'Launch', content_types: ['event'], entity_ids: ['e1'], topic_ids: ['t1'], published_from: '2026-10-01', collapse_similar: false, limit: 20 }
   await module.exports.searchEntries(request)
   await module.exports.getSearchOptions()
   assert.deepEqual(calls, [{ method: 'post', url: '/api/v1/search', body: request }, { method: 'get', url: '/api/v1/search/options', body: undefined }])

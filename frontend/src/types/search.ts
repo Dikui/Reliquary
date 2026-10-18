@@ -39,7 +39,6 @@ export interface SearchFilters {
   content_types: string[]
   entity_ids: string[]
   topic_ids: string[]
-  sources: SearchSource[]
   published_from: string
   published_to: string
   collapse_similar: boolean

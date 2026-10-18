@@ -148,8 +148,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/SearchFilters.vue",
     "expressions": [
-      "`library.contentTypes.${value}`",
-      "`knowledgeSearch.sources.${value}`"
+      "`library.contentTypes.${value}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

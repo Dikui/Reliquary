@@ -12,7 +12,7 @@ import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 import { CONTENT_TYPES } from '../../types/entryClassification'
-import { SEARCH_SOURCES, type SearchEntry, type SearchRequest } from '../../types/search'
+import type { SearchEntry, SearchRequest } from '../../types/search'
 import * as helpers from '../../utils/search'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
 import * as protectedAccess from '../../utils/protectedFileAccess'
@@ -153,13 +153,16 @@ function ingestSearchAPI(fields: Record<string, unknown>) {
 }
 
 test('search requests and URL state preserve all filters without old scope parameters', () => {
-  const filters = { ...helpers.defaultSearchFilters(), content_types: ['research', 'event'] as const, entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'] as const, published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
-  const mutable = { ...filters, content_types: [...filters.content_types], sources: [...filters.sources] }
+  const filters = { ...helpers.defaultSearchFilters(), content_types: ['research', 'event'] as const, entity_ids: ['e1', 'e2'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+  const mutable = { ...filters, content_types: [...filters.content_types] }
   assert.deepEqual(helpers.buildSearchRequest('  Launch  ', mutable), { query: 'Launch', ...mutable })
   assert.deepEqual(helpers.searchStateFromURL(helpers.searchStateToURL('Launch', mutable)), { query: 'Launch', filters: mutable })
   assert.deepEqual(helpers.buildSearchRequest('Launch', helpers.defaultSearchFilters()), { query: 'Launch', collapse_similar: true, limit: 20 })
   const invalid = helpers.searchStateFromURL({ content_types: 'event,实验记录', sources: 'mine,removed', limit: '200' })
-  assert.deepEqual(invalid.filters.content_types, ['event', '实验记录']); assert.deepEqual(invalid.filters.sources, ['mine']); assert.equal(invalid.filters.limit, 20)
+  assert.equal('sources' in invalid.filters, false)
+  assert.equal('sources' in helpers.buildSearchRequest(invalid.query, invalid.filters), false)
+  assert.equal('sources' in helpers.searchStateToURL(invalid.query, invalid.filters), false)
+  assert.deepEqual(invalid.filters.content_types, ['event', '实验记录']); assert.equal(invalid.filters.limit, 20)
 })
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: search markers show and hide using fields loaded through the real search API`, async () => {
@@ -222,17 +225,18 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.match(html, /entry-classification/)
     assert.ok(html.includes(messages[locale].library.contentTypes.research))
   })
-  test(`${locale}: filters offer six content types, three sources and ID-valued entity and topic options`, async () => {
-    const filtersComponent = component('../../components/SearchFilters.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/types/search': { SEARCH_SOURCES } })
+  test(`${locale}: filters offer six content types and ID-valued entity and topic options without a source filter`, async () => {
+    const filtersComponent = component('../../components/SearchFilters.vue', { '@/types/entryClassification': { CONTENT_TYPES } })
     const selects: any[] = [], dates: any[] = []
     const select = defineComponent({ props: ['modelValue', 'options', 'multiple', 'clearable', 'filterable', 'disabled', 'loading'], setup: (props, { attrs }) => { selects.push(props); return () => h('div', attrs) } })
     const date = defineComponent({ props: ['modelValue', 'format', 'valueType', 'clearable', 'allowInput'], setup: (props, { attrs }) => { dates.push(props); return () => h('div', attrs) } })
     const html = await render(filtersComponent, { modelValue: helpers.defaultSearchFilters(), options: { entities: article.entities, topics: article.topics } }, locale, undefined, { 't-select': select, 't-date-picker': date })
     assert.deepEqual(selects[0].options.map((option: any) => option.value), CONTENT_TYPES)
     assert.deepEqual(selects[1].options, [{ value: 'e1', label: 'Launch Labs' }]); assert.deepEqual(selects[2].options, [{ value: 't1', label: 'Releases' }])
-    assert.deepEqual(selects[3].options.map((option: any) => option.value), SEARCH_SOURCES)
-    assert.ok(selects.slice(0, 4).every(select => select.multiple !== undefined))
-    assert.deepEqual(selects[4].options.map((option: any) => option.value), ['', 'true', 'false'])
+    assert.equal(selects.length, 4)
+    assert.ok(!html.includes(messages[locale].knowledgeSearch.source))
+    assert.ok(selects.slice(0, 3).every(select => select.multiple !== undefined))
+    assert.deepEqual(selects[3].options.map((option: any) => option.value), ['', 'true', 'false'])
     assert.ok(dates.every(date => date.valueType === 'YYYY-MM-DD'))
     assert.ok(html.includes(messages[locale].knowledgeSearch.filterHint))
   })
@@ -251,7 +255,7 @@ async function pageScenario(action: (state: any, calls: SearchRequest[], pushes:
 test('search page submits all filters, renders exclusion count and opens the article detail', async () => {
   const result = await pageScenario(async (state, calls, pushes) => {
     state.query.value = ' Launch '
-    state.filters.value = { ...helpers.defaultSearchFilters(), content_types: ['research'], entity_ids: ['e1'], topic_ids: ['t1'], sources: ['article'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false }
+    state.filters.value = { ...helpers.defaultSearchFilters(), content_types: ['research'], entity_ids: ['e1'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false }
     await state.runSearch()
     await state.loadOptions()
     assert.equal(calls.length, 1); assert.equal(calls[0].collapse_similar, false); assert.deepEqual(calls[0].entity_ids, ['e1'])
