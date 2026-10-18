@@ -18,7 +18,7 @@ func TestIngestContractFieldSetAndExample(t *testing.T) {
 			fields = append(fields, field)
 		}
 	}
-	require.ElementsMatch(t, []string{"library", "entry_id", "source_ref", "identifier", "graph", "url", "content", "acquisition", "content_type_hint", "missing", "title", "author", "publisher", "published_at", "images", "thread", "quotes", "collect_reason", "agent_summary", "agent_tags", "source_name"}, fields)
+	require.ElementsMatch(t, []string{"recovery_failure_id", "library", "entry_id", "source_ref", "identifier", "graph", "url", "content", "acquisition", "content_type_hint", "missing", "title", "author", "publisher", "published_at", "images", "thread", "quotes", "collect_reason", "agent_summary", "agent_tags", "source_name"}, fields)
 	result := IngestResult{EntryID: "article-example", Status: "pending_review", Message: "等待收录审核。", Reason: "缺少来源", ImageFailures: []IngestImageFailure{}, Completeness: []IngestMissing{}}
 	data, err := json.Marshal(result)
 	require.NoError(t, err)

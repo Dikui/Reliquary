@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,25 @@ import (
 
 	"reliquary/internal/types"
 )
+
+func TestEntryAndIngestContentDoesNotEnterSharedModelDebugFiles(t *testing.T) {
+	oldEnabled, oldDir := llmDebug.enabled, llmDebug.dir
+	dir := t.TempDir()
+	llmDebug.enabled, llmDebug.dir = true, dir
+	t.Cleanup(func() { llmDebug.enabled, llmDebug.dir = oldEnabled, oldDir })
+	record := &LLMCallRecord{CallType: "chat"}
+	LLMDebugLog(types.WithPrivateIngestContent(context.Background()), record)
+	LLMDebugLog(types.WithModelCallEntry(context.Background(), "entry-fixture"), record)
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("private content created debug files: %v, %v", entries, err)
+	}
+	LLMDebugLog(context.Background(), record)
+	entries, err = os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("unrelated debug logging should still work: %v, %v", entries, err)
+	}
+}
 
 func newEntry(level logrus.Level, msg string, data logrus.Fields) *logrus.Entry {
 	e := logrus.NewEntry(logrus.New())

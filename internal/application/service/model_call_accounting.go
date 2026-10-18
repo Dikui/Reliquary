@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"reliquary/internal/diagnostics"
 	"reliquary/internal/modelcalls"
 	"reliquary/internal/models/provider"
 	"reliquary/internal/types"
@@ -22,7 +24,17 @@ func (s *modelService) callAccounting(m *types.Model) *types.ModelCallAccounting
 	default:
 		snapshot.Parameters.Provider = string(provider.Resolve(provider.ProviderName(m.Parameters.Provider), m.Parameters.BaseURL))
 	}
-	return &types.ModelCallAccounting{Model: &snapshot, Write: modelcalls.NewStore(s.db).Enqueue}
+	return &types.ModelCallAccounting{Model: &snapshot, Write: func(ctx context.Context, call *types.ModelCall) error {
+		if a := diagnostics.FromContext(ctx); a != nil {
+			a.AddSecrets(m.Parameters.APIKey, m.Parameters.AppSecret)
+			for _, v := range m.Parameters.CustomHeaders {
+				a.AddSecrets(v)
+			}
+			a.ModelCall(call)
+			return nil
+		}
+		return modelcalls.NewStore(s.db).Enqueue(ctx, call)
+	}}
 }
 
 // ModelCallAccounting also supplies the ledger for temporary connection probes.

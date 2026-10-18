@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/url"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	secutils "reliquary/internal/utils"
@@ -19,6 +21,15 @@ import (
 const (
 	maxBodySize = 1024 * 10 // 最大记录10KB的body内容
 )
+
+func omitContentBodies(path string) bool {
+	for _, prefix := range []string{"/mcp", "/api/v1/ingest", "/api/v1/diagnostics/", "/api/v1/entries", "/api/v1/model-calls"} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") || strings.HasSuffix(prefix, "/") && strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // loggerResponseBodyWriter 自定义ResponseWriter用于捕获响应内容（用于logger中间件）
 type loggerResponseBodyWriter struct {
@@ -171,7 +182,7 @@ func Logger() gin.HandlerFunc {
 
 		// 读取请求体（在Next之前读取，因为Next会消费body）
 		var requestBody string
-		if c.Request.Method == "POST" || c.Request.Method == "PUT" || c.Request.Method == "PATCH" {
+		if !omitContentBodies(path) && (c.Request.Method == "POST" || c.Request.Method == "PUT" || c.Request.Method == "PATCH") {
 			requestBody = readRequestBody(c)
 		}
 
@@ -210,7 +221,7 @@ func Logger() gin.HandlerFunc {
 
 		// 读取响应体
 		responseBodyStr := ""
-		if omitOAuthResponse {
+		if omitOAuthResponse || omitContentBodies(c.Request.URL.Path) {
 			responseBodyStr = "[OAuth response omitted]"
 		} else if responseBody.Len() > 0 {
 			contentType := c.Writer.Header().Get("Content-Type")
@@ -252,7 +263,16 @@ func Logger() gin.HandlerFunc {
 			logMsg = logMsg.WithField("response_body", secutils.SanitizeForLog(responseBodyStr))
 		}
 		if last := c.Errors.Last(); last != nil && last.Err != nil {
-			logMsg = logMsg.WithField("error", secutils.SanitizeForLog(last.Err.Error()))
+			if omitContentBodies(c.Request.URL.Path) {
+				code := apperrors.ErrInternalServer
+				var app *apperrors.AppError
+				if errors.As(last.Err, &app) {
+					code = app.Code
+				}
+				logMsg = logMsg.WithField("error", map[string]any{"code": code})
+			} else {
+				logMsg = logMsg.WithField("error", secutils.SanitizeForLog(last.Err.Error()))
+			}
 		}
 		switch {
 		case statusCode >= 500:

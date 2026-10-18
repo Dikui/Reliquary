@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reliquary/internal/types"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +86,10 @@ func LLMDebugEnabled() bool {
 // LLMDebugLog writes a complete model call record to a per-request log file.
 // All calls sharing the same request_id are appended to the same file.
 func LLMDebugLog(ctx context.Context, record *LLMCallRecord) {
+	// Entry-owned content belongs in the deletable model-call ledger, never in shared debug files.
+	if types.PrivateIngestContent(ctx) || types.ModelCallEntryFromContext(ctx) != nil {
+		return
+	}
 	if !llmDebug.enabled || record == nil {
 		return
 	}

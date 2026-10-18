@@ -15,6 +15,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `identifier` | 仅外部长效型库接受。可选 `scheme:value`，最多 2048 Unicode 码点。去两部分首尾空白，scheme 小写，DOI 的 value 也小写。其他 scheme 的值保留大小写。在所属库内参与去重 |
 | `graph` | 可选布尔值，保存在资料上；未提供或 null 表示按库和内容类型默认。非生成型库在处理时依该值和内容类型开关抽取图谱 |
 | `entry_id` | 仅补全使用，已有资料 ID。HTTP 与 MCP 均使用 `entry_id`，不接受旧字段别名 |
+| `recovery_failure_id` | 可选接收故障编号，用于关联修复请求与结果；不参与正文、来源身份或去重 |
 | `url` | 可选来源链接，可为空；非空必须为 HTTP 或 HTTPS，最多 2048 字节。现有外部来源审核仍可能要求链接 |
 | `title` | 可选标题，最多 255 个码点；AI产出需要标题 |
 | `author`、`publisher`、`published_at` | 可选来源信息；日期使用 YYYY-MM-DD 或 RFC3339 |
@@ -26,6 +27,8 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `agent_summary`、`agent_tags`、`source_name` | 调用方注释，保存数据库，不进入正文或处理提示词 |
 
 `kind`、`document_id`、`file` 和未知字段被拒绝。向其他模板提交空字符串 `source_ref` 或 `identifier` 也会被拒绝。
+
+技术故障的逐项结果可附带 `diagnostics: {failure_id, package_status, recorded}`；明确拒绝不保留故障包。`recorded=false` 表示未成功落盘。使用[接收故障查询接口](external-integration.md#接收故障与短期故障包)读取原始输入和图片，再通过本接口修正提交。`outcome=unknown` 时先核对现有资料与任务；`accepted` 仍只表示已接收。
 
 | 系统库目录 | 模板 | 专有可选字段 |
 | --- | --- | --- |

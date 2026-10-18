@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const (
 	MaxIngestBatchItems         = 50
@@ -18,6 +21,8 @@ const (
 // IngestRequest is sourced content collected deliberately by an external agent.
 // Agent annotations are stored separately from article metadata and processing input.
 type IngestRequest struct {
+	RecoveryFailureID  string             `json:"recovery_failure_id,omitempty"`
+	RawInput           json.RawMessage    `json:"-"`
 	Library            string             `json:"library"`
 	EntryID            string             `json:"entry_id,omitempty"`
 	SourceRef          string             `json:"source_ref,omitempty"`
@@ -81,21 +86,22 @@ type IngestImageFailure struct {
 }
 
 type IngestResult struct {
-	LibraryName      string               `json:"library_name"`
-	SourceUnverified bool                 `json:"source_unverified"`
-	LibraryID        string               `json:"library_id"`
-	SourceRef        string               `json:"source_ref,omitempty"`
-	Identifier       string               `json:"identifier,omitempty"`
-	Graph            *bool                `json:"graph"`
-	HasUpdate        bool                 `json:"has_update"`
-	LatestEntryID    string               `json:"latest_entry_id,omitempty"`
-	Index            int                  `json:"index"`
-	EntryID          string               `json:"entry_id"`
-	Status           string               `json:"status"`
-	Message          string               `json:"message"`
-	Reason           string               `json:"reason"`
-	ImageFailures    []IngestImageFailure `json:"image_failures"`
-	Completeness     []IngestMissing      `json:"completeness"`
+	Diagnostics      *IngestDiagnosticReference `json:"diagnostics,omitempty"`
+	LibraryName      string                     `json:"library_name"`
+	SourceUnverified bool                       `json:"source_unverified"`
+	LibraryID        string                     `json:"library_id"`
+	SourceRef        string                     `json:"source_ref,omitempty"`
+	Identifier       string                     `json:"identifier,omitempty"`
+	Graph            *bool                      `json:"graph"`
+	HasUpdate        bool                       `json:"has_update"`
+	LatestEntryID    string                     `json:"latest_entry_id,omitempty"`
+	Index            int                        `json:"index"`
+	EntryID          string                     `json:"entry_id"`
+	Status           string                     `json:"status"`
+	Message          string                     `json:"message"`
+	Reason           string                     `json:"reason"`
+	ImageFailures    []IngestImageFailure       `json:"image_failures"`
+	Completeness     []IngestMissing            `json:"completeness"`
 }
 
 type IngestBatchRequest struct {

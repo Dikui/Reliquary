@@ -52,6 +52,7 @@ func DecodeIngestBatch(reader io.Reader) (*IngestBatchRequest, error) {
 		}
 		_, request.Items[index].SourceRefProvided = fields["source_ref"]
 		_, request.Items[index].IdentifierProvided = fields["identifier"]
+		request.Items[index].RawInput = raw
 		if bytes.Equal(bytes.TrimSpace(fields["source_ref"]), []byte("null")) || bytes.Equal(bytes.TrimSpace(fields["identifier"]), []byte("null")) {
 			request.Items[index].InputError = "source_ref and identifier must be strings"
 		}

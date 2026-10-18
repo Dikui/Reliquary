@@ -13,6 +13,7 @@ import (
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
+	"reliquary/internal/diagnostics"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
@@ -34,6 +35,7 @@ var (
 // entryService implements the entry service interface
 // service 实现知识服务接口
 type entryService struct {
+	diagnostics     *diagnostics.Service
 	db              *gorm.DB
 	config          *config.Config
 	retrieveEngine  interfaces.RetrievalService
@@ -61,6 +63,8 @@ type entryService struct {
 // SetVault attaches the local article library without expanding the public
 // ingestion interface or requiring unrelated callers to implement new methods.
 func (s *entryService) SetVault(v *VaultService) { s.vault = v }
+
+func (s *entryService) SetIngestDiagnostics(d *diagnostics.Service) { s.diagnostics = d }
 
 const (
 	manualContentMaxLength = types.MaxIngestContentRunes

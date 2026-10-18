@@ -28,6 +28,7 @@ def deployment_env(text, root, project):
     updates = {
         'RELIQUARY_VAULT_DIR': str(root / 'data/vault'),
         'RELIQUARY_FILES_DIR': str(root / 'data/files'),
+        'RELIQUARY_DIAGNOSTICS_DIR': str(root / 'logs/diagnostics'),
         'BACKUP_DIR': str(root / 'backups'),
         'COMPOSE_PROJECT_NAME': project,
     }
@@ -78,7 +79,7 @@ def prepare(root, env_file, project):
         (stage / 'scripts').mkdir()
         shutil.copy2(SOURCE / 'scripts/reliquary_admin.py', stage / 'scripts/reliquary_admin.py')
         run(docker, 'compose', '--project-directory', str(stage), 'config', '--quiet')
-        for directory in ('scripts', 'data/vault', 'data/files', 'logs', 'backups'):
+        for directory in ('scripts', 'data/vault', 'data/files', 'logs/diagnostics', 'backups'):
             (root / directory).mkdir(parents=True, exist_ok=True, mode=0o700)
         shutil.copy2(SOURCE / 'scripts/startup-local.py', root / 'scripts/startup.py')
         stage.rename(deploy)

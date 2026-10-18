@@ -10,11 +10,13 @@
 ├── data/
 │   ├── vault/       Markdown 文件库
 │   └── files/       上传资源
-├── logs/            启动与恢复日志
+├── logs/            启动与恢复日志；diagnostics/ 保存短期故障包
 └── backups/         本地备份
 ```
 
 运行不依赖源码目录。脚本按自身位置定位 `deploy/`，Compose 相对引用 `.env` 与 `config/`；宿主机数据路径和系统启动入口则在安装时生成绝对路径，不把个人路径写进仓库。
+
+新安装会生成 `logs/diagnostics`，通过 `RELIQUARY_DIAGNOSTICS_DIR` 挂载到 `/data/diagnostics`。已有运行环境采用新版 Compose 时，确认该变量指向实际运行根目录的 `logs/diagnostics`。故障材料保留 7 天、容量上限 512 MiB，独立于 vault、上传资源和业务备份；备份恢复不会带回原机器的故障材料。[配置与生命周期](logging.md#接收故障日志与故障包)说明了过期和容量淘汰规则。
 
 在源码仓库的本机文件 `.deploy.env` 中记录部署位置，后续更新部署前先读取该文件。它不提交到 Git，也不保存运行凭据：
 
