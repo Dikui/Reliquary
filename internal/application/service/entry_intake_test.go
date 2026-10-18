@@ -18,11 +18,44 @@ import (
 )
 
 func TestIntakeXSourceEvidence(t *testing.T) {
-	for _, raw := range []string{"https://x.com./post/1", "https://www.x.com./post/1", "https://twitter.com../post/1"} {
+	for _, raw := range []string{"https://x.com/bcherny/status/123", "https://twitter.com/bcherny/status/123", "https://x.com./post/1", "https://www.x.com./post/1", "https://twitter.com../post/1", "https://example.com/article"} {
+		require.False(t, blockedIntakeURL(raw), raw)
+	}
+	for _, raw := range []string{"not-a-url", "https:///post/1", "ftp://x.com/post/1", "https://user:password@x.com/post/1"} {
 		require.True(t, blockedIntakeURL(raw), raw)
 	}
-	require.False(t, blockedIntakeURL("https://example.com/article"))
-	require.True(t, blockedIntakeURL("https://x.com/bcherny/status/123"))
+}
+
+func TestReviewIntakeXUsesLibraryCriteria(t *testing.T) {
+	for _, tc := range []struct {
+		name, url, response string
+		rejected            bool
+	}{
+		{"approved", "https://x.com/author/status/123", `{"approved":true,"reason":"Substantive product experience"}`, false},
+		{"rejected", "https://twitter.com/author/status/123", `{"approved":false,"reason":"No substantive opinion"}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			library := types.SystemLibraryDefaults()[1]
+			library.ModelTiers.Light = "review-model"
+			entry := &types.Entry{ID: "post", SpaceID: 1, LibraryID: library.ID}
+			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
+				Decision: "pending", SourceInfo: types.SourceInfo{Author: "@author", OriginalURL: tc.url},
+			}))
+			capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: tc.response}}
+			svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &tierTestModels{chat: capture}}
+			rejected, err := svc.reviewIntake(context.Background(), library, entry, "The author's product experience.")
+			require.NoError(t, err)
+			require.Equal(t, tc.rejected, rejected)
+			require.Len(t, capture.reviews, 1)
+			require.Contains(t, capture.reviews[0][0].Content, library.ReviewCriteria)
+			intake, err := entry.IntakeMetadata()
+			require.NoError(t, err)
+			require.Equal(t, tc.name, intake.Decision)
+			if tc.rejected {
+				require.Contains(t, intake.Reason, "No substantive opinion")
+			}
+		})
+	}
 }
 
 type intakeRepo struct {
