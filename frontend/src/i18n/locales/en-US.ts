@@ -1,6 +1,15 @@
 import { ikb18En } from './ikb18'
 export default {
   entryBatch: {
+    updatedFrom: 'Updated from',
+    updatedTo: 'Updated to',
+    updatedDates: 'Updated date range',
+    scopeStep: 'Step 1: Choose scope',
+    actionStep: 'Step 2: Choose action',
+    nextAction: 'Next: Choose action',
+    changeScope: 'Back: Change scope',
+    filterScopeHint: 'Uses the current list filters, including unloaded materials. Close this dialog to change those filters.',
+    topics: 'Topics',
     fixedScope: 'Submitted batch; its material set is fixed.',
     resultLink: 'Open this batch result',
     warningCount: '{count} warnings; see item results for details.',

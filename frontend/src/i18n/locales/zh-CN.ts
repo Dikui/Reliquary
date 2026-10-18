@@ -1,6 +1,15 @@
 import { ikb18Zh } from './ikb18'
 export default {
   entryBatch: {
+    updatedFrom: '更新起始日期',
+    updatedTo: '更新截止日期',
+    updatedDates: '更新时间范围',
+    scopeStep: '第 1 步：选择范围',
+    actionStep: '第 2 步：选择操作',
+    nextAction: '下一步：选择操作',
+    changeScope: '上一步：修改范围',
+    filterScopeHint: '范围沿用当前列表筛选，包含未加载的资料。需要调整筛选时，请关闭弹窗后修改。',
+    topics: '主题',
     fixedScope: '已提交批次；资料集合已固定。',
     resultLink: '打开此批次结果',
     warningCount: '警告 {count} 项；详情见各项结果。',

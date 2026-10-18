@@ -31,7 +31,7 @@ import { entrySpansPayloadHasTrace } from '@/utils/entryTrace';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import EntryBatchDialog from '@/components/EntryBatchDialog.vue';
-import type { EntryBatchSelection, EntryBatchAction } from '@/api/entry-batches';
+import type { EntryBatchSelection } from '@/api/entry-batches';
 import { listEntities, type Entity } from '@/api/entities';
 import { listTopics, type Topic } from '@/api/topics';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
@@ -39,8 +39,7 @@ import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
 import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
-import LibraryReviewAction from '@/components/LibraryReviewAction.vue';
-import type { LibraryContentType, LibraryRebuildScope } from '@/api/library';
+import type { LibraryContentType } from '@/api/library';
 import { SEARCH_SOURCES } from '@/types/search';
 import {
   documentListFiltersFromQuery,
@@ -65,9 +64,6 @@ const libraryId = computed(() => resources.library?.id || '');
 const libraryInfo = ref<any>(null);
 const libraryScope = useLibraryScope();
 const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
-const selectedLibrary = computed(() => libraryScope.value.length === 1
-  ? libraryCatalog.value.find(item => item.id === libraryScope.value[0])
-  : undefined);
 const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
 const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
@@ -659,7 +655,7 @@ const handleOpenLibrarySettings = () => uiStore.openSettings('library');
 const reparseConfirmStore = useReparseConfirmStore();
 
 const batchResultId = ref('');
-const batchDialogVisible = ref(false), batchInitialAction = ref<EntryBatchAction>('star'), batchScopeLabel = ref('');
+const batchDialogVisible = ref(false);
 const batchSelection = ref<EntryBatchSelection>();
 const batchSelectedIds = ref<string[]>([]);
 const batchLibraryIds = computed(() => [...new Set(cardList.value.filter((item: EntryCard) => batchSelectedIds.value.includes(item.id)).map((item: EntryCard) => item.library_id))].filter(Boolean) as string[]);
@@ -668,16 +664,8 @@ watch(() => route.query.batch_id, id => { if (typeof id === 'string' && id && id
 function openBatch() {
   batchResultId.value = '';
   batchSelectedIds.value = [...selectedIds.value]; batchSelection.value = { filters: JSON.parse(JSON.stringify(filterParams.value)) };
-  batchScopeLabel.value = ''; batchInitialAction.value = 'star'; batchDialogVisible.value = true;
+  batchDialogVisible.value = true;
 }
-const confirmLibraryRebuild = (scope: LibraryRebuildScope = 'failed') => {
-  const target = selectedLibrary.value;
-  if (!target || target.template === 'generated') return;
-  batchResultId.value = '';
-  batchSelectedIds.value = []; batchSelection.value = { filters: { libraries: [target.id], ...(scope === 'failed' ? { parse_status: 'failed' } : {}) } };
-  batchScopeLabel.value = `${target.display_name || target.name} · ${t(scope === 'failed' ? 'entryBatch.wholeLibraryFailed' : 'entryBatch.wholeLibrary')}`;
-  batchInitialAction.value = 'reprocess'; batchDialogVisible.value = true;
-};
 async function batchChanged() { clearSelection(); resetPage(); await handlePendingChanged(); }
 
 // Opens ONLY the trace drawer for this card — does NOT pop the
@@ -1072,14 +1060,20 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                     </template>
                   </t-select>
                 </div>
-                <div class="doc-filter-field"><t-select v-model="entityFilterValues" multiple filterable clearable :options="entityFilterOptions" :loading="choicesLoading" :placeholder="t('entryBatch.entities')" :aria-label="t('entryBatch.entities')" /><t-button v-if="moreEntityChoices" size="small" variant="text" :loading="choicesLoading" @click="loadFilterChoices(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button></div>
-                <div class="doc-filter-field"><t-select v-model="topicFilterValues" multiple filterable clearable :options="topicFilterOptions" :placeholder="t('entryBatch.actions.topics')" :aria-label="t('entryBatch.actions.topics')" /></div>
-                <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>
-                <p v-if="choicesError" role="alert">{{ choicesError }} <t-button variant="text" @click="loadFilterChoices()">{{ t('common.retry') }}</t-button></p>
+                <div class="doc-filter-field doc-filter-field--wide">
+                  <t-select v-model="entityFilterValues" multiple filterable clearable :options="entityFilterOptions" :loading="choicesLoading" :placeholder="t('entryBatch.entities')" :aria-label="t('entryBatch.entities')" class="doc-filter-field__control">
+                    <template v-if="moreEntityChoices" #panelBottomContent>
+                      <t-button block size="small" variant="text" :loading="choicesLoading" @click.stop="loadFilterChoices(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
+                    </template>
+                  </t-select>
+                </div>
+                <div class="doc-filter-field doc-filter-field--wide"><t-select v-model="topicFilterValues" multiple filterable clearable :options="topicFilterOptions" :placeholder="t('entryBatch.topics')" :aria-label="t('entryBatch.topics')" class="doc-filter-field__control" /></div>
+                <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" class="doc-date-range doc-filter-field__control" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>
+                <p v-if="choicesError" class="doc-filter-error" role="alert">{{ choicesError }} <t-button variant="text" @click="loadFilterChoices()">{{ t('common.retry') }}</t-button></p>
                 <div class="doc-filter-field doc-filter-field--wide">
                   <t-date-range-picker v-model="updatedTimeRange"
-                    :placeholder="[$t('library.updatedTimeFrom'), $t('library.updatedTimeTo')]"
-                    :disable-date="disableFutureDate" class="doc-date-range doc-filter-field__control" clearable
+                    :placeholder="[t('entryBatch.updatedFrom'), t('entryBatch.updatedTo')]" :aria-label="t('entryBatch.updatedDates')"
+                    :disable-date="disableFutureDate" class="doc-date-range doc-date-range--updated doc-filter-field__control" clearable
                     allow-input>
                     <template #prefixIcon>
                       <t-icon name="time" size="16px" />
@@ -1088,19 +1082,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 </div>
                 <div class="doc-filter-bar__trailing">
-                  <LibraryReviewAction :library="selectedLibrary" scope="all" @submitted="pendingCounts.refresh()" />
-                  <t-tooltip v-if="selectedLibrary?.template !== 'generated'" :content="selectedLibrary ? (selectedLibrary.display_name || selectedLibrary.name) : $t('library.rebuildLibrarySelectOne')">
-                    <span>
-                      <t-button variant="text" size="small"
-                        :disabled="!selectedLibrary" @click="confirmLibraryRebuild()">
-                        {{ $t('library.rebuildLibrary') }}
-                      </t-button>
-                      <t-button variant="text" size="small"
-                        :disabled="!selectedLibrary" @click="confirmLibraryRebuild('all')">
-                        {{ $t('library.rebuildLibraryAll') }}
-                      </t-button>
-                    </span>
-                  </t-tooltip>
+                  <t-button theme="primary" size="small" @click="openBatch">{{ t('entryBatch.title') }}</t-button>
                   <t-button  variant="text" size="small" @click="commandPalette.openPalette(docSearchKeyword.trim())">
                     {{ $t('library.searchMessageContent') }}
                   </t-button>
@@ -1194,7 +1176,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :scope-label="batchScopeLabel" :initial-action="batchInitialAction" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
+      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
     <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId"
         @openEntry="openSourceDoc" @openEntity="openArticleEntity" @openTopic="openReportTopic"
@@ -1335,8 +1317,8 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
   &__filters {
     grid-area: filters;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    align-items: center;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
     gap: 10px;
     min-width: 0;
   }
@@ -1358,9 +1340,15 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
     grid-template-areas: 'search' 'trailing' 'filters';
 
     &__trailing { justify-content: flex-start; }
+    &__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
+  .doc-filter-error { grid-column: 1 / -1; margin: 0; }
+
   .doc-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     min-width: 0;
 
     &--wide {
