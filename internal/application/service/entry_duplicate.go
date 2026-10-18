@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"net/url"
 	"os"
 	"strconv"
@@ -68,9 +68,9 @@ func messageBodyFingerprint(body string) (string, int64, int) {
 		if strings.IndexFunc(feature, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }) < 0 {
 			continue
 		}
-		h := fnv.New64a()
-		_, _ = h.Write([]byte(feature))
-		value := h.Sum64()
+		// Short FNV shingles share high bits and collapse unrelated English bodies.
+		featureHash := sha256.Sum256([]byte(feature))
+		value := binary.BigEndian.Uint64(featureHash[:8])
 		for bit := range weights {
 			if value&(uint64(1)<<bit) != 0 {
 				weights[bit]++

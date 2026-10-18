@@ -35,9 +35,35 @@ func TestP4RepostNamePreservesFullWidthCharacters(t *testing.T) {
 	require.NotEqual(t, normalizeRepostName("ＡＣＭＥ"), normalizeRepostName("ACME"))
 }
 
+func TestP4UnrelatedEnglishBodiesStaySeparate(t *testing.T) {
+	// These unrelated bodies were only three bits apart with FNV shingles.
+	bank := "Customers can ask a virtual assistant to explain charges and find the correct service team. The system presents clear instructions when a payment cannot be completed. Independent reviewers examined access controls and recorded how employees handle sensitive records."
+	marine := "A marine research team surveyed a coral reef to study the movement of small fish. Divers recorded water temperature and collected samples for laboratory analysis. They found that changes in available food affected where the animals gathered."
+	t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "3")
+	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", ParseStatus: "completed"}
+	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library"}
+	setMessageFingerprint(owner, bank)
+	setMessageFingerprint(incoming, marine)
+	require.GreaterOrEqual(t, incoming.ContentRuneCount, owner.ContentRuneCount*4/5)
+	require.LessOrEqual(t, incoming.ContentRuneCount, owner.ContentRuneCount*5/4)
+	require.Greater(t, bits.OnesCount64(uint64(owner.ContentSimHash)^uint64(incoming.ContentSimHash)), messageSimHashThreshold())
+	require.False(t, sameIngestBody(bank, marine))
+	db := pgtest.Open(t)
+	require.NoError(t, db.Create(owner).Error)
+	match, _, _, err := findMessageDuplicate(db, incoming)
+	require.NoError(t, err)
+	require.Nil(t, match)
+	setMessageFingerprint(incoming, bank)
+	match, method, _, err := findMessageDuplicate(db, incoming)
+	require.NoError(t, err)
+	require.NotNil(t, match)
+	require.Equal(t, owner.ID, match.ID)
+	require.Equal(t, "content_hash", method)
+}
+
 func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 	body := "Acme released the Orion model with improved reasoning, fast inference, multimodal input, and a context window of one million tokens. The report includes benchmark results, evaluation methodology, pricing, and deployment requirements."
-	changed := strings.Replace(body, "one million", "two million", 1)
+	changed := strings.Replace(body, "reasoning,", "reasoning;", 1)
 	hash, simhash, count := messageBodyFingerprint(body)
 	otherHash, otherSimhash, otherCount := messageBodyFingerprint(changed)
 	require.NotEqual(t, hash, otherHash)
@@ -85,7 +111,7 @@ func TestP4DuplicateIntakeReturnsCurrentMatchMethod(t *testing.T) {
 	for _, input := range []struct {
 		body, url, method string
 	}{
-		{strings.Replace(body, "one million", "two million", 1), "https://news.example/near", "simhash"},
+		{strings.Replace(body, "reasoning,", "reasoning;", 1), "https://news.example/near", "simhash"},
 		{body, "https://news.example/exact", "content_hash"},
 		{body, "https://news.example/exact?utm_source=feed", "url"},
 	} {
