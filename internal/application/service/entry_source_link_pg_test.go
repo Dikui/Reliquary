@@ -82,7 +82,7 @@ func TestIntakeRetryUsesCurrentLibraryReviewPolicy(t *testing.T) {
 		"source_evidence_rule": "link_required", "review_criteria": oldCriteria,
 	}).Error)
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{
-		Library: "institutional", Acquisition: "verbatim", Title: "Policy retry",
+		Library: "official", Acquisition: "verbatim", Title: "Policy retry",
 		Publisher: "Measured Research", PublishedAt: "2026-10-01",
 		Content: "The original publication reports complete measurements and supporting observations.",
 	})
@@ -145,7 +145,7 @@ func TestAdmitWithoutSourceForcesFullAndRecordsUserConfirmation(t *testing.T) {
 func TestIngestModelRejectReturnsPendingReviewWithReason(t *testing.T) {
 	h, vault := newIngestHarness(t)
 	h.processor.reject = true
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://example.org/intake-rejected", Publisher: "Acme", Content: "A complete original selected by an external agent.", AgentSummary: "The collector says this passes review."})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", Acquisition: "verbatim", URL: "https://example.org/intake-rejected", Publisher: "Acme", Content: "A complete original selected by an external agent.", AgentSummary: "The collector says this passes review."})
 	require.NoError(t, err)
 	require.Equal(t, "pending_review", result.Status)
 	require.Equal(t, "第 1/1 段: Fixture sourced article", result.Reason)

@@ -23,7 +23,7 @@ export function moveType(rows: unknown[], index: number, delta: number) {
 
 // Only the exact historical system default is adapted for display. Saved
 // configuration and user-authored descriptions remain untouched until Save.
-export function catalogDescription(library: LibraryCatalogItem, currentOpinionsDescription: string) {
-  return library.system_role === 'opinions' && /^外部个人的观点：专家、分析师、KOL 的评论与\u6587\u7ae0。$/.test(library.description)
-    ? currentOpinionsDescription : library.description
+export function catalogDescription(library: LibraryCatalogItem, currentMediaDescription: string) {
+  return library.system_role === 'media' && /^外部个人的观点：专家、分析师、KOL 的评论与\u6587\u7ae0。$/.test(library.description)
+    ? currentMediaDescription : library.description
 }

@@ -41,7 +41,7 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 		require.Equal(t, want.RelationTypes, got.RelationTypes)
 		require.Error(t, svc.DeleteLibrary(ctx, got.ID))
 	}
-	institutional, err := repo.GetSystemLibraryByRole(ctx, 1, "institutional")
+	institutional, err := repo.GetSystemLibraryByRole(ctx, 1, "official")
 	require.NoError(t, err)
 	name := "用户改名"
 	off := false

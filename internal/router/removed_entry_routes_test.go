@@ -4,14 +4,18 @@ import (
 	"net/http"
 	"testing"
 
+	"reliquary/internal/handler"
+
 	"github.com/stretchr/testify/require"
 )
 
 func TestRemovedEntryResourcesReturnNotFound(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", t.TempDir())
+	f.params.VaultHandler = handler.NewVaultHandler(nil)
 	f.router = NewRouter(f.params)
 	cases := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/reports"},
 		{http.MethodPost, "/api/v1/entries/article/regenerate-summary"},
 		{http.MethodPut, "/api/v1/chunks/by-id/chunk/questions"},
 		{http.MethodDelete, "/api/v1/chunks/by-id/chunk/questions"},

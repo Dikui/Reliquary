@@ -11,7 +11,7 @@ import (
 
 func TestIngestLibrarySourceIdentityAndCompletion(t *testing.T) {
 	h, v := newIngestHarness(t)
-	req := types.IngestRequest{Library: "mine", SourceRef: "work/measurements", Content: "# Original\n\nMeasured pressure equals 42.", Acquisition: "verbatim", Title: "Measurements"}
+	req := types.IngestRequest{Library: "personal", SourceRef: "work/measurements", Content: "# Original\n\nMeasured pressure equals 42.", Acquisition: "verbatim", Title: "Measurements"}
 	on := true
 	req.Graph = &on
 	first, err := h.service.Ingest(h.ctx, &req)
@@ -96,7 +96,7 @@ func TestIngestLibrarySourceIdentityAndCompletion(t *testing.T) {
 	independent, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
 	require.NotEqual(t, fourth.EntryID, independent.EntryID)
-	req.Library = "institutional"
+	req.Library = "official"
 	_, err = h.service.Ingest(h.ctx, &req)
 	require.ErrorContains(t, err, "source_ref")
 	req.SourceRef = ""
@@ -116,23 +116,23 @@ func TestIngestLibrarySourceIdentityAndCompletion(t *testing.T) {
 	require.Error(t, validateLibraryIngest(&req, &types.Library{Template: types.TemplateExternalDurable}))
 	req.Identifier = ""
 	req.SourceRef = strings.Repeat("界", 2049)
-	req.Library = "mine"
+	req.Library = "personal"
 	_, err = h.service.Ingest(h.ctx, &req)
 	require.ErrorContains(t, err, "2048")
 
 	// Complete by ID without a URL or body. Inspect the stored replacement.
 	imageURL := "https://example.org/chart.png"
-	incomplete := types.IngestRequest{Library: "mine", Content: "My calibration record.\n\n![chart](" + imageURL + ")", Title: "Calibration", Acquisition: "verbatim"}
+	incomplete := types.IngestRequest{Library: "personal", Content: "My calibration record.\n\n![chart](" + imageURL + ")", Title: "Calibration", Acquisition: "verbatim"}
 	accepted, err := h.service.Ingest(h.ctx, &incomplete)
 	require.NoError(t, err)
 	h.drain(t)
-	complete := types.IngestRequest{Library: "mine", EntryID: accepted.EntryID, Images: []types.IngestImage{{SourceURL: imageURL, Data: articleImageDataURI(t, 70)}}}
+	complete := types.IngestRequest{Library: "personal", EntryID: accepted.EntryID, Images: []types.IngestImage{{SourceURL: imageURL, Data: articleImageDataURI(t, 70)}}}
 	bad := complete
 	bad.EntryID = "00000000-0000-4000-8000-000000000000"
 	_, err = h.service.Ingest(h.ctx, &bad)
 	require.ErrorContains(t, err, "existing entry")
 	bad = complete
-	bad.Library = "institutional"
+	bad.Library = "official"
 	_, err = h.service.Ingest(h.ctx, &bad)
 	require.ErrorContains(t, err, "different library")
 	done, err := h.service.Ingest(h.ctx, &complete)
@@ -162,7 +162,7 @@ func TestIngestLibrarySourceIdentityAndCompletion(t *testing.T) {
 
 func TestIngestFiveMillionCodePoints(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	req := types.IngestRequest{Library: "mine", Title: "Long record", Content: strings.Repeat("界", types.MaxIngestContentRunes), Acquisition: "verbatim"}
+	req := types.IngestRequest{Library: "personal", Title: "Long record", Content: strings.Repeat("界", types.MaxIngestContentRunes), Acquisition: "verbatim"}
 	result, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
 	require.NotEmpty(t, result.EntryID)

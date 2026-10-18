@@ -74,7 +74,7 @@ func TestHTTPProcessingEntrypointsResumeFailedAndCancelledSegments(t *testing.T)
 				router := ingestAuthHTTPRouter(f)
 				oldTopic := &types.Topic{ID: "old-global-topic", SpaceID: types.SingleSpaceID, Name: "Old measurements"}
 				require.NoError(t, f.db.Create(oldTopic).Error)
-				body, _ := json.Marshal(map[string]any{"items": []any{map[string]any{"library": "mine", "title": "HTTP segmented original", "acquisition": "verbatim", "content": "# Measurements\n\n" + strings.Repeat("Complete original measurements. ", 30)}}})
+				body, _ := json.Marshal(map[string]any{"items": []any{map[string]any{"library": "personal", "title": "HTTP segmented original", "acquisition": "verbatim", "content": "# Measurements\n\n" + strings.Repeat("Complete original measurements. ", 30)}}})
 				response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest", string(body), f.key, true)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 				var envelope struct{ Data types.IngestBatchResult }

@@ -287,6 +287,9 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 	if err := maintenance.VerifyImportedReplica(ctx, s.db, s.root); err != nil {
 		return result, err
 	}
+	if err := ensureVaultDirectories(s.db.WithContext(ctx), s.root); err != nil {
+		return result, err
+	}
 	// Keyword reconstruction uses each entry's library while model credentials
 	// are being entered. Vector rebuilding is a separate maintenance step.
 	var articles []types.Entry

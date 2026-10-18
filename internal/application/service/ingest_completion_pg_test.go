@@ -17,7 +17,7 @@ import (
 )
 
 func ingestFixtureRequest(url, body string) *types.IngestRequest {
-	return &types.IngestRequest{Library: "institutional", URL: url, Content: body, Acquisition: "verbatim", Publisher: "Acme", Title: "Original observations"}
+	return &types.IngestRequest{Library: "official", URL: url, Content: body, Acquisition: "verbatim", Publisher: "Acme", Title: "Original observations"}
 }
 func ingestMissingImageRequest(url, source string) *types.IngestRequest {
 	return ingestFixtureRequest(url, "# Original observations\n\nAcme reports the exact measured pressure, the calibration method and instrument configuration.\n\n![measurement]("+source+")")
@@ -48,7 +48,7 @@ func TestIngestImageSupplementWithBodyPreservesTextReprocessesAndUpdatesHeader(t
 	require.True(t, before.Incomplete)
 	require.Len(t, h.processor.requests, 1)
 	h.processor.output = strings.Replace(validProcessingFixture("research"), "Acme released", "Acme measured", 1)
-	supplement, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", EntryID: accepted.EntryID, URL: request.URL, Content: request.Content, Acquisition: "extracted", Images: []types.IngestImage{{SourceURL: source, Data: articleImageDataURI(t, 71)}}})
+	supplement, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", EntryID: accepted.EntryID, URL: request.URL, Content: request.Content, Acquisition: "extracted", Images: []types.IngestImage{{SourceURL: source, Data: articleImageDataURI(t, 71)}}})
 	require.NoError(t, err)
 	require.Equal(t, "supplemented", supplement.Status)
 	require.Empty(t, supplement.Completeness)
@@ -98,7 +98,7 @@ func TestIngestPartialCompletionListPaginationAcceptAndKeyRevocation(t *testing.
 	next, err := h.service.ListIncomplete(h.ctx, 2, 1, false)
 	require.NoError(t, err)
 	require.Len(t, next.Items, 1)
-	supplement, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", EntryID: first.EntryID, URL: req.URL, Content: req.Content, Acquisition: "extracted", Images: []types.IngestImage{{SourceURL: sources[0], Data: articleImageDataURI(t, 72)}}})
+	supplement, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", EntryID: first.EntryID, URL: req.URL, Content: req.Content, Acquisition: "extracted", Images: []types.IngestImage{{SourceURL: sources[0], Data: articleImageDataURI(t, 72)}}})
 	require.NoError(t, err)
 	require.Equal(t, "supplemented", supplement.Status)
 	require.Len(t, supplement.Completeness, 1)
@@ -117,7 +117,7 @@ func TestIngestPartialCompletionListPaginationAcceptAndKeyRevocation(t *testing.
 	require.False(t, h.article(t, first.EntryID).Incomplete)
 	now := time.Now()
 	require.NoError(t, h.db.Model(&types.APIKey{}).Where("id=1").Update("revoked_at", now).Error)
-	_, err = h.service.CheckURLs(h.ctx, []string{req.URL}, "institutional")
+	_, err = h.service.CheckURLs(h.ctx, []string{req.URL}, "official")
 	require.Error(t, err)
 	_, err = h.service.Ingest(h.ctx, req)
 	require.Error(t, err)
@@ -152,7 +152,7 @@ func TestIngestConflictPreservesOriginalAndCanBeDiscardedOrSaved(t *testing.T) {
 	_, _, still := readVaultArticle(t, v, h.article(t, first.EntryID))
 	require.Equal(t, body, still)
 	require.NoError(t, h.service.DiscardIngest(h.ctx, result.EntryID, "用户不保留冲突材料"))
-	checks, err := h.service.CheckURLs(h.ctx, []string{req.URL}, "institutional")
+	checks, err := h.service.CheckURLs(h.ctx, []string{req.URL}, "official")
 	require.NoError(t, err)
 	require.Equal(t, "in_library", checks[0].Status)
 	result, err = h.service.Ingest(h.ctx, different)
@@ -174,7 +174,7 @@ func TestIngestConcurrentSameSupplementMutatesOnce(t *testing.T) {
 	first, err := h.service.Ingest(h.ctx, ingestMissingImageRequest("https://example.org/concurrent", source))
 	require.NoError(t, err)
 	h.drain(t)
-	request := &types.IngestRequest{Library: "institutional", EntryID: first.EntryID, URL: "https://example.org/concurrent", Content: ingestMissingImageRequest("https://example.org/concurrent", source).Content, Acquisition: "verbatim", Images: []types.IngestImage{{SourceURL: source, Data: articleImageDataURI(t, 73)}}}
+	request := &types.IngestRequest{Library: "official", EntryID: first.EntryID, URL: "https://example.org/concurrent", Content: ingestMissingImageRequest("https://example.org/concurrent", source).Content, Acquisition: "verbatim", Images: []types.IngestImage{{SourceURL: source, Data: articleImageDataURI(t, 73)}}}
 	var wg sync.WaitGroup
 	results := make([]*types.IngestResult, 2)
 	errs := make([]error, 2)
@@ -210,7 +210,7 @@ func TestIngestSupplementRollbackRestoresVaultBody(t *testing.T) {
 	before, err := os.ReadFile(filepath.Join(v.root, article.VaultPath))
 	require.NoError(t, err)
 	require.NoError(t, h.db.Exec("DROP TABLE operation_logs").Error)
-	_, err = h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", EntryID: first.EntryID, URL: "https://example.org/rollback", Content: ingestMissingImageRequest("https://example.org/rollback", source).Content, Acquisition: "verbatim", Images: []types.IngestImage{{SourceURL: source, Data: articleImageDataURI(t, 74)}}})
+	_, err = h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", EntryID: first.EntryID, URL: "https://example.org/rollback", Content: ingestMissingImageRequest("https://example.org/rollback", source).Content, Acquisition: "verbatim", Images: []types.IngestImage{{SourceURL: source, Data: articleImageDataURI(t, 74)}}})
 	require.Error(t, err)
 	after, err := os.ReadFile(filepath.Join(v.root, article.VaultPath))
 	require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestIngestSupplementRollbackRestoresVaultBody(t *testing.T) {
 func TestIncompleteOwnDiscardUsesIngestOperation(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	forbidIngestNetwork(t, h)
-	row, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "mine", SourceRef: "discard/own.md", Title: "Discard fixture", Content: "# Discard\n\nAcme has original calibration observations.\n\n![figure](https://example.org/discard.png)", Acquisition: "verbatim", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/discard.png", Reason: "unavailable"}}})
+	row, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "personal", SourceRef: "discard/own.md", Title: "Discard fixture", Content: "# Discard\n\nAcme has original calibration observations.\n\n![figure](https://example.org/discard.png)", Acquisition: "verbatim", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/discard.png", Reason: "unavailable"}}})
 	require.NoError(t, err)
 	require.Equal(t, "accepted", row.Status)
 	h.drain(t)

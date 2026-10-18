@@ -60,12 +60,12 @@ test('navigation and article labels use the same current names in both locales',
   assert.equal(enUS.knowledgeEditor.document.title, 'Materials')
   assert.equal(zhCN.menu.search, '知识检索')
   assert.equal(zhCN.knowledgeWorkbench.tabLabel, '实体')
-  assert.equal(zhCN.settings.vault.title, '文件库状态')
+  assert.equal(zhCN.settings.vault.title, '文件存档与备份')
   assert.equal(zhCN.settings.taskQueue, '运行队列')
 })
 
 test('library settings navigation, heading and model labels agree in both locales', () => {
-  for (const [bundle, label] of [[enUS, 'Library settings'], [zhCN, '库设置']] as const) {
+  for (const [bundle, label] of [[enUS, 'Library settings'], [zhCN, '资料库设置']] as const) {
     assert.equal(bundle.settings.librarySettings, label)
     assert.equal(bundle.modelSettings.usage.librarySettings, label)
     assert.equal(bundle.modelTiers.sources.library, label)

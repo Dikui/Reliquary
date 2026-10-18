@@ -46,7 +46,6 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 	f.router.POST("/contract/ingest", entryHandler.Ingest)
 	f.router.GET("/contract/entries/:id", entryHandler.GetEntry)
 	f.router.GET("/contract/entries/:id/body", entryHandler.ReadEntryBody)
-	f.router.POST("/contract/reports", handler.NewVaultHandler(f.documents).CreateReport)
 	search := service.NewSearchService(evaluationHTTPBases{f.params.LibraryService}, f.params.SpaceService, nil, f.db)
 	f.router.POST("/contract/search", handler.NewSearchHandler(search, nil).SearchEntry)
 	entitiesService := service.NewEntityService(f.db, nil)
@@ -77,7 +76,7 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 	}
 	for _, transport := range []string{"http", "mcp"} {
 		t.Run(transport, func(t *testing.T) {
-			input := map[string]any{"items": []any{map[string]any{"library": "mine", "source_ref": "contract/" + transport, "title": "Contract " + transport, "content": "# Contract\n\nComplete evidence for " + transport, "acquisition": "verbatim", "missing": []any{map[string]any{"type": "image", "source_url": "https://example.test/image.png", "reason": "Unavailable"}}}}}
+			input := map[string]any{"items": []any{map[string]any{"library": "personal", "source_ref": "contract/" + transport, "title": "Contract " + transport, "content": "# Contract\n\nComplete evidence for " + transport, "acquisition": "verbatim", "missing": []any{map[string]any{"type": "image", "source_url": "https://example.test/image.png", "reason": "Unavailable"}}}}}
 			var out map[string]any
 			if transport == "http" {
 				out = httpCall(http.MethodPost, "/contract/ingest", input)["data"].(map[string]any)
@@ -91,7 +90,7 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 			// The fixture does not run background workers. Explicitly settle processing
 			// so this case tests the supplement contract without a concurrent worker.
 			require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", id).Update("parse_status", "completed").Error)
-			supplement := map[string]any{"items": []any{map[string]any{"library": "mine", "entry_id": id, "images": []any{map[string]any{"source_url": "https://example.test/image.png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII="}}}}}
+			supplement := map[string]any{"items": []any{map[string]any{"library": "personal", "entry_id": id, "images": []any{map[string]any{"source_url": "https://example.test/image.png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII="}}}}}
 			if transport == "http" {
 				out = httpCall("POST", "/contract/ingest", supplement)["data"].(map[string]any)
 			} else {
@@ -101,7 +100,7 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 			require.Equal(t, "supplemented", item["status"])
 			require.Equal(t, id, item["entry_id"])
 			for _, old := range []string{"article_id", "knowledge_id"} {
-				bad := map[string]any{"items": []any{map[string]any{"library": "mine", old: id, "images": []any{}}}}
+				bad := map[string]any{"items": []any{map[string]any{"library": "personal", old: id, "images": []any{}}}}
 				if transport == "http" {
 					out = httpCall("POST", "/contract/ingest", bad)["data"].(map[string]any)
 				} else {
@@ -131,25 +130,6 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 	require.NotEmpty(t, mcpFeed["results"])
 	require.Contains(t, httpCall("GET", "/contract/entries/"+source.ID, nil)["data"], "id")
 	require.NotEmpty(t, call("get_entry", map[string]any{"id": source.ID})["header"])
-	for _, transport := range []string{"http", "mcp"} {
-		report := map[string]any{"title": "Contract report " + transport, "markdown": "# Report\n\nAnalysis " + transport, "related_entry_ids": []string{source.ID}}
-		if transport == "http" {
-			httpCall("POST", "/contract/reports", report)
-		} else {
-			call("write_report", report)
-		}
-		report["related_article_ids"] = report["related_entry_ids"]
-		delete(report, "related_entry_ids")
-		if transport == "http" {
-			raw, _ := json.Marshal(report)
-			response := personalRequest(t, f.router, "POST", "/contract/reports", string(raw), f.key, true)
-			require.Equal(t, 400, response.Code)
-		} else {
-			result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: report})
-			require.NoError(t, err)
-			require.True(t, result.IsError)
-		}
-	}
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_article", Arguments: map[string]any{"id": source.ID}})
 	require.Error(t, err)
 	records, err := service.NewSearchRecorder(f.db).List(f.ctx, service.SearchRecordFilter{})

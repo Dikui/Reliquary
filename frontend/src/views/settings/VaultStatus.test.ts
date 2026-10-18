@@ -22,8 +22,14 @@ assert.deepEqual(template.errors, [])
 
 const status: VaultStatus = {
   root: '/srv/reliquary/vault',
-  mine: { directory: 'custom-mine', last_scan_at: '2026-10-11T06:12:30Z', indexed_files: 12 },
-  reports: { directory: 'ai-reports', indexed_files: 3, last_error: 'Cannot read ai-reports/example.md' },
+  libraries: [
+    ...['official', 'media', 'references', 'personal', 'ai-output'].map((role, index) => ({
+      library_id: role, name: ['官方信息', '媒体信息', '参考文档', '个人产出', 'AI产出'][index]!,
+      system_role: role, directory: role, archived_entries: index === 3 ? 12 : index,
+      ...(role === 'ai-output' ? { last_error: 'Cannot read ai-output/example.md' } : {}),
+    })),
+    { library_id: 'custom', name: 'Custom library', system_role: '', directory: 'custom-library', archived_entries: 3 },
+  ],
 }
 
 async function scenario(locale: keyof typeof messages, getVaultStatus: () => Promise<unknown>, action: (state: any) => Promise<void>, api: Record<string, unknown> = {}, dialog: (options: any) => void = () => {}) {
@@ -67,14 +73,14 @@ async function scenario(locale: keyof typeof messages, getVaultStatus: () => Pro
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   const copy = messages[locale].settings.vault
-  test(`${locale}: settings render the read-only vault root and separate directory status`, async () => {
+  test(`${locale}: settings render every library archive, including empty and custom libraries`, async () => {
     const html = await scenario(locale, async () => ({ success: true, data: status }), state => state.load())
-    for (const value of [copy.title, copy.root, copy.rootHint, copy.mine, copy.reports, copy.lastScan, copy.indexedFiles, copy.lastError, copy.noError, copy.notScanned, status.root, status.reports.last_error!]) assert.ok(html.includes(value), value)
-    assert.ok(html.includes(copy.mineImportedHint))
-    assert.ok(!html.includes(new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(status.mine.last_scan_at!))))
-    assert.ok(html.includes('custom-mine/'))
-    assert.ok(html.includes('ai-reports/'))
-    assert.doesNotMatch(html, />reports\//)
+    for (const value of [copy.title, copy.root, copy.rootHint, copy.archiveHint, copy.lastScan, copy.archivedEntries, copy.lastError, copy.notScanned, status.root, 'Cannot read ai-output/example.md']) assert.ok(html.includes(value), value)
+    for (const library of status.libraries) {
+      assert.ok(html.includes(library.name), library.name)
+      assert.ok(html.includes(`${library.directory}/`), library.directory)
+    }
+    assert.match(html, /<dd>0<\/dd>/)
     assert.match(html, /<dd>12<\/dd>/)
     assert.match(html, /<dd>3<\/dd>/)
     assert.doesNotMatch(html, /<input|<textarea/)

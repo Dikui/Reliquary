@@ -40,7 +40,7 @@ func TestIngestProcessingNeverFetchesRemoteImages(t *testing.T) {
 		t.Run(map[bool]string{false: "markdown", true: "image_original_address"}[structured], func(t *testing.T) {
 			h, v := newIngestHarness(t)
 			transport := forbidIngestNetwork(t, h)
-			request := &types.IngestRequest{Library: "institutional", URL: "https://example.org/no-network", Acquisition: "extracted", ContentTypeHint: "tutorial", Publisher: "Fixture Journal",
+			request := &types.IngestRequest{Library: "official", URL: "https://example.org/no-network", Acquisition: "extracted", ContentTypeHint: "tutorial", Publisher: "Fixture Journal",
 				Content: "# Original observations\n\nThe original experiment measures atmospheric pressure and reports its instrument settings."}
 			imageURL := "https://example.org/unprovided.png"
 			if structured {
@@ -74,7 +74,7 @@ func TestIngestProcessingNeverFetchesRemoteImages(t *testing.T) {
 
 func TestIngestOwnedFieldsSurviveBackgroundSnapshots(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", URL: "https://example.org/ownership", Acquisition: "model_written", Content: "A glacier observation records mass balance and physical sampling procedures.", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/figure.png", Reason: "图片暂不可用"}}})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", URL: "https://example.org/ownership", Acquisition: "model_written", Content: "A glacier observation records mass balance and physical sampling procedures.", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/figure.png", Reason: "图片暂不可用"}}})
 	require.NoError(t, err)
 	article := h.article(t, result.EntryID)
 	stale := *article

@@ -14,7 +14,7 @@ import * as scope from './utils/libraryScope'
 import * as references from './utils/bodyReference'
 const require = createRequire(import.meta.url)
 const empty = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
-const library = (id = 'mine', extra = {}) => ({ id, name: '我的资料', display_name: '我的资料', directory: id, template: 'own', system_role: id === 'mine' ? 'mine' : '', description: '', review_criteria: '完整', content_types: [{ name: '笔记', enabled: true, position: 0, extract_graph: false }], relation_types: [{ name: '合作', enabled: true, position: 0 }, { name: '依赖', enabled: true, position: 1 }], feed_enabled: false, entry_count: 0, ...extra })
+const library = (id = 'mine', extra = {}) => ({ id, name: '我的资料', display_name: '我的资料', directory: id === 'mine' ? 'personal' : id, template: 'own', system_role: id === 'mine' ? 'personal' : '', description: '', review_criteria: '完整', content_types: [{ name: '笔记', enabled: true, position: 0, extract_graph: false }], relation_types: [{ name: '合作', enabled: true, position: 0 }, { name: '依赖', enabled: true, position: 1 }], feed_enabled: false, entry_count: 0, ...extra })
 async function scenario(path: string, props: Record<string, unknown>, modules: Record<string, any>, action: (state: any) => Promise<void>, locale = 'zh-CN') {
   const filename = new URL(path, import.meta.url).pathname
   const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
@@ -68,7 +68,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       assert.equal(body.relation_types.length, 1)
       for (const field of ['directory', 'template', 'system_role', 'source_evidence_rule']) assert.equal(field in body, false)
     }, locale)
-    assert.match(html, /mine\//); assert.doesNotMatch(html, /Delete library|删除库/)
+    assert.match(html, /personal\//); assert.doesNotMatch(html, /Delete library|删除库/)
   })
   test(`${locale}: new library validates directory and enters created library settings`, async () => {
     const calls: any[] = []
@@ -227,14 +227,14 @@ test('English newline separator labels display literal escapes', async () => {
 
 for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: historical default description uses current copy without an implicit save`, async()=>{
  const legacy='外部个人的观点：专家、分析师、KOL 的评论与文章。'
- const original=library('opinions',{system_role:'opinions',template:'external_timely',description:legacy})
+ const original=library('media',{system_role:'media',template:'external_timely',description:legacy})
  const calls:any[]=[]
  const modules=catalogModules(calls)
  modules['@/api/library'].listLibraries=async()=>({success:true,data:[original]})
  modules['@/api/library'].getCatalogLibrary=async()=>({success:true,data:structuredClone(original)})
  await scenario('./views/settings/LibraryCatalogSettings.vue',{},modules,async state=>{
   await state.load()
-  assert.equal(state.draft.value.description,(locale==='zh-CN'?zh:en).ikb18.systemOpinionsDescription)
+  assert.equal(state.draft.value.description,(locale==='zh-CN'?zh:en).ikb18.systemMediaDescription)
   assert.equal(state.dirty.value,false)
   assert.equal(calls.length,0)
   assert.equal(original.description,legacy)

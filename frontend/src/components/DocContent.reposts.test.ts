@@ -747,7 +747,7 @@ for (const count of [1, 2]) {
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: vault source identity reaches full detail through the production loading hook`, async () => {
-    const loader = createArticleDetailsLoader({ converted: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Converted.md' }, direct: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'mine/Direct.md' }, report: { source_kind: 'report', channel: 'api', file_type: 'md', vault_path: 'reports/Report.md' } })
+    const loader = createArticleDetailsLoader({ converted: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'personal/Converted.md' }, direct: { source_kind: 'mine', channel: 'api', file_type: 'md', vault_path: 'personal/Direct.md' }, report: { source_kind: 'report', channel: 'api', file_type: 'md', vault_path: 'ai-output/Report.md' } })
     for (const [id, kind] of [['converted', 'mine'], ['direct', 'mine'], ['report', 'report']] as const) {
       const html = await renderDetails([], locale, { loadedDetails: await loader.load(id) })
       assert.ok(html.includes(messages[locale].library.sourceKinds[kind]), id)

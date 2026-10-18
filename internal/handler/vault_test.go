@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -21,13 +20,13 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
+func TestVaultStatusIncludesArchivedGeneratedMaterials(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
 	library, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
-	library, err = repository.NewLibraryRepository(db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, "ai-reports")
+	library, err = repository.NewLibraryRepository(db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, "ai-output")
 	require.NoError(t, err)
 	library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, db.Save(library).Error)
@@ -40,29 +39,22 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	router.ContextWithFallback = true
 	router.Use(func(c *gin.Context) { c.Request = c.Request.WithContext(ctx); c.Next() }, middleware.ErrorHandler())
 	handler := NewVaultHandler(documents)
-	router.POST("/api/v1/reports", handler.CreateReport)
 	router.GET("/api/v1/vault/status", handler.Status)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/reports", bytes.NewBufferString(`{"title":"测试报告","markdown":"# 测试报告\n\nReportvaultmarker records verified findings."}`))
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-	router.ServeHTTP(response, request)
-	require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
-	var result struct {
-		Data types.Entry `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
-	require.Equal(t, "report", result.Data.SourceKind)
-	require.Equal(t, "测试报告", result.Data.Title)
-	require.Contains(t, result.Data.VaultPath, library.Directory+"/测试报告-")
-	content, err := os.ReadFile(filepath.Join(root, result.Data.VaultPath))
+	report, err := documents.CreateReport(ctx, "测试报告", "# 测试报告\n\nReportvaultmarker records verified findings.", nil)
+	require.NoError(t, err)
+	entry := report.Entry
+	require.Equal(t, "report", entry.SourceKind)
+	require.Equal(t, "测试报告", entry.Title)
+	require.Contains(t, entry.VaultPath, library.Directory+"/测试报告-")
+	content, err := os.ReadFile(filepath.Join(root, entry.VaultPath))
 	require.NoError(t, err)
 	require.Contains(t, string(content), "Reportvaultmarker")
 	hits, err := engine.Retrieve(ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{library.ID}, Query: "Reportvaultmarker", TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 	require.NotEmpty(t, hits[0].Results)
-	require.Equal(t, result.Data.ID, hits[0].Results[0].EntryID)
-	response = httptest.NewRecorder()
+	require.Equal(t, entry.ID, hits[0].Results[0].EntryID)
+	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/vault/status", nil))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var status struct {
@@ -70,10 +62,10 @@ func TestReportsRESTWritesVaultFileAndIndexesImmediately(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &status))
 	require.Equal(t, root, status.Data.Root)
-	require.EqualValues(t, 1, status.Data.Reports.IndexedFiles)
-	response = httptest.NewRecorder()
-	request = httptest.NewRequest(http.MethodPost, "/api/v1/reports", bytes.NewBufferString(`{"title":"bad","markdown":"x","related_entry_ids":["missing"]}`))
-	request.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(response, request)
-	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	require.Len(t, status.Data.Libraries, 5)
+	for _, item := range status.Data.Libraries {
+		if item.LibraryID == library.ID {
+			require.EqualValues(t, 1, item.ArchivedEntries)
+		}
+	}
 }

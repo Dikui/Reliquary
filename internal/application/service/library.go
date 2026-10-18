@@ -53,7 +53,7 @@ func NewLibraryService(db *gorm.DB, repo interfaces.LibraryRepository,
 	}
 }
 
-// GetSystemLibrary selects a stable role. The no-argument legacy settings endpoint selects institutional.
+// GetSystemLibrary selects a stable role. The no-argument legacy settings endpoint selects official.
 func (s *libraryService) GetSystemLibrary(ctx context.Context, roles ...string) (*types.Library, error) {
 	library, err := s.repo.GetSystemLibraryByRole(ctx, types.MustSpaceIDFromContext(ctx), roles...)
 	if err != nil {

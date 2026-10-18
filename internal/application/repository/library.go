@@ -79,7 +79,7 @@ func (r *libraryRepository) GetLibraryByIDs(ctx context.Context, ids []string) (
 
 // GetSystemLibraryByRole returns the active library for one space.
 func (r *libraryRepository) GetSystemLibraryByRole(ctx context.Context, spaceID uint64, roles ...string) (*types.Library, error) {
-	role := "institutional"
+	role := "official"
 	if len(roles) > 0 {
 		role = roles[0]
 	}
@@ -239,7 +239,7 @@ func EnsureSystemLibraries(ctx context.Context, db *gorm.DB, spaceID uint64, cre
 					}
 					existing.CreatorID = creatorID
 				}
-				if library.SystemRole == "institutional" {
+				if library.SystemRole == "official" {
 					first = existing
 				}
 				continue
@@ -255,7 +255,7 @@ func EnsureSystemLibraries(ctx context.Context, db *gorm.DB, spaceID uint64, cre
 			if err := repo.CreateLibrary(ctx, library); err != nil {
 				return err
 			}
-			if library.SystemRole == "institutional" {
+			if library.SystemRole == "official" {
 				first, err = repo.GetLibraryByID(ctx, library.ID)
 				if err != nil {
 					return err

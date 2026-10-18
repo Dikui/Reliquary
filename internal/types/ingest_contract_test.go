@@ -11,7 +11,7 @@ import (
 
 func TestIngestContractFieldSetAndExample(t *testing.T) {
 	fields := []string{}
-	typ := reflect.TypeOf(IngestRequest{Library: "institutional"})
+	typ := reflect.TypeOf(IngestRequest{Library: "official"})
 	for i := 0; i < typ.NumField(); i++ {
 		field := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
 		if field != "-" {

@@ -11,8 +11,8 @@ import (
 func TestSystemLibraryDisplayNamesMatchFrontendLocales(t *testing.T) {
 	source, err := os.ReadFile("../../frontend/src/i18n/locales/ikb18.ts")
 	require.NoError(t, err)
-	keys := map[string]string{"institutional": "systemInstitutional", "opinions": "systemOpinions", "references": "systemReferences", "mine": "systemMine", "ai-reports": "systemReports"}
-	expectedEnglish := map[string]string{"institutional": "Institutional releases", "opinions": "Personal opinions", "references": "References", "mine": "My materials", "ai-reports": "AI reports"}
+	keys := map[string]string{"official": "systemOfficial", "media": "systemMedia", "references": "systemReferences", "personal": "systemPersonal", "ai-output": "systemAIOutput"}
+	expectedEnglish := map[string]string{"official": "Official information", "media": "Media information", "references": "Reference documents", "personal": "Personal output", "ai-output": "AI output"}
 	require.Len(t, SystemLibraryDefaults(), len(keys))
 	for _, library := range SystemLibraryDefaults() {
 		t.Run(library.SystemRole, func(t *testing.T) {

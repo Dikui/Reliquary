@@ -73,7 +73,7 @@ test('changing documents clears vault state and an older response cannot restore
   assert.equal(hook.details.source_kind, '')
   assert.equal(hook.details.vault_path, '')
   resolvers.get('personal')!({ success: true, data: {
-    id: 'personal', source_kind: 'mine', vault_path: 'mine/notes.md', updated_at: '2026-10-11T00:00:00Z',
+    id: 'personal', source_kind: 'mine', vault_path: 'personal/notes.md', updated_at: '2026-10-11T00:00:00Z',
   } })
   await settle()
   resolvers.get('old-article')!({ success: true, data: {
@@ -82,7 +82,7 @@ test('changing documents clears vault state and an older response cannot restore
   await settle()
   assert.equal(hook.details.id, 'personal')
   assert.equal(hook.details.source_kind, 'mine')
-  assert.equal(hook.details.vault_path, 'mine/notes.md')
+  assert.equal(hook.details.vault_path, 'personal/notes.md')
 })
 
 test('mine and report names display the indexed heading without removing dots', async () => {

@@ -145,7 +145,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 			v1.GET("/vault/status", params.VaultHandler.Status)
 			v1.POST("/vault/rebuild", params.VaultHandler.RebuildFiles)
 			v1.GET("/vault/rebuild", params.VaultHandler.FileRebuildStatus)
-			v1.POST("/reports", params.VaultHandler.CreateReport)
 			v1.GET("/entries/:id/vault-attachment", accessGuards.LibraryExistsFromEntryIDParam("id"), params.VaultHandler.Attachment)
 		}
 		if params.MaintenanceHandler != nil {

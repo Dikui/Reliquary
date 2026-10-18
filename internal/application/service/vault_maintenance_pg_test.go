@@ -24,7 +24,7 @@ func TestVaultVerifyRepairsAllLibraryFilesAndReplica(t *testing.T) {
 	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
 	var generated types.Library
-	require.NoError(t, h.db.Where("system_role=?", "ai-reports").First(&generated).Error)
+	require.NoError(t, h.db.Where("system_role=?", "ai-output").First(&generated).Error)
 	generated.IndexingStrategy.VectorEnabled = false
 	require.NoError(t, h.db.Model(&generated).Update("indexing_strategy", generated.IndexingStrategy).Error)
 	report, err := documents.createReport(h.ctx, &generated, "Report original", "# Report original\n\nDatabase recovery copy.", nil, nil)
@@ -105,14 +105,14 @@ func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *
 	t.Helper()
 	original := library
 	var own types.Library
-	require.NoError(t, documents.db.Where("system_role=?", "mine").First(&own).Error)
+	require.NoError(t, documents.db.Where("system_role=?", "personal").First(&own).Error)
 	own.IndexingStrategy = original.IndexingStrategy
 	own.ChunkingConfig = original.ChunkingConfig
 	own.ModelTiers = original.ModelTiers
 	library = &own
 	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Personal tutorial", ContentType: "tutorial", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), Summary: &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Preserve the full procedure"}, KeyTerms: []string{"Recovery"}}}
 	body := "# Personal tutorial\n\nmaintenanceminefixture full original procedure.\n"
-	path := "mine/Personal-tutorial-" + header.ID[:8] + ".md"
+	path := "personal/Personal-tutorial-" + header.ID[:8] + ".md"
 	entry, err := documents.restoreVaultArticle(ctx, library, path, header, []byte(body))
 	require.NoError(t, err)
 	require.NoError(t, documents.indexVaultChunks(ctx, library, entry, body))
@@ -159,9 +159,9 @@ func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testin
 	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
 	personal := createMaintenanceMineFixture(t, h.ctx, documents, vault, &indexing)
-	plainPath := "mine/hand-placed.md"
+	plainPath := "personal/hand-placed.md"
 	require.NoError(t, os.WriteFile(filepath.Join(vault.root, plainPath), []byte("# Hand placed note\n\nThis document was never imported."), 0600))
-	unregisteredPath := "mine/unregistered.md"
+	unregisteredPath := "personal/unregistered.md"
 	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Unregistered personal document", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), ContentType: "event"}
 	require.NoError(t, os.WriteFile(filepath.Join(vault.root, unregisteredPath), append(RenderVaultArticleHeader(header), []byte("# Unregistered note\n\nThe readable replica contains no entry for this file.")...), 0600))
 	require.NoError(t, vault.Flush(h.ctx))
@@ -202,7 +202,7 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 
 	configuration := map[string]string{
 		".obsidian/app.json": `{"theme":"obsidian"}`, ".trash/x.md": "# Deleted note\n", ".DS_Store": "Finder metadata",
-		"mine/.trash/x.md": "# Deleted personal note\n", "ai-reports/.obsidian/template.md": "# Editor template\n",
+		"personal/.trash/x.md": "# Deleted personal note\n", "ai-output/.obsidian/template.md": "# Editor template\n",
 	}
 	for relative, data := range configuration {
 		path := filepath.Join(v.root, relative)
@@ -216,7 +216,7 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	indexing := *h.library
 	indexing.IndexingStrategy.VectorEnabled = false
 	var generated types.Library
-	require.NoError(t, h.db.Where("system_role=?", "ai-reports").First(&generated).Error)
+	require.NoError(t, h.db.Where("system_role=?", "ai-output").First(&generated).Error)
 	generated.IndexingStrategy.VectorEnabled = false
 	require.NoError(t, h.db.Model(&generated).Update("indexing_strategy", generated.IndexingStrategy).Error)
 	report, err := documents.createReport(h.ctx, &generated, "Report original", "# Report original\n\nDatabase recovery copy.", nil, nil)

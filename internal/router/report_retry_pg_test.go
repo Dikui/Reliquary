@@ -1,7 +1,6 @@
 package router
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -22,41 +21,35 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func reportWriter(t *testing.T, f *mcpFixture, transport string) func(string, string) *service.ReportWriteResult {
+func reportWriter(t *testing.T, f *mcpFixture, transport string) func(string, string) types.IngestResult {
 	t.Helper()
+	var write func(map[string]any) types.IngestBatchResult
 	if transport == "MCP" {
 		client := f.connect(t, "2025-11-25")
-		return func(title, markdown string) *service.ReportWriteResult {
-			var result service.ReportWriteResult
-			mcpCall(t, client, "write_report", map[string]any{"title": title, "markdown": markdown}, &result)
-			return &result
+		write = func(input map[string]any) types.IngestBatchResult {
+			var result types.IngestBatchResult
+			mcpCall(t, client, "ingest", input, &result)
+			return result
+		}
+	} else {
+		router := ingestAuthHTTPRouter(f)
+		write = func(input map[string]any) types.IngestBatchResult {
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+			response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest", string(body), f.key, true)
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			var output struct {
+				Data types.IngestBatchResult `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &output))
+			return output.Data
 		}
 	}
-	h := handler.NewVaultHandler(f.documents)
-	f.router.POST("/api/v1/reports", h.CreateReport)
-	return func(title, markdown string) *service.ReportWriteResult {
-		body, err := json.Marshal(map[string]string{"title": title, "markdown": markdown})
-		require.NoError(t, err)
-		request, err := http.NewRequest(http.MethodPost, f.server.URL+"/api/v1/reports", bytes.NewReader(body))
-		require.NoError(t, err)
-		request.Header.Set("Authorization", "Bearer "+f.key)
-		request.Header.Set("Content-Type", "application/json")
-		response, err := f.server.Client().Do(request)
-		require.NoError(t, err)
-		defer response.Body.Close()
-		require.Contains(t, []int{http.StatusCreated, http.StatusOK}, response.StatusCode)
-		var output struct {
-			Success bool                      `json:"success"`
-			Data    service.ReportWriteResult `json:"data"`
-		}
-		require.NoError(t, json.NewDecoder(response.Body).Decode(&output))
-		require.True(t, output.Success)
-		if output.Data.Existing {
-			require.Equal(t, http.StatusOK, response.StatusCode)
-		} else {
-			require.Equal(t, http.StatusCreated, response.StatusCode)
-		}
-		return &output.Data
+	return func(title, markdown string) types.IngestResult {
+		result := write(map[string]any{"items": []any{map[string]any{"library": "ai-output", "title": title, "content": markdown, "acquisition": "model_written"}}})
+		require.Len(t, result.Items, 1)
+		require.Contains(t, []string{"accepted", "exists"}, result.Items[0].Status)
+		return result.Items[0]
 	}
 }
 
@@ -77,7 +70,7 @@ func startReportQueue(t *testing.T, f *mcpFixture) *queue.Client {
 	return client
 }
 
-func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
+func TestGeneratedIngestHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 	for _, transport := range []string{"HTTP", "MCP"} {
 		t.Run(transport, func(t *testing.T) {
 			f := newMCPFixture(t)
@@ -88,11 +81,12 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", f.library.SpaceID).Update("embedding_model_id", f.library.ModelTiers.Embedding).Error)
 			markdown := "# Retried report\n\nreportqueueretryfixture preserves verified findings."
 			report := write("Retried report", markdown)
-			require.NotEmpty(t, report.ID)
-			require.Equal(t, "pending_retry", report.IndexStatus)
-			require.False(t, report.Existing)
-			require.Equal(t, types.ParseStatusFailed, report.ParseStatus)
-			content, err := os.ReadFile(filepath.Join(f.root, report.VaultPath))
+			require.NotEmpty(t, report.EntryID)
+			require.Equal(t, "accepted", report.Status)
+			var entry types.Entry
+			require.NoError(t, f.db.First(&entry, "id=?", report.EntryID).Error)
+			require.Equal(t, types.ParseStatusFailed, entry.ParseStatus)
+			content, err := os.ReadFile(filepath.Join(f.root, entry.VaultPath))
 			require.NoError(t, err)
 			require.Contains(t, string(content), markdown)
 			var jobs []queue.Job
@@ -109,28 +103,29 @@ func TestWriteReportHTTPAndMCPIndexRetryAndDuplicate(t *testing.T) {
 			require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", f.library.SpaceID).Update("embedding_model_id", f.library.ModelTiers.Embedding).Error)
 			require.Eventually(t, func() bool {
 				var entry types.Entry
-				return f.db.First(&entry, "id=?", report.ID).Error == nil && entry.ParseStatus == types.ParseStatusCompleted
+				return f.db.First(&entry, "id=?", report.EntryID).Error == nil && entry.ParseStatus == types.ParseStatusCompleted
 			}, 5*time.Second, 10*time.Millisecond)
 			require.NoError(t, client.Close())
 			var search types.EntrySearchResponse
-			mcpCall(t, f.connect(t, "2025-11-25"), "search", map[string]any{"libraries": []string{"ai-reports"}, "query": "reportqueueretryfixture", "sources": []string{"report"}}, &search)
+			mcpCall(t, f.connect(t, "2025-11-25"), "search", map[string]any{"libraries": []string{"ai-output"}, "query": "reportqueueretryfixture", "sources": []string{"report"}}, &search)
 			require.Len(t, search.Results, 1)
-			require.Equal(t, report.ID, search.Results[0].EntryID)
+			require.Equal(t, report.EntryID, search.Results[0].EntryID)
 			completed := write("Retried report", markdown)
-			require.Equal(t, report.ID, completed.ID)
-			require.True(t, completed.Existing)
-			require.Equal(t, "completed", completed.IndexStatus)
+			require.Equal(t, report.EntryID, completed.EntryID)
+			require.Equal(t, "exists", completed.Status)
+			require.NoError(t, f.db.First(&entry, "id=?", completed.EntryID).Error)
+			require.Equal(t, types.ParseStatusCompleted, entry.ParseStatus)
 			var count int64
 			require.NoError(t, f.db.Model(&types.Entry{}).Where("source_kind='report'").Count(&count).Error)
 			require.EqualValues(t, 1, count)
 			require.NoError(t, f.db.Model(&types.OperationLog{}).Where("operation_type='write_report'").Count(&count).Error)
 			require.EqualValues(t, 1, count)
-			t.Logf("%s saved report %s despite indexing failure; queued retry recovered search; identical retry returned the existing report", transport, report.ID)
+			t.Logf("%s saved report %s despite indexing failure; queued retry recovered search; identical retry returned the existing report", transport, report.EntryID)
 		})
 	}
 }
 
-func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
+func TestGeneratedIngestExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	f := newMCPFixture(t)
 	f.seedProcessingModels(t)
 	f.library.ModelTiers.Embedding = "missing-embedding"
@@ -157,7 +152,7 @@ func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	var result handler.RuntimeTasksResponse
 	require.NoError(t, json.Unmarshal(page.Body.Bytes(), &result))
 	require.Len(t, result.Tasks, 1)
-	require.Equal(t, report.ID, result.Tasks[0].EntryID)
+	require.Equal(t, report.EntryID, result.Tasks[0].EntryID)
 	require.Equal(t, types.TypeReportIndex, result.Tasks[0].Type)
 	require.Contains(t, result.Tasks[0].LastError, "embedding")
 	require.True(t, result.Tasks[0].Allows(types.RuntimeTaskActionRunNow))
@@ -171,9 +166,9 @@ func TestWriteReportExhaustedRetryVisibleInRuntimeQueue(t *testing.T) {
 	require.NoError(t, f.db.Model(&types.Space{}).Where("id=?", f.library.SpaceID).Update("embedding_model_id", f.library.ModelTiers.Embedding).Error)
 	require.NoError(t, f.documents.Scan(f.ctx, false))
 	var entry types.Entry
-	require.NoError(t, f.db.First(&entry, "id=?", report.ID).Error)
+	require.NoError(t, f.db.First(&entry, "id=?", report.EntryID).Error)
 	require.Equal(t, types.ParseStatusFailed, entry.ParseStatus)
-	t.Logf("Archived report index task %s remains visible with entry %s, error and retry actions", job.ID, report.ID)
+	t.Logf("Archived report index task %s remains visible with entry %s, error and retry actions", job.ID, report.EntryID)
 }
 
 func TestWriteReportConcurrentDuplicateAndLegacyFingerprint(t *testing.T) {

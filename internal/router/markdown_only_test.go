@@ -77,12 +77,12 @@ func TestMarkdownOnlyHTTPAndMCP(t *testing.T) {
 	for _, protocol := range []string{"HTTP", "MCP"} {
 		t.Run(protocol, func(t *testing.T) {
 			for _, field := range []string{"file", "original_file", "original_data", "original_file_base64"} {
-				result := send(protocol, map[string]any{"url": "https://example.org/rejected", "library": "institutional", "acquisition": "extracted", "content": "# Body", field: "cGRm"})
+				result := send(protocol, map[string]any{"url": "https://example.org/rejected", "library": "official", "acquisition": "extracted", "content": "# Body", field: "cGRm"})
 				require.Equal(t, "invalid", result.Status)
 				require.Contains(t, result.Reason, field)
 				require.Contains(t, result.Reason, "Markdown")
 			}
-			result := send(protocol, map[string]any{"url": "https://example.org/empty", "library": "institutional", "acquisition": "extracted"})
+			result := send(protocol, map[string]any{"url": "https://example.org/empty", "library": "official", "acquisition": "extracted"})
 			require.Equal(t, "invalid", result.Status)
 			require.Contains(t, result.Reason, "content is required")
 			require.Contains(t, result.Reason, "Markdown")
@@ -97,7 +97,7 @@ func TestMarkdownOnlyHTTPAndMCP(t *testing.T) {
 				extra = "Software verification documents a compiler architecture, dependency graph and deterministic output format."
 			}
 			body := "# " + protocol + " supplied source\n\nComplete original Markdown for " + protocol + " with an uploaded picture. " + extra + "\n\n![Figure](https://example.org/" + protocol + ".png)"
-			result = send(protocol, map[string]any{"url": "https://example.org/valid-" + protocol, "library": "institutional", "acquisition": "extracted", "publisher": "Fixture Journal", "content": body, "images": []any{map[string]any{"asset_id": asset.AssetID, "source_url": "https://example.org/" + protocol + ".png"}}})
+			result = send(protocol, map[string]any{"url": "https://example.org/valid-" + protocol, "library": "official", "acquisition": "extracted", "publisher": "Fixture Journal", "content": body, "images": []any{map[string]any{"asset_id": asset.AssetID, "source_url": "https://example.org/" + protocol + ".png"}}})
 			require.Equal(t, "accepted", result.Status, result.Reason)
 			for _, task := range f.queue.tasks {
 				if task.Type() == types.TypeManualProcess {

@@ -1,9 +1,7 @@
 package router
 
 import (
-	"context"
 	"encoding/json"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"net/http"
 	"testing"
 
@@ -42,12 +40,12 @@ func TestIngestLibraryHTTPAndMCPAgreement(t *testing.T) {
 		items := []any{
 			map[string]any{"content": "Missing library", "acquisition": "verbatim"},
 			map[string]any{"library": "unknown", "content": "Unknown library", "acquisition": "verbatim"},
-			map[string]any{"library": "mine", "content": "My original " + protocol, "acquisition": "verbatim", "source_ref": protocol, "graph": false},
-			map[string]any{"library": ids["mine"], "content": "My original " + protocol, "acquisition": "verbatim", "source_ref": protocol, "graph": false},
-			map[string]any{"library": "institutional", "content": "My original", "acquisition": "verbatim", "source_ref": "wrong"},
-			map[string]any{"library": "mine", "content": "My original", "acquisition": "verbatim", "identifier": "doi:wrong"},
+			map[string]any{"library": "personal", "content": "My original " + protocol, "acquisition": "verbatim", "source_ref": protocol, "graph": false},
+			map[string]any{"library": ids["personal"], "content": "My original " + protocol, "acquisition": "verbatim", "source_ref": protocol, "graph": false},
+			map[string]any{"library": "official", "content": "My original", "acquisition": "verbatim", "source_ref": "wrong"},
+			map[string]any{"library": "personal", "content": "My original", "acquisition": "verbatim", "identifier": "doi:wrong"},
 			map[string]any{"library": "references", "content": "Research from " + protocol, "acquisition": "verbatim", "identifier": " DOI: 10.1234/ABC ", "url": "https://example.org/" + protocol, "publisher": "Journal"},
-			map[string]any{"library": "ai-reports", "title": "Agent findings " + protocol, "content": "# Analysis\n\nGenerated observations.", "acquisition": "model_written"},
+			map[string]any{"library": "ai-output", "title": "Agent findings " + protocol, "content": "# Analysis\n\nGenerated observations.", "acquisition": "model_written"},
 		}
 		result := send(protocol, items)
 		require.Len(t, result.Items, len(items))
@@ -63,14 +61,8 @@ func TestIngestLibraryHTTPAndMCPAgreement(t *testing.T) {
 		require.NotNil(t, result.Items[2].Graph)
 		require.False(t, *result.Items[2].Graph)
 		require.Equal(t, "doi:10.1234/abc", result.Items[6].Identifier)
-		require.Equal(t, ids["ai-reports"], result.Items[7].LibraryID)
+		require.Equal(t, ids["ai-output"], result.Items[7].LibraryID)
 	}
-	var report map[string]any
-	mcpCall(t, client, "write_report", map[string]any{"library": ids["ai-reports"], "title": "Explicit AI report", "markdown": "# Generated\n\nReport body."}, &report)
-	require.Equal(t, ids["ai-reports"], report["library_id"])
-	rejected, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"library": "mine", "title": "Wrong library", "markdown": "Full report"}})
-	require.NoError(t, err)
-	require.True(t, rejected.IsError)
 	var checked types.IngestCheckResponse
 	mcpCall(t, client, "check_urls", map[string]any{"urls": []string{"https://example.org/a", "https://example.org/b"}}, &checked)
 	require.Len(t, checked.Items, 2)

@@ -23,9 +23,9 @@ import (
 	"gorm.io/gorm"
 )
 
-const ingestAuthCheckBody = `{"library":"institutional","urls":["https://example.org/auth-recheck"]}`
-const ingestAuthBatchBody = `{"items":[{"url":"https://example.org/auth-recheck","content":"Complete original measurements.","library":"institutional","acquisition":"extracted","publisher":"Fixture Journal"}]}`
-const ingestAuthMCPBody = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"check_urls","arguments":{"library":"institutional","urls":["https://example.org/auth-recheck"]}}}`
+const ingestAuthCheckBody = `{"library":"official","urls":["https://example.org/auth-recheck"]}`
+const ingestAuthBatchBody = `{"items":[{"url":"https://example.org/auth-recheck","content":"Complete original measurements.","library":"official","acquisition":"extracted","publisher":"Fixture Journal"}]}`
+const ingestAuthMCPBody = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"check_urls","arguments":{"library":"official","urls":["https://example.org/auth-recheck"]}}}`
 
 func ingestAuthMCPRequest(router *gin.Engine, key, body string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))

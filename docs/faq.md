@@ -121,7 +121,7 @@ Reliquary 不再提供 RSS、站点适配器、网址导入、网页上传或手
 
 ## 29. 文件存储在哪里？
 
-文章的表头、正文、附件以及 `mine/`、`reports/` 保存在 `VAULT_ROOT` 指定的文件库中。上传资源仍使用 `LOCAL_STORAGE_BASE_DIR`。迁移时同时保存 PostgreSQL、文件库和上传资源，步骤与备份脚本见[个人使用指南](./personal-use.md)。
+五个库的 Markdown 文件分别保存在 `official/`、`media/`、`references/`、`personal/`、`ai-output/`，附件保存在 `attachments/`。这些目录都位于 `VAULT_ROOT` 指定的文件库中。上传资源仍使用 `LOCAL_STORAGE_BASE_DIR`。迁移时同时保存 PostgreSQL、文件库和上传资源，步骤与备份脚本见[个人使用指南](./personal-use.md)。
 
 ## 30. 后台解析/入库任务积压或需要排查失败任务怎么办？
 

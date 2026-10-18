@@ -23,7 +23,7 @@ assert.deepEqual(template.errors, [])
 const status: MaintenanceStatus = {
   paused: true, pause_mode: 'snapshot', pause_reason: 'backup',
   backup_at: '2026-11-01T03:00:00Z', backup_status: 'success', backup_path: '/Volumes/backup/latest', backup_size_bytes: 2097152, backup_error: '',
-  drill_at: '2026-11-01T04:00:00Z', drill_status: 'failed', drill_error: 'verify: mine/example.md is missing',
+  drill_at: '2026-11-01T04:00:00Z', drill_status: 'failed', drill_error: 'verify: personal/example.md is missing',
   backup_directory: '/Volumes/backup', backup_schedule: '0 3 * * 0', drill_schedule: '0 4 1 * *', schedule_timezone: 'Asia/Shanghai', automatic_enabled: true,
 }
 

@@ -27,18 +27,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// VaultDirectoryStatus describes indexing of one directory, including the last scan failure.
-type VaultDirectoryStatus struct {
-	Directory    string     `json:"directory"`
-	LastScanAt   *time.Time `json:"last_scan_at"`
-	IndexedFiles int64      `json:"indexed_files"`
-	LastError    string     `json:"last_error"`
+type VaultLibraryStatus struct {
+	LibraryID       string     `json:"library_id"`
+	Name            string     `json:"name"`
+	SystemRole      string     `json:"system_role"`
+	Directory       string     `json:"directory"`
+	ArchivedEntries int64      `json:"archived_entries"`
+	LastScanAt      *time.Time `json:"last_scan_at,omitempty"`
+	LastError       string     `json:"last_error,omitempty"`
 }
 
 type VaultStatus struct {
-	Root    string               `json:"root"`
-	Mine    VaultDirectoryStatus `json:"mine"`
-	Reports VaultDirectoryStatus `json:"reports"`
+	Root      string               `json:"root"`
+	Libraries []VaultLibraryStatus `json:"libraries"`
 }
 
 type vaultObservation struct {
@@ -58,7 +59,7 @@ type VaultDocumentService struct {
 	mu                 sync.Mutex
 	observations       map[string]vaultObservation
 	statusMu           sync.RWMutex
-	status             VaultStatus
+	reportStatus       VaultLibraryStatus
 	lifecycleMu        sync.Mutex
 	cancel             context.CancelFunc
 	done               chan struct{}
@@ -77,8 +78,7 @@ func NewVaultDocumentService(db *gorm.DB, models interfaces.ModelService, retrie
 		return nil, err
 	}
 	return &VaultDocumentService{db: db, models: models, retrieval: retrieval, root: root,
-		reportStableWait: 10 * time.Minute, reportScanInterval: time.Minute, observations: make(map[string]vaultObservation),
-		status: VaultStatus{Root: root}}, nil
+		reportStableWait: 10 * time.Minute, reportScanInterval: time.Minute, observations: make(map[string]vaultObservation)}, nil
 }
 
 func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *types.Library, error) {
@@ -88,7 +88,7 @@ func (s *VaultDocumentService) scope(ctx context.Context) (context.Context, *typ
 		ctx = context.WithValue(ctx, types.SpaceIDContextKey, spaceID)
 	}
 	var library types.Library
-	if err := s.db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "ai-reports").First(&library).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "ai-output").First(&library).Error; err != nil {
 		return ctx, nil, fmt.Errorf("vault indexing requires an initialized library: %w", err)
 	}
 	return ctx, &library, nil
@@ -232,7 +232,7 @@ func (s *VaultDocumentService) recordReportWatchError(ctx context.Context, err e
 	if ctx.Err() != nil {
 		return
 	}
-	s.status.Reports.LastError = err.Error()
+	s.reportStatus.LastError = err.Error()
 }
 
 func (s *VaultDocumentService) Close() error {
@@ -295,9 +295,8 @@ func (s *VaultDocumentService) scanReports(ctx context.Context, library *types.L
 	}
 	now := time.Now().UTC()
 	s.statusMu.Lock()
-	s.status.Reports.LastScanAt = &now
-	s.status.Reports.IndexedFiles = int64(len(reports))
-	s.status.Reports.LastError = ""
+	s.reportStatus.LastScanAt = &now
+	s.reportStatus.LastError = ""
 	s.statusMu.Unlock()
 	return nil
 }
@@ -517,28 +516,38 @@ func (s *VaultDocumentService) deleteDocument(ctx context.Context, entry *types.
 }
 
 func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) {
-	s.statusMu.RLock()
-	result := s.status
-	s.statusMu.RUnlock()
+	result := VaultStatus{Root: s.root, Libraries: []VaultLibraryStatus{}}
 	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
 		spaceID = types.SingleSpaceID
 	}
-	for _, target := range []struct {
-		kind   string
-		role   string
-		status *VaultDirectoryStatus
-	}{{"mine", "mine", &result.Mine}, {"report", "ai-reports", &result.Reports}} {
-		var library types.Library
-		if err := s.db.WithContext(ctx).Select("directory").Where("space_id=? AND system_role=?", spaceID, target.role).First(&library).Error; err != nil {
-			return result, err
+	var libraries []types.Library
+	if err := s.db.WithContext(ctx).Where("space_id=?", spaceID).Order("created_at,id").Find(&libraries).Error; err != nil {
+		return result, err
+	}
+	var counts []struct {
+		LibraryID       string
+		ArchivedEntries int64
+	}
+	if err := s.db.WithContext(ctx).Model(&types.Entry{}).
+		Select("library_id, COUNT(*) AS archived_entries").
+		Where("space_id=? AND vault_path<>''", spaceID).
+		Group("library_id").Scan(&counts).Error; err != nil {
+		return result, err
+	}
+	archived := make(map[string]int64, len(counts))
+	for _, count := range counts {
+		archived[count.LibraryID] = count.ArchivedEntries
+	}
+	s.statusMu.RLock()
+	report := s.reportStatus
+	s.statusMu.RUnlock()
+	for _, library := range libraries {
+		status := VaultLibraryStatus{LibraryID: library.ID, Name: library.DisplayName(types.LanguageFromContextOrDefault(ctx)), SystemRole: library.SystemRole, Directory: library.Directory, ArchivedEntries: archived[library.ID]}
+		if library.SystemRole == "ai-output" {
+			status.LastScanAt, status.LastError = report.LastScanAt, report.LastError
 		}
-		target.status.Directory = library.Directory
-		if err := s.db.WithContext(ctx).Model(&types.Entry{}).
-			Where("space_id=? AND source_kind=? AND parse_status=?", spaceID, target.kind, types.ParseStatusCompleted).
-			Count(&target.status.IndexedFiles).Error; err != nil {
-			return result, err
-		}
+		result.Libraries = append(result.Libraries, status)
 	}
 	return result, nil
 }

@@ -15,7 +15,7 @@ func TestIKB06SourceUnverifiedHTTPAndMCP(t *testing.T) {
 	router := ingestAuthHTTPRouter(f)
 	client := f.connect(t, "2025-11-25")
 	for _, protocol := range []string{"http", "mcp"} {
-		request := map[string]any{"items": []any{map[string]any{"library": "institutional", "publisher": "Institute", "published_at": "2026-10-01", "title": "Unlinked " + protocol, "content": "Complete original institutional evidence " + protocol, "acquisition": "verbatim"}}}
+		request := map[string]any{"items": []any{map[string]any{"library": "official", "publisher": "Institute", "published_at": "2026-10-01", "title": "Unlinked " + protocol, "content": "Complete original institutional evidence " + protocol, "acquisition": "verbatim"}}}
 		var batch types.IngestBatchResult
 		if protocol == "mcp" {
 			mcpCall(t, client, "ingest", request, &batch)

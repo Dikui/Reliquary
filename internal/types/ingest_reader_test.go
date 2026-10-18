@@ -31,7 +31,7 @@ func (b repeatedByteReader) Read(p []byte) (int, error) {
 func TestIngestReaderCodePointsAndEarlyLimits(t *testing.T) {
 	for _, unit := range []string{"界", "😀", `\u754c`, `\ud83d\ude00`} {
 		// Each encoding must count as exactly one code point.
-		raw := `{"items":[{"library":"mine","content":"` + strings.Repeat(unit, MaxIngestContentRunes) + `","acquisition":"verbatim"}]}`
+		raw := `{"items":[{"library":"personal","content":"` + strings.Repeat(unit, MaxIngestContentRunes) + `","acquisition":"verbatim"}]}`
 		got, err := DecodeIngestBatch(strings.NewReader(raw))
 		require.NoError(t, err)
 		require.Len(t, []rune(got.Items[0].Content), MaxIngestContentRunes)

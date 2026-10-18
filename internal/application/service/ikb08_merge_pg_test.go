@@ -20,7 +20,7 @@ func TestIKB08MergedVaultPositionsSupplementAndRestore(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Millisecond)
 	require.NoError(t, h.db.Model(&types.Library{}).Where("space_id=1").Update("indexing_strategy", types.IndexingStrategy{KeywordEnabled: true}).Error)
 	var library types.Library
-	require.NoError(t, h.db.Where("directory='institutional'").First(&library).Error)
+	require.NoError(t, h.db.Where("directory='official'").First(&library).Error)
 	v, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: h.root, HeaderDebounce: time.Millisecond}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, v.Close()) })
@@ -30,7 +30,7 @@ func TestIKB08MergedVaultPositionsSupplementAndRestore(t *testing.T) {
 	require.NoError(t, entry.SetIngestMissing([]types.IngestMissing{{Type: "image", SourceURL: source}}))
 	require.NoError(t, h.db.Create(entry).Error)
 	require.NoError(t, v.WriteArticle(h.ctx, entry, body, nil))
-	require.Equal(t, "institutional", filepath.Dir(entry.VaultPath))
+	require.Equal(t, "official", filepath.Dir(entry.VaultPath))
 	require.NoError(t, h.documents.indexVaultChunks(h.ctx, &library, entry, entry.VaultBody))
 	image, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6xQAAAABJRU5ErkJggg==")
 	require.NoError(t, err)

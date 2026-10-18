@@ -5,7 +5,7 @@ HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 A
 ```json
 {
   "query": "仪器校准",
-  "libraries": ["mine", "references"],
+  "libraries": ["personal", "references"],
   "content_types": ["教程"],
   "entity_ids": [],
   "topic_ids": [],
@@ -96,7 +96,7 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
 
 ```json
 {
-  "libraries": ["opinions", "institutional"],
+  "libraries": ["media", "official"],
   "entity": {"name": "Atlas Lab"},
   "mode": "neighbors",
   "hops": 2,
@@ -121,7 +121,7 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
 
 ```json
 {
-  "libraries": ["mine"],
+  "libraries": ["personal"],
   "entity": {"id": "atlas-entity-id"},
   "target": {"id": "gamma-entity-id"},
   "mode": "path",
@@ -158,8 +158,8 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
       "entry_id": "source-document-id",
       "title": "合作资料",
       "library_id": "mine-library-id",
-      "library_name": "我的资料",
-      "library_directory": "mine",
+      "library_name": "个人产出",
+      "library_directory": "personal",
       "published_at": "2026-10-01T00:00:00Z",
       "source_unverified": false,
       "acquisition": "verbatim",
@@ -179,7 +179,7 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
 
 `RELIQUARY_GRAPH_EXPANSION_LIMIT` 设置每跳所有节点共用的扩展预算，默认 100，允许 1 至 1000。每个节点最多读取剩余预算加一条，额外一条仅用于检测截断，不继续扩展。入边、重复边和之后被 PG 过滤的旧边也消耗预算，因此副本落后可能减少可见结果。未读完的节点或该层后续节点会写 `truncations`，reason 为 `expansion_limit`，包含 hop 和可用时的 entity_id。最终邻居边超出 limit 标为 `result_limit`，路径超出 limit 标为 `path_limit`，路径枚举超过固定 10000 个状态标为 `path_work_limit`，资料级列表超限标为 `document_limit`。存在任一条时 `truncated=true`。截断结果不能用来断言实体间没有路径。
 
-每批 Neo4j 边从 PG 回填并校验关系 ID、方向、库、关系类型和两端实体存在性，PG 不再承认的旧边不会继续扩展。来源资料必须在当前空间、所选库和边所属库中存在且未删除。没有有效来源的边不返回，也不能作为路径桥梁。sources 的 evidence 保留位置和人物观点发言人，published_at 缺失时为 null，不用收录时间替代。source_count 为本次可见来源数，version 为 PG 正本版本。documents 为按最终边顺序出现的资料去重列表，位置映射为 snippets.locations，供检索记录与测评使用。
+每批 Neo4j 边从 PG 回填并校验关系 ID、方向、库、关系类型和两端实体存在性，PG 不再承认的旧边不会继续扩展。来源资料必须在当前空间、所选库和边所属库中存在且未删除。没有有效来源的边不返回，也不能作为路径桥梁。sources 的 evidence 保留位置和媒体信息中的发言人，published_at 缺失时为 null，不用收录时间替代。source_count 为本次可见来源数，version 为 PG 正本版本。documents 为按最终边顺序出现的资料去重列表，位置映射为 snippets.locations，供检索记录与测评使用。
 
 `pending_sync.global` 是当前个人空间内 `completed_at IS NULL` 的记录数，不按库缩小。`involved` 是涉及最终返回实体和查询端点的记录数；候选响应使用全部候选实体。统计按记录行计数，同一实体多条记录分别计数，两项在同一个 PG 查询中读取。计数提示副本可能落后，不能证明 PG 和 Neo4j 是同一时间点快照。多次 Neo4j 读取与 PG 回填之间不持有跨数据库锁。Neo4j 连接或查询失败时，HTTP 返回 503 和明确的 `Neo4j query replica unavailable` 错误，MCP 返回同样含义的工具错误。
 

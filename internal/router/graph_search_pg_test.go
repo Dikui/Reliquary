@@ -53,11 +53,11 @@ func newGraphSearchFixture(t *testing.T) *graphSearchFixture {
 		require.NoError(t, f.db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: name, NormalizedName: strings.ToLower(name), EntityType: kind}).Error)
 	}
 	var opinions types.Library
-	require.NoError(t, f.db.Where("space_id=1 AND directory='opinions'").First(&opinions).Error)
+	require.NoError(t, f.db.Where("space_id=1 AND directory='media'").First(&opinions).Error)
 	f.library = &opinions
 	out.libraries = append(out.libraries, f.library.ID)
 	var mine types.Library
-	require.NoError(t, f.db.Where("space_id=1 AND directory='mine'").First(&mine).Error)
+	require.NoError(t, f.db.Where("space_id=1 AND directory='personal'").First(&mine).Error)
 	out.libraries = append(out.libraries, mine.ID)
 	for _, lib := range out.libraries {
 		for _, name := range []string{"cooperates", "supports"} {
@@ -242,7 +242,7 @@ func TestGraphSearchTruncationUnavailableAndValidation(t *testing.T) {
 	response := personalRequest(t, f.router, "POST", "/api/v1/offline-graph", string(body), f.key, true)
 	require.Equal(t, 503, response.Code)
 	require.Contains(t, response.Body.String(), "Neo4j query replica unavailable")
-	for _, body := range []string{`{"libraries":[],"entity":{"id":"x"}}`, `{"libraries":["unknown"],"entity":{"id":"x"}}`, `{"libraries":["institutional"],"entity":{"id":"x"},"hops":4}`, `{"libraries":["institutional"],"entity":{"id":"x","name":"x"}}`, `{"libraries":["institutional"],"entity":{"id":"x"},"mode":"path"}`, `{"libraries":["institutional"],"entity":{"id":"x"},"unknown":true}`} {
+	for _, body := range []string{`{"libraries":[],"entity":{"id":"x"}}`, `{"libraries":["unknown"],"entity":{"id":"x"}}`, `{"libraries":["official"],"entity":{"id":"x"},"hops":4}`, `{"libraries":["official"],"entity":{"id":"x","name":"x"}}`, `{"libraries":["official"],"entity":{"id":"x"},"mode":"path"}`, `{"libraries":["official"],"entity":{"id":"x"},"unknown":true}`} {
 		response := personalRequest(t, f.router, "POST", "/api/v1/graph/search", body, f.key, true)
 		require.Equal(t, 400, response.Code, response.Body.String())
 	}

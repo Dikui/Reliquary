@@ -67,7 +67,7 @@ func (h *LibraryHandler) validateAndGetLibrary(c *gin.Context) (*types.Library, 
 	var library *types.Library
 	var err error
 	if id == "" {
-		library, err = h.service.GetSystemLibrary(ctx, "institutional")
+		library, err = h.service.GetSystemLibrary(ctx, "official")
 	} else {
 		library, err = h.service.GetLibraryByID(ctx, id)
 	}

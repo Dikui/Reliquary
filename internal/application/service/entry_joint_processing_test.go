@@ -258,7 +258,7 @@ func TestIKB11RelationTypesCatalogSynonymsAdditionAndLog(t *testing.T) {
 func TestIKB11OpinionsSpeakerUsesExtractedPersonOrAuthor(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	k := segmentedEntry(t, h)
-	h.library.SystemRole = "opinions"
+	h.library.SystemRole = "media"
 	intake, _ := k.IntakeMetadata()
 	intake.SourceInfo.Author = "Author fallback"
 	require.NoError(t, k.SetIntakeMetadata(intake))

@@ -98,7 +98,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 		})
 	}
 	// The catalog localizes a default system label separately from stored article metadata.
-	require.Equal(t, "Institutional releases", systemLibrary.DisplayName("en-US"))
+	require.Equal(t, "Official information", systemLibrary.DisplayName("en-US"))
 	require.Equal(t, customLibrary.Name, customLibrary.DisplayName("en-US"))
 	for _, article := range articles {
 		var read service.EntryReadResult
@@ -133,10 +133,10 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	require.Equal(t, "accepted", ingested.Items[0].Status)
 	require.Equal(t, systemLibrary.Name, ingested.Items[0].LibraryName)
 	var reports types.Library
-	require.NoError(t, f.db.Where("space_id=? AND system_role=?", types.SingleSpaceID, "ai-reports").First(&reports).Error)
+	require.NoError(t, f.db.Where("space_id=? AND system_role=?", types.SingleSpaceID, "ai-output").First(&reports).Error)
 	expected[reports.ID] = reports.Name
 	var report any
-	mcpCall(t, client, "write_report", map[string]any{"title": "Library name report", "markdown": "# Report\n\nDerived evidence."}, &report)
+	mcpCall(t, client, "ingest", map[string]any{"items": []any{map[string]any{"library": reports.ID, "title": "Library name report", "content": "# Report\n\nDerived evidence.", "acquisition": "model_written"}}}, &report)
 	require.Greater(t, assertNames(report), 0)
 	// Renames must be reflected immediately, including custom names on a system library.
 	expected[systemLibrary.ID] = "Renamed system library"

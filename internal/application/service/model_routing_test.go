@@ -16,7 +16,7 @@ import (
 func TestModelTiersUseSpaceEmbeddingAndLibraryProcessingSettings(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
-	library := &types.Library{ID: "library", SpaceID: 1, SystemRole: "institutional", Template: types.TemplateExternalTimely, Directory: "institutional", SourceEvidenceRule: "link_required", Name: "Library", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
+	library := &types.Library{ID: "library", SpaceID: 1, SystemRole: "official", Template: types.TemplateExternalTimely, Directory: "official", SourceEvidenceRule: "link_required", Name: "Library", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
 	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Space", EmbeddingModelID: "chosen-embedding"}).Error)
 	require.NoError(t, db.Create(library).Error)
 	for _, tier := range types.ModelTiers {

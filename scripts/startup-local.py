@@ -38,8 +38,10 @@ def main(ollama):
     try:
         run(['docker', 'info', '--format', '{{.ServerVersion}}'], timeout=12)
     except (subprocess.SubprocessError, OSError):
-        run(['/usr/bin/open', '-gj', '-a', 'Docker'])
-        raise RuntimeError('Docker is starting; retrying next minute')
+        context = os.environ.get('DOCKER_CONTEXT') or run(['docker', 'context', 'show']).strip()
+        application = 'OrbStack' if context == 'orbstack' else 'Docker'
+        run(['orb', 'start'] if context == 'orbstack' else ['/usr/bin/open', '-gj', '-a', 'Docker'])
+        raise RuntimeError(f'{application} is starting; retrying next minute')
     raw = run(COMPOSE + ['ps', '--format', 'json'])
     rows = json.loads(raw) if raw.lstrip().startswith('[') else [json.loads(line) for line in raw.splitlines() if line.strip()]
     ready = {row.get('Service') for row in rows} == SERVICES and all(

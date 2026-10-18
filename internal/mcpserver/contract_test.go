@@ -48,7 +48,7 @@ func TestSearchAndFollowFeedContractsIncludeIncompleteBoolean(t *testing.T) {
 }
 
 func TestSearchContractPreservesLibraryLocationsAndFlags(t *testing.T) {
-	response := types.EntrySearchResponse{VectorUnavailable: true, RerankStatus: "unavailable", Results: []*types.EntrySearchResult{{EntryID: "entry", LibraryID: "library", LibraryName: "我的资料", LibraryDirectory: "mine", SourceUnverified: true, HasUpdate: true, LatestEntryID: "new", Snippets: []types.EntrySearchSnippet{{Content: "😀", Locations: []types.SourceLocation{{Start: 3, End: 4, Paragraph: 2, HeadingPath: []string{"标题"}, BodyHash: "hash", Mapping: "exact"}}}}}}}
+	response := types.EntrySearchResponse{VectorUnavailable: true, RerankStatus: "unavailable", Results: []*types.EntrySearchResult{{EntryID: "entry", LibraryID: "library", LibraryName: "我的资料", LibraryDirectory: "personal", SourceUnverified: true, HasUpdate: true, LatestEntryID: "new", Snippets: []types.EntrySearchSnippet{{Content: "😀", Locations: []types.SourceLocation{{Start: 3, End: 4, Paragraph: 2, HeadingPath: []string{"标题"}, BodyHash: "hash", Mapping: "exact"}}}}}}}
 	output, err := contractOutput(response)
 	require.NoError(t, err)
 	data := output.(map[string]any)

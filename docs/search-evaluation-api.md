@@ -26,7 +26,7 @@
   "method": "ordinary",
   "request": {
     "query": "校准步骤是什么？",
-    "libraries": ["mine"],
+    "libraries": ["personal"],
     "collapse_similar": false
   },
   "answers": [{"entry_id": "document-id", "grade": 1}]
@@ -37,7 +37,7 @@
 
 转题请求为 `{"record_id":"...","answers":[{"entry_id":"..."}]}`。题目保存当次 `suggested_results`，供界面勾选；再次 PUT 可以修改答案。题目的来源由服务决定，不能由客户端伪造。AI 题的来源为 `ai`，状态为 `pending`，普通 PUT 不能绕过人工确认。
 
-候选生成请求为 `{"libraries":["mine"],"entry_ids":["..."],"count":1,"model_id":"..."}`。最多 20 题、50 篇资料、60000 个正文字符，超出时明确拒绝；不截断正文。模型省略时使用库的 generation 模型。模型输出限定在所给资料范围，完整批次验证后才保存。确认请求为 `{}`，使用已有候选答案；也可传 `answers` 明确替换。重复确认返回 400。
+候选生成请求为 `{"libraries":["personal"],"entry_ids":["..."],"count":1,"model_id":"..."}`。最多 20 题、50 篇资料、60000 个正文字符，超出时明确拒绝；不截断正文。模型省略时使用库的 generation 模型。模型输出限定在所给资料范围，完整批次验证后才保存。确认请求为 `{}`，使用已有候选答案；也可传 `answers` 明确替换。重复确认返回 400。
 
 运行请求示例：
 
@@ -75,7 +75,7 @@
   "method":"graph",
   "request": {
     "query":"Atlas Lab 的合作机构",
-    "libraries":["mine"],
+    "libraries":["personal"],
     "graph_parameters": {
       "entity":{"id":"atlas-entity-id"},
       "mode":"neighbors",

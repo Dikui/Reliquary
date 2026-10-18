@@ -417,7 +417,7 @@ func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *te
 	var personal types.Entry
 	require.NoError(t, h.db.Where("id='mine'").First(&personal).Error)
 	personal.ContentType = "tutorial"
-	personal.VaultPath = "mine/personal.md"
+	personal.VaultPath = "personal/personal.md"
 	personal.VaultBody = "# Personal procedure\n\n![Personal image](../attachments/mine/personal.png)"
 	personal.StructuredSummary = &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Retain the complete instructions"}, KeyTerms: []string{"Personal"}}
 	personal.Description = personal.StructuredSummary.RenderText()

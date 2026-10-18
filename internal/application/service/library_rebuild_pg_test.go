@@ -244,7 +244,7 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	transport := forbidIngestNetwork(t, h)
 	body := "# Original observations\n\nThe experiment reports complete instrument measurements.\n\n![chart](https://example.org/missing-chart.png)"
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{
-		Library: "institutional", URL: "https://example.org/rebuild-missing-images",
+		Library: "official", URL: "https://example.org/rebuild-missing-images",
 		Acquisition: "verbatim", Publisher: "Fixture Journal", Content: body,
 	})
 	require.NoError(t, err)

@@ -1,16 +1,18 @@
 import { get, post } from '../utils/request'
 
-export interface VaultDirectoryStatus {
-  directory?: string
+export interface VaultLibraryStatus {
+  library_id: string
+  name: string
+  system_role: string
+  directory: string
   last_scan_at?: string | null
-  indexed_files: number
+  archived_entries: number
   last_error?: string
 }
 
 export interface VaultStatus {
   root: string
-  mine: VaultDirectoryStatus
-  reports: VaultDirectoryStatus
+  libraries: VaultLibraryStatus[]
 }
 
 export function getVaultStatus() {

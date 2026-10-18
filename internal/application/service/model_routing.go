@@ -79,7 +79,7 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 	if library == nil && db != nil {
 		spaceID := types.MustSpaceIDFromContext(ctx)
 		library = &types.Library{}
-		if err := db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "institutional").First(library).Error; err != nil {
+		if err := db.WithContext(ctx).Where("space_id = ? AND system_role = ?", spaceID, "official").First(library).Error; err != nil {
 			return ResolvedModelTier{}, fmt.Errorf("read library model tiers: %w", err)
 		}
 	}
@@ -104,9 +104,9 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 			return ResolvedModelTier{id, "library"}, nil
 		}
 	}
-	if db != nil && library != nil && library.SystemRole != "institutional" && tier != types.ModelTierEmbedding {
+	if db != nil && library != nil && library.SystemRole != "official" && tier != types.ModelTierEmbedding {
 		var defaults types.Library
-		if err := db.WithContext(ctx).Where("space_id=? AND system_role=?", library.SpaceID, "institutional").Find(&defaults).Error; err != nil {
+		if err := db.WithContext(ctx).Where("space_id=? AND system_role=?", library.SpaceID, "official").Find(&defaults).Error; err != nil {
 			return ResolvedModelTier{}, err
 		}
 		if defaults.ID != "" {

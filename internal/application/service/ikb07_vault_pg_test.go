@@ -48,13 +48,13 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 			if library.Template == types.TemplateExternalDurable {
 				entry.Identifier = "doi:10.7/example"
 			}
-			if library.Directory == "institutional" {
+			if library.Directory == "official" {
 				entry.SourceUnverified = true
 			}
 			require.NoError(t, h.db.Create(entry).Error)
 			require.NoError(t, v.WriteArticle(h.ctx, entry, body, nil))
 		}
-		if library.Directory == "mine" {
+		if library.Directory == "personal" {
 			old = entry
 		}
 		require.Equal(t, library.Directory, filepath.Dir(entry.VaultPath))

@@ -68,26 +68,26 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 		require.NoError(t, err)
 		return result
 	}
-	base := types.IngestRequest{Library: "institutional", URL: "https://example.org/shared", Title: "Shared", Publisher: "Agency", Content: "Complete original body for cross-library isolation.", Acquisition: "verbatim"}
+	base := types.IngestRequest{Library: "official", URL: "https://example.org/shared", Title: "Shared", Publisher: "Agency", Content: "Complete original body for cross-library isolation.", Acquisition: "verbatim"}
 	first := send(base)
-	base.Library = "opinions"
+	base.Library = "media"
 	other := send(base)
 	require.Equal(t, "accepted", first.Status)
 	require.Equal(t, "accepted", other.Status)
 	require.NotEqual(t, first.EntryID, other.EntryID)
 	require.Equal(t, other.EntryID, send(base).EntryID)
-	pending := types.IngestRequest{Library: "opinions", Content: "An unlinked opinion awaiting admission.", Acquisition: "verbatim"}
+	pending := types.IngestRequest{Library: "media", Content: "An unlinked opinion awaiting admission.", Acquisition: "verbatim"}
 	awaiting := send(pending)
 	require.Equal(t, "pending_review", awaiting.Status)
 	require.Equal(t, awaiting.EntryID, send(pending).EntryID)
 	// Matching bodies with different URLs stay independent between libraries.
 	base.URL = "https://example.org/other-url"
 	require.Equal(t, other.EntryID, send(base).EntryID)
-	base.Library = "institutional"
+	base.Library = "official"
 	require.Equal(t, first.EntryID, send(base).EntryID)
 	// A no-link timely source is also identified by publisher, title and date.
 	require.NoError(t, h.db.Model(&types.Library{}).Where("id=?", h.library.ID).Update("source_evidence_rule", "link_or_publisher_date").Error)
-	noLink := types.IngestRequest{Library: "institutional", Title: "Bulletin", Publisher: "Agency", PublishedAt: "2026-10-01", Content: "First complete bulletin text.", Acquisition: "verbatim"}
+	noLink := types.IngestRequest{Library: "official", Title: "Bulletin", Publisher: "Agency", PublishedAt: "2026-10-01", Content: "First complete bulletin text.", Acquisition: "verbatim"}
 	bulletin := send(noLink)
 	require.Equal(t, "accepted", bulletin.Status)
 	noLink.Content = "A completely different transcription of the same published bulletin."
@@ -102,7 +102,7 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	durable.Content = "Another supplied edition of the same identified reference."
 	require.Equal(t, reference.EntryID, send(durable).EntryID)
 	// Own sources compare the latest record first, even when URL/body match an older one.
-	own := types.IngestRequest{Library: "mine", SourceRef: "local/notes", URL: "https://example.org/shared", Content: "Own original observation.", Acquisition: "verbatim"}
+	own := types.IngestRequest{Library: "personal", SourceRef: "local/notes", URL: "https://example.org/shared", Content: "Own original observation.", Acquisition: "verbatim"}
 	original := send(own)
 	own.Content = "Own revised observation."
 	revised := send(own)
@@ -120,14 +120,14 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	// A confirmed discard blocks all its known keys only in its own library.
 	entry := h.article(t, first.EntryID)
 	require.NoError(t, h.service.rememberIngestDiscard(h.ctx, entry, "Confirmed no admission"))
-	base.Library = "institutional"
+	base.Library = "official"
 	require.Equal(t, "discarded", send(base).Status)
-	base.Library = "opinions"
+	base.Library = "media"
 	require.Equal(t, "exists", send(base).Status)
-	checks, err := h.service.CheckURLs(h.ctx, []string{"https://example.org/shared"}, "institutional")
+	checks, err := h.service.CheckURLs(h.ctx, []string{"https://example.org/shared"}, "official")
 	require.NoError(t, err)
 	require.Equal(t, "discarded", checks[0].Status)
-	checks, err = h.service.CheckURLs(h.ctx, []string{"https://example.org/shared"}, "opinions")
+	checks, err = h.service.CheckURLs(h.ctx, []string{"https://example.org/shared"}, "media")
 	require.NoError(t, err)
 	require.Equal(t, "in_library", checks[0].Status)
 	require.NoError(t, h.service.rememberIngestDiscard(h.ctx, h.article(t, reference.EntryID), "Discard reference"))
@@ -140,7 +140,7 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	own.Content = "New content following a discarded source record."
 	require.Equal(t, "accepted", send(own).Status)
 	// Generated content uses interface idempotency and never a discard fingerprint.
-	generated := types.IngestRequest{Library: "ai-reports", Title: "Generated report", Content: "Independent generated report.", Acquisition: "model_written"}
+	generated := types.IngestRequest{Library: "ai-output", Title: "Generated report", Content: "Independent generated report.", Acquisition: "model_written"}
 	g1, g2 := send(generated), send(generated)
 	require.Equal(t, g1.EntryID, g2.EntryID)
 	require.NoError(t, h.service.rememberIngestDiscard(h.ctx, h.article(t, g1.EntryID), "Delete report"))

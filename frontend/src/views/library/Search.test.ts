@@ -406,7 +406,7 @@ test('search results render their library display name', async () => {
 })
 
 test('personal document search results render the content type returned by the API', async () => {
-  const api = ingestSearchAPI({ source: 'mine', content_type: '内部方案', vault_path: 'mine/plan.md' })
+  const api = ingestSearchAPI({ source: 'mine', content_type: '内部方案', vault_path: 'personal/plan.md' })
   const result = await pageScenario(async state => {
     state.query.value = 'Launch'; await state.runSearch()
     assert.equal(state.results.value[0].content_type, '内部方案')

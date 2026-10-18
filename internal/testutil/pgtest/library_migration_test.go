@@ -65,3 +65,149 @@ INSERT INTO task_dead_letters(space_id,task_type,scope,scope_id,payload,fail_cou
 	require.NoError(t, m.Migrate(7))
 	require.Equal(t, after, baselineContents(t, db))
 }
+
+func TestSystemLibraryLabelMigrationPreservesCustomNamesAndOtherData(t *testing.T) {
+	db := Open(t)
+	directory, err := filepath.Abs("../../../migrations/versioned")
+	require.NoError(t, err)
+	m, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := m.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, m.Migrate(25))
+	require.NoError(t, db.Exec(`
+INSERT INTO spaces(id,name,business) VALUES(1,'Labels','personal');
+INSERT INTO libraries(id,space_id,name,system_role,directory,template,source_evidence_rule,embedding_model_id,summary_model_id) VALUES
+('official',1,'机构发布','institutional','institutional','external_timely','link_required','',''),
+('media',1,'人物观点','opinions','opinions','external_timely','link_required','',''),
+('reference',1,'参考文献','references','references','external_durable','','',''),
+('personal',1,'我的资料','mine','mine','own','','',''),
+('ai',1,'AI 报告','ai-reports','ai-reports','generated','','',''),
+('custom',1,'机构发布','','custom-library','own','','','');
+INSERT INTO entries(id,space_id,library_id,type,title,source,source_kind,parse_status,enable_status,vault_body,vault_path)
+VALUES('entry',1,'media','manual','Preserved title','','article','completed','enabled','Original body','opinions/unchanged.md');
+`).Error)
+	before := baselineContents(t, db)
+	expected := map[string]string{}
+	for table, raw := range before {
+		expected[table] = raw
+	}
+	var libraries []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(expected["libraries"]), &libraries))
+	names := map[string]string{"official": "官方信息", "media": "媒体信息", "reference": "参考文档", "personal": "个人产出", "ai": "AI产出"}
+	for _, library := range libraries {
+		if name, ok := names[library["id"].(string)]; ok {
+			library["name"] = name
+		}
+	}
+	raw, err := json.Marshal(libraries)
+	require.NoError(t, err)
+	expected["libraries"] = string(raw)
+	check := func(want map[string]string) {
+		t.Helper()
+		actual := baselineContents(t, db)
+		require.Len(t, actual, len(want))
+		for table, rows := range want {
+			require.JSONEq(t, rows, actual[table], table)
+		}
+	}
+	require.NoError(t, m.Migrate(26))
+	check(expected)
+	require.NoError(t, m.Migrate(25))
+	check(before)
+	require.NoError(t, m.Migrate(26))
+	check(expected)
+}
+
+func TestSystemLibraryDirectoryMigrationPreservesRowsAndCustomDirectories(t *testing.T) {
+	db := Open(t)
+	directory, err := filepath.Abs("../../../migrations/versioned")
+	require.NoError(t, err)
+	m, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := m.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, m.Migrate(26))
+	require.NoError(t, db.Exec(`
+INSERT INTO spaces(id,name,business) VALUES(1,'Directories','personal');
+INSERT INTO libraries(id,space_id,name,system_role,directory,template,source_evidence_rule,embedding_model_id,summary_model_id) VALUES
+('official',1,'Custom official','institutional','institutional','external_timely','link_required','',''),
+('media',1,'媒体信息','opinions','opinions','external_timely','link_required','',''),
+('reference',1,'参考文档','references','references','external_durable','','',''),
+('personal',1,'个人产出','mine','mine','own','','',''),
+('ai',1,'AI产出','ai-reports','ai-reports','generated','','',''),
+('custom',1,'Custom','','custom-library','own','','','');
+INSERT INTO libraries(id,space_id,name,system_role,directory,template,embedding_model_id,summary_model_id,deleted_at) VALUES('custom-personal',1,'Custom personal','mine','custom-personal','own','','',now());
+INSERT INTO entries(id,space_id,library_id,type,title,source,source_kind,parse_status,enable_status,vault_body,vault_path,metadata) VALUES
+('official-entry',1,'official','manual','Official','https://example.com/institutional/source','article','completed','enabled','Original institutional body','institutional/entry.md','{"directory":"institutional"}'),
+('media-entry',1,'media','manual','Media','opinions/nested/entry.md','article','completed','enabled','Media body','opinions/nested/entry.md','{}'),
+('personal-entry',1,'personal','manual','Personal','mine/entry.md','mine','completed','enabled','Personal body','mine/entry.md','{}'),
+('ai-entry',1,'ai','manual','AI','ai-reports/entry.md','report','completed','enabled','AI body','ai-reports/entry.md','{}'),
+('custom-entry',1,'custom','manual','Custom','custom-library/entry.md','mine','completed','enabled','Custom body','custom-library/entry.md','{}'),
+('custom-personal-entry',1,'custom-personal','manual','Custom personal','custom-personal/entry.md','mine','completed','enabled','Custom personal body','custom-personal/entry.md','{}');
+`).Error)
+	before := baselineContents(t, db)
+	expected := map[string]string{}
+	for table, raw := range before {
+		expected[table] = raw
+	}
+	renames := map[string]string{"institutional": "official", "opinions": "media", "mine": "personal", "ai-reports": "ai-output"}
+	for _, table := range []string{"libraries", "entries"} {
+		var rows []map[string]any
+		require.NoError(t, json.Unmarshal([]byte(expected[table]), &rows))
+		for _, row := range rows {
+			if table == "libraries" {
+				if current, ok := renames[row["system_role"].(string)]; ok {
+					if row["directory"] == row["system_role"] {
+						row["directory"] = current
+					}
+					row["system_role"] = current
+				}
+			} else {
+				old := row["vault_path"].(string)
+				for from, to := range renames {
+					if len(old) > len(from) && old[:len(from)+1] == from+"/" {
+						row["vault_path"] = to + old[len(from):]
+						if row["source"] == old {
+							row["source"] = row["vault_path"]
+						}
+					}
+				}
+			}
+		}
+		raw, err := json.Marshal(rows)
+		require.NoError(t, err)
+		expected[table] = string(raw)
+	}
+	check := func(want map[string]string) {
+		t.Helper()
+		actual := baselineContents(t, db)
+		require.Len(t, actual, len(want))
+		for table, rows := range want {
+			require.JSONEq(t, rows, actual[table], table)
+		}
+	}
+	require.NoError(t, m.Migrate(27))
+	check(expected)
+	require.Error(t, db.Exec(`UPDATE libraries SET directory='changed' WHERE id='personal'`).Error)
+	require.NoError(t, m.Migrate(26))
+	check(before)
+	require.NoError(t, m.Migrate(27))
+	check(expected)
+}
+
+func TestSystemLibraryDirectoryMigrationRejectsOccupiedDirectory(t *testing.T) {
+	db := Open(t)
+	directory, err := filepath.Abs("../../../migrations/versioned")
+	require.NoError(t, err)
+	m, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := m.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, m.Migrate(26))
+	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Collision','personal'); INSERT INTO libraries(id,space_id,name,system_role,directory,template,embedding_model_id,summary_model_id) VALUES('personal',1,'Personal','mine','mine','own','',''),('custom',1,'Occupied','','personal','own','',''); INSERT INTO entries(id,space_id,library_id,type,title,source,source_kind,vault_path) VALUES('entry',1,'personal','manual','Personal','mine/entry.md','mine','mine/entry.md')`).Error)
+	before := baselineContents(t, db)
+	require.ErrorContains(t, m.Migrate(27), "idx_libraries_directory")
+	after := baselineContents(t, db)
+	for table, rows := range before {
+		require.JSONEq(t, rows, after[table], table)
+	}
+	require.Error(t, db.Exec(`UPDATE libraries SET directory='changed' WHERE id='personal'`).Error)
+}

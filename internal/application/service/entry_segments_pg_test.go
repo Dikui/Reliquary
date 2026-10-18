@@ -290,7 +290,7 @@ func TestSegmentLongIngestCommitsBeforeReviewAndResumes(t *testing.T) {
 	m := &segmentedChat{reviewFail: 2}
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService.model = m
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "mine", Title: "Queued review", Content: strings.Repeat("Original measured content. ", 30), Acquisition: "verbatim"})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "personal", Title: "Queued review", Content: strings.Repeat("Original measured content. ", 30), Acquisition: "verbatim"})
 	require.NoError(t, err)
 	require.Equal(t, "accepted", result.Status)
 	require.Empty(t, m.calls)
@@ -314,7 +314,7 @@ func TestSegmentAsyncRejectionRemainsOutOfVault(t *testing.T) {
 	m := &segmentedChat{reject: 2}
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService.model = m
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "mine", Title: "Rejected segment", Content: strings.Repeat("Review this complete original paragraph. ", 20), Acquisition: "verbatim"})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "personal", Title: "Rejected segment", Content: strings.Repeat("Review this complete original paragraph. ", 20), Acquisition: "verbatim"})
 	require.NoError(t, err)
 	require.Equal(t, "accepted", result.Status)
 	require.Empty(t, m.calls)

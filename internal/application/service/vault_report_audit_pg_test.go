@@ -73,7 +73,7 @@ func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
 	require.Equal(t, "pending_retry", report.IndexStatus)
 	require.Contains(t, report.ErrorMessage, "fixture embedding is unavailable")
 	files := []string{}
-	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "ai-reports"), func(path string, entry fs.DirEntry, err error) error {
+	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "ai-output"), func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

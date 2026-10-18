@@ -12,6 +12,30 @@ import (
 	"reliquary/internal/types"
 )
 
+var systemLibraryLabelMigration = map[string][2]string{
+	"institutional": {"机构发布", "官方信息"},
+	"opinions":      {"人物观点", "媒体信息"},
+	"references":    {"参考文献", "参考文档"},
+	"mine":          {"我的资料", "个人产出"},
+	"ai-reports":    {"AI 报告", "AI产出"},
+}
+
+var systemLibraryDirectoryMigration = map[string]string{
+	"institutional": "official",
+	"opinions":      "media",
+	"mine":          "personal",
+	"ai-reports":    "ai-output",
+}
+
+func legacySystemLibraryRole(role string) string {
+	for old, current := range systemLibraryDirectoryMigration {
+		if role == current {
+			return old
+		}
+	}
+	return role
+}
+
 func hasLibrarySchema(rows []map[string]any) bool {
 	for _, row := range rows {
 		if _, ok := row["template"]; ok {
@@ -31,7 +55,7 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 	roles := map[string]map[string]any{}
 	for _, row := range reference {
 		if stringValue(row["system_role"]) != "" {
-			roles[fmt.Sprint(row["space_id"])+":"+stringValue(row["system_role"])] = row
+			roles[fmt.Sprint(row["space_id"])+":"+legacySystemLibraryRole(stringValue(row["system_role"]))] = row
 		}
 	}
 	ids := map[string]map[string]string{}
@@ -39,8 +63,14 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 	// The 9 to 10 projection must retain the text written by frozen 000010,
 	// independently of later corrections to the current initialization copy.
 	for _, library := range defaults {
+		library.SystemRole = legacySystemLibraryRole(library.SystemRole)
+		library.Directory = legacySystemLibraryRole(library.Directory)
+		library.Name = systemLibraryLabelMigration[library.SystemRole][0]
 		if library.SystemRole == "opinions" {
 			library.Description = "外部个人的观点：专家、分析师、KOL 的评论与文章。"
+		}
+		if library.SystemRole == "ai-reports" {
+			library.ReviewCriteria = "不审核、不处理，只建索引。标题、Markdown 正文必填；关联资料、已存在的实体与主题可选。"
 		}
 	}
 	original := snapshot.Tables["libraries"]
@@ -130,7 +160,14 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 	entryLibrary := map[string]string{}
 	for _, entry := range snapshot.Tables["entries"] {
 		if byRole := ids[fmt.Sprint(entry["space_id"])]; byRole != nil {
-			id := byRole[types.SystemRoleForSource(stringValue(entry["source_kind"]))]
+			role := "institutional"
+			switch entry["source_kind"] {
+			case "mine":
+				role = "mine"
+			case "report":
+				role = "ai-reports"
+			}
+			id := byRole[role]
 			entry["library_id"] = id
 			entryLibrary[fmt.Sprint(entry["id"])] = id
 		}
@@ -240,6 +277,163 @@ func projectLibraryManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 					left.Files[group] = append(left.Files[group], file)
 				}
 			}
+		}
+	}
+	return &left, actual
+}
+
+func projectLibraryLabelsSnapshot(snapshot *Snapshot, targetVersion int64) {
+	if snapshot.schemaVersion >= 26 || targetVersion < 26 {
+		return
+	}
+	for _, row := range snapshot.Tables["libraries"] {
+		if labels, ok := systemLibraryLabelMigration[stringValue(row["system_role"])]; ok && row["name"] == labels[0] {
+			row["name"] = labels[1]
+		}
+	}
+}
+
+func projectLibraryLabelsManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 26 || actual.SchemaVersion < 26 {
+		return expected, actual
+	}
+	item, ok := expected.Tables["libraries"]
+	if !ok || item.Data == nil {
+		return expected, actual
+	}
+	beforeHash, _ := json.Marshal(canonicalRows("libraries", item.Data))
+	if item.SHA256 != sum(beforeHash) {
+		return expected, actual
+	}
+	before, _ := json.MarshalIndent(item.Data, "", "  ")
+	before = append(before, '\n')
+	rows := make([]map[string]any, 0, len(item.Data))
+	for _, row := range item.Data {
+		copy := make(map[string]any, len(row))
+		for field, value := range row {
+			copy[field] = value
+		}
+		rows = append(rows, copy)
+	}
+	projectLibraryLabelsSnapshot(&Snapshot{schemaVersion: expected.SchemaVersion, Tables: map[string][]map[string]any{"libraries": rows}}, actual.SchemaVersion)
+	item.Data = rows
+	data, _ := json.Marshal(canonicalRows("libraries", rows))
+	item.SHA256 = sum(data)
+	left := *expected
+	left.Tables = make(map[string]TableManifest, len(expected.Tables))
+	for table, entry := range expected.Tables {
+		left.Tables[table] = entry
+	}
+	left.Tables["libraries"] = item
+	after, _ := json.MarshalIndent(rows, "", "  ")
+	after = append(after, '\n')
+	left.Files = make(map[string][]File, len(expected.Files))
+	for group, files := range expected.Files {
+		for _, file := range files {
+			if file.Path == ".reliquary/config/libraries.json" && file.SHA256 == sum(before) && file.Size == int64(len(before)) {
+				file.SHA256, file.Size = sum(after), int64(len(after))
+			}
+			left.Files[group] = append(left.Files[group], file)
+		}
+	}
+	return &left, actual
+}
+
+// Version 27 changes only built-in identities and their default archive paths.
+// Source URLs, custom directories, user JSON and historical evidence stay opaque.
+func projectLibraryDirectoriesSnapshot(snapshot *Snapshot, targetVersion int64) map[string]string {
+	if snapshot.schemaVersion >= 27 || targetVersion < 27 {
+		return nil
+	}
+	directories := map[string][2]string{}
+	for _, row := range snapshot.Tables["libraries"] {
+		old := stringValue(row["system_role"])
+		if current, ok := systemLibraryDirectoryMigration[old]; ok {
+			row["system_role"] = current
+			if row["directory"] == old {
+				row["directory"] = current
+				directories[stringValue(row["id"])] = [2]string{old, current}
+			}
+		}
+	}
+	files := map[string]string{}
+	for _, row := range snapshot.Tables["entries"] {
+		directory, ok := directories[stringValue(row["library_id"])]
+		old := stringValue(row["vault_path"])
+		if !ok || !strings.HasPrefix(old, directory[0]+"/") {
+			continue
+		}
+		current := directory[1] + strings.TrimPrefix(old, directory[0])
+		row["vault_path"] = current
+		if row["source"] == old {
+			row["source"] = current
+		}
+		files[directory[0]] = directory[1]
+	}
+	return files
+}
+
+func projectLibraryDirectoriesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 27 || actual.SchemaVersion < 27 {
+		return expected, actual
+	}
+	snapshot := &Snapshot{schemaVersion: expected.SchemaVersion, Tables: map[string][]map[string]any{}}
+	for _, table := range []string{"libraries", "entries"} {
+		item, ok := expected.Tables[table]
+		if !ok || item.Data == nil {
+			return expected, actual
+		}
+		raw, _ := json.Marshal(canonicalRows(table, item.Data))
+		if item.SHA256 != sum(raw) {
+			return expected, actual
+		}
+		rows := make([]map[string]any, 0, len(item.Data))
+		for _, row := range item.Data {
+			copy := make(map[string]any, len(row))
+			for field, value := range row {
+				copy[field] = value
+			}
+			rows = append(rows, copy)
+		}
+		snapshot.Tables[table] = rows
+	}
+	directories := projectLibraryDirectoriesSnapshot(snapshot, actual.SchemaVersion)
+	left := *expected
+	left.Tables = make(map[string]TableManifest, len(expected.Tables))
+	for table, entry := range expected.Tables {
+		left.Tables[table] = entry
+	}
+	for table, rows := range snapshot.Tables {
+		item := left.Tables[table]
+		item.Data = rows
+		raw, _ := json.Marshal(canonicalRows(table, rows))
+		item.SHA256 = sum(raw)
+		left.Tables[table] = item
+	}
+	left.Files = make(map[string][]File, len(expected.Files))
+	for group, files := range expected.Files {
+		for _, file := range files {
+			if group == "vault" {
+				for old, current := range directories {
+					if strings.HasPrefix(file.Path, old+"/") {
+						file.Path = current + strings.TrimPrefix(file.Path, old)
+						break
+					}
+				}
+				for table, rows := range snapshot.Tables {
+					if file.Path != ".reliquary/config/"+table+".json" && file.Path != ".reliquary/data/"+table+".json" {
+						continue
+					}
+					before, _ := json.MarshalIndent(expected.Tables[table].Data, "", "  ")
+					before = append(before, '\n')
+					if file.SHA256 == sum(before) && file.Size == int64(len(before)) {
+						after, _ := json.MarshalIndent(rows, "", "  ")
+						after = append(after, '\n')
+						file.SHA256, file.Size = sum(after), int64(len(after))
+					}
+				}
+			}
+			left.Files[group] = append(left.Files[group], file)
 		}
 	}
 	return &left, actual

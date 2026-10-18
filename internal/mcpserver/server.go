@@ -38,7 +38,6 @@ type Services struct {
 	Graph     *service.GraphSearchService
 	Topics    *service.TopicService
 	Entities  *service.EntityService
-	Reports   *service.VaultDocumentService
 	Follows   *service.FollowService
 }
 
@@ -347,7 +346,6 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in starInput) (any, error) {
 			return services.Entries.SetStarred(ctx, in.ID, in.Starred)
 		})
-	addReportTool(server, services.Reports)
 }
 
 func object(properties map[string]any, required ...string) map[string]any {

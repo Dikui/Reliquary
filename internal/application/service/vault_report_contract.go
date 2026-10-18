@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -14,7 +13,7 @@ import (
 	"reliquary/internal/types"
 )
 
-// ReportInput is the shared HTTP and MCP report contract.
+// ReportInput supplies fields to the shared generated-material persistence path.
 type ReportInput struct {
 	Library         string   `json:"library,omitempty"`
 	Title           string   `json:"title"`
@@ -23,7 +22,6 @@ type ReportInput struct {
 	RelatedEntities []string `json:"related_entities,omitempty"`
 	Topics          []string `json:"topics,omitempty"`
 	RequestID       string   `json:"request_id,omitempty"`
-	issues          []ReportFieldError
 }
 
 type ReportFieldError struct {
@@ -44,43 +42,6 @@ type reportMetadata struct {
 	TopicIDs        []string                `json:"topic_ids,omitempty"`
 	Fingerprint     string                  `json:"report_fingerprint,omitempty"`
 	RequestID       string                  `json:"request_id,omitempty"`
-}
-
-// DecodeReportInput collects type errors and rejects unknown fields in both transports.
-func DecodeReportInput(reader io.Reader) (ReportInput, error) {
-	var input ReportInput
-	var fields map[string]json.RawMessage
-	decoder := json.NewDecoder(io.LimitReader(reader, types.MaxIngestItemBytes+1))
-	if err := decoder.Decode(&fields); err != nil || fields == nil {
-		return input, werrors.NewBadRequestError("report must be a JSON object")
-	}
-	var extra any
-	if decoder.Decode(&extra) != io.EOF {
-		return input, werrors.NewBadRequestError("report must contain one JSON object")
-	}
-	targets := map[string]any{"library": &input.Library, "title": &input.Title, "markdown": &input.Markdown, "related_entry_ids": &input.RelatedEntryIDs, "related_entities": &input.RelatedEntities, "topics": &input.Topics, "request_id": &input.RequestID}
-	keys := make([]string, 0, len(fields))
-	for key := range fields {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		raw := fields[key]
-		target, ok := targets[key]
-		if !ok {
-			input.issues = append(input.issues, ReportFieldError{Field: key, Message: "unsupported field"})
-			continue
-		}
-		if string(raw) == "null" || !utf8.Valid(raw) || json.Unmarshal(raw, target) != nil {
-			expected := "string"
-			switch key {
-			case "related_entry_ids", "related_entities", "topics":
-				expected = "array of strings"
-			}
-			input.issues = append(input.issues, ReportFieldError{Field: key, Message: "invalid type; expected " + expected})
-		}
-	}
-	return input, nil
 }
 
 func reportValidationError(issues []ReportFieldError) error {
@@ -114,7 +75,7 @@ func reportInputFingerprint(input ReportInput, metadata reportMetadata) string {
 
 func validateReport(tx *gorm.DB, library *types.Library, input ReportInput) (reportMetadata, error) {
 	metadata := reportMetadata{RelatedEntryIDs: normalizedReportIDs(input.RelatedEntryIDs), RequestID: strings.TrimSpace(input.RequestID)}
-	issues := append([]ReportFieldError(nil), input.issues...)
+	var issues []ReportFieldError
 	add := func(field, message string) { issues = append(issues, ReportFieldError{Field: field, Message: message}) }
 	if title := strings.TrimSpace(input.Title); title == "" || !utf8.ValidString(title) || strings.ContainsRune(title, 0) || utf8.RuneCountInString(title) > 255 {
 		add("title", "required valid UTF-8 string without NUL, 1 to 255 characters")

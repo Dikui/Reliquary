@@ -188,7 +188,7 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 				continue
 			}
 			rel.Evidence = []types.RelationEvidence{{Locations: global}}
-			if l.SystemRole == "opinions" {
+			if l.SystemRole == "media" {
 				source, _ := entrySourceInfo(k)
 				speaker := &types.ProcessingSpeaker{Name: source.Author, Selection: "author"}
 				if e, ok := entities[normalizeEntityName(rel.Speaker)]; ok && types.NormalizeEntityType(*e.Type) == "person" {
@@ -384,7 +384,7 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 			continue
 		}
 		evidence := r.Evidence
-		if l.SystemRole == "opinions" {
+		if l.SystemRole == "media" {
 			for i := range evidence {
 				name := r.Speaker
 				if evidence[i].Speaker != nil {

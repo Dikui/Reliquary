@@ -404,7 +404,7 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 			require.NoError(t, h.db.Create(&types.APIKey{ID: 19, SpaceID: &spaceID, Name: "ChatGPT fixture collector", KeyHash: "chatgpt-fixture-collector"}).Error)
 			h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "19"})
 			inspector := chatGPTScheduledQueue(t, h)
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", Acquisition: "verbatim", URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
+			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", Acquisition: "verbatim", URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
 			require.NoError(t, err)
 			require.Equal(t, "accepted", result.Status)
 			pending := h.article(t, result.EntryID)

@@ -14,11 +14,11 @@ let sequence = 0
 const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== saved.value)
 const systemRoleName = computed(() => {
   switch (draft.value?.system_role) {
-    case 'institutional': return t('ikb18.systemInstitutional')
-    case 'opinions': return t('ikb18.systemOpinions')
+    case 'official': return t('ikb18.systemOfficial')
+    case 'media': return t('ikb18.systemMedia')
     case 'references': return t('ikb18.systemReferences')
-    case 'mine': return t('ikb18.systemMine')
-    case 'ai-reports': return t('ikb18.systemReports')
+    case 'personal': return t('ikb18.systemPersonal')
+    case 'ai-output': return t('ikb18.systemAIOutput')
     default: return t('ikb18.custom')
   }
 })
@@ -33,7 +33,7 @@ async function load(id?: string) {
     if (!selected) { draft.value = null; return }
     const response = await getCatalogLibrary(selected); if (!response.success) throw new Error(response.message)
     if (current !== sequence) return
-    draft.value = { ...response.data, description: catalogDescription(response.data, t('ikb18.systemOpinionsDescription')), content_types: response.data.content_types || [], relation_types: response.data.relation_types || [] }
+    draft.value = { ...response.data, description: catalogDescription(response.data, t('ikb18.systemMediaDescription')), content_types: response.data.content_types || [], relation_types: response.data.relation_types || [] }
     saved.value = JSON.stringify(draft.value); fromType.value = ''; toType.value = ''
   } catch (cause: any) { if (current === sequence) error.value = cause.message || t('common.operationFailed') }
   finally { if (current === sequence) loading.value = false }

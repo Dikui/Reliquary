@@ -1,5 +1,5 @@
 export const ikb18Zh = {
-  systemOpinionsDescription: '外部个人的观点：专家、分析师、KOL 的评论与观点资料。', priceTitle: '模型价格', priceInput: '输入单价（每百万 token）', priceOutput: '输出单价（每百万 token）', priceCurrency: '币种', priceHint: '单价可留空。币种使用三位字母，未填写时为 USD。全部留空清除价格；历史调用价格不变。', priceInvalid: '单价必须为非负有限数值，币种必须为三位字母。', priceNotApplicable: 'ChatGPT 订阅调用不按 token 单价计费。', hasUpdate: '有更新的记录', systemInstitutional: '机构发布', systemOpinions: '人物观点', systemReferences: '参考文献', systemMine: '我的资料', systemReports: 'AI 报告', moreFilters: '更多筛选', markdown: 'Markdown 资料', scope: '库范围', all: '全部库', library: '所属库', catalog: '库', create: '从模板新建库',
+  systemMediaDescription: '外部个人的观点：专家、分析师、KOL 的评论与观点资料。', priceTitle: '模型价格', priceInput: '输入单价（每百万 token）', priceOutput: '输出单价（每百万 token）', priceCurrency: '币种', priceHint: '单价可留空。币种使用三位字母，未填写时为 USD。全部留空清除价格；历史调用价格不变。', priceInvalid: '单价必须为非负有限数值，币种必须为三位字母。', priceNotApplicable: 'ChatGPT 订阅调用不按 token 单价计费。', hasUpdate: '有更新的记录', systemOfficial: '官方信息', systemMedia: '媒体信息', systemReferences: '参考文档', systemPersonal: '个人产出', systemAIOutput: 'AI产出', moreFilters: '更多筛选', markdown: 'Markdown 资料', scope: '库范围', all: '全部库', library: '所属库', catalog: '库', create: '从模板新建库',
   template: '模板', directory: '目录名', systemRole: '系统角色', custom: '自建库',
   name: '名称', description: '说明', review: '收录审核标准', evidence: '来源证据规则',
   linkRequired: '必须有链接', linkOrDate: '链接，或机构名称加发布日期', feed: '关注动态',
@@ -9,7 +9,7 @@ export const ikb18Zh = {
   mergeConfirm: '确认合并', deleteLibrary: '删除库', deleteHint: '只可删除无资料的自建库。',
   deleteConfirm: '确认删除这个空库？', invalidName: '名称不能为空，最多 255 个字符。',
   invalidDirectory: '目录名最多 100 个字符，只能包含小写字母、数字和单个连字符。',
-  invalidTypes: '类型名称不能为空或重复，最多 100 个字符。', unsaved: '库设置尚未保存，是否放弃修改？',
+  invalidTypes: '类型名称不能为空或重复，最多 100 个字符。', unsaved: '资料库设置尚未保存，是否放弃修改？',
   external_timely: '外部时效型', external_durable: '外部长效型', own: '自有型', generated: '生成型',
   external_timelyHint: '用于新闻、公告与人物观点。要求来源证据，归并转载并折叠相似报道。',
   external_durableHint: '用于论文、书籍、标准和长期参考资料。要求链接或标识。',
@@ -20,11 +20,11 @@ export const ikb18Zh = {
   deleteRelation: '删除关系', suppressHint: '删除后会保存抑制记录，重新处理资料时不再抽出这条关系。',
   reference: '正文引用', bodyChanged: '正文已变化，仅定位到段落，未应用旧字符范围。',
   noLocation: '没有可用的正文位置，请查看资料全文。', incompleteHint: '按资料 ID 补交图片。已入库资料仍可检索，也可接受缺失或丢弃。',
-  reindex: '重新索引 AI 报告', reindexHint: '重新建立这份 AI 报告的索引，不调用模型处理。',
+  reindex: '重新索引 AI产出', reindexHint: '重新建立这份 AI产出的索引，不调用模型处理。',
   segmentReason: '分段审核原因',
 }
 export const ikb18En: typeof ikb18Zh = {
-  systemOpinionsDescription: 'Views from external individuals: commentary and opinion materials from experts, analysts, and opinion leaders.', priceTitle: 'Model pricing', priceInput: 'Input price per million tokens', priceOutput: 'Output price per million tokens', priceCurrency: 'Currency', priceHint: 'Prices may be empty. Use a three-letter currency code; USD is the default. Clear all fields to remove pricing. Past calls keep their prices.', priceInvalid: 'Prices must be finite non-negative numbers and currency must use three letters.', priceNotApplicable: 'ChatGPT subscription calls do not use token pricing.', hasUpdate: 'A newer record is available', systemInstitutional: 'Institutional releases', systemOpinions: 'Personal opinions', systemReferences: 'References', systemMine: 'My materials', systemReports: 'AI reports', moreFilters: 'More filters', markdown: 'Markdown material', scope: 'Library scope', all: 'All libraries', library: 'Library', catalog: 'Libraries', create: 'Create library from template',
+  systemMediaDescription: 'Views from external individuals: commentary and opinion materials from experts, analysts, and opinion leaders.', priceTitle: 'Model pricing', priceInput: 'Input price per million tokens', priceOutput: 'Output price per million tokens', priceCurrency: 'Currency', priceHint: 'Prices may be empty. Use a three-letter currency code; USD is the default. Clear all fields to remove pricing. Past calls keep their prices.', priceInvalid: 'Prices must be finite non-negative numbers and currency must use three letters.', priceNotApplicable: 'ChatGPT subscription calls do not use token pricing.', hasUpdate: 'A newer record is available', systemOfficial: 'Official information', systemMedia: 'Media information', systemReferences: 'Reference documents', systemPersonal: 'Personal output', systemAIOutput: 'AI output', moreFilters: 'More filters', markdown: 'Markdown material', scope: 'Library scope', all: 'All libraries', library: 'Library', catalog: 'Libraries', create: 'Create library from template',
   template: 'Template', directory: 'Directory', systemRole: 'System role', custom: 'Custom library',
   name: 'Name', description: 'Description', review: 'Intake review criteria', evidence: 'Source evidence rule',
   linkRequired: 'Link required', linkOrDate: 'Link, or publisher and publication date', feed: 'Follow feed',
@@ -45,6 +45,6 @@ export const ikb18En: typeof ikb18Zh = {
   deleteRelation: 'Delete relation', suppressHint: 'Deletion saves a suppression record. Processing these materials again will not extract this relation.',
   reference: 'Body reference', bodyChanged: 'The body has changed. Only the paragraph is located; the old character range was skipped.',
   noLocation: 'No body location is available. Read the complete material.', incompleteHint: 'Submit missing images by material ID. Saved materials remain searchable; you can also accept missing images or discard the material.',
-  reindex: 'Reindex AI report', reindexHint: 'Rebuild the index for this AI report without model processing.',
+  reindex: 'Reindex AI output', reindexHint: 'Rebuild the index for this AI output without model processing.',
   segmentReason: 'Segment review reasons',
 }

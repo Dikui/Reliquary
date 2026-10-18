@@ -26,7 +26,7 @@ Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模�
 
 ## 新机器安装
 
-需要 Python 3.9+、Git、Node.js/npm、Docker Compose v2（支持 `config --no-env-resolution`）。macOS 自启动使用 Docker Desktop；如需本机 Ollama，同时安装 Ollama 桌面应用并准备模型。其他系统可使用相同运行目录，自启动需自行配置。
+需要 Python 3.9+、Git、Node.js/npm、Docker Compose v2（支持 `config --no-env-resolution`）。macOS 自启动支持 OrbStack 和 Docker Desktop；如需本机 Ollama，同时安装 Ollama 桌面应用并准备模型。其他系统可使用相同运行目录，自启动需自行配置。
 
 1. 将仓库克隆到 `~/Project/Reliquary`，启动 Docker，然后生成运行配置：
 
@@ -61,7 +61,9 @@ Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模�
      --root "$HOME/Reliquary" --install-autostart --ollama
    ```
 
-   任务每分钟检查一次；Docker 尚未启动时打开 Docker Desktop，缺少服务时使用已有镜像恢复五个容器。启用 `--ollama` 时也检查并打开 Ollama。脚本不更新源码、下载模型或构建镜像。启动日志位于 `logs/`。
+   任务每分钟检查一次；Docker 尚未启动时，`orbstack` context 使用 `orb start` 启动 OrbStack 引擎，其他 context 保留打开 Docker Desktop 的行为。启动引擎后等待下次检查恢复服务。缺少服务时使用已有镜像恢复五个容器。启用 `--ollama` 时也检查并打开 Ollama。脚本不更新源码、下载模型或构建镜像。启动日志位于 `logs/`。
+
+   注册时将当前 Docker context 固定为 LaunchAgent 的 `DOCKER_CONTEXT`，后续 `docker context use` 不会改变该任务。直接运行脚本时优先使用 `DOCKER_CONTEXT`，未设置时读取 `docker context show`。迁移至 OrbStack 后，须将任务中的 `DOCKER_CONTEXT` 更新为 `orbstack` 并重新加载；同时将源码的 `scripts/startup-local.py` 同步到运行目录的 `scripts/startup.py`，仅更新源码不会更新已安装的副本。
 
 4. 打开本机网页（默认 `http://127.0.0.1`），配置模型并测试检索。正常重启后，在未手动打开 Docker/Ollama 的情况下检查网页。无人值守来电恢复还需要在系统设置完成来电启动、禁止系统休眠，以及符合自身安全需求的自动登录配置；脚本不会代办这些系统设置。
 

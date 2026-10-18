@@ -14,12 +14,12 @@ The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/W
 | --- | --- |
 | Intake | External tools send complete content through the authenticated HTTP intake API or MCP; Reliquary does not fetch source content |
 | Intake review | Submitted content passes intake review; rejected content and missing bodies remain pending until you approve, supplement, or discard them |
-| Entry processing | Joint output includes summary, library content type, entities, topics, relations, and image descriptions; long content uses durable segment checkpoints; AI reports only build indexes |
+| Entry processing | Joint output includes summary, library content type, entities, topics, relations, and image descriptions; long content uses durable segment checkpoints; AI output only builds indexes |
 | Storage | Every content type retains the full Markdown text and supplied images |
-| File library | Every library has its own English directory: `institutional/`, `opinions/`, `references/`, `mine/`, `ai-reports/`, or a custom directory. All use the same database-owned header and full Markdown body; images live in `attachments/<entry-id>/` |
+| File library | Every library has its own English directory: `official/`, `media/`, `references/`, `personal/`, `ai-output/`, or a custom directory. All use the same database-owned header and full Markdown body; images live in `attachments/<entry-id>/` |
 | Search | Hybrid full-text and vector retrieval, merged entry results, filters for content type, entities, topics, publication dates, stars, and library; similar reporting can be collapsed |
 | Personal decisions | Star entries, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical entry summaries |
-| External AI | MCP supports search, entry reading, collection, pending review, stars, entity/topic lookup, and writing AI reports |
+| External AI | MCP supports search, entry reading, collection, pending review, stars, entity/topic lookup, and collecting AI output |
 | Graph search | Query 1 to 3 hops or paths within selected libraries, with source entries and body positions; no model calls |
 | Evaluation and accounting | Question sets, five retrieval metrics, run comparison, and model call price snapshots |
 | Administration | Library, models, file library status, operation log, API integration, and runtime queues |
@@ -95,4 +95,4 @@ Integration tests require PostgreSQL, Redis, and Neo4j endpoints documented in t
 
 [MIT](LICENSE). Upstream attribution and third-party licenses remain in the repository.
 
-Entry IDs use `entry_id` and lists use `entry_ids` across HTTP and MCP. Read content with `get_entry` and cite report sources with `related_entry_ids`. Retired field and tool aliases are not accepted.
+Entry IDs use `entry_id` and lists use `entry_ids` across HTTP and MCP. Read content with `get_entry`. Submit generated material through `ingest` and cite sources in its Markdown body; existing report references remain readable. Retired field and tool aliases are not accepted.

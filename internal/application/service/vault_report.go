@@ -69,10 +69,6 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 	return s.createReport(ctx, nil, title, markdown, relatedIDs, nil)
 }
 
-func (s *VaultDocumentService) CreateReportRequest(ctx context.Context, input ReportInput) (*ReportWriteResult, error) {
-	return s.createReportInput(ctx, nil, input, nil)
-}
-
 func (s *VaultDocumentService) createReport(ctx context.Context, library *types.Library, title, markdown string, relatedIDs []string, graph *bool) (*ReportWriteResult, error) {
 	return s.createReportInput(ctx, library, ReportInput{Title: title, Markdown: markdown, RelatedEntryIDs: relatedIDs}, graph)
 }
@@ -90,7 +86,7 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 		return nil, err
 	}
 	if library.Template != types.TemplateGenerated {
-		return nil, werrors.NewBadRequestError("write_report requires the AI reports library")
+		return nil, werrors.NewBadRequestError("generated material requires a generated library")
 	}
 	var entry *types.Entry
 	var absolutePath string

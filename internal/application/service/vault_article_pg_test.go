@@ -263,9 +263,9 @@ func TestVaultReprocessingUpdatesHeaderAndReadsVaultBody(t *testing.T) {
 func TestImportedVaultDocumentReadBodyExcludesHeaderAndDeleteRemovesFile(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	var mine types.Library
-	require.NoError(t, h.db.Where("system_role=?", "mine").First(&mine).Error)
+	require.NoError(t, h.db.Where("system_role=?", "personal").First(&mine).Error)
 	doc := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: mine.ID,
-		SourceKind: "mine", VaultPath: "mine/user.md", Title: "User", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted}
+		SourceKind: "mine", VaultPath: "personal/user.md", Title: "User", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted}
 	require.NoError(t, h.db.Create(doc).Error)
 	data := []byte("---\ntitle: User\n---\n# User\n\nBody")
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, doc.VaultPath), data, 0644))

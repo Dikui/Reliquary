@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { DialogPlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { getVaultStatus, rebuildVaultFiles, getVaultFileRebuildStatus, type VaultStatus, type VaultFileRebuildStatus } from '@/api/vault'
@@ -113,6 +113,7 @@ function formatScanTime(value?: string | null) {
   return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'medium' }).format(date)
 }
 
+watch(locale, () => { loading.value = false; void load() })
 onMounted(() => { void load(); void pollRebuild() })
 onBeforeUnmount(() => { generation++; disposed = true; clearTimeout(pollTimer); confirmation?.destroy() })
 </script>
@@ -140,19 +141,20 @@ onBeforeUnmount(() => { generation++; disposed = true; clearTimeout(pollTimer); 
         <dd><code>{{ status.root }}</code></dd>
       </dl>
       <p class="vault-readonly-hint">{{ t('settings.vault.rootHint') }}</p>
+      <p class="vault-readonly-hint">{{ t('settings.vault.archiveHint') }}</p>
+      <p v-if="status.libraries.length === 0" role="status">{{ t('common.noData') }}</p>
       <div class="vault-directories">
-        <section v-for="kind in (['mine', 'reports'] as const)" :key="kind" class="vault-directory">
-          <h4>{{ t(kind === 'mine' ? 'settings.vault.mine' : 'settings.vault.reports') }} <code>{{ status[kind].directory }}/</code></h4>
-          <p v-if="kind === 'mine'" class="vault-readonly-hint">{{ t('settings.vault.mineImportedHint') }}</p>
+        <section v-for="library in status.libraries" :key="library.library_id" class="vault-directory">
+          <h4>{{ library.name }} <code>{{ library.directory }}/</code></h4>
           <dl>
-            <template v-if="kind === 'reports'">
+            <dt>{{ t('settings.vault.archivedEntries') }}</dt>
+            <dd>{{ new Intl.NumberFormat(locale).format(library.archived_entries) }}</dd>
+            <template v-if="library.system_role === 'ai-output'">
               <dt>{{ t('settings.vault.lastScan') }}</dt>
-              <dd>{{ formatScanTime(status[kind].last_scan_at) }}</dd>
+              <dd>{{ formatScanTime(library.last_scan_at) }}</dd>
+              <dt>{{ t('settings.vault.lastError') }}</dt>
+              <dd :class="{ 'vault-scan-error': library.last_error }">{{ library.last_error || t('settings.vault.noError') }}</dd>
             </template>
-            <dt>{{ t('settings.vault.indexedFiles') }}</dt>
-            <dd>{{ new Intl.NumberFormat(locale).format(status[kind].indexed_files) }}</dd>
-            <dt>{{ t('settings.vault.lastError') }}</dt>
-            <dd :class="{ 'vault-scan-error': status[kind].last_error }">{{ status[kind].last_error || t('settings.vault.noError') }}</dd>
           </dl>
         </section>
       </div>

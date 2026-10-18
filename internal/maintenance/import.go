@@ -49,19 +49,6 @@ func Load(root string) (*Snapshot, error) {
 		return nil, err
 	}
 	snapshot := &Snapshot{FormatVersion: manifest.FormatVersion, storedFormat: manifest.FormatVersion, registryVersion: manifest.RegistryVersion, schemaVersion: manifest.SchemaVersion, Tables: map[string][]map[string]any{}, Required: manifest.Required, ActiveUploads: manifest.ActiveUploads, JSONNulls: manifest.JSONNulls}
-	for _, file := range manifest.VaultFiles {
-		path, err := SafePath(root, file.Path)
-		if err != nil {
-			return nil, err
-		}
-		if vaultpath.UserMetadata(file.Path) {
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil || sum(data) != file.SHA256 || int64(len(data)) != file.Size {
-			return nil, fmt.Errorf("vault file checksum mismatch: %s", file.Path)
-		}
-	}
 	for _, file := range manifest.Files {
 		path, err := SafePath(directory, file.Path)
 		if err != nil {
@@ -165,6 +152,45 @@ func Load(root string) (*Snapshot, error) {
 			return nil, errors.New("persistent table registry differs from supported table and column mapping")
 		}
 	}
+	// Original sidecars can outlive the version-27 directory move until the next flush.
+	var directories map[string]string
+	if snapshot.schemaVersion < 27 {
+		projection := &Snapshot{schemaVersion: snapshot.schemaVersion, Tables: map[string][]map[string]any{}}
+		for _, table := range []string{"libraries", "entries"} {
+			for _, row := range snapshot.Tables[table] {
+				copy := make(map[string]any, len(row))
+				for key, value := range row {
+					copy[key] = value
+				}
+				projection.Tables[table] = append(projection.Tables[table], copy)
+			}
+		}
+		directories = projectLibraryDirectoriesSnapshot(projection, 27)
+	}
+	for _, file := range manifest.VaultFiles {
+		path, err := SafePath(root, file.Path)
+		if err != nil {
+			return nil, err
+		}
+		if vaultpath.UserMetadata(file.Path) {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			for old, current := range directories {
+				if strings.HasPrefix(file.Path, old+"/") {
+					path, err = SafePath(root, current+strings.TrimPrefix(file.Path, old))
+					if err == nil {
+						data, err = os.ReadFile(path)
+					}
+					break
+				}
+			}
+		}
+		if err != nil || sum(data) != file.SHA256 || int64(len(data)) != file.Size {
+			return nil, fmt.Errorf("vault file checksum mismatch: %s", file.Path)
+		}
+	}
 	return snapshot, nil
 }
 
@@ -211,6 +237,14 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			return nil, err
 		}
 	}
+	var targetVersion int64
+	if db.Migrator().HasTable("schema_migrations") {
+		if err := db.WithContext(ctx).Table("schema_migrations").Select("version").Scan(&targetVersion).Error; err != nil {
+			return nil, err
+		}
+	}
+	projectLibraryLabelsSnapshot(snapshot, targetVersion)
+	projectLibraryDirectoriesSnapshot(snapshot, targetVersion)
 	if db.Migrator().HasTable("task_pending_ops") {
 		if err := migrateQueueSnapshot(snapshot); err != nil {
 			return nil, err

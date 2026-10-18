@@ -23,7 +23,7 @@ func entityFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService) {
 	t.Helper()
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Entities"}).Error)
-	library := types.Library{ID: "entity-library", SpaceID: 1, SystemRole: "institutional", Template: types.TemplateExternalTimely, Directory: "institutional", SourceEvidenceRule: "link_required", Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
+	library := types.Library{ID: "entity-library", SpaceID: 1, SystemRole: "official", Template: types.TemplateExternalTimely, Directory: "official", SourceEvidenceRule: "link_required", Name: "Entity articles", SummaryModelID: "entity-chat", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}
 	require.NoError(t, db.Create(&library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "entity-reviewer")

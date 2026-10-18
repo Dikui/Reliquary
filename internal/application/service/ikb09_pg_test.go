@@ -48,7 +48,7 @@ func TestIKB09TopicLibrariesAssignmentHistoryAndRetention(t *testing.T) {
 func TestIKB09FeedLibrariesWatermarksFoldingAndEntityGroups(t *testing.T) {
 	h := newFollowFixture(t)
 	h.followBoth(t)
-	other := types.Library{ID: "other-feed-library", Directory: "opinions", SpaceID: 1, Name: "人物观点", Template: types.TemplateExternalTimely, SourceEvidenceRule: "link_required", FeedEnabled: true}
+	other := types.Library{ID: "other-feed-library", Directory: "media", SpaceID: 1, Name: "人物观点", Template: types.TemplateExternalTimely, SourceEvidenceRule: "link_required", FeedEnabled: true}
 	disabled := types.Library{ID: "disabled-feed-library", SpaceID: 1, Name: "参考文献", Template: types.TemplateExternalDurable}
 	require.NoError(t, h.db.Create(&other).Error)
 	require.NoError(t, h.db.Create(&disabled).Error)

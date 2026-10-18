@@ -10,9 +10,26 @@ from unittest import mock
 spec = importlib.util.spec_from_file_location('installer', Path(__file__).with_name('install-local.py'))
 installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
+spec = importlib.util.spec_from_file_location('startup', Path(__file__).with_name('startup-local.py'))
+startup = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(startup)
 
 
 class InstallationTests(unittest.TestCase):
+    def test_orbstack_starts_when_daemon_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deploy = Path(tmp)
+            (deploy / '.env').touch()
+            with mock.patch.object(startup, 'DEPLOY', deploy), \
+                 mock.patch.dict(startup.os.environ, {'DOCKER_CONTEXT': 'orbstack'}), \
+                 mock.patch.object(startup, 'run', side_effect=[
+                     subprocess.CalledProcessError(1, ['docker', 'info']), '']) as command:
+                with self.assertRaisesRegex(RuntimeError, 'OrbStack is starting; retrying next minute'):
+                    startup.main(False)
+            self.assertEqual(command.call_args_list, [
+                mock.call(['docker', 'info', '--format', '{{.ServerVersion}}'], timeout=12),
+                mock.call(['orb', 'start'])])
+
     def test_existing_credentials_become_independent_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / '中文 Library'

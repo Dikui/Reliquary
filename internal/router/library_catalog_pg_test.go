@@ -52,7 +52,7 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 		Data types.Library `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &custom))
-	for _, patch := range []string{`{"template":"generated"}`, `{"directory":"new"}`, `{"system_role":"mine"}`, `{"source_evidence_rule":"link_required"}`, `{"template_rules":{"review":false}}`} {
+	for _, patch := range []string{`{"template":"generated"}`, `{"directory":"new"}`, `{"system_role":"personal"}`, `{"source_evidence_rule":"link_required"}`, `{"template_rules":{"review":false}}`} {
 		response := personalRequest(t, f.router, http.MethodPut, "/api/v1/libraries/"+custom.Data.ID, patch, f.key, true)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
@@ -64,9 +64,9 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 
 func TestExplicitIngestSelectsSystemLibrary(t *testing.T) {
 	f := newMCPFixture(t)
-	for _, kind := range []string{"institutional", "mine"} {
+	for _, kind := range []string{"official", "personal"} {
 		request := &types.IngestRequest{Library: kind, Title: kind, Content: "# Original\n\nFull source content for the transition.", Acquisition: "verbatim", URL: "https://example.org/" + kind}
-		if kind == "mine" {
+		if kind == "personal" {
 			request.URL = ""
 		}
 		result, err := f.articles.Ingest(f.ctx, request)
@@ -81,7 +81,7 @@ func TestExplicitIngestSelectsSystemLibrary(t *testing.T) {
 	require.NoError(t, err)
 	var library types.Library
 	require.NoError(t, f.db.First(&library, "id=?", report.LibraryID).Error)
-	require.Equal(t, "ai-reports", library.SystemRole)
+	require.Equal(t, "ai-output", library.SystemRole)
 }
 
 func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
@@ -95,7 +95,7 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	_, err := follows.Follow(f.ctx, "entity", entity.ID)
 	require.NoError(t, err)
 	for _, library := range libraries {
-		entry := types.Entry{ID: library.SystemRole + "-entry", SpaceID: 1, LibraryID: library.ID, Title: "catalogneedle shared", Type: "manual", SourceKind: map[string]string{"mine": "mine", "ai-reports": "report", "institutional": "article", "opinions": "article", "references": "article"}[library.SystemRole], ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", VaultBody: "Full original body"}
+		entry := types.Entry{ID: library.SystemRole + "-entry", SpaceID: 1, LibraryID: library.ID, Title: "catalogneedle shared", Type: "manual", SourceKind: map[string]string{"personal": "mine", "ai-output": "report", "official": "article", "media": "article", "references": "article"}[library.SystemRole], ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", VaultBody: "Full original body"}
 		require.NoError(t, f.db.Create(&entry).Error)
 		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entry.ID, EntityID: entity.ID, CreatedAt: time.Now().Add(-time.Second)}).Error)
 		detail := personalRequest(t, f.router, http.MethodGet, "/api/v1/entries/"+entry.ID, "", f.key, true)
@@ -117,13 +117,13 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	require.NoError(t, json.Unmarshal(all.Body.Bytes(), &page))
 	require.Equal(t, 5, page.Total)
 	noCollapse := false
-	search, err := service.NewSearchService(f.params.LibraryService, f.params.SpaceService, nil, f.db).Search(f.ctx, types.EntrySearchRequest{Libraries: []string{"mine", "ai-reports", "institutional", "opinions", "references"}, Query: "catalogneedle", Limit: 10, CollapseSimilar: &noCollapse})
+	search, err := service.NewSearchService(f.params.LibraryService, f.params.SpaceService, nil, f.db).Search(f.ctx, types.EntrySearchRequest{Libraries: []string{"personal", "ai-output", "official", "media", "references"}, Query: "catalogneedle", Limit: 10, CollapseSimilar: &noCollapse})
 	require.NoError(t, err)
 	require.Len(t, search.Results, 5)
 	feed, err := follows.Feed(f.ctx, types.FollowFeedRequest{})
 	require.NoError(t, err)
 	require.Len(t, feed.Results, 2)
-	require.NoError(t, f.db.Model(&types.Library{}).Where("system_role='mine'").Update("feed_enabled", true).Error)
+	require.NoError(t, f.db.Model(&types.Library{}).Where("system_role='personal'").Update("feed_enabled", true).Error)
 	feed, err = follows.Feed(f.ctx, types.FollowFeedRequest{})
 	require.NoError(t, err)
 	require.Len(t, feed.Results, 3)

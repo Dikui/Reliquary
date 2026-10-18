@@ -77,7 +77,7 @@ export default {
     "recordNoResults": "当次没有返回资料，可以保存为无答案题或稍后手工补充。",
     "count": "题数",
     "model": "模型",
-    "libraryDefault": "沿用库设置",
+    "libraryDefault": "沿用资料库设置",
     "candidateHint": "选择库和资料范围，最多 50 份资料、20 题。生成后进入待确认，逐题审核答案。",
     "generate": "生成候选",
     "generating": "生成中",
@@ -224,7 +224,7 @@ export default {
     "openSettings": "打开 ChatGPT 模型设置",
     "encryptionRequired": "先在部署配置中设置有效的 SYSTEM_AES_KEY，再使用 ChatGPT 登录。",
     "browserHint": "请在部署 Reliquary 的本机浏览器中授权，完成后返回本页。",
-    "noAccounts": "尚未连接 ChatGPT 账号。登录后添加聊天模型，并在库设置中选择。",
+    "noAccounts": "尚未连接 ChatGPT 账号。登录后添加聊天模型，并在资料库设置中选择。",
     "connected": "已登录",
     "needsLogin": "需要重新登录",
     "signedOut": "已退出登录",
@@ -258,7 +258,7 @@ export default {
 },
   embeddingRebuild: {
     title: '重建全部向量',
-    description: '使用当前模型重新生成正文分块、资料、图片、资料、AI 报告和实体名称的向量。',
+    description: '使用当前模型重新生成正文分块、资料、图片、资料、AI产出和实体名称的向量。',
     currentModel: '当前模型：{name}',
     runModel: '本次重建模型：{name}，{dimension} 维',
     saveFirst: '先保存模型设置，再开始或继续重建。',
@@ -279,7 +279,7 @@ export default {
     failureLimit: '显示前 {shown} 项，共 {total} 项失败。',
     attempts: '已尝试 {count} 次',
     status: { pending: '等待执行', running: '重建中', paused: '已中断，可继续', completed: '重建完成', completed_with_errors: '重建结束，有失败项', failed: '重建失败，可继续' },
-    kinds: { article_chunk: '正文分块', article: '资料', image: '图片', mine_chunk: '资料分块', report_chunk: 'AI 报告分块', entity: '实体名称' },
+    kinds: { article_chunk: '正文分块', article: '资料', image: '图片', mine_chunk: '资料分块', report_chunk: 'AI产出分块', entity: '实体名称' },
   },
   follows: {
     library: '库',
@@ -509,7 +509,7 @@ export default {
     "update_topic": "修改主题",
     "delete_topic": "删除主题",
     "ingest": "收录",
-    "write_report": "写入AI 报告"
+    "write_report": "写入AI产出"
   }
 },
   menu: {
@@ -553,7 +553,7 @@ export default {
   "sources": {
     "generation": "资料处理模型档位",
 
-    "library": "库设置",
+    "library": "资料库设置",
     "legacy": "已有模型配置",
     "default": "系统默认",
     "unconfigured": "未配置"
@@ -745,7 +745,7 @@ export default {
       ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。新内容经过模型收录审核；重复、已丢弃、缺正文等情况按规则直接返回。未通过审核的资料返回 pending_review 与原因，调用方的判断不替代审核。通过内网访问时使用 Authorization: Bearer API_KEY。",
       copyIngestUrl: '复制收录接口地址',
       mcpUrl: 'MCP 服务地址',
-      mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取资料、收录、待审区、星标和写入AI 报告。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
+      mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取资料、收录、待审区、星标和写入AI产出。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
       copyMcpUrl: '复制 MCP 服务地址',
       apiKeys: 'API 密钥',
       apiKeysDesc: "API Key 可以访问个人空间的全部内容和收录、检索等接口。部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。",
@@ -817,7 +817,7 @@ export default {
     previewImage: '查看图片：{title}',
     imageLoadFailed: '图片读取失败',
     title: '知识检索',
-    description: '从资料、资料和AI 报告中检索，按资料展示命中内容。',
+    description: '从资料、资料和AI产出中检索，按资料展示命中内容。',
     query: '检索内容',
     queryPlaceholder: '输入要查找的内容',
     clearQuery: '清除检索内容',
@@ -827,7 +827,7 @@ export default {
     entities: '实体',
     topics: '主题',
     source: '来源',
-    sources: { article: '资料', mine: '我的资料', report: 'AI 报告' },
+    sources: { article: '资料', mine: '个人产出', report: 'AI产出' },
     publishedFrom: '发布时间起始',
     publishedTo: '发布时间截止',
     collapseSimilar: '折叠相似报道',
@@ -854,7 +854,7 @@ export default {
     requestPreview: '检索请求参数',
   },
   commandPalette: {
-    placeholder: "搜索资料、资料与AI 报告…",
+    placeholder: "搜索资料、资料与AI产出…",
     clearRecent: '清除',
     retrieval: '检索参数',
     hotkey: {
@@ -949,7 +949,7 @@ export default {
     usage: {
       title: '模型无法删除',
       description: '模型「{name}」仍被以下配置引用。请先打开对应配置并更换模型，再重新删除。',
-      librarySettings: '库设置',
+      librarySettings: '资料库设置',
       openConfiguration: '打开配置',
       truncated: '仅显示前 {shown} 个，共 {total} 个',
       bindings: {
@@ -1593,7 +1593,7 @@ export default {
 
             entityNameEmbeddingRebuild: '实体名称向量重建',
             embeddingRebuild: '全部向量重建',
-            reportIndex: 'AI 报告索引',
+            reportIndex: 'AI产出索引',
             topicBackfill: '主题历史归入',
           }
         },
@@ -1753,7 +1753,7 @@ export default {
   },
   knowledgeEditor: {
 
-    titleEdit: '库设置',
+    titleEdit: '资料库设置',
     chunking: {
       title: '分块设置',
       description: "控制文档在向量化之前的分块方式。默认设置适用于多数情况，可在检索质量不佳时调整。",
@@ -2051,20 +2051,18 @@ export default {
       rebuildFailed: '文件重建失败。',
       rebuildCounts: '写入 {written}，跳过 {skipped}，失败 {failed}。计数仅包含 Markdown 文件，未变化的文件计入跳过。',
 
-      title: '文件库状态',
+      title: '文件存档与备份',
       root: '根目录',
-      rootHint: '由服务器配置，此处只读。',
-      mine: '资料',
-      mineImportedHint: '资料通过收录接口导入。更新正文请通过收录接口重新提交。',
-      reports: 'AI 报告',
+      rootHint: '所有资料库的 Markdown 文件保存在此根目录，可用 Obsidian 打开阅读。路径由服务器配置，此处只读。',
       lastScan: '最近扫描时间',
-      indexedFiles: '已索引文件数',
+      archivedEntries: '已归档资料数',
+      archiveHint: '数量按数据库中的归档记录统计，不代表已核验磁盘文件完整性。',
       lastError: '最近错误',
       noError: '无',
       notScanned: '尚未扫描',
-      loadFailed: '无法加载文件库状态，请重试。',
+      loadFailed: '无法加载文件存档状态，请重试。',
     },
-    librarySettings: '库设置',
+    librarySettings: '资料库设置',
     modelManagement: '模型管理',
     versionInfo: '版本信息',
     taskQueue: '运行队列',
@@ -2221,7 +2219,7 @@ export default {
     channelRSS: 'RSS（历史）',
     emptyArticles: "暂无资料",
     ingestOnlyHint: "请通过外部工具将完整材料送入 HTTP 或 MCP 收录接口。",
-    sourceKinds: { mine: '我的资料', report: 'AI 报告' },
+    sourceKinds: { mine: '个人产出', report: 'AI产出' },
     collectReason: '收藏理由',
     vaultPath: '文件库路径',
     copyVaultPath: '复制文件库路径',
@@ -2358,7 +2356,7 @@ export default {
     confirmBatchDeleteDocument: '确认删除选中的 {count} 篇资料？删除后将无法恢复。',
     batchDeleteSuccess: '成功删除 {count} 篇资料',
     batchDeleteFailed: '批量删除失败',
-    confirmBatchReparseDocument: '重新处理选中的 {count} 份资料？保留正文，更新处理结果与索引。AI 报告只重新索引。',
+    confirmBatchReparseDocument: '重新处理选中的 {count} 份资料？保留正文，更新处理结果与索引。AI产出只重新索引。',
     confirmBatchReparse: '确认并重新处理',
     batchReparseSuccess: '已提交 {count} 个重建任务',
     batchReparseFailed: '批量重建失败',

@@ -28,7 +28,7 @@ func TestIngestResourceDuplicateCleanupWithinTransaction(t *testing.T) {
 			t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "3")
 
 			missing := []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/ui02/materials/existing.png", Reason: "外部工具未取得原图"}}
-			existing, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "institutional", URL: "https://example.org/ui02/existing", Title: "已有待补全文章", Content: body, Acquisition: "extracted", Publisher: "星河观测通讯", Missing: missing})
+			existing, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", URL: "https://example.org/ui02/existing", Title: "已有待补全文章", Content: body, Acquisition: "extracted", Publisher: "星河观测通讯", Missing: missing})
 			require.NoError(t, err)
 			require.Equal(t, "accepted", existing.Status)
 			require.True(t, h.article(t, existing.EntryID).Incomplete)
@@ -45,7 +45,7 @@ func TestIngestResourceDuplicateCleanupWithinTransaction(t *testing.T) {
 			var beforeResources int64
 			require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&beforeResources).Error)
 			beforeJobs := transactionJobs(t, h.db)
-			request := types.IngestRequest{Library: "institutional", URL: "https://example.org/ui02/follow-main", Title: "已有待补全文章", Content: incoming, Acquisition: "model_written", Publisher: "星河观测通讯", Author: "页面检查编辑", PublishedAt: "2026-10-10T09:30:00+08:00", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/ui02/materials/follow-main.png", Reason: "外部工具未取得原图"}}}
+			request := types.IngestRequest{Library: "official", URL: "https://example.org/ui02/follow-main", Title: "已有待补全文章", Content: incoming, Acquisition: "model_written", Publisher: "星河观测通讯", Author: "页面检查编辑", PublishedAt: "2026-10-10T09:30:00+08:00", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/ui02/materials/follow-main.png", Reason: "外部工具未取得原图"}}}
 			result, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{request}})
 			require.NoError(t, err)
 			require.Len(t, result.Items, 1)
