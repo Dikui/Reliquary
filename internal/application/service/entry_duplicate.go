@@ -196,14 +196,16 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Entry, earlierPendingOnly ...boo
 			return item, "content_hash", 0, err
 		}
 	}
-	if rules.Identity.NearDuplicate && k.ContentRuneCount >= minimumSimHashRunes {
+	if rules.Identity.NearDuplicate && k.ContentRuneCount >= minimumSimHashRunes && strings.TrimSpace(k.Title) != "" {
 		var candidate struct {
 			types.Entry
 			Distance int
 		}
 		// PostgreSQL's bit_count avoids loading every body into the application.
+		// Shared language or page templates alone cannot establish article identity.
 		distance := "bit_count(content_sim_hash::bit(64) # CAST(? AS bigint)::bit(64))"
 		err := base().Select("entries.*, "+distance+" AS distance", k.ContentSimHash).
+			Where("lower(btrim(title)) = lower(?)", strings.TrimSpace(k.Title)).
 			Where("content_rune_count >= ? AND content_rune_count BETWEEN ? AND ?", minimumSimHashRunes, k.ContentRuneCount*4/5, k.ContentRuneCount*5/4).
 			Where(distance+" <= ?", k.ContentSimHash, messageSimHashThreshold()).Order("distance ASC, created_at ASC, id ASC").First(&candidate).Error
 		if err == nil {

@@ -283,7 +283,7 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 	}
 
 	if status == types.ManualEntryStatusPublish {
-		incoming := &types.Entry{SpaceID: spaceID, LibraryID: libraryID}
+		incoming := &types.Entry{SpaceID: spaceID, LibraryID: libraryID, Title: title}
 		if len(payload.SourceMetadata) > 0 {
 			metadata, err := json.Marshal(payload.SourceMetadata)
 			if err != nil {

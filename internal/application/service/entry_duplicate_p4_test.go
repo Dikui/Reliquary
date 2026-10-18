@@ -40,8 +40,8 @@ func TestP4UnrelatedEnglishBodiesStaySeparate(t *testing.T) {
 	bank := "Customers can ask a virtual assistant to explain charges and find the correct service team. The system presents clear instructions when a payment cannot be completed. Independent reviewers examined access controls and recorded how employees handle sensitive records."
 	marine := "A marine research team surveyed a coral reef to study the movement of small fish. Divers recorded water temperature and collected samples for laboratory analysis. They found that changes in available food affected where the animals gathered."
 	t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "3")
-	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", ParseStatus: "completed"}
-	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library"}
+	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Title: "Bank services", Type: "manual", ParseStatus: "completed"}
+	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Title: "Coral reef survey"}
 	setMessageFingerprint(owner, bank)
 	setMessageFingerprint(incoming, marine)
 	require.GreaterOrEqual(t, incoming.ContentRuneCount, owner.ContentRuneCount*4/5)
@@ -50,6 +50,7 @@ func TestP4UnrelatedEnglishBodiesStaySeparate(t *testing.T) {
 	require.False(t, sameIngestBody(bank, marine))
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(owner).Error)
+	incoming.ContentSimHash = owner.ContentSimHash
 	match, _, _, err := findMessageDuplicate(db, incoming)
 	require.NoError(t, err)
 	require.Nil(t, match)
@@ -75,9 +76,9 @@ func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 	whitespaceHash, _, _ := messageBodyFingerprint(" \n" + strings.ReplaceAll(body, " ", "  \n") + "\n")
 	require.Equal(t, hash, whitespaceHash)
 	db := pgtest.Open(t)
-	k := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", Source: "manual", ParseStatus: "completed", ContentHash: hash, ContentSimHash: simhash, ContentRuneCount: count}
+	k := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Title: "Orion report", Type: "manual", Source: "manual", ParseStatus: "completed", ContentHash: hash, ContentSimHash: simhash, ContentRuneCount: count}
 	require.NoError(t, db.Create(k).Error)
-	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", ContentHash: otherHash, ContentSimHash: otherSimhash, ContentRuneCount: otherCount}
+	incoming := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Title: "Orion report", ContentHash: otherHash, ContentSimHash: otherSimhash, ContentRuneCount: otherCount}
 	t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "0")
 	match, _, _, err := findMessageDuplicate(db, incoming)
 	require.NoError(t, err)
@@ -102,7 +103,7 @@ func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 func TestP4DuplicateIntakeReturnsCurrentMatchMethod(t *testing.T) {
 	db := pgtest.Open(t)
 	body := "Acme released the Orion model with improved reasoning, fast inference, multimodal input, and a context window of one million tokens. The report includes benchmark results, evaluation methodology, pricing, and deployment requirements."
-	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
+	owner := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: "library", Title: "Reprint", Type: "manual", Source: "manual", ParseStatus: "completed", EnableStatus: "enabled"}
 	setMessageFingerprint(owner, body)
 	require.NoError(t, db.Create(owner).Error)
 	files := &createEntryFileServiceStub{}

@@ -34,7 +34,7 @@ type TemplateRules struct {
 func RulesForTemplate(template string) (TemplateRules, bool) {
 	switch template {
 	case TemplateExternalTimely:
-		return TemplateRules{Deduplication: "仅在本库按规范化链接、正文哈希或近似正文识别；无链接时还按机构、标题、发布日期识别。", SourceEvidence: "链接必填，或按库配置接受机构名称加发布日期，后者标记来源未核实。", Review: true, Process: true, MergeReposts: true, CollapseSimilar: true, FactSource: true, Identity: IdentityRules{URL: true, Body: true, NearDuplicate: true, PublisherDate: true}, EvidenceMode: "configured"}, true
+		return TemplateRules{Deduplication: "仅在本库按规范化链接、正文哈希或同标题近似正文识别；无链接时还按机构、标题、发布日期识别。", SourceEvidence: "链接必填，或按库配置接受机构名称加发布日期，后者标记来源未核实。", Review: true, Process: true, MergeReposts: true, CollapseSimilar: true, FactSource: true, Identity: IdentityRules{URL: true, Body: true, NearDuplicate: true, PublisherDate: true}, EvidenceMode: "configured"}, true
 	case TemplateExternalDurable:
 		return TemplateRules{Deduplication: "仅在本库按规范化链接、identifier 或正文哈希识别；不做近似去重、转载归并或相似折叠。", SourceEvidence: "链接或 identifier 至少提供一项。", Review: true, Process: true, FactSource: true, Identity: IdentityRules{URL: true, Body: true, Identifier: true}, EvidenceMode: "link_or_identifier"}, true
 	case TemplateOwn:
