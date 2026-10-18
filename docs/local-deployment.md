@@ -91,6 +91,26 @@ docker compose stop
 
 已有安装需先将新版 `scripts/reliquary_admin.py` 复制到 `deploy/scripts/`，再执行一次 `record-runtime`。备份会在暂停任务和停服前检查源码材料的完整性、镜像是否存在，以及登记的镜像 ID 是否与当前应用一致；检查失败时提示修复，不进入停服步骤。
 
+### 按改动范围更新
+
+完成上述安装并提交源码后，在源码仓库运行：
+
+```sh
+python3 scripts/deploy-local.py --dry-run  # 只读查看本次更新范围
+python3 scripts/deploy-local.py            # 按改动范围更新
+python3 scripts/deploy-local.py --all      # 手动全量构建、更新前后端
+```
+
+入口从源码根目录的 `.deploy.env` 读取 `RELIQUARY_DEPLOY_DIR`；在新 worktree 中需创建该本机文件，也可传 `--deploy-dir /实际运行目录/deploy`。源码有未提交改动时拒绝部署，确保镜像与登记的提交一致。
+
+脚本分别比较前端、后端已部署的提交与当前提交：普通前端文件只更新前端，普通 Go 文件只更新后端；接口目录（`frontend/src/api/`、`internal/handler/`、`internal/router/`）和未知路径保守选择前后端。仅文档、测试、CI 或代理规则变化时跳过构建。前后端基准各自保存并绑定镜像 ID，前端单独更新不会推进后端基准；前端缺少有效基准时选择全量，后端基准无法确认时拒绝更新，避免漏过数据库迁移检查。
+
+普通更新复用前端依赖；`package.json`、锁文件、`.npmrc` 或 Node 版本、平台变化时重新执行 `npm ci`。首次启用复用时也会执行一次干净安装，指纹保存在 `node_modules/.reliquary-deps`。单独调用 `./scripts/build-frontend-dist.sh` 以及手动 `--all` 仍执行干净安装。Go 镜像构建保留模块下载与编译缓存，全量构建也可复用有效的 Docker 缓存。
+
+所有选定镜像构建成功后才切换运行配置。运行目录只维护一个 `.maintenance-schedule/local-deploy.images.json` 入口，并保留原有 Compose 覆盖配置；重复更新不会追加同名入口。只重建选定容器，等待健康检查、验证前端代理链路并核对实际镜像，不重启 PostgreSQL、Redis 和 Neo4j。后端单独更新时重载 Nginx，刷新后端地址。后端更新后登记源码；前端单独更新先核对已有源码材料，保留材料并跳过重复归档。部署与已安装的启动恢复、备份共用锁。更新失败时恢复原配置、维护工具和原容器；若恢复也失败，命令返回错误，须修复后再使用。
+
+`--all` 表示全量更新两个应用服务，不负责首次安装、数据库迁移或覆盖机器配置。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行既有备份与升级流程。发现 `config/`、`docker-compose.yml` 或 `.env.example` 变化时，停止并提示按本节原有手动发布流程核对、同步运行配置。首次安装仍按前文执行。脚本不清理历史镜像和备份。
+
 若移动运行目录，须同步更新 `.deploy.env`、`deploy/.env` 中的数据路径、系统已注册的启动路径，以及已保存的备份目录设置。不要只改文件夹名称。
 
 只提交源码、脚本、示例配置和文档。`deploy/.env`、业务数据、授权、日志及备份不进入 Git，也不推送远程仓库。

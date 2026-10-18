@@ -63,6 +63,7 @@ func TestProcessingModelOutputAcceptsFencesAndCorrectsInvalidSummary(t *testing.
 	h := newArticleProcessingHarness(t, false)
 	h.service.config.ArticleProcessing.MaxBodyChars = 140
 	k := segmentedEntry(t, h)
+	k.Title = ""
 	model := &correctedProcessingChat{calls: map[string]int{}}
 	h.service.modelService.(articleProcessingModels).summaryStateModelService.model = model
 	body := strings.Repeat("Original instrument measurements and observations. ", 12)
@@ -72,6 +73,7 @@ func TestProcessingModelOutputAcceptsFencesAndCorrectsInvalidSummary(t *testing.
 	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
 	require.Len(t, result.Summary.Points, 3)
+	require.Equal(t, "Acme announces a widget", result.Title, "the merge returns a title for the whole document")
 	require.Equal(t, 2, model.calls["article_summary_merge"])
 	var run entrySegmentRun
 	require.NoError(t, h.db.Where("entry_id=? AND phase=?", k.ID, "processing").First(&run).Error)
@@ -231,6 +233,35 @@ func articleProcessingOutput(t *testing.T, contentType string, entities []types.
 	return string(raw)
 }
 
+func TestArticleProcessingGeneratesMissingTitleWithSummary(t *testing.T) {
+	h, vault := newIngestHarness(t)
+	request := &types.IngestRequest{Library: "official", URL: "https://example.org/widget-release", Acquisition: "verbatim", Publisher: "Acme",
+		Content: "Acme released a widget. The announcement describes its deployment capabilities and reports original measurements."}
+	result, err := h.service.Ingest(h.ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, request.URL, h.article(t, result.EntryID).Title)
+	h.drain(t)
+	article := h.article(t, result.EntryID)
+	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus, article.ErrorMessage)
+	require.Equal(t, "Acme announces a widget", article.Title)
+	require.NotNil(t, article.StructuredSummary)
+	require.Len(t, h.processor.requests, 1, "title generation shares the summary call")
+	var input articleProcessingInput
+	require.NoError(t, json.Unmarshal([]byte(h.processor.requests[0][1].Content), &input))
+	require.Empty(t, input.Title, "the URL placeholder is not treated as a real title")
+	data, _, body := readVaultArticle(t, vault, article)
+	header, _, err := ParseVaultArticle(data)
+	require.NoError(t, err)
+	require.Equal(t, article.Title, header.Title)
+	require.Equal(t, request.Content, strings.TrimSpace(string(body)))
+}
+
+func TestArticleProcessingRejectsMultilineGeneratedTitle(t *testing.T) {
+	raw := strings.Replace(validProcessingFixture("event"), "Acme announces a widget", `Acme\nannounces a widget`, 1)
+	_, err := parseArticleProcessingResult(raw)
+	require.ErrorContains(t, err, "title must be a single line")
+}
+
 func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t *testing.T) {
 	h := newArticleProcessingHarness(t, true)
 	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Product news", Description: "Original product announcements"})
@@ -240,6 +271,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	h.processor.output = articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Acme", EntityType: "company", Aliases: []string{"Acme Inc"}}}, []string{topic.ID, "missing-topic"})
 	body := "# First announcement\n\nAcme released a widget with original measurements.\n\n![chart](" + articleImageDataURI(t, 10) + ")"
 	article := h.upload(t, "first-event", body)
+	require.Equal(t, "first-event.md", article.Title, "processing preserves the supplied title")
 	require.Equal(t, "event", article.ContentType)
 	require.NotNil(t, article.StructuredSummary)
 	require.Len(t, article.StructuredSummary.Points, 3)
