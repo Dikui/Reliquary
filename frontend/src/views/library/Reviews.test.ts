@@ -81,8 +81,8 @@ function missingComponent() { return component('../../components/MissingMaterial
 function incompleteActions(api: object) {
   return component('../../components/IncompleteActions.vue', { '@/api/ingest': api, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
 }
-function libraryReviewComponent(api: object = {}) {
-  return component('../../components/LibraryReviewAction.vue', { '@/api/library': api, '@/stores/ui': { useUIStore: () => ({ openSettings() {} }) } })
+function libraryReviewComponent(api: object = {}, dialog: unknown = empty) {
+  return component('../../components/LibraryReviewAction.vue', { '@/api/library': api, '@/components/EntryBatchDialog.vue': dialog, 'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace() {} }) } })
 }
 function pendingComponent(api: object, child = reviewComponent(api), ingest = createIngestAPI(async () => ({ success: true, data: [], total: 0 })).api, incompleteChild = incompleteActions(ingest)) {
   return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/api/ingest': ingest, '@/utils/security': security, '@/components/LibraryReviewAction.vue': moduleOf(libraryReviewComponent()), '@/components/ReviewActions.vue': moduleOf(child), '@/components/MissingMaterials.vue': moduleOf(missingComponent()), '@/components/IncompleteActions.vue': moduleOf(incompleteChild) })
@@ -269,33 +269,37 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(confirmation.includes(messages[locale].knowledgeReview.confirmations.reject.description))
   })
 
-  test(`${locale}: library reviews keep the selected scope and require confirmation before submission`, async () => {
+  test(`${locale}: library reviews keep the selected scope and use shared preview confirmation`, async () => {
     for (const scope of ['all', 'pending'] as const) {
-      const requests: unknown[] = []
+      const forwarded: Record<string, any> = {}, requests: unknown[] = []
       let fail = true
-      const api = { reviewLibrary: async (id: string, value: string) => {
-        requests.push({ id, scope: value })
-        if (fail) throw new Error('Review already running')
-        return { success: true, data: { task_id: 'review-task', total: 71 } }
-      } }
+      const api = {
+        previewEntryBatch: async (input: unknown) => { requests.push(input); return { success: true, data: { fingerprint: 'review-preview', matched: 71, eligible: 71, skipped: 0, blocked: 0, reasons: [], samples: [] } } },
+        submitEntryBatch: async (input: unknown) => { requests.push(input); if (fail) throw { message: 'Review already running' }; return { success: true, data: { batch_id: 'review-batch', action: 'review', status: 'completed', total: 71, succeeded: 71, failed: 0, skipped: 0, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } } },
+      }
+      const capture = moduleOf(defineComponent({ props: ['visible', 'selection', 'initialAction', 'scopeLabel', 'libraries'], setup: props => { Object.assign(forwarded, props); return () => null } }))
       const library = { id: 'selected-library', name: 'Research', template: 'external_timely' }
-      const html = await render(libraryReviewComponent(api), { library, scope }, locale, async state => {
-        state.open()
-        assert.equal(requests.length, 0)
-        state.close()
-        await state.confirm()
-        assert.equal(requests.length, 0)
-        state.open()
-        await state.confirm()
-        assert.equal(state.visible.value, true)
+      await render(libraryReviewComponent({}, capture), { library, scope }, locale, async state => { state.open(); await nextTick(); assert.equal(requests.length, 0) })
+      assert.equal(forwarded.initialAction, 'review')
+      const selection = { filters: { libraries: [library.id], include_rejected: true, ...(scope === 'pending' ? { parse_status: 'rejected' } : {}) } }
+      assert.deepEqual(forwarded.selection, selection)
+      assert.ok(forwarded.scopeLabel.includes('Research'))
+      const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) } })
+      const html = await render(dialog, forwarded, locale, async state => {
+        state.ready.value = true
+        await state.submit(); assert.equal(requests.length, 0)
+        await state.showPreview(); assert.equal(requests.length, 1)
+        await state.submit(); assert.equal(requests.length, 1, 'preview alone cannot submit')
+        state.confirmed.value = true; await state.submit()
         assert.equal(state.error.value, 'Review already running')
+        assert.equal(state.batch.value, undefined)
         fail = false
-        await state.confirm()
-        assert.deepEqual(state.result.value, { task_id: 'review-task', total: 71 })
+        await state.showPreview(); state.confirmed.value = true; await state.submit()
+        assert.equal(state.batch.value.status, 'completed')
       })
-      assert.deepEqual(requests, [{ id: library.id, scope }, { id: library.id, scope }])
+      assert.deepEqual(requests, [{ action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }, { action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }])
       assert.ok(html.includes('71'))
-      assert.ok(html.includes(messages[locale].settings.taskQueue))
+      assert.ok(html.includes('batch_id=review-batch'))
     }
   })
 

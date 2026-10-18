@@ -84,6 +84,11 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.HandleFunc(types.TypeManualProcess, params.EntryService.ProcessManualUpdate)
 	mux.HandleFunc(types.TypeEntryListDelete, params.EntryService.ProcessEntryListDelete)
 	mux.HandleFunc(types.TypeEntryListReparse, params.EntryService.ProcessEntryListReparse)
+	if batches, ok := params.EntryService.(interface {
+		ProcessEntryBatch(context.Context, *queue.Task) error
+	}); ok {
+		mux.HandleFunc(types.TypeEntryBatch, batches.ProcessEntryBatch)
+	}
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
 	mux.HandleFunc(types.TypeEntryVector, params.EmbeddingRebuild.HandleEntryVector)
@@ -163,6 +168,16 @@ func newDeadLetterEntryFailer(ks interfaces.EntryService, tracker service.SpanTr
 	}
 	return func(ctx context.Context, t *queue.Task, taskErr error) {
 		if t == nil {
+			return
+		}
+		if t.Type() == types.TypeEntryBatch {
+			if batches, ok := ks.(interface {
+				FailEntryBatch(context.Context, *queue.Task, error) error
+			}); ok {
+				if err := batches.FailEntryBatch(ctx, t, taskErr); err != nil {
+					logger.Warnf(ctx, "failed to record batch failure: %v", err)
+				}
+			}
 			return
 		}
 		if t.Type() == types.TypeEntryListDelete {

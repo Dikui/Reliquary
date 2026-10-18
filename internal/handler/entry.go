@@ -523,6 +523,39 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
 	}
+	for key, target := range map[string]*[]string{"entity_ids": &filter.EntityIDs, "topic_ids": &filter.TopicIDs} {
+		seen := map[string]bool{}
+		for _, raw := range c.QueryArray(key) {
+			for _, value := range strings.Split(raw, ",") {
+				id := strings.TrimSpace(value)
+				if id != "" && !seen[id] {
+					*target = append(*target, id)
+					seen[id] = true
+				}
+			}
+		}
+		if len(*target) > 100 {
+			c.Error(errors.NewBadRequestError(key + " accepts at most 100 IDs"))
+			return
+		}
+	}
+	for key, target := range map[string]*time.Time{"published_from": &filter.PublishedFrom, "published_to": &filter.PublishedTo} {
+		if raw := c.Query(key); raw != "" {
+			value, err := time.Parse("2006-01-02", raw)
+			if err != nil {
+				c.Error(errors.NewBadRequestError(key + " must be YYYY-MM-DD"))
+				return
+			}
+			if key == "published_to" {
+				value = value.AddDate(0, 0, 1)
+			}
+			*target = value
+		}
+	}
+	if !filter.PublishedFrom.IsZero() && !filter.PublishedTo.IsZero() && !filter.PublishedFrom.Before(filter.PublishedTo) {
+		c.Error(errors.NewBadRequestError("published_from must not be after published_to"))
+		return
+	}
 	if raw, supplied := c.GetQuery("collapse_similar"); supplied {
 		value, err := strconv.ParseBool(raw)
 		if err != nil {

@@ -35,6 +35,7 @@ type entryIDProbe struct {
 }
 
 type runtimeTaskPayloadProbe struct {
+	BatchID    string   `json:"batch_id,omitempty"`
 	SpaceID    uint64   `json:"tenant_id,omitempty"`
 	LibraryID  string   `json:"library_id,omitempty"`
 	EntryID    string   `json:"entry_id,omitempty"`
@@ -181,6 +182,10 @@ func runtimeTaskActions(info types.RuntimeTaskInfo) []types.RuntimeTaskAction {
 	if info.SpaceID != 0 && info.SpaceID != types.SingleSpaceID {
 		return actions
 	}
+	// Batch heads retain the request and results; recovery belongs to failed-item retry.
+	if info.Type == types.TypeEntryBatch {
+		return actions
+	}
 	if _, cancellable := taskTypesForEntryCancel[info.Type]; cancellable && info.EntryID != "" {
 		switch info.State {
 		case types.RuntimeTaskPending, types.RuntimeTaskActive, types.RuntimeTaskScheduled, types.RuntimeTaskRetry:
@@ -221,6 +226,9 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 		EntryID: probe.EntryID, TaskID: probe.TaskID,
 		EntryCount:     len(probe.EntryIDs),
 		AllowedActions: []types.RuntimeTaskAction{},
+	}
+	if job.TaskType == types.TypeEntryBatch {
+		info.BatchID = probe.BatchID
 	}
 	if job.TaskType == types.TypeTopicBackfill {
 		info.TaskID = probe.JobID

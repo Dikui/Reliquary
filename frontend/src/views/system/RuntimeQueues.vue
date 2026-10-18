@@ -420,6 +420,7 @@
                   {{ t('system.globalSettings.runtime.tasks.attempts', { current: task.retried + 1, max: task.max_retry + 1 }) }}
                 </span>
               </div>
+              <a v-if="task.batch_id" :href="`/platform/entries?batch_id=${encodeURIComponent(task.batch_id)}`">{{ t('entryBatch.resultLink') }}</a>
               <dl v-if="runtimeTaskMeta(task).length > 0" class="rq-failed-row-refs">
                 <div v-for="ref in runtimeTaskMeta(task)" :key="ref.key" class="rq-failed-ref">
                   <dt>{{ ref.label }}</dt>
@@ -604,6 +605,7 @@ const purging = ref(false)
 const TASK_PAGE_SIZE = 20
 const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry', 'archived', 'completed', 'cancelled']
 const runtimeTaskTypeKeys: Record<string, string> = {
+  'entry:batch': 'entryBatch',
   'document:process': 'documentProcess',
   'manual:process': 'manualProcess',
   'knowledge:list_reparse': 'batchReparse',

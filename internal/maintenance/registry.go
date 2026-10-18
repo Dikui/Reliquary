@@ -68,6 +68,7 @@ var PersistentTables = map[string]PersistentTable{
 // BackupOnlyTables must be explicitly classified when introduced. They are
 // preserved by PostgreSQL backups, never by portable replicas.
 var BackupOnlyTables = map[string]Rule{
+	"entry_batch_items":            {Sidecar: "batch_id entry_id space_id title library_id status message warning task_id attempt created_at updated_at"},
 	"model_call_content_deletions": {Sidecar: "space_id entry_id"},
 	"model_call_contents":          {Sidecar: "id request_gzip response_gzip request_bytes response_bytes response_type http_status complete"},
 	"search_records":               {Sidecar: "id space_id created_at source method query libraries request results duration_ms fallback_fulltext reranked evaluation_run_id error"},

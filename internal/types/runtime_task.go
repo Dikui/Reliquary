@@ -54,6 +54,7 @@ const (
 // Raw payloads and results are deliberately excluded because they may contain
 // document content, signed object URLs, or connector credentials.
 type RuntimeTaskInfo struct {
+	BatchID                       string              `json:"batch_id,omitempty"`
 	ID                            string              `json:"id"`
 	Queue                         string              `json:"queue"`
 	Type                          string              `json:"type"`

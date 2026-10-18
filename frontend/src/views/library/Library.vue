@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
-import { DialogPlugin, MessagePlugin } from "tdesign-vue-next";
+import { MessagePlugin } from "tdesign-vue-next";
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue';
 import { useLibraryScope } from '@/composables/useLibraryScope';
 import { parseReference } from '@/utils/bodyReference';
@@ -23,9 +23,6 @@ import {
   batchQueryEntry,
   reparseEntry,
   cancelEntryParse,
-  batchDeleteEntry,
-  batchReparseEntry,
-  rebuildCatalogLibrary,
   getEntrySpans,
   getEntryDetails,
 
@@ -33,6 +30,10 @@ import {
 import { entrySpansPayloadHasTrace } from '@/utils/entryTrace';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
+import EntryBatchDialog from '@/components/EntryBatchDialog.vue';
+import type { EntryBatchSelection, EntryBatchAction } from '@/api/entry-batches';
+import { listEntities, type Entity } from '@/api/entities';
+import { listTopics, type Topic } from '@/api/topics';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
@@ -40,7 +41,6 @@ import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
 import LibraryReviewAction from '@/components/LibraryReviewAction.vue';
 import type { LibraryContentType, LibraryRebuildScope } from '@/api/library';
-import { CONTENT_TYPES } from '@/types/entryClassification';
 import { SEARCH_SOURCES } from '@/types/search';
 import {
   documentListFiltersFromQuery,
@@ -68,12 +68,6 @@ const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
 const selectedLibrary = computed(() => libraryScope.value.length === 1
   ? libraryCatalog.value.find(item => item.id === libraryScope.value[0])
   : undefined);
-const libraryRebuilding = ref(false);
-const libraryRebuildScope = ref<LibraryRebuildScope>('failed');
-const libraryRebuildError = ref('');
-const libraryRebuildNotice = ref('');
-const libraryRebuildConfirming = ref(false);
-let libraryRebuildDialog: ReturnType<typeof DialogPlugin.confirm> | undefined;
 const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
 const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
@@ -161,78 +155,6 @@ watch(viewMode, (v) => {
 // Vue 3.5 tracks Set#add/delete natively, so direct mutation is reactive.
 const selectedIds = ref<Set<string>>(new Set());
 let lastSelectedIndex = -1;
-const batchDeleting = ref(false);
-const batchReparsing = ref(false);
-// IDs submitted for async batch reparse; hold optimistic pending until the worker updates DB.
-const pendingReparseAck = ref<Set<string>>(new Set());
-
-const applyOptimisticBatchReparse = (ids: string[]) => {
-  const idSet = new Set(ids);
-  for (const card of cardList.value) {
-    if (!idSet.has(card.id)) continue;
-    pendingReparseAck.value.add(card.id);
-    card.parse_status = 'pending';
-    card.description = '';
-    delete traceAvailableById[card.id];
-    traceAvailableById[card.id] = true;
-  }
-};
-
-const syncReparseAckFromServer = (ids: string[]) => {
-  for (const id of ids) {
-    if (!pendingReparseAck.value.has(id)) continue;
-    const card = cardList.value.find((c) => c.id === id);
-    if (card && isParseInFlight(card.parse_status)) {
-      pendingReparseAck.value.delete(id);
-    }
-  }
-};
-
-const awaitBatchReparseReflection = async (ids: string[]) => {
-  const maxPolls = 30;
-  const delayMs = 400;
-  for (let i = 0; i < maxPolls && pendingReparseAck.value.size > 0; i++) {
-    await loadEntryFiles(libraryId.value);
-    syncReparseAckFromServer(ids);
-    applyOptimisticBatchReparse(Array.from(pendingReparseAck.value));
-    await new Promise<void>((r) => setTimeout(r, delayMs));
-  }
-  pendingReparseAck.value.clear();
-};
-
-const confirmBatchReparse = async () => {
-  if (!selectedDocumentsReprocessable.value || batchReparsing.value || batchDeleting.value || selectedIds.value.size === 0) return;
-  const allIds = Array.from(selectedIds.value);
-  const ids = allIds.filter((id) => {
-    const item = cardList.value.find((c) => c.id === id);
-    return !item || !isParseInFlight(item.parse_status);
-  });
-  const skipped = allIds.length - ids.length;
-  if (ids.length === 0) {
-    MessagePlugin.info(t('library.rebuildInProgress'));
-    return;
-  }
-  if (skipped > 0) {
-    MessagePlugin.warning(t('library.batchReparseSkippedInFlight', { count: skipped }));
-  }
-  batchReparsing.value = true;
-  try {
-    const res: any = await batchReparseEntry(ids);
-    if (res?.success) {
-      MessagePlugin.success(t('library.batchReparseSuccess', { count: ids.length }));
-      applyOptimisticBatchReparse(ids);
-      clearSelection();
-      batchMode.value = false;
-      void awaitBatchReparseReflection(ids);
-    } else {
-      MessagePlugin.error(res?.message || t('library.batchReparseFailed'));
-    }
-  } catch (e: any) {
-    MessagePlugin.error(e?.message || t('library.batchReparseFailed'));
-  } finally {
-    batchReparsing.value = false;
-  }
-};
 let docSearchDebounce: number | null = null;
 const initialDocumentFilters = documentListFiltersFromQuery(route.query);
 const docSearchKeyword = ref(initialDocumentFilters.keyword);
@@ -240,6 +162,28 @@ const selectedFileType = ref(initialDocumentFilters.fileType);
 const selectedContentType = ref(initialDocumentFilters.contentType);
 const selectedStarred = ref(initialDocumentFilters.starred);
 const selectedIncomplete = ref(initialDocumentFilters.incomplete);
+const selectedEntityIds = ref(initialDocumentFilters.entityIds);
+const selectedTopicIds = ref(initialDocumentFilters.topicIds);
+const publishedRange = ref<string[]>(initialDocumentFilters.publishedFrom || initialDocumentFilters.publishedTo ? [initialDocumentFilters.publishedFrom, initialDocumentFilters.publishedTo] : []);
+const entityChoices = ref<Entity[]>([]), topicChoices = ref<Topic[]>([]), choicesError = ref(''), choicesLoading = ref(false), moreEntityChoices = ref(true);
+let choicesGeneration = 0, choicesDisposed = false;
+async function loadFilterChoices(more = false) {
+  const current = ++choicesGeneration; choicesLoading.value = true; choicesError.value = '';
+  try {
+    const [entities, topics] = await Promise.all([listEntities({ limit: 50, offset: more ? entityChoices.value.length : 0 }), listTopics()]);
+    if (choicesDisposed || current !== choicesGeneration) return;
+    if (!entities.success || !topics.success) throw new Error(t('entryBatch.choicesFailed'));
+    entityChoices.value = more ? [...entityChoices.value, ...entities.data] : entities.data;
+    moreEntityChoices.value = entities.data.length === 50; topicChoices.value = topics.data;
+  } catch { if (!choicesDisposed && current === choicesGeneration) choicesError.value = t('entryBatch.choicesFailed'); }
+  finally { if (!choicesDisposed && current === choicesGeneration) choicesLoading.value = false; }
+}
+onMounted(() => loadFilterChoices());
+onUnmounted(() => { choicesDisposed = true; choicesGeneration++; });
+const entityFilterValues = computed({ get: () => selectedEntityIds.value.split(',').filter(Boolean), set: (ids: string[]) => { selectedEntityIds.value = ids.join(','); } });
+const topicFilterValues = computed({ get: () => selectedTopicIds.value.split(',').filter(Boolean), set: (ids: string[]) => { selectedTopicIds.value = ids.join(','); } });
+const entityFilterOptions = computed(() => [...new Map([...entityFilterValues.value.map(id => ({ value: id, label: id })), ...entityChoices.value.map(item => ({ value: item.id, label: item.canonical_name }))].map(item => [item.value, item])).values()]);
+const topicFilterOptions = computed(() => [...new Map([...topicFilterValues.value.map(id => ({ value: id, label: id })), ...topicChoices.value.map(item => ({ value: item.id, label: item.name }))].map(item => [item.value, item])).values()]);
 const imageStatusOptions = computed(() => [
   { value: '', label: t('library.allImageStatuses') },
   { value: 'true', label: t('library.missingImagesOnly') },
@@ -255,7 +199,7 @@ const contentTypeOptions = computed(() => {
     const names = new Set(libraryCatalog.value.filter(item => !libraryScope.value.length || libraryScope.value.includes(item.id)).flatMap(item => (item.content_types || []).filter(row => row.enabled).map(row => row.name)));
     return [...names].map(value => ({ value, label: value }));
   }
-  return libraryInfo.value?.content_types?.filter((row: LibraryContentType) => row.enabled).map((row: LibraryContentType) => ({ value: row.name, label: row.name })) || CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) }));
+  return libraryInfo.value?.content_types?.filter((row: LibraryContentType) => row.enabled).map((row: LibraryContentType) => ({ value: row.name, label: row.name })) || [];
 });
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
@@ -318,6 +262,7 @@ const documentFilters = computed<DocumentListFilters>(() => ({
   sourceKind: selectedSourceKind.value || '',
   startDate: updatedTimeRange.value?.[0] || '',
   endDate: updatedTimeRange.value?.[1] || '',
+  entityIds: selectedEntityIds.value, topicIds: selectedTopicIds.value, publishedFrom: publishedRange.value?.[0] || '', publishedTo: publishedRange.value?.[1] || '',
 }));
 // Disable any date after today so users cannot filter into the future.
 const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)) };
@@ -326,6 +271,8 @@ const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
   return {
     libraries: libraryScope.value,
+    entity_ids: entityFilterValues.value, topic_ids: topicFilterValues.value,
+    published_from: publishedRange.value?.[0] || undefined, published_to: publishedRange.value?.[1] || undefined,
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
     file_type: selectedFileType.value || undefined,
     content_type: selectedContentType.value || undefined,
@@ -446,6 +393,8 @@ watch(() => route.query, query => {
     selectedContentType.value = restored.contentType;
     selectedStarred.value = restored.starred;
     selectedIncomplete.value = restored.incomplete;
+    selectedEntityIds.value = restored.entityIds; selectedTopicIds.value = restored.topicIds;
+    publishedRange.value = restored.publishedFrom || restored.publishedTo ? [restored.publishedFrom, restored.publishedTo] : [];
     selectedParseStatus.value = restored.parseStatus;
     selectedSource.value = restored.source;
     selectedSourceKind.value = restored.sourceKind;
@@ -623,13 +572,7 @@ const updateStatus = (analyzeList: EntryCard[]) => {
           if (index == -1) return;
 
           let parseStatus = item.parse_status;
-          if (pendingReparseAck.value.has(item.id)) {
-            if (isParseInFlight(item.parse_status)) {
-              pendingReparseAck.value.delete(item.id);
-            } else {
-              parseStatus = 'pending';
-            }
-          }
+
 
           if (cardList.value[index].parse_status !== parseStatus ||
             cardList.value[index].description !== item.description) {
@@ -715,44 +658,27 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
 const handleOpenLibrarySettings = () => uiStore.openSettings('library');
 const reparseConfirmStore = useReparseConfirmStore();
 
+const batchResultId = ref('');
+const batchDialogVisible = ref(false), batchInitialAction = ref<EntryBatchAction>('star'), batchScopeLabel = ref('');
+const batchSelection = ref<EntryBatchSelection>();
+const batchSelectedIds = ref<string[]>([]);
+const batchLibraryIds = computed(() => [...new Set(cardList.value.filter((item: EntryCard) => batchSelectedIds.value.includes(item.id)).map((item: EntryCard) => item.library_id))].filter(Boolean) as string[]);
+function batchCreated(id: string) { batchResultId.value = id; void router.replace({ query: { ...route.query, batch_id: id } }); }
+watch(() => route.query.batch_id, id => { if (typeof id === 'string' && id && id !== batchResultId.value) { batchResultId.value = id; batchDialogVisible.value = true; } }, { immediate: true });
+function openBatch() {
+  batchResultId.value = '';
+  batchSelectedIds.value = [...selectedIds.value]; batchSelection.value = { filters: JSON.parse(JSON.stringify(filterParams.value)) };
+  batchScopeLabel.value = ''; batchInitialAction.value = 'star'; batchDialogVisible.value = true;
+}
 const confirmLibraryRebuild = (scope: LibraryRebuildScope = 'failed') => {
   const target = selectedLibrary.value;
-  if (!target || target.template === 'generated' || libraryRebuilding.value || libraryRebuildConfirming.value) return;
-  libraryRebuildConfirming.value = true;
-  const close = () => {
-    libraryRebuildDialog?.destroy();
-    libraryRebuildDialog = undefined;
-    libraryRebuildConfirming.value = false;
-  };
-  libraryRebuildDialog = DialogPlugin.confirm({
-    header: t(scope === 'all' ? 'library.rebuildLibraryAll' : 'library.rebuildLibrary'),
-    body: t(scope === 'all' ? 'library.rebuildLibraryAllConfirm' : 'library.rebuildLibraryConfirm', { name: target.display_name || target.name }),
-    confirmBtn: t(scope === 'all' ? 'library.rebuildLibraryAll' : 'library.rebuildLibrary'),
-    cancelBtn: t('common.cancel'),
-    onConfirm: () => { close(); void submitLibraryRebuild(target.id, scope); },
-    onCancel: close,
-    onClose: close,
-  });
+  if (!target || target.template === 'generated') return;
+  batchResultId.value = '';
+  batchSelectedIds.value = []; batchSelection.value = { filters: { libraries: [target.id], ...(scope === 'failed' ? { parse_status: 'failed' } : {}) } };
+  batchScopeLabel.value = `${target.display_name || target.name} · ${t(scope === 'failed' ? 'entryBatch.wholeLibraryFailed' : 'entryBatch.wholeLibrary')}`;
+  batchInitialAction.value = 'reprocess'; batchDialogVisible.value = true;
 };
-
-const submitLibraryRebuild = async (targetId: string, scope: LibraryRebuildScope) => {
-  if (libraryRebuilding.value) return;
-  libraryRebuildScope.value = scope;
-  libraryRebuilding.value = true;
-  libraryRebuildError.value = '';
-  libraryRebuildNotice.value = '';
-  try {
-    const result = await rebuildCatalogLibrary(targetId, scope);
-    if (!result.success) throw new Error(result.message || t('library.rebuildFailed'));
-    libraryRebuildNotice.value = t(scope === 'all' ? 'library.rebuildLibraryAllSubmitted' : 'library.rebuildLibrarySubmitted', { count: result.data.total });
-    MessagePlugin.success(libraryRebuildNotice.value);
-  } catch (error: any) {
-    libraryRebuildError.value = error?.message || t('library.rebuildFailed');
-  } finally {
-    libraryRebuilding.value = false;
-  }
-};
-onUnmounted(() => libraryRebuildDialog?.destroy());
+async function batchChanged() { clearSelection(); resetPage(); await handlePendingChanged(); }
 
 // Opens ONLY the trace drawer for this card — does NOT pop the
 // document detail drawer behind it. The trace drawer attaches to
@@ -958,11 +884,6 @@ const {
   },
 });
 
-const selectedDocumentsReprocessable = computed(() => Array.from(selectedIds.value).every(id => {
-  const item = cardList.value.find((card: EntryCard) => card.id === id);
-  return Boolean(item);
-}));
-
 const openEntryItem = (item: EntryCard) => {
   if (shouldSuppressDocClick()) return;
   openCardDetails(item);
@@ -982,38 +903,6 @@ const handlePersonalDocumentDeleted = async (id: string) => {
   selectedIds.value.delete(id);
   resetPage();
   await Promise.all([loadEntryFiles(libraryId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
-};
-
-const confirmBatchDelete = async () => {
-  if (batchDeleting.value || batchReparsing.value || selectedIds.value.size === 0) return;
-  const ids = Array.from(selectedIds.value);
-  const deletedIdSet = new Set(ids);
-  batchDeleting.value = true;
-  try {
-    const res: any = await batchDeleteEntry(ids);
-    if (res?.success) {
-      MessagePlugin.success(t('library.batchDeleteSuccess', { count: ids.length }));
-      clearSelection();
-      batchMode.value = false;
-      resetPage();
-      // 后端将批量删除放入异步队列，立刻拉列表仍可能包含待删项；短轮询直到列表与后端一致或超时
-      const maxPolls = 30;
-      const delayMs = 400;
-      for (let i = 0; i < maxPolls; i++) {
-        await loadEntryFiles(libraryId.value);
-        const stillPresent = (cardList.value || []).some((c: EntryCard) => deletedIdSet.has(c.id));
-        if (!stillPresent) break;
-        await new Promise<void>((r) => setTimeout(r, delayMs));
-      }
-      await pendingCounts.refresh();
-    } else {
-      MessagePlugin.error(res?.message || t('library.batchDeleteFailed'));
-    }
-  } catch (e: any) {
-    MessagePlugin.error(e?.message || t('library.batchDeleteFailed'));
-  } finally {
-    batchDeleting.value = false;
-  }
 };
 
 const confirmCancelParseEntry = async (item: EntryCard) => {
@@ -1058,7 +947,7 @@ const handleListAction = (
 
 // Clear selection on filter/library change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedIncomplete, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, libraryId],
+  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedIncomplete, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, selectedEntityIds, selectedTopicIds, publishedRange, libraryId],
   () => {
     clearSelection();
   },
@@ -1115,12 +1004,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
           </div>
           <p v-if="activeLibraryTab === 'documents'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
         </div>
-      </div>
-
-      <t-alert v-if="libraryRebuildError" theme="error" :message="libraryRebuildError" role="alert" />
-      <div v-if="libraryRebuildNotice" role="status">
-        {{ libraryRebuildNotice }}
-        <t-button variant="text" size="small" @click="uiStore.openSettings('runtime-queues')">{{ $t('settings.taskQueue') }}</t-button>
       </div>
 
       <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
@@ -1189,6 +1072,10 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                     </template>
                   </t-select>
                 </div>
+                <div class="doc-filter-field"><t-select v-model="entityFilterValues" multiple filterable clearable :options="entityFilterOptions" :loading="choicesLoading" :placeholder="t('entryBatch.entities')" :aria-label="t('entryBatch.entities')" /><t-button v-if="moreEntityChoices" size="small" variant="text" :loading="choicesLoading" @click="loadFilterChoices(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button></div>
+                <div class="doc-filter-field"><t-select v-model="topicFilterValues" multiple filterable clearable :options="topicFilterOptions" :placeholder="t('entryBatch.actions.topics')" :aria-label="t('entryBatch.actions.topics')" /></div>
+                <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>
+                <p v-if="choicesError" role="alert">{{ choicesError }} <t-button variant="text" @click="loadFilterChoices()">{{ t('common.retry') }}</t-button></p>
                 <div class="doc-filter-field doc-filter-field--wide">
                   <t-date-range-picker v-model="updatedTimeRange"
                     :placeholder="[$t('library.updatedTimeFrom'), $t('library.updatedTimeTo')]"
@@ -1201,15 +1088,15 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 </div>
                 <div class="doc-filter-bar__trailing">
-                  <LibraryReviewAction :library="selectedLibrary" scope="all" :disabled="libraryRebuilding || libraryRebuildConfirming" @submitted="pendingCounts.refresh()" />
+                  <LibraryReviewAction :library="selectedLibrary" scope="all" @submitted="pendingCounts.refresh()" />
                   <t-tooltip v-if="selectedLibrary?.template !== 'generated'" :content="selectedLibrary ? (selectedLibrary.display_name || selectedLibrary.name) : $t('library.rebuildLibrarySelectOne')">
                     <span>
-                      <t-button variant="text" size="small" :loading="libraryRebuilding && libraryRebuildScope === 'failed'"
-                        :disabled="!selectedLibrary || libraryRebuilding || libraryRebuildConfirming" @click="confirmLibraryRebuild()">
+                      <t-button variant="text" size="small"
+                        :disabled="!selectedLibrary" @click="confirmLibraryRebuild()">
                         {{ $t('library.rebuildLibrary') }}
                       </t-button>
-                      <t-button variant="text" size="small" :loading="libraryRebuilding && libraryRebuildScope === 'all'"
-                        :disabled="!selectedLibrary || libraryRebuilding || libraryRebuildConfirming" @click="confirmLibraryRebuild('all')">
+                      <t-button variant="text" size="small"
+                        :disabled="!selectedLibrary" @click="confirmLibraryRebuild('all')">
                         {{ $t('library.rebuildLibraryAll') }}
                       </t-button>
                     </span>
@@ -1299,12 +1186,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </template>
               </div>
               <div class="doc-batch-bar-anchor" v-show="batchMode || selectedIds.size > 0">
-                <DocumentBatchBar :count="selectedIds.size" :delete-loading="batchDeleting"
-                  :reparse-loading="batchReparsing" :visible="batchMode || selectedIds.size > 0"
-                  :reparse-allowed="selectedDocumentsReprocessable"
-
-                  @cancel="handleBatchCancel" @delete="confirmBatchDelete" @reparse="confirmBatchReparse"
-                   />
+                <DocumentBatchBar :count="selectedIds.size" :visible="batchMode || selectedIds.size > 0" @cancel="handleBatchCancel" @manage="openBatch" />
               </div>
             </div>
           </div>
@@ -1312,7 +1194,8 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
+      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :scope-label="batchScopeLabel" :initial-action="batchInitialAction" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
+    <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId"
         @openEntry="openSourceDoc" @openEntity="openArticleEntity" @openTopic="openReportTopic"
         @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">

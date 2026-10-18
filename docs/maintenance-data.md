@@ -34,6 +34,7 @@
 | `public.entity_merge_records` | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 | 无 |
 | `public.entity_merge_suggestions` | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`entry_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 | 无 |
 | `public.entries` | `id`、`space_id`、`library_id`、`type`、`title`、`description`、`content_type`、`source_unverified`、`source_kind`、`vault_path`、`vault_body`、`starred`、`collect_reason`、`agent_summary`、`agent_tags`、`source_name`、`structured_summary`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count`、`storage_size`、`metadata`、`created_at`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`acquisition`、`incomplete`、`external_completion_attempted`、`ingest_api_key_id`、`ingest_api_key_name`、`last_ingest_api_key_id`、`last_ingest_api_key_name`、`missing_materials`、`content_type_hint`、`related_entry_id`、`source_ref`、`source_body_hash`、`identifier`、`graph` | 无 | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
+| `public.entry_batch_items` | `batch_id`、`entry_id`、`space_id`、`title`、`library_id`、`status`、`message`、`warning`、`task_id`、`attempt`、`created_at`、`updated_at` | 无 | 无 | 无 |
 | `public.entry_entities` | `space_id`、`entry_id`、`entity_id`、`created_at` | 无 | 无 | 无 |
 | `public.entry_processing_outputs` | `entry_id`、`space_id`、`library_id`、`run_id`、`body_hash`、`content_type`、`relations`、`images`、`updated_at` | 无 | 无 | 无 |
 | `public.entry_processing_spans` | `id`、`entry_id`、`attempt`、`span_id`、`parent_span_id`、`name`、`kind`、`status`、`input`、`output`、`metadata`、`error_code`、`error_message`、`error_detail`、`started_at`、`finished_at`、`duration_ms`、`created_at`、`updated_at` | 无 | 无 | 无 |
@@ -473,3 +474,5 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 默认内容永不清理。`RELIQUARY_MODEL_CALL_CONTENT_RETENTION_DAYS` 和 `RELIQUARY_MODEL_CALL_CONTENT_RETENTION_ATTEMPTS` 分别控制保留天数和每篇资料最近 N 个处理尝试，0 或未配置表示不限；同时配置时两项均生效。非资料调用不受尝试数量限制。旧的 `RELIQUARY_MODEL_CALL_RETENTION_DAYS` 仍控制整个统计账本，删除账本也会级联清理内容。
 
 `RELIQUARY_MODEL_CALL_CAPTURE_EMBEDDING` 与 `RELIQUARY_MODEL_CALL_CAPTURE_RERANK` 默认开启，设置 `false` 关闭对应内容捕获，统计照常。正常向量响应只保存数量及维度，错误响应保留原文。图片二进制用 SHA-256 与附件路径引用替换，正文文字、提示词和所有其他响应字节完整保留。请求头不保存，已知凭据及 JSON 凭据字段脱敏。持久化由最多 64 项的进程队列异步执行，超时、失败或队列饱和仅记日志；正常停止会刷新队列。
+
+资料批次明细 `entry_batch_items` 与任务记录一同由 PostgreSQL 备份保存，不进入文件库副本。明细保留提交时的资料标识与标题，不随资料删除级联清除；恢复后与 `task_pending_ops` 一起用于核对批次状态。

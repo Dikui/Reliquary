@@ -12,13 +12,17 @@ export interface DocumentListFilters {
   source: string
   sourceKind: SearchSource | ''
   startDate: string
+  entityIds: string
+  topicIds: string
+  publishedFrom: string
+  publishedTo: string
   endDate: string
 }
 
 const queryFields = {
   keyword: 'keyword', fileType: 'file_type', contentType: 'content_type', starred: 'starred', incomplete: 'incomplete',
   parseStatus: 'parse_status', source: 'source', sourceKind: 'source_kind',
-  startDate: 'start_date', endDate: 'end_date',
+  startDate: 'start_date', endDate: 'end_date', entityIds: 'entity_ids', topicIds: 'topic_ids', publishedFrom: 'published_from', publishedTo: 'published_to',
 } as const
 const fileTypes = ['pdf', 'docx', 'doc', 'pptx', 'ppt', 'epub', 'txt', 'md', 'markdown', 'url', 'manual', 'mp3', 'wav', 'm4a', 'flac', 'ogg']
 const parseStatuses = ['pending', 'processing', 'completed', 'failed', 'cancelled', 'finalizing', 'draft', 'rejected']
@@ -48,6 +52,9 @@ export function documentListFiltersFromQuery(query: LocationQuery): DocumentList
     sourceKind: choice(query.source_kind, SEARCH_SOURCES) as DocumentListFilters['sourceKind'],
     startDate: date(query.start_date),
     endDate: date(query.end_date),
+    entityIds: queryString(query.entity_ids).split(',').map(id => id.trim()).filter(Boolean).join(','),
+    topicIds: queryString(query.topic_ids).split(',').map(id => id.trim()).filter(Boolean).join(','),
+    publishedFrom: date(query.published_from), publishedTo: date(query.published_to),
   }
 }
 

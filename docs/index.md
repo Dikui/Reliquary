@@ -4,6 +4,7 @@
 | --- | --- |
 | [个人使用指南](personal-use.md) | 部署、本机访问、模型、外部 AI 与备份恢复 |
 | [收录接口说明](ingest-api.md) | 外部工具对接、完整材料、HTTP 与 MCP、补全和重试 |
+| [资料批量管理](batch-operations.md) | 筛选范围、六类操作、预览确认、结果与失败重试 |
 | [开发指南](development.md) | 本地开发、脚本职责与 PostgreSQL 集成测试 |
 | [快速开发模式](quick-development.md) | 开发与生产模式的架构对比 |
 | [内置模型管理](builtin-models.md) | YAML 声明、SQL 管理与模型生命周期 |

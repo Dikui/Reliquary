@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -83,6 +84,7 @@ func (r *resourceReleaser) deletable(ctx context.Context, ref string) bool {
 		if err != nil {
 			logger.Warnf(ctx, "Failed to release resource %s from %s %s: %v",
 				ref, r.ownerType, ownerID, err)
+			collectEntryDeleteWarning(ctx, err)
 			return false
 		}
 		if count >= 0 {
@@ -109,14 +111,28 @@ func deleteExtractedImages(
 		return
 	}
 	logger.Infof(ctx, "Deleting %d extracted images", len(imageURLs))
+	seen := map[string]bool{}
 	for _, url := range imageURLs {
+		if url == "" || seen[url] {
+			continue
+		}
+		seen[url] = true
 		if !releaser.deletable(ctx, url) {
 			logger.Infof(ctx, "Keeping extracted image %s: another owner may still reference it", url)
 			continue
 		}
-		if err := fileSvc.DeleteFile(ctx, url); err != nil {
+		if err := fileSvc.DeleteFile(ctx, url); err != nil && !errors.Is(err, os.ErrNotExist) {
 			logger.Errorf(ctx, "Failed to delete extracted image %s: %v", url, err)
+			collectEntryDeleteWarning(ctx, err)
 		}
+	}
+}
+
+type entryDeleteWarningsKey struct{}
+
+func collectEntryDeleteWarning(ctx context.Context, err error) {
+	if warnings, ok := ctx.Value(entryDeleteWarningsKey{}).(*[]string); ok && err != nil && !errors.Is(err, os.ErrNotExist) {
+		*warnings = append(*warnings, err.Error())
 	}
 }
 
@@ -247,12 +263,27 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 	if err := s.releaseIngestArticleAssets(ctx, id); err != nil {
 		return err
 	}
-	if err := s.repo.DeleteEntry(ctx, spaceID, id); err != nil {
-		return err
-	}
-	if entry.SourceKind == "mine" {
-		if err := s.removeDocumentRecords(ctx, entry); err != nil {
+	if entry.SourceKind == "mine" && s.db != nil {
+		// Keep the entry visible for retry if document record cleanup fails.
+		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			copy := *s
+			copy.db = tx
+			copy.repo = repository.NewEntryRepository(tx)
+			if err := copy.repo.DeleteEntry(ctx, spaceID, id); err != nil {
+				return err
+			}
+			return copy.removeDocumentRecords(ctx, entry)
+		}); err != nil {
 			return err
+		}
+	} else {
+		if err := s.repo.DeleteEntry(ctx, spaceID, id); err != nil {
+			return err
+		}
+		if entry.SourceKind == "mine" {
+			if err := s.removeDocumentRecords(ctx, entry); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -261,17 +292,20 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 	if s.vault != nil {
 		if err := s.vault.DeleteArticle(ctx, entry); err != nil {
 			logger.Errorf(ctx, "DeleteEntry vault cleanup failed: %v", err)
+			collectEntryDeleteWarning(ctx, err)
 		}
 	}
 	if entry.FilePath != "" {
 		if err := libraryFileSvc.DeleteFile(ctx, entry.FilePath); err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete file failed")
+			collectEntryDeleteWarning(ctx, err)
 		}
 	}
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
 		if intake.OriginalPath != "" && intake.OriginalPath != entry.FilePath {
 			if err := libraryFileSvc.DeleteFile(ctx, intake.OriginalPath); err != nil {
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete intake original failed")
+				collectEntryDeleteWarning(ctx, err)
 			}
 		}
 		imageURLs = append(imageURLs, intake.Images...)
@@ -281,6 +315,7 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 	spaceInfo.StorageUsed -= entry.StorageSize
 	if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, -entry.StorageSize); err != nil {
 		logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry update space storage used failed")
+		collectEntryDeleteWarning(ctx, err)
 	}
 	return nil
 }
@@ -565,11 +600,13 @@ func (s *entryService) deleteEntryList(ctx context.Context, ids []string) error 
 			fSvc := libraryFileServices[entry.LibraryID]
 			if err := fSvc.DeleteFile(ctx, entry.FilePath); err != nil {
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete file failed")
+				collectEntryDeleteWarning(ctx, err)
 			}
 		}
 		if intake, _ := entry.IntakeMetadata(); intake != nil && intake.OriginalPath != "" && intake.OriginalPath != entry.FilePath {
 			if err := libraryFileServices[entry.LibraryID].DeleteFile(ctx, intake.OriginalPath); err != nil {
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry delete intake original failed")
+				collectEntryDeleteWarning(ctx, err)
 			}
 		}
 		storageAdjust -= entry.StorageSize
@@ -586,6 +623,7 @@ func (s *entryService) deleteEntryList(ctx context.Context, ids []string) error 
 	spaceInfo.StorageUsed += storageAdjust
 	if err := s.spaceRepo.AdjustStorageUsed(ctx, spaceInfo.ID, storageAdjust); err != nil {
 		logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteEntry update space storage used failed")
+		collectEntryDeleteWarning(ctx, err)
 	}
 	return nil
 }

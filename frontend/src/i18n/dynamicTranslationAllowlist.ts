@@ -2,6 +2,7 @@ import type { TranslationCall } from './translationCallAudit.ts'
 
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
+  { file: 'components/EntryBatchDialog.vue', expressions: ['`entryBatch.actions.${value}`', '`entryBatch.actions.${batch.action}`', '`entryBatch.reasons.${reason.code}`', '`entryBatch.status.${batch.status}`', '`entryBatch.status.${item.status}`'], reason: 'Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code.' },
   {
     file: 'views/library/components/PendingReviews.vue',
     expressions: ['`ingestStatus.acquisition.${item.acquisition}`'],
@@ -199,7 +200,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "views/library/Library.vue",
     "expressions": [
-      "`library.contentTypes.${value}`",
       "`knowledgeSearch.sources.${value}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."

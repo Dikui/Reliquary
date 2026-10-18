@@ -18,6 +18,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 | --- | --- | --- | --- | --- |
+| Table Selection | DocumentBatchBar and EntryBatchDialog | Server batch preview and fixed membership at submit | Checked loaded rows or all matching results; whole-library shortcuts ignore list filters | Filter tests, frontend checks and browser batch flow |
 | Select/Listbox | TDesign Select and TagInput | Existing TDesign installation and locale provider | Filtered, multiple and tag input | Frontend type check and component tests |
 | Date | TDesign DatePicker for API Key expiry | ApiIntegrationSettings.vue and active locale | Local minute precision, Unix seconds on submission | API Key expiry tests |
 | Form | TDesign inputs and application validation | Existing library editor and settings forms | Create and edit | Editor validation tests |
@@ -129,3 +130,13 @@ Personal documents arrive through ingest with kind=mine. Pending intake and miss
 Source: .scratch/agent-operations-diagnostics/spec.md and internal/types/ingest_diagnostics.go. The read-only /platform/diagnostics page lists technical ingest failures, with URL-backed committed filters and pagination. Selecting a failure preserves the list query in the URL. List, detail and material requests ignore stale responses and teardown. Refresh failures retain the current readable list. Filters use explicit apply; clear immediately applies the new filter. TDesign owns date entry and localization.
 
 Details distinguish unknown outcomes, partial inputs, unavailable materials and expiry. Raw text is escaped and read in server-defined Unicode segments. Image reads use the authenticated request owner, never a public file path; Blob URLs are released when replaced or unmounted. Reading does not replay, modify or delete content. Recovery entry/request associations are links, not claims of completed repair. Existing failed processing, timeline, model calls, queues, operation log, vault and evaluation owners remain accessible. The default retention hint is 7 days / 512 MiB and explains capacity eviction. Visual intent and token ownership are documented in DESIGN.md.
+
+## Bulk material management
+
+DocumentBatchBar opens the shared EntryBatchDialog even when no loaded row is checked. Checked rows and all matching server results are separate scopes. All-match selection includes unloaded results and fixes membership at confirmation submission. Entity IDs, topic IDs and publication dates join existing URL-backed document filters. Entity profiles and topic records link to the matching documents view. Publication date filtering excludes missing dates. Filter or library changes clear hidden selections.
+
+Delete, reprocess, review, star changes, content type corrections and topic add/remove share this dialog. Whole-library review, pending review, failed rebuild and all rebuild shortcuts use explicit library selections independent of current list filters. Content types come from a single library catalogue. Preview shows eligible, skipped and blocked counts, reasons and samples; a named scope and explicit confirmation precede submission. Delete explains irreversible removal. Reprocess uses current library policy and excludes generated output, whose index maintenance remains separate. Review preserves source text and never performs user rejection deletion.
+
+Accepted submissions show pending/running state, then server terminal counts and paginated item results. No submission toast claims completed success. Errors preserve the dialog and results with refresh recovery. Only failed items can be retried. Pending requests prevent duplicate mutations; generation checks reject stale responses; closing and teardown stop client polling without stopping server work. TDesign owns dialog focus, Escape, selects, date entry and pagination. Both locales and existing semantic theme tokens apply.
+
+Batch submissions retain batch_id in the documents route. The result link and a page reload reopen server status in the root EntryBatchDialog. Review shortcuts hand off to that same root result owner; closing the dialog does not orphan its route.

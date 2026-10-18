@@ -31,6 +31,10 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 	r.POST("/ingest/:id/discard", g.LibraryExistsFromEntryIDParam("id"), handler.DiscardIngest)
 	r.DELETE("/documents/:id", g.LibraryExistsFromEntryIDParam("id"), handler.DeleteDocument)
 	r.GET("/entries", handler.ListEntry)
+	r.POST("/entries/batches/preview", handler.PreviewEntryBatch)
+	r.POST("/entries/batches", handler.SubmitEntryBatch)
+	r.GET("/entries/batches/:batch_id", handler.GetEntryBatchResult)
+	r.POST("/entries/batches/:batch_id/retry-failed", handler.RetryEntryBatch)
 	library := r.Group("/libraries/:id/entries")
 	libraryRead := library
 	{

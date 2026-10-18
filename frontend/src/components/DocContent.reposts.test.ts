@@ -388,9 +388,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         assert.ok(html.includes(source_kind === 'report' ? messages[locale].library.reindexDocument : messages[locale].library.rebuildDocument))
       }
     }
-    const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2, reparseAllowed: false }, locale)
-    assert.ok(!mixedBatch.includes(messages[locale].library.rebuildDocument))
-    assert.ok(mixedBatch.includes(messages[locale].library.batchDelete))
+    const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2 }, locale)
+    assert.ok(mixedBatch.includes(messages[locale].entryBatch.title))
+    assert.ok(mixedBatch.includes(messages[locale].library.selectedCount.replace('{count}', '2')))
   })
 
   test(`${locale}: article detail shows the relative vault path and copies it through the shared clipboard helper`, async () => {

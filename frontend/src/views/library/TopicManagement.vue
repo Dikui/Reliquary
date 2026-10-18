@@ -120,7 +120,7 @@ onUnmounted(() => { disposed = true; generation++; clearTimeout(pollTimer) })
     <t-loading :loading="loading">
       <ul v-if="topics.length" class="topic-list">
         <li v-for="topic in topics" :key="topic.id" class="topic-card">
-          <div class="topic-heading"><h2>{{ topic.name }}</h2><span>{{ t('topicManagement.articleCount', { count: topic.entry_count }) }}</span></div>
+          <div class="topic-heading"><h2>{{ topic.name }}</h2><a :href="`/platform/entries?tab=documents&topic_ids=${encodeURIComponent(topic.id)}`">{{ t('topicManagement.articleCount', { count: topic.entry_count }) }} · {{ t('entryBatch.manageRelated') }}</a></div>
           <p class="topic-description">{{ topic.description || t('topicManagement.noDescription') }}</p>
           <div v-if="progress[topic.id]" class="topic-progress" aria-live="polite">
             <span>{{ t(`topicManagement.status.${progress[topic.id]!.status}`) }}</span>

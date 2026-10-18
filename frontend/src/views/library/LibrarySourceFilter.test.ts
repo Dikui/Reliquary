@@ -46,7 +46,9 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const requests: URLSearchParams[] = []
   const scope = ref<string[]>([])
   const rebuildRequests: Array<{ path: string; data: unknown }> = [], notices: string[] = []
-  let rebuildResponse: () => Promise<any> = async () => ({ success: true, data: { task_id: 'rebuild', total: 41 } })
+  const previewResult = { success: true, data: { fingerprint: 'preview-1', matched: 41, eligible: 40, skipped: 1, blocked: 0, reasons: [{ code: 'generated_library', count: 1 }], samples: [{ id: 'sample', title: 'Matching sample', library_id: 'library-source' }] } }
+  const batchResult = { success: true, data: { batch_id: 'batch-1', action: 'reprocess', status: 'completed', total: 41, succeeded: 40, failed: 0, skipped: 1, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } }
+  let rebuildResponse: (path: string) => Promise<any> = async path => path.endsWith('/preview') ? previewResult : batchResult
   let confirmation: any
   const records = [
     { id: 'article', source_kind: 'article', title: 'Needle article', content_type: 'tutorial', starred: true },
@@ -62,7 +64,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     records.push({ ...target, id: `mine-other-${field}`, [field]: value })
   }
   const transport = {
-    async post(path: string, data: unknown) { rebuildRequests.push({ path, data }); return rebuildResponse() },
+    async post(path: string, data: unknown) { rebuildRequests.push({ path, data }); return rebuildResponse(path) },
     async get(path: string) {
       const url = new URL(path, 'http://localhost')
       assert.equal(url.pathname, '/api/v1/entries')
@@ -88,6 +90,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const api = evaluateFile('../../api/library.ts', { '../utils/request': transport })
   const store = evaluateFile('../../stores/entry.ts', {})
   const hook = evaluateFile('../../composables/useLibrary.ts', {
+    '@/api/entities': { listEntities: async () => ({ success: true, data: [] }) },
+    '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
     '@/api/library': api, '@/stores/entry': store,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
     'tdesign-vue-next': { MessagePlugin: {} },
@@ -96,6 +100,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const empty = moduleOf(defineComponent({ setup: () => () => null }))
   let backendAvailable = !unavailable
   const modules: Record<string, any> = {
+    '@/api/entities': { listEntities: async () => ({ success: true, data: [] }) },
+    '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
     '@/utils/bodyReference': bodyReference,
     '@/composables/useLibraryScope': { useLibraryScope: () => scope },
     'vue-router': vueRouter,
@@ -110,6 +116,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/types/entryClassification': { CONTENT_TYPES },
     '@/types/search': { SEARCH_SOURCES },
     '@/api/library': api,
+    '@/api/entry-batches': evaluateFile('../../api/entry-batches.ts', { '@/utils/request': transport }),
     '@/utils/entryTrace': {},
     '@/utils/entrySourceLabels': entrySourceLabels,
     '@/utils/markdownPlainText': markdownPlainText,
@@ -123,6 +130,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   for (const path of ['./Library.vue', './components/DocumentCardView.vue', './components/DocumentListView.vue']) {
     for (const match of readFileSync(new URL(path, import.meta.url), 'utf8').matchAll(/from\s+['"]([^'"]+\.vue)['"]/g)) modules[match[1]] = empty
   }
+  modules['@/components/EntryBatchDialog.vue'] = moduleOf(loadComponent(new URL('../../components/EntryBatchDialog.vue', import.meta.url), modules))
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
     emits: ['loaded'], setup: (_, { emit }) => {
       onMounted(() => emit('loaded', [
@@ -139,7 +147,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   if (unavailable) {
     modules['@/api/entities'] = { ENTITY_TYPES: ['company'], listEntities: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:[{id:'recovered',canonical_name:'Recovered entity',entity_type:'company',aliases:[]}] } }, getEntityNameEmbeddingRebuildStatus: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:{pending_count:0}} } }
     modules['@/stores/follows'] = {useFollowStore:()=>({refreshAfterTargetChange:async()=>{}})}
-    modules['./MergeSuggestions.vue']=empty;modules['./EntityRelations.vue']=empty;modules['@/components/FollowToggle.vue']=empty
+    modules['./EntityGraph.vue']=empty;modules['./MergeSuggestions.vue']=empty;modules['./EntityRelations.vue']=empty;modules['@/components/FollowToggle.vue']=empty
     modules['./components/EntryWorkbench.vue']=moduleOf(loadComponent(new URL('./components/EntryWorkbench.vue',import.meta.url),modules))
   }
   const library = loadComponent(new URL('./Library.vue', import.meta.url), modules)
@@ -175,13 +183,13 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
       onChange: (event: any) => emit('update:modelValue', event.value) }),
   }))
   app.component('t-checkbox', defineComponent({
-    props: ['checked', 'disabled'], emits: ['change'],
+    props: ['checked', 'modelValue', 'disabled'], emits: ['change', 'update:modelValue'],
     setup: (props, { attrs, emit }) => () => h('input', { ...attrs, type: 'checkbox', checked: props.checked, disabled: props.disabled,
-      onChange: (event: any) => emit('change', event.checked, { e: event }) }),
+      onChange: (event: any) => { emit('change', event.checked, { e: event }); emit('update:modelValue', event.checked) } }),
   }))
   delete app._context.components['t-alert']
   app.component('t-alert', defineComponent({ props: ['message'], setup: (props, { attrs, slots }) => () => h('div', attrs, [props.message, slots.operation?.()]) }))
-  for (const name of ['t-dropdown', 't-skeleton']) app.component(name, empty.default)
+  for (const name of ['t-dropdown', 't-skeleton', 't-pagination']) app.component(name, empty.default)
   const errors: unknown[] = []
   app.config.errorHandler = error => errors.push(error)
   const root = element('root')
@@ -197,9 +205,9 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     node.tag === 'select' && node.props['data-options']?.some((option: any) => option.value === value))!
   const ids = () => descendants(root).filter(node => node.props['data-select-id']).map(node => node.props['data-select-id'])
   return {
-    root, router, requests, records, errors, control, byOptions, ids, t, scope, rebuildRequests, notices,
+    root, router, requests, records, errors, control, byOptions, ids, t, scope, rebuildRequests, notices, previewResult, batchResult,
     get confirmation() { return confirmation },
-    setRebuildResponse(response: () => Promise<any>) { rebuildResponse = response },
+    setRebuildResponse(response: (path: string) => Promise<any>) { rebuildResponse = response },
     recover() { backendAvailable = true },
     get route() { return router.currentRoute.value },
     async change(node: ReturnType<typeof element>, value: unknown) { node.props.onChange({ value }); await waitForLoad() },
@@ -475,88 +483,86 @@ test('library-defined content types and Markdown aliases survive a shared URL an
   } finally { env.cleanup() }
 })
 
-test('library rebuild confirms one selected library, prevents duplicate submission and reports queued work', async () => {
-  const env = await mountLibrary()
-  const button = () => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t('library.rebuildLibrary'))
+test('library rebuild confirms one selected library, prevents duplicate submission and reports final work', async () => {
+  const env = await mountLibrary('zh-CN', { keyword: 'Needle', starred: 'true' })
+  const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))
   try {
-    assert.equal(button()?.props.disabled, true)
-    env.scope.value = ['library-source']
-    await settle()
-    button()!.props.onClick()
-    assert.match(env.confirmation.body, /Research/)
-    assert.match(env.confirmation.body, /保留正文、图片和人工判断/)
-    assert.match(env.confirmation.body, /仅重建.*处理失败的资料/)
-    assert.match(env.confirmation.body, /已完成和已取消的资料不参与/)
-    assert.match(env.confirmation.body, /审核阶段失败的资料会先重新审核/)
+    assert.equal(button('library.rebuildLibrary')?.props.disabled, true)
+    env.scope.value = ['library-source']; await settle()
+    button('library.rebuildLibrary')!.props.onClick(); await settle()
+    assert.ok(visibleText(env.root).includes('Research'))
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.wholeLibraryFailed')))
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.reprocessHint')))
+    assert.deepEqual(env.rebuildRequests, [])
+    assert.equal(button('entryBatch.confirm'), undefined)
+    button('entryBatch.preview')!.props.onClick(); await settle()
+    assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/entries/batches/preview', data: { action: 'reprocess', selection: { filters: { libraries: ['library-source'], parse_status: 'failed' } } } }])
+    assert.ok(visibleText(env.root).includes('Matching sample'))
+    assert.equal(button('entryBatch.confirm')!.props.disabled, true)
+    button('entryBatch.confirm')!.props.onClick(); await settle()
+    assert.equal(env.rebuildRequests.length, 1, 'unchecked confirmation cannot submit')
+    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
     let finish!: (response: unknown) => void
     env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
-    env.confirmation.onConfirm()
-    await settle()
-    assert.equal(button()?.props.disabled, true)
-    assert.equal(button()?.props['data-loading'], true)
-    button()!.props.onClick()
-    assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/libraries/library-source/rebuild', data: { scope: 'failed' } }])
-    finish({ success: true, data: { task_id: 'rebuild', total: 41 } })
-    await settle()
-    assert.ok(visibleText(env.root).includes(env.t('library.rebuildLibrarySubmitted', { count: 41 })))
-    assert.equal(button()?.props.disabled, false)
-    env.scope.value = ['reports']
-    await settle()
-    assert.equal(button(), undefined)
+    button('entryBatch.confirm')!.props.onClick(); await settle()
+    assert.equal(button('entryBatch.confirm')!.props.disabled, true)
+    assert.equal(button('entryBatch.confirm')!.props['data-loading'], true)
+    button('entryBatch.confirm')!.props.onClick(); await settle()
+    assert.equal(env.rebuildRequests.length, 2, 'busy submit rejects duplicate calls')
+    assert.deepEqual(env.rebuildRequests[1], { path: '/api/v1/entries/batches', data: { action: 'reprocess', selection: { filters: { libraries: ['library-source'], parse_status: 'failed' } }, preview_fingerprint: 'preview-1' } })
+    assert.deepEqual(env.notices, [], 'submission never announces completed success')
+    finish(env.batchResult); await new Promise(resolve => setImmediate(resolve)); await settle()
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.status.completed')))
+    assert.equal(env.route.query.batch_id, 'batch-1')
+    assert.ok(descendants(env.root).some(node => node.tag === 'a' && node.props.href === '/platform/entries?batch_id=batch-1'))
   } finally { env.cleanup() }
 })
 
-test('full library rebuild requires confirmation, sends its scope and can be cancelled', async () => {
-  const env = await mountLibrary('en-US')
+test('full library rebuild requires preview and confirmation, sends its scope and can be cancelled', async () => {
+  const env = await mountLibrary('en-US', { source_kind: 'mine', incomplete: 'true' })
   const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))
   try {
     assert.equal(button('library.rebuildLibraryAll')?.props.disabled, true)
-    env.scope.value = ['library-source']
-    await settle()
-    button('library.rebuildLibraryAll')!.props.onClick()
-    assert.equal(env.confirmation.header, env.t('library.rebuildLibraryAll'))
-    assert.equal(env.confirmation.confirmBtn, env.t('library.rebuildLibraryAll'))
-    assert.match(env.confirmation.body, /Research/)
-    assert.match(env.confirmation.body, /Completed materials will be processed again/)
-    assert.match(env.confirmation.body, /incurs costs/)
+    env.scope.value = ['library-source']; await settle()
+    button('library.rebuildLibraryAll')!.props.onClick(); await settle()
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.wholeLibrary')))
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.reprocessHint')))
     assert.deepEqual(env.rebuildRequests, [])
-    await settle()
-    assert.equal(button('library.rebuildLibrary')?.props.disabled, true)
-    env.confirmation.onCancel()
-    await settle()
+    button('common.close')!.props.onClick(); await settle()
+    assert.equal(button('entryBatch.preview'), undefined)
     assert.deepEqual(env.rebuildRequests, [])
-    assert.equal(button('library.rebuildLibraryAll')?.props.disabled, false)
-    button('library.rebuildLibraryAll')!.props.onClick()
-    let finish!: (response: unknown) => void
-    env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
-    env.confirmation.onConfirm()
-    await settle()
-    assert.equal(button('library.rebuildLibraryAll')?.props['data-loading'], true)
-    assert.equal(button('library.rebuildLibrary')?.props.disabled, true)
-    assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/libraries/library-source/rebuild', data: { scope: 'all' } }])
-    finish({ success: true, data: { task_id: 'rebuild', total: 41 } })
-    await settle()
-    assert.ok(visibleText(env.root).includes(env.t('library.rebuildLibraryAllSubmitted', { count: 41 })))
-    env.scope.value = ['reports']
-    await settle()
+    button('library.rebuildLibraryAll')!.props.onClick(); await settle()
+    button('entryBatch.preview')!.props.onClick(); await settle()
+    assert.deepEqual(env.rebuildRequests[0], { path: '/api/v1/entries/batches/preview', data: { action: 'reprocess', selection: { filters: { libraries: ['library-source'] } } } })
+    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
+    button('entryBatch.confirm')!.props.onClick(); await settle()
+    assert.deepEqual(env.rebuildRequests[1], { path: '/api/v1/entries/batches', data: { action: 'reprocess', selection: { filters: { libraries: ['library-source'] } }, preview_fingerprint: 'preview-1' } })
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.status.completed')))
+    env.scope.value = ['reports']; await settle()
     assert.equal(button('library.rebuildLibraryAll'), undefined)
   } finally { env.cleanup() }
 })
 
-test('library rebuild retains a readable conflict and allows a deliberate retry', async () => {
+test('library rebuild retains a readable conflict and allows a deliberate preview retry', async () => {
   const env = await mountLibrary('en-US')
-  const button = () => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t('library.rebuildLibrary'))!
+  const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))!
   try {
-    env.scope.value = ['library-source']
-    await settle()
+    env.scope.value = ['library-source']; await settle()
     env.setRebuildResponse(async () => { throw { status: 409, message: 'A processing task is already running in this library.' } })
-    button().props.onClick()
-    env.confirmation.onConfirm()
-    await settle()
+    button('library.rebuildLibrary').props.onClick(); await settle()
+    button('entryBatch.preview').props.onClick(); await settle()
     assert.ok(visibleText(env.root).includes('A processing task is already running in this library.'))
     assert.deepEqual(env.notices, [])
-    assert.equal(button().props.disabled, false)
-    button().props.onClick()
-    assert.equal(env.confirmation.confirmBtn, 'Rebuild failed materials')
+    assert.equal(button('entryBatch.preview').props.disabled, false)
+    assert.equal(env.rebuildRequests.length, 1)
+    env.setRebuildResponse(async path => path.endsWith('/preview') ? env.previewResult : env.batchResult)
+    button('entryBatch.preview').props.onClick(); await settle()
+    assert.ok(!visibleText(env.root).includes('A processing task is already running in this library.'))
+    assert.equal(env.rebuildRequests.length, 2)
+    assert.equal(button('entryBatch.confirm').props.disabled, true)
+    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
+    button('entryBatch.confirm').props.onClick(); await settle()
+    assert.ok(visibleText(env.root).includes(env.t('entryBatch.status.completed')))
+    assert.equal(env.rebuildRequests.length, 3)
   } finally { env.cleanup() }
 })

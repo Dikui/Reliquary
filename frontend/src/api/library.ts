@@ -41,6 +41,7 @@ export function listEntryFiles(
     page: number;
     page_size: number;
     libraries?: string[];
+    entity_ids?: string[]; topic_ids?: string[]; published_from?: string; published_to?: string;
     keyword?: string;
     file_type?: string;
     content_type?: string;
@@ -57,6 +58,10 @@ export function listEntryFiles(
   query.append('page', String(params.page));
   query.append('page_size', String(params.page_size));
   if (params.libraries?.length) query.set('libraries', params.libraries.join(','));
+  if (params.entity_ids?.length) query.set('entity_ids', params.entity_ids.join(','));
+  if (params.topic_ids?.length) query.set('topic_ids', params.topic_ids.join(','));
+  if (params.published_from) query.set('published_from', params.published_from);
+  if (params.published_to) query.set('published_to', params.published_to);
   if (params.keyword) query.append('keyword', params.keyword);
   if (params.file_type) query.append('file_type', params.file_type);
   if (params.content_type) query.append('content_type', params.content_type);

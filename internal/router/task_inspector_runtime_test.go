@@ -96,6 +96,13 @@ func TestProjectRuntimeTaskRedactsPayloadAndBuildsSafeActions(t *testing.T) {
 }
 
 func TestProjectRuntimeTaskActionsFollowCurrentState(t *testing.T) {
+	// Batch dispatchers retain selection metadata and retry through their result page.
+	for _, state := range []task.TaskState{task.TaskStateScheduled, task.TaskStateRetry, task.TaskStateArchived, task.TaskStateCancelled} {
+		info, err := projectRuntimeTask(&task.Job{ID: "batch", Queue: types.QueueMaintenance, TaskType: types.TypeEntryBatch, Payload: []byte(`{"space_id":1,"batch_id":"batch"}`), State: state})
+		if err != nil || len(info.AllowedActions) != 0 {
+			t.Fatalf("batch state %s must retain its request and use per-item retry: %+v, %v", state, info, err)
+		}
+	}
 	payload := []byte(`{"tenant_id":1,"entry_id":"entry-1"}`)
 	cases := []struct {
 		state task.TaskState

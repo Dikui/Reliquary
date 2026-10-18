@@ -67,6 +67,10 @@ func TestMarkdownOnlyCapabilityGuard(t *testing.T) {
 			return err
 		}
 		for _, hit := range retired.FindAllString(string(data), -1) {
+			// This preview counts a batch selection; it does not expose a retired original-file preview.
+			if relative == "internal/router/routes_entry.go" && hit == "/entries/batches/preview" {
+				continue
+			}
 			t.Errorf("retired capability %q in %s", hit, relative)
 		}
 		if strings.HasPrefix(relative, "frontend/src/") {

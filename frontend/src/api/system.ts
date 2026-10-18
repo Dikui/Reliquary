@@ -190,6 +190,7 @@ export type RuntimeTaskState = 'pending' | 'active' | 'scheduled' | 'retry' | 'a
 export type RuntimeTaskAction = 'cancel' | 'run_now' | 'delete'
 
 export interface RuntimeTask {
+  batch_id?: string
   id: string
   queue: string
   type: string

@@ -87,6 +87,11 @@ const (
 // under a library. Empty / zero fields mean "no filter on that dimension".
 type EntryListFilter struct {
 	LibraryIDs      []string
+	EntityIDs       []string
+	TopicIDs        []string
+	PublishedFrom   time.Time
+	PublishedTo     time.Time // Exclusive end of the selected publication day.
+	IncludeRejected bool
 	CollapseSimilar *bool
 
 	// SourceKind selects article, mine or report independently of ingestion channel.

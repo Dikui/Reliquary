@@ -113,11 +113,23 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	if len(filter.LibraryIDs) > 0 {
 		query = query.Where("library_id IN ?", filter.LibraryIDs)
 	}
+	if len(filter.EntityIDs) > 0 {
+		query = query.Where("EXISTS (SELECT 1 FROM entry_entities links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.entity_id IN ?)", filter.EntityIDs)
+	}
+	if len(filter.TopicIDs) > 0 {
+		query = query.Where("EXISTS (SELECT 1 FROM entry_topics links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.topic_id IN ?)", filter.TopicIDs)
+	}
+	if !filter.PublishedFrom.IsZero() {
+		query = query.Where("search_published_at >= ?", filter.PublishedFrom)
+	}
+	if !filter.PublishedTo.IsZero() {
+		query = query.Where("search_published_at < ?", filter.PublishedTo)
+	}
 	if filter.SourceKind != "" {
 		query = query.Where("source_kind = ?", filter.SourceKind)
 	}
 	if filter.Starred != nil {
-		query = query.Where("source_kind IN ('article','mine') AND starred=?", *filter.Starred)
+		query = query.Where("source_kind IN ('article','mine','report') AND starred=?", *filter.Starred)
 	}
 	if filter.Incomplete != nil {
 		query = query.Where("incomplete = ?", *filter.Incomplete)
@@ -154,7 +166,11 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 		// pipeline marks the row `deleting` before tearing down its resources; a
 		// row whose delete task exhausts its retries is flipped to `failed` by the
 		// dead-letter callback and stays visible so the failure remains actionable.
-		query = query.Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting, types.ParseStatusRejected})
+		hidden := []string{types.ParseStatusDeleting}
+		if !filter.IncludeRejected {
+			hidden = append(hidden, types.ParseStatusRejected)
+		}
+		query = query.Where("parse_status NOT IN ?", hidden)
 	}
 	if !filter.UpdatedFrom.IsZero() {
 		query = query.Where("updated_at >= ?", filter.UpdatedFrom)

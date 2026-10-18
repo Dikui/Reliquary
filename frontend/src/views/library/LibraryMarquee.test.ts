@@ -51,6 +51,8 @@ async function mountLibrary(realCheckbox = false) {
     '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
     '@/types/entryClassification': { CONTENT_TYPES: [] },
     '@/types/search': { SEARCH_SOURCES },
+    '@/api/entities': { listEntities: async () => ({ success: true, data: [] }) },
+    '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
     '@/api/library': {},
     '@/utils/entryTrace': {},
     '@/utils/entrySourceLabels': entrySourceLabels,

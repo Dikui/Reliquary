@@ -65,16 +65,11 @@ func (s *entryService) RebuildLibrary(ctx context.Context, libraryID, scope stri
 	if err := s.db.WithContext(ctx).Exec("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", libraryRebuildGroup(libraryID)).Error; err != nil {
 		return nil, err
 	}
-	active := []taskqueue.TaskState{taskqueue.TaskStatePending, taskqueue.TaskStateDispatched, taskqueue.TaskStateActive, taskqueue.TaskStateScheduled, taskqueue.TaskStateRetry}
-	var busy int64
-	err = s.db.WithContext(ctx).Model(&taskqueue.Job{}).Where("state IN ?", active).
-		Where(`group_name=? OR object_id IN (SELECT id FROM entries WHERE space_id=? AND library_id=?)
-		 OR (task_type=? AND EXISTS (SELECT 1 FROM entries e WHERE e.space_id=? AND e.library_id=? AND jsonb_exists(payload->'entry_ids',e.id)))`,
-			libraryRebuildGroup(libraryID), spaceID, libraryID, types.TypeEntryListReparse, spaceID, libraryID).Count(&busy).Error
+	busy, err := s.libraryBatchBusy(ctx, spaceID, libraryID, "")
 	if err != nil {
 		return nil, err
 	}
-	if busy > 0 {
+	if busy {
 		return nil, apperrors.NewConflictError("This library has unfinished processing tasks; finish or cancel them before rebuilding")
 	}
 	var entries []types.Entry

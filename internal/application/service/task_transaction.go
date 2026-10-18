@@ -26,8 +26,15 @@ type transactionTaskEnqueuer struct {
 	commitFailure bool
 }
 
+type entryBatchChildKey struct{}
+
 func (q *transactionTaskEnqueuer) Enqueue(task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	info, err := q.queue.EnqueueTx(q.ctx, q.tx, task, opts...)
+	if err == nil && task.Type() == types.TypeManualProcess {
+		if capture, ok := q.ctx.Value(entryBatchChildKey{}).(func(*gorm.DB, *taskqueue.TaskInfo) error); ok {
+			err = capture(q.tx, info)
+		}
+	}
 	if err != nil {
 		q.enqueueErr = errors.Join(q.enqueueErr, err)
 	}
