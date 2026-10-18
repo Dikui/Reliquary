@@ -537,43 +537,49 @@ class Context:
 
     @contextlib.contextmanager
     def stopped(self, mode, timeout, keep_paused=False, automatic=False, destination=None):
-        legacy = self.ensure_legacy_helper()
-        if self.direct or self.local_server:
-            hooks = (self.env.get("RELIQUARY_ADMIN_STOP_COMMAND"), self.env.get("RELIQUARY_ADMIN_START_COMMAND"))
-            if self.env.get("RELIQUARY_ADMIN_OFFLINE") != "1" and not all(hooks):
-                raise AdminError("Native runtime requires stop/start hooks or RELIQUARY_ADMIN_OFFLINE=1; live snapshots are unsafe")
-            was_running = all(hooks)
-        else:
-            was_running = bool(self.compose("ps", "--status", "running", "--quiet", self.app).strip())
-            hooks = (None, None)
-        paused = False
-        owner_path = self.root / ".maintenance-schedule/active.json"
-        if automatic:
-            json_write(owner_path, {"reason": "automatic:backup", "was_running": was_running, "destination": str(destination or "")})
-        try:
-            if legacy:
-                print("Baseline maintenance: stopping the legacy application before flushing and exporting; in-flight tasks remain in PostgreSQL.")
+        with contextlib.ExitStack() as guards:
+            if (self.root.parent / "scripts/startup.py").is_file():
+                import fcntl
+                # Share the installed recovery task's lock until writers are restored.
+                lock = guards.enter_context((self.root.parent / "logs/startup.lock").open("a"))
+                fcntl.flock(lock, fcntl.LOCK_EX)
+            legacy = self.ensure_legacy_helper()
+            if self.direct or self.local_server:
+                hooks = (self.env.get("RELIQUARY_ADMIN_STOP_COMMAND"), self.env.get("RELIQUARY_ADMIN_START_COMMAND"))
+                if self.env.get("RELIQUARY_ADMIN_OFFLINE") != "1" and not all(hooks):
+                    raise AdminError("Native runtime requires stop/start hooks or RELIQUARY_ADMIN_OFFLINE=1; live snapshots are unsafe")
+                was_running = all(hooks)
             else:
-                self.cli_json("pause", "--mode", mode, "--timeout", f"{timeout}s", "--reason", "automatic:backup" if automatic else "manual:" + mode)
-            paused = True
-            if was_running:
-                if hooks[0]:
-                    run(shlex.split(hooks[0]), env=self.env, cwd=self.root)
-                else:
-                    self.compose("stop", "--timeout", str(timeout), self.app)
-            self.cli_json("flush")
-            yield
-        finally:
-            if paused:
-                if not keep_paused and not legacy:
-                    self.cli_json("resume")
-                if was_running and not keep_paused:
-                    if hooks[1]:
-                        run(shlex.split(hooks[1]), env=self.env, cwd=self.root)
-                    else:
-                        self.compose("start", self.app)
+                was_running = bool(self.compose("ps", "--status", "running", "--quiet", self.app).strip())
+                hooks = (None, None)
+            paused = False
+            owner_path = self.root / ".maintenance-schedule/active.json"
             if automatic:
-                owner_path.unlink(missing_ok=True)
+                json_write(owner_path, {"reason": "automatic:backup", "was_running": was_running, "destination": str(destination or "")})
+            try:
+                if legacy:
+                    print("Baseline maintenance: stopping the legacy application before flushing and exporting; in-flight tasks remain in PostgreSQL.")
+                else:
+                    self.cli_json("pause", "--mode", mode, "--timeout", f"{timeout}s", "--reason", "automatic:backup" if automatic else "manual:" + mode)
+                paused = True
+                if was_running:
+                    if hooks[0]:
+                        run(shlex.split(hooks[0]), env=self.env, cwd=self.root)
+                    else:
+                        self.compose("stop", "--timeout", str(timeout), self.app)
+                self.cli_json("flush")
+                yield
+            finally:
+                if paused:
+                    if not keep_paused and not legacy:
+                        self.cli_json("resume")
+                    if was_running and not keep_paused:
+                        if hooks[1]:
+                            run(shlex.split(hooks[1]), env=self.env, cwd=self.root)
+                        else:
+                            self.compose("start", self.app)
+                if automatic:
+                    owner_path.unlink(missing_ok=True)
 
     @contextlib.contextmanager
     def cloned_database(self):

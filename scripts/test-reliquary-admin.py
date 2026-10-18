@@ -7,6 +7,8 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -758,6 +760,48 @@ class AdminStorageTests(unittest.TestCase):
         with ctx.stopped("snapshot", 10):
             self.assertIn(("stop", "--timeout", "10", "app"), ctx.calls)
         self.assertIn(("start", "app"), ctx.calls)
+
+    def test_snapshot_excludes_autostart_and_releases_lock_after_failure(self):
+        deploy = self.root / "deploy"
+        deploy.mkdir()
+        (deploy / ".env").touch()
+        (self.root / "logs").mkdir()
+        startup = self.root / "scripts/startup.py"
+        startup.parent.mkdir()
+        startup.write_bytes(Path(__file__).with_name("startup-local.py").read_bytes())
+        ctx = admin.Context(deploy)
+        ctx.ensure_legacy_helper = mock.Mock(return_value=False)
+        ctx.compose = mock.Mock(side_effect=lambda *args: b"app-id" if args[0] == "ps" else b"")
+        ctx.cli_json = mock.Mock(return_value={})
+        probe = """
+import runpy
+import sys
+from unittest import mock
+script = sys.argv[1]
+sys.argv = [script]
+with mock.patch('subprocess.run') as docker:
+    try:
+        runpy.run_path(script, run_name='__main__')
+    except SystemExit as error:
+        assert error.code == 0
+    assert not docker.called, 'Autostart attempted to restart services during a snapshot'
+"""
+        for failed in (False, True):
+            with self.subTest(snapshot_failed=failed):
+                try:
+                    with ctx.stopped("snapshot", 10):
+                        result = subprocess.run([sys.executable, "-c", probe, str(startup)], capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        if failed:
+                            raise RuntimeError("snapshot failed")
+                except RuntimeError as error:
+                    self.assertTrue(failed)
+                    self.assertEqual(str(error), "snapshot failed")
+                import fcntl
+                with (self.root / "logs/startup.lock").open("a") as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                ctx.cli_json.assert_any_call("resume")
+                ctx.compose.assert_any_call("start", "app")
 
     def test_credential_file_is_sent_in_memory_without_argv_value(self):
         path = self.root / "credentials.json"
