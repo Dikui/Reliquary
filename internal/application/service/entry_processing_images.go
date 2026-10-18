@@ -45,31 +45,6 @@ func (s *entryService) attachProcessingImages(ctx context.Context, l *types.Libr
 	return images, inputs, records
 }
 
-func finalizeImageDescriptions(records []types.ProcessingImage, descriptions []extractedImage) ([]types.ProcessingImage, error) {
-	seen := map[int]bool{}
-	for _, description := range descriptions {
-		i := description.Index - 1
-		if i < 0 || i >= len(records) || seen[i] {
-			return nil, fmt.Errorf("invalid or duplicate image description index %d", description.Index)
-		}
-		// A model cannot supply evidence for an image it did not receive.
-		if records[i].SkipReason != "" {
-			continue
-		}
-		if strings.TrimSpace(description.Description) == "" {
-			return nil, fmt.Errorf("empty image description %d", description.Index)
-		}
-		seen[i] = true
-		records[i].Description = strings.TrimSpace(description.Description)
-	}
-	for i, row := range records {
-		if row.SkipReason == "" && !seen[i] {
-			return nil, fmt.Errorf("missing image description %d", i+1)
-		}
-	}
-	return records, nil
-}
-
 func qualifyImageLocations(body string, p types.ProcessingSegment, part *articleProcessingResult, supplied ...[]docparser.MarkdownImageReference) {
 	refs := bodyImageReferences(body)
 	local := bodyImageReferences(string([]rune(body)[p.Start:p.End]))

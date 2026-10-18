@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/models/rerank"
 	"reliquary/internal/types"
 )
 
@@ -385,34 +386,68 @@ func (s *searchService) rerankEntryResults(ctx context.Context, library *types.L
 	if s.modelService == nil {
 		return results, "unavailable"
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	hasImages := slices.ContainsFunc(results, func(result *types.EntrySearchResult) bool {
+		return slices.ContainsFunc(result.Snippets, func(snippet types.EntrySearchSnippet) bool { return snippet.ImagePath != "" })
+	})
+	timeout := 5 * time.Second
+	if hasImages {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	model, err := s.modelService.GetRerankModel(ctx, modelID)
 	if err != nil || model == nil {
 		return results, "unavailable"
 	}
-	documents := make([]string, len(results))
-	for i, result := range results {
+	candidates := results
+	if hasImages {
+		// Scores are comparable only within one request. Rerank a complete
+		// prefix within the mixed-input limit; retain the fused tail order.
+		items, end := 0, 0
+		for end < len(results) {
+			count := 1
+			if slices.ContainsFunc(results[end].Snippets, func(snippet types.EntrySearchSnippet) bool { return snippet.ImagePath != "" }) {
+				count++
+			}
+			if items+count > maxMultimodalRerankDocuments {
+				break
+			}
+			items += count
+			end++
+		}
+		candidates = results[:end]
+	}
+	documents := make([]string, len(candidates))
+	for i, result := range candidates {
 		documents[i] = result.Title + "\n" + result.Summary.RenderText()
 		for _, snippet := range result.Snippets {
 			documents[i] += "\n\n" + snippet.Content
 		}
 	}
-	ranks, err := model.Rerank(ctx, query, documents)
-	if err != nil || len(ranks) != len(results) {
+	var ranks []rerank.RankResult
+	if hasImages {
+		images, ok := model.(rerank.MultimodalReranker)
+		if !ok || !images.SupportsImages() {
+			return results, "unavailable"
+		}
+		ranks, err = s.rerankImageEntryResults(ctx, images, query, candidates, documents)
+	} else {
+		ranks, err = model.Rerank(ctx, query, documents)
+	}
+	if err != nil || len(ranks) != len(candidates) {
 		return results, "unavailable"
 	}
 	seen := map[int]bool{}
 	for _, rank := range ranks {
-		if rank.Index < 0 || rank.Index >= len(results) || seen[rank.Index] || math.IsNaN(rank.RelevanceScore) || math.IsInf(rank.RelevanceScore, 0) {
+		if rank.Index < 0 || rank.Index >= len(candidates) || seen[rank.Index] || math.IsNaN(rank.RelevanceScore) || math.IsInf(rank.RelevanceScore, 0) {
 			return results, "unavailable"
 		}
 		seen[rank.Index] = true
 	}
 	for _, rank := range ranks {
-		results[rank.Index].Score = rank.RelevanceScore
+		candidates[rank.Index].Score = rank.RelevanceScore
 	}
-	slices.SortStableFunc(results, compareEntryScores)
+	slices.SortStableFunc(candidates, compareEntryScores)
 	return results, "applied"
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"reliquary/internal/logger"
 	secutils "reliquary/internal/utils"
@@ -109,6 +110,39 @@ func (r *AliyunReranker) Rerank(ctx context.Context, query string, documents []s
 		},
 	}
 
+	return r.rerank(ctx, requestBody, query, documents, false)
+}
+
+func (r *AliyunReranker) SupportsImages() bool {
+	return r.modelName == "qwen3-vl-rerank" || strings.HasPrefix(r.modelName, "qwen3-vl-rerank-")
+}
+
+func (r *AliyunReranker) RerankMultimodal(ctx context.Context, query string, documents []RerankDocument) ([]RankResult, error) {
+	if !r.SupportsImages() {
+		return nil, fmt.Errorf("rerank model %q does not support images", r.modelName)
+	}
+	for i, doc := range documents {
+		if (doc.Text == "") == (doc.Image == "") {
+			return nil, fmt.Errorf("rerank document %d must contain exactly one text or image", i)
+		}
+		if doc.Image != "" && (!strings.HasPrefix(doc.Image, "data:image/") || !strings.Contains(doc.Image, ";base64,")) {
+			return nil, fmt.Errorf("rerank document %d image must be a base64 image data URI", i)
+		}
+	}
+	requestBody := struct {
+		Model string `json:"model"`
+		Input struct {
+			Query     string           `json:"query"`
+			Documents []RerankDocument `json:"documents"`
+		} `json:"input"`
+		Parameters AliyunRerankParameters `json:"parameters"`
+	}{Model: r.modelName, Parameters: AliyunRerankParameters{TopN: len(documents)}}
+	requestBody.Input.Query = query
+	requestBody.Input.Documents = documents
+	return r.rerank(ctx, requestBody, query, multimodalDocumentPreviews(documents), true)
+}
+
+func (r *AliyunReranker) rerank(ctx context.Context, requestBody any, query string, documents []string, multimodal bool) ([]RankResult, error) {
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request body: %w", err)
@@ -138,11 +172,18 @@ func (r *AliyunReranker) Rerank(ctx context.Context, query string, documents []s
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		if multimodal {
+			// Provider errors may echo image payloads or request credentials.
+			return nil, fmt.Errorf("aliyun multimodal rerank API error: Http Status: %s", resp.Status)
+		}
 		return nil, fmt.Errorf("aliyun rerank API error: Http Status: %s, Body: %s", resp.Status, string(body))
 	}
 
 	var response AliyunRerankResponse
 	if err := json.Unmarshal(body, &response); err != nil {
+		if multimodal {
+			return nil, fmt.Errorf("unmarshal multimodal rerank response: invalid response")
+		}
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 
@@ -155,6 +196,10 @@ func (r *AliyunReranker) Rerank(ctx context.Context, query string, documents []s
 				Text: aliyunResult.Document.Text,
 			},
 			RelevanceScore: aliyunResult.RelevanceScore,
+		}
+		if multimodal {
+			// Scores and indices are sufficient; never log echoed image content.
+			results[i].Document = DocumentInfo{}
 		}
 	}
 

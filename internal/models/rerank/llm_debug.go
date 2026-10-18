@@ -68,3 +68,30 @@ func logRerankDebug(ctx context.Context, model string, query string, documents [
 	}
 	logger.LLMDebugLog(ctx, record)
 }
+
+func (d *debugReranker) SupportsImages() bool {
+	r, ok := d.inner.(MultimodalReranker)
+	return ok && r.SupportsImages()
+}
+
+func (d *debugReranker) RerankMultimodal(ctx context.Context, query string, documents []RerankDocument) ([]RankResult, error) {
+	r, ok := d.inner.(MultimodalReranker)
+	if !ok || !r.SupportsImages() {
+		return nil, fmt.Errorf("rerank model %q does not support images", d.GetModelName())
+	}
+	start := time.Now()
+	result, err := r.RerankMultimodal(ctx, query, documents)
+	logRerankDebug(ctx, d.inner.GetModelName(), query, multimodalDocumentPreviews(documents), result, err, time.Since(start))
+	return result, err
+}
+
+func multimodalDocumentPreviews(documents []RerankDocument) []string {
+	previews := make([]string, len(documents))
+	for i, doc := range documents {
+		previews[i] = doc.Text
+		if doc.Image != "" {
+			previews[i] = fmt.Sprintf("[image data URI: %d bytes]", len(doc.Image))
+		}
+	}
+	return previews
+}
