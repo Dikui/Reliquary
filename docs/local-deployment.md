@@ -79,6 +79,13 @@ Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模�
 
 所有运行操作都在 `deploy/` 执行，例如 `docker compose ps`、`docker compose logs --tail 100 app` 和 `./reliquary-admin backup`。备份命令的具体恢复范围见[个人使用指南](personal-use.md)。同一硬盘的备份仍需另行复制到外置盘或其他设备。
 
+部署前按本次操作判断是否需要完整备份：
+
+- 日常纯代码更新默认跳过完整备份，按下文“按改动范围更新”执行。
+- 涉及数据库迁移、批量修改存量数据或迁移数据目录时，必须先完成完整备份并确认校验通过，再执行相关操作。
+
+仅修改版本号或使用 `--all` 全量构建、更新应用服务，不构成完整备份的触发条件。定时备份按独立计划执行，不与每次部署绑定；跳过本次部署前的完整备份，不应关闭或修改定时备份计划。
+
 需要长期停服时，先卸载恢复任务，再停止容器，否则每分钟的检查会重新启动服务：
 
 ```sh
@@ -87,7 +94,7 @@ cd ~/Reliquary/deploy
 docker compose stop
 ```
 
-恢复时用 `launchctl bootstrap` 加载同一 plist。升级前备份，更新源码并构建新版本镜像；核对新版 Compose 模板与运行配置的差异，再调整 `deploy/.env` 镜像标签并启动。每次手动发布后，从运行目录执行 `./reliquary-admin record-runtime --source /源码仓库的绝对路径`，登记新镜像对应的源码材料。安装脚本不自动覆盖现有配置，也不提供自动升级。
+恢复时用 `launchctl bootstrap` 加载同一 plist。手动发布时，先按上述约定判断是否需要完整备份，再更新源码并构建新版本镜像；核对新版 Compose 模板与运行配置的差异，再调整 `deploy/.env` 镜像标签并启动。每次手动发布后，从运行目录执行 `./reliquary-admin record-runtime --source /源码仓库的绝对路径`，登记新镜像对应的源码材料。安装脚本不自动覆盖现有配置，也不提供自动升级。
 
 已有安装需先将新版 `scripts/reliquary_admin.py` 复制到 `deploy/scripts/`，再执行一次 `record-runtime`。备份会在暂停任务和停服前检查源码材料的完整性、镜像是否存在，以及登记的镜像 ID 是否与当前应用一致；检查失败时提示修复，不进入停服步骤。
 
