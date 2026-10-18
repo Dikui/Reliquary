@@ -9,6 +9,7 @@ const t = (key: string) => i18n.global.t(key)
 // 模型类型定义
 export interface ModelPricing {
   input_per_million: number | null;
+  image_input_per_million?: number | null;
   output_per_million: number | null;
   currency: string;
 }

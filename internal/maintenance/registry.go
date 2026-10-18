@@ -72,7 +72,7 @@ var BackupOnlyTables = map[string]Rule{
 	"model_call_content_deletions": {Sidecar: "space_id entry_id"},
 	"model_call_contents":          {Sidecar: "id request_gzip response_gzip request_bytes response_bytes response_type http_status complete"},
 	"search_records":               {Sidecar: "id space_id created_at source method query libraries request results duration_ms fallback_fulltext reranked evaluation_run_id error"},
-	"model_calls":                  {Sidecar: "id space_id requested_at model_id model_name provider purpose entry_id input_tokens output_tokens input_price output_price currency cost cost_status duration_ms success error_category attempt retry_number processing_attempt span_id"},
+	"model_calls":                  {Sidecar: "id space_id requested_at model_id model_name provider purpose entry_id input_tokens output_tokens input_price output_price currency cost cost_status duration_ms success error_category attempt retry_number processing_attempt span_id text_input_tokens image_input_tokens image_input_price"},
 }
 
 // RegeneratedTable registers derived tables without putting their rows in a

@@ -57,7 +57,7 @@
 | `public.library_content_types` | `library_id`、`name`、`position`、`enabled`、`extract_graph` | 无 | 无 | 无 |
 | `public.library_relation_types` | `library_id`、`name`、`position`、`enabled` | 无 | 无 | 无 |
 | `public.maintenance_state` | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error`、`backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` | 无 | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | 无 |
-| `public.model_calls` | 无 | `id`、`space_id`、`requested_at`、`model_id`、`model_name`、`provider`、`purpose`、`entry_id`、`input_tokens`、`output_tokens`、`input_price`、`output_price`、`currency`、`cost`、`cost_status`、`duration_ms`、`success`、`error_category`、`attempt`、`retry_number`、`processing_attempt`、`span_id` | 无 | 无 |
+| `public.model_calls` | 无 | `id`、`space_id`、`requested_at`、`model_id`、`model_name`、`provider`、`purpose`、`entry_id`、`input_tokens`、`output_tokens`、`input_price`、`output_price`、`currency`、`cost`、`cost_status`、`duration_ms`、`success`、`error_category`、`attempt`、`retry_number`、`processing_attempt`、`span_id`、`text_input_tokens`、`image_input_tokens`、`image_input_price` | 无 | 无 |
 | `public.models` | `id`、`space_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` | 无 | 无 | 无 |
 | `public.operation_logs` | `id`、`space_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at`、`api_key_id`、`api_key_name` | 无 | 无 | 无 |
 | `public.relation_sources` | `relation_id`、`entry_id`、`evidence`、`run_id`、`body_hash` | 无 | 无 | 无 |
@@ -476,3 +476,5 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 `RELIQUARY_MODEL_CALL_CAPTURE_EMBEDDING` 与 `RELIQUARY_MODEL_CALL_CAPTURE_RERANK` 默认开启，设置 `false` 关闭对应内容捕获，统计照常。正常向量响应只保存数量及维度，错误响应保留原文。图片二进制用 SHA-256 与附件路径引用替换，正文文字、提示词和所有其他响应字节完整保留。请求头不保存，已知凭据及 JSON 凭据字段脱敏。持久化由最多 64 项的进程队列异步执行，超时、失败或队列饱和仅记日志；正常停止会刷新队列。
 
 资料批次明细 `entry_batch_items` 与任务记录一同由 PostgreSQL 备份保存，不进入文件库副本。明细保留提交时的资料标识与标题，不随资料删除级联清除；恢复后与 `task_pending_ops` 一起用于核对批次状态。
+
+版本 29 起，`model_calls.text_input_tokens`、`image_input_tokens` 和 `image_input_price` 属于仅备份调用证据，不进入文件库副本。旧版本升级只投影新增 NULL 列，不改历史费用；分项非空时继续参与完整备份的逐行哈希核对。

@@ -252,13 +252,22 @@ test('restored model credential save uses only its subresource and unchanged edi
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   for (const modelType of ['chat', 'embedding', 'rerank'] as const) test(`${locale}: ${modelType} editor displays nullable prices and saves currency with zero input`, async () => {
-    const modelData = { id: 'priced', modelName: 'fixture', source: 'remote', baseUrl: 'http://localhost:21901/v1', pricing: { input_per_million: 2, output_per_million: 4, currency: 'CNY' } }
+    const modelData = { id: 'priced', modelName: 'fixture', source: 'remote', baseUrl: 'http://localhost:21901/v1', pricing: { input_per_million: 2, image_input_per_million: 8, output_per_million: 4, currency: 'CNY' } }
     const loaded = await renderEditor({ locale, modelType, modelData, initializeModel: true })
     assert.equal(loaded.state.formData.value.inputPerMillion, 2)
     assert.equal(loaded.state.formData.value.outputPerMillion, 4)
+    assert.equal(loaded.state.formData.value.imageInputPerMillion, 8)
     assert.equal(loaded.state.formData.value.priceCurrency, 'CNY')
     assert.ok(loaded.html.includes((locale === 'zh-CN' ? zhCN : enUS).ikb18.priceTitle))
     assert.match(loaded.html, /id="model-price-input"/)
+    if (modelType === 'chat') {
+      assert.match(loaded.html, /id="model-price-output"/)
+      assert.doesNotMatch(loaded.html, /id="model-price-image"/)
+    } else {
+      assert.match(loaded.html, /id="model-price-image"/)
+      assert.doesNotMatch(loaded.html, /id="model-price-output"/)
+      assert.ok(loaded.html.includes((locale === 'zh-CN' ? zhCN : enUS).ikb18.priceTextInput))
+    }
     const saved = await renderEditor({ locale, modelType, modelData, initializeModel: true, scenario: async state => {
       state.formData.value.inputPerMillion = '0'
       state.formData.value.outputPerMillion = ''
@@ -266,11 +275,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await state.handleConfirm()
     } })
     assert.equal(saved.confirmed.length, 1)
-    assert.deepEqual(saved.confirmed[0].pricing, { input_per_million: 0, output_per_million: null, currency: 'USD' })
+    assert.deepEqual(saved.confirmed[0].pricing, { input_per_million: 0, ...(modelType !== 'chat' ? { image_input_per_million: 8 } : {}), output_per_million: null, currency: 'USD' })
   })
   test(`${locale}: clearing all price fields emits explicit null`, async () => {
-    const { confirmed } = await renderEditor({ locale, scenario: async state => {
-      Object.assign(state.formData.value, { modelName: 'fixture', baseUrl: 'http://localhost:21901/v1', inputPerMillion: '', outputPerMillion: '', priceCurrency: '' })
+    const { confirmed } = await renderEditor({ locale, modelType: 'embedding', scenario: async state => {
+      Object.assign(state.formData.value, { modelName: 'fixture', baseUrl: 'http://localhost:21901/v1', inputPerMillion: '', imageInputPerMillion: '', outputPerMillion: '', priceCurrency: '' })
       await state.handleConfirm()
     } })
     assert.equal(confirmed.length, 1)
@@ -278,8 +287,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: invalid prices and currency prevent submission`, async () => {
     for (const price of ['-1', 'Infinity', 'invalid']) {
-      const { confirmed } = await renderEditor({ locale, scenario: async state => {
-        Object.assign(state.formData.value, { modelName: 'fixture', baseUrl: 'http://localhost:21901/v1', inputPerMillion: price })
+      const { confirmed } = await renderEditor({ locale, modelType: 'rerank', scenario: async state => {
+        Object.assign(state.formData.value, { modelName: 'fixture', baseUrl: 'http://localhost:21901/v1', imageInputPerMillion: price })
         await state.handleConfirm()
       } })
       assert.equal(confirmed.length, 0)

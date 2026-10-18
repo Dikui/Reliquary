@@ -62,8 +62,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	trace := types.ModelCallTraceFromContext(req.Context())
 	call.ProcessingAttempt, call.SpanID = trace.Attempt, trace.SpanID
-	body := &accountingBody{ctx: req.Context(), call: call, write: session.Accounting.Write, capture: captureEnabled(m), embedding: m.Type == types.ModelTypeEmbedding, secrets: requestSecrets(req, m)}
-	if body.capture && req.Body != nil {
+	body := &accountingBody{ctx: req.Context(), call: call, write: session.Accounting.Write, capture: captureEnabled(m), embedding: m.Type == types.ModelTypeEmbedding, inputOnly: m.Type == types.ModelTypeEmbedding || m.Type == types.ModelTypeRerank, secrets: requestSecrets(req, m)}
+	if body.inputOnly {
+		call.ImageInputPrice = clonePrice(m.Parameters.Pricing.ImageInputPerMillion)
+	}
+	if (body.capture || body.inputOnly) && req.Body != nil {
 		// Replayable JSON bodies retain the complete input even when dialing fails.
 		if req.GetBody != nil {
 			if copy, err := req.GetBody(); err == nil {
@@ -128,6 +131,7 @@ func httpErrorCategory(code int) string {
 type accountingBody struct {
 	capture      bool
 	embedding    bool
+	inputOnly    bool
 	secrets      []string
 	request      *capturedRequest
 	requestRaw   string
@@ -312,7 +316,89 @@ func (b *accountingBody) usage(raw json.RawMessage) {
 			b.call.InputTokens = token(v)
 		}
 	}
+	if !b.inputOnly {
+		return
+	}
+	for _, key := range []string{"input_tokens_details", "prompt_tokens_details"} {
+		var details map[string]json.RawMessage
+		if json.Unmarshal(u[key], &details) == nil {
+			b.call.TextInputTokens = token(details["text_tokens"])
+			b.call.ImageInputTokens = token(details["image_tokens"])
+		}
+	}
+	// DashScope reports text input_tokens beside image_tokens, rather than a combined input count.
+	if images := token(u["image_tokens"]); images != nil {
+		b.call.TextInputTokens = token(u["input_tokens"])
+		b.call.ImageInputTokens = images
+		b.call.InputTokens = token(u["total_tokens"])
+		if b.call.TextInputTokens != nil {
+			total := *b.call.TextInputTokens + *images
+			b.call.InputTokens = &total
+		}
+	} else if b.call.InputTokens == nil && b.call.TextInputTokens != nil && b.call.ImageInputTokens != nil {
+		total := *b.call.TextInputTokens + *b.call.ImageInputTokens
+		b.call.InputTokens = &total
+	}
 }
+
+func hasImageInput(value any) bool {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, part := range value {
+			if (key == "image" || key == "image_url") && part != nil && part != "" {
+				return true
+			}
+			if hasImageInput(part) {
+				return true
+			}
+		}
+	case []any:
+		for _, part := range value {
+			if hasImageInput(part) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func inputCost(call *types.ModelCall, request string) *float64 {
+	var payload struct {
+		Input     any `json:"input"`
+		Documents any `json:"documents"`
+	}
+	_ = json.Unmarshal([]byte(request), &payload)
+	images := hasImageInput(payload.Input) || hasImageInput(payload.Documents)
+	if call.InputTokens == nil {
+		return nil
+	}
+	if call.ImageInputTokens != nil && call.TextInputTokens == nil && *call.ImageInputTokens <= *call.InputTokens {
+		text := *call.InputTokens - *call.ImageInputTokens
+		call.TextInputTokens = &text
+	}
+	if call.ImageInputTokens == nil && !images {
+		call.TextInputTokens = call.InputTokens
+	}
+	if call.TextInputTokens == nil || images && call.ImageInputTokens == nil {
+		return nil
+	}
+	text, image := *call.TextInputTokens, int64(0)
+	if call.ImageInputTokens != nil {
+		image = *call.ImageInputTokens
+	}
+	if text+image != *call.InputTokens || text > 0 && call.InputPrice == nil || image > 0 && call.ImageInputPrice == nil {
+		return nil
+	}
+	cost := 0.0
+	if call.InputPrice != nil {
+		cost += float64(text) * *call.InputPrice / 1e6
+	}
+	if call.ImageInputPrice != nil {
+		cost += float64(image) * *call.ImageInputPrice / 1e6
+	}
+	return &cost
+}
+
 func (b *accountingBody) finish(err error) {
 	b.once.Do(func() {
 		b.mu.Lock()
@@ -341,7 +427,16 @@ func (b *accountingBody) finish(err error) {
 			c.Success = false
 			c.ErrorCategory = "invalid_response"
 		}
-		if c.CostStatus != "not_applicable" && c.InputTokens != nil && c.InputPrice != nil {
+		request := b.requestRaw
+		if !b.requestReady {
+			request = b.request.snapshot()
+		}
+		if c.CostStatus != "not_applicable" && b.inputOnly {
+			c.Cost = inputCost(c, request)
+			if c.Cost != nil {
+				c.CostStatus = "calculated"
+			}
+		} else if !b.inputOnly && c.CostStatus != "not_applicable" && c.InputTokens != nil && c.InputPrice != nil {
 			cost := float64(*c.InputTokens) * (*c.InputPrice) / 1e6
 			inputOnly := types.ModelTierFromContext(b.ctx) == types.ModelTierEmbedding || types.ModelTierFromContext(b.ctx) == types.ModelTierRerank
 			if c.OutputTokens != nil && c.OutputPrice != nil {
@@ -357,10 +452,6 @@ func (b *accountingBody) finish(err error) {
 			raw := b.response.String()
 			if b.embedding && c.Success {
 				raw = vectorSummary(raw)
-			}
-			request := b.requestRaw
-			if !b.requestReady {
-				request = b.request.snapshot()
 			}
 			c.Content = &types.ModelCallContent{ID: c.ID, Request: protectContent(request, b.secrets, b.ctx), Response: protectContent(raw, b.secrets, b.ctx), ResponseType: b.responseType, HTTPStatus: b.httpStatus, Complete: !b.stream && b.eof || b.stream && b.terminal}
 			b.response.Reset()

@@ -1,4 +1,7 @@
 export const ikb18Zh = {
+  priceTextInput: '文本输入单价（每百万 token）', priceImageInput: '图片输入单价（每百万 token）',
+  priceModalityHint: '文本与图片分别计费。图片单价留空时，含图片的调用费用可能显示未知；接口未返回分项用量时也会显示未知。',
+  textTokens: '文本 token', imageTokens: '图片 token',
   systemMediaDescription: '外部个人的观点：专家、分析师、KOL 的评论与观点资料。', priceTitle: '模型价格', priceInput: '输入单价（每百万 token）', priceOutput: '输出单价（每百万 token）', priceCurrency: '币种', priceHint: '单价可留空。币种使用三位字母，未填写时为 USD。全部留空清除价格；历史调用价格不变。', priceInvalid: '单价必须为非负有限数值，币种必须为三位字母。', priceNotApplicable: 'ChatGPT 订阅调用不按 token 单价计费。', hasUpdate: '有更新的记录', systemOfficial: '官方信息', systemMedia: '媒体信息', systemReferences: '参考文档', systemPersonal: '个人产出', systemAIOutput: 'AI产出', moreFilters: '更多筛选', markdown: 'Markdown 资料', scope: '库范围', all: '全部库', library: '所属库', catalog: '库', create: '从模板新建库',
   template: '模板', directory: '目录名', systemRole: '系统角色', custom: '自建库',
   name: '名称', description: '说明', review: '收录审核标准', evidence: '来源证据规则',
@@ -24,6 +27,9 @@ export const ikb18Zh = {
   segmentReason: '分段审核原因',
 }
 export const ikb18En: typeof ikb18Zh = {
+  priceTextInput: 'Text input price per million tokens', priceImageInput: 'Image input price per million tokens',
+  priceModalityHint: 'Text and images are priced separately. Calls with images may show an unknown cost if the image price or itemized usage is missing.',
+  textTokens: 'Text tokens', imageTokens: 'Image tokens',
   systemMediaDescription: 'Views from external individuals: commentary and opinion materials from experts, analysts, and opinion leaders.', priceTitle: 'Model pricing', priceInput: 'Input price per million tokens', priceOutput: 'Output price per million tokens', priceCurrency: 'Currency', priceHint: 'Prices may be empty. Use a three-letter currency code; USD is the default. Clear all fields to remove pricing. Past calls keep their prices.', priceInvalid: 'Prices must be finite non-negative numbers and currency must use three letters.', priceNotApplicable: 'ChatGPT subscription calls do not use token pricing.', hasUpdate: 'A newer record is available', systemOfficial: 'Official information', systemMedia: 'Media information', systemReferences: 'Reference documents', systemPersonal: 'Personal output', systemAIOutput: 'AI output', moreFilters: 'More filters', markdown: 'Markdown material', scope: 'Library scope', all: 'All libraries', library: 'Library', catalog: 'Libraries', create: 'Create library from template',
   template: 'Template', directory: 'Directory', systemRole: 'System role', custom: 'Custom library',
   name: 'Name', description: 'Description', review: 'Intake review criteria', evidence: 'Source evidence rule',

@@ -26,7 +26,7 @@ type TableManifest struct {
 	Data            []map[string]any    `json:"data,omitempty"`
 	JSONNulls       map[string][]string `json:"json_nulls,omitempty"`
 	legacySHA256    map[int]string
-	legacyCalls     *TableManifest
+	legacyCalls     map[int64]*TableManifest
 }
 type Retrieval struct {
 	Query string   `json:"query"`
@@ -486,6 +486,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectEvaluationManifest(expected, actual)
 	expected, actual = projectModelCallManifest(expected, actual)
 	expected, actual = projectCallContentManifest(expected, actual)
+	expected, actual = projectCallPricingManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}

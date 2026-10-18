@@ -45,3 +45,36 @@ func TestCallContentMigration23To24PreservesEveryRow(t *testing.T) {
 	require.NoError(t, m.Migrate(24))
 	require.Equal(t, after, baselineContents(t, db))
 }
+
+func TestCallModalityMigrationPreservesEveryRow(t *testing.T) {
+	db := Open(t)
+	directory, err := filepath.Abs("../../../migrations/versioned")
+	require.NoError(t, err)
+	m, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := m.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, m.Migrate(28))
+	require.NoError(t, db.Exec(`INSERT INTO model_calls(id,space_id,requested_at,model_id,model_name,provider,purpose,currency,cost,cost_status,duration_ms,success,error_category,attempt)
+ VALUES('00000000-0000-0000-0000-000000000029',1,'2026-10-19T01:02:03Z','old-model','Old model','fixture','rerank','USD',0.1,'calculated',123,true,'',1)`).Error)
+	before := baselineContents(t, db)
+	require.NoError(t, m.Migrate(29))
+	after := baselineContents(t, db)
+	for table, original := range before {
+		if table == "model_calls" {
+			var rows []map[string]any
+			require.NoError(t, json.Unmarshal([]byte(original), &rows))
+			for _, row := range rows {
+				row["text_input_tokens"], row["image_input_tokens"], row["image_input_price"] = nil, nil, nil
+			}
+			expected, err := json.Marshal(rows)
+			require.NoError(t, err)
+			require.JSONEq(t, string(expected), after[table])
+		} else {
+			require.JSONEq(t, original, after[table], table)
+		}
+	}
+	require.NoError(t, m.Migrate(28))
+	require.Equal(t, before, baselineContents(t, db))
+	require.NoError(t, m.Migrate(29))
+	require.Equal(t, after, baselineContents(t, db))
+}

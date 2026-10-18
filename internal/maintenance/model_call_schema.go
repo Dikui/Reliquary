@@ -31,37 +31,43 @@ func backupOnlyTableManifest(ctx context.Context, db *gorm.DB, table string, rul
 	}
 	canonical := canonicalRows(table, rows)
 	if table == "model_calls" {
-		legacy := []map[string]any{}
-		defaults := true
-		for _, row := range canonical {
-			copy := map[string]any{}
-			for key, value := range row {
-				copy[key] = value
+		result.legacyCalls = map[int64]*TableManifest{}
+		for _, version := range []int64{23, 28} {
+			removed := map[string]any{"text_input_tokens": nil, "image_input_tokens": nil, "image_input_price": nil}
+			if version < 24 {
+				removed["processing_attempt"] = 0
+				removed["span_id"] = ""
 			}
-			if value, ok := copy["processing_attempt"]; ok && fmt.Sprint(value) != "0" {
-				defaults = false
-			}
-			if value, ok := copy["span_id"]; ok && value != "" {
-				defaults = false
-			}
-			delete(copy, "processing_attempt")
-			delete(copy, "span_id")
-			legacy = append(legacy, copy)
-		}
-		if defaults {
-			projected := TableManifest{Rows: int64(len(legacy)), Columns: []string{}, BackupRowHashes: map[string]string{}}
-			for _, col := range result.Columns {
-				if col != "processing_attempt" && col != "span_id" {
-					projected.Columns = append(projected.Columns, col)
+			legacy := []map[string]any{}
+			defaults := true
+			for _, row := range canonical {
+				copy := map[string]any{}
+				for key, value := range row {
+					copy[key] = value
 				}
+				for column, defaultValue := range removed {
+					if value, ok := copy[column]; ok && fmt.Sprint(value) != fmt.Sprint(defaultValue) {
+						defaults = false
+					}
+					delete(copy, column)
+				}
+				legacy = append(legacy, copy)
 			}
-			data, _ := json.Marshal(legacy)
-			projected.SHA256 = sum(data)
-			for _, row := range legacy {
-				data, _ := json.Marshal(row)
-				projected.BackupRowHashes[rowIdentity(row)] = sum(data)
+			if defaults {
+				projected := TableManifest{Rows: int64(len(legacy)), Columns: []string{}, BackupRowHashes: map[string]string{}}
+				for _, col := range result.Columns {
+					if _, omit := removed[col]; !omit {
+						projected.Columns = append(projected.Columns, col)
+					}
+				}
+				data, _ := json.Marshal(legacy)
+				projected.SHA256 = sum(data)
+				for _, row := range legacy {
+					data, _ := json.Marshal(row)
+					projected.BackupRowHashes[rowIdentity(row)] = sum(data)
+				}
+				result.legacyCalls[version] = &projected
 			}
-			result.legacyCalls = &projected
 		}
 	}
 	for _, row := range canonical {
@@ -97,7 +103,7 @@ func projectModelCallManifest(expected, actual *Manifest) (*Manifest, *Manifest)
 	}
 	columns := []string{}
 	for column := range BackupOnlyTables["model_calls"].Columns() {
-		if column != "processing_attempt" && column != "span_id" {
+		if column != "processing_attempt" && column != "span_id" && column != "text_input_tokens" && column != "image_input_tokens" && column != "image_input_price" {
 			columns = append(columns, column)
 		}
 	}
@@ -119,8 +125,8 @@ func projectCallContentManifest(expected, actual *Manifest) (*Manifest, *Manifes
 	for name, table := range actual.Tables {
 		right.Tables[name] = table
 	}
-	if table, ok := actual.Tables["model_calls"]; ok && table.legacyCalls != nil {
-		right.Tables["model_calls"] = *table.legacyCalls
+	if table, ok := actual.Tables["model_calls"]; ok && table.legacyCalls[23] != nil {
+		right.Tables["model_calls"] = *table.legacyCalls[23]
 	}
 	for _, name := range []string{"model_call_contents", "model_call_content_deletions"} {
 		if _, ok := expected.Tables[name]; !ok {
@@ -134,4 +140,21 @@ func projectCallContentManifest(expected, actual *Manifest) (*Manifest, *Manifes
 	}
 
 	return &left, &right
+}
+
+func projectCallPricingManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 29 || actual.SchemaVersion < 29 {
+		return expected, actual
+	}
+	table, ok := actual.Tables["model_calls"]
+	if !ok || table.legacyCalls[28] == nil {
+		return expected, actual
+	}
+	right := *actual
+	right.Tables = make(map[string]TableManifest, len(actual.Tables))
+	for name, item := range actual.Tables {
+		right.Tables[name] = item
+	}
+	right.Tables["model_calls"] = *table.legacyCalls[28]
+	return expected, &right
 }

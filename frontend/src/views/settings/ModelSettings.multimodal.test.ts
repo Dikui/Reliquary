@@ -18,7 +18,7 @@ const stub = defineComponent({ setup: (_, { attrs, slots }) => () => h('div', at
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: the actual model settings load the image capability and persist it through the model API`, async () => {
     const calls: { path: string; payload?: any }[] = []
-    let model = { id: 'image-model', name: 'local-siglip', display_name: 'Image model', type: 'Embedding', source: 'remote', parameters: { pricing: { input_per_million: 2, output_per_million: 4, currency: 'USD' }, base_url: 'http://localhost:18092/v1', provider: 'generic', embedding_parameters: { dimension: 512, supports_dimension_override: false, supports_images: true, multimodal_format: 'jina' } } }
+    let model = { id: 'image-model', name: 'local-siglip', display_name: 'Image model', type: 'Embedding', source: 'remote', parameters: { pricing: { input_per_million: 2, image_input_per_million: 8, output_per_million: null, currency: 'USD' }, base_url: 'http://localhost:18092/v1', provider: 'generic', embedding_parameters: { dimension: 512, supports_dimension_override: false, supports_images: true, multimodal_format: 'jina' } } }
     const i18n = createI18n({ legacy: false, locale, messages })
     const request = {
       get: async (path: string) => { calls.push({ path }); return { success: true, data: [structuredClone(model)] } },
@@ -53,13 +53,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       onServerPrefetch(async () => {
         await state.loadModels()
         const loaded = state.allLegacyModels.value[0]
-        assert.deepEqual(loaded.pricing, { input_per_million: 2, output_per_million: 4, currency: 'USD' })
+        assert.deepEqual(loaded.pricing, { input_per_million: 2, image_input_per_million: 8, output_per_million: null, currency: 'USD' })
         assert.equal(loaded.supportsImages, true)
         assert.equal(loaded.multimodalFormat, 'jina')
         state.editModel('embedding', loaded)
-        await state.handleModelSave({ ...state.editingModel.value, displayName: 'Updated image model', pricing: { input_per_million: 3, output_per_million: null, currency: 'CNY' } })
+        await state.handleModelSave({ ...state.editingModel.value, displayName: 'Updated image model', pricing: { input_per_million: 3, image_input_per_million: 9, output_per_million: null, currency: 'CNY' } })
         assert.equal(state.allLegacyModels.value[0].supportsImages, true)
-        assert.deepEqual(state.allLegacyModels.value[0].pricing, { input_per_million: 3, output_per_million: null, currency: 'CNY' })
+        assert.deepEqual(state.allLegacyModels.value[0].pricing, { input_per_million: 3, image_input_per_million: 9, output_per_million: null, currency: 'CNY' })
         await state.handleModelSave({ ...state.allLegacyModels.value[0], pricing: null })
         assert.equal(state.allLegacyModels.value[0].pricing, null)
       })
@@ -72,7 +72,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const html = await renderToString(app)
     assert.deepEqual(failures, []); assert.deepEqual(warnings, [])
     const save = calls.find(call => call.payload)!
-    assert.deepEqual(save.payload.parameters.pricing, { input_per_million: 3, output_per_million: null, currency: 'CNY' })
+    assert.deepEqual(save.payload.parameters.pricing, { input_per_million: 3, image_input_per_million: 9, output_per_million: null, currency: 'CNY' })
     assert.equal(calls.filter(call => call.payload).at(-1)!.payload.parameters.pricing, null)
     assert.equal(save.path, '/api/v1/models/image-model')
     assert.equal(save.payload.parameters.embedding_parameters.supports_images, true)

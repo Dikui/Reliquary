@@ -200,6 +200,94 @@ func TestPriceSnapshotAndSubscription(t *testing.T) {
 	require.InDelta(t, 2, *rows[2].InputPrice, 1e-10)
 }
 
+func TestMultimodalInputPricingAndSnapshot(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		model   types.ModelType
+		tier    types.ModelTier
+		request string
+		usage   string
+	}{
+		{"embedding", types.ModelTypeEmbedding, types.ModelTierEmbedding, `{"input":{"contents":[{"text":"hello"},{"image":"data:image/png;base64,aGVsbG8="}]}}`, `{"input_tokens":1000000,"image_tokens":2000000,"total_tokens":3000000}`},
+		{"rerank", types.ModelTypeRerank, types.ModelTierRerank, `{"input":{"query":"hello","documents":[{"text":"world"},{"image":"data:image/png;base64,aGVsbG8="}]}}`, `{"input_tokens":3000000,"output_tokens":3,"total_tokens":3000003,"input_tokens_details":{"text_tokens":1000000,"image_tokens":2000000}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := []types.ModelCall{}
+			m := model(tc.name, tc.model)
+			m.Parameters.Pricing.ImageInputPerMillion = price(6)
+			response := `{"usage":` + tc.usage + `}`
+			client := modelcalls.WrapClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				*m.Parameters.Pricing.InputPerMillion = 20
+				if m.Parameters.Pricing.ImageInputPerMillion != nil {
+					*m.Parameters.Pricing.ImageInputPerMillion = 60
+				}
+				return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(response))}, nil
+			})})
+			invoke := func(request string) {
+				ctx := types.WithModelCallAccounting(types.WithModelTier(callCtx(tc.name), tc.tier), accounting(m, &rows))
+				req, err := http.NewRequestWithContext(ctx, "POST", "https://models.example", strings.NewReader(request))
+				require.NoError(t, err)
+				resp, err := client.Do(req)
+				require.NoError(t, err)
+				_, err = io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+			}
+			invoke(tc.request)
+			require.Len(t, rows, 1)
+			require.EqualValues(t, 3000000, *rows[0].InputTokens)
+			require.EqualValues(t, 1000000, *rows[0].TextInputTokens)
+			require.EqualValues(t, 2000000, *rows[0].ImageInputTokens)
+			require.Equal(t, "calculated", rows[0].CostStatus)
+			require.InDelta(t, 14, *rows[0].Cost, 1e-10)
+			require.InDelta(t, 2, *rows[0].InputPrice, 1e-10)
+			require.InDelta(t, 6, *rows[0].ImageInputPrice, 1e-10)
+			m.Parameters.Pricing.ImageInputPerMillion = nil
+			response = `{"usage":{"total_tokens":1000000}}`
+			invoke(`{"input":[{"text":"data:image/png;base64,aGVsbG8= {\"image\":\"example\"}"}]}`)
+			require.Len(t, rows, 2)
+			require.Equal(t, "calculated", rows[1].CostStatus)
+			require.EqualValues(t, 1000000, *rows[1].TextInputTokens)
+			require.Nil(t, rows[1].ImageInputTokens)
+			require.InDelta(t, 20, *rows[1].Cost, 1e-10)
+		})
+	}
+}
+
+func TestMultimodalInputPricingRequiresUsageAndImagePrice(t *testing.T) {
+	t.Setenv("RELIQUARY_MODEL_CALL_CAPTURE_RERANK", "false")
+	for _, tc := range []struct {
+		name       string
+		usage      string
+		imagePrice *float64
+	}{
+		{"total-only", `{"total_tokens":3000000}`, price(6)},
+		{"missing-price", `{"input_tokens":3000000,"prompt_tokens_details":{"text_tokens":1000000,"image_tokens":2000000}}`, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := []types.ModelCall{}
+			m := model("rerank", types.ModelTypeRerank)
+			m.Parameters.Pricing.ImageInputPerMillion = tc.imagePrice
+			client := modelcalls.WrapClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"usage":` + tc.usage + `}`))}, nil
+			})})
+			ctx := types.WithModelCallAccounting(types.WithModelTier(callCtx("rerank"), types.ModelTierRerank), accounting(m, &rows))
+			req, err := http.NewRequestWithContext(ctx, "POST", "https://models.example", strings.NewReader(`{"input":{"documents":[{"text":"hello"},{"image":"data:image/png;base64,aGVsbG8="}]}}`))
+			require.NoError(t, err)
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			_, err = io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			require.Len(t, rows, 1)
+			require.EqualValues(t, 3000000, *rows[0].InputTokens)
+			require.Equal(t, "unknown", rows[0].CostStatus)
+			require.Nil(t, rows[0].Cost)
+			require.Nil(t, rows[0].Content)
+		})
+	}
+}
+
 func TestEmbeddingActualRetries(t *testing.T) {
 	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
 	secutils.ResetSSRFWhitelistForTest()

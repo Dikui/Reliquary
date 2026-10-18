@@ -382,10 +382,12 @@
         <h3>{{ $t('ikb18.priceTitle') }}</h3>
         <p v-if="formData.source === 'chatgpt'" class="form-desc">{{ $t('ikb18.priceNotApplicable') }}</p>
         <template v-else>
-          <div class="form-item"><label class="form-label" for="model-price-input">{{ $t('ikb18.priceInput') }}</label><t-input id="model-price-input" v-model="formData.inputPerMillion" type="number" :min="0" :aria-label="$t('ikb18.priceInput')" /></div>
-          <div class="form-item"><label class="form-label" for="model-price-output">{{ $t('ikb18.priceOutput') }}</label><t-input id="model-price-output" v-model="formData.outputPerMillion" type="number" :min="0" :aria-label="$t('ikb18.priceOutput')" /></div>
+          <div class="form-item"><label class="form-label" for="model-price-input">{{ $t(activeModelType === 'chat' ? 'ikb18.priceInput' : 'ikb18.priceTextInput') }}</label><t-input id="model-price-input" v-model="formData.inputPerMillion" type="number" :min="0" :aria-label="$t(activeModelType === 'chat' ? 'ikb18.priceInput' : 'ikb18.priceTextInput')" /></div>
+          <div v-if="activeModelType !== 'chat'" class="form-item"><label class="form-label" for="model-price-image">{{ $t('ikb18.priceImageInput') }}</label><t-input id="model-price-image" v-model="formData.imageInputPerMillion" type="number" :min="0" :aria-label="$t('ikb18.priceImageInput')" /></div>
+          <div v-else class="form-item"><label class="form-label" for="model-price-output">{{ $t('ikb18.priceOutput') }}</label><t-input id="model-price-output" v-model="formData.outputPerMillion" type="number" :min="0" :aria-label="$t('ikb18.priceOutput')" /></div>
           <div class="form-item"><label class="form-label" for="model-price-currency">{{ $t('ikb18.priceCurrency') }}</label><t-input id="model-price-currency" v-model="formData.priceCurrency" placeholder="USD" :maxlength="3" :aria-label="$t('ikb18.priceCurrency')" /></div>
           <p class="form-desc">{{ $t('ikb18.priceHint') }}</p>
+          <p v-if="activeModelType !== 'chat'" class="form-desc">{{ $t('ikb18.priceModalityHint') }}</p>
         </template>
       </section>
 
@@ -426,6 +428,7 @@ interface CustomHeaderItem {
 interface ModelFormData {
   pricing?: import('@/api/model').ModelPricing | null
   inputPerMillion?: number | string | null
+  imageInputPerMillion?: number | string | null
   outputPerMillion?: number | string | null
   priceCurrency?: string
   id: string
@@ -675,7 +678,7 @@ const formData = ref<ModelFormData>({
   supportsVision: false,
   contextWindow: undefined,
   maxConcurrency: undefined,
-  inputPerMillion: '', outputPerMillion: '', priceCurrency: '',
+  inputPerMillion: '', imageInputPerMillion: '', outputPerMillion: '', priceCurrency: '',
   thinkingControl: defaultThinkingControl('generic', ''),
   customHeaders: [],
 })
@@ -855,6 +858,7 @@ watch(() => props.visible, (val) => {
           multimodalFormat: props.modelData.multimodalFormat || 'jina',
           apiKey: '',
           inputPerMillion: props.modelData.pricing?.input_per_million ?? '',
+          imageInputPerMillion: props.modelData.pricing?.image_input_per_million ?? '',
           outputPerMillion: props.modelData.pricing?.output_per_million ?? '',
           priceCurrency: props.modelData.pricing?.currency || '',
           customHeaders: Array.isArray(props.modelData.customHeaders)
@@ -910,7 +914,7 @@ const resetForm = () => {
     supportsVision: false,
     contextWindow: undefined,
     maxConcurrency: undefined,
-    inputPerMillion: '', outputPerMillion: '', priceCurrency: '',
+    inputPerMillion: '', imageInputPerMillion: '', outputPerMillion: '', priceCurrency: '',
     thinkingControl: defaultThinkingControl('generic', ''),
     customHeaders: [],
   }
@@ -1340,13 +1344,14 @@ const handleConfirm = async () => {
     }
     const parseRate = (value: number | string | null | undefined) => value == null || String(value).trim() === '' ? null : Number(value)
     const inputRate = parseRate(formData.value.inputPerMillion)
-    const outputRate = parseRate(formData.value.outputPerMillion)
+    const imageRate = activeModelType.value !== 'chat' ? parseRate(formData.value.imageInputPerMillion) : null
+    const outputRate = activeModelType.value === 'chat' ? parseRate(formData.value.outputPerMillion) : null
     const currency = (formData.value.priceCurrency || '').trim().toUpperCase()
-    if ([inputRate, outputRate].some(value => value !== null && (!Number.isFinite(value) || value < 0)) || (currency && !/^[A-Z]{3}$/.test(currency))) {
+    if ([inputRate, imageRate, outputRate].some(value => value !== null && (!Number.isFinite(value) || value < 0 || value > 1e9)) || (currency && !/^[A-Z]{3}$/.test(currency))) {
       MessagePlugin.warning(t('ikb18.priceInvalid'))
       return
     }
-    const pricing = formData.value.source === 'chatgpt' || (inputRate === null && outputRate === null && !currency) ? null : { input_per_million: inputRate, output_per_million: outputRate, currency: currency || 'USD' }
+    const pricing = formData.value.source === 'chatgpt' || (inputRate === null && imageRate === null && outputRate === null && !currency) ? null : { input_per_million: inputRate, ...(activeModelType.value !== 'chat' ? { image_input_per_million: imageRate } : {}), output_per_million: outputRate, currency: currency || 'USD' }
     // 执行表单验证
     await formRef.value?.validate()
 

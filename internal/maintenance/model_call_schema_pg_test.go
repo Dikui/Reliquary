@@ -53,6 +53,30 @@ func TestOldModelCallManifestProjectsOnlyEmptyLedger(t *testing.T) {
 	require.NotContains(t, old.Tables, "model_calls")
 }
 
+func TestCallPricingManifestPreservesOldLedgerAndDetectsNewUsage(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx := context.Background()
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	migration, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, migration.Migrate(28))
+	call := types.ModelCall{ID: uuid.NewString(), SpaceID: 1, RequestedAt: time.Now().UTC(), ModelID: "m", ModelName: "m", Provider: "test", Purpose: types.CallPurposeRerank, Currency: "USD", CostStatus: "unknown", Attempt: 1, Success: true}
+	require.NoError(t, db.Omit("TextInputTokens", "ImageInputTokens", "ImageInputPrice").Create(&call).Error)
+	before, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, migration.Migrate(29))
+	after, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
+	require.NoError(t, err)
+	require.Empty(t, CompareManifest(before, after))
+	require.NoError(t, db.Exec("UPDATE model_calls SET text_input_tokens=10,image_input_tokens=20,image_input_price=3 WHERE id=?", call.ID).Error)
+	changed, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
+	require.NoError(t, err)
+	require.Contains(t, CompareManifest(before, changed), "table model_calls")
+	require.Contains(t, CompareManifest(after, changed), "table model_calls")
+}
+
 func TestCallContentManifestDetectsTamperingAndProjectsVersion23(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.Background()
@@ -63,7 +87,7 @@ func TestCallContentManifestDetectsTamperingAndProjectsVersion23(t *testing.T) {
 	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
 	require.NoError(t, migration.Migrate(23))
 	call := types.ModelCall{ID: uuid.NewString(), SpaceID: 1, RequestedAt: time.Now().UTC(), ModelID: "m", ModelName: "m", Provider: "test", Purpose: types.CallPurposeOther, Currency: "USD", CostStatus: "unknown", Attempt: 1, Success: true}
-	require.NoError(t, db.Omit("ProcessingAttempt", "SpanID").Create(&call).Error)
+	require.NoError(t, db.Omit("ProcessingAttempt", "SpanID", "TextInputTokens", "ImageInputTokens", "ImageInputPrice").Create(&call).Error)
 	before, err := BuildManifest(ctx, db, t.TempDir(), t.TempDir())
 	require.NoError(t, err)
 	require.NoError(t, migration.Migrate(24))

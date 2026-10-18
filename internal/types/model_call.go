@@ -56,13 +56,14 @@ func NormalizeModelCallPurpose(stage string, tier ModelTier) ModelCallPurpose {
 
 // Prices are currency units per million tokens. Nil means unconfigured.
 type ModelPricing struct {
-	InputPerMillion  *float64 `json:"input_per_million" yaml:"input_per_million"`
-	OutputPerMillion *float64 `json:"output_per_million" yaml:"output_per_million"`
-	Currency         string   `json:"currency" yaml:"currency"`
+	InputPerMillion      *float64 `json:"input_per_million" yaml:"input_per_million"`
+	ImageInputPerMillion *float64 `json:"image_input_per_million" yaml:"image_input_per_million"`
+	OutputPerMillion     *float64 `json:"output_per_million" yaml:"output_per_million"`
+	Currency             string   `json:"currency" yaml:"currency"`
 }
 
 func (p ModelPricing) Validate() error {
-	for _, v := range []*float64{p.InputPerMillion, p.OutputPerMillion} {
+	for _, v := range []*float64{p.InputPerMillion, p.ImageInputPerMillion, p.OutputPerMillion} {
 		if v != nil && (math.IsNaN(*v) || math.IsInf(*v, 0) || *v < 0 || *v > 1e9) {
 			return fmt.Errorf("token prices must be finite and between 0 and 1000000000")
 		}
@@ -86,8 +87,11 @@ type ModelCall struct {
 	Purpose           ModelCallPurpose  `json:"purpose"`
 	EntryID           *string           `json:"entry_id"`
 	InputTokens       *int64            `json:"input_tokens"`
+	TextInputTokens   *int64            `json:"text_input_tokens"`
+	ImageInputTokens  *int64            `json:"image_input_tokens"`
 	OutputTokens      *int64            `json:"output_tokens"`
 	InputPrice        *float64          `json:"input_price_per_million"`
+	ImageInputPrice   *float64          `json:"image_input_price_per_million"`
 	OutputPrice       *float64          `json:"output_price_per_million"`
 	Currency          string            `json:"currency"`
 	Cost              *float64          `json:"cost"`

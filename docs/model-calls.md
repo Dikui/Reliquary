@@ -9,11 +9,21 @@
 {"input_per_million": 2, "output_per_million": 4, "currency": "USD"}
 ```
 
-单位为每百万 token 的币种金额。单价可为 null，币种缺省为 USD，提供时要求三个大写字母。更新省略 pricing 会保留现有价格，显式 null 清空价格。模型响应返回 pricing。每次请求保存单价、币种和模型名称快照，历史记录不会随配置变更。
+向量、重排模型示例：
 
-网页在“设置 > 模型”的新建和编辑表单提供输入单价、输出单价和币种。两项单价可分别留空，明确的 0 表示免费；币种留空时使用 USD。三项全部清空会提交 pricing=null。保存新价格只影响之后发出的调用，历史快照保持原值。ChatGPT 订阅模型显示费用不适用说明，不提供 token 单价填写。
+```json
+{"input_per_million": 2, "image_input_per_million": 6, "output_per_million": null, "currency": "USD"}
+```
+
+单位为每百万 token 的币种金额。向量和重排模型使用 `input_per_million` 作为文本输入价，另用 `image_input_per_million` 配置图片输入价；不收取输出费用。单价可为 null，币种缺省为 USD，提供时要求三个大写字母。更新省略 pricing 会保留现有价格，显式 null 清空价格。模型响应返回 pricing。每次请求保存单价、币种和模型名称快照，历史记录不会随配置变更。
+
+网页在“设置 > 模型”的新建和编辑表单中，生成模型填写输入价、输出价；向量和重排模型填写文本输入价、图片输入价。两项单价可分别留空，明确的 0 表示免费；币种留空时使用 USD。价格与币种全部清空会提交 pricing=null。保存新价格只影响之后发出的调用，历史快照保持原值。ChatGPT 订阅模型显示费用不适用说明，不提供 token 单价填写。
 
 费用状态为 `calculated`、`unknown` 或 `not_applicable`。`calculated` 是按模型配置计算的金额，不代表提供方账单。ChatGPT 登录账号始终为 `not_applicable`，cost 为 null。无 usage 的 token 字段为 null；明确返回的 0 保持为 0。输入型 embedding 和 rerank 接受 total_tokens 作为输入 token，缺失的输出 token 保持 null。
+
+向量和重排调用在接口提供分项时保存 `text_input_tokens`、`image_input_tokens` 及 `image_input_price_per_million` 快照，`input_tokens` 为两类输入之和。费用为文本 token × 文本价 + 图片 token × 图片价，再除以一百万。图片价缺失，或含图片的请求只有总量、无法区分文本与图片时，费用保持 `unknown`。纯文本请求仍可使用总输入量计费。旧调用保留原费用与空分项，不回填估算。
+
+阿里云向量接口的顶层 `input_tokens` 仅表示文本，`image_tokens` 单列图片；`input_tokens_details` 则表示总输入的分项。重排接口文档只承诺 `total_tokens`，混合输入可能无法计算费用。字段依据：[多模态向量 API](https://www.alibabacloud.com/help/en/model-studio/multimodal-embedding-api-reference)、[重排 API](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
 
 所有接口位于 `/api/v1`，网页不带凭据，外部工具使用 API Key 认证：
 
