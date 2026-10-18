@@ -53,7 +53,7 @@ func (s *entryService) prepareArticleProcessing(ctx context.Context, library *ty
 		}
 	}
 	prompt := libraryProcessingPrompt(library, k)
-	prompt += "\n图片附件与输入 images 的顺序一一对应。image_descriptions 的 index 必须使用 images 中列出的原编号，不得重新编号。没有提供的图片不生成说明；images 为空时 image_descriptions 返回空数组。"
+	prompt += "\n图片附件与输入 images 的顺序一一对应。仅依据已提供的可读图片理解文章，不猜测缺失或不可读图片的内容。"
 	if input.ContentTypeHint != "" {
 		prompt += "\ncontent_type_hint 是外部工具对内容类型的建议，仅作参考输入，不替代你的判断。仍须按文章内容判定主要用途。"
 	}
@@ -346,7 +346,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		if err := utils.ParseLLMJsonResponse(raw, &output); err != nil {
 			return err
 		}
-		encoded, _ := json.Marshal(map[string]any{"title": output.Title, "summary": output.Summary, "entities": []any{}, "topics": []string{}, "relations": []extractedRelation{}, "image_descriptions": []extractedImage{}})
+		encoded, _ := json.Marshal(map[string]any{"title": output.Title, "summary": output.Summary, "entities": []any{}, "topics": []string{}, "relations": []extractedRelation{}})
 		checked, err := parseArticleProcessingResult(string(encoded))
 		if err == nil && title == "" && checked.Title == "" {
 			return errors.New("summary merge output is missing a generated title")

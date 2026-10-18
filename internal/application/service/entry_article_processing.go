@@ -30,8 +30,8 @@ entities 只保留有独立身份、对理解本文有实质作用的对象：�
 body 中的 [P数字] 是程序添加的证据段落编号，不属于原文。实体和关系只引用本段实际提供的编号；不能引用 context_before。不要重抄证据或计算字符偏移。保留段落中的条件、时间、否定、假设和发言归属，不能把演示数据写成实际结果。
 description 必须脱离本文也能独立读懂：涉及另一个对象时直接写完整名称，不使用“前者/后者/该公司”等依赖上下文的代称，尤其不能混淆产品提供方与客户。
 topics 只能从输入 existing_topics 中选择符合名称和说明的主题 ID，可选多个，也可为空数组，禁止创建主题或编造 ID。
-如果附有图片，按输入图片序号结合上下文理解文章，并输出每张图片的说明。
-输出所有字段，格式：{"title":"资料标题","content_type":"所属库类型","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[{"name":"名称","type":"company","aliases":["别名"],"description":"原文支持的简短介绍","relevance":"central","evidence_ids":[1]}],"topics":["已给定的主题 ID"],"relations":[],"image_descriptions":[]}
+如果附有图片，结合上下文理解文章并将重要视觉信息纳入摘要，不输出逐图说明。
+输出所有字段，格式：{"title":"资料标题","content_type":"所属库类型","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[{"name":"名称","type":"company","aliases":["别名"],"description":"原文支持的简短介绍","relevance":"central","evidence_ids":[1]}],"topics":["已给定的主题 ID"],"relations":[]}
 segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
 
 const defaultArticleBodyChars = 24000
@@ -41,18 +41,17 @@ const defaultArticleCompletionTokens = 4096
 // articleProcessingResult keeps required fields nullable while decoding so an
 // omitted field is distinguishable from an intentionally empty array.
 type articleProcessingResult struct {
-	Title             string                           `json:"title,omitempty"`
-	Relations         []extractedRelation              `json:"relations"`
-	ImageDescriptions []extractedImage                 `json:"image_descriptions"`
-	Images            []types.ProcessingImage          `json:"images_result,omitempty"`
-	ContentType       *string                          `json:"content_type"`
-	Summary           *types.EntrySummary              `json:"summary"`
-	Entities          []articleProcessingEntity        `json:"entities"`
-	Topics            []string                         `json:"topics"`
-	Provenance        *articleProcessingProvenance     `json:"provenance,omitempty"`
-	Extensions        map[string][]SegmentContribution `json:"extensions,omitempty"`
-	RunID             string                           `json:"processing_run_id,omitempty"`
-	ResolvedEntities  map[string]string                `json:"resolved_entities,omitempty"`
+	Title            string                           `json:"title,omitempty"`
+	Relations        []extractedRelation              `json:"relations"`
+	Images           []types.ProcessingImage          `json:"images_result,omitempty"`
+	ContentType      *string                          `json:"content_type"`
+	Summary          *types.EntrySummary              `json:"summary"`
+	Entities         []articleProcessingEntity        `json:"entities"`
+	Topics           []string                         `json:"topics"`
+	Provenance       *articleProcessingProvenance     `json:"provenance,omitempty"`
+	Extensions       map[string][]SegmentContribution `json:"extensions,omitempty"`
+	RunID            string                           `json:"processing_run_id,omitempty"`
+	ResolvedEntities map[string]string                `json:"resolved_entities,omitempty"`
 }
 
 type articleProcessingTopic struct {
@@ -92,7 +91,7 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 	if len([]rune(result.Title)) > 255 || strings.ContainsAny(result.Title, "\r\n\x00") {
 		return nil, errors.New("article processing title must be a single line of at most 255 characters without NUL")
 	}
-	if result.Summary == nil || result.Entities == nil || result.Topics == nil || result.Relations == nil || result.ImageDescriptions == nil ||
+	if result.Summary == nil || result.Entities == nil || result.Topics == nil || result.Relations == nil ||
 		strings.TrimSpace(result.Summary.Overview) == "" || result.Summary.Points == nil || result.Summary.KeyTerms == nil {
 		return nil, errors.New("article processing output is missing required fields")
 	}
@@ -293,8 +292,8 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 		if input.Title == "" && result.Title == "" {
 			return errors.New("article processing output is missing a generated title")
 		}
-		result.Images, err = finalizeImageDescriptions(imageRecords, result.ImageDescriptions)
-		return err
+		result.Images = imageRecords
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("article processing call failed: %w", err)
@@ -417,7 +416,6 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		}
 	}
 	chunks, options := splitArticleBody(body, eff.ChunkingConfig)
-	options.AdditionalChunks = imageDescriptionChunks(k, result.Images, len(chunks))
 	s.processChunks(ctx, library, k, chunks, options)
 	if k.ParseStatus == types.ParseStatusFailed {
 		return errors.New(k.ErrorMessage)

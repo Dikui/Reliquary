@@ -185,22 +185,12 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。字段和错误按上文通
 
 配置见 [个人使用指南](personal-use.md) 的长文配置。默认最多 128 段，每篇顺序执行，仍受现有模型并发限制。
 
-## 联合处理的图片说明
+## 联合处理的图片输入
 
-除 AI产出外，处理调用从所属库的内容类型清单选择类型，同时输出关系和图片说明。`graph: true/false` 覆盖内容类型的图谱开关；未提供时使用所属库的配置，其他默认不抽关系。资料的内容类型修正只能选择所属库启用的类型。
+除 AI产出外，处理调用从所属库的内容类型清单选择类型，补全缺失标题并输出摘要、实体、主题和关系。`graph: true/false` 覆盖内容类型的图谱开关；未提供时使用所属库的配置，其他默认不抽关系。资料的内容类型修正只能选择所属库启用的类型。
 
-每张可读图片的说明作为独立检索块进入 BM25 与文本向量索引，不写回 Markdown 正文。处理模型须支持视觉；图片不可读或模型不支持视觉时保存跳过原因。资料详情的 `image_descriptions` 返回 `url`、`ordinal`、`description`、`skip_reason` 和 `locations`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。关系及来源通过实体详情和 [关系接口](relations-api.md) 读取。
+支持视觉的处理模型继续读取已保存原图，将重要视觉信息纳入理解和摘要。默认处理不再要求、校验或保存逐图说明，也不生成新的 `image_description` 检索块；模型额外返回的 `image_descriptions` 不参与处理结果。每段最多读取 `article_processing.max_images` 张图片，超过时增加分段。图片不可读或模型不支持视觉时保存跳过原因。
 
-普通检索的 `snippets` 中，图片说明命中包含 `chunk_type: "image_description"`，`content` 为说明文字，`match_type` 仍表示 `keyword` 或 `vector` 检索通道。`locations` 指向图片引用所在正文段落，`mapping` 为 `image_description`，字符范围和 `body_hash` 使用保存后的 Markdown 正文坐标。例如：
+资料详情沿用 `image_descriptions` 字段返回图片引用和读取状态，包括 `url`、`ordinal` 和 `locations`，有历史说明或跳过原因时附带 `description`、`skip_reason`。新处理结果不返回 `description`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。图片引用和位置保留，历史说明仍可读取，不批量清理。历史说明命中仍可返回 `chunk_type: "image_description"`；位置使用保存后的 Markdown 正文坐标。关系及来源通过实体详情和 [关系接口](relations-api.md) 读取。
 
-```json
-{
-  "chunk_type": "image_description",
-  "chunk_id": "图片说明块 ID",
-  "content": "图表显示 2026 年收入 120 万，增长 42%。",
-  "match_type": "keyword",
-  "locations": [{"heading_path": ["收入数据"], "paragraph": 3, "start": 80, "end": 120, "body_hash": "正文 SHA256", "mapping": "image_description"}]
-}
-```
-
-图片说明使用联合处理的生成模型与现有图片读取流程。每段最多读取 `article_processing.max_images` 张图片，超过时增加分段，不增加独立图片说明调用。可读图片遗漏说明或重复返回图片序号会使该段处理失败并保留检查点供重试。
+原图仍可建立图片向量，需要支持图片输入的 embedding 配置。图片命中后，`qwen3-vl-rerank` 可通过多模态接口读取窗口内每条候选最高匹配的本地原图和文章文本，取该条文本与图像得分的最大值排序。不支持图像重排、附件读取失败或模型失败时保留融合顺序；文本候选继续使用文本重排。多模态重排按融合顺序截取最多 40 个文档项作为单次窗口：每条资料占一个文本项，命中图片再占一个原图项，因此窗口至少容纳前 20 条资料（候选不足时全部纳入）。仅窗口内排序，其余候选保留原位置和顺序，不跨请求比较分数。此行为不新增配置，也不批量回填历史资料。

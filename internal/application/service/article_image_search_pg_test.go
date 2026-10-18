@@ -1,10 +1,17 @@
 package service
 
 import (
+	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"reliquary/internal/models/rerank"
 	"reliquary/internal/types"
 
 	"github.com/pgvector/pgvector-go"
@@ -102,3 +109,94 @@ func TestArticleImageSearchKeepsMatchedImageAlongsideHigherScoringText(t *testin
 }
 
 func entrySearchBool(value bool) *bool { return &value }
+
+type imageSearchReranker struct {
+	target         string
+	images         []string
+	documentCounts []int
+	err            error
+}
+
+func (r *imageSearchReranker) GetModelID() string   { return "image-rerank" }
+func (r *imageSearchReranker) GetModelName() string { return "qwen3-vl-rerank" }
+func (r *imageSearchReranker) SupportsImages() bool { return true }
+func (r *imageSearchReranker) Rerank(context.Context, string, []string) ([]rerank.RankResult, error) {
+	return nil, errors.New("image matches must use multimodal reranking")
+}
+func (r *imageSearchReranker) RerankMultimodal(_ context.Context, _ string, documents []rerank.RerankDocument) ([]rerank.RankResult, error) {
+	r.documentCounts = append(r.documentCounts, len(documents))
+	if r.err != nil {
+		return nil, r.err
+	}
+	ranks := []rerank.RankResult{}
+	for index, document := range documents {
+		score := 0.1
+		if document.Image != "" {
+			r.images = append(r.images, document.Image)
+			score = 0.2
+			if document.Image == r.target {
+				score = 0.95
+			}
+		}
+		ranks = append(ranks, rerank.RankResult{Index: index, RelevanceScore: score})
+	}
+	slices.Reverse(ranks)
+	return ranks, nil
+}
+
+func TestArticleImageSearchReranksOriginalAttachmentsWithoutDescriptions(t *testing.T) {
+	h := newEntrySearchFixture(t)
+	enableImageSearchFixture(t, h)
+	root := t.TempDir()
+	imageURIs := []string{articleImageDataURI(t, 29), articleImageDataURI(t, 58)}
+	for index, id := range []string{"a-unrelated", "z-target"} {
+		entry := h.add(t, id, "article", "2026-10-01", "research", "unrelated observation", 0)
+		path := "../attachments/" + id + "/original.png"
+		require.NoError(t, h.db.Model(entry).Update("vault_body", "![source]("+path+")").Error)
+		addImageSearchVector(t, h, entry, path, "fixture-model", []float32{0, 1, 0})
+		_, encoded, _ := strings.Cut(imageURIs[index], ",")
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		require.NoError(t, err)
+		directory := filepath.Join(root, "attachments", id)
+		require.NoError(t, os.MkdirAll(directory, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "original.png"), data, 0644))
+	}
+	baseline := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchNoCollapse()})
+	ranker := &imageSearchReranker{target: imageURIs[1]}
+	h.library.ModelTiers.Rerank = ranker.GetModelID()
+	require.NoError(t, h.db.Save(h.library).Error)
+	svc := h.svc.(*searchService)
+	svc.vault = &VaultService{root: root}
+	svc.modelService = ikb08Models{ranker: ranker}
+	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchNoCollapse()})
+	require.Equal(t, "applied", response.RerankStatus)
+	require.Equal(t, "z-target", response.Results[0].EntryID)
+	require.InDelta(t, 0.95, response.Results[0].Score, 1e-9)
+	require.ElementsMatch(t, imageURIs, ranker.images, "send original image bytes rather than generated descriptions")
+	require.Empty(t, response.Results[0].Snippets[0].Content)
+	var count int64
+	require.NoError(t, h.db.Table("chunks").Where("chunk_type='image_description'").Count(&count).Error)
+	require.Zero(t, count)
+
+	window := make([]*types.EntrySearchResult, 21)
+	for index := range window {
+		candidate := *baseline.Results[index%len(baseline.Results)]
+		window[index] = &candidate
+	}
+	tail := window[20]
+	tailScore := tail.Score
+	ranker.documentCounts = nil
+	window, status := svc.rerankEntryResults(h.ctx, h.library, "othersemantic", window)
+	require.Equal(t, "applied", status)
+	require.Equal(t, []int{40}, ranker.documentCounts, "all comparable scores come from one request")
+	require.Same(t, tail, window[20], "candidates outside the window retain their position")
+	require.Equal(t, tailScore, tail.Score)
+
+	ranker.err = errors.New("image model unavailable")
+	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchNoCollapse()})
+	require.Equal(t, "unavailable", response.RerankStatus)
+	for index, result := range baseline.Results {
+		require.Equal(t, result.EntryID, response.Results[index].EntryID)
+		require.Equal(t, result.Score, response.Results[index].Score, "model failure preserves the complete fused ranking")
+	}
+}

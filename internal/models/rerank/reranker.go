@@ -22,6 +22,18 @@ type Reranker interface {
 	GetModelID() string
 }
 
+// MultimodalReranker is an optional capability for reranking original images.
+type MultimodalReranker interface {
+	SupportsImages() bool
+	RerankMultimodal(ctx context.Context, query string, documents []RerankDocument) ([]RankResult, error)
+}
+
+// RerankDocument contains exactly one text or image data URI.
+type RerankDocument struct {
+	Text  string `json:"text,omitempty"`
+	Image string `json:"image,omitempty"`
+}
+
 type RankResult struct {
 	Index          int          `json:"index"`
 	Document       DocumentInfo `json:"document"`
