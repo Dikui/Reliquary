@@ -829,7 +829,7 @@ export default {
     previewImage: '查看图片：{title}',
     imageLoadFailed: '图片读取失败',
     title: '知识检索',
-    description: '从资料、资料和AI产出中检索，按资料展示命中内容。',
+    description: '在所选库中检索，按资料展示命中内容。',
     query: '检索内容',
     queryPlaceholder: '输入要查找的内容',
     clearQuery: '清除检索内容',
