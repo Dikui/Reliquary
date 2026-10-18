@@ -94,6 +94,15 @@ test('a 401 neither refreshes a session nor redirects to the removed login page'
  assert.ok(!f.calls.some(packet => packet.url?.includes('/auth/refresh')))
 })
 
+test('a graph 503 stays local while other 503 responses retain the global outage notice', async t => {
+ const f = fixture(t)
+ f.transport.mode = '503'
+ await assert.rejects(f.request.post('/api/v1/graph/search', {}), (error: any) => error.status === 503)
+ assert.equal(f.request.serviceUnavailable.value, false)
+ await assert.rejects(f.request.get('/api/v1/auth/me'))
+ assert.equal(f.request.serviceUnavailable.value, true)
+})
+
 for (const locale of ['zh-CN', 'en-US'] as const) {
  test(`${locale}: persisted browser session upgrades before loading current HTTP data`, async t => {
   const f = fixture(t, locale, true)

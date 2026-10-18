@@ -86,7 +86,8 @@ instance.interceptors.response.use(
       return Promise.reject({ code: error.code, message: t('error.networkError') });
     }
 
-    if ([502, 503, 504].includes(error.response.status) && error.response.data?.error?.code !== 'chatgpt_generation_paused') markServiceUnavailable();
+    const graphUnavailable = originalRequest?.url === '/api/v1/graph/search' && error.response.status === 503;
+    if ([502, 503, 504].includes(error.response.status) && !graphUnavailable && error.response.data?.error?.code !== 'chatgpt_generation_paused') markServiceUnavailable();
 
     // 处理 Nginx 413 Request Entity Too Large
     if (error.response.status === 413) {

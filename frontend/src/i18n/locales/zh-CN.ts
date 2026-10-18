@@ -1,5 +1,17 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  entityGraph: {
+    view: '关系展示方式', list: '列表', graph: '图谱', libraries: '资料库', relationTypes: '关系类型', allRelations: '全部关系', hops: '关系层数', hopCount: '{count} 跳', limit: '关系上限', query: '查询',
+    center: '中心：{name}', count: '{nodes} 个节点 · {edges} 条关系', empty: '当前条件下未找到关系', choose: '选择节点或连线，查看详情和来源。',
+    nodeDetails: '实体详情', edgeDetails: '关系详情', recenter: '以此为中心', openProfile: '打开实体档案', related: '当前图中关联 · {count}', endpoints: '关系端点', sourceUnverified: '来源未核实',
+    fit: '恢复全图', zoomIn: '放大', zoomOut: '缩小', keyboardBrowse: '浏览节点与关系', interactionHint: '拖动空白处平移，点击节点或连线查看详情。',
+    canvasLabel: '实体关系图。方向键平移，加减键缩放，Home 恢复全图；下方可用按钮浏览节点与关系。',
+    localOnly: '仅展示当前实体、库和筛选条件下的局部关系。',
+    truncated: '关系结果不完整。请缩小库、关系类型或跳数；也可提高关系上限。当前结果不能证明实体间没有关系。',
+    documentsTruncated: '资料级结果列表已截断；连线来源仍按每条关系返回的来源展示。',
+    pending: '全空间待同步 {global} 条记录，其中本图涉及 {involved} 条。副本可能落后，结果可能不完整。',
+    failed: '图谱查询失败，请重试。', unavailable: '图谱查询服务暂时不可用，请稍后重试。', noLibraries: '没有可查询的资料库，请重新选择资料库。', chooseEntity: '实体尚未明确，请重新选择实体。',
+  },
  ikb23: { view: '查看输入输出', input: '输入', output: '输出', raw: '完整原始内容', body: '正文', characters: '{n} 字符', copy: '复制', copied: '已复制', copyFailed: '复制失败', unavailable: '内容未保存或已按保留策略清理', loading: '正在读取内容', retry: '重试', call: '调用', partial: '响应未完整接收', close: '关闭', details: '其他字段' },
   ikb19: {
     elapsed: '耗时',

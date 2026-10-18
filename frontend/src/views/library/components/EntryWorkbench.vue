@@ -27,7 +27,7 @@
         <div class="entity-filters"><t-input v-model="entityFilter" clearable :placeholder="t('knowledgeWorkbench.entities.filter')" :aria-label="t('knowledgeWorkbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @enter="onEntityEnter" /><t-select v-model="entityTypeFilter" clearable :options="entityTypeOptions" :placeholder="t('knowledgeWorkbench.entities.allTypes')" :aria-label="t('knowledgeWorkbench.entities.type')" /></div>
       </div>
       <t-loading :loading="entitiesLoading" show-overlay>
-        <div class="entity-layout">
+        <div class="entity-layout" :class="{ 'entity-layout--graph': relationView === 'graph' }">
           <div class="entity-list">
             <t-empty v-if="!entities.length && !loadError" :description="t(entityFilter || entityTypeFilter ? 'knowledgeWorkbench.entities.noResults' : 'knowledgeWorkbench.entities.empty')" />
             <button v-for="entity in entities" :key="entity.id" type="button" :class="['entity-list__item', { selected: selectedEntity?.id === entity.id }]" @click="selectEntity(entity)">
@@ -41,7 +41,12 @@
             <section v-else>
               <div class="entity-detail__header"><div><span class="eyebrow">{{ entityTypeLabel(selectedEntity.entity_type) }}</span><h3>{{ selectedEntity.canonical_name }}</h3><p v-if="selectedEntity.description">{{ selectedEntity.description }}</p><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><div class="entity-detail__actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div></div>
 
-              <EntityRelations :entity-id="selectedEntity.id" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" />
+              <div class="relation-view-switch" role="group" :aria-label="t('entityGraph.view')">
+                <button type="button" :aria-pressed="relationView === 'list'" @click="relationView = 'list'">{{ t('entityGraph.list') }}</button>
+                <button type="button" :aria-pressed="relationView === 'graph'" @click="graphVisited = true; relationView = 'graph'">{{ t('entityGraph.graph') }}</button>
+              </div>
+              <EntityRelations v-if="relationView === 'list'" :entity-id="selectedEntity.id" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" />
+              <EntityGraph v-if="graphVisited" v-show="relationView === 'graph'" :entity="selectedEntity" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @open-profile="id => { relationView = 'list'; void selectInitialEntity(id) }" />
               <t-alert v-if="entityDetailError" theme="error" :message="entityDetailError" role="alert"><template #operation><t-button variant="text" :loading="entityDetailLoading" @click="selectEntity(selectedEntity)">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
               <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><t-empty v-if="!entityEntries.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><section v-for="group in entityLibraryGroups" :key="group.id" class="entity-library-group"><h5>{{ group.name }} ({{ group.entries.length }})</h5><ul><li v-for="article in group.entries" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></section></div></t-loading>
             </section>
@@ -61,6 +66,7 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ENTITY_TYPES, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityEntry, type EntityNameEmbeddingRebuildStatus, type EntityType } from '@/api/entities'
 import EntityRelations from './EntityRelations.vue'
+import EntityGraph from './EntityGraph.vue'
 import type { SourceLocation } from '@/types/search'
 import MergeSuggestions from './MergeSuggestions.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
@@ -73,6 +79,7 @@ const followStore = useFollowStore()
 const pageSize = 50
 const sections = ['entities', 'merges'] as const
 const activeSection = ref<typeof sections[number]>('entities')
+const relationView = ref<'list' | 'graph'>('list'), graphVisited = ref(false)
 const entityFilter = ref(''), entityTypeFilter = ref<EntityType | ''>(''), entityComposing = ref(false)
 const entityTypeOptions = computed(() => ENTITY_TYPES.map(value => ({ value, label: entityTypeLabel(value) })))
 const entities = ref<Entity[]>([]), entitiesLoading = ref(false), hasMoreEntities = ref(false), loadError = ref('')
@@ -187,6 +194,12 @@ onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; 
 .entity-filters { display: flex; gap: 12px; width: min(480px, 100%); }
 .entity-filters > :deep(*) { min-width: 0; }
 .entity-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 24px; min-height: 300px; }
+.entity-layout--graph { grid-template-columns: minmax(180px, .7fr) minmax(0, 2.3fr); }
+.relation-view-switch { display: flex; gap: 20px; margin-top: 20px; border-bottom: 1px solid var(--td-component-stroke); }
+.relation-view-switch button { padding: 10px 4px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--td-text-color-secondary); font: inherit; font-size: 13px; cursor: pointer; }
+.relation-view-switch button:hover { background: var(--td-bg-color-container-hover); color: var(--td-brand-color); }
+.relation-view-switch button[aria-pressed="true"] { color: var(--td-brand-color); border-bottom-color: var(--td-brand-color); }
+.relation-view-switch button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 .entity-list { min-width: 0; }
 .entity-list__item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border: 1px solid transparent; background: transparent; border-radius: var(--td-radius-medium); text-align: left; color: var(--td-text-color-primary); cursor: pointer; }
 .entity-list__item:hover { background: var(--td-bg-color-container-hover); }

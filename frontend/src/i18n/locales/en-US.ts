@@ -1,5 +1,17 @@
 import { ikb18En } from './ikb18'
 export default {
+  entityGraph: {
+    view: 'Relationship view', list: 'List', graph: 'Graph', libraries: 'Libraries', relationTypes: 'Relationship types', allRelations: 'All relationships', hops: 'Hops', hopCount: '{count} hop | {count} hops', limit: 'Relationship limit', query: 'Search',
+    center: 'Center: {name}', count: '{nodes} nodes · {edges} relationships', empty: 'No relationships found with these filters', choose: 'Select a node or edge to view details and sources.',
+    nodeDetails: 'Entity details', edgeDetails: 'Relationship details', recenter: 'Use as center', openProfile: 'Open entity profile', related: 'Relationships in this graph · {count}', endpoints: 'Endpoints', sourceUnverified: 'Source unverified',
+    fit: 'Fit graph', zoomIn: 'Zoom in', zoomOut: 'Zoom out', keyboardBrowse: 'Browse nodes and relationships', interactionHint: 'Drag the background to pan. Select a node or edge for details.',
+    canvasLabel: 'Entity relationship graph. Arrow keys pan, plus and minus zoom, and Home fits the graph. Buttons below provide access to nodes and relationships.',
+    localOnly: 'Shows local relationships for the current entity, libraries, and filters.',
+    truncated: 'Relationships are incomplete. Narrow the libraries, relationship types, or hops, or increase the relationship limit. These results cannot prove that no relationship exists.',
+    documentsTruncated: 'The document-level list was truncated. Edge sources still use the sources returned for each relationship.',
+    pending: '{global} records await sync across the space; {involved} involve this graph. The replica may lag and results may be incomplete.',
+    failed: 'Graph search failed. Try again.', unavailable: 'Graph search is temporarily unavailable. Try again later.', noLibraries: 'No libraries are available for this query. Select libraries again.', chooseEntity: 'The entity is ambiguous. Select an entity again.',
+  },
  ikb23: { view: 'View input and output', input: 'Input', output: 'Output', raw: 'Complete raw content', body: 'Body', characters: '{n} characters', copy: 'Copy', copied: 'Copied', copyFailed: 'Copy failed', unavailable: 'Content was not saved or was removed by retention', loading: 'Loading content', retry: 'Retry', call: 'Call', partial: 'Response was partially received', close: 'Close', details: 'Other fields' },
   ikb19: {
     elapsed: 'Duration',
