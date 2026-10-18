@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"reliquary/internal/application/graph"
 	"reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
@@ -260,6 +261,60 @@ func TestArticleProcessingRejectsMultilineGeneratedTitle(t *testing.T) {
 	raw := strings.Replace(validProcessingFixture("event"), "Acme announces a widget", `Acme\nannounces a widget`, 1)
 	_, err := parseArticleProcessingResult(raw)
 	require.ErrorContains(t, err, "title must be a single line")
+}
+
+func TestPersonalAndReferenceProcessingKeepsRetrievalWithoutEntities(t *testing.T) {
+	for _, library := range []string{"personal", "references"} {
+		t.Run(library, func(t *testing.T) {
+			h, vault := newIngestHarness(t)
+			topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Deployment notes", Description: "Acme and Beta deployment measurements"})
+			require.NoError(t, err)
+			kind := "方案"
+			if library == "references" {
+				kind = "论文"
+			}
+			output, err := parseArticleProcessingResult(articleProcessingOutput(t, kind, []types.EntityCandidate{{Name: "Acme", EntityType: "company", Description: "A partner of Beta."}, {Name: "Beta", EntityType: "company", Description: "A partner of Acme."}}, []string{topic.ID}))
+			require.NoError(t, err)
+			output.Relations = []extractedRelation{{Subject: "Acme", Object: "Beta", Type: "合作", EvidenceIDs: []int{1}}}
+			raw, err := json.Marshal(output)
+			require.NoError(t, err)
+			h.processor.output = string(raw)
+			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: library, URL: "https://example.org/measurements", Acquisition: "verbatim", Graph: entrySearchBool(true),
+				Content: "Acme and Beta jointly measured deployment performance. The original report describes the method and complete measurements."})
+			require.NoError(t, err)
+			h.drain(t)
+			article := h.article(t, result.EntryID)
+			require.Equal(t, types.ParseStatusCompleted, article.ParseStatus, article.ErrorMessage)
+			require.Equal(t, "Acme announces a widget", article.Title)
+			require.NotNil(t, article.StructuredSummary)
+			require.Empty(t, article.Entities)
+			var topicCount int64
+			require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=? AND topic_id=?", article.ID, topic.ID).Count(&topicCount).Error)
+			require.EqualValues(t, 1, topicCount)
+			for _, table := range []string{"entities", "entry_entities", "relations"} {
+				var count int64
+				require.NoError(t, h.db.Table(table).Count(&count).Error)
+				require.Zero(t, count, table)
+			}
+			for _, table := range []string{"chunks", "article_embeddings"} {
+				var count int64
+				require.NoError(t, h.db.Table(table).Where("entry_id=?", article.ID).Count(&count).Error)
+				require.Positive(t, count, table)
+			}
+			enabled, err := graph.Enabled(h.db, article)
+			require.NoError(t, err)
+			require.False(t, enabled, "graph:true cannot enable extraction for this template")
+			stored, err := ReadEntryProcessingOutput(h.ctx, h.db, article.SpaceID, article.ID)
+			require.NoError(t, err)
+			require.Empty(t, stored.Relations)
+			_, header, _ := readVaultArticle(t, vault, article)
+			require.NotContains(t, string(header), "[[Acme]]")
+			require.Len(t, h.processor.requests, 1, "no entity judgement calls")
+			require.NotContains(t, h.processor.requests[0][0].Content, "每个实体输出")
+			require.NotContains(t, h.processor.requests[0][0].Content, "relation_types=")
+			require.Contains(t, h.processor.requests[0][0].Content, "不抽取实体、实体短介绍或实体间关系")
+		})
+	}
 }
 
 func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t *testing.T) {

@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/chat"
-	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 )
 
@@ -30,6 +29,7 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	require.Contains(t, numbered, "[P2]\n[Acme](https://example.org/acme)")
 	company := "company"
 	product := "product"
+	person, project, other := "person", "project", "other"
 	result, err := parseArticleProcessingResult(validProcessingFixture("公告"))
 	require.NoError(t, err)
 	result.Entities = []articleProcessingEntity{
@@ -39,6 +39,10 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 		{Name: "Footer", Type: &company, Description: "导航项。", Relevance: "incidental", EvidenceIDs: []int{1}},
 		{Name: "Uncited", Type: &company, Description: "没有原文支持。", Relevance: "central", EvidenceIDs: []int{999}},
 		{Name: "Empty", Type: &company, Relevance: "central", EvidenceIDs: []int{2}},
+		{Name: "Alice", Type: &person, Description: "发言人。", Relevance: "participant", EvidenceIDs: []int{2}},
+		{Name: "Protocol", Type: &project, Description: "协议。", Relevance: "central", EvidenceIDs: []int{2}},
+		{Name: "Concept", Type: &other, Description: "概念。", Relevance: "central", EvidenceIDs: []int{2}},
+		{Name: "Byline", Type: &company, Description: "署名。", Relevance: "attribution", EvidenceIDs: []int{2}},
 	}
 	result.Relations = []extractedRelation{
 		{Subject: "Acme", Object: "Beta", Type: "合作", EvidenceIDs: []int{2, 2}},
@@ -57,6 +61,8 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	require.Equal(t, blocks[1:2], result.Entities[0].Evidence)
 	location := result.Relations[0].Evidence[0].Locations[0]
 	require.Equal(t, "[Acme](https://example.org/acme) 与 **Beta** 合作。\r\nAcme 的产品是 Suite。\r\n", string([]rune(body)[location.Start:location.End]))
+	text := "Acme announced a product."
+	require.Nil(t, processingRelationSpeaker("Reporter", "Ann", text, []types.SourceLocation{{End: len([]rune(text))}}), "a word substring is not a speaker name")
 }
 
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
@@ -111,8 +117,9 @@ func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message,
 	return &types.ChatResponse{Content: string(data)}, err
 }
 
-func TestIKB11PromptSnapshotsAndSwitchMatrix(t *testing.T) {
+func TestIKB11ProcessingPromptsAndSwitches(t *testing.T) {
 	h := newArticleProcessingHarness(t, true)
+	body := "Alice 说：Acme 与 Beta 合作。"
 	fixture := &jointProcessingChat{}
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService.model = fixture
@@ -125,14 +132,19 @@ func TestIKB11PromptSnapshotsAndSwitchMatrix(t *testing.T) {
 			k := &types.Entry{Graph: override}
 			name := defaults.SystemRole + "-" + mode
 			prompt := libraryProcessingPrompt(defaults, k)
-			path := filepath.Join("testdata", "ikb11-prompts", name+".txt")
-			if os.Getenv("UPDATE_IKB11_SNAPSHOTS") == "1" {
-				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
-				require.NoError(t, os.WriteFile(path, []byte(prompt+"\n"), 0644))
+			require.Contains(t, prompt, "输入 title 为空时")
+			require.Contains(t, prompt, "topics 只能从输入 existing_topics 中选择")
+			require.Contains(t, prompt, "不输出逐图说明")
+			require.NotContains(t, prompt, "image_descriptions")
+			if defaults.Template == types.TemplateExternalTimely {
+				require.Contains(t, prompt, "每个实体输出")
+				require.Contains(t, prompt, "不使用固定名单")
+				require.Contains(t, prompt, "产品不分主次")
+				require.Contains(t, prompt, "人物暂不建档")
+			} else {
+				require.NotContains(t, prompt, "每个实体输出")
+				require.Contains(t, prompt, "entities 和 relations 必须返回空数组")
 			}
-			expected, err := os.ReadFile(path)
-			require.NoError(t, err)
-			require.Equal(t, string(expected), prompt+"\n")
 			if defaults.Template == types.TemplateGenerated {
 				require.False(t, libraryGraphEnabled(defaults, "其他", override))
 				continue
@@ -143,20 +155,24 @@ func TestIKB11PromptSnapshotsAndSwitchMatrix(t *testing.T) {
 					library.ModelTiers = h.library.ModelTiers
 					fixture.kind = row.Name
 					fixture.malicious = false
-					result, err := h.service.callArticleProcessingPart(h.ctx, &library, k, "Acme 与 Beta 合作。", nil, nil)
+					result, err := h.service.callArticleProcessingPart(h.ctx, &library, k, body, nil, nil)
 					require.NoError(t, err)
 					wanted := row.ExtractGraph && row.Name != "其他"
 					if override != nil {
 						wanted = *override
 					}
+					wanted = wanted && defaults.Template == types.TemplateExternalTimely
 					require.Equal(t, wanted, len(result.Relations) > 0)
-					qualifySegmentOutput(&library, k, "Acme 与 Beta 合作。", types.ProcessingSegment{End: 15}, result)
+					qualifySegmentOutput(&library, k, body, types.ProcessingSegment{End: len([]rune(body))}, result)
 					require.Equal(t, wanted, len(result.Relations) > 0)
 					fixture.malicious = true
-					result, err = h.service.callArticleProcessingPart(h.ctx, &library, k, "Acme 与 Beta 合作。", nil, nil)
+					result, err = h.service.callArticleProcessingPart(h.ctx, &library, k, body, nil, nil)
 					require.NoError(t, err)
-					qualifySegmentOutput(&library, k, "Acme 与 Beta 合作。", types.ProcessingSegment{End: 15}, result)
+					qualifySegmentOutput(&library, k, body, types.ProcessingSegment{End: len([]rune(body))}, result)
 					require.Equal(t, wanted, len(result.Relations) > 0, "server rejects relations despite a disobedient model")
+					if defaults.Template != types.TemplateExternalTimely {
+						require.Empty(t, result.Entities)
+					}
 				})
 			}
 		}
@@ -203,17 +219,11 @@ func TestIKB11SegmentRelationsResolveGlobalIDsAndKeepAllEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []int{1, 2}, result.Provenance.ResolvedEntities[stored.ID])
 	k.ContentType = ct
-	relationCalls := 0
-	fixture := &relationVectorFixture{vectors: map[string][]float32{"合作": {1, 0, 0}}, onCall: func(ctx context.Context) {
-		relationCalls++
-		stage, _ := types.LLMCallMetadataFromContext(ctx)
-		require.Equal(t, "relation_type_embedding", stage)
-		require.Equal(t, types.CallPurposeOther, types.NormalizeModelCallPurpose(stage, types.ModelTierFromContext(ctx)))
-		require.Equal(t, k.ID, *types.ModelCallEntryFromContext(ctx))
-	}}
-	h.service.modelService = relationVectorModels{articleProcessingModels: h.service.modelService.(articleProcessingModels), fixture: fixture}
+	embeddingCalls := 0
+	models.embeddingCalls = &embeddingCalls
+	h.service.modelService = models
 	require.NoError(t, h.service.saveProcessingOutput(h.ctx, h.library, k, body, result, resolved))
-	require.Equal(t, 1, relationCalls)
+	require.Zero(t, embeddingCalls, "relation types never use vector similarity")
 	out, err := ReadEntryProcessingOutput(h.ctx, h.db, k.SpaceID, k.ID)
 	require.NoError(t, err)
 	require.Len(t, out.Relations, 1)
@@ -233,31 +243,31 @@ func TestIKB11SegmentRelationsResolveGlobalIDsAndKeepAllEvidence(t *testing.T) {
 	require.Empty(t, out.Relations)
 }
 
-func TestIKB11RelationTypesCatalogSynonymsAdditionAndLog(t *testing.T) {
+func TestIKB11RelationTypesKeepExactMeaningAdditionAndLog(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
-	// Disable vector lookup in this fixture to isolate exact and containment rules.
 	h.service.modelService = nil
 	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: h.library.ID, Name: "合作", Position: 0, Enabled: true}).Error)
-	mapping, err := h.service.canonicalRelationTypes(h.ctx, h.library, []string{"合作", "合作伙伴", " 联 合 研 发 ", "联合研发项目"})
+	mapping, err := h.service.canonicalRelationTypes(h.ctx, h.library, []string{"合作", "合作伙伴", " 联合研发 ", "联合研发项目", "被监管", "监管"})
 	require.NoError(t, err)
 	require.Equal(t, "合作", mapping["合作"])
-	require.Equal(t, "合作", mapping["合作伙伴"])
-	require.Equal(t, mapping[" 联 合 研 发 "], mapping["联合研发项目"])
+	require.Equal(t, "合作伙伴", mapping["合作伙伴"])
+	require.Equal(t, "联合研发", mapping[" 联合研发 "])
+	require.Equal(t, "联合研发项目", mapping["联合研发项目"])
+	require.Equal(t, "被监管", mapping["被监管"])
+	require.Equal(t, "监管", mapping["监管"])
 	var count int64
 	require.NoError(t, h.db.Model(&types.LibraryRelationType{}).Where("library_id=?", h.library.ID).Count(&count).Error)
-	require.EqualValues(t, 2, count)
+	require.EqualValues(t, 6, count)
 	require.NoError(t, h.db.Model(&types.OperationLog{}).Where("operation_type='add_relation_type'").Count(&count).Error)
-	require.EqualValues(t, 1, count)
+	require.EqualValues(t, 5, count)
 	require.NoError(t, h.db.Exec(`CREATE FUNCTION reject_ikb11_log() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'log failure'; END $$; CREATE TRIGGER reject_ikb11_log BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION reject_ikb11_log()`).Error)
 	_, err = h.service.canonicalRelationTypes(h.ctx, h.library, []string{"投资"})
 	require.ErrorContains(t, err, "log failure")
 	require.NoError(t, h.db.Model(&types.LibraryRelationType{}).Where("library_id=? AND name='投资'", h.library.ID).Count(&count).Error)
 	require.Zero(t, count, "addition and audit log roll back together")
-	require.Greater(t, relationCosine([]float32{1, 0}, []float32{.99, .01}), .92)
-	require.Less(t, relationCosine([]float32{1, 0}, []float32{0, 1}), .92)
 }
 
-func TestIKB11OpinionsSpeakerUsesExtractedPersonOrAuthor(t *testing.T) {
+func TestIKB11OpinionsKeepSpeakerAndRejectStaleExtractionScope(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	k := segmentedEntry(t, h)
 	h.library.SystemRole = "media"
@@ -267,25 +277,35 @@ func TestIKB11OpinionsSpeakerUsesExtractedPersonOrAuthor(t *testing.T) {
 	fixture := &jointProcessingChat{kind: "event"}
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService.model = fixture
-	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, "Acme 与 Beta 合作。", nil)
+	body := "Alice 说：Acme 与 Beta 合作。"
+	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
-	candidates := []types.EntityCandidate{{Name: "Acme", EntityType: "company"}, {Name: "Beta", EntityType: "company"}, {Name: "Alice", EntityType: "person"}}
-	resolved, err := h.service.resolveProcessingEntities(h.ctx, k, candidates, result)
-	require.NoError(t, err)
-	k.ContentType = "event"
-	require.NoError(t, h.service.saveProcessingOutput(h.ctx, h.library, k, "Acme 与 Beta 合作。", result, resolved))
+	// Simulate a cached result produced before the extraction policy changed.
+	person := "person"
+	result.Entities = append(result.Entities, articleProcessingEntity{Name: "Alice", Type: &person, Description: "The speaker.", Relevance: "attribution"})
+	result.Entities[0].Aliases = []string{"Unverified alias"}
+	require.NoError(t, h.service.persistArticleProcessingResult(h.ctx, h.library, k, body, nil, types.EffectiveProcessConfig{ChunkingConfig: h.library.ChunkingConfig}, result, false))
+	var count int64
+	require.NoError(t, h.db.Model(&types.Entity{}).Where("entity_type='person'").Count(&count).Error)
+	require.Zero(t, count)
+	require.NoError(t, h.db.Model(&types.EntityAlias{}).Where("alias='Unverified alias'").Count(&count).Error)
+	require.Zero(t, count)
 	out, err := ReadEntryProcessingOutput(h.ctx, h.db, k.SpaceID, k.ID)
 	require.NoError(t, err)
 	speaker := out.Relations[0].Evidence[0].Speaker
 	require.Equal(t, "extracted_person", speaker.Selection)
-	require.NotEmpty(t, speaker.EntityID)
-	result.Relations[0].Speaker = "Unknown"
+	require.Equal(t, "Alice", speaker.Name)
+	require.Empty(t, speaker.EntityID)
+	result.Relations[0].Speaker = ""
 	result.Relations[0].Evidence[0].Speaker = nil
-	require.NoError(t, h.service.saveProcessingOutput(h.ctx, h.library, k, "Acme 与 Beta 合作。", result, resolved))
+	require.NoError(t, h.service.saveProcessingOutput(h.ctx, h.library, k, body, result, nil))
 	out, err = ReadEntryProcessingOutput(h.ctx, h.db, k.SpaceID, k.ID)
 	require.NoError(t, err)
 	require.Equal(t, "Author fallback", out.Relations[0].Evidence[0].Speaker.Name)
 	require.Equal(t, "author", out.Relations[0].Evidence[0].Speaker.Selection)
+	result.Relations[0].Speaker = "Unknown"
+	result.Relations[0].Evidence[0].Speaker = nil
+	require.ErrorContains(t, h.service.saveProcessingOutput(h.ctx, h.library, k, body, result, nil), "no identifiable speaker")
 }
 
 func TestIKB11ImagesRetainReferencesWithoutCaptionsOrDescriptionChunks(t *testing.T) {
@@ -318,12 +338,11 @@ func TestIKB11ImagesRetainReferencesWithoutCaptionsOrDescriptionChunks(t *testin
 	require.NotEmpty(t, out.Images[1].Locations)
 }
 
-func TestIKB11RelationVectorThresholdAndLexicalPriority(t *testing.T) {
-	vectors := map[string][]float32{"合作": {1, 0}, "任职": {0, 1}, "协作": {.99, .05}, "合作伙伴": {0, 1}, "不相关": {.7, .7}}
-	require.Equal(t, "合作", matchingRelationType("协作", []string{"任职", "合作"}, vectors, .92))
-	require.Empty(t, matchingRelationType("协作", []string{"任职", "合作"}, vectors, .9999))
-	require.Empty(t, matchingRelationType("不相关", []string{"任职", "合作"}, vectors, .92))
-	require.Equal(t, "合作", matchingRelationType("合作伙伴", []string{"任职", "合作"}, vectors, .92))
+func TestIKB11RelationNamesRequireExactIdentity(t *testing.T) {
+	require.Equal(t, "合作", matchingRelationType(" 合作 ", []string{"任职", "合作"}))
+	require.Empty(t, matchingRelationType("协作", []string{"任职", "合作"}))
+	require.Empty(t, matchingRelationType("合作伙伴", []string{"任职", "合作"}))
+	require.Empty(t, matchingRelationType("被监管", []string{"监管"}))
 }
 
 func TestIKB11ImageBoundedSegmentsCoverEveryReference(t *testing.T) {
@@ -362,62 +381,6 @@ func TestIKB11CustomContentTypeAndCorrectionBelongToLibrary(t *testing.T) {
 	corrected, err := h.service.CorrectContentType(h.ctx, article.ID, "event")
 	require.NoError(t, err)
 	require.Equal(t, "event", corrected.ContentType)
-}
-
-type relationVectorFixture struct {
-	chunkSearchEmbedder
-	calls   int
-	vectors map[string][]float32
-	onCall  func(context.Context)
-}
-
-func (m *relationVectorFixture) BatchEmbed(ctx context.Context, names []string) ([][]float32, error) {
-	m.calls++
-	if m.onCall != nil {
-		m.onCall(ctx)
-	}
-	out := [][]float32{}
-	for _, name := range names {
-		value, ok := m.vectors[name]
-		if !ok {
-			return nil, fmt.Errorf("missing fixture vector %s", name)
-		}
-		out = append(out, value)
-	}
-	return out, nil
-}
-
-type relationVectorModels struct {
-	articleProcessingModels
-	fixture *relationVectorFixture
-}
-
-func (m relationVectorModels) GetEmbeddingModel(context.Context, string) (embedding.Embedder, error) {
-	return m.fixture, nil
-}
-
-func TestIKB11RelationVectorCanonicalizationUsesConfiguredThreshold(t *testing.T) {
-	h := newArticleProcessingHarness(t, false)
-	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: h.library.ID, Name: "合作", Enabled: true}).Error)
-	fixture := &relationVectorFixture{vectors: map[string][]float32{"合作": {1, 0, 0}, "协作": {.99, .05, 0}, "投资": {0, 1, 0}, "资金投入": {0, .99, .05}}}
-	h.service.modelService = relationVectorModels{articleProcessingModels: h.service.modelService.(articleProcessingModels), fixture: fixture}
-	mapping, err := h.service.canonicalRelationTypes(h.ctx, h.library, []string{"合作"})
-	require.NoError(t, err)
-	require.Equal(t, "合作", mapping["合作"])
-	require.Zero(t, fixture.calls)
-	mapping, err = h.service.canonicalRelationTypes(h.ctx, h.library, []string{"协作", "投资", "资金投入"})
-	require.NoError(t, err)
-	require.Equal(t, "合作", mapping["协作"])
-	require.Equal(t, "投资", mapping["投资"])
-	require.Equal(t, "投资", mapping["资金投入"])
-	require.Equal(t, 1, fixture.calls)
-	h.service.config.ArticleProcessing.RelationTypeSimilarityThreshold = .9999
-	mapping, err = h.service.canonicalRelationTypes(h.ctx, h.library, []string{"协作"})
-	require.NoError(t, err)
-	require.Equal(t, "协作", mapping["协作"])
-	var count int64
-	require.NoError(t, h.db.Model(&types.OperationLog{}).Where("operation_type='add_relation_type'").Count(&count).Error)
-	require.EqualValues(t, 2, count)
 }
 
 func TestIKB11ImageCrossingTextSegmentBoundaryStillAttachedOnce(t *testing.T) {

@@ -141,7 +141,7 @@ func Enabled(tx *gorm.DB, entry *types.Entry) (bool, error) {
 	if err := tx.Select("id,template").Where("id=? AND space_id=?", entry.LibraryID, entry.SpaceID).First(&library).Error; err != nil {
 		return false, err
 	}
-	if library.Template == types.TemplateGenerated {
+	if !library.ExtractsEntities() {
 		return false, nil
 	}
 	if entry.Graph != nil {

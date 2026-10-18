@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -15,7 +15,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
-	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 )
 
@@ -36,6 +35,15 @@ type extractedImage struct {
 
 func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	catalog, _ := json.Marshal(l.ContentTypes)
+	prompt := articleProcessingPrompt + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
+先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。`
+	if k.ContentTypeCorrected {
+		name, _ := json.Marshal(k.ContentType)
+		prompt += "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类。"
+	}
+	if !l.ExtractsEntities() {
+		return prompt + "\n本库不抽取实体、实体短介绍或实体间关系。entities 和 relations 必须返回空数组，不受 graph_override 或内容类型开关影响。"
+	}
 	relations := []string{}
 	for _, row := range l.RelationTypes {
 		if row.Enabled {
@@ -44,19 +52,17 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	}
 	names, _ := json.Marshal(relations)
 	graphOverride := k.Graph
-	corrected := ""
 	if k.ContentTypeCorrected {
 		value := libraryGraphEnabled(l, k.ContentType, k.Graph)
 		graphOverride = &value
-		name, _ := json.Marshal(k.ContentType)
-		corrected = "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类；关系开关已按此类型设置。"
 	}
 	override, _ := json.Marshal(graphOverride)
-	return articleProcessingPrompt + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + corrected + `
-先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。先定类型再决定是否抽关系：graph_override=true 总是抽，false 总是不抽，null 时依照所选类型的 extract_graph，其他默认不抽。关闭时 relations=[]。
+	return prompt + "\n" + articleEntityProcessingPrompt + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + `
+先定类型再决定是否抽关系：graph_override=true 总是抽，false 总是不抽，null 时依照所选类型的 extract_graph，其他默认不抽。关闭时 relations=[]。
 关系只保留原文明示、对本文有价值的联系；subject、object 必须是本次 entities 中的 name。evidence_ids 引用足以支持主体、关系含义和客体的段落，可多选以补充指代上下文。先确定原文表达的具体联系，再选 relation_types 中语义一致的名称；没有一致名称就使用精确的新名称，不能为套用清单而改写原意。每条边必须能从所选段落直接读出，不能依赖常识或“这个产品总归由它发布过”的推断。特别是“发布”必须有发布/宣布/推出该对象的动作证据：“甲的产品乙”“第一方部署如乙”“甲的安全框架乙”均不是发布证据，只能按原文明示的隶属等含义处理或不抽关系。仅同文出现不构成关系。基准比较应写“基准比较”或“基准优于”，不能改成商业竞争。原文有限定的比较应保留其范围，不扩展为全方面优于。
 逐条按“subject type object”读回核对方向：“隶属”是下级/产品指向上级/所属组织，“发布”是发布者指向发布对象，“客户”是客户指向供应方或所用产品，“投资”是投资方指向被投资方；“甲的产品乙”应为“乙 隶属 甲”，不能反过来。
-人物观点库每条关系必须输出 speaker：有明确发言人时使用本次 entities 的人物 name，否则使用输入 author，不将被评论对象当作发言人。
+关系两端可以是本篇新识别或已有的合格实体，但不能为补关系而额外创建不合格对象。具体型号的发布、成绩或比较不能扩大为家族整体的事实，子团队动作不能上提给母公司；无法准确表达时不建该边，具体事实留在摘要与原文中。
+媒体信息库每条关系必须输出 speaker：原文明示发言人时，使用证据段落中实际出现的姓名，并将包含姓名及发言归属的段落纳入 evidence_ids；姓名不要求出现在 entities，也不为发言人建档。没有明确引述他人时使用输入 author，不将被评论对象当作发言人；不能确定归属就不抽该关系。
 附加输出格式："relations":[{"subject":"实体名称","type":"合作","object":"另一实体名称","evidence_ids":[1],"speaker":"发言人"}]。`
 }
 
@@ -75,7 +81,7 @@ func libraryContentType(l *types.Library, value string) string {
 	return types.ContentTypeOther
 }
 func libraryGraphEnabled(l *types.Library, value string, override *bool) bool {
-	if l.Template == types.TemplateGenerated {
+	if !l.ExtractsEntities() {
 		return false
 	}
 	if override != nil {
@@ -130,7 +136,51 @@ func articleEvidenceLocations(ids []int, blocks []types.SourceLocation) []types.
 	return locations
 }
 
+func eligibleProcessingEntity(entity articleProcessingEntity) bool {
+	if entity.Type == nil || (entity.Relevance != "central" && entity.Relevance != "participant") {
+		return false
+	}
+	switch types.NormalizeEntityType(*entity.Type) {
+	case "company", "product", "organization":
+		return true
+	}
+	return false
+}
+
+func processingRelationSpeaker(author, name, body string, locations []types.SourceLocation) *types.ProcessingSpeaker {
+	author, name = strings.TrimSpace(author), strings.TrimSpace(name)
+	if name == "" || normalizeEntityName(name) == normalizeEntityName(author) {
+		if author == "" {
+			return nil
+		}
+		return &types.ProcessingSpeaker{Name: author, Selection: "author"}
+	}
+	if normalizeEntityName(name) == "" || len([]rune(name)) > 512 {
+		return nil
+	}
+	pattern := "(?i)" + regexp.QuoteMeta(name)
+	letters := []rune(name)
+	if unicode.Is(unicode.Latin, letters[0]) || unicode.IsDigit(letters[0]) {
+		pattern = `(^|[^\p{Latin}\p{N}_])` + pattern
+	}
+	if last := letters[len(letters)-1]; unicode.Is(unicode.Latin, last) || unicode.IsDigit(last) {
+		pattern += `($|[^\p{Latin}\p{N}_])`
+	}
+	mention := regexp.MustCompile(pattern)
+	text := []rune(body)
+	for _, location := range locations {
+		if location.Start >= 0 && location.End > location.Start && location.End <= len(text) && mention.MatchString(string(text[location.Start:location.End])) {
+			return &types.ProcessingSpeaker{Name: name, Selection: "extracted_person"}
+		}
+	}
+	return nil
+}
+
 func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types.ProcessingSegment, result *articleProcessingResult) {
+	if !l.ExtractsEntities() {
+		result.Entities = []articleProcessingEntity{}
+		result.Relations = []extractedRelation{}
+	}
 	ct := libraryContentType(l, *result.ContentType)
 	if k.ContentTypeCorrected {
 		ct = libraryContentType(l, k.ContentType)
@@ -140,9 +190,10 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 	_, blocks := articleEvidenceBody(string(runes[p.Start:p.End]))
 	accepted := []articleProcessingEntity{}
 	for _, entity := range result.Entities {
-		if entity.Relevance != "central" && entity.Relevance != "participant" && entity.Relevance != "attribution" {
+		if !eligibleProcessingEntity(entity) {
 			continue
 		}
+		entity.Aliases = nil
 		entity.Description = strings.TrimSpace(entity.Description)
 		locations := articleEvidenceLocations(entity.EvidenceIDs, blocks)
 		if entity.Description == "" || len(locations) == 0 {
@@ -189,11 +240,8 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 			rel.Evidence = []types.RelationEvidence{{Locations: global}}
 			if l.SystemRole == "media" {
 				source, _ := entrySourceInfo(k)
-				speaker := &types.ProcessingSpeaker{Name: source.Author, Selection: "author"}
-				if e, ok := entities[normalizeEntityName(rel.Speaker)]; ok && types.NormalizeEntityType(*e.Type) == "person" {
-					speaker = &types.ProcessingSpeaker{Name: e.Name, Selection: "extracted_person"}
-				}
-				if speaker.Name == "" {
+				speaker := processingRelationSpeaker(source.Author, rel.Speaker, body, global)
+				if speaker == nil {
 					continue
 				}
 				rel.Evidence[0].Speaker = speaker
@@ -223,17 +271,12 @@ func relationNameKey(value string) string {
 		return unicode.ToLower(r)
 	}, strings.TrimSpace(value))
 }
-func similarRelationNames(a, b string) bool {
-	a, b = relationNameKey(a), relationNameKey(b)
-	return a != "" && b != "" && (a == b || strings.Contains(a, b) || strings.Contains(b, a))
-}
-
 func (s *entryService) canonicalRelationTypes(ctx context.Context, l *types.Library, raw []string) (map[string]string, error) {
 	result := map[string]string{}
 	if len(raw) == 0 {
 		return result, nil
 	}
-	// Lock the parent library so concurrent processing cannot add synonymous rows.
+	// Serialize catalog additions with relation-type merges.
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var parent types.Library
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id=? AND space_id=?", l.ID, l.SpaceID).First(&parent).Error; err != nil {
@@ -258,37 +301,6 @@ func (s *entryService) canonicalRelationTypes(ctx context.Context, l *types.Libr
 				names = append(names, row.Name)
 			}
 		}
-		// Known names bypass vector lookup entirely. Novel names share one text batch.
-		novel := false
-		for _, name := range raw {
-			if matchingRelationType(name, names, nil, 1) == "" {
-				novel = true
-			}
-		}
-		// No additional generative model call.
-		vectors := map[string][]float32{}
-		var embedder embedding.Embedder
-		var embedErr error
-		if novel && s.modelService != nil {
-			embedder, embedErr = GetTierEmbeddingModel(ctx, tx, s.modelService, l)
-		}
-		if embedErr == nil && embedder != nil {
-			inputs := append(append([]string{}, names...), raw...)
-			values, err := embedder.BatchEmbed(types.WithLLMCallMetadata(ctx, "relation_type_embedding", ""), inputs)
-			if err != nil {
-				return fmt.Errorf("relation type embeddings: %w", err)
-			}
-			if len(values) != len(inputs) {
-				return errors.New("relation type embedding count mismatch")
-			}
-			for i, name := range inputs {
-				vectors[name] = values[i]
-			}
-		}
-		threshold := 0.92
-		if s.config != nil && s.config.ArticleProcessing != nil && s.config.ArticleProcessing.RelationTypeSimilarityThreshold > 0 {
-			threshold = s.config.ArticleProcessing.RelationTypeSimilarityThreshold
-		}
 		position := 0
 		for _, row := range rows {
 			position = max(position, row.Position+1)
@@ -297,7 +309,7 @@ func (s *entryService) canonicalRelationTypes(ctx context.Context, l *types.Libr
 			if _, ok := result[name]; ok {
 				continue
 			}
-			chosen := matchingRelationType(name, names, vectors, threshold)
+			chosen := matchingRelationType(name, names)
 			if chosen == "" {
 				chosen = strings.TrimSpace(name)
 				if relationNameKey(chosen) == "" {
@@ -320,7 +332,6 @@ func (s *entryService) canonicalRelationTypes(ctx context.Context, l *types.Libr
 				names = append(names, chosen)
 				rows = append(rows, row)
 				position++
-				vectors[chosen] = vectors[name]
 			}
 			result[name] = chosen
 		}
@@ -331,22 +342,6 @@ func (s *entryService) canonicalRelationTypes(ctx context.Context, l *types.Libr
 	})
 	return result, err
 }
-func relationCosine(a, b []float32) float64 {
-	if len(a) == 0 || len(a) != len(b) {
-		return -1
-	}
-	var dot, aa, bb float64
-	for i := range a {
-		dot += float64(a[i]) * float64(b[i])
-		aa += float64(a[i]) * float64(a[i])
-		bb += float64(b[i]) * float64(b[i])
-	}
-	if aa == 0 || bb == 0 {
-		return -1
-	}
-	return dot / math.Sqrt(aa*bb)
-}
-
 func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Library, k *types.Entry, body string, result *articleProcessingResult, resolved []types.Entity) error {
 	ctx = types.WithModelCallEntry(ctx, k.ID)
 	ids := map[string]string{}
@@ -357,6 +352,18 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 	}
 	for key, id := range result.ResolvedEntities {
 		ids[key] = id
+	}
+	// Historical aliases must not restore endpoints excluded from this extraction.
+	allowed := map[string]bool{}
+	for _, entity := range result.Entities {
+		if eligibleProcessingEntity(entity) {
+			allowed[entityNameKey(*entity.Type, entity.Name)] = true
+		}
+	}
+	for key := range ids {
+		if !allowed[key] {
+			delete(ids, key)
+		}
 	}
 	out := &types.EntryProcessingOutput{EntryID: k.ID, SpaceID: k.SpaceID, LibraryID: k.LibraryID, RunID: result.RunID, BodyHash: fmt.Sprintf("%x", sha256.Sum256([]byte(body))), ContentType: k.ContentType, Relations: []types.ProcessingRelation{}, Images: result.Images, UpdatedAt: time.Now()}
 	if out.Images == nil {
@@ -379,7 +386,10 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 	for _, r := range result.Relations {
 		name := canonical[r.Type]
 		a, b := ids[entityNameKey(r.SubjectType, r.Subject)], ids[entityNameKey(r.ObjectType, r.Object)]
-		if name == "" || a == "" || b == "" {
+		if name == "" || a == "" || b == "" || a == b {
+			continue
+		}
+		if name == "隶属" && (r.SubjectType == "company" || r.SubjectType == "organization") && (r.ObjectType == "product" || r.ObjectType == "project") {
 			continue
 		}
 		evidence := r.Evidence
@@ -389,15 +399,8 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 				if evidence[i].Speaker != nil {
 					name = evidence[i].Speaker.Name
 				}
-				speaker := &types.ProcessingSpeaker{Name: source.Author, Selection: "author"}
-				for _, e := range result.Entities {
-					if types.NormalizeEntityType(*e.Type) == "person" && normalizeEntityName(e.Name) == normalizeEntityName(name) {
-						if id := ids[entityNameKey("person", e.Name)]; id != "" {
-							speaker = &types.ProcessingSpeaker{EntityID: id, Name: e.Name, Selection: "extracted_person"}
-						}
-					}
-				}
-				if speaker.Name == "" {
+				speaker := processingRelationSpeaker(source.Author, name, body, evidence[i].Locations)
+				if speaker == nil {
 					return errors.New("opinion relation has no identifiable speaker")
 				}
 				evidence[i].Speaker = speaker
@@ -414,23 +417,11 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 	return s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "entry_id"}}, UpdateAll: true}).Create(out).Error
 }
 
-func matchingRelationType(name string, names []string, vectors map[string][]float32, threshold float64) string {
+func matchingRelationType(name string, names []string) string {
 	for _, old := range names {
-		if name == old {
+		if strings.TrimSpace(name) == old {
 			return old
 		}
 	}
-	for _, old := range names {
-		if similarRelationNames(name, old) {
-			return old
-		}
-	}
-	chosen := ""
-	best := threshold
-	for _, old := range names {
-		if score := relationCosine(vectors[name], vectors[old]); score > best {
-			chosen, best = old, score
-		}
-	}
-	return chosen
+	return ""
 }

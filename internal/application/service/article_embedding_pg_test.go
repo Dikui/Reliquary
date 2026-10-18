@@ -215,8 +215,11 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	h, _ := newArticleIndexingHarness(t)
 	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Topicmarker"})
 	require.NoError(t, err)
-	h.processor.output = articleProcessingOutput(t, "reference", []types.EntityCandidate{{Name: "Entitymarker", EntityType: "company", Aliases: []string{"Aliasmarker"}}}, []string{topic.ID})
+	h.processor.output = articleProcessingOutput(t, "reference", []types.EntityCandidate{{Name: "Entitymarker", EntityType: "company"}}, []string{topic.ID})
 	article := h.upload(t, "Headermarker", "discardedfixture reference source body")
+	var entity types.Entity
+	require.NoError(t, h.db.Where("canonical_name=?", "Entitymarker").First(&entity).Error)
+	require.NoError(t, saveEntityAlias(h.db, entity, "Aliasmarker", "manual"))
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
 	intake.SourceInfo.Publisher, intake.SourceInfo.Author = "Publishermarker", "Authormarker"

@@ -115,7 +115,7 @@ func TestIKB12SourcesVersionsSuppressionAndLibraryIsolation(t *testing.T) {
 	var logs int64
 	require.NoError(t, db.Model(&types.OperationLog{}).Where("operation_type='delete_relation'").Count(&logs).Error)
 	require.EqualValues(t, 1, logs)
-	other := types.Library{ID: "other-library", SpaceID: 1, Name: "Other", Directory: "other-library", Template: types.TemplateOwn}
+	other := types.Library{ID: "other-library", SpaceID: 1, Name: "Other", Directory: "other-library", Template: types.TemplateExternalTimely, SourceEvidenceRule: "link_required"}
 	require.NoError(t, db.Create(&other).Error)
 	require.NoError(t, db.Create(&types.LibraryRelationType{LibraryID: other.ID, Name: "合作", Enabled: true}).Error)
 	require.NoError(t, db.Create(&types.LibraryContentType{LibraryID: other.ID, Name: "on", Enabled: true, ExtractGraph: true}).Error)
