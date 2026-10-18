@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"go.uber.org/dig"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
@@ -57,6 +59,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// Core infrastructure configuration
 	logger.Debugf(ctx, "[Container] Registering core infrastructure...")
 	must(container.Provide(config.LoadConfig))
+	must(container.Provide(newIngestDiagnostics))
 	must(container.Provide(initDatabase))
 	must(container.Provide(initFileService))
 	must(container.Provide(initAntsPool))
@@ -135,6 +138,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewSpaceHandler))
 	must(container.Provide(handler.NewLibraryHandler))
 	must(container.Provide(handler.NewEntryHandler))
+	must(container.Provide(handler.NewIngestDiagnosticsHandler))
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewMaintenanceHandler))
 	must(container.Provide(handler.NewGraphReplicaHandler))
@@ -162,6 +166,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(registerModelLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
 	must(container.Invoke(registerVaultIntegration))
+	must(container.Invoke(registerIngestDiagnostics))
 	must(container.Invoke(registerTopicIntegration))
 
 	// Router configuration
@@ -283,6 +288,10 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	)
 	db, err := gorm.Open(postgres.Open(gormDSN), &gorm.Config{
 		NowFunc: func() time.Time { return time.Now().UTC() },
+		// Bound values can contain submitted content. Keep SQL diagnostics without copying those values into shared logs.
+		Logger: gormlogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormlogger.Config{
+			SlowThreshold: 200 * time.Millisecond, LogLevel: gormlogger.Warn, ParameterizedQueries: true,
+		}),
 	})
 	if err != nil {
 		return nil, err

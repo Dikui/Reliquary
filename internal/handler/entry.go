@@ -17,6 +17,7 @@ import (
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
+	"reliquary/internal/diagnostics"
 	"reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -27,11 +28,12 @@ import (
 
 // EntryHandler processes HTTP requests related to entry resources
 type EntryHandler struct {
-	cfg            *config.Config
-	kgService      interfaces.EntryService
-	libraryService interfaces.LibraryService
-	taskClient     interfaces.TaskEnqueuer
-	spanRepo       repository.EntrySpanRepository
+	ingestDiagnostics *diagnostics.Service
+	cfg               *config.Config
+	kgService         interfaces.EntryService
+	libraryService    interfaces.LibraryService
+	taskClient        interfaces.TaskEnqueuer
+	spanRepo          repository.EntrySpanRepository
 }
 
 // NewEntryHandler creates a new entry handler instance

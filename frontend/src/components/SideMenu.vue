@@ -11,11 +11,13 @@
       </t-tooltip>
     </div>
     <nav class="menu_top" :aria-label="t('menu.library')">
-      <t-tooltip v-for="item in visibleMenuArr" :key="item.key" :content="item.title" placement="right" :disabled="!sidebarCollapsed">
+      <section v-for="group in menuGroups" :key="group.key" class="menu-group" :aria-label="group.title"><h2 v-if="!sidebarCollapsed" class="menu-group-title">{{ group.title }}</h2>
+      <t-tooltip v-for="item in group.items" :key="item.key" :content="item.title" placement="right" :disabled="!sidebarCollapsed">
         <button type="button" :class="['menu_item', { menu_item_active: active(item.path, item.tab) }]" :aria-label="item.key === 'follows' && follows.newCount > 0 ? t('follows.navCount', { count: follows.newCount }) : item.title" :aria-current="active(item.path, item.tab) ? 'page' : undefined" @click="navigate(item.path, item.tab)">
           <t-icon :name="item.icon" size="20px" /><span v-if="!sidebarCollapsed" class="menu_title">{{ item.title }}</span><span v-if="item.key === 'follows' && (follows.newCount > 0 || follows.stateError)" class="follow-badge" :title="follows.stateError ? t('follows.countFailed') : t('follows.navCount', { count: follows.newCount })" aria-hidden="true">{{ follows.stateError ? '!' : follows.newCount }}</span>
         </button>
       </t-tooltip>
+      </section>
     </nav>
     <div class="menu_bottom"><UserMenu :collapsed="sidebarCollapsed" /></div>
   </aside>
@@ -40,10 +42,10 @@ function refreshFollowCount() { if (typeof document === 'undefined' || document.
 watch(() => route.path, refreshFollowCount)
 onMounted(() => { refreshFollowCount(); followTimer = setInterval(refreshFollowCount, 30000); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', refreshFollowCount) })
 onUnmounted(() => { clearInterval(followTimer); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', refreshFollowCount) })
-const { visibleMenuArr } = storeToRefs(useMenuStore())
+const { menuGroups } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && uiStore.sidebarCollapsed)
 const active = (path: string, tab?: string) => path === 'entries'
-  ? route.name === 'entries' && (tab === 'entities' ? route.query.tab === 'entities' : route.query.tab !== 'entities')
+  ? route.name === 'entries' && (tab ? route.query.tab === tab : !['entities', 'reviews'].includes(String(route.query.tab)))
   : route.path === `/platform/${path}`
 function toggleNavigation() { if (props.mobileOverlay) emit('close'); else uiStore.toggleSidebar() }
 function navigate(path: string, tab?: string) {
@@ -56,6 +58,8 @@ function navigate(path: string, tab?: string) {
 .aside_box { display: flex; flex-direction: column; width: 240px; min-width: 240px; height: 100%; padding: 20px 12px 12px; box-sizing: border-box; background: var(--td-bg-color-container); border-right: 1px solid var(--td-component-stroke); transition: width .2s, min-width .2s; }
 .aside_box--collapsed { width: 64px; min-width: 64px; padding-inline: 8px; }
 .logo_row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; margin-bottom: 20px; }
+.menu-group + .menu-group { margin-top: 16px; }
+.menu-group-title { margin: 0 12px 8px; font-size: 12px; font-weight: 500; color: var(--td-text-color-secondary); }
 .logo_box, .header-icon-btn, .menu_item { border: 0; background: transparent; color: var(--td-text-color-primary); cursor: pointer; border-radius: var(--td-radius-medium); }
 .logo_box { padding: 0; display: flex; min-width: 0; }
 .logo { max-width: 144px; height: 28px; }

@@ -122,7 +122,9 @@ func deleteExtractedImages(
 
 // DeleteEntry deletes a entry entry and all related resources
 func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
-	return s.withTaskObject(ctx, id, func(held context.Context) error { return s.deleteEntry(held, id) })
+	return s.withTaskObject(ctx, id, func(held context.Context) error {
+		return s.deleteEntry(held, id)
+	})
 }
 func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 	// Get the entry entry
@@ -133,6 +135,9 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
 		_, err := s.ReviewEntryIntake(ctx, id, "discard", types.SourceInfo{})
+		return err
+	}
+	if err := s.removeEntryDiagnosticMaterials(ctx, entry); err != nil {
 		return err
 	}
 
@@ -357,6 +362,12 @@ func (s *entryService) deleteEntryList(ctx context.Context, ids []string) error 
 		}
 		if _, ok := types.PrincipalFromContext(ctx); !ok {
 			return errors.New("an authenticated user is required to delete rejected intake")
+		}
+	}
+
+	for _, entry := range entryList {
+		if err := s.removeEntryDiagnosticMaterials(ctx, entry); err != nil {
+			return err
 		}
 	}
 

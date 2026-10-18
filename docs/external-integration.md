@@ -2,6 +2,23 @@
 
 Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格式转换为 Markdown，并提交图片。Reliquary 负责按库审核、保存、去重、处理与检索。综合分析由外部工具完成，再将报告写回 AI产出库。所有有效 API Key 均可访问个人空间全部库。
 
+## 功能与接口分类
+
+内部导航和对外能力采用相同的四类名称。HTTP 路径均以 `/api/v1` 为前缀。
+
+| 分类 | 查询 | 操作与协议差异 |
+| --- | --- | --- |
+| 资料管理 | 库、资料、正文、检索、实体、主题、关注 | 沿用 `ingest`、整理、关注等 HTTP/MCP 能力 |
+| 待处理 | 收录待审、缺少图片 | 沿用审核、补图、接受缺失及丢弃；只有这两类业务待办 |
+| 辅助诊断 | 已接收资料的处理失败、接收故障、时间线、模型调用和队列 | 读取诊断后，按当前状态使用已有审核或重新处理接口 |
+| 系统配置 | 库策略、模型、系统参数、API Key | 沿用 HTTP 配置接口；本次不为全部管理操作增加 MCP 工具 |
+
+待审使用 HTTP `GET /entries/pending` 或 MCP `list_pending`，原文使用 `GET /entries/:id/body` 或 `get_entry`。HTTP `POST /entries/:id/review` 提供 `approve`、`retry`、`supplement_url`、`admit_unverified`、`reject`、`discard`。MCP `approve_pending` 提供前三种适用审批动作 `approve`、`supplement_url`、`admit_unverified`，`discard_pending` 用于丢弃。确认与来源规则沿用现有契约。
+
+缺图使用 HTTP `GET /ingest/incomplete` 或 MCP `list_incomplete`。HTTP 支持按库筛选，默认包含已尝试补全的资料，可用 `include_attempted=false` 排除。MCP 固定排除已尝试补全的资料，待审和缺图工具均不提供同样的按库筛选参数。补图使用 `ingest` 的 `library`、`entry_id` 与图片；接受缺失使用 `accept_incomplete`，HTTP 丢弃入口为 `POST /ingest/:id/discard`。从 MCP 缺图列表消失不能证明图片已经补全，应继续检查资料状态和收录结果。
+
+处理失败归辅助诊断。通过 HTTP `GET /entries?parse_status=failed` 找资料，再读取 `GET /entries/:id`、`/body`、`/stages`、`/model-calls`。原文不可读时须明确报告。重试使用 `POST /entries/:id/reprocess`，批量重试使用 `POST /entries/batch-reparse`，取消使用 `POST /entries/:id/cancel-parse`。这些管理动作目前主要由 HTTP 提供。
+
 ## 连接与认证
 
 打开网页，在设置的 API 集成为每个工具创建独立 API Key，记录后端地址。后端只监听本机，工具须运行在同一台电脑上。HTTP 使用 `Authorization: Bearer <KEY>` 与 `Content-Type: application/json`。以下示例的 BASE 是后端地址，不含 `/api/v1`。
@@ -85,6 +102,34 @@ HTTP `POST /api/v1/graph/search` 对应 MCP `graph_search`，参数和返回 dat
 ```
 
 MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出只保存并建立索引，不审核、不调用内容处理模型、不抽图谱。相同内容重试返回已有资料；索引失败由后台任务继续处理。字段和状态见 [收录 API](ingest-api.md#ai产出收录)。
+
+## 接收故障与短期故障包
+
+接收发生技术故障时，逐项收录结果可附带 `diagnostics: {failure_id, package_status, recorded}`。原有 `status=invalid` 仍可能表示内部收录失败，应结合诊断字段判断。图片上传故障的相同引用位于错误的 `details.diagnostics`。`recorded=false` 表示故障包未成功落盘；若运行事件已保存，仍可按故障编号查询 `unavailable` 摘要，但不能读取原始材料。事件也写入失败时不承诺能查到。参数错误、格式错误、超限和认证失败不保留提交内容或故障包。
+
+| 能力 | HTTP | MCP |
+| --- | --- | --- |
+| 故障列表 | `GET /diagnostics/ingest-failures` | `list_ingest_failures` |
+| 故障详情与材料清单 | `GET /diagnostics/ingest-failures/:id` | `get_ingest_failure` |
+| 读取材料 | `GET /diagnostics/ingest-failures/:id/materials/:material_id` | `read_ingest_failure_material` |
+
+列表参数：`page` 默认 1，`page_size` 默认 20、最大 100；`from`、`to` 使用 RFC3339 时间；可按 `api_key_id`、`library_id`、`error_code`、`request_id`、`id` 筛选。不限定库时也能找到尚未解析出目标库的故障。HTTP 返回 `success/data`，列表的 `data` 为 `{items,total,page,page_size}`。MCP 按已有 `structuredContent` 和 `isError` 规则返回。
+
+详情包括执行阶段、错误、结果判断、关联请求/资料、非敏感执行条件、材料清单和过期时间。包状态为 `available`（输入与已知条件可用）、`partial`（查看 `missing`）、`unavailable`、`expired`。`available` 不承诺外部服务和模型输出可逐字复现。`outcome=rolled_back` 表示已知回滚；`unknown` 表示应先核对资料与任务，不能盲目重试。
+
+材料标识只能取自清单。文本的 `offset`、`length` 按 Unicode 码点计数；默认读取 20000、最多 100000，使用返回的 `next_offset` 继续读取。HTTP 图片返回原始图片字节；MCP 图片返回 `url` 和元数据，须继续携带 Bearer 凭据访问该相对 HTTP 地址。不存在或无权读取返回 404；已过期材料返回 410。读取材料不会执行重放。
+
+```json
+{"name":"list_ingest_failures","arguments":{"request_id":"原请求编号","page_size":20}}
+```
+
+```json
+{"name":"read_ingest_failure_material","arguments":{"id":"故障编号","material_id":"清单中的材料编号","offset":0,"length":20000}}
+```
+
+修复时先读取原始输入、实际图片及执行条件，再检查是否已有资料或任务。修正后通过普通 `ingest` 重提，可在条目中携带 `recovery_failure_id` 关联原故障。该字段不影响正文、来源身份和去重。原快照保持不变，详情记录新的资料和请求编号。重提仍失败时，新故障的 `recovery_failure_id` 指向上一次故障。仍须继续确认结果；`accepted` 只表示已接收，待审或仍缺图须如实报告。确认拒绝或删除前，清理关联恢复链及进行中的故障材料。清理失败会保留资料并返回错误，修复存储后可重试。
+
+故障包保留 7 天，总容量 512 MiB，先过期再淘汰最旧材料。详见[日志与故障包配置](logging.md#接收故障日志与故障包)。
 
 ## 资料 ID
 

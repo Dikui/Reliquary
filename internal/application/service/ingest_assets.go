@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reliquary/internal/diagnostics"
 	"reliquary/internal/infrastructure/docparser"
 	"strings"
 	"time"
@@ -33,13 +34,8 @@ type ingestAssetCleanupPayload struct {
 // UploadIngestAsset uses the same extension whitelist and upload limit as the
 // existing file importer. Its queue job survives process restarts.
 func (s *entryService) UploadIngestAsset(ctx context.Context, name string, data []byte) (*types.IngestAssetResult, error) {
-	if s.needsTaskTransaction() {
-		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestAssetResult, error) {
-			return copy.UploadIngestAsset(ctx, name, data)
-		})
-	}
 	var identityErr error
-	ctx, _, _, identityErr = s.ingestIdentity(ctx)
+	ctx, keyID, keyName, identityErr := s.ingestIdentity(ctx)
 	if identityErr != nil {
 		return nil, identityErr
 	}
@@ -66,6 +62,18 @@ func (s *entryService) UploadIngestAsset(ctx context.Context, name string, data 
 	}
 	if int64(len(data)) > utils.GetMaxFileSize() {
 		return nil, werrors.NewBadRequestError(fmt.Sprintf("文件大小不能超过%dMB", utils.GetMaxFileSizeMB()))
+	}
+	if s.needsTaskTransaction() {
+		principal, _ := types.PrincipalFromContext(ctx)
+		ctx = context.WithValue(ctx, verifiedIngestIdentityKey{}, verifiedIngestIdentity{space, principal, keyID, keyName})
+		result, err := entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestAssetResult, error) {
+			return copy.UploadIngestAsset(ctx, name, data)
+		})
+		if s.diagnostics != nil && technicalIngestError(err) {
+			ref := s.diagnostics.RecordUploadFailure(ctx, name, data, err, true)
+			return nil, werrors.NewInternalServerError("Image upload failed").WithDetails(map[string]any{"diagnostics": ref})
+		}
+		return result, err
 	}
 	path, err := s.fileSvc.SaveBytes(ctx, data, space, name, false)
 	if err != nil {
@@ -124,6 +132,7 @@ func (s *entryService) loadIngestAsset(ctx context.Context, id string) (*types.I
 	if int64(len(data)) != asset.Size || int64(len(data)) > utils.GetMaxFileSize() {
 		return nil, nil, werrors.NewBadRequestError("附件大小与上传记录不符")
 	}
+	diagnostics.CaptureImage(ctx, asset.Name, "asset_id:"+asset.ID, http.DetectContentType(data), data)
 	return &asset, data, nil
 }
 

@@ -190,7 +190,7 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.
 	}
 	refs, stored, failures := s.resolveIngestImages(ctx, imageInputs, files, article.SpaceID)
 	if len(failures) > 0 {
-		return "", "", werrors.NewBadRequestError("provided image file could not be stored: " + failures[0].Reason)
+		return "", "", werrors.NewInternalServerError("provided image file could not be stored: " + failures[0].Reason)
 	}
 	for _, image := range stored {
 		intake.Images = append(intake.Images, image.ServingURL)

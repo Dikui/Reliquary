@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -94,15 +96,19 @@ func (h *EntryHandler) UploadIngestAsset(c *gin.Context) {
 		c.Error(werrors.NewBadRequestError(fmt.Sprintf("文件大小不能超过%dMB", utils.GetMaxFileSizeMB())))
 		return
 	}
+	if !docparser.IsImageFormat(filepath.Ext(part.Filename)) {
+		c.Error(werrors.NewBadRequestError("only image attachments are accepted; convert the source to Markdown before ingestion"))
+		return
+	}
 	file, err := part.Open()
 	if err != nil {
-		c.Error(werrors.NewInternalServerError("无法读取附件"))
+		h.uploadReadFailure(c, part.Filename, nil, err)
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil {
-		c.Error(werrors.NewBadRequestError("读取附件失败"))
+		h.uploadReadFailure(c, part.Filename, data, err)
 		return
 	}
 	if int64(len(data)) > maxBytes {

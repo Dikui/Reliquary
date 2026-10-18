@@ -16,6 +16,12 @@ article_processing:
   segment_overlap_chars: 128
   context_reserve_percent: 40
 
+# Technical ingest failures only; rejected content is not retained.
+ingest_diagnostics:
+  root: "" # Compose sets RELIQUARY_DIAGNOSTICS_ROOT; native default is the user's cache directory.
+  retention_days: 7
+  max_bytes: 536870912 # 512 MiB, including active temporary captures.
+
 # Markdown library. Compose binds RELIQUARY_VAULT_DIR to the required VAULT_ROOT.
 vault:
   header_debounce: 5s

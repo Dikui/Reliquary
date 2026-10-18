@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,8 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
+	"reliquary/internal/diagnostics"
+	"reliquary/internal/modelcalls"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
+	secutils "reliquary/internal/utils"
 )
 
 type ingestFixtureLibrary struct {
@@ -233,6 +238,13 @@ func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) 
 
 func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	h, _ := newIngestHarness(t)
+	diagnosticRoot := t.TempDir()
+	diag, err := diagnostics.New(diagnosticRoot, diagnostics.DefaultRetention, diagnostics.DefaultMaxBytes)
+	require.NoError(t, err)
+	diag.SetVersion("fixture@revision")
+	closeDiagnostics := diag.Start(context.Background())
+	t.Cleanup(func() { require.NoError(t, closeDiagnostics()) })
+	h.service.SetIngestDiagnostics(diag)
 	request := &types.IngestRequest{Library: "official", Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/audit-existing", Content: "The original article is retained for an audit failure test."}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
@@ -244,14 +256,88 @@ func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	request.URL = "https://example.org/audit-new"
 	request.Content = "A totally distinct second paper studies different physical properties and their relationships."
 	request.Images = []types.IngestImage{{Data: strings.SplitN(articleImageDataURI(t, 14), ",", 2)[1]}}
-	_, err = h.service.Ingest(h.ctx, request)
-	require.ErrorContains(t, err, "audit unavailable")
+	require.NoError(t, h.db.Exec(`CREATE OR REPLACE FUNCTION fail_ingest_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.after_value->>'collect_reason' = '不应提交' THEN RAISE EXCEPTION 'audit unavailable'; END IF; RETURN NEW; END $$`).Error)
+	success := types.IngestRequest{Library: "official", Acquisition: "verbatim", Publisher: "Independent laboratory", URL: "https://example.org/independent-geology", Content: "Independent researchers found that crystalline minerals form under elevated pressure. The experiment compared rock composition and temperature gradients across six geological samples. Detailed tables describe physical properties, laboratory conditions and the chemical instruments used for each measurement."}
+	failed, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{success, {Content: "Refused sibling must never be retained"}, *request}})
+	require.NoError(t, err)
+	require.Equal(t, "accepted", failed.Items[0].Status)
+	require.Nil(t, failed.Items[0].Diagnostics)
+	require.Equal(t, "invalid", failed.Items[1].Status)
+	require.Nil(t, failed.Items[1].Diagnostics)
+	require.Equal(t, "invalid", failed.Items[2].Status)
+	require.NotNil(t, failed.Items[2].Diagnostics)
+	failure, err := diag.Get(h.ctx, failed.Items[2].Diagnostics.FailureID)
+	require.NoError(t, err)
+	require.Contains(t, failure.Reason, "audit unavailable")
+	require.Equal(t, "rolled_back", failure.Outcome)
+	require.Equal(t, "available", failure.PackageStatus)
+	require.Len(t, failure.Materials, 2)
+	require.Equal(t, 2, failure.ItemIndex)
+	_, original, err := diag.Read(h.ctx, failure.ID, failure.Materials[0].ID)
+	require.NoError(t, err)
+	var recovered types.IngestRequest
+	require.NoError(t, json.Unmarshal(original, &recovered))
+	require.Equal(t, request.Content, recovered.Content)
+	require.NotContains(t, string(original), success.Content)
+	require.NotContains(t, string(original), "Refused sibling")
+	_, image, err := diag.Read(h.ctx, failure.ID, failure.Materials[1].ID)
+	require.NoError(t, err)
+	wantImage, err := decodeIngestInline(request.Images[0].Data)
+	require.NoError(t, err)
+	require.Equal(t, wantImage, image)
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
-	require.EqualValues(t, 1, count)
-	require.Len(t, h.queue.tasks, 1)
+	require.EqualValues(t, 2, count)
+	require.Len(t, h.queue.tasks, 2)
 	files := h.service.fileSvc.(*articleProcessingFiles)
-	require.Len(t, files.saved, 1, "the original first article remains; failed collection files are removed")
+	require.Len(t, files.saved, 2, "successful articles remain; failed collection files are removed")
+	require.NoError(t, h.db.Exec(`DROP TRIGGER fail_ingest_audit ON operation_logs`).Error)
+	recovered.RecoveryFailureID = failure.ID
+	// Removing source evidence puts the repaired submission into the existing review queue.
+	recovered.URL, recovered.Publisher = "", ""
+	// A failed repair creates a child failure; rejecting its eventual repair
+	// must clear both snapshots, including the ancestor without a business row.
+	require.NoError(t, h.db.Exec(`CREATE OR REPLACE FUNCTION fail_ingest_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$; CREATE TRIGGER fail_ingest_audit BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION fail_ingest_audit()`).Error)
+	second, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{recovered}})
+	require.NoError(t, err)
+	require.NotNil(t, second.Items[0].Diagnostics)
+	childID := second.Items[0].Diagnostics.FailureID
+	child, err := diag.Get(h.ctx, childID)
+	require.NoError(t, err)
+	require.Equal(t, failure.ID, child.RecoveryFailureID)
+	require.NoError(t, h.db.Exec(`DROP TRIGGER fail_ingest_audit ON operation_logs`).Error)
+	recovered.RecoveryFailureID = childID
+	repaired, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{recovered}})
+	require.NoError(t, err)
+	require.Equal(t, "pending_review", repaired.Items[0].Status)
+	child, err = diag.Get(h.ctx, childID)
+	require.NoError(t, err)
+	require.Equal(t, repaired.Items[0].EntryID, child.RecoveryEntryID)
+	// A diagnostic cleanup failure must leave the pending entry retryable.
+	// Permissions are restored even if the assertion below fails.
+	childDir := filepath.Join(diagnosticRoot, "failures", childID)
+	require.NoError(t, os.Chmod(childDir, 0500))
+	t.Cleanup(func() { _ = os.Chmod(childDir, 0700) })
+	_, err = h.service.ReviewEntryIntake(h.ctx, repaired.Items[0].EntryID, "reject", types.SourceInfo{Confirmed: true})
+	require.Error(t, err)
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", repaired.Items[0].EntryID).Count(&count).Error)
+	require.EqualValues(t, 1, count, "cleanup failure preserves the entry for a retry")
+	require.NoError(t, os.Chmod(childDir, 0700))
+	_, err = h.service.ReviewEntryIntake(h.ctx, repaired.Items[0].EntryID, "reject", types.SourceInfo{Confirmed: true})
+	require.NoError(t, err)
+	failure, err = diag.Get(h.ctx, failure.ID)
+	require.NoError(t, err)
+	require.Equal(t, "unavailable", failure.PackageStatus)
+	require.Empty(t, failure.Materials)
+	for _, id := range []string{failure.ID, childID} {
+		removed, err := diag.Get(h.ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, "unavailable", removed.PackageStatus)
+		require.Empty(t, removed.Materials)
+		files, err := os.ReadDir(filepath.Join(diagnosticRoot, "failures", id))
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+	}
 }
 
 func TestAssembleIngestBodyExactFormat(t *testing.T) {
@@ -261,4 +347,75 @@ func TestAssembleIngestBodyExactFormat(t *testing.T) {
 	var typed types.IngestRequest
 	require.NoError(t, json.Unmarshal([]byte(`{"url":"https://x.com/a/1","content":"Original","thread":[{"author":"Ada","published_at":"2026-10-01","content":"Thread"}],"quotes":[{"content":"Quote","author":"Grace","url":"https://example.org/q"}]}`), &typed))
 	require.Equal(t, "2026-10-01", typed.Thread[0].PublishedAt)
+}
+
+func TestIngestModelCallBodiesFollowTransactionOutcome(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
+	secutils.ResetSSRFWhitelistForTest()
+	t.Cleanup(secutils.ResetSSRFWhitelistForTest)
+	h, _ := newIngestHarness(t)
+	diag, err := diagnostics.New(t.TempDir(), diagnostics.DefaultRetention, diagnostics.DefaultMaxBytes)
+	require.NoError(t, err)
+	diag.SetVersion("review@fixture")
+	h.service.SetIngestDiagnostics(diag)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"approved\":true,\"reason\":\"Complete original publication\"}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20}}`))
+	}))
+	defer server.Close()
+	fixture := h.service.modelService.(articleProcessingModels).summaryStateModelService
+	metadata := *fixture.metadata
+	metadata.Parameters.Provider = "openai"
+	metadata.Parameters.BaseURL = server.URL + "/v1"
+	cfg := chat.ConfigFromModel(&metadata)
+	cfg.Accounting = (&modelService{db: h.db}).callAccounting(&metadata)
+	actual, err := chat.NewChat(cfg, nil)
+	require.NoError(t, err)
+	fixture.model = actual
+	h.service.task = failingReparseTaskEnqueuer{err: context.DeadlineExceeded}
+	req := types.IngestRequest{Library: "official", Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/rollback-ledger", Content: "PRIVATE LEDGER ORIGINAL measured physical observations and deployment experiment."}
+	failed, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{req}})
+	require.NoError(t, err)
+	require.Equal(t, "invalid", failed.Items[0].Status)
+	require.NotNil(t, failed.Items[0].Diagnostics)
+	require.NoError(t, modelcalls.FlushWrites(h.ctx))
+	store := modelcalls.NewStore(h.db)
+	rows, _, err := store.List(h.ctx, modelcalls.Filter{SpaceID: h.library.SpaceID}, 100, 0)
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	require.NotNil(t, rows[0].EntryID)
+	ghostID := *rows[0].EntryID
+	var count int64
+	require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", ghostID).Count(&count).Error)
+	require.Zero(t, count)
+	_, err = store.Content(h.ctx, h.library.SpaceID, rows[0].ID)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound, "rolled-back call keeps accounting only")
+	h.service.task = h.queue
+	req.RecoveryFailureID = failed.Items[0].Diagnostics.FailureID
+	repaired, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{req}})
+	require.NoError(t, err)
+	require.Equal(t, "accepted", repaired.Items[0].Status)
+	require.NoError(t, modelcalls.FlushWrites(h.ctx))
+	calls, _, err := store.List(h.ctx, modelcalls.Filter{SpaceID: h.library.SpaceID}, 100, 0)
+	require.NoError(t, err)
+	var acceptedID string
+	for _, call := range calls {
+		if call.EntryID != nil && *call.EntryID == repaired.Items[0].EntryID {
+			acceptedID = call.ID
+			break
+		}
+	}
+	require.NotEmpty(t, acceptedID)
+	content, err := store.Content(h.ctx, h.library.SpaceID, acceptedID)
+	require.NoError(t, err)
+	require.Contains(t, content.Request, "PRIVATE LEDGER ORIGINAL", "successful ingest retains existing model-call details")
+	failure, err := diag.Get(h.ctx, req.RecoveryFailureID)
+	require.NoError(t, err)
+	var captured bool
+	for _, m := range failure.Materials {
+		if m.Source == "model_call" {
+			captured = true
+		}
+	}
+	require.True(t, captured, "failed call body stays inside the bounded fault package")
 }

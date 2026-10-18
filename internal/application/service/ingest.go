@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"reliquary/internal/diagnostics"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	taskqueue "reliquary/internal/queue"
@@ -42,19 +43,25 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
+	diagnostics.SetStage(ctx, "library")
 	library, err := s.resolveIngestLibrary(ctx, request.Library)
 	if err != nil {
 		return nil, err
 	}
+	diagnostics.SetLibrary(ctx, library)
 	defer func() {
 		if err == nil && result != nil && result.LibraryID == library.ID {
 			result.LibraryName = library.Name
+		}
+		if err == nil && result != nil && result.EntryID != "" && request.RecoveryFailureID != "" && !s.needsTaskTransaction() {
+			err = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", result.EntryID, spaceID).Update("metadata", gorm.Expr("jsonb_set(COALESCE(metadata,'{}'::jsonb),'{recovery_failure_id}',to_jsonb(?::text),true)", request.RecoveryFailureID)).Error
 		}
 	}()
 	if err := validateLibraryIngest(request, library); err != nil {
 		return nil, err
 	}
 	if !intakeTemplateRules(library).Process {
+		diagnostics.SetOutcome(ctx, "unknown", "")
 		if s.vault == nil {
 			return nil, werrors.NewBadRequestError("report vault is unavailable")
 		}
@@ -87,6 +94,9 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		if err != nil {
 			err = errors.Join(err, changes.rollback(s.vault))
 		} else {
+			if result != nil {
+				diagnostics.SetOutcome(ctx, "unknown", result.EntryID)
+			}
 			err = errors.Join(err, changes.finish())
 		}
 		return result, err
@@ -137,6 +147,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	}
 	article.CreatedAt = time.Now()
 	if request.EntryID != "" {
+		diagnostics.SetStage(ctx, "materials")
 		var existing types.Entry
 		err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, request.EntryID).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -169,6 +180,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		}
 		return ingestResult(existing, "exists", "该文章已收录。", "", ""), nil
 	}
+	diagnostics.SetStage(ctx, "materials")
 	body, canonicalBody, err := s.storeIngestMaterials(ctx, library, article, request)
 	if err != nil {
 		return nil, err
@@ -236,9 +248,13 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 	if request == nil || len(request.Items) < 1 || len(request.Items) > 50 {
 		return nil, werrors.NewBadRequestError("items must contain between 1 and 50 entries")
 	}
-	if _, _, _, err := s.ingestIdentity(ctx); err != nil {
+	verified, keyID, keyName, err := s.ingestIdentity(ctx)
+	if err != nil {
 		return nil, err
 	}
+	spaceID, _ := types.SpaceIDFromContext(verified)
+	principal, _ := types.PrincipalFromContext(verified)
+	ctx = context.WithValue(verified, verifiedIngestIdentityKey{}, verifiedIngestIdentity{spaceID, principal, keyID, keyName})
 	var total int64
 	for _, item := range request.Items {
 		total += ingestInlineSize(item.Images)
@@ -248,7 +264,7 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 	}
 	result := &types.IngestBatchResult{Items: make([]types.IngestResult, 0, len(request.Items))}
 	for i := range request.Items {
-		item, err := s.Ingest(ctx, &request.Items[i])
+		item, err := s.ingestWithDiagnostics(ctx, &request.Items[i], i)
 		if err != nil {
 			var identityErr *ingestIdentityError
 			if errors.As(err, &identityErr) {
@@ -261,7 +277,11 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 				reason = app.Message
 				message = "该条目无效，请检查获取方式、材料和缺失说明后重试。"
 			}
+			diagnostic := item
 			item = ingestResult(nil, "invalid", message, reason, "")
+			if diagnostic != nil {
+				item.Diagnostics = diagnostic.Diagnostics
+			}
 		}
 		item.Index = i
 		result.Items = append(result.Items, *item)
@@ -270,8 +290,10 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 }
 
 func (s *entryService) finishIngestReview(ctx context.Context, library *types.Library, article *types.Entry, body string) (*types.IngestResult, error) {
+	diagnostics.SetStage(ctx, "review")
 	rejected, err := s.reviewIntake(context.WithValue(ctx, deferSegmentReviewKey{}, true), library, article, body)
 	if errors.Is(err, errSegmentReviewQueued) {
+		diagnostics.SetStage(ctx, "enqueue")
 		if _, err := s.enqueueManualProcessing(ctx, article, body, false); err != nil {
 			return nil, err
 		}
@@ -290,6 +312,7 @@ func (s *entryService) finishIngestReview(ctx context.Context, library *types.Li
 		intake, _ := article.IntakeMetadata()
 		return ingestResult(article, "pending_review", "已保存，等待收录审核。", intake.Reason, ""), nil
 	}
+	diagnostics.SetStage(ctx, "enqueue")
 	if _, err := s.enqueueManualProcessing(ctx, article, body, false, options...); err != nil {
 		return nil, err
 	}
@@ -413,6 +436,9 @@ func validateIngestRequest(request *types.IngestRequest) error {
 			if _, err := decodeIngestInline(image.Data); err != nil {
 				return bad(err.Error())
 			}
+			if _, err := ingestImageDataURI(image.Data); err != nil {
+				return bad(err.Error())
+			}
 		}
 		if image.SourceURL != "" && !validIngestURL(image.SourceURL) {
 			return bad(fmt.Sprintf("images[%d].source_url is invalid", i))
@@ -458,6 +484,13 @@ func (s *entryService) resolveIngestImages(ctx context.Context, input []types.In
 			continue
 		}
 		ref, err := ingestImageDataURI(image.Data)
+		if data, decodeErr := decodeIngestInline(image.Data); decodeErr == nil {
+			source := ingestImageSource(image)
+			if image.AssetID != "" {
+				source = "asset_id:" + image.AssetID
+			}
+			diagnostics.CaptureImage(ctx, fmt.Sprintf("image-%d", i), source, http.DetectContentType(data), data)
+		}
 		var images []docparser.StoredImage
 		if err == nil {
 			_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, spaceID)

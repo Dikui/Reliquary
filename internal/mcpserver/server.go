@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"reliquary/internal/application/service"
+	"reliquary/internal/diagnostics"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -32,13 +33,14 @@ type EntryService interface {
 }
 
 type Services struct {
-	Libraries interfaces.LibraryService
-	Entries   EntryService
-	Search    interfaces.SearchService
-	Graph     *service.GraphSearchService
-	Topics    *service.TopicService
-	Entities  *service.EntityService
-	Follows   *service.FollowService
+	Diagnostics *diagnostics.Service
+	Libraries   interfaces.LibraryService
+	Entries     EntryService
+	Search      interfaces.SearchService
+	Graph       *service.GraphSearchService
+	Topics      *service.TopicService
+	Entities    *service.EntityService
+	Follows     *service.FollowService
 }
 
 // Handler uses sessionless Streamable HTTP so every request carries its own
@@ -83,7 +85,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.Reader
 		io.Closer
 	}{&ingestBodyReader{Reader: types.NewIngestJSONReader(r.Body, types.MaxIngestMCPBytes), err: &readError}, r.Body}
-	h.transport.ServeHTTP(&ingestBodyErrorWriter{ResponseWriter: w, err: &readError}, r.WithContext(ctx))
+	h.transport.ServeHTTP(&ingestBodyErrorWriter{ResponseWriter: w, err: &readError}, r.WithContext(diagnostics.WithTransport(ctx, "mcp")))
 }
 
 // Preserve the bounded reader's precise error; the MCP SDK otherwise replaces
@@ -209,6 +211,7 @@ func contractFields(value any) any {
 }
 
 func registerTools(server *mcp.Server, services Services) {
+	registerIngestDiagnostics(server, services.Diagnostics)
 	registerGraphSearch(server, services.Graph)
 	if services.Libraries != nil {
 		addTool(server, "list_libraries", "列出全部库的 ID、目录、名称、模板、说明、该收与不该收的内容、审核标准、去重规则、内容类型和关注动态配置。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
@@ -433,16 +436,17 @@ func ingestSchema() map[string]any {
 		"reason":     text("无法提供材料的原因，必填"),
 	}, "type", "source_url", "reason")
 	item := object(map[string]any{
-		"library":     text("必填，库 ID 或英文目录名；先调用 list_libraries"),
-		"entry_id":    text("补全时必填的资料 ID"),
-		"source_ref":  text("仅自有型库，最多 2048 Unicode 码点"),
-		"identifier":  text("仅外部长效型库，scheme:value，最多 2048 Unicode 码点"),
-		"graph":       map[string]any{"type": []string{"boolean", "null"}, "description": "覆盖图谱默认开关，null 使用默认值"},
-		"url":         text("文章原文链接必填，可为空；本人文档可省略或为空，不提取链接"),
-		"content":     text("Markdown 正文全文，必填；调用方须先将原始资料转换成 Markdown"),
-		"acquisition": enum("获取方式，必填：逐字原文、网页提取或模型整理", "verbatim", "extracted", "model_written"),
-		"missing":     map[string]any{"type": "array", "description": "缺失图片时说明原地址和原因", "items": missing},
-		"title":       text("原文标题"), "author": text("作者"), "publisher": text("发布者"),
+		"library":             text("必填，库 ID 或英文目录名；先调用 list_libraries"),
+		"entry_id":            text("补全时必填的资料 ID"),
+		"recovery_failure_id": text("可选，关联修复的接收故障编号；不参与正文或去重"),
+		"source_ref":          text("仅自有型库，最多 2048 Unicode 码点"),
+		"identifier":          text("仅外部长效型库，scheme:value，最多 2048 Unicode 码点"),
+		"graph":               map[string]any{"type": []string{"boolean", "null"}, "description": "覆盖图谱默认开关，null 使用默认值"},
+		"url":                 text("文章原文链接必填，可为空；本人文档可省略或为空，不提取链接"),
+		"content":             text("Markdown 正文全文，必填；调用方须先将原始资料转换成 Markdown"),
+		"acquisition":         enum("获取方式，必填：逐字原文、网页提取或模型整理", "verbatim", "extracted", "model_written"),
+		"missing":             map[string]any{"type": "array", "description": "缺失图片时说明原地址和原因", "items": missing},
+		"title":               text("原文标题"), "author": text("作者"), "publisher": text("发布者"),
 		"published_at": text("原文发布时间，YYYY-MM-DD 或 RFC3339，可省略"),
 		"images":       map[string]any{"type": "array", "description": "原始图片文件；补全按 source_url 匹配，不下载远程图片", "items": image},
 		"thread": map[string]any{"type": "array", "description": "按顺序追加的推文串", "items": object(map[string]any{
