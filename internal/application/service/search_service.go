@@ -14,7 +14,10 @@ type searchService struct {
 	modelService   interfaces.ModelService
 	rerank         *search.RerankStage
 	db             *gorm.DB
+	vault          *VaultService
 }
+
+func (s *searchService) SetVault(v *VaultService) { s.vault = v }
 
 func NewSearchService(libraryService interfaces.LibraryService, spaceService interfaces.SpaceService, modelService interfaces.ModelService, db *gorm.DB) interfaces.SearchService {
 	return &searchService{
