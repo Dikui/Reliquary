@@ -110,6 +110,9 @@ func (s *entryService) singleReviewSegment(ctx context.Context, library *types.L
 }
 
 func (s *entryService) reviewSegments(ctx context.Context, library *types.Library, entry *types.Entry, body string, source types.SourceInfo) (bool, string, error) {
+	if err := s.rejectProcessingGIFs(ctx, library, entry, body); err != nil {
+		return false, "", err
+	}
 	ctx = types.WithModelCallEntry(ctx, entry.ID)
 	id, err := ResolveModelTier(ctx, s.db, library, types.ModelTierLight)
 	if err != nil {
@@ -177,7 +180,10 @@ func (s *entryService) reviewSegments(ctx context.Context, library *types.Librar
 	parts, err := s.executeSegments(ctx, entry, run, func(ctx context.Context, p types.ProcessingSegment, count int) (json.RawMessage, error) {
 		partBody := string(runes[p.Start:p.End])
 		refs := segmentImageReferences(body, p)
-		images, _, records := s.attachProcessingImages(ctx, library, entry, partBody, model.Parameters.SupportsVision, refs)
+		images, _, records, err := s.attachProcessingImages(ctx, library, entry, partBody, model.Parameters.SupportsVision, refs)
+		if err != nil {
+			return nil, err
+		}
 		imageInputs := make([]reviewImageInput, 0, len(records))
 		imageReferences := []types.ModelCallImageReference{}
 		for i, record := range records {

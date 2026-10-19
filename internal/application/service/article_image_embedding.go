@@ -17,6 +17,7 @@ import (
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
@@ -108,16 +109,13 @@ func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *Vault
 	if err != nil {
 		return nil, fmt.Errorf("read article image %s: %w", attachmentPath, err)
 	}
-	data, err := io.ReadAll(file)
+	prepared, err := utils.PrepareModelImage(ctx, file)
 	file.Close()
 	if err != nil {
-		return nil, fmt.Errorf("read article image bytes: %w", err)
+		return nil, fmt.Errorf("prepare article image %s: %w", attachmentPath, err)
 	}
+	data, hash := prepared.Data, prepared.SourceHash
 	mediaType := http.DetectContentType(data)
-	if !strings.HasPrefix(mediaType, "image/") {
-		return nil, fmt.Errorf("article image is not a supported image: %s", attachmentPath)
-	}
-	hash := fmt.Sprintf("%x", sha256.Sum256(data))
 	if !force {
 		var count int64
 		if err := db.WithContext(ctx).Table("image_embeddings").Where("space_id=? AND entry_id=? AND attachment_path=? AND model_id=? AND dimension=? AND content_hash=?",
@@ -129,6 +127,7 @@ func prepareArticleImageEmbedding(ctx context.Context, db *gorm.DB, vault *Vault
 		}
 	}
 	ctx = types.WithLLMCallMetadata(ctx, "image_embedding", "")
+	ctx = types.WithModelCallImages(ctx, []types.ModelCallImageReference{{Path: attachmentPath, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))}})
 	vector, err := images.EmbedImage(ctx, "data:"+mediaType+";base64,"+base64.StdEncoding.EncodeToString(data))
 	if err != nil {
 		return nil, fmt.Errorf("embed article image %s: %w", attachmentPath, err)

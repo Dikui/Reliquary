@@ -5,14 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"slices"
-	"strings"
 
 	"reliquary/internal/models/rerank"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
 const maxMultimodalRerankDocuments = 40
@@ -86,14 +85,12 @@ func (s *searchService) entryRerankImage(ctx context.Context, entryID, path stri
 		return document, reference, err
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, types.MaxIngestInlineAssetBytes+1))
+	prepared, err := utils.PrepareModelImage(ctx, file)
 	if err != nil {
 		return document, reference, err
 	}
+	data := prepared.Data
 	mediaType := http.DetectContentType(data)
-	if len(data) > types.MaxIngestInlineAssetBytes || !strings.HasPrefix(mediaType, "image/") {
-		return document, reference, fmt.Errorf("rerank image is not a supported image within the size limit")
-	}
 	document.Image = "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data)
 	reference = types.ModelCallImageReference{Path: path, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))}
 	return document, reference, nil

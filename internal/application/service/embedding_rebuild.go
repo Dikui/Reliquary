@@ -14,6 +14,7 @@ import (
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/pgvector/pgvector-go"
@@ -321,7 +322,7 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID stri
 			return ctx.Err()
 		}
 		var deferred types.DeferredOperation
-		if embedErr != nil && (run.Candidate || errors.As(embedErr, &deferred)) {
+		if embedErr != nil && !utils.IsPermanentImageError(embedErr) && (run.Candidate || errors.As(embedErr, &deferred)) {
 			return &types.VectorDeferredError{Cause: embedErr, RetryAt: time.Now().Add(time.Minute)}
 		}
 		if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

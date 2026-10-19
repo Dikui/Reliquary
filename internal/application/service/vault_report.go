@@ -18,6 +18,7 @@ import (
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/queue"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -235,7 +236,7 @@ func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *ty
 	}
 	var indexed *types.Entry
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		transactional := &VaultDocumentService{db: tx, models: s.models,
+		transactional := &VaultDocumentService{db: tx, models: s.models, root: s.root,
 			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
 		indexed, err = transactional.indexReport(ctx, library, entry.VaultPath, string(body), entry.CreatedAt)
 		return err
@@ -247,7 +248,12 @@ func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *ty
 	return indexed, err
 }
 
-func (s *VaultDocumentService) HandleReportIndex(ctx context.Context, task *queue.Task) error {
+func (s *VaultDocumentService) HandleReportIndex(ctx context.Context, task *queue.Task) (returnErr error) {
+	defer func() {
+		if utils.IsPermanentImageError(returnErr) {
+			returnErr = fmt.Errorf("%w: %w", returnErr, queue.SkipRetry)
+		}
+	}()
 	var payload types.ReportIndexPayload
 	if err := types.UnmarshalSpacePayload(task.Payload(), &payload); err != nil || payload.SpaceID != types.SingleSpaceID || payload.EntryID == "" {
 		return fmt.Errorf("invalid report indexing payload: %w", queue.SkipRetry)

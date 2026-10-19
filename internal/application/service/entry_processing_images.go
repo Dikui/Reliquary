@@ -5,12 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
 type processingImageInput struct {
@@ -18,7 +21,27 @@ type processingImageInput struct {
 	Start int `json:"start"`
 }
 
-func (s *entryService) attachProcessingImages(ctx context.Context, l *types.Library, k *types.Entry, body string, vision bool, supplied ...[]docparser.MarkdownImageReference) ([]string, []processingImageInput, []types.ProcessingImage) {
+// Check before checkpoints or non-visual branches can skip a stored GIF.
+func rejectGIFImages(body string, open func(string) (io.ReadCloser, error)) error {
+	for i, ref := range bodyImageReferences(body) {
+		if remoteIngestImage(ref.URL) {
+			continue
+		}
+		file, err := open(ref.URL)
+		if err != nil {
+			continue // Missing and unreadable references keep their existing skip reason.
+		}
+		var header [6]byte
+		n, _ := io.ReadFull(file, header[:])
+		file.Close()
+		if http.DetectContentType(header[:n]) == "image/gif" {
+			return &utils.ImageInputError{Reason: fmt.Sprintf("第 %d 张图片不支持 GIF，请提供静态图片后重新处理", i+1)}
+		}
+	}
+	return nil
+}
+
+func (s *entryService) attachProcessingImages(ctx context.Context, l *types.Library, k *types.Entry, body string, vision bool, supplied ...[]docparser.MarkdownImageReference) ([]string, []processingImageInput, []types.ProcessingImage, error) {
 	images := []string{}
 	inputs := []processingImageInput{}
 	records := []types.ProcessingImage{}
@@ -34,6 +57,9 @@ func (s *entryService) attachProcessingImages(ctx context.Context, l *types.Libr
 		} else {
 			uri, err := s.processingImageDataURI(ctx, l, k, ref.URL)
 			if err != nil {
+				if utils.IsPermanentImageError(err) {
+					return nil, nil, records, err
+				}
 				row.SkipReason = err.Error()
 			} else {
 				images = append(images, uri)
@@ -42,7 +68,7 @@ func (s *entryService) attachProcessingImages(ctx context.Context, l *types.Libr
 		}
 		records = append(records, row)
 	}
-	return images, inputs, records
+	return images, inputs, records, nil
 }
 
 func qualifyImageLocations(body string, p types.ProcessingSegment, part *articleProcessingResult, supplied ...[]docparser.MarkdownImageReference) {

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"gorm.io/gorm"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 	"time"
 )
 
@@ -17,9 +19,12 @@ func imageVectorsEnabled(ctx context.Context, db *gorm.DB, spaceID uint64) bool 
 	var space types.Space
 	return db.WithContext(ctx).Select("retrieval_config").Where("id=?", spaceID).Find(&space).Error == nil && space.RetrievalConfig != nil && space.RetrievalConfig.ImageVectorEnabled
 }
-func (s *entryService) deferEntryVectors(ctx context.Context, entry *types.Entry) error {
+func (s *entryService) deferEntryVectors(ctx context.Context, entry *types.Entry, cause error) error {
+	if utils.IsPermanentImageError(cause) {
+		return cause
+	}
 	if ctx.Value(libraryRebuildContextKey{}) == true {
-		return errors.New("library rebuild vectors are incomplete; retry this processing task")
+		return fmt.Errorf("library rebuild vectors are incomplete; retry this processing task: %w", cause)
 	}
 	if s.task == nil {
 		return errors.New("vector pending operation queue unavailable")
@@ -42,6 +47,9 @@ func (r *EmbeddingRebuilder) HandleEntryVector(ctx context.Context, task *taskqu
 	ctx = types.WithModelTier(types.WithBackgroundTask(context.WithValue(ctx, types.SpaceIDContextKey, payload.SpaceID)), types.ModelTierEmbedding)
 	err := r.indexEntryVectors(ctx, payload.SpaceID, payload.EntryID)
 	if err != nil {
+		if utils.IsPermanentImageError(err) {
+			return fmt.Errorf("%w: %w", err, taskqueue.SkipRetry)
+		}
 		return &types.VectorDeferredError{Cause: err, RetryAt: time.Now().Add(time.Minute)}
 	}
 	return nil

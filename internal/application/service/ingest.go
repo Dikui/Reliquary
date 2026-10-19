@@ -444,6 +444,16 @@ func validateIngestRequest(request *types.IngestRequest) error {
 			return bad(fmt.Sprintf("images[%d].source_url is invalid", i))
 		}
 	}
+	for i, ref := range bodyImageReferences(request.Content) {
+		if strings.HasPrefix(ref.URL, "data:image/") {
+			if _, err := decodeIngestInline(ref.URL); err != nil {
+				return bad(fmt.Sprintf("正文图片 %d：%s", i+1, err))
+			}
+			if _, err := ingestImageDataURI(ref.URL); err != nil {
+				return bad(fmt.Sprintf("正文图片 %d：%s", i+1, err))
+			}
+		}
+	}
 	for i, item := range request.Thread {
 		if strings.TrimSpace(item.Content) == "" {
 			return bad(fmt.Sprintf("thread[%d].content is required", i))
@@ -477,33 +487,31 @@ func (s *entryService) resolveIngestImages(ctx context.Context, input []types.In
 	refs := make([]string, len(input))
 	stored := []docparser.StoredImage{}
 	failures := []types.IngestImageFailure{}
-	resolver := docparser.NewImageResolver()
 	for i, image := range input {
 		if image.Data == "" {
 			refs[i] = ingestImageSource(image)
 			continue
 		}
 		ref, err := ingestImageDataURI(image.Data)
-		if data, decodeErr := decodeIngestInline(image.Data); decodeErr == nil {
+		if err == nil {
+			_, payload, _ := strings.Cut(ref, ",")
+			data, _ := base64.StdEncoding.DecodeString(payload)
+			mimeType := http.DetectContentType(data)
 			source := ingestImageSource(image)
 			if image.AssetID != "" {
 				source = "asset_id:" + image.AssetID
 			}
-			diagnostics.CaptureImage(ctx, fmt.Sprintf("image-%d", i), source, http.DetectContentType(data), data)
-		}
-		var images []docparser.StoredImage
-		if err == nil {
-			_, images, err = resolver.ResolveDataURIImages(ctx, "![image]("+ref+")", files, spaceID)
-		}
-		if err == nil && len(images) != 1 {
-			err = fmt.Errorf("image could not be stored")
+			diagnostics.CaptureImage(ctx, fmt.Sprintf("image-%d", i), source, mimeType, data)
+			// Inputs are already validated; preserve upload limits and original bytes.
+			name := uuid.NewString() + vaultImageExtension("", mimeType)
+			refs[i], err = files.SaveBytes(ctx, data, spaceID, name, false)
+			if err == nil {
+				stored = append(stored, docparser.StoredImage{OriginalRef: ref, ServingURL: refs[i], MimeType: mimeType})
+			}
 		}
 		if err != nil {
 			failures = append(failures, types.IngestImageFailure{Index: i, URL: ingestImageSource(image), Reason: err.Error()})
-			continue
 		}
-		refs[i] = images[0].ServingURL
-		stored = append(stored, images[0])
 	}
 	return refs, stored, failures
 }
@@ -520,6 +528,9 @@ func ingestImageDataURI(raw string) (string, error) {
 	decoded, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
 		return "", fmt.Errorf("decode image data: %w", err)
+	}
+	if err := utils.ValidateIngestImage(decoded); err != nil {
+		return "", err
 	}
 	mimeType := http.DetectContentType(decoded)
 	if !strings.HasPrefix(mimeType, "image/") {

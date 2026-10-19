@@ -1,17 +1,25 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"reliquary/internal/models/embedding"
+	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
@@ -57,12 +65,15 @@ func newArticleImageHarness(t *testing.T, enabled bool) (*articleProcessingHarne
 
 func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T) {
 	h, vault, e := newArticleImageHarness(t, true)
-	image := articleImageDataURI(t, 29)
-	article := h.upload(t, "Image observations", "Original measurements are recorded in the illustrations.\n\n![first]("+image+")\n\n![second]("+articleImageDataURI(t, 58)+")\n\n![repeat]("+image+")")
+	firstImage := articleImageDataURI(t, 29)
+	var large bytes.Buffer
+	require.NoError(t, png.Encode(&large, image.NewNRGBA(image.Rect(0, 0, 5000, 40))))
+	largeURI := "data:image/png;base64," + base64.StdEncoding.EncodeToString(large.Bytes())
+	article := h.upload(t, "Image observations", "Original measurements are recorded in the illustrations.\n\n![first]("+firstImage+")\n\n![second]("+articleImageDataURI(t, 58)+")\n\n![repeat]("+firstImage+")\n\n![large]("+largeURI+")")
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
 	paths := articleImagePaths(article)
-	require.Len(t, paths, 2, "repeated attachment is vectorized once")
-	require.Len(t, e.images, 2)
+	require.Len(t, paths, 3, "repeated attachment is vectorized once")
+	require.Len(t, e.images, 3)
 	type row struct {
 		ModelID, AttachmentPath, ContentHash string
 		Dimension                            int
@@ -70,7 +81,8 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 	}
 	var rows []row
 	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Order("attachment_path").Scan(&rows).Error)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 3)
+	var transformed bool
 	for index, stored := range rows {
 		require.Equal(t, "embedding", stored.ModelID)
 		require.Equal(t, 3, stored.Dimension)
@@ -82,9 +94,17 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 		require.NoError(t, err)
 		require.NoError(t, file.Close())
 		require.Equal(t, fmt.Sprintf("%x", sha256.Sum256(data)), stored.ContentHash)
+		_, payload, _ := strings.Cut(e.images[index], ",")
+		sent, err := base64.StdEncoding.DecodeString(payload)
+		require.NoError(t, err)
+		config, _, err := image.DecodeConfig(bytes.NewReader(sent))
+		require.NoError(t, err)
+		require.LessOrEqual(t, max(config.Width, config.Height), 4096)
+		transformed = transformed || !bytes.Equal(data, sent)
 	}
+	require.True(t, transformed, "large images use a derived copy while stored originals keep their hash")
 	require.NoError(t, indexArticleImages(h.ctx, h.db, h.service.modelService, h.library, vault, article))
-	require.Len(t, e.images, 2, "unchanged bytes and model retain vectors")
+	require.Len(t, e.images, 3, "unchanged bytes and model retain vectors")
 	e.err = errors.New("fixture unavailable")
 	embedder, err := GetTierEmbeddingModel(h.ctx, h.db, h.service.modelService, h.library)
 	require.NoError(t, err)
@@ -92,7 +112,7 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 	require.ErrorContains(t, err, "fixture unavailable")
 	var count int64
 	require.NoError(t, h.db.Table("image_embeddings").Where("entry_id=?", article.ID).Count(&count).Error)
-	require.EqualValues(t, 2, count, "failed replacement keeps the prior image vector")
+	require.EqualValues(t, 3, count, "failed replacement keeps the prior image vector")
 }
 
 func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T) {
@@ -106,6 +126,24 @@ func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T
 	relative := filepath.Join(filepath.Dir(article.VaultPath), path)
 	require.NoError(t, os.WriteFile(filepath.Join(vault.root, relative), []byte("changed image bytes"), 0644))
 	require.ErrorContains(t, write(h.db), "bytes changed")
+	gifData, err := base64.StdEncoding.DecodeString("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(vault.root, relative), gifData, 0644))
+	_, err = prepareArticleImageEmbedding(h.ctx, h.db, vault, embedder, article, path, true)
+	require.ErrorContains(t, err, "不支持 GIF")
+	require.True(t, utils.IsPermanentImageError(err))
+	err = h.service.processArticleBody(h.ctx, h.library, article, article.VaultBody, nil, types.EffectiveProcessConfig{})
+	require.ErrorContains(t, err, "不支持 GIF")
+	require.True(t, utils.IsPermanentImageError(err), "stored GIFs fail before completed checkpoints can skip image processing")
+	require.NoError(t, h.db.Model(article).Update("parse_status", types.ParseStatusPending).Error)
+	payload, err := json.Marshal(types.ManualProcessPayload{SpaceID: article.SpaceID, LibraryID: article.LibraryID, EntryID: article.ID, Content: article.VaultBody, NeedCleanup: true, RebuildID: "gif-rebuild"})
+	require.NoError(t, err)
+	err = h.service.ProcessManualUpdate(h.ctx, taskqueue.NewTask(types.TypeManualProcess, payload))
+	require.ErrorContains(t, err, "不支持 GIF")
+	require.ErrorIs(t, err, taskqueue.SkipRetry)
+	data, err := os.ReadFile(filepath.Join(vault.root, relative))
+	require.NoError(t, err)
+	require.Equal(t, gifData, data, "rejected historical GIFs remain stored")
 	copy := *article
 	copy.SourceKind = "mine"
 	require.Equal(t, articleImagePaths(article), articleImagePaths(&copy))

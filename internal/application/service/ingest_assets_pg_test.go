@@ -101,6 +101,15 @@ func TestIngestAssetsRejectUnsupportedAndOversize(t *testing.T) {
 		_, err := s.UploadIngestAsset(ctx, item.name, item.body)
 		require.Error(t, err)
 	}
+	const gifBase64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+	gifData, err := base64.StdEncoding.DecodeString(gifBase64)
+	require.NoError(t, err)
+	_, err = s.UploadIngestAsset(ctx, "disguised.png", gifData)
+	require.ErrorContains(t, err, "不支持 GIF")
+	_, err = ingestImageDataURI("data:image/png;base64," + gifBase64)
+	require.ErrorContains(t, err, "不支持 GIF")
+	err = validateIngestRequest(&types.IngestRequest{Library: "ai-output", Acquisition: "model_written", Content: "正文\n\n![gif](data:image/png;base64," + gifBase64 + ")"})
+	require.ErrorContains(t, err, "不支持 GIF")
 	var count int64
 	require.NoError(t, s.db.Model(&types.IngestAsset{}).Count(&count).Error)
 	require.Zero(t, count)

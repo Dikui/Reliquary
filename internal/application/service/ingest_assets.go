@@ -63,6 +63,9 @@ func (s *entryService) UploadIngestAsset(ctx context.Context, name string, data 
 	if int64(len(data)) > utils.GetMaxFileSize() {
 		return nil, werrors.NewBadRequestError(fmt.Sprintf("文件大小不能超过%dMB", utils.GetMaxFileSizeMB()))
 	}
+	if err := utils.ValidateIngestImage(data); err != nil {
+		return nil, werrors.NewBadRequestError(err.Error())
+	}
 	if s.needsTaskTransaction() {
 		principal, _ := types.PrincipalFromContext(ctx)
 		ctx = context.WithValue(ctx, verifiedIngestIdentityKey{}, verifiedIngestIdentity{space, principal, keyID, keyName})
@@ -131,6 +134,9 @@ func (s *entryService) loadIngestAsset(ctx context.Context, id string) (*types.I
 	}
 	if int64(len(data)) != asset.Size || int64(len(data)) > utils.GetMaxFileSize() {
 		return nil, nil, werrors.NewBadRequestError("附件大小与上传记录不符")
+	}
+	if err := utils.ValidateIngestImage(data); err != nil {
+		return nil, nil, werrors.NewBadRequestError(err.Error())
 	}
 	diagnostics.CaptureImage(ctx, asset.Name, "asset_id:"+asset.ID, http.DetectContentType(data), data)
 	return &asset, data, nil

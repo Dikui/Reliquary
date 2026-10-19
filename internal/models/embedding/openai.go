@@ -142,6 +142,13 @@ func (e *OpenAIEmbedder) multimodalEmbed(ctx context.Context, inputs []multimoda
 		if len(body) > 1000 {
 			body = body[:1000]
 		}
+		if response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusRequestEntityTooLarge {
+			for _, input := range inputs {
+				if input.Image != "" {
+					return nil, &secutils.ImageInputError{Reason: fmt.Sprintf("图片模型拒绝输入（HTTP %d）：%s", response.StatusCode, body)}
+				}
+			}
+		}
 		return nil, fmt.Errorf("multimodal embedding HTTP %d: %s", response.StatusCode, body)
 	}
 	var result OpenAIEmbedResponse

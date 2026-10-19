@@ -441,7 +441,7 @@ func (s *entryService) processChunks(ctx context.Context,
 	}
 
 	if vectorErr != nil {
-		if err := s.deferEntryVectors(ctx, entry); err != nil {
+		if err := s.deferEntryVectors(ctx, entry, vectorErr); err != nil {
 			entry.ParseStatus = types.ParseStatusFailed
 			entry.ErrorMessage = err.Error()
 			_ = s.repo.UpdateEntry(ctx, entry)
@@ -690,7 +690,12 @@ func (s *entryService) dequeueEntryTasks(ctx context.Context, entryID string) {
 	}
 }
 
-func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Task) error {
+func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Task) (returnErr error) {
+	defer func() {
+		if secutils.IsPermanentImageError(returnErr) {
+			returnErr = fmt.Errorf("%w: %w", returnErr, taskqueue.SkipRetry)
+		}
+	}()
 	var payload types.ManualProcessPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "failed to unmarshal manual process task payload: %v", err)
@@ -791,6 +796,10 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 	ctx = withAttempt(ctx, attempt)
 
 	// Cleanup old resources (indexes and chunks) for update operations
+	if err := s.rejectProcessingGIFs(ctx, library, entry, payload.Content); err != nil {
+		s.markArticleProcessingFailed(ctx, entry, err)
+		return err
+	}
 	if payload.NeedCleanup {
 		cleanup := s.cleanupEntryResources
 		if payload.RebuildID != "" {
@@ -820,6 +829,11 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 
 // ProcessDocument handles PostgreSQL queue document processing tasks
 func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (returnErr error) {
+	defer func() {
+		if secutils.IsPermanentImageError(returnErr) {
+			returnErr = fmt.Errorf("%w: %w", returnErr, taskqueue.SkipRetry)
+		}
+	}()
 	var payload types.DocumentProcessPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "failed to unmarshal document process task payload: %v", err)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -206,45 +207,49 @@ func articleImagesInOrder(body string, stored []docparser.StoredImage) []string 
 	return urls
 }
 
-func (s *entryService) processingImageDataURI(ctx context.Context, library *types.Library, k *types.Entry, ref string) (string, error) {
+func (s *entryService) processingImageReader(ctx context.Context, library *types.Library, k *types.Entry, ref string) (io.ReadCloser, error) {
 	if strings.HasPrefix(ref, "data:image/") {
 		header, payload, ok := strings.Cut(ref, ",")
 		if !ok || !strings.HasSuffix(header, ";base64") {
-			return "", errors.New("图片 data URI 格式不正确")
+			return nil, errors.New("图片 data URI 格式不正确")
 		}
-		data, err := base64.StdEncoding.DecodeString(payload)
-		if err != nil || !strings.HasPrefix(http.DetectContentType(data), "image/") {
-			return "", errors.New("图片 data URI 内容不可读")
+		reader := bufio.NewReader(base64.NewDecoder(base64.StdEncoding, strings.NewReader(payload)))
+		prefix, _ := reader.Peek(512)
+		if !strings.HasPrefix(http.DetectContentType(prefix), "image/") {
+			return nil, errors.New("图片 data URI 内容不可读")
 		}
-		return ref, nil
+		return io.NopCloser(reader), nil
 	}
-	var data []byte
-	var err error
 	if remoteIngestImage(ref) {
-		return "", errors.New("未提供图片文件")
+		return nil, errors.New("未提供图片文件")
 	}
-	{
-		var file io.ReadCloser
-		var readErr error
-		if s.vault != nil && k.VaultPath != "" && !strings.Contains(ref, "://") {
-			file, readErr = s.vault.ReadImage(k, ref)
-		} else {
-			file, readErr = s.resolveFileServiceForPath(ctx, library, ref).GetFile(ctx, ref)
-		}
-		if readErr != nil {
-			return "", fmt.Errorf("read processing image %s: %w", ref, readErr)
-		}
-		data, err = io.ReadAll(file)
-		file.Close()
+	if s.vault != nil && k.VaultPath != "" && !strings.Contains(ref, "://") {
+		return s.vault.ReadImage(k, ref)
 	}
+	return s.resolveFileServiceForPath(ctx, library, ref).GetFile(ctx, ref)
+}
+
+func (s *entryService) rejectProcessingGIFs(ctx context.Context, library *types.Library, k *types.Entry, body string) error {
+	return rejectGIFImages(body, func(ref string) (io.ReadCloser, error) {
+		return s.processingImageReader(ctx, library, k, ref)
+	})
+}
+
+func (s *entryService) processingImageDataURI(ctx context.Context, library *types.Library, k *types.Entry, ref string) (string, error) {
+	reader, err := s.processingImageReader(ctx, library, k, ref)
 	if err != nil {
-		return "", fmt.Errorf("read processing image %s: %w", ref, err)
+		return "", err
 	}
-	mime := http.DetectContentType(data)
-	if !strings.HasPrefix(mime, "image/") {
-		return "", fmt.Errorf("processing image %s has unsupported media type %s", ref, mime)
+	defer reader.Close()
+	prepared, err := utils.PrepareModelImage(ctx, reader)
+	if err != nil {
+		label := ref
+		if strings.HasPrefix(ref, "data:") {
+			label = "内联图片"
+		}
+		return "", fmt.Errorf("prepare processing image %s: %w", label, err)
 	}
-	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+	return "data:" + http.DetectContentType(prepared.Data) + ";base64," + base64.StdEncoding.EncodeToString(prepared.Data), nil
 }
 
 func (s *entryService) callArticleProcessingPart(ctx context.Context, library *types.Library, k *types.Entry, body string, stored []docparser.StoredImage, segment any, imageRefs ...[]docparser.MarkdownImageReference) (*articleProcessingResult, error) {
@@ -260,7 +265,10 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 	}
 	input.Segment = segment
 	bodyLimit, _, completion := s.articleProcessingLimits(model)
-	images, imageInputs, imageRecords := s.attachProcessingImages(ctx, library, k, body, model.Parameters.SupportsVision, imageRefs...)
+	images, imageInputs, imageRecords, err := s.attachProcessingImages(ctx, library, k, body, model.Parameters.SupportsVision, imageRefs...)
+	if err != nil {
+		return nil, err
+	}
 	input.Images = imageInputs
 	imageReferences := []types.ModelCallImageReference{}
 	for i, uri := range images {
@@ -325,6 +333,9 @@ func (s *entryService) processArticleBody(ctx context.Context, library *types.Li
 	writeFiles := ctx.Value(libraryRebuildContextKey{}) != true
 	if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
 		return nil
+	}
+	if err := s.rejectProcessingGIFs(ctx, library, k, body); err != nil {
+		return err
 	}
 	result, err := s.callArticleProcessing(ctx, library, k, body, images)
 	if err != nil {
@@ -442,7 +453,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		return errors.New(k.ErrorMessage)
 	}
 	if err := indexArticleEmbedding(ctx, s.db, s.modelService, library, k); err != nil {
-		if err := s.deferEntryVectors(ctx, k); err != nil {
+		if err := s.deferEntryVectors(ctx, k, err); err != nil {
 			return err
 		}
 	}
@@ -462,7 +473,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		}
 	}
 	if err := indexArticleImages(ctx, s.db, s.modelService, library, s.vault, k); err != nil {
-		if err := s.deferEntryVectors(ctx, k); err != nil {
+		if err := s.deferEntryVectors(ctx, k, err); err != nil {
 			return err
 		}
 	}

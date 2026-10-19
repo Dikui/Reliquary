@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -350,6 +351,12 @@ func (s *VaultDocumentService) indexReport(ctx context.Context, library *types.L
 	}
 	if entry.SourceKind != "report" {
 		return nil, fmt.Errorf("vault path already belongs to a different source kind")
+	}
+	vault := &VaultService{db: s.db, root: s.root}
+	if err := rejectGIFImages(entry.VaultBody, func(ref string) (io.ReadCloser, error) {
+		return vault.ReadImage(&entry, ref)
+	}); err != nil {
+		return nil, err
 	}
 	hash := vaultContentHash(body)
 	if entry.FileHash == hash && entry.ParseStatus == types.ParseStatusCompleted {

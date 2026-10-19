@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
 type candidateVector struct {
@@ -93,11 +95,12 @@ func (r *EmbeddingRebuilder) candidateContent(ctx context.Context, db *gorm.DB, 
 			return "", nil, err
 		}
 		defer f.Close()
-		data, err := io.ReadAll(f)
+		hash := sha256.New()
+		_, err = io.Copy(hash, f)
 		if err != nil {
 			return "", nil, err
 		}
-		return "data:" + http.DetectContentType(data) + ";base64," + base64.StdEncoding.EncodeToString(data), &entry, nil
+		return fmt.Sprintf("%x", hash.Sum(nil)), &entry, nil
 	}
 	return buildEntryIndexContent(&entry, chunk.Content), &entry, nil
 }
@@ -107,12 +110,25 @@ func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *type
 		return nil, err
 	}
 	var vector []float32
+	contentHash := vaultContentHash(content)
 	if item.Kind == "image" {
 		imageModel, ok := p.embedder.(embedding.ImageEmbedder)
 		if !ok || !imageModel.SupportsImages() {
 			return nil, errors.New("candidate model cannot embed images")
 		}
-		vector, err = imageModel.EmbedImage(ctx, content)
+		file, openErr := r.vault.ReadImage(entry, item.AttachmentPath)
+		if openErr != nil {
+			return nil, openErr
+		}
+		prepared, prepareErr := utils.PrepareModelImage(ctx, file)
+		file.Close()
+		if prepareErr != nil {
+			return nil, fmt.Errorf("prepare candidate image %s: %w", item.AttachmentPath, prepareErr)
+		}
+		contentHash = prepared.SourceHash
+		data := prepared.Data
+		ctx = types.WithModelCallImages(ctx, []types.ModelCallImageReference{{Path: item.AttachmentPath, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))}})
+		vector, err = imageModel.EmbedImage(ctx, "data:"+http.DetectContentType(data)+";base64,"+base64.StdEncoding.EncodeToString(data))
 	} else {
 		vector, err = rebuildTextVector(ctx, p, content)
 	}
@@ -122,7 +138,7 @@ func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *type
 	if len(vector) != p.dimension {
 		return nil, errors.New("candidate dimension mismatch")
 	}
-	row := candidateVector{RunID: run.ID, Kind: item.Kind, SourceID: item.SourceID, AttachmentPath: item.AttachmentPath, ModelID: run.ModelID, Dimension: run.Dimension, Embedding: pgvector.NewHalfVector(vector), ContentHash: vaultContentHash(content)}
+	row := candidateVector{RunID: run.ID, Kind: item.Kind, SourceID: item.SourceID, AttachmentPath: item.AttachmentPath, ModelID: run.ModelID, Dimension: run.Dimension, Embedding: pgvector.NewHalfVector(vector), ContentHash: contentHash}
 	if entry != nil {
 		row.EntryID, row.LibraryID = entry.ID, entry.LibraryID
 	}
@@ -131,7 +147,11 @@ func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *type
 		if err != nil {
 			return err
 		}
-		if vaultContentHash(current) != row.ContentHash {
+		currentHash := vaultContentHash(current)
+		if item.Kind == "image" {
+			currentHash = current
+		}
+		if currentHash != row.ContentHash {
 			return errors.New("candidate source changed; retry item")
 		}
 		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "run_id"}, {Name: "kind"}, {Name: "source_id"}, {Name: "attachment_path"}}, UpdateAll: true}).Create(&row).Error
@@ -181,7 +201,11 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 				chunkCount++
 			}
 			content, _, err := r.candidateContent(ctx, tx, spaceID, types.EmbeddingRebuildItem{Kind: v.Kind, SourceID: v.SourceID, AttachmentPath: v.AttachmentPath})
-			if err != nil || vaultContentHash(content) != v.ContentHash {
+			currentHash := vaultContentHash(content)
+			if v.Kind == "image" {
+				currentHash = content
+			}
+			if err != nil || currentHash != v.ContentHash {
 				return apperrors.NewBadRequestError("sources changed during rebuild; rebuild before switching")
 			}
 		}
