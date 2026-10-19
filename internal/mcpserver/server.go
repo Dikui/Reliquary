@@ -130,6 +130,12 @@ type documentInput struct {
 	DocumentID string `json:"document_id"`
 }
 
+type entryContentInput struct {
+	EntryID     string `json:"entry_id"`
+	Content     string `json:"content"`
+	Acquisition string `json:"acquisition,omitempty"`
+}
+
 type entryInput struct {
 	ID     string `json:"id"`
 	Offset int    `json:"offset,omitempty"`
@@ -300,6 +306,11 @@ func registerTools(server *mcp.Server, services Services) {
 			return map[string]any{"target_type": in.TargetType, "target_id": in.TargetID, "following": false}, nil
 		})
 	addIngestTool(server, services.Entries)
+	addTool(server, "update_entry_content", "按资料 ID 替换已归档资料的完整 Markdown 正文，保留 ID 和来源，不保留旧正文版本。非生成型重新审核和处理，生成型只重建索引；处理中返回冲突。省略 acquisition 保留原值。原附件可保留相对引用；非生成型的远程图片标记缺图后用 ingest 补全。"+externalContentNotice,
+		object(map[string]any{"entry_id": text("资料 ID，必填"), "content": text("替换后的完整 Markdown 正文，最多 5000000 Unicode 码点"), "acquisition": enum("获取方式，省略保留原值", "verbatim", "extracted", "model_written")}, "entry_id", "content"),
+		func(ctx context.Context, in entryContentInput) (any, error) {
+			return services.Entries.UpdateEntryContent(ctx, in.EntryID, in.Content, in.Acquisition)
+		})
 	addTool(server, "delete_document", "按文档 ID 删除本人文档，同时删除文件、附件、索引和记录并写入操作日志。文章和整理结果不能用此工具删除。删除后可重新导入相同内容。"+externalContentNotice,
 		object(map[string]any{"document_id": text("本人文档 ID，必填")}, "document_id"),
 		func(ctx context.Context, in documentInput) (any, error) {

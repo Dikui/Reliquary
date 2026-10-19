@@ -205,3 +205,27 @@ func (h *EntryHandler) DeleteDocument(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"document_id": c.Param("id"), "status": "deleted", "message": "本人文档已删除"}})
 }
+
+func (h *EntryHandler) UpdateEntryContent(c *gin.Context) {
+	var input struct {
+		Content     string `json:"content"`
+		Acquisition string `json:"acquisition,omitempty"`
+	}
+	c.Request.Body = struct {
+		io.Reader
+		io.Closer
+	}{types.NewIngestJSONReader(c.Request.Body, types.MaxIngestItemBytes), c.Request.Body}
+	if !decodeIngestJSON(c, &input) {
+		return
+	}
+	collector := h.ingestService(c)
+	if collector == nil {
+		return
+	}
+	result, err := collector.UpdateEntryContent(c.Request.Context(), c.Param("id"), input.Content, input.Acquisition)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}

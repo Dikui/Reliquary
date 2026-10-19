@@ -52,6 +52,7 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 		kRead.GET("/pending", handler.ListPending)
 		kRead.GET("/batch", handler.GetEntryBatch)
 		kRead.GET("/:id/body", g.LibraryExistsFromEntryIDParam("id"), handler.ReadEntryBody)
+		k.PUT("/:id/body", g.LibraryExistsFromEntryIDParam("id"), handler.UpdateEntryContent)
 		kRead.GET("/:id", g.LibraryExistsFromEntryIDParam("id"), handler.GetEntry)
 		kRead.GET("/:id/stages", g.LibraryExistsFromEntryIDParam("id"), handler.GetEntrySpans)
 		kRead.GET("/:id/spans", g.LibraryExistsFromEntryIDParam("id"), handler.GetEntrySpans)

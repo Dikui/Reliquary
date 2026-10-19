@@ -180,6 +180,40 @@ func (v *VaultService) SupplementArticle(ctx context.Context, k *types.Entry, ne
 	return change.finish()
 }
 
+// Only the explicit content-update API may replace finalized text. Keep the
+// file lock until its database transaction commits, using the supplement undo.
+func (v *VaultService) beginArticleContentUpdate(k *types.Entry, newBody string) (*vaultArticleSupplement, error) {
+	lock := v.articleLock(k.ID)
+	lock.Lock()
+	keep := false
+	defer func() {
+		if !keep {
+			lock.Unlock()
+		}
+	}()
+	abs, err := vaultAbsolute(v.root, k.VaultPath)
+	if err != nil {
+		return nil, err
+	}
+	previous, err := os.ReadFile(abs)
+	if err != nil {
+		return nil, err
+	}
+	header, body, err := SplitVaultArticle(previous)
+	if err != nil {
+		return nil, err
+	}
+	if string(body) != k.VaultBody {
+		return nil, errors.New("vault body differs from the locked article snapshot; replacement refused")
+	}
+	if err := v.atomicArticleWrite(abs, header, []byte(newBody), previous); err != nil {
+		return nil, err
+	}
+	k.VaultBody = newBody
+	keep = true
+	return &vaultArticleSupplement{vault: v, abs: abs, previous: previous, lock: lock}, nil
+}
+
 func (change *vaultArticleSupplement) rollback() error {
 	if change == nil || change.closed {
 		return nil

@@ -525,7 +525,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			require.Contains(t, tool.Description, "incomplete=true 表示资料缺少图片")
 		}
 	}
-	require.ElementsMatch(t, []string{"list_libraries", "search", "get_entry", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_incomplete", "accept_incomplete", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material"}, names)
+	require.ElementsMatch(t, []string{"list_libraries", "search", "get_entry", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_incomplete", "accept_incomplete", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material"}, names)
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"title": "Removed report entry point", "markdown": "# Report"}})
 	require.Error(t, err)
 	var search types.EntrySearchResponse

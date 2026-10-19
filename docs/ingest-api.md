@@ -96,6 +96,27 @@ AI产出：
 
 图片缺失继续标记为“缺少图片”。调用方按 `library` 与 `entry_id` 定位原资料，补全成功后重新处理，撤换旧关系证据并重新计算正文位置；缺少图片与来源证据不足分别处理。长文按文末规则分段审核。
 
+## 更新已有资料的正文
+
+HTTP `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 显式替换同一资料的完整 Markdown 正文。认证与收录相同。资料必须已归档；保留资料 ID、库、来源、`source_ref`、`identifier`、创建时间、星标和用户主题。标题、摘要与自定义元数据仍通过 `PUT /api/v1/entries/:id` 修改。
+
+```bash
+curl -X PUT "$RELIQUARY_URL/api/v1/entries/$ENTRY_ID/body" \
+  -H "Authorization: Bearer $RELIQUARY_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"content":"# 项目计划\n\n更新后的完整正文。","acquisition":"verbatim"}'
+```
+
+`content` 必填，不能只传链接或增量片段，最多 5,000,000 Unicode 码点；HTTP JSON 上限 64 MiB。`acquisition` 可选，省略时保留原值；生成型只能使用 `model_written`。MCP 参数为 `{"entry_id":"资料 ID","content":"完整 Markdown","acquisition":"verbatim"}`。
+
+正文相同且获取方式未变时返回 `exists`，不重复处理。更新成功返回原 `entry_id` 和 `accepted`，表示正文及后台任务已保存；通过 HTTP `GET /api/v1/entries/:id` 或 MCP `get_entry` 查看处理状态。非生成型重新审核并生成摘要、索引及适用的图谱关系；生成型只重建索引。旧索引、模型主题、实体关联和关系来源立即撤除，处理期间不继续返回旧正文的检索结果。审核不通过时保留新正文并进入收录待审；处理失败可按现有审核或重新处理流程重试。
+
+未归档、正在处理或删除、所属库有未完成任务时返回 HTTP 409，等待完成或取消任务后重试。数据库写入或任务提交失败时，数据库和 Markdown 文件均回滚。此接口不保留旧正文版本，也不通过删除再收录实现更新，不产生丢弃指纹。
+
+正文可保留本资料原有附件的相对引用。非生成型的新远程图片链接会标记缺图，之后用现有 `ingest` 补图；更新接口不接收图片文件、内联图片或其他资料的本地附件引用。
+
+原有 `ingest` 的规则不变：自有型同一 `source_ref` 提交变化正文仍新增记录；只有本节接口会修改原记录。修改同来源的历史记录不会改变创建时间，也不会使它成为最新记录。
+
 ## 来源标识与结果
 
 自有型库同一 `source_ref` 的正文，按规范 Markdown（含追加片段、引用和图片稳定标识）去首尾空白、统一空白后计算 SHA-256，与最新一条比较。相同则返回 `exists` 和已有 `entry_id`；不同则保存新资料，保留旧记录。再次提交较早的正文也会产生新记录。无 `source_ref` 时按正文哈希去重；不同库互不影响。

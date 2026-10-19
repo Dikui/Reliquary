@@ -14,5 +14,6 @@ type IngestService interface {
 	AcceptIncomplete(context.Context, string) (*types.IngestResult, error)
 	DiscardIngest(context.Context, string, string) error
 	DeleteDocument(context.Context, string) error
+	UpdateEntryContent(context.Context, string, string, string) (*types.IngestResult, error)
 	UploadIngestAsset(context.Context, string, []byte) (*types.IngestAssetResult, error)
 }
