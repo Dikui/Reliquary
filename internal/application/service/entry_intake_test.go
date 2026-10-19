@@ -66,6 +66,7 @@ func TestReviewIntakeCompletenessWarning(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, response, reason string
 		rejected                     bool
+		reference                    bool
 	}{
 		{
 			name: "usable_body", body: "缓存可复用已有上下文，避免重复上传。创建缓存后，后续请求通过缓存 ID 引用。下面是调用代码：",
@@ -77,9 +78,17 @@ func TestReviewIntakeCompletenessWarning(t *testing.T) {
 			response: `{"approved":false,"auxiliary":true,"reason":"只有标题和资源链接，没有可用实质内容"}`,
 			reason:   "缺少符合收录标准的实质正文", rejected: true,
 		},
+		{
+			name: "reference_requires_core", body: "缓存教程说明如何使用缓存。创建缓存后，后续请求通过缓存 ID 引用。下面是必要的调用代码：",
+			response: `{"approved":false,"reason":"教程缺少必要调用代码，不符合本库正文完整要求"}`,
+			reason:   "必要调用代码", rejected: true, reference: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			library := types.SystemLibraryDefaults()[0]
+			if tc.reference {
+				library = types.SystemLibraryDefaults()[2]
+			}
 			library.ModelTiers.Light = "review-model"
 			entry := &types.Entry{ID: tc.name, SpaceID: 1, LibraryID: library.ID}
 			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
@@ -96,6 +105,8 @@ func TestReviewIntakeCompletenessWarning(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, intake.Reason, tc.reason)
 			require.Greater(t, len(capture.reviews), 1, "warning aggregation also works across segments")
+			require.Contains(t, capture.reviews[0][0].Content, library.ReviewCriteria)
+			require.NotContains(t, capture.reviews[0][0].Content, "Reject for lack of completeness only when the whole document has no usable substance")
 			if !tc.rejected {
 				require.Equal(t, "approved", intake.Decision)
 				require.NotEqual(t, types.ParseStatusRejected, entry.ParseStatus)

@@ -9,6 +9,8 @@ export function validTypes(rows: Array<{ name: string }>) {
 export function librarySettingsPayload(draft: LibraryCatalogItem) {
   return {
     name: draft.name.trim(), description: draft.description, review_criteria: draft.review_criteria,
+    ...(draft.model_tiers ? { model_tiers: { ...draft.model_tiers } } : {}),
+    ...(draft.chunking_config ? { chunking_config: { ...draft.chunking_config } } : {}),
     ...(draft.template === 'external_timely' ? { source_evidence_rule: draft.source_evidence_rule } : {}),
     feed_enabled: draft.feed_enabled,
     content_types: draft.content_types.map((row, position) => ({ ...row, name: row.name.trim(), position })),

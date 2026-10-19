@@ -25,7 +25,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 | Textarea autosize | SafeTextarea wrapping TDesign Textarea | SafeTextarea.vue and utils/textareaAutosize.ts | Boolean autosize or minRows/maxRows | Actual component mount and height regression tests |
 | Scrollbar | Global application theme stylesheet | UX-CONTRACT.md and frontend/src/assets/theme/theme.css | Stable gutter for bounded regions | Premium static audit |
 | Toast | TDesign MessagePlugin | Existing settings workflows | Success, warning, error and information | Frontend component tests |
-| Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Global default and library override | Model preview tests and frontend checks |
+| Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Independent library stages; shared space embedding | Model preview tests and frontend checks |
 | Merge suggestions | MergeSuggestions and shared useConfirmDelete | Entity API and ADR 0002 | Pending, accepted and rejected | Backend lifecycle and frontend component tests |
 | Model call budgets | ModelCallSummary | Processing span model_calls | Processing details | Budget validation and component tests |
 | CRUD | Library editor, entity API and existing document detail | Entity profiles and library management | Entity merge refreshes the owning list | Entity lifecycle and editor tests |
@@ -107,7 +107,7 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 实体列表使用显式加载更多，实体详情保持自然高度。窄屏把实体列表与档案改为上下排列，长实体名、别名和文章标题换行。实体合并前明确保留实体与相关文章影响，待合并建议通过共享确认对话框处理。
 
-模型档位只在设置中心的库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。每一行直接显示用途、选择和当前生效来源。唯一库的文章和实体页面使用 /platform/entries；内容由外部工具通过收录接口送入，设置中心不再提供订阅源入口。模型调用继续使用共享 ModelCallSummary 表格。
+模型档位在设置中心的库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。库目录内按选中库编辑标准、适用模型与分块参数；参考文档和个人产出隐藏实体身份模型与图谱设置，AI产出隐藏审核与内容处理设置。共享嵌入页签仅配置空间向量模型。每一行显示用途、选择和生效来源，不暗示其他库提供默认值。恢复建议标准仅改草稿，保存后生效；切库和离开前沿用未保存确认，失败保留草稿。父子分块开关按模板锁定。待审区显示选中库重新审核时使用的当前标准。资料和实体页面使用 /platform/entries；内容由外部工具通过收录接口送入。模型调用继续使用共享 ModelCallSummary 表格。
 
 主导航按资料管理、待处理、辅助诊断、系统配置分组。待处理直达原待审区，仍只有收录待审与缺少图片；实体入口打开现有实体档案页签。设置中心提供库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
 

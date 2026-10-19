@@ -34,6 +34,20 @@ func TestModelTiersUseSpaceEmbeddingAndLibraryProcessingSettings(t *testing.T) {
 	id, err := ResolveModelTier(ctx, db, nil, types.ModelTierLight)
 	require.NoError(t, err)
 	require.Equal(t, "summary", id)
+	media := types.SystemLibraryDefaults()[1]
+	media.ID, media.SpaceID = "independent-media", 1
+	require.NoError(t, db.Create(media).Error)
+	resolved, err := resolveModelTier(ctx, db, media, types.ModelTierLight)
+	require.NoError(t, err)
+	require.Empty(t, resolved.ModelID, "an unconfigured library must not borrow official's model")
+	media.ModelTiers.Generation = "media-generation"
+	resolved, err = resolveModelTier(ctx, db, media, types.ModelTierLight)
+	require.NoError(t, err)
+	require.Equal(t, ResolvedModelTier{ModelID: "media-generation", Source: "generation"}, resolved)
+	require.NoError(t, db.Model(library).Update("summary_model_id", "changed-official").Error)
+	id, err = ResolveModelTier(ctx, db, media, types.ModelTierLight)
+	require.NoError(t, err)
+	require.Equal(t, "media-generation", id)
 	require.NoError(t, db.Unscoped().Delete(library).Error)
 	_, err = ResolveModelTier(ctx, db, nil, types.ModelTierLight)
 	require.Error(t, err, "missing library must remain visible")

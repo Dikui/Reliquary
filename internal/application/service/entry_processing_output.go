@@ -37,6 +37,16 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	catalog, _ := json.Marshal(l.ContentTypes)
 	prompt := articleProcessingPrompt + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
 先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。`
+	switch {
+	case l.SystemRole == "media":
+		prompt += "\n本库保存个人观点。摘要保留作者、观点、判断条件与第一手经验的归属；不得把作者评价改写成已核实的客观事实。"
+	case l.Template == types.TemplateExternalDurable:
+		prompt += "\n本库保存长期参考文档。摘要优先保留定义、方法、适用条件和必要步骤；不补写未提供的代码或章节。"
+	case l.Template == types.TemplateOwn:
+		prompt += "\n本库保存个人工作资料。摘要保留本人的决定、经验和约束，不推断外部权威背书。"
+	default:
+		prompt += "\n本库保存机构发布。摘要保留发布主体、具体变化、时间、条件和研究结论；宣传用语不能替代事实。"
+	}
 	if k.ContentTypeCorrected {
 		name, _ := json.Marshal(k.ContentType)
 		prompt += "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类。"

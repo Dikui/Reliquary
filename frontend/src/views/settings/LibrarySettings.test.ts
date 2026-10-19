@@ -33,7 +33,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
     '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: null }) },
     '@/stores/resources': { useResourcesStore: () => ({ allModels: [], ensureModels: async () => {}, invalidateLibraryDetail() { requests.push({ cacheInvalidated: true }) } }) },
     '@/api/library': {
-      getLibrary: async () => { requests.push({ method: 'get' }); return { success: true, data: { id: 'unique-library', name: 'Library', model_tiers: { generation: 'generation-old', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false, languages: null, parser_engine_rules: null }, indexing_strategy: { vector_enabled: true, keyword_enabled: true } } } },
+      getLibrary: async () => { requests.push({ method: 'get' }); return { success: true, data: { id: 'unique-library', name: 'Library', model_tiers: { generation: '', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false, languages: null, parser_engine_rules: null }, indexing_strategy: { vector_enabled: true, keyword_enabled: true } } } },
       listEntryFiles: async (id: string) => { requests.push({ articleListId: id }); return { data: [], total: 0 } },
       updateLibrary: async (body: unknown) => { requests.push({ method: 'put', body }); return failSave ? { success: false, message: 'Save unavailable' } : { success: true } },
     },

@@ -22,7 +22,7 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	require.Len(t, body.Data, 5)
 	rules := map[string]string{}
 	for _, library := range body.Data {
-		for _, field := range []string{"id", "directory", "name", "template", "description", "collect_content", "exclude_content", "review_criteria", "deduplication_rule", "content_types", "relation_types", "feed_enabled", "system_role", "template_rules"} {
+		for _, field := range []string{"id", "directory", "name", "template", "description", "collect_content", "exclude_content", "review_criteria", "default_review_criteria", "processing_model_tiers", "model_tiers", "deduplication_rule", "content_types", "relation_types", "feed_enabled", "system_role", "template_rules"} {
 			require.Contains(t, library, field)
 		}
 		rules[library["template"].(string)] = library["deduplication_rule"].(string)
@@ -52,6 +52,27 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 		Data types.Library `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &custom))
+	require.Equal(t, types.PersonalReviewCriteria, custom.Data.ReviewCriteria)
+	model := &types.Model{ID: "catalog-review", SpaceID: 1, Name: "Catalog review", Type: types.ModelTypeGeneration, Status: types.ModelStatusActive}
+	require.NoError(t, f.db.Create(model).Error)
+	settings, err := json.Marshal(types.LibraryPatch{ModelTiers: &types.ModelTierConfig{Generation: model.ID, Embedding: custom.Data.ModelTiers.Embedding}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 256, ChunkOverlap: 20}})
+	require.NoError(t, err)
+	configured := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, string(settings), f.key, true)
+	require.Equal(t, http.StatusOK, configured.Code, configured.Body.String())
+	var configuredBody struct {
+		Data types.Library `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(configured.Body.Bytes(), &configuredBody))
+	require.Equal(t, model.ID, configuredBody.Data.ModelTiers.Generation)
+	require.Equal(t, 256, configuredBody.Data.ChunkingConfig.ChunkSize)
+	var other types.Library
+	require.NoError(t, f.db.First(&other, "id=?", f.library.ID).Error)
+	require.NotEqual(t, model.ID, other.ModelTiers.Generation)
+	settings, err = json.Marshal(types.LibraryPatch{ModelTiers: &types.ModelTierConfig{Generation: "missing-model", Embedding: custom.Data.ModelTiers.Embedding}})
+	require.NoError(t, err)
+	invalid := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, string(settings), f.key, true)
+	require.Equal(t, http.StatusBadRequest, invalid.Code)
+	require.Contains(t, invalid.Body.String(), "generation model is unavailable")
 	for _, patch := range []string{`{"template":"generated"}`, `{"directory":"new"}`, `{"system_role":"personal"}`, `{"source_evidence_rule":"link_required"}`, `{"template_rules":{"review":false}}`} {
 		response := personalRequest(t, f.router, http.MethodPut, "/api/v1/libraries/"+custom.Data.ID, patch, f.key, true)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())

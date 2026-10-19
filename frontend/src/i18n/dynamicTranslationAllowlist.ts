@@ -262,13 +262,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/settings/LibrarySettings.vue",
-    "expressions": [
-      "`knowledgeEditor.sidebar.${tab}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
     "file": "views/settings/ModelSettings.vue",
     "expressions": [
       "key",

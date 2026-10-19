@@ -3,7 +3,7 @@
     <div class="section-header"><h2>{{ $t('settings.librarySettings') }}</h2></div>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button v-if="!formData" variant="text" :loading="loading" @click="load">{{ $t('common.retry') }}</t-button></template></t-alert>
     <t-loading :loading="loading" show-overlay>
-      <t-tabs v-model="currentSection"><t-tab-panel v-for="tab in tabs" :key="tab" :value="tab" :label="tab === 'catalog' ? $t('ikb18.catalog') : $t(`knowledgeEditor.sidebar.${tab}`)" /></t-tabs>
+      <t-tabs v-model="currentSection"><t-tab-panel v-for="tab in tabs" :key="tab" :value="tab" :label="tab === 'catalog' ? $t('ikb18.catalog') : $t('ikb18.sharedEmbedding')" /></t-tabs>
       <div class="library-settings-body">
         <LibraryCatalogSettings ref="catalogRef" v-show="currentSection === 'catalog'" @changed="load" />
                 <!-- 基本信息 -->
@@ -63,18 +63,10 @@
                 <!-- 模型配置 -->
                 <div v-show="currentSection === 'models'" class="section">
 
-                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" :all-models="allModels" :before-navigate="confirmLeave" :disabled="saving" @resolved="resolvedModelTiers = $event" />
+                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" :tiers="['embedding']" scope="space" :all-models="allModels" :before-navigate="confirmLeave" :disabled="saving" @resolved="resolvedModelTiers = $event" />
                   <EmbeddingRebuild v-if="formData && currentSection === 'models'" :model-id="formData.modelTiers.embedding || ''" :models="allModels" :disabled="dirty || saving" />
                 </div>
 
-                <!-- 分块设置 -->
-                <div  v-show="currentSection === 'chunking'" class="section">
-                  <LibraryChunkingSettings
-                    v-if="formData"
-                    :config="formData.chunkingConfig"
-                    @update:config="handleChunkingConfigUpdate"
-                  />
-                </div>
 
       </div>
     </t-loading>
@@ -95,12 +87,11 @@ import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import EmbeddingRebuild from '@/components/EmbeddingRebuild.vue'
 import LibraryCatalogSettings from './LibraryCatalogSettings.vue'
 import SafeTextarea from '@/components/SafeTextarea.vue'
-import LibraryChunkingSettings from '@/views/library/settings/LibraryChunkingSettings.vue'
 
 const { t } = useI18n()
 const props = defineProps<{ initialSection?: string }>()
 const resources = useResourcesStore(), uiStore = useUIStore()
-const tabs = ['catalog', 'models', 'chunking']
+const tabs = ['catalog', 'models']
 const initialSection = props.initialSection || uiStore.settingsInitialSubSection || 'catalog'
 const currentSection = ref(tabs.includes(initialSection) ? initialSection : 'catalog')
 const catalogRef = ref<{ confirmLeave?: () => Promise<boolean> }>()
@@ -193,7 +184,6 @@ async function handleSubmit() {
   if (saving.value || loading.value || !formData.value || !dirty.value) return
   if (!formData.value.name.trim()) { error.value = t('knowledgeEditor.messages.nameRequired'); currentSection.value = 'basic'; return }
   if (needsEmbedding.value && !formData.value.modelTiers.embedding) { error.value = t('knowledgeEditor.indexing.embeddingRequired'); currentSection.value = 'models'; return }
-  if (!formData.value.modelTiers.generation) { error.value = t('knowledgeEditor.messages.summaryRequired'); currentSection.value = 'models'; return }
   saving.value = true; error.value = ''
   try {
     const data = buildSubmitData()

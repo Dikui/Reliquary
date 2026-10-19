@@ -1,5 +1,5 @@
 import { get, post, put, del } from "../utils/request";
-import type { ModelTierConfig } from '@/types/modelTiers';
+import type { ModelTier, ModelTierConfig } from '@/types/modelTiers';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import type { SearchRequest, SearchSource } from '@/types/search';
 
@@ -9,6 +9,9 @@ export interface LibraryRelationType { name: string; position: number; enabled: 
 export interface LibraryCatalogItem {
   id: string; directory: string; name: string; display_name: string; system_role: string;
   entry_count?: number; template: LibraryTemplate; description: string; review_criteria: string;
+  default_review_criteria: string; model_tiers: ModelTierConfig; summary_model_id?: string;
+  processing_model_tiers: ModelTier[];
+  chunking_config: { chunk_size: number; chunk_overlap: number; separators: string[]; enable_parent_child: boolean; parent_chunk_size: number; child_chunk_size: number; strategy?: string; token_limit?: number; languages?: string[] };
   source_evidence_rule: '' | 'link_required' | 'link_or_publisher_date';
   collect_content: string; exclude_content: string; deduplication_rule: string;
   content_types: LibraryContentType[]; relation_types: LibraryRelationType[]; feed_enabled: boolean;

@@ -23,6 +23,7 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 		library.SourceEvidenceRule = "link_required"
 	}
 	library.EnsureDefaults()
+	library.ReviewCriteria = library.DefaultReviewCriteria()
 	if err := types.ValidateLibrary(library); err != nil {
 		return nil, apperrors.NewBadRequestError(err.Error())
 	}
@@ -65,6 +66,25 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		}
 		if patch.ReviewCriteria != nil {
 			library.ReviewCriteria = *patch.ReviewCriteria
+		}
+		if patch.ModelTiers != nil {
+			if patch.ModelTiers.ModelID(types.ModelTierEmbedding) != library.ModelTiers.ModelID(types.ModelTierEmbedding) {
+				return apperrors.NewBadRequestError("configure search models in shared search settings")
+			}
+			models := *patch.ModelTiers
+			models.Embedding = "" // The space validates its shared embedding setting separately.
+			if err := ValidateModelTierConfig(ctx, tx, models); err != nil {
+				return apperrors.NewBadRequestError(err.Error())
+			}
+			library.ModelTiers = *patch.ModelTiers
+			library.SummaryModelID = library.ModelTiers.ModelID(types.ModelTierGeneration)
+		}
+		if patch.ChunkingConfig != nil {
+			c := patch.ChunkingConfig
+			if c.ChunkSize <= 0 || c.ChunkOverlap < 0 || c.ChunkOverlap >= c.ChunkSize {
+				return apperrors.NewBadRequestError("chunk size must be positive and chunk overlap must be smaller than chunk size")
+			}
+			library.ChunkingConfig = *c
 		}
 		if patch.SourceEvidenceRule != nil {
 			if library.Template != types.TemplateExternalTimely {

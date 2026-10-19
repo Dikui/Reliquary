@@ -1,4 +1,12 @@
 export const ikb18Zh = {
+  parentChildFixed: '父子分块由模板决定：参考文档启用，其他库关闭。',
+  useRecommendedReview: '使用建议标准（保存后生效）',
+  processingWithGraph: '处理步骤：收录审核 → 摘要、分类与主题 → 按内容类型抽取图谱 → 索引。',
+  processingWithoutGraph: '处理步骤：收录审核 → 摘要、分类与主题 → 索引。不抽取实体和关系。',
+  indexOnly: '仅建立索引，不做收录价值审核或内容模型处理。下面的重排模型只用于检索。',
+  currentReviewCriteria: '当前库标准（用于重新审核）：',
+  sharedEmbedding: '共享向量模型',
+
   priceTextInput: '文本输入单价（每百万 token）', priceImageInput: '图片输入单价（每百万 token）',
   priceModalityHint: '文本与图片分别计费。图片单价留空时，含图片的调用费用可能显示未知；接口未返回分项用量时也会显示未知。',
   textTokens: '文本 token', imageTokens: '图片 token',
@@ -27,6 +35,14 @@ export const ikb18Zh = {
   segmentReason: '分段审核原因',
 }
 export const ikb18En: typeof ikb18Zh = {
+  parentChildFixed: 'The template enables parent–child chunks for reference documents and disables them for other libraries.',
+  useRecommendedReview: 'Use recommended criteria (applied on save)',
+  processingWithGraph: 'Processing: admission review → summary, classification and topics → graph extraction by content type → indexing.',
+  processingWithoutGraph: 'Processing: admission review → summary, classification and topics → indexing. No entity or relationship extraction.',
+  indexOnly: 'Indexing only: no admission review or content processing. The reranking model below is used only for retrieval.',
+  currentReviewCriteria: 'Current library criteria (used when reviewing again):',
+  sharedEmbedding: 'Shared embedding model',
+
   priceTextInput: 'Text input price per million tokens', priceImageInput: 'Image input price per million tokens',
   priceModalityHint: 'Text and images are priced separately. Calls with images may show an unknown cost if the image price or itemized usage is missing.',
   textTokens: 'Text tokens', imageTokens: 'Image tokens',

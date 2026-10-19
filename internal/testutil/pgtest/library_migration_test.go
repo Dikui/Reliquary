@@ -3,6 +3,7 @@ package pgtest
 import (
 	"encoding/json"
 	"path/filepath"
+	"reliquary/internal/types"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -210,4 +211,38 @@ func TestSystemLibraryDirectoryMigrationRejectsOccupiedDirectory(t *testing.T) {
 		require.JSONEq(t, rows, after[table], table)
 	}
 	require.Error(t, db.Exec(`UPDATE libraries SET directory='changed' WHERE id='personal'`).Error)
+}
+
+func TestLibraryReviewRoutingMigrationPreservesCustomPoliciesAndModels(t *testing.T) {
+	db := Open(t)
+	directory, err := filepath.Abs("../../../migrations/versioned")
+	require.NoError(t, err)
+	m, err := migrate.New("file://"+filepath.ToSlash(directory), db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := m.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, m.Migrate(29))
+	require.NoError(t, db.Exec(`
+ INSERT INTO spaces(id,name,business) VALUES(1,'Owner','personal');
+ INSERT INTO libraries(id,space_id,name,template,system_role,directory,source_evidence_rule,review_criteria,summary_model_id,embedding_model_id,model_tiers) VALUES
+ ('routing-official',1,'Official','external_timely','official','routing-official','link_or_publisher_date','发布者是机构（官方、公司、媒体、研究机构、行业协会）；有实质信息，不是广告、招聘、纯转发；正文完整。','old-generation','','{"light":"old-review","entity_resolution":"old-entity","generation":"old-generation","rerank":"old-rerank"}'),
+ ('routing-media',1,'Media','external_timely','media','routing-media','link_required','My custom review policy','','','{}'),
+ ('routing-reference',1,'Reference','external_durable','references','routing-reference','','长期有参考价值；正文完整，不是摘要或目录。','','','{"light":"reference-review"}');
+ `).Error)
+	require.NoError(t, m.Migrate(30))
+	var criteria string
+	require.NoError(t, db.Raw("SELECT review_criteria FROM libraries WHERE id='routing-official'").Scan(&criteria).Error)
+	require.Equal(t, types.OfficialReviewCriteria, criteria)
+	require.NoError(t, db.Raw("SELECT review_criteria FROM libraries WHERE id='routing-media'").Scan(&criteria).Error)
+	require.Equal(t, "My custom review policy", criteria)
+	var models types.ModelTierConfig
+	require.NoError(t, db.Raw("SELECT model_tiers FROM libraries WHERE id='routing-media'").Row().Scan(&models))
+	require.Equal(t, "old-review", models.Light)
+	require.Equal(t, "old-generation", models.Generation)
+	require.Equal(t, "old-entity", models.EntityResolution)
+	require.Equal(t, "old-rerank", models.Rerank)
+	require.NoError(t, db.Raw("SELECT model_tiers FROM libraries WHERE id='routing-reference'").Row().Scan(&models))
+	require.Equal(t, "reference-review", models.Light)
+	require.NoError(t, m.Migrate(29))
+	require.NoError(t, db.Raw("SELECT model_tiers FROM libraries WHERE id='routing-media'").Row().Scan(&models))
+	require.Equal(t, "old-generation", models.Generation, "rollback retains explicit bindings")
 }

@@ -1,8 +1,8 @@
 <template>
   <section class="model-tier-editor" :aria-label="t('modelTiers.title')">
-    <div class="model-tier-heading"><div><h3>{{ t('modelTiers.title') }}</h3><p>{{ t('modelTiers.scopeHint.library') }}</p></div><t-button variant="text" :loading="loading" :disabled="disabled" @click="refresh">{{ t('common.refresh') }}</t-button></div>
+    <div class="model-tier-heading"><div><h3>{{ t('modelTiers.title') }}</h3><p>{{ t(scope === 'space' ? 'modelTiers.scopeHint.space' : 'modelTiers.scopeHint.library') }}</p></div><t-button variant="text" :loading="loading" :disabled="disabled" @click="refresh">{{ t('common.refresh') }}</t-button></div>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" @click="refresh">{{ t('modelTiers.retry') }}</t-button></template></t-alert>
-    <div v-for="tier in MODEL_TIERS" :key="tier" class="model-tier-row">
+    <div v-for="tier in tiers" :key="tier" class="model-tier-row">
       <div class="model-tier-info"><label :id="`${id}-${tier}`">{{ t(`modelTiers.names.${tier}`) }}</label><p>{{ t(`modelTiers.uses.${tier}`) }}</p></div>
       <div class="model-tier-control">
         <ModelSelector :model-type="modelTypeForTier(tier)" :selected-model-id="modelValue[tier] || ''" :all-models="models"
@@ -14,7 +14,7 @@
         <p v-if="tier === 'embedding' && embeddingLocked" class="model-tier-current">{{ t('knowledgeEditor.models.embeddingLocked') }}</p>
       </div>
     </div>
-    <p class="model-tier-footnote">{{ t('modelTiers.explicitChoice') }}</p>
+    <p v-if="scope === 'library' && (tiers.includes('light') || tiers.includes('entity_resolution'))" class="model-tier-footnote">{{ t('modelTiers.explicitChoice') }}</p>
   </section>
 </template>
 <script setup lang="ts">
@@ -26,7 +26,7 @@ import { modelTypeForTier, previewModelTiers } from '@/utils/modelTiers'
 import { useResourcesStore } from '@/stores/resources'
 import { useUIStore } from '@/stores/ui'
 import ModelSelector from './ModelSelector.vue'
-const props = withDefaults(defineProps<{ modelValue: ModelTierConfig; allModels?: ModelConfig[]; beforeNavigate?: () => Promise<boolean>; disabled?: boolean; embeddingLocked?: boolean }>(), { disabled: false, embeddingLocked: false })
+const props = withDefaults(defineProps<{ modelValue: ModelTierConfig; allModels?: ModelConfig[]; beforeNavigate?: () => Promise<boolean>; disabled?: boolean; embeddingLocked?: boolean; tiers?: readonly ModelTier[]; scope?: 'library' | 'space' }>(), { disabled: false, embeddingLocked: false, tiers: () => MODEL_TIERS, scope: 'library' })
 const emit = defineEmits<{ 'update:modelValue': [value: ModelTierConfig]; resolved: [value: ResolvedModelTiers]; refresh: [] }>()
 const { t, te } = useI18n()
 const resources = useResourcesStore()
@@ -37,7 +37,7 @@ const models = computed(() => props.allModels || resources.allModels)
 const resolved = computed(() => {
   const generation = props.modelValue.generation || ''
   const inherited: ResolvedModelTiers = generation ? Object.fromEntries(['light', 'entity_resolution'].map(tier => [tier, { model_id: generation, source: 'generation' }])) : {}
-  return previewModelTiers(props.modelValue, inherited, 'library')
+  return previewModelTiers(props.modelValue, props.scope === 'library' ? inherited : {}, props.scope)
 })
 function modelName(modelId?: string): string { const model = models.value?.find(item => item.id === modelId); return model?.display_name || model?.name || modelId || t('modelTiers.unconfigured') }
 function sourceName(source?: string): string { const key = `modelTiers.sources.${source || 'unconfigured'}`; return te(key) ? t(key) : t('modelTiers.sources.default') }

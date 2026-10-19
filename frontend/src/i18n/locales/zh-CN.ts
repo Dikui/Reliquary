@@ -716,18 +716,19 @@ export default {
   "title": "模型档位",
   "scopeHint": {
 
-    "library": "所有资料共用此处保存的模型档位。"
+    "library": "仅影响当前资料库。审核、处理和重排模型分别保存。",
+    "space": "所有库共用此向量模型；审核、处理、重排和分块在各库配置中设置。"
   },
   "names": {
-    "light": "轻量",
+    "light": "收录审核",
     "generation": "资料处理",
     "embedding": "向量",
     "rerank": "重排",
     "entity_resolution": "实体解析"
   },
   "uses": {
-    "light": "收录审核与转载判定",
-    "generation": "资料内容类型、结构化摘要、实体和主题",
+    "light": "按当前库的标准审核收录内容",
+    "generation": "资料内容类型、结构化摘要和主题",
     "embedding": "内容检索与实体名称相似度",
     "rerank": "重排检索结果",
     "entity_resolution": "判断实体候选是否属于已有实体"
@@ -735,7 +736,8 @@ export default {
   "sources": {
     "generation": "资料处理模型档位",
 
-    "library": "资料库设置",
+    "library": "当前库设置",
+    "space": "全空间向量设置",
     "legacy": "已有模型配置",
     "default": "系统默认",
     "unconfigured": "未配置"
@@ -744,7 +746,7 @@ export default {
   "useDefault": "选择模型",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
-  "explicitChoice": "资料分类、摘要、实体和主题使用生成模型档位。",
+  "explicitChoice": "审核和实体归一未单独选择时，使用本库的资料处理模型；不继承其他库的模型。",
   "loadFailed": "无法加载模型配置，请重试。",
   "saveFailed": "模型配置保存失败，请重试。",
   "saved": "模型档位已保存",

@@ -1,0 +1,22 @@
+-- Preserve effective model choices before removing cross-library fallback.
+UPDATE libraries l
+SET model_tiers = l.model_tiers || jsonb_build_object(
+    'light', COALESCE(NULLIF(l.model_tiers->>'light',''), NULLIF(l.summary_model_id,''), NULLIF(o.model_tiers->>'light',''), o.summary_model_id, ''),
+    'generation', COALESCE(NULLIF(l.model_tiers->>'generation',''), NULLIF(l.summary_model_id,''), NULLIF(o.model_tiers->>'generation',''), o.summary_model_id, ''),
+    'entity_resolution', COALESCE(NULLIF(l.model_tiers->>'entity_resolution',''), NULLIF(l.summary_model_id,''), NULLIF(o.model_tiers->>'entity_resolution',''), o.summary_model_id, ''),
+    'rerank', COALESCE(NULLIF(l.model_tiers->>'rerank',''), o.model_tiers->>'rerank', '')
+)
+FROM libraries o
+WHERE l.space_id=o.space_id AND o.system_role='official' AND o.deleted_at IS NULL
+  AND l.system_role<>'official' AND l.deleted_at IS NULL;
+
+-- Only replace untouched built-in criteria; custom policies stay authoritative.
+UPDATE libraries l SET review_criteria=p.new_criteria
+FROM (VALUES
+    ('official', '发布者是机构（官方、公司、媒体、研究机构、行业协会）；有实质信息，不是广告、招聘、纯转发；正文完整。', '发布者是机构（官方、公司、媒体、研究机构、行业协会）；至少包含一个可明确识别的事实、变化或研究结论。产品发布、调价、活动、人员变动和有过程及结果的客户案例可收录；研究摘要可作为独立发布页收录，不要求包含链接论文全文。排除纯口号、空导流、招聘和无新增信息的转发。完整性以提交的独立发布内容为准：缺失内容影响主要事实理解时待审，否则保留并提示缺失。'),
+    ('media', '作者是外部个人，必须能确定作者；有明确观点或判断；不是纯转发、无内容的短评。', '作者是外部个人，必须能确定作者；包含具体观点、建议、判断或第一手经验。允许短帖及理解它所需的回复上下文，不设最低篇幅或分析深度。排除纯转发、寒暄、表情和无法理解的碎片；他人的引文不能代替作者自己的贡献。图片或视频缺失时，已有文字能独立表达实质信息的可收录，并提示缺失。'),
+    ('references', '长期有参考价值；正文完整，不是摘要或目录。', '有长期参考价值；提交的文档主体完整。论文应有主要章节，教程应有必要步骤与代码。排除只有摘要、目录、链接集合或缺少核心内容的文档。按声明的文档单元判断完整性，不要求另附链接资源的全文。'),
+    ('personal', '正文完整、可读；不是结构化记录（任务清单、工单、明细表）。', '本人的工作资料、经验、SOP 或笔记；正文可读且能独立理解。不要求外部来源、权威性、最低篇幅或分析深度。排除空白、占位内容和结构化记录（任务清单、工单、明细表）。'),
+    ('ai-output', '不审核、不处理，只建索引。标题、Markdown 正文必填；来源引用写在正文中。', '不做收录价值审核，不调用模型处理，只建索引。标题、Markdown 正文必填；来源引用写在正文中，保留 AI 产出标识，不能当作事实。')
+) AS p(role,old_criteria,new_criteria)
+WHERE l.system_role=p.role AND l.review_criteria=p.old_criteria;

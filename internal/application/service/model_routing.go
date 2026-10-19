@@ -87,6 +87,11 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 		if id := library.ModelTiers.ModelID(tier); id != "" {
 			return ResolvedModelTier{id, "library"}, nil
 		}
+		if tier == types.ModelTierLight || tier == types.ModelTierEntityResolution {
+			if id := library.ModelTiers.ModelID(types.ModelTierGeneration); id != "" {
+				return ResolvedModelTier{id, "generation"}, nil
+			}
+		}
 	}
 	if library != nil {
 		id := ""
@@ -102,15 +107,6 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 		}
 		if id = strings.TrimSpace(id); id != "" {
 			return ResolvedModelTier{id, "library"}, nil
-		}
-	}
-	if db != nil && library != nil && library.SystemRole != "official" && tier != types.ModelTierEmbedding {
-		var defaults types.Library
-		if err := db.WithContext(ctx).Where("space_id=? AND system_role=?", library.SpaceID, "official").Find(&defaults).Error; err != nil {
-			return ResolvedModelTier{}, err
-		}
-		if defaults.ID != "" {
-			return resolveModelTier(ctx, nil, &defaults, tier)
 		}
 	}
 	return ResolvedModelTier{Source: "unconfigured"}, nil

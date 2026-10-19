@@ -225,15 +225,18 @@ func (library *Library) MarshalJSON() ([]byte, error) {
 	rules, _ := RulesForTemplate(library.Template)
 	aux := struct {
 		*alias
-		AcceptedFields    map[string]string   `json:"accepted_fields"`
-		Capabilities      LibraryCapabilities `json:"capabilities"`
-		Rules             TemplateRules       `json:"template_rules"`
-		DeduplicationRule string              `json:"deduplication_rule"`
-		CollectContent    string              `json:"collect_content"`
-		ExcludeContent    string              `json:"exclude_content"`
+		AcceptedFields        map[string]string   `json:"accepted_fields"`
+		Capabilities          LibraryCapabilities `json:"capabilities"`
+		Rules                 TemplateRules       `json:"template_rules"`
+		DeduplicationRule     string              `json:"deduplication_rule"`
+		CollectContent        string              `json:"collect_content"`
+		ExcludeContent        string              `json:"exclude_content"`
+		DefaultReviewCriteria string              `json:"default_review_criteria"`
+		ProcessingModelTiers  []ModelTier         `json:"processing_model_tiers"`
 	}{
 		alias: (*alias)(library), AcceptedFields: library.IngestFields(),
 		Capabilities: library.Capabilities(), Rules: rules, DeduplicationRule: rules.Deduplication, CollectContent: library.Description, ExcludeContent: library.ReviewCriteria,
+		DefaultReviewCriteria: library.DefaultReviewCriteria(), ProcessingModelTiers: library.ProcessingModelTiers(),
 	}
 	return json.Marshal(aux)
 }

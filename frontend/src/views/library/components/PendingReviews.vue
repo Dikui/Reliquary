@@ -70,6 +70,7 @@ defineExpose({ refresh: load })
       <t-tab-panel value="incomplete" :label="t('knowledgeReview.incomplete')" :disabled="busy" />
     </t-tabs>
     <p class="review-description">{{ t(kind === 'incomplete' ? 'ikb18.incompleteHint' : 'knowledgeReview.intakeHint') }}</p>
+    <p v-if="kind === 'intake' && selectedLibrary" class="review-description">{{ t('ikb18.currentReviewCriteria') }} {{ selectedLibrary.review_criteria }}</p>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" :disabled="busy" @click="refresh">{{ t('common.retry') }}</t-button></template></t-alert>
     <t-loading :loading="loading" show-overlay>
       <div class="review-list">

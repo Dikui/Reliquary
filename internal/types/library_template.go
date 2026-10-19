@@ -100,6 +100,8 @@ type LibraryPatch struct {
 	Name               *string                `json:"name"`
 	Description        *string                `json:"description"`
 	ReviewCriteria     *string                `json:"review_criteria"`
+	ModelTiers         *ModelTierConfig       `json:"model_tiers"`
+	ChunkingConfig     *ChunkingConfig        `json:"chunking_config"`
 	SourceEvidenceRule *string                `json:"source_evidence_rule"`
 	FeedEnabled        *bool                  `json:"feed_enabled"`
 	ContentTypes       *[]LibraryContentType  `json:"content_types"`
@@ -107,6 +109,50 @@ type LibraryPatch struct {
 	Template           *string                `json:"template"`
 	Directory          *string                `json:"directory"`
 	SystemRole         *string                `json:"system_role"`
+}
+
+const (
+	OfficialReviewCriteria  = "发布者是机构（官方、公司、媒体、研究机构、行业协会）；至少包含一个可明确识别的事实、变化或研究结论。产品发布、调价、活动、人员变动和有过程及结果的客户案例可收录；研究摘要可作为独立发布页收录，不要求包含链接论文全文。排除纯口号、空导流、招聘和无新增信息的转发。完整性以提交的独立发布内容为准：缺失内容影响主要事实理解时待审，否则保留并提示缺失。"
+	MediaReviewCriteria     = "作者是外部个人，必须能确定作者；包含具体观点、建议、判断或第一手经验。允许短帖及理解它所需的回复上下文，不设最低篇幅或分析深度。排除纯转发、寒暄、表情和无法理解的碎片；他人的引文不能代替作者自己的贡献。图片或视频缺失时，已有文字能独立表达实质信息的可收录，并提示缺失。"
+	ReferenceReviewCriteria = "有长期参考价值；提交的文档主体完整。论文应有主要章节，教程应有必要步骤与代码。排除只有摘要、目录、链接集合或缺少核心内容的文档。按声明的文档单元判断完整性，不要求另附链接资源的全文。"
+	PersonalReviewCriteria  = "本人的工作资料、经验、SOP 或笔记；正文可读且能独立理解。不要求外部来源、权威性、最低篇幅或分析深度。排除空白、占位内容和结构化记录（任务清单、工单、明细表）。"
+	GeneratedReviewCriteria = "不做收录价值审核，不调用模型处理，只建索引。标题、Markdown 正文必填；来源引用写在正文中，保留 AI 产出标识，不能当作事实。"
+)
+
+// DefaultReviewCriteria is a suggestion; saved, user-authored criteria remain authoritative.
+func (l *Library) DefaultReviewCriteria() string {
+	switch l.SystemRole {
+	case "official":
+		return OfficialReviewCriteria
+	case "media":
+		return MediaReviewCriteria
+	}
+	switch l.Template {
+	case TemplateExternalTimely:
+		return OfficialReviewCriteria
+	case TemplateExternalDurable:
+		return ReferenceReviewCriteria
+	case TemplateOwn:
+		return PersonalReviewCriteria
+	case TemplateGenerated:
+		return GeneratedReviewCriteria
+	}
+	return ""
+}
+
+func (l *Library) ProcessingModelTiers() []ModelTier {
+	rules, _ := RulesForTemplate(l.Template)
+	tiers := []ModelTier{}
+	if rules.Review {
+		tiers = append(tiers, ModelTierLight)
+	}
+	if rules.Process {
+		tiers = append(tiers, ModelTierGeneration)
+	}
+	if l.ExtractsEntities() {
+		tiers = append(tiers, ModelTierEntityResolution)
+	}
+	return tiers
 }
 
 type CreateLibraryRequest struct {
@@ -186,11 +232,11 @@ func SystemLibraryDefaults() []*Library {
 		return l
 	}
 	return []*Library{
-		makeLibrary("official", "官方信息", TemplateExternalTimely, "官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。", "发布者是机构（官方、公司、媒体、研究机构、行业协会）；有实质信息，不是广告、招聘、纯转发；正文完整。", "link_or_publisher_date", true, []string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"}, 5, official),
-		makeLibrary("media", "媒体信息", TemplateExternalTimely, "外部个人的观点：专家、分析师、KOL 的评论与观点资料。", "作者是外部个人，必须能确定作者；有明确观点或判断；不是纯转发、无内容的短评。", "link_required", true, []string{"评论", "分析", "预测", "访谈", "其他"}, 4, append([]string{"看好", "看空", "评价", "预测", "批评", "推荐"}, official...)),
-		makeLibrary("references", "参考文档", TemplateExternalDurable, "长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。", "长期有参考价值；正文完整，不是摘要或目录。", "", false, []string{"论文", "书籍", "标准", "官方文档", "教程", "其他"}, 0, []string{"提出", "引用", "属于", "依赖", "对比"}),
-		makeLibrary("personal", "个人产出", TemplateOwn, "本人的工作资料、经验、SOP、笔记。", "正文完整、可读；不是结构化记录（任务清单、工单、明细表）。", "", false, []string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"}, 0, []string{"负责", "参与", "合作", "客户", "供应", "依赖", "属于", "决定"}),
-		makeLibrary("ai-output", "AI产出", TemplateGenerated, "外部 AI 按要求写回的报告；不能当作事实。", "不审核、不处理，只建索引。标题、Markdown 正文必填；来源引用写在正文中。", "", false, nil, 0, nil),
+		makeLibrary("official", "官方信息", TemplateExternalTimely, "官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。", OfficialReviewCriteria, "link_or_publisher_date", true, []string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"}, 5, official),
+		makeLibrary("media", "媒体信息", TemplateExternalTimely, "外部个人的观点：专家、分析师、KOL 的评论与观点资料。", MediaReviewCriteria, "link_required", true, []string{"评论", "分析", "预测", "访谈", "其他"}, 4, append([]string{"看好", "看空", "评价", "预测", "批评", "推荐"}, official...)),
+		makeLibrary("references", "参考文档", TemplateExternalDurable, "长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。", ReferenceReviewCriteria, "", false, []string{"论文", "书籍", "标准", "官方文档", "教程", "其他"}, 0, []string{"提出", "引用", "属于", "依赖", "对比"}),
+		makeLibrary("personal", "个人产出", TemplateOwn, "本人的工作资料、经验、SOP、笔记。", PersonalReviewCriteria, "", false, []string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"}, 0, []string{"负责", "参与", "合作", "客户", "供应", "依赖", "属于", "决定"}),
+		makeLibrary("ai-output", "AI产出", TemplateGenerated, "外部 AI 按要求写回的报告；不能当作事实。", GeneratedReviewCriteria, "", false, nil, 0, nil),
 	}
 }
 

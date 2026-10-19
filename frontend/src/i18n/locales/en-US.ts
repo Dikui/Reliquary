@@ -716,18 +716,19 @@ export default {
   "title": "Model tiers",
   "scopeHint": {
 
-    "library": "All materials use the model tiers saved here."
+    "library": "These model choices apply only to the selected library.",
+    "space": "All libraries share this embedding model. Configure review, processing, reranking and chunking in each library."
   },
   "names": {
-    "light": "Light",
+    "light": "Intake review",
     "generation": "Material processing",
     "embedding": "Embedding",
     "rerank": "Rerank",
     "entity_resolution": "Entity resolution"
   },
   "uses": {
-    "light": "Intake review and repost detection",
-    "generation": "Material content type, structured summary, entities and topics",
+    "light": "Review material against this library’s admission criteria",
+    "generation": "Material content type, structured summary and topics",
     "embedding": "Document retrieval and entity name similarity",
     "rerank": "Rank retrieved results",
     "entity_resolution": "Determine whether entity candidates belong to existing entities"
@@ -735,7 +736,8 @@ export default {
   "sources": {
     "generation": "Material processing tier",
 
-    "library": "Library settings",
+    "library": "Selected library",
+    "space": "Shared embedding settings",
     "legacy": "Existing model configuration",
     "default": "System default",
     "unconfigured": "Unconfigured"
@@ -744,7 +746,7 @@ export default {
   "useDefault": "Choose a model",
   "effective": "Current model: {model} ({source})",
   "unconfigured": "No model configured",
-  "explicitChoice": "Material classification, summaries, entities and topics use the generation tier.",
+  "explicitChoice": "Review and entity resolution use this library’s processing model when not selected separately. Models are never inherited from another library.",
   "loadFailed": "Could not load model configuration. Try again.",
   "saveFailed": "Could not save model configuration. Try again.",
   "saved": "Model tiers saved",
