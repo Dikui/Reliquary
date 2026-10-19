@@ -49,6 +49,12 @@ type IngestRequest struct {
 	SourceName         string             `json:"source_name,omitempty"`
 }
 
+type EntryContentUpdate struct {
+	Content     string        `json:"content"`
+	Acquisition string        `json:"acquisition,omitempty"`
+	Images      []IngestImage `json:"images,omitempty"`
+}
+
 type IngestImage struct {
 	AssetID   string `json:"asset_id,omitempty"`
 	SourceURL string `json:"source_url,omitempty"`

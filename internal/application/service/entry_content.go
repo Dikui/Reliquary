@@ -2,8 +2,14 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"gorm.io/gorm/clause"
@@ -15,7 +21,10 @@ import (
 
 // UpdateEntryContent is an explicit replacement, independent of ingest's
 // source-based deduplication and append-only source_ref history.
-func (s *entryService) UpdateEntryContent(ctx context.Context, id, content, acquisition string) (result *types.IngestResult, err error) {
+func (s *entryService) UpdateEntryContent(ctx context.Context, id string, request *types.EntryContentUpdate) (result *types.IngestResult, err error) {
+	if request == nil {
+		return nil, werrors.NewBadRequestError("content is required")
+	}
 	ctx, keyID, keyName, err := s.ingestIdentity(ctx)
 	if err != nil {
 		return nil, err
@@ -27,7 +36,7 @@ func (s *entryService) UpdateEntryContent(ctx context.Context, id, content, acqu
 		changes := &ingestFileChanges{}
 		ctx = context.WithValue(ctx, ingestFileChangesKey{}, changes)
 		result, err = entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestResult, error) {
-			return copy.updateEntryContent(ctx, id, content, acquisition, keyID, keyName)
+			return copy.updateEntryContent(ctx, id, *request, keyID, keyName)
 		})
 		if err != nil {
 			return errors.Join(err, changes.rollback(s.vault))
@@ -40,7 +49,8 @@ func (s *entryService) UpdateEntryContent(ctx context.Context, id, content, acqu
 	return result, err
 }
 
-func (s *entryService) updateEntryContent(ctx context.Context, id, content, acquisition string, keyID uint64, keyName string) (*types.IngestResult, error) {
+func (s *entryService) updateEntryContent(ctx context.Context, id string, request types.EntryContentUpdate, keyID uint64, keyName string) (*types.IngestResult, error) {
+	content, acquisition := request.Content, request.Acquisition
 	spaceID, _ := types.SpaceIDFromContext(ctx)
 	entry, err := s.repo.GetEntryByID(ctx, spaceID, id)
 	if err != nil {
@@ -63,8 +73,17 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 	if acquisition == "" {
 		acquisition = entry.Acquisition
 	}
-	if err := validateIngestRequest(&types.IngestRequest{Library: library.ID, Content: content, Acquisition: acquisition}); err != nil {
+	// Update matches literal Markdown image targets, including relative paths.
+	// Retain ingestion's file/data validation without its HTTP-only source rule.
+	images := append([]types.IngestImage(nil), request.Images...)
+	for i := range images {
+		images[i].SourceURL, images[i].URL = "", ""
+	}
+	if err := validateIngestRequest(&types.IngestRequest{Library: library.ID, Content: content, Acquisition: acquisition, Images: images}); err != nil {
 		return nil, err
+	}
+	if ingestInlineSize(request.Images) > types.MaxIngestInlineRequestBytes {
+		return nil, werrors.NewBadRequestError("inline images exceed the 20 MiB request limit")
 	}
 	if library.Template == types.TemplateGenerated && acquisition != "model_written" {
 		return nil, werrors.NewBadRequestError("generated libraries require acquisition model_written")
@@ -72,7 +91,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 	if entry.VaultPath == "" {
 		return nil, werrors.NewConflictError("资料尚未归档，请先完成审核和处理")
 	}
-	if entry.VaultBody == content && entry.Acquisition == acquisition {
+	if len(request.Images) == 0 && entry.VaultBody == content && entry.Acquisition == acquisition {
 		return ingestResult(entry, "exists", "正文未变化。", "", ""), nil
 	}
 	switch entry.ParseStatus {
@@ -85,6 +104,10 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 	}
 	if busy {
 		return nil, werrors.NewConflictError("所属库有未完成任务，请完成或取消后再更新")
+	}
+	content, canonical, err := s.prepareEntryContentImages(ctx, entry, content, request.Images)
+	if err != nil {
+		return nil, err
 	}
 	for _, ref := range articleImagesInOrder(content, nil) {
 		if remoteIngestImage(ref) {
@@ -101,6 +124,16 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 			return nil, err
 		}
 	}
+	if entry.VaultBody == content && entry.Acquisition == acquisition {
+		return ingestResult(entry, "exists", "正文和图片未变化。", "", ""), nil
+	}
+	for _, image := range request.Images {
+		if image.AssetID != "" {
+			if err := s.referenceIngestAsset(ctx, image.AssetID, id); err != nil {
+				return nil, err
+			}
+		}
+	}
 	before := map[string]any{"content_hash": entry.ContentHash, "acquisition": entry.Acquisition}
 	if err := s.cleanupLibraryRebuild(ctx, entry); err != nil {
 		return nil, err
@@ -114,7 +147,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 	entry.Acquisition = acquisition
 	entry.LastIngestAPIKeyID, entry.LastIngestAPIKeyName = keyID, keyName
 	entry.ExternalCompletionAttempted = false
-	setMessageFingerprint(entry, content)
+	setMessageFingerprint(entry, canonical)
 	resetEntryForReparse(entry, &library)
 	entry.UpdatedAt = time.Now()
 	if library.Template == types.TemplateGenerated {
@@ -126,7 +159,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 		if err := json.Unmarshal(entry.Metadata, &metadata); err != nil {
 			return nil, err
 		}
-		metadata["report_fingerprint"], _ = json.Marshal(reportInputFingerprint(ReportInput{Title: entry.Title, Markdown: content}, report))
+		metadata["report_fingerprint"], _ = json.Marshal(reportInputFingerprint(ReportInput{Title: entry.Title, Markdown: canonical}, report))
 		encoded, err := json.Marshal(metadata)
 		if err != nil {
 			return nil, err
@@ -157,7 +190,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 		}
 	}
 	if library.Template == types.TemplateOwn {
-		entry.SourceBodyHash = sourceBodyHash(content)
+		entry.SourceBodyHash = sourceBodyHash(canonical)
 	}
 	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
 		return nil, err
@@ -184,4 +217,79 @@ func (s *entryService) updateEntryContent(ctx context.Context, id, content, acqu
 	}
 	entry.LibraryName = library.Name
 	return ingestResult(entry, "accepted", "正文已更新，正在重新审核和建立索引。", "", ""), nil
+}
+
+func (s *entryService) prepareEntryContentImages(ctx context.Context, entry *types.Entry, body string, images []types.IngestImage) (string, string, error) {
+	targets := map[string]bool{}
+	for _, ref := range articleImagesInOrder(body, nil) {
+		targets[ref] = true
+	}
+	seen := map[string]bool{}
+	for _, image := range images {
+		source := ingestImageSource(image)
+		if source == "" || !targets[source] || seen[source] {
+			return "", "", werrors.NewBadRequestError("每张图片的 source_url 必须唯一，且对应正文中的图片引用")
+		}
+		seen[source] = true
+	}
+	// Reuse identical existing bytes so retries do not create random filenames,
+	// reprocess unchanged pictures or overwrite an attachment used by old chunks.
+	byHash, canonicalTargets := map[string]string{}, map[string]string{}
+	refs := append(articleImagesInOrder(entry.VaultBody, nil), articleImagesInOrder(body, nil)...)
+	for _, ref := range refs {
+		if canonicalTargets[ref] != "" || !isArticleAttachmentReference(entry.ID, entry.VaultPath, ref) {
+			continue
+		}
+		file, err := s.vault.ReadImage(entry, ref)
+		if err != nil {
+			continue
+		}
+		hash := sha256.New()
+		_, readErr := io.Copy(hash, file)
+		closeErr := file.Close()
+		if readErr == nil && closeErr == nil {
+			identity := fmt.Sprintf("data:sha256,%x", hash.Sum(nil))
+			byHash[identity], canonicalTargets[ref] = ref, identity
+		}
+	}
+	mappings := map[string]string{}
+	changes := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges)
+	for _, image := range images {
+		data, err := decodeIngestInline(image.Data)
+		name := ""
+		if image.AssetID != "" {
+			asset, bytes, loadErr := s.loadIngestAsset(ctx, image.AssetID)
+			if loadErr != nil {
+				return "", "", loadErr
+			}
+			if asset.EntryID != "" && asset.EntryID != entry.ID {
+				return "", "", werrors.NewBadRequestError("附件已归入其他资料")
+			}
+			name, data, err = asset.Name, bytes, nil
+		}
+		if err != nil {
+			return "", "", werrors.NewBadRequestError(err.Error())
+		}
+		mimeType := http.DetectContentType(data)
+		if len(data) == 0 || !strings.HasPrefix(mimeType, "image/") {
+			return "", "", werrors.NewBadRequestError("only image attachments are accepted")
+		}
+		if name == "" {
+			name = "image" + vaultImageExtension("", mimeType)
+		}
+		image.Data = base64.StdEncoding.EncodeToString(data)
+		identity := ingestCanonicalImageReference(image)
+		ref := byHash[identity]
+		if ref == "" {
+			ref, err = s.vault.StoreArticleAttachment(entry, name, data)
+			if err != nil {
+				return "", "", err
+			}
+			changes.vaultFiles = append(changes.vaultFiles, ingestVaultFile{article: entry, path: ref})
+			byHash[identity] = ref
+		}
+		source := ingestImageSource(image)
+		mappings[source], canonicalTargets[source] = ref, identity
+	}
+	return replaceIngestImageTargets(body, mappings), replaceIngestImageTargets(body, canonicalTargets), nil
 }

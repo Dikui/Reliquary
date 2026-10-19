@@ -207,10 +207,7 @@ func (h *EntryHandler) DeleteDocument(c *gin.Context) {
 }
 
 func (h *EntryHandler) UpdateEntryContent(c *gin.Context) {
-	var input struct {
-		Content     string `json:"content"`
-		Acquisition string `json:"acquisition,omitempty"`
-	}
+	var input types.EntryContentUpdate
 	c.Request.Body = struct {
 		io.Reader
 		io.Closer
@@ -222,7 +219,7 @@ func (h *EntryHandler) UpdateEntryContent(c *gin.Context) {
 	if collector == nil {
 		return
 	}
-	result, err := collector.UpdateEntryContent(c.Request.Context(), c.Param("id"), input.Content, input.Acquisition)
+	result, err := collector.UpdateEntryContent(c.Request.Context(), c.Param("id"), &input)
 	if err != nil {
 		c.Error(err)
 		return

@@ -98,22 +98,26 @@ AI产出：
 
 ## 更新已有资料的正文
 
-HTTP `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 显式替换同一资料的完整 Markdown 正文。认证与收录相同。资料必须已归档；保留资料 ID、库、来源、`source_ref`、`identifier`、创建时间、星标和用户主题。标题、摘要与自定义元数据仍通过 `PUT /api/v1/entries/:id` 修改。
+HTTP `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 一起更新同一资料的完整 Markdown 正文和图片。认证与收录相同。资料必须已归档；保留资料 ID、库、来源、`source_ref`、`identifier`、创建时间、星标和用户主题。标题、摘要与自定义元数据仍通过 `PUT /api/v1/entries/:id` 修改。
+
+新图片先通过 `POST /api/v1/ingest/assets` 上传，取得 `asset_id`，再与正文一起提交；也可直接在 `images[].data` 提交图片 base64/data URI。
 
 ```bash
 curl -X PUT "$RELIQUARY_URL/api/v1/entries/$ENTRY_ID/body" \
   -H "Authorization: Bearer $RELIQUARY_API_KEY" \
   -H 'Content-Type: application/json' \
-  --data '{"content":"# 项目计划\n\n更新后的完整正文。","acquisition":"verbatim"}'
+  --data '{"content":"# 项目计划\n\n更新后的完整正文。\n\n![图表](images/chart.png)","acquisition":"verbatim","images":[{"source_url":"images/chart.png","asset_id":"上传返回的 asset_id"}]}'
 ```
 
 `content` 必填，不能只传链接或增量片段，最多 5,000,000 Unicode 码点；HTTP JSON 上限 64 MiB。`acquisition` 可选，省略时保留原值；生成型只能使用 `model_written`。MCP 参数为 `{"entry_id":"资料 ID","content":"完整 Markdown","acquisition":"verbatim"}`。
 
-正文相同且获取方式未变时返回 `exists`，不重复处理。更新成功返回原 `entry_id` 和 `accepted`，表示正文及后台任务已保存；通过 HTTP `GET /api/v1/entries/:id` 或 MCP `get_entry` 查看处理状态。非生成型重新审核并生成摘要、索引及适用的图谱关系；生成型只重建索引。旧索引、模型主题、实体关联和关系来源立即撤除，处理期间不继续返回旧正文的检索结果。审核不通过时保留新正文并进入收录待审；处理失败可按现有审核或重新处理流程重试。
+`images` 可选，最多 100 项。每项使用 `asset_id` 或 `data` 之一，并提供 `source_url`。该值必须与正文中的图片引用完全一致，可以是 HTTP/HTTPS 地址、`images/chart.png` 这类相对路径或本资料原有附件引用。同一引用只能提供一份图片；未被正文引用的图片会被拒绝。服务端将引用替换为本资料的本地附件路径，不抓取图片链接。内联图片每张最多 10 MiB、总计最多 20 MiB；上传附件沿用上传接口的大小限制。
 
-未归档、正在处理或删除、所属库有未完成任务时返回 HTTP 409，等待完成或取消任务后重试。数据库写入或任务提交失败时，数据库和 Markdown 文件均回滚。此接口不保留旧正文版本，也不通过删除再收录实现更新，不产生丢弃指纹。
+正文、图片字节和获取方式均未变时返回 `exists`，不重复保存附件或处理。图片地址不变但字节变化也会执行更新。更新成功返回原 `entry_id` 和 `accepted`，表示正文及后台任务已保存；通过 HTTP `GET /api/v1/entries/:id` 或 MCP `get_entry` 查看处理状态。非生成型重新审核并生成摘要、索引及适用的图谱关系；生成型只重建索引。旧索引、模型主题、实体关联和关系来源立即撤除，处理期间不继续返回旧正文的检索结果。审核不通过时保留新正文并进入收录待审；处理失败可按现有审核或重新处理流程重试。
 
-正文可保留本资料原有附件的相对引用。非生成型的新远程图片链接会标记缺图，之后用现有 `ingest` 补图；更新接口不接收图片文件、内联图片或其他资料的本地附件引用。
+未归档、正在处理或删除、所属库有未完成任务时返回 HTTP 409，等待完成或取消任务后重试。数据库写入或任务提交失败时，数据库、Markdown 文件和本次新增附件一起回滚，用户上传的源附件仍可重试使用。此接口不保留旧正文版本，也不通过删除再收录实现更新，不产生丢弃指纹。
+
+正文可直接保留本资料已有附件的相对引用，无须重复上传。提供新图片时创建独立附件，不覆盖原文件。非生成型正文中未提供图片文件的远程链接仍标记缺图，之后可用现有 `ingest` 补全；未提供文件的其他本地引用会被拒绝。
 
 原有 `ingest` 的规则不变：自有型同一 `source_ref` 提交变化正文仍新增记录；只有本节接口会修改原记录。修改同来源的历史记录不会改变创建时间，也不会使它成为最新记录。
 
