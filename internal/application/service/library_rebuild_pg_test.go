@@ -69,7 +69,7 @@ func rebuildAttachments(t *testing.T, root, id string) map[string]string {
 func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	h, vault, _ := newArticleImageHarness(t, true)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
-	output := articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "OldCo", EntityType: "company"}, {Name: "Partner", EntityType: "company"}}, []string{})
+	output := articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "OldCo", EntityType: "company"}, {Name: "Partner", EntityType: "company"}, {Name: "ObsoleteTool", EntityType: "product"}}, []string{})
 	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(output), &result))
 	result["relations"] = []extractedRelation{{Subject: "OldCo", Object: "Partner", Type: "合作", EvidenceIDs: []int{1}}}
@@ -91,6 +91,9 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Model(k).Updates(map[string]any{"starred": true, "collect_reason": k.CollectReason, "content_type_corrected": true}).Error)
 	var oldEntity types.Entity
 	require.NoError(t, h.db.Where("canonical_name=?", "OldCo").First(&oldEntity).Error)
+	var orphan types.Entity
+	require.NoError(t, h.db.Where("canonical_name=?", "ObsoleteTool").First(&orphan).Error)
+	require.NoError(t, h.db.Create(&types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: k.SpaceID, EntryID: k.ID, NewEntityID: orphan.ID, CandidateEntityID: oldEntity.ID, Status: "pending"}).Error)
 	var oldRelation types.Relation
 	require.NoError(t, h.db.Where("library_id=?", k.LibraryID).First(&oldRelation).Error)
 	otherLibrary := *h.library
@@ -98,6 +101,11 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Omit("ContentTypes", "RelationTypes").Create(&otherLibrary).Error)
 	other := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: otherLibrary.ID, Type: "manual", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Other source"}
 	require.NoError(t, h.db.Create(other).Error)
+	var shared []types.Entity
+	require.NoError(t, h.db.Where("canonical_name IN ?", []string{"OldCo", "Partner"}).Find(&shared).Error)
+	for _, entity := range shared {
+		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: k.SpaceID, EntryID: other.ID, EntityID: entity.ID}).Error)
+	}
 	completed := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Already completed source"}
 	require.NoError(t, h.db.Create(completed).Error)
 	cancelled := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCancelled, VaultBody: "Cancelled source"}
@@ -129,6 +137,19 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.ErrorContains(t, err, "unfinished processing")
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	childID := run.TaskID + ":" + k.ID
+	injectedErr := errors.New("fixture graph notification failure")
+	const callback = "test:fail_orphan_graph_notification"
+	require.NoError(t, h.db.Callback().Create().Before("gorm:create").Register(callback, func(tx *gorm.DB) {
+		if row, ok := tx.Statement.Dest.(*types.GraphPendingSync); ok && row.EntityID == orphan.ID && row.Deleted {
+			tx.AddError(injectedErr)
+		}
+	}))
+	require.ErrorIs(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, childID)), injectedErr)
+	require.NoError(t, h.db.Callback().Create().Remove(callback))
+	require.NoError(t, h.db.First(&types.Entity{}, "id=?", orphan.ID).Error)
+	require.NoError(t, h.db.Where("entity_id=?", orphan.ID).First(&types.EntityAlias{}).Error)
+	require.NoError(t, h.db.Where("entity_id=? AND entry_id=?", orphan.ID, k.ID).First(&types.EntryEntity{}).Error)
+	require.NoError(t, h.db.Where("new_entity_id=?", orphan.ID).First(&types.EntityMergeSuggestion{}).Error)
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, childID)))
 	finished := h.article(t, k.ID)
 	require.Equal(t, types.ParseStatusCompleted, finished.ParseStatus)
@@ -164,6 +185,15 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	var preserved types.Entity
 	require.NoError(t, h.db.First(&preserved, "id=?", oldEntity.ID).Error)
 	require.Equal(t, oldEntity.Description, preserved.Description)
+	require.ErrorIs(t, h.db.First(&types.Entity{}, "id=?", orphan.ID).Error, gorm.ErrRecordNotFound)
+	for _, model := range []any{&types.EntityAlias{}, &types.EntryEntity{}} {
+		require.NoError(t, h.db.Model(model).Where("entity_id=?", orphan.ID).Count(&count).Error)
+		require.Zero(t, count)
+	}
+	require.NoError(t, h.db.Model(&types.EntityMergeSuggestion{}).Where("new_entity_id=? OR candidate_entity_id=?", orphan.ID, orphan.ID).Count(&count).Error)
+	require.Zero(t, count)
+	require.NoError(t, h.db.Model(&types.GraphPendingSync{}).Where("entity_id=? AND deleted=true", orphan.ID).Count(&count).Error)
+	require.Positive(t, count, "isolated entity removal must reach the graph replica")
 	require.NoError(t, h.db.Model(&types.RelationSuppression{}).Where("library_id=?", k.LibraryID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	// Redelivering the parent after processing must not reset the completed child.
@@ -227,12 +257,17 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	h.processor.output = string(output)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, parent))
 	require.Equal(t, types.ParseStatusFailed, h.article(t, k.ID).ParseStatus)
-	// A late file-write failure must not leave the entry completed and thereby
+	// A late database-write failure must not leave the entry completed and thereby
 	// cause the queue to skip the unfinished tail on recovery.
-	vault.articles.beforeTempWrite = func(data []byte) []byte { return append(data, []byte("changed body")...) }
+	const callback = "test:fail_final_rebuild_update"
+	require.NoError(t, h.db.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
+		if entry, ok := tx.Statement.Dest.(*types.Entry); ok && entry.ID == k.ID && entry.ParseStatus == types.ParseStatusCompleted {
+			tx.AddError(errors.New("fixture final persistence failure"))
+		}
+	}))
 	require.Error(t, h.service.ProcessManualUpdate(h.ctx, child))
-	require.Equal(t, types.ParseStatusFailed, h.article(t, k.ID).ParseStatus)
-	vault.articles.beforeTempWrite = nil
+	require.NotEqual(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)
+	require.NoError(t, h.db.Callback().Update().Remove(callback))
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, child))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)
 	require.Equal(t, generation, string(segmentGeneration(h.article(t, k.ID), "processing")))

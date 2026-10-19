@@ -102,7 +102,9 @@ class AdminStorageTests(unittest.TestCase):
         values = {"HOME": str(self.root / "home"), "RELIQUARY_VAULT_DIR": str(self.root / "vault"),
                   "RELIQUARY_FILES_DIR": str(self.root / "files"), "BACKUP_DIR": str(self.root / "backups")}
         with mock.patch.dict(admin.os.environ, {}, clear=True):
-            return admin.Context(source, {**values, **overrides})
+            ctx = admin.Context(source, {**values, **overrides})
+            ctx.database_only = False  # Existing fixtures represent file-library backups.
+            return ctx
 
     def reader_files(self, vault):
         contents = {".obsidian/app.json": b'{"showLineNumber": true}\n', ".trash/x.md": b"Deleted reader note\n",
@@ -123,6 +125,28 @@ class AdminStorageTests(unittest.TestCase):
         self.assertEqual(checked["backup"], (self.root / "home/Backups/Reliquary").resolve())
         self.assertTrue(all(path.is_dir() for path in checked.values()))
         self.assertEqual(list(checked["vault"].iterdir()), [])
+
+    def test_database_backup_restores_resources_without_generated_markdown(self):
+        ctx = self.host_context()
+        ctx.database_only = True
+        vault = ctx.host_storage_path("vault")
+        for relative, data in {"attachments/entry/image.png": b"original image",
+                               "official/entry.md": b"generated Markdown",
+                               ".reliquary/exports/sources.json": b"historical migration export",
+                               ".reliquary/resources/image.png": b"recovery mirror"}.items():
+            path = vault / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        package = self.root / "database-backup"
+        ctx.copy_storage("vault", package / "vault")
+        self.assertEqual((package / "vault/attachments/entry/image.png").read_bytes(), b"original image")
+        self.assertFalse((package / "vault/official").exists())
+        self.assertFalse((package / "vault/.reliquary/resources").exists())
+        self.assertEqual((package / "vault/.reliquary/exports/sources.json").read_bytes(), b"historical migration export")
+        self.assertTrue((vault / "official/entry.md").exists(), "Existing files are never deleted")
+        restored = self.host_context(RELIQUARY_VAULT_DIR=str(self.root / "restored-assets"))
+        restored.restore_storage("vault", package / "vault")
+        self.assertEqual((self.root / "restored-assets/attachments/entry/image.png").read_bytes(), b"original image")
 
     @unittest.skipUnless(admin.shutil.which("docker"), "Docker Compose is required to check its interpolation")
     def test_compose_and_admin_resolve_the_same_host_directories(self):
@@ -345,6 +369,7 @@ class AdminStorageTests(unittest.TestCase):
         configured = self.host_context()
         with mock.patch.dict(admin.os.environ, {}, clear=True):
             ctx = HostContext(configured.root, configured.env)
+        ctx.database_only = False
         ctx.check_host_directories()
         vault = self.root / "vault"
         reader = self.reader_files(vault)
@@ -1465,6 +1490,7 @@ class IKB20DrillTests(unittest.TestCase):
             class Context:
                 local_server = "server"
                 direct = True
+                database_only = True
                 env = {"REDIS_ADDR": "live:6379", "REDIS_DB": "4"}
                 def __init__(self):
                     self.root, self.calls = root, []
@@ -1483,6 +1509,7 @@ class IKB20DrillTests(unittest.TestCase):
                 self.assertTrue(any(call.args[0][:3] == ["docker", "rm", "-f"] for call in command.call_args_list))
             replay = ctx.calls[0][1]["overrides"]
             self.assertEqual(replay["REDIS_DB"], "0")
+            self.assertEqual(replay["RELIQUARY_ADMIN_DATABASE_ONLY"], "1")
             self.assertTrue(replay["REDIS_ADDR"].startswith("127.0.0.1:2"))
             self.assertEqual(ctx.env["REDIS_ADDR"], "live:6379")
             self.assertEqual(ctx.calls[-1][0], ("graph-clear-drill", "--namespace", database))

@@ -156,7 +156,7 @@ func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
 	intake, err := failed.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "pending", intake.Decision)
-	require.NotEmpty(t, intake.OriginalPath)
+	require.Contains(t, failed.VaultBody, "complete original product announcement")
 	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
 	require.Len(t, h.model.prompts, 2, "invalid output gets one corrective call")
 	require.Contains(t, h.model.prompts[1], "reason must be non-empty")

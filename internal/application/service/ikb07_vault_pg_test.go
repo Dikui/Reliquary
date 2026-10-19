@@ -58,6 +58,7 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 			old = entry
 		}
 		require.Equal(t, library.Directory, filepath.Dir(entry.VaultPath))
+		require.NoError(t, v.RefreshHeader(h.ctx, entry.ID))
 		data, err := os.ReadFile(filepath.Join(h.root, entry.VaultPath))
 		require.NoError(t, err)
 		head, full, err := SplitVaultArticle(data)
@@ -103,6 +104,7 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 	newer := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: old.LibraryID, Title: old.Title, SourceKind: "mine", SourceRef: old.SourceRef, Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, CreatedAt: time.Now().UTC().Add(time.Second)}
 	require.NoError(t, h.db.Create(newer).Error)
 	require.NoError(t, v.WriteArticle(h.ctx, newer, "新记录的完整正文", nil))
+	require.NoError(t, v.RefreshHeader(h.ctx, old.ID))
 	require.Eventually(t, func() bool {
 		data, _ := os.ReadFile(filepath.Join(h.root, old.VaultPath))
 		return strings.Contains(string(data), "has_update: true") && strings.Contains(string(data), newer.ID)

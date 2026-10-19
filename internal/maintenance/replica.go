@@ -561,6 +561,14 @@ func files(root string, ignore func(string) bool) ([]File, error) {
 	return result, err
 }
 
+// RuntimeVaultFiles retains original attachments and historical migration exports.
+func RuntimeVaultFiles(root string) ([]File, error) {
+	return files(root, func(relative string) bool {
+		return relative != "." && relative != "attachments" && !strings.HasPrefix(relative, "attachments/") &&
+			relative != ".reliquary" && relative != ".reliquary/exports" && !strings.HasPrefix(relative, ".reliquary/exports/")
+	})
+}
+
 func vaultFiles(root string) ([]File, error) {
 	return files(root, func(relative string) bool {
 		return relative == ".reliquary" || strings.HasPrefix(relative, ".reliquary/") || vaultpath.UserMetadata(relative)

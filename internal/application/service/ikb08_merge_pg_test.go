@@ -46,6 +46,7 @@ func TestIKB08MergedVaultPositionsSupplementAndRestore(t *testing.T) {
 	require.NoError(t, change.finish())
 	check := func(dbBody string, chunks []*types.Chunk) []byte {
 		t.Helper()
+		require.NoError(t, v.RefreshHeader(h.ctx, entry.ID))
 		data, err := os.ReadFile(filepath.Join(h.root, entry.VaultPath))
 		require.NoError(t, err)
 		_, content, err := SplitVaultArticle(data)

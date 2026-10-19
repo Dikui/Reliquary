@@ -156,6 +156,7 @@ func TestEntryBatchDeleteRetriesDocumentCleanupWithoutFalseWarnings(t *testing.T
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id=?", second.ID).Update("source_kind", "mine").Error)
 	// The same attachment can be referenced by several stored metadata fields.
 	for _, entry := range []*types.Entry{first, second} {
+		require.NoError(t, v.RefreshHeader(h.ctx, entry.ID))
 		refs := articleImagePaths(entry)
 		require.NotEmpty(t, refs)
 		imagePath := filepath.Clean(filepath.Join(v.root, filepath.Dir(entry.VaultPath), refs[0]))

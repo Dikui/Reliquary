@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"strings"
 	"testing"
@@ -49,5 +50,28 @@ func TestPrepareModelImageRejectsDecodeBudgetBeforePixelDecode(t *testing.T) {
 	_, err = PrepareModelImage(context.Background(), bytes.NewReader(data))
 	if !IsPermanentImageError(err) || !strings.Contains(err.Error(), "内存预算") {
 		t.Fatalf("expected rejection before trying incomplete pixel data, got %v", err)
+	}
+}
+
+func TestValidateIngestImageAllowsLargeSequentialJPEGButBoundsProgressive(t *testing.T) {
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 16, 16)), nil); err != nil {
+		t.Fatal(err)
+	}
+	data := encoded.Bytes()
+	sof := bytes.Index(data, []byte{0xff, 0xc0})
+	if sof < 0 {
+		t.Fatal("JPEG fixture has no sequential frame")
+	}
+	binary.BigEndian.PutUint16(data[sof+5:sof+7], 8488)
+	binary.BigEndian.PutUint16(data[sof+7:sof+9], 15197)
+	if err := ValidateIngestImage(data); err != nil {
+		t.Fatalf("sequential JPEG matching the rejected original must fit the budget: %v", err)
+	}
+	data[sof+1] = 0xc2
+	// A marker inside APP metadata must not lower a progressive JPEG's budget.
+	progressive := append([]byte{0xff, 0xd8, 0xff, 0xe1, 0, 6, 0xff, 0xc0, 0, 0}, data[2:]...)
+	if err := ValidateIngestImage(progressive); !IsPermanentImageError(err) || !strings.Contains(err.Error(), "内存预算") {
+		t.Fatalf("progressive JPEG must retain the conservative budget: %v", err)
 	}
 }

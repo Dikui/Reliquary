@@ -2,14 +2,15 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"io/fs"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/embedding"
+	"reliquary/internal/queue"
 	"reliquary/internal/types"
 )
 
@@ -44,7 +45,7 @@ END $$`).Error)
 	require.NoError(t, h.db.Exec(`CREATE TRIGGER reject_report_audit BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION reject_report_audit()`).Error)
 	_, err = h.documents.CreateReport(h.ctx, "Failed audit report", "# Failed audit report\n\nThis report must be rolled back.", nil)
 	require.ErrorContains(t, err, "fixture refuses report audit")
-	require.Equal(t, before, vaultFileHashes(t, h.root), "audit failure removes only the newly created report file")
+	require.Equal(t, before, vaultFileHashes(t, h.root), "audit failure leaves existing files untouched")
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report'").Count(&count).Error)
 	require.EqualValues(t, 1, count)
@@ -63,7 +64,7 @@ func (reportFailedEmbeddingModels) GetEmbeddingModel(context.Context, string) (e
 	return nil, fmt.Errorf("fixture embedding is unavailable")
 }
 
-func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
+func TestVaultReportIndexFailureRetainsDatabaseBodyForRetry(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Minute)
 	models := h.documents.models
 	h.documents.models = reportFailedEmbeddingModels{}
@@ -72,20 +73,13 @@ func TestVaultReportIndexFailureRetainsFileForRetry(t *testing.T) {
 	require.NotEmpty(t, report.ID)
 	require.Equal(t, "pending_retry", report.IndexStatus)
 	require.Contains(t, report.ErrorMessage, "fixture embedding is unavailable")
-	files := []string{}
-	require.NoError(t, filepath.WalkDir(filepath.Join(h.root, "ai-output"), func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() {
-			files = append(files, path)
-		}
-		return nil
-	}))
-	require.Len(t, files, 1)
+	require.NoFileExists(t, filepath.Join(h.root, report.VaultPath))
+	require.Contains(t, report.VaultBody, "Source retained for a later indexing retry.")
 	before := vaultFileHashes(t, h.root)
 	h.documents.models = models
-	require.NoError(t, h.documents.Scan(h.ctx, true))
+	payload, err := json.Marshal(types.ReportIndexPayload{SpaceID: report.SpaceID, LibraryID: report.LibraryID, EntryID: report.ID})
+	require.NoError(t, err)
+	require.NoError(t, h.documents.HandleReportIndex(h.ctx, queue.NewTask(types.TypeReportIndex, payload)))
 	require.Equal(t, before, vaultFileHashes(t, h.root))
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_kind='report' AND parse_status='completed'").Count(&count).Error)

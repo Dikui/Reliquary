@@ -65,7 +65,10 @@ func modelImageConfig(data []byte) (image.Config, string, error) {
 	}
 	pixels := int64(config.Width) * int64(config.Height)
 	bytesPerPixel := int64(32)
-	if format == "png" && len(data) >= 29 {
+	if format == "jpeg" && isSequentialJPEG(data) {
+		// Cover decoded planes plus RGB/CMYK conversion; progressive scans retain extra coefficients.
+		bytesPerPixel = 8
+	} else if format == "png" && len(data) >= 29 {
 		bytesPerPixel = 4
 		if data[24] == 16 {
 			bytesPerPixel = 8
@@ -80,6 +83,31 @@ func modelImageConfig(data []byte) (image.Config, string, error) {
 		return invalid("图片解码预计超过 1.5 GiB 内存预算，请缩小图片后重新提交")
 	}
 	return config, format, nil
+}
+
+func isSequentialJPEG(data []byte) bool {
+	for offset := 2; offset+4 <= len(data); {
+		if data[offset] != 0xff {
+			return false
+		}
+		marker := data[offset+1]
+		if marker == 0xff {
+			offset++
+			continue
+		}
+		switch marker {
+		case 0xc0, 0xc1:
+			return true
+		case 0xc2, 0xda, 0xd9:
+			return false
+		}
+		length := int(data[offset+2])<<8 | int(data[offset+3])
+		if length < 2 || length > len(data)-offset-2 {
+			return false
+		}
+		offset += 2 + length
+	}
+	return false
 }
 
 // PrepareModelImage keeps the original hash while producing bounded model input.

@@ -98,6 +98,9 @@ func TestSummaryMergeReservesSpaceForOutputCorrection(t *testing.T) {
 func (m *articleProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.stages = append(m.stages, stage)
+	if stage == "article_graph_verification" {
+		return supportedGraphVerificationFixture(messages)
+	}
 	if stage == "intake_review" {
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"Fixture sourced article"}`, !m.reject)}, nil
 	}

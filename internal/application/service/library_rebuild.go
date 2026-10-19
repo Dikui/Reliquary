@@ -172,11 +172,18 @@ func (s *entryService) submitLibraryRebuildEntry(ctx context.Context, payload ty
 
 func (s *entryService) cleanupLibraryRebuild(ctx context.Context, entry *types.Entry) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, entry.SpaceID); err != nil {
+			return err
+		}
 		if err := graph.Lock(tx, entry.SpaceID); err != nil {
 			return err
 		}
 		var current types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", entry.ID, entry.SpaceID).First(&current).Error; err != nil {
+			return err
+		}
+		var entityIDs []string
+		if err := tx.Model(&types.EntryEntity{}).Where("entry_id=? AND space_id=?", entry.ID, entry.SpaceID).Pluck("entity_id", &entityIDs).Error; err != nil {
 			return err
 		}
 		for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
@@ -195,6 +202,9 @@ func (s *entryService) cleanupLibraryRebuild(ctx context.Context, entry *types.E
 		if err := graph.WithdrawTx(tx, []string{entry.ID}); err != nil {
 			return err
 		}
+		if err := pruneUnreferencedEntities(tx, entry.SpaceID, entityIDs); err != nil {
+			return err
+		}
 		if current.StorageSize > 0 {
 			if err := repository.NewSpaceRepository(tx).AdjustStorageUsed(ctx, entry.SpaceID, -current.StorageSize); err != nil {
 				return err
@@ -211,7 +221,7 @@ func (s *entryService) processLibraryRebuild(ctx context.Context, library *types
 	ctx = context.WithValue(ctx, libraryRebuildContextKey{}, true)
 	err := s.processArticleBody(ctx, library, entry, body, nil, ResolveProcessConfig(library, nil))
 	if err == nil && s.vault != nil {
-		err = s.vault.RefreshHeader(ctx, entry.ID)
+		s.vault.ScheduleRefresh(ctx, entry.ID)
 	}
 	if err != nil {
 		s.markArticleProcessingFailed(ctx, entry, err)

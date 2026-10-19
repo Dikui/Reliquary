@@ -347,6 +347,9 @@ func (s *entryService) GetEntryBody(ctx context.Context, id string) (io.ReadClos
 
 func (s *entryService) getEntryBody(ctx context.Context, entry *types.Entry) (io.ReadCloser, string, error) {
 
+	if entry.VaultBody != "" {
+		return io.NopCloser(strings.NewReader(entry.VaultBody)), sanitizeManualDownloadFilename(entry.Title), nil
+	}
 	if s.vault != nil && entry.VaultPath != "" {
 		body, err := s.vault.ReadBody(entry)
 		if err != nil {

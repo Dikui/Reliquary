@@ -130,11 +130,15 @@ def empty_directory(path):
     return path.resolve()
 
 
-def snapshot_tree(source, target, previous=None, *, vault=False):
+def snapshot_tree(source, target, previous=None, *, vault=False, runtime_only=False):
     """A complete immutable tree, sharing unchanged inodes with the prior backup."""
     source, target = Path(source), Path(target)
     target.mkdir(parents=True, exist_ok=True)
-    items = sorted(source.rglob("*"))
+    def included(item):
+        relative = item.relative_to(source)
+        return (not runtime_only or relative.parts[:1] == ("attachments",)
+                or relative.parts[:2] == (".reliquary", "exports") or vault_user_path(relative))
+    items = sorted(item for item in source.rglob("*") if included(item))
     original_paths = sorted(str(item.relative_to(source)) for item in items
                             if not vault or not vault_user_path(item.relative_to(source)))
     for item in items:
@@ -143,7 +147,7 @@ def snapshot_tree(source, target, previous=None, *, vault=False):
         if item.is_symlink():
             raise AdminError(f"Refusing storage symlink: {item}")
         if item.is_dir():
-            dest.mkdir(exist_ok=True)
+            dest.mkdir(parents=True, exist_ok=True)
         elif item.is_file():
             dest.parent.mkdir(parents=True, exist_ok=True)
             if vault and vault_user_path(rel):
@@ -166,7 +170,7 @@ def snapshot_tree(source, target, previous=None, *, vault=False):
         else:
             raise AdminError(f"Unsupported storage entry: {item}")
     if sorted(str(item.relative_to(source)) for item in source.rglob("*")
-              if not vault or not vault_user_path(item.relative_to(source))) != original_paths:
+              if included(item) and (not vault or not vault_user_path(item.relative_to(source)))) != original_paths:
         raise AdminError(f"Storage entries changed during snapshot: {source}; pause external editors and retry")
 
 
@@ -340,6 +344,13 @@ def sanitize_env_example(source, destination):
 class Context:
     def __init__(self, root=ROOT, overrides=None):
         self.root = Path(root)
+        self.database_only = True
+        state = self.root / ".maintenance-restore.json"
+        if state.is_file():
+            recovery = json.loads(state.read_text())
+            package = Path(recovery.get("package", ""))
+            if recovery.get("state") != "ready" and (package / "manifest.json").is_file():
+                self.database_only = json.loads((package / "manifest.json").read_text()).get("storage") == "database"
         self.env = dict(os.environ)
         self.env = {**read_env(self.root / ".env"), **self.env, **(overrides or {})}
         # Compose does not expand expressions in values supplied through its
@@ -438,6 +449,8 @@ class Context:
                     self.app, "./Reliquary", *args], env=env, cwd=self.root, capture=capture, data=data, stdin=stdin)
 
     def cli_json(self, *args, overrides=None, data=None, stdin=None):
+        if getattr(self, "database_only", False):
+            overrides = {**(overrides or {}), "RELIQUARY_ADMIN_DATABASE_ONLY": "1"}
         output = self.server("maintenance", *args, overrides=overrides, data=data, stdin=stdin)
         try:
             return json.loads(output)
@@ -504,11 +517,16 @@ class Context:
                 raise AdminError(f"Host storage directory does not exist: {source}; run check-deployment first")
             if Path(target).resolve().is_relative_to(source.resolve()):
                 raise AdminError("Backup directory must be outside the storage directory")
-            snapshot_tree(source, target, previous, vault=name == "vault")
+            snapshot_tree(source, target, previous, vault=name == "vault", runtime_only=name == "vault" and getattr(self, "database_only", False))
         else:
             target.mkdir(parents=True, exist_ok=True)
             app_id, path = source
-            run(["docker", "cp", f"{app_id}:{path}/.", target])
+            if name == "vault" and getattr(self, "database_only", False):
+                with tempfile.TemporaryDirectory(prefix="vault-assets-", dir=target.parent) as temporary:
+                    run(["docker", "cp", f"{app_id}:{path}/.", temporary])
+                    snapshot_tree(temporary, target, vault=True, runtime_only=True)
+            else:
+                run(["docker", "cp", f"{app_id}:{path}/.", target])
             if previous:
                 # Reuse old inodes after reading the container's volume.
                 for item in sorted(target.rglob("*")):
@@ -901,10 +919,11 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                         side["RELIQUARY_ADMIN_CLI_VAULT_HOST"] = str(stage / "vault")
                     scrubbed = ctx.cli_json("scrub", overrides=side)
                     ctx.cli_json("flush", overrides=side)
-                    replica_path = stage / "vault" / ".reliquary" / "manifest.json"
-                    replica = json.loads(replica_path.read_text())
-                    replica["required"] = before.get("required_credentials", [])
-                    json_write(replica_path, replica)
+                    if not getattr(ctx, "database_only", False):
+                        replica_path = stage / "vault" / ".reliquary" / "manifest.json"
+                        replica = json.loads(replica_path.read_text())
+                        replica["required"] = before.get("required_credentials", [])
+                        json_write(replica_path, replica)
                     original_manifest = stage / ".pre-scrub-snapshot.json"
                     json_write(original_manifest, before)
                     clone_check = dict(side)
@@ -938,7 +957,7 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                 shutil.copy2(launcher, stage / "reliquary-admin")
                 (stage / "scripts").mkdir(exist_ok=True)
                 shutil.copy2(Path(__file__), stage / "scripts" / "reliquary_admin.py")
-                metadata = {"format": FORMAT, "kind": kind, "created_at": result["started_at"], "code": code, "images": packed_images,
+                metadata = {"format": FORMAT, "kind": kind, "storage": "database" if getattr(ctx, "database_only", False) else "vault", "created_at": result["started_at"], "code": code, "images": packed_images,
                             "versions": versions, "required_credentials": required,
                             "comparison": "Exact preserved data and file hashes; vectors, runtime state and search scores are regenerated. Retrieval compares article IDs."}
                 json_write(stage / "manifest.json", metadata)
@@ -1020,6 +1039,7 @@ def freeze_restored_queue(ctx):
 
 def restore(ctx, package, args):
     package = Path(package).resolve()
+    ctx.database_only = json.loads((package / "manifest.json").read_text()).get("storage") == "database"
     check_files(package)
     metadata = json.loads((package / "manifest.json").read_text())
     if metadata.get("format") != FORMAT:
@@ -1352,6 +1372,9 @@ def rebuild(ctx, args):
 
 def finalize_restore(ctx, package):
     require_parser_credentials(ctx, package)
+    metadata_path = Path(package) / "manifest.json"
+    if metadata_path.is_file():
+        ctx.database_only = json.loads(metadata_path.read_text()).get("storage") == "database"
     if ctx.legacy_schema():
         unresolved = ctx.sql("SELECT (SELECT count(*) FROM models WHERE deleted_at IS NULL AND status='needs_configuration') + (SELECT count(*) FROM chatgpt_accounts WHERE status='needs_login')")
         if int(unresolved or "0"):
@@ -1711,6 +1734,8 @@ def drill_runtime(ctx, root, package, database):
     overrides = {"DB_NAME": database, "SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32),
                  "VAULT_ROOT": str(root / "vault"), "LOCAL_STORAGE_BASE_DIR": str(root / "resources"),
                  "REDIS_DB": "0", "REDIS_PASSWORD": ""}
+    if getattr(ctx, "database_only", False):
+        overrides["RELIQUARY_ADMIN_DATABASE_ONLY"] = "1"
     redis_command = ["docker", "run", "-d", "--pull", "never", "--name", redis_name,
                      "--health-cmd", "redis-cli ping", "--health-interval", "1s", "--health-timeout", "1s", "--health-retries", "30"]
     if native:
@@ -1793,6 +1818,7 @@ def run_drill(ctx, args):
         if not packages:
             raise AdminError("Monthly restore drill has no complete backup")
         package = packages[-1]
+        ctx.database_only = json.loads((package / "manifest.json").read_text()).get("storage") == "database"
         result["path"] = str(package)
         check_files(package)
         database = "reliquary_drill_" + secrets.token_hex(8)

@@ -155,10 +155,10 @@ export default function (defaultLibraryId?: string) {
       moreIndex.value = -1;
     }
   };
-  const getCardDetails = (item: any) => {
-    const requestGeneration = ++detailRequestGeneration;
-    activeEntryId = item.id;
+  const clearCardDetails = () => {
+    detailRequestGeneration++;
     chunkRequestGeneration++;
+    activeEntryId = '';
     Object.assign(details, {
       title: "",
       time: "",
@@ -198,6 +198,13 @@ export default function (defaultLibraryId?: string) {
       chunkLoadError: "",
       repost_sources: [],
     });
+    details.chunkLoading = false;
+  };
+  const getCardDetails = (item: any) => {
+    clearCardDetails();
+    const requestGeneration = detailRequestGeneration;
+    activeEntryId = item.id;
+
     getEntryDetails(item.id)
       .then((result: any) => {
         if (requestGeneration !== detailRequestGeneration || activeEntryId !== item.id) return;
@@ -287,6 +294,7 @@ export default function (defaultLibraryId?: string) {
     openMore,
     onVisibleChange,
     getCardDetails,
+    clearCardDetails,
     total,
     getfDetails,
   };

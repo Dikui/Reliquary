@@ -60,7 +60,7 @@ test('navigation and article labels use the same current names in both locales',
   assert.equal(enUS.knowledgeEditor.document.title, 'Materials')
   assert.equal(zhCN.menu.search, '知识检索')
   assert.equal(zhCN.knowledgeWorkbench.tabLabel, '实体')
-  assert.equal(zhCN.settings.vault.title, '文件存档与备份')
+  assert.equal(zhCN.settings.vault.title, '资料导出与备份')
   assert.equal(zhCN.settings.taskQueue, '运行队列')
 })
 

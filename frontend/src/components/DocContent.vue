@@ -16,7 +16,7 @@ import {
   ENTRY_CHUNK_PAGE_SIZE,
 } from "@/api/library";
 import { MessagePlugin } from "tdesign-vue-next";
-import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages, isValidURL } from '@/utils/security';
+import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages, createProtectedFileImageScope, isValidURL } from '@/utils/security';
 import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
 import { useI18n } from 'vue-i18n';
@@ -201,6 +201,13 @@ mermaid.initialize({
 });
 const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "libraryId", "reference"]);
 const externalToolName = computed(() => getExternalToolName(props.details));
+let previewImages = createProtectedFileImageScope();
+function releasePreviewResources() {
+  previewImages.dispose();
+  previewImages = createProtectedFileImageScope();
+}
+watch(() => props.details?.id, releasePreviewResources);
+
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "openTopic", "reviewChanged"]);
 const reportRelatedEntryIds = computed(() => Array.isArray(props.details?.metadata?.related_entry_ids)
   ? props.details.metadata.related_entry_ids
@@ -661,6 +668,7 @@ watch(() => props.details?.chunkLoading, (val) => {
   }
 });
 onUnmounted(() => {
+  previewImages.dispose();
   resetIntakePreview();
   stopProcessingPolling();
   window.removeEventListener('resize', onTraceDrawerWindowResize);
@@ -676,7 +684,7 @@ const checkImage = (url) => {
     img.src = url;
   });
 };
-const resolveVaultImageSource = (href: string) => ['article', 'mine'].includes(props.details?.source_kind) && props.details?.vault_path && href
+const resolveVaultImageSource = (href: string) => ['article', 'mine', 'report'].includes(props.details?.source_kind) && props.details?.vault_path && href
     && !/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(href)
     ? `vault://${encodeURIComponent(props.details.id)}/${encodeURIComponent(href)}`
     : href;
@@ -762,7 +770,10 @@ const processedChunks = computed(() => {
 watch(() => props.details?.id, () => { viewMode.value = 'merged'; });
 
 const runMarkdownPostRenderPipeline = async () => {
+  if (!props.visible) return;
+  const scope = previewImages;
   await nextTick();
+  if (scope.signal.aborted || !props.visible) return;
   const renderRoot = getMarkdownRenderRoot();
   if (!renderRoot) {
     return;
@@ -770,7 +781,9 @@ const runMarkdownPostRenderPipeline = async () => {
   await hydrateProtectedFileImages(
     renderRoot,
     props.libraryId ? { mode: 'library', libraryId: props.libraryId } : undefined,
+    scope,
   );
+  if (scope.signal.aborted) return;
   const images = renderRoot?.querySelectorAll?.('img.markdown-image') as NodeListOf<HTMLImageElement> | undefined;
   if (images) {
     images.forEach(async item => {
@@ -796,6 +809,7 @@ watch(() => viewMode.value, (mode) => {
 
 watch(() => props.visible, (visible) => {
   if (!visible) {
+    releasePreviewResources();
     resetIntakePreview();
   } else if (viewMode.value === 'chunks' || viewMode.value === 'merged') {
     runMarkdownPostRenderPipeline();
@@ -902,6 +916,7 @@ const processMarkdown = (markdownText) => {
 };
 const handleClose = () => {
   if (personalDocumentDeleteBusy.value) return;
+  releasePreviewResources();
   resetIntakePreview();
   emit("closeDoc", false);
   const scrollEl = document.querySelector('.doc-main-drawer .t-drawer__body') as HTMLElement | null;
@@ -1047,7 +1062,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <div class="doc-drawer-resize-line" />
       </div>
     </teleport>
-    <t-drawer :visible="visible" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="!personalDocumentDeleteBusy"
+    <t-drawer :visible="visible" :destroy-on-close="true" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="!personalDocumentDeleteBusy"
       :closeOnOverlayClick="!personalDocumentDeleteBusy" :closeOnEscKeydown="!personalDocumentDeleteBusy"
       :footer="false" :class="['doc-main-drawer', { 'doc-main-drawer--resizing': mainDrawerResizing }]"
       @close="handleClose">

@@ -17,6 +17,7 @@ type segmentedChat struct {
 	retainedProcessingChat
 	calls         map[string]map[int]int
 	fail          int
+	verifyFail    int
 	reject        int
 	mergeCalls    int
 	mergeFail     bool
@@ -28,6 +29,22 @@ type segmentedChat struct {
 
 func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
+	if stage == "article_graph_verification" {
+		var input struct {
+			Source struct {
+				Segment struct {
+					Number int `json:"number"`
+				} `json:"segment"`
+			} `json:"source"`
+		}
+		if err := json.Unmarshal([]byte(messages[len(messages)-1].Content), &input); err != nil {
+			return nil, err
+		}
+		if m.verifyFail > 0 && input.Source.Segment.Number == m.verifyFail {
+			return nil, fmt.Errorf("verification failure %d", m.verifyFail)
+		}
+		return supportedGraphVerificationFixture(messages)
+	}
 	if stage == "article_summary_merge" {
 		m.mergeCalls++
 		if m.mergeFail {
@@ -113,9 +130,10 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	require.NoError(t, err)
 	m.topic = topic.ID
 	body := "# Main\n\n" + strings.Repeat("paragraph with meaningful original material. ", 13)
-	m.fail = 3
+	m.verifyFail = 3
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.ErrorContains(t, err, "第 3/")
+	require.ErrorContains(t, err, "verification failure 3")
 	var first entrySegmentRun
 	require.NoError(t, h.db.Where("entry_id=?", k.ID).First(&first).Error)
 	require.NotEqual(t, "completed", first.Status)
@@ -131,7 +149,7 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	}
 	// A fresh service value models the absence of any in-memory checkpoint.
 	restarted := *h.service
-	m.fail = 0
+	m.verifyFail = 0
 	result, err := restarted.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.calls["article_processing"][1])
@@ -269,7 +287,7 @@ func TestSegmentInlineReviewUsesTheFullEnvelopeBudget(t *testing.T) {
 	k := segmentedEntry(t, h)
 	h.service.config.ArticleProcessing.MaxBodyChars = 0
 	models := h.service.modelService.(articleProcessingModels)
-	models.summaryStateModelService.metadata.Parameters.ContextWindow = 8000
+	models.summaryStateModelService.metadata.Parameters.ContextWindow = 16000
 	intake, err := k.IntakeMetadata()
 	require.NoError(t, err)
 	source := intake.SourceInfo
@@ -352,7 +370,7 @@ func TestSegmentAsyncRejectionRemainsOutOfVault(t *testing.T) {
 	require.Empty(t, m.calls["article_processing"])
 }
 
-func TestSegmentLegacyTopicFingerprintUpgradesWithoutRepeatingCompletedWork(t *testing.T) {
+func TestSegmentUnverifiedFingerprintRepeatsOldWorkAndThenRetainsVerifiedCheckpoints(t *testing.T) {
 	h, model := segmentedHarness(t)
 	k := segmentedEntry(t, h)
 	body := "# Original\n\n" + strings.Repeat("Complete original measurements. ", 30)
@@ -372,16 +390,16 @@ func TestSegmentLegacyTopicFingerprintUpgradesWithoutRepeatingCompletedWork(t *t
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", k.ID).Update("plan_hash", legacy).Error)
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.Error(t, err)
-	require.Equal(t, 1, model.calls["article_processing"][1])
+	require.Equal(t, 2, model.calls["article_processing"][1], "unverified checkpoints cannot bypass verification")
 	var upgraded entrySegmentRun
-	require.NoError(t, h.db.Where("entry_id=? AND phase='processing'", k.ID).First(&upgraded).Error)
+	require.NoError(t, h.db.Where("entry_id=? AND phase='processing'", k.ID).Order("created_at DESC,id DESC").First(&upgraded).Error)
 	require.NotEqual(t, legacy, upgraded.PlanHash)
 	require.NoError(t, h.db.Delete(topic).Error)
 	model.fail = 0
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, model.calls["article_processing"][1])
+	require.Equal(t, 2, model.calls["article_processing"][1], "topic changes retain verified checkpoints")
 	var runs int64
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", k.ID).Count(&runs).Error)
-	require.EqualValues(t, 1, runs)
+	require.EqualValues(t, 2, runs)
 }

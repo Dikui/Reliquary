@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/chatgpt"
+	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
@@ -48,6 +49,8 @@ func (r chatGPTGenerationRequest) stage() string {
 		return "intake_review"
 	case strings.HasPrefix(r.Instructions, articleProcessingPrompt):
 		return "article_processing"
+	case strings.HasPrefix(r.Instructions, articleGraphVerificationPrompt):
+		return "article_graph_verification"
 	case r.Instructions == topicBackfillPrompt:
 		return "topic_backfill"
 	case strings.HasPrefix(r.Instructions, "Decide whether the source mention is the exact same real-world entity"):
@@ -211,6 +214,10 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 		return `{"approved":true,"reason":"Complete original publication"}`, ""
 	case "article_processing":
 		return articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Fixture Acme", EntityType: "company"}}, []string{}), ""
+	case "article_graph_verification":
+		response, err := supportedGraphVerificationFixture([]chat.Message{{Role: "user", Content: request.userText()}})
+		require.NoError(t, err)
+		return response.Content, ""
 	case "entity_resolution":
 		return `{"decision":"new","confidence":1}`, ""
 	case "topic_backfill":
@@ -262,7 +269,7 @@ func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHisto
 	require.Len(t, topicLinks(t, topics, topic.ID), 1)
 
 	requests := h.requests()
-	require.Len(t, requests, 4, "each retained generation path must reach the real ChatGPT model service")
+	require.Len(t, requests, 5, "each retained generation path must reach the real ChatGPT model service")
 	stages := make([]string, 0, len(requests))
 	for _, request := range requests {
 		stages = append(stages, request.stage())
@@ -270,24 +277,28 @@ func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHisto
 			require.NotEqual(t, "system", input.Role)
 		}
 		if request.stage() == "article_processing" {
-			require.Equal(t, libraryProcessingPrompt(h.library, &types.Entry{}), request.Instructions)
+			require.True(t, strings.HasPrefix(request.Instructions, libraryProcessingPrompt(h.library, &types.Entry{})))
 			require.Len(t, request.Input, 1)
 			require.Len(t, request.Input[0].Content, 2)
 			require.Equal(t, "input_image", request.Input[0].Content[1].Type)
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
+		if request.stage() == "article_graph_verification" {
+			require.Equal(t, articleGraphVerificationPrompt, request.Instructions)
+			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
+		}
 	}
-	require.Equal(t, []string{"intake_review", "article_processing", "entity_resolution", "topic_backfill"}, stages)
+	require.Equal(t, []string{"intake_review", "article_processing", "article_graph_verification", "entity_resolution", "topic_backfill"}, stages)
 	policy, err := h.policy.Get(h.ctx)
 	require.NoError(t, err)
-	require.Equal(t, 4, policy.DailyUsed)
+	require.Equal(t, 5, policy.DailyUsed)
 	_, err = h.models.GetEmbeddingModel(h.ctx, "chatgpt-generation")
 	require.Error(t, err, "subscription generation model cannot supply embedding")
 }
 
 func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecovery(t *testing.T) {
 	for _, code := range []string{"subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable"} {
-		for _, stage := range []string{"intake_review", "article_processing"} {
+		for _, stage := range []string{"intake_review", "article_processing", "article_graph_verification"} {
 			t.Run(code+"/"+stage, func(t *testing.T) {
 				var quota atomic.Bool
 				quota.Store(true)
@@ -314,8 +325,7 @@ func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecove
 				require.NoError(t, err)
 				require.NotEqual(t, "error", intake.Decision)
 				require.NotEqual(t, "rejected", intake.Decision)
-				require.NotEmpty(t, intake.OriginalPath)
-				require.Contains(t, h.service.fileSvc.(*articleProcessingFiles).saved, intake.OriginalPath)
+				require.Contains(t, pending.VaultBody, "Fixture Acme published an original product announcement with measured capabilities.")
 				policy, err := h.policy.Get(h.ctx)
 				require.NoError(t, err)
 				require.True(t, policy.Paused)
@@ -412,8 +422,7 @@ func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery
 			intake, err := pending.IntakeMetadata()
 			require.NoError(t, err)
 			require.Equal(t, "pending", intake.Decision)
-			require.NotEmpty(t, intake.OriginalPath)
-			require.Contains(t, h.service.fileSvc.(*articleProcessingFiles).saved, intake.OriginalPath)
+			require.Contains(t, pending.VaultBody, "Fixture Acme published an original product announcement")
 			tasks, err := chatGPTScheduledTasks(h.ctx, inspector)
 			require.NoError(t, err)
 			require.Len(t, tasks, 1)
@@ -453,8 +462,8 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 	require.Equal(t, types.ParseStatusRejected, missing.ParseStatus)
 	intake, err := missing.IntakeMetadata()
 	require.NoError(t, err)
-	require.NotEmpty(t, intake.OriginalPath)
-	original := intake.OriginalPath
+	original := missing.VaultBody
+	require.Contains(t, original, "Fixture Acme published a complete original announcement")
 	inspector := chatGPTScheduledQueue(t, h)
 	quota.Store(true)
 	reviewed, err := h.service.ReviewEntryIntake(h.ctx, article.ID, "supplement_url", types.SourceInfo{OriginalURL: "https://example.org/supplemented-original"})
@@ -463,8 +472,8 @@ func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOrig
 	intake, err = reviewed.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "pending", intake.Decision)
-	require.Equal(t, original, intake.OriginalPath)
-	require.Contains(t, h.service.fileSvc.(*articleProcessingFiles).saved, original)
+	require.Equal(t, original, reviewed.VaultBody)
+	require.Equal(t, original, h.article(t, article.ID).VaultBody)
 	tasks, err := chatGPTScheduledTasks(h.ctx, inspector)
 	require.NoError(t, err)
 	require.Len(t, tasks, 1)

@@ -93,7 +93,7 @@ test('mounted detail switches full-text articles, closes and unmounts without un
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
       '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 25 },
       '@/utils/clipboard': { copyWithToast() {} },
-      '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
+      '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ }, createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }) },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
       '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryUpdateNotice.vue': { __esModule:true, default:notice }, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty,
       '@/components/ReportAssociations.vue': empty,

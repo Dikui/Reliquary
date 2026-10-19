@@ -157,8 +157,7 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	lock := v.articleLock(k.ID)
 	lock.Lock()
 	defer lock.Unlock()
-	// Even the initial header comes from PostgreSQL. In-memory creation times
-	// may retain nanoseconds that were rounded to microseconds by PostgreSQL.
+	// Validate publication against the committed review and processing state.
 	var persisted types.Entry
 	if err := v.db.WithContext(ctx).Where("id=? AND space_id=?", k.ID, k.SpaceID).First(&persisted).Error; err != nil {
 		return err
@@ -181,29 +180,13 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 		v.ScheduleRefresh(ctx, k.ID)
 		return nil
 	}
-	h, err := v.articleHeader(ctx, k)
-	if err != nil {
-		return err
-	}
 	directory, err := vaultLibraryDirectory(v.db.WithContext(ctx), k.LibraryID)
 	if err != nil {
 		return err
 	}
 	relative := vaultEntryPath(directory, k.Title, k.ID)
-	abs, err := vaultAbsolute(v.root, relative)
-	if err != nil {
-		return err
-	}
-	if _, err = os.Stat(abs); err == nil {
-		return fmt.Errorf("article vault file already exists: %s", relative)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
 	body, err = v.prepareArticleMaterials(ctx, k, relative, body, read)
 	if err != nil {
-		return err
-	}
-	if err = v.atomicArticleWrite(abs, RenderVaultArticleHeader(h), []byte(body), nil); err != nil {
 		return err
 	}
 	kind := k.SourceKind
@@ -213,7 +196,6 @@ func (v *VaultService) WriteArticle(ctx context.Context, k *types.Entry, body st
 	values := map[string]any{"source_kind": kind, "vault_path": relative, "vault_body": body}
 
 	if err = v.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", k.ID, k.SpaceID).Updates(values).Error; err != nil {
-		_ = os.Remove(abs)
 		return err
 	}
 	k.SourceKind, k.VaultPath, k.VaultBody = kind, relative, body
@@ -473,68 +455,25 @@ func (v *VaultService) ArticleError() string {
 	return v.articles.recentError
 }
 
-// ScheduleRefresh coalesces repeated changes per article using a trailing
-// timer. The context keeps space identity but outlives its HTTP request.
-func (v *VaultService) ScheduleRefresh(ctx context.Context, entryID string) {
-	v.articles.mu.Lock()
-	defer v.articles.mu.Unlock()
-	if v.articles.stopped {
-		return
-	}
-	if v.articles.timers == nil {
-		v.articles.timers = make(map[string]*time.Timer)
-	}
-	if prior := v.articles.timers[entryID]; prior != nil && prior.Stop() {
-		v.articles.wg.Done()
-	}
-	delay := v.cfg.HeaderDebounce
-	if delay <= 0 {
-		delay = 5 * time.Second
-	}
-	ctx = context.WithoutCancel(ctx)
-	v.articles.wg.Add(1)
-	var timer *time.Timer
-	timer = time.AfterFunc(delay, func() {
-		defer v.articles.wg.Done()
-		v.articles.mu.Lock()
-		if v.articles.timers[entryID] == timer {
-			delete(v.articles.timers, entryID)
-		}
-		v.articles.mu.Unlock()
-		refreshCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		_ = v.RefreshHeader(refreshCtx, entryID)
-	})
-	v.articles.timers[entryID] = timer
-}
+// ScheduleRefresh keeps the metadata notification contract without writing an
+// export on every edit. PostgreSQL owns the current document and its metadata.
+func (v *VaultService) ScheduleRefresh(ctx context.Context, entryID string) {}
 
 func (v *VaultService) Close() error {
 	v.closeFileRebuild()
-	v.articles.mu.Lock()
-	v.articles.stopped = true
-	for id, timer := range v.articles.timers {
-		if timer.Stop() {
-			v.articles.wg.Done()
-		}
-		delete(v.articles.timers, id)
-	}
-	v.articles.mu.Unlock()
-	v.articles.wg.Wait()
-	if err := v.Flush(context.Background()); err != nil {
-		return err
-	}
-	if v.replica != nil {
-		return v.replica.Close()
-	}
 	return nil
 }
 
 func (v *VaultService) ReadBody(k *types.Entry) ([]byte, error) {
-	abs, err := vaultAbsolute(v.root, k.VaultPath)
+	if k.VaultBody != "" {
+		return []byte(k.VaultBody), nil
+	}
+	// Historical imports may still have a file-only body. Keep that reader.
+	path, err := vaultAbsolute(v.root, k.VaultPath)
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(abs)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

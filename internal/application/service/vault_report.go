@@ -90,7 +90,6 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 		return nil, werrors.NewBadRequestError("generated material requires a generated library")
 	}
 	var entry *types.Entry
-	var absolutePath string
 	var createdID string
 	var jobID string
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -122,6 +121,9 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 			return err
 		}
 		path := vaultEntryPath(directory, title, id)
+		if _, err := vaultAbsolute(s.root, path); err != nil {
+			return err
+		}
 		encodedMetadata, _ := json.Marshal(metadata)
 		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
 			Graph: graph, SourceKind: "report", Title: title, VaultPath: path, Source: path, VaultBody: markdown,
@@ -153,28 +155,6 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 		if err := tx.Model(entry).Updates(map[string]any{"file_size": entry.FileSize, "file_hash": entry.FileHash}).Error; err != nil {
 			return err
 		}
-		pathOnDisk, err := vaultAbsolute(s.root, path)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(pathOnDisk), 0o755); err != nil {
-			return err
-		}
-		file, err := os.OpenFile(pathOnDisk, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err != nil {
-			return err
-		}
-		absolutePath = pathOnDisk
-		_, writeErr := file.WriteString(content)
-		if syncErr := file.Sync(); writeErr == nil {
-			writeErr = syncErr
-		}
-		if closeErr := file.Close(); writeErr == nil {
-			writeErr = closeErr
-		}
-		if writeErr != nil {
-			return writeErr
-		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", entry.ID, nil,
 			map[string]any{"title": title, "vault_path": path, "related_entry_ids": selected, "related_entities": metadata.RelatedEntities, "topic_ids": metadata.TopicIDs, "request_id": metadata.RequestID}); err != nil {
 			return err
@@ -188,11 +168,6 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 		return err
 	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		if absolutePath != "" {
-			if cleanupErr := os.Remove(absolutePath); cleanupErr != nil {
-				return nil, errors.Join(err, fmt.Errorf("remove unsaved report: %w", cleanupErr))
-			}
-		}
 		if createdID != "" {
 			attachmentPath, pathErr := vaultAbsolute(s.root, filepath.ToSlash(filepath.Join("attachments", createdID)))
 			if pathErr != nil {
@@ -223,22 +198,16 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 
 func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *types.Library, entry *types.Entry) (*types.Entry, error) {
 	vault := &VaultService{db: s.db, root: s.root}
-	if err := vault.RefreshHeader(ctx, entry.ID); err != nil {
-		return nil, err
-	}
-	path, err := vaultAbsolute(s.root, entry.VaultPath)
+	header, err := vault.articleHeader(ctx, entry)
 	if err != nil {
 		return nil, err
 	}
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+	body := string(RenderVaultArticleHeader(header)) + entry.VaultBody
 	var indexed *types.Entry
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		transactional := &VaultDocumentService{db: tx, models: s.models, root: s.root,
 			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
-		indexed, err = transactional.indexReport(ctx, library, entry.VaultPath, string(body), entry.CreatedAt)
+		indexed, err = transactional.indexReport(ctx, library, entry.VaultPath, body, entry.CreatedAt)
 		return err
 	})
 	if err != nil {

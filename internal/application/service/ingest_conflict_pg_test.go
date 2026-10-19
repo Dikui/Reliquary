@@ -114,8 +114,8 @@ func TestIngestConflictConcurrentSameBodyCreatesOnePending(t *testing.T) {
 	assertSamePendingOperations(t, beforeJobs, transactionJobs(t, h.db))
 	var resources int64
 	require.NoError(t, h.db.Model(&types.StoredResource{}).Count(&resources).Error)
-	require.EqualValues(t, 3, resources, "the original body and one conflict's image and body remain")
-	require.Len(t, transactionStoredFiles(t, root), 3)
+	require.EqualValues(t, 1, resources, "only the conflict image is stored outside PostgreSQL")
+	require.Len(t, transactionStoredFiles(t, root), 1)
 }
 
 func TestIngestConflictDifferentBodyHashesCreateSeparatePending(t *testing.T) {

@@ -26,6 +26,7 @@ func TestArticleStarPersistsHeaderLogsAndListFilter(t *testing.T) {
 		updated, err := h.service.SetStarred(h.ctx, k.ID, starred)
 		require.NoError(t, err)
 		require.Equal(t, starred, updated.Starred)
+		require.NoError(t, v.RefreshHeader(h.ctx, k.ID))
 		require.Eventually(t, func() bool {
 			data, err := os.ReadFile(filepath.Join(v.root, k.VaultPath))
 			if err != nil {

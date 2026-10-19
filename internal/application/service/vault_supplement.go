@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -93,15 +92,12 @@ func replaceVaultImageTargets(body string, mappings map[string]string) string {
 }
 
 type vaultArticleSupplement struct {
-	vault    *VaultService
-	abs      string
-	previous []byte
-	lock     *sync.Mutex
-	closed   bool
+	lock   *sync.Mutex
+	closed bool
 }
 
 // BeginArticleSupplement trusts the caller's locked PostgreSQL snapshot and
-// keeps the article file lock until the database transaction commits or rolls
+// keeps the article lock until the database transaction commits or rolls
 // back. It never reads through v.db, which would contend with that transaction.
 func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string) (_ *vaultArticleSupplement, supplementErr error) {
 	if k == nil {
@@ -126,21 +122,7 @@ func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entr
 			lock.Unlock()
 		}
 	}()
-	abs, err := vaultAbsolute(v.root, k.VaultPath)
-	if err != nil {
-		return nil, err
-	}
-	previous, err := os.ReadFile(abs)
-	if err != nil {
-		return nil, err
-	}
-	_, oldBody, err := SplitVaultArticle(previous)
-	if err != nil {
-		return nil, err
-	}
-	if !bytes.Equal(oldBody, []byte(k.VaultBody)) {
-		return nil, errors.New("vault body differs from the locked article snapshot; replacement refused")
-	}
+	oldBody := k.VaultBody
 	missingImages := map[string]bool{}
 	for _, missing := range k.IngestMissing() {
 		if missing.Type == "image" {
@@ -156,20 +138,13 @@ func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entr
 		}
 	}
 
-	expected := replaceVaultImageTargets(string(oldBody), imageMappings)
+	expected := replaceVaultImageTargets(oldBody, imageMappings)
 	if newBody != expected {
 		return nil, errors.New("supplement changed article text; replacement refused")
 	}
-	header, _, err := SplitVaultArticle(previous)
-	if err != nil {
-		return nil, err
-	}
-	if err := v.atomicArticleWrite(abs, header, []byte(newBody), previous); err != nil {
-		return nil, err
-	}
 	k.VaultBody = newBody
 	keep = true
-	return &vaultArticleSupplement{vault: v, abs: abs, previous: previous, lock: lock}, nil
+	return &vaultArticleSupplement{lock: lock}, nil
 }
 
 func (v *VaultService) SupplementArticle(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string) error {
@@ -181,7 +156,7 @@ func (v *VaultService) SupplementArticle(ctx context.Context, k *types.Entry, ne
 }
 
 // Only the explicit content-update API may replace finalized text. Keep the
-// file lock until its database transaction commits, using the supplement undo.
+// article lock until its database transaction commits or rolls back.
 func (v *VaultService) beginArticleContentUpdate(k *types.Entry, newBody string) (*vaultArticleSupplement, error) {
 	lock := v.articleLock(k.ID)
 	lock.Lock()
@@ -191,40 +166,15 @@ func (v *VaultService) beginArticleContentUpdate(k *types.Entry, newBody string)
 			lock.Unlock()
 		}
 	}()
-	abs, err := vaultAbsolute(v.root, k.VaultPath)
-	if err != nil {
-		return nil, err
-	}
-	previous, err := os.ReadFile(abs)
-	if err != nil {
-		return nil, err
-	}
-	header, body, err := SplitVaultArticle(previous)
-	if err != nil {
-		return nil, err
-	}
-	if string(body) != k.VaultBody {
-		return nil, errors.New("vault body differs from the locked article snapshot; replacement refused")
-	}
-	if err := v.atomicArticleWrite(abs, header, []byte(newBody), previous); err != nil {
-		return nil, err
-	}
 	k.VaultBody = newBody
 	keep = true
-	return &vaultArticleSupplement{vault: v, abs: abs, previous: previous, lock: lock}, nil
+	return &vaultArticleSupplement{lock: lock}, nil
 }
 
 func (change *vaultArticleSupplement) rollback() error {
-	if change == nil || change.closed {
-		return nil
-	}
-	defer change.finish()
-	header, body, err := SplitVaultArticle(change.previous)
-	if err != nil {
-		return err
-	}
-	return change.vault.atomicArticleWrite(change.abs, header, body, nil)
+	return change.finish()
 }
+
 func (change *vaultArticleSupplement) finish() error {
 	if change != nil && !change.closed {
 		change.closed = true

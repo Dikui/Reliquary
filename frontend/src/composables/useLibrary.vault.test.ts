@@ -124,3 +124,18 @@ test('old source details retain update links and clearing or switching resets th
  assert.equal(hook.details.has_update,false);assert.equal(hook.details.latest_entry_id,'')
  await settle();assert.equal(hook.details.has_update,false)
 })
+
+
+test('closing preview releases its content and ignores an unfinished detail response', async () => {
+  let reply: (result: unknown) => void = () => {}
+  const hook = createHook(() => new Promise(resolve => { reply = resolve }))
+  hook.getCardDetails({ id: 'closing' })
+  hook.details.md = [{ content: 'Preview content' }]
+  hook.clearCardDetails()
+  assert.deepEqual(hook.details.md, [])
+  assert.equal(hook.details.id, '')
+  reply({ success: true, data: { id: 'closing', title: 'Late response', updated_at: '2026-10-19T00:00:00Z' } })
+  await settle()
+  assert.equal(hook.details.id, '')
+  assert.deepEqual(hook.details.md, [])
+})

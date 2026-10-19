@@ -108,6 +108,7 @@ func TestIngestDuplicateReturnsExistingAndFillsReasonWithoutReprocessing(t *test
 	require.Len(t, h.queue.tasks, 1)
 	require.Len(t, h.processor.requests, 1)
 	require.Equal(t, request.CollectReason, h.article(t, first.EntryID).CollectReason)
+	require.NoError(t, vault.RefreshHeader(h.ctx, article.ID))
 	require.Eventually(t, func() bool {
 		data, err := os.ReadFile(filepath.Join(vault.root, article.VaultPath))
 		if err != nil {
@@ -290,7 +291,8 @@ func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	require.EqualValues(t, 2, count)
 	require.Len(t, h.queue.tasks, 2)
 	files := h.service.fileSvc.(*articleProcessingFiles)
-	require.Len(t, files.saved, 2, "successful articles remain; failed collection files are removed")
+	require.Empty(t, files.saved, "text remains in PostgreSQL; failed collection files are removed")
+	require.Equal(t, success.Content+"\n", h.article(t, failed.Items[0].EntryID).VaultBody)
 	require.NoError(t, h.db.Exec(`DROP TRIGGER fail_ingest_audit ON operation_logs`).Error)
 	recovered.RecoveryFailureID = failure.ID
 	// Removing source evidence puts the repaired submission into the existing review queue.

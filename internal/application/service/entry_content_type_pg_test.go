@@ -42,6 +42,9 @@ func correctionLogValue(t *testing.T, data types.JSON, key string) any {
 func waitCorrectionHeader(t *testing.T, v *VaultService, k *types.Entry, contentType string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
+		if err := v.RefreshHeader(context.Background(), k.ID); err != nil {
+			return false
+		}
 		data, err := os.ReadFile(filepath.Join(v.root, k.VaultPath))
 		return err == nil && bytes.Contains(data, []byte("content_type: \""+contentType+"\""))
 	}, 3*time.Second, 10*time.Millisecond)

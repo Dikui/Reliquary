@@ -33,7 +33,9 @@ type Retrieval struct {
 	IDs   []string `json:"ids"`
 }
 type Manifest struct {
-	SchemaVersion      int64 `json:"schema_version,omitempty"`
+	DatabaseOnly       bool              `json:"database_only,omitempty"`
+	BodyHashes         map[string]string `json:"body_hashes,omitempty"`
+	SchemaVersion      int64             `json:"schema_version,omitempty"`
 	collectionMigrated bool
 	FormatVersion      int                      `json:"format_version"`
 	Tables             map[string]TableManifest `json:"tables"`
@@ -52,6 +54,14 @@ type Verification struct {
 }
 
 func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Manifest, error) {
+	return buildManifest(ctx, db, root, uploads, false)
+}
+
+func BuildRuntimeManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Manifest, error) {
+	return buildManifest(ctx, db, root, uploads, true)
+}
+
+func buildManifest(ctx context.Context, db *gorm.DB, root, uploads string, databaseOnly bool) (*Manifest, error) {
 	rules, err := schemaRules(ctx, db)
 	if err != nil {
 		return nil, err
@@ -60,7 +70,7 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 	if err != nil {
 		return nil, err
 	}
-	manifest := &Manifest{SchemaVersion: snapshot.schemaVersion, FormatVersion: FormatVersion, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
+	manifest := &Manifest{DatabaseOnly: databaseOnly, SchemaVersion: snapshot.schemaVersion, FormatVersion: FormatVersion, Tables: map[string]TableManifest{}, Files: map[string][]File{}, Retrieval: []Retrieval{}, Required: snapshot.Required, Regenerated: []string{"all chunks and vectors, search sequence IDs and ranking scores, live queue leases, excluded authentication secrets, maintenance pause and scheduling checkpoints"}}
 	columns, err := Schema(ctx, db)
 	if err != nil {
 		return nil, err
@@ -120,6 +130,9 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 		inventory := Files
 		if name == "vault" {
 			inventory = VaultFiles
+			if databaseOnly {
+				inventory = RuntimeVaultFiles
+			}
 		}
 		files, err := inventory(path)
 		if err != nil {
@@ -139,6 +152,24 @@ func BuildManifest(ctx context.Context, db *gorm.DB, root, uploads string) (*Man
 			ids = []string{}
 		}
 		manifest.Retrieval = append(manifest.Retrieval, Retrieval{Query: query, IDs: ids})
+	}
+	if databaseOnly {
+		manifest.BodyHashes = map[string]string{}
+		rows, err := db.WithContext(ctx).Table("entries").Select("id, vault_body").Rows()
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id, body string
+			if err := rows.Scan(&id, &body); err != nil {
+				return nil, err
+			}
+			manifest.BodyHashes[id] = sum([]byte(body))
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	manifest.CollectionExports, err = collectionExports(root)
 	if err != nil {
@@ -490,6 +521,19 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
+	if expected.DatabaseOnly != actual.DatabaseOnly {
+		diffs = append(diffs, "database storage layout")
+	}
+	if expected.DatabaseOnly {
+		if len(expected.BodyHashes) != len(actual.BodyHashes) {
+			diffs = append(diffs, "document body count")
+		}
+		for id, hash := range expected.BodyHashes {
+			if actual.BodyHashes[id] != hash {
+				diffs = append(diffs, "document body: "+id)
+			}
+		}
+	}
 	policyAuditValid := false
 	if options.AllowReconfigurationAppend {
 		policyAuditValid = verifyPolicyProbeChain(expected, actual)

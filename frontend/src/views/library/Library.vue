@@ -73,7 +73,7 @@ type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeLibraryTab = ref<KbTab>(initTab);
 
-let { cardList, total, moreIndex, details, loadEntries, delEntry, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails } = useLibrary(libraryId.value)
+let { cardList, total, moreIndex, details, loadEntries, delEntry, openMore, onVisibleChange: _onVisibleChange, getCardDetails, clearCardDetails, getfDetails } = useLibrary(libraryId.value)
 
 /** Per-entry cache: whether /spans has a real trace (see entrySpansPayloadHasTrace). */
 const traceAvailableById = reactive<Record<string, boolean>>({});
@@ -602,6 +602,7 @@ const updateStatus = (analyzeList: EntryCard[]) => {
 
 const closeDoc = () => {
   isCardDetails.value = false;
+  clearCardDetails();
 };
 const openCardDetails = (item: EntryCard) => {
   isCardDetails.value = true;

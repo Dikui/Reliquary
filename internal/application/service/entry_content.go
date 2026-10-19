@@ -64,6 +64,9 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	if err := lockMessageDeduplication(s.db.WithContext(ctx), entry); err != nil {
 		return nil, err
 	}
+	if err := lockEntitySpace(s.db.WithContext(ctx), spaceID); err != nil {
+		return nil, err
+	}
 	if err := graph.Lock(s.db.WithContext(ctx), spaceID); err != nil {
 		return nil, err
 	}

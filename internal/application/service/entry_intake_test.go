@@ -62,6 +62,48 @@ func TestReviewIntakeXUsesLibraryCriteria(t *testing.T) {
 	}
 }
 
+func TestReviewIntakeCompletenessWarning(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, response, reason string
+		rejected                     bool
+	}{
+		{
+			name: "usable_body", body: "缓存可复用已有上下文，避免重复上传。创建缓存后，后续请求通过缓存 ID 引用。下面是调用代码：",
+			response: `{"approved":true,"reason":"缓存机制说明可独立理解","warning":"疑似不完整：提到调用代码，但未提供代码"}`,
+			reason:   "疑似不完整：提到调用代码，但未提供代码",
+		},
+		{
+			name: "no_usable_body", body: "# 缓存教程\n\n## 参考链接\n\nhttps://example.org/cache",
+			response: `{"approved":false,"auxiliary":true,"reason":"只有标题和资源链接，没有可用实质内容"}`,
+			reason:   "缺少符合收录标准的实质正文", rejected: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			library := types.SystemLibraryDefaults()[0]
+			library.ModelTiers.Light = "review-model"
+			entry := &types.Entry{ID: tc.name, SpaceID: 1, LibraryID: library.ID}
+			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
+				Source: "manual", Decision: "pending", SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/cache"},
+			}))
+			capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: tc.response}}
+			svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &tierTestModels{chat: capture},
+				config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{MaxBodyChars: 30, SegmentOverlapChars: 1}},
+			}
+			rejected, err := svc.reviewIntake(context.Background(), library, entry, tc.body)
+			require.NoError(t, err)
+			require.Equal(t, tc.rejected, rejected)
+			intake, err := entry.IntakeMetadata()
+			require.NoError(t, err)
+			require.Contains(t, intake.Reason, tc.reason)
+			require.Greater(t, len(capture.reviews), 1, "warning aggregation also works across segments")
+			if !tc.rejected {
+				require.Equal(t, "approved", intake.Decision)
+				require.NotEqual(t, types.ParseStatusRejected, entry.ParseStatus)
+			}
+		})
+	}
+}
+
 func TestReviewIntakeSendsSegmentImagesAndReadStatus(t *testing.T) {
 	library := types.SystemLibraryDefaults()[0]
 	library.ModelTiers.Light = "review-model"

@@ -29,25 +29,25 @@ func TestMaintenanceFilesHTTPAndCLIShareResultsAndRejectConcurrentRebuild(t *tes
 	_, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
 	require.NoError(t, err)
 	var library types.Library
-	require.NoError(t, db.Where("system_role=?", "mine").First(&library).Error)
+	require.NoError(t, db.Where("system_role=?", "personal").First(&library).Error)
 	root := t.TempDir()
 	t.Setenv("VAULT_ROOT", root)
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", "")
 	vault, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(`INSERT INTO entries(id,space_id,library_id,title,type,source,source_kind,parse_status,enable_status,vault_path,vault_body,created_at,updated_at)
- VALUES('files-written',1,?,'Rebuild fixture','manual','manual','mine','completed','enabled','mine/rebuild-fixture.md','# Original body',now(),now()),
- ('files-skipped',1,?,'Unmanaged fixture','manual','manual','mine','completed','enabled','mine/unmanaged.md','',now(),now())`, library.ID, library.ID).Error)
+ VALUES('files-written',1,?,'Rebuild fixture','manual','manual','mine','completed','enabled','personal/rebuild-fixture.md','# Original body',now(),now()),
+ ('files-skipped',1,?,'Unmanaged fixture','manual','manual','mine','completed','enabled','personal/unmanaged.md','',now(),now())`, library.ID, library.ID).Error)
 	require.NoError(t, vault.RefreshHeader(ctx, "files-skipped"))
 	var output bytes.Buffer
 	require.NoError(t, runMaintenanceDatabase(ctx, db, "", []string{"rebuild-files"}, bytes.NewReader(nil), &output))
 	var cli service.VaultFileRebuildResult
 	require.NoError(t, json.Unmarshal(output.Bytes(), &cli))
 	require.Equal(t, service.VaultFileRebuildResult{Rebuilt: true, Written: 1, Skipped: 1}, cli)
-	original, err := os.ReadFile(filepath.Join(root, "mine/rebuild-fixture.md"))
+	original, err := os.ReadFile(filepath.Join(root, "personal/rebuild-fixture.md"))
 	require.NoError(t, err)
 	require.Contains(t, string(original), "# Original body")
-	require.NoError(t, os.Remove(filepath.Join(root, "mine/rebuild-fixture.md")))
+	require.NoError(t, os.Remove(filepath.Join(root, "personal/rebuild-fixture.md")))
 
 	h := handler.NewVaultHandler(nil)
 	h.SetArticles(vault)
@@ -62,6 +62,8 @@ func TestMaintenanceFilesHTTPAndCLIShareResultsAndRejectConcurrentRebuild(t *tes
 		router.ServeHTTP(response, httptest.NewRequest(method, "/vault/rebuild", nil).WithContext(requestCtx))
 		return response
 	}
+	other, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})
+	require.NoError(t, err)
 	// Block the worker inside its first database query while the request returns.
 	tx := db.Begin()
 	require.NoError(t, tx.Error)
@@ -72,8 +74,6 @@ func TestMaintenanceFilesHTTPAndCLIShareResultsAndRejectConcurrentRebuild(t *tes
 	require.Contains(t, accepted.Body.String(), `"status":"running"`)
 	require.Equal(t, http.StatusConflict, invoke(http.MethodPost).Code)
 	// A separate service instance, as used by CLI, must also see the lock.
-	other, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})
-	require.NoError(t, err)
 	_, err = other.RebuildFilesWithResult(ctx)
 	require.ErrorIs(t, err, service.ErrVaultRebuildRunning)
 	require.NoError(t, tx.Rollback().Error)
@@ -90,7 +90,7 @@ func TestMaintenanceFilesHTTPAndCLIShareResultsAndRejectConcurrentRebuild(t *tes
 	}, 10*time.Second, 10*time.Millisecond)
 	require.Equal(t, "success", final.Status, final.Error)
 	require.Equal(t, &cli, final.Result)
-	restored, err := os.ReadFile(filepath.Join(root, "mine/rebuild-fixture.md"))
+	restored, err := os.ReadFile(filepath.Join(root, "personal/rebuild-fixture.md"))
 	require.NoError(t, err)
 	require.Equal(t, original, restored)
 	// Lock is released and unchanged files are counted as skipped.

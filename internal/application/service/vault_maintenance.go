@@ -25,8 +25,7 @@ func (v *VaultService) StartReplica() error {
 	return v.replica.Start()
 }
 
-// Flush is the common barrier for shutdown, backup and migration. The caller
-// first pauses intake and stops writes; this then persists all database headers.
+// Flush materializes the full file export for explicit export and legacy recovery.
 func (v *VaultService) Flush(ctx context.Context) error {
 	if !v.db.Migrator().HasColumn("libraries", "directory") {
 		if v.replica == nil {
@@ -50,6 +49,14 @@ func (v *VaultService) Flush(ctx context.Context) error {
 }
 
 func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Verification, error) {
+	return v.verify(ctx, repair, true)
+}
+
+func (v *VaultService) VerifyRuntime(ctx context.Context) (*maintenance.Verification, error) {
+	return v.verify(ctx, false, false)
+}
+
+func (v *VaultService) verify(ctx context.Context, repair, exported bool) (*maintenance.Verification, error) {
 	result := &maintenance.Verification{OK: true, Differences: []string{}, Repaired: []string{}}
 	legacy := !v.db.Migrator().HasColumn("libraries", "directory")
 	if legacy && repair {
@@ -73,37 +80,42 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 		if article.SourceKind == "report" && vaultpath.UserMetadata(article.VaultPath) {
 			continue
 		}
-		actual, readErr := os.ReadFile(path)
-		if legacy {
-			if readErr != nil {
-				result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
-			}
-			// The original replica's checksums and SQL rows are verified below.
-			continue
+		if !exported && article.ParseStatus == types.ParseStatusCompleted && article.VaultBody == "" {
+			result.Differences = append(result.Differences, article.VaultPath+": saved document body is missing from database")
 		}
-		if article.SourceKind != "article" && article.SourceKind != "mine" && article.SourceKind != "report" {
-			if readErr != nil {
-				result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
-			} else if article.FileHash != "" && vaultContentHash(string(actual)) != article.FileHash {
-				result.Differences = append(result.Differences, article.VaultPath+": user file differs from indexed hash")
-			}
-			continue
-		}
-		header, err := v.articleHeader(ctx, &article)
-		if err != nil {
-			return result, err
-		}
-		body := []byte(article.VaultBody)
-
-		expected := append(RenderVaultArticleHeader(header), body...)
-		if readErr != nil || !bytes.Equal(actual, expected) {
-			if repair {
-				if err := v.atomicArticleWrite(path, RenderVaultArticleHeader(header), body, nil); err != nil {
-					return result, err
+		if exported {
+			actual, readErr := os.ReadFile(path)
+			if legacy {
+				if readErr != nil {
+					result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
 				}
-				result.Repaired = append(result.Repaired, article.VaultPath)
-			} else {
-				result.Differences = append(result.Differences, article.VaultPath+": article file differs from database")
+				// The original replica's checksums and SQL rows are verified below.
+				continue
+			}
+			if article.SourceKind != "article" && article.SourceKind != "mine" && article.SourceKind != "report" {
+				if readErr != nil {
+					result.Differences = append(result.Differences, article.VaultPath+": "+readErr.Error())
+				} else if article.FileHash != "" && vaultContentHash(string(actual)) != article.FileHash {
+					result.Differences = append(result.Differences, article.VaultPath+": user file differs from indexed hash")
+				}
+				continue
+			}
+			header, err := v.articleHeader(ctx, &article)
+			if err != nil {
+				return result, err
+			}
+			body := []byte(article.VaultBody)
+
+			expected := append(RenderVaultArticleHeader(header), body...)
+			if readErr != nil || !bytes.Equal(actual, expected) {
+				if repair {
+					if err := v.atomicArticleWrite(path, RenderVaultArticleHeader(header), body, nil); err != nil {
+						return result, err
+					}
+					result.Repaired = append(result.Repaired, article.VaultPath)
+				} else {
+					result.Differences = append(result.Differences, article.VaultPath+": article file differs from database")
+				}
 			}
 		}
 
@@ -172,7 +184,7 @@ func (v *VaultService) Verify(ctx context.Context, repair bool) (*maintenance.Ve
 			}
 		}
 	}
-	if v.replica != nil {
+	if exported && v.replica != nil {
 		replica, err := maintenance.VerifyReplica(ctx, v.db, v.root, os.Getenv("LOCAL_STORAGE_BASE_DIR"), repair)
 		if err != nil {
 			return result, err

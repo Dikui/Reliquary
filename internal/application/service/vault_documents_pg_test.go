@@ -256,6 +256,8 @@ func TestVaultReportImmediatelyIndexesReadOnlyBodyAndValidatesRelations(t *testi
 	require.Equal(t, "整理:结果/中文", report.Title)
 	require.Regexp(t, `^ai-output/整理结果中文-[0-9a-f]{8}\.md$`, report.VaultPath)
 	h.assertSearch(t, report.ID, "reportfixture")
+	require.NoFileExists(t, filepath.Join(h.root, report.VaultPath))
+	require.NoError(t, (&VaultService{db: h.db, root: h.root}).RefreshHeader(h.ctx, report.ID))
 	content, err := os.ReadFile(filepath.Join(h.root, report.VaultPath))
 	require.NoError(t, err)
 	require.Contains(t, string(content), "title: \"整理:结果/中文\"")

@@ -23,6 +23,120 @@ type jointProcessingChat struct {
 	describeMissing bool
 }
 
+// These fixtures exercise the protocol and pipeline, not real-model accuracy.
+func supportedGraphVerificationFixture(messages []chat.Message) (*types.ChatResponse, error) {
+	var input graphVerificationInput
+	if err := json.Unmarshal([]byte(messages[len(messages)-1].Content), &input); err != nil {
+		return nil, err
+	}
+	verdicts := []graphVerificationVerdict{}
+	for _, candidate := range input.Candidates {
+		verdict := graphVerificationVerdict{ID: candidate.ID, Status: "supported", Reason: "Fixture evidence"}
+		if candidate.Entity != nil {
+			verdict.DescriptionStatus = "supported"
+		}
+		verdicts = append(verdicts, verdict)
+	}
+	raw, err := json.Marshal(map[string]any{"verdicts": verdicts})
+	return &types.ChatResponse{Content: string(raw)}, err
+}
+
+type graphVerificationChat struct {
+	retainedProcessingChat
+	respond func([]chat.Message) (*types.ChatResponse, error)
+}
+
+func (m graphVerificationChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
+	return m.respond(messages)
+}
+
+func TestGraphVerificationRetainsSupportedFactsAndClearsUnsupportedDescription(t *testing.T) {
+	require.Equal(t, types.CallPurposeArticleProcessing, types.NormalizeModelCallPurpose("article_graph_verification", types.ModelTierGeneration))
+	company, product := "company", "product"
+	result := &articleProcessingResult{
+		Entities: []articleProcessingEntity{
+			{Name: "Playco", Type: &company, Description: "游戏公司客户", EvidenceIDs: []int{1}},
+			{Name: "OpenAI", Type: &company, Description: "合作方", EvidenceIDs: []int{1}},
+			{Name: "Model family", Type: &product, Description: "将型号提升为家族", EvidenceIDs: []int{1}},
+			{Name: "Missing", Type: &company, EvidenceIDs: []int{1}},
+		},
+		Relations: []extractedRelation{
+			{Subject: "Playco", Type: "合作", Object: "OpenAI", EvidenceIDs: []int{1}},
+			{Subject: "OpenAI", Type: "发布", Object: "Model family", EvidenceIDs: []int{1}},
+			{Subject: "Playco", Type: "合作", Object: "Missing", EvidenceIDs: []int{1}},
+		},
+	}
+	source := articleProcessingInput{Body: "[P1]\nPlayco 与 OpenAI 合作开发游戏原型。", Author: "Reporter"}
+	images := []string{"data:image/png;base64,fixture"}
+	seen := []string{}
+	model := &graphVerificationChat{respond: func(messages []chat.Message) (*types.ChatResponse, error) {
+		var input graphVerificationInput
+		require.NoError(t, json.Unmarshal([]byte(messages[1].Content), &input))
+		require.Equal(t, source.Body, input.Source.Body)
+		require.Equal(t, source.Author, input.Source.Author)
+		require.Equal(t, images, messages[1].Images)
+		response, err := supportedGraphVerificationFixture(messages)
+		require.NoError(t, err)
+		var output struct {
+			Verdicts []graphVerificationVerdict `json:"verdicts"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(response.Content), &output))
+		for i := range output.Verdicts {
+			v := &output.Verdicts[i]
+			seen = append(seen, v.ID)
+			switch v.ID {
+			case "e0":
+				v.DescriptionStatus, v.Reason = "unsupported", "原文未说明行业身份"
+			case "e2", "r1":
+				v.Status, v.Reason = "unsupported", "具体型号不能提升为家族或发布关系"
+			case "e3":
+				v.Status, v.Reason = "insufficient_evidence", "缺少必要上下文"
+			}
+		}
+		raw, err := json.Marshal(output)
+		return &types.ChatResponse{Content: string(raw)}, err
+	}}
+	require.NoError(t, verifyArticleGraph(context.Background(), model, &types.Model{}, source, images, 416, result))
+	require.Equal(t, []string{"e0", "e1", "e2", "e3", "r0", "r1", "r2"}, seen, "batching must cover every candidate")
+	require.Len(t, result.Entities, 2)
+	require.Empty(t, result.Entities[0].Description)
+	require.Equal(t, "合作方", result.Entities[1].Description)
+	require.Equal(t, []int{1}, result.Entities[0].EvidenceIDs)
+	require.Len(t, result.Relations, 1, "a relation cannot retain a rejected endpoint")
+	require.Equal(t, "合作", result.Relations[0].Type)
+	audit := string(result.Extensions["graph_verification"][0].Value)
+	require.Contains(t, audit, "游戏公司客户", "audit keeps the rejected original description")
+	require.Contains(t, audit, "insufficient_evidence")
+	require.Contains(t, audit, "原文未说明行业身份")
+}
+
+func TestGraphVerificationMissingVerdictFailsWithoutPublishingPartialResults(t *testing.T) {
+	company := "company"
+	result := &articleProcessingResult{Entities: []articleProcessingEntity{
+		{Name: "Acme", Type: &company, Description: "Original description"},
+		{Name: "Beta", Type: &company, Description: "Another description"},
+	}}
+	before, err := json.Marshal(result)
+	require.NoError(t, err)
+	calls := 0
+	model := &graphVerificationChat{respond: func(messages []chat.Message) (*types.ChatResponse, error) {
+		calls++
+		if calls == 1 {
+			return &types.ChatResponse{Content: `{"verdicts":[{"id":"e0","status":"supported","description_status":"unsupported","reason":"unsupported description"}]}`}, nil
+		}
+		if calls == 3 {
+			require.Contains(t, messages[0].Content, "must return exactly 1 verdicts")
+		}
+		return &types.ChatResponse{Content: `{"verdicts":[]}`}, nil
+	}}
+	err = verifyArticleGraph(context.Background(), model, &types.Model{}, articleProcessingInput{}, nil, 224, result)
+	require.ErrorContains(t, err, "graph verification call failed")
+	require.Equal(t, 3, calls, "one accepted batch, then one correction for the missing verdict")
+	after, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.JSONEq(t, string(before), string(after), "failed verification must not apply even an earlier valid batch")
+}
+
 func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *testing.T) {
 	body := "# 公告\r\n\r\n[Acme](https://example.org/acme) 与 **Beta** 合作。\r\nAcme 的产品是 Suite。\r\n"
 	numbered, blocks := articleEvidenceBody(body)
@@ -35,10 +149,9 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	result.Entities = []articleProcessingEntity{
 		{Name: "Acme", Type: &company, Description: "Beta 的合作方。", Relevance: "central", EvidenceIDs: []int{2}},
 		{Name: "Beta", Type: &company, Description: "Acme 的合作方。", Relevance: "participant", EvidenceIDs: []int{2}},
-		{Name: "Suite", Type: &product, Description: "Acme 的产品。", Relevance: "participant", EvidenceIDs: []int{2}},
+		{Name: "Suite", Type: &product, Relevance: "participant", EvidenceIDs: []int{2}},
 		{Name: "Footer", Type: &company, Description: "导航项。", Relevance: "incidental", EvidenceIDs: []int{1}},
 		{Name: "Uncited", Type: &company, Description: "没有原文支持。", Relevance: "central", EvidenceIDs: []int{999}},
-		{Name: "Empty", Type: &company, Relevance: "central", EvidenceIDs: []int{2}},
 		{Name: "Alice", Type: &person, Description: "发言人。", Relevance: "participant", EvidenceIDs: []int{2}},
 		{Name: "Protocol", Type: &project, Description: "协议。", Relevance: "central", EvidenceIDs: []int{2}},
 		{Name: "Concept", Type: &other, Description: "概念。", Relevance: "central", EvidenceIDs: []int{2}},
@@ -54,6 +167,7 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	library := &types.Library{ContentTypes: []types.LibraryContentType{{Name: "公告", Enabled: true, ExtractGraph: true}}}
 	qualifySegmentOutput(library, &types.Entry{}, body, types.ProcessingSegment{End: len([]rune(body))}, result)
 	require.Len(t, result.Entities, 3)
+	require.Empty(t, result.Entities[2].Description, "a supported identity does not require a description")
 	require.Len(t, result.Relations, 2)
 	require.Equal(t, "Suite", result.Relations[1].Subject)
 	require.Equal(t, "Acme", result.Relations[1].Object)
@@ -67,6 +181,9 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
+	if stage == "article_graph_verification" {
+		return supportedGraphVerificationFixture(messages)
+	}
 	if stage == "intake_review" {
 		return &types.ChatResponse{Content: `{"approved":true,"reason":"fixture"}`}, nil
 	}
@@ -139,7 +256,11 @@ func TestIKB11ProcessingPromptsAndSwitches(t *testing.T) {
 			if defaults.Template == types.TemplateExternalTimely {
 				require.Contains(t, prompt, "每个实体输出")
 				require.Contains(t, prompt, "不使用固定名单")
-				require.Contains(t, prompt, "产品不分主次")
+				require.Contains(t, prompt, "不设数量上限")
+				require.Contains(t, prompt, "先确定正文的主旨与重点事实")
+				require.Contains(t, prompt, "产品同样按本文重点筛选")
+				require.NotContains(t, prompt, "不按主次")
+				require.NotContains(t, prompt, "产品不分主次")
 				require.Contains(t, prompt, "人物暂不建档")
 			} else {
 				require.NotContains(t, prompt, "每个实体输出")

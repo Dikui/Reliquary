@@ -31,7 +31,7 @@ func NormalizeModelCallPurpose(stage string, tier ModelTier) ModelCallPurpose {
 	switch stage {
 	case "intake_review":
 		return CallPurposeIntakeReview
-	case "article_processing":
+	case "article_processing", "article_graph_verification":
 		return CallPurposeArticleProcessing
 	case "article_summary_merge", "segment_merge":
 		return CallPurposeSegmentMerge

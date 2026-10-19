@@ -196,7 +196,7 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 		entity.Aliases = nil
 		entity.Description = strings.TrimSpace(entity.Description)
 		locations := articleEvidenceLocations(entity.EvidenceIDs, blocks)
-		if entity.Description == "" || len(locations) == 0 {
+		if len(locations) == 0 {
 			continue
 		}
 		entity.Evidence = []types.SourceLocation{}

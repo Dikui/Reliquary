@@ -165,7 +165,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.rebuilding.value, true)
     }, { rebuildVaultFiles: async () => { calls++; return { success: true, data: { status: 'running' } } } })
     assert.ok(html.includes(copy.rebuildRunning))
-    assert.match(html, /<button[^>]*disabled[^>]*>Rebuild|<button[^>]*disabled[^>]*>重建/)
+    assert.match(html, /<button[^>]*disabled[^>]*>Export library|<button[^>]*disabled[^>]*>导出文件库/)
   })
 
   test(`${locale}: polling renders completed counts and refreshes directory status`, async () => {
@@ -230,7 +230,7 @@ test('reopening the page discovers a running rebuild and disables its button', a
     await state.pollRebuild()
     assert.equal(state.rebuilding.value, true)
   }, { getVaultFileRebuildStatus: async () => ({ success: true, data: { status: 'running' } }) })
-  assert.match(html, /<button[^>]*disabled[^>]*>Rebuild/)
+  assert.match(html, /<button[^>]*disabled[^>]*>Export library/)
 })
 
 test('refresh during submission cannot cancel observation of the accepted task', async () => {

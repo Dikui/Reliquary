@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -82,7 +80,9 @@ func TestIngestPartialCompletionListPaginationAcceptAndKeyRevocation(t *testing.
 	first, err := h.service.Ingest(h.ctx, req)
 	require.NoError(t, err)
 	h.drain(t)
-	second, err := h.service.Ingest(h.ctx, ingestMissingImageRequest("https://example.org/other", "https://example.org/other.png"))
+	other := ingestMissingImageRequest("https://example.org/other", "https://example.org/other.png")
+	other.Content = "# Independent geology experiment\n\nResearchers measured crystalline minerals under elevated pressure across six rock samples. Tables record temperatures, chemical composition and laboratory instruments.\n\n![sample](https://example.org/other.png)"
+	second, err := h.service.Ingest(h.ctx, other)
 	require.NoError(t, err)
 	// Distinct text avoids content deduplication when source URLs are compared.
 	if second.Status == "exists" {
@@ -200,20 +200,18 @@ func TestIngestConcurrentSameSupplementMutatesOnce(t *testing.T) {
 }
 
 func TestIngestSupplementRollbackRestoresVaultBody(t *testing.T) {
-	h, v := newIngestHarness(t)
+	h, _ := newIngestHarness(t)
 	forbidIngestNetwork(t, h)
 	source := "https://example.org/rollback.png"
 	first, err := h.service.Ingest(h.ctx, ingestMissingImageRequest("https://example.org/rollback", source))
 	require.NoError(t, err)
 	h.drain(t)
 	article := h.article(t, first.EntryID)
-	before, err := os.ReadFile(filepath.Join(v.root, article.VaultPath))
-	require.NoError(t, err)
+	before := article.VaultBody
 	require.NoError(t, h.db.Exec("DROP TABLE operation_logs").Error)
 	_, err = h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", EntryID: first.EntryID, URL: "https://example.org/rollback", Content: ingestMissingImageRequest("https://example.org/rollback", source).Content, Acquisition: "verbatim", Images: []types.IngestImage{{SourceURL: source, Data: articleImageDataURI(t, 74)}}})
 	require.Error(t, err)
-	after, err := os.ReadFile(filepath.Join(v.root, article.VaultPath))
-	require.NoError(t, err)
+	after := h.article(t, article.ID).VaultBody
 	require.Equal(t, before, after)
 	require.True(t, h.article(t, article.ID).Incomplete)
 }

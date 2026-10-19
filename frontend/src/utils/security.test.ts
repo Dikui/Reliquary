@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createSafeImage, hydrateProtectedFileImages, isValidImageURL, protectProviderImageSrcInHTML } from './security.ts'
+import { createSafeImage, createProtectedFileImageScope, hydrateProtectedFileImages, isValidImageURL, protectProviderImageSrcInHTML } from './security.ts'
 import { domPurifySecurityHooks } from './markdownDomPurify.ts'
 
 test('protectProviderImageSrcInHTML uses a placeholder src for provider images', () => {
@@ -25,7 +25,7 @@ test('protectProviderImageSrcInHTML uses a placeholder src for resource referenc
   )
 })
 
-test('vault image references are protected and hydrated through the authenticated article endpoint', async () => {
+test('preview image scope hydrates authorized images and releases its blobs when closed', async () => {
   const relative = '../../attachments/vault-hydration-id/图表.png'
   const source = `vault://vault-hydration-id/${encodeURIComponent(relative)}`
   assert.equal(isValidImageURL(source), true)
@@ -55,8 +55,10 @@ test('vault image references are protected and hydrated through the authenticate
     previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key))
     Object.defineProperty(globalThis, key, { configurable: true, value })
   }
+  const nativeFetch = previous.get('fetch')?.value as typeof fetch
+  const scope = createProtectedFileImageScope()
   try {
-    await hydrateProtectedFileImages(root as unknown as ParentNode, { mode: 'library', libraryId: 'library-a' })
+    await hydrateProtectedFileImages(root as unknown as ParentNode, { mode: 'library', libraryId: 'library-a' }, scope)
     assert.equal(requests.length, 1)
     const request = requests[0]
     const url = new URL(request.url, 'http://localhost')
@@ -64,12 +66,18 @@ test('vault image references are protected and hydrated through the authenticate
     assert.equal(url.searchParams.get('path'), relative)
     assert.deepEqual(request.options.headers, {})
     assert.equal(request.options.credentials, 'include')
+    assert.equal(request.options.cache, 'no-store')
     assert.doesNotMatch(request.url, /vault-hydration-token|token=/)
     assert.equal(image.dataset.authHydrated, '1')
     assert.match(image.src, /^blob:/)
     assert.ok(selectors.some(selector => selector.includes('img[src^="vault://"]')))
-    URL.revokeObjectURL(image.src)
+    assert.equal(scope.cache.blobByRequest.size, 1)
+    scope.dispose()
+    assert.equal(scope.signal.aborted, true)
+    assert.equal(scope.cache.blobByRequest.size, 0)
+    await assert.rejects(nativeFetch(image.src), TypeError)
   } finally {
+    scope.dispose()
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor)
       else Reflect.deleteProperty(globalThis, key)

@@ -141,6 +141,7 @@ func TestTopicManagementUniqueScopeDeletionRefreshAndUserLogs(t *testing.T) {
 	name := "Research renamed"
 	_, err = svc.UpdateTopic(ctx, topic.ID, &name, nil)
 	require.NoError(t, err)
+	require.NoError(t, v.RefreshHeader(ctx, article.ID))
 	require.Eventually(t, func() bool {
 		raw, err := os.ReadFile(filepath.Join(v.root, article.VaultPath))
 		return err == nil && strings.Contains(string(raw), "Research renamed")
@@ -164,6 +165,7 @@ func TestTopicManagementUniqueScopeDeletionRefreshAndUserLogs(t *testing.T) {
 	require.Equal(t, "api_key:fixture-key", apiLog.Actor)
 	require.NoError(t, svc.DeleteTopic(ctx, topic.ID))
 	require.Empty(t, topicLinks(t, svc, topic.ID))
+	require.NoError(t, v.RefreshHeader(ctx, article.ID))
 	require.Eventually(t, func() bool {
 		raw, err := os.ReadFile(filepath.Join(v.root, article.VaultPath))
 		return err == nil && !strings.Contains(string(raw), "Research renamed")

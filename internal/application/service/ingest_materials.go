@@ -215,14 +215,8 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.
 	if err := article.SetIngestMissing(missing); err != nil {
 		return "", "", err
 	}
-	path, err := files.SaveBytes(ctx, []byte(body), article.SpaceID, article.ID+".md", false)
-	if err != nil {
-		return "", "", err
-	}
-	if err := rememberIngestStoredFile(ctx, files, path); err != nil {
-		return "", "", err
-	}
-	intake.OriginalPath = path
+	article.VaultBody = body
+	intake.OriginalPath = ""
 	if err := article.SetIntakeMetadata(intake); err != nil {
 		return "", "", err
 	}
@@ -303,7 +297,7 @@ func (s *entryService) recordMissingIngestImages(ctx context.Context, k *types.E
 }
 
 func (s *entryService) readIngestBody(ctx context.Context, library *types.Library, k *types.Entry) (string, error) {
-	if k.VaultPath != "" {
+	if k.VaultBody != "" || k.VaultPath != "" {
 		return k.VaultBody, nil
 	}
 	intake, err := k.IntakeMetadata()

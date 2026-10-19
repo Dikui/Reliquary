@@ -90,7 +90,15 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 	vault := func() (*service.VaultService, error) {
 		return service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 5 * time.Second}})
 	}
+	databaseOnly := os.Getenv("RELIQUARY_ADMIN_DATABASE_ONLY") == "1"
+	buildManifest := maintenance.BuildManifest
+	if databaseOnly {
+		buildManifest = maintenance.BuildRuntimeManifest
+	}
 	flush := func(ctx context.Context) error {
+		if databaseOnly {
+			return nil
+		}
 		v, err := vault()
 		if err != nil {
 			return err
@@ -209,7 +217,7 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		}
 		return rebuildErr
 	case "manifest":
-		manifest, err := maintenance.BuildManifest(ctx, db, root, uploads)
+		manifest, err := buildManifest(ctx, db, root, uploads)
 		if err != nil {
 			return err
 		}
@@ -233,7 +241,12 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		if err != nil {
 			return err
 		}
-		result, err := v.Verify(ctx, *repair)
+		var result *maintenance.Verification
+		if databaseOnly {
+			result, err = v.VerifyRuntime(ctx)
+		} else {
+			result, err = v.Verify(ctx, *repair)
+		}
 		if err != nil {
 			return err
 		}
@@ -253,7 +266,7 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 					return err
 				}
 			}
-			actual, err := maintenance.BuildManifest(ctx, db, root, uploads)
+			actual, err := buildManifest(ctx, db, root, uploads)
 			if err != nil {
 				return err
 			}

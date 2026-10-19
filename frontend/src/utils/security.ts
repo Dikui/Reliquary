@@ -366,23 +366,37 @@ type ProtectedFileCacheState = {
 // Keep object URLs alive across Vite hot updates. A hot update replaces this
 // module but not the page document, so module-local Maps would forget valid
 // blob URLs and make already-loaded images fall back to the 1x1 placeholder.
+function freshProtectedFileCache(): ProtectedFileCacheState {
+  return { blobByRequest: new Map(), blobBySource: new Map(), missingSources: new Set(), failures: new Map(), inflight: new Map() };
+}
+
+export function createProtectedFileImageScope() {
+  const cache = freshProtectedFileCache();
+  const controller = new AbortController();
+  return {
+    cache,
+    signal: controller.signal,
+    dispose() {
+      controller.abort();
+      for (const url of new Set(cache.blobByRequest.values())) URL.revokeObjectURL(url);
+      cache.blobByRequest.clear();
+      cache.blobBySource.clear();
+      cache.inflight.clear();
+      cache.missingSources.clear();
+      cache.failures.clear();
+    },
+  };
+}
+
 const protectedFileCacheState = (() => {
-  const fresh = (): ProtectedFileCacheState => ({
-    blobByRequest: new Map(),
-    blobBySource: new Map(),
-    missingSources: new Set(),
-    failures: new Map(),
-    inflight: new Map(),
-  });
-  if (typeof window === 'undefined') return fresh();
+  if (typeof window === 'undefined') return freshProtectedFileCache();
   const scope = window as typeof window & {
     __reliquaryProtectedFileCacheV1__?: ProtectedFileCacheState;
   };
-  scope.__reliquaryProtectedFileCacheV1__ ||= fresh();
+  scope.__reliquaryProtectedFileCacheV1__ ||= freshProtectedFileCache();
   return scope.__reliquaryProtectedFileCacheV1__;
 })();
 
-const protectedFileBlobCache = protectedFileCacheState.blobByRequest;
 // Blob URL keyed by the protected source URL (e.g. `local://...`). Once an image
 // has been hydrated, re-renders of the same markdown can emit the blob src
 // directly instead of the placeholder. Without this, the typewriter re-renders
@@ -397,7 +411,6 @@ const protectedFileMissingSources = protectedFileCacheState.missingSources;
 // the last failure time per URL and skip re-fetching within a cooldown window,
 // while still allowing a later attempt once the file becomes available.
 const protectedFileFailureCache = protectedFileCacheState.failures;
-const protectedFileInflight = protectedFileCacheState.inflight;
 const PROTECTED_FILE_RETRY_COOLDOWN_MS = 5000;
 
 /**
@@ -460,7 +473,12 @@ function applyHydratedProtectedImage(root: ParentNode, sourceURL: string, blobUR
 export async function hydrateProtectedFileImages(
   root: ParentNode | null | undefined,
   access?: ProtectedFileAccessContext,
+  scope?: ReturnType<typeof createProtectedFileImageScope>,
 ): Promise<void> {
+  const cache = scope?.cache ?? protectedFileCacheState;
+  const { blobByRequest: protectedFileBlobCache, blobBySource: protectedFileBlobBySource,
+    missingSources: protectedFileMissingSources, failures: protectedFileFailureCache, inflight: protectedFileInflight } = cache;
+  if (scope?.signal.aborted) return;
   if (!root || typeof window === 'undefined') {
     return;
   }
@@ -523,6 +541,7 @@ export async function hydrateProtectedFileImages(
             method: 'GET',
             headers,
             credentials: 'include',
+            ...(scope ? { signal: scope.signal, cache: 'no-store' as const } : {}),
           });
           if (!resp.ok) {
             if (resp.status === 404) {
@@ -532,11 +551,13 @@ export async function hydrateProtectedFileImages(
             throw new Error(`HTTP ${resp.status}`);
           }
           const blob = await resp.blob();
+          if (scope?.signal.aborted) return { status: 'failed' };
           const blobURL = URL.createObjectURL(blob);
           protectedFileBlobCache.set(requestURL, blobURL);
           protectedFileFailureCache.delete(requestURL);
           return { status: 'loaded', blobURL };
         } catch (error) {
+          if (scope?.signal.aborted) return { status: 'failed' };
           console.warn('[security] hydrateProtectedFileImages failed:', error);
           protectedFileFailureCache.set(requestURL, Date.now());
           return { status: 'failed' };
@@ -548,6 +569,7 @@ export async function hydrateProtectedFileImages(
     }
 
     const result = await loadTask;
+    if (scope?.signal.aborted) return;
     if (result.status === 'loaded') {
       protectedFileBlobBySource.set(sourceURL, result.blobURL);
       protectedFileMissingSources.delete(sourceURL);

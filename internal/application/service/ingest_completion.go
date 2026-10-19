@@ -145,14 +145,8 @@ func (s *entryService) supplementIngest(ctx context.Context, library *types.Libr
 		}
 	}
 	if changed {
-		path, err := files.SaveBytes(ctx, []byte(newBody), article.SpaceID, article.ID+"-supplement.md", false)
-		if err != nil {
-			return nil, err
-		}
-		if err := rememberIngestStoredFile(ctx, files, path); err != nil {
-			return nil, err
-		}
-		intake.OriginalPath = path
+		article.VaultBody = newBody
+		intake.OriginalPath = ""
 	}
 	article.Incomplete = len(remaining) > 0
 	article.ExternalCompletionAttempted = article.Incomplete

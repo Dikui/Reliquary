@@ -2,7 +2,6 @@ package container
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +24,7 @@ import (
 	"reliquary/internal/utils"
 )
 
-func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAndFailedItems(t *testing.T) {
+func TestOfflineReembedPersistsAuditWithoutExportOnCompletionCancellationAndFailedItems(t *testing.T) {
 	for _, outcome := range []string{"completed", "cancelled", "failed_items"} {
 		t.Run(outcome, func(t *testing.T) {
 			cancelAfterFirst := outcome == "cancelled"
@@ -60,9 +59,7 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 			initial, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: time.Hour}})
 			require.NoError(t, err)
 			require.NoError(t, initial.Close())
-			before, err := maintenance.Load(root)
-			require.NoError(t, err)
-			require.Empty(t, before.Tables["embedding_rebuild_runs"])
+			require.NoDirExists(t, filepath.Join(root, ".reliquary"))
 			status, runErr := Reembed(ctx, "maintenance_start", "", func(run *types.EmbeddingRebuildRun) {
 				if cancelAfterFirst && run.CompletedCount == 1 {
 					cancel()
@@ -82,29 +79,21 @@ func TestOfflineReembedFlushesAuditReplicaBeforeReturnOnCompletionCancellationAn
 				require.Equal(t, "completed", status.LatestRun.Status)
 				require.EqualValues(t, 2, status.LatestRun.CompletedCount)
 			}
-			// No running application, replica poller or extra manual flush follows
-			// this command. Its terminal run and every item must already be exact.
-			saved, err := maintenance.Load(root)
-			require.NoError(t, err)
+			// The offline command persists checkpoints in PostgreSQL. File exports
+			// remain explicit and must not be created by closing the vault.
 			actual, err := maintenance.Capture(context.Background(), db)
 			require.NoError(t, err)
-			for _, table := range []string{"embedding_rebuild_runs", "embedding_rebuild_items", "entities"} {
-				wanted, err := json.Marshal(actual.Tables[table])
-				require.NoError(t, err)
-				got, err := json.Marshal(saved.Tables[table])
-				require.NoError(t, err)
-				require.JSONEq(t, string(wanted), string(got), table)
-			}
-			require.Len(t, saved.Tables["embedding_rebuild_runs"], 1)
-			require.Len(t, saved.Tables["embedding_rebuild_items"], 2)
-			verified, err := maintenance.VerifyReplica(context.Background(), db, root, uploads, false)
+			require.Len(t, actual.Tables["embedding_rebuild_runs"], 1)
+			require.Len(t, actual.Tables["embedding_rebuild_items"], 2)
+			require.NoDirExists(t, filepath.Join(root, ".reliquary"))
+			verified, err := initial.VerifyRuntime(context.Background())
 			require.NoError(t, err)
 			require.True(t, verified.OK, verified.Differences)
 		})
 	}
 }
 
-func TestOfflineReembedFailureStillFlushesAndReturnsTheOriginalError(t *testing.T) {
+func TestOfflineReembedFailureDoesNotExportAndReturnsTheOriginalError(t *testing.T) {
 	db := pgtest.Open(t)
 	root, uploads := t.TempDir(), t.TempDir()
 	_, err := repository.EnsureSystemLibraries(context.Background(), db, 1, "")
@@ -114,12 +103,10 @@ func TestOfflineReembedFailureStillFlushesAndReturnsTheOriginalError(t *testing.
 	require.Nil(t, status)
 	require.ErrorContains(t, err, "unsupported reembed action")
 	require.False(t, errors.Is(err, context.Canceled))
-	saved, err := maintenance.Load(root)
+	saved, err := maintenance.Capture(context.Background(), db)
 	require.NoError(t, err)
 	require.NotEmpty(t, saved.Tables["libraries"])
-	verified, err := maintenance.VerifyReplica(context.Background(), db, root, uploads, false)
-	require.NoError(t, err)
-	require.True(t, verified.OK, verified.Differences)
+	require.NoDirExists(t, filepath.Join(root, ".reliquary"))
 }
 
 func configureOfflineReembed(t *testing.T, db *gorm.DB, root, uploads string) {
