@@ -2,6 +2,7 @@ package maintenance
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -17,6 +18,9 @@ func backupOnlyTableManifest(ctx context.Context, db *gorm.DB, table string, rul
 		result.Columns = append(result.Columns, column)
 	}
 	sort.Strings(result.Columns)
+	if table == "model_call_contents" {
+		return callContentManifest(ctx, db, result)
+	}
 	var encoded []string
 	if err := db.WithContext(ctx).Raw("SELECT to_jsonb(t)::text FROM public." + quote(table) + " t").Scan(&encoded).Error; err != nil {
 		return result, err
@@ -83,6 +87,44 @@ func backupOnlyTableManifest(ctx context.Context, db *gorm.DB, table string, rul
 	}
 	result.Rows = int64(len(rows))
 	result.SHA256 = sum(data)
+	return result, nil
+}
+
+func callContentManifest(ctx context.Context, db *gorm.DB, result TableManifest) (TableManifest, error) {
+	// These non-null fields precede the payload in canonical JSON; the unique ID completes its byte order.
+	rows, err := db.WithContext(ctx).Raw(`SELECT to_jsonb(t)::text FROM public.model_call_contents t
+ ORDER BY complete::text COLLATE "C", http_status::text COLLATE "C", id::text COLLATE "C"`).Rows()
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+	digest := sha256.New()
+	digest.Write([]byte("["))
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return result, err
+		}
+		row, err := jsonRow(raw)
+		if err != nil {
+			return result, err
+		}
+		data, err := json.Marshal(row)
+		if err != nil {
+			return result, err
+		}
+		if result.Rows > 0 {
+			digest.Write([]byte(","))
+		}
+		digest.Write(data)
+		result.BackupRowHashes[rowIdentity(row)] = sum(data)
+		result.Rows++
+	}
+	if err := rows.Err(); err != nil {
+		return result, err
+	}
+	digest.Write([]byte("]"))
+	result.SHA256 = fmt.Sprintf("%x", digest.Sum(nil))
 	return result, nil
 }
 

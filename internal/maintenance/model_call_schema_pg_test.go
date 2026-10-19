@@ -2,9 +2,11 @@ package maintenance
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/golang-migrate/migrate/v4"
 	"gorm.io/driver/postgres"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,46 @@ import (
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
+
+func TestCallContentManifestPreservesDigestsWithoutRepeatedPayloadCopies(t *testing.T) {
+	db := pgtest.Open(t)
+	calls := make([]types.ModelCall, 256)
+	for index := range calls {
+		calls[index] = types.ModelCall{ID: uuid.NewString(), SpaceID: 1, RequestedAt: time.Now().UTC(), ModelID: "m", ModelName: "m", Provider: "test", Purpose: types.CallPurposeOther, Currency: "USD", CostStatus: "unknown", Attempt: index%4 + 1, Success: index/4%2 == 0}
+	}
+	require.NoError(t, db.Create(&calls).Error)
+	require.NoError(t, db.Exec(`INSERT INTO model_call_contents
+ (id,request_gzip,response_gzip,request_bytes,response_bytes,response_type,http_status,complete)
+ SELECT id,repeat('x',4096)::bytea,repeat('y',4096)::bytea,4096,4096,'text/plain',
+ (ARRAY[0,20,200,500])[attempt],success FROM model_calls`).Error)
+	var encoded []string
+	require.NoError(t, db.Raw("SELECT to_jsonb(t)::text FROM model_call_contents t").Scan(&encoded).Error)
+	rows := make([]map[string]any, 0, len(encoded))
+	for _, data := range encoded {
+		row, err := jsonRow([]byte(data))
+		require.NoError(t, err)
+		rows = append(rows, row)
+	}
+	canonical := canonicalRows("model_call_contents", rows)
+	wanted, err := json.Marshal(canonical)
+	require.NoError(t, err)
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	manifest, err := backupOnlyTableManifest(context.Background(), db, "model_call_contents", BackupOnlyTables["model_call_contents"])
+	runtime.ReadMemStats(&after)
+	require.NoError(t, err)
+	require.EqualValues(t, len(calls), manifest.Rows)
+	require.Equal(t, sum(wanted), manifest.SHA256)
+	for _, row := range canonical {
+		data, err := json.Marshal(row)
+		require.NoError(t, err)
+		require.Equal(t, sum(data), manifest.BackupRowHashes[rowIdentity(row)])
+	}
+	allocated := after.TotalAlloc - before.TotalAlloc
+	t.Logf("manifest allocated %d bytes for %d payload bytes", allocated, len(calls)*8192)
+	require.Less(t, allocated, uint64(64<<20), "manifest must not repeatedly copy payloads while sorting")
+}
 
 func TestModelCallsStayOutOfReplicaAndSQLManifestDetectsTampering(t *testing.T) {
 	db := pgtest.Open(t)
