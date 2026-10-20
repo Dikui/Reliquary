@@ -45,7 +45,7 @@ func (m *correctedProcessingChat) Chat(ctx context.Context, messages []chat.Mess
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.calls[stage]++
 	if stage == "intake_review" {
-		return &types.ChatResponse{Content: "```json\n{\"approved\":true,\"reason\":\"Original measurements\"}\n```"}, nil
+		return &types.ChatResponse{Content: "```json\n" + reviewFixtureContent(`{"approved":true,"reason":"Original measurements"}`, messages) + "\n```"}, nil
 	}
 	result, err := parseArticleProcessingResult(validProcessingFixture("event"))
 	if err != nil {

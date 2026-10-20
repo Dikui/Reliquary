@@ -11,7 +11,46 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 )
+
+func TestAdmissionPolicyMigrationPreservesCustomCriteria(t *testing.T) {
+	db := pgtest.Open(t)
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Review policy"}).Error)
+	libraries := types.SystemLibraryDefaults()
+	for _, library := range libraries {
+		library.SpaceID = 1
+		require.NoError(t, db.Create(library).Error)
+	}
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	migration, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, migration.Migrate(30))
+	require.NoError(t, migration.Migrate(31))
+	var builtinMedia types.Library
+	require.NoError(t, db.First(&builtinMedia, "system_role=?", "media").Error)
+	require.Equal(t, types.MediaReviewCriteria, builtinMedia.ReviewCriteria)
+	require.Equal(t, libraries[1].Description, builtinMedia.Description)
+	require.NoError(t, migration.Migrate(30))
+	const custom = "Keep this custom media policy."
+	require.NoError(t, db.Model(&types.Library{}).Where("system_role=?", "media").Update("review_criteria", custom).Error)
+	require.NoError(t, migration.Migrate(31))
+	for _, library := range libraries {
+		var stored types.Library
+		require.NoError(t, db.First(&stored, "id=?", library.ID).Error)
+		want := library.ReviewCriteria
+		if library.SystemRole == "media" {
+			want = custom
+		}
+		require.Equal(t, want, stored.ReviewCriteria)
+	}
+	require.NoError(t, migration.Migrate(30))
+	var media types.Library
+	require.NoError(t, db.First(&media, "system_role=?", "media").Error)
+	require.Equal(t, custom, media.ReviewCriteria)
+}
 
 func TestLibraryUpgradePreservationProjection(t *testing.T) {
 	db := pgtest.Open(t)

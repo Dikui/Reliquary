@@ -118,7 +118,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, err)
 			require.Empty(t, result.Results)
 			require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)
-			require.Contains(t, h.model.prompts[0], "do not invent additional URL, publisher or date requirements")
+			require.Contains(t, h.model.prompts[0], "不新增链接、日期或发布者字段要求")
 		})
 	}
 }

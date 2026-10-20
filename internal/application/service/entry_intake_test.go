@@ -32,26 +32,30 @@ func TestIntakeXSourceEvidence(t *testing.T) {
 
 func TestReviewIntakeXUsesLibraryCriteria(t *testing.T) {
 	for _, tc := range []struct {
-		name, url, response string
-		rejected            bool
+		name, url, author, body, response string
+		rejected                          bool
 	}{
-		{"approved", "https://x.com/author/status/123", `{"approved":true,"reason":"Substantive product experience"}`, false},
-		{"rejected", "https://twitter.com/author/status/123", `{"approved":false,"reason":"No substantive opinion"}`, true},
+		{"approved", "https://x.com/outlet/status/123", "未知", "媒体报道：该产品新增离线模式。", `{"approved":true,"reason":"Substantive product report"}`, false},
+		{"rejected", "https://twitter.com/outlet/status/123", "", "感谢支持！", `{"approved":false,"reason":"No substantive opinion"}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			library := types.SystemLibraryDefaults()[1]
 			library.ModelTiers.Light = "review-model"
 			entry := &types.Entry{ID: "post", SpaceID: 1, LibraryID: library.ID}
 			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
-				Decision: "pending", SourceInfo: types.SourceInfo{Author: "@author", OriginalURL: tc.url},
+				Decision: "pending", SourceInfo: types.SourceInfo{Author: tc.author, Publisher: "Media outlet", OriginalURL: tc.url},
 			}))
 			capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: tc.response}}
 			svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &tierTestModels{chat: capture}}
-			rejected, err := svc.reviewIntake(context.Background(), library, entry, "The author's product experience.")
+			rejected, err := svc.reviewIntake(context.Background(), library, entry, tc.body)
 			require.NoError(t, err)
 			require.Equal(t, tc.rejected, rejected)
 			require.Len(t, capture.reviews, 1)
 			require.Contains(t, capture.reviews[0][0].Content, library.ReviewCriteria)
+			require.Contains(t, capture.reviews[0][0].Content, "个人署名不是收录前提")
+			require.Contains(t, capture.reviews[0][0].Content, "引用和上下文随主文章保存")
+			require.Contains(t, capture.reviews[0][0].Content, "主文章没有实质内容时不收录")
+			require.NotContains(t, capture.reviews[0][0].Content, "原作者能够确定")
 			intake, err := entry.IntakeMetadata()
 			require.NoError(t, err)
 			require.Equal(t, tc.name, intake.Decision)
@@ -79,9 +83,9 @@ func TestReviewIntakeCompletenessWarning(t *testing.T) {
 			reason:   "缺少符合收录标准的实质正文", rejected: true,
 		},
 		{
-			name: "reference_requires_core", body: "缓存教程说明如何使用缓存。创建缓存后，后续请求通过缓存 ID 引用。下面是必要的调用代码：",
-			response: `{"approved":false,"reason":"教程缺少必要调用代码，不符合本库正文完整要求"}`,
-			reason:   "必要调用代码", rejected: true, reference: true,
+			name: "reference_partial_body", body: "缓存教程说明如何使用缓存。创建缓存后，后续请求通过缓存 ID 引用。下面是必要的调用代码：",
+			response: `{"approved":true,"reason":"保留已有缓存机制说明","warning":"缺少必要调用代码，使用前需另行检索核对"}`,
+			reason:   "必要调用代码", reference: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,6 +111,7 @@ func TestReviewIntakeCompletenessWarning(t *testing.T) {
 			require.Greater(t, len(capture.reviews), 1, "warning aggregation also works across segments")
 			require.Contains(t, capture.reviews[0][0].Content, library.ReviewCriteria)
 			require.NotContains(t, capture.reviews[0][0].Content, "Reject for lack of completeness only when the whole document has no usable substance")
+			require.Contains(t, capture.reviews[0][0].Content, "完整性不作为准入条件")
 			if !tc.rejected {
 				require.Equal(t, "approved", intake.Decision)
 				require.NotEqual(t, types.ParseStatusRejected, entry.ParseStatus)
@@ -142,8 +147,8 @@ func TestReviewIntakeSendsSegmentImagesAndReadStatus(t *testing.T) {
 	rejected, err := svc.reviewIntake(ctx, library, entry, body)
 	require.NoError(t, err)
 	require.False(t, rejected)
-	require.Len(t, capture.reviews, 2)
-	for i, messages := range capture.reviews {
+	require.Len(t, capture.reviews, 3)
+	for i, messages := range capture.reviews[:2] {
 		user := messages[len(messages)-1]
 		require.Equal(t, []string{uri}, user.Images, "each segment sends its readable image bytes")
 		var input struct {
@@ -362,7 +367,7 @@ type intakeChat struct {
 	err      error
 }
 
-func (m intakeChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
+func (m intakeChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -370,7 +375,34 @@ func (m intakeChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOpti
 	if stage == "article_processing" {
 		return &types.ChatResponse{Content: validProcessingFixture("event")}, nil
 	}
-	return &types.ChatResponse{Content: m.response}, nil
+	return &types.ChatResponse{Content: reviewFixtureContent(m.response, messages)}, nil
+}
+
+func reviewFixtureContent(raw string, messages []chat.Message) string {
+	var decision segmentReviewDecision
+	if json.Unmarshal([]byte(raw), &decision) != nil {
+		return raw
+	}
+	var input struct {
+		Scope   string `json:"scope"`
+		Body    string `json:"body"`
+		Segment struct {
+			Count int `json:"count"`
+		} `json:"segment"`
+	}
+	if json.Unmarshal([]byte(messages[len(messages)-1].Content), &input) != nil {
+		return raw
+	}
+	if input.Scope == "document" && decision.Auxiliary {
+		decision.Auxiliary = false
+		decision.Reason = "全文缺少符合收录标准的实质正文：" + decision.Reason
+	}
+	if input.Segment.Count > 1 {
+		body := []rune(input.Body)
+		decision.Summary = "Fixture content: " + string(body[:min(300, len(body))])
+	}
+	encoded, _ := json.Marshal(decision)
+	return string(encoded)
 }
 
 func (intakeModelService) GetModelByID(_ context.Context, id string) (*types.Model, error) {

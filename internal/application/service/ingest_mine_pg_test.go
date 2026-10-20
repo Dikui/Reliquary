@@ -46,7 +46,7 @@ func TestIngestMineReviewsProcessesTutorialFullTextAndPortableHeader(t *testing.
 	require.Equal(t, "accepted", result.Status)
 	require.Len(t, capture.reviews, 1)
 	require.Contains(t, capture.reviews[0][0].Content, "Library review criteria:")
-	require.Contains(t, capture.reviews[0][0].Content, "正文完整、可读")
+	require.Contains(t, capture.reviews[0][0].Content, types.PersonalReviewCriteria)
 	h.drain(t)
 	k := h.article(t, result.EntryID)
 	require.Equal(t, "mine", k.SourceKind)

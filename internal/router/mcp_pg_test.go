@@ -58,8 +58,8 @@ func (mcpFixtureEmbedder) GetDimensions() int   { return 3 }
 
 type mcpFixtureChat struct{}
 
-func (mcpFixtureChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
-	if strings.HasPrefix(messages[0].Content, "Review this document for admission") {
+func (mcpFixtureChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
+	if purpose, _ := types.LLMCallMetadataFromContext(ctx); purpose == "intake_review" {
 		approved := !strings.Contains(messages[1].Content, "rejectfixture")
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"model fixture decision"}`, approved)}, nil
 	}

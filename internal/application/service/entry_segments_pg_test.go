@@ -15,16 +15,20 @@ import (
 
 type segmentedChat struct {
 	retainedProcessingChat
-	calls         map[string]map[int]int
-	fail          int
-	verifyFail    int
-	reject        int
-	mergeCalls    int
-	mergeFail     bool
-	cancel        context.CancelFunc
-	topic         string
-	reviewFail    int
-	auxiliaryFrom int
+	calls             map[string]map[int]int
+	fail              int
+	verifyFail        int
+	reject            int
+	mergeCalls        int
+	mergeFail         bool
+	cancel            context.CancelFunc
+	topic             string
+	reviewFail        int
+	auxiliaryFrom     int
+	reviewMergeCalls  int
+	reviewMergeFail   bool
+	reviewMergeAccept bool
+	reviewMergeInput  string
 }
 
 func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
@@ -55,6 +59,21 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 	if stage != "intake_review" && stage != "article_processing" {
 		return &types.ChatResponse{Content: `{"decision":"new","confidence":1}`}, nil
 	}
+	if stage == "intake_review" && strings.Contains(messages[0].Content, "你负责全文汇总审核") {
+		m.reviewMergeCalls++
+		m.reviewMergeInput = messages[len(messages)-1].Content
+		if m.reviewMergeFail {
+			return nil, fmt.Errorf("document review failed")
+		}
+		approved, reason := m.reject == 0 || m.reviewMergeAccept, "全文具有实质内容"
+		if !approved {
+			reason = "第 2/ 段提供全文不合格的证据"
+		}
+		if m.auxiliaryFrom == 1 {
+			approved, reason = false, "全文缺少符合收录标准的实质正文"
+		}
+		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":%q}`, approved, reason)}, nil
+	}
 	var input struct {
 		Segment struct {
 			Number int `json:"number"`
@@ -81,7 +100,7 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 			return nil, fmt.Errorf("review failure %d", n)
 		}
 		auxiliary := m.auxiliaryFrom > 0 && n >= m.auxiliaryFrom
-		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"auxiliary":%t,"reason":"fixture segment %d"}`, n != m.reject && !auxiliary, auxiliary, n)}, nil
+		return &types.ChatResponse{Content: reviewFixtureContent(fmt.Sprintf(`{"approved":%t,"auxiliary":%t,"reason":"fixture segment %d"}`, n != m.reject && !auxiliary, auxiliary, n), messages)}, nil
 	}
 	if n == m.fail {
 		if m.cancel != nil {
@@ -216,6 +235,7 @@ func TestSegmentReviewRejectionAllApprovedAndLimit(t *testing.T) {
 				require.Equal(t, "approved", intake.Decision)
 			}
 			require.Greater(t, len(m.calls["intake_review"]), 1)
+			require.Equal(t, 1, m.reviewMergeCalls)
 		})
 	}
 	h, m := segmentedHarness(t)
@@ -227,6 +247,53 @@ func TestSegmentReviewRejectionAllApprovedAndLimit(t *testing.T) {
 	intake, _ := k.IntakeMetadata()
 	require.Contains(t, intake.Reason, "分段上限 2")
 	require.Empty(t, m.calls)
+}
+
+func TestDocumentReviewOverridesLocalRejectionAndResumes(t *testing.T) {
+	summary := strings.Repeat("文", 444)
+	parsed, err := parseReviewDecision(fmt.Sprintf(`{"approved":true,"reason":"supported","summary":%q}`, summary), true, false)
+	require.NoError(t, err)
+	require.Equal(t, summary, parsed.Summary)
+	_, err = parseReviewDecision(`{"approved":true,"reason":"supported"}`, true, false)
+	require.ErrorContains(t, err, "summary")
+	h, m := segmentedHarness(t)
+	k := segmentedEntry(t, h)
+	body := strings.Repeat("Useful original information. ", 30)
+	m.reject, m.reviewMergeAccept, m.reviewMergeFail = 2, true, true
+	rejected, err := h.service.reviewIntake(h.ctx, h.library, k, body)
+	require.ErrorContains(t, err, "document review failed")
+	require.False(t, rejected, "a local rejection cannot bypass an incomplete whole-document review")
+	var run entrySegmentRun
+	require.NoError(t, h.db.Where("entry_id=? AND phase='review'", k.ID).First(&run).Error)
+	require.Empty(t, run.Result)
+	var input struct {
+		BodyComplete bool `json:"body_complete"`
+		Segments     []struct {
+			Segment struct {
+				ContextBefore string `json:"context_before"`
+			} `json:"segment"`
+			Review segmentReviewDecision `json:"review"`
+		} `json:"segments"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(m.reviewMergeInput), &input))
+	require.False(t, input.BodyComplete)
+	require.NotContains(t, m.reviewMergeInput, `"body"`)
+	require.NotContains(t, m.reviewMergeInput, `"evidence"`)
+	require.Len(t, input.Segments, len(m.calls["intake_review"]))
+	for _, segment := range input.Segments {
+		require.NotEmpty(t, segment.Review.Summary)
+		require.Empty(t, segment.Segment.ContextBefore)
+	}
+	before := fmt.Sprint(m.calls)
+	m.reviewMergeFail = false
+	rejected, err = h.service.reviewIntake(h.ctx, h.library, k, body)
+	require.NoError(t, err)
+	require.False(t, rejected, "whole-document review can override a local rejection")
+	require.Equal(t, before, fmt.Sprint(m.calls), "retry keeps completed segment checkpoints")
+	mergeCalls := m.reviewMergeCalls
+	_, _, err = h.service.reviewSegments(h.ctx, h.library, k, body, types.SourceInfo{OriginalURL: "https://example.org/segments", Publisher: "Acme"})
+	require.NoError(t, err)
+	require.Equal(t, mergeCalls, m.reviewMergeCalls, "completed whole-document decisions are checkpointed")
 }
 
 func TestSegmentReviewAuxiliaryNeedsSubstantiveBody(t *testing.T) {
