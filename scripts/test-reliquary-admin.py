@@ -1202,17 +1202,21 @@ with mock.patch('subprocess.run') as docker:
         self.assertNotIn("--allow-model-change", ctx.flags)
 
 
-    def upgrade_context(self, fail_export=False):
+    def upgrade_context(self, fail_command=None):
         class FakeContext:
             direct = True
             local_server = None
             env = {}
             def __init__(self, root):
                 self.root, self.calls = root, []
+            @contextlib.contextmanager
+            def stopped(self, mode, timeout, keep_paused=False):
+                self.calls.append(("stopped", mode, timeout, keep_paused))
+                yield
             def cli_json(self, *args, **kwargs):
                 self.calls.append(args)
-                if args[0] == "export-sources" and fail_export:
-                    raise admin.AdminError("source export failed")
+                if args[0] == fail_command:
+                    raise admin.AdminError(f"{fail_command} failed")
                 if args[0] == "status":
                     return {"paused": True}
                 return {"ok": True}
@@ -1224,21 +1228,42 @@ with mock.patch('subprocess.run') as docker:
             admin.main(["export-sources"])
         self.assertEqual(ctx.calls, [("export-sources",)])
 
-    def test_upgrade_exports_after_backup_and_before_migration(self):
+    def test_upgrade_without_backup_stops_before_migration_and_verifies_before_resume(self):
+        ctx = self.upgrade_context()
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup") as backup, mock.patch.object(admin, "verify_upgrade") as verify, contextlib.redirect_stdout(io.StringIO()):
+            admin.main(["upgrade"])
+        backup.assert_not_called()
+        verify.assert_not_called()
+        self.assertEqual(ctx.calls[0], ("stopped", "snapshot", 300, True))
+        self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
+        self.assertLess(ctx.calls.index(("migrate",)), ctx.calls.index(("verify",)))
+        self.assertLess(ctx.calls.index(("verify",)), ctx.calls.index(("resume",)))
+        self.assertNotIn(("manifest",), ctx.calls)
+
+    def test_upgrade_with_explicit_backup_exports_before_migration(self):
         ctx = self.upgrade_context()
         with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup", return_value=self.root) as backup, mock.patch.object(admin, "verify_upgrade") as verify, contextlib.redirect_stdout(io.StringIO()):
-            admin.main(["upgrade"])
+            admin.main(["upgrade", "--backup"])
         backup.assert_called_once()
         self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
         self.assertLess(ctx.calls.index(("migrate",)), ctx.calls.index(("resume",)))
         verify.assert_called_once_with(ctx, self.root)
 
     def test_upgrade_export_failure_prevents_migration_and_resume(self):
-        ctx = self.upgrade_context(fail_export=True)
-        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup", return_value=self.root), contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaisesRegex(admin.AdminError, "source export failed"):
+        ctx = self.upgrade_context(fail_command="export-sources")
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup") as backup, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(admin.AdminError, "export-sources failed"):
                 admin.main(["upgrade"])
-        self.assertEqual(ctx.calls, [("export-sources",)])
+        backup.assert_not_called()
+        self.assertEqual(ctx.calls, [("stopped", "snapshot", 300, True), ("export-sources",)])
+
+    def test_upgrade_migration_failure_does_not_verify_or_resume(self):
+        ctx = self.upgrade_context(fail_command="migrate")
+        with mock.patch.object(admin, "Context", return_value=ctx), mock.patch.object(admin, "backup") as backup, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(admin.AdminError, "migrate failed"):
+                admin.main(["upgrade"])
+        backup.assert_not_called()
+        self.assertEqual(ctx.calls, [("stopped", "snapshot", 300, True), ("export-sources",), ("migrate",)])
 
     def old_backup_restore_context(self, legacy=False):
         package = self.root / "package"

@@ -109,10 +109,10 @@ def update(source, directory, *, all_services, dry_run):
         revisions[service] = revision
         differences[service] = changed_paths(source, revision, head) if revision else None
     if differences["app"] is None:
-        raise admin.AdminError("Cannot verify the deployed app revision; use the documented backup and upgrade procedure")
+        raise admin.AdminError("Cannot verify the deployed app revision; use the documented explicit upgrade procedure")
     app_changes = differences["app"]
     if any(name.startswith("migrations/") for name in app_changes):
-        raise admin.AdminError("Database migrations changed; use the backup and upgrade procedure in docs/personal-use.md")
+        raise admin.AdminError("Database migrations changed; use the explicit upgrade procedure in docs/personal-use.md (no backup by default)")
     if any(name.startswith("config/") or name in {"docker-compose.yml", ".env.example"} for name in app_changes):
         raise admin.AdminError("Runtime configuration changed; review and sync it using docs/local-deployment.md before a manual release")
     selected = set(SERVICES) if all_services or differences["frontend"] is None else {

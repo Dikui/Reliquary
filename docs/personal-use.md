@@ -290,12 +290,12 @@ docker compose up -d --wait postgres redis neo4j
 
 失败也清理自己创建的资源，清理失败时保留 `.maintenance-schedule/drill-active.json` 记录，执行 `schedule run --once` 重试清理，错误及报告保留。普通命令把报告写到 `.maintenance-schedule/drill-result.json`；`--report` 可指定永久存证位置。
 
-每周备份、每月演练可以安装宿主机计划，macOS 用 launchd，Linux 用用户 systemd：
+每月备份、每月演练可以安装宿主机计划，macOS 用 launchd，Linux 用用户 systemd。下面配置北京时间每月 1 日 03:00 备份、13:00 演练：
 
 ```bash
 ./reliquary-admin schedule configure \
   --backup-directory /Users/yourname/Backups/Reliquary \
-  --backup-schedule '0 3 * * 0' --drill-schedule '0 4 1 * *' \
+  --backup-schedule '0 3 1 * *' --drill-schedule '0 13 1 * *' \
   --timezone Asia/Shanghai --enabled true
 ./reliquary-admin schedule install
 ./reliquary-admin schedule run --once
@@ -395,9 +395,11 @@ APP_PORT=18080 FRONTEND_PORT=18081 \
 ./reliquary-admin upgrade
 ```
 
-升级前自动产生整体备份，包括旧代码、旧镜像和旧数据，版本 4 及以前的完整备份仍包含 `data_sources` 与 `sync_logs`。执行 `000005` 前先将两表的非密钥内容导出到文件库 `.reliquary/exports/`，JSON 包含导出时间与迁移版本。导出失败则不执行迁移并保持暂停。旧备份恢复到当前版本时也先导出再迁移，已有文章、附件及历史渠道不删除。开发环境若直接运行迁移，必须先执行 `./reliquary-admin export-sources`。迁移完成后核对不可再生数据和文件，只有通过才恢复使用。失败时保持暂停并显示升级前快照位置。不要运行迁移 `down` 或修改 `schema_migrations` 来退回生产。
+升级默认不备份，也不生成升级前全量清单。命令准备镜像后暂停收录、停止应用，执行必要迁移并核验当前数据一致性，通过后恢复使用；默认不做升级前后全库摘要比对。需要本次升级前的恢复点时，明确运行 `./reliquary-admin upgrade --backup`，该模式保存旧代码、旧镜像和旧数据，并按备份清单核对。月度备份独立执行，不与部署绑定。
 
-退回需要用升级前快照恢复旧代码、旧镜像、旧数据库和旧文件库到新的空环境。`upgrade` 的自动备份包含这些镜像，因此可在该备份目录执行随包提供的入口：
+执行 `000005` 前仍先将 `data_sources` 与 `sync_logs` 的非密钥内容导出到文件库 `.reliquary/exports/`，JSON 包含导出时间与迁移版本。导出失败则不执行迁移并保持暂停。版本 4 及以前的完整备份仍包含这两表；旧备份恢复到当前版本时也先导出再迁移，已有文章、附件及历史渠道不删除。开发环境若直接运行迁移，必须先执行 `./reliquary-admin export-sources`。失败时不解除维护暂停；没有本次升级前备份时，恢复只能使用另外保留的恢复点。不要运行迁移 `down` 或修改 `schema_migrations` 来退回生产。
+
+退回需要用已有快照恢复旧代码、旧镜像、旧数据库和旧文件库到新的空环境。`upgrade --backup` 或手动 `backup --with-images` 产生的完整备份包含这些镜像，可在该备份目录执行随包提供的入口：
 
 ```bash
 RELIQUARY_VAULT_DIR=/Users/yourname/Reliquary-Rollback/vault \

@@ -1125,7 +1125,7 @@ def print_credentials(required, preserve_version=False):
         ("storage", "vault/uploads host paths, container mappings and filesystem permissions"),
         ("network", "app/frontend ports, SSRF allowlist and resource public URL"),
         ("ChatGPT", "new sign-in, callback URL and settings page URL"),
-        ("automation", "backup directory, timezone, weekly backup and monthly drill schedule; install host runner"),
+        ("automation", "backup directory, timezone, backup and restore-drill schedules; install host runner"),
         ("intake callers", "issue new intake API keys and update every external caller"),
     ):
         print(f"  [ ] {name}: {fields}")
@@ -1299,7 +1299,7 @@ def rebuild(ctx, args):
         state["state"] = "waiting_resume" if ready else getattr(ctx, "waiting_state", "waiting_models")
         json_write(state_path, state)
         start_paused_environment(ctx)
-        print(f"Data rebuilt and verified. State: {state['state']}. Collection and task execution remain paused. Fill credentials, then run reliquary-admin rebuild {vault} --resume. Resume verifies all vectors and installs weekly backups and monthly drills.")
+        print(f"Data rebuilt and verified. State: {state['state']}. Collection and task execution remain paused. Fill credentials, then run reliquary-admin rebuild {vault} --resume. Resume verifies all vectors and installs the configured backup and restore-drill schedules.")
         return
     if not state_path.exists() or not package.exists():
         raise AdminError("No original rebuild manifest exists. Run rebuild VAULT first in an empty database")
@@ -2013,6 +2013,7 @@ def parser():
     p = sub.add_parser("upgrade")
     p.add_argument("--timeout", type=int, default=300)
     p.add_argument("--include-worktree", action="store_true")
+    p.add_argument("--backup", action="store_true", help="Create and verify a complete pre-upgrade backup before migrating")
     p = sub.add_parser("setup-models")
     p.add_argument("--install", action="store_true")
     p.add_argument("--download", action="store_true")
@@ -2075,8 +2076,11 @@ def main(argv=None):
     elif args.command == "rebuild":
         rebuild(ctx, args)
     elif args.command == "upgrade":
-        options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True, upgrade=True)
-        path = backup(ctx, options)
+        path = None
+        if args.backup:
+            options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True, upgrade=True)
+            path = backup(ctx, options)
+        guard = contextlib.ExitStack()
         try:
             if not ctx.direct and not ctx.local_server:
                 revision = run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ctx.root).decode().strip()
@@ -2087,12 +2091,17 @@ def main(argv=None):
                 ctx.env["RELIQUARY_COMMIT"] = revision
                 ctx.compose("build", ctx.app, "frontend")
             ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+            if path is None:
+                guard.enter_context(ctx.stopped("snapshot", args.timeout, keep_paused=True))
             ctx.cli_json("export-sources")
             ctx.cli_json("migrate")
             if not ctx.cli_json("status").get("paused"):
                 ctx.cli_json("pause", "--mode", "snapshot", "--timeout", str(args.timeout) + "s", "--reason", "manual:upgrade")
             ctx.cli_json("flush")
-            verify_upgrade(ctx, path)
+            if path is None:
+                ctx.cli_json("verify")
+            else:
+                verify_upgrade(ctx, path)
             if not ctx.direct and not ctx.local_server:
                 config = json.loads(ctx.compose("config", "--format", "json"))
                 new_images = {}
@@ -2106,14 +2115,20 @@ def main(argv=None):
                 persisted.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
                 persisted.update(COMPOSE_FILE=ctx.env["COMPOSE_FILE"], RELIQUARY_COMMIT=revision)
                 write_env(ctx.root / ".env", persisted)
-                ctx.cli_json("resume")
-                ctx.compose("up", "-d", "--no-build")
+                ctx.compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
+            ctx.cli_json("resume")
+            if path is None:
+                print("Upgrade verified. No pre-upgrade backup was created.")
             else:
-                ctx.cli_json("resume")
-            print(f"Upgrade verified. Rollback uses the complete pre-upgrade backup: {path}; restore into an empty environment. Database down migration is not a rollback.")
+                print(f"Upgrade verified. Rollback uses the complete pre-upgrade backup: {path}; restore into an empty environment. Database down migration is not a rollback.")
         except BaseException:
-            print(f"Upgrade failed; environment remains paused. Restore pre-upgrade backup into a fresh environment: {path}", file=sys.stderr)
+            if path is None:
+                print("Upgrade failed without a pre-upgrade backup; inspect the migration state before resuming. Data recovery requires a separately retained backup.", file=sys.stderr)
+            else:
+                print(f"Upgrade failed; environment remains paused. Restore pre-upgrade backup into a fresh environment: {path}", file=sys.stderr)
             raise
+        finally:
+            guard.close()
     elif args.command == "setup-models":
         if not setup_models(ctx, args):
             return 3
