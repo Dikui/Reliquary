@@ -212,12 +212,16 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: details prevent cross-action submissions and refresh review counts only on article judgments`, async () => {
     const loader = createArticleDetailsLoader({ article: { incomplete: true } })
     const loadedDetails = await loader.load('article')
+    const reprocessRequests: string[] = []
     const events: unknown[][] = []
     const disabled: boolean[] = []
     const judgments = defineComponent({ props: ['disabled'], setup(props) { disabled.push(Boolean(props.disabled)); return () => null } })
-    await renderDetails([], locale, { loadedDetails, articleJudgments: { __esModule: true, default: judgments }, onReviewChanged: (...args: unknown[]) => events.push(args), async scenario(state) {
-      state.incompleteBusy.value = true
+    await renderDetails([], locale, { loadedDetails, reprocessRequests, articleJudgments: { __esModule: true, default: judgments }, onReviewChanged: (...args: unknown[]) => events.push(args), async scenario(state) {
+      state.articleJudgmentsBusy.value = true
       await state.reprocess()
+      assert.deepEqual(reprocessRequests, [], 'a classification save must block reprocessing requests')
+      state.articleJudgmentsBusy.value = false
+      state.reprocessing.value = true
       state.applyProcessingState({ parse_status: 'completed' })
       assert.equal(events.length, 0, 'processing polls do not refresh pending counts')
       state.applyEntryJudgment({ content_type: 'research' })
