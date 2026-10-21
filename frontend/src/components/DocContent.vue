@@ -8,7 +8,7 @@ import 'katex/dist/katex.min.css';
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import mermaid from "mermaid";
-import { onMounted, ref, nextTick, onUnmounted, watch, computed } from "vue";
+import { onMounted, ref, nextTick, onUnmounted, watch, computed, defineAsyncComponent } from "vue";
 import {
   getChunkByIdOnly,
   updateEntryMetadata,
@@ -38,6 +38,38 @@ import { copyWithToast } from '@/utils/clipboard';
 import { entryFileFormatLabel, entryChannelLabel, getExternalToolName } from '@/utils/entrySourceLabels';
 
 const { t } = useI18n();
+const EntryContentEditor = defineAsyncComponent(() => import('./EntryContentEditor.vue'));
+const contentEditor = ref();
+const editingEntry = ref<{ id: string; title: string; indexOnly: boolean } | null>(null);
+const savedBody = ref<{ id: string; content: string } | null>(null);
+const editTrigger = ref();
+let restoringEditedEntry = false;
+function startContentEdit() {
+  if (isProcessing.value || reprocessing.value || articleJudgmentsBusy.value || incompleteBusy.value || personalDocumentDeleteBusy.value || props.details.parse_status === 'deleting') return;
+  editingEntry.value = { id: props.details.id, title: getDisplayTitle(), indexOnly: isIndexOnly.value };
+  timelineDrawerVisible.value = false;
+  releasePreviewResources();
+}
+async function finishContentEdit() {
+  restoringEditedEntry = false;
+  editingEntry.value = null;
+  releasePreviewResources();
+  await nextTick();
+  editTrigger.value?.$el?.focus();
+  void runMarkdownPostRenderPipeline();
+}
+async function contentSaved(value: { id: string; content: string; status: string }) {
+  savedBody.value = { id: value.id, content: value.content };
+  await finishContentEdit();
+  if (props.details.id !== value.id) return;
+  if (value.status !== 'exists') applyProcessingState({ parse_status: 'pending', md: [], total: 0, description: '', structured_summary: null, entities: [], topics: [] });
+  try {
+    const result = await getEntryDetails(value.id);
+    if (props.details.id !== value.id || !result.success) return;
+    applyProcessingState(result.data);
+    if (!isProcessing.value) emit('getDoc', 1);
+  } catch { /* The existing processing poll refreshes status after a saved update. */ }
+}
 
 
 type MetadataValueType = 'text' | 'number' | 'boolean' | 'null';
@@ -207,6 +239,17 @@ function releasePreviewResources() {
   previewImages = createProtectedFileImageScope();
 }
 watch(() => props.details?.id, releasePreviewResources);
+watch(() => props.details?.id, async id => {
+  savedBody.value = null;
+  const entry = editingEntry.value;
+  if (!entry || id === entry.id) { restoringEditedEntry = false; return; }
+  if (restoringEditedEntry) return;
+  if (contentEditor.value && await contentEditor.value.confirmLeave()) await finishContentEdit();
+  else if (!restoringEditedEntry) {
+    restoringEditedEntry = true;
+    emit('openEntry', entry.id);
+  }
+});
 
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "openTopic", "reviewChanged"]);
 const reportRelatedEntryIds = computed(() => Array.isArray(props.details?.metadata?.related_entry_ids)
@@ -747,6 +790,7 @@ const legacyManualBody = computed(() => isLegacyManualDraft.value
 
 // 监听 chunks 变化，自动更新合并内容（已改为 computed 属性）
 const mergedContent = computed(() => {
+  if (savedBody.value?.id === props.details?.id) return savedBody.value.content;
   const newChunks = props.details?.md;
   if (newChunks && newChunks.length > 0) {
     return mergeChunks(newChunks);
@@ -809,6 +853,8 @@ watch(() => viewMode.value, (mode) => {
 
 watch(() => props.visible, (visible) => {
   if (!visible) {
+    if (editingEntry.value) { void handleClose(); return; }
+    savedBody.value = null;
     releasePreviewResources();
     resetIntakePreview();
   } else if (viewMode.value === 'chunks' || viewMode.value === 'merged') {
@@ -914,8 +960,13 @@ const processMarkdown = (markdownText) => {
 
   return result;
 };
-const handleClose = () => {
+const handleClose = async () => {
   if (personalDocumentDeleteBusy.value) return;
+  if (editingEntry.value) {
+    if (!contentEditor.value || !await contentEditor.value.confirmLeave()) return;
+    editingEntry.value = null;
+  }
+  savedBody.value = null;
   releasePreviewResources();
   resetIntakePreview();
   emit("closeDoc", false);
@@ -1062,7 +1113,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <div class="doc-drawer-resize-line" />
       </div>
     </teleport>
-    <t-drawer :visible="visible" :destroy-on-close="true" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="!personalDocumentDeleteBusy"
+    <t-drawer :visible="visible || Boolean(editingEntry)" :destroy-on-close="true" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="!personalDocumentDeleteBusy"
       :closeOnOverlayClick="!personalDocumentDeleteBusy" :closeOnEscKeydown="!personalDocumentDeleteBusy"
       :footer="false" :class="['doc-main-drawer', { 'doc-main-drawer--resizing': mainDrawerResizing }]"
       @close="handleClose">
@@ -1072,9 +1123,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <t-icon :name="headerIconName" />
           </div>
           <div class="doc-drawer-header-text">
-            <div class="doc-drawer-header-title">{{ getDisplayTitle() }}</div>
+            <div class="doc-drawer-header-title">{{ editingEntry?.title || getDisplayTitle() }}</div>
           </div>
-          <div class="header-actions">
+          <div v-if="!editingEntry" class="header-actions">
+            <t-button v-if="details.vault_path && !editingEntry" ref="editTrigger" size="small" variant="outline"
+              :disabled="isProcessing || reprocessing || articleJudgmentsBusy || incompleteBusy || personalDocumentDeleteBusy || details.parse_status === 'deleting'"
+              :title="isProcessing ? t('entryEditor.busy') : t('entryEditor.title')" @click="startContentEdit">{{ t('entryEditor.title') }}</t-button>
             <a v-if="details.id" :href="`/platform/model-calls?entry_id=${encodeURIComponent(details.id)}`" :title="t('ikb19.viewEntryCalls')" :aria-label="t('ikb19.viewEntryCalls')" class="header-action-btn"><t-icon name="chart-bar" size="16px" /></a>
 
             <PersonalDocumentDelete v-if="details.source_kind === 'mine' && details.id" :document-id="details.id" :title="getDisplayTitle()"
@@ -1120,6 +1174,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
       </t-drawer>
 
       <div ref="docMarkdownRoot" class="doc-markdown-root doc-drawer-body setting-drawer__body">
+        <EntryContentEditor v-if="editingEntry" ref="contentEditor" :key="editingEntry.id" :entry-id="editingEntry.id"
+          :title="editingEntry.title" :index-only="editingEntry.indexOnly" @cancel="finishContentEdit" @saved="contentSaved" @preview="runMarkdownPostRenderPipeline">
+          <template #preview="{ content }"><div class="md-content" v-html="processMarkdown(content)" /></template>
+        </EntryContentEditor>
+        <template v-else>
+        <t-alert v-if="savedBody && isProcessing" theme="info" :message="t('entryEditor.savedPending')" role="status" />
         <BodyReference v-if="visible && details.id && reference" :key="details.id" :entry-id="details.id" :location="reference as SourceLocation" />
         <section v-if="details.id" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('library.detailSectionMeta') }}</h4>
@@ -1383,6 +1443,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
 
         </section>
+        </template>
       </div>
 
     </t-drawer>

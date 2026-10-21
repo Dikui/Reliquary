@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,12 +35,16 @@ func TestEntryContentUpdateHTTPAndMCP(t *testing.T) {
 	require.NoError(t, f.db.First(&original, "id=?", first.EntryID).Error)
 	require.Equal(t, types.ParseStatusCompleted, original.ParseStatus)
 	require.NoError(t, f.db.Model(&original).Update("starred", true).Error)
+	body := personalRequest(t, router, http.MethodGet, "/api/v1/entries/"+original.ID+"/body", "", f.key, true)
+	require.Equal(t, http.StatusOK, body.Code)
+	baseHash := strings.Trim(body.Header().Get("ETag"), "\"")
+	require.Len(t, baseHash, 64)
 	newBody := "# Corrected\n\nnewuniquemarker describes corrected measurements."
 	invalid, err := json.Marshal(map[string]string{"content": newBody + "\n\n![missing](../attachments/" + original.ID + "/missing.png)"})
 	require.NoError(t, err)
 	rejected := personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+original.ID+"/body", string(invalid), f.key, true)
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
-	encoded, err := json.Marshal(map[string]string{"content": newBody, "acquisition": "extracted"})
+	encoded, err := json.Marshal(map[string]string{"content": newBody, "acquisition": "extracted", "base_body_hash": baseHash})
 	require.NoError(t, err)
 	response := personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+original.ID+"/body", string(encoded), f.key, true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -71,15 +76,31 @@ func TestEntryContentUpdateHTTPAndMCP(t *testing.T) {
 	var updated types.Entry
 	require.NoError(t, f.db.First(&updated, "id=?", original.ID).Error)
 	require.Equal(t, types.ParseStatusCompleted, updated.ParseStatus, updated.ErrorMessage)
+	taskCount := len(f.queue.tasks)
+	stale, err := json.Marshal(types.EntryContentUpdate{Content: "A stale editor must not overwrite this entry.", BaseBodyHash: baseHash})
+	require.NoError(t, err)
+	conflict := personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+original.ID+"/body", string(stale), f.key, true)
+	require.Equal(t, http.StatusConflict, conflict.Code, conflict.Body.String())
+	require.Contains(t, conflict.Body.String(), `"reason":"body_changed"`)
+	var retained types.Entry
+	require.NoError(t, f.db.First(&retained, "id=?", original.ID).Error)
+	require.Equal(t, updated.VaultBody, retained.VaultBody)
+	require.Equal(t, updated.ParseStatus, retained.ParseStatus)
+	require.Len(t, f.queue.tasks, taskCount)
+	// A retry whose first response was lost still succeeds without processing twice.
+	response = personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+original.ID+"/body", string(encoded), f.key, true)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), `"status":"exists"`)
+	require.Len(t, f.queue.tasks, taskCount)
 	var chunks []types.Chunk
 	require.NoError(t, f.db.Where("entry_id=?", original.ID).Find(&chunks).Error)
 	chunkData, err := json.Marshal(chunks)
 	require.NoError(t, err)
 	require.Contains(t, string(chunkData), "newuniquemarker")
 	require.NotContains(t, string(chunkData), "olduniquemarker")
-	data, err := os.ReadFile(filepath.Join(f.root, updated.VaultPath))
-	require.NoError(t, err)
-	require.Contains(t, string(data), newBody)
+	updatedBody := personalRequest(t, router, http.MethodGet, "/api/v1/entries/"+original.ID+"/body", "", f.key, true)
+	require.Equal(t, http.StatusOK, updatedBody.Code)
+	require.Equal(t, newBody, updatedBody.Body.String())
 	var unchanged types.IngestResult
 	mcpCall(t, client, "update_entry_content", map[string]any{"entry_id": original.ID, "content": newBody}, &unchanged)
 	require.Equal(t, "exists", unchanged.Status)
@@ -194,8 +215,8 @@ func TestEntryContentUpdateEnqueueFailureRestoresOriginal(t *testing.T) {
 	require.NoError(t, f.articles.(interfaces.EntryService).ProcessManualUpdate(f.ctx, f.queue.tasks[len(f.queue.tasks)-1]))
 	var original types.Entry
 	require.NoError(t, f.db.First(&original, "id=?", first.EntryID).Error)
-	before, err := os.ReadFile(filepath.Join(f.root, original.VaultPath))
-	require.NoError(t, err)
+	before := personalRequest(t, router, http.MethodGet, "/api/v1/entries/"+original.ID+"/body", "", f.key, true)
+	require.Equal(t, http.StatusOK, before.Code)
 	var oldChunks int64
 	require.NoError(t, f.db.Model(&types.Chunk{}).Where("entry_id=?", original.ID).Count(&oldChunks).Error)
 	require.Positive(t, oldChunks)
@@ -218,9 +239,9 @@ func TestEntryContentUpdateEnqueueFailureRestoresOriginal(t *testing.T) {
 	var retainedChunks int64
 	require.NoError(t, f.db.Model(&types.Chunk{}).Where("entry_id=?", original.ID).Count(&retainedChunks).Error)
 	require.Equal(t, oldChunks, retainedChunks)
-	after, err := os.ReadFile(filepath.Join(f.root, original.VaultPath))
-	require.NoError(t, err)
-	require.Equal(t, before, after)
+	after := personalRequest(t, router, http.MethodGet, "/api/v1/entries/"+original.ID+"/body", "", f.key, true)
+	require.Equal(t, http.StatusOK, after.Code)
+	require.Equal(t, before.Body.String(), after.Body.String())
 	afterImages, err := filepath.Glob(filepath.Join(f.root, "attachments", original.ID, "*"))
 	require.NoError(t, err)
 	require.Equal(t, beforeImages, afterImages, "rollback removes only the new attachment")

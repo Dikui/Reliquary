@@ -1,5 +1,16 @@
 import { ikb18En } from './ikb18'
 export default {
+  entryEditor: {
+    title: 'Edit body', edit: 'Edit', preview: 'Preview', view: 'Body display', markdown: 'Markdown body', unsaved: 'Unsaved changes',
+    processHint: 'Saving replaces the body without keeping a previous version. The entry ID and source stay the same. Review and processing may incur model costs, and search may be unavailable until processing finishes.',
+    indexHint: 'Saving replaces the body without keeping a previous version. The entry ID and source stay the same. Only the index is rebuilt.',
+    saveProcess: 'Save and reprocess', saveIndex: 'Save and rebuild index', savedPending: 'Body saved. Processing is in progress.', unchanged: 'The body is unchanged. No processing is needed.',
+    loadFailed: 'Could not load the complete body. Please retry.', saveFailed: 'The body was not saved. Your draft is retained. Please retry.', empty: 'The body cannot be empty.',
+    conflict: 'Another window or tool has changed this entry. Your draft is retained. Copy it before reloading the latest body.',
+    busy: 'This entry or its library is being processed. Please save later.', reload: 'Reload body', copyDraft: 'Copy draft',
+    discardTitle: 'Discard unsaved changes?', discardHint: 'Your unsaved body changes will be lost.', discard: 'Discard changes', keepEditing: 'Keep editing',
+    uncertain: 'The save result could not be confirmed. Your draft is retained. You can retry; identical content will not be processed twice.',
+  },
   entryBatch: {
     scopeSummary: 'Scope summary',
     currentFilters: 'Current filters',

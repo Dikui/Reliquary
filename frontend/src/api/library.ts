@@ -2,6 +2,18 @@ import { get, post, put, del } from "../utils/request";
 import type { ModelTier, ModelTierConfig } from '@/types/modelTiers';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import type { SearchRequest, SearchSource } from '@/types/search';
+import { getApiBaseUrl } from '@/utils/api-base';
+
+export async function getEntryEditableBody(id: string, signal: AbortSignal) {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/entries/${encodeURIComponent(id)}/body`, { signal });
+  const hash = response.headers.get('ETag')?.match(/^"([a-f0-9]{64})"$/)?.[1];
+  if (response.status !== 200 || !hash) throw new Error('Full Markdown body and ETag are required');
+  return { content: await response.text(), bodyHash: hash };
+}
+
+export function updateEntryContent(id: string, data: { content: string; base_body_hash: string }) {
+  return put<{ success: boolean; message?: string; data: { entry_id: string; status: string } }>(`/api/v1/entries/${encodeURIComponent(id)}/body`, data);
+}
 
 export type LibraryTemplate = 'external_timely' | 'external_durable' | 'own' | 'generated';
 export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
