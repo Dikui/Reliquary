@@ -72,9 +72,9 @@ func rebuildVaultWithDatabase(ctx context.Context, db *gorm.DB, cfg *config.Conf
 		}
 		return result, nil
 	}
-	library, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
+	library, err := repository.NewLibraryRepository(db).GetSystemLibraryByRole(ctx, types.SingleSpaceID, "official")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("legacy vault rebuild requires an existing official library: %w", err)
 	}
 	var count int64
 	if err := db.WithContext(ctx).Unscoped().Model(&types.Entry{}).Count(&count).Error; err != nil {

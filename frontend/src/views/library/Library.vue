@@ -985,7 +985,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
               <LibraryInfoPopover v-if="libraryInfo" :library-info="libraryInfo"
                 />
               <t-tooltip :content="$t('library.settings')" placement="top">
-                <button type="button" class="library-settings-button" :disabled="!libraryId" @click="handleOpenLibrarySettings">
+                <button type="button" class="library-settings-button" @click="handleOpenLibrarySettings">
                   <t-icon name="setting" size="16px" />
                 </button>
               </t-tooltip>

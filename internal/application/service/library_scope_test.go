@@ -5,10 +5,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
+
+// Existing fixtures can request the historical library set explicitly.
+func EnsureSystemLibraries(ctx context.Context, db *gorm.DB) error {
+	_, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
+	return err
+}
 
 func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 	db := pgtest.Open(t)
@@ -39,7 +46,6 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 		}
 		require.Equal(t, want.ContentTypes, got.ContentTypes)
 		require.Equal(t, want.RelationTypes, got.RelationTypes)
-		require.Error(t, svc.DeleteLibrary(ctx, got.ID))
 	}
 	institutional, err := repo.GetSystemLibraryByRole(ctx, 1, "official")
 	require.NoError(t, err)
@@ -102,6 +108,8 @@ func TestSpaceEmbeddingSelectionIsSharedByEveryLibrary(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
 	require.NoError(t, EnsurePersonalSpace(ctx, db))
+	_, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
+	require.NoError(t, err)
 	require.NoError(t, db.Model(&types.Space{}).Where("id=?", 1).Update("embedding_model_id", "space-vector").Error)
 	require.NoError(t, db.Model(&types.Library{}).Where("space_id=?", 1).Update("embedding_model_id", "obsolete-library-vector").Error)
 	// A stale general space edit must not overwrite the separately owned model selection.
@@ -116,4 +124,39 @@ func TestSpaceEmbeddingSelectionIsSharedByEveryLibrary(t *testing.T) {
 		require.Equal(t, id, library.EmbeddingModelID)
 		require.Equal(t, id, library.ModelTiers.Embedding)
 	}
+}
+
+func TestEmptySystemLibrariesCanBeDeletedWithoutRecreation(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
+	require.NoError(t, EnsurePersonalSpace(ctx, db))
+	repo := repository.NewLibraryRepository(db)
+	svc := &libraryService{db: db, repo: repo}
+	libraries, err := svc.ListLibraries(ctx)
+	require.NoError(t, err)
+	require.Empty(t, libraries)
+
+	official, err := repository.EnsureSystemLibraries(ctx, db, types.SingleSpaceID, "")
+	require.NoError(t, err)
+	entry := &types.Entry{ID: "occupied-system-library", SpaceID: 1, LibraryID: official.ID, Type: "manual", SourceKind: "article", Title: "Existing"}
+	require.NoError(t, db.Create(entry).Error)
+	require.ErrorContains(t, svc.DeleteLibrary(ctx, official.ID), "library contains entries")
+	require.NoError(t, db.Unscoped().Delete(entry).Error)
+	libraries, err = svc.ListLibraries(ctx)
+	require.NoError(t, err)
+	require.Len(t, libraries, 5)
+	for _, library := range libraries {
+		require.NoError(t, svc.DeleteLibrary(ctx, library.ID))
+	}
+	require.NoError(t, EnsurePersonalSpace(ctx, db))
+	require.NoError(t, repository.NewUserRepository(db).RegisterSingleUser(ctx, &types.User{ID: "zero-library-user", Username: "zero", Email: "zero@example.test", IsActive: true}))
+	require.NoError(t, EnsurePersonalSpace(ctx, db))
+	libraries, err = svc.ListLibraries(ctx)
+	require.NoError(t, err)
+	require.Empty(t, libraries)
+	var contentTypes, relationTypes int64
+	require.NoError(t, db.Model(&types.LibraryContentType{}).Count(&contentTypes).Error)
+	require.NoError(t, db.Model(&types.LibraryRelationType{}).Count(&relationTypes).Error)
+	require.Zero(t, contentTypes)
+	require.Zero(t, relationTypes)
 }

@@ -23,10 +23,6 @@ func (r *userRepository) RegisterSingleUser(ctx context.Context, user *types.Use
 			return ErrRegistrationClosed
 		}
 		user.SpaceID = types.SingleSpaceID
-		if err := tx.Create(user).Error; err != nil {
-			return err
-		}
-		_, err := EnsureSystemLibraries(ctx, tx, user.SpaceID, user.ID)
-		return err
+		return tx.Create(user).Error
 	})
 }

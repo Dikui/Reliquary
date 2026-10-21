@@ -67,7 +67,15 @@ func (h *LibraryHandler) validateAndGetLibrary(c *gin.Context) (*types.Library, 
 	var library *types.Library
 	var err error
 	if id == "" {
-		library, err = h.service.GetSystemLibrary(ctx, "official")
+		var libraries []*types.Library
+		libraries, err = h.service.ListLibraries(ctx)
+		if err == nil {
+			if len(libraries) == 0 {
+				err = repository.ErrLibraryNotFound
+			} else {
+				library = libraries[0]
+			}
+		}
 	} else {
 		library, err = h.service.GetLibraryByID(ctx, id)
 	}
@@ -99,6 +107,11 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 	// Validate and get the library
 	library, _, _, err := h.validateAndGetLibrary(c)
 	if err != nil {
+		var appErr *apperrors.AppError
+		if c.Param("id") == "" && stderrors.As(err, &appErr) && appErr.Code == apperrors.ErrNotFound {
+			c.JSON(http.StatusOK, gin.H{"success": true, "data": nil})
+			return
+		}
 		c.Error(err)
 		return
 	}

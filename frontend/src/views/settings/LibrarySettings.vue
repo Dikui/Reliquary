@@ -110,8 +110,9 @@ async function load() {
   try {
     const [response] = await Promise.all([getLibrary(), resources.ensureModels()])
     if (request !== generation) return
+    if (response?.success === false) throw new Error(response.message || t('knowledgeEditor.messages.loadDataFailed'))
     const library = response?.data
-    if (!library) throw new Error(t('knowledgeEditor.messages.loadDataFailed'))
+    if (!library) { formData.value = null; saved.value = ''; return }
     loadedLibrary.value = library
     activeLibraryId.value = library.id
     const files: any = await listEntryFiles(library.id, { page: 1, page_size: 1 })

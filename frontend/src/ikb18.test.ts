@@ -74,7 +74,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       assert.equal(body.relation_types.length, 1)
       for (const field of ['directory', 'template', 'system_role', 'source_evidence_rule']) assert.equal(field in body, false)
     }, locale)
-    assert.match(html, /personal\//); assert.doesNotMatch(html, /Delete library|删除库/)
+    assert.match(html, /personal\//); assert.match(html, /Delete library|删除库/)
     assert.doesNotMatch(html, /抽取图谱|Extract graph/)
   })
   test(`${locale}: new library validates directory and enters created library settings`, async () => {
@@ -87,6 +87,21 @@ for (const locale of ['zh-CN', 'en-US']) {
     }, locale)
   })
 }
+test('deleting the last empty system library leaves the catalogue ready to create a library', async () => {
+  const calls: any[] = [], modules = catalogModules(calls)
+  modules['@/api/library'].listLibraries = async () => ({ success: true, data: calls.some(call => call.delete) ? [] : [library()] })
+  const html = await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
+    await state.load(); state.removeLibrary()
+    assert.equal(calls.length, 0)
+    await modules.dialog().onConfirm()
+    assert.deepEqual(calls, [{ delete: 'mine' }])
+    assert.equal(state.draft.value, null)
+    assert.deepEqual(state.libraries.value, [])
+    assert.equal(state.loading.value, false)
+  })
+  assert.doesNotMatch(html, /personal\//)
+  assert.match(html, /新建/)
+})
 test('library validation preserves failed drafts, rejects duplicate and empty types, and confirms relation merging', async () => {
   const calls: any[] = [], modules = catalogModules(calls)
   await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {

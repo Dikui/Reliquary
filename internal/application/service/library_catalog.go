@@ -134,9 +134,6 @@ func (s *libraryService) DeleteLibrary(ctx context.Context, id string) error {
 			}
 			return err
 		}
-		if library.SystemRole != "" {
-			return apperrors.NewBadRequestError("system libraries cannot be deleted")
-		}
 		var count int64
 		if err := tx.Unscoped().Model(&types.Entry{}).Where("library_id=?", id).Count(&count).Error; err != nil {
 			return err

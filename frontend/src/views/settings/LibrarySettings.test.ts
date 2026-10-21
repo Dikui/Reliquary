@@ -19,7 +19,7 @@ const script = compileScript(descriptor, { id: 'library-settings-test' })
 const template = compileTemplate({ id: 'library-settings-test', filename: 'LibrarySettings.vue', source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
 assert.deepEqual(template.errors, [])
 
-async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests: any[]) => Promise<void>, failSave = false) {
+async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests: any[]) => Promise<void>, failSave = false, emptyLibrary = false) {
   const requests: any[] = [], events: string[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const originalWindow = globalThis.window
@@ -33,7 +33,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
     '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: null }) },
     '@/stores/resources': { useResourcesStore: () => ({ allModels: [], ensureModels: async () => {}, invalidateLibraryDetail() { requests.push({ cacheInvalidated: true }) } }) },
     '@/api/library': {
-      getLibrary: async () => { requests.push({ method: 'get' }); return { success: true, data: { id: 'unique-library', name: 'Library', model_tiers: { generation: '', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false, languages: null, parser_engine_rules: null }, indexing_strategy: { vector_enabled: true, keyword_enabled: true } } } },
+      getLibrary: async () => { requests.push({ method: 'get' }); return { success: true, data: emptyLibrary ? null : { id: 'unique-library', name: 'Library', model_tiers: { generation: '', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false, languages: null, parser_engine_rules: null }, indexing_strategy: { vector_enabled: true, keyword_enabled: true } } } },
       listEntryFiles: async (id: string) => { requests.push({ articleListId: id }); return { data: [], total: 0 } },
       updateLibrary: async (body: unknown) => { requests.push({ method: 'put', body }); return failSave ? { success: false, message: 'Save unavailable' } : { success: true } },
     },
@@ -106,4 +106,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 test('unchanged knowledge settings do not rewrite loaded null defaults', async () => {
  const {requests}=await scenario('zh-CN',async state=>{await state.handleSubmit()})
  assert.equal(requests.filter(x=>x.method==='put').length,0)
+})
+
+test('zero libraries leave settings available without a load error or entry-list request', async () => {
+  const { requests } = await scenario('zh-CN', async state => {
+    assert.equal(state.formData.value, null)
+    assert.equal(state.error.value, '')
+    assert.equal(state.dirty.value, false)
+    await state.handleSubmit()
+  }, false, true)
+  assert.equal(requests.some(item => item.articleListId || item.method === 'put'), false)
 })

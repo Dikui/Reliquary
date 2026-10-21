@@ -90,7 +90,7 @@ function merge() {
   confirmAction(t('ikb18.merge'), `${from} → ${to}. ${t('ikb18.mergeHint')}`, async () => { const result = await mergeLibraryRelationTypes(id, from, to); if (!result.success) throw new Error(result.message); await load(id) })
 }
 function removeLibrary() {
-  if (!draft.value || draft.value.system_role || draft.value.entry_count) return
+  if (!draft.value || draft.value.entry_count) return
   const id = draft.value.id
   confirmAction(t('ikb18.deleteLibrary'), t('ikb18.deleteConfirm'), async () => { const result = await deleteCatalogLibrary(id); if (!result.success) throw new Error(result.message); draft.value = null; await load() })
 }
@@ -138,7 +138,7 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
           </section>
           <div class="catalog-actions"><t-button type="submit" :loading="saving" :disabled="!dirty">{{ t('common.save') }}</t-button><t-button variant="outline" :disabled="!dirty" @click="draft = JSON.parse(saved); error = ''">{{ t('common.cancel') }}</t-button></div>
           <section v-if="hasGraph"><h3>{{ t('ikb18.merge') }}</h3><p>{{ t('ikb18.mergeHint') }}</p><div class="catalog-toolbar"><t-select :disabled="saving || loading" v-model="fromType" :options="relationOptions" :placeholder="t('ikb18.from')" :aria-label="t('ikb18.from')" /><t-select :disabled="saving || loading" v-model="toType" :options="relationOptions.filter(row => row.value !== fromType)" :placeholder="t('ikb18.to')" :aria-label="t('ikb18.to')" /><t-button :disabled="dirty || !fromType || !toType || fromType === toType" @click="merge">{{ t('ikb18.mergeConfirm') }}</t-button></div></section>
-          <p>{{ t('ikb18.deleteHint') }}</p><t-button v-if="!draft.system_role" theme="danger" variant="outline" :disabled="!!draft.entry_count" @click="removeLibrary">{{ t('ikb18.deleteLibrary') }}</t-button>
+          <p>{{ t('ikb18.deleteHint') }}</p><t-button theme="danger" variant="outline" :disabled="!!draft.entry_count" @click="removeLibrary">{{ t('ikb18.deleteLibrary') }}</t-button>
         </fieldset>
       </form>
     </t-loading>

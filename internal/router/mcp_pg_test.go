@@ -151,7 +151,6 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	var key types.APIKey
 	require.NoError(t, f.db.Where("name=?", "personal integration").First(&key).Error)
 	ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIKey, ID: fmt.Sprint(key.ID)})
-	require.NoError(t, service.EnsureSystemLibraries(ctx, f.db))
 	libraryRepo, entryRepo := apprepo.NewLibraryRepository(f.db), apprepo.NewEntryRepository(f.db)
 	chunkRepo := apprepo.NewChunkRepository(f.db)
 	models := mcpFixtureModels{ModelService: service.NewModelService(apprepo.NewModelRepository(f.db), libraryRepo, nil, nil, f.params.SpaceService)}

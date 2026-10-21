@@ -58,6 +58,8 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	gin.SetMode(gin.TestMode)
 	db := pgtest.Open(t)
 	require.NoError(t, service.EnsurePersonalSpace(context.Background(), db))
+	_, err := apprepo.EnsureSystemLibraries(context.Background(), db, types.SingleSpaceID, "")
+	require.NoError(t, err)
 	cfg := &config.Config{}
 	spaceRepo := apprepo.NewSpaceRepository(db)
 	spaceSvc := service.NewSpaceService(spaceRepo)

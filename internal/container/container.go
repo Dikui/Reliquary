@@ -316,9 +316,6 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	if err := service.EnsurePersonalSpace(context.Background(), db); err != nil {
 		return nil, err
 	}
-	if err := service.EnsureSystemLibraries(context.Background(), db); err != nil {
-		return nil, err
-	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err

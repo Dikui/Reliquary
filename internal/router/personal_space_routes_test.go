@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -9,6 +10,28 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestLibraryRoutesSupportZeroLibrariesAndCustomLibrarySettings(t *testing.T) {
+	f := newPersonalAuthFixture(t)
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID)
+	libraries, err := f.params.LibraryService.ListLibraries(ctx)
+	require.NoError(t, err)
+	for _, library := range libraries {
+		response := personalRequest(t, f.router, http.MethodDelete, "/api/v1/libraries/"+library.ID, "", "", false)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	}
+	empty := personalRequest(t, f.router, http.MethodGet, "/api/v1/library", "", "", false)
+	require.Equal(t, http.StatusOK, empty.Code, empty.Body.String())
+	require.JSONEq(t, `{"success":true,"data":null}`, empty.Body.String())
+	created := personalRequest(t, f.router, http.MethodPost, "/api/v1/libraries", `{"name":"New notes","directory":"notes","template":"own"}`, "", false)
+	require.Equal(t, http.StatusCreated, created.Code, created.Body.String())
+	settings := personalRequest(t, f.router, http.MethodGet, "/api/v1/library", "", "", false)
+	require.Equal(t, http.StatusOK, settings.Code, settings.Body.String())
+	require.Contains(t, settings.Body.String(), `"name":"New notes"`)
+	updated := personalRequest(t, f.router, http.MethodPut, "/api/v1/library", `{"name":"Updated notes"}`, "", false)
+	require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+	require.Contains(t, updated.Body.String(), `"name":"Updated notes"`)
+}
 
 func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 	f := newPersonalAuthFixture(t)
