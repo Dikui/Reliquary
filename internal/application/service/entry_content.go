@@ -97,6 +97,20 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	if len(request.Images) == 0 && entry.VaultBody == content && entry.Acquisition == acquisition {
 		return ingestResult(entry, "exists", "正文未变化。", "", ""), nil
 	}
+	if request.BaseBodyHash != "" {
+		reader, _, err := s.getEntryBody(ctx, entry)
+		if err != nil {
+			return nil, err
+		}
+		body, readErr := io.ReadAll(reader)
+		closeErr := reader.Close()
+		if err := errors.Join(readErr, closeErr); err != nil {
+			return nil, err
+		}
+		if fmt.Sprintf("%x", sha256.Sum256(body)) != request.BaseBodyHash {
+			return nil, werrors.NewConflictError("正文已被修改，请重新读取后再保存").WithDetails(map[string]string{"reason": "body_changed"})
+		}
+	}
 	switch entry.ParseStatus {
 	case types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFinalizing, types.ParseStatusDeleting:
 		return nil, werrors.NewConflictError("资料正在处理或删除，请完成或取消后再更新")

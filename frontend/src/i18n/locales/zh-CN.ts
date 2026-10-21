@@ -1,5 +1,16 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  entryEditor: {
+    title: '编辑正文', edit: '编辑', preview: '预览', view: '正文显示方式', markdown: 'Markdown 正文', unsaved: '尚未保存',
+    processHint: '保存会替换原正文，不保留旧版本。资料 ID 和来源保留；重新审核和处理可能产生模型费用，期间资料可能暂时无法检索。',
+    indexHint: '保存会替换原正文，不保留旧版本。资料 ID 和来源保留，仅重新建立索引。',
+    saveProcess: '保存并重新处理', saveIndex: '保存并重建索引', savedPending: '正文已保存，正在处理。', unchanged: '正文未变化，无需重新处理。',
+    loadFailed: '无法读取完整正文，请重试。', saveFailed: '正文未保存，草稿已保留，请重试。', empty: '正文不能为空。',
+    conflict: '这份资料已被其他窗口或工具修改。你的草稿仍然保留，请复制草稿后重新加载最新正文。',
+    busy: '资料或所属库正在处理，请稍后再保存。', reload: '重新加载正文', copyDraft: '复制草稿',
+    discardTitle: '放弃未保存的修改？', discardHint: '未保存的正文修改将丢失。', discard: '放弃修改', keepEditing: '继续编辑',
+    uncertain: '未能确认保存结果，草稿已保留。可以重试，相同正文不会重复处理。',
+  },
   entryBatch: {
     scopeSummary: '范围摘要',
     currentFilters: '当前筛选条件',

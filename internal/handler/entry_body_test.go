@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,4 +33,9 @@ func TestStoredMarkdownBodySupportsRange(t *testing.T) {
 	require.Equal(t, "# Stored", response.Body.String())
 	require.Equal(t, "text/markdown; charset=utf-8", response.Header().Get("Content-Type"))
 	require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"))
+	full := httptest.NewRecorder()
+	r.ServeHTTP(full, httptest.NewRequest(http.MethodGet, "/entries/id/body", nil))
+	require.Equal(t, http.StatusOK, full.Code)
+	require.Equal(t, fmt.Sprintf("\"%x\"", sha256.Sum256(full.Body.Bytes())), full.Header().Get("ETag"))
+	require.Equal(t, full.Header().Get("ETag"), response.Header().Get("ETag"), "ranges identify the same complete body")
 }

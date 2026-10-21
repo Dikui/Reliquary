@@ -2,6 +2,8 @@ package handler
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -25,5 +27,6 @@ func (h *EntryHandler) ReadEntryBody(c *gin.Context) {
 	c.Header("Content-Type", "text/markdown; charset=utf-8")
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Cache-Control", "private, no-store")
+	c.Header("ETag", fmt.Sprintf("\"%x\"", sha256.Sum256(data)))
 	http.ServeContent(c.Writer, c.Request, "body.md", time.Time{}, bytes.NewReader(data))
 }

@@ -104,6 +104,10 @@ AI产出：
 
 ## 更新已有资料的正文
 
+网页资料详情的“编辑正文”提供完整 Markdown 编辑与预览。保存更新原资料，不创建新 ID；关闭、切换资料或离开页面前检查未保存修改。草稿仅保存在当前页面内存中，不保留旧正文版本。
+
+`GET /api/v1/entries/:id/body` 的 `ETag` 为带双引号的完整正文 SHA-256；范围读取也返回同一校验值。HTTP 更新可提交 `base_body_hash`（去掉 ETag 的双引号），网页保存必须携带。后端在事务行锁内检查，正文已变化时返回 HTTP 409 和 `error.details.reason: "body_changed"`，不修改正文、附件或派生数据；相同正文的重试仍返回 `exists`。省略此字段的既有调用保持原更新语义。
+
 HTTP `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 一起更新同一资料的完整 Markdown 正文和图片。认证与收录相同。资料必须已归档；保留资料 ID、库、来源、`source_ref`、`identifier`、创建时间、星标和用户主题。标题、摘要与自定义元数据仍通过 `PUT /api/v1/entries/:id` 修改。
 
 新图片先通过 `POST /api/v1/ingest/assets` 上传，取得 `asset_id`，再与正文一起提交；也可直接在 `images[].data` 提交图片 base64/data URI。

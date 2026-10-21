@@ -16,7 +16,7 @@ import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import { safeExternalUrl } from '../utils/externalUrl'
 import type { EntryRepostSource } from '../api/library'
-import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML } from '../utils/security'
+import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML, createProtectedFileImageScope, hydrateProtectedFileImages } from '../utils/security'
 import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
 import { CONTENT_TYPES } from '../types/entryClassification'
 
@@ -115,6 +115,7 @@ interface DetailRenderOptions {
   articleJudgments?: unknown
   personalDelete?: unknown
   onReviewChanged?: (...args: unknown[]) => void
+  onCloseDoc?: (visible: boolean) => void
 }
 async function renderDetails(sources: EntryRepostSource[] | null | undefined, locale: keyof typeof messages = 'zh-CN', options: DetailRenderOptions = {}) {
   const component = detailSFC.create({
@@ -125,7 +126,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI, success() {} } },
     '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedAPI, reparseEntry: (id: string) => { options.reprocessRequests?.push(id); return envelope({ parse_status: 'pending' }) } },
     '@/utils/clipboard': { copyWithToast: async (text: string, successKey: string) => { options.copyRequests?.push({ text, successKey }); return true } },
-    '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL,
+    '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL, createProtectedFileImageScope, hydrateProtectedFileImages,
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
@@ -150,6 +151,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
   return renderComponent(component, {
     visible: true, canEditLibrary: false, canDownloadLibrary: false, libraryId: 'library-a', entryType: 'document',
     onReviewChanged: options.onReviewChanged,
+    onCloseDoc: options.onCloseDoc,
     details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
   }, locale, options.ssrContext)
@@ -183,6 +185,20 @@ function createArticleDetailsLoader(records: Record<string, Record<string, unkno
     return hook.details
   } }
 }
+
+test('declining to discard a body draft never sends a close event to the library page', async () => {
+  const closes: boolean[] = []
+  let retained = false
+  await renderDetails([], 'zh-CN', { onCloseDoc: value => closes.push(value), async scenario(state) {
+    state.editingEntry.value = { id: 'message-a', title: 'Original source', indexOnly: false }
+    state.contentEditor.value = { confirmLeave: async () => false }
+    await state.handleClose()
+    retained = state.editingEntry.value?.id === 'message-a'
+    state.editingEntry.value = null
+  } })
+  assert.equal(retained, true)
+  assert.deepEqual(closes, [], 'the parent closes and clears details for every closeDoc event, regardless of payload')
+})
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: detail conflict keeps its approval label after loading the actual related article field`, async () => {

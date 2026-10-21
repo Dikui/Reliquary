@@ -50,9 +50,10 @@ type IngestRequest struct {
 }
 
 type EntryContentUpdate struct {
-	Content     string        `json:"content"`
-	Acquisition string        `json:"acquisition,omitempty"`
-	Images      []IngestImage `json:"images,omitempty"`
+	Content      string        `json:"content"`
+	BaseBodyHash string        `json:"base_body_hash,omitempty"`
+	Acquisition  string        `json:"acquisition,omitempty"`
+	Images       []IngestImage `json:"images,omitempty"`
 }
 
 type IngestImage struct {
