@@ -72,7 +72,6 @@ const filterSummary = computed(() => {
   add(t('entryBatch.keyword'), f.keyword)
   add(t('library.contentTypeFilter'), f.content_type)
   if (f.starred !== undefined) add(t('articleJudgments.starLabel'), t(f.starred ? 'articleJudgments.starredOnly' : 'articleJudgments.unstarredOnly'))
-  if (f.incomplete !== undefined) add(t('library.imageStatusFilter'), t(f.incomplete ? 'library.missingImagesOnly' : 'library.noMissingImages'))
   const statuses: Record<string, string> = { pending: t('library.parseStatusPending'), processing: t('library.parseStatusProcessing'), finalizing: t('library.parseStatusFinalizing'), completed: t('library.parseStatusCompleted'), failed: t('library.parseStatusFailed'), cancelled: t('library.parseStatusCancelled'), draft: t('library.parseStatusDraft'), rejected: t('library.intakeWaiting') }
   if (f.parse_status) add(t('library.parseStatusFilter'), statuses[f.parse_status] || f.parse_status)
   const sources: Record<string, string> = { article: t('knowledgeSearch.sources.article'), mine: t('knowledgeSearch.sources.mine'), report: t('knowledgeSearch.sources.report') }

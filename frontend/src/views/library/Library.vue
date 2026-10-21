@@ -157,7 +157,6 @@ const docSearchKeyword = ref(initialDocumentFilters.keyword);
 const selectedFileType = ref(initialDocumentFilters.fileType);
 const selectedContentType = ref(initialDocumentFilters.contentType);
 const selectedStarred = ref(initialDocumentFilters.starred);
-const selectedIncomplete = ref(initialDocumentFilters.incomplete);
 const selectedEntityIds = ref(initialDocumentFilters.entityIds);
 const selectedTopicIds = ref(initialDocumentFilters.topicIds);
 const publishedRange = ref<string[]>(initialDocumentFilters.publishedFrom || initialDocumentFilters.publishedTo ? [initialDocumentFilters.publishedFrom, initialDocumentFilters.publishedTo] : []);
@@ -180,11 +179,6 @@ const entityFilterValues = computed({ get: () => selectedEntityIds.value.split('
 const topicFilterValues = computed({ get: () => selectedTopicIds.value.split(',').filter(Boolean), set: (ids: string[]) => { selectedTopicIds.value = ids.join(','); } });
 const entityFilterOptions = computed(() => [...new Map([...entityFilterValues.value.map(id => ({ value: id, label: id })), ...entityChoices.value.map(item => ({ value: item.id, label: item.canonical_name }))].map(item => [item.value, item])).values()]);
 const topicFilterOptions = computed(() => [...new Map([...topicFilterValues.value.map(id => ({ value: id, label: id })), ...topicChoices.value.map(item => ({ value: item.id, label: item.name }))].map(item => [item.value, item])).values()]);
-const imageStatusOptions = computed(() => [
-  { value: '', label: t('library.allImageStatuses') },
-  { value: 'true', label: t('library.missingImagesOnly') },
-  { value: 'false', label: t('library.noMissingImages') },
-]);
 const starredOptions = computed(() => [
   { value: '', label: t('articleJudgments.allStars') },
   { value: 'true', label: t('articleJudgments.starredOnly') },
@@ -252,7 +246,6 @@ const documentFilters = computed<DocumentListFilters>(() => ({
   fileType: selectedFileType.value || '',
   contentType: selectedContentType.value || '',
   starred: selectedStarred.value || '',
-  incomplete: selectedIncomplete.value || '',
   parseStatus: selectedParseStatus.value || '',
   source: selectedSource.value || '',
   sourceKind: selectedSourceKind.value || '',
@@ -273,7 +266,6 @@ const filterParams = computed(() => {
     file_type: selectedFileType.value || undefined,
     content_type: selectedContentType.value || undefined,
     starred: selectedStarred.value === '' ? undefined : selectedStarred.value === 'true',
-    incomplete: selectedIncomplete.value === '' ? undefined : selectedIncomplete.value === 'true',
     parse_status: selectedParseStatus.value || undefined,
     source: selectedSource.value || undefined,
     source_kind: selectedSourceKind.value || undefined,
@@ -388,7 +380,6 @@ watch(() => route.query, query => {
     selectedFileType.value = restored.fileType;
     selectedContentType.value = restored.contentType;
     selectedStarred.value = restored.starred;
-    selectedIncomplete.value = restored.incomplete;
     selectedEntityIds.value = restored.entityIds; selectedTopicIds.value = restored.topicIds;
     publishedRange.value = restored.publishedFrom || restored.publishedTo ? [restored.publishedFrom, restored.publishedTo] : [];
     selectedParseStatus.value = restored.parseStatus;
@@ -936,7 +927,7 @@ const handleListAction = (
 
 // Clear selection on filter/library change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedIncomplete, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, selectedEntityIds, selectedTopicIds, publishedRange, libraryId],
+  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, selectedEntityIds, selectedTopicIds, publishedRange, libraryId],
   () => {
     clearSelection();
   },
@@ -1027,10 +1018,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                       <t-icon name="check-circle" size="16px" />
                     </template>
                   </t-select>
-                </div>
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedIncomplete" :options="imageStatusOptions"
-                    :aria-label="$t('library.imageStatusFilter')" class="doc-type-select doc-filter-field__control" />
                 </div>
                 <div class="doc-filter-field">
                   <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />

@@ -578,14 +578,6 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		value := raw == "true"
 		filter.Starred = &value
 	}
-	if raw, supplied := c.GetQuery("incomplete"); supplied {
-		if raw != "true" && raw != "false" {
-			c.Error(errors.NewBadRequestError("incomplete must be true or false"))
-			return
-		}
-		value := raw == "true"
-		filter.Incomplete = &value
-	}
 
 	if raw := c.Query("start_time"); raw != "" {
 		t, err := parseFilterTime(raw)

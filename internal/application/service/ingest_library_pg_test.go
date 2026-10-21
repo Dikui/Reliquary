@@ -9,8 +9,8 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestIngestLibrarySourceIdentityAndCompletion(t *testing.T) {
-	h, v := newIngestHarness(t)
+func TestIngestLibrarySourceIdentity(t *testing.T) {
+	h, _ := newIngestHarness(t)
 	req := types.IngestRequest{Library: "personal", SourceRef: "work/measurements", Content: "# Original\n\nMeasured pressure equals 42.", Acquisition: "verbatim", Title: "Measurements"}
 	on := true
 	req.Graph = &on
@@ -120,29 +120,6 @@ func TestIngestLibrarySourceIdentityAndCompletion(t *testing.T) {
 	_, err = h.service.Ingest(h.ctx, &req)
 	require.ErrorContains(t, err, "2048")
 
-	// Complete by ID without a URL or body. Inspect the stored replacement.
-	imageURL := "https://example.org/chart.png"
-	incomplete := types.IngestRequest{Library: "personal", Content: "My calibration record.\n\n![chart](" + imageURL + ")", Title: "Calibration", Acquisition: "verbatim"}
-	accepted, err := h.service.Ingest(h.ctx, &incomplete)
-	require.NoError(t, err)
-	h.drain(t)
-	complete := types.IngestRequest{Library: "personal", EntryID: accepted.EntryID, Images: []types.IngestImage{{SourceURL: imageURL, Data: articleImageDataURI(t, 70)}}}
-	bad := complete
-	bad.EntryID = "00000000-0000-4000-8000-000000000000"
-	_, err = h.service.Ingest(h.ctx, &bad)
-	require.ErrorContains(t, err, "existing entry")
-	bad = complete
-	bad.Library = "official"
-	_, err = h.service.Ingest(h.ctx, &bad)
-	require.ErrorContains(t, err, "different library")
-	done, err := h.service.Ingest(h.ctx, &complete)
-	require.NoError(t, err)
-	require.Equal(t, "supplemented", done.Status)
-	_, _, body := readVaultArticle(t, v, h.article(t, accepted.EntryID))
-	require.NotContains(t, string(body), imageURL)
-	require.Contains(t, string(body), "attachments/")
-	_, err = h.service.Ingest(h.ctx, &complete)
-	require.ErrorContains(t, err, "not awaiting")
 	// Read method projects the same latest identity used by HTTP entry details.
 	read, err := h.service.ReadEntry(h.ctx, first.EntryID, 0, 100)
 	require.NoError(t, err)

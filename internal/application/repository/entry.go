@@ -47,7 +47,7 @@ func escapeLikeKeyword(keyword string) string {
 // User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
 var omitFieldsOnUpdate = []string{"SourceRef", "SourceBodyHash", "Identifier", "Graph", "DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified",
-	"Acquisition", "Incomplete", "ExternalCompletionAttempted", "MissingMaterials", "ContentTypeHint", "RelatedEntryID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
+	"Acquisition", "ContentTypeHint", "RelatedEntryID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
 
 // entryRepository implements library and entry repository interface
 type entryRepository struct {
@@ -130,9 +130,6 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	}
 	if filter.Starred != nil {
 		query = query.Where("source_kind IN ('article','mine','report') AND starred=?", *filter.Starred)
-	}
-	if filter.Incomplete != nil {
-		query = query.Where("incomplete = ?", *filter.Incomplete)
 	}
 	if filter.ContentType != "" {
 		query = query.Where("content_type = ?", filter.ContentType)

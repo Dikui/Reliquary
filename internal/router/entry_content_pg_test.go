@@ -129,7 +129,6 @@ func TestEntryContentUpdateHTTPAndMCP(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
 	require.Equal(t, firstImage, picture)
-	require.False(t, updated.Incomplete)
 	firstImageBody, firstImageHash := updated.VaultBody, updated.ContentHash
 	var claimed types.IngestAsset
 	require.NoError(t, f.db.First(&claimed, "id=?", asset.AssetID).Error)

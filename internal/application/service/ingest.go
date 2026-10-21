@@ -141,29 +141,11 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	}
 	setMessageFingerprint(article, "")
 	// Hold the existing collection lock through lookup, byte storage and enqueue.
-	// Concurrent deliveries and supplements therefore commit one mutation.
+	// Concurrent deliveries therefore commit one mutation.
 	if err := lockMessageDeduplication(s.db.WithContext(ctx), article); err != nil {
 		return nil, err
 	}
 	article.CreatedAt = time.Now()
-	if request.EntryID != "" {
-		diagnostics.SetStage(ctx, "materials")
-		var existing types.Entry
-		err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, request.EntryID).First(&existing).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, werrors.NewBadRequestError("entry_id does not identify an existing entry")
-		}
-		if err != nil {
-			return nil, err
-		}
-		if existing.LibraryID != library.ID {
-			return nil, werrors.NewBadRequestError("entry_id belongs to a different library")
-		}
-		if !existing.Incomplete {
-			return nil, werrors.NewBadRequestError("entry_id is not awaiting image completion")
-		}
-		return s.supplementIngest(ctx, library, &existing, request, keyID, keyName)
-	}
 	if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(article, intakeTemplateRules(library))); err != nil {
 		return nil, err
 	} else if discarded != nil {
@@ -237,7 +219,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", article.ID, nil, map[string]any{
-		"library_id": library.ID, "template": library.Template, "url": article.Source, "acquisition": article.Acquisition, "collect_reason": article.CollectReason, "missing": article.IngestMissing()}); err != nil {
+		"library_id": library.ID, "template": library.Template, "url": article.Source, "acquisition": article.Acquisition, "collect_reason": article.CollectReason}); err != nil {
 		return nil, err
 	}
 	s.bindContentResources(ctx, spaceID, article.ID, body)
@@ -275,7 +257,7 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 			message := "该条目收录失败，请稍后重试。"
 			if errors.As(err, &app) && app.HTTPCode == http.StatusBadRequest {
 				reason = app.Message
-				message = "该条目无效，请检查获取方式、材料和缺失说明后重试。"
+				message = "该条目无效，请检查获取方式、正文和图片后重试。"
 			}
 			diagnostic := item
 			item = ingestResult(nil, "invalid", message, reason, "")
@@ -320,7 +302,7 @@ func (s *entryService) finishIngestReview(ctx context.Context, library *types.Li
 }
 
 func ingestResult(article *types.Entry, status, message, reason, id string) *types.IngestResult {
-	result := &types.IngestResult{EntryID: id, Status: status, Message: message, Reason: reason, Completeness: []types.IngestMissing{}, ImageFailures: []types.IngestImageFailure{}}
+	result := &types.IngestResult{EntryID: id, Status: status, Message: message, Reason: reason, ImageFailures: []types.IngestImageFailure{}}
 	if article != nil {
 		result.LibraryName = article.LibraryName
 		result.EntryID = article.ID
@@ -330,12 +312,6 @@ func ingestResult(article *types.Entry, status, message, reason, id string) *typ
 		if article.SourceRef != "" && result.LatestEntryID == "" {
 			result.LatestEntryID = article.ID
 		}
-		if article.Incomplete {
-			result.Completeness = article.IngestMissing()
-		}
-	}
-	if result.Completeness == nil {
-		result.Completeness = []types.IngestMissing{}
 	}
 	return result
 }
@@ -376,17 +352,10 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	if utf8.RuneCountInString(request.Content) > types.MaxIngestContentRunes {
 		return bad("content exceeds 5000000 Unicode code points")
 	}
-	if request.EntryID == "" && (strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" || validIngestURL(strings.TrimSpace(request.Content))) {
+	if strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" || validIngestURL(strings.TrimSpace(request.Content)) {
 		return bad("content is required; convert the source to Markdown before ingestion")
 	}
-	if request.EntryID != "" {
-		if _, err := uuid.Parse(request.EntryID); err != nil {
-			return bad("entry_id must be a UUID")
-		}
-		if len(request.Images) == 0 {
-			return bad("image completion requires images")
-		}
-	} else if request.Acquisition != "verbatim" && request.Acquisition != "extracted" && request.Acquisition != "model_written" {
+	if request.Acquisition != "verbatim" && request.Acquisition != "extracted" && request.Acquisition != "model_written" {
 		return bad("acquisition must be verbatim, extracted or model_written")
 	}
 	if request.URL != "" && (!validIngestURL(strings.TrimSpace(request.URL)) || len(request.URL) > 2048) {
@@ -411,25 +380,14 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	if len(request.Images) > 100 {
 		return bad("images supports at most 100 items")
 	}
-	for i, missing := range request.Missing {
-		if missing.Type != "image" {
-			return bad(fmt.Sprintf("missing[%d] has an invalid type", i))
-		}
-		if strings.TrimSpace(missing.Reason) == "" {
-			return bad(fmt.Sprintf("missing[%d].reason is required", i))
-		}
-		if missing.SourceURL != "" && !validIngestURL(missing.SourceURL) {
-			return bad(fmt.Sprintf("missing[%d].source_url must be an HTTP or HTTPS URL", i))
-		}
-	}
 	for i, image := range request.Images {
 		if image.AssetID != "" && image.Data != "" {
 			return bad(fmt.Sprintf("images[%d] requires one of asset_id or data", i))
 		}
 		if image.AssetID == "" && image.Data == "" {
 			source := ingestImageSource(image)
-			if source == "" || !validIngestURL(source) || !hasIngestMissing(request.Missing, "image", source) {
-				return bad(fmt.Sprintf("images[%d] link requires a corresponding missing explanation", i))
+			if source == "" || !validIngestURL(source) {
+				return bad(fmt.Sprintf("images[%d] requires image data, an asset_id or an HTTP/HTTPS source_url", i))
 			}
 		}
 		if image.Data != "" {

@@ -100,8 +100,6 @@ type EntryListFilter struct {
 	ContentType string
 	// Starred filters the user's article marker when supplied.
 	Starred *bool
-	// Incomplete filters entries with missing images when supplied.
-	Incomplete *bool
 	// Keyword performs a LIKE match on file_name / title when non-empty.
 	Keyword string
 	// FileType filters by file_type, or by type for the special values "manual" / "url".
@@ -143,33 +141,30 @@ type Entry struct {
 	// Title of the entry
 	Title string `json:"title"`
 	// Description of the entry
-	Description                 string        `json:"description"`
-	ContentType                 string        `json:"content_type" gorm:"type:varchar(16)"`
-	ContentTypeCorrected        bool          `json:"content_type_corrected" gorm:"not null;default:false"`
-	CannotBeFact                bool          `json:"cannot_be_fact,omitempty" gorm:"-"`
-	SourceUnverified            bool          `json:"source_unverified" gorm:"not null;default:false"`
-	ReviewKind                  string        `json:"review_kind,omitempty" gorm:"-"`
-	SourceKind                  string        `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
-	VaultPath                   string        `json:"vault_path" gorm:"type:text;not null;default:''"`
-	VaultBody                   string        `json:"-" gorm:"type:text;not null;default:''"`
-	Starred                     bool          `json:"starred" gorm:"not null;default:false"`
-	CollectReason               string        `json:"collect_reason" gorm:"type:text;not null;default:''"`
-	AgentSummary                string        `json:"agent_summary" gorm:"type:text;not null;default:''"`
-	AgentTags                   JSON          `json:"agent_tags" gorm:"type:jsonb;not null"`
-	SourceName                  string        `json:"source_name" gorm:"type:text;not null;default:''"`
-	Acquisition                 string        `json:"acquisition" gorm:"type:varchar(16);not null;default:''"`
-	Incomplete                  bool          `json:"incomplete" gorm:"not null;default:false"`
-	ExternalCompletionAttempted bool          `json:"external_completion_attempted" gorm:"not null;default:false"`
-	IngestAPIKeyID              uint64        `json:"ingest_api_key_id" gorm:"not null;default:0"`
-	IngestAPIKeyName            string        `json:"ingest_api_key_name" gorm:"type:text;not null;default:''"`
-	LastIngestAPIKeyID          uint64        `json:"last_ingest_api_key_id" gorm:"not null;default:0"`
-	LastIngestAPIKeyName        string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
-	MissingMaterials            JSON          `json:"missing_materials" gorm:"type:jsonb;not null"`
-	ContentTypeHint             string        `json:"content_type_hint" gorm:"type:varchar(16);not null;default:''"`
-	RelatedEntryID              string        `json:"related_entry_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
-	StructuredSummary           *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
-	Entities                    []Entity      `json:"entities" gorm:"-"`
-	Topics                      []Topic       `json:"topics" gorm:"-"`
+	Description          string        `json:"description"`
+	ContentType          string        `json:"content_type" gorm:"type:varchar(16)"`
+	ContentTypeCorrected bool          `json:"content_type_corrected" gorm:"not null;default:false"`
+	CannotBeFact         bool          `json:"cannot_be_fact,omitempty" gorm:"-"`
+	SourceUnverified     bool          `json:"source_unverified" gorm:"not null;default:false"`
+	ReviewKind           string        `json:"review_kind,omitempty" gorm:"-"`
+	SourceKind           string        `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
+	VaultPath            string        `json:"vault_path" gorm:"type:text;not null;default:''"`
+	VaultBody            string        `json:"-" gorm:"type:text;not null;default:''"`
+	Starred              bool          `json:"starred" gorm:"not null;default:false"`
+	CollectReason        string        `json:"collect_reason" gorm:"type:text;not null;default:''"`
+	AgentSummary         string        `json:"agent_summary" gorm:"type:text;not null;default:''"`
+	AgentTags            JSON          `json:"agent_tags" gorm:"type:jsonb;not null"`
+	SourceName           string        `json:"source_name" gorm:"type:text;not null;default:''"`
+	Acquisition          string        `json:"acquisition" gorm:"type:varchar(16);not null;default:''"`
+	IngestAPIKeyID       uint64        `json:"ingest_api_key_id" gorm:"not null;default:0"`
+	IngestAPIKeyName     string        `json:"ingest_api_key_name" gorm:"type:text;not null;default:''"`
+	LastIngestAPIKeyID   uint64        `json:"last_ingest_api_key_id" gorm:"not null;default:0"`
+	LastIngestAPIKeyName string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
+	ContentTypeHint      string        `json:"content_type_hint" gorm:"type:varchar(16);not null;default:''"`
+	RelatedEntryID       string        `json:"related_entry_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
+	StructuredSummary    *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
+	Entities             []Entity      `json:"entities" gorm:"-"`
+	Topics               []Topic       `json:"topics" gorm:"-"`
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`
@@ -287,32 +282,8 @@ func (k *Entry) BeforeCreate(tx *gorm.DB) (err error) {
 	if len(k.AgentTags) == 0 {
 		k.AgentTags = JSON(`[]`)
 	}
-	if len(k.MissingMaterials) == 0 {
-		k.MissingMaterials = JSON(`[]`)
-	}
 
 	return nil
-}
-
-func (k *Entry) IngestMissing() []IngestMissing {
-	items := []IngestMissing{}
-	if k != nil && len(k.MissingMaterials) != 0 {
-		_ = json.Unmarshal(k.MissingMaterials, &items)
-	}
-	if items == nil {
-		items = []IngestMissing{}
-	}
-	return items
-}
-func (k *Entry) SetIngestMissing(items []IngestMissing) error {
-	if items == nil {
-		items = []IngestMissing{}
-	}
-	data, err := json.Marshal(items)
-	if err == nil {
-		k.MissingMaterials = JSON(data)
-	}
-	return err
 }
 
 type ManualEntryMetadata struct {

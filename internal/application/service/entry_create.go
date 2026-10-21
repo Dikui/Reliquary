@@ -143,9 +143,6 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 		return nil
 	}
 	s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "markdown", "body_chars": len([]rune(content))})
-	if err := s.recordMissingIngestImages(ctx, entry, clean); err != nil {
-		return err
-	}
 
 	// Store embedded image bytes before chunking.
 	// Runs before chunking so chunks contain stable provider:// URLs.
@@ -168,9 +165,6 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			logger.Infof(ctx, "Resolved %d data-URI images for manual entry %s", len(fromDataURI), entry.ID)
 			clean = afterDataURI
 			resolvedImages = append(resolvedImages, fromDataURI...)
-		}
-		if err := s.recordMissingIngestImages(ctx, entry, clean); err != nil {
-			return err
 		}
 		if intake, _ := entry.IntakeMetadata(); intake != nil && s.hasUnstoredArticleImages(entry, clean) {
 			entry.ParseStatus, entry.ErrorMessage, entry.UpdatedAt = types.ParseStatusFailed, "intake has unstored content images", time.Now()

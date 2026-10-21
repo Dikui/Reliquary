@@ -73,7 +73,7 @@ func (s *entryService) RebuildLibrary(ctx context.Context, libraryID, scope stri
 		return nil, apperrors.NewConflictError("This library has unfinished processing tasks; finish or cancel them before rebuilding")
 	}
 	var entries []types.Entry
-	if err := s.db.WithContext(ctx).Select("id,source_kind,incomplete,parse_status,metadata").Where("space_id=? AND library_id=?", spaceID, libraryID).Order("id").Find(&entries).Error; err != nil {
+	if err := s.db.WithContext(ctx).Select("id,source_kind,parse_status,metadata").Where("space_id=? AND library_id=?", spaceID, libraryID).Order("id").Find(&entries).Error; err != nil {
 		return nil, err
 	}
 	ids := []string{}

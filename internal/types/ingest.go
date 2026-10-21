@@ -24,7 +24,6 @@ type IngestRequest struct {
 	RecoveryFailureID  string             `json:"recovery_failure_id,omitempty"`
 	RawInput           json.RawMessage    `json:"-"`
 	Library            string             `json:"library"`
-	EntryID            string             `json:"entry_id,omitempty"`
 	SourceRef          string             `json:"source_ref,omitempty"`
 	Identifier         string             `json:"identifier,omitempty"`
 	Graph              *bool              `json:"graph"`
@@ -34,7 +33,6 @@ type IngestRequest struct {
 	Content            string             `json:"content"`
 	Acquisition        string             `json:"acquisition"`
 	ContentTypeHint    string             `json:"content_type_hint,omitempty"`
-	Missing            []IngestMissing    `json:"missing,omitempty"`
 	InputError         string             `json:"-"`
 	Title              string             `json:"title,omitempty"`
 	Author             string             `json:"author,omitempty"`
@@ -63,15 +61,6 @@ type IngestImage struct {
 	Data      string `json:"data,omitempty"`
 	Caption   string `json:"caption,omitempty"`
 	Text      string `json:"text,omitempty"`
-}
-
-type IngestMissing struct {
-	Type        string    `json:"type"`
-	SourceURL   string    `json:"source_url"`
-	Reason      string    `json:"reason"`
-	APIKeyID    uint64    `json:"api_key_id,omitempty"`
-	APIKeyName  string    `json:"api_key_name,omitempty"`
-	SubmittedAt time.Time `json:"submitted_at,omitempty"`
 }
 
 type IngestThreadItem struct {
@@ -108,7 +97,6 @@ type IngestResult struct {
 	Message          string                     `json:"message"`
 	Reason           string                     `json:"reason"`
 	ImageFailures    []IngestImageFailure       `json:"image_failures"`
-	Completeness     []IngestMissing            `json:"completeness"`
 }
 
 type IngestBatchRequest struct {
@@ -122,32 +110,13 @@ type IngestCheckRequest struct {
 	URLs    []string `json:"urls"`
 }
 type IngestCheckResult struct {
-	Reason     string `json:"reason,omitempty"`
-	URL        string `json:"url"`
-	Status     string `json:"status"`
-	EntryID    string `json:"entry_id"`
-	Incomplete bool   `json:"incomplete"`
+	Reason  string `json:"reason,omitempty"`
+	URL     string `json:"url"`
+	Status  string `json:"status"`
+	EntryID string `json:"entry_id"`
 }
 type IngestCheckResponse struct {
 	Items []IngestCheckResult `json:"items"`
-}
-type IncompleteArticle struct {
-	LibraryName                 string          `json:"library_name"`
-	SourceUnverified            bool            `json:"source_unverified"`
-	LibraryTemplate             string          `json:"library_template"`
-	LibraryID                   string          `json:"library_id"`
-	EntryID                     string          `json:"entry_id"`
-	URL                         string          `json:"url"`
-	Title                       string          `json:"title"`
-	Acquisition                 string          `json:"acquisition"`
-	Missing                     []IngestMissing `json:"missing"`
-	ExternalCompletionAttempted bool            `json:"external_completion_attempted"`
-}
-type IncompleteListResult struct {
-	Items    []IncompleteArticle `json:"items"`
-	Total    int64               `json:"total"`
-	Page     int                 `json:"page"`
-	PageSize int                 `json:"page_size"`
 }
 type IngestAssetResult struct {
 	AssetID string `json:"asset_id"`

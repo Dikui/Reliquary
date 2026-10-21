@@ -23,9 +23,6 @@ func TestLegacyQueuedURLTasksNeverRetrieveContent(t *testing.T) {
 			raw, err := json.Marshal(map[string]any{"tenant_id": h.library.SpaceID, "knowledge_id": entry.ID, "library_id": h.library.ID, field: entry.Source})
 			require.NoError(t, err)
 			require.ErrorContains(t, h.service.ProcessDocument(h.ctx, taskqueue.NewTask(types.TypeDocumentProcess, raw)), "Markdown")
-			stored := h.article(t, entry.ID)
-			require.False(t, stored.Incomplete)
-			require.Empty(t, stored.IngestMissing())
 			require.Empty(t, h.queue.tasks)
 			require.Zero(t, transport.calls.Load())
 		})
@@ -42,8 +39,6 @@ func TestContentTypeCorrectionPreservesBodyAndIndexes(t *testing.T) {
 	chunks, vectors, articleVectors := correctionIndexCounts(t, h, article.ID)
 	corrected, err := h.service.CorrectContentType(h.ctx, article.ID, "research")
 	require.NoError(t, err)
-	require.False(t, corrected.Incomplete)
-	require.Empty(t, corrected.IngestMissing())
 	require.Len(t, h.processor.requests, requests)
 	_, _, afterBody := readVaultArticle(t, v, corrected)
 	require.Equal(t, body, afterBody)
@@ -86,7 +81,6 @@ func TestLegacyQueuedURLTaskUsesStoredBodyWithoutFetching(t *testing.T) {
 	stored := h.article(t, entry.ID)
 	require.Equal(t, types.ParseStatusCompleted, stored.ParseStatus)
 	require.Equal(t, body, stored.VaultBody)
-	require.False(t, stored.Incomplete)
 	require.Zero(t, transport.calls.Load())
 }
 
@@ -106,6 +100,5 @@ func TestLegacyReprocessingUsesDatabaseBodyWithoutVaultPath(t *testing.T) {
 	stored := h.article(t, entry.ID)
 	require.Equal(t, types.ParseStatusCompleted, stored.ParseStatus)
 	require.Equal(t, body, stored.VaultBody)
-	require.False(t, stored.Incomplete)
 	require.Zero(t, transport.calls.Load())
 }

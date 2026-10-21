@@ -271,30 +271,6 @@ for (const locale of ['zh-CN', 'en-US']) {
   })
 }
 
-test('missing-image filter persists in the URL and combines with processing status', async () => {
-  const env = await mountLibrary('zh-CN', { incomplete: 'true', parse_status: 'completed' })
-  try {
-    const images = env.control('library.imageStatusFilter')
-    assert.equal(images.props.value, 'true')
-    assert.equal(env.requests.at(-1)!.get('incomplete'), 'true')
-    assert.ok(env.ids().length > 0)
-    assert.ok(env.ids().every(id => env.records.find(record => record.id === id)?.incomplete))
-    await env.list()
-    assert.ok(env.ids().every(id => env.records.find(record => record.id === id)?.incomplete))
-    await env.change(images, 'false')
-    assert.equal(env.route.query.incomplete, 'false')
-    assert.equal(env.requests.at(-1)!.get('parse_status'), 'completed')
-    assert.ok(env.ids().every(id => !env.records.find(record => record.id === id)?.incomplete))
-    await env.leave()
-    await env.back()
-    assert.equal(env.control('library.imageStatusFilter').props.value, 'false')
-    assert.equal(env.requests.at(-1)!.get('incomplete'), 'false')
-    await env.change(env.control('library.imageStatusFilter'), '')
-    assert.equal(env.route.query.incomplete, undefined)
-    assert.equal(env.requests.at(-1)!.has('incomplete'), false)
-  } finally { env.cleanup() }
-})
-
 test('source filters combine with existing filters and retain URL state on reload and history changes', async () => {
   const env = await mountLibrary('zh-CN', { source_kind: 'mine', tab: 'documents' })
   try {
@@ -428,7 +404,7 @@ test('default and invalid URL filters are omitted while unrelated query paramete
   } finally { env.cleanup() }
 })
 
-test('source, star and image filter changes clear selected entries before loading filtered data', async () => {
+test('source and star filter changes clear selected entries before loading filtered data', async () => {
   const env = await mountLibrary('zh-CN', {}, 'list')
   try {
     const selected = () => descendants(env.root).filter(node => node.props['data-select-id'] && hasClass(node, 'selected'))
@@ -447,11 +423,6 @@ test('source, star and image filter changes clear selected entries before loadin
     await env.change(env.control('library.materialCategory'), 'mine')
     assert.equal(selected().length, 0)
     assert.ok(env.ids().every(id => id.startsWith('mine')))
-    select('mine')
-    await settle()
-    await env.change(env.control('library.imageStatusFilter'), 'false')
-    assert.equal(selected().length, 0)
-    assert.ok(env.ids().every(id => !env.records.find(record => record.id === id)!.incomplete))
   } finally { env.cleanup() }
 })
 
@@ -484,7 +455,7 @@ test('library-defined content types and Markdown aliases survive a shared URL an
 })
 
 test('bulk management retains exact filters and server count across both steps and uses a separate action preview', async () => {
-  const env = await mountLibrary('zh-CN', { keyword: 'Needle', starred: 'false', incomplete: 'false', parse_status: 'failed', entity_ids: 'entity-1', topic_ids: 'topic-1', published_from: '2026-10-01', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_date: '2026-10-01', end_date: '2026-10-18' })
+  const env = await mountLibrary('zh-CN', { keyword: 'Needle', starred: 'false', parse_status: 'failed', entity_ids: 'entity-1', topic_ids: 'topic-1', published_from: '2026-10-01', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_date: '2026-10-01', end_date: '2026-10-18' })
   const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))
   const summary = () => visibleText(env.control('entryBatch.scopeSummary'))
   try {
@@ -501,8 +472,8 @@ test('bulk management retains exact filters and server count across both steps a
     assert.equal(env.control('entryBatch.action'), undefined)
     assert.equal(button('entryBatch.preview'), undefined)
     assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 73 })), 'count comes from the batch server, not the displayed list')
-    for (const value of ['Research', 'Target Entity', 'Target Topic', 'Needle', 'tutorial', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.noMissingImages'), env.t('library.parseStatusFailed'), env.t('knowledgeSearch.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
-    const selection = { filters: { libraries: ['library-source'], entity_ids: ['entity-1'], topic_ids: ['topic-1'], published_from: '2026-10-01', keyword: 'Needle', starred: false, incomplete: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
+    for (const value of ['Research', 'Target Entity', 'Target Topic', 'Needle', 'tutorial', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.parseStatusFailed'), env.t('knowledgeSearch.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
+    const selection = { filters: { libraries: ['library-source'], entity_ids: ['entity-1'], topic_ids: ['topic-1'], published_from: '2026-10-01', keyword: 'Needle', starred: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
     assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/entries/batches/preview', data: { action: 'star', starred: true, selection } }])
     const firstSummary = summary()
     button('entryBatch.nextAction')!.props.onClick(); await settle()

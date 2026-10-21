@@ -25,8 +25,6 @@ import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
 import ReportAssociations from '@/components/ReportAssociations.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
-import MissingMaterials from '@/components/MissingMaterials.vue';
-import IncompleteActions from '@/components/IncompleteActions.vue';
 import BodyReference from './BodyReference.vue';
 import type { SourceLocation } from '@/types/search';
 import ReviewActions from '@/components/ReviewActions.vue';
@@ -45,7 +43,7 @@ const savedBody = ref<{ id: string; content: string } | null>(null);
 const editTrigger = ref();
 let restoringEditedEntry = false;
 function startContentEdit() {
-  if (isProcessing.value || reprocessing.value || articleJudgmentsBusy.value || incompleteBusy.value || personalDocumentDeleteBusy.value || props.details.parse_status === 'deleting') return;
+  if (isProcessing.value || reprocessing.value || articleJudgmentsBusy.value || personalDocumentDeleteBusy.value || props.details.parse_status === 'deleting') return;
   editingEntry.value = { id: props.details.id, title: getDisplayTitle(), indexOnly: isIndexOnly.value };
   timelineDrawerVisible.value = false;
   releasePreviewResources();
@@ -171,11 +169,10 @@ const saveMetadata = async () => {
 
 const reprocessing = ref(false);
 const articleJudgmentsBusy = ref(false);
-const incompleteBusy = ref(false);
 const canReprocess = computed(() => Boolean(props.details?.id));
 const isIndexOnly = computed(() => props.details?.source_kind === 'report' || props.details?.library_template === 'generated');
 const reprocess = async () => {
-  if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value || incompleteBusy.value) return;
+  if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value) return;
   reprocessing.value = true;
   try {
     const result: any = await reparseEntry(props.details.id);
@@ -325,10 +322,6 @@ watch(() => props.details?.id, resetIntakePreview);
 const applyProcessingState = (value: Record<string, unknown>) => {
   Object.assign(props.details, value);
   if (props.details?.id) emit('processingStateChange', { ...value, id: props.details.id });
-};
-const applyIncompleteChange = () => {
-  applyProcessingState({ incomplete: false, missing_materials: [] });
-  emit('reviewChanged', props.details, false);
 };
 const applyEntryJudgment = (value: Record<string, unknown>) => {
   applyProcessingState(value);
@@ -1127,12 +1120,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
           <div v-if="!editingEntry" class="header-actions">
             <t-button v-if="details.vault_path && !editingEntry" ref="editTrigger" size="small" variant="outline"
-              :disabled="isProcessing || reprocessing || articleJudgmentsBusy || incompleteBusy || personalDocumentDeleteBusy || details.parse_status === 'deleting'"
+              :disabled="isProcessing || reprocessing || articleJudgmentsBusy || personalDocumentDeleteBusy || details.parse_status === 'deleting'"
               :title="isProcessing ? t('entryEditor.busy') : t('entryEditor.title')" @click="startContentEdit">{{ t('entryEditor.title') }}</t-button>
             <a v-if="details.id" :href="`/platform/model-calls?entry_id=${encodeURIComponent(details.id)}`" :title="t('ikb19.viewEntryCalls')" :aria-label="t('ikb19.viewEntryCalls')" class="header-action-btn"><t-icon name="chart-bar" size="16px" /></a>
 
             <PersonalDocumentDelete v-if="details.source_kind === 'mine' && details.id" :document-id="details.id" :title="getDisplayTitle()"
-              :disabled="articleJudgmentsBusy || incompleteBusy" @busy-change="personalDocumentDeleteBusy = $event"
+              :disabled="articleJudgmentsBusy" @busy-change="personalDocumentDeleteBusy = $event"
               @deleted="() => emit('reviewChanged', details, true)" />
 
             <t-button v-if="details.id && hasTimelineSpans" class="header-action-btn trace-entry-btn" size="small"
@@ -1322,7 +1315,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">{{ $t('library.documentSummary') }}</h4>
-            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy || incompleteBusy" @click="reprocess">
+            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
               {{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.reprocess') }}
             </t-button>
@@ -1336,12 +1329,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </details>
           <EntryClassification :entry="details" followable :hide-relations="details.source_kind === 'report'" @open-entity="emit('openEntity', $event)" />
         <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
-          <section v-if="details.incomplete" class="setting-drawer__section incomplete-materials">
-            <MissingMaterials :items="details.missing_materials || []" />
-            <IncompleteActions :article-id="details.id" :title="details.title" :disabled="reprocessing || articleJudgmentsBusy" @busy-change="incompleteBusy = $event" @changed="applyIncompleteChange" />
-          </section>
           <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" />
-          <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing || incompleteBusy" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('library.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('library.parsingFailed') }}</p>
         </section>

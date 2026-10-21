@@ -16,7 +16,7 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestIKB08MergedVaultPositionsSupplementAndRestore(t *testing.T) {
+func TestIKB08MergedVaultPositionsContentUpdateAndRestore(t *testing.T) {
 	h := newVaultDocumentHarness(t, time.Millisecond)
 	require.NoError(t, h.db.Model(&types.Library{}).Where("space_id=1").Update("indexing_strategy", types.IndexingStrategy{KeywordEnabled: true}).Error)
 	var library types.Library
@@ -24,10 +24,9 @@ func TestIKB08MergedVaultPositionsSupplementAndRestore(t *testing.T) {
 	v, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: h.root, HeaderDebounce: time.Millisecond}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, v.Close()) })
-	entry := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Type: types.EntryTypeManual, SourceKind: "article", Title: "合并后定位 😀", ContentType: "other", ParseStatus: types.ParseStatusCompleted, Incomplete: true, Acquisition: "verbatim", EnableStatus: "enabled"}
+	entry := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Type: types.EntryTypeManual, SourceKind: "article", Title: "合并后定位 😀", ContentType: "other", ParseStatus: types.ParseStatusCompleted, Acquisition: "verbatim", EnableStatus: "enabled"}
 	source := "https://example.org/long-original-image.png"
 	body := "# 中文 😀\n\n首段 English。\n\n## 表格\n\n|列|值|\n|---|---|\n|一|two|\n\n- 列表一\n- item two\n\n```text\n# not a heading\n\ncode\n```\n\n![图](" + source + ")\n\n最后一段。"
-	require.NoError(t, entry.SetIngestMissing([]types.IngestMissing{{Type: "image", SourceURL: source}}))
 	require.NoError(t, h.db.Create(entry).Error)
 	require.NoError(t, v.WriteArticle(h.ctx, entry, body, nil))
 	require.Equal(t, "official", filepath.Dir(entry.VaultPath))
@@ -39,7 +38,7 @@ func TestIKB08MergedVaultPositionsSupplementAndRestore(t *testing.T) {
 	require.True(t, strings.HasPrefix(ref, "../attachments/"+entry.ID+"/"))
 	next := strings.ReplaceAll(entry.VaultBody, source, ref)
 	previous := entry.VaultBody
-	change, err := v.BeginArticleSupplement(h.ctx, entry, next, map[string]string{source: ref})
+	change, err := v.beginArticleContentUpdate(entry, next)
 	require.NoError(t, err)
 	require.NoError(t, recalculateBodyLocations(h.ctx, h.db, entry, previous, next, nil))
 	require.NoError(t, h.db.Model(entry).Update("vault_body", next).Error)

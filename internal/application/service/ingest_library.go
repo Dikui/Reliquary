@@ -58,14 +58,10 @@ func validateLibraryIngest(request *types.IngestRequest, library *types.Library)
 		}
 		request.Identifier = scheme + ":" + value
 	}
-	if library.Template == types.TemplateGenerated && request.EntryID != "" {
-		return bad("generated libraries do not accept image completion")
-	}
 	return nil
 }
 
-// Source identity compares the submitted Markdown text, independently of image
-// completion paths and approximate external-source deduplication.
+// Source identity compares the submitted Markdown text, independently of approximate external-source deduplication.
 func sourceBodyHash(body string) string {
 	normalized := strings.Join(strings.Fields(utils.CleanMarkdown(body)), " ")
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(normalized)))

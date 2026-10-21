@@ -69,33 +69,16 @@ function createReviewAPI(handler: (call: Call) => Promise<any>) {
   const api = evaluate(source('../../api/entry-review.ts'), { '@/utils/request': request })
   return { api, calls }
 }
-function createIngestAPI(handler: (call: Call) => Promise<any>) {
-  const calls: Call[] = []
-  const request = Object.fromEntries(['get', 'post'].map(method => [method, (url: string, body?: any) => { const call = { method, url, ...(body === undefined ? {} : { body }) }; calls.push(call); return handler(call) }]))
-  return { api: evaluate(source('../../api/ingest.ts'), { '@/utils/request': request }), calls }
-}
 function reviewComponent(api: object) {
   return component('../../components/ReviewActions.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': api, '@/utils/security': security, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
-}
-function missingComponent() { return component('../../components/MissingMaterials.vue', { '@/utils/security': security }) }
-function incompleteActions(api: object) {
-  return component('../../components/IncompleteActions.vue', { '@/api/ingest': api, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
 }
 function libraryReviewComponent(api: object = {}, dialog: unknown = empty) {
   return component('../../components/LibraryReviewAction.vue', { '@/api/library': api, '@/components/EntryBatchDialog.vue': dialog, 'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace() {} }) } })
 }
-function pendingComponent(api: object, child = reviewComponent(api), ingest = createIngestAPI(async () => ({ success: true, data: [], total: 0 })).api, incompleteChild = incompleteActions(ingest)) {
-  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/api/ingest': ingest, '@/utils/security': security, '@/components/LibraryReviewAction.vue': moduleOf(libraryReviewComponent()), '@/components/ReviewActions.vue': moduleOf(child), '@/components/MissingMaterials.vue': moduleOf(missingComponent()), '@/components/IncompleteActions.vue': moduleOf(incompleteChild) })
+function pendingComponent(api: object, child = reviewComponent(api)) {
+  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/utils/security': security, '@/components/LibraryReviewAction.vue': moduleOf(libraryReviewComponent()), '@/components/ReviewActions.vue': moduleOf(child) })
 }
 const settle = () => new Promise<void>(resolve => setImmediate(resolve))
-const incomplete = {
-  entry_id: 'needs-files', title: 'Materials to complete', url: 'https://example.com/needs-files', acquisition: 'extracted', external_completion_attempted: true,
-  missing: [
-    { type: 'image', source_url: 'https://example.com/source.png', reason: 'Image required a login', api_key_name: 'Research Bot', submitted_at: '2026-10-12T03:04:05Z' },
-    { type: 'image', source_url: 'https://example.com/figure.png', reason: 'Image request was blocked', api_key_name: 'Research Bot', submitted_at: '2026-10-12T03:04:05Z' },
-  ],
-}
-
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: rejected personal documents show their source and approve without a URL`, async () => {
     const mine = { ...intake, source_kind: 'mine', metadata: { intake: { decision: 'rejected', reason: 'Needs user decision', source_info: {} } } }
@@ -128,87 +111,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes('My source'))
     assert.ok(html.includes(messages[locale].personalDocument.deleteConfirm.replace('{title}', 'My source')))
     assert.ok(!html.includes(locale === 'zh-CN' ? '删除后重新导入' : 'import it again'))
-  })
-  test(`${locale}: incomplete articles and personal documents load with the correct completion instructions and shared action copy`, async () => {
-    const records = [
-      { ...incomplete, kind: 'article' },
-      { ...incomplete, library_id: 'mine-library', library_template: 'own', entry_id: 'personal-files', title: 'My incomplete note', url: '', acquisition: 'verbatim' },
-    ]
-    const { api: review } = createReviewAPI(async () => ({ success: true, data: [], total: 0 }))
-    const { api: ingest, calls } = createIngestAPI(async () => ({ success: true, data: records, total: records.length }))
-    let loadedMine: typeof records[number] | undefined
-    const html = await render(pendingComponent(review, reviewComponent(review), ingest), {}, locale, async state => {
-      state.changeKind('incomplete'); await settle()
-      assert.deepEqual(state.incompleteRecords.value, records)
-      loadedMine = state.incompleteRecords.value[1]
-    })
-    assert.deepEqual(calls, [{ method: 'get', url: '/api/v1/ingest/incomplete?page=1&page_size=20&include_attempted=true' }])
-    assert.ok(html.includes(records[0].title)); assert.ok(html.includes(records[1].title))
-    const missingLabel = locale === 'zh-CN' ? '缺少图片' : 'Missing images'
-    assert.equal(messages[locale].ingestStatus.incomplete, missingLabel)
-    assert.equal(messages[locale].knowledgeReview.incomplete, missingLabel)
-    assert.ok(html.includes(missingLabel))
-    assert.ok(html.includes(messages[locale].library.sourceKinds.mine))
-    const instructions = locale === 'zh-CN'
-      ? '按资料 ID 补交图片'
-      : 'material ID'
-    assert.ok(html.includes(instructions))
-    assert.ok(messages[locale].ingestStatus.incompleteHint.includes(instructions))
-    assert.ok(html.includes(messages[locale].ingestStatus.attemptedHint))
-    assert.ok(!/该文章|This article/.test(messages[locale].ingestStatus.attemptedHint))
-    for (const action of ['accept', 'discard'] as const) {
-      const confirmationHTML = await render(incompleteActions(ingest), { articleId: loadedMine!.entry_id, title: loadedMine!.title, allowDiscard: true }, locale, async state => { state.request(action) })
-      assert.ok(confirmationHTML.includes(loadedMine!.title))
-      assert.ok(confirmationHTML.includes(messages[locale].ingestStatus[action === 'accept' ? 'acceptDescription' : 'discardDescription']))
-      assert.ok(!confirmationHTML.includes(locale === 'zh-CN' ? '这篇文章' : 'this article'))
-    }
-    const emptyIngest = createIngestAPI(async () => ({ success: true, data: [], total: 0 })).api
-    const emptyHTML = await render(pendingComponent(review, reviewComponent(review), emptyIngest), {}, locale, async state => { state.changeKind('incomplete'); await settle() })
-    assert.ok(emptyHTML.includes(messages[locale].knowledgeReview.emptyIncomplete))
-  })
-
-  test(`${locale}: incomplete records without an external attempt hide the attempt notice and refresh after an action`, async () => {
-    let completed = false, changed = 0
-    const { api: review } = createReviewAPI(async () => ({ success: true, data: [], total: 0 }))
-    const { api: ingest, calls } = createIngestAPI(async call => {
-      if (call.method === 'post') { completed = true; return { success: true, data: { entry_id: incomplete.entry_id } } }
-      return { success: true, data: completed ? [] : [{ ...incomplete, external_completion_attempted: false }], total: completed ? 0 : 1 }
-    })
-    const child = incompleteActions(ingest)
-    const setup = child.setup
-    child.setup = (props: any, context: any) => {
-      const state = setup(props, context)
-      onServerPrefetch(async () => { state.request('accept'); await state.confirm(); await settle() })
-      return state
-    }
-    const html = await render(pendingComponent(review, reviewComponent(review), ingest, child), { onChanged: () => changed++ }, locale, async state => { state.changeKind('incomplete'); await settle() })
-    assert.equal(changed, 1)
-    assert.deepEqual(calls.map(call => call.url), ['/api/v1/ingest/incomplete?page=1&page_size=20&include_attempted=true', '/api/v1/ingest/needs-files/accept-incomplete', '/api/v1/ingest/incomplete?page=1&page_size=20&include_attempted=true'])
-    assert.ok(!html.includes(messages[locale].ingestStatus.attemptedTitle)); assert.ok(!html.includes(messages[locale].ingestStatus.attemptedHint))
-  })
-  test(`${locale}: incomplete accept and discard require confirmation, cancellation sends nothing and confirmed actions call the ingest API`, async () => {
-    for (const action of ['accept', 'discard'] as const) {
-      const { api, calls } = createIngestAPI(async call => call.method === 'get' ? { success: true, data: [incomplete], total: 1 } : { success: true, data: { entry_id: incomplete.entry_id } })
-      const loaded = (await api.listIncompleteEntrys({ page: 1, page_size: 20 })).data[0]
-      const confirmationHTML = await render(incompleteActions(api), { articleId: loaded.entry_id, title: loaded.title, allowDiscard: true }, locale, async state => { state.request(action); assert.equal(state.confirmation.value, action); assert.equal(calls.length, 1) })
-      assert.ok(confirmationHTML.includes(loaded.title))
-      assert.ok(confirmationHTML.includes(messages[locale].ingestStatus[action === 'accept' ? 'acceptDescription' : 'discardDescription']))
-      let changed: boolean | undefined
-      await render(incompleteActions(api), { articleId: loaded.entry_id, title: loaded.title, allowDiscard: true, onChanged: (removed: boolean) => { changed = removed } }, locale, async state => {
-        state.request(action); state.cancel(); await state.confirm(); assert.equal(calls.length, 1)
-        state.request(action); await state.confirm(); assert.equal(state.confirmation.value, '')
-      })
-      assert.equal(changed, action === 'discard')
-      assert.deepEqual(calls[1], { method: 'post', url: `/api/v1/ingest/needs-files/${action === 'accept' ? 'accept-incomplete' : 'discard'}`, ...(action === 'discard' ? { body: {} } : {}) })
-    }
-  })
-  test(`${locale}: failed incomplete actions keep confirmation and allow retry, detail actions hide discard by default`, async () => {
-    const { api, calls } = createIngestAPI(async () => ({ success: false, message: 'Please retry later' }))
-    const html = await render(incompleteActions(api), { articleId: incomplete.entry_id, title: incomplete.title }, locale, async state => {
-      state.request('discard'); assert.equal(state.confirmation.value, '')
-      state.request('accept'); await state.confirm(); assert.equal(state.confirmation.value, 'accept'); assert.equal(state.busy.value, false)
-    })
-    assert.equal(calls.length, 1); assert.ok(html.includes('Please retry later')); assert.ok(!html.includes(`>${messages[locale].ingestStatus.discard}<`))
   })
   test(`${locale}: intake conflicts show the existing article link and save as new wording from the pending response`, async () => {
     const conflict = { ...intake, id: 'conflict', acquisition: 'model_written', related_entry_id: 'existing/article', metadata: { intake: { reason: 'A conflicting supplement', source_info: { original_url: 'https://example.com/same' } } } }
@@ -317,61 +219,18 @@ test('pending paging clamps after the last record is resolved and requests the c
   assert.deepEqual(calls.map(call => call.url), ['/api/v1/entries/pending?page=2&page_size=20&kind=intake', '/api/v1/entries/pending?page=1&page_size=20&kind=intake'])
 })
 
-test('pending toolbar refresh and error retry notify navigation and load the current queue again', async () => {
-  let fail = true, refreshed = 0
-  const { api } = createReviewAPI(async () => ({ success: true, data: [], total: 0 }))
-  const { api: ingest, calls } = createIngestAPI(async () => {
-    if (fail) throw new Error('Incomplete queue unavailable')
-    return { success: true, data: [incomplete], total: 1 }
-  })
-  await render(pendingComponent(api, reviewComponent(api), ingest), { onRefreshed: () => refreshed++ }, 'en-US', async state => {
-    state.changeKind('incomplete'); await settle()
-    assert.equal(state.error.value, 'Incomplete queue unavailable')
-    fail = false; await state.refresh()
-    assert.equal(state.error.value, ''); assert.equal(state.incompleteRecords.value[0].entry_id, incomplete.entry_id)
-    await state.refresh()
-    state.setBusy('another-operation', true); await state.refresh()
-  })
-  assert.equal(refreshed, 2)
-  assert.equal(calls.length, 3)
-  assert.ok(calls.every(call => call.url.endsWith('include_attempted=true')))
-})
-
-
-
-
-
-test('shared incomplete actions honor external disabled state before either confirmation or HTTP submission', async () => {
-  const { api, calls } = createIngestAPI(async () => ({ success: true }))
-  await render(incompleteActions(api), { articleId: incomplete.entry_id, allowDiscard: true, disabled: true }, 'en-US', async state => {
-    state.request('accept'); assert.equal(state.confirmation.value, '')
-    state.confirmation.value = 'discard'; await state.confirm()
-  })
-  assert.deepEqual(calls, [])
-})
-
-
-
-
-
 for (const locale of ['zh-CN', 'en-US'] as const) {
 
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: pending page exposes only intake and incomplete tabs`, async () => {
+  test(`${locale}: pending page loads intake only and has no image-completion tab`, async () => {
     const { api, calls } = createReviewAPI(async () => ({ success: true, data: [], total: 0 }))
-    const html = await render(pendingComponent(api), {}, locale, async state => {
-      await state.load()
-      const count = calls.length
-      state.changeKind('processing')
-      await settle()
-      assert.equal(state.kind.value, 'intake')
-      assert.equal(calls.length, count)
-    })
-    assert.ok(html.includes('value="intake"'))
-    assert.ok(html.includes('value="incomplete"'))
-    assert.ok(!html.includes('value="processing"'))
-    assert.equal((source('./components/PendingReviews.vue').match(/<t-tab-panel\b/g) || []).length, 2)
+    const html = await render(pendingComponent(api), {}, locale, async state => { await state.load() })
+    assert.equal(calls.length, 1)
+    assert.ok(calls[0].url.includes('kind=intake'))
+    assert.ok(html.includes(messages[locale].knowledgeReview.emptyIntake))
+    assert.ok(!html.includes('value="incomplete"'))
+    assert.ok(!source('./components/PendingReviews.vue').includes('listIncomplete'))
   })
 }

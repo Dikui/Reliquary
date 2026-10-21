@@ -89,7 +89,6 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 				"/api/v1/entries/batch?ids=" + articles[0].ID + "&ids=" + articles[1].ID,
 				"/api/v1/entries/pending",
 				"/api/v1/entries/search?keyword=Librarynamefixture",
-				"/api/v1/ingest/incomplete",
 				"/api/v1/entities/" + entity.ID,
 			} {
 				require.Greater(t, assertNames(request(http.MethodGet, path, "", language)), 0, path)
@@ -106,7 +105,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 		require.Equal(t, article.LibraryID, read.LibraryID)
 		require.Equal(t, expected[article.LibraryID], read.LibraryName)
 	}
-	for _, tool := range []string{"list_pending", "list_incomplete", "follow_feed"} {
+	for _, tool := range []string{"list_pending", "follow_feed"} {
 		var wire any
 		args := map[string]any{}
 		if tool == "follow_feed" {
@@ -121,7 +120,6 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	// Mutation responses reuse the same article metadata contract.
 	require.Greater(t, assertNames(request(http.MethodPut, "/api/v1/entries/"+articles[0].ID+"/star", `{"starred":true}`, "en-US")), 0)
 	require.Greater(t, assertNames(request(http.MethodPut, "/api/v1/entries/"+articles[0].ID+"/content-type", `{"content_type":"其他"}`, "en-US")), 0)
-	require.Greater(t, assertNames(request(http.MethodPost, "/api/v1/ingest/"+articles[0].ID+"/accept-incomplete", `{}`, "en-US")), 0)
 	var starred any
 	mcpCall(t, client, "set_star", map[string]any{"id": articles[1].ID, "starred": true}, &starred)
 	require.Greater(t, assertNames(starred), 0)

@@ -28,7 +28,6 @@ const originalURL = computed(() => {
       <t-tag v-if="entry.cannot_be_fact || entry.source_kind === 'report'" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.cannotBeFact') }}</t-tag>
       <t-tag v-if="entry.source_unverified" size="small" theme="warning" variant="light-outline">{{ t('knowledgeReview.sourceUnverified') }}</t-tag>
       <t-tag v-if="entry.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
-      <t-tag v-if="entry.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>
     </div>
     <a v-if="originalURL" class="original-link" :href="originalURL" target="_blank" rel="noopener noreferrer" @click.stop>{{ t('library.originalArticle') }}: {{ originalURL }}</a>
     <div v-if="entry.structured_summary" class="structured-summary">

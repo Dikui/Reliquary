@@ -87,8 +87,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       for (const path of ['../views/library/components/DocumentCardView.vue', '../views/library/components/DocumentListView.vue']) {
         const html = await render(component(path, listModules), { ...props, items: hook.cardList.value }, locale)
         assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged), path)
-        assert.equal(html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged), path)
-        for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+        assert.equal(html.includes(messages[locale].ingestStatus.incomplete), false, path)
+        for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
           assert.equal(html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), `${path}: ${hint}`)
         }
       }

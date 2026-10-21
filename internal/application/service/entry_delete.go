@@ -248,7 +248,7 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 		return err
 	}
 	if s.db != nil && (entry.SourceKind == "article" || ctx.Value(ingestDiscardReasonKey{}) != nil) {
-		if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_discard", id, map[string]any{"url": entry.Source, "missing": entry.IngestMissing()}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+		if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest_discard", id, map[string]any{"url": entry.Source}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
 			return err
 		}
 	}
@@ -544,7 +544,7 @@ func (s *entryService) deleteEntryList(ctx context.Context, ids []string) error 
 			}
 			if svc.db != nil && entry.SourceKind == "article" {
 				if intake, _ := entry.IntakeMetadata(); intake == nil || intake.Decision != "rejected" {
-					if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "ingest_discard", entry.ID, map[string]any{"url": entry.Source, "missing": entry.IngestMissing()}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
+					if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "ingest_discard", entry.ID, map[string]any{"url": entry.Source}, map[string]any{"reason": ingestDiscardReason(ctx)}); err != nil {
 						return err
 					}
 				}

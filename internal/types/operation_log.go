@@ -21,7 +21,7 @@ func (OperationLog) TableName() string { return "operation_logs" }
 
 var OperationTypes = []string{
 	"ingest", "write_report", "delete_document",
-	"ingest_supplement", "ingest_conflict", "accept_incomplete", "ingest_discard",
+	"ingest_discard",
 	"review_approve", "review_reject", "review_retry", "review_discard",
 	"review_supplement_url", "review_admit_unverified",
 	"star", "unstar", "correct_content_type", "correct_topics", "merge_entities",

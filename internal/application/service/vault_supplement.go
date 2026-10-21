@@ -1,21 +1,18 @@
 package service
 
 import (
-	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 
 	"reliquary/internal/infrastructure/docparser"
-	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 )
 
@@ -61,103 +58,14 @@ func (v *VaultService) DeleteStoredArticleAttachment(k *types.Entry, ref string)
 	return err
 }
 
-func replaceVaultImageTargets(body string, mappings map[string]string) string {
-	type replacement struct {
-		start, end int
-		value      string
-	}
-	var changes []replacement
-	for _, ref := range docparser.MarkdownImageReferences(body) {
-		value, ok := mappings[ref.URL]
-		if !ok {
-			continue
-		}
-		start := ref.Position + strings.Index(body[ref.Position:], ref.URL)
-		changes = append(changes, replacement{start, start + len(ref.URL), value})
-	}
-	for _, match := range searchutil.HTMLImageSrcRegex.FindAllStringSubmatchIndex(body, -1) {
-		group := searchutil.HTMLImageSrcURLGroup * 2
-		if len(match) <= group+1 || match[group] < 0 {
-			continue
-		}
-		if value, ok := mappings[body[match[group]:match[group+1]]]; ok {
-			changes = append(changes, replacement{match[group], match[group+1], value})
-		}
-	}
-	sort.Slice(changes, func(i, j int) bool { return changes[i].start > changes[j].start })
-	for _, change := range changes {
-		body = body[:change.start] + change.value + body[change.end:]
-	}
-	return body
-}
-
-type vaultArticleSupplement struct {
+type vaultArticleContentUpdate struct {
 	lock   *sync.Mutex
 	closed bool
 }
 
-// BeginArticleSupplement trusts the caller's locked PostgreSQL snapshot and
-// keeps the article lock until the database transaction commits or rolls
-// back. It never reads through v.db, which would contend with that transaction.
-func (v *VaultService) BeginArticleSupplement(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string) (_ *vaultArticleSupplement, supplementErr error) {
-	if k == nil {
-		return nil, errors.New("article is required")
-	}
-	defer func() {
-		if supplementErr != nil {
-			v.recordArticleError(ctx, k.ID, supplementErr)
-		}
-	}()
-	if !k.Incomplete {
-		return nil, errors.New("article body is finalized; replacement refused")
-	}
-	if !isIngestArticle(k) || k.VaultPath == "" {
-		return nil, errors.New("supplement requires a published article")
-	}
-	lock := v.articleLock(k.ID)
-	lock.Lock()
-	keep := false
-	defer func() {
-		if !keep {
-			lock.Unlock()
-		}
-	}()
-	oldBody := k.VaultBody
-	missingImages := map[string]bool{}
-	for _, missing := range k.IngestMissing() {
-		if missing.Type == "image" {
-			missingImages[missing.SourceURL] = true
-		}
-	}
-	for source, ref := range imageMappings {
-		if !missingImages[source] {
-			return nil, errors.New("image replacement does not match recorded missing material")
-		}
-		if !isArticleAttachmentReference(k.ID, k.VaultPath, ref) {
-			return nil, errors.New("supplement image must be a local article attachment")
-		}
-	}
-
-	expected := replaceVaultImageTargets(oldBody, imageMappings)
-	if newBody != expected {
-		return nil, errors.New("supplement changed article text; replacement refused")
-	}
-	k.VaultBody = newBody
-	keep = true
-	return &vaultArticleSupplement{lock: lock}, nil
-}
-
-func (v *VaultService) SupplementArticle(ctx context.Context, k *types.Entry, newBody string, imageMappings map[string]string) error {
-	change, err := v.BeginArticleSupplement(ctx, k, newBody, imageMappings)
-	if err != nil {
-		return err
-	}
-	return change.finish()
-}
-
 // Only the explicit content-update API may replace finalized text. Keep the
 // article lock until its database transaction commits or rolls back.
-func (v *VaultService) beginArticleContentUpdate(k *types.Entry, newBody string) (*vaultArticleSupplement, error) {
+func (v *VaultService) beginArticleContentUpdate(k *types.Entry, newBody string) (*vaultArticleContentUpdate, error) {
 	lock := v.articleLock(k.ID)
 	lock.Lock()
 	keep := false
@@ -168,14 +76,14 @@ func (v *VaultService) beginArticleContentUpdate(k *types.Entry, newBody string)
 	}()
 	k.VaultBody = newBody
 	keep = true
-	return &vaultArticleSupplement{lock: lock}, nil
+	return &vaultArticleContentUpdate{lock: lock}, nil
 }
 
-func (change *vaultArticleSupplement) rollback() error {
+func (change *vaultArticleContentUpdate) rollback() error {
 	return change.finish()
 }
 
-func (change *vaultArticleSupplement) finish() error {
+func (change *vaultArticleContentUpdate) finish() error {
 	if change != nil && !change.closed {
 		change.closed = true
 		change.lock.Unlock()

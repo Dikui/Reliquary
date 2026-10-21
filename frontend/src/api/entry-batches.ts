@@ -1,9 +1,9 @@
 import { get, post } from '@/utils/request'
 export type EntryBatchAction = 'delete' | 'reprocess' | 'review' | 'star' | 'content_type' | 'topics'
 export interface EntryBatchFilters {
+  parse_status?: string; source?: string; source_kind?: string; start_time?: string; end_time?: string
   libraries?: string[]; entity_ids?: string[]; topic_ids?: string[]; published_from?: string; published_to?: string
   include_rejected?: boolean; keyword?: string; file_type?: string; content_type?: string; starred?: boolean
-  incomplete?: boolean; parse_status?: string; source?: string; source_kind?: string; start_time?: string; end_time?: string
 }
 export interface EntryBatchSelection { ids?: string[]; filters?: EntryBatchFilters }
 export interface EntryBatchRequest { action: EntryBatchAction; selection: EntryBatchSelection; starred?: boolean; content_type?: string; topic_ids?: string[]; topic_mode?: 'add' | 'remove'; preview_fingerprint?: string }

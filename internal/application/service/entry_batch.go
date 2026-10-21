@@ -42,7 +42,7 @@ func batchFilter(f *types.EntryBatchFilters) (types.EntryListFilter, error) {
 	if f == nil {
 		return out, nil
 	}
-	out = types.EntryListFilter{LibraryIDs: f.Libraries, EntityIDs: f.EntityIDs, TopicIDs: f.TopicIDs, IncludeRejected: f.IncludeRejected, Keyword: f.Keyword, FileType: f.FileType, ContentType: f.ContentType, Starred: f.Starred, Incomplete: f.Incomplete, ParseStatus: f.ParseStatus, Source: f.Source, SourceKind: f.SourceKind}
+	out = types.EntryListFilter{LibraryIDs: f.Libraries, EntityIDs: f.EntityIDs, TopicIDs: f.TopicIDs, IncludeRejected: f.IncludeRejected, Keyword: f.Keyword, FileType: f.FileType, ContentType: f.ContentType, Starred: f.Starred, ParseStatus: f.ParseStatus, Source: f.Source, SourceKind: f.SourceKind}
 	for _, v := range []struct {
 		raw       string
 		target    *time.Time

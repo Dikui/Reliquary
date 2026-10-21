@@ -41,7 +41,7 @@ func (s *entryService) ingestWithDiagnostics(ctx context.Context, req *types.Ing
 	if len(input) == 0 {
 		input, _ = json.Marshal(req)
 	}
-	ctx, attempt := s.diagnostics.Begin(ctx, input, index, req.Library, req.EntryID)
+	ctx, attempt := s.diagnostics.Begin(ctx, input, index, req.Library, "")
 	attempt.SetRecoveryFailure(req.RecoveryFailureID)
 	panicked := false
 	defer func() {

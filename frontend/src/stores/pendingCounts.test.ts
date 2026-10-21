@@ -23,7 +23,6 @@ function evaluate(code: string, modules: Record<string, unknown>) {
 }
 const endpoints = [
   '/api/v1/entries/pending?page=1&page_size=1&kind=intake',
-  '/api/v1/ingest/incomplete?page=1&page_size=1&include_attempted=true',
 ] as const
 const envelope = (total: number) => ({ success: true, data: [], total, page: 1, page_size: 1 })
 type Packet = {
@@ -81,10 +80,9 @@ function fixture(t: TestContext) {
     '@/i18n': { __esModule: true, default: { global: { locale: { value: 'zh-CN' }, t: (key: string) => key } } },
   })
   const reviews = evaluate(source('../api/entry-review.ts'), { '@/utils/request': request })
-  const ingest = evaluate(source('../api/ingest.ts'), { '@/utils/request': request })
   const pinia = createPinia()
   setActivePinia(pinia)
-  const storeModule = evaluate(source('./pendingCounts.ts'), { pinia: { defineStore }, vue: { ref, onScopeDispose }, '@/api/entry-review': reviews, '@/api/ingest': ingest })
+  const storeModule = evaluate(source('./pendingCounts.ts'), { pinia: { defineStore }, vue: { ref, onScopeDispose }, '@/api/entry-review': reviews })
   const store = storeModule.usePendingCountsStore()
   t.after(async () => {
     store.$dispose()
@@ -143,7 +141,7 @@ function fixture(t: TestContext) {
     t.after(() => app.unmount())
     return root
   }
-  return { store, reviews, ingest, packets, next, batch, finish, badge, mountBadge }
+  return { store, reviews, packets, next, batch, finish, badge, mountBadge }
 }
 
 function pageHandlers(bindings: Record<string, unknown>) {
@@ -165,122 +163,69 @@ function pageHandlers(bindings: Record<string, unknown>) {
   return value.exports
 }
 
-test('mounting the navigation badge uses the real Vue lifecycle to load all queue counts', async t => {
+test('navigation badge loads only the intake count', async t => {
   const f = fixture(t)
   const root = f.mountBadge()
   assert.equal(f.store.loading, true)
-  const requests = await f.batch()
-  assert.ok(!root.children.some(node => node.kind === 'span'))
-  requests.forEach((packet, index) => packet.resolve(envelope(index + 1)))
+  const [packet] = await f.batch()
+  packet.resolve(envelope(4))
   for (let attempt = 0; attempt < 20 && f.store.loading; attempt++) await new Promise<void>(resolve => setImmediate(resolve))
   await nextTick()
-  assert.equal(f.store.total, 3)
-  const badge = root.children.find(node => node.kind === 'span')!
-  assert.ok(badge)
-  assert.equal(textOf(badge), '3')
-  assert.equal(badge.props['aria-label'], zh.ingestStatus.navCount.replace('{count}', '3'))
+  assert.equal(f.store.total, 4)
+  assert.equal(f.packets.length, 1)
+  assert.equal(textOf(root.children.find(node => node.kind === 'span')!), '4')
+  for (const locale of ['zh-CN', 'en-US'] as const) assert.match(await f.badge(locale), />4<\/span>/)
 })
 
-test('pending navigation loads and adds both queues through the authenticated HTTP wrapper', async t => {
+test('refresh hides the old count and renders a confirmed zero', async t => {
   const f = fixture(t)
+  await f.finish([6])
+  const reading = f.store.refresh()
   assert.equal(f.store.total, null)
-  const loading = f.store.refresh()
-  assert.equal(f.store.loading, true)
-  const requests = await f.batch()
-  for (const packet of requests) {
-    assert.equal(packet.config.baseURL, 'http://pending.test')
-    assert.equal(packet.config.headers.Authorization, undefined)
-    assert.equal(packet.config.headers['Accept-Language'], 'zh-CN')
-  }
-  requests[0]!.resolve(envelope(4))
-  assert.equal(f.store.total, null)
-  requests[1]!.resolve(envelope(9))
-  await loading
-  assert.equal(f.store.total, 13)
-  assert.equal(f.store.loading, false)
-  assert.deepEqual(f.packets.map(packet => packet.config.url), [...endpoints])
-  for (const locale of ['zh-CN', 'en-US'] as const) {
-    const html = await f.badge(locale)
-    assert.match(html, /class="pending-count"/)
-    assert.match(html, />13<\/span>/)
-    assert.ok(html.includes((locale === 'zh-CN' ? zh : en).ingestStatus.navCount.replace('{count}', '13')))
-  }
-})
-
-test('pending navigation hides the previous number while refreshing and renders a confirmed zero', async t => {
-  const f = fixture(t)
-  await f.finish([1, 5])
-  assert.equal(f.store.total, 6)
-  const loading = f.store.refresh()
-  assert.equal(f.store.total, null)
-  assert.ok(!(await f.badge('zh-CN')).includes('pending-count'))
-  ;(await f.batch()).forEach(packet => packet.resolve(envelope(0)))
-  await loading
+  ;(await f.batch())[0].resolve(envelope(0))
+  await reading
   assert.equal(f.store.total, 0)
   assert.match(await f.badge('en-US'), />0<\/span>/)
 })
 
-test('failure in any pending queue hides the entire navigation number and permits refresh', async t => {
+test('failed or invalid intake counts stay unknown and permit retry', async t => {
   const f = fixture(t)
-  for (let failedQueue = 0; failedQueue < 2; failedQueue++) {
-    await f.finish([2, 7])
-    const loading = f.store.refresh()
-    const requests = await f.batch()
-    requests.forEach((packet, index) => index === failedQueue ? packet.reject() : packet.resolve(envelope(20)))
-    await loading
+  for (const invalid of [null, { success: false, total: 5 }, { success: true }, envelope(-1), envelope(1.5), envelope(Number.MAX_SAFE_INTEGER + 1)]) {
+    const reading = f.store.refresh()
+    const [packet] = await f.batch()
+    if (invalid === null) packet.reject()
+    else packet.resolve(invalid)
+    await reading
     assert.equal(f.store.total, null)
     assert.equal(f.store.loading, false)
-    assert.ok(!(await f.badge('zh-CN')).includes('pending-count'))
   }
-  await f.finish([0, 3])
+  await f.finish([3])
   assert.equal(f.store.total, 3)
 })
 
-test('unsuccessful or invalid HTTP envelopes never produce a partial or invalid navigation sum', async t => {
-  const f = fixture(t)
-  for (const invalid of [{ success: false, total: 5 }, { success: true }, envelope(-1), envelope(1.5), envelope(Number.MAX_SAFE_INTEGER + 1)]) {
-    const loading = f.store.refresh()
-    const requests = await f.batch()
-    requests[0]!.resolve(envelope(4))
-        requests[1]!.resolve(invalid)
-    await loading
-    assert.equal(f.store.total, null)
-  }
-  await f.finish([Number.MAX_SAFE_INTEGER, 1])
-  assert.equal(f.store.total, null)
-})
-
-test('a delayed count snapshot or failure cannot replace a newer refresh result', async t => {
+test('a delayed snapshot or failure cannot replace a newer intake count', async t => {
   const f = fixture(t)
   for (const oldFails of [false, true]) {
     const old = f.store.refresh()
-    const oldRequests = await f.batch()
-    await f.finish([7, 17])
-    oldRequests.forEach((packet, index) => oldFails && index === 1 ? packet.reject() : packet.resolve(envelope(100)))
+    const [packet] = await f.batch()
+    await f.finish([24])
+    if (oldFails) packet.reject()
+    else packet.resolve(envelope(100))
     await old
     assert.equal(f.store.total, 24)
     assert.equal(f.store.loading, false)
   }
-  const old = f.store.refresh()
-  const oldRequests = await f.batch()
-  const current = f.store.refresh()
-  const currentRequests = await f.batch()
-  currentRequests.forEach((packet, index) => index === 0 ? packet.reject() : packet.resolve(envelope(3)))
-  await current
-  oldRequests.forEach(packet => packet.resolve(envelope(9)))
-  await old
-  assert.equal(f.store.total, null)
 })
 
-test('disposing the pending store prevents in-flight requests from restoring a navigation number', async t => {
+test('disposing the store prevents in-flight requests from restoring a count', async t => {
   const f = fixture(t)
-  const loading = f.store.refresh()
-  const requests = await f.batch()
+  const reading = f.store.refresh()
+  const [packet] = await f.batch()
   f.store.$dispose()
-  requests.forEach(packet => packet.resolve(envelope(3)))
-  await loading
+  packet.resolve(envelope(3))
+  await reading
   assert.equal(f.store.total, null)
   assert.equal(f.store.loading, false)
   await f.store.refresh()
-  assert.equal(f.packets.length, 2)
+  assert.equal(f.packets.length, 1)
 })

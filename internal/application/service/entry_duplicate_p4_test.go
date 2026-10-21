@@ -47,7 +47,6 @@ func TestP4UnrelatedEnglishBodiesStaySeparate(t *testing.T) {
 	require.GreaterOrEqual(t, incoming.ContentRuneCount, owner.ContentRuneCount*4/5)
 	require.LessOrEqual(t, incoming.ContentRuneCount, owner.ContentRuneCount*5/4)
 	require.Greater(t, bits.OnesCount64(uint64(owner.ContentSimHash)^uint64(incoming.ContentSimHash)), messageSimHashThreshold())
-	require.False(t, sameIngestBody(bank, marine))
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(owner).Error)
 	incoming.ContentSimHash = owner.ContentSimHash

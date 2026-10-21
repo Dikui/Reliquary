@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"reliquary/internal/application/service"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
@@ -63,80 +62,14 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 	tools, err := client.ListTools(context.Background(), nil)
 	require.NoError(t, err)
 	for _, tool := range tools.Tools {
-		if tool.Name == "ingest" || tool.Name == "check_urls" || tool.Name == "list_incomplete" {
+		if tool.Name == "ingest" || tool.Name == "check_urls" {
 			require.Contains(t, tool.Description, "送入 Markdown 正文全文与图片文件")
-			require.Contains(t, tool.Description, "补全时提供 library、entry_id 与图片")
+			require.Contains(t, tool.Description, "图片可选，未提供的图片不生成待办")
 		}
 		if tool.Name == "ingest" {
 			require.Contains(t, tool.Description, "10 MiB")
 			require.Contains(t, tool.Description, "20 MiB")
 		}
-	}
-}
-
-func TestMCPAndHTTPIncompleteListAcceptAndAcquisition(t *testing.T) {
-	f := newMCPFixture(t)
-	first := f.seedArticle(t, "Acquisitionfixture first", "full", "# Original\n\nUnchanged source text.\n")
-	attempted := f.seedArticle(t, "Acquisitionfixture attempted", "full", "# Other\n\nAnother original source text.\n")
-	for _, article := range []*types.Entry{first, attempted} {
-		article.Incomplete = true
-		article.Acquisition = "model_written"
-		article.NormalizedURL = article.Source
-		article.ExternalCompletionAttempted = article.ID == attempted.ID
-		require.NoError(t, article.SetIngestMissing([]types.IngestMissing{{Type: "image", SourceURL: "https://example.org/chart.png", Reason: "未提供图片文件"}}))
-		require.NoError(t, f.db.Save(article).Error)
-	}
-	client := f.connect(t, "2025-11-25")
-	var list types.IncompleteListResult
-	mcpCall(t, client, "list_incomplete", map[string]any{"page": 1, "page_size": 1}, &list)
-	require.EqualValues(t, 1, list.Total)
-	require.Len(t, list.Items, 1)
-	require.Equal(t, first.ID, list.Items[0].EntryID)
-	require.Equal(t, "model_written", list.Items[0].Acquisition)
-	require.Equal(t, "未提供图片文件", list.Items[0].Missing[0].Reason)
-	mcpCall(t, client, "list_incomplete", map[string]any{"page": 2, "page_size": 1}, &list)
-	require.Empty(t, list.Items)
-	var check types.IngestCheckResponse
-	mcpCall(t, client, "check_urls", map[string]any{"library": "official", "urls": []string{first.Source, "https://example.org/no-record"}}, &check)
-	require.Equal(t, "in_library", check.Items[0].Status)
-	require.True(t, check.Items[0].Incomplete)
-	require.Equal(t, "not_found", check.Items[1].Status)
-	for _, query := range []string{"", "?include_attempted=false", "?page=2&page_size=1"} {
-		response := personalRequest(t, f.router, http.MethodGet, "/api/v1/ingest/incomplete"+query, "", f.key, false)
-		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-		var result struct {
-			Data  []types.IncompleteArticle `json:"data"`
-			Total int64                     `json:"total"`
-		}
-		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
-		if query == "?include_attempted=false" {
-			require.EqualValues(t, 1, result.Total)
-		} else {
-			require.EqualValues(t, 2, result.Total)
-		}
-	}
-	var read service.EntryReadResult
-	mcpCall(t, client, "get_entry", map[string]any{"id": first.ID}, &read)
-	require.Equal(t, "model_written", read.Acquisition)
-	var search types.EntrySearchResponse
-	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "Acquisitionfixture", "collapse_similar": false}, &search)
-	require.Len(t, search.Results, 2)
-	for _, result := range search.Results {
-		require.Equal(t, "model_written", result.Acquisition)
-	}
-	var accepted types.IngestResult
-	mcpCall(t, client, "accept_incomplete", map[string]any{"id": first.ID}, &accepted)
-	require.Equal(t, first.ID, accepted.EntryID)
-	require.NoError(t, f.db.First(first, "id=?", first.ID).Error)
-	require.False(t, first.Incomplete)
-	require.Len(t, first.IngestMissing(), 1)
-	response := personalRequest(t, f.router, http.MethodPost, "/api/v1/ingest/"+attempted.ID+"/accept-incomplete", "", f.key, false)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var logs []types.OperationLog
-	require.NoError(t, f.db.Where("operation_type=?", "accept_incomplete").Find(&logs).Error)
-	require.Len(t, logs, 2)
-	for _, log := range logs {
-		require.Equal(t, "personal integration", log.APIKeyName)
 	}
 }
 
@@ -146,7 +79,7 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 	router.Use(middleware.ErrorHandler(), middleware.Auth(f.params.SpaceService, f.params.UserService, f.params.APIKeyService))
 	entries := f.articles.(interfaces.EntryService)
 	RegisterEntryRoutes(router.Group("/api/v1"), handler.NewEntryHandler(nil, entries, f.params.LibraryService, f.queue, nil), newAccessGuards(f.params.LibraryService, entries, nil))
-	library := &types.Entry{ID: "11111111-1111-4111-8111-111111111111", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, Type: "manual", SourceKind: "article", Source: "https://example.org/library", NormalizedURL: "https://example.org/library", Title: "In library", ParseStatus: types.ParseStatusCompleted, Incomplete: true, Acquisition: "extracted"}
+	library := &types.Entry{ID: "11111111-1111-4111-8111-111111111111", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, Type: "manual", SourceKind: "article", Source: "https://example.org/library", NormalizedURL: "https://example.org/library", Title: "In library", ParseStatus: types.ParseStatusCompleted, Acquisition: "extracted"}
 	require.NoError(t, library.SetIntakeMetadata(&types.EntryIntakeMetadata{Source: "ingest", Decision: "approved", SourceInfo: types.SourceInfo{OriginalURL: library.Source}}))
 	require.NoError(t, f.db.Create(library).Error)
 	pending := &types.Entry{ID: "22222222-2222-4222-8222-222222222222", SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, Type: "manual", SourceKind: "article", Source: "https://example.org/pending", NormalizedURL: "https://example.org/pending", Title: "Pending", ParseStatus: types.ParseStatusRejected, Acquisition: "extracted"}
@@ -166,7 +99,6 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 	for index, status := range []string{"in_library", "pending_review", "discarded", "not_found", "in_library"} {
 		require.Equal(t, status, checked.Data.Items[index].Status)
 	}
-	require.True(t, checked.Data.Items[0].Incomplete)
 	require.Equal(t, library.ID, checked.Data.Items[4].EntryID)
 	response = personalRequest(t, router, http.MethodPost, "/api/v1/ingest/"+pending.ID+"/discard", `{"reason":"用户丢弃原因"}`, f.key, false)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

@@ -183,17 +183,14 @@ test('entity relation groups filter libraries, source links retain positions, an
   }, async state => { state.deleting.value = relation; await state.remove(); assert.equal(state.deleting.value, null) })
   assert.deepEqual(calls, ['r'])
 })
-for (const locale of ['zh-CN', 'en-US']) test(`${locale}: pending review shows library and segment reason and filters both tabs by library`, async () => {
+for (const locale of ['zh-CN', 'en-US']) test(`${locale}: pending review shows library and segment reason and filters intake by library`, async () => {
   const calls: any[] = []
   const modules = {
     '@/composables/useLibraryScope': { useLibraryScope: () => ref(['mine']) }, '@/utils/security': { isValidURL: () => true },
     '@/api/entry-review': { listPendingEntry: async (input: any) => { calls.push(input); return { success: true, total: 1, data: [{ id: 'a', title: 'Pending', library_name: 'Notes', metadata: { intake: { reason: '第 2/3 段: body incomplete' } } }] } } },
-    '@/api/ingest': { listIncompleteEntrys: async (input: any) => { calls.push(input); return { success: true, data: [], total: 0 } } },
   }
   const html = await scenario('./views/library/components/PendingReviews.vue', {}, modules, async state => { await state.load() }, locale)
   assert.match(html, /Notes/); assert.match(html, /第 2\/3 段/); assert.deepEqual(calls[0].libraries, ['mine'])
-  const incomplete = await scenario('./views/library/components/PendingReviews.vue', {}, modules, async state => { state.kind.value = 'incomplete'; await state.load() }, locale)
-  assert.ok(incomplete.includes(locale === 'zh-CN' ? '按资料 ID 补交图片' : 'Submit missing images by material ID')); assert.deepEqual(calls[1].libraries, ['mine'])
 })
 
 test('mounted relation source opens exact body position and suppression deletion waits for confirm', async () => {

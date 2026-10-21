@@ -44,9 +44,6 @@ export default function (defaultLibraryId?: string) {
     acquisition: undefined as ClassifiedEntry['acquisition'],
     ingest_api_key_name: '',
     last_ingest_api_key_name: '',
-    incomplete: false,
-    missing_materials: [] as NonNullable<ClassifiedEntry['missing_materials']>,
-    external_completion_attempted: false,
     related_entry_id: '',
     structured_summary: null as StructuredSummary | null,
     entities: [] as NonNullable<ClassifiedEntry['entities']>,
@@ -72,7 +69,6 @@ export default function (defaultLibraryId?: string) {
       file_type?: string;
       content_type?: string;
       starred?: boolean;
-      incomplete?: boolean;
       parse_status?: string;
       source?: string;
       source_kind?: ClassifiedEntry['source_kind'];
@@ -184,9 +180,6 @@ export default function (defaultLibraryId?: string) {
       acquisition: undefined,
       ingest_api_key_name: '',
       last_ingest_api_key_name: '',
-      incomplete: false,
-      missing_materials: [],
-      external_completion_attempted: false,
       related_entry_id: '',
       structured_summary: null,
       entities: [],
@@ -236,9 +229,6 @@ export default function (defaultLibraryId?: string) {
             acquisition: data.acquisition,
             ingest_api_key_name: data.ingest_api_key_name || '',
             last_ingest_api_key_name: data.last_ingest_api_key_name || '',
-            incomplete: Boolean(data.incomplete),
-            missing_materials: Array.isArray(data.missing_materials) ? data.missing_materials : [],
-            external_completion_attempted: Boolean(data.external_completion_attempted),
             related_entry_id: data.related_entry_id || '',
             structured_summary: data.structured_summary || null,
             entities: Array.isArray(data.entities) ? data.entities : [],

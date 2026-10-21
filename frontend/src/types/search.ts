@@ -33,7 +33,6 @@ export interface SearchEntry {
   cannot_be_fact?: boolean
   source_unverified?: boolean
   acquisition?: Acquisition | ''
-  incomplete?: boolean
 }
 export interface SearchFilters {
   content_types: string[]

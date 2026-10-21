@@ -26,8 +26,6 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 	r.POST("/ingest", handler.Ingest)
 	r.POST("/ingest/check", handler.CheckIngestURLs)
 	r.POST("/ingest/assets", handler.UploadIngestAsset)
-	r.GET("/ingest/incomplete", handler.ListIncomplete)
-	r.POST("/ingest/:id/accept-incomplete", g.LibraryExistsFromEntryIDParam("id"), handler.AcceptIncomplete)
 	r.POST("/ingest/:id/discard", g.LibraryExistsFromEntryIDParam("id"), handler.DiscardIngest)
 	r.DELETE("/documents/:id", g.LibraryExistsFromEntryIDParam("id"), handler.DeleteDocument)
 	r.GET("/entries", handler.ListEntry)

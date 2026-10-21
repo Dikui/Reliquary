@@ -15,7 +15,6 @@ type EntryBatchFilters struct {
 	FileType        string   `json:"file_type,omitempty"`
 	ContentType     string   `json:"content_type,omitempty"`
 	Starred         *bool    `json:"starred,omitempty"`
-	Incomplete      *bool    `json:"incomplete,omitempty"`
 	ParseStatus     string   `json:"parse_status,omitempty"`
 	Source          string   `json:"source,omitempty"`
 	SourceKind      string   `json:"source_kind,omitempty"`

@@ -1012,9 +1012,6 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		}
 		storedImages = images
 
-		if err := s.recordMissingIngestImages(ctx, entry, convertResult.MarkdownContent); err != nil {
-			return err
-		}
 		if intake, _ := entry.IntakeMetadata(); intake != nil && s.hasUnstoredArticleImages(entry, convertResult.MarkdownContent) {
 			return fmt.Errorf("intake has unstored content images")
 		}

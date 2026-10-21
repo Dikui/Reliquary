@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -138,33 +137,6 @@ func ingestInlineSize(images []types.IngestImage) int64 {
 	return total
 }
 
-func hasIngestMissing(items []types.IngestMissing, kind, source string) bool {
-	for _, item := range items {
-		if item.Type == kind && (source == "" || item.SourceURL == source) && strings.TrimSpace(item.Reason) != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func stampIngestMissing(items []types.IngestMissing, id uint64, name string) []types.IngestMissing {
-	result := make([]types.IngestMissing, 0, len(items))
-	for _, item := range items {
-		item.APIKeyID, item.APIKeyName, item.SubmittedAt = id, name, time.Now()
-		exists := false
-		for _, previous := range result {
-			if previous.Type == item.Type && previous.SourceURL == item.SourceURL {
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
 func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.Library, article *types.Entry, request *types.IngestRequest) (string, string, error) {
 	copy := *request
 	if validIngestURL(strings.TrimSpace(copy.Content)) {
@@ -172,7 +144,6 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.
 	}
 	intake, _ := article.IntakeMetadata()
 	files := s.resolveFileService(ctx, library)
-	missing := stampIngestMissing(request.Missing, article.LastIngestAPIKeyID, article.LastIngestAPIKeyName)
 	canonicalRefs := make([]string, len(copy.Images))
 	imageInputs := append([]types.IngestImage(nil), copy.Images...)
 	for i := range imageInputs {
@@ -209,11 +180,6 @@ func (s *entryService) storeIngestMaterials(ctx context.Context, library *types.
 			body = replaceIngestImageTargets(body, map[string]string{source: ref})
 			canonical = replaceIngestImageTargets(canonical, map[string]string{source: canonicalRefs[i]})
 		}
-	}
-	missing = addRemoteIngestImageMissing(body, missing, article.LastIngestAPIKeyID, article.LastIngestAPIKeyName)
-	article.Incomplete = len(missing) > 0
-	if err := article.SetIngestMissing(missing); err != nil {
-		return "", "", err
 	}
 	article.VaultBody = body
 	intake.OriginalPath = ""
@@ -271,51 +237,6 @@ func replaceIngestImageTargets(body string, mappings map[string]string) string {
 	return body
 }
 
-func addRemoteIngestImageMissing(body string, items []types.IngestMissing, id uint64, name string) []types.IngestMissing {
-	for _, ref := range articleImagesInOrder(body, nil) {
-		if !validIngestURL(ref) || hasIngestMissing(items, "image", ref) {
-			continue
-		}
-		items = append(items, types.IngestMissing{Type: "image", SourceURL: ref, Reason: "未提供图片文件", APIKeyID: id, APIKeyName: name, SubmittedAt: time.Now()})
-	}
-	return items
-}
-
-// This dedicated update preserves collection-owned columns across processing
-// snapshots. It never attempts to resolve or fetch the scanned image targets.
-func (s *entryService) recordMissingIngestImages(ctx context.Context, k *types.Entry, body string) error {
-	old := k.IngestMissing()
-	missing := addRemoteIngestImageMissing(body, old, k.LastIngestAPIKeyID, k.LastIngestAPIKeyName)
-	if len(old) == len(missing) {
-		return nil
-	}
-	if err := k.SetIngestMissing(missing); err != nil {
-		return err
-	}
-	k.Incomplete = true
-	return s.repo.UpdateEntryColumns(ctx, k.ID, map[string]any{"missing_materials": k.MissingMaterials, "incomplete": true, "updated_at": time.Now()})
-}
-
-func (s *entryService) readIngestBody(ctx context.Context, library *types.Library, k *types.Entry) (string, error) {
-	if k.VaultBody != "" || k.VaultPath != "" {
-		return k.VaultBody, nil
-	}
-	intake, err := k.IntakeMetadata()
-	if err != nil {
-		return "", err
-	}
-	if intake == nil || intake.OriginalPath == "" {
-		return "", nil
-	}
-	file, err := s.resolveFileServiceForPath(ctx, library, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	data, err := io.ReadAll(file)
-	return string(data), err
-}
-
 // The transaction wrapper restores published bytes if any later durable write
 // fails, and removes newly saved unreferenced material.
 type ingestFileChangesKey struct{}
@@ -329,9 +250,9 @@ type ingestVaultFile struct {
 	path    string
 }
 type ingestFileChanges struct {
-	supplements []*vaultArticleSupplement
-	stored      []ingestStoredFile
-	vaultFiles  []ingestVaultFile
+	contentUpdates []*vaultArticleContentUpdate
+	stored         []ingestStoredFile
+	vaultFiles     []ingestVaultFile
 }
 
 func rememberIngestStoredFile(ctx context.Context, files interfaces.FileService, path string) error {
@@ -353,8 +274,8 @@ func rememberIngestStoredFile(ctx context.Context, files interfaces.FileService,
 }
 func (c *ingestFileChanges) rollback(v *VaultService) error {
 	var err error
-	for i := len(c.supplements) - 1; i >= 0; i-- {
-		err = errors.Join(err, c.supplements[i].rollback())
+	for i := len(c.contentUpdates) - 1; i >= 0; i-- {
+		err = errors.Join(err, c.contentUpdates[i].rollback())
 	}
 	if v != nil {
 		for _, file := range c.vaultFiles {
@@ -372,7 +293,7 @@ func (c *ingestFileChanges) rollback(v *VaultService) error {
 }
 func (c *ingestFileChanges) finish() error {
 	var err error
-	for _, change := range c.supplements {
+	for _, change := range c.contentUpdates {
 		err = errors.Join(err, change.finish())
 	}
 	return err

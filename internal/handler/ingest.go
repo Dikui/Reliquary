@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	werrors "reliquary/internal/errors"
@@ -125,55 +124,6 @@ func (h *EntryHandler) UploadIngestAsset(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": result})
-}
-
-func (h *EntryHandler) ListIncomplete(c *gin.Context) {
-	if !h.applyLibraryReadScope(c) {
-		return
-	}
-	page, size := 0, 0
-	for key, target := range map[string]*int{"page": &page, "page_size": &size} {
-		if raw := c.Query(key); raw != "" {
-			value, err := strconv.Atoi(raw)
-			if err != nil || value < 1 {
-				c.Error(werrors.NewBadRequestError(key + " must be positive"))
-				return
-			}
-			*target = value
-		}
-	}
-	includeAttempted := true
-	if raw := c.Query("include_attempted"); raw != "" {
-		value, err := strconv.ParseBool(raw)
-		if err != nil {
-			c.Error(werrors.NewBadRequestError("include_attempted must be true or false"))
-			return
-		}
-		includeAttempted = value
-	}
-	collector := h.ingestService(c)
-	if collector == nil {
-		return
-	}
-	result, err := collector.ListIncomplete(c.Request.Context(), page, size, includeAttempted)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": result.Items, "total": result.Total, "page": result.Page, "page_size": result.PageSize})
-}
-
-func (h *EntryHandler) AcceptIncomplete(c *gin.Context) {
-	collector := h.ingestService(c)
-	if collector == nil {
-		return
-	}
-	result, err := collector.AcceptIncomplete(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
 }
 
 func (h *EntryHandler) DiscardIngest(c *gin.Context) {

@@ -9,24 +9,22 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | 字段 | 规则 |
 | --- | --- |
 | `library` | 每项必填，库 ID 或英文目录名。不能用中文名称。缺少或不存在时提示调用 `list_libraries` |
-| `content` | 新收录必填，非空 Markdown 全文，不能只有一个链接。上限 5,000,000 Unicode 码点；补全时可省略 |
+| `content` | 新收录必填，非空 Markdown 全文，不能只有一个链接。上限 5,000,000 Unicode 码点 |
 | `acquisition` | 新收录必填：`verbatim` 逐字原文、`extracted` 提取、`model_written` 模型整理 |
 | `source_ref` | 仅自有型库接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库同来源按最新记录的正文判断重复 |
 | `identifier` | 仅外部长效型库接受。可选 `scheme:value`，最多 2048 Unicode 码点。去两部分首尾空白，scheme 小写，DOI 的 value 也小写。其他 scheme 的值保留大小写。在所属库内参与去重 |
 | `graph` | 可选布尔值，保存在资料上；未提供或 null 表示按库和内容类型默认。仅外部时效型库在处理时依该值和内容类型开关抽取图谱；自有型、外部长效型和生成型库不抽图谱，即使设为 true |
-| `entry_id` | 仅补全使用，已有资料 ID。HTTP 与 MCP 均使用 `entry_id`，不接受旧字段别名 |
 | `recovery_failure_id` | 可选接收故障编号，用于关联修复请求与结果；不参与正文、来源身份或去重 |
 | `url` | 可选来源链接，可为空；非空必须为 HTTP 或 HTTPS，最多 2048 字节。现有外部来源审核仍可能要求链接 |
 | `title` | 可选标题，最多 255 个码点；AI产出需要标题 |
 | `author`、`publisher`、`published_at` | 可选来源信息；日期使用 YYYY-MM-DD 或 RFC3339 |
 | `images` | 可选图片列表，最多 100 项，见下节 |
-| `missing` | 仅图片缺失：`type=image`、`source_url` 和非空 `reason` |
 | `content_type_hint` | 可选分类提示，不替代处理结果 |
 | `thread`、`quotes` | 可选有序正文片段与引用；每项 `content` 必填，合计正文仍受 500 万码点限制 |
 | `collect_reason` | 收藏理由 |
 | `agent_summary`、`agent_tags`、`source_name` | 调用方注释，保存数据库，不进入正文或处理提示词 |
 
-`kind`、`document_id`、`file` 和未知字段被拒绝。向其他模板提交空字符串 `source_ref` 或 `identifier` 也会被拒绝。
+`kind`、`document_id`、`file`、`entry_id`、`missing` 和未知字段被拒绝。向其他模板提交空字符串 `source_ref` 或 `identifier` 也会被拒绝。
 
 技术故障的逐项结果可附带 `diagnostics: {failure_id, package_status, recorded}`；明确拒绝不保留故障包。`recorded=false` 表示未成功落盘。使用[接收故障查询接口](external-integration.md#接收故障与短期故障包)读取原始输入和图片，再通过本接口修正提交。`outcome=unknown` 时先核对现有资料与任务；`accepted` 仍只表示已接收。
 
@@ -76,7 +74,7 @@ AI产出：
 {"items":[{"library":"ai-output","title":"研究报告","content":"# 研究报告\n\n综合分析内容。","acquisition":"model_written","graph":false}]}
 ```
 
-## 审核、去重和补全
+## 审核与去重
 
 审核提示词使用资料所属库的 `review_criteria`，结果与原因写入收录审核记录。生成型不调用审核或处理模型，只保存并建立索引。本文规则适用于系统库和用户按模板新建的库；显示名称与目录名不决定行为。
 
@@ -100,7 +98,7 @@ AI产出：
 
 来源未核实标记在 HTTP/MCP 收录结果、资料列表、详情、正文读取、检索和关注动态返回中保留。网页沿用已有标记位置。缺链接的待审条目继续支持补链接并重新审核、明确确认无链接入库、确认不收录。补上链接后清除未核实标记；无链接手工入库仍标记未核实。
 
-图片缺失继续标记为“缺少图片”。调用方按 `library` 与 `entry_id` 定位原资料，补全成功后重新处理，撤换旧关系证据并重新计算正文位置；缺少图片与来源证据不足分别处理。长文按文末规则分段审核。
+未提供的图片保留正文原引用，不生成缺图状态、待办或缺失原因记录。长文按文末规则分段审核。
 
 ## 更新已有资料的正文
 
@@ -127,7 +125,7 @@ curl -X PUT "$RELIQUARY_URL/api/v1/entries/$ENTRY_ID/body" \
 
 未归档、正在处理或删除、所属库有未完成任务时返回 HTTP 409，等待完成或取消任务后重试。数据库写入或任务提交失败时，数据库、Markdown 文件和本次新增附件一起回滚，用户上传的源附件仍可重试使用。此接口不保留旧正文版本，也不通过删除再收录实现更新，不产生丢弃指纹。
 
-正文可直接保留本资料已有附件的相对引用，无须重复上传。提供新图片时创建独立附件，不覆盖原文件。非生成型正文中未提供图片文件的远程链接仍标记缺图，之后可用现有 `ingest` 补全；未提供文件的其他本地引用会被拒绝。
+正文可直接保留本资料已有附件的相对引用，无须重复上传。提供新图片时创建独立附件，不覆盖原文件。未提供图片文件的远程链接保留原引用，不生成待办；未提供文件的其他本地引用会被拒绝。
 
 原有 `ingest` 的规则不变：自有型同一 `source_ref` 提交变化正文仍新增记录；只有本节接口会修改原记录。修改同来源的历史记录不会改变创建时间，也不会使它成为最新记录。
 
@@ -137,19 +135,18 @@ curl -X PUT "$RELIQUARY_URL/api/v1/entries/$ENTRY_ID/body" \
 
 资料详情、HTTP 收录结果、MCP 收录与 `get_entry` 返回 `source_ref`、`identifier`、`graph`、`source_unverified`、`has_update`、`latest_entry_id`。`has_update=true` 表示存在更新记录，`latest_entry_id` 指向同库同来源最新的未删除记录。最新记录本身返回 false 与自己的 ID；无来源标识时不提供最新 ID。历史记录的查询、正文与时间保持不变。
 
-逐项结果另含 `index`、`library_id`、`entry_id`、`status`、`message`、`reason`、`image_failures`、`completeness`。状态包括 `accepted`、`exists`、`supplemented`、`pending_review`、`conflict`、`discarded`、`invalid`。无效项原因可包含：
+逐项结果另含 `index`、`library_id`、`entry_id`、`status`、`message`、`reason`、`image_failures`。状态包括 `accepted`、`exists`、`pending_review`、`discarded`、`invalid`。无效项原因可包含：
 
 | 错误 | 返回方式与信息 |
 | --- | --- |
 | 缺库或库不存在 | HTTP 200 的对应项 `invalid`，原因包含 `library` 与 `call list_libraries` |
 | 字段不适用于库 | 对应项 `invalid`，原因包含 `source_ref is only accepted by own libraries` 或 `identifier is only accepted by external_durable libraries` |
-| 错误、跨库或未标记缺少图片的 ID | 对应项 `invalid`，原因分别包含 `does not identify an existing entry`、`different library`、`not awaiting image completion` |
 | 正文缺失或超长、标识格式无效 | 对应项 `invalid`，或流式读取时立即拒绝超长请求；给出具体字段与上限 |
 | JSON 语法、批量包络或字节上限错误 | HTTP 400，应用错误码 `1000`；MCP 返回工具错误，流式读取超限为带具体原因的 HTTP 400 |
 
 `POST /api/v1/ingest/check` 接收 `{"library":"official","urls":["https://example.org/release"]}`。每次 1 至 100 个链接；缺库或库不存在时每个链接返回 `invalid` 和原因。已存在结果为 `in_library` 或 `pending_review`；其他状态为 `not_found`、`discarded`。自有型资料不按链接判重。生成型也不按链接判重。所有查询仅在指定库生效。
 
-## 图片与按资料 ID 补全
+## 图片提交
 
 先上传图片：
 
@@ -164,21 +161,9 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 
 审核、摘要、图片向量及重排统一按需生成模型输入副本：最长边不超过 4096 像素、总像素不超过 800 万、编码后不超过 8 MiB。合格 JPEG、PNG、WebP 保持原字节；其他图片等比缩放并优先编码 PNG，超限时转 JPEG，透明区域合成到白底。副本不长期另存。图片预处理串行执行，解码前检查约 1.5 GiB 的工作集预算。永久图片输入错误不自动重试；网络故障和限流继续使用原有重试。
 
-首次收录缺图片：
+图片可在首次收录时通过 `images` 提交。正文中的远程图片引用也可直接保留，不需要单独声明缺失原因。服务端不下载远程图片。
 
-```json
-{"items":[{"library":"personal","source_ref":"notes/figure.md","title":"测量记录","content":"# 测量\n\n完整正文。\n\n![图表](https://example.org/chart.png)","acquisition":"verbatim","missing":[{"type":"image","source_url":"https://example.org/chart.png","reason":"暂未取得图片"}]}]}
-```
-
-补全只凭库与资料 ID 定位，无须 URL 或再次提交正文：
-
-```json
-{"items":[{"library":"personal","entry_id":"首次收录返回的 entry_id","images":[{"asset_id":"上传返回的 asset_id","source_url":"https://example.org/chart.png"}]}]}
-```
-
-补全把正文中匹配的图片引用替换为本地路径，文字保持原样。可选 `content` 用于旧有正文冲突检查；不同正文另存关联收录待审，返回 `conflict`，不覆盖原资料。保留原有规范化与近似正文比较规则。不能用相同 URL 自动补全。图片替换后重新计算保存正文的哈希和位置，检索与关系证据使用更新后的坐标。
-
-`GET /api/v1/ingest/incomplete?page=1&page_size=20` 列出缺少图片的资料，含 `entry_id`、`library_id` 与缺失图片。`include_attempted=false` 排除已尝试补全一次的资料。`POST /api/v1/ingest/:id/accept-incomplete` 接受缺失，`POST /api/v1/ingest/:id/discard` 丢弃资料，可附 `reason`。
+已有资料需要增加或替换图片时，使用上文的正文更新接口，一并提交完整正文和图片。`ingest` 只用于新增收录，不再接受 `entry_id` 或 `missing`。缺图清单、接受缺失的 HTTP 接口与 MCP 工具已移除。
 
 ## 长度和传输上限
 
@@ -194,7 +179,7 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ingest","arguments":{"items":[{"library":"personal","source_ref":"notes/mcp.md","content":"# 笔记\n\n通过 MCP 收录的正文。","acquisition":"verbatim","graph":false}]}}}
 ```
 
-先 `initialize`，随后请求 `/mcp`，使用 Bearer API Key、`Accept: application/json, text/event-stream` 和协商的 `MCP-Protocol-Version`。`list_libraries` 返回库用途、模板、审核和来源说明、去重说明及 `accepted_fields`。`check_urls` 参数与 HTTP 相同。`list_incomplete`、`accept_incomplete` 可用于发现和处理缺图片的资料；图片上传仍走 HTTP。
+先 `initialize`，随后请求 `/mcp`，使用 Bearer API Key、`Accept: application/json, text/event-stream` 和协商的 `MCP-Protocol-Version`。`list_libraries` 返回库用途、模板、审核和来源说明、去重说明及 `accepted_fields`。`check_urls` 参数与 HTTP 相同。图片上传走 HTTP，已有资料的正文和图片更新使用 `update_entry_content`。
 
 ## AI产出收录
 

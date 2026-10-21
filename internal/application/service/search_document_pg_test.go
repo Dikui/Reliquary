@@ -13,7 +13,7 @@ func TestImportedDocumentSearchUsesSummaryFiltersAndFolding(t *testing.T) {
 	mine := h.add(t, "imported", "mine", "2026-10-01", "tutorial", "semanticlaunch", 0)
 	mine.StructuredSummary = &types.EntrySummary{Overview: "semanticlaunch", Points: []string{"Recorded procedure"}}
 	mine.Description = mine.StructuredSummary.RenderText()
-	mine.Incomplete, mine.Starred = true, true
+	mine.Starred = true
 	require.NoError(t, h.db.Save(mine).Error)
 	vector := pgvector.NewHalfVector(entrySearchFixtureEmbedding(mine.Title + "\n" + mine.Description))
 	require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
@@ -27,7 +27,6 @@ func TestImportedDocumentSearchUsesSummaryFiltersAndFolding(t *testing.T) {
 	starred := true
 	result := h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", Sources: []string{"mine"}, ContentTypes: []string{"tutorial"}, EntityIDs: []string{"document-entity"}, TopicIDs: []string{"document-topic"}, Starred: &starred, CollapseSimilar: entrySearchNoCollapse()})
 	require.Equal(t, []string{mine.ID}, entrySearchIDs(result))
-	require.True(t, result.Results[0].Incomplete)
 	require.NotNil(t, result.Results[0].Summary)
 	require.Len(t, result.Results[0].Entities, 1)
 	require.Len(t, result.Results[0].Topics, 1)

@@ -338,7 +338,7 @@ func DeleteEntriesTx(tx *gorm.DB, spaceID uint64, ids []string, hard bool) error
 		if err != nil {
 			return err
 		}
-		if latest.Incomplete || latest.ParseStatus != types.ParseStatusCompleted {
+		if latest.ParseStatus != types.ParseStatusCompleted {
 			continue
 		}
 		if latest.VaultBody != "" && output.BodyHash != fmt.Sprintf("%x", sha256.Sum256([]byte(latest.VaultBody))) {

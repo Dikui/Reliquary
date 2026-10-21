@@ -131,11 +131,11 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 			continue
 		}
 		if !isArticleAttachmentReference(id, entry.VaultPath, ref) {
-			return nil, werrors.NewBadRequestError("正文中的图片只支持本资料已有附件或远程图片链接；新图片请标记缺图后通过 ingest 补全")
+			return nil, werrors.NewBadRequestError("正文中的图片只支持本资料已有附件或远程图片链接；新图片请通过 images 提交")
 		}
 		image, err := s.vault.ReadImage(entry, ref)
 		if err != nil {
-			return nil, werrors.NewBadRequestError("正文引用的本地图片不可读，请保留有效附件或通过 ingest 补图")
+			return nil, werrors.NewBadRequestError("正文引用的本地图片不可读，请保留有效附件或通过 images 提交图片")
 		}
 		if err := image.Close(); err != nil {
 			return nil, err
@@ -160,10 +160,9 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 		return nil, err
 	}
 	changes := ctx.Value(ingestFileChangesKey{}).(*ingestFileChanges)
-	changes.supplements = append(changes.supplements, change)
+	changes.contentUpdates = append(changes.contentUpdates, change)
 	entry.Acquisition = acquisition
 	entry.LastIngestAPIKeyID, entry.LastIngestAPIKeyName = keyID, keyName
-	entry.ExternalCompletionAttempted = false
 	setMessageFingerprint(entry, canonical)
 	resetEntryForReparse(entry, &library)
 	entry.UpdatedAt = time.Now()
@@ -197,11 +196,6 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 		if err := entry.SetIntakeMetadata(intake); err != nil {
 			return nil, err
 		}
-		missing := addRemoteIngestImageMissing(content, nil, keyID, keyName)
-		entry.Incomplete = len(missing) > 0
-		if err := entry.SetIngestMissing(missing); err != nil {
-			return nil, err
-		}
 		if err := advanceSegmentGeneration(entry, "processing"); err != nil {
 			return nil, err
 		}
@@ -214,8 +208,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	}
 	if err := s.repo.UpdateEntryColumns(ctx, id, map[string]any{
 		"source_body_hash": entry.SourceBodyHash, "pending_subtasks_count": 0,
-		"acquisition": entry.Acquisition, "incomplete": entry.Incomplete,
-		"missing_materials": entry.MissingMaterials, "external_completion_attempted": false,
+		"acquisition":            entry.Acquisition,
 		"last_ingest_api_key_id": keyID, "last_ingest_api_key_name": keyName,
 	}); err != nil {
 		return nil, err

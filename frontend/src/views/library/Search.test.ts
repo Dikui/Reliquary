@@ -170,8 +170,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const api = ingestSearchAPI({ acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) })
       const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, api.searchEntries, locale)
       assert.equal(result.html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
-      assert.equal(result.html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
-      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+      assert.equal(result.html.includes(messages[locale].ingestStatus.incomplete), false)
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(result.html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
     }
@@ -183,8 +183,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const html = await render(articleComponent(), { article: result.data.results[0], query: 'Launch' }, locale, async state => { state.expanded.value = true })
       const nested = html.slice(html.indexOf('data-article-id="nested"'))
       assert.equal(nested.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
-      assert.equal(nested.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
-      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+      assert.equal(nested.includes(messages[locale].ingestStatus.incomplete), false)
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(nested.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
     }
@@ -297,14 +297,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       } })
       const html = await render(palette, {}, locale)
       assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
-      assert.equal(html.includes(messages[locale].ingestStatus.incomplete), Boolean(flagged))
-      for (const hint of [messages[locale].ingestStatus.modelWrittenHint, messages[locale].ingestStatus.incompleteHint]) {
+      assert.equal(html.includes(messages[locale].ingestStatus.incomplete), false)
+      for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
     }
     const template = readFileSync(new URL('../../components/GlobalCommandPalette.vue', import.meta.url), 'utf8')
     assert.match(template, /:acquisition="item.file.acquisition"/)
-    assert.match(template, /:incomplete="item.file.incomplete"/)
+    assert.doesNotMatch(template, /:incomplete=/)
   })
   test(`${locale}: dependency failures render a localized message and retain retry without upstream text`, async () => {
     let attempts = 0

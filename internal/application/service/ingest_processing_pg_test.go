@@ -45,7 +45,6 @@ func TestIngestProcessingNeverFetchesRemoteImages(t *testing.T) {
 			imageURL := "https://example.org/unprovided.png"
 			if structured {
 				request.Images = []types.IngestImage{{SourceURL: imageURL, Caption: "Original figure"}}
-				request.Missing = []types.IngestMissing{{Type: "image", SourceURL: imageURL, Reason: "来源拒绝提供图片文件"}}
 			} else {
 				request.Content += "\n\n![figure](" + imageURL + ")"
 			}
@@ -55,12 +54,6 @@ func TestIngestProcessingNeverFetchesRemoteImages(t *testing.T) {
 			h.drain(t)
 			article := h.article(t, result.EntryID)
 			require.Equal(t, types.ParseStatusCompleted, article.ParseStatus, article.ErrorMessage)
-			require.True(t, article.Incomplete)
-			require.Len(t, article.IngestMissing(), 1)
-			require.Equal(t, imageURL, article.IngestMissing()[0].SourceURL)
-			if !structured {
-				require.Equal(t, "未提供图片文件", article.IngestMissing()[0].Reason)
-			}
 			_, _, body := readVaultArticle(t, v, article)
 			require.Contains(t, string(body), imageURL)
 			require.Empty(t, h.processor.requests[0][1].Images)
@@ -74,19 +67,16 @@ func TestIngestProcessingNeverFetchesRemoteImages(t *testing.T) {
 
 func TestIngestOwnedFieldsSurviveBackgroundSnapshots(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", URL: "https://example.org/ownership", Acquisition: "model_written", Content: "A glacier observation records mass balance and physical sampling procedures.", Missing: []types.IngestMissing{{Type: "image", SourceURL: "https://example.org/figure.png", Reason: "图片暂不可用"}}})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", URL: "https://example.org/ownership", Acquisition: "model_written", Content: "A glacier observation records mass balance and physical sampling procedures."})
 	require.NoError(t, err)
 	article := h.article(t, result.EntryID)
 	stale := *article
-	stale.Incomplete, stale.ExternalCompletionAttempted, stale.Acquisition = false, true, ""
-	stale.MissingMaterials, stale.IngestAPIKeyName = types.JSON(`[]`), "stale"
+	stale.Acquisition = ""
+	stale.IngestAPIKeyName = "stale"
 	stale.Description = "background summary"
 	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, &stale))
 	current := h.article(t, article.ID)
-	require.True(t, current.Incomplete)
-	require.False(t, current.ExternalCompletionAttempted)
 	require.Equal(t, "model_written", current.Acquisition)
 	require.Equal(t, article.IngestAPIKeyName, current.IngestAPIKeyName)
-	require.Equal(t, article.MissingMaterials, current.MissingMaterials)
 	require.Equal(t, "background summary", strings.TrimSpace(current.Description))
 }

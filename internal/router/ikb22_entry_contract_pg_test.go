@@ -30,7 +30,7 @@ func requireEntryWireKeys(t *testing.T, value any) {
 			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers":
 				continue
 			}
-			for _, retired := range []string{"article_id", "article_ids", "latest_article_id", "related_article_id", "related_article_ids", "knowledge_id", "knowledge_ids", "knowledge", "article_count", "recent_article_count", "failed_articles"} {
+			for _, retired := range []string{"incomplete", "missing_materials", "external_completion_attempted", "completeness", "article_id", "article_ids", "latest_article_id", "related_article_id", "related_article_ids", "knowledge_id", "knowledge_ids", "knowledge", "article_count", "recent_article_count", "failed_articles"} {
 				require.NotEqual(t, retired, key, "retired wire key")
 			}
 			requireEntryWireKeys(t, child)
@@ -76,7 +76,7 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 	}
 	for _, transport := range []string{"http", "mcp"} {
 		t.Run(transport, func(t *testing.T) {
-			input := map[string]any{"items": []any{map[string]any{"library": "personal", "source_ref": "contract/" + transport, "title": "Contract " + transport, "content": "# Contract\n\nComplete evidence for " + transport, "acquisition": "verbatim", "missing": []any{map[string]any{"type": "image", "source_url": "https://example.test/image.png", "reason": "Unavailable"}}}}}
+			input := map[string]any{"items": []any{map[string]any{"library": "personal", "source_ref": "contract/" + transport, "title": "Contract " + transport, "content": "# Contract\n\nComplete evidence for " + transport, "acquisition": "verbatim"}}}
 			var out map[string]any
 			if transport == "http" {
 				out = httpCall(http.MethodPost, "/contract/ingest", input)["data"].(map[string]any)
@@ -87,9 +87,7 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 			require.Equal(t, "accepted", item["status"])
 			id := item["entry_id"].(string)
 			require.NotEmpty(t, id)
-			// The fixture does not run background workers. Explicitly settle processing
-			// so this case tests the supplement contract without a concurrent worker.
-			require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", id).Update("parse_status", "completed").Error)
+			// Retired image-completion requests must be rejected before any mutation.
 			supplement := map[string]any{"items": []any{map[string]any{"library": "personal", "entry_id": id, "images": []any{map[string]any{"source_url": "https://example.test/image.png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII="}}}}}
 			if transport == "http" {
 				out = httpCall("POST", "/contract/ingest", supplement)["data"].(map[string]any)
@@ -97,8 +95,8 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 				out = call("ingest", supplement)
 			}
 			item = out["items"].([]any)[0].(map[string]any)
-			require.Equal(t, "supplemented", item["status"])
-			require.Equal(t, id, item["entry_id"])
+			require.Equal(t, "invalid", item["status"])
+			require.Contains(t, item["reason"], "entry_id")
 			for _, old := range []string{"article_id", "knowledge_id"} {
 				bad := map[string]any{"items": []any{map[string]any{"library": "personal", old: id, "images": []any{}}}}
 				if transport == "http" {

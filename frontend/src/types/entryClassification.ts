@@ -1,5 +1,5 @@
 import type { Entity } from '@/api/entities'
-import type { Acquisition, MissingMaterial } from './ingest'
+import type { Acquisition } from './ingest'
 
 export const CONTENT_TYPES = ['event', 'opinion', 'research', 'tutorial', 'case', 'reference', 'other'] as const
 export type ContentType = typeof CONTENT_TYPES[number]
@@ -13,9 +13,6 @@ export interface ClassifiedEntry {
  library_content_types?: { name: string; enabled: boolean; extract_graph: boolean; position: number }[]
  image_descriptions?: { url: string; description?: string; skip_reason?: string; ordinal: number; locations: { paragraph: number; start: number; end: number }[] }[]
   acquisition?: Acquisition | ''
-  incomplete?: boolean
-  external_completion_attempted?: boolean
-  missing_materials?: MissingMaterial[]
   related_entry_id?: string
   starred?: boolean
   cannot_be_fact?: boolean

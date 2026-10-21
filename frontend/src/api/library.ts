@@ -61,7 +61,6 @@ export function listEntryFiles(
     file_type?: string;
     content_type?: string;
     starred?: boolean;
-    incomplete?: boolean;
     parse_status?: string;
     source?: string;
     source_kind?: SearchSource;
@@ -81,7 +80,6 @@ export function listEntryFiles(
   if (params.file_type) query.append('file_type', params.file_type);
   if (params.content_type) query.append('content_type', params.content_type);
   if (typeof params.starred === 'boolean') query.append('starred', String(params.starred));
-  if (typeof params.incomplete === 'boolean') query.append('incomplete', String(params.incomplete));
   if (params.parse_status) query.append('parse_status', params.parse_status);
   if (params.source) query.append('source', params.source);
   if (params.source_kind) query.append('source_kind', params.source_kind);

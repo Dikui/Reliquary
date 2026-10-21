@@ -1,7 +1,6 @@
 import { onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { listPendingEntry } from '@/api/entry-review'
-import { listIncompleteEntrys } from '@/api/ingest'
 
 export const usePendingCountsStore = defineStore('pending-counts', () => {
   const total = ref<number | null>(null), loading = ref(false)
@@ -13,15 +12,11 @@ export const usePendingCountsStore = defineStore('pending-counts', () => {
     total.value = null
     loading.value = true
     try {
-      const responses = await Promise.all([
-        listPendingEntry({ kind: 'intake', page: 1, page_size: 1 }),
-        listIncompleteEntrys({ page: 1, page_size: 1, include_attempted: true }),
-      ])
-      if (responses.some(response => !response.success || !Number.isSafeInteger(response.total) || response.total < 0)) return
-      const sum = responses.reduce((value, response) => value + response.total, 0)
-      if (current === generation && !disposed && Number.isSafeInteger(sum)) total.value = sum
+      const response = await listPendingEntry({ kind: 'intake', page: 1, page_size: 1 })
+      if (!response.success || !Number.isSafeInteger(response.total) || response.total < 0) return
+      if (current === generation && !disposed) total.value = response.total
     } catch {
-      // An unknown queue size must not be presented as zero or a partial sum.
+      // An unknown queue size must not be presented as zero.
       if (current === generation && !disposed) total.value = null
     } finally {
       if (current === generation && !disposed) loading.value = false

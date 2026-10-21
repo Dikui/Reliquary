@@ -299,9 +299,8 @@ const openDelete = async (item: EntryCard) => {
           </t-popup>
         </div>
 
-        <div v-if="item.parse_status !== 'completed' && (item.acquisition === 'model_written' || item.incomplete)" class="card-ingest-status">
+        <div v-if="item.parse_status !== 'completed' && item.acquisition === 'model_written'" class="card-ingest-status">
           <t-tag v-if="item.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
-          <t-tag v-if="item.incomplete" size="small" theme="warning" variant="light-outline" :title="t('ingestStatus.incompleteHint')">{{ t('ingestStatus.incomplete') }}</t-tag>
         </div>
 
         <!-- Parse status display -->

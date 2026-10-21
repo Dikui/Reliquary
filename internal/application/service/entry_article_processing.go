@@ -367,11 +367,10 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if s.db != nil {
 		if isIngestArticle(k) {
 			var latest types.Entry
-			if err := s.db.WithContext(ctx).Select("acquisition", "incomplete", "external_completion_attempted", "missing_materials", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_entry_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
+			if err := s.db.WithContext(ctx).Select("acquisition", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_entry_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
 				return err
 			}
-			k.Acquisition, k.Incomplete, k.ExternalCompletionAttempted = latest.Acquisition, latest.Incomplete, latest.ExternalCompletionAttempted
-			k.MissingMaterials = latest.MissingMaterials
+			k.Acquisition = latest.Acquisition
 			k.IngestAPIKeyID, k.IngestAPIKeyName = latest.IngestAPIKeyID, latest.IngestAPIKeyName
 			k.LastIngestAPIKeyID, k.LastIngestAPIKeyName = latest.LastIngestAPIKeyID, latest.LastIngestAPIKeyName
 			k.ContentTypeHint, k.RelatedEntryID = latest.ContentTypeHint, latest.RelatedEntryID
@@ -578,7 +577,13 @@ func articleChunkImages(content string) []types.ParsedImage {
 // Relative image destinations in a persisted article already point to managed
 // vault attachments. Validate their presence before the existing intake check.
 func (s *entryService) hasUnstoredArticleImages(k *types.Entry, body string) bool {
-	body = recordedMissingImageBody(k, body)
+	remote := map[string]string{}
+	for _, ref := range articleImagesInOrder(body, nil) {
+		if remoteIngestImage(ref) {
+			remote[ref] = "local://remote/image"
+		}
+	}
+	body = replaceIngestImageTargets(body, remote)
 	if s.vault == nil || k.VaultPath == "" {
 		return docparser.HasUnstoredImages(body)
 	}

@@ -179,7 +179,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           const tags = descendants(result).find(node => hasClass(node, 'classification-tags'))!
           for (const [label, hint] of [
             [messages[locale].ingestStatus.modelWritten, messages[locale].ingestStatus.modelWrittenHint],
-            [messages[locale].ingestStatus.incomplete, messages[locale].ingestStatus.incompleteHint],
           ]) {
             const marker = tags.children.find(node => visibleText(node) === label)
             assert.equal(Boolean(marker), id !== 'old' && Boolean(flagged), `${id}: ${label}`)

@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,31 +19,6 @@ func TestOwnershipFieldsKeepMCPContract(t *testing.T) {
 	data, err := json.Marshal(output)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"topics":[{"id":"topic","tenant_id":9007199254740993,"name":"","description":"","library_ids":null,"created_at":"0001-01-01T00:00:00Z","updated_at":"0001-01-01T00:00:00Z","entry_count":0}],"metadata":{"space_id":"user metadata","tenant_id":"original key"},"payload":{"space_id":1}}`, string(data))
-}
-
-func TestSearchAndFollowFeedContractsIncludeIncompleteBoolean(t *testing.T) {
-	for _, incomplete := range []bool{false, true} {
-		article := types.EntrySearchResult{EntryID: "article", Source: "article", Incomplete: incomplete,
-			Snippets: []types.EntrySearchSnippet{}, SimilarReports: []*types.EntrySearchResult{
-				{EntryID: "similar", Source: "article", Incomplete: !incomplete, Snippets: []types.EntrySearchSnippet{}},
-			}}
-		for name, response := range map[string]any{
-			"search": types.EntrySearchResponse{Results: []*types.EntrySearchResult{&article}},
-			"follow_feed": types.FollowFeedResponse{Results: []*types.FollowFeedArticle{{EntrySearchResult: article,
-				SimilarReports: []*types.FollowFeedArticle{{EntrySearchResult: *article.SimilarReports[0]}}}}},
-		} {
-			t.Run(fmt.Sprintf("%s/incomplete=%t", name, incomplete), func(t *testing.T) {
-				output, err := contractOutput(response)
-				require.NoError(t, err)
-				result := output.(map[string]any)["results"].([]any)[0].(map[string]any)
-				require.Equal(t, incomplete, result["incomplete"])
-				require.Equal(t, "article", result["entry_id"])
-				member := result["similar_reports"].([]any)[0].(map[string]any)
-				require.Equal(t, !incomplete, member["incomplete"])
-				require.Equal(t, "similar", member["entry_id"])
-			})
-		}
-	}
 }
 
 func TestSearchContractPreservesLibraryLocationsAndFlags(t *testing.T) {

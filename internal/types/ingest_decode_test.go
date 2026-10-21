@@ -42,13 +42,12 @@ func TestDecodeIngestAllowsOptionalURL(t *testing.T) {
 	require.Empty(t, request.Items[2].InputError)
 }
 
-func TestDecodeIngestMineAllowsOmittedURLAndEntrySupplementID(t *testing.T) {
+func TestDecodeIngestMineAllowsOmittedURLAndRejectsImageCompletion(t *testing.T) {
 	request, err := DecodeIngestBatch(strings.NewReader(`{"items":[{"library":"personal","acquisition":"verbatim","content":"本人原文"},{"library":"personal","entry_id":"11111111-1111-4111-8111-111111111111","url":"","acquisition":"verbatim"},{"library":"personal","url":null,"acquisition":"verbatim"}]}`))
 	require.NoError(t, err)
 	require.Empty(t, request.Items[0].InputError)
 	require.Equal(t, "personal", request.Items[0].Library)
 	require.Empty(t, request.Items[0].URL)
-	require.Empty(t, request.Items[1].InputError)
-	require.Equal(t, "11111111-1111-4111-8111-111111111111", request.Items[1].EntryID)
+	require.Contains(t, request.Items[1].InputError, "entry_id")
 	require.Empty(t, request.Items[2].InputError)
 }

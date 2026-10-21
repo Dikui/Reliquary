@@ -52,7 +52,6 @@ func TestIngestMineReviewsProcessesTutorialFullTextAndPortableHeader(t *testing.
 	require.Equal(t, "mine", k.SourceKind)
 	require.Equal(t, types.ParseStatusCompleted, k.ParseStatus, k.ErrorMessage)
 	require.Equal(t, "笔记", k.ContentType)
-	require.False(t, k.Incomplete)
 	require.False(t, k.SourceUnverified)
 	require.Empty(t, k.NormalizedURL)
 	intake, err := k.IntakeMetadata()

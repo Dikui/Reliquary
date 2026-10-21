@@ -45,24 +45,24 @@ test('article details retain vault source and path from the actual API loading h
   assert.equal(hook.details.vault_path, 'articles/2026-10/中文-12345678.md')
 })
 
-test('detail loading retains incomplete material data and changing documents clears every ingest field', async () => {
+test('detail loading ignores retired image-completion fields and clears ingest identity on document switches', async () => {
   const missing = [{ type: 'image', source_url: 'https://example.com/source.png', reason: 'Login required', api_key_name: 'Collector', submitted_at: '2026-10-12T08:00:00Z' }]
   const hook = createHook(async id => ({ success: true, data: { id, updated_at: '2026-10-12T00:00:00Z', ...(id === 'incomplete' ? { acquisition: 'model_written', incomplete: true, missing_materials: missing, external_completion_attempted: true, related_entry_id: 'original' } : {}) } }))
   hook.getCardDetails({ id: 'incomplete' }); await settle()
   assert.equal(hook.details.acquisition, 'model_written')
-  assert.equal(hook.details.incomplete, true)
-  assert.equal(hook.details.external_completion_attempted, true)
+  assert.equal(Object.hasOwn(hook.details, "incomplete"), false)
+  assert.equal(Object.hasOwn(hook.details, "external_completion_attempted"), false)
   assert.equal(hook.details.related_entry_id, 'original')
-  assert.deepEqual(hook.details.missing_materials, missing)
+  assert.equal(Object.hasOwn(hook.details, "missing_materials"), false)
   hook.getCardDetails({ id: 'complete' })
   assert.equal(hook.details.acquisition, undefined)
-  assert.equal(hook.details.incomplete, false)
-  assert.equal(hook.details.external_completion_attempted, false)
+  assert.equal(Object.hasOwn(hook.details, "incomplete"), false)
+  assert.equal(Object.hasOwn(hook.details, "external_completion_attempted"), false)
   assert.equal(hook.details.related_entry_id, '')
-  assert.deepEqual(hook.details.missing_materials, [])
+  assert.equal(Object.hasOwn(hook.details, "missing_materials"), false)
   await settle()
   assert.equal(hook.details.acquisition, undefined)
-  assert.equal(hook.details.incomplete, false)
+  assert.equal(Object.hasOwn(hook.details, "incomplete"), false)
 })
 
 test('changing documents clears vault state and an older response cannot restore it', async () => {

@@ -9,13 +9,11 @@ Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格
 | 分类 | 查询 | 操作与协议差异 |
 | --- | --- | --- |
 | 资料管理 | 库、资料、正文、检索、实体、主题、关注 | 沿用 `ingest`、整理、关注等 HTTP/MCP 能力 |
-| 待处理 | 收录待审、缺少图片 | 沿用审核、补图、接受缺失及丢弃；只有这两类业务待办 |
+| 待处理 | 收录待审 | 审核、补链接及丢弃；图片缺失不产生待办 |
 | 辅助诊断 | 已接收资料的处理失败、接收故障、时间线、模型调用和队列 | 读取诊断后，按当前状态使用已有审核或重新处理接口 |
 | 系统配置 | 库策略、模型、系统参数、API Key | 沿用 HTTP 配置接口；本次不为全部管理操作增加 MCP 工具 |
 
 待审使用 HTTP `GET /entries/pending` 或 MCP `list_pending`，原文使用 `GET /entries/:id/body` 或 `get_entry`。HTTP `POST /entries/:id/review` 提供 `approve`、`retry`、`supplement_url`、`admit_unverified`、`reject`、`discard`。MCP `approve_pending` 提供前三种适用审批动作 `approve`、`supplement_url`、`admit_unverified`，`discard_pending` 用于丢弃。确认与来源规则沿用现有契约。
-
-缺图使用 HTTP `GET /ingest/incomplete` 或 MCP `list_incomplete`。HTTP 支持按库筛选，默认包含已尝试补全的资料，可用 `include_attempted=false` 排除。MCP 固定排除已尝试补全的资料，待审和缺图工具均不提供同样的按库筛选参数。补图使用 `ingest` 的 `library`、`entry_id` 与图片；接受缺失使用 `accept_incomplete`，HTTP 丢弃入口为 `POST /ingest/:id/discard`。从 MCP 缺图列表消失不能证明图片已经补全，应继续检查资料状态和收录结果。
 
 处理失败归辅助诊断。通过 HTTP `GET /entries?parse_status=failed` 找资料，再读取 `GET /entries/:id`、`/body`、`/stages`、`/model-calls`。原文不可读时须明确报告。重试使用 `POST /entries/:id/reprocess`，批量重试使用 `POST /entries/batch-reparse`，取消使用 `POST /entries/:id/cancel-parse`。这些管理动作目前主要由 HTTP 提供。
 
@@ -55,7 +53,7 @@ HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每
 
 有时效的机构研报收 official，作为定义与方法长期引用的白皮书收 references。人物评论收 media，不能因提到机构就改收 official。各库不可接受的字段以 accepted_fields 为准，不能给非自有型提交 source_ref。
 
-## 收录与补图
+## 收录与图片提交
 
 HTTP `POST /api/v1/ingest` 对应 MCP `ingest`，参数相同：
 
@@ -63,15 +61,11 @@ HTTP `POST /api/v1/ingest` 对应 MCP `ingest`，参数相同：
 {"items":[{"library":"personal","source_ref":"notes/calibration.md","title":"校准记录","content":"# 校准\n\n完整步骤与结果。","acquisition":"verbatim"}]}
 ```
 
-每批 1 至 50 项。content 是完整 Markdown；acquisition 必选 verbatim、extracted 或 model_written。新收录最多 500 万 Unicode 码点，实际处理还受模型上下文及分段数限制。逐项检查 status、entry_id、reason、image_failures 和 completeness。accepted 表示接收成功，处理可异步完成；用 `GET /api/v1/entries/:id` 查询 parse_status。pending_review 需要用户判断，invalid 需要修正参数，exists 使用已有 ID。
+每批 1 至 50 项。content 是完整 Markdown；acquisition 必选 verbatim、extracted 或 model_written。新收录最多 500 万 Unicode 码点，实际处理还受模型上下文及分段数限制。逐项检查 status、entry_id、reason和 image_failures。accepted 表示接收成功，处理可异步完成；用 `GET /api/v1/entries/:id` 查询 parse_status。pending_review 需要用户判断，invalid 需要修正参数，exists 使用已有 ID。
 
-图片先经 `POST /api/v1/ingest/assets` 上传 multipart 的 file，再用 asset_id 和 source_url 对应正文图片地址，也可提交受限的 base64。服务端不下载远程图片。暂缺图片时提交 missing，后续按资料 ID 补全：
+图片先经 `POST /api/v1/ingest/assets` 上传 multipart 的 file，再用 asset_id 和 source_url 对应正文图片地址，也可提交受限的 base64。图片可选，服务端不下载远程图片，也不生成缺图状态或待办。已有资料增补图片时，使用 `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 一并提交完整正文和图片。
 
-```json
-{"items":[{"library":"personal","entry_id":"缺少图片的已有资料ID","images":[{"asset_id":"上传返回ID","source_url":"https://example.org/chart.png"}]}]}
-```
-
-普通 URL 查重使用 HTTP `POST /api/v1/ingest/check` 或 MCP `check_urls`，参数为 library 与 urls；不是图片补全入口。完整状态、长度上限、重试及来源规则见 [收录接口](ingest-api.md)。
+普通 URL 查重使用 HTTP `POST /api/v1/ingest/check` 或 MCP `check_urls`，参数为 library 与 urls。完整状态、长度上限、重试及来源规则见 [收录接口](ingest-api.md)。
 
 ## 普通检索
 
@@ -127,7 +121,7 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出只保存并建立�
 {"name":"read_ingest_failure_material","arguments":{"id":"故障编号","material_id":"清单中的材料编号","offset":0,"length":20000}}
 ```
 
-修复时先读取原始输入、实际图片及执行条件，再检查是否已有资料或任务。修正后通过普通 `ingest` 重提，可在条目中携带 `recovery_failure_id` 关联原故障。该字段不影响正文、来源身份和去重。原快照保持不变，详情记录新的资料和请求编号。重提仍失败时，新故障的 `recovery_failure_id` 指向上一次故障。仍须继续确认结果；`accepted` 只表示已接收，待审或仍缺图须如实报告。确认拒绝或删除前，清理关联恢复链及进行中的故障材料。清理失败会保留资料并返回错误，修复存储后可重试。
+修复时先读取原始输入、实际图片及执行条件，再检查是否已有资料或任务。修正后通过普通 `ingest` 重提，可在条目中携带 `recovery_failure_id` 关联原故障。该字段不影响正文、来源身份和去重。原快照保持不变，详情记录新的资料和请求编号。重提仍失败时，新故障的 `recovery_failure_id` 指向上一次故障。仍须继续确认结果；`accepted` 只表示已接收，待审或处理失败须如实报告。确认拒绝或删除前，清理关联恢复链及进行中的故障材料。清理失败会保留资料并返回错误，修复存储后可重试。
 
 故障包保留 7 天，总容量 512 MiB，先过期再淘汰最旧材料。详见[日志与故障包配置](logging.md#接收故障日志与故障包)。
 

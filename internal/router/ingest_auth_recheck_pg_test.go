@@ -175,8 +175,6 @@ func TestIngestHTTPAssetAndCompletionCredentialFailures(t *testing.T) {
 	for _, endpoint := range []struct{ method, path, body string }{
 		{http.MethodPost, "/api/v1/ingest", ingestAuthBatchBody},
 		{http.MethodPost, "/api/v1/ingest/check", ingestAuthCheckBody},
-		{http.MethodGet, "/api/v1/ingest/incomplete", ""},
-		{http.MethodPost, "/api/v1/ingest/" + article.ID + "/accept-incomplete", ""},
 		{http.MethodPost, "/api/v1/ingest/" + article.ID + "/discard", `{}`},
 	} {
 		t.Run(endpoint.path, func(t *testing.T) {
