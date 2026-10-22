@@ -19,6 +19,7 @@ type entryNamingException struct {
 }
 
 var entryNamingExceptions = map[string]entryNamingException{
+	"frontend/src/views/insights/ContentChecksPage.vue":                     {Reason: "自检模型筛选使用既有 HTTP 模型类型枚举，不改已持久化值", Tokens: []string{"KnowledgeQA"}},
 	"internal/maintenance/library_schema_pg_test.go":                        {Reason: "核对冻结的五库迁移保全历史任务 payload，导入时转换", Tokens: []string{"knowledge_id"}},
 	"internal/router/ikb22_entry_contract_pg_test.go":                       {Reason: "逐接口验证旧字段和工具拒绝，直接核对线上协议键", Tokens: []string{"knowledge", "knowledge_id", "knowledge_ids"}},
 	"internal/maintenance/entry_contract_names_pg_test.go":                  {Reason: "验证旧副本任务与报告字段转换，用户 JSON 原值保全", Tokens: []string{"knowledge_id"}},
