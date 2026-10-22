@@ -88,3 +88,26 @@ func TestListPagedLibraryScopeFiltersBeforePagination(t *testing.T) {
 	require.EqualValues(t, 2, total)
 	require.Contains(t, filter.LibraryIDs, rows[0].LibraryID)
 }
+
+func TestListPaged_FailedIncludesBackgroundProcessingFailure(t *testing.T) {
+	db := setupEntryTestDB(t)
+	repo := NewEntryRepository(db).(*entryRepository)
+	libraryID := uuid.NewString()
+	indexFailedID := insertEntryInLibrary(t, db, 1, libraryID, types.ParseStatusFailed)
+	backgroundFailedID := insertEntryInLibrary(t, db, 1, libraryID, types.ParseStatusCompleted)
+	processingID := insertEntryInLibrary(t, db, 1, libraryID, types.ParseStatusProcessing)
+	outsideID := insertEntryInLibrary(t, db, 1, uuid.NewString(), types.ParseStatusCompleted)
+	insertEntryInLibrary(t, db, 1, libraryID, types.ParseStatusCompleted)
+	require.NoError(t, db.Model(&types.Entry{}).Where("id IN ?", []string{backgroundFailedID, processingID, outsideID}).
+		Update("summary_status", types.SummaryStatusFailed).Error)
+
+	rows, total, err := repo.ListPagedEntryByLibraryID(context.Background(), 1, libraryID,
+		&types.Pagination{Page: 1, PageSize: 100}, types.EntryListFilter{ParseStatus: types.ParseStatusFailed})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	require.ElementsMatch(t, []string{indexFailedID, backgroundFailedID}, ids)
+	require.EqualValues(t, 2, total, "count and rows use the same failure filter within the requested library")
+}

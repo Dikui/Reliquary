@@ -15,7 +15,7 @@ Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格
 
 待审使用 HTTP `GET /entries/pending` 或 MCP `list_pending`，原文使用 `GET /entries/:id/body` 或 `get_entry`。HTTP `POST /entries/:id/review` 提供 `approve`、`retry`、`supplement_url`、`admit_unverified`、`reject`、`discard`。MCP `approve_pending` 提供前三种适用审批动作 `approve`、`supplement_url`、`admit_unverified`，`discard_pending` 用于丢弃。确认与来源规则沿用现有契约。
 
-处理失败归辅助诊断。通过 HTTP `GET /entries?parse_status=failed` 找资料，再读取 `GET /entries/:id`、`/body`、`/stages`、`/model-calls`。原文不可读时须明确报告。重试使用 `POST /entries/:id/reprocess`，批量重试使用 `POST /entries/batch-reparse`，取消使用 `POST /entries/:id/cancel-parse`。这些管理动作目前主要由 HTTP 提供。
+处理失败归辅助诊断。通过 HTTP `GET /entries?parse_status=failed` 查找正文索引失败，以及正文索引已完成但后台处理失败的资料，再读取 `GET /entries/:id`、`/body`、`/stages`、`/model-calls`。原文不可读时须明确报告。重试使用 `POST /entries/:id/reprocess`，批量重试使用 `POST /entries/batch-reparse`，取消使用 `POST /entries/:id/cancel-parse`。这些管理动作目前主要由 HTTP 提供。
 
 ## 连接与认证
 

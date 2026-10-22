@@ -155,7 +155,10 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	if filter.Source != "" {
 		query = query.Where("channel = ?", filter.Source)
 	}
-	if filter.ParseStatus != "" {
+	if filter.ParseStatus == types.ParseStatusFailed {
+		query = query.Where("(parse_status = ? OR (parse_status = ? AND summary_status = ?))",
+			types.ParseStatusFailed, types.ParseStatusCompleted, types.SummaryStatusFailed)
+	} else if filter.ParseStatus != "" {
 		query = query.Where("parse_status = ?", filter.ParseStatus)
 	} else {
 		// Hide rows that are mid-deletion so an async delete never lingers in the

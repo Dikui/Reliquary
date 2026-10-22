@@ -42,19 +42,22 @@ func TestSimpleIngestKeepsBodySearchableWhenProcessingModelMissing(t *testing.T)
 
 func TestSimpleIngestExactRetryReplacementAndBadImageRollback(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	request := &types.IngestRequest{Library: h.library.ID, SourceRef: "calibration/log", Content: "Calibration result: 42 pascals.", Title: "Calibration"}
+	request := &types.IngestRequest{Library: h.library.ID, SourceRef: "calibration/log", Content: "Calibration result: 42 pascals.", Title: "Calibration", Acquisition: "model_written"}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
+	request.Acquisition = ""
 	duplicate, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "exists", duplicate.Status)
 	require.Equal(t, first.EntryID, duplicate.EntryID)
+	require.Equal(t, "model_written", h.article(t, first.EntryID).Acquisition)
 	require.Len(t, h.queue.tasks, 1)
 	request.Content = "Calibration result corrected to 43 pascals."
 	replaced, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, first.EntryID, replaced.EntryID)
 	require.Contains(t, h.article(t, first.EntryID).VaultBody, "43 pascals")
+	require.Equal(t, "model_written", h.article(t, first.EntryID).Acquisition)
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, h.queue.tasks[0]), "old queued body must be ignored")
 	require.Empty(t, h.processor.requests)
 	request.Content = "Bad update must not replace the saved calibration."

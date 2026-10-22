@@ -104,7 +104,8 @@ type EntryListFilter struct {
 	Keyword string
 	// FileType filters by file_type, or by type for the special values "manual" / "url".
 	FileType string
-	// ParseStatus filters by parse_status when non-empty (e.g. pending, processing, completed, failed).
+	// ParseStatus filters by parse_status when non-empty. Failed also includes
+	// completed body indexes whose background processing failed.
 	ParseStatus string
 	// Source filters by ingestion channel when non-empty (web, api, rss).
 	// The special values "manual" and "url" are routed to the `type` column to match

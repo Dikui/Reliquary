@@ -99,6 +99,9 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		if request.SourceName == "" {
 			entry.SourceName = existing.SourceName
 		}
+		if request.Acquisition == "" {
+			entry.Acquisition = existing.Acquisition
+		}
 		entry.Metadata = append(types.JSON(nil), existing.Metadata...)
 	}
 	if entry.VaultPath == "" {
