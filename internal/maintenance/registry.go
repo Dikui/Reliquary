@@ -103,6 +103,43 @@ func projectEntryBatchManifest(expected, actual *Manifest) (*Manifest, *Manifest
 	return &left, actual
 }
 
+// Version 32 adds empty self-check tables. Preserve strict row and file checks
+// while allowing only those empty defaults when comparing an older replica.
+func projectContentCheckManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 32 || actual.SchemaVersion < 32 {
+		return expected, actual
+	}
+	left := *expected
+	left.Tables = make(map[string]TableManifest, len(expected.Tables)+2)
+	left.Files = make(map[string][]File, len(expected.Files))
+	for name, table := range expected.Tables {
+		left.Tables[name] = table
+	}
+	for group, files := range expected.Files {
+		left.Files[group] = append([]File{}, files...)
+	}
+	for _, name := range []string{"content_check_settings", "content_check_runs"} {
+		if _, present := left.Tables[name]; present {
+			continue
+		}
+		if _, present := actual.Tables[name]; !present {
+			continue
+		}
+		columns := []string{}
+		for column := range PersistentTables[name].Columns.Columns() {
+			columns = append(columns, column)
+		}
+		sort.Strings(columns)
+		left.Tables[name] = TableManifest{Columns: columns, SHA256: sum([]byte("[]")), Data: []map[string]any{}}
+		for _, file := range actual.Files["vault"] {
+			if file.Path == ".reliquary/"+PersistentTables[name].File {
+				left.Files["vault"] = append(left.Files["vault"], File{Path: file.Path, SHA256: sum([]byte("[]\n")), Size: 3})
+			}
+		}
+	}
+	return &left, actual
+}
+
 // RegeneratedTable registers derived tables without putting their rows in a
 // portable replica. Their names still participate in strict schema verification.
 type RegeneratedTable struct {

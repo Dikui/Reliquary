@@ -65,6 +65,13 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	}
 	projectSegmentSnapshot(original, current)
 	projectEvaluationSnapshot(original, current)
+	if original.schemaVersion < 32 && current.schemaVersion >= 32 {
+		for _, name := range []string{"content_check_settings", "content_check_runs"} {
+			if _, present := original.Tables[name]; !present {
+				original.Tables[name] = []map[string]any{}
+			}
+		}
+	}
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]
