@@ -125,6 +125,7 @@ func configureOfflineReembed(t *testing.T, db *gorm.DB, root, uploads string) {
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(path, data, 0600))
+	require.NoError(t, os.CopyFS(filepath.Join(filepath.Dir(path), "prompt_templates"), os.DirFS("../../config/prompt_templates")))
 	viper.Reset()
 	viper.SetConfigFile(path)
 	viper.AddConfigPath(filepath.Dir(path))

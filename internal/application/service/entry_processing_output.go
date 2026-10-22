@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
+	"reliquary/internal/config"
 	"reliquary/internal/types"
 )
 
@@ -35,17 +36,17 @@ type extractedImage struct {
 
 func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	catalog, _ := json.Marshal(l.ContentTypes)
-	prompt := articleProcessingPrompt + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
+	prompt := articleProcessingPrompt() + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
 先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。`
 	switch {
 	case l.SystemRole == "media":
-		prompt += "\n本库保存个人观点。摘要保留作者、观点、判断条件与第一手经验的归属；不得把作者评价改写成已核实的客观事实。"
+		prompt += "\n" + config.Prompt("library_media")
 	case l.Template == types.TemplateExternalDurable:
-		prompt += "\n本库保存长期参考文档。摘要优先保留定义、方法、适用条件和必要步骤；不补写未提供的代码或章节。"
+		prompt += "\n" + config.Prompt("library_reference")
 	case l.Template == types.TemplateOwn:
-		prompt += "\n本库保存个人工作资料。摘要保留本人的决定、经验和约束，不推断外部权威背书。"
+		prompt += "\n" + config.Prompt("library_own")
 	default:
-		prompt += "\n本库保存机构发布。摘要保留发布主体、具体变化、时间、条件和研究结论；宣传用语不能替代事实。"
+		prompt += "\n" + config.Prompt("library_institutional")
 	}
 	if k.ContentTypeCorrected {
 		name, _ := json.Marshal(k.ContentType)
@@ -67,12 +68,9 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 		graphOverride = &value
 	}
 	override, _ := json.Marshal(graphOverride)
-	return prompt + "\n" + articleEntityProcessingPrompt + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + `
+	return prompt + "\n" + articleEntityProcessingPrompt() + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + `
 默认抽取有原文依据的关系，不因内容类型关闭。graph_override=false 时 relations=[]，其他值正常抽取；没有合格关系时也返回空数组。
-关系只保留原文明示、对本文有价值的联系；subject、object 必须是本次 entities 中的 name。evidence_ids 引用足以支持主体、关系含义和客体的段落，可多选以补充指代上下文。先确定原文表达的具体联系，再选 relation_types 中语义一致的名称；没有一致名称就使用精确的新名称，不能为套用清单而改写原意。每条边必须能从所选段落直接读出，不能依赖常识或“这个产品总归由它发布过”的推断。特别是“发布”必须有发布/宣布/推出该对象的动作证据：“甲的产品乙”“第一方部署如乙”“甲的安全框架乙”均不是发布证据，只能按原文明示的隶属等含义处理或不抽关系。仅同文出现不构成关系。基准比较应写“基准比较”或“基准优于”，不能改成商业竞争。原文有限定的比较应保留其范围，不扩展为全方面优于。
-逐条按“subject type object”读回核对方向：“隶属”是下级/产品指向上级/所属组织，“发布”是发布者指向发布对象，“客户”是客户指向供应方或所用产品，“投资”是投资方指向被投资方；“甲的产品乙”应为“乙 隶属 甲”，不能反过来。
-关系两端可以是本篇新识别或已有的合格实体，但不能为补关系而额外创建不合格对象。具体型号的发布、成绩或比较不能扩大为家族整体的事实，子团队动作不能上提给母公司；无法准确表达时不建该边，具体事实留在摘要与原文中。
-媒体信息库每条关系必须输出 speaker：原文明示发言人时，使用证据段落中实际出现的姓名，并将包含姓名及发言归属的段落纳入 evidence_ids；姓名不要求出现在 entities，也不为发言人建档。没有明确引述他人时使用输入 author，不将被评论对象当作发言人；不能确定归属就不抽该关系。
+` + config.Prompt("article_relations") + `
 附加输出格式："relations":[{"subject":"实体名称","type":"合作","object":"另一实体名称","evidence_ids":[1],"speaker":"发言人"}]。`
 }
 

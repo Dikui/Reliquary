@@ -48,11 +48,11 @@ func (r chatGPTGenerationRequest) stage() string {
 	switch {
 	case strings.HasPrefix(r.Instructions, intakeReviewPrompt()):
 		return "intake_review"
-	case strings.HasPrefix(r.Instructions, articleProcessingPrompt):
+	case strings.HasPrefix(r.Instructions, articleProcessingPrompt()):
 		return "article_processing"
-	case strings.HasPrefix(r.Instructions, articleGraphVerificationPrompt):
+	case strings.HasPrefix(r.Instructions, articleGraphVerificationPrompt()):
 		return "article_graph_verification"
-	case r.Instructions == topicBackfillPrompt:
+	case r.Instructions == topicBackfillPrompt():
 		return "topic_backfill"
 	case strings.HasPrefix(r.Instructions, "Decide whether the source mention is the exact same real-world entity"):
 		return "entity_resolution"
@@ -285,7 +285,7 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
 		if request.stage() == "article_graph_verification" {
-			require.Equal(t, articleGraphVerificationPrompt, request.Instructions)
+			require.Equal(t, articleGraphVerificationPrompt(), request.Instructions)
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
 	}

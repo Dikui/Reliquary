@@ -31,7 +31,7 @@ type topicJudgementChat struct {
 }
 
 func (m *topicJudgementChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
-	if len(messages) != 2 || messages[0].Content != topicBackfillPrompt {
+	if len(messages) != 2 || messages[0].Content != topicBackfillPrompt() {
 		return nil, errors.New("unexpected historical classification prompt")
 	}
 	var input topicBackfillInput

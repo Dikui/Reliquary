@@ -33,7 +33,7 @@ def affected(paths):
         return set(SERVICES)
     selected = set()
     for name in paths:
-        if name.startswith(("docs/", ".scratch/", ".github/")) or name.startswith(("README", "AGENTS.md", "CLAUDE.md")):
+        if name.startswith(("docs/", ".scratch/", ".github/", "config/prompt_templates/")) or name.startswith(("README", "AGENTS.md", "CLAUDE.md")):
             continue
         if name.endswith(("_test.go", ".test.ts")) or name.startswith("scripts/test-"):
             continue
@@ -113,7 +113,8 @@ def update(source, directory, *, all_services, dry_run):
     app_changes = differences["app"]
     if any(name.startswith("migrations/") for name in app_changes):
         raise admin.AdminError("Database migrations changed; use the explicit upgrade procedure in docs/personal-use.md (no backup by default)")
-    if any(name.startswith("config/") or name in {"docker-compose.yml", ".env.example"} for name in app_changes):
+    if any((name.startswith("config/") and not name.startswith("config/prompt_templates/"))
+           or name in {"docker-compose.yml", ".env.example"} for name in app_changes):
         raise admin.AdminError("Runtime configuration changed; review and sync it using docs/local-deployment.md before a manual release")
     selected = set(SERVICES) if all_services or differences["frontend"] is None else {
         service for service in SERVICES if service in affected(differences[service])}

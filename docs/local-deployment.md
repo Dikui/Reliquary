@@ -110,13 +110,38 @@ python3 scripts/deploy-local.py --all      # 手动全量构建、更新前后�
 
 入口从源码根目录的 `.deploy.env` 读取 `RELIQUARY_DEPLOY_DIR`；在新 worktree 中需创建该本机文件，也可传 `--deploy-dir /实际运行目录/deploy`。源码有未提交改动时拒绝部署，确保镜像与登记的提交一致。
 
-脚本分别比较前端、后端已部署的提交与当前提交：普通前端文件只更新前端，普通 Go 文件只更新后端；接口目录（`frontend/src/api/`、`internal/handler/`、`internal/router/`）和未知路径保守选择前后端。仅文档、测试、CI 或代理规则变化时跳过构建。前后端基准各自保存并绑定镜像 ID，前端单独更新不会推进后端基准；前端缺少有效基准时选择全量，后端基准无法确认时拒绝更新，避免漏过数据库迁移检查。
+脚本分别比较前端、后端已部署的提交与当前提交：普通前端文件只更新前端，普通 Go 文件只更新后端；接口目录（`frontend/src/api/`、`internal/handler/`、`internal/router/`）和未知路径保守选择前后端。仅提示词模板（`config/prompt_templates/`）、文档、测试、CI 或代理规则变化时跳过构建。前后端基准各自保存并绑定镜像 ID，前端单独更新不会推进后端基准；前端缺少有效基准时选择全量，后端基准无法确认时拒绝更新，避免漏过数据库迁移检查。
 
 普通更新复用前端依赖；`package.json`、锁文件、`.npmrc` 或 Node 版本、平台变化时重新执行 `npm ci`。首次启用复用时也会执行一次干净安装，指纹保存在 `node_modules/.reliquary-deps`。单独调用 `./scripts/build-frontend-dist.sh` 以及手动 `--all` 仍执行干净安装。Go 镜像构建保留模块下载与编译缓存，全量构建也可复用有效的 Docker 缓存。
 
 所有选定镜像构建成功后才切换运行配置。运行目录只维护一个 `.maintenance-schedule/local-deploy.images.json` 入口，并保留原有 Compose 覆盖配置；重复更新不会追加同名入口。只重建选定容器，等待健康检查、验证前端代理链路并核对实际镜像，不重启 PostgreSQL、Redis 和 Neo4j。后端单独更新时重载 Nginx，刷新后端地址。后端更新后登记源码；前端单独更新先核对已有源码材料，保留材料并跳过重复归档。部署与已安装的启动恢复、备份共用锁。更新失败时恢复原配置、维护工具和原容器；若恢复也失败，命令返回错误，须修复后再使用。
 
-`--all` 表示全量更新两个应用服务，不负责首次安装、数据库迁移或覆盖机器配置。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行显式升级流程；升级默认不备份，只有明确选择 `upgrade --backup` 才创建升级前备份。发现 `config/`、`docker-compose.yml` 或 `.env.example` 变化时，停止并提示按本节原有手动发布流程核对、同步运行配置。首次安装仍按前文执行。脚本不清理历史镜像和备份。
+`--all` 表示全量更新两个应用服务，不负责首次安装、数据库迁移或覆盖机器配置。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行显式升级流程；升级默认不备份，只有明确选择 `upgrade --backup` 才创建升级前备份。发现 `config/`（不含 `prompt_templates/`）、`docker-compose.yml` 或 `.env.example` 变化时，停止并提示按本节原有手动发布流程核对、同步运行配置。首次安装仍按前文执行。脚本不清理历史镜像和备份。
+
+### 提示词配置
+
+仓库的 `config/prompt_templates/*.yaml` 保存提示词及 Git 修改历史。新安装会复制到 `deploy/config/prompt_templates/`，容器只读挂载该目录，后端启动时加载。普通代码部署和 `--all` 都不覆盖运行副本；只有模板变化时不会构建或重启服务。输出结构、工具权限等约束仍由代码维护。
+
+已有安装首次采用此功能时，将模板目录复制到 `deploy/config/`，并在运行 Compose 的 `app.volumes` 中加入以下挂载。保留其他运行配置，按手动发布流程更新镜像并重建 app 容器，使新挂载生效；后续只改提示词时重启即可。
+
+```yaml
+- type: bind
+  source: ./config/prompt_templates
+  target: /app/config/prompt_templates
+  read_only: true
+  bind:
+    create_host_path: false
+```
+
+日常修改仓库中的对应模板，用几条固定资料确认效果后提交 Git，再将该文件复制到运行目录并执行 `docker compose restart app`。例如在源码根目录执行：
+
+```sh
+. ./.deploy.env
+cp config/prompt_templates/processing.yaml "$RELIQUARY_DEPLOY_DIR/config/prompt_templates/"
+(cd "$RELIQUARY_DEPLOY_DIR" && docker compose restart app)
+```
+
+后端会检查文件格式和必需模板；缺失或无效时启动失败，不会偷偷改用镜像内的模板。检查 app 日志及健康状态，并抽查一次实际处理。效果不好时，从 Git 取出上次使用的文件，写回运行目录并重启；已经写入的处理结果不会自动恢复。程序升级若新增必需模板或修改配置格式，须明确迁移，不能仅保留不兼容的旧文件。
 
 若移动运行目录，须同步更新 `.deploy.env`、`deploy/.env` 中的数据路径、系统已注册的启动路径，以及已保存的备份目录设置。不要只改文件夹名称。
 

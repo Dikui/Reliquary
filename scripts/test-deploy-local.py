@@ -33,6 +33,10 @@ class DeploymentTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('source')
         (directory / 'scripts').mkdir()
+        for base, content in ((source, 'new template'), (directory, 'custom runtime template')):
+            template = base / 'config/prompt_templates/processing.yaml'
+            template.parent.mkdir(parents=True)
+            template.write_text(content)
         heads = iter(('head1', 'head2', 'head3'))
         base = {'app': 'app-base', 'frontend': 'ui-base'}
         current = {name: {'id': name + '0', 'reference': name + '0', 'commit': base[name]} for name in deployer.SERVICES}
@@ -98,6 +102,8 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(deployer.update(source, directory, all_services=True, dry_run=False), ['app', 'frontend'])
             state = json.loads(override.read_text())['x-reliquary-revisions']
             self.assertEqual([state[name]['commit'] for name in deployer.SERVICES], ['head3', 'head3'])
+        self.assertEqual((directory / 'config/prompt_templates/processing.yaml').read_text(),
+                         'custom runtime template')
         env = deployer.admin.read_env(directory / '.env')
         self.assertEqual(env['COMPOSE_FILE'].split(os.pathsep).count(str(override)), 1)
         self.assertEqual(len(build_inputs), 3)
@@ -107,7 +113,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(record_runtime.call_count, 2)
         ctx.compose.assert_any_call('exec', '-T', 'frontend', 'nginx', '-s', 'reload')
 
-    def test_migration_blocks_even_manual_full_build(self):
+    def test_template_only_changes_do_not_deploy(self):
         temp, source, directory = self.fixture()
         self.addCleanup(temp.cleanup)
         with mock.patch.object(deployer, 'git', side_effect=['', 'head']), \
@@ -116,11 +122,28 @@ class DeploymentTests(unittest.TestCase):
                  name: {'id': name, 'reference': name, 'labels': {'org.opencontainers.image.revision': 'base'}}
                  for name in deployer.SERVICES}), \
              mock.patch.object(deployer, 'checked_containers'), \
-             mock.patch.object(deployer, 'changed_paths', return_value={'migrations/001.sql'}), \
+             mock.patch.object(deployer, 'changed_paths', return_value={'config/prompt_templates/processing.yaml'}), \
              mock.patch.object(deployer.subprocess, 'run') as run:
-            with self.assertRaisesRegex(deployer.admin.AdminError, 'Database migrations changed'):
-                deployer.deploy(source, directory, all_services=True)
+            self.assertEqual(deployer.deploy(source, directory), [])
         run.assert_not_called()
+
+    def test_migration_or_other_config_blocks_even_manual_full_build(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        for changed, error in [('migrations/001.sql', 'Database migrations changed'),
+                               ('config/config.yaml', 'Runtime configuration changed')]:
+            with self.subTest(changed=changed), \
+                 mock.patch.object(deployer, 'git', side_effect=['', 'head']), \
+                 mock.patch.object(deployer.admin, 'Context'), \
+                 mock.patch.object(deployer.admin, 'runtime_images', return_value={
+                     name: {'id': name, 'reference': name, 'labels': {'org.opencontainers.image.revision': 'base'}}
+                     for name in deployer.SERVICES}), \
+                 mock.patch.object(deployer, 'checked_containers'), \
+                 mock.patch.object(deployer, 'changed_paths', return_value={changed, 'config/prompt_templates/processing.yaml'}), \
+                 mock.patch.object(deployer.subprocess, 'run') as run:
+                with self.assertRaisesRegex(deployer.admin.AdminError, error):
+                    deployer.deploy(source, directory, all_services=True)
+            run.assert_not_called()
 
     def test_failed_update_restores_files_and_restarts_old_service(self):
         temp, source, directory = self.fixture()

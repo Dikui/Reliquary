@@ -16,6 +16,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/config"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
@@ -348,7 +349,7 @@ func (s *EntityService) judgeEntity(ctx context.Context, model chat.Chat, item e
 		payload = append(payload, map[string]any{"id": candidate.ID, "name": candidate.CanonicalName, "type": candidate.EntityType, "description": candidate.Description, "aliases": candidate.Aliases})
 	}
 	encoded, _ := json.Marshal(map[string]any{"mention": item.Mention, "canonical_name": item.Canonical, "entity_type": item.EntityType, "description": item.Description, "candidates": payload})
-	response, err := model.Chat(ctx, []chat.Message{{Role: "system", Content: `Decide whether the source mention is the exact same real-world entity as one candidate. Compare the source description with candidate descriptions and aliases to establish identity. A difference in type labels alone proves neither a different nor the same identity. Similar names, different versions, or a shared topic do not prove identity. Return {"decision":"match|new|uncertain","entity_id":"listed ID for match, otherwise empty","candidate_ids":["listed IDs relevant to uncertainty"],"confidence":0.0,"reason":"brief reason"}. Match requires confidence at least 0.9.`}, {Role: "user", Content: string(encoded)}}, &chat.ChatOptions{Temperature: 0})
+	response, err := model.Chat(ctx, []chat.Message{{Role: "system", Content: entityResolutionPrompt()}, {Role: "user", Content: string(encoded)}}, &chat.ChatOptions{Temperature: 0})
 	if err != nil || response == nil {
 		if err == nil {
 			err = errors.New("empty entity resolution response")
@@ -579,4 +580,8 @@ func entityConfiguredPositive(name string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func entityResolutionPrompt() string {
+	return config.Prompt("entity_resolution") + ` Return {"decision":"match|new|uncertain","entity_id":"listed ID for match, otherwise empty","candidate_ids":["listed IDs relevant to uncertainty"],"confidence":0.0,"reason":"brief reason"}. Match requires confidence at least 0.9.`
 }

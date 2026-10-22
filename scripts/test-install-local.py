@@ -58,6 +58,11 @@ class InstallationTests(unittest.TestCase):
             self.assertIn('--no-env-resolution', command.call_args_list[0].args)
             self.assertTrue((root / 'scripts/startup.py').is_file())
             self.assertTrue((root / 'deploy/scripts/reliquary_admin.py').is_file())
+            templates = list((installer.SOURCE / 'config/prompt_templates').glob('*.yaml'))
+            self.assertTrue(templates)
+            for template in templates:
+                self.assertEqual((root / 'deploy/config/prompt_templates' / template.name).read_bytes(),
+                                 template.read_bytes())
 
     def test_existing_deployment_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -10,13 +10,14 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 )
 
 const checkProtocol = `
-以调用方提供的只读 JSON 协议执行以上 skill。每轮只输出一个 JSON 对象：
+以调用方提供的只读 JSON 协议执行以上检查规则。每轮只输出一个 JSON 对象：
 调用工具：{"tool":"search|get_entry|get_entity|graph_search","arguments":{...}}
 最终结果：{"findings":[{"kind":"duplicate|conflict|result_error","description":"问题说明","evidence":[{"entry_id":"资料ID","quote":"逐字原文证据","current_result":"仅已有结果错误时填写当前结果"}]}]}
 无问题返回 {"findings":[]}。完成前必须用 search 查找历史候选。
@@ -74,7 +75,7 @@ func (s *ContentCheckService) checkEntry(ctx context.Context, model chat.Chat, m
 		return nil, err
 	}
 	input, _ := json.Marshal(map[string]any{"target_entry_id": id, "libraries": libraries, "entry": seed})
-	messages := []chat.Message{{Role: "system", Content: contentCheckSkill + checkProtocol}, {Role: "user", Content: string(input)}}
+	messages := []chat.Message{{Role: "system", Content: config.Prompt("content_check") + checkProtocol}, {Role: "user", Content: string(input)}}
 	searched := false
 	for {
 		raw, _ := json.Marshal(messages)

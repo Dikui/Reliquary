@@ -157,6 +157,11 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	if err := LoadPromptTemplates(ConfigDir()); err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(os.Stderr, "Using prompt templates: %s\n", filepath.Join(ConfigDir(), "prompt_templates"))
+
 	return &cfg, nil
 }
 

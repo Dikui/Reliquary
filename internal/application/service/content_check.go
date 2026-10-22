@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,9 +19,6 @@ import (
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
-
-//go:embed reliquary-content-check/SKILL.md
-var contentCheckSkill string
 
 type contentCheckStrictKey struct{}
 
