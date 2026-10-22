@@ -106,7 +106,18 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	}); ok {
 		mux.HandleFunc(types.TypeIngestAssetCleanup, assets.HandleIngestAssetCleanup)
 	}
-	config := queue.Config{Pools: resolveWorkerPoolConcurrency(params.SystemSettings), OnDeadLetter: newDeadLetterEntryFailer(params.EntryService, params.SpanTracker)}
+	entryFailure := newDeadLetterEntryFailer(params.EntryService, params.SpanTracker)
+	config := queue.Config{Pools: resolveWorkerPoolConcurrency(params.SystemSettings), OnDeadLetter: func(ctx context.Context, task *queue.Task, cause error) {
+		if task != nil && task.Type() == types.TypeContentCheck && params.ContentChecks != nil {
+			if err := params.ContentChecks.FailTask(ctx, task, cause); err != nil {
+				logger.Warnf(ctx, "failed to record content check failure: %v", err)
+			}
+			return
+		}
+		if entryFailure != nil {
+			entryFailure(ctx, task, cause)
+		}
+	}}
 	for name, target := range map[string]*time.Duration{"RELIQUARY_QUEUE_SWEEP_INTERVAL": &config.CheckInterval, "RELIQUARY_QUEUE_DELIVERY_TIMEOUT": &config.DeliveryTimeout} {
 		if raw := os.Getenv(name); raw != "" {
 			d, err := time.ParseDuration(raw)

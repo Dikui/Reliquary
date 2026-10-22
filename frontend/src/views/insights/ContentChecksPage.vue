@@ -6,7 +6,7 @@ import { listModels, type ModelConfig } from '@/api/model'
 import { checkSettings, saveCheckSettings, checkRuns, checkRun, recheck, type CheckRun, type CheckSettings, type CheckEvidence } from '@/api/content-check'
 const { t, locale } = useI18n(), route = useRoute(), router = useRouter()
 const settings = ref<CheckSettings>({ enabled: false, model_id: '', weekday: 1, time: '' }), models = ref<ModelConfig[]>([])
-const items = ref<CheckRun[]>([]), total = ref(0), detail = ref<CheckRun>(), loading = ref(false), busy = ref(false), error = ref(''), configError = ref(''), configReady = ref(false), message = ref('')
+const items = ref<CheckRun[]>([]), total = ref(0), detail = ref<CheckRun>(), loading = ref(false), busy = ref(false), error = ref(''), operationError = ref(''), configError = ref(''), configReady = ref(false), message = ref('')
 const selected = computed(() => typeof route.query.run === 'string' ? route.query.run : '')
 const page = computed(() => Math.max(1, Number(route.query.page) || 1))
 const modelOptions = computed(() => models.value.filter(m => m.status === 'active').map(m => ({ label: m.name, value: m.id! })))
@@ -18,7 +18,7 @@ const stamp = (s: string) => new Date(s).toLocaleString(locale.value)
 const evidenceRoute = (e: CheckEvidence) => ({ path: '/platform/entries', query: { entry_id: e.entry_id, reference: JSON.stringify(e.location) } })
 const statusName = (s: string) => t(`contentCheck.${s}`)
 let version = 0, disposed = false, timer: ReturnType<typeof setTimeout> | undefined
-function showError(e: unknown) { error.value = (e && typeof e === 'object' && 'message' in e) ? String(e.message) : t('contentCheck.loadFailed') }
+function errorMessage(e: unknown) { return (e && typeof e === 'object' && 'message' in e) ? String(e.message) : t('contentCheck.loadFailed') }
 async function load() {
   const ticket = ++version, id = selected.value
   loading.value = true; error.value = ''
@@ -28,20 +28,20 @@ async function load() {
     items.value = list.items; total.value = list.total; detail.value = run
     const last = Math.max(1, Math.ceil(list.total / 20))
     if (page.value > last) void router.replace({ query: { ...route.query, page: String(last) } })
-  } catch (e) { if (!disposed && ticket === version) showError(e) }
+  } catch (e) { if (!disposed && ticket === version) error.value = errorMessage(e) }
   finally { if (!disposed && ticket === version) loading.value = false }
 }
 async function save() {
   if (busy.value || !configReady.value) return
-  busy.value = true; error.value = ''; message.value = ''
+  busy.value = true; operationError.value = ''; message.value = ''
   try { settings.value = await saveCheckSettings(settings.value); message.value = t('contentCheck.saved') }
-  catch (e) { showError(e) } finally { busy.value = false }
+  catch (e) { operationError.value = errorMessage(e) } finally { busy.value = false }
 }
 async function retry() {
   if (!detail.value || busy.value) return
-  busy.value = true; error.value = ''
+  busy.value = true; operationError.value = ''
   try { const run = await recheck(detail.value.id); await router.push({ query: { ...route.query, run: run.id } }) }
-  catch (e) { showError(e) } finally { busy.value = false }
+  catch (e) { operationError.value = errorMessage(e) } finally { busy.value = false }
 }
 async function poll() {
   await load()
@@ -78,6 +78,7 @@ onUnmounted(() => { disposed = true; version++; clearTimeout(timer) })
     </section>
     <div v-if="configError" class="error" role="alert">{{ configError }} <t-button variant="text" @click="loadConfig">{{ t('common.retry') }}</t-button></div>
     <p v-if="message" role="status">{{ message }}</p>
+    <div v-if="operationError" class="error" role="alert">{{ operationError }}</div>
     <div v-if="error" class="error" role="alert">{{ error }} <t-button variant="text" @click="load">{{ t('common.retry') }}</t-button></div>
     <div class="toolbar"><t-button v-if="selected" variant="outline" @click="select()">{{ t('contentCheck.back') }}</t-button><t-button variant="outline" :loading="loading" @click="load">{{ t('contentCheck.refresh') }}</t-button></div>
     <section v-if="!selected" :aria-busy="loading">
@@ -92,7 +93,7 @@ onUnmounted(() => { disposed = true; version++; clearTimeout(timer) })
       <h2>{{ statusName(detail.status) }} · {{ detail.completed }}/{{ detail.total }}</h2>
       <p><code>{{ detail.id }}</code> · {{ modelName(detail.model_id) }}</p>
       <p v-if="detail.previous_id"><router-link :to="{ query: { ...route.query, run: detail.previous_id } }">{{ t('contentCheck.original') }}</router-link></p>
-      <div v-if="detail.status === 'failed'" class="error" role="alert"><p>{{ detail.error }}</p><p>{{ t('contentCheck.unfinished', { count: detail.total - detail.completed }) }}</p><t-button :loading="busy" @click="retry">{{ t('contentCheck.recheck') }}</t-button></div>
+      <div v-if="detail.status === 'failed'" class="error" role="alert"><p>{{ detail.error }}</p><p>{{ t('contentCheck.unfinished', { count: detail.total - detail.completed }) }}</p><details v-if="detail.targets?.length"><summary>{{ t('contentCheck.unfinishedMaterials') }}</summary><ul><li v-for="id in detail.targets.slice(detail.completed)" :key="id"><router-link :to="{ path: '/platform/entries', query: { entry_id: id } }">{{ id }}</router-link></li></ul></details><t-button :loading="busy" @click="retry">{{ t('contentCheck.recheck') }}</t-button></div>
       <section v-for="kind in kinds" :key="kind">
         <h3>{{ t(`contentCheck.${kind}`) }}</h3>
         <article v-for="(finding, index) in findings.filter(f => f.kind === kind)" :key="index" class="finding">

@@ -125,6 +125,7 @@ export default {
     failed: '图谱查询失败，请重试。', unavailable: '图谱查询服务暂时不可用，请稍后重试。', noLibraries: '没有可查询的资料库，请重新选择资料库。', chooseEntity: '实体尚未明确，请重新选择实体。',
   },
   contentCheck: {
+  "unfinishedMaterials": '未完成资料',
   "notice": "资料自检失败，请查看检查记录。",
   "title": "检查记录",
   "description": "每周检查新增和修改的资料，只输出问题和原文证据。",

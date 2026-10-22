@@ -3,7 +3,7 @@ import type { SourceLocation } from '@/types/search'
 export interface CheckSettings { enabled: boolean; model_id: string; weekday: number; time: string; next_run_at?: string | null }
 export interface CheckEvidence { entry_id: string; title: string; library_id: string; quote: string; current_result?: string; location: SourceLocation }
 export interface CheckFinding { kind: 'duplicate' | 'conflict' | 'result_error'; description: string; evidence: CheckEvidence[] }
-export interface CheckRun { id: string; model_id: string; previous_id: string; status: string; total: number; completed: number; results: { entry_id: string; findings: CheckFinding[] }[]; error: string; created_at: string; finished_at?: string }
+export interface CheckRun { id: string; model_id: string; previous_id: string; status: string; total: number; targets?: string[]; completed: number; results: { entry_id: string; findings: CheckFinding[] }[]; error: string; created_at: string; finished_at?: string }
 const path = '/api/v1/diagnostics/content-checks'
 interface Reply<T> { success: boolean; data: T; message?: string }
 async function data<T>(request: Promise<Reply<T>>) { const result = await request; if (!result.success) throw new Error(result.message || 'Request failed'); return result.data }

@@ -60,9 +60,9 @@ func (s checkTestSearch) Search(_ context.Context, r types.EntrySearchRequest) (
 	}
 	return out, nil
 }
-func seedCheckEntry(t *testing.T, h *articleProcessingHarness, title, body string) *types.Entry {
+func seedCheckEntry(t *testing.T, h *articleProcessingHarness, libraryID, title, body string) *types.Entry {
 	t.Helper()
-	e := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: h.library.ID, Title: title, VaultBody: body, VaultPath: uuid.NewString() + ".md", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted, EnableStatus: "enabled", ContentType: "event"}
+	e := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: libraryID, Title: title, VaultBody: body, VaultPath: uuid.NewString() + ".md", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted, EnableStatus: "enabled", ContentType: "event"}
 	require.NoError(t, h.db.Create(e).Error)
 	return e
 }
@@ -74,15 +74,15 @@ func checkTask(id string) *queue.Task {
 func TestContentCheckReportsEvidenceThroughRunResult(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	h.service.vault = &VaultService{db: h.db}
-	old := seedCheckEntry(t, h, "History", "Acme specification.")
+	old := seedCheckEntry(t, h, h.library.ID, "History", "Acme specification.")
 	otherLibrary := &types.Library{ID: uuid.NewString(), SpaceID: 1, Name: "Other sources", Directory: "other-sources"}
 	require.NoError(t, h.db.Create(otherLibrary).Error)
-	conflict := seedCheckEntry(t, h, "Earlier specification", "Acme supports eight connections.")
-	require.NoError(t, h.db.Model(conflict).Updates(map[string]any{"library_id": otherLibrary.ID, "metadata": types.JSON(`{"source":{"published_at":"2025-01-01T00:00:00Z"}}`)}).Error)
+	conflict := seedCheckEntry(t, h, otherLibrary.ID, "Earlier specification", "Acme supports eight connections.")
+	require.NoError(t, h.db.Model(conflict).Updates(map[string]any{"metadata": types.JSON(`{"source":{"published_at":"2025-01-01T00:00:00Z"}}`)}).Error)
 	model := &checkTestChat{}
 	s := NewContentCheckService(h.db, &libraryRebuildQueue{db: h.db}, checkTestModels{model: model}, h.service, checkTestSearch{t: t, ids: []string{old.ID, conflict.ID}}, NewEntityService(h.db, h.service.modelService), nil)
 	require.NoError(t, s.Configure(h.ctx, types.ContentCheckSettings{Enabled: true, ModelID: "local-fixture", Weekday: 1, Time: "03:00"}))
-	target := seedCheckEntry(t, h, "New source", "Acme supports sixteen connections. Acme specification.")
+	target := seedCheckEntry(t, h, h.library.ID, "New source", "Acme supports sixteen connections. Acme specification.")
 	model.replies = []string{`{"tool":"search","arguments":{"query":"Acme connections"}}`, `{"tool":"get_entry","arguments":{"id":"` + old.ID + `"}}`, `{"tool":"get_entry","arguments":{"id":"` + conflict.ID + `"}}`, `{"findings":[{"kind":"conflict","description":"The same object's connection count differs.","evidence":[{"entry_id":"` + target.ID + `","quote":"Acme supports sixteen connections."},{"entry_id":"` + conflict.ID + `","quote":"Acme supports eight connections."}]},{"kind":"duplicate","description":"Same specification content.","evidence":[{"entry_id":"` + target.ID + `","quote":"Acme specification."},{"entry_id":"` + old.ID + `","quote":"Acme specification."}]},{"kind":"result_error","description":"Existing result does not match the source.","evidence":[{"entry_id":"` + target.ID + `","quote":"Acme supports sixteen connections.","current_result":"eight connections"}]}]}`}
 	target.StructuredSummary = &types.EntrySummary{Overview: "eight connections"}
 	require.NoError(t, h.db.Save(target).Error)
@@ -121,9 +121,9 @@ func TestContentCheckStopsAndRetainsResultsForExplicitRecheck(t *testing.T) {
 	model := &checkTestChat{replies: []string{`{"tool":"search","arguments":{"query":"Acme"}}`, `{"findings":[]}`}, failAt: 3}
 	s := NewContentCheckService(h.db, &libraryRebuildQueue{db: h.db}, checkTestModels{model: model}, h.service, checkTestSearch{t: t}, NewEntityService(h.db, h.service.modelService), nil)
 	require.NoError(t, s.Configure(h.ctx, types.ContentCheckSettings{Enabled: true, ModelID: "local-fixture", Weekday: 1, Time: "03:00"}))
-	first := seedCheckEntry(t, h, "First", "First Acme note.")
+	first := seedCheckEntry(t, h, h.library.ID, "First", "First Acme note.")
 	time.Sleep(time.Millisecond)
-	second := seedCheckEntry(t, h, "Second", "Second Acme note.")
+	second := seedCheckEntry(t, h, h.library.ID, "Second", "Second Acme note.")
 	run, err := s.Start(h.ctx, "")
 	require.NoError(t, err)
 	require.NoError(t, s.Handle(h.ctx, checkTask(run.ID)))
@@ -150,4 +150,15 @@ func TestContentCheckStopsAndRetainsResultsForExplicitRecheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "failed", original.Status)
 	require.Len(t, original.Results, 1)
+	seedCheckEntry(t, h, h.library.ID, "Queue interruption", "Another Acme note.")
+	interrupted, err := s.Start(h.ctx, "")
+	require.NoError(t, err)
+	require.NoError(t, s.FailTask(h.ctx, checkTask(interrupted.ID), errors.New("task handler panic")))
+	terminal, err := s.Get(h.ctx, interrupted.ID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", terminal.Status)
+	require.NoError(t, s.FailTask(h.ctx, checkTask(completed.ID), errors.New("late callback")))
+	completed, err = s.Get(h.ctx, completed.ID)
+	require.NoError(t, err)
+	require.Equal(t, "completed", completed.Status)
 }

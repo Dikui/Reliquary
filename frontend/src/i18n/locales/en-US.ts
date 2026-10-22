@@ -125,6 +125,7 @@ export default {
     failed: 'Graph search failed. Try again.', unavailable: 'Graph search is temporarily unavailable. Try again later.', noLibraries: 'No libraries are available for this query. Select libraries again.', chooseEntity: 'The entity is ambiguous. Select an entity again.',
   },
   contentCheck: {
+  "unfinishedMaterials": 'Unfinished materials',
   "notice": "Content check failed. Open the check record.",
   "title": "Check records",
   "description": "Check new and updated materials each week. Report problems and source evidence only.",

@@ -220,7 +220,18 @@ func (s *ContentCheckService) Tick(ctx context.Context) error {
 }
 func (s *ContentCheckService) fail(ctx context.Context, id string, cause error) error {
 	now := time.Now().UTC()
-	return s.db.WithContext(context.WithoutCancel(ctx)).Model(&types.ContentCheckRun{}).Where("id=?", id).Updates(map[string]any{"status": "failed", "error": cause.Error(), "finished_at": now}).Error
+	return s.db.WithContext(context.WithoutCancel(ctx)).Model(&types.ContentCheckRun{}).Where("id=? AND status IN ?", id, []string{"pending", "running"}).Updates(map[string]any{"status": "failed", "error": cause.Error(), "finished_at": now}).Error
+}
+
+// FailTask mirrors terminal queue failures without retrying the check or losing checkpoints.
+func (s *ContentCheckService) FailTask(ctx context.Context, task *queue.Task, cause error) error {
+	var payload struct {
+		RunID string `json:"run_id"`
+	}
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil || payload.RunID == "" {
+		return errors.New("invalid check task")
+	}
+	return s.fail(ctx, payload.RunID, cause)
 }
 func (s *ContentCheckService) Handle(ctx context.Context, task *queue.Task) error {
 	var payload struct {
