@@ -1,10 +1,17 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  entryStatus: {
+    title: '入库与后台处理状态', saved: '已入库', indexPending: '索引待处理', indexing: '正在建立正文索引', indexFailed: '正文索引失败',
+    pending: '后台待处理', processing: '后台处理中', completed: '后台处理完成', failed: '后台处理失败',
+    cancelled: '处理已取消', deleting: '正在删除', none: '无需后台处理', skipped: '后台处理已跳过', unknown: '后台状态未知',
+    retry: '重试处理', retryQueued: '已提交重试，后台将继续处理。', retryFailed: '未能提交重试，请再试一次。',
+    retryUncertain: '未能确认重试结果，请刷新资料状态后再试。', savedHint: '正文已保存。后台处理失败不会删除已入库的正文。',
+  },
   entryEditor: {
     title: '编辑正文', edit: '编辑', preview: '预览', view: '正文显示方式', markdown: 'Markdown 正文', unsaved: '尚未保存',
-    processHint: '保存会替换原正文，不保留旧版本。资料 ID 和来源保留；重新审核和处理可能产生模型费用，期间资料可能暂时无法检索。',
-    indexHint: '保存会替换原正文，不保留旧版本。资料 ID 和来源保留，仅重新建立索引。',
-    saveProcess: '保存并重新处理', saveIndex: '保存并重建索引', savedPending: '正文已保存，正在处理。', unchanged: '正文未变化，无需重新处理。',
+    processHint: '保存后即已入库。正文索引和后台处理会重新运行，可能产生模型费用；可在详情中查看状态。资料 ID 和来源保留，不保留旧版本。',
+    indexHint: '保存后即已入库。正文索引和后台处理会重新运行，可能产生模型费用；可在详情中查看状态。资料 ID 和来源保留，不保留旧版本。',
+    saveProcess: '保存', saveIndex: '保存', savedPending: '已入库', unchanged: '正文未变化，无需重新处理。',
     loadFailed: '无法读取完整正文，请重试。', saveFailed: '正文未保存，草稿已保留，请重试。', empty: '正文不能为空。',
     conflict: '这份资料已被其他窗口或工具修改。你的草稿仍然保留，请复制草稿后重新加载最新正文。',
     busy: '资料或所属库正在处理，请稍后再保存。', reload: '重新加载正文', copyDraft: '复制草稿',
@@ -937,7 +944,7 @@ export default {
       baseUrl: 'API 地址',
       baseUrlDesc: '与 REST API 路径拼接使用。',
       ingestUrl: '外部 Agent 收录接口',
-      ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。新内容经过模型收录审核；重复、已丢弃、缺正文等情况按规则直接返回。未通过审核的资料返回 pending_review 与原因，调用方的判断不替代审核。通过内网访问时使用 Authorization: Bearer API_KEY。",
+      ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。通过必要技术校验后即入库，正文索引、摘要、分类和图谱在后台处理。来源相同且内容不变时返回原资料，有变化时更新原资料；后台处理失败不撤销已保存的正文。通过内网访问时使用 Authorization: Bearer API_KEY。",
       copyIngestUrl: '复制收录接口地址',
       mcpUrl: 'MCP 服务地址',
       mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取资料、收录、待审区、星标和写入AI产出。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',

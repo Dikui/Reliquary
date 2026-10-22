@@ -23,6 +23,8 @@ import { useI18n } from 'vue-i18n';
 import RepostSources from '@/views/library/components/RepostSources.vue';
 import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import EntryProcessingStatus from '@/components/EntryProcessingStatus.vue';
+import { entryProcessingState } from '@/utils/entryProcessingStatus';
 import ReportAssociations from '@/components/ReportAssociations.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import BodyReference from './BodyReference.vue';
@@ -60,7 +62,7 @@ async function contentSaved(value: { id: string; content: string; status: string
   savedBody.value = { id: value.id, content: value.content };
   await finishContentEdit();
   if (props.details.id !== value.id) return;
-  if (value.status !== 'exists') applyProcessingState({ parse_status: 'pending', md: [], total: 0, description: '', structured_summary: null, entities: [], topics: [] });
+  if (value.status !== 'exists') applyProcessingState({ parse_status: 'pending', summary_status: 'pending', error_message: '', md: [], total: 0, description: '', structured_summary: null, entities: [], topics: [] });
   try {
     const result = await getEntryDetails(value.id);
     if (props.details.id !== value.id || !result.success) return;
@@ -175,14 +177,18 @@ const reprocess = async () => {
   if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value) return;
   reprocessing.value = true;
   try {
-    const result: any = await reparseEntry(props.details.id);
-    applyProcessingState(result?.data || { parse_status: 'pending' });
+    const id = props.details.id;
+    const result: any = await reparseEntry(id);
+    if (props.details.id !== id) return;
+    if (!result?.success || !result.data) throw new Error(result?.message || t('entryStatus.retryFailed'));
+    applyProcessingState(result.data);
     MessagePlugin.success(t('library.reprocessQueued'));
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('common.error'));
   } finally { reprocessing.value = false; }
 };
-const isProcessing = computed(() => ['pending', 'processing', 'finalizing'].includes(props.details?.parse_status));
+const processingState = computed(() => entryProcessingState(props.details || {}));
+const isProcessing = computed(() => processingState.value.active);
 
 const headerIconName = computed(() => {
   if (props.details?.source_kind === 'mine') return 'file';
@@ -350,7 +356,7 @@ const scheduleProcessingPoll = () => {
     if (generation === processingPollGeneration && isProcessing.value) scheduleProcessingPoll();
   }, 1500);
 };
-watch(() => [props.visible, props.details?.id, props.details?.parse_status], ([visible, id], previous) => {
+watch(() => [props.visible, props.details?.id, props.details?.parse_status, props.details?.summary_status], ([visible, id], previous) => {
   if (!previous || previous[1] !== id || !visible) stopProcessingPolling();
   if (props.visible && props.details?.id && isProcessing.value) scheduleProcessingPoll();
   else stopProcessingPolling();
@@ -536,7 +542,7 @@ function cleanupMainDrawerResize() {
 }
 
 const traceEntryTheme = computed(() => {
-  const s = timelineSummary.value.status || '';
+  const s = processingState.value.status === 'completed' ? timelineSummary.value.status : processingState.value.status;
   switch (s) {
     case 'done':
     case 'completed':
@@ -1142,7 +1148,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
            link's status dot / duration stays live even before the user
            opens the secondary drawer. -->
       <div class="kp-trigger-shadow" aria-hidden="true">
-        <EntryProcessingTimeline v-if="details.id" :entry-id="details.id" :parse-status="details.parse_status"
+        <EntryProcessingTimeline v-if="details.id" :entry-id="details.id" :parse-status="processingState.status"
           :compact="true" :grace-poll="false" @update:has-spans="hasTimelineSpans = $event"
           @update:summary="timelineSummary = $event" />
       </div>
@@ -1162,7 +1168,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         @close="closeTimeline">
         <div class="kp-drawer-shell" :class="{ 'kp-drawer-shell--resizing': timelineDrawerResizing }">
           <EntryProcessingTimeline v-if="details.id && timelineDrawerVisible" :entry-id="details.id"
-            :parse-status="details.parse_status" :doc-title="details.title" show-close @close="closeTimeline" />
+            :parse-status="processingState.status" :doc-title="details.title" show-close @close="closeTimeline" />
         </div>
       </t-drawer>
 
@@ -1172,7 +1178,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <template #preview="{ content }"><div class="md-content" v-html="processMarkdown(content)" /></template>
         </EntryContentEditor>
         <template v-else>
-        <t-alert v-if="savedBody && isProcessing" theme="info" :message="t('entryEditor.savedPending')" role="status" />
         <BodyReference v-if="visible && details.id && reference" :key="details.id" :entry-id="details.id" :location="reference as SourceLocation" />
         <section v-if="details.id" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('library.detailSectionMeta') }}</h4>
@@ -1312,12 +1317,16 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
         </section>
 
+        <section class="setting-drawer__section">
+          <EntryProcessingStatus :entry="details" :disabled="reprocessing || articleJudgmentsBusy || personalDocumentDeleteBusy" @updated="applyProcessingState" />
+        </section>
+
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">{{ $t('library.documentSummary') }}</h4>
-            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy" @click="reprocess">
+            <t-button v-if="canReprocess && !processingState.failed" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
-              {{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.reprocess') }}
+              {{ $t('library.reprocess') }}
             </t-button>
           </div>
           <details v-if="details.image_descriptions?.some(image => image.description)" class="image-descriptions">
@@ -1331,8 +1340,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
           <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" />
           <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
-          <p v-if="isProcessing" role="status">{{ $t('library.statusProcessing') }}</p>
-          <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('library.parsingFailed') }}</p>
         </section>
 
         <section class="setting-drawer__section doc-content-section">

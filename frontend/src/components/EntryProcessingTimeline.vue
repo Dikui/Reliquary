@@ -76,6 +76,7 @@ const POLL_INTERVAL_MS = 2000
 
 const data = ref<SpansResponse | null>(null)
 const processOverrides = ref<EntryProcessOverrides | null>(null)
+const processConfigVisible = ref(false)
 const currentEntryFileType = ref('')
 const loading = ref(false)
 const refreshing = ref(false)
@@ -467,6 +468,12 @@ watch(
     fetchProcessOverrides()
   },
 )
+
+function closeProcessConfig(event: KeyboardEvent) {
+  if (!processConfigVisible.value) return
+  processConfigVisible.value = false
+  event.stopPropagation()
+}
 
 function onKeydown(ev: KeyboardEvent) {
   if (ev.key === 'Escape' && selectedSpanId.value) {
@@ -1313,10 +1320,12 @@ const processConfigLines = computed<string[]>(() => {
               <span class="kp-live-text">{{ t('knowledgeStages.live') }}</span>
             </span>
             <div class="kp-head-actions">
-              <t-popup trigger="hover" placement="bottom-right" :overlay-style="{ maxWidth: '340px' }">
+              <t-popup v-model:visible="processConfigVisible" trigger="click" placement="bottom-right" :overlay-style="{ maxWidth: '340px' }">
                 <button type="button" class="kp-icon-btn"
                   :title="t('knowledgeStages.processConfig.title')"
-                  :aria-label="t('knowledgeStages.processConfig.title')">
+                  :aria-label="t('knowledgeStages.processConfig.title')"
+                  :aria-expanded="processConfigVisible"
+                  @keydown.esc="closeProcessConfig">
                   <t-icon name="info-circle" size="14px" />
                 </button>
                 <template #content>
@@ -1867,6 +1876,11 @@ const processConfigLines = computed<string[]>(() => {
 .kp-icon-btn:hover:not(:disabled) {
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-primary);
+}
+
+.kp-icon-btn:focus-visible {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: 2px;
 }
 
 .kp-icon-btn:disabled {

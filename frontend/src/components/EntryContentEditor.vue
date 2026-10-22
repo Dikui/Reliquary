@@ -65,7 +65,7 @@ async function save() {
   try {
     const response = await updateEntryContent(props.entryId, { content, base_body_hash: bodyHash.value })
     if (controller.signal.aborted) return
-    if (!response.success) throw new Error(response.message)
+    if (!response.success || !['accepted', 'exists'].includes(response.data?.status)) throw Object.assign(new Error(response.message || t('entryEditor.saveFailed')), { status: 200 })
     original.value = content
     saving.value = false
     MessagePlugin.success(t(response.data.status === 'exists' ? 'entryEditor.unchanged' : 'entryEditor.savedPending'))

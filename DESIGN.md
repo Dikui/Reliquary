@@ -77,3 +77,6 @@ TDesign owns buttons, inputs, date pickers, loading, empty states and pagination
 - Keep unknown, partial and expired states explicit; link to existing diagnostic owners.
 - Do not add replay or destructive actions to the read-only failure viewer.
 - Do not infer a resolved failure from an accepted recovery submission.
+
+
+EntryProcessingStatus uses the existing success outline tag for confirmed storage and a separate neutral, active or error tag for background work. Cards, rows and details share these labels and the TDesign retry button. Labels wrap in narrow containers; the saved state does not change to an error color when enrichment fails. No new theme tokens are introduced.

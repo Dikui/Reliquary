@@ -7,6 +7,7 @@ import DocumentActionMenu from './DocumentActionMenu.vue';
 import DocumentMenuDelete from './DocumentMenuDelete.vue';
 import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import EntryProcessingStatus from '@/components/EntryProcessingStatus.vue';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
 import type { EntryJudgment } from '@/api/entry-judgments';
@@ -43,6 +44,7 @@ const emit = defineEmits<{
   (e: 'action', action: 'download' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: EntryItem): void;
   (e: 'probe-trace', item: EntryItem): void;
   (e: 'deleted', id: string): void;
+  (e: 'processing-updated', value: Record<string, unknown> & { id: string }): void;
 }>();
 
 const { t } = useI18n();
@@ -61,41 +63,6 @@ const formatTime = (time?: string) => {
 };
 
 const getSourceInfo = (item: EntryItem) => ({ icon: 'link', label: entryChannelLabel(item, t) });
-
-interface StatusInfo {
-  label: string;
-  theme: 'success' | 'warning' | 'danger' | 'primary' | 'default';
-  icon?: string;
-  spin?: boolean;
-}
-const computeStatus = (item: EntryItem): StatusInfo => {
-  if (item.parse_status === 'pending' || item.parse_status === 'processing') {
-    return { label: t('library.statusProcessing'), theme: 'primary', icon: 'loading', spin: true };
-  }
-  if (item.parse_status === 'finalizing') return { label: t('library.statusFinalizing'), theme: 'primary', icon: 'loading', spin: true };
-  if (item.parse_status === 'failed') {
-    return { label: t('library.statusFailed'), theme: 'danger', icon: 'close-circle' };
-  }
-  if (item.parse_status === 'cancelled') {
-    return { label: t('library.statusCancelled'), theme: 'warning', icon: 'close-circle' };
-  }
-  if (item.parse_status === 'draft') {
-    return { label: t('library.statusDraft'), theme: 'warning' };
-  }
-  if (item.parse_status === 'rejected') {
-    return { label: t('library.intakeWaiting'), theme: 'warning' };
-  }
-  if (item.parse_status === 'completed') {
-    return { label: t('library.statusCompleted'), theme: 'success' };
-  }
-  return { label: '--', theme: 'default' };
-};
-
-const statusByRow = computed(() => {
-  const map = new Map<string, StatusInfo>();
-  for (const item of props.items) map.set(item.id, computeStatus(item));
-  return map;
-});
 
 const allSelected = computed(() => {
   return props.items.length > 0 && props.items.every(i => props.selectedIds.has(i.id));
@@ -207,17 +174,7 @@ const openDelete = async (item: EntryItem) => {
         </div>
 
         <div class="cell cell-status">
-          <template v-if="statusByRow.get(item.id) as StatusInfo | undefined">
-            <t-tag v-if="statusByRow.get(item.id)!.label !== '--'" size="small" :theme="statusByRow.get(item.id)!.theme"
-              variant="light-outline" class="row-status-tag">
-              <template v-if="statusByRow.get(item.id)!.icon" #icon>
-                <t-icon :name="statusByRow.get(item.id)!.icon!"
-                  :class="{ 'icon-spin': statusByRow.get(item.id)!.spin }" />
-              </template>
-              {{ statusByRow.get(item.id)!.label }}
-            </t-tag>
-            <span v-else class="row-muted">--</span>
-          </template>
+          <EntryProcessingStatus :entry="item" compact @updated="emit('processing-updated', $event)" />
         </div>
 
         <div class="cell cell-time">
@@ -533,7 +490,12 @@ const openDelete = async (item: EntryItem) => {
 @media (max-width: 640px) {
   .doc-list-header { display: none; }
   .doc-list-row { grid-template-columns: 32px minmax(0, 1fr) 52px; padding: 12px 6px; }
-  .doc-list-row > :nth-child(n+3):nth-child(-n+6) { display: none; }
+  .doc-list-row > .cell-source, .doc-list-row > .cell-size, .doc-list-row > .cell-time { display: none; }
+  .doc-list-row > .cell-check { grid-area: 1 / 1; }
+  .doc-list-row > .cell-name { grid-area: 1 / 2; }
+  .doc-list-row > .cell-actions { grid-area: 1 / 3; }
+  .doc-list-row > .cell-status { grid-area: 2 / 2 / 3 / 4; padding-top: 8px; }
+  .doc-list-row .row-more-btn { opacity: 1; }
   .doc-list-row .row-file-name { white-space: normal; overflow-wrap: anywhere; }
   .doc-list-view { min-width: 0; overflow-x: hidden; }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { isEntryProcessingActive } from '@/utils/entryProcessingStatus';
 
 interface EntryItem {
   id: string;
@@ -7,6 +8,7 @@ interface EntryItem {
   title?: string;
   type?: string;
   parse_status?: string;
+  summary_status?: string;
   source_kind?: string;
   vault_path?: string;
 }
@@ -24,15 +26,10 @@ const emit = defineEmits<{
   (e: 'delete'): void;
 }>();
 
-const CANCELABLE_PARSE_STATUSES = new Set(['pending', 'processing', 'finalizing']);
-
-const isParseInFlight = computed(() =>
-  CANCELABLE_PARSE_STATUSES.has(String(props.item.parse_status ?? ''))
-);
+const isParseInFlight = computed(() => isEntryProcessingActive(props.item));
 
 const fileName = computed(() => props.item.file_name || props.item.title || props.item.id);
 const canReprocess = computed(() => Boolean(props.item.id));
-const isIndexOnly = computed(() => props.item.source_kind === 'report');
 </script>
 
 <template>
@@ -45,18 +42,18 @@ const isIndexOnly = computed(() => props.item.source_kind === 'report');
   <!-- 重建知识 (in-flight: no popconfirm, just emits) -->
   <div v-if="canReprocess && isParseInFlight" class="doc-action-menu-item" @click.stop="emit('reparse')">
     <t-icon class="icon" name="refresh" />
-    <span>{{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.rebuildDocument') }}</span>
+    <span>{{ $t('library.reprocess') }}</span>
   </div>
 
   <!-- 重建知识 (normal: with popconfirm) -->
   <t-popconfirm v-else-if="canReprocess" theme="warning"
-    :content="$t(isIndexOnly ? 'library.reindexConfirm' : 'library.rebuildConfirm', { fileName })"
+    :content="$t('library.rebuildConfirm', { fileName })"
     :confirm-btn="{ content: $t('common.confirm'), theme: 'primary' }"
     :cancel-btn="{ content: $t('common.cancel') }" placement="left"
     @confirm="emit('reparse')">
     <div class="doc-action-menu-item" @click.stop>
       <t-icon class="icon" name="refresh" />
-      <span>{{ $t(isIndexOnly ? 'library.reindexDocument' : 'library.rebuildDocument') }}</span>
+      <span>{{ $t('library.reprocess') }}</span>
     </div>
   </t-popconfirm>
 

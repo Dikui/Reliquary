@@ -1,11 +1,11 @@
-export type EntryPollStatus = {
-  parse_status?: string
-}
+import { isEntryProcessingActive, type EntryProcessingInput } from '@/utils/entryProcessingStatus'
+
+export type EntryPollStatus = EntryProcessingInput
 
 export function isEntryParseInFlight(status?: string): boolean {
   return status === 'pending' || status === 'processing' || status === 'finalizing'
 }
 
 export function entryNeedsStatusPolling(item: EntryPollStatus): boolean {
-  return isEntryParseInFlight(item.parse_status)
+  return isEntryProcessingActive(item)
 }

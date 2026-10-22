@@ -1,10 +1,17 @@
 import { ikb18En } from './ikb18'
 export default {
+  entryStatus: {
+    title: 'Storage and background processing', saved: 'Saved', indexPending: 'Index queued', indexing: 'Indexing body', indexFailed: 'Body indexing failed',
+    pending: 'Background work queued', processing: 'Processing in background', completed: 'Background work completed', failed: 'Background processing failed',
+    cancelled: 'Processing cancelled', deleting: 'Deleting', none: 'No background work required', skipped: 'Background work skipped', unknown: 'Background status unknown',
+    retry: 'Retry processing', retryQueued: 'Retry submitted. Background processing will continue.', retryFailed: 'Could not submit the retry. Try again.',
+    retryUncertain: 'The retry result could not be confirmed. Refresh the entry status before trying again.', savedHint: 'The body is saved. Failed background processing does not delete the saved body.',
+  },
   entryEditor: {
     title: 'Edit body', edit: 'Edit', preview: 'Preview', view: 'Body display', markdown: 'Markdown body', unsaved: 'Unsaved changes',
-    processHint: 'Saving replaces the body without keeping a previous version. The entry ID and source stay the same. Review and processing may incur model costs, and search may be unavailable until processing finishes.',
-    indexHint: 'Saving replaces the body without keeping a previous version. The entry ID and source stay the same. Only the index is rebuilt.',
-    saveProcess: 'Save and reprocess', saveIndex: 'Save and rebuild index', savedPending: 'Body saved. Processing is in progress.', unchanged: 'The body is unchanged. No processing is needed.',
+    processHint: 'Saving stores the body immediately. Body indexing and background processing run again and may incur model costs; follow their status in the entry details. The entry ID and source stay the same; no previous version is kept.',
+    indexHint: 'Saving stores the body immediately. Body indexing and background processing run again and may incur model costs; follow their status in the entry details. The entry ID and source stay the same; no previous version is kept.',
+    saveProcess: 'Save', saveIndex: 'Save', savedPending: 'Saved', unchanged: 'The body is unchanged. No processing is needed.',
     loadFailed: 'Could not load the complete body. Please retry.', saveFailed: 'The body was not saved. Your draft is retained. Please retry.', empty: 'The body cannot be empty.',
     conflict: 'Another window or tool has changed this entry. Your draft is retained. Copy it before reloading the latest body.',
     busy: 'This entry or its library is being processed. Please save later.', reload: 'Reload body', copyDraft: 'Copy draft',
@@ -2561,7 +2568,7 @@ export default {
       baseUrl: 'API Base URL',
       baseUrlDesc: 'Use this base URL with REST API paths.',
       ingestUrl: 'External Agent ingest endpoint',
-      ingestUrlDesc: "External tools submit complete content through the HTTP and MCP ingest interfaces. Reliquary does not fetch source pages or download remote files and images. New content goes through model intake review; duplicates, discarded content, missing bodies and similar cases return directly according to the rules. Rejected materials return pending_review with a reason. The caller’s judgment does not replace review. Use Authorization: Bearer API_KEY over the intranet.",
+      ingestUrlDesc: "External tools submit complete content through the HTTP and MCP ingest interfaces. Reliquary does not fetch source pages or download remote files and images. Content is saved after technical validation. Body indexing, summaries, classification and graph processing run in the background. An unchanged source returns the existing entry; changed content updates it. Background failures do not undo the saved body. Use Authorization: Bearer API_KEY over the intranet.",
       copyIngestUrl: 'Copy ingest endpoint',
       mcpUrl: 'MCP server URL',
       mcpUrlDesc: 'Connect via Streamable HTTP to search, read materials, ingest, review pending materials, set stars and write reports. Access over the intranet with the same API key: Authorization: Bearer API_KEY.',

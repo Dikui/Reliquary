@@ -52,7 +52,6 @@ import type { EntryJudgment } from '@/api/entry-judgments';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import { useReparseConfirmStore } from '@/stores/reparseConfirm';
 import {
-  isEntryParseInFlight,
   entryNeedsStatusPolling,
 } from './entryStatusPolling';
 import { useI18n } from 'vue-i18n';
@@ -86,16 +85,9 @@ function clearTraceAvailabilityCache() {
   traceProbeInflight.clear();
 }
 
-// Parse phases where the backend pipeline is still actively running
-// (primary parse OR post-process fan-out). Trace data exists and the
-// UI should treat the row as "in flight" rather than terminal.
-function isParseInFlight(status?: string): boolean {
-  return isEntryParseInFlight(status);
-}
-
 function isTraceMenuVisible(item: EntryCard): boolean {
   if (!item?.id) return false;
-  if (isParseInFlight(item.parse_status)) {
+  if (entryNeedsStatusPolling(item)) {
     return true;
   }
   return traceAvailableById[item.id] === true;
@@ -104,7 +96,7 @@ function isTraceMenuVisible(item: EntryCard): boolean {
 async function probeTraceAvailable(item: EntryCard) {
   const id = item.id;
   if (!id || traceProbeInflight.has(id)) return;
-  if (isParseInFlight(item.parse_status)) {
+  if (entryNeedsStatusPolling(item)) {
     traceAvailableById[id] = true;
     return;
   }
@@ -522,6 +514,7 @@ type EntryCard = {
   vault_path?: string;
   library_id?: string;
   parse_status: string;
+  summary_status?: string;
   description?: string;
   file_name?: string;
   original_file_name?: string;
@@ -562,7 +555,9 @@ const updateStatus = (analyzeList: EntryCard[]) => {
 
 
           if (cardList.value[index].parse_status !== parseStatus ||
-            cardList.value[index].description !== item.description) {
+            cardList.value[index].description !== item.description ||
+            cardList.value[index].summary_status !== item.summary_status ||
+            cardList.value[index].error_message !== item.error_message) {
 
             // Always update the card data
             cardList.value[index].parse_status = parseStatus;
@@ -638,7 +633,7 @@ const confirmDeleteEntry = (index: number, item: EntryCard) => {
 };
 
 const onReparseMenuClick = (index: number, item: EntryCard) => {
-  if (isParseInFlight(item.parse_status)) {
+  if (entryNeedsStatusPolling(item)) {
     MessagePlugin.info(t('library.rebuildInProgress'));
   }
 };
@@ -687,7 +682,7 @@ const confirmRebuildEntry = async (index: number, item: EntryCard) => {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
     return;
   }
-  if (isParseInFlight(item.parse_status)) {
+  if (entryNeedsStatusPolling(item)) {
     MessagePlugin.info(t('library.rebuildInProgress'));
     return;
   }
@@ -770,6 +765,7 @@ const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknow
   if (!state?.id) return;
   const card = cardList.value.find((item: EntryCard) => item.id === state.id);
   if (card) Object.assign(card, state);
+  if (details.id === state.id) Object.assign(details, state);
   if (selectedStarred.value !== '' && typeof state.starred === 'boolean' && String(state.starred) !== selectedStarred.value) {
     selectedIds.value.delete(state.id);
     resetPage();
@@ -903,7 +899,7 @@ const handleCardAction = (
 ) => {
   const idx = (cardList.value || []).findIndex((i: EntryCard) => i.id === item.id);
   if (action === 'reparse') {
-    if (isParseInFlight(item.parse_status)) return onReparseMenuClick(idx, item);
+    if (entryNeedsStatusPolling(item)) return onReparseMenuClick(idx, item);
     return confirmRebuildEntry(idx, item);
   }
   if (action === 'cancel-parse') return confirmCancelParseEntry(item);
@@ -1117,7 +1113,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 <template v-else-if="cardList.length && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
                   <DocumentCardView
-                    :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment"
+                    :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment" @processing-updated="syncDocumentProcessingState"
 
                     :selected-ids="selectedIds"
                     :batch-mode="batchMode"
@@ -1135,7 +1131,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                   />
                 </template>
                 <template v-else-if="cardList.length && (viewMode === 'list' || selectedParseStatus === 'rejected')">
-                  <DocumentListView :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment"
+                  <DocumentListView :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment" @processing-updated="syncDocumentProcessingState"
                     :selected-ids="selectedIds"
 
                     :trace-visible-ids="traceAvailableById"

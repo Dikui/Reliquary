@@ -32,3 +32,43 @@ export function resolveTimelineHeaderStatus(input: TimelineStatusInput): string 
   }
   return input.traceStatus || parseStatusToTimelineStatus(input.parseStatus)
 }
+
+
+export type EntryProcessingInput = {
+  id?: string
+  parse_status?: string
+  summary_status?: string
+  error_message?: string
+}
+
+export function isEntryProcessingActive(entry: EntryProcessingInput): boolean {
+  return ['pending', 'processing', 'finalizing'].includes(entry.parse_status || '')
+    || (entry.parse_status === 'completed' && ['pending', 'processing'].includes(entry.summary_status || ''))
+}
+
+export function entryProcessingState(entry: EntryProcessingInput) {
+  const parse = entry.parse_status || ''
+  const summary = entry.summary_status || ''
+  const stored = Boolean(entry.id) && ['pending', 'processing', 'finalizing', 'completed', 'failed', 'cancelled'].includes(parse)
+  let status = parse
+  let label = 'entryStatus.unknown'
+  if (parse === 'failed') label = 'entryStatus.indexFailed'
+  else if (parse === 'cancelled') label = 'entryStatus.cancelled'
+  else if (parse === 'pending') label = 'entryStatus.indexPending'
+  else if (parse === 'processing' || parse === 'finalizing') label = 'entryStatus.indexing'
+  else if (parse === 'draft') label = 'library.statusDraft'
+  else if (parse === 'rejected') label = 'library.intakeWaiting'
+  else if (parse === 'deleting') label = 'entryStatus.deleting'
+  else if (parse === 'completed') {
+    if (summary === 'failed') { status = 'failed'; label = 'entryStatus.failed' }
+    else if (summary === 'pending') { status = 'pending'; label = 'entryStatus.pending' }
+    else if (summary === 'processing') { status = 'processing'; label = 'entryStatus.processing' }
+    else if (summary === 'completed') label = 'entryStatus.completed'
+    else if (summary === 'none') label = 'entryStatus.none'
+    else if (summary === 'skipped') label = 'entryStatus.skipped'
+  }
+  const failed = status === 'failed'
+  const active = isEntryProcessingActive(entry)
+  const theme: 'danger' | 'primary' | 'default' = failed ? 'danger' : active ? 'primary' : 'default'
+  return { stored, status, label, failed, active, theme, retryable: stored && failed }
+}

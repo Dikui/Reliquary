@@ -8,11 +8,12 @@ import DocumentActionMenu from './DocumentActionMenu.vue';
 import DocumentMenuDelete from './DocumentMenuDelete.vue';
 import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import EntryProcessingStatus from '@/components/EntryProcessingStatus.vue';
+import { isEntryProcessingActive } from '@/utils/entryProcessingStatus';
 import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import SelectionCheckbox from '@/components/SelectionCheckbox.vue';
 import type { EntryJudgment } from '@/api/entry-judgments';
 import type { ClassifiedEntry } from '@/types/entryClassification';
-import EntryProcessingTimeline from '@/components/EntryProcessingTimeline.vue';
 
 interface EntryCard extends ClassifiedEntry {
   id: string;
@@ -51,6 +52,7 @@ const emit = defineEmits<{
   (e: 'menu-visible-change', visible: boolean, item: EntryCard): void;
   (e: 'action', action: 'download' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: EntryCard): void;
   (e: 'deleted', id: string): void;
+  (e: 'processing-updated', value: Record<string, unknown> & { id: string }): void;
 }>();
 
 const { t } = useI18n();
@@ -68,23 +70,8 @@ const onMenuVisibleChange = (visible: boolean, item: EntryCard) => {
   emit('menu-visible-change', visible, item);
 };
 
-// --- Parse status helpers ---
-const CANCELABLE_PARSE_STATUSES = new Set(['pending', 'processing', 'finalizing']);
-const isParseInFlight = (status?: string): boolean =>
-  CANCELABLE_PARSE_STATUSES.has(String(status ?? ''));
-
-const isTraceMenuVisible = (item: EntryCard): boolean => {
-  if (!item?.id) return false;
-  if (isParseInFlight(item.parse_status)) return true;
-  return props.traceAvailableById[item.id] === true;
-};
-
-const inFlightCardStatusText = (item: EntryCard): string => {
-  if (item.parse_status === 'finalizing') {
-    return t('library.statusFinalizing');
-  }
-  return t('library.parsingInProgress');
-};
+const isTraceMenuVisible = (item: EntryCard): boolean => Boolean(item?.id)
+  && (isEntryProcessingActive(item) || props.traceAvailableById[item.id] === true);
 
 // --- Display helpers ---
 const formatDocTime = (time?: string) => {
@@ -303,57 +290,11 @@ const openDelete = async (item: EntryCard) => {
           <t-tag v-if="item.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
         </div>
 
-        <!-- Parse status display -->
-        <div v-if="isParseInFlight(item.parse_status)" class="card-analyze card-analyze-trace">
-          <t-icon name="loading" class="card-analyze-loading"></t-icon>
-          <span
-            class="card-analyze-txt card-analyze-trace-link"
-            role="button"
-            tabindex="0"
-            :title="$t('knowledgeStages.viewTrace')"
-            @click.stop="handleAction('view-trace', item)"
-            @keydown.enter.stop="handleAction('view-trace', item)"
-            @keydown.space.prevent.stop="handleAction('view-trace', item)"
-          >{{ inFlightCardStatusText(item) }}</span>
-          <button
-            type="button"
-            class="card-analyze-trace-btn"
-            :title="$t('knowledgeStages.viewTrace')"
-            :aria-label="$t('knowledgeStages.viewTrace')"
-            @click.stop="handleAction('view-trace', item)"
-          >
-            <t-icon name="chart-line" />
-          </button>
-        </div>
-        <div v-else-if="item.parse_status === 'failed'" class="card-analyze failure card-analyze-trace">
-          <t-icon name="close-circle" class="card-analyze-loading failure"></t-icon>
-          <span
-            class="card-analyze-txt failure card-analyze-trace-link"
-            role="button"
-            tabindex="0"
-            :title="$t('knowledgeStages.viewTrace')"
-            @click.stop="handleAction('view-trace', item)"
-            @keydown.enter.stop="handleAction('view-trace', item)"
-            @keydown.space.prevent.stop="handleAction('view-trace', item)"
-          >{{ $t('library.parsingFailed') }}</span>
-          <button
-            type="button"
-            class="card-analyze-trace-btn"
-            :title="$t('knowledgeStages.viewTrace')"
-            :aria-label="$t('knowledgeStages.viewTrace')"
-            @click.stop="handleAction('view-trace', item)"
-          >
-            <t-icon name="chart-bar" />
-          </button>
-        </div>
-        <div v-else-if="item.parse_status === 'draft'" class="card-draft">
-          <t-tag size="small" theme="warning" variant="light-outline">{{ $t('library.draft') }}</t-tag>
-          <span class="card-draft-tip">{{ $t('library.draftTip') }}</span>
-        </div>
-        <div v-else-if="item.parse_status === 'rejected'" class="card-draft">
-          <t-tag size="small" theme="warning" variant="light-outline">{{ $t('library.intakeWaiting') }}</t-tag>
-        </div>
-        <EntryClassification v-else-if="item.parse_status === 'completed'" :entry="item" compact @open-entity="emit('open-entity', $event)" />
+        <EntryProcessingStatus :entry="item" compact @updated="emit('processing-updated', $event)" />
+        <button v-if="isTraceMenuVisible(item)" type="button" class="card-analyze-trace-btn"
+          :title="t('knowledgeStages.viewTrace')" :aria-label="t('knowledgeStages.viewTrace')"
+          @click.stop="handleAction('view-trace', item)"><t-icon name="chart-line" /></button>
+        <EntryClassification v-if="item.parse_status === 'completed'" :entry="item" compact @open-entity="emit('open-entity', $event)" />
         <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_entry_id" />
       </div>
 
@@ -383,26 +324,8 @@ const openDelete = async (item: EntryCard) => {
     >
       <template v-if="hoveredCardItem">
         <div class="card-popover-title">{{ hoveredCardItem.file_name }}</div>
-        <div v-if="isParseInFlight(hoveredCardItem.parse_status)" class="card-popover-status parsing">
-          <EntryProcessingTimeline
-            :entry-id="hoveredCardItem.id"
-            :parse-status="hoveredCardItem.parse_status"
-            :auto-poll="false"
-            :compact="true"
-          />
-        </div>
-        <div v-else-if="hoveredCardItem.parse_status === 'failed'" class="card-popover-status failure">
-          <EntryProcessingTimeline
-            :entry-id="hoveredCardItem.id"
-            :parse-status="hoveredCardItem.parse_status"
-            :auto-poll="false"
-            :compact="true"
-          />
-        </div>
-        <div v-else-if="hoveredCardItem.parse_status === 'draft'" class="card-popover-status draft">
-          {{ $t('library.draft') }}
-        </div>
-        <template v-else>
+        <EntryProcessingStatus :entry="hoveredCardItem" compact @updated="emit('processing-updated', $event)" />
+        <template v-if="hoveredCardItem.parse_status === 'completed'">
           <div v-if="hoveredCardItem.description" class="card-popover-desc">
             {{ markdownToPlainText(hoveredCardItem.description, `[${t('ingestStatus.missingTypes.image')}]`) }}
           </div>

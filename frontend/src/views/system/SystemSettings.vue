@@ -4,9 +4,11 @@
     <div class="section-header">
       <div class="section-header__titlewrap">
         <h2>{{ t('system.globalSettings.title') }}</h2>
-        <t-popup placement="bottom-start" trigger="hover" :overlay-inner-style="{ maxWidth: '420px' }">
+        <t-popup v-model:visible="priorityHintVisible" placement="bottom-start" trigger="click" :overlay-inner-style="{ maxWidth: '420px' }">
           <button type="button" class="hint-trigger"
-            :aria-label="t('system.globalSettings.priorityHint.disclosure')">
+            :aria-label="t('system.globalSettings.priorityHint.disclosure')"
+            :aria-expanded="priorityHintVisible"
+            @keydown.esc="closePriorityHint">
             <t-icon name="info-circle" size="16px" />
           </button>
           <template #content>
@@ -346,6 +348,14 @@ function enumLabel(itemKey: string, optionValue: string): string {
 }
 
 const emptyListPlaceholder = computed(() => t('system.globalSettings.tagInputPlaceholder'))
+
+const priorityHintVisible = ref(false)
+
+function closePriorityHint(event: KeyboardEvent) {
+  if (!priorityHintVisible.value) return
+  priorityHintVisible.value = false
+  event.stopPropagation()
+}
 
 const settings = ref<SystemSettingItem[]>([])
 const loading = ref(false)
@@ -783,7 +793,7 @@ onUnmounted(() => {
   border-radius: 4px;
   background: transparent;
   color: var(--td-text-color-placeholder);
-  cursor: help;
+  cursor: pointer;
   line-height: 1;
 
   &:hover,
