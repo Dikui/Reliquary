@@ -47,6 +47,9 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 	if patch.Template != nil || patch.Directory != nil || patch.SystemRole != nil {
 		return nil, apperrors.NewBadRequestError("template, directory and system_role are immutable")
 	}
+	if patch.ReviewCriteria != nil || patch.SourceEvidenceRule != nil {
+		return nil, apperrors.NewBadRequestError("review_criteria and source_evidence_rule are no longer configurable")
+	}
 	var result *types.Library
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var locked types.Library
@@ -63,9 +66,6 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		}
 		if patch.Description != nil {
 			library.Description = *patch.Description
-		}
-		if patch.ReviewCriteria != nil {
-			library.ReviewCriteria = *patch.ReviewCriteria
 		}
 		if patch.ModelTiers != nil {
 			if patch.ModelTiers.ModelID(types.ModelTierEmbedding) != library.ModelTiers.ModelID(types.ModelTierEmbedding) {
@@ -85,12 +85,6 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 				return apperrors.NewBadRequestError("chunk size must be positive and chunk overlap must be smaller than chunk size")
 			}
 			library.ChunkingConfig = *c
-		}
-		if patch.SourceEvidenceRule != nil {
-			if library.Template != types.TemplateExternalTimely {
-				return apperrors.NewBadRequestError("source_evidence_rule is only configurable for external_timely")
-			}
-			library.SourceEvidenceRule = *patch.SourceEvidenceRule
 		}
 		if patch.FeedEnabled != nil {
 			library.FeedEnabled = *patch.FeedEnabled

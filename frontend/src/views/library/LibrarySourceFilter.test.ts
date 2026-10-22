@@ -464,7 +464,7 @@ test('bulk management retains exact filters and server count across both steps a
       if (countRequest) { countRequest = false; return { success: true, data: { ...env.previewResult.data, matched: 73, eligible: 0, fingerprint: 'scope-only' } } }
       return path.endsWith('/preview') ? env.previewResult : env.batchResult
     })
-    for (const key of ['library.rebuildLibrary', 'library.rebuildLibraryAll', 'knowledgeReview.reviewAll']) assert.equal(button(key), undefined)
+    for (const key of ['library.rebuildLibrary', 'library.rebuildLibraryAll']) assert.equal(button(key), undefined)
     assert.equal(button('entryBatch.title')!.props.disabled, false)
     env.scope.value = ['library-source']; await settle()
     button('entryBatch.title')!.props.onClick(); await settle()

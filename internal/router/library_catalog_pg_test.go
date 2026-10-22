@@ -73,12 +73,15 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	invalid := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, string(settings), f.key, true)
 	require.Equal(t, http.StatusBadRequest, invalid.Code)
 	require.Contains(t, invalid.Body.String(), "generation model is unavailable")
-	for _, patch := range []string{`{"template":"generated"}`, `{"directory":"new"}`, `{"system_role":"personal"}`, `{"source_evidence_rule":"link_required"}`, `{"template_rules":{"review":false}}`} {
-		response := personalRequest(t, f.router, http.MethodPut, "/api/v1/libraries/"+custom.Data.ID, patch, f.key, true)
+	for _, patch := range []string{`{"template":"generated"}`, `{"directory":"new"}`, `{"system_role":"personal"}`, `{"review_criteria":"No review"}`, `{"source_evidence_rule":"link_required"}`, `{"template_rules":{"review":false}}`} {
+		response := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, patch, f.key, true)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
-	changed := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, `{"name":"Renamed","description":"Collect notes","review_criteria":"Exclude empty notes","feed_enabled":true,"content_types":[{"name":"Note","enabled":true,"extract_graph":false}],"relation_types":[{"name":"uses","enabled":true}]}`, f.key, true)
+	changed := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, `{"name":"Renamed","description":"Collect notes","feed_enabled":true,"content_types":[{"name":"Note","enabled":true,"extract_graph":false}],"relation_types":[{"name":"uses","enabled":true}]}`, f.key, true)
 	require.Equal(t, http.StatusOK, changed.Code, changed.Body.String())
+	require.NoError(t, json.Unmarshal(changed.Body.Bytes(), &configuredBody))
+	require.Equal(t, custom.Data.ReviewCriteria, configuredBody.Data.ReviewCriteria, "historical criteria remain readable")
+	require.Equal(t, custom.Data.SourceEvidenceRule, configuredBody.Data.SourceEvidenceRule)
 	require.Equal(t, http.StatusOK, personalRequest(t, f.router, http.MethodDelete, "/api/v1/libraries/"+f.library.ID, "", f.key, true).Code)
 	require.Equal(t, http.StatusOK, personalRequest(t, f.router, http.MethodDelete, "/api/v1/libraries/"+custom.Data.ID, "", f.key, true).Code)
 }

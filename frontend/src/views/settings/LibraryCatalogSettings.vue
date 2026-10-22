@@ -27,9 +27,8 @@ const systemRoleName = computed(() => {
   }
 })
 const relationOptions = computed(() => (draft.value?.relation_types || []).filter(row => row.enabled).map(row => ({ value: row.name, label: row.name })))
-const hasGraph = computed(() => draft.value?.processing_model_tiers?.includes('entity_resolution') || false)
 const modelTiers = computed<ModelTier[]>(() => [...(draft.value?.processing_model_tiers || []), 'rerank'])
-const typeSections = computed<Array<'content_types' | 'relation_types'>>(() => draft.value?.template === 'generated' ? [] : hasGraph.value ? ['content_types', 'relation_types'] : ['content_types'])
+const typeSections = ['content_types', 'relation_types'] as const
 const chunkingConfig = computed(() => {
   const c = draft.value?.chunking_config
   return c ? { chunkSize: c.chunk_size, chunkOverlap: c.chunk_overlap, separators: c.separators, enableParentChild: c.enable_parent_child, parentChunkSize: c.parent_chunk_size, childChunkSize: c.child_chunk_size, strategy: c.strategy, tokenLimit: c.token_limit, languages: c.languages } : null
@@ -116,28 +115,23 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
           <p>{{ t(`ikb18.${draft.template}Hint`) }}</p>
           <label>{{ t('ikb18.name') }}<t-input :disabled="saving || loading" v-model="draft.name" :maxlength="255" :aria-label="t('ikb18.name')" /></label>
           <label>{{ t('ikb18.description') }}<SafeTextarea :disabled="saving || loading" v-model="draft.description" :autosize="{ minRows: 2, maxRows: 8 }" /></label>
-          <template v-if="draft.template !== 'generated'">
-            <label>{{ t('ikb18.review') }}<SafeTextarea :disabled="saving || loading" v-model="draft.review_criteria" :aria-label="t('ikb18.review')" :autosize="{ minRows: 3, maxRows: 12 }" /></label>
-            <t-button variant="text" :disabled="saving || loading || !draft.default_review_criteria || draft.review_criteria === draft.default_review_criteria" @click="draft.review_criteria = draft.default_review_criteria">{{ t('ikb18.useRecommendedReview') }}</t-button>
-          </template>
-          <p v-else>{{ draft.default_review_criteria }}</p>
-          <p>{{ t(hasGraph ? 'ikb18.processingWithGraph' : draft.template === 'generated' ? 'ikb18.indexOnly' : 'ikb18.processingWithoutGraph') }}</p>
+          <h3>{{ t('ikb18.admissionPolicyTitle') }}</h3>
+          <p>{{ t('ikb18.admissionPolicyHint') }}</p>
+          <p>{{ t('ikb18.processingPolicy') }}</p>
           <ModelTierEditor v-model="draft.model_tiers" :tiers="modelTiers" :before-navigate="confirmLeave" :disabled="saving || loading" />
           <div v-if="chunkingConfig" :key="draft.id" :inert="saving || loading"><p>{{ t('ikb18.parentChildFixed') }}</p><LibraryChunkingSettings :config="chunkingConfig" embedded parent-child-locked @update:config="updateChunking" /></div>
-          <label v-if="draft.template === 'external_timely'">{{ t('ikb18.evidence') }}<t-select :disabled="saving || loading" v-model="draft.source_evidence_rule" :options="[{ value: 'link_required', label: t('ikb18.linkRequired') }, { value: 'link_or_publisher_date', label: t('ikb18.linkOrDate') }]" /></label>
           <label class="toggle-label">{{ t('ikb18.feed') }}<t-switch :disabled="saving || loading" v-model="draft.feed_enabled" :aria-label="t('ikb18.feed')" /></label>
           <section v-for="kind in typeSections" :key="kind">
             <h3>{{ t(kind === 'content_types' ? 'ikb18.contentTypes' : 'ikb18.relationTypes') }}</h3>
             <div v-for="(row, index) in draft[kind]" :key="index" class="type-row">
               <t-input :disabled="saving || loading" v-model="row.name" :aria-label="t('ikb18.name')" :maxlength="100" />
               <t-checkbox :disabled="saving || loading" v-model="row.enabled">{{ t('ikb18.enabled') }}</t-checkbox>
-              <t-checkbox :disabled="saving || loading" v-if="hasGraph && 'extract_graph' in row" v-model="row.extract_graph">{{ t('ikb18.graph') }}</t-checkbox>
               <div class="type-actions"><t-button variant="text" :disabled="index === 0" @click="moveType(draft![kind], index, -1)">{{ t('ikb18.up') }}</t-button><t-button variant="text" :disabled="index === draft[kind].length - 1" @click="moveType(draft![kind], index, 1)">{{ t('ikb18.down') }}</t-button><t-button variant="text" theme="danger" @click="draft![kind].splice(index, 1)">{{ t('ikb18.remove') }}</t-button></div>
             </div>
             <t-button variant="outline" @click="kind === 'content_types' ? draft!.content_types.push({ name: '', position: draft!.content_types.length, enabled: true, extract_graph: false }) : draft!.relation_types.push({ name: '', position: draft!.relation_types.length, enabled: true })">{{ t('ikb18.add') }}</t-button>
           </section>
           <div class="catalog-actions"><t-button type="submit" :loading="saving" :disabled="!dirty">{{ t('common.save') }}</t-button><t-button variant="outline" :disabled="!dirty" @click="draft = JSON.parse(saved); error = ''">{{ t('common.cancel') }}</t-button></div>
-          <section v-if="hasGraph"><h3>{{ t('ikb18.merge') }}</h3><p>{{ t('ikb18.mergeHint') }}</p><div class="catalog-toolbar"><t-select :disabled="saving || loading" v-model="fromType" :options="relationOptions" :placeholder="t('ikb18.from')" :aria-label="t('ikb18.from')" /><t-select :disabled="saving || loading" v-model="toType" :options="relationOptions.filter(row => row.value !== fromType)" :placeholder="t('ikb18.to')" :aria-label="t('ikb18.to')" /><t-button :disabled="dirty || !fromType || !toType || fromType === toType" @click="merge">{{ t('ikb18.mergeConfirm') }}</t-button></div></section>
+          <section><h3>{{ t('ikb18.merge') }}</h3><p>{{ t('ikb18.mergeHint') }}</p><div class="catalog-toolbar"><t-select :disabled="saving || loading" v-model="fromType" :options="relationOptions" :placeholder="t('ikb18.from')" :aria-label="t('ikb18.from')" /><t-select :disabled="saving || loading" v-model="toType" :options="relationOptions.filter(row => row.value !== fromType)" :placeholder="t('ikb18.to')" :aria-label="t('ikb18.to')" /><t-button :disabled="dirty || !fromType || !toType || fromType === toType" @click="merge">{{ t('ikb18.mergeConfirm') }}</t-button></div></section>
           <p>{{ t('ikb18.deleteHint') }}</p><t-button theme="danger" variant="outline" :disabled="!!draft.entry_count" @click="removeLibrary">{{ t('ikb18.deleteLibrary') }}</t-button>
         </fieldset>
       </form>

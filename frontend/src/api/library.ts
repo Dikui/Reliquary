@@ -36,8 +36,6 @@ export const saveCatalogLibrary = (id: string, data: Record<string, unknown>) =>
 export const deleteCatalogLibrary = (id: string) => del<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
 export type LibraryRebuildScope = 'failed' | 'all'
 export const rebuildCatalogLibrary = (id: string, scope: LibraryRebuildScope = 'failed') => post<{ success: boolean; data: { task_id: string; total: number }; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/rebuild`, { scope })
-export type LibraryReviewScope = 'all' | 'pending'
-export const reviewLibrary = (id: string, scope: LibraryReviewScope) => post<{ success: boolean; data: { task_id: string; total: number }; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/review`, { scope })
 export const mergeLibraryRelationTypes = (id: string, from_type: string, to_type: string) => post<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/relation-types/merge`, { from_type, to_type })
 
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }

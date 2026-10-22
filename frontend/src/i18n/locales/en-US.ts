@@ -53,7 +53,7 @@ export default {
   "actions": {
     "delete": "Delete",
     "reprocess": "Reprocess",
-    "review": "Review again",
+    "review": "Historical review",
     "star": "Set stars",
     "content_type": "Change content type",
     "topics": "Change topics"
@@ -65,8 +65,7 @@ export default {
   "removeTopics": "Remove topics",
   "singleLibrary": "Limit the selection to one library to use its content type catalogue.",
   "deleteHint": "Deletes materials, indexes, relationships and exclusively owned attachments. This cannot be undone. Rejected intake also retains a blocked-source record.",
-  "reviewHint": "Review under the current library policy and keep the original text. Model rejection returns materials to intake review without deleting them. Model costs may apply.",
-  "reprocessHint": "Reprocess fully with current library settings. Keep the body, missing-image records and user corrections. AI output is excluded; use its existing index maintenance action instead. Model costs may apply.",
+  "reprocessHint": "Reprocess all material types, including AI output, with the current library settings. Keep the body, images and manual decisions, rebuild the index and run background processing. Model costs may apply.",
   "preview": "Preview impact",
   "previewCounts": "Matched {matched} · Eligible {eligible} · Skipped {skipped} · Blocked {blocked}",
   "reasonCount": "{reason}: {count}",
@@ -87,8 +86,6 @@ export default {
   "manageRelated": "Manage related materials",
   "wholeLibrary": "Entire library, independent of current list filters",
   "wholeLibraryFailed": "Failed materials in the entire library, independent of current list filters",
-  "wholeLibraryReview": "Collected and pending materials in the entire library, independent of current list filters",
-  "wholeLibraryPending": "Pending intake in the entire library, independent of current list filters",
   "status": {
     "pending": "Pending",
     "running": "Running",
@@ -561,26 +558,20 @@ export default {
   "emptyIncomplete": "No materials have missing images.",
   "conflictReason": "The body differs from an existing material",
   "relatedArticle": "Related material",
-  "saveAsNew": "Save as a new material",
-  "title": "Pending",
-  "intake": "Intake review",
-  "reviewAll": "Review entire library",
-  "reviewPending": "Review pending materials",
-  "reviewAllConfirm": "Review all collected and pending materials in “{name}” using its current policy. Collected materials that pass keep their processing results. Materials that fail return to intake review and leave search and the graph. Original sources are retained until you explicitly reject and delete them.",
-  "reviewPendingConfirm": "Review all pending materials in “{name}” using its current policy. Approved materials continue processing. Materials that fail keep their original sources and reasons for your decision.",
-  "reviewCost": "Some materials are temporarily unavailable in search during review. This background task calls models and incurs costs. Keep the library policy unchanged while it runs.",
-  "reviewSubmitted": "Submitted {count} materials for review. View progress in the runtime queue.",
-  "intakeHint": "Materials that did not pass intake review stay here. Processing starts after approval.",
-  "emptyIntake": "No materials need intake review.",
+  "saveAsNew": "Collect this material",
+  "title": "Pending legacy materials",
+  "intake": "Pending legacy materials",
+  "intakeHint": "This list contains legacy materials awaiting your decision to collect or reject them. New materials are saved after technical validation and do not enter this queue.",
+  "emptyIntake": "No legacy materials await a decision.",
   "sourceUnverified": "Source unverified",
-  "missingLinkHint": "The original URL is missing, so model review has not run. Add a URL to review again, or confirm collection without a URL.",
+  "missingLinkHint": "The source URL is optional. Add it before collecting, or confirm collection without a URL and retain the source-unverified marker.",
   "invalidLink": "Enter a valid HTTP or HTTPS original URL.",
   "chooseType": "Choose a content type.",
-  "failed": "Review action failed. Try again.",
+  "failed": "Could not save your decision. Try again.",
   "loadFailed": "Pending items could not load. Try again.",
-  "saved": "Review action saved",
+  "saved": "Decision saved",
   "actions": {
-    "supplement_url": "Add URL and review again",
+    "supplement_url": "Add URL and collect",
     "admit_unverified": "Collect without URL",
     "confirm": "Confirm model type",
     "correct": "Use selected type",
@@ -590,7 +581,7 @@ export default {
   "confirmations": {
     "admit_unverified": {
       "title": "Collect without an original URL?",
-      "description": "This material will skip intake review, be saved in full and marked as source unverified. Its original URL will be empty."
+      "description": "Keep the body and mark its source as unverified, with no original URL. Indexing and background processing follow."
     },
 
     "reject": {
@@ -734,8 +725,8 @@ export default {
   "title": "Model tiers",
   "scopeHint": {
 
-    "library": "These model choices apply only to the selected library.",
-    "space": "All libraries share this embedding model. Configure review, processing, reranking and chunking in each library."
+    "library": "These processing and reranking model choices apply only to the selected library.",
+    "space": "All libraries share this embedding model. Configure processing, reranking and chunking in each library."
   },
   "names": {
     "light": "Intake review",
@@ -746,7 +737,7 @@ export default {
   },
   "uses": {
     "light": "Review material against this library’s admission criteria",
-    "generation": "Material content type, structured summary and topics",
+    "generation": "Summaries, classification, topics, entities and graph processing",
     "embedding": "Document retrieval and entity name similarity",
     "rerank": "Rank retrieved results",
     "entity_resolution": "Determine whether entity candidates belong to existing entities"
@@ -764,7 +755,7 @@ export default {
   "useDefault": "Choose a model",
   "effective": "Current model: {model} ({source})",
   "unconfigured": "No model configured",
-  "explicitChoice": "Review and entity resolution use this library’s processing model when not selected separately. Models are never inherited from another library.",
+  "explicitChoice": "Entity resolution uses this library’s processing model when not selected separately. Models are never inherited from another library.",
   "loadFailed": "Could not load model configuration. Try again.",
   "saveFailed": "Could not save model configuration. Try again.",
   "saved": "Model tiers saved",

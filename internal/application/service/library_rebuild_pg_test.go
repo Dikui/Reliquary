@@ -327,7 +327,17 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	require.Zero(t, transport.calls.Load())
 }
 
-func TestLibraryReviewScopesAcceptLegacyPendingAndPreserveCollectedMaterial(t *testing.T) {
+func queuedLegacyLibraryReview(t *testing.T, h *articleProcessingHarness, scope string, ids ...string) *types.LibraryRebuildResult {
+	t.Helper()
+	runID := uuid.NewString()
+	data, err := json.Marshal(types.EntryListReparsePayload{SpaceID: h.library.SpaceID, LibraryID: h.library.ID, EntryIDs: ids, ReviewID: runID, ReviewScope: scope})
+	require.NoError(t, err)
+	info, err := h.service.task.Enqueue(taskqueue.NewTask(types.TypeEntryListReparse, data, taskqueue.TaskID(runID), taskqueue.Group(libraryRebuildGroup(h.library.ID))))
+	require.NoError(t, err)
+	return &types.LibraryRebuildResult{TaskID: info.ID, Total: len(ids)}
+}
+
+func TestQueuedLegacyLibraryReviewPreservesPendingAndCollectedMaterial(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	keep := h.upload(t, "keep", "# Keep\n\nOriginal measurements.")
@@ -346,16 +356,12 @@ func TestLibraryReviewScopesAcceptLegacyPendingAndPreserveCollectedMaterial(t *t
 	capture := captureMineReview(h)
 	h.processor.reject = true
 	h.service.task = &libraryRebuildQueue{db: h.db}
-	run, err := h.service.ReviewLibrary(h.ctx, h.library.ID, "pending")
-	require.NoError(t, err)
-	require.Equal(t, 1, run.Total)
+	run := queuedLegacyLibraryReview(t, h, "pending", pending.ID)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, run.TaskID+":"+pending.ID)))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, pending.ID).ParseStatus)
 	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("group_name=?", libraryRebuildGroup(h.library.ID)).Update("state", taskqueue.TaskStateCompleted).Error)
-	run, err = h.service.ReviewLibrary(h.ctx, h.library.ID, "all")
-	require.NoError(t, err)
-	require.Equal(t, 2, run.Total)
+	run = queuedLegacyLibraryReview(t, h, "all", keep.ID, pending.ID)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	calls := len(h.processor.requests)
 	for _, id := range []string{keep.ID, pending.ID} {
@@ -374,15 +380,14 @@ func TestLibraryReviewScopesAcceptLegacyPendingAndPreserveCollectedMaterial(t *t
 	require.Equal(t, original, after)
 }
 
-func TestLibraryReviewPersistenceFailureKeepsOriginalAndCanResume(t *testing.T) {
+func TestQueuedLegacyLibraryReviewPersistenceFailureKeepsOriginalAndCanResume(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	entry := h.upload(t, "review-failure", "# Original\n\nOriginal measurements survive a database failure.")
 	original, err := vault.ReadBody(entry)
 	require.NoError(t, err)
 	h.service.task = &libraryRebuildQueue{db: h.db}
-	run, err := h.service.ReviewLibrary(h.ctx, h.library.ID, "all")
-	require.NoError(t, err)
+	run := queuedLegacyLibraryReview(t, h, "all", entry.ID)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	const callback = "test:review_persistence"
 	armed := true

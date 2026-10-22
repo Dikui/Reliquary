@@ -3,6 +3,7 @@ import type { TranslationCall } from './translationCallAudit.ts'
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   { file: 'components/EntryBatchDialog.vue', expressions: ['`entryBatch.actions.${value}`', '`entryBatch.actions.${batch.action}`', '`entryBatch.reasons.${reason.code}`', '`entryBatch.status.${batch.status}`', '`entryBatch.status.${item.status}`'], reason: 'Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code.' },
+  { file: 'components/EntryProcessingStatus.vue', expressions: ['state.label'], reason: 'entryProcessingState returns the fixed admission and processing label keys defined in the locale bundles.' },
   {
     file: 'views/library/components/EntityRelations.vue',
     expressions: ['`ikb18.${relation.direction}`'],

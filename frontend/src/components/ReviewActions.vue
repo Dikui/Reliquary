@@ -61,7 +61,6 @@ async function submit(action: IntakeReviewAction, confirmed = false) {
           <t-button variant="outline" :disabled="busy" @click="submit('admit_unverified')">{{ t('knowledgeReview.actions.admit_unverified') }}</t-button>
         </template>
         <t-button v-else theme="primary" :loading="busy" :disabled="busy" @click="submit('approve')">{{ t(entry.related_entry_id ? 'knowledgeReview.saveAsNew' : 'articleJudgments.approveReview') }}</t-button>
-        <t-button variant="outline" :disabled="busy" @click="submit('retry')">{{ t('library.intakeRetry') }}</t-button>
       </div>
       <t-button theme="danger" variant="text" :disabled="busy" @click="submit('reject')">{{ t('articleJudgments.rejectReview') }}</t-button>
     <p v-if="error" :id="`review-error-${fieldID}`" class="review-error" role="alert">{{ error }}</p>

@@ -89,7 +89,7 @@ func validateBatchRequest(req types.EntryBatchRequest) error {
 		return apperrors.NewBadRequestError("select either ids or filters")
 	}
 	switch req.Action {
-	case "delete", "reprocess", "review":
+	case "delete", "reprocess":
 	case "star":
 		if req.Starred == nil {
 			return apperrors.NewBadRequestError("starred is required")

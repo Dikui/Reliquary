@@ -72,11 +72,8 @@ function createReviewAPI(handler: (call: Call) => Promise<any>) {
 function reviewComponent(api: object) {
   return component('../../components/ReviewActions.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': api, '@/utils/security': security, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
 }
-function libraryReviewComponent(api: object = {}, dialog: unknown = empty) {
-  return component('../../components/LibraryReviewAction.vue', { '@/api/library': api, '@/components/EntryBatchDialog.vue': dialog, 'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace() {} }) } })
-}
 function pendingComponent(api: object, child = reviewComponent(api)) {
-  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/utils/security': security, '@/components/LibraryReviewAction.vue': moduleOf(libraryReviewComponent()), '@/components/ReviewActions.vue': moduleOf(child) })
+  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/utils/security': security, '@/components/ReviewActions.vue': moduleOf(child) })
 }
 const settle = () => new Promise<void>(resolve => setImmediate(resolve))
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -105,7 +102,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const menuHTML = await render(menu, { item, traceVisible: false }, locale)
     assert.ok(menuHTML.includes(messages[locale].personalDocument.delete))
     assert.ok(!menuHTML.includes(messages[locale].personalDocument.deleteConfirm.replace('{title}', 'My source')), 'deletion confirmation remains in its independent dialog')
-    assert.ok(menuHTML.includes(`>${messages[locale].library.rebuildDocument}<`))
+    assert.ok(menuHTML.includes(`>${messages[locale].library.reprocess}<`))
     assert.ok(!menuHTML.includes('name="edit"'))
     const html = await render(modal, {}, locale, async state => { await state.open(item) })
     assert.ok(html.includes('My source'))
@@ -140,15 +137,15 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes('Temporary server failure')); assert.ok(html.includes(messages[locale].knowledgeReview.confirmations.admit_unverified.description))
   })
 
-  test(`${locale}: every pending entry can retry and rejection deletes only after confirmation`, async () => {
+  test(`${locale}: historical pending entries retain manual collection and confirmed rejection`, async () => {
     let fail = false, removed = false
     const { api, calls } = createReviewAPI(async () => {
       if (fail) throw new Error('Delete failed')
       return { success: true, data: intake }
     })
     const html = await render(reviewComponent(api), { entry: intake, onChanged: (_entry: unknown, deleted: boolean) => { removed = deleted } }, locale, async state => {
-      await state.submit('retry')
-      assert.deepEqual(calls[0].body, { action: 'retry', source_info: {} })
+      await state.submit('admit_unverified', true)
+      assert.deepEqual(calls[0].body, { action: 'admit_unverified', confirmed: true })
       await state.submit('reject')
       assert.equal(calls.length, 1)
       assert.equal(state.confirmation.value, 'reject')
@@ -165,48 +162,25 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.confirmation.value, '')
       assert.deepEqual(calls.at(-1)!.body, { action: 'reject', confirmed: true })
     })
-    assert.ok(html.includes(messages[locale].library.intakeRetry))
+    assert.ok(!html.includes(messages[locale].library.intakeRetry))
     assert.ok(!html.includes('确认不收录'))
     const confirmation = await render(reviewComponent(api), { entry: intake }, locale, async state => { await state.submit('reject') })
     assert.ok(confirmation.includes(messages[locale].knowledgeReview.confirmations.reject.description))
   })
 
-  test(`${locale}: library reviews keep the selected scope and use shared preview confirmation`, async () => {
-    for (const scope of ['all', 'pending'] as const) {
-      const forwarded: Record<string, any> = {}, requests: unknown[] = []
-      let fail = true
-      const api = {
-        previewEntryBatch: async (input: unknown) => { requests.push(input); return { success: true, data: { fingerprint: 'review-preview', matched: 71, eligible: 71, skipped: 0, blocked: 0, reasons: [], samples: [] } } },
-        submitEntryBatch: async (input: unknown) => { requests.push(input); if (fail) throw { message: 'Review already running' }; return { success: true, data: { batch_id: 'review-batch', action: 'review', status: 'completed', total: 71, succeeded: 71, failed: 0, skipped: 0, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } } },
-      }
-      const capture = moduleOf(defineComponent({ props: ['visible', 'selection', 'initialAction', 'scopeLabel', 'libraries'], setup: props => { Object.assign(forwarded, props); return () => null } }))
-      const library = { id: 'selected-library', name: 'Research', template: 'external_timely' }
-      await render(libraryReviewComponent({}, capture), { library, scope }, locale, async state => { state.open(); await nextTick(); assert.equal(requests.length, 0) })
-      assert.equal(forwarded.initialAction, 'review')
-      const selection = { filters: { libraries: [library.id], include_rejected: true, ...(scope === 'pending' ? { parse_status: 'rejected' } : {}) } }
-      assert.deepEqual(forwarded.selection, selection)
-      assert.ok(forwarded.scopeLabel.includes('Research'))
-      const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) } })
-      const html = await render(dialog, forwarded, locale, async state => {
-        state.ready.value = true
-        await settle()
-        assert.equal(requests.length, 1, 'opening only counts the scope')
-        assert.deepEqual(requests[0], { action: 'star', starred: true, selection })
-        assert.equal(state.scopeCount.value.matched, 71)
-        await state.submit(); assert.equal(requests.length, 1)
-        await state.showPreview(); assert.equal(requests.length, 2)
-        await state.submit(); assert.equal(requests.length, 2, 'preview alone cannot submit')
-        state.confirmed.value = true; await state.submit()
-        assert.equal(state.error.value, 'Review already running')
-        assert.equal(state.batch.value, undefined)
-        fail = false
-        await state.showPreview(); state.confirmed.value = true; await state.submit()
-        assert.equal(state.batch.value.status, 'completed')
-      })
-      assert.deepEqual(requests, [{ action: 'star', starred: true, selection }, { action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }, { action: 'review', selection }, { action: 'review', selection, preview_fingerprint: 'review-preview' }])
-      assert.ok(html.includes('71'))
-      assert.ok(html.includes('batch_id=review-batch'))
+  test(`${locale}: batch management removes new reviews but preserves historical results`, async () => {
+    const api = {
+      getEntryBatch: async () => ({ success: true, data: { batch_id: 'legacy-review', action: 'review', status: 'completed', total: 1, succeeded: 1, failed: 0, skipped: 0, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } }),
+      submitEntryBatch: async () => assert.fail('Historical results must not create a review task'),
     }
+    const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) } })
+    const html = await render(dialog, { visible: true, batchId: 'legacy-review', libraries: [] }, locale, async state => {
+      state.ready.value = true
+      assert.ok(!state.actions.includes('review'))
+      await state.refresh()
+    })
+    assert.ok(html.includes(messages[locale].entryBatch.actions.review))
+    assert.ok(html.includes('batch_id=legacy-review'))
   })
 
 }
@@ -232,5 +206,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(html.includes(messages[locale].knowledgeReview.emptyIntake))
     assert.ok(!html.includes('value="incomplete"'))
     assert.ok(!source('./components/PendingReviews.vue').includes('listIncomplete'))
+    assert.ok(!source('./components/PendingReviews.vue').includes('LibraryReviewAction'))
   })
 }

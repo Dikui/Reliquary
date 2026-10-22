@@ -16,6 +16,7 @@ func TestRemovedEntryResourcesReturnNotFound(t *testing.T) {
 	f.router = NewRouter(f.params)
 	cases := []struct{ method, path string }{
 		{http.MethodPost, "/api/v1/reports"},
+		{http.MethodPost, "/api/v1/libraries/library/review"},
 		{http.MethodPost, "/api/v1/entries/article/regenerate-summary"},
 		{http.MethodPut, "/api/v1/chunks/by-id/chunk/questions"},
 		{http.MethodDelete, "/api/v1/chunks/by-id/chunk/questions"},

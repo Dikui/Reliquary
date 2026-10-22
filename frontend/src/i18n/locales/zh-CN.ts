@@ -53,7 +53,7 @@ export default {
   "actions": {
     "delete": "删除",
     "reprocess": "重新处理",
-    "review": "重新审核",
+    "review": "历史审核",
     "star": "设置星标",
     "content_type": "修改内容类型",
     "topics": "修改主题"
@@ -65,8 +65,7 @@ export default {
   "removeTopics": "移除主题",
   "singleLibrary": "修改内容类型需限定一个库，并使用该库的类型清单。",
   "deleteHint": "删除会移除资料、索引、关系及独占附件，无法撤销。待审资料会同时保留拒绝收录的来源记录。",
-  "reviewHint": "按当前库策略重新审核，保留原文。模型未通过会转入待审，不会执行删除。此操作可能产生模型费用。",
-  "reprocessHint": "使用当前库配置完整重新处理。保留正文、缺图记录和用户修正。AI产出不参与；只重建其索引请使用原维护入口。此操作可能产生模型费用。",
+  "reprocessHint": "使用当前库配置重新处理所有类型的资料，包括 AI 产出。保留正文、图片及人工判断，重新建立索引并运行后台内容处理；可能产生模型费用。",
   "preview": "预览影响",
   "previewCounts": "匹配 {matched} · 可执行 {eligible} · 跳过 {skipped} · 阻止 {blocked}",
   "reasonCount": "{reason}：{count}",
@@ -87,8 +86,6 @@ export default {
   "manageRelated": "管理关联资料",
   "wholeLibrary": "全库资料，不受当前列表筛选影响",
   "wholeLibraryFailed": "全库失败资料，不受当前列表筛选影响",
-  "wholeLibraryReview": "全库已收录及待审资料，不受当前列表筛选影响",
-  "wholeLibraryPending": "全库收录待审资料，不受当前列表筛选影响",
   "status": {
     "pending": "待执行",
     "running": "执行中",
@@ -561,26 +558,20 @@ export default {
   "emptyIncomplete": "没有缺少图片的资料。",
   "conflictReason": "与已有资料正文不同",
   "relatedArticle": "关联资料",
-  "saveAsNew": "另存为新资料",
-  "title": "待处理",
-  "intake": "收录待审",
-  "reviewAll": "全库重新审核",
-  "reviewPending": "收录待审重新审核",
-  "reviewAllConfirm": "按当前策略重新审核“{name}”中的全部资料，包括已收录和收录待审资料。审核通过的已收录资料保留现有处理结果；未通过的转入待审，暂时退出检索和图谱。原文保留，由你决定是否拒绝收录并删除。",
-  "reviewPendingConfirm": "按当前策略重新审核“{name}”中的全部收录待审资料。通过后继续入库处理；未通过的保留原文和原因，继续等待你的决定。",
-  "reviewCost": "审核期间部分资料暂不可检索。任务在后台执行，会调用模型并产生费用。执行期间请保持库策略不变。",
-  "reviewSubmitted": "已提交 {count} 条资料重新审核，可在运行队列查看进度。",
-  "intakeHint": "未通过收录审核的内容保留在这里，审核通过后开始处理。",
-  "emptyIntake": "没有收录待审的内容。",
+  "saveAsNew": "确认收录此资料",
+  "title": "历史待审",
+  "intake": "历史待审资料",
+  "intakeHint": "这里只保留历史待审资料，由你逐条决定收录或拒绝。新资料通过技术校验后直接入库，不进入日常待审队列。",
+  "emptyIntake": "没有历史待审资料。",
   "sourceUnverified": "来源未核实",
-  "missingLinkHint": "缺少原始链接，尚未调用模型审核。可补链接后重新审核，也可确认无链接入库。",
+  "missingLinkHint": "来源链接可选。可补充链接后收录，也可确认无链接收录并保留“来源未核实”标记。",
   "invalidLink": "请填写有效的 HTTP 或 HTTPS 原始链接。",
   "chooseType": "请选择内容类型。",
-  "failed": "审核操作失败，请重试。",
+  "failed": "未能保存处理结果，请重试。",
   "loadFailed": "待处理内容加载失败，请重试。",
-  "saved": "审核操作已保存",
+  "saved": "处理结果已保存",
   "actions": {
-    "supplement_url": "补链接并重新审核",
+    "supplement_url": "补充链接并收录",
     "admit_unverified": "无链接入库",
     "confirm": "确认模型类型",
     "correct": "改为所选类型",
@@ -590,7 +581,7 @@ export default {
   "confirmations": {
     "admit_unverified": {
       "title": "确认无链接入库",
-      "description": "资料会跳过收录审核，全文保存并标记为来源未核实，原始链接留空。"
+      "description": "正文将保留并标记为来源未核实，原始链接留空；后续执行索引和后台处理。"
     },
 
     "reject": {
@@ -734,8 +725,8 @@ export default {
   "title": "模型档位",
   "scopeHint": {
 
-    "library": "仅影响当前资料库。审核、处理和重排模型分别保存。",
-    "space": "所有库共用此向量模型；审核、处理、重排和分块在各库配置中设置。"
+    "library": "仅影响当前资料库。处理和重排模型分别保存。",
+    "space": "所有库共用此向量模型；处理、重排和分块在各库配置中设置。"
   },
   "names": {
     "light": "收录审核",
@@ -746,7 +737,7 @@ export default {
   },
   "uses": {
     "light": "按当前库的标准审核收录内容",
-    "generation": "资料内容类型、结构化摘要和主题",
+    "generation": "资料摘要、分类、主题、实体及图谱",
     "embedding": "内容检索与实体名称相似度",
     "rerank": "重排检索结果",
     "entity_resolution": "判断实体候选是否属于已有实体"
@@ -764,7 +755,7 @@ export default {
   "useDefault": "选择模型",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
-  "explicitChoice": "审核和实体归一未单独选择时，使用本库的资料处理模型；不继承其他库的模型。",
+  "explicitChoice": "实体归一未单独选择时，使用本库的资料处理模型；不继承其他库的模型。",
   "loadFailed": "无法加载模型配置，请重试。",
   "saveFailed": "模型配置保存失败，请重试。",
   "saved": "模型档位已保存",

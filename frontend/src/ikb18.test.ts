@@ -70,12 +70,13 @@ for (const locale of ['zh-CN', 'en-US']) {
       const body = calls[0].body
       assert.equal(body.model_tiers.generation, 'notes-model')
       assert.equal(body.chunking_config.chunk_size, 256)
-      assert.equal(body.name, 'Notes'); assert.equal(body.content_types[0].name, 'SOP'); assert.equal(body.content_types[0].position, 0); assert.equal(body.content_types[0].extract_graph, true)
+      assert.equal(body.name, 'Notes'); assert.deepEqual(body.content_types[0], { name: 'SOP', enabled: false, extract_graph: true, position: 0 })
       assert.equal(body.relation_types.length, 1)
-      for (const field of ['directory', 'template', 'system_role', 'source_evidence_rule']) assert.equal(field in body, false)
+      for (const field of ['directory', 'template', 'system_role', 'review_criteria', 'source_evidence_rule']) assert.equal(field in body, false)
     }, locale)
     assert.match(html, /personal\//); assert.match(html, /Delete library|删除库/)
     assert.doesNotMatch(html, /抽取图谱|Extract graph/)
+    assert.ok(html.includes((locale === 'zh-CN' ? zh : en).ikb18.admissionPolicyHint))
   })
   test(`${locale}: new library validates directory and enters created library settings`, async () => {
     const calls: any[] = []
@@ -87,6 +88,27 @@ for (const locale of ['zh-CN', 'en-US']) {
     }, locale)
   })
 }
+test('generated libraries expose content and relation types under the shared admission policy', async () => {
+  const original = library('reports', { template: 'generated', review_criteria: '旧审核规则', source_evidence_rule: 'link_required', processing_model_tiers: ['generation', 'entity_resolution'] })
+  const calls: any[] = [], modules = catalogModules(calls)
+  modules['@/api/library'].listLibraries = async () => ({ success: true, data: [original] })
+  modules['@/api/library'].getCatalogLibrary = async () => ({ success: true, data: structuredClone(original) })
+  const html = await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
+    await state.load()
+    assert.deepEqual(state.typeSections, ['content_types', 'relation_types'])
+    assert.deepEqual(state.modelTiers.value, ['generation', 'entity_resolution', 'rerank'])
+    state.draft.value.name = 'Updated reports'
+    await state.save()
+    assert.deepEqual(calls[0].body.content_types, [{ name: '笔记', enabled: true, position: 0, extract_graph: false }])
+    assert.equal('review_criteria' in calls[0].body, false)
+    assert.equal('source_evidence_rule' in calls[0].body, false)
+    assert.equal(original.review_criteria, '旧审核规则')
+  })
+  assert.ok(html.includes(zh.ikb18.admissionPolicyHint))
+  assert.match(html, /内容类型/)
+  assert.match(html, /关系类型/)
+  assert.doesNotMatch(html, /旧审核规则|抽取图谱|来源证据规则/)
+})
 test('deleting the last empty system library leaves the catalogue ready to create a library', async () => {
   const calls: any[] = [], modules = catalogModules(calls)
   modules['@/api/library'].listLibraries = async () => ({ success: true, data: calls.some(call => call.delete) ? [] : [library()] })

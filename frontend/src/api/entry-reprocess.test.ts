@@ -16,13 +16,9 @@ test('reprocessing uses the canonical requests and library rebuild encodes its t
   await module.exports.reprocessEntry('failed-entry')
   await module.exports.reparseEntry('failed-entry')
   await module.exports.rebuildCatalogLibrary('library/id')
-  await module.exports.reviewLibrary('library/id', 'all')
-  await module.exports.reviewLibrary('library/id', 'pending')
   assert.deepEqual(requests, [
     { url: '/api/v1/entries/failed-entry/reparse', body: undefined },
     { url: '/api/v1/entries/failed-entry/reparse', body: undefined },
     { url: '/api/v1/libraries/library%2Fid/rebuild', body: { scope: 'failed' } },
-    { url: '/api/v1/libraries/library%2Fid/review', body: { scope: 'all' } },
-    { url: '/api/v1/libraries/library%2Fid/review', body: { scope: 'pending' } },
   ])
 })

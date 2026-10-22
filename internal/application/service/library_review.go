@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
 	"reliquary/internal/application/repository"
-	apperrors "reliquary/internal/errors"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
@@ -48,70 +47,6 @@ func libraryReviewEligible(entry *types.Entry, scope string) bool {
 	}
 	return scope == "all" && (intake == nil || intake.Decision == "approved") &&
 		(entry.ParseStatus == types.ParseStatusCompleted || entry.ParseStatus == types.ParseStatusFailed || entry.ParseStatus == types.ParseStatusCancelled)
-}
-
-// Library review shares the rebuild group so the two bulk operations cannot
-// race or reuse each other's partially produced results.
-func (s *entryService) ReviewLibrary(ctx context.Context, libraryID, scope string) (*types.LibraryRebuildResult, error) {
-	if scope != "all" && scope != "pending" {
-		return nil, apperrors.NewBadRequestError("scope must be all or pending")
-	}
-	if s.needsTaskTransaction() {
-		return entryTaskTransaction(ctx, s, func(copy *entryService) (*types.LibraryRebuildResult, error) {
-			return copy.ReviewLibrary(ctx, libraryID, scope)
-		})
-	}
-	spaceID, ok := types.SpaceIDFromContext(ctx)
-	if !ok || spaceID == 0 {
-		return nil, apperrors.NewUnauthorizedError("personal space is required")
-	}
-	library, err := s.libraryService.GetLibraryByID(ctx, libraryID)
-	if err != nil {
-		return nil, err
-	}
-	if library.SpaceID != spaceID {
-		return nil, apperrors.NewNotFoundError("library not found")
-	}
-	if library.Template == types.TemplateGenerated {
-		return nil, apperrors.NewBadRequestError("AI report libraries do not have intake review")
-	}
-	if err := s.db.WithContext(ctx).Exec("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", libraryRebuildGroup(libraryID)).Error; err != nil {
-		return nil, err
-	}
-	busy, err := s.libraryBatchBusy(ctx, spaceID, libraryID, "")
-	if err != nil {
-		return nil, err
-	}
-	if busy {
-		return nil, apperrors.NewConflictError("This library has unfinished processing tasks; finish or cancel them before reviewing")
-	}
-	var entries []types.Entry
-	if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=?", spaceID, libraryID).Order("id").Find(&entries).Error; err != nil {
-		return nil, err
-	}
-	ids := []string{}
-	for i := range entries {
-		entry := &entries[i]
-		if entry.ParseStatus == types.ParseStatusPending || entry.ParseStatus == types.ParseStatusProcessing || entry.ParseStatus == types.ParseStatusFinalizing {
-			return nil, apperrors.NewConflictError("This library has unfinished processing tasks; finish or cancel them before reviewing")
-		}
-		if libraryReviewEligible(entry, scope) {
-			ids = append(ids, entry.ID)
-		}
-	}
-	if len(ids) == 0 {
-		return nil, apperrors.NewBadRequestError("This library has no materials in the selected review scope")
-	}
-	runID := uuid.NewString()
-	data, err := json.Marshal(types.EntryListReparsePayload{SpaceID: spaceID, LibraryID: libraryID, EntryIDs: ids, ReviewID: runID, ReviewScope: scope, Initiator: types.TaskInitiatorFromContext(ctx)})
-	if err != nil {
-		return nil, err
-	}
-	info, err := s.task.Enqueue(taskqueue.NewTask(types.TypeEntryListReparse, data, taskqueue.TaskID(runID), taskqueue.Group(libraryRebuildGroup(libraryID)), taskqueue.Queue(types.QueueMaintenance), taskqueue.MaxRetry(3), taskqueue.Timeout(time.Hour)))
-	if err != nil {
-		return nil, err
-	}
-	return &types.LibraryRebuildResult{TaskID: info.ID, Total: len(ids)}, nil
 }
 
 func setLibraryReviewMetadata(entry *types.Entry, key, id string) error {

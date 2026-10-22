@@ -48,7 +48,6 @@ type EntryService interface {
 	) (*types.Entry, error)
 	// RebuildLibrary snapshots existing entries and schedules source-preserving reprocessing.
 	RebuildLibrary(ctx context.Context, libraryID, scope string) (*types.LibraryRebuildResult, error)
-	ReviewLibrary(ctx context.Context, libraryID, scope string) (*types.LibraryRebuildResult, error)
 	// CancelEntryParse marks an in-progress parse as cancelled by the
 	// user. The entry row and any partially written chunks/index are
 	// kept; downstream queued tasks for the same entry are best-effort

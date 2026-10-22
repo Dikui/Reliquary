@@ -17,6 +17,19 @@ import (
 	"reliquary/internal/types"
 )
 
+func TestEntryBatchRejectsNewReviewRequests(t *testing.T) {
+	h := newArticleProcessingHarness(t, false)
+	request := types.EntryBatchRequest{Action: "review", Selection: types.EntryBatchSelection{IDs: []string{"entry"}}}
+	_, err := h.service.PreviewEntryBatch(h.ctx, request)
+	require.ErrorContains(t, err, "unsupported batch action")
+	request.PreviewFingerprint = "old-review-preview"
+	_, err = h.service.SubmitEntryBatch(h.ctx, request)
+	require.ErrorContains(t, err, "unsupported batch action")
+	var count int64
+	require.NoError(t, h.db.Model(&types.EntryBatchItem{}).Count(&count).Error)
+	require.Zero(t, count)
+}
+
 func TestEntryBatchFreezesFilteredMembershipAndPreservesOtherTopics(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)

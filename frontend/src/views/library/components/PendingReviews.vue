@@ -4,16 +4,12 @@ import { useI18n } from 'vue-i18n'
 import { listPendingEntry, type ReviewEntry } from '@/api/entry-review'
 import { isValidURL } from '@/utils/security'
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
-import LibraryReviewAction from '@/components/LibraryReviewAction.vue'
-import type { LibraryCatalogItem } from '@/api/library'
 import { useLibraryScope } from '@/composables/useLibraryScope'
 import ReviewActions from '@/components/ReviewActions.vue'
 
 const emit = defineEmits<{ 'open-source': [id: string]; changed: []; refreshed: [] }>()
 const { t } = useI18n()
 const libraryScope = useLibraryScope()
-const libraries = ref<LibraryCatalogItem[]>([])
-const selectedLibrary = computed(() => libraryScope.value.length === 1 ? libraries.value.find(item => item.id === libraryScope.value[0]) : undefined)
 const records = ref<ReviewEntry[]>([]), total = ref(0), page = ref(1)
 const loading = ref(false), error = ref(''), busyIds = ref(new Set<string>())
 const busy = computed(() => busyIds.value.size > 0)
@@ -49,11 +45,9 @@ defineExpose({ refresh: load })
   <section class="pending-reviews" :aria-label="t('knowledgeReview.title')">
     <div class="review-heading"><h3>{{ t('knowledgeReview.title') }}</h3><t-button variant="outline" :loading="loading" :disabled="busy" @click="refresh">{{ t('knowledgeWorkbench.refresh') }}</t-button></div>
     <div class="review-scope-controls">
-      <LibraryScopeSelect v-model="libraryScope" :disabled="busy" @loaded="libraries = $event" />
-      <LibraryReviewAction :library="selectedLibrary" scope="pending" :disabled="busy" @submitted="refresh" />
+      <LibraryScopeSelect v-model="libraryScope" :disabled="busy" />
     </div>
     <p class="review-description">{{ t('knowledgeReview.intakeHint') }}</p>
-    <p v-if="selectedLibrary" class="review-description">{{ t('ikb18.currentReviewCriteria') }} {{ selectedLibrary.review_criteria }}</p>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" :disabled="busy" @click="refresh">{{ t('common.retry') }}</t-button></template></t-alert>
     <t-loading :loading="loading" show-overlay>
       <div class="review-list">

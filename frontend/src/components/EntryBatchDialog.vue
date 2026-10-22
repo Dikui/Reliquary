@@ -36,7 +36,7 @@ async function loadTopics() {
 }
 const preview = ref<EntryBatchPreview>(), batch = ref<EntryBatch>(), confirmed = ref(false), busy = ref(false), error = ref(''), topics = ref<Topic[]>([]), page = ref(1)
 let generation = 0, timer: ReturnType<typeof setTimeout> | undefined, disposed = false, readGeneration = 0
-const actions: EntryBatchAction[] = ['star', 'content_type', 'topics', 'review', 'reprocess', 'delete']
+const actions: EntryBatchAction[] = ['star', 'content_type', 'topics', 'reprocess', 'delete']
 const selection = computed<EntryBatchSelection>(() => scope.value === 'selected' && !props.scopeLabel ? { ids: [...(props.ids || [])] } : (props.selection || {}))
 const singleLibrary = computed(() => { const ids = selection.value.ids ? props.selectedLibraryIds : selection.value.filters?.libraries; return ids?.length === 1 ? props.libraries.find(lib => lib.id === ids[0]) : undefined })
 const contentTypes = computed(() => (singleLibrary.value?.content_types || []).filter(row => row.enabled).map(row => ({ value: row.name, label: row.name })))
@@ -83,7 +83,7 @@ const filterSummary = computed(() => {
   if (f.include_rejected) add(t('entryBatch.includeRejected'), t('common.yes'))
   return rows
 })
-const valid = computed(() => scopeValid.value && scopeKnown.value && (action.value !== 'content_type' || Boolean(contentType.value)) && (action.value !== 'topics' || topicIds.value.length > 0))
+const valid = computed(() => actions.includes(action.value) && scopeValid.value && scopeKnown.value && (action.value !== 'content_type' || Boolean(contentType.value)) && (action.value !== 'topics' || topicIds.value.length > 0))
 const active = computed(() => Boolean(batch.value && ['pending', 'running'].includes(batch.value.status)))
 const scopeText = computed(() => props.batchId && !preview.value ? t('entryBatch.fixedScope') : props.scopeLabel || t(scope.value === 'selected' ? 'entryBatch.selectedScope' : 'entryBatch.matchedScope', { count: props.ids?.length || 0 }))
 async function changeStep(value: 'scope' | 'action') {
@@ -133,7 +133,7 @@ watch(() => [props.visible, props.batchId] as const, async ([visible, batchId]) 
   batch.value = undefined; preview.value = undefined; confirmed.value = false; error.value = ''; busy.value = false; page.value = 1
   if (batchId) { void refresh(); return }
   step.value = props.scopeLabel ? 'action' : 'scope'
-  scope.value = props.scopeLabel || !props.ids?.length ? 'matched' : 'selected'; action.value = props.initialAction || 'star'; contentType.value = ''; topicIds.value = []
+  scope.value = props.scopeLabel || !props.ids?.length ? 'matched' : 'selected'; action.value = props.initialAction && actions.includes(props.initialAction) ? props.initialAction : 'star'; contentType.value = ''; topicIds.value = []
   void loadTopics()
 }, { immediate: true })
 watch([() => props.visible, () => props.batchId, selection], ([visible, batchId]) => {
@@ -174,7 +174,7 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
         <template v-if="action === 'topics'"><label><span>{{ t('entryBatch.topicMode') }}</span><t-select v-model="topicMode" :disabled="busy" :aria-label="t('entryBatch.topicMode')" :options="[{ value: 'add', label: t('entryBatch.addTopics') }, { value: 'remove', label: t('entryBatch.removeTopics') }]" /></label><label><span>{{ t('entryBatch.actions.topics') }}</span><t-select v-model="topicIds" multiple filterable :loading="topicsLoading" :disabled="busy" :aria-label="t('entryBatch.actions.topics')" :options="topics.map(topic => ({ value: topic.id, label: topic.name }))" /></label></template>
         <p v-if="action === 'topics' && topicsError" role="alert">{{ topicsError }} <t-button variant="text" :loading="topicsLoading" @click="loadTopics">{{ t('common.retry') }}</t-button></p>
         <t-alert v-if="action === 'delete'" theme="warning" :message="t('entryBatch.deleteHint')" />
-        <t-alert v-if="action === 'review' || action === 'reprocess'" theme="warning" :message="t(action === 'review' ? 'entryBatch.reviewHint' : 'entryBatch.reprocessHint')" />
+        <t-alert v-if="action === 'reprocess'" theme="warning" :message="t('entryBatch.reprocessHint')" />
         <t-button :loading="busy" :disabled="busy || !valid" @click="showPreview">{{ t('entryBatch.preview') }}</t-button>
         <section v-if="preview" aria-live="polite"><p>{{ t('entryBatch.previewCounts', { ...preview }) }}</p><ul><li v-for="reason in preview.reasons" :key="reason.code">{{ t('entryBatch.reasonCount', { reason: t(`entryBatch.reasons.${reason.code}`, reason.code), count: reason.count }) }}</li></ul><p>{{ t('entryBatch.samples') }}</p><ul><li v-for="item in preview.samples" :key="item.id">{{ item.title || item.id }} · {{ libraries.find(lib => lib.id === item.library_id)?.display_name || item.library_id }}</li></ul><t-checkbox v-model="confirmed" :disabled="busy || !preview.eligible">{{ t('entryBatch.confirmScope', { scope: scopeText, count: preview.eligible }) }}</t-checkbox><div><t-button :theme="action === 'delete' ? 'danger' : 'primary'" :disabled="busy || !confirmed || !preview.eligible || preview.blocked > 0" :loading="busy" @click="submit()">{{ t('entryBatch.confirm') }}</t-button></div></section>
         </template>
