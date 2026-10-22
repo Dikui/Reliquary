@@ -139,6 +139,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewLibraryHandler))
 	must(container.Provide(handler.NewEntryHandler))
 	must(container.Provide(handler.NewIngestDiagnosticsHandler))
+	must(container.Provide(newContentCheckService))
+	must(container.Provide(handler.NewContentCheckHandler))
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewMaintenanceHandler))
 	must(container.Provide(handler.NewGraphReplicaHandler))
@@ -174,6 +176,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(router.NewRouter))
 	must(container.Invoke(router.RunTaskServer))
 	must(container.Invoke(startGraphReplica))
+	must(container.Invoke(startContentChecks))
 	must(container.Invoke(recoverEntityNameEmbeddings))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")

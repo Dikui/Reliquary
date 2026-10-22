@@ -1,0 +1,1 @@
+../../../../internal/application/service/reliquary-content-check/SKILL.md

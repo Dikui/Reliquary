@@ -106,7 +106,7 @@ func (c *chatGPTBudgetChat) GetModelID() string   { return c.inner.GetModelID() 
 func (c *chatGPTBudgetChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	p, err := c.policy.Reserve(ctx)
 	if err != nil {
-		if p != nil && types.IsChatGPTDeferred(err) && p.FallbackModelID != "" {
+		if p != nil && types.IsChatGPTDeferred(err) && p.FallbackModelID != "" && !strictContentCheck(ctx) {
 			result, fallbackErr := c.useFallback(ctx, p.FallbackModelID, messages, opts)
 			if fallbackErr != nil {
 				return nil, c.policy.deferred(p, errors.Join(err, fallbackErr))
@@ -125,7 +125,7 @@ func (c *chatGPTBudgetChat) Chat(ctx context.Context, messages []chat.Message, o
 		errors.As(err, &upstream)
 		return nil, &types.ChatGPTDeferredError{Reason: upstream.Code, RetryAt: c.policy.now().Add(5 * time.Minute), Cause: errors.Join(err, pauseErr)}
 	}
-	if p.FallbackModelID != "" {
+	if p.FallbackModelID != "" && !strictContentCheck(ctx) {
 		result, fallbackErr := c.useFallback(ctx, p.FallbackModelID, messages, opts)
 		if fallbackErr != nil {
 			return nil, c.policy.deferred(p, errors.Join(err, fallbackErr))

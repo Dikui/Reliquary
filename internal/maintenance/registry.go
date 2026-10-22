@@ -22,6 +22,8 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"content_check_settings": {Columns: Rule{Configuration: "space_id enabled model_id weekday time next_run_at scan_after"}, File: "config/content_check_settings.json", After: []string{"spaces", "models"}, Since: 32},
+	"content_check_runs":     {Columns: Rule{Sidecar: "id space_id model_id previous_id status window_from window_to targets completed results error created_at finished_at"}, File: "data/content_check_runs.json", After: []string{"content_check_settings"}, Since: 32},
 	"relations":              {Columns: Rule{Sidecar: "id space_id library_id subject_id relation_type object_id version created_at updated_at"}, File: "data/relations.json", After: []string{"spaces", "libraries", "entities", "library_relation_types"}, Since: 18},
 	"relation_sources":       {Columns: Rule{Sidecar: "relation_id entry_id evidence run_id body_hash"}, File: "data/relation_sources.json", After: []string{"relations", "entries"}, Since: 18},
 	"relation_suppressions":  {Columns: Rule{Sidecar: "space_id library_id subject_id relation_type object_id actor created_at"}, File: "data/relation_suppressions.json", After: []string{"spaces", "libraries", "entities", "library_relation_types"}, Since: 18},

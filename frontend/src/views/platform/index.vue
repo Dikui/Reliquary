@@ -13,6 +13,7 @@
             <Menu mobile-overlay @close="mobileSidebarOpen = false" />
         </t-drawer>
         <div v-if="isRouterAlive" class="platform-route-outlet">
+            <ContentCheckNotice />
             <RouterView />
         </div>
         <!-- 全局设置模态框，供所有 platform 子路由使用 -->
@@ -23,6 +24,7 @@
 </template>
 <script setup lang="ts">
 import Menu from '@/components/SideMenu.vue'
+import ContentCheckNotice from '@/components/ContentCheckNotice.vue'
 import { ref, onMounted, onUnmounted, nextTick, provide, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router'
 import Settings from '@/views/settings/Settings.vue'

@@ -15,12 +15,14 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/mcpserver"
 	"reliquary/internal/middleware"
+	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
 // RouterParams 路由参数
 type RouterParams struct {
 	dig.In
+	ContentCheckHandler      *handler.ContentCheckHandler      `optional:"true"`
 	IngestDiagnosticsHandler *handler.IngestDiagnosticsHandler `optional:"true"`
 	GraphReplicaHandler      *handler.GraphReplicaHandler      `optional:"true"`
 	GraphSearchHandler       *handler.GraphSearchHandler       `optional:"true"`
@@ -142,6 +144,22 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.FileService,
 			params.ResourceCatalog)
 		RegisterEntryRoutes(v1, params.EntryHandler, accessGuards)
+		if h := params.ContentCheckHandler; h != nil {
+			g := v1.Group("/diagnostics/content-checks")
+			g.GET("", h.List)
+			g.GET("/settings", h.Settings)
+			g.GET("/:id", h.Get)
+			local := func(c *gin.Context) {
+				p, ok := types.PrincipalFromContext(c.Request.Context())
+				if !ok || p.Type != types.PrincipalWebUser {
+					c.AbortWithStatusJSON(403, gin.H{"success": false, "message": "local settings session required"})
+					return
+				}
+				c.Next()
+			}
+			g.PUT("/settings", local, h.Save)
+			g.POST("/:id/recheck", local, h.Recheck)
+		}
 		if h := params.IngestDiagnosticsHandler; h != nil {
 			v1.GET("/diagnostics/ingest-failures", h.List)
 			v1.GET("/diagnostics/ingest-failures/:id", h.Get)

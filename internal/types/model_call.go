@@ -22,13 +22,16 @@ const (
 	CallPurposeBodyEmbedding     ModelCallPurpose = "body_embedding"
 	CallPurposeRerank            ModelCallPurpose = "rerank"
 	CallPurposeEvaluation        ModelCallPurpose = "evaluation_generation"
+	CallPurposeContentCheck      ModelCallPurpose = "content_check"
 	CallPurposeOther             ModelCallPurpose = "other"
 )
 
-var ModelCallPurposes = []ModelCallPurpose{CallPurposeIntakeReview, CallPurposeArticleProcessing, CallPurposeSegmentMerge, CallPurposeImageDescription, CallPurposeEntityResolution, CallPurposeEntityEmbedding, CallPurposeBodyEmbedding, CallPurposeRerank, CallPurposeEvaluation, CallPurposeOther}
+var ModelCallPurposes = []ModelCallPurpose{CallPurposeIntakeReview, CallPurposeArticleProcessing, CallPurposeSegmentMerge, CallPurposeImageDescription, CallPurposeEntityResolution, CallPurposeEntityEmbedding, CallPurposeBodyEmbedding, CallPurposeRerank, CallPurposeEvaluation, CallPurposeContentCheck, CallPurposeOther}
 
 func NormalizeModelCallPurpose(stage string, tier ModelTier) ModelCallPurpose {
 	switch stage {
+	case "content_check":
+		return CallPurposeContentCheck
 	case "intake_review":
 		return CallPurposeIntakeReview
 	case "article_processing", "article_graph_verification":

@@ -23,7 +23,8 @@ import (
 
 type TaskParams struct {
 	dig.In
-	GraphReplica        *graphreplica.Service `optional:"true"`
+	ContentChecks       *service.ContentCheckService `optional:"true"`
+	GraphReplica        *graphreplica.Service        `optional:"true"`
 	Client              *queue.Client
 	SystemSettings      interfaces.SystemSettingService
 	EntryService        interfaces.EntryService
@@ -76,6 +77,9 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux := queue.NewServeMux()
 	mux.Use(chatGPTPermanentFailureMiddleware())
 	mux.Use(backgroundTaskMiddleware())
+	if params.ContentChecks != nil {
+		mux.HandleFunc(types.TypeContentCheck, params.ContentChecks.Handle)
+	}
 	if params.GraphReplica != nil {
 		mux.HandleFunc(graphreplica.TypeSync, params.GraphReplica.HandleSync)
 		mux.HandleFunc(graphreplica.TypeCheck, params.GraphReplica.HandleCheck)
