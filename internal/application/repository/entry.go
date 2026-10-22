@@ -155,12 +155,14 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	if filter.Source != "" {
 		query = query.Where("channel = ?", filter.Source)
 	}
-	if filter.ParseStatus == types.ParseStatusFailed {
+	switch filter.ParseStatus {
+	case types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFailed:
 		query = query.Where("(parse_status = ? OR (parse_status = ? AND summary_status = ?))",
-			types.ParseStatusFailed, types.ParseStatusCompleted, types.SummaryStatusFailed)
-	} else if filter.ParseStatus != "" {
-		query = query.Where("parse_status = ?", filter.ParseStatus)
-	} else {
+			filter.ParseStatus, types.ParseStatusCompleted, filter.ParseStatus)
+	case types.ParseStatusCompleted:
+		query = query.Where("parse_status = ? AND (summary_status IS NULL OR summary_status NOT IN ?)",
+			types.ParseStatusCompleted, []string{types.SummaryStatusPending, types.SummaryStatusProcessing, types.SummaryStatusFailed})
+	case "":
 		// Hide rows that are mid-deletion so an async delete never lingers in the
 		// document list as if it were a normal entry (issue #2192). The delete
 		// pipeline marks the row `deleting` before tearing down its resources; a
@@ -171,6 +173,8 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 			hidden = append(hidden, types.ParseStatusRejected)
 		}
 		query = query.Where("parse_status NOT IN ?", hidden)
+	default:
+		query = query.Where("parse_status = ?", filter.ParseStatus)
 	}
 	if !filter.UpdatedFrom.IsZero() {
 		query = query.Where("updated_at >= ?", filter.UpdatedFrom)

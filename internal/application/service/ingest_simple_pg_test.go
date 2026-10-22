@@ -74,3 +74,33 @@ func TestSimpleIngestExactRetryReplacementAndBadImageRollback(t *testing.T) {
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("library_id=?", h.library.ID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 }
+
+func TestIngestRejectsInvalidPublicationDateWithoutReplacingEntry(t *testing.T) {
+	h, _ := newIngestHarness(t)
+	request := &types.IngestRequest{Library: h.library.ID, SourceRef: "dated-note", Content: "Calibration result: 42 pascals.", PublishedAt: "2026-10-22"}
+	first, err := h.service.Ingest(h.ctx, request)
+	require.NoError(t, err)
+	intake, err := h.article(t, first.EntryID).IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, request.PublishedAt, intake.SourceInfo.PublishedAt)
+
+	request.PublishedAt = "2026-10-22T12:30:00+08:00"
+	updated, err := h.service.Ingest(h.ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, first.EntryID, updated.EntryID)
+	saved := h.article(t, first.EntryID)
+	intake, err = saved.IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, "2026-10-22T04:30:00Z", intake.SourceInfo.PublishedAt)
+	require.Len(t, h.queue.tasks, 2)
+
+	request.PublishedAt = "not-a-date"
+	rejected, err := h.service.Ingest(h.ctx, request)
+	require.ErrorContains(t, err, "published_at")
+	require.Nil(t, rejected)
+	after := h.article(t, first.EntryID)
+	require.Equal(t, saved.Metadata, after.Metadata)
+	require.Equal(t, saved.VaultBody, after.VaultBody)
+	require.Equal(t, saved.UpdatedAt, after.UpdatedAt)
+	require.Len(t, h.queue.tasks, 2, "invalid date must not enqueue replacement work")
+}

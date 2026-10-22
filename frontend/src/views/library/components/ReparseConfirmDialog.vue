@@ -133,7 +133,7 @@ function truncateNavText(text: string, max = 18): string {
 }
 
 const dialogTitle = computed(() => t(props.reparsePreview?.sourceKind === 'report' ? 'ikb18.reindex' : 'reparseConfirm.titleReparse'))
-const confirmButtonText = computed(() => t(props.reparsePreview?.sourceKind === 'report' ? 'library.reindexDocument' : 'reparseConfirm.confirmReparse'))
+const confirmButtonText = computed(() => t('reparseConfirm.confirmReparse'))
 const batchFileExts = computed(() => {
   const ext = (props.reparsePreview?.fileType || '').toLowerCase()
   return ext ? [ext] : []

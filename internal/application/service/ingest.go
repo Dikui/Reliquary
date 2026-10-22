@@ -212,6 +212,9 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	if request.URL != "" && (!validIngestURL(strings.TrimSpace(request.URL)) || len(request.URL) > 2048) {
 		return bad("url must be an absolute HTTP or HTTPS URL of at most 2048 bytes")
 	}
+	if request.PublishedAt != "" && normalizeIntakePublicationDate(request.PublishedAt) == "" {
+		return bad("published_at must be a valid date in YYYY-MM-DD or RFC3339 format")
+	}
 	bodyRunes := utf8.RuneCountInString(request.Content)
 	for _, item := range request.Thread {
 		bodyRunes += utf8.RuneCountInString(item.Content)
