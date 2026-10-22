@@ -80,7 +80,7 @@ function environment(locale: keyof typeof messages) {
     '@/types/entryClassification': { CONTENT_TYPES }, '@/api/library': api, '@/stores/entry': storeModule,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
-    '@/utils/security': { isValidURL: () => true, isValidImageURL: () => true, safeMarkdownToHTML: identity, sanitizeHTML: identity, hydrateProtectedFileImages: async () => {}, createSafeImage: (url: string, alt: string) => `<img src="${url}" alt="${alt}">` },
+    '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: () => true, isValidImageURL: () => true, safeMarkdownToHTML: identity, sanitizeHTML: identity, hydrateProtectedFileImages: async () => {}, createSafeImage: (url: string, alt: string) => `<img src="${url}" alt="${alt}">` },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: identity },
     '@/utils/mermaidViewer': {}, '@/utils/clipboard': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {}, '@/views/library/entryDownloadFileName': {},
     marked: { marked: { Renderer, use: parser.use.bind(parser), parse: parser.parse.bind(parser) } },

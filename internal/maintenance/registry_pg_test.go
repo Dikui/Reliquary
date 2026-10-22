@@ -66,3 +66,16 @@ func TestIKB07ModernEmptyFieldsSurviveLegacyProjection(t *testing.T) {
 	require.Equal(t, "other", legacy.Tables["entries"][0]["content_type"])
 	require.NotContains(t, legacy.Tables["entries"][0], "processing_mode")
 }
+
+func TestEntryBatchProjectionOnlyAcceptsEmptyMigrationTable(t *testing.T) {
+	before := &Manifest{SchemaVersion: 27, FormatVersion: FormatVersion, Tables: map[string]TableManifest{}}
+	after := &Manifest{SchemaVersion: 28, FormatVersion: FormatVersion, Tables: map[string]TableManifest{
+		"entry_batch_items": {SHA256: sum([]byte("[]"))},
+	}}
+	require.Empty(t, CompareManifest(before, after))
+	require.NotContains(t, before.Tables, "entry_batch_items", "projection must preserve the original evidence")
+	after.Tables["entry_batch_items"] = TableManifest{Rows: 1, SHA256: "unexpected row"}
+	require.Contains(t, CompareManifest(before, after), "table entry_batch_items")
+	before.SchemaVersion = 28
+	require.Contains(t, CompareManifest(before, after), "unexpected table entry_batch_items", "current backups must retain exact table coverage")
+}

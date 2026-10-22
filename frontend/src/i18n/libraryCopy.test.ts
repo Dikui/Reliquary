@@ -64,11 +64,11 @@ test('navigation and article labels use the same current names in both locales',
   assert.equal(zhCN.settings.taskQueue, '运行队列')
 })
 
-test('library settings navigation, heading and model labels agree in both locales', () => {
+test('library settings labels and model source labels describe their separate roles in both locales', () => {
   for (const [bundle, label] of [[enUS, 'Library settings'], [zhCN, '资料库设置']] as const) {
     assert.equal(bundle.settings.librarySettings, label)
     assert.equal(bundle.modelSettings.usage.librarySettings, label)
-    assert.equal(bundle.modelTiers.sources.library, label)
+    assert.equal(bundle.modelTiers.sources.library, bundle === enUS ? 'Selected library' : '当前库设置')
   }
 })
 

@@ -517,6 +517,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectEvaluationManifest(expected, actual)
 	expected, actual = projectModelCallManifest(expected, actual)
 	expected, actual = projectCallContentManifest(expected, actual)
+	expected, actual = projectEntryBatchManifest(expected, actual)
 	expected, actual = projectCallPricingManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend

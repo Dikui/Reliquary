@@ -77,7 +77,7 @@ async function renderDetail(details: Record<string, unknown>, locale: keyof type
     mermaid: { __esModule: true, default: { initialize() {} } },
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedRequest, warning: unexpectedRequest } },
     '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedRequest },
-    '@/utils/security': { isValidURL: () => false, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
+    '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: () => false, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value },
     '@/utils/mermaidViewer': {}, '@/utils/clipboard': {},
     '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},

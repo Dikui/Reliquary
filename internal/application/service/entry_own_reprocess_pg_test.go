@@ -76,7 +76,7 @@ func TestOwnReprocessAfterFailureAndCancellationReusesCompletedSegments(t *testi
 	require.Equal(t, 2, m.calls["article_processing"][3])
 }
 
-func TestGeneratedReparseOnlyIndexesAndPreservesCallerFields(t *testing.T) {
+func TestGeneratedReparseRunsProcessingAndPreservesUserTopics(t *testing.T) {
 	h, m := segmentedHarness(t)
 	h.library.SystemRole = ""
 	h.library.ID, h.library.Directory, h.library.Template, h.library.SourceEvidenceRule = "generated-reindex", "generated-reindex", types.TemplateGenerated, ""
@@ -95,10 +95,11 @@ func TestGeneratedReparseOnlyIndexesAndPreservesCallerFields(t *testing.T) {
 	h.drain(t)
 	saved := h.article(t, k.ID)
 	require.Equal(t, types.ParseStatusCompleted, saved.ParseStatus)
-	require.Equal(t, "Caller summary", saved.Description)
-	require.Equal(t, k.StructuredSummary, saved.StructuredSummary)
-	require.Equal(t, "research", saved.ContentType)
-	require.Empty(t, m.calls)
+	require.NotEmpty(t, saved.Description)
+	require.NotEqual(t, "Caller summary", saved.Description)
+	require.NotNil(t, saved.StructuredSummary)
+	require.NotEmpty(t, saved.ContentType)
+	require.NotEmpty(t, m.calls)
 	require.Zero(t, m.mergeCalls)
 	var chunks, links, runs int64
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", k.ID).Count(&chunks).Error)
@@ -106,7 +107,7 @@ func TestGeneratedReparseOnlyIndexesAndPreservesCallerFields(t *testing.T) {
 	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=?", k.ID).Count(&links).Error)
 	require.EqualValues(t, 1, links)
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=?", k.ID).Count(&runs).Error)
-	require.Zero(t, runs)
+	require.Positive(t, runs)
 }
 
 func TestOwnMetadataIsUpdatedThroughTheNormalEntryService(t *testing.T) {

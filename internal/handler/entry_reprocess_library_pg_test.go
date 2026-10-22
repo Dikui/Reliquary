@@ -79,9 +79,8 @@ func TestHTTPReprocessCancelAndResumeAcrossLibraryTemplates(t *testing.T) {
 				require.Equal(t, "Updated own title", saved.Title)
 				require.JSONEq(t, `{"owner":"me"}`, string(saved.CustomMetadata))
 			}
-			if template == types.TemplateGenerated {
-				require.Equal(t, "Caller summary", saved.Description)
-			}
+			require.Empty(t, saved.Description)
+			require.Equal(t, types.SummaryStatusPending, saved.SummaryStatus)
 		})
 	}
 }

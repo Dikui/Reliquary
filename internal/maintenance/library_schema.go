@@ -59,20 +59,7 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 		}
 	}
 	ids := map[string]map[string]string{}
-	defaults := types.SystemLibraryDefaults()
-	// The 9 to 10 projection must retain the text written by frozen 000010,
-	// independently of later corrections to the current initialization copy.
-	for _, library := range defaults {
-		library.SystemRole = legacySystemLibraryRole(library.SystemRole)
-		library.Directory = legacySystemLibraryRole(library.Directory)
-		library.Name = systemLibraryLabelMigration[library.SystemRole][0]
-		if library.SystemRole == "opinions" {
-			library.Description = "外部个人的观点：专家、分析师、KOL 的评论与文章。"
-		}
-		if library.SystemRole == "ai-reports" {
-			library.ReviewCriteria = "不审核、不处理，只建索引。标题、Markdown 正文必填；关联资料、已存在的实体与主题可选。"
-		}
-	}
+	defaults := version10LibraryDefaults()
 	original := snapshot.Tables["libraries"]
 	libraries := []map[string]any{}
 	contents := []map[string]any{}
@@ -192,6 +179,41 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 		sortRows(rows)
 	}
 	return nil
+}
+
+// These values belong to frozen migration 000010, not current library templates.
+// Changing today's defaults must not change how old backups are restored.
+func version10LibraryDefaults() []*types.Library {
+	officialRelations := []string{"投资", "收购", "合作", "竞争", "任职", "发布", "供应", "客户", "监管", "隶属"}
+	makeLibrary := func(role, template, description, criteria, evidence string, feed bool, names []string, graphCount int, relations []string) *types.Library {
+		library := &types.Library{
+			SystemRole: role, Directory: role, Name: systemLibraryLabelMigration[role][0], Template: template,
+			Description: description, ReviewCriteria: criteria, SourceEvidenceRule: evidence, FeedEnabled: feed,
+		}
+		for i, name := range names {
+			library.ContentTypes = append(library.ContentTypes, types.LibraryContentType{Name: name, Position: i, Enabled: true, ExtractGraph: i < graphCount})
+		}
+		for i, name := range relations {
+			library.RelationTypes = append(library.RelationTypes, types.LibraryRelationType{Name: name, Position: i, Enabled: true})
+		}
+		return library
+	}
+	return []*types.Library{
+		makeLibrary("institutional", "external_timely", "官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。",
+			"发布者是机构（官方、公司、媒体、研究机构、行业协会）；有实质信息，不是广告、招聘、纯转发；正文完整。", "link_or_publisher_date", true,
+			[]string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"}, 5, officialRelations),
+		makeLibrary("opinions", "external_timely", "外部个人的观点：专家、分析师、KOL 的评论与文章。",
+			"作者是外部个人，必须能确定作者；有明确观点或判断；不是纯转发、无内容的短评。", "link_required", true,
+			[]string{"评论", "分析", "预测", "访谈", "其他"}, 4, append([]string{"看好", "看空", "评价", "预测", "批评", "推荐"}, officialRelations...)),
+		makeLibrary("references", "external_durable", "长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。",
+			"长期有参考价值；正文完整，不是摘要或目录。", "", false,
+			[]string{"论文", "书籍", "标准", "官方文档", "教程", "其他"}, 0, []string{"提出", "引用", "属于", "依赖", "对比"}),
+		makeLibrary("mine", "own", "本人的工作资料、经验、SOP、笔记。",
+			"正文完整、可读；不是结构化记录（任务清单、工单、明细表）。", "", false,
+			[]string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"}, 3, []string{"负责", "参与", "合作", "客户", "供应", "依赖", "属于", "决定"}),
+		makeLibrary("ai-reports", "generated", "外部 AI 按要求写回的报告；不能当作事实。",
+			"不审核、不处理，只建索引。标题、Markdown 正文必填；关联资料、已存在的实体与主题可选。", "", false, nil, 0, nil),
+	}
 }
 
 func projectLibraryManifest(expected, actual *Manifest) (*Manifest, *Manifest) {

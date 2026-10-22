@@ -11,7 +11,6 @@ import (
 
 	taskqueue "reliquary/internal/queue"
 
-	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -124,24 +123,6 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 		return errors.New("article body is empty")
 	}
 	clean = content
-	if library.Template == types.TemplateGenerated {
-		// Reports retain caller-provided fields and only rebuild their indexes.
-		s.bindContentResources(ctx, entry.SpaceID, entry.ID, content)
-		s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "saved_markdown"})
-		s.endStage(ctx, entry.ID, types.StageDocReader, nil)
-		s.skipStage(ctx, entry.ID, types.StageProcessing, "generated_library")
-		overrides, _ := entry.ProcessOverrides()
-		eff := ResolveProcessConfig(library, overrides)
-		chunks, options := splitArticleBody(content, eff.ChunkingConfig)
-		s.processChunks(ctx, library, entry, chunks, options)
-		if entry.ParseStatus == types.ParseStatusFailed {
-			return errors.New(entry.ErrorMessage)
-		}
-		if aborted, _ := s.isEntryAborted(ctx, entry.SpaceID, entry.ID); !aborted {
-			s.tracker().FinalizeAttempt(ctx, entry.ID, attemptFromCtx(ctx), "done", types.JSONMap{"index_only": true}, "", "")
-		}
-		return nil
-	}
 	s.beginStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"source": "markdown", "body_chars": len([]rune(content))})
 
 	// Store embedded image bytes before chunking.
@@ -172,9 +153,11 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 			return errors.New("article processing failed")
 		}
 	}
-	if err := extractIntakeOriginalLink(entry, clean, nil); err != nil {
-		entry.ParseStatus = types.ParseStatusFailed
-		return err
+	if intake, _ := entry.IntakeMetadata(); intake == nil || intake.Decision != "approved" {
+		if err := extractIntakeOriginalLink(entry, clean, nil); err != nil {
+			entry.ParseStatus = types.ParseStatusFailed
+			return err
+		}
 	}
 	if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
 		existing, err := s.checkMessageDuplicate(ctx, entry, clean)
@@ -206,10 +189,6 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	// released the previous run's claims, so a republished document keeps the
 	// files its new body still references.
 	s.bindContentResources(ctx, entry.SpaceID, entry.ID, clean)
-
-	// Keep manually entered CRLF text aligned with the LF values sent by the
-	// chunking preview endpoint.
-	clean = chunker.NormalizeLineEndings(clean)
 
 	s.endStage(ctx, entry.ID, types.StageDocReader, types.JSONMap{"images": len(resolvedImages), "body_chars": len([]rune(clean))})
 	processOverrides, _ := entry.ProcessOverrides()

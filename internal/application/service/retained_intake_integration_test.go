@@ -119,7 +119,7 @@ func (h *retainedIntakeHarness) article(t *testing.T, id string) *types.Entry {
 	return article
 }
 
-func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T) {
+func TestUploadedMarkdownCompletesWithOneBodyColumnWithoutReview(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	body := "# Uploadfixture\n\nAcme published an original technical announcement with supported deployment capabilities and measured product improvements."
 	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "announcement.md", body),
@@ -138,30 +138,23 @@ func TestUploadedMarkdownCompletesWithOneBodyColumnAndBuiltinReview(t *testing.T
 		require.False(t, h.db.Migrator().HasColumn(&types.Chunk{}, column), column)
 	}
 	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
-	require.Equal(t, []string{segmentReviewPrompt(h.library)}, h.model.prompts)
+	require.Empty(t, h.model.prompts)
 	require.NotContains(t, string(completed.Metadata), "classification")
 }
 
-func TestMalformedBuiltinReviewIsExecutionFailure(t *testing.T) {
+func TestObsoleteReviewResponseDoesNotGateProcessing(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
 	h.model.malformed = true
 	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
-		newMultipartFileHeader(t, "malformed.md", "Acme published the complete original product announcement with detailed deployment options."),
-		map[string]string{"publisher": "Acme", "original_url": "https://example.com/malformedfixture", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+		newMultipartFileHeader(t, "draft.md", "Acme published an unfinished product announcement."),
+		nil, nil, "", types.ChannelWeb, nil)
 	require.NoError(t, err)
-	require.Len(t, h.queue.tasks, 1)
-	require.ErrorContains(t, h.service.ProcessDocument(h.ctx, h.queue.tasks[0]), "invalid intake review response: reason must be non-empty")
-	failed := h.article(t, article.ID)
-	require.Equal(t, types.ParseStatusFailed, failed.ParseStatus)
-	intake, err := failed.IntakeMetadata()
+	h.drain(t)
+	saved := h.article(t, article.ID)
+	require.Equal(t, types.ParseStatusCompleted, saved.ParseStatus)
+	require.Equal(t, types.SummaryStatusCompleted, saved.SummaryStatus)
+	require.Empty(t, h.model.prompts)
+	intake, err := saved.IntakeMetadata()
 	require.NoError(t, err)
-	require.Equal(t, "pending", intake.Decision)
-	require.Contains(t, failed.VaultBody, "complete original product announcement")
-	require.False(t, h.db.Migrator().HasTable("entry_strategy_versions"))
-	require.Len(t, h.model.prompts, 2, "invalid output gets one corrective call")
-	require.Contains(t, h.model.prompts[1], "reason must be non-empty")
-	h.model.malformed = false
-	require.NoError(t, h.service.ProcessDocument(h.ctx, h.queue.tasks[0]))
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
-	require.Len(t, h.model.prompts, 3)
+	require.Equal(t, "approved", intake.Decision)
 }

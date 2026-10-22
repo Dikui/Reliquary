@@ -34,8 +34,8 @@ var allowedOutboundCalls = map[string]int{
 	"internal/models/chat/remote_api.go|chatWithRawHTTP|rawHTTPClient.Do":                 1,
 	"internal/models/embedding/openai.go|doRequestWithRetry|e.httpClient.Do":              1,
 	"internal/models/embedding/openai.go|doRequestWithRetry|http.NewRequestWithContext":   1,
-	"internal/models/rerank/aliyun_reranker.go|Rerank|http.NewRequestWithContext":         1,
-	"internal/models/rerank/aliyun_reranker.go|Rerank|r.client.Do":                        1,
+	"internal/models/rerank/aliyun_reranker.go|rerank|http.NewRequestWithContext":         1,
+	"internal/models/rerank/aliyun_reranker.go|rerank|r.client.Do":                        1,
 	"internal/models/rerank/remote_api.go|Rerank|http.NewRequestWithContext":              1,
 	"internal/models/rerank/remote_api.go|Rerank|r.client.Do":                             1,
 	// Accounting delegates only to the existing guarded transport; no new endpoints.
@@ -49,6 +49,9 @@ var allowedOutboundCalls = map[string]int{
 	"internal/utils/security.go|RoundTrip|t.Base.RoundTrip":               1,
 	"internal/utils/security.go|roundTripPinnedProxy|transport.RoundTrip": 1,
 	// Local selectors with HTTP-like method names.
+	"internal/application/service/ingest_diagnostics.go|ingestWithDiagnostics|s.diagnostics.Get":       1,
+	"internal/handler/ingest_diagnostics.go|Get|h.service.Get":                                         1,
+	"internal/mcpserver/ingest_diagnostics.go|registerIngestDiagnostics|s.Get":                         1,
 	"cmd/server/maintenance_chatgpt.go|runMaintenanceChatGPT|query.Get":                                6,
 	"internal/application/service/search/search.go|searchByTargets|errOnce.Do":                         1,
 	"internal/application/service/vault_file_rebuild.go|lockFileRebuild|once.Do":                       1,

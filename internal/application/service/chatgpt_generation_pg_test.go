@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/chatgpt"
+	"reliquary/internal/config"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	taskqueue "reliquary/internal/queue"
@@ -236,7 +237,7 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 	}
 }
 
-func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHistory(t *testing.T) {
+func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testing.T) {
 	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
 		if request.stage() == "entity_resolution" {
 			return `{"decision":"match","entity_id":"existing-acme","confidence":0.99}`, ""
@@ -269,7 +270,7 @@ func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHisto
 	require.Len(t, topicLinks(t, topics, topic.ID), 1)
 
 	requests := h.requests()
-	require.Len(t, requests, 5, "each retained generation path must reach the real ChatGPT model service")
+	require.Len(t, requests, 4, "each retained generation path must reach the real ChatGPT model service")
 	stages := make([]string, 0, len(requests))
 	for _, request := range requests {
 		stages = append(stages, request.stage())
@@ -288,17 +289,17 @@ func TestChatGPTGenerationSourceRunsIntakeProcessingEntityJudgementAndTopicHisto
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
 	}
-	require.Equal(t, []string{"intake_review", "article_processing", "article_graph_verification", "entity_resolution", "topic_backfill"}, stages)
+	require.Equal(t, []string{"article_processing", "article_graph_verification", "entity_resolution", "topic_backfill"}, stages)
 	policy, err := h.policy.Get(h.ctx)
 	require.NoError(t, err)
-	require.Equal(t, 5, policy.DailyUsed)
+	require.Equal(t, 4, policy.DailyUsed)
 	_, err = h.models.GetEmbeddingModel(h.ctx, "chatgpt-generation")
 	require.Error(t, err, "subscription generation model cannot supply embedding")
 }
 
-func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecovery(t *testing.T) {
+func TestChatGPTQuotaDefersEnrichmentAndPreservesSearchableBody(t *testing.T) {
 	for _, code := range []string{"subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable"} {
-		for _, stage := range []string{"intake_review", "article_processing", "article_graph_verification"} {
+		for _, stage := range []string{"article_processing", "article_graph_verification"} {
 			t.Run(code+"/"+stage, func(t *testing.T) {
 				var quota atomic.Bool
 				quota.Store(true)
@@ -320,7 +321,8 @@ func TestChatGPTQuotaDefersIntakeOrProcessingAndPreservesOriginalForManualRecove
 				require.True(t, deferred.RetryAt.After(time.Now()))
 				require.Equal(t, code, deferred.Reason)
 				pending := h.article(t, article.ID)
-				require.Equal(t, types.ParseStatusPending, pending.ParseStatus)
+				require.Equal(t, types.ParseStatusCompleted, pending.ParseStatus)
+				require.Equal(t, types.SummaryStatusFailed, pending.SummaryStatus)
 				intake, err := pending.IntakeMetadata()
 				require.NoError(t, err)
 				require.NotEqual(t, "error", intake.Decision)
@@ -398,91 +400,69 @@ func chatGPTScheduledTasks(ctx context.Context, client *taskqueue.Client) ([]*ta
 	return result, err
 }
 
-func TestChatGPTQuotaDuringSynchronousIngestQueuesThePreservedArticleForRecovery(t *testing.T) {
-	for _, code := range []string{"subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable"} {
-		t.Run(code, func(t *testing.T) {
-			var quota atomic.Bool
-			quota.Store(true)
-			h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
-				if quota.Load() && request.stage() == "intake_review" {
-					return "", code
-				}
-				return chatGPTGenerationSuccess(t, request)
-			})
-			h.service.libraryService = ingestFixtureLibrary{retainedProcessingLibrary: retainedProcessingLibrary{library: h.library}, db: h.db}
-			spaceID := h.library.SpaceID
-			require.NoError(t, h.db.Create(&types.APIKey{ID: 19, SpaceID: &spaceID, Name: "ChatGPT fixture collector", KeyHash: "chatgpt-fixture-collector"}).Error)
-			h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "19"})
-			inspector := chatGPTScheduledQueue(t, h)
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", Acquisition: "verbatim", URL: "https://example.org/chatgpt-ingest-quota", Title: "Fixture original publication", Publisher: "Fixture Acme", PublishedAt: "2026-10-01", Content: "Fixture Acme published an original product announcement with complete deployment details and measured capabilities."})
-			require.NoError(t, err)
-			require.Equal(t, "accepted", result.Status)
-			pending := h.article(t, result.EntryID)
-			require.Equal(t, types.ParseStatusPending, pending.ParseStatus)
-			intake, err := pending.IntakeMetadata()
-			require.NoError(t, err)
-			require.Equal(t, "pending", intake.Decision)
-			require.Contains(t, pending.VaultBody, "Fixture Acme published an original product announcement")
-			tasks, err := chatGPTScheduledTasks(h.ctx, inspector)
-			require.NoError(t, err)
-			require.Len(t, tasks, 1)
-			require.Equal(t, types.TypeManualProcess, tasks[0].Type)
-			require.Equal(t, 3, tasks[0].MaxRetry)
-			require.Zero(t, tasks[0].Retried)
-			require.True(t, tasks[0].NextProcessAt.After(time.Now().Add(4*time.Minute)))
-			task := taskqueue.NewTask(tasks[0].Type, tasks[0].Payload)
-			before := len(h.requests())
-			err = h.service.ProcessManualUpdate(types.WithTaskRetryMetadata(h.ctx, 0, 3), task)
-			require.True(t, types.IsChatGPTDeferred(err))
-			require.Len(t, h.requests(), before, "paused manual worker must not contact the API")
-			require.Equal(t, types.ParseStatusPending, h.article(t, result.EntryID).ParseStatus)
-			quota.Store(false)
-			_, err = h.policy.Resume(h.ctx)
-			require.NoError(t, err)
-			require.NoError(t, h.service.ProcessManualUpdate(types.WithTaskRetryMetadata(h.ctx, 0, 3), task))
-			require.Equal(t, types.ParseStatusCompleted, h.article(t, result.EntryID).ParseStatus)
-		})
-	}
-}
-
-func TestChatGPTQuotaDuringSupplementedLinkReviewQueuesRecoveryWithoutLosingOriginal(t *testing.T) {
+func TestChatGPTQuotaIsHandledAfterIngestAndKeepsBodySearchable(t *testing.T) {
 	var quota atomic.Bool
+	quota.Store(true)
 	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
-		if quota.Load() && request.stage() == "intake_review" {
+		if quota.Load() && request.stage() == "article_processing" {
 			return "", "subscription_sharing_usage_limit_exceeded"
 		}
 		return chatGPTGenerationSuccess(t, request)
 	})
-	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID,
-		newMultipartFileHeader(t, "missing-link.md", "Fixture Acme published a complete original announcement with product measurements and documented deployment choices."),
-		map[string]string{"publisher": "Fixture Acme"}, nil, "", types.ChannelWeb, nil)
+	h.service.libraryService = ingestFixtureLibrary{retainedProcessingLibrary: retainedProcessingLibrary{library: h.library}, db: h.db}
+	spaceID := h.library.SpaceID
+	require.NoError(t, h.db.Create(&types.APIKey{ID: 19, SpaceID: &spaceID, Name: "ChatGPT fixture collector", KeyHash: "chatgpt-fixture-collector"}).Error)
+	h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "19"})
+	vault, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: t.TempDir()}})
 	require.NoError(t, err)
-	h.drain(t)
-	missing := h.article(t, article.ID)
-	require.Equal(t, types.ParseStatusRejected, missing.ParseStatus)
-	intake, err := missing.IntakeMetadata()
-	require.NoError(t, err)
-	original := missing.VaultBody
-	require.Contains(t, original, "Fixture Acme published a complete original announcement")
+	h.service.SetVault(vault)
+	t.Cleanup(func() { require.NoError(t, vault.Close()) })
 	inspector := chatGPTScheduledQueue(t, h)
-	quota.Store(true)
-	reviewed, err := h.service.ReviewEntryIntake(h.ctx, article.ID, "supplement_url", types.SourceInfo{OriginalURL: "https://example.org/supplemented-original"})
+	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", Content: "Fixture Acme published original product measurements and deployment details."})
 	require.NoError(t, err)
-	require.Equal(t, types.ParseStatusPending, reviewed.ParseStatus)
-	intake, err = reviewed.IntakeMetadata()
-	require.NoError(t, err)
-	require.Equal(t, "pending", intake.Decision)
-	require.Equal(t, original, reviewed.VaultBody)
-	require.Equal(t, original, h.article(t, article.ID).VaultBody)
-	tasks, err := chatGPTScheduledTasks(h.ctx, inspector)
-	require.NoError(t, err)
-	require.Len(t, tasks, 1)
-	require.Equal(t, 3, tasks[0].MaxRetry)
-	require.Zero(t, tasks[0].Retried)
-	require.True(t, tasks[0].NextProcessAt.After(time.Now().Add(4*time.Minute)))
+	require.Equal(t, "accepted", result.Status)
+	require.Empty(t, h.requests(), "saving never calls the quota-limited model")
+	var job taskqueue.Job
+	require.NoError(t, inspector.DB().Where("object_id=? AND task_type=?", result.EntryID, types.TypeManualProcess).First(&job).Error)
+	task := taskqueue.NewTask(job.TaskType, job.Payload)
+	require.True(t, types.IsChatGPTDeferred(h.service.ProcessManualUpdate(h.ctx, task)))
+	saved := h.article(t, result.EntryID)
+	require.Equal(t, types.ParseStatusCompleted, saved.ParseStatus)
+	require.Equal(t, types.SummaryStatusFailed, saved.SummaryStatus)
+	require.Equal(t, "enabled", saved.EnableStatus)
+	before := len(h.requests())
+	require.True(t, types.IsChatGPTDeferred(h.service.ProcessManualUpdate(h.ctx, task)))
+	require.Len(t, h.requests(), before, "paused generation must not contact the API")
 	quota.Store(false)
 	_, err = h.policy.Resume(h.ctx)
 	require.NoError(t, err)
-	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, taskqueue.NewTask(tasks[0].Type, tasks[0].Payload)))
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, article.ID).ParseStatus)
+	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, task))
+	require.Equal(t, types.SummaryStatusCompleted, h.article(t, result.EntryID).SummaryStatus)
+}
+
+func TestLegacyPendingSourceSupplementDoesNotCallReviewModel(t *testing.T) {
+	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
+		require.NotEqual(t, "intake_review", request.stage())
+		return chatGPTGenerationSuccess(t, request)
+	})
+	article := h.upload(t, "legacy-source", "Fixture Acme published original measurements and deployment details.")
+	intake, err := article.IntakeMetadata()
+	require.NoError(t, err)
+	intake.Decision, intake.Reason = "rejected", "Old missing-source policy"
+	intake.SourceInfo.OriginalURL = ""
+	article.Source, article.NormalizedURL = "", ""
+	require.NoError(t, article.SetIntakeMetadata(intake))
+	article.ParseStatus = types.ParseStatusRejected
+	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, article))
+	original := article.VaultBody
+	_, err = h.service.ReviewEntryIntake(h.ctx, article.ID, "supplement_url", types.SourceInfo{OriginalURL: "https://example.org/supplemented-original"})
+	require.NoError(t, err)
+	h.drain(t)
+	saved := h.article(t, article.ID)
+	require.Equal(t, types.ParseStatusCompleted, saved.ParseStatus)
+	require.Equal(t, original, saved.VaultBody)
+	intake, err = saved.IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, "approved", intake.Decision)
+	require.Equal(t, "https://example.org/supplemented-original", intake.SourceInfo.OriginalURL)
 }

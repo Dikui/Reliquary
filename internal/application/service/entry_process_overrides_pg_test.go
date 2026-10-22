@@ -92,10 +92,17 @@ func (processOverridesPGFailedReader) Close() error               { return nil }
 
 type processOverridesPGChunks struct {
 	interfaces.ChunkService
-	repo interfaces.ChunkRepository
+	repo      interfaces.ChunkRepository
+	createErr error
 }
 
 func (s processOverridesPGChunks) GetRepository() interfaces.ChunkRepository { return s.repo }
+func (s processOverridesPGChunks) CreateChunks(ctx context.Context, chunks []*types.Chunk) error {
+	if s.createErr != nil {
+		return s.createErr
+	}
+	return s.repo.CreateChunks(ctx, chunks)
+}
 func (s processOverridesPGChunks) DeleteChunksByEntryID(ctx context.Context, id string) error {
 	return s.repo.DeleteChunksByEntryID(ctx, 1, id)
 }
@@ -108,6 +115,7 @@ type processOverridesPGHarness struct {
 	queue   *processOverridesPGQueue
 	handler *handler.EntryHandler
 	ctx     context.Context
+	chunks  *processOverridesPGChunks
 }
 
 func newProcessOverridesPGHarness(t *testing.T) *processOverridesPGHarness {
@@ -121,14 +129,15 @@ func newProcessOverridesPGHarness(t *testing.T) *processOverridesPGHarness {
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50}}}
 	files := &processOverridesPGFiles{stored: map[string][]byte{}}
 	queue := &processOverridesPGQueue{}
+	chunkService := &processOverridesPGChunks{repo: chunks}
 	svc, err := service.NewEntryService(db, nil, repo, libraries,
-		repository.NewSpaceRepository(db), nil, processOverridesPGChunks{repo: chunks}, chunks,
+		repository.NewSpaceRepository(db), nil, chunkService, chunks,
 		files, nil, nil, queue, nil, nil, nil, service.NewSpanTracker(spans, db))
 	require.NoError(t, err)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, &types.Space{ID: 1})
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
-	return &processOverridesPGHarness{db: db, svc: svc, repo: repo, files: files, queue: queue,
+	return &processOverridesPGHarness{db: db, svc: svc, repo: repo, files: files, queue: queue, chunks: chunkService,
 		handler: handler.NewEntryHandler(nil, svc, libraries, queue, spans), ctx: ctx}
 }
 
@@ -260,16 +269,18 @@ func TestProcessOverridesPGIntakeRetryFailure(t *testing.T) {
 
 func TestProcessOverridesPGManualProcessingFailure(t *testing.T) {
 	h := newProcessOverridesPGHarness(t)
-	k := h.seed(t, types.EntryTypeManual, "pending")
+	k := h.seed(t, types.EntryTypeManual, "approved")
 	want := processOverridesPGStoredConfig(t, k)
+	h.chunks.createErr = errors.New("chunk persistence unavailable")
 	payload := types.ManualProcessPayload{SpaceID: 1, EntryID: k.ID, LibraryID: "library",
 		Content: "![unresolved image](https://example.org/image.png)"}
 	require.Error(t, h.svc.ProcessManualUpdate(h.ctx, taskqueue.NewTask(types.TypeManualProcess,
 		[]byte(mustProcessOverridesPGJSON(t, payload)))))
 	stored := h.assertTimelineConfig(t, k.ID, want)
 	require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)
-	require.NotContains(t, string(stored.Metadata), "discard_on_cleanup")
-	require.Empty(t, h.files.stored)
+	require.JSONEq(t, string(k.Metadata), string(stored.Metadata), "background index failure preserves source metadata for retry")
+	require.Contains(t, h.files.stored, "original")
+	require.Contains(t, h.files.stored, "image")
 }
 
 func TestProcessOverridesPGCleanupWithoutOverrides(t *testing.T) {

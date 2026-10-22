@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -46,9 +44,9 @@ func TestVaultStatusIncludesArchivedGeneratedMaterials(t *testing.T) {
 	require.Equal(t, "report", entry.SourceKind)
 	require.Equal(t, "测试报告", entry.Title)
 	require.Contains(t, entry.VaultPath, library.Directory+"/测试报告-")
-	content, err := os.ReadFile(filepath.Join(root, entry.VaultPath))
-	require.NoError(t, err)
-	require.Contains(t, string(content), "Reportvaultmarker")
+	var saved types.Entry
+	require.NoError(t, db.First(&saved, "id=?", entry.ID).Error)
+	require.Contains(t, saved.VaultBody, "Reportvaultmarker")
 	hits, err := engine.Retrieve(ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType, LibraryIDs: []string{library.ID}, Query: "Reportvaultmarker", TopK: 10}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)

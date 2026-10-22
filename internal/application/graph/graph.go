@@ -147,12 +147,7 @@ func Enabled(tx *gorm.DB, entry *types.Entry) (bool, error) {
 	if entry.Graph != nil {
 		return *entry.Graph, nil
 	}
-	var row types.LibraryContentType
-	err := tx.Where("library_id=? AND name=? AND enabled=true", entry.LibraryID, entry.ContentType).First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, nil
-	}
-	return row.ExtractGraph, err
+	return true, nil
 }
 func mergeEvidence(a, b []types.RelationEvidence) []types.RelationEvidence {
 	// Preserve all speakers and locations, including repeated evidence positions.

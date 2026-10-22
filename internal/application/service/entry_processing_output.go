@@ -68,7 +68,7 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	}
 	override, _ := json.Marshal(graphOverride)
 	return prompt + "\n" + articleEntityProcessingPrompt + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + `
-先定类型再决定是否抽关系：graph_override=true 总是抽，false 总是不抽，null 时依照所选类型的 extract_graph，其他默认不抽。关闭时 relations=[]。
+默认抽取有原文依据的关系，不因内容类型关闭。graph_override=false 时 relations=[]，其他值正常抽取；没有合格关系时也返回空数组。
 关系只保留原文明示、对本文有价值的联系；subject、object 必须是本次 entities 中的 name。evidence_ids 引用足以支持主体、关系含义和客体的段落，可多选以补充指代上下文。先确定原文表达的具体联系，再选 relation_types 中语义一致的名称；没有一致名称就使用精确的新名称，不能为套用清单而改写原意。每条边必须能从所选段落直接读出，不能依赖常识或“这个产品总归由它发布过”的推断。特别是“发布”必须有发布/宣布/推出该对象的动作证据：“甲的产品乙”“第一方部署如乙”“甲的安全框架乙”均不是发布证据，只能按原文明示的隶属等含义处理或不抽关系。仅同文出现不构成关系。基准比较应写“基准比较”或“基准优于”，不能改成商业竞争。原文有限定的比较应保留其范围，不扩展为全方面优于。
 逐条按“subject type object”读回核对方向：“隶属”是下级/产品指向上级/所属组织，“发布”是发布者指向发布对象，“客户”是客户指向供应方或所用产品，“投资”是投资方指向被投资方；“甲的产品乙”应为“乙 隶属 甲”，不能反过来。
 关系两端可以是本篇新识别或已有的合格实体，但不能为补关系而额外创建不合格对象。具体型号的发布、成绩或比较不能扩大为家族整体的事实，子团队动作不能上提给母公司；无法准确表达时不建该边，具体事实留在摘要与原文中。
@@ -97,12 +97,7 @@ func libraryGraphEnabled(l *types.Library, value string, override *bool) bool {
 	if override != nil {
 		return *override
 	}
-	for _, row := range l.ContentTypes {
-		if row.Enabled && row.Name == value {
-			return row.ExtractGraph
-		}
-	}
-	return false
+	return true
 }
 func bodyRangeLocations(body string, start, end int, mapping string) []types.SourceLocation {
 	r := []rune(body)

@@ -24,20 +24,20 @@ func TestIngestLibrarySourceIdentity(t *testing.T) {
 	req.Content = "Measured pressure equals 43."
 	second, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
-	require.NotEqual(t, first.EntryID, second.EntryID)
+	require.Equal(t, first.EntryID, second.EntryID)
 	req.Content = "Measured pressure equals 44."
 	third, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
 	for _, id := range []string{first.EntryID, second.EntryID, third.EntryID} {
 		entry := h.article(t, id)
 		require.Equal(t, third.EntryID, entry.LatestEntryID)
-		require.Equal(t, id != third.EntryID, entry.HasUpdate)
+		require.False(t, entry.HasUpdate)
 	}
-	// Reverting to an older body creates a new latest record, not an old match.
+	// Reverting also replaces the same record.
 	req.Content = "Measured pressure equals 43."
 	fourth, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
-	require.NotEqual(t, second.EntryID, fourth.EntryID)
+	require.Equal(t, second.EntryID, fourth.EntryID)
 	var wg sync.WaitGroup
 	ids := make([]string, 8)
 	errs := make([]error, 8)
@@ -89,7 +89,7 @@ func TestIngestLibrarySourceIdentity(t *testing.T) {
 	require.NoError(t, err)
 	b, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
-	require.Equal(t, a.EntryID, b.EntryID)
+	require.NotEqual(t, a.EntryID, b.EntryID)
 	custom := &types.Library{ID: "own-library", SpaceID: h.library.SpaceID, Name: "Other own", Directory: "other-own", Template: types.TemplateOwn, ModelTiers: h.library.ModelTiers}
 	require.NoError(t, h.db.Create(custom).Error)
 	req.Library, req.SourceRef = "other-own", "work/measurements"
@@ -98,11 +98,11 @@ func TestIngestLibrarySourceIdentity(t *testing.T) {
 	require.NotEqual(t, fourth.EntryID, independent.EntryID)
 	req.Library = "official"
 	_, err = h.service.Ingest(h.ctx, &req)
-	require.ErrorContains(t, err, "source_ref")
+	require.NoError(t, err)
 	req.SourceRef = ""
 	req.Identifier = "DOI: 10.1234/AbC "
 	_, err = h.service.Ingest(h.ctx, &req)
-	require.ErrorContains(t, err, "identifier")
+	require.NoError(t, err)
 	req.Library = "references"
 	req.URL = "https://example.org/identifier"
 	req.Publisher = "Journal"
@@ -123,18 +123,18 @@ func TestIngestLibrarySourceIdentity(t *testing.T) {
 	// Read method projects the same latest identity used by HTTP entry details.
 	read, err := h.service.ReadEntry(h.ctx, first.EntryID, 0, 100)
 	require.NoError(t, err)
-	require.True(t, read.HasUpdate)
+	require.False(t, read.HasUpdate)
 	require.Equal(t, fourth.EntryID, read.LatestEntryID)
 	search := &searchService{db: h.db}
 	hits, err := search.mergeEntryHits(h.ctx, h.library.SpaceID, [][]entrySearchHit{{{EntryID: first.EntryID}}}, &types.RetrievalConfig{})
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
-	require.True(t, hits[0].HasUpdate)
+	require.False(t, hits[0].HasUpdate)
 	require.Equal(t, fourth.EntryID, hits[0].LatestEntryID)
 	require.True(t, *hits[0].Graph)
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_ref=? AND library_id=?", "work/measurements", h.article(t, first.EntryID).LibraryID).Count(&count).Error)
-	require.EqualValues(t, 4, count)
+	require.EqualValues(t, 1, count)
 }
 
 func TestIngestFiveMillionCodePoints(t *testing.T) {

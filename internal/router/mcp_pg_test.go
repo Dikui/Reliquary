@@ -3,7 +3,6 @@ package router
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,7 +61,7 @@ func (mcpFixtureChat) Chat(ctx context.Context, messages []chat.Message, _ *chat
 		approved := !strings.Contains(messages[1].Content, "rejectfixture")
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"model fixture decision"}`, approved)}, nil
 	}
-	return &types.ChatResponse{Content: `{"content_type":"event","summary":{"overview":"MCP fixture","points":["one","two","three"],"key_terms":["MCP"]},"entities":[],"topics":[],"relations":[],"image_descriptions":[]}`}, nil
+	return &types.ChatResponse{Content: `{"title":"MCP fixture title","content_type":"event","summary":{"overview":"MCP fixture","points":["one","two","three"],"key_terms":["MCP"]},"entities":[],"topics":[],"relations":[],"image_descriptions":[]}`}, nil
 }
 func (mcpFixtureChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	return nil, fmt.Errorf("streaming is not used by the MCP fixture")
@@ -102,18 +101,25 @@ type mcpFixtureQueue struct {
 	mu         sync.Mutex
 	tasks      []*taskqueue.Task
 	enqueueErr error
+	client     *taskqueue.Client
 }
 
-func (q *mcpFixtureQueue) Enqueue(task *taskqueue.Task, _ ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+func (q *mcpFixtureQueue) Enqueue(task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.enqueueErr != nil {
 		return nil, q.enqueueErr
 	}
+	if q.client != nil {
+		return q.client.Enqueue(task, opts...)
+	}
 	q.tasks = append(q.tasks, task)
 	return &taskqueue.TaskInfo{ID: uuid.NewString()}, nil
 }
-func (q *mcpFixtureQueue) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+func (q *mcpFixtureQueue) EnqueueTx(ctx context.Context, tx *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
+	if q.client != nil {
+		return q.client.EnqueueTx(ctx, tx, task, opts...)
+	}
 	return q.Enqueue(task, opts...)
 }
 
@@ -396,7 +402,7 @@ func TestMCPMissingSourcePendingActionsRequireConfirmation(t *testing.T) {
 		return item
 	}
 	supplemented, admitted, converted := createPending("Supplement fixture"), createPending("Admit fixture"), createPending("Mine fixture")
-	for _, args := range []map[string]any{{"id": admitted.ID}, {"id": admitted.ID, "action": "admit_unverified"}, {"id": converted.ID, "action": "convert_to_mine"}} {
+	for _, args := range []map[string]any{{"id": admitted.ID, "action": "admit_unverified"}, {"id": converted.ID, "action": "convert_to_mine"}} {
 		response, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "approve_pending", Arguments: args})
 		require.NoError(t, err)
 		require.True(t, response.IsError)
@@ -551,10 +557,8 @@ func TestMCPAndHTTPReadIngestFailureMaterials(t *testing.T) {
 	f := newMCPFixture(t)
 	f.seedProcessingModels(t)
 	client := f.connect(t, "2025-11-25")
-	const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="
 	const source = "# 故障恢复🙂\n\n原始材料。\n\n![photo](https://example.org/photo.png)"
-	expectedImage, err := base64.StdEncoding.DecodeString(imageData)
-	require.NoError(t, err)
+	expectedImage := entryContentPNG(t, 24)
 	asset, err := f.articles.UploadIngestAsset(f.ctx, "photo.png", expectedImage)
 	require.NoError(t, err)
 	f.queue.mu.Lock()

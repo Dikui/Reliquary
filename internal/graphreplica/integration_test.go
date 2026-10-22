@@ -338,6 +338,8 @@ func TestStoppedNeo4jChangesReplayAfterRecovery(t *testing.T) {
 	require.Positive(t, n)
 	output, err = exec.Command("docker", "start", container).CombinedOutput()
 	require.NoError(t, err, string(output))
+	// Container startup must not consume the queue recovery deadline.
+	require.Eventually(t, func() bool { return s.store.Available(context.Background()) == nil }, 60*time.Second, time.Second)
 	waitSynced(t, s)
 	consistent(t, s)
 	var op queue.Job

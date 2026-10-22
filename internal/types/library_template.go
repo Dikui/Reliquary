@@ -14,7 +14,7 @@ const (
 )
 
 func (l *Library) ExtractsEntities() bool {
-	return l.Template != TemplateOwn && l.Template != TemplateExternalDurable && l.Template != TemplateGenerated
+	return l != nil
 }
 
 // IdentityRules define the independent matching keys available to a template.
@@ -37,14 +37,8 @@ type TemplateRules struct {
 
 func RulesForTemplate(template string) (TemplateRules, bool) {
 	switch template {
-	case TemplateExternalTimely:
-		return TemplateRules{Deduplication: "仅在本库按规范化链接、正文哈希或同标题近似正文识别；无链接时还按机构、标题、发布日期识别。", SourceEvidence: "链接必填，或按库配置接受机构名称加发布日期，后者标记来源未核实。", Review: true, Process: true, MergeReposts: true, CollapseSimilar: true, FactSource: true, Identity: IdentityRules{URL: true, Body: true, NearDuplicate: true, PublisherDate: true}, EvidenceMode: "configured"}, true
-	case TemplateExternalDurable:
-		return TemplateRules{Deduplication: "仅在本库按规范化链接、identifier 或正文哈希识别；不做近似去重、转载归并或相似折叠。", SourceEvidence: "链接或 identifier 至少提供一项。", Review: true, Process: true, FactSource: true, Identity: IdentityRules{URL: true, Body: true, Identifier: true}, EvidenceMode: "link_or_identifier"}, true
-	case TemplateOwn:
-		return TemplateRules{Deduplication: "仅在本库去重；有 source_ref 时只与同来源最新记录比较正文，相同返回最新记录，变化新增并保留旧记录；无 source_ref 时按正文哈希识别。", SourceEvidence: "不需要来源证据。", Review: true, Process: true, FactSource: true, Identity: IdentityRules{Body: true, SourceRef: true}}, true
-	case TemplateGenerated:
-		return TemplateRules{Deduplication: "不做内容去重；生成内容按规范化内容指纹保证收录幂等。", SourceEvidence: "不需要来源证据。"}, true
+	case TemplateExternalTimely, TemplateExternalDurable, TemplateOwn, TemplateGenerated:
+		return TemplateRules{Deduplication: "仅在本库按来源标识或规范化链接定位；保存内容相同返回原 ID，变化覆盖旧文；无来源标识时新建。", SourceEvidence: "来源可选，保留已有依据，不因缺少来源进入待审。", Process: true, CollapseSimilar: template == TemplateExternalTimely, FactSource: template != TemplateGenerated, Identity: IdentityRules{URL: true, Identifier: true, SourceRef: true}}, true
 	default:
 		return TemplateRules{}, false
 	}
@@ -137,25 +131,9 @@ const (
 标题和 Markdown 正文满足接口要求，保留 AI 产出标识。生成内容中的陈述、推断和引用不因成功保存而视为已经核实。`
 )
 
-// DefaultReviewCriteria is a suggestion; saved, user-authored criteria remain authoritative.
+// DefaultReviewCriteria describes the shared technical admission policy.
 func (l *Library) DefaultReviewCriteria() string {
-	switch l.SystemRole {
-	case "official":
-		return OfficialReviewCriteria
-	case "media":
-		return MediaReviewCriteria
-	}
-	switch l.Template {
-	case TemplateExternalTimely:
-		return OfficialReviewCriteria
-	case TemplateExternalDurable:
-		return ReferenceReviewCriteria
-	case TemplateOwn:
-		return PersonalReviewCriteria
-	case TemplateGenerated:
-		return GeneratedReviewCriteria
-	}
-	return ""
+	return "默认接收可读的 Markdown 正文；拒绝空内容、纯链接、仅图片和技术异常。不逐条调用模型评价价值，不因来源、篇幅或完整度不足进入待审。"
 }
 
 func (l *Library) ProcessingModelTiers() []ModelTier {
@@ -239,7 +217,8 @@ func SystemRoleForSource(kind string) string {
 func SystemLibraryDefaults() []*Library {
 	official := []string{"投资", "收购", "合作", "竞争", "任职", "发布", "供应", "客户", "监管", "隶属"}
 	makeLibrary := func(role, name, template, description, criteria, evidence string, feed bool, names []string, graphCount int, relations []string) *Library {
-		l := &Library{SystemRole: role, Directory: role, Name: name, Template: template, Description: description, ReviewCriteria: criteria, SourceEvidenceRule: evidence, FeedEnabled: feed, ContentTypes: []LibraryContentType{}, RelationTypes: []LibraryRelationType{}}
+		l := &Library{SystemRole: role, Directory: role, Name: name, Template: template, Description: description, SourceEvidenceRule: evidence, FeedEnabled: feed, ContentTypes: []LibraryContentType{}, RelationTypes: []LibraryRelationType{}}
+		l.ReviewCriteria = l.DefaultReviewCriteria()
 		for i, n := range names {
 			l.ContentTypes = append(l.ContentTypes, LibraryContentType{Name: n, Position: i, Enabled: true, ExtractGraph: i < graphCount})
 		}

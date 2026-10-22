@@ -1,10 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,12 +15,11 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
 	werrors "reliquary/internal/errors"
-	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
-// UpdateEntryContent is an explicit replacement, independent of ingest's
-// source-based deduplication and append-only source_ref history.
+// UpdateEntryContent replaces an explicitly selected entry.
 func (s *entryService) UpdateEntryContent(ctx context.Context, id string, request *types.EntryContentUpdate) (result *types.IngestResult, err error) {
 	if request == nil {
 		return nil, werrors.NewBadRequestError("content is required")
@@ -88,11 +87,8 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	if ingestInlineSize(request.Images) > types.MaxIngestInlineRequestBytes {
 		return nil, werrors.NewBadRequestError("inline images exceed the 20 MiB request limit")
 	}
-	if library.Template == types.TemplateGenerated && acquisition != "model_written" {
-		return nil, werrors.NewBadRequestError("generated libraries require acquisition model_written")
-	}
 	if entry.VaultPath == "" {
-		return nil, werrors.NewConflictError("资料尚未归档，请先完成审核和处理")
+		return nil, werrors.NewConflictError("资料正文尚未保存，请稍后重试")
 	}
 	if len(request.Images) == 0 && entry.VaultBody == content && entry.Acquisition == acquisition {
 		return ingestResult(entry, "exists", "正文未变化。", "", ""), nil
@@ -112,8 +108,8 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 		}
 	}
 	switch entry.ParseStatus {
-	case types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFinalizing, types.ParseStatusDeleting:
-		return nil, werrors.NewConflictError("资料正在处理或删除，请完成或取消后再更新")
+	case types.ParseStatusDeleting:
+		return nil, werrors.NewConflictError("资料正在删除，请稍后重试")
 	}
 	busy, err := s.libraryBatchBusy(ctx, spaceID, library.ID, "")
 	if err != nil {
@@ -166,22 +162,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	setMessageFingerprint(entry, canonical)
 	resetEntryForReparse(entry, &library)
 	entry.UpdatedAt = time.Now()
-	if library.Template == types.TemplateGenerated {
-		var report reportMetadata
-		if err := json.Unmarshal(entry.Metadata, &report); err != nil {
-			return nil, err
-		}
-		metadata := map[string]json.RawMessage{}
-		if err := json.Unmarshal(entry.Metadata, &metadata); err != nil {
-			return nil, err
-		}
-		metadata["report_fingerprint"], _ = json.Marshal(reportInputFingerprint(ReportInput{Title: entry.Title, Markdown: canonical}, report))
-		encoded, err := json.Marshal(metadata)
-		if err != nil {
-			return nil, err
-		}
-		entry.Metadata, entry.EnableStatus = types.JSON(encoded), "enabled"
-	} else {
+	{
 		intake, err := entry.IntakeMetadata()
 		if err != nil {
 			return nil, err
@@ -189,7 +170,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 		if intake == nil {
 			intake = &types.EntryIntakeMetadata{Source: "ingest", SourceInfo: types.SourceInfo{OriginalURL: entry.Source}}
 		}
-		intake.Decision, intake.Reason, intake.UserRejected = "pending", "", false
+		intake.Decision, intake.Reason, intake.UserRejected = "approved", "", false
 		// Published material reads its authoritative body from the vault. Do not
 		// create another upload copy or retain a stale pre-publication body path.
 		intake.OriginalPath = ""
@@ -200,9 +181,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 			return nil, err
 		}
 	}
-	if library.Template == types.TemplateOwn {
-		entry.SourceBodyHash = sourceBodyHash(canonical)
-	}
+	entry.SourceBodyHash = sourceBodyHash(canonical)
 	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
 		return nil, err
 	}
@@ -216,17 +195,12 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", id, before, map[string]any{"action": "update_content", "content_hash": entry.ContentHash, "acquisition": acquisition}); err != nil {
 		return nil, err
 	}
-	if library.Template == types.TemplateGenerated {
-		payload, _ := json.Marshal(types.ReportIndexPayload{SpaceID: spaceID, LibraryID: library.ID, EntryID: id})
-		_, err = s.task.Enqueue(taskqueue.NewTask(types.TypeReportIndex, payload, taskqueue.Queue(types.QueueMaintenance), taskqueue.MaxRetry(5), taskqueue.Timeout(30*time.Minute)))
-	} else {
-		err = s.enqueueRetainedIntakeReview(ctx, entry, content, false)
-	}
+	_, err = s.enqueueManualProcessing(ctx, entry, content, false)
 	if err != nil {
 		return nil, err
 	}
 	entry.LibraryName = library.Name
-	return ingestResult(entry, "accepted", "正文已更新，正在重新审核和建立索引。", "", ""), nil
+	return ingestResult(entry, "accepted", "正文已更新，正在后台建立索引和处理。", "", ""), nil
 }
 
 func (s *entryService) prepareEntryContentImages(ctx context.Context, entry *types.Entry, body string, images []types.IngestImage) (string, string, error) {
@@ -283,6 +257,9 @@ func (s *entryService) prepareEntryContentImages(ctx context.Context, entry *typ
 		mimeType := http.DetectContentType(data)
 		if len(data) == 0 || !strings.HasPrefix(mimeType, "image/") {
 			return "", "", werrors.NewBadRequestError("only image attachments are accepted")
+		}
+		if _, err := utils.PrepareModelImage(ctx, bytes.NewReader(data)); err != nil {
+			return "", "", werrors.NewBadRequestError(err.Error())
 		}
 		if name == "" {
 			name = "image" + vaultImageExtension("", mimeType)

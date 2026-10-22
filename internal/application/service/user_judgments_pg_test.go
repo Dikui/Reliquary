@@ -84,7 +84,7 @@ func TestEntrySearchStarredFiltersAndMissingCount(t *testing.T) {
 
 func boolPointer(v bool) *bool { return &v }
 
-func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
+func TestUndatedArticleStoresNullAndDateFilteredSearchExcludesIt(t *testing.T) {
 	for _, date := range []string{"", "not a source date"} {
 		t.Run(date, func(t *testing.T) {
 			h := newRetainedIntakeHarness(t)
@@ -103,14 +103,18 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			intake, err := a.IntakeMetadata()
 			require.NoError(t, err)
 			require.Equal(t, "approved", intake.Decision)
-			require.Empty(t, intake.SourceInfo.PublishedAt)
+			require.Equal(t, date, intake.SourceInfo.PublishedAt, "preserve supplied provenance even when it cannot be indexed as a date")
 			var row struct {
 				PublishedAt *time.Time `gorm:"column:search_published_at"`
 			}
 			require.NoError(t, h.db.Table("entries").Select("search_published_at").Where("id=?", a.ID).Scan(&row).Error)
 			require.Nil(t, row.PublishedAt)
 			_, header, _ := readVaultArticle(t, v, a)
-			require.NotContains(t, string(header), "\npublished_at:")
+			if date == "" {
+				require.NotContains(t, string(header), "\npublished_at:")
+			} else {
+				require.Contains(t, string(header), date)
+			}
 			search := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, nil, h.db)
 			space, _ := types.SpaceInfoFromContext(h.ctx)
 			space.RetrievalConfig = &types.RetrievalConfig{KeywordThreshold: .00001, RerankTopK: 20}
@@ -118,7 +122,7 @@ func TestUndatedArticlePassesReviewStoresNullAndSearchExcludesIt(t *testing.T) {
 			require.NoError(t, err)
 			require.Empty(t, result.Results)
 			require.EqualValues(t, 1, result.ExcludedMissingPublishedAt)
-			require.Contains(t, h.model.prompts[0], "不新增链接、日期或发布者字段要求")
+			require.Empty(t, h.model.prompts, "missing dates do not invoke a value review")
 		})
 	}
 }

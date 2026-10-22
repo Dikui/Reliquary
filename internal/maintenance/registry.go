@@ -75,6 +75,32 @@ var BackupOnlyTables = map[string]Rule{
 	"model_calls":                  {Sidecar: "id space_id requested_at model_id model_name provider purpose entry_id input_tokens output_tokens input_price output_price currency cost cost_status duration_ms success error_category attempt retry_number processing_attempt span_id text_input_tokens image_input_tokens image_input_price"},
 }
 
+// Migration 000028 adds an empty backup-only table. Project only that default;
+// unexpected rows and changes to snapshots from version 28 onward still fail.
+func projectEntryBatchManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 28 || actual.SchemaVersion < 28 {
+		return expected, actual
+	}
+	if _, present := expected.Tables["entry_batch_items"]; present {
+		return expected, actual
+	}
+	if _, present := actual.Tables["entry_batch_items"]; !present {
+		return expected, actual
+	}
+	left := *expected
+	left.Tables = make(map[string]TableManifest, len(expected.Tables)+1)
+	for name, table := range expected.Tables {
+		left.Tables[name] = table
+	}
+	columns := []string{}
+	for column := range BackupOnlyTables["entry_batch_items"].Columns() {
+		columns = append(columns, column)
+	}
+	sort.Strings(columns)
+	left.Tables["entry_batch_items"] = TableManifest{Columns: columns, SHA256: sum([]byte("[]"))}
+	return &left, actual
+}
+
 // RegeneratedTable registers derived tables without putting their rows in a
 // portable replica. Their names still participate in strict schema verification.
 type RegeneratedTable struct {

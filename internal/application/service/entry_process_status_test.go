@@ -9,9 +9,9 @@ import (
 
 func TestFinalizeIndexedEntryState(t *testing.T) {
 	now := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)
-	entry := &types.Entry{ParseStatus: types.ParseStatusProcessing, ErrorMessage: "previous failure", Description: "summary"}
+	entry := &types.Entry{ParseStatus: types.ParseStatusProcessing, ErrorMessage: "previous failure", Description: "summary", SummaryStatus: types.SummaryStatusPending}
 	finalizeIndexedEntryState(entry, 4096, now)
-	if entry.ParseStatus != types.ParseStatusCompleted || entry.SummaryStatus != types.SummaryStatusCompleted || entry.ErrorMessage != "" || entry.Description != "summary" {
+	if entry.ParseStatus != types.ParseStatusCompleted || entry.SummaryStatus != types.SummaryStatusPending || entry.ErrorMessage != "" || entry.Description != "summary" {
 		t.Fatalf("unexpected completion: %+v", entry)
 	}
 	if entry.ProcessedAt == nil || !entry.ProcessedAt.Equal(now) || entry.StorageSize != 4096 || entry.EnableStatus != "enabled" {

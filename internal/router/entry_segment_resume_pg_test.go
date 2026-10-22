@@ -87,7 +87,8 @@ func TestHTTPProcessingEntrypointsResumeFailedAndCancelledSegments(t *testing.T)
 				require.ErrorContains(t, process(), "第 4/")
 				var entry types.Entry
 				require.NoError(t, f.db.First(&entry, "id=?", id).Error)
-				require.Equal(t, types.ParseStatusFailed, entry.ParseStatus)
+				require.Equal(t, types.ParseStatusCompleted, entry.ParseStatus)
+				require.Equal(t, types.SummaryStatusFailed, entry.SummaryStatus)
 				var runID string
 				require.NoError(t, f.db.Table("entry_segment_runs").Select("id").Where("entry_id=? AND phase='processing'", id).Scan(&runID).Error)
 				require.NotEmpty(t, runID)

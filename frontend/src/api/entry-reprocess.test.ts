@@ -9,6 +9,7 @@ test('reprocessing uses the canonical requests and library rebuild encodes its t
   const source = readFileSync(new URL('./library.ts', import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
   new Function('require', 'module', 'exports', code)((name: string) => {
+    if (name === '@/utils/api-base') return { getApiBaseUrl: () => '' }
     assert.equal(name, '../utils/request')
     return { post: (url: string, body: unknown) => { requests.push({ url, body }); return Promise.resolve({ success: true }) } }
   }, module, module.exports)
@@ -20,7 +21,7 @@ test('reprocessing uses the canonical requests and library rebuild encodes its t
   assert.deepEqual(requests, [
     { url: '/api/v1/entries/failed-entry/reparse', body: undefined },
     { url: '/api/v1/entries/failed-entry/reparse', body: undefined },
-    { url: '/api/v1/libraries/library%2Fid/rebuild', body: undefined },
+    { url: '/api/v1/libraries/library%2Fid/rebuild', body: { scope: 'failed' } },
     { url: '/api/v1/libraries/library%2Fid/review', body: { scope: 'all' } },
     { url: '/api/v1/libraries/library%2Fid/review', body: { scope: 'pending' } },
   ])

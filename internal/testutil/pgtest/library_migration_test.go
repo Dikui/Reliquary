@@ -231,7 +231,8 @@ func TestLibraryReviewRoutingMigrationPreservesCustomPoliciesAndModels(t *testin
 	require.NoError(t, m.Migrate(30))
 	var criteria string
 	require.NoError(t, db.Raw("SELECT review_criteria FROM libraries WHERE id='routing-official'").Scan(&criteria).Error)
-	require.Equal(t, types.OfficialReviewCriteria, criteria)
+	const version30OfficialCriteria = "发布者是机构（官方、公司、媒体、研究机构、行业协会）；至少包含一个可明确识别的事实、变化或研究结论。产品发布、调价、活动、人员变动和有过程及结果的客户案例可收录；研究摘要可作为独立发布页收录，不要求包含链接论文全文。排除纯口号、空导流、招聘和无新增信息的转发。完整性以提交的独立发布内容为准：缺失内容影响主要事实理解时待审，否则保留并提示缺失。"
+	require.Equal(t, version30OfficialCriteria, criteria, "frozen migration must not depend on current template text")
 	require.NoError(t, db.Raw("SELECT review_criteria FROM libraries WHERE id='routing-media'").Scan(&criteria).Error)
 	require.Equal(t, "My custom review policy", criteria)
 	var models types.ModelTierConfig

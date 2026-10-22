@@ -31,7 +31,7 @@ func TestAdmissionPolicyMigrationPreservesCustomCriteria(t *testing.T) {
 	require.NoError(t, migration.Migrate(31))
 	var builtinMedia types.Library
 	require.NoError(t, db.First(&builtinMedia, "system_role=?", "media").Error)
-	require.Equal(t, types.MediaReviewCriteria, builtinMedia.ReviewCriteria)
+	require.Equal(t, libraries[1].ReviewCriteria, builtinMedia.ReviewCriteria)
 	require.Equal(t, libraries[1].Description, builtinMedia.Description)
 	require.NoError(t, migration.Migrate(30))
 	const custom = "Keep this custom media policy."

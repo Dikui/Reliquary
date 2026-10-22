@@ -94,7 +94,7 @@ func TestTierChatCountsAttemptAndAnnotatesCalls(t *testing.T) {
 	require.Equal(t, []types.ModelCallCount{{Stage: "entity_resolution", Tier: types.ModelTierLight, ModelID: "chosen-light", Calls: 1}}, calls.Snapshot())
 }
 
-func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
+func TestIntakeApprovalDoesNotUseLightModel(t *testing.T) {
 	model := &tierTestChat{}
 	models := &tierTestModels{chat: model}
 	message := &types.Entry{ID: "message", SpaceID: 1, LibraryID: "library", Channel: "manual"}
@@ -104,12 +104,11 @@ func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
 	rejected, err := svc.reviewIntake(context.Background(), &types.Library{ID: "library", SpaceID: 1, ModelTiers: types.ModelTierConfig{Light: "chosen-light"}}, message, "Acme released a report.")
 	require.NoError(t, err)
 	require.False(t, rejected)
-	require.Equal(t, 1, model.calls)
+	require.Zero(t, model.calls)
 	intake, err := message.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
-	require.Equal(t, 1, intake.ModelCalls[0].Calls)
-	require.Equal(t, types.ModelTierLight, intake.ModelCalls[0].Tier)
+	require.Empty(t, intake.ModelCalls)
 }
 
 func TestModelTierReferencesProtectModelDeletion(t *testing.T) {

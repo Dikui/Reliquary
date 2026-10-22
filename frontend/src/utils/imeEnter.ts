@@ -34,8 +34,8 @@ export function installImeEnterGuard(root: Document, now?: () => number) {
   root.addEventListener('compositionend', end, true)
   root.addEventListener('keydown', keydown, true)
   return () => {
-    root.removeEventListener('compositionstart', start, true)
-    root.removeEventListener('compositionend', end, true)
-    root.removeEventListener('keydown', keydown, true)
+    root.removeEventListener('compositionstart', start, { capture: true })
+    root.removeEventListener('compositionend', end, { capture: true })
+    root.removeEventListener('keydown', keydown, { capture: true })
   }
 }

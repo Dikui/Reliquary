@@ -26,7 +26,7 @@ func TestIKB15FiveLibraryStarsAndOperationLogs(t *testing.T) {
 			mcpCall(t, client, "ingest", map[string]any{"items": []any{map[string]any{"library": library, "title": "Star " + library, "url": "https://example.test/" + library, "author": "Fixture author", "publisher": "Fixture publisher", "acquisition": acquisition, "content": "# " + library + "\n\nOriginal measured observations for " + library + "."}}}, &result)
 			require.Equal(t, "accepted", result.Items[0].Status)
 			id = result.Items[0].EntryID
-			if library != "ai-output" {
+			{
 				f.queue.mu.Lock()
 				task := f.queue.tasks[len(f.queue.tasks)-1]
 				f.queue.mu.Unlock()
@@ -47,9 +47,6 @@ func TestIKB15FiveLibraryStarsAndOperationLogs(t *testing.T) {
 			require.NoError(t, f.db.Where("object_id=?", id).Order("created_at,id").Find(&logs).Error)
 			require.Len(t, logs, 3)
 			expected := "ingest"
-			if library == "ai-output" {
-				expected = "write_report"
-			}
 			require.Equal(t, []string{expected, "star", "unstar"}, []string{logs[0].OperationType, logs[1].OperationType, logs[2].OperationType})
 			for _, log := range logs {
 				require.Contains(t, log.Actor, "api_key:")

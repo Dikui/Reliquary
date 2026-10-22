@@ -264,7 +264,7 @@ type taskTransactionInterruptedChat struct {
 
 func (m *taskTransactionInterruptedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
-	if stage == "intake_review" && m.interrupted.CompareAndSwap(false, true) {
+	if stage == "article_processing" && m.interrupted.CompareAndSwap(false, true) {
 		close(m.entered)
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -285,7 +285,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	select {
 	case <-model.entered:
 	case <-time.After(5 * time.Second):
-		t.Fatal("article worker did not begin intake review")
+		t.Fatal("article worker did not begin background processing")
 	}
 	require.NoError(t, first.Close(), "closing the worker simulates an interrupted process")
 	jobs := transactionJobs(t, h.db)
@@ -310,7 +310,7 @@ func TestTaskTransactionInterruptedArticleWorkerRestartsAndCompletes(t *testing.
 	t.Cleanup(func() { require.NoError(t, restarted.Close()) })
 	require.Eventually(t, func() bool {
 		completed, err := h.service.repo.GetEntryByID(h.ctx, h.library.SpaceID, article.ID)
-		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && len(transactionJobs(t, h.db)) == 1 && transactionJobs(t, h.db)[0].State == taskqueue.TaskStateCompleted
+		return err == nil && completed.ParseStatus == types.ParseStatusCompleted && completed.SummaryStatus == types.SummaryStatusCompleted && len(transactionJobs(t, h.db)) == 1 && transactionJobs(t, h.db)[0].State == taskqueue.TaskStateCompleted
 	}, 5*time.Second, 20*time.Millisecond)
 }
 

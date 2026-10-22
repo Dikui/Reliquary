@@ -69,8 +69,8 @@ func TestEntryContentUpdateHTTPAndMCP(t *testing.T) {
 		require.NoError(t, f.db.Table(table).Where("entry_id=?", original.ID).Count(&count).Error)
 		require.Zero(t, count, table)
 	}
-	// Reject another body while the replacement is still being processed.
-	response = personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+original.ID+"/body", `{"content":"Another replacement"}`, f.key, true)
+	// A stale editor cannot overwrite the pending replacement.
+	response = personalRequest(t, router, http.MethodPut, "/api/v1/entries/"+original.ID+"/body", `{"content":"Another replacement","base_body_hash":"`+baseHash+`"}`, f.key, true)
 	require.Equal(t, http.StatusConflict, response.Code, response.Body.String())
 	require.NoError(t, processor.ProcessManualUpdate(f.ctx, f.queue.tasks[len(f.queue.tasks)-1]))
 	var updated types.Entry
@@ -177,21 +177,20 @@ func TestEntryContentUpdateHTTPAndMCP(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "exists", again.Status)
 	require.Equal(t, own.EntryID, again.EntryID)
-	// Generated material reuses the report indexer and updates its idempotency key.
-	report := &types.IngestRequest{Library: "ai-output", Title: "Editable report", Content: "Original generated analysis.", Acquisition: "model_written"}
+	// Generated material uses the same background processing path.
+	report := &types.IngestRequest{Library: "ai-output", SourceRef: "editable-report", Title: "Editable report", Content: "Original generated analysis.", Acquisition: "model_written"}
 	generated, err := f.articles.Ingest(f.ctx, report)
 	require.NoError(t, err)
+	require.NoError(t, processor.ProcessManualUpdate(f.ctx, f.queue.tasks[len(f.queue.tasks)-1]))
 	var initialReport types.Entry
 	require.NoError(t, f.db.First(&initialReport, "id=?", generated.EntryID).Error)
 	require.Equal(t, types.ParseStatusCompleted, initialReport.ParseStatus, initialReport.ErrorMessage)
-	// This fixture runs indexing inline, without a worker to finish its queue record.
-	require.NoError(t, f.db.Table("task_pending_ops").Where("task_type=? AND object_id=?", types.TypeReportIndex, generated.EntryID).Update("state", "completed").Error)
 	report.Content = "Corrected generated analysis."
 	_, err = f.articles.UpdateEntryContent(f.ctx, generated.EntryID, &types.EntryContentUpdate{Content: report.Content})
 	require.NoError(t, err)
 	task := f.queue.tasks[len(f.queue.tasks)-1]
-	require.Equal(t, types.TypeReportIndex, task.Type())
-	require.NoError(t, f.documents.HandleReportIndex(f.ctx, task))
+	require.Equal(t, types.TypeManualProcess, task.Type())
+	require.NoError(t, processor.ProcessManualUpdate(f.ctx, task))
 	again, err = f.articles.Ingest(f.ctx, report)
 	require.NoError(t, err)
 	require.Equal(t, "exists", again.Status)
@@ -199,7 +198,7 @@ func TestEntryContentUpdateHTTPAndMCP(t *testing.T) {
 	generatedUpdate := &types.EntryContentUpdate{Content: "# Generated analysis\n\n![Chart](chart.png)", Images: []types.IngestImage{{SourceURL: "chart.png", Data: base64.StdEncoding.EncodeToString(secondImage)}}}
 	_, err = f.articles.UpdateEntryContent(f.ctx, generated.EntryID, generatedUpdate)
 	require.NoError(t, err)
-	require.NoError(t, f.documents.HandleReportIndex(f.ctx, f.queue.tasks[len(f.queue.tasks)-1]))
+	require.NoError(t, processor.ProcessManualUpdate(f.ctx, f.queue.tasks[len(f.queue.tasks)-1]))
 	again, err = f.articles.UpdateEntryContent(f.ctx, generated.EntryID, generatedUpdate)
 	require.NoError(t, err)
 	require.Equal(t, "exists", again.Status)

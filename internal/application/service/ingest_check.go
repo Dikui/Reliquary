@@ -25,18 +25,17 @@ func entryDiscardKeys(entry *types.Entry, rules types.TemplateRules) []discardKe
 		if hash != "" {
 			keys = append(keys, discardKey{fingerprint: identityFingerprint("source_ref", entry.SourceRef+"\x00"+hash)})
 		}
-		return keys
 	}
 	if rules.Identity.URL && entry.NormalizedURL != "" {
 		keys = append(keys, discardKey{identityFingerprint("url", entry.NormalizedURL), entry.NormalizedURL})
 	}
-	if hash := strings.TrimSpace(entry.ContentHash); rules.Identity.Body && hash != "" {
+	if hash := strings.TrimSpace(entry.ContentHash); hash != "" {
 		keys = append(keys, discardKey{fingerprint: identityFingerprint("body", hash)})
 	}
 	if rules.Identity.Identifier && entry.Identifier != "" {
 		keys = append(keys, discardKey{fingerprint: identityFingerprint("identifier", entry.Identifier)})
 	}
-	if rules.Identity.PublisherDate && entry.NormalizedURL == "" {
+	if entry.NormalizedURL == "" {
 		if key := timelySourceIdentity(entry); key != "" {
 			keys = append(keys, discardKey{fingerprint: key})
 		}

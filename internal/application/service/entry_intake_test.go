@@ -3,14 +3,12 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"strings"
 	"testing"
 
-	"reliquary/internal/config"
 	taskqueue "reliquary/internal/queue"
 
 	"github.com/stretchr/testify/require"
@@ -30,147 +28,23 @@ func TestIntakeXSourceEvidence(t *testing.T) {
 	}
 }
 
-func TestReviewIntakeXUsesLibraryCriteria(t *testing.T) {
-	for _, tc := range []struct {
-		name, url, author, body, response string
-		rejected                          bool
-	}{
-		{"approved", "https://x.com/outlet/status/123", "未知", "媒体报道：该产品新增离线模式。", `{"approved":true,"reason":"Substantive product report"}`, false},
-		{"rejected", "https://twitter.com/outlet/status/123", "", "感谢支持！", `{"approved":false,"reason":"No substantive opinion"}`, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			library := types.SystemLibraryDefaults()[1]
-			library.ModelTiers.Light = "review-model"
-			entry := &types.Entry{ID: "post", SpaceID: 1, LibraryID: library.ID}
-			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
-				Decision: "pending", SourceInfo: types.SourceInfo{Author: tc.author, Publisher: "Media outlet", OriginalURL: tc.url},
-			}))
-			capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: tc.response}}
+func TestReviewIntakeAcceptsAllTemplatesWithoutModelReview(t *testing.T) {
+	for _, library := range types.SystemLibraryDefaults() {
+		t.Run(library.Template+"/"+library.Directory, func(t *testing.T) {
+			entry := &types.Entry{ID: "note", SpaceID: 1, LibraryID: library.ID}
+			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending"}))
+			capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: `{"approved":false,"reason":"Old model decision"}`}}
 			svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &tierTestModels{chat: capture}}
-			rejected, err := svc.reviewIntake(context.Background(), library, entry, tc.body)
+			rejected, err := svc.reviewIntake(context.Background(), library, entry, "未完成的草稿。")
 			require.NoError(t, err)
-			require.Equal(t, tc.rejected, rejected)
-			require.Len(t, capture.reviews, 1)
-			require.Contains(t, capture.reviews[0][0].Content, library.ReviewCriteria)
-			require.Contains(t, capture.reviews[0][0].Content, "个人署名不是收录前提")
-			require.Contains(t, capture.reviews[0][0].Content, "引用和上下文随主文章保存")
-			require.Contains(t, capture.reviews[0][0].Content, "主文章没有实质内容时不收录")
-			require.NotContains(t, capture.reviews[0][0].Content, "原作者能够确定")
+			require.False(t, rejected)
+			require.Empty(t, capture.reviews)
 			intake, err := entry.IntakeMetadata()
 			require.NoError(t, err)
-			require.Equal(t, tc.name, intake.Decision)
-			if tc.rejected {
-				require.Contains(t, intake.Reason, "No substantive opinion")
-			}
+			require.Equal(t, "approved", intake.Decision)
+			require.Empty(t, intake.Reason)
 		})
 	}
-}
-
-func TestReviewIntakeCompletenessWarning(t *testing.T) {
-	for _, tc := range []struct {
-		name, body, response, reason string
-		rejected                     bool
-		reference                    bool
-	}{
-		{
-			name: "usable_body", body: "缓存可复用已有上下文，避免重复上传。创建缓存后，后续请求通过缓存 ID 引用。下面是调用代码：",
-			response: `{"approved":true,"reason":"缓存机制说明可独立理解","warning":"疑似不完整：提到调用代码，但未提供代码"}`,
-			reason:   "疑似不完整：提到调用代码，但未提供代码",
-		},
-		{
-			name: "no_usable_body", body: "# 缓存教程\n\n## 参考链接\n\nhttps://example.org/cache",
-			response: `{"approved":false,"auxiliary":true,"reason":"只有标题和资源链接，没有可用实质内容"}`,
-			reason:   "缺少符合收录标准的实质正文", rejected: true,
-		},
-		{
-			name: "reference_partial_body", body: "缓存教程说明如何使用缓存。创建缓存后，后续请求通过缓存 ID 引用。下面是必要的调用代码：",
-			response: `{"approved":true,"reason":"保留已有缓存机制说明","warning":"缺少必要调用代码，使用前需另行检索核对"}`,
-			reason:   "必要调用代码", reference: true,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			library := types.SystemLibraryDefaults()[0]
-			if tc.reference {
-				library = types.SystemLibraryDefaults()[2]
-			}
-			library.ModelTiers.Light = "review-model"
-			entry := &types.Entry{ID: tc.name, SpaceID: 1, LibraryID: library.ID}
-			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
-				Source: "manual", Decision: "pending", SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/cache"},
-			}))
-			capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: tc.response}}
-			svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &tierTestModels{chat: capture},
-				config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{MaxBodyChars: 30, SegmentOverlapChars: 1}},
-			}
-			rejected, err := svc.reviewIntake(context.Background(), library, entry, tc.body)
-			require.NoError(t, err)
-			require.Equal(t, tc.rejected, rejected)
-			intake, err := entry.IntakeMetadata()
-			require.NoError(t, err)
-			require.Contains(t, intake.Reason, tc.reason)
-			require.Greater(t, len(capture.reviews), 1, "warning aggregation also works across segments")
-			require.Contains(t, capture.reviews[0][0].Content, library.ReviewCriteria)
-			require.NotContains(t, capture.reviews[0][0].Content, "Reject for lack of completeness only when the whole document has no usable substance")
-			require.Contains(t, capture.reviews[0][0].Content, "完整性不作为准入条件")
-			if !tc.rejected {
-				require.Equal(t, "approved", intake.Decision)
-				require.NotEqual(t, types.ParseStatusRejected, entry.ParseStatus)
-			}
-		})
-	}
-}
-
-func TestReviewIntakeSendsSegmentImagesAndReadStatus(t *testing.T) {
-	library := types.SystemLibraryDefaults()[0]
-	library.ModelTiers.Light = "review-model"
-	entry := &types.Entry{ID: "image-review", SpaceID: 1, LibraryID: library.ID}
-	require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
-		Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/report"},
-	}))
-	uri := articleImageDataURI(t, 9)
-	_, payload, _ := strings.Cut(uri, ",")
-	data, err := base64.StdEncoding.DecodeString(payload)
-	require.NoError(t, err)
-	capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: `{"approved":true,"reason":"Chart supports the report"}`}}
-	svc := &entryService{
-		repo: &intakeRepo{entry: entry},
-		modelService: &summaryStateModelService{model: capture, metadata: &types.Model{
-			ID: "review-model", Type: types.ModelTypeGeneration,
-			Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 32768},
-		}},
-		fileSvc: &intakeFileService{saved: map[string][]byte{"chart.png": data}},
-		config:  &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{MaxImages: 2}},
-	}
-	body := "# 结果\n\n![缺失](https://example.org/missing.png)\n\n![得分](chart.png)\n\n## 结论\n\n![对比](chart.png)"
-	ctx := context.Background()
-	require.False(t, svc.singleReviewSegment(ctx, library, entry, body), "image count also requires background segmentation")
-	rejected, err := svc.reviewIntake(ctx, library, entry, body)
-	require.NoError(t, err)
-	require.False(t, rejected)
-	require.Len(t, capture.reviews, 3)
-	for i, messages := range capture.reviews[:2] {
-		user := messages[len(messages)-1]
-		require.Equal(t, []string{uri}, user.Images, "each segment sends its readable image bytes")
-		var input struct {
-			Body   string             `json:"body"`
-			Images []reviewImageInput `json:"images"`
-		}
-		require.NoError(t, json.Unmarshal([]byte(user.Content), &input))
-		if i == 0 {
-			require.Len(t, input.Images, 2)
-			require.Equal(t, 1, input.Images[0].Index)
-			require.False(t, input.Images[0].Provided)
-			require.Equal(t, "未提供图片文件", input.Images[0].SkipReason)
-		}
-		image := input.Images[len(input.Images)-1]
-		require.Equal(t, len(input.Images), image.Index, "unreadable images do not renumber the remaining attachment")
-		require.True(t, image.Provided)
-		require.Empty(t, image.SkipReason)
-		require.Equal(t, len([]rune(input.Body[:strings.Index(input.Body, "chart.png")])), image.Start)
-	}
-	intake, err := entry.IntakeMetadata()
-	require.NoError(t, err)
-	require.Equal(t, "approved", intake.Decision)
 }
 
 func TestReviewMissingImagesDoNotReserveVisualTokens(t *testing.T) {
@@ -241,8 +115,7 @@ func (intakeModelService) GetEmbeddingModel(context.Context, string) (embedding.
 	return parentChildEmbedder{}, nil
 }
 
-func TestReviewIntakeKeepsSourcedBodyWithExplicitRejection(t *testing.T) {
-	const reason = "Qwen article missing publication date"
+func TestReviewIntakeIgnoresObsoleteModelRejection(t *testing.T) {
 	entry := &types.Entry{ID: "qwen-article", SpaceID: 1, LibraryID: "library",
 		Metadata: types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`)}
 	require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
@@ -253,13 +126,12 @@ func TestReviewIntakeKeepsSourcedBodyWithExplicitRejection(t *testing.T) {
 	svc := &entryService{repo: repo}
 	rejected, err := svc.reviewIntake(context.Background(), &types.Library{ID: "library", SpaceID: 1}, entry, "Complete original body")
 	require.NoError(t, err)
-	require.True(t, rejected)
+	require.False(t, rejected)
 	intake, err := repo.entry.IntakeMetadata()
 	require.NoError(t, err)
-	require.Equal(t, "rejected", intake.Decision)
-	require.Equal(t, reason, intake.Reason)
+	require.Equal(t, "approved", intake.Decision)
+	require.Empty(t, intake.Reason)
 	require.Equal(t, "stored-original", intake.OriginalPath)
-	require.Equal(t, types.ParseStatusRejected, repo.entry.ParseStatus)
 }
 
 func (s intakeModelService) GetChatModel(context.Context, string) (chat.Chat, error) {

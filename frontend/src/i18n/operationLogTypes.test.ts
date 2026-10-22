@@ -23,6 +23,7 @@ test('every backend operation log type has a Chinese and English display name', 
       assert.ok(labels[name].trim(), `${locale}: empty operationLogs.types.${name}`)
       assert.notEqual(labels[name], name)
     }
-    assert.deepEqual(Object.keys(labels).sort(), [...names].sort(), `${locale}: backend and locale operation types agree`)
+    const historical = ['accept_incomplete', 'ingest_conflict', 'ingest_supplement']
+    assert.deepEqual(Object.keys(labels).sort(), [...names, ...historical].sort(), `${locale}: current and historical operation types remain readable`)
   }
 })

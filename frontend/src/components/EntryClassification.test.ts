@@ -98,12 +98,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 
 
 }
-test('content type filters retain all seven content types articles', () => {
+test('content type filters use enabled types from the selected libraries', () => {
   const page = readFileSync(new URL('../views/library/Library.vue', import.meta.url), 'utf8')
   const api = readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8')
   assert.match(page, /v-model="selectedContentType"/)
   assert.match(page, /content_type: selectedContentType\.value/)
-  assert.match(page, /CONTENT_TYPES\.map/)
+  assert.match(page, /libraryCatalog\.value\.filter/)
+  assert.match(page, /content_types \|\| \[\]/)
+  assert.match(page, /filter\(row => row\.enabled\)/)
   assert.match(api, /query\.append\('content_type', params\.content_type\)/)
   assert.match(page, /@openEntity="openArticleEntity"/)
   assert.match(page, /:initial-entity-id="selectedEntityId"/)
@@ -116,9 +118,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     card.setup = (props: object, context: object) => {
       const state = setup(props, context)
       onServerPrefetch(() => {
-        assert.equal(state.getEntryType({ ...article, channel: 'rss' }), messages[locale].library.channelRSS)
-        assert.equal(state.getChannelLabel('rss'), messages[locale].library.channelRSS)
-        assert.equal(state.getChannelLabel('web'), messages[locale].library.channelWeb)
+        assert.equal(state.getEntryType({ ...article, channel: 'rss' }), 'Markdown')
+        assert.equal(state.getChannelLabel({ channel: 'rss' }), messages[locale].library.channelRSS)
+        assert.equal(state.getChannelLabel({ channel: 'web' }), messages[locale].library.channelWeb)
       })
       return state
     }
@@ -129,7 +131,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const state = rowSetup(props, context)
       onServerPrefetch(() => {
         assert.equal(state.getSourceInfo({ ...article, channel: 'rss' }).label, messages[locale].library.channelRSS)
-        assert.equal(state.getSourceInfo({ ...article, type: 'url', channel: 'web' }).label, messages[locale].library.channelUrl)
+        assert.equal(state.getSourceInfo({ ...article, type: 'url', channel: 'web' }).label, messages[locale].library.channelWeb)
       })
       return state
     }

@@ -6,10 +6,9 @@ import (
 	"reliquary/internal/types"
 )
 
-// isIngestArticle covers articles and imported user documents. Reports keep
-// their separate indexing path without intake review or model processing.
+// All ingested templates share body indexing and background enrichment.
 func isIngestArticle(k *types.Entry) bool {
-	return k != nil && (k.SourceKind == "" || k.SourceKind == "article" || k.SourceKind == "mine")
+	return k != nil && (k.SourceKind == "" || k.SourceKind == "article" || k.SourceKind == "mine" || k.SourceKind == "report")
 }
 
 func remoteIngestImage(ref string) bool {

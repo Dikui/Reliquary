@@ -13,8 +13,6 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
 	"reliquary/internal/application/repository"
-	"reliquary/internal/queue"
-	"reliquary/internal/testutil/redistest"
 	"reliquary/internal/types"
 )
 
@@ -239,7 +237,7 @@ func graphSnapshot(t *testing.T, db *gorm.DB) string {
 }
 func TestIKB12EveryMutationRollsBackAuthorityAndPendingTogether(t *testing.T) {
 	t.Parallel()
-	mutations := []string{"replace", "withdraw", "delete_entry", "delete_relation", "merge_entity", "merge_type", "fallback", "content_type"}
+	mutations := []string{"replace", "withdraw", "delete_entry", "delete_relation", "merge_entity", "merge_type", "fallback"}
 	for _, name := range mutations {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -273,57 +271,32 @@ func TestIKB12EveryMutationRollsBackAuthorityAndPendingTogether(t *testing.T) {
 				err = entities.MergeRelationTypes(ctx, "entity-library", "合作", "投资")
 			case "fallback":
 				err = svc.repo.DeleteEntry(ctx, 1, two.ID)
-			case "content_type":
-				_, err = svc.CorrectContentType(ctx, one.ID, "off")
 			}
 			require.ErrorContains(t, err, "ikb12 pending unavailable")
 			require.Equal(t, before, graphSnapshot(t, db))
 		})
 	}
 }
-func TestIKB12ContentTypeQueueEnableDisableAndRollback(t *testing.T) {
+func TestIKB12ContentTypeCorrectionPreservesGraphAndRollsBackOnAuditFailure(t *testing.T) {
 	t.Parallel()
-	h := newArticleProcessingHarness(t, false)
-	models := h.service.modelService.(articleProcessingModels)
-	models.summaryStateModelService.model = &jointProcessingChat{kind: "other"}
-	h.service.modelService = models
-	client := redistest.NewClient(t, h.db)
-	h.service.task = client
-	mux := queue.NewServeMux()
-	mux.HandleFunc(types.TypeManualProcess, h.service.ProcessManualUpdate)
-	mux.HandleFunc(types.TypeDocumentProcess, h.service.ProcessDocument)
-	require.NoError(t, client.Start(context.Background(), mux, queue.Config{Pools: types.WorkerPoolConcurrency{Core: 1, Enrichment: 1, Maintenance: 1, Shared: 1}, CheckInterval: 20 * time.Millisecond}))
-	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	result, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, "graph-type.md", "Acme and Beta cooperate on a complete original measurement record."), map[string]string{"publisher": "Acme", "original_url": "https://example.org/graph-type", "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
+	db, ctx, _, svc := graphFixture(t)
+	entry := graphEntry(t, db, "one", "", time.Now())
+	graphPublish(t, db, ctx, svc, entry, graphInput("a", "合作", "b"))
+	rows, pending := graphRows(t, db), graphPending(t, db)
+	// Classification is a label; changing it neither withdraws nor re-extracts relations.
+	require.NoError(t, db.Exec(`CREATE FUNCTION reject_ikb12_enqueue() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'unexpected enqueue'; END $$; CREATE TRIGGER reject_ikb12_enqueue BEFORE INSERT ON task_pending_ops FOR EACH ROW EXECUTE FUNCTION reject_ikb12_enqueue()`).Error)
+	updated, err := svc.CorrectContentType(ctx, entry.ID, "off")
 	require.NoError(t, err)
-	wait := func() {
-		require.Eventually(t, func() bool {
-			var pending int64
-			if h.db.Model(&queue.Job{}).Where("state NOT IN ?", []string{"completed", "cancelled"}).Count(&pending).Error != nil || pending != 0 {
-				return false
-			}
-			return h.article(t, result.ID).ParseStatus == types.ParseStatusCompleted
-		}, 20*time.Second, 20*time.Millisecond)
-	}
-	wait()
-	require.Empty(t, graphRows(t, h.db))
-	// The model still proposes the previous type; the user correction governs extraction.
-	h.service.modelService = models
-	before := graphSnapshot(t, h.db)
-	require.NoError(t, h.db.Exec(`CREATE FUNCTION reject_ikb12_enqueue() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'ikb12 enqueue unavailable'; END $$; CREATE TRIGGER reject_ikb12_enqueue BEFORE INSERT ON task_pending_ops FOR EACH ROW EXECUTE FUNCTION reject_ikb12_enqueue()`).Error)
-	_, err = h.service.CorrectContentType(h.ctx, result.ID, "event")
-	require.ErrorContains(t, err, "ikb12 enqueue unavailable")
-	require.Equal(t, before, graphSnapshot(t, h.db))
-	require.NoError(t, h.db.Exec("DROP TRIGGER reject_ikb12_enqueue ON task_pending_ops").Error)
-	_, err = h.service.CorrectContentType(h.ctx, result.ID, "event")
-	require.NoError(t, err)
-	wait()
-	require.Len(t, graphRows(t, h.db), 1)
-	beforePending := len(graphPending(t, h.db))
-	_, err = h.service.CorrectContentType(h.ctx, result.ID, "other")
-	require.NoError(t, err)
-	require.Empty(t, graphRows(t, h.db))
-	require.Greater(t, len(graphPending(t, h.db)), beforePending)
+	require.Equal(t, "off", updated.ContentType)
+	require.True(t, updated.ContentTypeCorrected)
+	require.Equal(t, types.ParseStatusCompleted, updated.ParseStatus)
+	require.Equal(t, rows, graphRows(t, db))
+	require.Equal(t, pending, graphPending(t, db))
+	before := graphSnapshot(t, db)
+	require.NoError(t, db.Exec(`CREATE FUNCTION reject_ikb12_log() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'ikb12 log unavailable'; END $$; CREATE TRIGGER reject_ikb12_log BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION reject_ikb12_log()`).Error)
+	_, err = svc.CorrectContentType(ctx, entry.ID, "on")
+	require.ErrorContains(t, err, "ikb12 log unavailable")
+	require.Equal(t, before, graphSnapshot(t, db))
 }
 
 func TestIKB12LogFailureRollsBackAlreadyWrittenSyncRecords(t *testing.T) {

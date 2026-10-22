@@ -524,3 +524,21 @@ func TestVectorDeferralRecoversWithoutOrdinaryFailures(t *testing.T) {
 	require.Eventually(t, func() bool { return db.First(&j, "id=?", info.ID).Error == nil && j.State == TaskStateCompleted }, 10*time.Second, 20*time.Millisecond)
 	require.Zero(t, j.FailCount)
 }
+
+func TestCompletedBodyDoesNotSkipPendingEnrichment(t *testing.T) {
+	db := pgtest.Open(t)
+	c := testClient(t, db)
+	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Enrichment fixture','personal'); INSERT INTO libraries(id,space_id,name,embedding_model_id,summary_model_id) VALUES('library',1,'Library','',''); INSERT INTO entries(id,space_id,library_id,type,title,source,parse_status,summary_status) VALUES('entry',1,'library','manual','Note','','completed','failed')`).Error)
+	mux := NewServeMux()
+	var calls atomic.Int32
+	mux.HandleFunc(types.TypeManualProcess, func(ctx context.Context, task *Task) error {
+		calls.Add(1)
+		return db.WithContext(ctx).Exec("UPDATE entries SET summary_status='completed' WHERE id='entry'").Error
+	})
+	require.NoError(t, c.Start(context.Background(), mux, testConfig()))
+	t.Cleanup(func() { require.NoError(t, c.Close()) })
+	info, err := c.Enqueue(NewTask(types.TypeManualProcess, []byte(`{"tenant_id":1,"entry_id":"entry","library_id":"library"}`)))
+	require.NoError(t, err)
+	jobState(t, c, info.ID, TaskStateCompleted)
+	require.EqualValues(t, 1, calls.Load(), "completed body indexing must not suppress enrichment recovery")
+}

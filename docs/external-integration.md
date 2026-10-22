@@ -1,6 +1,6 @@
 # 外部工具接入总览
 
-Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格式转换为 Markdown，并提交图片。Reliquary 负责按库审核、保存、去重、处理与检索。综合分析由外部工具完成，再将报告写回 AI产出库。所有有效 API Key 均可访问个人空间全部库。
+Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格式转换为 Markdown，并提交图片。Reliquary 负责技术校验、保存、按来源标识识别重投、后台处理与检索；正常提交不逐条进行模型价值审核。综合分析由外部工具完成，再将报告写回 AI产出库。所有有效 API Key 均可访问个人空间全部库。
 
 ## 功能与接口分类
 
@@ -48,10 +48,10 @@ HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每
 | official | 机构、公司、媒体发布的新闻、公告、财报、时效研报、政策 | 外部时效型；链接必需，配置允许时可用机构加有效发布日期，标记来源未核实 |
 | media | 外部人物的评论、访谈、观点文章 | 外部时效型；按库来源规则，尽量填写 author，关系证据保留发言人 |
 | references | 长期引用的论文、书籍、标准、官方文档、教程 | 外部长效型；链接或 identifier，例 doi:10.1234/example |
-| personal | 本人的工作资料、经验、SOP、笔记 | 自有型；可空链接，source_ref 标识同一来源，正文变化追加新记录 |
-| ai-output | 外部 AI 写出的综合分析和报告 | 生成型；免审核与内容处理，只建索引，cannot_be_fact=true |
+| personal | 本人的工作资料、经验、SOP、笔记 | 自有型；可空链接，source_ref 标识同一来源，正文变化覆盖原记录 |
+| ai-output | 外部 AI 写出的综合分析和报告 | 生成型；先保存、后台处理，cannot_be_fact=true |
 
-有时效的机构研报收 official，作为定义与方法长期引用的白皮书收 references。人物评论收 media，不能因提到机构就改收 official。各库不可接受的字段以 accepted_fields 为准，不能给非自有型提交 source_ref。
+有时效的机构研报收 official，作为定义与方法长期引用的白皮书收 references。人物评论收 media，不能因提到机构就改收 official。所有模板均接受可选 source_ref、identifier 和 graph，具体格式见 accepted_fields。
 
 ## 收录与图片提交
 
@@ -61,7 +61,7 @@ HTTP `POST /api/v1/ingest` 对应 MCP `ingest`，参数相同：
 {"items":[{"library":"personal","source_ref":"notes/calibration.md","title":"校准记录","content":"# 校准\n\n完整步骤与结果。","acquisition":"verbatim"}]}
 ```
 
-每批 1 至 50 项。content 是完整 Markdown；acquisition 必选 verbatim、extracted 或 model_written。新收录最多 500 万 Unicode 码点，实际处理还受模型上下文及分段数限制。逐项检查 status、entry_id、reason和 image_failures。accepted 表示接收成功，处理可异步完成；用 `GET /api/v1/entries/:id` 查询 parse_status。pending_review 需要用户判断，invalid 需要修正参数，exists 使用已有 ID。
+每批 1 至 50 项。content 为非空可读 Markdown，允许草稿、片段和摘要，纯链接与仅图片不接收。acquisition 可选，提供时为 verbatim、extracted 或 model_written。正文及串文、引用合计最多 500 万 Unicode 码点。accepted 表示正文、图片和后台任务已保存；parse_status 查看正文索引，summary_status 查看模型处理。模型失败不撤销已建立的正文检索。不生成常规 pending_review。唯一同来源且内容未变返回 exists，有变化覆盖原 ID；缺来源标识时新建。
 
 图片先经 `POST /api/v1/ingest/assets` 上传 multipart 的 file，再用 asset_id 和 source_url 对应正文图片地址，也可提交受限的 base64。图片可选，服务端不下载远程图片，也不生成缺图状态或待办。已有资料增补图片时，使用 `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 一并提交完整正文和图片。
 
@@ -95,7 +95,7 @@ HTTP `POST /api/v1/graph/search` 对应 MCP `graph_search`，参数和返回 dat
 {"items":[{"library":"ai-output","title":"校准分析报告","content":"# 校准分析\n\n基于正文中引用资料的综合分析。","acquisition":"model_written"}]}
 ```
 
-MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出只保存并建立索引，不审核、不调用内容处理模型、不抽图谱。相同内容重试返回已有资料；索引失败由后台任务继续处理。字段和状态见 [收录 API](ingest-api.md#ai产出收录)。
+MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他模板共用先保存、后建正文索引并运行摘要、分类、实体和图谱的链路。相同来源且保存内容未变时返回已有资料；缺来源标识时新建。字段和状态见 [收录 API](ingest-api.md#ai产出收录)。
 
 ## 接收故障与短期故障包
 

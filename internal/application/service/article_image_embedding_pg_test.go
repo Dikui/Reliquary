@@ -148,5 +148,5 @@ func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T
 	copy.SourceKind = "mine"
 	require.Equal(t, articleImagePaths(article), articleImagePaths(&copy))
 	copy.SourceKind = "report"
-	require.Empty(t, articleImagePaths(&copy))
+	require.Equal(t, articleImagePaths(article), articleImagePaths(&copy))
 }

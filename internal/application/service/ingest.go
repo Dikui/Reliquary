@@ -16,20 +16,18 @@ import (
 	"reliquary/internal/diagnostics"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
-	taskqueue "reliquary/internal/queue"
+	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var _ interfaces.IngestService = (*entryService)(nil)
 
 // Ingest never retrieves source material from a URL. Supplied bytes are parsed
-// locally, then reviewed and processed by the existing article pipeline.
+// locally and saved before background indexing and enrichment.
 func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest) (result *types.IngestResult, err error) {
 	if request != nil {
 		copy := *request
@@ -49,35 +47,11 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	diagnostics.SetLibrary(ctx, library)
-	defer func() {
-		if err == nil && result != nil && result.LibraryID == library.ID {
-			result.LibraryName = library.Name
-		}
-		if err == nil && result != nil && result.EntryID != "" && request.RecoveryFailureID != "" && !s.needsTaskTransaction() {
-			err = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=?", result.EntryID, spaceID).Update("metadata", gorm.Expr("jsonb_set(COALESCE(metadata,'{}'::jsonb),'{recovery_failure_id}',to_jsonb(?::text),true)", request.RecoveryFailureID)).Error
-		}
-	}()
 	if err := validateLibraryIngest(request, library); err != nil {
 		return nil, err
 	}
-	if !intakeTemplateRules(library).Process {
-		diagnostics.SetOutcome(ctx, "unknown", "")
-		if s.vault == nil {
-			return nil, werrors.NewBadRequestError("report vault is unavailable")
-		}
-		reports, err := NewVaultDocumentService(s.db, s.modelService, s.retrieveEngine, s.vault.root)
-		if err != nil {
-			return nil, err
-		}
-		report, err := reports.createReport(ctx, library, request.Title, request.Content, nil, request.Graph)
-		if err != nil {
-			return nil, err
-		}
-		status := "accepted"
-		if report.Existing {
-			status = "exists"
-		}
-		return ingestResult(report.Entry, status, report.Message, "", ""), nil
+	if s.vault == nil {
+		return nil, werrors.NewServiceUnavailableError("article storage is unavailable")
 	}
 	if s.needsTaskTransaction() {
 		changes := &ingestFileChanges{}
@@ -85,8 +59,6 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		result, err = entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestResult, error) {
 			result, err := copy.Ingest(ctx, request)
 			if err == nil && result != nil && (result.Status == "exists" || result.Status == "discarded") {
-				// Cleanup participates in the transaction: a failed cleanup must
-				// not commit a repost or an operation reported as invalid.
 				err = changes.removeUnusedStoredFiles(ctx, copy.fileSvc)
 			}
 			return result, err
@@ -94,138 +66,64 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		if err != nil {
 			err = errors.Join(err, changes.rollback(s.vault))
 		} else {
-			if result != nil {
-				diagnostics.SetOutcome(ctx, "unknown", result.EntryID)
-			}
 			err = errors.Join(err, changes.finish())
 		}
 		return result, err
 	}
-	kind := "article"
-	if intakeTemplateRules(library).Identity.SourceRef {
-		kind = "mine"
-	}
 	now := time.Now()
+	kind := "article"
+	if library.Template == types.TemplateOwn {
+		kind = "mine"
+	} else if library.Template == types.TemplateGenerated {
+		kind = "report"
+	}
 	title := strings.TrimSpace(request.Title)
 	if title == "" {
 		title = strings.TrimSpace(request.URL)
 	}
 	if title == "" {
-		title = "待审文章"
-		if intakeTemplateRules(library).Identity.SourceRef {
-			title = "本人文档"
-		}
+		title = "未命名资料"
 	}
 	if len([]rune(title)) > 255 {
 		title = string([]rune(title)[:255])
 	}
-	tags := request.AgentTags
-	if tags == nil {
-		tags = []string{}
+	agentTags := request.AgentTags
+	if agentTags == nil {
+		agentTags = []string{}
 	}
-	tagJSON, _ := json.Marshal(tags)
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID,
+	tags, _ := json.Marshal(agentTags)
+	entry := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID,
 		SourceRef: request.SourceRef, Identifier: request.Identifier, Graph: request.Graph,
 		Type: types.EntryTypeManual, SourceKind: kind, Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual,
-		ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: now, UpdatedAt: now,
-		EmbeddingModelID: library.EmbeddingModelID, CollectReason: strings.TrimSpace(request.CollectReason),
-		AgentSummary: request.AgentSummary, AgentTags: types.JSON(tagJSON), SourceName: request.SourceName,
-		Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint,
+		ParseStatus: types.ParseStatusPending, SummaryStatus: types.SummaryStatusPending, EnableStatus: "disabled",
+		CreatedAt: now, UpdatedAt: now, EmbeddingModelID: library.EmbeddingModelID,
+		CollectReason: strings.TrimSpace(request.CollectReason), AgentSummary: request.AgentSummary, AgentTags: types.JSON(tags),
+		SourceName: request.SourceName, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint,
 		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName}
-	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "pending", SourceInfo: types.SourceInfo{
-		OriginalURL: article.Source, Author: request.Author, Publisher: request.Publisher,
+	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "approved", SourceInfo: types.SourceInfo{
+		OriginalURL: entry.Source, Author: request.Author, Publisher: request.Publisher,
 		PublishedAt: normalizeIntakePublicationDate(request.PublishedAt)}}
-	if err := article.SetIntakeMetadata(intake); err != nil {
+	if err := entry.SetIntakeMetadata(intake); err != nil {
 		return nil, err
 	}
-	setMessageFingerprint(article, "")
-	// Hold the existing collection lock through lookup, byte storage and enqueue.
-	// Concurrent deliveries therefore commit one mutation.
-	if err := lockMessageDeduplication(s.db.WithContext(ctx), article); err != nil {
+	setMessageFingerprint(entry, "")
+	if err := lockMessageDeduplication(s.db.WithContext(ctx), entry); err != nil {
 		return nil, err
 	}
-	article.CreatedAt = time.Now()
-	if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(article, intakeTemplateRules(library))); err != nil {
-		return nil, err
-	} else if discarded != nil {
-		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
-	}
-	if existing, err := s.findIngestURL(ctx, article.NormalizedURL, true, library); err != nil {
-		return nil, err
-	} else if existing != nil {
-		if _, err := recordIngestDuplicate(ctx, s.db, existing, article, "url", 0); err != nil {
-			return nil, err
-		}
-		if s.vault != nil {
-			s.vault.ScheduleRefresh(ctx, existing.ID)
-		}
-		return ingestResult(existing, "exists", "该文章已收录。", "", ""), nil
-	}
-	diagnostics.SetStage(ctx, "materials")
-	body, canonicalBody, err := s.storeIngestMaterials(ctx, library, article, request)
+	existing, err := s.findExactIngestSource(ctx, entry)
 	if err != nil {
 		return nil, err
 	}
-	if intakeTemplateRules(library).Identity.SourceRef && request.SourceRef != "" {
-		// The transaction holds the library lock, including when no prior row exists.
-		article.SourceBodyHash = sourceBodyHash(canonicalBody)
-		latest, err := types.FindLatestSourceEntry(s.db.WithContext(ctx), spaceID, library.ID, request.SourceRef)
-		if err != nil {
-			return nil, err
-		}
-		if latest != nil && latest.SourceBodyHash == article.SourceBodyHash {
-			if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", latest.ID, nil, map[string]any{"status": "exists", "source_ref": request.SourceRef, "library_id": library.ID}); err != nil {
-				return nil, err
-			}
-			return ingestResult(latest, "exists", "相同来源与正文已收录。", "", ""), nil
-		}
+	if existing != nil {
+		err = s.withTaskObject(ctx, existing.ID, func(held context.Context) error {
+			result, err = s.saveIngestEntry(held, library, entry, existing, request)
+			return err
+		})
+		return result, err
 	}
-	intake, _ = article.IntakeMetadata()
-	if err := extractIntakeOriginalLink(article, body, nil); err != nil {
-		return nil, err
-	}
-	intake, _ = article.IntakeMetadata()
-	setMessageFingerprint(article, canonicalBody)
-	// Source evidence extracted from a supplied file also participates in lookup.
-	if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(article, intakeTemplateRules(library))); err != nil {
-		return nil, err
-	} else if discarded != nil {
-		return ingestResult(nil, "discarded", "该链接已被丢弃，未再次收录。", discarded.Reason, discarded.EntryID), nil
-	}
-	var duplicate *types.Entry
-	var method string
-	var distance int
-	duplicate, method, distance, err = findMessageDuplicate(s.db.WithContext(ctx), article)
-	if err != nil {
-		return nil, err
-	}
-	if duplicate != nil {
-		if _, err := recordIngestDuplicate(ctx, s.db, duplicate, article, method, distance); err != nil {
-			return nil, err
-		}
-		if s.vault != nil {
-			s.vault.ScheduleRefresh(ctx, duplicate.ID)
-		}
-		return ingestResult(duplicate, "exists", "该文章已收录。", "", ""), nil
-	}
-	if err := article.SetManualMetadata(types.NewManualEntryMetadata("", types.ManualEntryStatusPublish, 1)); err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).Create(article).Error; err != nil {
-		return nil, err
-	}
-	if err := s.referenceIngestMaterials(ctx, article, request); err != nil {
-		return nil, err
-	}
-	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", article.ID, nil, map[string]any{
-		"library_id": library.ID, "template": library.Template, "url": article.Source, "acquisition": article.Acquisition, "collect_reason": article.CollectReason}); err != nil {
-		return nil, err
-	}
-	s.bindContentResources(ctx, spaceID, article.ID, body)
-	return s.finishIngestReview(ctx, library, article, body)
+	return s.saveIngestEntry(ctx, library, entry, nil, request)
 }
-
 func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBatchRequest) (*types.IngestBatchResult, error) {
 	if request == nil || len(request.Items) < 1 || len(request.Items) > 50 {
 		return nil, werrors.NewBadRequestError("items must contain between 1 and 50 entries")
@@ -255,7 +153,7 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 			var app *werrors.AppError
 			reason := "内部处理失败"
 			message := "该条目收录失败，请稍后重试。"
-			if errors.As(err, &app) && app.HTTPCode == http.StatusBadRequest {
+			if errors.As(err, &app) && (app.HTTPCode == http.StatusBadRequest || app.HTTPCode == http.StatusConflict) {
 				reason = app.Message
 				message = "该条目无效，请检查获取方式、正文和图片后重试。"
 			}
@@ -271,36 +169,6 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 	return result, nil
 }
 
-func (s *entryService) finishIngestReview(ctx context.Context, library *types.Library, article *types.Entry, body string) (*types.IngestResult, error) {
-	diagnostics.SetStage(ctx, "review")
-	rejected, err := s.reviewIntake(context.WithValue(ctx, deferSegmentReviewKey{}, true), library, article, body)
-	if errors.Is(err, errSegmentReviewQueued) {
-		diagnostics.SetStage(ctx, "enqueue")
-		if _, err := s.enqueueManualProcessing(ctx, article, body, false); err != nil {
-			return nil, err
-		}
-		return ingestResult(article, "accepted", "已接收，正在分段审核。", "", ""), nil
-	}
-	var deferred *types.ChatGPTDeferredError
-	var options []taskqueue.Option
-	if err != nil {
-		if !errors.As(err, &deferred) {
-			return nil, err
-		}
-		s.markArticleProcessingFailed(ctx, article, err)
-		options = append(options, taskqueue.ProcessAt(deferred.RetryAt))
-	}
-	if rejected {
-		intake, _ := article.IntakeMetadata()
-		return ingestResult(article, "pending_review", "已保存，等待收录审核。", intake.Reason, ""), nil
-	}
-	diagnostics.SetStage(ctx, "enqueue")
-	if _, err := s.enqueueManualProcessing(ctx, article, body, false, options...); err != nil {
-		return nil, err
-	}
-	return ingestResult(article, "accepted", "已收录，正在处理。", "", ""), nil
-}
-
 func ingestResult(article *types.Entry, status, message, reason, id string) *types.IngestResult {
 	result := &types.IngestResult{EntryID: id, Status: status, Message: message, Reason: reason, ImageFailures: []types.IngestImageFailure{}}
 	if article != nil {
@@ -314,28 +182,6 @@ func ingestResult(article *types.Entry, status, message, reason, id string) *typ
 		}
 	}
 	return result
-}
-
-func recordIngestDuplicate(ctx context.Context, tx *gorm.DB, existing, incoming *types.Entry, method string, distance int) (bool, error) {
-	if err := recordMessageRepost(tx, existing, incoming, method, distance); err != nil {
-		return false, err
-	}
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", existing.SpaceID, existing.ID).First(existing).Error; err != nil {
-		return false, err
-	}
-	before := existing.CollectReason
-	filled := strings.TrimSpace(before) == "" && incoming.CollectReason != ""
-	updates := map[string]any{"last_ingest_api_key_id": incoming.LastIngestAPIKeyID, "last_ingest_api_key_name": incoming.LastIngestAPIKeyName, "updated_at": time.Now()}
-	if filled {
-		updates["collect_reason"] = incoming.CollectReason
-		existing.CollectReason = incoming.CollectReason
-	}
-	if err := tx.Model(existing).Updates(updates).Error; err != nil {
-		return false, err
-	}
-	err := NewOperationLogService(tx).RecordTx(ctx, tx, "ingest", existing.ID,
-		map[string]any{"collect_reason": before}, map[string]any{"url": incoming.Source, "status": "exists", "collect_reason": existing.CollectReason})
-	return filled, err
 }
 
 func validateIngestRequest(request *types.IngestRequest) error {
@@ -355,7 +201,12 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	if strings.TrimSpace(utils.CleanMarkdown(request.Content)) == "" || validIngestURL(strings.TrimSpace(request.Content)) {
 		return bad("content is required; convert the source to Markdown before ingestion")
 	}
-	if request.Acquisition != "verbatim" && request.Acquisition != "extracted" && request.Acquisition != "model_written" {
+	textContent := searchutil.MarkdownImageRegex.ReplaceAllString(utils.CleanMarkdown(request.Content), "")
+	textContent = searchutil.HTMLImageSrcRegex.ReplaceAllString(textContent, "")
+	if strings.TrimSpace(textContent) == "" {
+		return bad("readable Markdown text is required; image-only content is not accepted")
+	}
+	if request.Acquisition != "" && request.Acquisition != "verbatim" && request.Acquisition != "extracted" && request.Acquisition != "model_written" {
 		return bad("acquisition must be verbatim, extracted or model_written")
 	}
 	if request.URL != "" && (!validIngestURL(strings.TrimSpace(request.URL)) || len(request.URL) > 2048) {

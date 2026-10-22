@@ -60,6 +60,7 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 		require.NotEmpty(t, entry.Before)
 		require.NotEmpty(t, entry.After)
 	}
+	require.NoError(t, v.RefreshHeader(ctx, k.ID))
 	require.Eventually(t, func() bool {
 		data, err := os.ReadFile(filepath.Join(root, k.VaultPath))
 		if err != nil {

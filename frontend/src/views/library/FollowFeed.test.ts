@@ -98,9 +98,9 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const urls: any[] = []
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
-  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
   modules['@/components/EntryUpdateNotice.vue'] = modules['./EntryUpdateNotice.vue'] = empty
-  modules['./EntityRelations.vue'] = modules['./BodyReference.vue'] = empty
+  modules['./EntityRelations.vue'] = modules['./EntityGraph.vue'] = modules['./BodyReference.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
   modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
@@ -289,7 +289,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await settle()
       const navigation = descendants(mounted.root).filter(node => node.tag === 'button' && hasClass(node, 'menu_item'))
-      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, messages[locale].topicManagement.title, `${messages[locale].follows.title}2`, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle, messages[locale].menu.settings])
+      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, messages[locale].topicManagement.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle, messages[locale].menu.settings])
       assert.ok(env.calls.some(call => call.url === '/api/v1/follows/state'))
       assert.equal(descendants(mounted.root).find(node => hasClass(node, 'follow-badge'))!.text, '2')
       await env.store.markViewed(openedAt); await settle()

@@ -216,106 +216,21 @@ func TestSegmentCancellationAndMergeFailureResume(t *testing.T) {
 	require.Equal(t, 2, m.mergeCalls)
 }
 
-func TestSegmentReviewRejectionAllApprovedAndLimit(t *testing.T) {
-	for _, reject := range []int{0, 2} {
-		t.Run(fmt.Sprint(reject), func(t *testing.T) {
-			h, m := segmentedHarness(t)
-			k := segmentedEntry(t, h)
-			m.reject = reject
-			rejected, err := h.service.reviewIntake(h.ctx, h.library, k, strings.Repeat("review material ", 40))
-			require.NoError(t, err)
-			intake, err := k.IntakeMetadata()
-			require.NoError(t, err)
-			if reject > 0 {
-				require.True(t, rejected)
-				require.Equal(t, types.ParseStatusRejected, k.ParseStatus)
-				require.Contains(t, intake.Reason, "第 2/")
-			} else {
-				require.False(t, rejected)
-				require.Equal(t, "approved", intake.Decision)
-			}
-			require.Greater(t, len(m.calls["intake_review"]), 1)
-			require.Equal(t, 1, m.reviewMergeCalls)
-		})
-	}
+func TestIntakeDoesNotCreateReviewSegmentsOrApplyModelLimits(t *testing.T) {
 	h, m := segmentedHarness(t)
 	k := segmentedEntry(t, h)
 	h.service.config.ArticleProcessing.MaxSegments = 2
-	rejected, err := h.service.reviewIntake(h.ctx, h.library, k, strings.Repeat("limit ", 100))
+	m.reject, m.reviewFail = 2, 1
+	rejected, err := h.service.reviewIntake(h.ctx, h.library, k, strings.Repeat("Original draft material. ", 100))
 	require.NoError(t, err)
-	require.True(t, rejected)
-	intake, _ := k.IntakeMetadata()
-	require.Contains(t, intake.Reason, "分段上限 2")
+	require.False(t, rejected)
+	intake, err := k.IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, "approved", intake.Decision)
 	require.Empty(t, m.calls)
-}
-
-func TestDocumentReviewOverridesLocalRejectionAndResumes(t *testing.T) {
-	summary := strings.Repeat("文", 444)
-	parsed, err := parseReviewDecision(fmt.Sprintf(`{"approved":true,"reason":"supported","summary":%q}`, summary), true, false)
-	require.NoError(t, err)
-	require.Equal(t, summary, parsed.Summary)
-	_, err = parseReviewDecision(`{"approved":true,"reason":"supported"}`, true, false)
-	require.ErrorContains(t, err, "summary")
-	h, m := segmentedHarness(t)
-	k := segmentedEntry(t, h)
-	body := strings.Repeat("Useful original information. ", 30)
-	m.reject, m.reviewMergeAccept, m.reviewMergeFail = 2, true, true
-	rejected, err := h.service.reviewIntake(h.ctx, h.library, k, body)
-	require.ErrorContains(t, err, "document review failed")
-	require.False(t, rejected, "a local rejection cannot bypass an incomplete whole-document review")
-	var run entrySegmentRun
-	require.NoError(t, h.db.Where("entry_id=? AND phase='review'", k.ID).First(&run).Error)
-	require.Empty(t, run.Result)
-	var input struct {
-		BodyComplete bool `json:"body_complete"`
-		Segments     []struct {
-			Segment struct {
-				ContextBefore string `json:"context_before"`
-			} `json:"segment"`
-			Review segmentReviewDecision `json:"review"`
-		} `json:"segments"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(m.reviewMergeInput), &input))
-	require.False(t, input.BodyComplete)
-	require.NotContains(t, m.reviewMergeInput, `"body"`)
-	require.NotContains(t, m.reviewMergeInput, `"evidence"`)
-	require.Len(t, input.Segments, len(m.calls["intake_review"]))
-	for _, segment := range input.Segments {
-		require.NotEmpty(t, segment.Review.Summary)
-		require.Empty(t, segment.Segment.ContextBefore)
-	}
-	before := fmt.Sprint(m.calls)
-	m.reviewMergeFail = false
-	rejected, err = h.service.reviewIntake(h.ctx, h.library, k, body)
-	require.NoError(t, err)
-	require.False(t, rejected, "whole-document review can override a local rejection")
-	require.Equal(t, before, fmt.Sprint(m.calls), "retry keeps completed segment checkpoints")
-	mergeCalls := m.reviewMergeCalls
-	_, _, err = h.service.reviewSegments(h.ctx, h.library, k, body, types.SourceInfo{OriginalURL: "https://example.org/segments", Publisher: "Acme"})
-	require.NoError(t, err)
-	require.Equal(t, mergeCalls, m.reviewMergeCalls, "completed whole-document decisions are checkpointed")
-}
-
-func TestSegmentReviewAuxiliaryNeedsSubstantiveBody(t *testing.T) {
-	for _, auxiliaryFrom := range []int{2, 1} {
-		t.Run(fmt.Sprint(auxiliaryFrom), func(t *testing.T) {
-			h, m := segmentedHarness(t)
-			k := segmentedEntry(t, h)
-			m.auxiliaryFrom = auxiliaryFrom
-			rejected, err := h.service.reviewIntake(h.ctx, h.library, k, strings.Repeat("Substantive original research. ", 20)+"\n\n## References\n\nReference material.")
-			require.NoError(t, err)
-			intake, err := k.IntakeMetadata()
-			require.NoError(t, err)
-			if auxiliaryFrom == 2 {
-				require.False(t, rejected)
-				require.Equal(t, "approved", intake.Decision)
-			} else {
-				require.True(t, rejected)
-				require.Contains(t, intake.Reason, "缺少符合收录标准的实质正文")
-			}
-			require.Greater(t, len(m.calls["intake_review"]), 1)
-		})
-	}
+	var count int64
+	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='review'", k.ID).Count(&count).Error)
+	require.Zero(t, count)
 }
 
 func TestShortArticleStillOneCallAndTypeTie(t *testing.T) {
@@ -393,10 +308,10 @@ func TestSegmentExplicitCompletedReparseStartsNewRun(t *testing.T) {
 	require.EqualValues(t, 2, runs)
 }
 
-func TestSegmentLongIngestCommitsBeforeReviewAndResumes(t *testing.T) {
+func TestSegmentLongIngestCommitsBeforeProcessingAndResumes(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	h.service.config.ArticleProcessing.MaxBodyChars = 140
-	m := &segmentedChat{reviewFail: 2}
+	m := &segmentedChat{fail: 2}
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService.model = m
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "personal", Title: "Queued review", Content: strings.Repeat("Original measured content. ", 30), Acquisition: "verbatim"})
@@ -404,20 +319,20 @@ func TestSegmentLongIngestCommitsBeforeReviewAndResumes(t *testing.T) {
 	require.Equal(t, "accepted", result.Status)
 	require.Empty(t, m.calls)
 	require.Len(t, h.queue.tasks, 1)
-	require.ErrorContains(t, h.service.ProcessManualUpdate(h.ctx, h.queue.tasks[0]), "review failure 2")
+	require.ErrorContains(t, h.service.ProcessManualUpdate(h.ctx, h.queue.tasks[0]), "fixture failure 2")
 	var run entrySegmentRun
-	require.NoError(t, h.db.Where("entry_id=? AND phase='review'", result.EntryID).First(&run).Error)
+	require.NoError(t, h.db.Where("entry_id=? AND phase='processing'", result.EntryID).First(&run).Error)
 	var plan []segmentCheckpoint
 	require.NoError(t, json.Unmarshal(run.Plan, &plan))
 	require.Equal(t, "completed", plan[0].Status)
-	m.reviewFail = 0
+	m.fail = 0
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, h.queue.tasks[0]))
-	require.Equal(t, 1, m.calls["intake_review"][1])
-	require.Equal(t, 2, m.calls["intake_review"][2])
+	require.Equal(t, 1, m.calls["article_processing"][1])
+	require.Equal(t, 2, m.calls["article_processing"][2])
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, result.EntryID).ParseStatus)
 }
 
-func TestSegmentAsyncRejectionRemainsOutOfVault(t *testing.T) {
+func TestSegmentAsyncReviewRejectionCannotBlockStoredBody(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	h.service.config.ArticleProcessing.MaxBodyChars = 140
 	m := &segmentedChat{reject: 2}
@@ -429,12 +344,14 @@ func TestSegmentAsyncRejectionRemainsOutOfVault(t *testing.T) {
 	require.Empty(t, m.calls)
 	h.drain(t)
 	article := h.article(t, result.EntryID)
-	require.Equal(t, types.ParseStatusRejected, article.ParseStatus)
-	require.Empty(t, article.VaultPath)
+	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
+	require.NotEmpty(t, article.VaultPath)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
-	require.Contains(t, intake.Reason, "第 2/")
-	require.Empty(t, m.calls["article_processing"])
+	require.Empty(t, intake.Reason)
+	require.Equal(t, "approved", intake.Decision)
+	require.Empty(t, m.calls["intake_review"])
+	require.NotEmpty(t, m.calls["article_processing"])
 }
 
 func TestSegmentUnverifiedFingerprintRepeatsOldWorkAndThenRetainsVerifiedCheckpoints(t *testing.T) {

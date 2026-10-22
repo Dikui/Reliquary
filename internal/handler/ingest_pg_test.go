@@ -3,9 +3,10 @@ package handler
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -137,19 +138,19 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 		Data types.IngestBatchResult `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(rejectedResponse.Body.Bytes(), &rejected))
-	require.Equal(t, "pending_review", rejected.Data.Items[0].Status)
-	require.Equal(t, "第 1/1 段: model rejected source", rejected.Data.Items[0].Reason)
-	require.Empty(t, queue.tasks)
+	require.Equal(t, "accepted", rejected.Data.Items[0].Status)
+	require.Empty(t, rejected.Data.Items[0].Reason)
+	require.Len(t, queue.tasks, 1)
 	var pending types.Entry
 	require.NoError(t, db.First(&pending, "id=?", rejected.Data.Items[0].EntryID).Error)
-	require.Equal(t, types.ParseStatusRejected, pending.ParseStatus)
-	require.Empty(t, pending.VaultPath)
+	require.Equal(t, types.ParseStatusPending, pending.ParseStatus)
+	require.NotEmpty(t, pending.VaultPath)
 	input := types.IngestRequest{Library: "official", Acquisition: "extracted", URL: "https://example.org/ada/article123", Publisher: "Journal", Content: "# Complete original\n\nMeasured product capabilities.", Title: "External article", SourceName: "grok-bot", AgentSummary: "annotation-summary", AgentTags: []string{"annotation-tag"}, Thread: []types.IngestThreadItem{{Author: "Ada", PublishedAt: "2026-10-01", Content: "Supporting thread."}}, Quotes: []types.IngestQuote{{Content: "Quoted external source."}}}
 	var articleID string
 	for _, attempt := range []struct {
 		status int
 		state  string
-	}{{http.StatusOK, "accepted"}, {http.StatusOK, "exists"}} {
+	}{{http.StatusOK, "accepted"}, {http.StatusOK, "accepted"}, {http.StatusOK, "exists"}} {
 		if articleID != "" {
 			input.CollectReason = "Retain these measurements"
 		}
@@ -172,12 +173,14 @@ func TestIngestHTTPValidationCreatedDuplicateAndOperationLog(t *testing.T) {
 			articleID = result.Data.Items[0].EntryID
 		} else {
 			require.Equal(t, articleID, result.Data.Items[0].EntryID)
-			require.Equal(t, "该文章已收录。", result.Data.Items[0].Message)
+			if attempt.state == "exists" {
+				require.Equal(t, "保存内容未变化。", result.Data.Items[0].Message)
+			}
 		}
 	}
-	require.Len(t, queue.tasks, 1)
+	require.Len(t, queue.tasks, 3)
 	var payload types.ManualProcessPayload
-	require.NoError(t, json.Unmarshal(queue.tasks[0].Payload(), &payload))
+	require.NoError(t, json.Unmarshal(queue.tasks[1].Payload(), &payload))
 	require.Contains(t, payload.Content, "## 推文串")
 	require.Contains(t, payload.Content, "## 引用")
 	require.NotContains(t, string(queue.tasks[0].Payload()), "annotation-summary")
@@ -239,9 +242,9 @@ func TestIngestHTTPUploadReferenceAndWhitelist(t *testing.T) {
 		router.ServeHTTP(response, request)
 		return response
 	}
-	png, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jGmEAAAAASUVORK5CYII=")
-	require.NoError(t, err)
-	response := upload("chart.png", png)
+	var picture bytes.Buffer
+	require.NoError(t, png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 1, 1))))
+	response := upload("chart.png", picture.Bytes())
 	require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
 	var uploaded struct {
 		Data types.IngestAssetResult `json:"data"`
@@ -249,7 +252,7 @@ func TestIngestHTTPUploadReferenceAndWhitelist(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &uploaded))
 	require.NotEmpty(t, uploaded.Data.AssetID)
 	require.Equal(t, "png", uploaded.Data.Type)
-	require.EqualValues(t, len(png), uploaded.Data.Size)
+	require.EqualValues(t, picture.Len(), uploaded.Data.Size)
 	body, err := json.Marshal(types.IngestBatchRequest{Items: []types.IngestRequest{{Library: "official", URL: "https://example.org/uploaded-chart", Acquisition: "verbatim", Content: "# Measurements\n\nOriginal source values.\n\n![Chart](https://example.org/chart.png)", Publisher: "Fixture Journal", Images: []types.IngestImage{{AssetID: uploaded.Data.AssetID, SourceURL: "https://example.org/chart.png"}}}}})
 	require.NoError(t, err)
 	response = httptest.NewRecorder()

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.uber.org/dig"
+	"gorm.io/gorm"
 	"reliquary/internal/graphreplica"
 	"reliquary/internal/queue"
 
@@ -192,13 +193,13 @@ func newDeadLetterEntryFailer(ks interfaces.EntryService, tracker service.SpanTr
 			return
 		}
 		errMsg := queue.NormalizeError("task " + t.Type() + " exhausted retries: " + taskErr.Error())
-		// Single UPDATE so we never end up with parse_status=failed but
-		// stale error_message (or vice versa) when the second write
-		// fails.
-		if err := repo.UpdateEntryColumns(ctx, probe.EntryID, map[string]interface{}{
-			"parse_status":  types.ParseStatusFailed,
-			"error_message": errMsg,
-		}); err != nil {
+		// Preserve a completed body index when only enrichment exhausted retries.
+		updates := map[string]interface{}{"parse_status": types.ParseStatusFailed, "error_message": errMsg}
+		if t.Type() == types.TypeManualProcess || t.Type() == types.TypeDocumentProcess {
+			updates["parse_status"] = gorm.Expr("CASE WHEN parse_status=? THEN parse_status ELSE ? END", types.ParseStatusCompleted, types.ParseStatusFailed)
+			updates["summary_status"] = types.SummaryStatusFailed
+		}
+		if err := repo.UpdateEntryColumns(ctx, probe.EntryID, updates); err != nil {
 			logger.Warnf(ctx, "dead-letter callback: failed to mark entry %s as failed: %v", probe.EntryID, err)
 			return
 		}

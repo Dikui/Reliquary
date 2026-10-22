@@ -253,7 +253,7 @@ func TestIKB11ProcessingPromptsAndSwitches(t *testing.T) {
 			require.Contains(t, prompt, "topics 只能从输入 existing_topics 中选择")
 			require.Contains(t, prompt, "不输出逐图说明")
 			require.NotContains(t, prompt, "image_descriptions")
-			if defaults.Template == types.TemplateExternalTimely {
+			{
 				require.Contains(t, prompt, "每个实体输出")
 				require.Contains(t, prompt, "不使用固定名单")
 				require.Contains(t, prompt, "不设数量上限")
@@ -262,14 +262,8 @@ func TestIKB11ProcessingPromptsAndSwitches(t *testing.T) {
 				require.NotContains(t, prompt, "不按主次")
 				require.NotContains(t, prompt, "产品不分主次")
 				require.Contains(t, prompt, "人物暂不建档")
-			} else {
-				require.NotContains(t, prompt, "每个实体输出")
-				require.Contains(t, prompt, "entities 和 relations 必须返回空数组")
 			}
-			if defaults.Template == types.TemplateGenerated {
-				require.False(t, libraryGraphEnabled(defaults, "其他", override))
-				continue
-			}
+			require.Equal(t, override == nil || *override, libraryGraphEnabled(defaults, "其他", override))
 			for _, row := range defaults.ContentTypes {
 				t.Run(name+"/"+row.Name, func(t *testing.T) {
 					library := *defaults
@@ -278,11 +272,10 @@ func TestIKB11ProcessingPromptsAndSwitches(t *testing.T) {
 					fixture.malicious = false
 					result, err := h.service.callArticleProcessingPart(h.ctx, &library, k, body, nil, nil)
 					require.NoError(t, err)
-					wanted := row.ExtractGraph && row.Name != "其他"
+					wanted := true
 					if override != nil {
 						wanted = *override
 					}
-					wanted = wanted && defaults.Template == types.TemplateExternalTimely
 					require.Equal(t, wanted, len(result.Relations) > 0)
 					qualifySegmentOutput(&library, k, body, types.ProcessingSegment{End: len([]rune(body))}, result)
 					require.Equal(t, wanted, len(result.Relations) > 0)
@@ -291,9 +284,7 @@ func TestIKB11ProcessingPromptsAndSwitches(t *testing.T) {
 					require.NoError(t, err)
 					qualifySegmentOutput(&library, k, body, types.ProcessingSegment{End: len([]rune(body))}, result)
 					require.Equal(t, wanted, len(result.Relations) > 0, "server rejects relations despite a disobedient model")
-					if defaults.Template != types.TemplateExternalTimely {
-						require.Empty(t, result.Entities)
-					}
+					require.NotEmpty(t, result.Entities)
 				})
 			}
 		}
@@ -522,9 +513,9 @@ func TestIKB11ImageCrossingTextSegmentBoundaryStillAttachedOnce(t *testing.T) {
 	require.Equal(t, "image_description", result.Images[0].Locations[0].Mapping)
 }
 
-func TestIKB11OtherDefaultsOffAndHonorsExplicitLibraryConfiguration(t *testing.T) {
+func TestIKB11GraphDefaultsOnAndHonorsExplicitOverride(t *testing.T) {
 	l := types.SystemLibraryDefaults()[0]
-	require.False(t, libraryGraphEnabled(l, "其他", nil))
+	require.True(t, libraryGraphEnabled(l, "其他", nil))
 	for i := range l.ContentTypes {
 		if l.ContentTypes[i].Name == "其他" {
 			l.ContentTypes[i].ExtractGraph = true

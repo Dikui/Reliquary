@@ -21,10 +21,10 @@ func libraryRebuildGroup(id string) string { return "library-rebuild:" + id }
 type libraryRebuildContextKey struct{}
 
 func libraryRebuildEligible(entry *types.Entry, scope string) (bool, error) {
-	if entry.SourceKind != "article" && entry.SourceKind != "mine" {
+	if !isIngestArticle(entry) {
 		return false, nil
 	}
-	if entry.ParseStatus != types.ParseStatusFailed && (scope != "all" || (entry.ParseStatus != types.ParseStatusCompleted && entry.ParseStatus != types.ParseStatusCancelled)) {
+	if entry.ParseStatus != types.ParseStatusFailed && entry.SummaryStatus != types.SummaryStatusFailed && (scope != "all" || (entry.ParseStatus != types.ParseStatusCompleted && entry.ParseStatus != types.ParseStatusCancelled)) {
 		return false, nil
 	}
 	intake, err := entry.IntakeMetadata()
@@ -59,9 +59,6 @@ func (s *entryService) RebuildLibrary(ctx context.Context, libraryID, scope stri
 	if library.SpaceID != spaceID {
 		return nil, apperrors.NewNotFoundError("library not found")
 	}
-	if library.Template == types.TemplateGenerated {
-		return nil, apperrors.NewBadRequestError("AI report libraries only support index rebuilding")
-	}
 	if err := s.db.WithContext(ctx).Exec("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", libraryRebuildGroup(libraryID)).Error; err != nil {
 		return nil, err
 	}
@@ -73,7 +70,7 @@ func (s *entryService) RebuildLibrary(ctx context.Context, libraryID, scope stri
 		return nil, apperrors.NewConflictError("This library has unfinished processing tasks; finish or cancel them before rebuilding")
 	}
 	var entries []types.Entry
-	if err := s.db.WithContext(ctx).Select("id,source_kind,parse_status,metadata").Where("space_id=? AND library_id=?", spaceID, libraryID).Order("id").Find(&entries).Error; err != nil {
+	if err := s.db.WithContext(ctx).Select("id,source_kind,parse_status,summary_status,metadata").Where("space_id=? AND library_id=?", spaceID, libraryID).Order("id").Find(&entries).Error; err != nil {
 		return nil, err
 	}
 	ids := []string{}

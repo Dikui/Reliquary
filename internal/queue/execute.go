@@ -139,7 +139,11 @@ func (c *Client) execute(workerCtx context.Context, h Handler, j *Job, p *worker
 	} else {
 		done := false
 		if j.TaskType == types.TypeDocumentProcess || j.TaskType == types.TypeManualProcess || j.TaskType == types.TypeReportIndex {
-			if err := c.db.WithContext(ctx).Table("entries").Select("COUNT(*)>0").Where("id=? AND parse_status=?", j.ObjectID, types.ParseStatusCompleted).Scan(&done).Error; err != nil {
+			query := c.db.WithContext(ctx).Table("entries").Select("COUNT(*)>0").Where("id=? AND parse_status=?", j.ObjectID, types.ParseStatusCompleted)
+			if j.TaskType == types.TypeManualProcess || j.TaskType == types.TypeDocumentProcess {
+				query = query.Where("summary_status=?", types.SummaryStatusCompleted)
+			}
+			if err := query.Scan(&done).Error; err != nil {
 				taskErr = err
 			}
 		}

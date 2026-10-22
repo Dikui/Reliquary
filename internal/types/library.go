@@ -272,14 +272,11 @@ func (library *Library) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
-// IngestFields describes template-specific optional fields in the public catalog.
+// IngestFields describes shared admission fields in the public catalog.
 func (library *Library) IngestFields() map[string]string {
-	fields := map[string]string{"library": "Required library ID or directory", "graph": "Optional boolean; null uses library and content defaults"}
-	switch library.Template {
-	case TemplateOwn:
-		fields["source_ref"] = "Optional source identity, at most 2048 Unicode code points; changed body creates a new record"
-	case TemplateExternalDurable:
-		fields["identifier"] = "Optional scheme:value, at most 2048 Unicode code points; scheme and DOI value are lowercased"
-	}
+	fields := map[string]string{"library": "Required library ID or directory", "graph": "Optional boolean; null enables supported relations by default, false disables relations"}
+	fields["source_ref"] = "Optional source identity, at most 2048 Unicode code points; changed content replaces the existing entry"
+	fields["identifier"] = "Optional scheme:value, at most 2048 Unicode code points; scheme and DOI value are lowercased"
+	fields["acquisition"] = "Optional verbatim, extracted or model_written; omitted means unknown"
 	return fields
 }

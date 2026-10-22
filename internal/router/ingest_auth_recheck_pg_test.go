@@ -132,7 +132,7 @@ func TestIngestServiceCredentialRecheckHTTPAndMCP(t *testing.T) {
 	}
 }
 
-func TestIngestHTTPBatchDoesNotHideItemCredentialFailures(t *testing.T) {
+func TestIngestHTTPBatchSharesCredentialCheckAndRechecksNextRequest(t *testing.T) {
 	for _, state := range []string{"unavailable", "revoked", "expired"} {
 		t.Run(state, func(t *testing.T) {
 			f := newMCPFixture(t)
@@ -153,11 +153,23 @@ func TestIngestHTTPBatchDoesNotHideItemCredentialFailures(t *testing.T) {
 				}
 			}))
 			t.Cleanup(func() { require.NoError(t, f.db.Callback().Query().Remove("ingest_auth_batch_recheck")) })
-			response := personalRequest(t, ingestAuthHTTPRouter(f), http.MethodPost, "/api/v1/ingest", ingestAuthBatchBody, f.key, false)
+			router := ingestAuthHTTPRouter(f)
+			response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest", ingestAuthBatchBody, f.key, false)
 			require.NoError(t, mutationErr)
-			require.Equal(t, 2, serviceReads)
-			requireIngestAuthResponse(t, response, state)
-			require.NotContains(t, response.Body.String(), `"status":"invalid"`)
+			require.Equal(t, 1, serviceReads, "a batch uses one durable credential check for its request")
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			require.Contains(t, response.Body.String(), `"status":"accepted"`)
+			// A successful request must not authorize any later request.
+			response = personalRequest(t, router, http.MethodPost, "/api/v1/ingest", strings.ReplaceAll(ingestAuthBatchBody, "auth-recheck", "next-request"), f.key, false)
+			if state == "unavailable" {
+				require.Equal(t, 2, serviceReads)
+				requireIngestAuthResponse(t, response, state)
+			} else {
+				require.Equal(t, http.StatusUnauthorized, response.Code, response.Body.String())
+			}
+			var count int64
+			require.NoError(t, f.db.Model(&types.Entry{}).Count(&count).Error)
+			require.EqualValues(t, 1, count, "a rejected request cannot save another entry")
 		})
 	}
 }
@@ -184,9 +196,9 @@ func TestIngestHTTPAssetAndCompletionCredentialFailures(t *testing.T) {
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", "original.txt")
+	part, err := writer.CreateFormFile("file", "original.png")
 	require.NoError(t, err)
-	_, err = part.Write([]byte("Complete original source."))
+	_, err = part.Write(entryContentPNG(t, 128))
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/assets", &body)

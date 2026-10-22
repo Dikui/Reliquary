@@ -505,6 +505,9 @@ func (s *entryService) clearIntakeSource(ctx context.Context, k *types.Entry) er
 }
 
 func (s *entryService) failIntake(ctx context.Context, k *types.Entry) {
+	if k.ParseStatus == types.ParseStatusCompleted {
+		return
+	}
 	if s.taskEnqueueFailedInTransaction() || ctx.Err() != nil {
 		// An interrupted worker will run again from its durable queue record.
 		// Keep the stored original available to that recovered execution.

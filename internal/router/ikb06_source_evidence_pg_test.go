@@ -9,7 +9,7 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestIKB06SourceUnverifiedHTTPAndMCP(t *testing.T) {
+func TestOptionalProvenanceAndExistingUnverifiedFlagHTTPAndMCP(t *testing.T) {
 	f := newMCPFixture(t)
 	f.seedProcessingModels(t)
 	router := ingestAuthHTTPRouter(f)
@@ -29,7 +29,8 @@ func TestIKB06SourceUnverifiedHTTPAndMCP(t *testing.T) {
 			batch = envelope.Data
 		}
 		require.Equal(t, "accepted", batch.Items[0].Status)
-		require.True(t, batch.Items[0].SourceUnverified)
+		require.False(t, batch.Items[0].SourceUnverified)
+		require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", batch.Items[0].EntryID).Update("source_unverified", true).Error)
 		detail := personalRequest(t, router, http.MethodGet, "/api/v1/entries/"+batch.Items[0].EntryID, "", f.key, true)
 		require.Equal(t, http.StatusOK, detail.Code, detail.Body.String())
 		var header struct {

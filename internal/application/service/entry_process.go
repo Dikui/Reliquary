@@ -37,7 +37,6 @@ type ProcessChunksOptions struct {
 // finalizeIndexedEntryState records the completed synchronous processing attempt.
 func finalizeIndexedEntryState(entry *types.Entry, totalStorageSize int64, now time.Time) {
 	entry.ParseStatus = types.ParseStatusCompleted
-	entry.SummaryStatus = types.SummaryStatusCompleted
 	entry.ErrorMessage = ""
 	entry.EnableStatus = "enabled"
 	entry.StorageSize = totalStorageSize
@@ -451,10 +450,6 @@ func (s *entryService) processChunks(ctx context.Context,
 
 	now := time.Now()
 	finalizeIndexedEntryState(entry, totalStorageSize, now)
-	if ctx.Value(libraryRebuildContextKey{}) == true {
-		// Recovery must still run the remaining vector, relation and file steps.
-		entry.ParseStatus, entry.EnableStatus, entry.ProcessedAt = types.ParseStatusProcessing, "disabled", nil
-	}
 	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
 		entry.ParseStatus = types.ParseStatusFailed
 		entry.ErrorMessage = err.Error()
@@ -531,7 +526,7 @@ func (s *entryService) reparseEntry(
 	}
 	// The worker opens the attempt when execution begins, after queue delivery.
 	if hasBody {
-		if existing.ParseStatus == types.ParseStatusCompleted && library.Template != types.TemplateGenerated {
+		if existing.ParseStatus == types.ParseStatusCompleted && existing.SummaryStatus == types.SummaryStatusCompleted {
 			if err := advanceSegmentGeneration(existing, "processing"); err != nil {
 				return nil, err
 			}
@@ -555,11 +550,9 @@ func (s *entryService) reparseEntry(
 func resetEntryForReparse(entry *types.Entry, library *types.Library) {
 	entry.ParseStatus = types.ParseStatusPending
 	entry.EnableStatus = "disabled"
-	if library.Template != types.TemplateGenerated {
-		entry.Description = ""
-		entry.StructuredSummary = nil
-		entry.SummaryStatus = types.SummaryStatusPending
-	}
+	entry.Description = ""
+	entry.StructuredSummary = nil
+	entry.SummaryStatus = types.SummaryStatusPending
 	entry.ProcessedAt = nil
 	entry.ErrorMessage = ""
 	entry.EmbeddingModelID = library.EmbeddingModelID
@@ -722,6 +715,9 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 		logger.Warnf(ctx, "ProcessManualUpdate: entry not found: %s", payload.EntryID)
 		return nil
 	}
+	if entry.VaultPath != "" && payload.Content != "" && payload.Content != entry.VaultBody {
+		return nil // A newer saved body supersedes this queued snapshot.
+	}
 	if payload.ReviewID != "" {
 		return s.processLibraryReviewEntry(ctx, entry, payload)
 	}
@@ -738,7 +734,7 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 	}
 
 	// Skip if already completed or being deleted
-	if entry.ParseStatus == types.ParseStatusCompleted {
+	if entry.ParseStatus == types.ParseStatusCompleted && entry.SummaryStatus == types.SummaryStatusCompleted {
 		logger.Infof(ctx, "ProcessManualUpdate: already completed, skipping: %s", payload.EntryID)
 		return nil
 	}
@@ -768,10 +764,12 @@ func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Tas
 		return nil
 	}
 	// Update status to processing
-	markEntryProcessing(entry, time.Now())
+	if entry.ParseStatus != types.ParseStatusCompleted {
+		markEntryProcessing(entry, time.Now())
+	}
 	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
 		logger.Errorf(ctx, "ProcessManualUpdate: failed to update status to processing: %v", err)
-		return nil
+		return err
 	}
 
 	// Allocate an attempt and pass it through article processing and indexing
@@ -901,7 +899,7 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	}
 
 	// 检查任务状态 - 幂等性处理
-	if entry.ParseStatus == types.ParseStatusCompleted {
+	if entry.ParseStatus == types.ParseStatusCompleted && (entry.SummaryStatus == types.SummaryStatusCompleted || payload.URL != "" || payload.FileURL != "") {
 		logger.Infof(ctx, "Document already completed, skipping: %s", payload.EntryID)
 		return nil // 幂等：已完成的任务直接返回
 	}
@@ -960,7 +958,9 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		logger.Infof(ctx, "Entry aborted (%s) before marking processing: %s", status, entry.ID)
 		return nil
 	}
-	markEntryProcessing(entry, time.Now())
+	if entry.ParseStatus != types.ParseStatusCompleted {
+		markEntryProcessing(entry, time.Now())
+	}
 	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
 		logger.Errorf(ctx, "failed to update entry status to processing: %v", err)
 		return nil

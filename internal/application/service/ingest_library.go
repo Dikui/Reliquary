@@ -30,12 +30,6 @@ var identifierScheme = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*$`)
 
 func validateLibraryIngest(request *types.IngestRequest, library *types.Library) error {
 	bad := werrors.NewBadRequestError
-	if (request.SourceRefProvided || request.SourceRef != "") && library.Template != types.TemplateOwn {
-		return bad("source_ref is only accepted by own libraries; call list_libraries")
-	}
-	if (request.IdentifierProvided || request.Identifier != "") && library.Template != types.TemplateExternalDurable {
-		return bad("identifier is only accepted by external_durable libraries; call list_libraries")
-	}
 	if utf8.RuneCountInString(request.SourceRef) > types.MaxIngestSourceRefRunes {
 		return bad("source_ref exceeds 2048 Unicode code points")
 	}

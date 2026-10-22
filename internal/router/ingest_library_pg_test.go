@@ -44,23 +44,26 @@ func TestIngestLibraryHTTPAndMCPAgreement(t *testing.T) {
 			map[string]any{"library": ids["personal"], "content": "My original " + protocol, "acquisition": "verbatim", "source_ref": protocol, "graph": false},
 			map[string]any{"library": "official", "content": "My original", "acquisition": "verbatim", "source_ref": "wrong"},
 			map[string]any{"library": "personal", "content": "My original", "acquisition": "verbatim", "identifier": "doi:wrong"},
-			map[string]any{"library": "references", "content": "Research from " + protocol, "acquisition": "verbatim", "identifier": " DOI: 10.1234/ABC ", "url": "https://example.org/" + protocol, "publisher": "Journal"},
+			map[string]any{"library": "references", "content": "Research from " + protocol, "acquisition": "verbatim", "identifier": " DOI: 10.1234/" + protocol + " ", "url": "https://example.org/" + protocol, "publisher": "Journal"},
 			map[string]any{"library": "ai-output", "title": "Agent findings " + protocol, "content": "# Analysis\n\nGenerated observations.", "acquisition": "model_written"},
 		}
 		result := send(protocol, items)
 		require.Len(t, result.Items, len(items))
-		for _, i := range []int{0, 1, 4, 5} {
+		for _, i := range []int{0, 1} {
 			require.Equal(t, "invalid", result.Items[i].Status)
 			require.NotEmpty(t, result.Items[i].Reason)
 		}
 		require.Contains(t, result.Items[0].Reason, "list_libraries")
 		require.Contains(t, result.Items[1].Reason, "list_libraries")
 		require.Equal(t, "accepted", result.Items[2].Status)
+		for _, i := range []int{4, 5} {
+			require.Contains(t, []string{"accepted", "exists"}, result.Items[i].Status)
+		}
 		require.Equal(t, "exists", result.Items[3].Status)
 		require.Equal(t, result.Items[2].EntryID, result.Items[3].EntryID)
 		require.NotNil(t, result.Items[2].Graph)
 		require.False(t, *result.Items[2].Graph)
-		require.Equal(t, "doi:10.1234/abc", result.Items[6].Identifier)
+		require.Equal(t, "doi:10.1234/"+protocol, result.Items[6].Identifier)
 		require.Equal(t, ids["ai-output"], result.Items[7].LibraryID)
 	}
 	var checked types.IngestCheckResponse

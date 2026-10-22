@@ -34,7 +34,7 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 		map[string]any{"url": "https://example.org/rejectfixture-batch", "content": "rejectfixture source facts", "library": "official", "acquisition": "model_written", "publisher": "Fixture Journal"},
 	}}, &batch)
 	require.Len(t, batch.Items, 6)
-	for index, status := range []string{"accepted", "exists", "invalid", "invalid", "invalid", "pending_review"} {
+	for index, status := range []string{"accepted", "exists", "invalid", "invalid", "invalid", "accepted"} {
 		require.Equal(t, index, batch.Items[index].Index)
 		require.Equal(t, status, batch.Items[index].Status, "%+v", batch.Items[index])
 		require.NotEmpty(t, batch.Items[index].Message)
@@ -63,7 +63,7 @@ func TestMCPIngestBatchSeparatesInvalidItemsAndEnforcesLimits(t *testing.T) {
 	require.NoError(t, err)
 	for _, tool := range tools.Tools {
 		if tool.Name == "ingest" || tool.Name == "check_urls" {
-			require.Contains(t, tool.Description, "送入 Markdown 正文全文与图片文件")
+			require.Contains(t, tool.Description, "送入可读 Markdown 正文与可选图片")
 			require.Contains(t, tool.Description, "图片可选，未提供的图片不生成待办")
 		}
 		if tool.Name == "ingest" {
@@ -96,10 +96,10 @@ func TestHTTPIngestCheckDiscardAndRevokedKey(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &checked))
 	require.Len(t, checked.Data.Items, 5)
-	for index, status := range []string{"in_library", "pending_review", "discarded", "not_found", "in_library"} {
+	for index, status := range []string{"in_library", "pending_review", "discarded", "not_found", "not_found"} {
 		require.Equal(t, status, checked.Data.Items[index].Status)
 	}
-	require.Equal(t, library.ID, checked.Data.Items[4].EntryID)
+	require.Empty(t, checked.Data.Items[4].EntryID, "new matching rules do not resolve historical repost aliases")
 	response = personalRequest(t, router, http.MethodPost, "/api/v1/ingest/"+pending.ID+"/discard", `{"reason":"用户丢弃原因"}`, f.key, false)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var ledger types.IngestDiscard

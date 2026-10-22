@@ -8,15 +8,13 @@ import { compiledSFCStyleRules, styleDeclarationsAtWidth } from './utils/sfcStyl
 for (const width of [1440, 1280, 1024, 390]) test(`${width}: the materials library selector retains usable width inside its filter row`, async () => {
   const rules = await compiledSFCStyleRules(new URL('./views/library/Library.vue', import.meta.url))
   const selector = styleDeclarationsAtWidth(rules, '.doc-filter-bar__filters > .library-scope', width, { 'doc-card-area': width - 200 })
-  if (width > 640) {
-    assert.equal(selector.flex, '0 0 220px', 'Fixed filter siblings cannot shrink the library selector to zero')
-    assert.equal(selector.width, '220px')
-    assert.equal(selector['min-width'], '220px')
-  } else {
-    assert.equal(selector.width, '100%')
-    assert.equal(selector['min-width'], '0')
-    assert.equal(selector['max-width'], 'none')
-  }
+  const filters = styleDeclarationsAtWidth(rules, '.doc-filter-bar__filters', width, { 'doc-card-area': width - 200 })
+  assert.equal(filters.display, 'grid')
+  assert.equal(filters['grid-template-columns'], width - 200 <= 420 ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))')
+  assert.equal(selector.width, '100%')
+  assert.equal(selector['min-width'], '0')
+  assert.equal(selector['max-width'], 'none')
+  if (width - 200 <= 420) assert.equal(selector['grid-column'], 'span 2')
 })
 function layer(path: string, tag: string) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8')

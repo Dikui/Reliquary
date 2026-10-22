@@ -34,7 +34,7 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	for _, rule := range rules {
 		texts[rule] = true
 	}
-	require.Len(t, texts, 4)
+	require.Len(t, texts, 1, "all templates share the admission rule")
 	client := f.connect(t, "2025-03-26")
 	var result struct {
 		Libraries []map[string]any `json:"libraries"`
@@ -52,7 +52,7 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 		Data types.Library `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &custom))
-	require.Equal(t, types.PersonalReviewCriteria, custom.Data.ReviewCriteria)
+	require.Equal(t, custom.Data.DefaultReviewCriteria(), custom.Data.ReviewCriteria)
 	model := &types.Model{ID: "catalog-review", SpaceID: 1, Name: "Catalog review", Type: types.ModelTypeGeneration, Status: types.ModelStatusActive}
 	require.NoError(t, f.db.Create(model).Error)
 	settings, err := json.Marshal(types.LibraryPatch{ModelTiers: &types.ModelTierConfig{Generation: model.ID, Embedding: custom.Data.ModelTiers.Embedding}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 256, ChunkOverlap: 20}})
@@ -79,7 +79,7 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	}
 	changed := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, `{"name":"Renamed","description":"Collect notes","review_criteria":"Exclude empty notes","feed_enabled":true,"content_types":[{"name":"Note","enabled":true,"extract_graph":false}],"relation_types":[{"name":"uses","enabled":true}]}`, f.key, true)
 	require.Equal(t, http.StatusOK, changed.Code, changed.Body.String())
-	require.Equal(t, http.StatusBadRequest, personalRequest(t, f.router, http.MethodDelete, "/api/v1/libraries/"+f.library.ID, "", f.key, true).Code)
+	require.Equal(t, http.StatusOK, personalRequest(t, f.router, http.MethodDelete, "/api/v1/libraries/"+f.library.ID, "", f.key, true).Code)
 	require.Equal(t, http.StatusOK, personalRequest(t, f.router, http.MethodDelete, "/api/v1/libraries/"+custom.Data.ID, "", f.key, true).Code)
 }
 

@@ -220,7 +220,7 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 				if e != nil {
 					return nil, nil, e
 				}
-				if library.Template == types.TemplateGenerated {
+				if req.Action == "review" && library.Template == types.TemplateGenerated {
 					reason = "generated_library"
 				} else if req.Action == "review" && !libraryReviewEligible(entry, "all") {
 					reason = "review_ineligible"
@@ -512,6 +512,14 @@ func (s *entryService) reconcileBatchItem(ctx context.Context, item *types.Entry
 	err := s.db.WithContext(ctx).Where("id=?", item.TaskID).First(&job).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		item.Status, item.Message = "failed", "processing task unavailable; retry this item"
+		// A lost child must not leave its entry permanently pending; never alter
+		// an entry now owned by another live processing operation.
+		live := s.db.Model(&taskqueue.Job{}).Select("1").Where("object_id=? AND task_type IN ? AND state IN ?", item.EntryID,
+			[]string{types.TypeManualProcess, types.TypeDocumentProcess}, []taskqueue.TaskState{taskqueue.TaskStatePending, taskqueue.TaskStateDispatched, taskqueue.TaskStateActive, taskqueue.TaskStateScheduled, taskqueue.TaskStateRetry})
+		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=? AND parse_status IN ? AND NOT EXISTS (?)", item.EntryID, item.SpaceID,
+			[]string{types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFinalizing}, live).Updates(map[string]any{"parse_status": types.ParseStatusFailed, "error_message": item.Message}).Error; err != nil {
+			return false, err
+		}
 		return true, s.db.WithContext(ctx).Save(item).Error
 	}
 	if err != nil {

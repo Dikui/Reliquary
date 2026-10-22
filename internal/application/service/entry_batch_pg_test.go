@@ -240,14 +240,14 @@ func TestEntryBatchDeleteRetriesDocumentCleanupWithoutFalseWarnings(t *testing.T
 	require.True(t, succeeded.UpdatedAt.Equal(after.UpdatedAt), "successful delete must not execute again on retry")
 }
 
-func TestEntryBatchRetriesContentTypeChildrenAndRecoversMissingTask(t *testing.T) {
+func TestEntryBatchRetriesProcessingChildrenAndRecoversMissingTask(t *testing.T) {
 	h, _ := newVaultArticleHarness(t)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	entry := h.upload(t, "Type retry", "# Acme\n\nA complete original technical announcement with measurements.")
 	_, err := h.service.CorrectContentType(h.ctx, entry.ID, "other")
 	require.NoError(t, err)
 	h.service.task = &libraryRebuildQueue{db: h.db}
-	request := types.EntryBatchRequest{Action: "content_type", ContentType: "event", Selection: types.EntryBatchSelection{IDs: []string{entry.ID}}}
+	request := types.EntryBatchRequest{Action: "reprocess", Selection: types.EntryBatchSelection{IDs: []string{entry.ID}}}
 	preview, err := h.service.PreviewEntryBatch(h.ctx, request)
 	require.NoError(t, err)
 	request.PreviewFingerprint = preview.Fingerprint
@@ -275,7 +275,7 @@ func TestEntryBatchRetriesContentTypeChildrenAndRecoversMissingTask(t *testing.T
 	require.ErrorAs(t, h.service.ProcessEntryBatch(h.ctx, rebuildTask(t, h.db, batch.BatchID)), &deferred)
 	var retry types.EntryBatchItem
 	require.NoError(t, h.db.Where("batch_id=?", batch.BatchID).First(&retry).Error)
-	require.Equal(t, "waiting", retry.Status, "a failed type-change child must be re-enqueued, not skipped")
+	require.Equal(t, "waiting", retry.Status, "a failed processing child must be re-enqueued, not skipped")
 	require.NotEqual(t, item.TaskID, retry.TaskID)
 
 	// A purged child must fail only this item and remain retryable.

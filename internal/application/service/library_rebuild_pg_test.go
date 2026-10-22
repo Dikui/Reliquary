@@ -243,7 +243,7 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	generation := string(segmentGeneration(h.article(t, k.ID), "processing"))
 	h.processor.output = "invalid model output"
 	require.Error(t, h.service.ProcessManualUpdate(h.ctx, child))
-	require.Equal(t, types.ParseStatusFailed, h.article(t, k.ID).ParseStatus)
+	require.Equal(t, types.SummaryStatusFailed, h.article(t, k.ID).SummaryStatus)
 	after, err := vault.ReadBody(k)
 	require.NoError(t, err)
 	require.Equal(t, body, after)
@@ -256,17 +256,17 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	require.NoError(t, err)
 	h.processor.output = string(output)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, parent))
-	require.Equal(t, types.ParseStatusFailed, h.article(t, k.ID).ParseStatus)
+	require.Equal(t, types.SummaryStatusFailed, h.article(t, k.ID).SummaryStatus)
 	// A late database-write failure must not leave the entry completed and thereby
 	// cause the queue to skip the unfinished tail on recovery.
 	const callback = "test:fail_final_rebuild_update"
 	require.NoError(t, h.db.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
-		if entry, ok := tx.Statement.Dest.(*types.Entry); ok && entry.ID == k.ID && entry.ParseStatus == types.ParseStatusCompleted {
+		if entry, ok := tx.Statement.Dest.(*types.Entry); ok && entry.ID == k.ID && entry.SummaryStatus == types.SummaryStatusCompleted {
 			tx.AddError(errors.New("fixture final persistence failure"))
 		}
 	}))
 	require.Error(t, h.service.ProcessManualUpdate(h.ctx, child))
-	require.NotEqual(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)
+	require.NotEqual(t, types.SummaryStatusCompleted, h.article(t, k.ID).SummaryStatus)
 	require.NoError(t, h.db.Callback().Update().Remove(callback))
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, child))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)
@@ -307,7 +307,7 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	after := h.article(t, before.ID)
 	require.Equal(t, types.ParseStatusCompleted, after.ParseStatus)
 	require.Greater(t, len(h.processor.requests), processingCalls)
-	require.Contains(t, h.processor.stages, "intake_review", "a failed review must complete before rebuilding")
+	require.NotContains(t, h.processor.stages, "intake_review", "rebuilding does not restore the removed model review gate")
 	rebuilt, err := vault.ReadBody(after)
 	require.NoError(t, err)
 	require.Equal(t, original, rebuilt)
@@ -327,157 +327,77 @@ func TestLibraryRebuildPreservesMissingImages(t *testing.T) {
 	require.Zero(t, transport.calls.Load())
 }
 
-func TestLibraryReviewScopesPreserveSourcesAndApplyCurrentPolicy(t *testing.T) {
+func TestLibraryReviewScopesAcceptLegacyPendingAndPreserveCollectedMaterial(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
-	var output map[string]any
-	require.NoError(t, json.Unmarshal([]byte(articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Acme", EntityType: "company"}, {Name: "Partner", EntityType: "company"}}, []string{})), &output))
-	output["relations"] = []extractedRelation{{Subject: "Acme", Object: "Partner", Type: "合作", EvidenceIDs: []int{1}}}
-	encoded, err := json.Marshal(output)
+	keep := h.upload(t, "keep", "# Keep\n\nOriginal measurements.")
+	pending := h.upload(t, "legacy-pending", "# Pending\n\nAn unfinished original note.")
+	original, err := vault.ReadBody(pending)
 	require.NoError(t, err)
-	h.processor.output = string(encoded)
-	keep := h.upload(t, "keep", "# Keep\n\nAcme and Partner published complete original measurements.")
-	drop := h.upload(t, "drop", "# Drop\n\nAcme and Partner published another original product announcement.\n\n![chart]("+articleImageDataURI(t, 11)+")")
-	original, err := vault.ReadBody(drop)
+	intake, err := pending.IntakeMetadata()
 	require.NoError(t, err)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "My judgment"})
-	require.NoError(t, err)
-	require.NoError(t, NewTopicService(h.db).SetUserEntryTopics(h.ctx, drop.ID, []string{topic.ID}))
-	require.NoError(t, h.db.Model(drop).Updates(map[string]any{"starred": true, "collect_reason": "Keep my assessment"}).Error)
+	intake.Decision, intake.Reason = "rejected", "Old value review"
+	require.NoError(t, pending.SetIntakeMetadata(intake))
+	pending.ParseStatus = types.ParseStatusRejected
+	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, pending))
+	require.NoError(t, h.db.Model(keep).Updates(map[string]any{"starred": true, "collect_reason": "My assessment"}).Error)
 	var chunksBefore []string
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", keep.ID).Order("id").Pluck("id", &chunksBefore).Error)
-	h.processor.reject = true
-	pending, err := h.service.createLegacyManualFixture(h.ctx, h.library.ID, &legacyManualFixturePayload{
-		Title: "Pending", Status: types.ManualEntryStatusPublish,
-		Content:    "Pending material contains original measurements for reconsideration.",
-		SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/review-pending"},
-	}, types.ChannelWeb)
-	require.NoError(t, err)
-	h.drain(t)
-	pending = h.article(t, pending.ID)
-	require.Equal(t, types.ParseStatusRejected, pending.ParseStatus)
-	hidden := &types.Entry{ID: uuid.NewString(), SpaceID: keep.SpaceID, LibraryID: keep.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusRejected}
-	require.NoError(t, hidden.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", UserRejected: true}))
-	require.NoError(t, h.db.Create(hidden).Error)
 	capture := captureMineReview(h)
+	h.processor.reject = true
 	h.service.task = &libraryRebuildQueue{db: h.db}
 	run, err := h.service.ReviewLibrary(h.ctx, h.library.ID, "pending")
 	require.NoError(t, err)
 	require.Equal(t, 1, run.Total)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, run.TaskID+":"+pending.ID)))
-	require.Equal(t, types.ParseStatusRejected, h.article(t, pending.ID).ParseStatus)
+	require.Equal(t, types.ParseStatusCompleted, h.article(t, pending.ID).ParseStatus)
 	require.NoError(t, h.db.Model(&taskqueue.Job{}).Where("group_name=?", libraryRebuildGroup(h.library.ID)).Update("state", taskqueue.TaskStateCompleted).Error)
-
-	const criteria = "Use the revised admission policy for every existing and pending document."
-	require.NoError(t, h.db.Model(h.library).Update("review_criteria", criteria).Error)
 	run, err = h.service.ReviewLibrary(h.ctx, h.library.ID, "all")
 	require.NoError(t, err)
-	require.Equal(t, 3, run.Total)
-	_, err = h.service.RebuildLibrary(h.ctx, h.library.ID, "all")
-	require.ErrorContains(t, err, "unfinished processing")
-	parent := rebuildTask(t, h.db, run.TaskID)
-	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, parent))
-	processingCalls := len(h.processor.requests)
-	for _, id := range []string{keep.ID, drop.ID, pending.ID} {
-		h.processor.reject = id == drop.ID
+	require.Equal(t, 2, run.Total)
+	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
+	calls := len(h.processor.requests)
+	for _, id := range []string{keep.ID, pending.ID} {
 		require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, run.TaskID+":"+id)))
 	}
-	require.Equal(t, processingCalls+1, len(h.processor.requests), "collected material retains its derived content; only newly approved pending material is processed")
-	require.Len(t, capture.reviews, 4, "a new run must review a previously rejected segment again")
-	for _, review := range capture.reviews[1:] {
-		require.Contains(t, review[0].Content, criteria)
-	}
+	require.Empty(t, capture.reviews)
+	require.Len(t, h.processor.requests, calls, "already collected material keeps its derived content")
 	var chunksAfter []string
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", keep.ID).Order("id").Pluck("id", &chunksAfter).Error)
 	require.Equal(t, chunksBefore, chunksAfter)
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, keep.ID).ParseStatus)
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, pending.ID).ParseStatus)
-	rejected := h.article(t, drop.ID)
-	require.Equal(t, types.ParseStatusRejected, rejected.ParseStatus)
-	require.Equal(t, "disabled", rejected.EnableStatus)
-	require.True(t, rejected.Starred)
-	require.Equal(t, "Keep my assessment", rejected.CollectReason)
-	after, err := vault.ReadBody(rejected)
+	saved := h.article(t, keep.ID)
+	require.True(t, saved.Starred)
+	require.Equal(t, "My assessment", saved.CollectReason)
+	after, err := vault.ReadBody(h.article(t, pending.ID))
 	require.NoError(t, err)
 	require.Equal(t, original, after)
-	var count int64
-	require.NoError(t, h.db.Model(&types.RelationSource{}).Where("entry_id=?", drop.ID).Count(&count).Error)
-	require.Zero(t, count)
-	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=? AND topic_id=? AND source=?", drop.ID, topic.ID, types.TopicSourceUser).Count(&count).Error)
-	require.EqualValues(t, 1, count)
-	search := &searchService{db: h.db}
-	require.NoError(t, search.eligibleEntries(h.ctx, keep.SpaceID, keep.LibraryID, entrySearchFilters{}, false).Where("k.id=?", drop.ID).Count(&count).Error)
-	require.Zero(t, count)
-	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, parent))
-	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, run.TaskID+":"+drop.ID)))
-	require.Len(t, capture.reviews, 4, "redelivery must not re-review a completed child")
-	// Collected materials can have only a Vault original after review rejection.
-	intake, err := rejected.IntakeMetadata()
-	require.NoError(t, err)
-	intake.OriginalPath = ""
-	require.NoError(t, rejected.SetIntakeMetadata(intake))
-	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, rejected))
-	_, err = h.service.ReviewEntryIntake(h.ctx, drop.ID, "approve", types.SourceInfo{})
-	require.NoError(t, err)
-	var job taskqueue.Job
-	require.NoError(t, h.db.Where("object_id=? AND payload->>'review_approved'='true'", drop.ID).Order("created_at DESC").First(&job).Error)
-	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, job.ID)))
-	require.Equal(t, types.ParseStatusCompleted, h.article(t, drop.ID).ParseStatus)
-	require.Len(t, capture.reviews, 4, "explicit manual approval does not run the model review")
-	// A later current-policy retry still preserves that Vault original.
-	restored := h.article(t, drop.ID)
-	intake, err = restored.IntakeMetadata()
-	require.NoError(t, err)
-	intake.Decision = "rejected"
-	restored.ParseStatus = types.ParseStatusRejected
-	require.NoError(t, restored.SetIntakeMetadata(intake))
-	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, restored))
-	_, err = h.service.ReviewEntryIntake(h.ctx, drop.ID, "retry", types.SourceInfo{})
-	require.NoError(t, err)
-	job = taskqueue.Job{}
-	require.NoError(t, h.db.Where("object_id=?", drop.ID).Order("created_at DESC").First(&job).Error)
-	h.processor.reject = true
-	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, job.ID)))
-	require.Equal(t, types.ParseStatusRejected, h.article(t, drop.ID).ParseStatus)
-	_, err = h.service.ReviewEntryIntake(h.ctx, drop.ID, "reject", types.SourceInfo{Confirmed: true})
-	require.NoError(t, err)
-	require.NoError(t, h.db.Unscoped().Model(&types.Entry{}).Where("id=?", drop.ID).Count(&count).Error)
-	require.Zero(t, count)
-	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings", "chunks"} {
-		require.NoError(t, h.db.Table(table).Where("entry_id=?", drop.ID).Count(&count).Error)
-		require.Zero(t, count, table)
-	}
-	_, err = os.Stat(filepath.Join(vault.root, drop.VaultPath))
-	require.True(t, os.IsNotExist(err))
-	_, err = os.Stat(filepath.Join(vault.root, "attachments", drop.ID))
-	require.True(t, os.IsNotExist(err))
 }
 
-func TestLibraryReviewFailureKeepsOriginalAndCanResume(t *testing.T) {
+func TestLibraryReviewPersistenceFailureKeepsOriginalAndCanResume(t *testing.T) {
 	h, vault := newVaultArticleHarness(t)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
-	entry := h.upload(t, "review-failure", "# Original\n\nComplete measurements survive a malformed review response.")
+	entry := h.upload(t, "review-failure", "# Original\n\nOriginal measurements survive a database failure.")
 	original, err := vault.ReadBody(entry)
 	require.NoError(t, err)
 	h.service.task = &libraryRebuildQueue{db: h.db}
 	run, err := h.service.ReviewLibrary(h.ctx, h.library.ID, "all")
 	require.NoError(t, err)
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
-	models := h.service.modelService.(articleProcessingModels)
-	failing := &retainedIntakeModel{malformed: true}
-	models.summaryStateModelService.model = failing
+	const callback = "test:review_persistence"
+	armed := true
+	require.NoError(t, h.db.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
+		if current, ok := tx.Statement.Dest.(*types.Entry); ok && current.ID == entry.ID && armed {
+			armed = false
+			tx.AddError(errors.New("review persistence failure"))
+		}
+	}))
+	t.Cleanup(func() { _ = h.db.Callback().Update().Remove(callback) })
 	child := rebuildTask(t, h.db, run.TaskID+":"+entry.ID)
-	require.ErrorContains(t, h.service.ProcessManualUpdate(h.ctx, child), "invalid intake review response")
-	failed := h.article(t, entry.ID)
-	require.Equal(t, types.ParseStatusFailed, failed.ParseStatus)
-	intake, err := failed.IntakeMetadata()
-	require.NoError(t, err)
-	require.Equal(t, "approved", intake.Decision, "execution failure is not a rejection")
-	after, err := vault.ReadBody(failed)
+	require.ErrorContains(t, h.service.ProcessManualUpdate(h.ctx, child), "review persistence failure")
+	after, err := vault.ReadBody(h.article(t, entry.ID))
 	require.NoError(t, err)
 	require.Equal(t, original, after)
-	failing.malformed = false
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, child))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, entry.ID).ParseStatus)
 }

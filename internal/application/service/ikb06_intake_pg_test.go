@@ -9,54 +9,23 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestIKB06TemplateEvidenceAndLibraryReview(t *testing.T) {
+func TestIKB06AllTemplatesAcceptWithoutSourceOrModelReview(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	capture := captureMineReview(h)
-	for i, tc := range []struct {
-		template, rule, url, publisher, date, identifier, status, reason string
-		unverified                                                       bool
-	}{
-		{types.TemplateExternalTimely, "link_required", "https://example.org/required", "", "", "", "accepted", "", false},
-		{types.TemplateExternalTimely, "link_required", "", "Publisher", "2026-10-01", "", "pending_review", "缺少原文链接", false},
-		{types.TemplateExternalTimely, "link_or_publisher_date", "https://example.org/optional", "", "", "", "accepted", "", false},
-		{types.TemplateExternalTimely, "link_or_publisher_date", "", "Publisher", "2026-10-01", "", "accepted", "", true},
-		{types.TemplateExternalTimely, "link_or_publisher_date", "", "", "2026-10-01", "", "pending_review", "缺少原文链接", false},
-		{types.TemplateExternalTimely, "link_or_publisher_date", "", "Publisher", "invalid", "", "pending_review", "缺少原文链接", false},
-		{types.TemplateExternalDurable, "", "https://example.org/durable", "", "", "", "accepted", "", false},
-		{types.TemplateExternalDurable, "", "", "", "", "doi:10.1234/method", "accepted", "", false},
-		{types.TemplateExternalDurable, "", "", "", "", "", "pending_review", "缺少原文链接或 identifier", false},
-		{types.TemplateOwn, "", "", "", "", "", "accepted", "", false},
-		{types.TemplateGenerated, "", "", "", "", "", "accepted", "", false},
-	} {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			library := &types.Library{ID: fmt.Sprintf("rules-%d", i), SpaceID: h.library.SpaceID, Name: "Rules", Directory: fmt.Sprintf("rules-%d", i), Template: tc.template, ReviewCriteria: fmt.Sprintf("Only accept the unique library criterion number %d", i), SourceEvidenceRule: tc.rule, ModelTiers: h.library.ModelTiers}
-			require.NoError(t, h.db.Create(library).Error)
-			before := len(capture.reviews)
-			req := &types.IngestRequest{Library: library.ID, Title: fmt.Sprintf("Rules %d", i), Content: fmt.Sprintf("Complete original body with distinct observation %d.", i), Acquisition: "verbatim", URL: tc.url, Publisher: tc.publisher, PublishedAt: tc.date, Identifier: tc.identifier}
-			result, err := h.service.Ingest(h.ctx, req)
-			require.NoError(t, err)
-			require.Equal(t, tc.status, result.Status)
-			require.Equal(t, tc.reason, result.Reason)
-			require.Equal(t, tc.unverified, result.SourceUnverified)
-			require.Equal(t, tc.unverified, h.article(t, result.EntryID).SourceUnverified)
-			if tc.unverified {
-				page, err := h.service.ListPagedEntryByLibraryID(h.ctx, library.ID, &types.Pagination{PageSize: 20}, types.EntryListFilter{})
-				require.NoError(t, err)
-				require.True(t, page.Data.([]*types.Entry)[0].SourceUnverified)
-				search := &searchService{db: h.db}
-				hits, err := search.mergeEntryHits(h.ctx, h.library.SpaceID, [][]entrySearchHit{{{EntryID: result.EntryID}}}, &types.RetrievalConfig{})
-				require.NoError(t, err)
-				require.Len(t, hits, 1)
-				require.True(t, hits[0].SourceUnverified)
-			}
-			if tc.status == "accepted" && tc.template != types.TemplateGenerated {
-				require.Len(t, capture.reviews, before+1)
-				require.Contains(t, capture.reviews[before][0].Content, library.ReviewCriteria)
-				require.NotContains(t, capture.reviews[before][0].Content, "Reject unreasoned pure opinion")
-			} else {
-				require.Len(t, capture.reviews, before)
-			}
-		})
+	for i, template := range []string{types.TemplateExternalTimely, types.TemplateExternalDurable, types.TemplateOwn, types.TemplateGenerated} {
+		library := &types.Library{ID: fmt.Sprintf("shared-rule-%d", i), SpaceID: h.library.SpaceID, Name: "Shared rule", Directory: fmt.Sprintf("shared-rule-%d", i), Template: template, ReviewCriteria: "Old custom value gate", ModelTiers: h.library.ModelTiers}
+		if template == types.TemplateExternalTimely {
+			library.SourceEvidenceRule = "link_required"
+		}
+		require.NoError(t, h.db.Create(library).Error)
+		result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: library.ID, Content: "Unfinished original notes."})
+		require.NoError(t, err)
+		require.Equal(t, "accepted", result.Status)
+		require.Empty(t, result.Reason)
+		entry := h.article(t, result.EntryID)
+		require.NotEmpty(t, entry.VaultBody)
+		require.Empty(t, entry.Acquisition)
+		require.Empty(t, capture.reviews)
 	}
 }
 
@@ -78,22 +47,22 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	require.Equal(t, other.EntryID, send(base).EntryID)
 	pending := types.IngestRequest{Library: "media", Content: "An unlinked opinion awaiting admission.", Acquisition: "verbatim"}
 	awaiting := send(pending)
-	require.Equal(t, "pending_review", awaiting.Status)
-	require.Equal(t, awaiting.EntryID, send(pending).EntryID)
+	require.Equal(t, "accepted", awaiting.Status)
+	require.NotEqual(t, awaiting.EntryID, send(pending).EntryID)
 	// Matching bodies with different URLs stay independent between libraries.
 	base.URL = "https://example.org/other-url"
-	require.Equal(t, other.EntryID, send(base).EntryID)
+	require.NotEqual(t, other.EntryID, send(base).EntryID)
 	base.Library = "official"
-	require.Equal(t, first.EntryID, send(base).EntryID)
-	// A no-link timely source is also identified by publisher, title and date.
+	require.NotEqual(t, first.EntryID, send(base).EntryID)
+	// Publisher, title and date alone cannot identify a source.
 	require.NoError(t, h.db.Model(&types.Library{}).Where("id=?", h.library.ID).Update("source_evidence_rule", "link_or_publisher_date").Error)
 	noLink := types.IngestRequest{Library: "official", Title: "Bulletin", Publisher: "Agency", PublishedAt: "2026-10-01", Content: "First complete bulletin text.", Acquisition: "verbatim"}
 	bulletin := send(noLink)
 	require.Equal(t, "accepted", bulletin.Status)
 	noLink.Content = "A completely different transcription of the same published bulletin."
-	require.Equal(t, bulletin.EntryID, send(noLink).EntryID)
+	require.NotEqual(t, bulletin.EntryID, send(noLink).EntryID)
 	noLink.PublishedAt = "2026-10-01T08:00:00+08:00"
-	require.Equal(t, bulletin.EntryID, send(noLink).EntryID)
+	require.NotEqual(t, bulletin.EntryID, send(noLink).EntryID)
 	noLink.PublishedAt = "2026-10-02"
 	require.NotEqual(t, bulletin.EntryID, send(noLink).EntryID)
 	// Durable identifiers match independent of URL and body.
@@ -101,26 +70,26 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	reference := send(durable)
 	durable.Content = "Another supplied edition of the same identified reference."
 	require.Equal(t, reference.EntryID, send(durable).EntryID)
-	// Own sources compare the latest record first, even when URL/body match an older one.
-	own := types.IngestRequest{Library: "personal", SourceRef: "local/notes", URL: "https://example.org/shared", Content: "Own original observation.", Acquisition: "verbatim"}
+	// Own sources compare the latest saved content, including a reverted body.
+	own := types.IngestRequest{Library: "personal", SourceRef: "local/notes", Content: "Own original observation.", Acquisition: "verbatim"}
 	original := send(own)
 	own.Content = "Own revised observation."
 	revised := send(own)
 	own.Content = "Own original observation."
 	reverted := send(own)
-	require.NotEqual(t, original.EntryID, revised.EntryID)
-	require.NotEqual(t, original.EntryID, reverted.EntryID)
+	require.Equal(t, original.EntryID, revised.EntryID)
+	require.Equal(t, original.EntryID, reverted.EntryID)
 	require.Equal(t, reverted.EntryID, send(own).EntryID)
-	own.SourceRef = "another/source"
+	own.SourceRef, own.URL = "another/source", ""
 	require.NotEqual(t, reverted.EntryID, send(own).EntryID)
 	own.SourceRef = ""
 	own.Content = "An independent own document without source identity."
 	plain := send(own)
-	require.Equal(t, plain.EntryID, send(own).EntryID)
+	require.NotEqual(t, plain.EntryID, send(own).EntryID)
 	// A confirmed discard blocks all its known keys only in its own library.
 	entry := h.article(t, first.EntryID)
 	require.NoError(t, h.service.rememberIngestDiscard(h.ctx, entry, "Confirmed no admission"))
-	base.Library = "official"
+	base.Library, base.URL = "official", "https://example.org/shared"
 	require.Equal(t, "discarded", send(base).Status)
 	base.Library = "media"
 	require.Equal(t, "exists", send(base).Status)
@@ -137,21 +106,22 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	// source_ref discards preserve the ability to add changed content.
 	require.NoError(t, h.service.rememberIngestDiscard(h.ctx, h.article(t, reverted.EntryID), "Discard old source content"))
 	own.SourceRef = "local/notes"
+	own.URL = ""
 	own.Content = "New content following a discarded source record."
 	require.Equal(t, "accepted", send(own).Status)
-	// Generated content uses interface idempotency and never a discard fingerprint.
+	// Generated content has the same source identity and explicit-discard rules.
 	generated := types.IngestRequest{Library: "ai-output", Title: "Generated report", Content: "Independent generated report.", Acquisition: "model_written"}
 	g1, g2 := send(generated), send(generated)
-	require.Equal(t, g1.EntryID, g2.EntryID)
+	require.NotEqual(t, g1.EntryID, g2.EntryID)
 	require.NoError(t, h.service.rememberIngestDiscard(h.ctx, h.article(t, g1.EntryID), "Delete report"))
-	require.Equal(t, "exists", send(generated).Status)
-	// Reposts are recorded for timely libraries only.
+	require.Equal(t, "discarded", send(generated).Status)
+	// Ingestion no longer creates repost records.
 	var rows []types.EntryRepostSource
 	require.NoError(t, h.db.Find(&rows).Error)
 	for _, row := range rows {
 		require.Contains(t, []string{entry.LibraryID, h.article(t, other.EntryID).LibraryID}, row.LibraryID)
 	}
-	require.NotEmpty(t, rows)
+	require.Empty(t, rows)
 }
 
 func TestIKB06DurableHasNoNearDuplicateOrRepost(t *testing.T) {

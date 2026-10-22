@@ -106,7 +106,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'tdesign-vue-next': { MessagePlugin: {} },
       '@/api/library': api,
       '@/utils/entrySourceLabels': entrySourceLabels,
-      '@/utils/security': {
+      '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }),
         isValidURL: () => true, isValidImageURL: () => true, safeMarkdownToHTML: identity, sanitizeHTML: identity,
         createSafeImage: (url: string, alt: string) => `<img src="${url}" alt="${alt}">`,
       },
