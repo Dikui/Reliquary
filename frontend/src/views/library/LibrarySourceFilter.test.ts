@@ -32,7 +32,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
 }
 const moduleOf = <T>(value: T) => ({ __esModule: true, default: value })
 
-async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'grid', unavailable = false, customType = false) {
+async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'grid', unavailable = false, customType = false, noLibraries = false) {
   const previous = { window: globalThis.window, document: globalThis.document,
     storage: Object.getOwnPropertyDescriptor(globalThis, 'localStorage') }
   globalThis.window = { innerHeight: 900, setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} } as any
@@ -109,7 +109,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/stores/ui': { useUIStore: () => ({}) },
     '@/stores/pendingCounts': { usePendingCountsStore: () => ({ total: null, refresh: async () => {} }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
-    '@/stores/resources': { useResourcesStore: () => ({ library: unavailable ? null : { id: 'library-source' }, fetchLibrary: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return { id: 'library-source' } } }) },
+    '@/stores/resources': { useResourcesStore: () => ({ library: unavailable || noLibraries ? null : { id: 'library-source' }, fetchLibrary: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return noLibraries ? null : { id: 'library-source' } } }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },
     '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
     '@/composables/useMarqueeSelect': { useMarqueeSelect: () => ({ shouldSuppressClick: () => false }) },
@@ -130,10 +130,11 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   for (const path of ['./Library.vue', './components/DocumentCardView.vue', './components/DocumentListView.vue']) {
     for (const match of readFileSync(new URL(path, import.meta.url), 'utf8').matchAll(/from\s+['"]([^'"]+\.vue)['"]/g)) modules[match[1]] = empty
   }
+  modules['@/components/EmptyEntry.vue'] = moduleOf(loadComponent(new URL('../../components/EmptyEntry.vue', import.meta.url), modules))
   modules['@/components/EntryBatchDialog.vue'] = moduleOf(loadComponent(new URL('../../components/EntryBatchDialog.vue', import.meta.url), modules))
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
     emits: ['loaded'], setup: (_, { emit }) => {
-      onMounted(() => emit('loaded', [
+      onMounted(() => emit('loaded', noLibraries ? [] : [
         { id: 'library-source', name: 'Research', display_name: 'Research', template: 'own', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) },
         { id: 'reports', name: 'AI Reports', template: 'generated', content_types: [] },
       ]))
@@ -229,6 +230,24 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     },
   }
 }
+
+test('a space with no libraries finishes loading and displays the material empty state', async () => {
+  const env = await mountLibrary('zh-CN', {}, 'grid', false, false, true)
+  try {
+    assert.equal(env.requests.length, 0)
+    assert.equal(descendants(env.root).some(node => hasClass(node, 'entry-card-skeleton')), false)
+    assert.ok(descendants(env.root).some(node => hasClass(node, 'doc-empty-state')))
+    assert.ok(visibleText(env.root).includes(env.t('library.emptyArticles')))
+  } finally { env.cleanup() }
+})
+
+test('an initial library request failure stops the material loading placeholders', async () => {
+  const env = await mountLibrary('zh-CN', {}, 'grid', true)
+  try {
+    assert.equal(env.requests.length, 0)
+    assert.equal(descendants(env.root).some(node => hasClass(node, 'entry-card-skeleton')), false)
+  } finally { env.cleanup() }
+})
 
 for (const locale of ['zh-CN', 'en-US']) {
   test(`${locale}: source filter loads cards and rows through the real hook and API with pagination`, async () => {

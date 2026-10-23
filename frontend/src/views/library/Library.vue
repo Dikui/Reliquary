@@ -470,7 +470,9 @@ const handleOpenEntryEvent = async (e: Event) => {
 };
 
 onMounted(() => {
-  void resources.fetchLibrary().catch(() => {});
+  void resources.fetchLibrary().catch(() => {}).finally(() => {
+    if (!libraryId.value) docListLoading.value = false;
+  });
 
   window.addEventListener('reliquary:open-entry', handleOpenEntryEvent as EventListener);
 });
