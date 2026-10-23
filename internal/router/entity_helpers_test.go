@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"reliquary/internal/config"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
@@ -18,7 +19,14 @@ import (
 
 const entityOwnerID = "entity-owner"
 
-func TestMain(m *testing.M)                 { os.Exit(pgtest.Run(m)) }
+func TestMain(m *testing.M) {
+	if err := config.LoadPromptTemplates("../../config"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Exit(pgtest.Run(m))
+}
+
 func entityFixtureDB(t *testing.T) *gorm.DB { t.Helper(); return pgtest.Open(t) }
 func entityContext(spaceID uint64, userID string) context.Context {
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, spaceID)

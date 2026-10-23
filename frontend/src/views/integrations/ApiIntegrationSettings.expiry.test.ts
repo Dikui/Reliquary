@@ -128,15 +128,15 @@ test('API endpoint address columns reserve a minimum width and truncate long add
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: API integration guidance renders the review rules and account setting limits`, async () => {
+  test(`${locale}: API integration guidance renders technical validation and account setting limits`, async () => {
     const result = await scenario(locale, async () => {})
     assert.deepEqual(result.warnings, [])
     const expected = locale === 'zh-CN' ? [
-      '新内容经过模型收录审核；重复、已丢弃、缺正文等情况按规则直接返回。',
+      '通过必要技术校验后即入库，正文索引、摘要、分类和图谱在后台处理。',
       'API Key 可以访问个人空间的全部内容和收录、检索等接口。',
       '部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。',
     ] : [
-      'New content goes through model intake review; duplicates, discarded content, missing bodies and similar cases return directly according to the rules.',
+      'Content is saved after technical validation. Body indexing, summaries, classification and graph processing run in the background.',
       'API keys can access all content in your personal space and interfaces such as ingest and search.',
       'Some account settings, including ChatGPT sign-in and maintenance schedules, still require signing in on the web.',
     ]
@@ -164,8 +164,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await scenario(locale, async () => {})
     assert.deepEqual(result.warnings, [])
     for (const text of [messages.ingestUrl, messages.mcpUrl, 'POST http://localhost/api/v1/ingest', 'http://localhost/mcp', 'Streamable HTTP', 'Authorization: Bearer API_KEY']) assert.ok(result.html.includes(text), text)
-    assert.ok(result.html.includes('pending_review'))
-    assert.ok(result.html.includes(locale === 'zh-CN' ? '调用方的判断不替代审核' : 'judgment does not replace review'))
+    assert.ok(result.html.includes(locale === 'zh-CN' ? '来源相同且内容不变时返回原资料，有变化时更新原资料' : 'An unchanged source returns the existing entry; changed content updates it.'))
+    assert.ok(result.html.includes(locale === 'zh-CN' ? '后台处理失败不撤销已保存的正文' : 'Background failures do not undo the saved body'))
     for (const label of [messages.copyIngestUrl, messages.copyMcpUrl]) {
       const button = result.buttons.find(button => button.label === label)
       assert.ok(button?.click, label)

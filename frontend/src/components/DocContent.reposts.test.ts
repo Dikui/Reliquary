@@ -133,6 +133,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     '@/components/ReportAssociations.vue': emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
     '@/components/EntryProcessingTimeline.vue': emptyModule,
+    '@/components/EntryProcessingStatus.vue': emptyModule,
     '@/components/PersonalDocumentDelete.vue': options.personalDelete || emptyModule,
     '@/views/library/components/RepostSources.vue': sharedRepostModule,
     '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
@@ -319,7 +320,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
 
   for (const source_kind of ['mine', 'report']) {
-    test(`${locale}: ${source_kind} detail submits processing or index rebuilding`, async () => {
+    test(`${locale}: ${source_kind} detail submits shared processing`, async () => {
       const calls: string[] = []
       const html = await renderDetails([], locale, {
         details: { source_kind, vault_path: `${source_kind}/note.md`, parse_status: 'failed' },
@@ -327,11 +328,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         scenario: state => state.reprocess(),
       })
       assert.deepEqual(calls, ['message-a'])
-      assert.ok(html.includes(source_kind === 'report' ? messages[locale].library.reindexDocument : messages[locale].library.reprocess))
+      assert.ok(html.includes(messages[locale].library.reprocess))
     })
   }
 
-  test(`${locale}: all library documents expose reprocessing or report index rebuilding without a body editor`, async () => {
+  test(`${locale}: all library documents expose the same reprocessing action`, async () => {
     const component = actionMenuSFC.create({
       '@/components/PersonalDocumentDelete.vue': personalDeleteModule,
       '@/components/DocumentDeleteConfirm.vue': deleteConfirmModule,
@@ -340,7 +341,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
     const editable = await render({})
     const hasEditAction = (html: string) => /class="[^"]*doc-action-menu-item[^"]*"[^>]*>[\s\S]*?name="edit"/.test(html)
-    const reprocessLabel = `<span>${messages[locale].library.rebuildDocument}</span>`
+    const reprocessLabel = `<span>${messages[locale].library.reprocess}</span>`
     assert.equal(hasEditAction(editable), false)
     assert.ok(editable.includes(reprocessLabel))
     const article = await render({ source_kind: 'article', vault_path: 'articles/note.md' })
@@ -350,7 +351,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       for (const parse_status of ['completed', 'processing']) {
         const html = await render({ source_kind, parse_status })
         assert.equal(hasEditAction(html), false)
-        assert.ok(html.includes(source_kind === 'report' ? messages[locale].library.reindexDocument : messages[locale].library.rebuildDocument))
+        assert.ok(html.includes(reprocessLabel))
       }
     }
     const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2 }, locale)

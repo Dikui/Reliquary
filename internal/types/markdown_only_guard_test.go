@@ -79,7 +79,8 @@ func TestMarkdownOnlyCapabilityGuard(t *testing.T) {
 		}
 		if strings.HasPrefix(relative, "frontend/src/") {
 			for number, line := range strings.Split(string(data), "\n") {
-				if !frontendRetired.MatchString(line) {
+				// An unknown retry outcome is unrelated to retired content types.
+				if !frontendRetired.MatchString(strings.ReplaceAll(line, "retryUncertain", "")) {
 					continue
 				}
 				allowed := false
