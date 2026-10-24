@@ -33,7 +33,7 @@
 }
 ```
 
-`request` 使用普通检索的参数，可包含类型、实体、主题、时间与星标筛选。库目录在保存时解析为稳定 ID。`grade` 省略时为 1，范围为 0 至 10；0 表示不相关。答案必须属于所选库，不允许重复 ID。`answers: []` 允许构造无答案题。`method` 为 `ordinary` 或 `graph`。图谱题可在 `request.graph_parameters` 保存原图谱请求 JSON，图谱记录转题时自动保留原请求，供适配器读取实体、跳数等参数。普通检索拒绝该字段。图谱题运行通过 `EvaluationService.GraphSearch` 调用实际 `GraphSearchService.Search`，以题目外层已校验的 `request.libraries` 覆盖 graph_parameters 内的库，以运行 K 覆盖 limit。资料级 documents 列表参与指标计算；图谱查询不调用模型，逐题 snapshot 保存有效请求、扩展预算、截断与未同步计数。实体候选不明确时题目失败，需要人工改为选定 ID；Neo4j 不可用时保存明确错误。图谱检索同样记录 evaluation 来源与运行 ID。完整字段见 [图谱检索接口](search-api.md#图谱检索)。
+`request` 使用普通检索的参数，可包含类型、实体、主题、时间与星标筛选。库目录在保存时解析为稳定 ID。`grade` 省略时为 1，范围为 0 至 10；0 表示不相关。答案必须属于所选库，不允许重复 ID。`answers: []` 允许构造无答案题。`method` 只支持 `ordinary`。
 
 转题请求为 `{"record_id":"...","answers":[{"entry_id":"..."}]}`。题目保存当次 `suggested_results`，供界面勾选；再次 PUT 可以修改答案。题目的来源由服务决定，不能由客户端伪造。AI 题的来源为 `ai`，状态为 `pending`，普通 PUT 不能绕过人工确认。
 
@@ -61,34 +61,13 @@
 
 比较限于同一测评集的两个完成运行。`delta` 为 after 减 before，逐题返回两侧结果、指标差值、`added_hits` 与 `lost_hits`。题目改变时有 `question_changed`，新增或移除题目通过 `change` 标明，不按列表位置错误配对。
 
-检索记录筛选支持 `source=web|http|mcp|evaluation`、`method=ordinary|graph`、`library`（稳定 ID）、`query`、`run_id`、`from`、`to`（RFC3339）、`include_evaluation=true`。默认排除评测检索；显式 source=evaluation、run_id 或 include_evaluation 可读取。记录保留期限由 `RELIQUARY_SEARCH_RECORD_RETENTION_DAYS` 设置，默认 180，每小时清理，维护暂停时跳过清理。
+检索记录筛选支持 `source=web|http|mcp|evaluation`、`method=ordinary`、`library`（稳定 ID）、`query`、`run_id`、`from`、`to`（RFC3339）、`include_evaluation=true`。默认排除评测检索；显式 source=evaluation、run_id 或 include_evaluation 可读取。记录保留期限由 `RELIQUARY_SEARCH_RECORD_RETENTION_DAYS` 设置，默认 180，每小时清理，维护暂停时跳过清理。
 
 五项指标均先对主结果资料 ID 去重并截取前 K 项，折叠成员不计命中。Precision@K 的分母固定为 K；Recall@K 的分母为所有正相关答案数；MRR 为首个命中排名的倒数；MAP 为各命中位置 Precision 之和除以全部正相关答案数；NDCG@K 使用 `(2^grade-1)/log2(rank+1)`，理想排序由全部答案按等级排序后取 K 项。无正相关答案时五项均为零。汇总为所有题目的算术平均。
 
 测评集、题目、标准答案、运行及逐题结果通过 `PersistentTables` 进入 `.reliquary/data/`。检索记录通过 `BackupOnlyTables` 分类，只随 PostgreSQL 完整备份保存。
 
 
-图谱题请求示例：
-
-```json
-{
-  "method":"graph",
-  "request": {
-    "query":"Atlas Lab 的合作机构",
-    "libraries":["personal"],
-    "graph_parameters": {
-      "entity":{"id":"atlas-entity-id"},
-      "mode":"neighbors",
-      "hops":2,
-      "relation_types":["合作"]
-    }
-  },
-  "answers":[{"entry_id":"source-document-id","grade":1}]
-}
-```
-
-query 是题目文本；实体、目标和查询模式由 graph_parameters 提供。嵌入请求中的 libraries 不能扩大题目范围。普通检索的向量集和重排选项不会改变图谱查询。
-
 ## 外部接入与运行检查
 
-测评管理与运行使用本文 HTTP 接口，MCP 的 `search` 与 `graph_search` 供正常检索；没有独立的测评 MCP 工具。创建题目前先用 [库清单](external-integration.md#选择库) 取得范围，答案资料必须在该范围内。运行接口同步返回完成或失败状态，客户端应为实际检索耗时配置足够的 HTTP 超时。评估报告须保留 K、向量集、重排选择、折叠选择和题目修订，替身服务验收只能证明执行流程与指标计算。
+测评管理与运行使用本文 HTTP 接口，MCP 的 `search` 供正常检索；没有独立的测评 MCP 工具。创建题目前先用 [库清单](external-integration.md#选择库) 取得范围，答案资料必须在该范围内。运行接口同步返回完成或失败状态，客户端应为实际检索耗时配置足够的 HTTP 超时。评估报告须保留 K、向量集、重排选择、折叠选择和题目修订，替身服务验收只能证明执行流程与指标计算。

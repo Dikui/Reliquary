@@ -8,23 +8,23 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/chatgpt"
+	"reliquary/internal/config"
+	"reliquary/internal/models/embedding"
 	"reliquary/internal/testutil/redistest"
+	"reliquary/internal/types"
+	"reliquary/internal/utils"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	taskqueue "reliquary/internal/queue"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/repository"
-	"reliquary/internal/chatgpt"
-	"reliquary/internal/config"
-	"reliquary/internal/models/chat"
-	"reliquary/internal/models/embedding"
-	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 type chatGPTGenerationInput struct {
@@ -50,8 +50,6 @@ func (r chatGPTGenerationRequest) stage() string {
 		return "intake_review"
 	case strings.HasPrefix(r.Instructions, articleProcessingPrompt()):
 		return "article_processing"
-	case strings.HasPrefix(r.Instructions, articleGraphVerificationPrompt()):
-		return "article_graph_verification"
 	case r.Instructions == topicBackfillPrompt():
 		return "topic_backfill"
 	case strings.HasPrefix(r.Instructions, "Decide whether the source mention is the exact same real-world entity"):
@@ -184,8 +182,19 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 	parsed, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	h.models.SetChatGPTTransport(&http.Client{Transport: chatGPTGenerationTransport{parsed, server.Client().Transport}})
-	model := &types.Model{ID: "chatgpt-generation", SpaceID: h.library.SpaceID, Name: "fixture-account-model", Type: types.ModelTypeGeneration, Source: types.ModelSourceChatGPT,
-		Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 32768, ExtraConfig: map[string]string{"chatgpt_account_id": accountID}}}
+	model := &types.Model{
+		ID:      "chatgpt-generation",
+		SpaceID: h.library.SpaceID,
+		Name:    "fixture-account-model",
+		Type:    types.ModelTypeGeneration,
+		Source:  types.ModelSourceChatGPT,
+
+		Parameters: types.ModelParameters{
+			SupportsVision: true,
+			ContextWindow:  32768,
+			ExtraConfig:    map[string]string{"chatgpt_account_id": accountID},
+		},
+	}
 	require.NoError(t, h.models.CreateModel(h.ctx, model))
 	// Embeddings retain their own supported billing route and httptest fixture.
 	var embedding types.Model
@@ -215,10 +224,6 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 		return `{"approved":true,"reason":"Complete original publication"}`, ""
 	case "article_processing":
 		return articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Fixture Acme", EntityType: "company"}}, []string{}), ""
-	case "article_graph_verification":
-		response, err := supportedGraphVerificationFixture([]chat.Message{{Role: "user", Content: request.userText()}})
-		require.NoError(t, err)
-		return response.Content, ""
 	case "entity_resolution":
 		return `{"decision":"new","confidence":1}`, ""
 	case "topic_backfill":
@@ -270,7 +275,7 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 	require.Len(t, topicLinks(t, topics, topic.ID), 1)
 
 	requests := h.requests()
-	require.Len(t, requests, 4, "each retained generation path must reach the real ChatGPT model service")
+	require.Len(t, requests, 3, "each retained generation path must reach the real ChatGPT model service")
 	stages := make([]string, 0, len(requests))
 	for _, request := range requests {
 		stages = append(stages, request.stage())
@@ -284,22 +289,18 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 			require.Equal(t, "input_image", request.Input[0].Content[1].Type)
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
-		if request.stage() == "article_graph_verification" {
-			require.Equal(t, articleGraphVerificationPrompt(), request.Instructions)
-			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
-		}
 	}
-	require.Equal(t, []string{"article_processing", "article_graph_verification", "entity_resolution", "topic_backfill"}, stages)
+	require.Equal(t, []string{"article_processing", "entity_resolution", "topic_backfill"}, stages)
 	policy, err := h.policy.Get(h.ctx)
 	require.NoError(t, err)
-	require.Equal(t, 4, policy.DailyUsed)
+	require.Equal(t, 3, policy.DailyUsed)
 	_, err = h.models.GetEmbeddingModel(h.ctx, "chatgpt-generation")
 	require.Error(t, err, "subscription generation model cannot supply embedding")
 }
 
 func TestChatGPTQuotaDefersEnrichmentAndPreservesSearchableBody(t *testing.T) {
 	for _, code := range []string{"subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable"} {
-		for _, stage := range []string{"article_processing", "article_graph_verification"} {
+		for _, stage := range []string{"article_processing"} {
 			t.Run(code+"/"+stage, func(t *testing.T) {
 				var quota atomic.Bool
 				quota.Store(true)

@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reliquary/internal/models/rerank"
+	"reliquary/internal/types"
 	"slices"
 	"strings"
 	"time"
 
+	apperrors "reliquary/internal/errors"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/models/rerank"
-	"reliquary/internal/types"
 )
 
 type entrySearchFilters struct {
@@ -24,9 +25,6 @@ type entrySearchFilters struct {
 
 func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters, error) {
 	f := entrySearchFilters{request: request}
-	if len(request.GraphParameters) > 0 {
-		return f, apperrors.NewBadRequestError("graph_parameters require a graph evaluation question")
-	}
 	if len(request.Libraries) == 0 || len(request.Libraries) > 100 {
 		return f, apperrors.NewBadRequestError("libraries requires 1 to 100 library IDs or directories")
 	}
@@ -369,6 +367,7 @@ func (s *searchService) rerankEntries(ctx context.Context, library *types.Librar
 	out, _ := s.rerankEntryResults(ctx, library, query, results)
 	return out, nil
 }
+
 func (s *searchService) rerankEntryResults(ctx context.Context, library *types.Library, query string, results []*types.EntrySearchResult) ([]*types.EntrySearchResult, string) {
 	modelID, err := ResolveModelTier(ctx, s.db, library, types.ModelTierRerank)
 	if err != nil {

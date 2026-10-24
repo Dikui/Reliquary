@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"gorm.io/gorm"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/sourceloc"
 	"reliquary/internal/types"
 	"sort"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 // Keep chunk boundaries while moving them with replaced image destinations.
@@ -80,16 +81,6 @@ func recalculateBodyLocations(ctx context.Context, db *gorm.DB, entry *types.Ent
 		return err
 	}
 	if output != nil {
-		for i := range output.Relations {
-			for j := range output.Relations[i].Evidence {
-				evidence := &output.Relations[i].Evidence[j]
-				locations := []types.SourceLocation{}
-				for _, loc := range evidence.Locations {
-					locations = append(locations, bodyRangeLocations(newBody, mapOffset(loc.Start), mapOffset(loc.End), loc.Mapping)...)
-				}
-				evidence.Locations = locations
-			}
-		}
 		for i := range output.Images {
 			image := &output.Images[i]
 			if image.Ordinal <= len(newRefs) && image.Ordinal > 0 {

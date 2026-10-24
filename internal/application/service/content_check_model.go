@@ -5,24 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
-	"time"
-	"unicode/utf8"
-
 	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
 )
 
 const checkProtocol = `
 以调用方提供的只读 JSON 协议执行以上检查规则。每轮只输出一个 JSON 对象：
-调用工具：{"tool":"search|get_entry|get_entity|graph_search","arguments":{...}}
+调用工具：{"tool":"search|get_entry|get_entity","arguments":{...}}
 最终结果：{"findings":[{"kind":"duplicate|conflict|result_error","description":"问题说明","evidence":[{"entry_id":"资料ID","quote":"逐字原文证据","current_result":"仅已有结果错误时填写当前结果"}]}]}
 无问题返回 {"findings":[]}。完成前必须用 search 查找历史候选。
 search 参数：query 必填；libraries 可选，默认所有允许库。get_entry 参数：id，offset、length 可选。
-get_entity 参数：id。graph_search 参数沿用原接口，libraries 默认允许库。
+get_entity 参数：id。
 不要返回 Markdown 或伪造工具结果。所有发现至少关联当前目标。重复/冲突至少引用两份不同资料；result_error 只针对当前目标。证据 quote 必须来自实际读取的原文。
 原文有图片但未读取图片时，不能仅凭文字未提及就判定图片支持的结果缺乏依据。
 `
@@ -55,20 +54,17 @@ func (s *ContentCheckService) checkEntry(ctx context.Context, model chat.Chat, m
 		if err := s.db.WithContext(ctx).Model(&types.Entity{}).Joins("JOIN entry_entities l ON l.entity_id=entities.id AND l.space_id=entities.space_id").Where("l.entry_id=? AND l.space_id=?", entryID, e.SpaceID).Find(&entities).Error; err != nil {
 			return nil, err
 		}
-		var relations []struct {
-			Subject  string
-			Type     string
-			Object   string
-			Evidence string
-		}
-		if err := s.db.WithContext(ctx).Raw(`SELECT a.canonical_name AS subject,r.relation_type AS type,b.canonical_name AS object,rs.evidence::text AS evidence FROM relation_sources rs JOIN relations r ON r.id=rs.relation_id JOIN entities a ON a.id=r.subject_id JOIN entities b ON b.id=r.object_id WHERE rs.entry_id=? AND r.space_id=?`, entryID, e.SpaceID).Scan(&relations).Error; err != nil {
-			return nil, err
-		}
 		var definitions []types.LibraryContentType
 		if err := s.db.WithContext(ctx).Where("library_id=?", e.LibraryID).Find(&definitions).Error; err != nil {
 			return nil, err
 		}
-		return map[string]any{"source": body, "summary": e.StructuredSummary, "content_type": e.ContentType, "content_types": definitions, "entities": entities, "relations": relations}, nil
+		return map[string]any{
+			"source":        body,
+			"summary":       e.StructuredSummary,
+			"content_type":  e.ContentType,
+			"content_types": definitions,
+			"entities":      entities,
+		}, nil
 	}
 	seed, err := read(id, 0, 20000)
 	if err != nil {
@@ -163,26 +159,6 @@ func (s *ContentCheckService) checkEntry(ctx context.Context, model chat.Chat, m
 				return nil, err
 			}
 			result, err = s.entities.EntityDetail(ctx, q.ID)
-			if err != nil {
-				return nil, err
-			}
-		case "graph_search":
-			if s.graph == nil {
-				return nil, errors.New("graph search unavailable")
-			}
-			var q types.GraphSearchRequest
-			if err := json.Unmarshal(reply.Arguments, &q); err != nil {
-				return nil, err
-			}
-			if len(q.Libraries) == 0 {
-				q.Libraries = libraries
-			}
-			for _, l := range q.Libraries {
-				if !slices.Contains(libraries, l) {
-					return nil, errors.New("graph library outside check scope")
-				}
-			}
-			result, err = s.graph.Search(ctx, q)
 			if err != nil {
 				return nil, err
 			}

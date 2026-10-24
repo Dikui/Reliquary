@@ -6,14 +6,15 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
+
+	taskqueue "reliquary/internal/queue"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
 )
 
 // Use production queue persistence without publishing to a running Redis server.
@@ -29,6 +30,7 @@ func (q *libraryRebuildQueue) Enqueue(task *taskqueue.Task, options ...taskqueue
 	})
 	return
 }
+
 func (q *libraryRebuildQueue) EnqueueTx(ctx context.Context, tx *gorm.DB, task *taskqueue.Task, options ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	var p types.ManualProcessPayload
 	_ = json.Unmarshal(task.Payload(), &p)
@@ -70,12 +72,7 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	h, vault, _ := newArticleImageHarness(t, true)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	output := articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "OldCo", EntityType: "company"}, {Name: "Partner", EntityType: "company"}, {Name: "ObsoleteTool", EntityType: "product"}}, []string{})
-	var result map[string]any
-	require.NoError(t, json.Unmarshal([]byte(output), &result))
-	result["relations"] = []extractedRelation{{Subject: "OldCo", Object: "Partner", Type: "合作", EvidenceIDs: []int{1}}}
-	data, err := json.Marshal(result)
-	require.NoError(t, err)
-	h.processor.output = string(data)
+	h.processor.output = output
 	k := h.upload(t, "rebuild", "# OldCo and Partner\n\n"+strings.Repeat("Measured original observations remain unchanged. ", 35)+"\n\n![chart]("+articleImageDataURI(t, 7)+")")
 	originalBody, err := vault.ReadBody(k)
 	require.NoError(t, err)
@@ -94,11 +91,9 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	var orphan types.Entity
 	require.NoError(t, h.db.Where("canonical_name=?", "ObsoleteTool").First(&orphan).Error)
 	require.NoError(t, h.db.Create(&types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: k.SpaceID, EntryID: k.ID, NewEntityID: orphan.ID, CandidateEntityID: oldEntity.ID, Status: "pending"}).Error)
-	var oldRelation types.Relation
-	require.NoError(t, h.db.Where("library_id=?", k.LibraryID).First(&oldRelation).Error)
 	otherLibrary := *h.library
 	otherLibrary.ID, otherLibrary.SystemRole, otherLibrary.Directory = "other-library", "", "other-library"
-	require.NoError(t, h.db.Omit("ContentTypes", "RelationTypes").Create(&otherLibrary).Error)
+	require.NoError(t, h.db.Omit("ContentTypes").Create(&otherLibrary).Error)
 	other := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: otherLibrary.ID, Type: "manual", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Other source"}
 	require.NoError(t, h.db.Create(other).Error)
 	var shared []types.Entity
@@ -110,21 +105,13 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Create(completed).Error)
 	cancelled := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCancelled, VaultBody: "Cancelled source"}
 	require.NoError(t, h.db.Create(cancelled).Error)
-	otherRelation := oldRelation
-	otherRelation.ID, otherRelation.LibraryID = uuid.NewString(), otherLibrary.ID
-	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: otherLibrary.ID, Name: oldRelation.RelationType, Enabled: true}).Error)
-	require.NoError(t, h.db.Create(&otherRelation).Error)
-	require.NoError(t, h.db.Create(&types.RelationSource{RelationID: otherRelation.ID, EntryID: other.ID, Evidence: []types.RelationEvidence{}}).Error)
-	suppression := &types.RelationSuppression{SpaceID: k.SpaceID, LibraryID: k.LibraryID, SubjectID: oldRelation.SubjectID, ObjectID: oldRelation.ObjectID, RelationType: "投资", Actor: "user"}
-	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: k.LibraryID, Name: suppression.RelationType, Enabled: true}).Error)
-	require.NoError(t, h.db.Create(suppression).Error)
 	h.library.ChunkingConfig = types.ChunkingConfig{ChunkSize: 100, ChunkOverlap: 0, Separators: []string{"\n\n", " ", ""}}
-	require.NoError(t, h.db.Omit("ContentTypes", "RelationTypes").Save(h.library).Error)
+	require.NoError(t, h.db.Omit("ContentTypes").Save(h.library).Error)
 	h.processor.output = articleProcessingOutput(t, "other", []types.EntityCandidate{{Name: "NewCo", EntityType: "company"}}, []string{})
 	var fresh map[string]any
 	require.NoError(t, json.Unmarshal([]byte(h.processor.output), &fresh))
 	fresh["summary"].(map[string]any)["overview"] = "New computed summary"
-	data, err = json.Marshal(fresh)
+	data, err := json.Marshal(fresh)
 	require.NoError(t, err)
 	h.processor.output = string(data)
 	h.service.task = &libraryRebuildQueue{db: h.db}
@@ -137,19 +124,6 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.ErrorContains(t, err, "unfinished processing")
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	childID := run.TaskID + ":" + k.ID
-	injectedErr := errors.New("fixture graph notification failure")
-	const callback = "test:fail_orphan_graph_notification"
-	require.NoError(t, h.db.Callback().Create().Before("gorm:create").Register(callback, func(tx *gorm.DB) {
-		if row, ok := tx.Statement.Dest.(*types.GraphPendingSync); ok && row.EntityID == orphan.ID && row.Deleted {
-			tx.AddError(injectedErr)
-		}
-	}))
-	require.ErrorIs(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, childID)), injectedErr)
-	require.NoError(t, h.db.Callback().Create().Remove(callback))
-	require.NoError(t, h.db.First(&types.Entity{}, "id=?", orphan.ID).Error)
-	require.NoError(t, h.db.Where("entity_id=?", orphan.ID).First(&types.EntityAlias{}).Error)
-	require.NoError(t, h.db.Where("entity_id=? AND entry_id=?", orphan.ID, k.ID).First(&types.EntryEntity{}).Error)
-	require.NoError(t, h.db.Where("new_entity_id=?", orphan.ID).First(&types.EntityMergeSuggestion{}).Error)
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, rebuildTask(t, h.db, childID)))
 	finished := h.article(t, k.ID)
 	require.Equal(t, types.ParseStatusCompleted, finished.ParseStatus)
@@ -176,10 +150,6 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	}
 	require.NoError(t, h.db.Model(&types.EntryEntity{}).Where("entry_id=? AND entity_id=?", k.ID, oldEntity.ID).Count(&count).Error)
 	require.Zero(t, count)
-	require.NoError(t, h.db.Model(&types.RelationSource{}).Where("entry_id=?", k.ID).Count(&count).Error)
-	require.Zero(t, count)
-	require.NoError(t, h.db.Model(&types.RelationSource{}).Where("entry_id=?", other.ID).Count(&count).Error)
-	require.EqualValues(t, 1, count)
 	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=? AND topic_id=? AND source=?", k.ID, userTopic.ID, types.TopicSourceUser).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	var preserved types.Entity
@@ -192,10 +162,6 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	}
 	require.NoError(t, h.db.Model(&types.EntityMergeSuggestion{}).Where("new_entity_id=? OR candidate_entity_id=?", orphan.ID, orphan.ID).Count(&count).Error)
 	require.Zero(t, count)
-	require.NoError(t, h.db.Model(&types.GraphPendingSync{}).Where("entity_id=? AND deleted=true", orphan.ID).Count(&count).Error)
-	require.Positive(t, count, "isolated entity removal must reach the graph replica")
-	require.NoError(t, h.db.Model(&types.RelationSuppression{}).Where("library_id=?", k.LibraryID).Count(&count).Error)
-	require.EqualValues(t, 1, count)
 	// Redelivering the parent after processing must not reset the completed child.
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)

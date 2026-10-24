@@ -38,24 +38,27 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 	require.Empty(t, CompareManifest(beforeManifest, afterManifest))
 	// Every preexisting table, row and column remains exact, including nonregenerable data.
 	for table, rows := range before.Tables {
-		if table == "schema_migrations" {
+		if table == "schema_migrations" || table == "library_relation_types" {
 			continue
+		}
+		if table == "library_content_types" {
+			for _, row := range rows {
+				delete(row, "extract_graph")
+			}
 		}
 		actual := preservedBeforeVectorDefaults(t, table, rows, after.Tables[table])
 		if table == "entries" {
 			for _, row := range actual {
 				require.Equal(t, "", row["source_ref"])
 				require.Equal(t, "", row["identifier"])
-				require.Nil(t, row["graph"])
 				delete(row, "source_ref")
 				delete(row, "source_body_hash")
 				delete(row, "identifier")
-				delete(row, "graph")
 			}
 		}
 		require.Equal(t, rows, actual, table)
 	}
-	require.NoError(t, db.Exec(`UPDATE entries SET graph=true WHERE id='preserved'`).Error)
+	require.NoError(t, db.Exec(`UPDATE entries SET identifier='tampered' WHERE id='preserved'`).Error)
 	tampered, err := Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", tampered))

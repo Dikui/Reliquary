@@ -16,9 +16,9 @@ export function updateEntryContent(id: string, data: { content: string; base_bod
 }
 
 export type LibraryTemplate = 'external_timely' | 'external_durable' | 'own' | 'generated';
-export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
-export interface LibraryRelationType { name: string; position: number; enabled: boolean }
+export interface LibraryContentType { name: string; position: number; enabled: boolean }
 export interface LibraryCatalogItem {
+  content_types: LibraryContentType[]; feed_enabled: boolean;
   id: string; directory: string; name: string; display_name: string; system_role: string;
   entry_count?: number; template: LibraryTemplate; description: string; review_criteria: string;
   default_review_criteria: string; model_tiers: ModelTierConfig; summary_model_id?: string;
@@ -26,7 +26,6 @@ export interface LibraryCatalogItem {
   chunking_config: { chunk_size: number; chunk_overlap: number; separators: string[]; enable_parent_child: boolean; parent_chunk_size: number; child_chunk_size: number; strategy?: string; token_limit?: number; languages?: string[] };
   source_evidence_rule: '' | 'link_required' | 'link_or_publisher_date';
   collect_content: string; exclude_content: string; deduplication_rule: string;
-  content_types: LibraryContentType[]; relation_types: LibraryRelationType[]; feed_enabled: boolean;
   template_rules: { deduplication: string; source_evidence: string; review: boolean; process: boolean; merge_reposts: boolean; collapse_similar: boolean; fact_source: boolean };
 }
 export function listLibraries() { return get<{ success: boolean; data: LibraryCatalogItem[]; message?: string }>('/api/v1/libraries'); }
@@ -36,7 +35,6 @@ export const saveCatalogLibrary = (id: string, data: Record<string, unknown>) =>
 export const deleteCatalogLibrary = (id: string) => del<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
 export type LibraryRebuildScope = 'failed' | 'all'
 export const rebuildCatalogLibrary = (id: string, scope: LibraryRebuildScope = 'failed') => post<{ success: boolean; data: { task_id: string; total: number }; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/rebuild`, { scope })
-export const mergeLibraryRelationTypes = (id: string, from_type: string, to_type: string) => post<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/relation-types/merge`, { from_type, to_type })
 
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string }
 

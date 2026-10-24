@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"reliquary/internal/application/service"
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
+
+	werrors "reliquary/internal/errors"
+
+	"github.com/gin-gonic/gin"
 )
 
 type EntityHandler struct {
@@ -19,6 +21,7 @@ func NewEntityHandler(s *service.EntityService) *EntityHandler { return &EntityH
 func (h *EntityHandler) SetNameEmbeddingRebuilder(r *service.EntityNameEmbeddingRebuilder) {
 	h.rebuilder = r
 }
+
 func entityListQuery(c *gin.Context) (types.EntityQuery, error) {
 	q := types.EntityQuery{Entity: c.Query("entity"), EntityType: c.Query("entity_type")}
 	var err error
@@ -32,6 +35,7 @@ func entityListQuery(c *gin.Context) (types.EntityQuery, error) {
 	}
 	return q, nil
 }
+
 func (h *EntityHandler) Entities(c *gin.Context) {
 	q, err := entityListQuery(c)
 	if err != nil {
@@ -45,6 +49,7 @@ func (h *EntityHandler) Entities(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
+
 func (h *EntityHandler) EntityDetail(c *gin.Context) {
 	item, err := h.service.EntityDetail(c.Request.Context(), c.Param("entity_id"))
 	if err != nil {
@@ -53,6 +58,7 @@ func (h *EntityHandler) EntityDetail(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
+
 func (h *EntityHandler) MergeRecords(c *gin.Context) {
 	items, err := h.service.ListMergeRecords(c.Request.Context(), c.Param("entity_id"))
 	if err != nil {
@@ -61,6 +67,7 @@ func (h *EntityHandler) MergeRecords(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
+
 func (h *EntityHandler) MergeEntities(c *gin.Context) {
 	var input struct {
 		Keep  string `json:"keep_entity_id" binding:"required"`
@@ -76,6 +83,7 @@ func (h *EntityHandler) MergeEntities(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
+
 func (h *EntityHandler) UpdateEntityDescription(c *gin.Context) {
 	var input struct {
 		Description *string `json:"description" binding:"required"`
@@ -91,6 +99,7 @@ func (h *EntityHandler) UpdateEntityDescription(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
+
 func (h *EntityHandler) RenameEntity(c *gin.Context) {
 	var input struct {
 		Name string `json:"name" binding:"required"`
@@ -106,6 +115,7 @@ func (h *EntityHandler) RenameEntity(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
+
 func (h *EntityHandler) MergeSuggestions(c *gin.Context) {
 	q, err := entityListQuery(c)
 	if err != nil {
@@ -129,6 +139,7 @@ func (h *EntityHandler) decideMergeSuggestion(c *gin.Context, accept bool) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
+
 func (h *EntityHandler) NameEmbeddingRebuildStatus(c *gin.Context) {
 	if h.rebuilder == nil {
 		c.Error(werrors.NewInternalServerError("name embedding rebuilder unavailable"))
@@ -141,6 +152,7 @@ func (h *EntityHandler) NameEmbeddingRebuildStatus(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
+
 func (h *EntityHandler) RebuildNameEmbeddings(c *gin.Context) {
 	if h.rebuilder == nil {
 		c.Error(werrors.NewInternalServerError("name embedding rebuilder unavailable"))
@@ -152,35 +164,4 @@ func (h *EntityHandler) RebuildNameEmbeddings(c *gin.Context) {
 		return
 	}
 	h.NameEmbeddingRebuildStatus(c)
-}
-
-func (h *EntityHandler) Relations(c *gin.Context) {
-	items, err := h.service.ListRelations(c.Request.Context(), c.Param("entity_id"), c.Query("library_id"))
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
-}
-func (h *EntityHandler) DeleteRelation(c *gin.Context) {
-	if err := h.service.DeleteRelation(c.Request.Context(), c.Param("relation_id")); err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-func (h *EntityHandler) MergeRelationTypes(c *gin.Context) {
-	var input struct {
-		From string `json:"from_type" binding:"required"`
-		To   string `json:"to_type" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(werrors.NewBadRequestError(err.Error()))
-		return
-	}
-	if err := h.service.MergeRelationTypes(c.Request.Context(), c.Param("id"), input.From, input.To); err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true})
 }

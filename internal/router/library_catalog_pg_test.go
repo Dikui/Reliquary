@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"reliquary/internal/application/service"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/types"
 )
 
 func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
@@ -22,7 +22,25 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	require.Len(t, body.Data, 5)
 	rules := map[string]string{}
 	for _, library := range body.Data {
-		for _, field := range []string{"id", "directory", "name", "template", "description", "collect_content", "exclude_content", "review_criteria", "default_review_criteria", "processing_model_tiers", "model_tiers", "deduplication_rule", "content_types", "relation_types", "feed_enabled", "system_role", "template_rules"} {
+		require.NotContains(t, library, "relation_types")
+		for _, field := range []string{
+			"id",
+			"directory",
+			"name",
+			"template",
+			"description",
+			"collect_content",
+			"exclude_content",
+			"review_criteria",
+			"default_review_criteria",
+			"processing_model_tiers",
+			"model_tiers",
+			"deduplication_rule",
+			"content_types",
+			"feed_enabled",
+			"system_role",
+			"template_rules",
+		} {
 			require.Contains(t, library, field)
 		}
 		rules[library["template"].(string)] = library["deduplication_rule"].(string)
@@ -77,7 +95,19 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 		response := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, patch, f.key, true)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
-	changed := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, `{"name":"Renamed","description":"Collect notes","feed_enabled":true,"content_types":[{"name":"Note","enabled":true,"extract_graph":false}],"relation_types":[{"name":"uses","enabled":true}]}`, f.key, true)
+	changed := personalRequest(
+		t,
+		f.router,
+		http.MethodPatch,
+		"/api/v1/libraries/"+custom.Data.ID,
+		`{"name":"Renamed",
+"description":"Collect notes",
+"feed_enabled":true,
+"content_types":[{"name":"Note",
+"enabled":true}]}`,
+		f.key,
+		true,
+	)
 	require.Equal(t, http.StatusOK, changed.Code, changed.Body.String())
 	require.NoError(t, json.Unmarshal(changed.Body.Bytes(), &configuredBody))
 	require.Equal(t, custom.Data.ReviewCriteria, configuredBody.Data.ReviewCriteria, "historical criteria remain readable")

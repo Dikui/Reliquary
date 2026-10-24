@@ -33,10 +33,10 @@
 | `public.entity_embedding_rebuild_runs` | `id`、`space_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 | 无 |
 | `public.entity_merge_records` | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 | 无 |
 | `public.entity_merge_suggestions` | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`entry_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 | 无 |
-| `public.entries` | `id`、`space_id`、`library_id`、`type`、`title`、`description`、`content_type`、`source_unverified`、`source_kind`、`vault_path`、`vault_body`、`starred`、`collect_reason`、`agent_summary`、`agent_tags`、`source_name`、`structured_summary`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count`、`storage_size`、`metadata`、`created_at`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`acquisition`、`incomplete`、`external_completion_attempted`、`ingest_api_key_id`、`ingest_api_key_name`、`last_ingest_api_key_id`、`last_ingest_api_key_name`、`missing_materials`、`content_type_hint`、`related_entry_id`、`source_ref`、`source_body_hash`、`identifier`、`graph` | 无 | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
+| `public.entries` | `id`、`space_id`、`library_id`、`type`、`title`、`description`、`content_type`、`source_unverified`、`source_kind`、`vault_path`、`vault_body`、`starred`、`collect_reason`、`agent_summary`、`agent_tags`、`source_name`、`structured_summary`、`source`、`parse_status`、`enable_status`、`file_name`、`file_type`、`file_size`、`file_path`、`file_hash`、`normalized_url`、`content_hash`、`content_sim_hash`、`content_rune_count`、`storage_size`、`metadata`、`created_at`、`updated_at`、`processed_at`、`error_message`、`deleted_at`、`summary_status`、`channel`、`pending_subtasks_count`、`custom_metadata`、`follow_ready_at`、`content_type_corrected`、`acquisition`、`incomplete`、`external_completion_attempted`、`ingest_api_key_id`、`ingest_api_key_name`、`last_ingest_api_key_id`、`last_ingest_api_key_name`、`missing_materials`、`content_type_hint`、`related_entry_id`、`source_ref`、`source_body_hash`、`identifier` | 无 | `search_seq_id`、`search_text`、`search_published_at`、`embedding_model_id` | 无 |
 | `public.entry_batch_items` | `batch_id`、`entry_id`、`space_id`、`title`、`library_id`、`status`、`message`、`warning`、`task_id`、`attempt`、`created_at`、`updated_at` | 无 | 无 | 无 |
 | `public.entry_entities` | `space_id`、`entry_id`、`entity_id`、`created_at` | 无 | 无 | 无 |
-| `public.entry_processing_outputs` | `entry_id`、`space_id`、`library_id`、`run_id`、`body_hash`、`content_type`、`relations`、`images`、`updated_at` | 无 | 无 | 无 |
+| `public.entry_processing_outputs` | `entry_id`、`space_id`、`library_id`、`run_id`、`body_hash`、`content_type`、`images`、`updated_at` | 无 | 无 | 无 |
 | `public.entry_processing_spans` | `id`、`entry_id`、`attempt`、`span_id`、`parent_span_id`、`name`、`kind`、`status`、`input`、`output`、`metadata`、`error_code`、`error_message`、`error_detail`、`started_at`、`finished_at`、`duration_ms`、`created_at`、`updated_at` | 无 | 无 | 无 |
 | `public.entry_repost_sources` | `id`、`space_id`、`library_id`、`entry_id`、`original_url`、`normalized_url`、`source_fingerprint`、`author`、`publisher`、`published_at`、`published_at_missing`、`match_method`、`sim_hash_distance`、`created_at` | 无 | 无 | 无 |
 | `public.entry_segment_runs` | `id`、`space_id`、`entry_id`、`phase`、`plan_hash`、`body_hash`、`plan`、`result`、`status`、`created_at`、`updated_at` | 无 | 无 | 无 |
@@ -49,21 +49,15 @@
 | `public.follow_feed_library_states` | `space_id`、`library_id`、`last_viewed_at` | 无 | 无 | 无 |
 | `public.follow_feed_states` | `space_id`、`last_viewed_at` | 无 | 无 | 无 |
 | `public.follows` | `space_id`、`target_type`、`target_id`、`created_at` | 无 | `entity_id`、`topic_id` | 无 |
-| `public.graph_pending_sync` | 无 | 无 | `id`、`space_id`、`entity_id`、`relation_id`、`relation_version`、`deleted`、`created_at`、`completed_at` | 无 |
 | `public.image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
 | `public.ingest_assets` | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 | 无 |
 | `public.ingest_discards` | `space_id`、`normalized_url`、`entry_id`、`discarded_at`、`reason`、`library_id`、`fingerprint` | 无 | 无 | 无 |
 | `public.libraries` | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id`、`system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` | 无 | 无 | 无 |
-| `public.library_content_types` | `library_id`、`name`、`position`、`enabled`、`extract_graph` | 无 | 无 | 无 |
-| `public.library_relation_types` | `library_id`、`name`、`position`、`enabled` | 无 | 无 | 无 |
+| `public.library_content_types` | `library_id`、`name`、`position`、`enabled` | 无 | 无 | 无 |
 | `public.maintenance_state` | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error`、`backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` | 无 | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | 无 |
 | `public.model_calls` | 无 | `id`、`space_id`、`requested_at`、`model_id`、`model_name`、`provider`、`purpose`、`entry_id`、`input_tokens`、`output_tokens`、`input_price`、`output_price`、`currency`、`cost`、`cost_status`、`duration_ms`、`success`、`error_category`、`attempt`、`retry_number`、`processing_attempt`、`span_id`、`text_input_tokens`、`image_input_tokens`、`image_input_price` | 无 | 无 |
 | `public.models` | `id`、`space_id`、`name`、`display_name`、`type`、`source`、`description`、`parameters`、`is_default`、`status`、`created_at`、`updated_at`、`deleted_at`、`is_builtin`、`managed_by` | 无 | 无 | 无 |
 | `public.operation_logs` | `id`、`space_id`、`actor`、`operation_type`、`object_id`、`before_value`、`after_value`、`created_at`、`api_key_id`、`api_key_name` | 无 | 无 | 无 |
-| `public.relation_sources` | `relation_id`、`entry_id`、`evidence`、`run_id`、`body_hash` | 无 | 无 | 无 |
-| `public.relation_suppressions` | `space_id`、`library_id`、`subject_id`、`relation_type`、`object_id`、`actor`、`created_at` | 无 | 无 | 无 |
-| `public.relation_type_merges` | `library_id`、`from_type`、`to_type`、`created_at` | 无 | 无 | 无 |
-| `public.relations` | `id`、`space_id`、`library_id`、`subject_id`、`relation_type`、`object_id`、`version`、`created_at`、`updated_at` | 无 | 无 | 无 |
 | `public.resource_access_grants` | `id`、`resource_id`、`access_scope`、`expires_at`、`revoked_at`、`created_at` | 无 | 无 | `token_hash` |
 | `public.resource_bindings` | `id`、`resource_id`、`space_id`、`owner_type`、`owner_id`、`relation`、`created_at` | 无 | 无 | 无 |
 | `public.resources` | `id`、`handle`、`space_id`、`provider`、`physical_path`、`location_hash`、`kind`、`mime_type`、`original_name`、`size`、`content_hash`、`lifecycle`、`expires_at`、`state`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 | 无 |
@@ -116,7 +110,7 @@
 | `topology.layer` | 无 | 无 | `topology_id`、`layer_id`、`schema_name`、`table_name`、`feature_column`、`feature_type`、`level`、`child_id` | 无 |
 | `topology.topology` | 无 | 无 | `id`、`name`、`srid`、`precision`、`hasz`、`useslargeids` | 无 |
 
-`search_records` 与 `model_calls` 的全部列只有 PostgreSQL 备份，没有副本。`graph_pending_sync` 是重建通知，关系正本与来源仍进副本。`relations` 的来源计数由 `relation_sources` 按资料去重计算，Neo4j 中保存的 `source_count` 属于图谱副本，不是独立正本。本次没有改变业务列的存储归属；修正文档中旧基线表格被误当成完整清单、仅备份表沿用 Sidecar 分类但未明确呈现的歧义。
+`search_records` 与 `model_calls` 的全部列只有 PostgreSQL 备份，没有副本。版本 33 起，关系及同步表不再参与当前维护数据；历史迁移的归属仍按其版本核对。
 
 ## 历史格式与基线对照
 
@@ -340,15 +334,15 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 ### 五库配置（迁移 000010）
 
-`libraries` 的 `system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` 属于配置正本。`library_content_types` 的 `library_id name position enabled extract_graph`，`library_relation_types` 的 `library_id name position enabled` 同样属于配置，必须完整备份与恢复。子表在库之后恢复。
+`libraries` 的 `system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` 属于配置正本。当前 `library_content_types` 的 `library_id name position enabled` 同样属于配置，子表在库之后恢复。版本 10 至 32 还包含 `library_content_types.extract_graph` 与 `library_relation_types`，仅旧结构核对保留这些字段；迁移到版本 33 时删除。
 
-`spaces.embedding_model_id` 是空间共享向量模型的配置正本。旧 `libraries.embedding_model_id` 和 `model_tiers.embedding` 保留用于旧副本兼容，运行读取投影为空间选择，不能作为各库独立的模型选择。模型设置的旧 HTTP 入口写入空间值。维护核对允许向量配置变更时一并检查空间选择；重建配置副本包含空间和两个库配置子表。
+`spaces.embedding_model_id` 是空间共享向量模型的配置正本。旧 `libraries.embedding_model_id` 和 `model_tiers.embedding` 保留用于旧副本兼容，运行读取投影为空间选择，不能作为各库独立的模型选择。模型设置的旧 HTTP 入口写入空间值。维护核对允许向量配置变更时一并检查空间选择；重建配置副本包含空间和仍存在的库配置子表。
 
 版本 10 之前的维护使用原有列归属，不要求新列或新表。迁移 000010 将原库保留为机构发布，新增其余系统库，按原来源类别迁移资料及索引归属；原正文、文件路径和业务字段保留。开发用 down 将资料归回原库，生产退回仍必须恢复升级前完整备份。
 
 ### 收录契约列（结构版本 11）
 
-`entries.source_ref`、`source_body_hash`、`identifier`、`graph` 均属于 sidecar 不可再生业务数据。`source_body_hash` 保留首次提交正文的规范化指纹，不因图片补全而变化。`has_update`、`latest_entry_id` 为按库和来源查询的派生响应，不是数据库列。版本 10 及以前没有这四列；恢复旧副本时使用空字符串与 NULL 默认值，核对时保留对其他字段的严格比较。
+`entries.source_ref`、`source_body_hash`、`identifier` 均属于 sidecar 不可再生业务数据。`source_body_hash` 保留首次提交正文的规范化指纹，不因图片补全而变化。`has_update`、`latest_entry_id` 为按库和来源查询的派生响应，不是数据库列。版本 11 至 32 还包含 `entries.graph`，版本 33 删除。版本 10 及以前没有这些列；恢复旧副本时按目标版本补默认值，核对时保留对其他字段的严格比较。
 
 版本 12 的 `ingest_discards.library_id` 与 `ingest_discards.fingerprint` 属于 sidecar 持久数据。版本 11 及以前仍按原列清单核对。旧副本缺少两列时，按资料原库及链接指纹投影；无法确定原库的历史记录保存在独立历史范围，不影响当前库收录。原有行、原因、时间和链接均保留。
 
@@ -357,7 +351,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 所有系统库和自建库都使用 `libraries.directory`，路径为 `<英文目录>/<标题短名>-<ID前8位>.md`。不设年月子目录，避免以不完整的发布时间决定路径，同时减少阅读时的层级。标题短名沿用最多 80 个 Unicode 字符、过滤文件系统特殊字符和空白改连字符的规则。资料的库与目录不可变。图片统一为 `attachments/<资料ID>/image-<内容哈希前16位>.<扩展名>`，正文使用相对路径；此目录只接收图片。
 
-每个库完整保存调用方提交的 Markdown 正文，表头不是正文的一部分。表头和正文均由数据库单向生成，在 Obsidian 手改不会回写数据库；刷新、核对修复或文件重建会覆盖修改。AI产出也使用数据库正文恢复副本。星标的 false、显式 graph 的 false 是有意义的值，会输出；其他空字符串、空列表、空摘要以及无标记的 source_unverified/has_update 不输出。
+每个库完整保存调用方提交的 Markdown 正文，表头不是正文的一部分。表头和正文均由数据库单向生成，在 Obsidian 手改不会回写数据库；刷新、核对修复或文件重建会覆盖修改。AI产出也使用数据库正文恢复副本。星标的 false 是有意义的值，会输出；其他空字符串、空列表、空摘要以及无标记的 source_unverified/has_update 不输出。
 
 以下是顶层字段的固定顺序。键名固定为英文，含义不随库变化。
 
@@ -384,8 +378,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 | 19 | `source_unverified` | 仅 true，表示来源未核实 |
 | 20 | `has_update` | 仅 true，表示有更新的记录 |
 | 21 | `latest_entry_id` | 有 source_ref 时的最新记录 ID，沿用现有接口键名 |
-| 22 | `graph` | 调用方明确设置时输出 true 或 false |
-| 23 | `related_entry_ids` | 非空关联资料 ID 列表，排序去重 |
+| 22 | `related_entry_ids` | 非空关联资料 ID 列表，排序去重 |
 
 各库示例见 [ikb-07 运行存证](tasks/ikb-07/evidence/runtime-headers.md)。所有示例都遵循同一字段表，无值不补 null。表头没有正文位置或向量字段。
 
@@ -396,9 +389,9 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 示例结构如下，示例表没有在本任务创建：
 
 ```go
-"future_relations": {
+"future_records": {
     Columns: Rule{Sidecar: "id source_id target_id created_at"},
-    File: "data/future_relations.json",
+    File: "data/future_records.json",
     After: []string{"entities", "entries"},
     Since: 13,
 },
@@ -406,11 +399,11 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 `File` 使用 `data/<表名>.json` 或 `config/<表名>.json`，一表一文件。必须列全主键、外键、业务列和历史时间列；只有确定可重算的列放在 Regenerated。敏感列沿用 SecretColumns 与净化机制。After 声明所有必须先恢复的父表；缺依赖或依赖环在写数据库前失败。登记项从 Since 指定版本进入列归属核对，新列未归类仍直接失败。已有登记项增加列时仍按数据库迁移规范维护历史版本映射。
 
-第一个登记对象为库配置：`libraries` 使用既有 `config/libraries.json`，`library_content_types` 与 `library_relation_types` 保留既有 `data/<表名>.json` 文件位置，保留完整数据库备份底层的旧映射。两个子表虽位于 data/，列归属仍为 Configuration。库在空间及账号之后恢复，子表在库之后恢复。库的名称、目录、模板、审核规则、内容类型、关系类型都参与逐列核对。
+第一个登记对象为库配置：`libraries` 使用既有 `config/libraries.json`，`library_content_types` 保留既有 `data/<表名>.json` 文件位置，保留完整数据库备份底层的旧映射。该子表虽位于 data/，列归属仍为 Configuration。库在空间及账号之后恢复，子表在库之后恢复。库的名称、目录、模板、审核规则、内容类型都参与逐列核对。
 
 副本新增 `registry.json`，自身格式版本为 1；主 manifest 的 `registry_version` 为 1，文件哈希在主 manifest 中登记。原副本主格式继续为 5，没有改变原有表文件格式。文件库重建拒绝没有受支持登记版本的旧副本，包括没有 registry_version 的旧格式 1 至 5，并提示使用匹配版本读取原文，再通过当前收录接口重新导入。不会猜测旧目录对应哪个库。底层完整数据库备份读取仍保留原有名称、默认值和结构版本映射，独立于当前文件库重建入口。没有生产数据迁移或旧目录扫描兼容。旧 schema 的维护 helper 仅导出副本并按原哈希核对，不生成库目录或改写旧表头；旧文件修复需使用匹配版本。
 
-关系正本、来源、抑制记录和关系类型合并已从结构版本 18 按上述方式登记；测评集、题目、答案、运行和逐题结果已按结构版本 21 沿用该入口。检索记录与模型调用统计只随 PostgreSQL 完整备份保存，不进 `.reliquary/`；两者已在结构版本 21 与 22 逐列登记到 `BackupOnlyTables`。Redis 临时队列和派生索引仍按现有规则处理。
+版本 18 至 32 使用该入口登记旧关系数据，版本 33 将其移除；测评集、题目、答案、运行和逐题结果已按结构版本 21 沿用该入口。检索记录与模型调用统计只随 PostgreSQL 完整备份保存，不进 `.reliquary/`；两者已在结构版本 21 与 22 逐列登记到 `BackupOnlyTables`。Redis 临时队列和派生索引仍按现有规则处理。
 
 `./reliquary-admin maintenance rebuild-files` 从现有数据库重新生成所有库的 Markdown 和维护副本；它覆盖手改表头及正文，不调用模型。删除所有库的资料目录后可以逐文件重建；应保留 `attachments/` 中不可重算的图片，图片或整个磁盘丢失须从包含文件库的完整备份恢复。`./reliquary-admin rebuild <文件库>` 仍用于从文件库和副本恢复空数据库，导入前核对原文件，恢复后逐列核对原副本。`verify --repair` 修复数据库拥有的表头及正文。
 
@@ -429,39 +422,23 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 副本格式保持 5；结构版本低于 16 的维护核对只允许该新增表为空。当前版本检查点被修改、丢失或替换为空计划均不通过核对。
 
-`entry_processing_outputs` 从结构版本 17 登记为 sidecar，副本路径为 `data/entry_processing_outputs.json`。这里的关系是处理证据，由关系正本消费；图片说明及其位置、不可读原因同样保存。恢复时从该结果重建 `image_description` 分块和向量，不需要重新调用视觉模型。库的关系类型自动补充写入已有配置正本，操作日志同时记录系统处理行为。
+`entry_processing_outputs` 从结构版本 17 登记为 sidecar，副本路径为 `data/entry_processing_outputs.json`。版本 33 删除处理证据中的 `relations` 字段，保留图片引用、历史说明及其位置、不可读原因。恢复时从该结果重建 `image_description` 分块和向量，不需要重新调用视觉模型。
 
-
-## PostgreSQL 关系正本与待同步记录
-
-结构版本 18 新增五张表，副本格式仍为 5，登记格式仍为 1。关系以库加主体、类型、客体唯一，空间实体跨库共用，各库的来源及人工抑制分别保存。`relation_sources` 以关系加资料唯一，`evidence` 保留位置列表和每份证据的发言人。来源数量通过来源行计算，不保存冗余计数。
-
-| 表 | 全部列的归属 | 副本路径 | 恢复依赖 |
-| --- | --- | --- | --- |
-| `relations` | Sidecar: id space_id library_id subject_id relation_type object_id version created_at updated_at | `data/relations.json` | spaces libraries entities library_relation_types |
-| `relation_sources` | Sidecar: relation_id entry_id evidence run_id body_hash | `data/relation_sources.json` | relations entries |
-| `relation_suppressions` | Sidecar: space_id library_id subject_id relation_type object_id actor created_at | `data/relation_suppressions.json` | spaces libraries entities library_relation_types |
-| `relation_type_merges` | Configuration: library_id from_type to_type created_at | `data/relation_type_merges.json` | library_relation_types |
-| `graph_pending_sync` | Regenerated: id space_id entity_id relation_id relation_version deleted created_at completed_at | 不进入副本 | 恢复后由图谱全量重建生成投影 |
-
-既有 `library_relation_types` 保持 Configuration 与 `data/library_relation_types.json` 登记。旧副本升级核对只投影四张新持久表的空默认值；当前非空关系、来源、版本、抑制及合并记录被改动或丢失会核对失败。待同步记录不参与数据相等核对，不进入文件库实时副本；PostgreSQL 完整备份仍包含该表。完整恢复及仅文件库恢复在解除暂停前从 PG 正本重建 Neo4j 并严格核对。
 
 ## 导入顺序与恢复核对
 
 导出在 PostgreSQL repeatable read 一致快照中读取所有归属表，文件名与 JSON 键稳定，manifest 最后原子替换。导出文件没有消费顺序；恢复先核验全部文件，再按 `replicaImportOrder` 和登记框架的拓扑排序写入同一事务。`TestIKB20ImportOrderCoversActualForeignKeys` 从最新数据库 `pg_constraint` 读取每条外键，验证所有副本表都在顺序中且父表先于子表。缺依赖、环或遗漏表在写入前失败。
 
-关系正本在 spaces、users、libraries、library_relation_types、entities 之后，relation_sources 还依赖 entries；抑制记录与类型合并依赖实体及库关系类型。evaluation_sets 在 spaces 之后，questions 在 sets 之后，answers 在 questions 之后，runs 在 spaces 之后，run_results 在 runs 之后。标准答案允许保留已删资料 ID，因此没有 entry 外键。历史来源检索记录 ID 也不要求 search_records 随文件库恢复。
+evaluation_sets 在 spaces 之后，questions 在 sets 之后，answers 在 questions 之后，runs 在 spaces 之后，run_results 在 runs 之后。标准答案允许保留已删资料 ID，因此没有 entry 外键。历史来源检索记录 ID 也不要求 search_records 随文件库恢复。
 
-核对覆盖所有不可再生字段、行数、JSONB null 类型、正文与表头、attachments、待审资源、模型与库配置、分块向量数量、模型及维度、关系及来源行、测评题和标准答案。副本差异及快照差异输出具体表和主键；复合键包含 relation_id 与 entry_id 或 question_id 与 entry_id。正文损坏输出文件路径。文件库恢复向量暂缺时输出 pending_vectors，恢复继续执行向量重建，`verify --vectors` 全部通过后解除暂停。
+核对覆盖所有不可再生字段、行数、JSONB null 类型、正文与表头、attachments、待审资源、模型与库配置、分块向量数量、模型及维度、测评题和标准答案。副本差异及快照差异输出具体表和主键；复合键包含 question_id 与 entry_id。正文损坏输出文件路径。文件库恢复向量暂缺时输出 pending_vectors，恢复继续执行向量重建，`verify --vectors` 全部通过后解除暂停。
 
 ```bash
 ./reliquary-admin verify --vectors
-./reliquary-admin maintenance graph-verify
 ```
 
-`graph-verify` 只核对，不自动修复。它比较全部实体节点及关系边的 ID、端点、类型、库、版本与来源计数，差异包含 PG 表名及行 ID。日常 `graph-check` 继续核对并修复。完整恢复在最终核对之前从 PG 重建图谱、刷新维护副本，新增系统重建日志允许追加，已有日志仍必须保留。
 
-恢复演练使用临时 PG 数据库、独立临时 Redis 容器中的 DB 0、受限 Neo4j 命名空间和临时文件目录。恢复真实待处理操作的 Redis 唤醒，但只消费独立队列的探针，不触发模型或外部工具。探针验证暂停期间零执行、解除暂停后一次完成；实际业务任务的完成由完整恢复集成测试验证。结果 JSON 包含原件核对、Redis 补推与暂停探针、Neo4j 重建及最终核对。结束清理临时数据库、Redis、图谱命名空间与文件；清理失败保留 ownership，下一次 schedule run 清理后重试。
+恢复演练使用临时 PG 数据库、独立临时 Redis 容器中的 DB 0和临时文件目录。恢复真实待处理操作的 Redis 唤醒，但只消费独立队列的探针，不触发模型或外部工具。探针验证暂停期间零执行、解除暂停后一次完成；实际业务任务的完成由完整恢复集成测试验证。结果 JSON 包含原件核对、Redis 补推与暂停探针及最终核对。结束清理临时数据库、Redis与文件；清理失败保留 ownership，下一次 schedule run 清理后重试。
 
 结构版本 23 将 `entries.related_entry_id`、`ingest_discards.entry_id`、`topic_backfill_batches.entry_count` 与 `topic_backfill_jobs.failed_entries` 归为 Sidecar；版本 22 及以前仍按原列名称核对。副本格式 6 写入新行字段，格式 1 至 5 的原文件先校验再转换。
 
@@ -478,3 +455,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 资料批次明细 `entry_batch_items` 与任务记录一同由 PostgreSQL 备份保存，不进入文件库副本。明细保留提交时的资料标识与标题，不随资料删除级联清除；恢复后与 `task_pending_ops` 一起用于核对批次状态。
 
 版本 29 起，`model_calls.text_input_tokens`、`image_input_tokens` 和 `image_input_price` 属于仅备份调用证据，不进入文件库副本。旧版本升级只投影新增 NULL 列，不改历史费用；分项非空时继续参与完整备份的逐行哈希核对。
+
+## 结构版本 33 的退役数据
+
+当前维护数据不包含关系、关系来源、关系抑制、关系类型合并、库关系类型和图谱待同步表，也不包含 `entries.graph`、`library_content_types.extract_graph` 和 `entry_processing_outputs.relations`。这些名称仅用于版本 33 之前的迁移核对与副本读取。导入当前版本时删除上述表列，其余数据及图片引用继续核对；恢复不重建 Neo4j。

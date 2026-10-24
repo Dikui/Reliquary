@@ -11,13 +11,7 @@ import (
 	"image/png"
 	"io"
 	"mime/multipart"
-
-	"strings"
-	"testing"
-
-	"reliquary/internal/application/graph"
 	"reliquary/internal/application/repository"
-	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/docparser"
@@ -25,6 +19,10 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
+	"strings"
+	"testing"
+
+	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 
 	"github.com/stretchr/testify/require"
 )
@@ -96,9 +94,6 @@ func TestSummaryMergeReservesSpaceForOutputCorrection(t *testing.T) {
 func (m *articleProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.stages = append(m.stages, stage)
-	if stage == "article_graph_verification" {
-		return supportedGraphVerificationFixture(messages)
-	}
 	if stage == "intake_review" {
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"Fixture sourced article"}`, !m.reject)}, nil
 	}
@@ -150,6 +145,7 @@ func (s *articleProcessingFiles) SaveBytes(_ context.Context, body []byte, _ uin
 	s.written[path] = bytes.Clone(body)
 	return path, nil
 }
+
 func (s *articleProcessingFiles) SaveFile(ctx context.Context, h *multipart.FileHeader, space uint64, id string) (string, error) {
 	f, err := h.Open()
 	if err != nil {
@@ -172,7 +168,7 @@ func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHa
 	t.Helper()
 	h := newRetainedIntakeHarness(t)
 	for i, name := range []string{"event", "opinion", "research", "tutorial", "case", "reference", "other"} {
-		row := types.LibraryContentType{LibraryID: h.library.ID, Name: name, Position: i, Enabled: true, ExtractGraph: name != "other"}
+		row := types.LibraryContentType{LibraryID: h.library.ID, Name: name, Position: i, Enabled: true}
 		require.NoError(t, h.db.Create(&row).Error)
 		h.library.ContentTypes = append(h.library.ContentTypes, row)
 	}
@@ -197,6 +193,7 @@ func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHa
 	h.service.config = &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{MaxImages: 8}}
 	return &articleProcessingHarness{retainedIntakeHarness: h, processor: model}
 }
+
 func articleImageDataURI(t *testing.T, n uint8) string {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
@@ -209,6 +206,7 @@ func articleImageDataURI(t *testing.T, n uint8) string {
 	require.NoError(t, png.Encode(&b, img))
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(b.Bytes())
 }
+
 func (h *articleProcessingHarness) upload(t *testing.T, title, body string) *types.Entry {
 	t.Helper()
 	article, err := h.service.createLegacyFileFixture(h.ctx, h.library.ID, newMultipartFileHeader(t, title+".md", body), map[string]string{"publisher": "Acme", "original_url": "https://example.org/" + title, "published_at": "2026-10-01"}, nil, "", types.ChannelWeb, nil)
@@ -216,6 +214,7 @@ func (h *articleProcessingHarness) upload(t *testing.T, title, body string) *typ
 	h.drain(t)
 	return h.article(t, article.ID)
 }
+
 func articleProcessingOutput(t *testing.T, contentType string, entities []types.EntityCandidate, topics []string) string {
 	t.Helper()
 	var result map[string]interface{}
@@ -237,8 +236,11 @@ func articleProcessingOutput(t *testing.T, contentType string, entities []types.
 
 func TestArticleProcessingGeneratesMissingTitleWithSummary(t *testing.T) {
 	h, vault := newIngestHarness(t)
-	request := &types.IngestRequest{Library: "official", URL: "https://example.org/widget-release", Acquisition: "verbatim", Publisher: "Acme",
-		Content: "Acme released a widget. The announcement describes its deployment capabilities and reports original measurements."}
+	request := &types.IngestRequest{
+		Library: "official", URL: "https://example.org/widget-release", Acquisition: "verbatim", Publisher: "Acme",
+		Content: "Acme released a widget. The announcement describes its deployment capa" +
+			"bilities and reports original measurements.",
+	}
 	result, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, request.URL, h.article(t, result.EntryID).Title)
@@ -264,7 +266,7 @@ func TestArticleProcessingRejectsMultilineGeneratedTitle(t *testing.T) {
 	require.ErrorContains(t, err, "title must be a single line")
 }
 
-func TestAllTemplatesProcessEntitiesAndGraph(t *testing.T) {
+func TestAllTemplatesProcessEntities(t *testing.T) {
 	for _, library := range []string{"personal", "references", "ai-output"} {
 		t.Run(library, func(t *testing.T) {
 			h, vault := newIngestHarness(t)
@@ -278,12 +280,17 @@ func TestAllTemplatesProcessEntitiesAndGraph(t *testing.T) {
 			}
 			output, err := parseArticleProcessingResult(articleProcessingOutput(t, kind, []types.EntityCandidate{{Name: "Acme", EntityType: "company", Description: "A partner of Beta."}, {Name: "Beta", EntityType: "company", Description: "A partner of Acme."}}, []string{topic.ID}))
 			require.NoError(t, err)
-			output.Relations = []extractedRelation{{Subject: "Acme", Object: "Beta", Type: "合作", EvidenceIDs: []int{1}}}
 			raw, err := json.Marshal(output)
 			require.NoError(t, err)
 			h.processor.output = string(raw)
-			result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: library, URL: "https://example.org/measurements", Acquisition: "verbatim", Graph: entrySearchBool(true),
-				Content: "Acme and Beta jointly measured deployment performance. The original report describes the method and complete measurements."})
+			result, err := h.service.Ingest(
+				h.ctx,
+				&types.IngestRequest{
+					Library: library, URL: "https://example.org/measurements", Acquisition: "verbatim",
+					Content: "Acme and Beta jointly measured deployment performance. The original re" +
+						"port describes the method and complete measurements.",
+				},
+			)
 			require.NoError(t, err)
 			h.drain(t)
 			article := h.article(t, result.EntryID)
@@ -294,7 +301,7 @@ func TestAllTemplatesProcessEntitiesAndGraph(t *testing.T) {
 			var topicCount int64
 			require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=? AND topic_id=?", article.ID, topic.ID).Count(&topicCount).Error)
 			require.EqualValues(t, 1, topicCount)
-			for _, table := range []string{"entities", "entry_entities", "relations"} {
+			for _, table := range []string{"entities", "entry_entities"} {
 				var count int64
 				require.NoError(t, h.db.Table(table).Count(&count).Error)
 				require.Positive(t, count, table)
@@ -307,17 +314,12 @@ func TestAllTemplatesProcessEntitiesAndGraph(t *testing.T) {
 				require.NoError(t, h.db.Table(table).Where("entry_id=?", article.ID).Count(&count).Error)
 				require.Positive(t, count, table)
 			}
-			enabled, err := graph.Enabled(h.db, article)
-			require.NoError(t, err)
-			require.True(t, enabled)
-			stored, err := ReadEntryProcessingOutput(h.ctx, h.db, article.SpaceID, article.ID)
-			require.NoError(t, err)
-			require.NotEmpty(t, stored.Relations)
+
 			_, header, _ := readVaultArticle(t, vault, article)
 			require.Contains(t, string(header), "[[Acme]]")
 			require.Len(t, h.processor.requests, 1, "no entity judgement calls")
 			require.Contains(t, h.processor.requests[0][0].Content, "每个实体输出")
-			require.Contains(t, h.processor.requests[0][0].Content, "relation_types=")
+			require.NotContains(t, h.processor.requests[0][0].Content, "relation_types=")
 			require.NotContains(t, h.processor.requests[0][0].Content, "本库不抽取实体")
 		})
 	}
@@ -404,5 +406,4 @@ func TestArticleProcessingDefaultLimits(t *testing.T) {
 	chars, _, completion = h.service.articleProcessingLimits(&types.Model{Parameters: types.ModelParameters{ContextWindow: 10000, MaxOutputTokens: 1000}})
 	require.Equal(t, 6000, chars)
 	require.Equal(t, 1000, completion)
-
 }

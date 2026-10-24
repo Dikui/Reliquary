@@ -58,7 +58,7 @@ def prepare(root, env_file, project):
     # Credentials are copied verbatim for an existing installation.
     text = env_file.read_text() if env_file else (SOURCE / '.env.example').read_text()
     if not env_file:
-        replacements = {key: secrets.token_hex(24) for key in ('DB_PASSWORD', 'NEO4J_PASSWORD')}
+        replacements = {key: secrets.token_hex(24) for key in ('DB_PASSWORD',)}
         replacements.update(DB_USER='reliquary', DB_NAME='reliquary', SYSTEM_AES_KEY=secrets.token_hex(16))
         text = '\n'.join(line.partition('=')[0] + '=' + replacements[line.partition('=')[0]]
                          if line.partition('=')[0] in replacements else line for line in text.splitlines())

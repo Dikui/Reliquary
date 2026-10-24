@@ -13,7 +13,6 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `acquisition` | 可选，缺省表示未知；提供时为 `verbatim` 逐字原文、`extracted` 提取、`model_written` 模型整理 |
 | `source_ref` | 所有模板接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库内用于唯一定位来源 |
 | `identifier` | 所有模板接受。可选 `scheme:value`，最多 2048 Unicode 码点。scheme 小写、DOI value 小写；其他 value 保留大小写 |
-| `graph` | 可选布尔值；所有模板默认抽取有依据的关系，false 显式关闭关系抽取 |
 | `recovery_failure_id` | 可选接收故障编号，用于关联修复请求与结果；不参与正文、来源身份或去重 |
 | `url` | 可选，缺来源不阻止保存。提供时必须为 HTTP/HTTPS，最多 2048 字节 |
 | `title` | 可选，最多 255 个码点；缺失不阻止保存，后台可补标题 |
@@ -30,7 +29,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 
 调用方应保留原文明确署名：`author` 填个人作者，`publisher` 填发布机构、媒体或平台账号，不用机构或转发账号替代文章作者，也不推测缺失的署名。正文保留作者观点和理解所需的回复、引用上下文。`verbatim` 不得删改主体；经过压缩、重述的材料应如实声明获取方式。提交原帖时保存原帖 URL，相关文章链接不能冒充原帖来源。客观机构新闻与外部个人观点按目标库用途分别收录。
 
-所有模板共用入库、审核和处理规则。系统库目录仅为示例，实际可用库由 `list_libraries` 返回。source_ref、identifier、graph 不再按模板限制。
+所有模板共用入库、审核和处理规则。系统库目录仅为示例，实际可用库由 `list_libraries` 返回。source_ref、identifier 不再按模板限制。
 
 ## 五个系统库示例
 
@@ -39,7 +38,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 ```sh
 curl -X POST "$BASE/api/v1/ingest" \
   -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
-  --data-binary '{"items":[{"library":"official","url":"https://example.org/release","title":"机构公告","publisher":"示例研究院","content":"# 公告\n\n完整公告正文与测量方法。","acquisition":"extracted","graph":true}]}'
+  --data-binary '{"items":[{"library":"official","url":"https://example.org/release","title":"机构公告","publisher":"示例研究院","content":"# 公告\n\n完整公告正文与测量方法。","acquisition":"extracted"}]}'
 ```
 
 媒体信息：
@@ -57,13 +56,13 @@ curl -X POST "$BASE/api/v1/ingest" \
 个人产出：
 
 ```json
-{"items":[{"library":"personal","source_ref":"notes/calibration.md","title":"校准记录","content":"# 校准\n\n仪器读数为 42。","acquisition":"verbatim","graph":false}]}
+{"items":[{"library":"personal","source_ref":"notes/calibration.md","title":"校准记录","content":"# 校准\n\n仪器读数为 42。","acquisition":"verbatim"}]}
 ```
 
 AI产出：
 
 ```json
-{"items":[{"library":"ai-output","title":"研究报告","content":"# 研究报告\n\n综合分析内容。","acquisition":"model_written","graph":false}]}
+{"items":[{"library":"ai-output","title":"研究报告","content":"# 研究报告\n\n综合分析内容。","acquisition":"model_written"}]}
 ```
 
 ## 保存与同来源更新
@@ -74,7 +73,7 @@ AI产出：
 
 原有人工作出的拒收记录继续生效。已有来源未核实标记保留。任一已提交图片无效时整条回滚，已有正文不变。未提供的远程图片保留引用，不下载或生成缺图待办。
 
-先保存正文、图片和元数据，再后台建立正文索引，随后运行摘要、分类、实体和图谱。空实体或关系结果合法；不为凑数编造事实。模型失败不回滚原文，也不撤销已建立的正文索引；向量暂不可用时保留全文检索并后台补算。parse_status 表示正文索引状态，summary_status 表示模型处理状态。前者 completed、后者 failed 表示正文仍可检索，模型处理需要重试。
+先保存正文、图片和元数据，再后台建立正文索引，随后运行摘要、分类、实体。空实体结果合法；不为凑数编造事实。模型失败不回滚原文，也不撤销已建立的正文索引；向量暂不可用时保留全文检索并后台补算。parse_status 表示正文索引状态，summary_status 表示模型处理状态。前者 completed、后者 failed 表示正文仍可检索，模型处理需要重试。
 
 ## 更新已有资料的正文
 
@@ -150,7 +149,7 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 `ingest` 使用同样的 `items` 包络、字段与逐项状态。例如：
 
 ```json
-{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ingest","arguments":{"items":[{"library":"personal","source_ref":"notes/mcp.md","content":"# 笔记\n\n通过 MCP 收录的正文。","acquisition":"verbatim","graph":false}]}}}
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ingest","arguments":{"items":[{"library":"personal","source_ref":"notes/mcp.md","content":"# 笔记\n\n通过 MCP 收录的正文。","acquisition":"verbatim"}]}}}
 ```
 
 先 `initialize`，随后请求 `/mcp`，使用 Bearer API Key、`Accept: application/json, text/event-stream` 和协商的 `MCP-Protocol-Version`。`list_libraries` 返回库用途、模板、审核和来源说明、去重说明及 `accepted_fields`。`check_urls` 参数与 HTTP 相同。图片上传走 HTTP，已有资料的正文和图片更新使用 `update_entry_content`。
@@ -165,7 +164,7 @@ AI产出和其他库共用 HTTP `POST /api/v1/ingest` 与 MCP `ingest`。每项�
 
 MCP 将同一对象作为 `ingest` 的 `arguments`。字段和错误按上文通用收录契约处理。来源资料可在正文中引用；收录不接受专用的关联资料、实体、主题或 `request_id` 参数。
 
-生成型同样先保存，再后台运行正文索引、摘要、分类、实体和图谱。保留 `cannot_be_fact=true`，处理成功不代表陈述已核实。acquisition 仍可省略；无来源标识时相同正文也正常新建。
+生成型同样先保存，再后台运行正文索引、摘要、分类、实体。保留 `cannot_be_fact=true`，处理成功不代表陈述已核实。acquisition 仍可省略；无来源标识时相同正文也正常新建。
 
 ## 长文处理
 
@@ -177,10 +176,10 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。字段和错误按上文通
 
 ## 联合处理的图片输入
 
-所有模板均选择所属库内容类型、补全缺失标题、生成摘要与主题，并抽取有依据的实体、短介绍和关系。默认运行图谱，`graph:false` 显式关闭关系抽取；内容类型不再关闭图谱。内容类型修正仍只能选择所属库启用的类型。
+所有模板均选择所属库内容类型、补全缺失标题、生成摘要与主题，并抽取有依据的实体和短介绍。内容类型修正仍只能选择所属库启用的类型。
 
 支持视觉的处理模型读取由已保存原图生成的模型输入副本，将重要视觉信息纳入理解和摘要。默认处理不再要求、校验或保存逐图说明，也不生成新的 `image_description` 检索块；模型额外返回的 `image_descriptions` 不参与处理结果。每段最多读取 `article_processing.max_images` 张图片，超过时增加分段。图片不可读或模型不支持视觉时保存跳过原因。
 
-资料详情沿用 `image_descriptions` 字段返回图片引用和读取状态，包括 `url`、`ordinal` 和 `locations`，有历史说明或跳过原因时附带 `description`、`skip_reason`。新处理结果不返回 `description`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。图片引用和位置保留，历史说明仍可读取，不批量清理。历史说明命中仍可返回 `chunk_type: "image_description"`；位置使用保存后的 Markdown 正文坐标。关系及来源通过实体详情和 [关系接口](relations-api.md) 读取。
+资料详情沿用 `image_descriptions` 字段返回图片引用和读取状态，包括 `url`、`ordinal` 和 `locations`，有历史说明或跳过原因时附带 `description`、`skip_reason`。新处理结果不返回 `description`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。图片引用和位置保留，历史说明仍可读取，不批量清理。历史说明命中仍可返回 `chunk_type: "image_description"`；位置使用保存后的 Markdown 正文坐标。
 
 原图仍可建立图片向量，需要支持图片输入的 embedding 配置。图片命中后，`qwen3-vl-rerank` 可通过多模态接口读取窗口内每条候选最高匹配图片的模型输入副本和文章文本，取该条文本与图像得分的最大值排序。不支持图像重排、附件读取失败或模型失败时保留融合顺序；文本候选继续使用文本重排。多模态重排按融合顺序截取最多 40 个文档项作为单次窗口：每条资料占一个文本项，命中图片再占一个原图项，因此窗口至少容纳前 20 条资料（候选不足时全部纳入）。仅窗口内排序，其余候选保留原位置和顺序，不跨请求比较分数。此行为不新增配置，也不批量回填历史资料。

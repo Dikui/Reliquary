@@ -9,17 +9,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
-	"time"
-	"unicode/utf8"
-
 	"reliquary/internal/diagnostics"
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	werrors "reliquary/internal/errors"
 
 	"github.com/google/uuid"
 )
@@ -92,18 +92,21 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		agentTags = []string{}
 	}
 	tags, _ := json.Marshal(agentTags)
-	entry := &types.Entry{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID,
-		SourceRef: request.SourceRef, Identifier: request.Identifier, Graph: request.Graph,
+	entry := &types.Entry{
+		ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID,
+		SourceRef: request.SourceRef, Identifier: request.Identifier,
 		Type: types.EntryTypeManual, SourceKind: kind, Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual,
 		ParseStatus: types.ParseStatusPending, SummaryStatus: types.SummaryStatusPending, EnableStatus: "disabled",
 		CreatedAt: now, UpdatedAt: now, EmbeddingModelID: library.EmbeddingModelID,
 		CollectReason: strings.TrimSpace(request.CollectReason), AgentSummary: request.AgentSummary, AgentTags: types.JSON(tags),
 		SourceName: request.SourceName, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint,
-		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName}
+		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName,
+	}
 	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "approved", SourceInfo: types.SourceInfo{
 		OriginalURL: entry.Source, Author: request.Author, Publisher: request.Publisher,
-		PublishedAt: normalizeIntakePublicationDate(request.PublishedAt)}}
+		PublishedAt: normalizeIntakePublicationDate(request.PublishedAt),
+	}}
 	if err := entry.SetIntakeMetadata(intake); err != nil {
 		return nil, err
 	}
@@ -124,6 +127,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	}
 	return s.saveIngestEntry(ctx, library, entry, nil, request)
 }
+
 func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBatchRequest) (*types.IngestBatchResult, error) {
 	if request == nil || len(request.Items) < 1 || len(request.Items) > 50 {
 		return nil, werrors.NewBadRequestError("items must contain between 1 and 50 entries")
@@ -175,7 +179,7 @@ func ingestResult(article *types.Entry, status, message, reason, id string) *typ
 		result.LibraryName = article.LibraryName
 		result.EntryID = article.ID
 		result.SourceUnverified = article.SourceUnverified
-		result.LibraryID, result.SourceRef, result.Identifier, result.Graph = article.LibraryID, article.SourceRef, article.Identifier, article.Graph
+		result.LibraryID, result.SourceRef, result.Identifier = article.LibraryID, article.SourceRef, article.Identifier
 		result.HasUpdate, result.LatestEntryID = article.HasUpdate, article.LatestEntryID
 		if article.SourceRef != "" && result.LatestEntryID == "" {
 			result.LatestEntryID = article.ID

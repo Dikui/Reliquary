@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"reliquary/internal/types"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"reliquary/internal/types"
 )
 
 var systemLibraryLabelMigration = map[string][2]string{
@@ -181,24 +181,51 @@ func migrateLibrarySnapshot(snapshot *Snapshot, reference []map[string]any) erro
 	return nil
 }
 
+type legacyLibrary struct {
+	types.Library
+	ContentTypes  []legacyLibraryType
+	RelationTypes []legacyLibraryType
+}
+type legacyLibraryType struct {
+	Name         string
+	Position     int
+	Enabled      bool
+	ExtractGraph bool
+}
+
 // These values belong to frozen migration 000010, not current library templates.
 // Changing today's defaults must not change how old backups are restored.
-func version10LibraryDefaults() []*types.Library {
+func version10LibraryDefaults() []*legacyLibrary {
 	officialRelations := []string{"投资", "收购", "合作", "竞争", "任职", "发布", "供应", "客户", "监管", "隶属"}
-	makeLibrary := func(role, template, description, criteria, evidence string, feed bool, names []string, graphCount int, relations []string) *types.Library {
-		library := &types.Library{
+	makeLibrary := func(role,
+		template,
+		description,
+		criteria,
+		evidence string,
+		feed bool,
+		names []string,
+		graphCount int,
+		relations []string,
+	) *legacyLibrary {
+		library := &legacyLibrary{Library: types.Library{
 			SystemRole: role, Directory: role, Name: systemLibraryLabelMigration[role][0], Template: template,
 			Description: description, ReviewCriteria: criteria, SourceEvidenceRule: evidence, FeedEnabled: feed,
-		}
+		}}
 		for i, name := range names {
-			library.ContentTypes = append(library.ContentTypes, types.LibraryContentType{Name: name, Position: i, Enabled: true, ExtractGraph: i < graphCount})
+			library.ContentTypes = append(
+				library.ContentTypes,
+				legacyLibraryType{Name: name, Position: i, Enabled: true, ExtractGraph: i < graphCount},
+			)
 		}
 		for i, name := range relations {
-			library.RelationTypes = append(library.RelationTypes, types.LibraryRelationType{Name: name, Position: i, Enabled: true})
+			library.RelationTypes = append(
+				library.RelationTypes,
+				legacyLibraryType{Name: name, Position: i, Enabled: true},
+			)
 		}
 		return library
 	}
-	return []*types.Library{
+	return []*legacyLibrary{
 		makeLibrary("institutional", "external_timely", "官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。",
 			"发布者是机构（官方、公司、媒体、研究机构、行业协会）；有实质信息，不是广告、招聘、纯转发；正文完整。", "link_or_publisher_date", true,
 			[]string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"}, 5, officialRelations),

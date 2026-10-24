@@ -168,7 +168,7 @@ class AdminStorageTests(unittest.TestCase):
                     (source / ".env").write_text(dotenv)
                     process_env = {"PATH": os.environ.get("PATH", os.defpath), "HOME": str(home),
                                    "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker")),
-                                   "COMPOSE_PROJECT_NAME": "reliquary-admin-path-test", "NEO4J_PASSWORD": "compose-test-password", **overrides}
+                                   "COMPOSE_PROJECT_NAME": "reliquary-admin-path-test", **overrides}
                     with mock.patch.dict(admin.os.environ, process_env, clear=True):
                         ctx = admin.Context(source)
                         config = json.loads(ctx.compose("config", "--format", "json"))
@@ -660,35 +660,23 @@ class AdminStorageTests(unittest.TestCase):
         admin.schedule(ctx, argparse.Namespace(action="configure", enabled="false"))
         self.assertEqual(ctx.called, ("configure", "--enabled=false"))
 
-    def test_restore_rebuilds_graph_before_resuming_and_failure_keeps_pause(self):
+    def test_restore_resumes_after_verification_without_retired_services(self):
         class FakeContext:
             direct = True
             local_server = None
-            def __init__(self, root, graph=True, fail=False):
-                self.root, self.calls, self.graph, self.fail = root, [], graph, fail
+            def __init__(self, root):
+                self.root, self.calls = root, []
             def legacy_schema(self):
                 return False
-            def sql(self, query):
-                return "t" if self.graph else "f"
             def cli_json(self, *args, **kwargs):
                 self.calls.append(args)
-                if args[0] == "graph-rebuild" and self.fail:
-                    raise admin.AdminError("Neo4j unavailable")
                 return {"models": []} if args[0] == "models" else {"valid": True}
-        for graph, fail in [(True, False), (True, True), (False, False)]:
-            with self.subTest(graph=graph, fail=fail):
-                ctx = FakeContext(self.root, graph, fail)
-                with mock.patch.object(admin, "require_parser_credentials"), mock.patch.object(admin, "verify_reconfigured_data", return_value={"valid": True}):
-                    if fail:
-                        with self.assertRaisesRegex(admin.AdminError, "Neo4j unavailable"):
-                            admin.finalize_restore(ctx, self.root)
-                        self.assertNotIn(("resume",), ctx.calls)
-                    else:
-                        admin.finalize_restore(ctx, self.root)
-                        if graph:
-                            self.assertLess(ctx.calls.index(("graph-rebuild",)), ctx.calls.index(("resume",)))
-                        else:
-                            self.assertNotIn(("graph-rebuild",), ctx.calls)
+        ctx = FakeContext(self.root)
+        with mock.patch.object(admin, "require_parser_credentials"), mock.patch.object(admin, "verify_reconfigured_data", return_value={"valid": True}) as verify:
+            admin.finalize_restore(ctx, self.root)
+            verify.assert_called_once()
+        self.assertIn(("resume",), ctx.calls)
+        self.assertFalse(any(call[0].startswith("graph-") for call in ctx.calls))
 
     def test_scheduler_install_failure_keeps_restore_paused(self):
         class FakeContext:
@@ -1482,8 +1470,8 @@ class IKB20DrillTests(unittest.TestCase):
                 def runtime(*args):
                     def invoke(*flags):
                         calls.append(flags)
-                        if fail and flags[0] == "graph-verify":
-                            raise admin.AdminError("edge corruption")
+                        if fail and flags[0] == "queue-probe-drill":
+                            raise admin.AdminError("data corruption")
                         return {"ok": True}
                     try:
                         yield invoke, str(backup / "snapshot.json")
@@ -1494,7 +1482,7 @@ class IKB20DrillTests(unittest.TestCase):
                 args = argparse.Namespace(directory=str(root / "backups"), automatic=False, report=str(report))
                 with mock.patch.object(admin, "check_files"), mock.patch.object(admin, "snapshot_tree"), mock.patch.object(admin, "record"), mock.patch.object(admin, "drill_runtime", runtime), mock.patch.object(admin.subprocess, "run", return_value=mock.Mock(returncode=0)):
                     if fail:
-                        with self.assertRaisesRegex(admin.AdminError, "edge corruption"):
+                        with self.assertRaisesRegex(admin.AdminError, "data corruption"):
                             admin.drill(ctx, args)
                     else:
                         admin.drill(ctx, args)
@@ -1509,7 +1497,7 @@ class IKB20DrillTests(unittest.TestCase):
                     self.assertFalse((root / ".maintenance-schedule/drill-active.json").exists())
                     self.assertTrue(any("--allow-operation-log-append" in flags for flags in calls))
 
-    def test_drill_runtime_never_uses_live_redis_and_always_cleans_graph(self):
+    def test_drill_runtime_never_uses_live_redis_and_cleans_temporary_containers(self):
         with tempfile.TemporaryDirectory(prefix="ikb20-runtime-test-") as temporary:
             root = Path(temporary)
             class Context:
@@ -1520,7 +1508,7 @@ class IKB20DrillTests(unittest.TestCase):
                 def __init__(self):
                     self.root, self.calls = root, []
                 def runtime_env(self):
-                    return {"NEO4J_URI": "bolt://graph:7687"}
+                    return {}
                 def cli_json(self, *args, **kwargs):
                     self.calls.append((args, kwargs))
                     return {"ok": True}
@@ -1537,7 +1525,7 @@ class IKB20DrillTests(unittest.TestCase):
             self.assertEqual(replay["RELIQUARY_ADMIN_DATABASE_ONLY"], "1")
             self.assertTrue(replay["REDIS_ADDR"].startswith("127.0.0.1:2"))
             self.assertEqual(ctx.env["REDIS_ADDR"], "live:6379")
-            self.assertEqual(ctx.calls[-1][0], ("graph-clear-drill", "--namespace", database))
+            self.assertEqual([call[0] for call in ctx.calls], [("queue-replay",)])
 
 
 if __name__ == "__main__":

@@ -11,11 +11,10 @@ import (
 	"os"
 	"path/filepath"
 	"reliquary/internal/application/repository"
-	"strings"
-
 	"reliquary/internal/maintenance"
 	"reliquary/internal/types"
 	"reliquary/internal/vaultpath"
+	"strings"
 )
 
 func (v *VaultService) StartReplica() error {
@@ -269,11 +268,6 @@ func (s *VaultDocumentService) RebuildReplica(ctx context.Context) (*VaultRebuil
 		for key, value := range map[string]string{"source_ref": header.SourceRef, "identifier": header.Identifier} {
 			if _, present := row[key]; present {
 				checks[key] = value
-			}
-		}
-		if value, present := row["graph"]; present {
-			if (header.Graph == nil) != (value == nil) || (header.Graph != nil && value != *header.Graph) {
-				return fmt.Errorf("header graph differs from replica: %s", path)
 			}
 		}
 		for key, value := range checks {

@@ -80,3 +80,5 @@ TDesign owns buttons, inputs, date pickers, loading, empty states and pagination
 
 
 EntryProcessingStatus uses the existing success outline tag for confirmed storage and a separate neutral, active or error tag for background work. Cards, rows and details share these labels and the TDesign retry button. Labels wrap in narrow containers; the saved state does not change to an error color when enrichment fails. No new theme tokens are introduced.
+
+Entity profiles retain the shared metadata controls and source-material list. The retired relationship list, graph canvas and relationship-type editor are removed; no replacement visual controls are introduced in this change.

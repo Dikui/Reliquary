@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/types"
 	"time"
+
+	apperrors "reliquary/internal/errors"
+	taskqueue "reliquary/internal/queue"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/application/graph"
-	"reliquary/internal/application/repository"
-	apperrors "reliquary/internal/errors"
-	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
 )
 
 func libraryRebuildGroup(id string) string { return "library-rebuild:" + id }
@@ -172,9 +172,6 @@ func (s *entryService) cleanupLibraryRebuild(ctx context.Context, entry *types.E
 		if err := lockEntitySpace(tx, entry.SpaceID); err != nil {
 			return err
 		}
-		if err := graph.Lock(tx, entry.SpaceID); err != nil {
-			return err
-		}
 		var current types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", entry.ID, entry.SpaceID).First(&current).Error; err != nil {
 			return err
@@ -194,9 +191,6 @@ func (s *entryService) cleanupLibraryRebuild(ctx context.Context, entry *types.E
 			}
 		}
 		if err := tx.Where("entry_id=? AND space_id=? AND source=?", entry.ID, entry.SpaceID, types.TopicSourceModel).Delete(&types.EntryTopic{}).Error; err != nil {
-			return err
-		}
-		if err := graph.WithdrawTx(tx, []string{entry.ID}); err != nil {
 			return err
 		}
 		if err := pruneUnreferencedEntities(tx, entry.SpaceID, entityIDs); err != nil {

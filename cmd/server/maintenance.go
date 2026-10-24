@@ -12,23 +12,23 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
-
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/container"
 	"reliquary/internal/database"
-	"reliquary/internal/graphreplica"
-	applogger "reliquary/internal/logger"
 	"reliquary/internal/maintenance"
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/queue"
 	"reliquary/internal/types"
 	"sort"
+	"strings"
+	"time"
+
+	applogger "reliquary/internal/logger"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func maintenanceDatabase() (*gorm.DB, string, error) {
@@ -55,7 +55,12 @@ func maintenanceDatabase() (*gorm.DB, string, error) {
 func runMaintenance(args []string, input io.Reader, output io.Writer) error {
 	applogger.SetOutput(os.Stderr)
 	if len(args) == 0 {
-		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|graph-rebuild|graph-check|graph-verify|graph-clear-drill|audit|queue-replay|queue-probe-drill|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
+		return errors.New(
+			"usage: server maintenance flush|manifest|verify|scrub|models|model-tes" +
+				"t|credentials|chatgpt-login|chatgpt-complete|secret-scan|audit|queue-r" +
+				"eplay|queue-probe-drill|reindex|export-sources|migrate|rebuild|rebuild" +
+				"-files|pause|resume|status|record|configure|due",
+		)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -106,50 +111,6 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		return v.Flush(ctx)
 	}
 	switch args[0] {
-	case "graph-rebuild", "graph-check", "graph-verify", "graph-clear-drill":
-		flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
-		namespace := flags.String("namespace", "", "isolated drill namespace")
-		if err := flags.Parse(args[1:]); err != nil {
-			return err
-		}
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			return err
-		}
-		store := graphreplica.NewStore(config.ResolveNeo4j(cfg))
-		if *namespace != "" {
-			store.Close()
-			store, err = graphreplica.NewDrillStore(config.ResolveNeo4j(cfg), *namespace)
-			if err != nil {
-				return err
-			}
-		}
-		defer store.Close()
-		if args[0] == "graph-clear-drill" {
-			if err := store.ClearDrill(ctx); err != nil {
-				return err
-			}
-			return emit(map[string]bool{"ok": true})
-		}
-		svc := graphreplica.NewService(db, store, nil)
-		var result graphreplica.CheckResult
-		if args[0] == "graph-rebuild" {
-			result, err = svc.Rebuild(ctx)
-		} else if args[0] == "graph-verify" {
-			result, err = svc.Verify(ctx)
-		} else {
-			result, err = svc.Check(ctx)
-		}
-		if err != nil {
-			return err
-		}
-		if err := emit(result); err != nil {
-			return err
-		}
-		if args[0] == "graph-verify" && len(result.Differences) > 0 {
-			return errors.New("Neo4j verification failed")
-		}
-		return nil
 	case "audit":
 		result, err := maintenance.Audit(ctx, db)
 		if err != nil {

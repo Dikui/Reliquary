@@ -9,13 +9,13 @@ import (
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
 	taskqueue "reliquary/internal/queue"
+	"reliquary/internal/types"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 func blockedIntakeURL(raw string) bool {
@@ -190,7 +190,7 @@ func (s *entryService) reviewIntake(ctx context.Context, library *types.Library,
 
 func (s *entryService) saveIntakeReview(ctx context.Context, entry *types.Entry) error {
 	if ctx.Value(libraryReviewContextKey{}) == true {
-		// A library review commits its verdict and graph visibility together.
+		// A library review commits its verdict with the entry state.
 		return nil
 	}
 	return s.repo.UpdateEntry(ctx, entry)

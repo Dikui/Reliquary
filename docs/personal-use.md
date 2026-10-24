@@ -2,25 +2,25 @@
 
 日常正文保存在 PostgreSQL，图片等原始资源保存在磁盘。网页预览按需读取数据库并在关闭后释放，不生成 `.md`。设置 → 资料导出与备份 → 导出文件库，仅在需要离线阅读或文件库恢复时生成 Markdown 和 `.reliquary/`；旧导出文件不会自动删除。下文的 Obsidian 阅读及仅文件库重建说明适用于显式导出的文件库。
 
-Reliquary 在一个个人空间中按库收录、存储、去重、检索资料，并维护实体关系图谱。系统初始化官方信息、媒体信息、参考文档、个人产出、AI产出五个库，可从四个处理模板新建库。综合分析和写报告由外部 AI 通过 HTTP 与 MCP 完成。统一术语和设计见 [CONTEXT.md](../CONTEXT.md) 与 [ADR 0014](adr/0014-internal-knowledge-base.md)。
+Reliquary 在一个个人空间中按库收录、存储、去重、检索资料。系统初始化官方信息、媒体信息、参考文档、个人产出、AI产出五个库，可从四个处理模板新建库。综合分析和写报告由外部 AI 通过 HTTP 与 MCP 完成。统一术语和设计见 [CONTEXT.md](../CONTEXT.md) 与 [ADR 0014](adr/0014-internal-knowledge-base.md)。
 
 ## 账号与网页入口
 
 系统只有一个用户，没有登录。网页和后端端口只绑定本机 `127.0.0.1`，打开网页即可访问个人空间全部内容；外部工具使用 API Key。其他设备无法访问，见 [ADR 0015](adr/0015-no-login-local-only.md)。API Key 支持名称、有效期和撤销，接入方式见 [收录接口说明](ingest-api.md)。
 
-打开网页后进入资料页。主要入口为资料、检索、实体、主题、关注、测评和设置。待处理页面只保留收录待审，可审核或丢弃。资料可标星、修正内容类型与主题，实体页可查看关系来源、删除关系和合并实体。设置提供资料库设置、从模板新建库、模型、文件存档与备份、操作日志、API 集成、运行队列和调用统计。测评页管理题集、确认 AI 候选、运行普通或图谱检索评测并比较两次完成运行。
+打开网页后进入资料页。主要入口为资料、检索、实体、主题、关注、测评和设置。待处理页面只保留收录待审，可审核或丢弃。资料可标星、修正内容类型与主题，实体页可查看关联资料和合并实体。设置提供资料库设置、从模板新建库、模型、文件存档与备份、操作日志、API 集成、运行队列和调用统计。测评页管理题集、确认 AI 候选、运行普通检索评测并比较两次完成运行。
 
 ## 收集、审核与处理
 
 新内容由外部工具通过收录接口送入。Reliquary 不采集 RSS，不按链接抓取原文、图片或文件，网页不提供网址导入、文件上传与手动录入创建入口。外部工具的材料要求、HTTP 与 MCP 用法见 [收录接口说明](ingest-api.md)。正文中的图片需要由调用方上传。缺失图片显示来源链接，不由服务端下载，不产生缺图待办。
 
-调用方每项必须指定库，提交完整 Markdown 和获取方式。外部时效型按库规则要求链接，或接受机构名称加有效发布日期并标记来源未核实。外部长效型要求链接或 identifier；自有型不要求来源证据，可用 source_ref 标识同一来源。同库同 source_ref 的正文变化会新建记录，旧记录保留，图谱仅采用最新活动记录。资料入库后不能换库。各库用途见 [外部接入总览](external-integration.md)。
+调用方每项必须指定库，提交完整 Markdown 和获取方式。外部时效型按库规则要求链接，或接受机构名称加有效发布日期并标记来源未核实。外部长效型要求链接或 identifier；自有型不要求来源证据，可用 source_ref 标识同一来源。同库同 source_ref 的正文变化会新建记录，旧记录保留。资料入库后不能换库。各库用途见 [外部接入总览](external-integration.md)。
 
 除生成型外，新资料按所属库的审核标准审核，未通过进入收录待审；通过后才写文件库。正文齐全但缺图片仍可入库和检索，不生成缺图状态和待办。已有资料需要增加图片时，通过正文更新接口一并提交完整正文和图片。
 
-处理调用生成统一摘要、所属库内容类型、实体、主题、关系和图片说明。摘要包括一句话概述、3 至 5 条要点和关键名词。图谱抽取按内容类型开关及资料 graph 覆盖执行，所有类型均保存全文。支持视觉的模型在同次调用中读取图片，说明作为独立检索块，不写回正文。长文按上下文预算分段审核、处理及合并，保留检查点，任何段审核失败则整篇待审。实体档案跨库共用，主题可限定适用库。新建主题可按历史摘要归入，历史归入不产生新动态。
+处理调用生成统一摘要、所属库内容类型、实体和主题。摘要包括一句话概述、3 至 5 条要点和关键名词。所有类型均保存全文。支持视觉的模型在同次调用中读取图片，说明作为独立检索块，不写回正文。长文按上下文预算分段审核、处理及合并，保留检查点，任何段审核失败则整篇待审。实体档案跨库共用，主题可限定适用库。新建主题可按历史摘要归入，历史归入不产生新动态。
 
-生成型资料不审核、不调用内容处理模型、不抽图谱，只建索引。五个库统一通过 HTTP `/api/v1/ingest` 或 MCP `ingest` 收录。外部 AI 写入 AI产出时指定 `library: "ai-output"`，来源引用放在正文中；相同内容重试返回已有资料，资料标记 `cannot_be_fact=true`。向量索引仍会调用 embedding。
+生成型资料不审核、不调用内容处理模型，只建索引。五个库统一通过 HTTP `/api/v1/ingest` 或 MCP `ingest` 收录。外部 AI 写入 AI产出时指定 `library: "ai-output"`，来源引用放在正文中；相同内容重试返回已有资料，资料标记 `cannot_be_fact=true`。向量索引仍会调用 embedding。
 
 去重及转载按模板在库内执行；只有外部时效型做转载归并与相似报道折叠。审核待审可补链接后重审、确认无链接入库或丢弃。人工无链接入库标记来源未核实。模型配置支持现有 OpenAI 兼容、Anthropic 与 Ollama 协议；先测试连接及能力，再给各库选择轻量、生成、实体判断和重排档位，向量模型由空间共享。
 
@@ -47,7 +47,7 @@ Obsidian 的 `.obsidian/` 阅读配置、`.trash/` 和 `.DS_Store` 等用户配�
 
 日常运行不再安排 Markdown 表头或恢复副本刷新；旧配置 `VAULT_HEADER_DEBOUNCE` 不再影响日常存储。资料正文不监听文件变化，也没有索引等待时间设置。资料导出与备份页展示全部库的名称、子目录与已归档资料数，包括空库和自建库。数量按数据库中的归档记录统计，不代表已核验磁盘文件完整性。
 
-普通检索必须选择一个或多个库，使用 PostgreSQL BM25 与向量混合检索加可选重排，按资料合并命中并返回正文位置。可按内容类型、实体、主题、发布时间与星标筛选；时间筛选排除缺日期的资料，不用收录时间替代。图谱检索按库查询实体的 1 至 3 跳关系或两实体间路径，不调用模型，返回 PG 来源、媒体信息发言人、位置和待同步数量。详见 [普通与图谱检索](search-api.md)。
+普通检索必须选择一个或多个库，使用 PostgreSQL BM25 与向量混合检索加可选重排，按资料合并命中并返回正文位置。可按内容类型、实体、主题、发布时间与星标筛选；时间筛选排除缺日期的资料，不用收录时间替代。详见 [检索](search-api.md)。
 
 只运行一个后端进程。模型并发、速率和接口限流由该进程维护；待处理操作与业务数据在同一 PostgreSQL 事务中持久化，Redis（asynq）只负责调度唤醒，设置保存后立即刷新进程内缓存。数据库备份同时包含未完成任务，恢复后任务可继续执行。文件库与数据库仍需一致性备份，迁移前应停止写入并等待运行队列完成。详见 [ADR 0014](adr/0014-internal-knowledge-base.md)。
 
@@ -65,7 +65,7 @@ Reliquary 可以通过自己的 OpenID Connect 登录，使用符合条件的 Ch
 
 OpenAI 返回 `subscription_sharing_usage_limit_exceeded` 时，设置与运行队列显示额度暂停，并提供 **Manage usage** 链接到 [ChatGPT 用量设置](https://chatgpt.com/settings/usage)。该错误可能对应应用上限，不能仅凭错误码推断全部订阅耗尽或具体重置时间；调整额度或等待官方用量页显示恢复后，点击“手动恢复”。`subscription_sharing_usage_unavailable` 表示暂时无法确认用量，保留凭据并在五分钟后再试。暂停期间未完成的任务延后执行，额度暂停不消耗普通失败重试次数，文章的原始内容保留，主题批次保持待处理。参考 [错误与恢复](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)。
 
-修改资料内容类型需按所属库校验并联动图谱。需要同步调用生成模型时，生成暂停返回可重试的 HTTP 503 与 `Retry-After`；操作失败保留原资料和分类，恢复后需再次发起。
+修改资料内容类型需按所属库校验。需要同步调用生成模型时，生成暂停返回可重试的 HTTP 503 与 `Retry-After`；操作失败保留原资料和分类，恢复后需再次发起。
 
 手动恢复解除生成暂停，已经延后的任务会在原定重试时间运行；需要立即重试文章时，在运行队列对相应任务点击“立即运行”。主题历史归入由后台轮询按批次恢复。
 
@@ -109,7 +109,7 @@ Reliquary 提供资料，不生成周报或推送通知。下面是外部 AI 通
 
 长期运行建议使用[源码与运行分离的本地部署](local-deployment.md)。下文保留直接从源码目录部署的方式。
 
-Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。四个核心服务为应用、PostgreSQL（ParadeDB）、Redis 与 Neo4j，均使用 Compose；网页静态资源由独立 frontend 容器代理，模型服务可在 macOS 原生或其他端点运行。应用镜像从当前仓库构建，未发布公共应用镜像。
+Mac mini 使用 Apple Silicon，安装 Git、Node.js/npm 和支持 Docker Compose 的 Docker 兼容运行环境（如 OrbStack、Docker Desktop）。三个核心服务为应用、PostgreSQL（ParadeDB）、Redis，均使用 Compose；网页静态资源由独立 frontend 容器代理，模型服务可在 macOS 原生或其他端点运行。应用镜像从当前仓库构建，未发布公共应用镜像。
 
 ```bash
 git clone https://github.com/Dikui/Reliquary.git
@@ -132,7 +132,6 @@ cp .env.example .env
 | `OLLAMA_BASE_URL` | 容器访问 macOS 模型服务的地址，例如 `http://host.docker.internal:11434` |
 | `OLLAMA_OPTIONAL` | 设为 `true` 时，Ollama 暂不可用只输出告警 |
 | `SSRF_WHITELIST_EXTRA` | 部署额外放行的模型服务主机/IP/CIDR；与设置页白名单合并 |
-| `NEO4J_URI`、`NEO4J_USERNAME`、`NEO4J_PASSWORD` | 使用 `bolt://neo4j:7687`、`neo4j` 与独立密码，须与 Neo4j 初始化一致 |
 | `REDIS_ADDR` | Compose 内使用 `redis:6379` |
 | `APP_PORT`、`FRONTEND_PORT` | 宿主机 API 与网页端口，默认 `8080` 和 `80` |
 | `APP_EXTERNAL_URL` | 需要外部调用方读取限时文件链接时填写内网访问地址并代理 `/r/` |
@@ -160,7 +159,7 @@ export COMPOSE_PROJECT_NAME=reliquary
 ./reliquary-admin check-deployment
 ./scripts/build-frontend-dist.sh
 docker compose build
-docker compose up -d --wait postgres redis neo4j
+docker compose up -d --wait postgres redis
 ./reliquary-admin check-deployment
 docker compose up -d --no-build
 ```
@@ -177,7 +176,7 @@ docker compose up -d --no-build
 
 ### 按库重建资料
 
-在资料页面只选择一个库，默认使用“重建失败资料”，只处理失败资料，跳过已完成和已取消的资料。需要按新模型或新规则重新处理全部资料时，点击“全量重建”，确认后才提交。全量范围包含已通过审核（或无审核记录）的已完成、失败和已取消资料，以及审核阶段失败的资料。两种方式均按当前已保存的库配置重新生成分块、摘要、图片说明、实体关联、关系来源和已启用的向量；全量重建也会重新调用模型处理已完成资料并产生费用。正文、图片、资料 ID、来源、星标、收录理由、人工内容类型、人工主题及关系抑制记录保留；跨库共享的实体档案沿用现有归一规则，不清空。历史单条分块配置仍保留，但本轮不使用。
+在资料页面只选择一个库，默认使用“重建失败资料”，只处理失败资料，跳过已完成和已取消的资料。需要按新模型或新规则重新处理全部资料时，点击“全量重建”，确认后才提交。全量范围包含已通过审核（或无审核记录）的已完成、失败和已取消资料，以及审核阶段失败的资料。两种方式均按当前已保存的库配置重新生成分块、摘要、图片说明、实体关联和已启用的向量；全量重建也会重新调用模型处理已完成资料并产生费用。正文、图片、资料 ID、来源、星标、收录理由、人工内容类型及人工主题保留；跨库共享的实体档案沿用现有归一规则，不清空。历史单条分块配置仍保留，但本轮不使用。
 
 本轮固定启动时的资料清单，不包含之后新收录的资料。两种范围内资料都不因图片未提供而跳过。审核阶段失败的资料先重新审核，通过后继续处理。待审及删除中的资料不进入清单；库中有未完成处理任务时拒绝启动。AI产出库仍只建索引，不提供此操作。重建期间保持库配置稳定；各条任务开始时读取当前配置，处理中的资料暂不可检索，其他库继续可用。
 
@@ -187,7 +186,7 @@ docker compose up -d --no-build
 
 修改收录策略后，在资料页选择一个库，点击“全库重新审核”，复核已收录和收录待审的资料。在“待处理 → 收录待审”选择一个库，点击“收录待审重新审核”，只复核待审资料；每条资料也保留“重新审核”。缺少原文链接时同样可以按新策略重审。
 
-审核通过的已收录资料保留摘要和索引；未通过的转入待审，退出检索和图谱，原文仍保留。待审资料通过后继续入库处理。人工点击“拒绝收录”并确认后，才删除收录记录、原文和独占附件；操作日志和防止重复收录的来源标识保留。模型未通过审核不会自动删除资料。
+审核通过的已收录资料保留摘要和索引；未通过的转入待审，退出检索，原文仍保留。待审资料通过后继续入库处理。人工点击“拒绝收录”并确认后，才删除收录记录、原文和独占附件；操作日志和防止重复收录的来源标识保留。模型未通过审核不会自动删除资料。
 
 批量接口为 `POST /api/v1/libraries/:id/review`，请求体为 `{"scope":"all"}` 或 `{"scope":"pending"}`，返回 HTTP 202 和 `data.task_id`、`data.total`。任务固定本次资料清单，按执行时的当前库策略审核；期间请勿修改策略。批量审核与重建互斥，进度和失败原因在运行队列查看。
 
@@ -238,18 +237,18 @@ go run ./cmd/server reembed --retry-failed <任务ID>
 
 第一条输出逐项差异，成功后应没有未解决的差异。第二条根据数据库补回各库资料文件和数据库副本，再核对。也可运行 `./reliquary-admin maintenance rebuild-files` 重建全部库的 Markdown；图片字节不可重算，保留 attachments/ 或从完整备份恢复。错误时保留原库和故障文件，先检查输出指向的路径、权限和磁盘空间，再从完整备份恢复。不要通过删除数据库行消除差异。
 
-## 四服务备份、恢复与演练
+## 三服务备份、恢复与演练
 
-维护时使用部署目录的相同 `.env`、`COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。四个数据相关服务为 PostgreSQL、Redis、Neo4j、Reliquary；本机 Ollama 和重排服务分别提供向量与重排，不把模型权重放入数据备份。宿主机需要 Python 3、Git、Docker 与 Compose。先启动并检查 PostgreSQL、Redis、Neo4j，再启动应用：
+维护时使用部署目录的相同 `.env`、`COMPOSE_FILE` 和 `COMPOSE_PROJECT_NAME`。三个数据相关服务为 PostgreSQL、Redis、Reliquary；本机 Ollama 和重排服务分别提供向量与重排，不把模型权重放入数据备份。宿主机需要 Python 3、Git、Docker 与 Compose。先启动并检查 PostgreSQL、Redis，再启动应用：
 
 ```bash
 ./reliquary-admin check-deployment
-docker compose up -d --wait postgres redis neo4j
+docker compose up -d --wait postgres redis
 docker compose up -d app
 ./reliquary-admin setup-models
 ```
 
-新完整备份包含脱敏 PostgreSQL dump、原始 `attachments/`、上传资源及阅读配置，不包含生成的库目录 Markdown 和恢复副本；`.reliquary/exports/` 中的历史迁移资料仍保留。正文完整性由数据库正文哈希单独核验；历史完整备份仍按原布局恢复。关系正本、来源、测评题、答案、评测运行、库配置、检索记录和调用统计都由 PG 备份保留；检索记录与调用统计不进入文件副本。Redis 只保存任务唤醒，Neo4j 是可重建图谱，两者不备份。账号密码哈希保留，模型 API Key、收录 API Key、ChatGPT 令牌和系统密钥不进入备份，恢复时重新配置。
+新完整备份包含脱敏 PostgreSQL dump、原始 `attachments/`、上传资源及阅读配置，不包含生成的库目录 Markdown 和恢复副本；`.reliquary/exports/` 中的历史迁移资料仍保留。正文完整性由数据库正文哈希单独核验；历史完整备份仍按原布局恢复。测评题、答案、评测运行、库配置、检索记录和调用统计都由 PG 备份保留；检索记录与调用统计不进入文件副本。Redis 只保存任务唤醒，不进入备份。账号密码哈希保留，模型 API Key、收录 API Key、ChatGPT 令牌和系统密钥不进入备份，恢复时重新配置。
 
 备份目录默认 `~/Backups/Reliquary`，也可在 `.env` 配置 `BACKUP_DIR`。目录应位于源码之外，与文件库和上传目录互不包含。备份时暂停收录与任务消费，停止应用，将 PG 与文件取成一致快照；长任务的检查点和待处理操作保留。成功核对后启动原应用并解除暂停。外部编辑器写文件也应暂停。
 
@@ -262,7 +261,7 @@ docker compose up -d app
 完整恢复使用新的空 PG 数据库和空文件目录，目标应用保持停止。先填写目标 `.env` 中的四服务连接、`RELIQUARY_VAULT_DIR`、`RELIQUARY_FILES_DIR` 和新系统密钥。恢复不覆盖现有数据库或非空目录：
 
 ```bash
-docker compose up -d --wait postgres redis neo4j
+docker compose up -d --wait postgres redis
 ./reliquary-admin restore /Users/yourname/Backups/Reliquary/backup-具体时间 --skip-models
 ```
 
@@ -274,10 +273,9 @@ docker compose up -d --wait postgres redis neo4j
 ./reliquary-admin setup-models
 ./reliquary-admin unpack --resume
 ./reliquary-admin verify --vectors
-./reliquary-admin maintenance graph-verify
 ```
 
-继续命令核对原件与不可再生数据，从 PG 全量重建 Neo4j，核对实体、边及来源计数，刷新新增系统重建日志后的维护副本，最终核对通过才解除暂停。向量模型发生变化时先重建全部向量。缺模型、缺凭据、图谱不可用或任何核对差异都会保留暂停。`State: ready` 后后台补推并完成未完成操作；`--resume` 继续原恢复，不再次导入。独立验收环境可对 `unpack --resume` 加 `--no-scheduler`，避免注册本机自动计划。
+继续命令核对原件与不可再生数据，最终核对通过才解除暂停。向量模型发生变化时先重建全部向量。缺模型、缺凭据或任何核对差异都会保留暂停。`State: ready` 后后台补推并完成未完成操作；`--resume` 继续原恢复，不再次导入。独立验收环境可对 `unpack --resume` 加 `--no-scheduler`，避免注册本机自动计划。
 
 一键演练从指定目录选择最近一份完整备份，不需要关闭正常部署：
 
@@ -286,7 +284,7 @@ docker compose up -d --wait postgres redis neo4j
   --report /Users/yourname/Backups/Reliquary/drill-result.json
 ```
 
-演练在临时 PG 数据库、独立 Redis 容器中的临时 DB 0、临时 Neo4j 命名空间和临时目录恢复并核对。它重推真实待处理操作的唤醒，独立探针验证暂停期间零执行、解除暂停后一次完成；业务队列保持暂停，演练不会调用模型或外部工具。报告含原件核对、补推数量、暂停探针、图谱重建和最终核对结果，`status: success` 才表示通过。结束清理临时数据库、Redis、图谱空间和目录，不清空线上 Redis 或 Neo4j。
+演练在临时 PG 数据库、独立 Redis 容器中的临时 DB 0和临时目录恢复并核对。它重推真实待处理操作的唤醒，独立探针验证暂停期间零执行、解除暂停后一次完成；业务队列保持暂停，演练不会调用模型或外部工具。报告含原件核对、补推数量、暂停探针和最终核对结果，`status: success` 才表示通过。结束清理临时数据库、Redis和目录，不清空线上 Redis。
 
 失败也清理自己创建的资源，清理失败时保留 `.maintenance-schedule/drill-active.json` 记录，执行 `schedule run --once` 重试清理，错误及报告保留。普通命令把报告写到 `.maintenance-schedule/drill-result.json`；`--report` 可指定永久存证位置。
 
@@ -371,7 +369,7 @@ APP_PORT=18080 FRONTEND_PORT=18081 \
 ./reliquary-admin rebuild /Users/yourname/RecoveredVault --resume
 ```
 
-第一条确认配置模型可用；第二条只继续已经重建的库，读取初次保存的固定核对清单，不再次导入数据。它先严格核对，再检查模型及必需凭据，自动补齐全部向量，保留实体档案时间，从关系正本全量重建 Neo4j 并核对，核对向量完整性并安装本机备份调度。缺模型、缺凭据、向量失败、核对不一致或调度安装失败时继续暂停并返回非零状态。全部通过才显示 `State: ready`、解除维护暂停并让原有任务自动继续。其他未配置功能仍暂停。隔离演练可加 `--no-scheduler`，日常使用默认安装。初次清单保存在部署目录的 `.maintenance-rebuild.json` 等维护状态文件中，位于文件库之外，不进入迁移包。不要删除清单或重新执行初次 rebuild 来跳过失败。
+第一条确认配置模型可用；第二条只继续已经重建的库，读取初次保存的固定核对清单，不再次导入数据。它先严格核对，再检查模型及必需凭据，自动补齐全部向量，保留实体档案时间，核对向量完整性并安装本机备份调度。缺模型、缺凭据、向量失败、核对不一致或调度安装失败时继续暂停并返回非零状态。全部通过才显示 `State: ready`、解除维护暂停并让原有任务自动继续。其他未配置功能仍暂停。隔离演练可加 `--no-scheduler`，日常使用默认安装。初次清单保存在部署目录的 `.maintenance-rebuild.json` 等维护状态文件中，位于文件库之外，不进入迁移包。不要删除清单或重新执行初次 rebuild 来跳过失败。
 
 没有 `.reliquary/` 时，`vault-rebuild` 只能从当前按库目录下的统一表头和正文恢复部分资料，无法凭空恢复档案说明、日志、关注、待审与库配置。旧 `articles/`、`reports/` 布局不受支持。应保留原件，寻找完整数据库备份，不要宣称完整重建成功。
 
@@ -493,19 +491,3 @@ article_processing:
 预算按一个正文码点约占一个 token 作保守估计。请为库的轻量、生成模型填写实际 `context_window`，程序分别计算审核与处理预算；修改配置后重启服务。所有分段调用继续使用现有模型并发限制，每篇内部顺序执行。
 
 长文处理失败后保留原文和逐段检查点，再次重试可续跑。正文、模型输入配置或分段规则变化会重新处理全文。合并摘要过大时会明确报错，可选用更大上下文模型或将资料拆成多篇，不能靠提高 `max_body_chars` 越过模型上限。备份及文件库副本包含检查点，恢复后可继续未完成的处理。
-
-## Neo4j 图谱查询副本
-
-部署前设置 `NEO4J_URI=bolt://neo4j:7687`、`NEO4J_USERNAME=neo4j` 和独立的 `NEO4J_PASSWORD`。初始管理员用户名固定为 `neo4j`，修改密码后需要同时更新 Neo4j 和后端配置。Compose 固定 Community 5.26.12 与镜像摘要，有认证和专用数据卷，默认不对外暴露 Bolt 端口。32 GB 小型服务器使用 512 MB 初始堆、1 GB 最大堆、1 GB 页缓存和 3 GB 容器内存上限。
-
-PostgreSQL 是唯一正本。业务修改和图谱通知在同一 PG 事务提交，后台通过 PG 待处理操作和 Redis 唤醒同步。默认启动后立即补推，此后每分钟扫描；`RELIQUARY_GRAPH_SWEEP_INTERVAL` 可调整扫描周期。Redis 丢失后仍可从 PG 补推。Neo4j 不可用时后端照常启动和收录，通知保留，运行队列可见重试及错误；副本恢复后自动重读 PG 当前关系。
-
-每天执行一次全量排序 SHA-256 核对，同时比较实体信息、边数、关系类型、库、来源数量与版本。发现偏差时以 PG 为准修复，结果写入操作日志 `graph_check`。图快照占用 O(V+E) 内存，PG 来源计数还需读取 S 条来源行，读取代价为 O(V+E+S)，核对与重建期间会暂时锁定 PG 关系修改，适用于当前小型部署。同步也持有短时关系锁，离线检测先于该锁，任务超时为 15 秒。
-
-手工重建命令为 `./reliquary-admin maintenance graph-rebuild`，手工核对为 `./reliquary-admin maintenance graph-check`。网页用户的 `POST /api/v1/maintenance/graph/rebuild` 将重建排入运行队列，返回操作 ID。重建清空专用 Neo4j 数据库，在一个 Neo4j 事务内从当前 PG 全量创建实体与关系并核对哈希；不能把这个数据库与其他应用共用。
-
-备份不包含 Neo4j 卷和 Redis。`reliquary-admin` 恢复当前版本备份时，在解除维护暂停前自动重建 Neo4j。Neo4j 不可用或重建失败时恢复不会解除暂停，修复连接后再次使用恢复的 `--resume`。恢复到新环境会生成新 Neo4j 密码，目标环境显式提供的 Neo4j 地址、账号、密码和端口优先。历史版本缺少图谱同步结构时保持原版本恢复流程，升级后由每日核对生成副本。
-
-来源资料、发言人和位置明细只保存在 PG，Neo4j 只含全局实体节点及关系概要。HTTP 与 MCP 图谱检索已提供，见 [图谱检索](search-api.md#图谱检索)。
-
-资料契约使用 `entry_id`、`entry_ids`、`latest_entry_id`、`related_entry_ids` 和 MCP `get_entry`。结构版本 23 与副本格式 6 的改名和历史恢复规则见 [迁移规范](database-migrations.md#资料对外命名迁移)。

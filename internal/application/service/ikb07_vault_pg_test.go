@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/config"
+	"reliquary/internal/maintenance"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 	"time"
@@ -11,10 +15,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
-	"reliquary/internal/config"
-	"reliquary/internal/maintenance"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
 
 func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
@@ -36,7 +36,7 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 		body := "# " + library.Name + "\n\n完整正文首段。\n\n![图](" + image + ")\n\n正文末段，不能替换为摘要。"
 		var entry *types.Entry
 		if library.Template == types.TemplateGenerated {
-			result, err := h.documents.createReport(h.ctx, &library, "测试 / "+library.Name, body, nil, nil)
+			result, err := h.documents.createReport(h.ctx, &library, "测试 / "+library.Name, body, nil)
 			require.NoError(t, err)
 			entry = result.Entry
 		} else {
@@ -114,7 +114,7 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 	path := filepath.Join(h.root, old.VaultPath)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(data), "title:", "edited_title:", 1)), 0600))
+	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(data), "title:", "edited_title:", 1)), 0o600))
 	require.NoError(t, v.RebuildFiles(h.ctx))
 	require.Equal(t, before, vaultFileHashes(t, h.root))
 	for _, library := range libraries {
@@ -144,10 +144,10 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 	delete(legacyManifest, "registry_version")
 	legacyBytes, err := json.Marshal(legacyManifest)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath, legacyBytes, 0600))
+	require.NoError(t, os.WriteFile(manifestPath, legacyBytes, 0o600))
 	_, err = rebuild.RebuildReplica(h.ctx)
 	require.ErrorContains(t, err, "legacy file-library replica")
-	require.NoError(t, os.WriteFile(manifestPath, originalManifest, 0600))
+	require.NoError(t, os.WriteFile(manifestPath, originalManifest, 0o600))
 	encoded, err := json.Marshal(headers)
 	require.NoError(t, err)
 	t.Log(string(encoded))

@@ -8,17 +8,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
-
 	"reliquary/internal/application/repository"
-	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
+	"strings"
+	"time"
+
+	pgretriever "reliquary/internal/application/repository/retriever/postgres"
+	werrors "reliquary/internal/errors"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -67,14 +67,23 @@ func (s *VaultDocumentService) reportWriteResult(ctx context.Context, entry *typ
 }
 
 func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown string, relatedIDs []string) (*ReportWriteResult, error) {
-	return s.createReport(ctx, nil, title, markdown, relatedIDs, nil)
+	return s.createReport(ctx, nil, title, markdown, relatedIDs)
 }
 
-func (s *VaultDocumentService) createReport(ctx context.Context, library *types.Library, title, markdown string, relatedIDs []string, graph *bool) (*ReportWriteResult, error) {
-	return s.createReportInput(ctx, library, ReportInput{Title: title, Markdown: markdown, RelatedEntryIDs: relatedIDs}, graph)
+func (s *VaultDocumentService) createReport(
+	ctx context.Context,
+	library *types.Library,
+	title, markdown string,
+	relatedIDs []string,
+) (*ReportWriteResult, error) {
+	return s.createReportInput(ctx, library, ReportInput{Title: title, Markdown: markdown, RelatedEntryIDs: relatedIDs})
 }
 
-func (s *VaultDocumentService) createReportInput(ctx context.Context, library *types.Library, input ReportInput, graph *bool) (*ReportWriteResult, error) {
+func (s *VaultDocumentService) createReportInput(
+	ctx context.Context,
+	library *types.Library,
+	input ReportInput,
+) (*ReportWriteResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	title, markdown := strings.TrimSpace(input.Title), input.Markdown
@@ -125,10 +134,16 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 			return err
 		}
 		encodedMetadata, _ := json.Marshal(metadata)
-		entry = &types.Entry{ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
-			Graph: graph, SourceKind: "report", Title: title, VaultPath: path, Source: path, VaultBody: markdown,
+		entry = &types.Entry{
+			ID: id, SpaceID: library.SpaceID, LibraryID: library.ID, Type: types.EntryTypeManual,
+			SourceKind: "report", Title: title, VaultPath: path, Source: path, VaultBody: markdown,
 			FileName: filepath.Base(path), FileType: "md", EnableStatus: "enabled", Channel: types.ChannelAPI,
-			Acquisition: "model_written", ParseStatus: types.ParseStatusPending, Metadata: types.JSON(encodedMetadata), CreatedAt: created, UpdatedAt: created}
+			Acquisition: "model_written",
+			ParseStatus: types.ParseStatusPending,
+			Metadata:    types.JSON(encodedMetadata),
+			CreatedAt:   created,
+			UpdatedAt:   created,
+		}
 		vault := &VaultService{db: tx, root: s.root}
 		markdown, err = vault.copyArticleImages(ctx, entry, path, markdown, nil)
 		if err != nil {
@@ -205,8 +220,10 @@ func (s *VaultDocumentService) retryReportIndex(ctx context.Context, library *ty
 	body := string(RenderVaultArticleHeader(header)) + entry.VaultBody
 	var indexed *types.Entry
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		transactional := &VaultDocumentService{db: tx, models: s.models, root: s.root,
-			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
+		transactional := &VaultDocumentService{
+			db: tx, models: s.models, root: s.root,
+			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx)),
+		}
 		indexed, err = transactional.indexReport(ctx, library, entry.VaultPath, body, entry.CreatedAt)
 		return err
 	})

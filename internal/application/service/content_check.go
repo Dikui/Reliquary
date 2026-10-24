@@ -5,19 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reliquary/internal/maintenanceops"
+	"reliquary/internal/queue"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	apperrors "reliquary/internal/errors"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/maintenanceops"
-	"reliquary/internal/queue"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 type contentCheckStrictKey struct{}
@@ -34,12 +35,27 @@ type ContentCheckService struct {
 	entries  interfaces.EntryService
 	search   interfaces.SearchService
 	entities *EntityService
-	graph    *GraphSearchService
 }
 
-func NewContentCheckService(db *gorm.DB, tasks interfaces.TaskEnqueuer, models interfaces.ModelService, entries interfaces.EntryService, search interfaces.SearchService, entities *EntityService, graph *GraphSearchService) *ContentCheckService {
-	return &ContentCheckService{db: db, tasks: tasks, models: models, entries: entries, search: search, entities: entities, graph: graph}
+// NewContentCheckService builds the scheduled read-only material checker.
+func NewContentCheckService(
+	db *gorm.DB,
+	tasks interfaces.TaskEnqueuer,
+	models interfaces.ModelService,
+	entries interfaces.EntryService,
+	search interfaces.SearchService,
+	entities *EntityService,
+) *ContentCheckService {
+	return &ContentCheckService{
+		db:       db,
+		tasks:    tasks,
+		models:   models,
+		entries:  entries,
+		search:   search,
+		entities: entities,
+	}
 }
+
 func nextContentCheck(now time.Time, weekday int, clock string) time.Time {
 	loc := time.FixedZone("Asia/Shanghai", 8*3600)
 	now = now.In(loc)
@@ -52,6 +68,7 @@ func nextContentCheck(now time.Time, weekday int, clock string) time.Time {
 	}
 	return next.UTC()
 }
+
 func (s *ContentCheckService) Settings(ctx context.Context) (*types.ContentCheckSettings, error) {
 	out := &types.ContentCheckSettings{SpaceID: types.MustSpaceIDFromContext(ctx), Weekday: 1}
 	err := s.db.WithContext(ctx).First(out, "space_id=?", out.SpaceID).Error
@@ -60,6 +77,7 @@ func (s *ContentCheckService) Settings(ctx context.Context) (*types.ContentCheck
 	}
 	return out, err
 }
+
 func (s *ContentCheckService) Configure(ctx context.Context, in types.ContentCheckSettings) error {
 	in.SpaceID = types.MustSpaceIDFromContext(ctx)
 	if in.Weekday < 0 || in.Weekday > 6 {
@@ -87,6 +105,7 @@ func (s *ContentCheckService) Configure(ctx context.Context, in types.ContentChe
 		return tx.Model(&types.ContentCheckSettings{}).Where("space_id=?", in.SpaceID).Updates(map[string]any{"enabled": in.Enabled, "model_id": in.ModelID, "weekday": in.Weekday, "time": in.Time, "next_run_at": next}).Error
 	})
 }
+
 func (s *ContentCheckService) Get(ctx context.Context, id string) (*types.ContentCheckRun, error) {
 	var out types.ContentCheckRun
 	err := s.db.WithContext(ctx).Where("id=? AND space_id=?", id, types.MustSpaceIDFromContext(ctx)).First(&out).Error
@@ -96,6 +115,7 @@ func (s *ContentCheckService) Get(ctx context.Context, id string) (*types.Conten
 	out.Total = len(out.Targets)
 	return &out, err
 }
+
 func (s *ContentCheckService) List(ctx context.Context, page int) (*types.ContentCheckPage, error) {
 	if page < 1 || page > 1000000 {
 		return nil, apperrors.NewBadRequestError("invalid page")
@@ -113,11 +133,13 @@ func (s *ContentCheckService) List(ctx context.Context, page int) (*types.Conten
 	}
 	return out, err
 }
+
 func (s *ContentCheckService) Start(ctx context.Context, previous string) (*types.ContentCheckRun, error) {
 	var run *types.ContentCheckRun
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { var err error; run, err = s.startTx(ctx, tx, previous, false); return err })
 	return run, err
 }
+
 func (s *ContentCheckService) startTx(ctx context.Context, tx *gorm.DB, previous string, scheduled bool) (*types.ContentCheckRun, error) {
 	space := types.MustSpaceIDFromContext(ctx)
 	var settings types.ContentCheckSettings
@@ -204,6 +226,7 @@ func (s *ContentCheckService) startTx(ctx context.Context, tx *gorm.DB, previous
 	}
 	return run, nil
 }
+
 func (s *ContentCheckService) Tick(ctx context.Context) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		_, err := s.startTx(ctx, tx, "", true)
@@ -214,6 +237,7 @@ func (s *ContentCheckService) Tick(ctx context.Context) error {
 		return err
 	})
 }
+
 func (s *ContentCheckService) fail(ctx context.Context, id string, cause error) error {
 	now := time.Now().UTC()
 	return s.db.WithContext(context.WithoutCancel(ctx)).Model(&types.ContentCheckRun{}).Where("id=? AND status IN ?", id, []string{"pending", "running"}).Updates(map[string]any{"status": "failed", "error": cause.Error(), "finished_at": now}).Error
@@ -229,6 +253,7 @@ func (s *ContentCheckService) FailTask(ctx context.Context, task *queue.Task, ca
 	}
 	return s.fail(ctx, payload.RunID, cause)
 }
+
 func (s *ContentCheckService) Handle(ctx context.Context, task *queue.Task) error {
 	var payload struct {
 		RunID string `json:"run_id"`

@@ -105,7 +105,10 @@ func TestResolveWorkerPoolConcurrencyFallsBackPerPool(t *testing.T) {
 }
 
 func TestReplacedProcessingTasksHaveNoQueue(t *testing.T) {
-	for _, taskType := range []string{"summary:generation", "question:generation", "image:multimodal", "knowledge:post_process", "datatable:summary"} {
+	for _, taskType := range []string{
+		"summary:generation", "question:generation", "image:multimodal", "knowledge:post_process", "datatable:summary",
+		"graph:sync", "graph:check", "graph:rebuild",
+	} {
 		if queue, ok := QueueForTaskType(taskType); ok {
 			t.Fatalf("removed task %q still routes to %q", taskType, queue)
 		}

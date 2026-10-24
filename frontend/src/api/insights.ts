@@ -5,7 +5,7 @@ export interface RankedEntry { entry_id: string; rank: number; score: number }
 export interface EvaluationSet { id: string; name: string; description: string }
 export interface Question {
   id: string; method: string; source: string; status: string; revision: number; answer_deleted: boolean
-  request: { query: string; libraries: string[]; collapse_similar?: boolean; graph_parameters?: unknown; [key: string]: unknown }
+  request: { query: string; libraries: string[]; collapse_similar?: boolean; [key: string]: unknown }
   answers: Answer[]; suggested_results?: RankedEntry[]
 }
 export interface SearchRecord { id: string; source: string; method: string; libraries: string[]; query: string; created_at: string; results: RankedEntry[]; error: string }

@@ -5,22 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reliquary/internal/types"
 	"strconv"
 	"time"
 
+	apperrors "reliquary/internal/errors"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 type SearchRecorder struct{ db *gorm.DB }
 
 func NewSearchRecorder(db *gorm.DB) *SearchRecorder { return &SearchRecorder{db: db} }
 
-// RecordSearch is shared by ordinary search and the graph service adapter.
-// The caller supplies graph parameters as Request and ranked document IDs as
-// Results. Scope, origin and evaluation identity are attached here.
+// RecordSearch stores retrieval results with their scope, origin and evaluation identity.
 func (s *SearchRecorder) RecordSearch(ctx context.Context, record *types.SearchRecord) error {
 	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
@@ -33,7 +32,7 @@ func (s *SearchRecorder) RecordSearch(ctx context.Context, record *types.SearchR
 	}
 	record.Source = types.SearchSource(ctx)
 	record.EvaluationRunID = types.EvaluationRunID(ctx)
-	if record.Method != "ordinary" && record.Method != "graph" {
+	if record.Method != "ordinary" {
 		return apperrors.NewBadRequestError("invalid search method")
 	}
 	if record.Request == nil {
@@ -95,12 +94,14 @@ func (s *SearchRecorder) List(ctx context.Context, f SearchRecordFilter) ([]type
 	err := q.Order("created_at DESC,id").Limit(pageLimit(f.Limit)).Offset(max(0, f.Offset)).Find(&records).Error
 	return records, err
 }
+
 func pageLimit(n int) int {
 	if n <= 0 {
 		return 50
 	}
 	return min(n, 200)
 }
+
 func SearchRecordRetention() (time.Duration, error) {
 	days := 180
 	if raw := os.Getenv("RELIQUARY_SEARCH_RECORD_RETENTION_DAYS"); raw != "" {
@@ -112,6 +113,7 @@ func SearchRecordRetention() (time.Duration, error) {
 	}
 	return time.Duration(days) * 24 * time.Hour, nil
 }
+
 func (s *SearchRecorder) Cleanup(ctx context.Context, now time.Time, retention time.Duration) (int64, error) {
 	if retention <= 0 {
 		return 0, fmt.Errorf("positive retention required")

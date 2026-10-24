@@ -26,7 +26,6 @@ type IngestRequest struct {
 	Library            string             `json:"library"`
 	SourceRef          string             `json:"source_ref,omitempty"`
 	Identifier         string             `json:"identifier,omitempty"`
-	Graph              *bool              `json:"graph"`
 	SourceRefProvided  bool               `json:"-"`
 	IdentifierProvided bool               `json:"-"`
 	URL                string             `json:"url"`
@@ -88,7 +87,6 @@ type IngestResult struct {
 	LibraryID        string                     `json:"library_id"`
 	SourceRef        string                     `json:"source_ref,omitempty"`
 	Identifier       string                     `json:"identifier,omitempty"`
-	Graph            *bool                      `json:"graph"`
 	HasUpdate        bool                       `json:"has_update"`
 	LatestEntryID    string                     `json:"latest_entry_id,omitempty"`
 	Index            int                        `json:"index"`

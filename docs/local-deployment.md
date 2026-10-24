@@ -24,7 +24,7 @@
 RELIQUARY_DEPLOY_DIR="$HOME/Reliquary/deploy"
 ```
 
-Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模型可供多个项目共用，继续由 Ollama 管理。macOS 的 LaunchAgent 文件仍安装在 `~/Library/LaunchAgents/`，引用本目录的脚本。启动无需保留打开的终端或 Codex 对话。
+Docker 管理镜像、容器日志和 PostgreSQL 数据卷。Ollama 模型可供多个项目共用，继续由 Ollama 管理。macOS 的 LaunchAgent 文件仍安装在 `~/Library/LaunchAgents/`，引用本目录的脚本。启动无需保留打开的终端或 Codex 对话。
 
 ## 新机器安装
 
@@ -48,7 +48,7 @@ Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模�
      docker compose --env-file "$HOME/Reliquary/deploy/.env" build app frontend
    cd "$HOME/Reliquary/deploy"
    ./reliquary-admin check-deployment
-   docker compose up -d --wait postgres redis neo4j
+   docker compose up -d --wait postgres redis
    ./reliquary-admin check-deployment
    docker compose up -d --no-build --wait
    ./reliquary-admin record-runtime --source "$HOME/Project/Reliquary"
@@ -114,7 +114,7 @@ python3 scripts/deploy-local.py --all      # 手动全量构建、更新前后�
 
 普通更新复用前端依赖；`package.json`、锁文件、`.npmrc` 或 Node 版本、平台变化时重新执行 `npm ci`。首次启用复用时也会执行一次干净安装，指纹保存在 `node_modules/.reliquary-deps`。单独调用 `./scripts/build-frontend-dist.sh` 以及手动 `--all` 仍执行干净安装。Go 镜像构建保留模块下载与编译缓存，全量构建也可复用有效的 Docker 缓存。
 
-所有选定镜像构建成功后才切换运行配置。运行目录只维护一个 `.maintenance-schedule/local-deploy.images.json` 入口，并保留原有 Compose 覆盖配置；重复更新不会追加同名入口。只重建选定容器，等待健康检查、验证前端代理链路并核对实际镜像，不重启 PostgreSQL、Redis 和 Neo4j。后端单独更新时重载 Nginx，刷新后端地址。后端更新后登记源码；前端单独更新先核对已有源码材料，保留材料并跳过重复归档。部署与已安装的启动恢复、备份共用锁。更新失败时恢复原配置、维护工具和原容器；若恢复也失败，命令返回错误，须修复后再使用。
+所有选定镜像构建成功后才切换运行配置。运行目录只维护一个 `.maintenance-schedule/local-deploy.images.json` 入口，并保留原有 Compose 覆盖配置；重复更新不会追加同名入口。只重建选定容器，等待健康检查、验证前端代理链路并核对实际镜像，不重启 PostgreSQL 和 Redis。后端单独更新时重载 Nginx，刷新后端地址。后端更新后登记源码；前端单独更新先核对已有源码材料，保留材料并跳过重复归档。部署与已安装的启动恢复、备份共用锁。更新失败时恢复原配置、维护工具和原容器；若恢复也失败，命令返回错误，须修复后再使用。
 
 `--all` 表示全量更新两个应用服务，不负责首次安装、数据库迁移或覆盖机器配置。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行显式升级流程；升级默认不备份，只有明确选择 `upgrade --backup` 才创建升级前备份。发现 `config/`（不含 `prompt_templates/`）、`docker-compose.yml` 或 `.env.example` 变化时，停止并提示按本节原有手动发布流程核对、同步运行配置。首次安装仍按前文执行。脚本不清理历史镜像和备份。
 

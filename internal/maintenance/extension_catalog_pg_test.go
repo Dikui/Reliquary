@@ -2,11 +2,11 @@ package maintenance
 
 import (
 	"context"
+	"reliquary/internal/testutil/pgtest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func TestCatalogClassificationCoversEveryNonSystemTableAndColumn(t *testing.T) {
@@ -25,8 +25,10 @@ func TestCatalogClassificationCoversEveryNonSystemTableAndColumn(t *testing.T) {
 		require.True(t, found, key+"."+column.Name)
 		require.Contains(t, []Category{Header, Sidecar, Regenerated, Configuration}, category)
 	}
-	require.Len(t, publicTables, len(Rules))
-	require.Len(t, tables, len(Rules)+38)
+	rules, err := schemaRules(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, publicTables, len(rules))
+	require.Len(t, tables, len(rules)+38)
 	require.Len(t, ExtensionCatalogRegistry, 39, "public.spatial_ref_sys is included in both the existing public list and extension ownership review")
 	require.NoError(t, ValidateClassification(ctx, db))
 	manifest, err := BuildManifest(ctx, db, t.TempDir(), "")

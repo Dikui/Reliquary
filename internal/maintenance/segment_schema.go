@@ -102,7 +102,7 @@ func projectProcessingOutputManifest(expected, actual *Manifest) (*Manifest, *Ma
 }
 
 func projectGraphManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
-	if expected.SchemaVersion >= 18 || actual.SchemaVersion < 18 {
+	if expected.SchemaVersion >= 18 || actual.SchemaVersion < 18 || actual.SchemaVersion >= 33 {
 		return expected, actual
 	}
 	left := *expected

@@ -759,7 +759,7 @@ else
             printf "%b\n" "${GREEN}  - API接口: http://localhost:${APP_PORT:-8080}${NC}"
             echo ""
             log_info "正在持续输出容器日志（按 Ctrl+C 退出日志，容器不会停止）..."
-            "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD logs app postgres redis neo4j --since=10s -f
+            "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD logs app postgres redis --since=10s -f
         else
             log_error "部分服务启动失败，请检查日志并修复问题"
         fi
@@ -772,7 +772,7 @@ else
         printf "%b\n" "${GREEN}  - API接口: http://localhost:${APP_PORT:-8080}${NC}"
         echo ""
         log_info "正在持续输出容器日志（按 Ctrl+C 退出日志，容器不会停止）..."
-        "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD logs app postgres redis neo4j --since=10s -f
+        "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD logs app postgres redis --since=10s -f
     fi
 fi
 

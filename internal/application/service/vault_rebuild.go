@@ -8,13 +8,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reliquary/internal/types"
+	"reliquary/internal/vaultpath"
 	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"reliquary/internal/types"
-	"reliquary/internal/vaultpath"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -190,25 +189,31 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 		kind = "report"
 	}
 	now := time.Now().UTC()
-	entry := &types.Entry{ID: header.ID, SpaceID: library.SpaceID, LibraryID: library.ID,
+	entry := &types.Entry{
+		ID: header.ID, SpaceID: library.SpaceID, LibraryID: library.ID,
 		Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, VaultBody: string(body),
 		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
-		SourceUnverified: header.SourceUnverified, SourceRef: header.SourceRef, Identifier: header.Identifier, Graph: header.Graph,
+		SourceUnverified: header.SourceUnverified, SourceRef: header.SourceRef, Identifier: header.Identifier,
 		Acquisition: header.Acquisition,
 		ParseStatus: types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
 		EnableStatus: "enabled", Channel: types.ChannelAPI, FileName: filepath.Base(path), FileType: "md",
 		CreatedAt: collected.UTC(), UpdatedAt: now, ProcessedAt: &now,
-		FileHash: vaultContentHash(string(body)), FileSize: int64(len(body))}
+		FileHash: vaultContentHash(string(body)), FileSize: int64(len(body)),
+	}
 	if header.URL != "" {
 		entry.Type = "url"
 	}
 	if header.Summary != nil {
 		entry.Description = header.Summary.RenderText()
 	}
-	if err := entry.SetIntakeMetadata(&types.EntryIntakeMetadata{Source: "vault", Decision: "approved",
-		SourceInfo: types.SourceInfo{OriginalURL: header.URL, Publisher: header.Publisher,
-			Author: header.Author, PublishedAt: header.PublishedAt}}); err != nil {
+	if err := entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
+		Source: "vault", Decision: "approved",
+		SourceInfo: types.SourceInfo{
+			OriginalURL: header.URL, Publisher: header.Publisher,
+			Author: header.Author, PublishedAt: header.PublishedAt,
+		},
+	}); err != nil {
 		return nil, err
 	}
 
@@ -247,8 +252,10 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 			}
 			// Headers cannot distinguish model and user selections. Preserve all
 			// recovered selections against later automatic classification.
-			if err := tx.Create(&types.EntryTopic{SpaceID: library.SpaceID, EntryID: entry.ID,
-				TopicID: topic.ID, Source: types.TopicSourceUser, CreatedAt: collected.UTC()}).Error; err != nil {
+			if err := tx.Create(&types.EntryTopic{
+				SpaceID: library.SpaceID, EntryID: entry.ID,
+				TopicID: topic.ID, Source: types.TopicSourceUser, CreatedAt: collected.UTC(),
+			}).Error; err != nil {
 				return err
 			}
 		}
@@ -263,8 +270,10 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 				return err
 			}
 			if existing == 0 {
-				if err := tx.Create(&types.EntryEntity{SpaceID: library.SpaceID, EntryID: entry.ID,
-					EntityID: entity.ID, CreatedAt: collected.UTC()}).Error; err != nil {
+				if err := tx.Create(&types.EntryEntity{
+					SpaceID: library.SpaceID, EntryID: entry.ID,
+					EntityID: entity.ID, CreatedAt: collected.UTC(),
+				}).Error; err != nil {
 					return err
 				}
 			}
@@ -287,8 +296,10 @@ func restoreVaultEntity(tx *gorm.DB, spaceID uint64, name string, now time.Time)
 			Order("entities.canonical_name, entities.id").Select("entities.*").First(&entity).Error
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: name, NormalizedName: normalized,
-			EntityType: "other", EmbeddingNeedsRebuild: true, CreatedAt: now, UpdatedAt: now}
+		entity = types.Entity{
+			ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: name, NormalizedName: normalized,
+			EntityType: "other", EmbeddingNeedsRebuild: true, CreatedAt: now, UpdatedAt: now,
+		}
 		err = tx.Create(&entity).Error
 	}
 	return &entity, err

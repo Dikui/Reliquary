@@ -13,7 +13,6 @@ export interface SearchEntry {
   library_directory?: string
   source_ref?: string
   identifier?: string
-  graph?: boolean | null
   has_update?: boolean
   latest_entry_id?: string
   entry_id: string

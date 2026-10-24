@@ -132,11 +132,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await scenario(locale, async () => {})
     assert.deepEqual(result.warnings, [])
     const expected = locale === 'zh-CN' ? [
-      '通过必要技术校验后即入库，正文索引、摘要、分类和图谱在后台处理。',
+      '通过必要技术校验后即入库，正文索引、摘要、分类在后台处理。',
       'API Key 可以访问个人空间的全部内容和收录、检索等接口。',
       '部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。',
     ] : [
-      'Content is saved after technical validation. Body indexing, summaries, classification and graph processing run in the background.',
+      'Content is saved after technical validation. Body indexing, summaries, classification run in the background.',
       'API keys can access all content in your personal space and interfaces such as ingest and search.',
       'Some account settings, including ChatGPT sign-in and maintenance schedules, still require signing in on the web.',
     ]

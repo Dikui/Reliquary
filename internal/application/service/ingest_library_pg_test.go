@@ -1,22 +1,19 @@
 package service
 
 import (
+	"reliquary/internal/types"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/types"
 )
 
 func TestIngestLibrarySourceIdentity(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	req := types.IngestRequest{Library: "personal", SourceRef: "work/measurements", Content: "# Original\n\nMeasured pressure equals 42.", Acquisition: "verbatim", Title: "Measurements"}
-	on := true
-	req.Graph = &on
 	first, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
-	require.True(t, *first.Graph)
 	again, err := h.service.Ingest(h.ctx, &req)
 	require.NoError(t, err)
 	require.Equal(t, first.EntryID, again.EntryID)
@@ -58,7 +55,6 @@ func TestIngestLibrarySourceIdentity(t *testing.T) {
 		require.NoError(t, errs[i])
 		require.Equal(t, fourth.EntryID, ids[i])
 	}
-	require.True(t, *h.article(t, first.EntryID).Graph)
 	// Serialize first-ever concurrent submissions too, when no matching row exists.
 	fresh := req
 	fresh.SourceRef = "fresh-concurrent"
@@ -131,7 +127,6 @@ func TestIngestLibrarySourceIdentity(t *testing.T) {
 	require.Len(t, hits, 1)
 	require.False(t, hits[0].HasUpdate)
 	require.Equal(t, fourth.EntryID, hits[0].LatestEntryID)
-	require.True(t, *hits[0].Graph)
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("source_ref=? AND library_id=?", "work/measurements", h.article(t, first.EntryID).LibraryID).Count(&count).Error)
 	require.EqualValues(t, 1, count)

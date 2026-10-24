@@ -377,7 +377,7 @@ class Context:
 
     def runtime_env(self):
         if self.direct or self.local_server:
-            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "REDIS_", "NEO4J_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "JWT_SECRET", "APP_PORT", "FRONTEND_PORT", "TZ"}}
+            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "REDIS_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "JWT_SECRET", "APP_PORT", "FRONTEND_PORT", "TZ"}}
         else:
             config = json.loads(self.compose("config", "--format", "json"))
             values = config["services"].get(self.app, {}).get("environment", {})
@@ -1013,14 +1013,14 @@ def restored_environment(ctx, package, env_path=None):
     for key in list(values):
         if key.startswith("RELIQUARY_ADMIN_") or key in {"RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "RELIQUARY_DIAGNOSTICS_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY"}:
             values.pop(key)
-    values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32), "DB_PASSWORD": secrets.token_urlsafe(32), "NEO4J_PASSWORD": secrets.token_urlsafe(32)})
+    values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32), "DB_PASSWORD": secrets.token_urlsafe(32)})
     values.setdefault("VAULT_ROOT", "/data/vault")
     values.setdefault("LOCAL_STORAGE_BASE_DIR", "/data/files")
     values.update(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="${HOME}/Reliquary/files", RELIQUARY_DIAGNOSTICS_DIR="${HOME}/Reliquary/logs/diagnostics", BACKUP_DIR="${HOME}/Backups/Reliquary")
     for key in ("COMPOSE_FILE", "COMPOSE_PROJECT_NAME"):
         values.pop(key, None)
     # Keep the new destination's actual connection and ports when supplied.
-    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PORT", "NEO4J_URI", "NEO4J_USERNAME", "NEO4J_PASSWORD", "NEO4J_PORT", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "RELIQUARY_DIAGNOSTICS_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
+    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PORT", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "RELIQUARY_DIAGNOSTICS_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
         if key in ctx.env:
             values[key] = ctx.env[key]
     if env_path:
@@ -1287,7 +1287,7 @@ def rebuild(ctx, args):
         json_write(package / "snapshot.json", expected)
         # Keep a separate immutable projection so permitting new vector audit
         # rows cannot also permit changes to an unchanged embedding config.
-        json_write(package / "configuration.json", {**expected, "tables": {table: expected["tables"][table] for table in ("models", "libraries", "spaces", "library_content_types", "library_relation_types") if table in expected["tables"]}, "files": {}})
+        json_write(package / "configuration.json", {**expected, "tables": {table: expected["tables"][table] for table in ("models", "libraries", "spaces", "library_content_types") if table in expected["tables"]}, "files": {}})
         json_write(package / "models.json", ctx.cli_json("models"))
         json_write(package / "manifest.json", {"required_credentials": expected["required_credentials"]})
         state = {"state": "waiting_models", "vault": str(vault), "package": str(package), "verification": verification,
@@ -1331,7 +1331,7 @@ def rebuild(ctx, args):
         before = ctx.cli_json("manifest", overrides=side)
         # The existing compare flag permits new rebuild audit rows. Protect
         # selected model configuration separately across this maintenance call.
-        configuration = {table: before["tables"][table].get("data") for table in ("models", "libraries", "spaces", "library_content_types", "library_relation_types") if table in before["tables"]}
+        configuration = {table: before["tables"][table].get("data") for table in ("models", "libraries", "spaces", "library_content_types") if table in before["tables"]}
         state.update(state="rebuilding_vectors", vector_rebuild_started=True)
         json_write(state_path, state)
         ctx.server("reembed", "--preserve-entity-timestamps", overrides=side, capture=False)
@@ -1355,13 +1355,6 @@ def rebuild(ctx, args):
             state.update(state="waiting_scheduler", error=str(error))
             json_write(state_path, state)
             raise AdminError("State: waiting_scheduler. Fix host scheduler installation, then run rebuild VAULT --resume: " + str(error)) from error
-    if ctx.sql("SELECT to_regclass('public.graph_pending_sync') IS NOT NULL") == "t":
-        if not ctx.direct and not ctx.local_server:
-            ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "neo4j")
-        ctx.cli_json("graph-rebuild", overrides=side)
-        ctx.cli_json("graph-verify", overrides=side)
-        ctx.cli_json("flush", overrides=side)
-        verification = verify_reconfigured_data(ctx, *flags, overrides=checks)
     ctx.cli_json("resume")
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")
@@ -1406,14 +1399,6 @@ def finalize_restore(ctx, package):
             json_write(ctx.root / ".maintenance-restore.json", {"state": "waiting_scheduler", "package": str(package), "scheduler_required": True, "error": str(error)})
             raise AdminError("State: waiting_scheduler. Collection remains paused. Fix host scheduler installation, then run unpack --resume: " + str(error)) from error
     if not legacy:
-        # Graph copies contain no source details and are rebuilt from restored PG.
-        if ctx.sql("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='graph_pending_sync' AND column_name='completed_at')") == "t":
-            if not ctx.direct and not ctx.local_server:
-                ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "neo4j")
-            ctx.cli_json("graph-rebuild")
-            ctx.cli_json("graph-verify")
-            ctx.cli_json("flush")
-            verification = verify_reconfigured_data(ctx, "--manifest", expected, "--vectors", *(["--allow-model-change"] if rebuilt else []), overrides=verification_overrides)
         ctx.cli_json("resume")
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")
@@ -1726,7 +1711,7 @@ def prepare_multimodal(ctx, name, args):
 
 @contextlib.contextmanager
 def drill_runtime(ctx, root, package, database):
-    """Disposable Redis DB 0 and scoped graph, without touching live consumers."""
+    """Disposable Redis DB 0 without touching live consumers."""
     container = database.replace("_", "-")
     redis_name = container + "-redis"
     native = ctx.local_server or ctx.direct
@@ -1781,15 +1766,8 @@ def drill_runtime(ctx, root, package, database):
             raise AdminError("Temporary drill Redis failed its health check")
         yield invoke, str(package / "snapshot.json") if native else "/check/snapshot.json"
     finally:
-        cleanup_errors = []
-        try:
-            invoke("graph-clear-drill", "--namespace", database)
-        except (AdminError, OSError, ValueError) as error:
-            cleanup_errors.append(str(error))
         for name in (container, redis_name):
             run(["docker", "rm", "-f", name], check=False)
-        if cleanup_errors:
-            raise AdminError("Drill graph cleanup failed; ownership retained for retry: " + "; ".join(cleanup_errors))
 
 
 def drill(ctx, args):
@@ -1841,8 +1819,6 @@ def run_drill(ctx, args):
                     result["checks"]["original"] = invoke("verify", "--manifest", expected, "--vectors")
                     result["checks"]["redis_replay"] = invoke("queue-replay")
                     result["checks"]["redis_pause_probe"] = invoke("queue-probe-drill")
-                    result["checks"]["neo4j_rebuild"] = invoke("graph-rebuild", "--namespace", database)
-                    result["checks"]["neo4j_verify"] = invoke("graph-verify", "--namespace", database)
                     invoke("flush")
                     result["checks"]["restored"] = invoke("verify", "--manifest", expected, "--vectors", "--allow-operation-log-append")
                 result["status"] = "success"
@@ -1896,7 +1872,6 @@ def schedule(ctx, args):
                         run(["docker", "rm", "-f", container], check=False)
                     redis_container = owner.get("redis_container", "")
                     if redis_container == database.replace("_", "-") + "-redis":
-                        ctx.cli_json("graph-clear-drill", "--namespace", database)
                         run(["docker", "rm", "-f", redis_container], check=False)
                     ctx.sql(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)', "postgres")
                     root = Path(owner.get("root", ""))
@@ -2018,7 +1993,7 @@ def parser():
     p.add_argument("--install", action="store_true")
     p.add_argument("--download", action="store_true")
     p.add_argument("--start", action="store_true")
-    p = sub.add_parser("drill", help="Restore the latest backup in isolated PostgreSQL, Redis, Neo4j and storage")
+    p = sub.add_parser("drill", help="Restore the latest backup in isolated PostgreSQL, Redis and storage")
     p.add_argument("directory", nargs="?")
     p.add_argument("--automatic", action="store_true")
     p.add_argument("--report", help="Write a JSON result report")

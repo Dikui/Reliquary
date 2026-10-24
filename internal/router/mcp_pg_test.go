@@ -8,13 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"sync"
-	"testing"
-	"time"
-
-	apprepo "reliquary/internal/application/repository"
-	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service"
 	"reliquary/internal/application/service/file"
 	"reliquary/internal/application/service/retriever"
@@ -24,9 +17,16 @@ import (
 	"reliquary/internal/mcpserver"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
-	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	apprepo "reliquary/internal/application/repository"
+	pgretriever "reliquary/internal/application/repository/retriever/postgres"
+	taskqueue "reliquary/internal/queue"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -40,6 +40,7 @@ type mcpFixtureEmbedder struct{}
 func (mcpFixtureEmbedder) Embed(context.Context, string) ([]float32, error) {
 	return []float32{1, 0, 0}, nil
 }
+
 func (e mcpFixtureEmbedder) BatchEmbed(ctx context.Context, values []string) ([][]float32, error) {
 	result := make([][]float32, len(values))
 	for i, value := range values {
@@ -47,6 +48,7 @@ func (e mcpFixtureEmbedder) BatchEmbed(ctx context.Context, values []string) ([]
 	}
 	return result, nil
 }
+
 func (e mcpFixtureEmbedder) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, values []string) ([][]float32, error) {
 	return e.BatchEmbed(ctx, values)
 }
@@ -61,8 +63,20 @@ func (mcpFixtureChat) Chat(ctx context.Context, messages []chat.Message, _ *chat
 		approved := !strings.Contains(messages[1].Content, "rejectfixture")
 		return &types.ChatResponse{Content: fmt.Sprintf(`{"approved":%t,"reason":"model fixture decision"}`, approved)}, nil
 	}
-	return &types.ChatResponse{Content: `{"title":"MCP fixture title","content_type":"event","summary":{"overview":"MCP fixture","points":["one","two","three"],"key_terms":["MCP"]},"entities":[],"topics":[],"relations":[],"image_descriptions":[]}`}, nil
+	return &types.ChatResponse{
+		Content: `{"title":"MCP fixture title",
+"content_type":"event",
+"summary":{"overview":"MCP fixture",
+"points":["one",
+"two",
+"three"],
+"key_terms":["MCP"]},
+"entities":[],
+"topics":[],
+"image_descriptions":[]}`,
+	}, nil
 }
+
 func (mcpFixtureChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	return nil, fmt.Errorf("streaming is not used by the MCP fixture")
 }
@@ -90,6 +104,7 @@ func (mcpFixtureModels) GetEmbeddingModel(_ context.Context, id string) (embeddi
 	}
 	return mcpFixtureEmbedder{}, nil
 }
+
 func (m mcpFixtureModels) GetChatModel(context.Context, string) (chat.Chat, error) {
 	if m.chatModel != nil {
 		return m.chatModel, nil
@@ -116,6 +131,7 @@ func (q *mcpFixtureQueue) Enqueue(task *taskqueue.Task, opts ...taskqueue.Option
 	q.tasks = append(q.tasks, task)
 	return &taskqueue.TaskInfo{ID: uuid.NewString()}, nil
 }
+
 func (q *mcpFixtureQueue) EnqueueTx(ctx context.Context, tx *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	if q.client != nil {
 		return q.client.EnqueueTx(ctx, tx, task, opts...)
@@ -201,26 +217,42 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	f.router.GET("/api/v1/diagnostics/ingest-failures/:id", diagnosticHandler.Get)
 	f.router.GET("/api/v1/diagnostics/ingest-failures/:id/materials/:material_id", diagnosticHandler.Read)
 	articles := entry.(mcpserver.EntryService)
-	adapter := mcpserver.New(mcpserver.Services{Diagnostics: diagnosticStore, Libraries: bases, Entries: articles,
+	adapter := mcpserver.New(mcpserver.Services{
+		Diagnostics: diagnosticStore, Libraries: bases, Entries: articles,
 		Search: service.NewSearchService(bases, f.params.SpaceService, models, f.db),
-		Topics: service.NewTopicService(f.db), Entities: service.NewEntityService(f.db, models), Follows: service.NewFollowService(f.db)})
+		Topics: service.NewTopicService(f.db),
+		Entities: service.NewEntityService(f.db,
+			models),
+		Follows: service.NewFollowService(f.db),
+	})
 	f.router.Any("/mcp", gin.WrapH(adapter))
 	server := httptest.NewServer(f.router)
 	t.Cleanup(server.Close)
-	return &mcpFixture{personalAuthFixture: f, ctx: ctx, library: library, articles: articles, files: files,
-		vault: vault, documents: documents, queue: queue, server: server, root: root, diagnostics: diagnosticStore}
+	return &mcpFixture{
+		personalAuthFixture: f, ctx: ctx, library: library, articles: articles, files: files,
+		vault: vault, documents: documents, queue: queue, server: server, root: root, diagnostics: diagnosticStore,
+	}
 }
 
 func (f *mcpFixture) seedArticle(t *testing.T, title, mode, body string) *types.Entry {
 	t.Helper()
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID,
+	article := &types.Entry{
+		ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID,
 		Type: "url", Title: title, SourceKind: "article", Source: "https://example.org/" + uuid.NewString(),
 		ContentType: "event", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
 		StructuredSummary: &types.EntrySummary{Overview: "MCP source summary", Points: []string{"one", "two", "three"}, KeyTerms: []string{"MCP"}},
-		CollectReason:     "供 MCP 检索", CreatedAt: time.Now().UTC()}
+		CollectReason:     "供 MCP 检索", CreatedAt: time.Now().UTC(),
+	}
 
-	require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved",
-		SourceInfo: types.SourceInfo{OriginalURL: article.Source, Publisher: "MCP publisher", Author: "MCP author", PublishedAt: "2026-10-01"}}))
+	require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{
+		Decision: "approved",
+		SourceInfo: types.SourceInfo{
+			OriginalURL: article.Source,
+			Publisher:   "MCP publisher",
+			Author:      "MCP author",
+			PublishedAt: "2026-10-01",
+		},
+	}))
 	require.NoError(t, f.db.Create(article).Error)
 	require.NoError(t, f.vault.WriteArticle(f.ctx, article, body, nil))
 	return article
@@ -230,10 +262,18 @@ func (f *mcpFixture) seedPending(t *testing.T, title string) *types.Entry {
 	t.Helper()
 	bodyPath, err := f.files.SaveBytes(f.ctx, []byte("# "+title+"\n\nAwaiting a deliberate approval."), types.SingleSpaceID, uuid.NewString()+".md", false)
 	require.NoError(t, err)
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID,
-		Type: "manual", Title: title, SourceKind: "article", ParseStatus: types.ParseStatusRejected, EnableStatus: "disabled"}
-	require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "rejected", OriginalPath: bodyPath,
-		SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/" + article.ID, Publisher: "Pending publisher"}}))
+	article := &types.Entry{
+		ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID,
+		Type:         "manual",
+		Title:        title,
+		SourceKind:   "article",
+		ParseStatus:  types.ParseStatusRejected,
+		EnableStatus: "disabled",
+	}
+	require.NoError(t, article.SetIntakeMetadata(&types.EntryIntakeMetadata{
+		Decision: "rejected", OriginalPath: bodyPath,
+		SourceInfo: types.SourceInfo{OriginalURL: "https://example.org/" + article.ID, Publisher: "Pending publisher"},
+	}))
 	require.NoError(t, f.db.Create(article).Error)
 	return article
 }
@@ -253,8 +293,16 @@ func (t mcpBearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func (f *mcpFixture) connect(t *testing.T, version string) *mcp.ClientSession {
 	t.Helper()
 	client := mcp.NewClient(&mcp.Implementation{Name: "reliquary-test-agent", Version: "1.0.0"}, nil)
-	transport := &mcp.StreamableClientTransport{Endpoint: f.server.URL + "/mcp", MaxRetries: -1, DisableStandaloneSSE: true,
-		HTTPClient: &http.Client{Transport: mcpBearerTransport{key: f.key, base: http.DefaultTransport}, Timeout: 10 * time.Second}}
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: f.server.URL + "/mcp", MaxRetries: -1, DisableStandaloneSSE: true,
+		HTTPClient: &http.Client{
+			Transport: mcpBearerTransport{
+				key:  f.key,
+				base: http.DefaultTransport,
+			},
+			Timeout: 10 * time.Second,
+		},
+	}
 	session, err := client.Connect(context.Background(), transport, &mcp.ClientSessionOptions{ProtocolVersion: version})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, session.Close()) })
@@ -302,8 +350,11 @@ func mcpCall(t *testing.T, client *mcp.ClientSession, name string, arguments any
 func TestMCPRequiresValidBearerAPIKeyOnEveryRequest(t *testing.T) {
 	f := newMCPFixture(t)
 	for _, test := range []struct{ name, bearer, other string }{
-		{"missing", "", ""}, {"invalid", "invalid-key", ""}, {"login token", f.token, ""},
-		{"X-API-Key only", "", f.key}, {"invalid Bearer plus valid X-API-Key", "invalid-key", f.key},
+		{"missing", "", ""},
+		{"invalid", "invalid-key", ""},
+		{"login token", f.token, ""},
+		{"X-API-Key only", "", f.key},
+		{"invalid Bearer plus valid X-API-Key", "invalid-key", f.key},
 		{"login Bearer plus valid X-API-Key", f.token, f.key},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -484,9 +535,15 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"title": "Removed report entry point", "markdown": "# Report"}})
 	require.Error(t, err)
 	var search types.EntrySearchResponse
-	mcpCall(t, client, "search", map[string]any{"libraries": []string{f.library.ID}, "query": "searchfixture", "content_types": []string{"event"}, "entity_ids": []string{entity.ID},
+	mcpCall(t, client, "search", map[string]any{
+		"libraries":     []string{f.library.ID},
+		"query":         "searchfixture",
+		"content_types": []string{"event"},
+		"entity_ids":    []string{entity.ID},
+
 		"topic_ids": []string{topic.ID}, "sources": []string{"article"}, "starred": false,
-		"published_from": "2026-10-01", "published_to": "2026-10-02", "collapse_similar": false, "limit": 5}, &search)
+		"published_from": "2026-10-01", "published_to": "2026-10-02", "collapse_similar": false, "limit": 5,
+	}, &search)
 	require.Len(t, search.Results, 1)
 	require.Equal(t, article.ID, search.Results[0].EntryID)
 	var read service.EntryReadResult

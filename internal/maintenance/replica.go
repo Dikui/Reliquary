@@ -13,13 +13,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reliquary/internal/vaultpath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"gorm.io/gorm"
-	"reliquary/internal/vaultpath"
 )
 
 type Snapshot struct {
@@ -192,6 +192,7 @@ func rowIdentity(row map[string]any) string {
 	data, _ := json.Marshal(row)
 	return sum(data)
 }
+
 func sortRows(rows []map[string]any) {
 	sort.Slice(rows, func(i, j int) bool {
 		left, _ := json.Marshal(rows[i])
@@ -199,6 +200,7 @@ func sortRows(rows []map[string]any) {
 		return bytes.Compare(left, right) < 0
 	})
 }
+
 func sum(data []byte) string         { value := sha256.Sum256(data); return hex.EncodeToString(value[:]) }
 func ProfileHash(data []byte) string { return sum(data) }
 
@@ -208,7 +210,7 @@ func AtomicWrite(path string, data []byte) error {
 	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, data) {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	file, err := os.CreateTemp(filepath.Dir(path), ".reliquary-*.tmp")
@@ -217,7 +219,7 @@ func AtomicWrite(path string, data []byte) error {
 	}
 	defer os.Remove(file.Name())
 	defer file.Close()
-	if err := file.Chmod(0600); err != nil {
+	if err := file.Chmod(0o600); err != nil {
 		return err
 	}
 	if _, err := file.Write(data); err != nil {
@@ -248,7 +250,7 @@ func AtomicWrite(path string, data []byte) error {
 }
 
 func appendLogs(path string, rows []map[string]any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	existing := map[string][]byte{}
@@ -303,7 +305,7 @@ func appendLogs(path string, rows []map[string]any) error {
 			return nil
 		}
 	}
-	output, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	output, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -439,6 +441,15 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 	if _, currentQueue := snapshot.Tables["task_pending_ops"]; currentQueue {
 		if err := os.Remove(filepath.Join(directory, "data/task_jobs.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
+		}
+	}
+	if snapshot.schemaVersion >= 33 {
+		for _, table := range retiredTables {
+			if file, registered := registeredPath(table); registered {
+				if err := os.Remove(filepath.Join(directory, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+			}
 		}
 	}
 	if retired {
@@ -621,6 +632,7 @@ func NewWriter(db *gorm.DB, root, uploads string, debounce time.Duration) *Write
 	}
 	return &Writer{db: db, root: root, uploads: uploads, debounce: debounce, stop: make(chan struct{}), done: make(chan struct{})}
 }
+
 func (w *Writer) Flush(ctx context.Context) error {
 	w.flushMu.Lock()
 	defer w.flushMu.Unlock()
@@ -649,6 +661,7 @@ func (w *Writer) Schedule() {
 		_ = w.Flush(ctx)
 	})
 }
+
 func (w *Writer) Start() error {
 	w.mu.Lock()
 	if w.started {
@@ -689,6 +702,7 @@ func (w *Writer) Start() error {
 	}()
 	return nil
 }
+
 func (w *Writer) Close() error {
 	w.mu.Lock()
 	if w.closed {

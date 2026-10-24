@@ -92,12 +92,12 @@ for (const locale of ['zh-CN', 'en-US']) test(`${locale}: question editing saves
     const saved = env.calls.find(c => c.method === 'write')!; assert.equal(saved.path, 'evaluation/sets/set1/questions/q1'); assert.equal(saved.update, true); assert.deepEqual(saved.body, { method: 'ordinary', request: { query: 'Revised?', libraries: ['lib1'], content_types: ['reference'], collapse_similar: false }, answers: [{ entry_id: 'e1', grade: 8 }] }); assert.deepEqual(m.errors, [])
   } finally { m.close() }
 })
-test('manual question uses selected-library material search and graph parameters', async () => {
+test('manual question uses selected-library material search and ordinary retrieval', async () => {
   const env = environment(), m = env.mount('./QuestionEditor.vue', { setId: 'set1', libraries: [{ id: 'lib1', name: 'My materials' }] })
   try {
     await input(control(m.root, 'Question', 'textarea'), 'New?'); await change(scope(m.root), ['lib1']); await input(control(m.root, 'Search materials'), 'Calibration'); await click(button(m.root, 'Search')); assert.ok(visibleText(m.root).includes('Selected material')); assert.ok(!visibleText(m.root).includes('Outside library'))
-    await change(check(m.root, 'Selected material'), true); await change(control(m.root, 'Search method', 'select'), 'graph'); await input(control(m.root, 'Graph parameters JSON', 'textarea'), '{"entity_ids":["entity1"],"hops":2}'); await submit(m.root)
-    const saved = env.calls.find(c => c.method === 'write')!; assert.equal(saved.update, false); assert.deepEqual(saved.body.answers, [{ entry_id: 'e1', grade: 1 }]); assert.deepEqual(saved.body.request.graph_parameters, { entity_ids: ['entity1'], hops: 2 }); assert.deepEqual(m.errors, [])
+    await change(check(m.root, 'Selected material'), true); await submit(m.root)
+    const saved = env.calls.find(c => c.method === 'write')!; assert.equal(saved.update, false); assert.deepEqual(saved.body.answers, [{ entry_id: 'e1', grade: 1 }]); assert.equal(saved.body.method, 'ordinary'); assert.deepEqual(m.errors, [])
   } finally { m.close() }
 })
 test('deleted reference warnings and save failure retain the draft for repair', async () => {
@@ -109,8 +109,8 @@ test('record filters default to excluding evaluation and conversion sends only c
   const env = environment(), m = env.mount('./EvaluationPage.vue')
   try {
     await settle(); await click(button(m.root, 'Search records')); assert.equal(env.calls.find(c => c.path === 'search/records')?.body.include_evaluation, false)
-    await change(control(m.root, 'Source', 'select'), 'mcp'); await change(control(m.root, 'Search method', 'select'), 'graph'); await change(control(m.root, 'Libraries', 'select'), 'lib1'); await input(control(m.root, 'Question'), 'Original'); await input(control(m.root, 'From'), '2026-10-01T00:00'); await click(button(m.root, 'Apply filters'))
-    const params = env.calls.filter(c => c.path === 'search/records').at(-1)!.body; assert.equal(params.source, 'mcp'); assert.equal(params.method, 'graph'); assert.equal(params.library, 'lib1'); assert.equal(params.query, 'Original'); assert.ok(params.from.endsWith('Z'))
+    await change(control(m.root, 'Source', 'select'), 'mcp'); await change(control(m.root, 'Search method', 'select'), 'ordinary'); await change(control(m.root, 'Libraries', 'select'), 'lib1'); await input(control(m.root, 'Question'), 'Original'); await input(control(m.root, 'From'), '2026-10-01T00:00'); await click(button(m.root, 'Apply filters'))
+    const params = env.calls.filter(c => c.path === 'search/records').at(-1)!.body; assert.equal(params.source, 'mcp'); assert.equal(params.method, 'ordinary'); assert.equal(params.library, 'lib1'); assert.equal(params.query, 'Original'); assert.ok(params.from.endsWith('Z'))
     await click(button(m.root, 'Create question from record')); await change(check(m.root, '#2'), true); await click(button(m.root, 'Save question')); assert.deepEqual(env.calls.find(c => c.path.endsWith('/from-record'))?.body, { record_id: 'record1', answers: [{ entry_id: 'e2', grade: 1 }] }); assert.deepEqual(m.errors, [])
   } finally { m.close() }
 })
@@ -166,9 +166,9 @@ for (const page of ['./EvaluationPage.vue', './ModelCallsPage.vue']) test(`${pag
   const env = environment(); env.state.fail = () => ({ message: 'Service unavailable' }); const m = env.mount(page)
   try { await settle(); assert.ok(visibleText(m.root).includes('Service unavailable')); assert.ok(!visibleText(m.root).includes('No matching calls.')); assert.ok(!visibleText(m.root).includes('No evaluation sets yet.')); env.state.fail = () => undefined; await click(button(m.root, page.includes('Evaluation') ? 'Refresh' : 'Retry')); assert.ok(!visibleText(m.root).includes('Service unavailable')); assert.deepEqual(m.errors, []) } finally { m.close() }
 })
-test('graph 503 retains run parameters and offers graph service recovery steps', async () => {
-  const env = environment(); env.state.fail = (method, path) => method === 'write' && path.endsWith('/runs') ? { status: 503 } : undefined; const m = env.mount('./EvaluationPage.vue')
-  try { await settle(); await click(button(m.root, 'Runs and comparison')); await input(control(m.root, 'K (1 to 100)'), 7); await submit(m.root); assert.ok(visibleText(m.root).includes('The backend returned service unavailable (503).')); assert.equal(control(m.root, 'K (1 to 100)').props.value, 7); assert.equal(button(m.root, 'Start run').props.disabled, false); assert.deepEqual(m.errors, []) } finally { m.close() }
+test('service failure retains run parameters for retry', async () => {
+  const env = environment(); env.state.fail = (method, path) => method === 'write' && path.endsWith('/runs') ? { status: 503, message: 'Service unavailable' } : undefined; const m = env.mount('./EvaluationPage.vue')
+  try { await settle(); await click(button(m.root, 'Runs and comparison')); await input(control(m.root, 'K (1 to 100)'), 7); await submit(m.root); assert.ok(visibleText(m.root).includes('Service unavailable')); assert.equal(control(m.root, 'K (1 to 100)').props.value, 7); assert.equal(button(m.root, 'Start run').props.disabled, false); assert.deepEqual(m.errors, []) } finally { m.close() }
 })
 test('failed and running details show errors and next actions', () => {
   const env = environment(), bad = env.mount('./RunResults.vue', { run: run('bad', 0, { status: 'failed', error: 'Model timeout' }) }), running = env.mount('./RunResults.vue', { run: run('active', 0, { status: 'running' }) })
@@ -176,23 +176,6 @@ test('failed and running details show errors and next actions', () => {
 })
 test('narrow layout contains scrolling tables and responds to theme tokens', () => {
   const css = readFileSync(new URL('./insights.css', import.meta.url), 'utf8'); assert.match(css, /\.table-scroll[^}]*max-width: 100%;[^}]*overflow-x: auto/); assert.match(css, /@media \(max-width: 640px\)/); assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/); assert.match(css, /var\(--td-bg-color-container\)/); assert.match(css, /min-width: 0/)
-})
-
-for (const locale of ['zh-CN', 'en-US']) test(`${locale}: graph question runs successfully and renders its metrics and reference hit without an outage warning`, async () => {
-  const env = environment(locale)
-  const graphQuestion = question({ method: 'graph', request: { query: 'Graph calibration?', libraries: ['lib1'], graph_parameters: { entity: { id: 'entity1' }, hops: 1 } } })
-  env.state.questions = [graphQuestion]
-  env.state.runs = [run('graph-run', 1, { questions: [{ ...run('graph-run', 1).questions[0], question: graphQuestion }] })]
-  const m = env.mount('./EvaluationPage.vue')
-  try {
-    await settle(); assert.ok(visibleText(m.root).includes(env.t('ikb19.graph')))
-    assert.ok(!visibleText(m.root).includes(env.t('ikb19.graphUnavailable')))
-    await click(button(m.root, env.t('ikb19.runs'))); await submit(m.root)
-    assert.ok(env.calls.some(call => call.method === 'write' && call.path.endsWith('/runs')))
-    for (const text of ['Graph calibration?', '1.0000', 'Reference 1', env.t('ikb19.completed'), env.t('ikb19.hit')]) assert.ok(visibleText(m.root).includes(text), text)
-    assert.ok(!visibleText(m.root).includes(env.t('ikb19.graphUnavailable')))
-    assert.deepEqual(m.errors, [])
-  } finally { m.close() }
 })
 
 test('clearing the shared library scope explicitly resolves all current libraries for evaluation and candidate generation', async () => {

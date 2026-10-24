@@ -134,7 +134,9 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	// segments use the current candidates and persistence revalidates all IDs.
 	fingerprintInput := input
 	fingerprintInput.ExistingTopics = []articleProcessingTopic{}
-	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{fingerprintInput, prompt, articleGraphVerificationPrompt(), segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget})
+	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{
+		fingerprintInput, prompt, segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -256,20 +258,10 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 	p := &articleProcessingProvenance{ContentTypes: map[string][]int{}, Entities: map[string][]int{}, Topics: map[string][]int{}}
 	merged := &articleProcessingResult{Title: parts[0].Title, Summary: parts[0].Summary, Entities: []articleProcessingEntity{}, Topics: []string{}, Provenance: p, Extensions: map[string][]SegmentContribution{}}
 	entityIndex := map[string]int{}
-	relationIndex := map[string]int{}
 	winningType := ""
 	winningCount := 0
 	for i, part := range parts {
 		n := i + 1
-		for _, rel := range part.Relations {
-			key := entityNameKey(rel.SubjectType, rel.Subject) + "\x00" + relationNameKey(rel.Type) + "\x00" + entityNameKey(rel.ObjectType, rel.Object)
-			if index, ok := relationIndex[key]; ok {
-				merged.Relations[index].Evidence = append(merged.Relations[index].Evidence, rel.Evidence...)
-			} else {
-				relationIndex[key] = len(merged.Relations)
-				merged.Relations = append(merged.Relations, rel)
-			}
-		}
 		merged.Images = append(merged.Images, part.Images...)
 		p.Summary = append(p.Summary, n)
 		p.ContentTypes[*part.ContentType] = append(p.ContentTypes[*part.ContentType], n)
@@ -349,7 +341,9 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		if err := utils.ParseLLMJsonResponse(raw, &output); err != nil {
 			return err
 		}
-		encoded, _ := json.Marshal(map[string]any{"title": output.Title, "summary": output.Summary, "entities": []any{}, "topics": []string{}, "relations": []extractedRelation{}})
+		encoded, _ := json.Marshal(map[string]any{
+			"title": output.Title, "summary": output.Summary, "entities": []any{}, "topics": []string{},
+		})
 		checked, err := parseArticleProcessingResult(string(encoded))
 		if err == nil && title == "" && checked.Title == "" {
 			return errors.New("summary merge output is missing a generated title")

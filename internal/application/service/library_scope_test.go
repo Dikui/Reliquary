@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"reliquary/internal/application/repository"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
 
 // Existing fixtures can request the historical library set explicitly.
@@ -41,11 +41,7 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 		for i := range want.ContentTypes {
 			want.ContentTypes[i].LibraryID = got.ID
 		}
-		for i := range want.RelationTypes {
-			want.RelationTypes[i].LibraryID = got.ID
-		}
 		require.Equal(t, want.ContentTypes, got.ContentTypes)
-		require.Equal(t, want.RelationTypes, got.RelationTypes)
 	}
 	institutional, err := repo.GetSystemLibraryByRole(ctx, 1, "official")
 	require.NoError(t, err)
@@ -68,7 +64,6 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 		created, err := svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: template, Directory: "custom-" + map[string]string{types.TemplateExternalTimely: "timely", types.TemplateExternalDurable: "durable", types.TemplateOwn: "own", types.TemplateGenerated: "generated"}[template], Name: template})
 		require.NoError(t, err)
 		require.Empty(t, created.ContentTypes)
-		require.Empty(t, created.RelationTypes)
 		_, err = svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: template, Directory: created.Directory, Name: "duplicate"})
 		require.Error(t, err)
 		for _, patch := range []types.LibraryPatch{{Template: &template}, {Directory: &created.Directory}, {SystemRole: &name}} {
@@ -154,9 +149,7 @@ func TestEmptySystemLibrariesCanBeDeletedWithoutRecreation(t *testing.T) {
 	libraries, err = svc.ListLibraries(ctx)
 	require.NoError(t, err)
 	require.Empty(t, libraries)
-	var contentTypes, relationTypes int64
+	var contentTypes int64
 	require.NoError(t, db.Model(&types.LibraryContentType{}).Count(&contentTypes).Error)
-	require.NoError(t, db.Model(&types.LibraryRelationType{}).Count(&relationTypes).Error)
 	require.Zero(t, contentTypes)
-	require.Zero(t, relationTypes)
 }

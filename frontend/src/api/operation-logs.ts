@@ -19,13 +19,8 @@ export const OPERATION_TYPES = [
   'create_topic',
   'update_topic',
   'delete_topic',
-  'graph_check',
-  'graph_rebuild',
   'follow',
   'unfollow',
-  'add_relation_type',
-  'delete_relation',
-  'merge_relation_types',
 ] as const
 export type OperationType = typeof OPERATION_TYPES[number]
 export interface OperationLog { id: string; actor: string; actor_name?: string; operation_type: OperationType; object_id: string; before: unknown; after: unknown; created_at: string }

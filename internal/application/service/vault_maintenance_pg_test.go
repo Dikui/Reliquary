@@ -27,14 +27,24 @@ func TestVaultVerifyRepairsAllLibraryFilesAndReplica(t *testing.T) {
 	require.NoError(t, h.db.Where("system_role=?", "ai-output").First(&generated).Error)
 	generated.IndexingStrategy.VectorEnabled = false
 	require.NoError(t, h.db.Model(&generated).Update("indexing_strategy", generated.IndexingStrategy).Error)
-	report, err := documents.createReport(h.ctx, &generated, "Report original", "# Report original\n\nDatabase recovery copy.", nil, nil)
+	report, err := documents.createReport(
+		h.ctx,
+		&generated,
+		"Report original",
+		"# Report original\n\nDatabase recovery copy.",
+		nil,
+	)
 	require.NoError(t, err)
 	personal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)
 	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
 	require.NoError(t, v.Flush(h.ctx))
-	require.NoError(t, os.WriteFile(filepath.Join(v.root, article.VaultPath), []byte("damaged article"), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(v.root, ".reliquary/data/topics.json"), []byte("invalid"), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(v.root, personal.VaultPath), []byte("damaged personal document"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(v.root, article.VaultPath), []byte("damaged article"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(v.root, ".reliquary/data/topics.json"), []byte("invalid"), 0o600))
+	require.NoError(t,
+		os.WriteFile(filepath.Join(v.root,
+			personal.VaultPath),
+			[]byte("damaged personal document"),
+			0o600))
 	require.NoError(t, os.Remove(filepath.Join(v.root, report.VaultPath)))
 	check, err := v.Verify(h.ctx, false)
 	require.NoError(t, err)
@@ -55,7 +65,11 @@ func TestVaultVerifyRepairsAllLibraryFilesAndReplica(t *testing.T) {
 	_, err = os.Stat(filepath.Join(v.root, report.VaultPath))
 	require.NoError(t, err)
 	// Broken JSONL is quarantined rather than overwritten in place.
-	require.NoError(t, os.WriteFile(filepath.Join(v.root, ".reliquary/operation_logs.jsonl"), []byte("broken log"), 0600))
+	require.NoError(t,
+		os.WriteFile(filepath.Join(v.root,
+			".reliquary/operation_logs.jsonl"),
+			[]byte("broken log"),
+			0o600))
 	_, err = v.Verify(h.ctx, true)
 	require.NoError(t, err)
 	quarantined, err := filepath.Glob(filepath.Join(v.root, ".reliquary/quarantine/*.corrupt.jsonl"))
@@ -118,12 +132,17 @@ func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *
 	require.NoError(t, documents.indexVaultChunks(ctx, library, entry, body))
 	header, err = vault.articleHeader(ctx, entry)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(vault.root, path), append(RenderVaultArticleHeader(header), []byte(body)...), 0600))
+	require.NoError(t,
+		os.WriteFile(filepath.Join(vault.root,
+			path),
+			append(RenderVaultArticleHeader(header),
+				[]byte(body)...),
+			0o600))
 	attachment := filepath.Join(vault.root, "attachments", entry.ID, "fixture.png")
-	require.NoError(t, os.MkdirAll(filepath.Dir(attachment), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(attachment), 0o755))
 	image, err := readVaultImage(ctx, articleImageDataURI(t, 10), nil)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(attachment, image, 0600))
+	require.NoError(t, os.WriteFile(attachment, image, 0o600))
 	return entry
 }
 
@@ -160,10 +179,19 @@ func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testin
 	indexing.IndexingStrategy.VectorEnabled = false
 	personal := createMaintenanceMineFixture(t, h.ctx, documents, vault, &indexing)
 	plainPath := "personal/hand-placed.md"
-	require.NoError(t, os.WriteFile(filepath.Join(vault.root, plainPath), []byte("# Hand placed note\n\nThis document was never imported."), 0600))
+	require.NoError(t,
+		os.WriteFile(filepath.Join(vault.root,
+			plainPath),
+			[]byte("# Hand placed note\n\nThis document was never imported."),
+			0o600))
 	unregisteredPath := "personal/unregistered.md"
 	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Unregistered personal document", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), ContentType: "event"}
-	require.NoError(t, os.WriteFile(filepath.Join(vault.root, unregisteredPath), append(RenderVaultArticleHeader(header), []byte("# Unregistered note\n\nThe readable replica contains no entry for this file.")...), 0600))
+	require.NoError(t,
+		os.WriteFile(filepath.Join(vault.root,
+			unregisteredPath),
+			append(RenderVaultArticleHeader(header),
+				[]byte("# Unregistered note\n\nThe readable replica contains no entry for this file.")...),
+			0o600))
 	require.NoError(t, vault.Flush(h.ctx))
 	before := vaultFileHashes(t, vault.root)
 	fresh := pgtest.Open(t)
@@ -206,8 +234,8 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	}
 	for relative, data := range configuration {
 		path := filepath.Join(v.root, relative)
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
-		require.NoError(t, os.WriteFile(path, []byte(data), 0644))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(data), 0o644))
 	}
 	documents, err := NewVaultDocumentService(h.db, nil, h.service.retrieveEngine, v.root)
 	require.NoError(t, err)
@@ -219,7 +247,13 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	require.NoError(t, h.db.Where("system_role=?", "ai-output").First(&generated).Error)
 	generated.IndexingStrategy.VectorEnabled = false
 	require.NoError(t, h.db.Model(&generated).Update("indexing_strategy", generated.IndexingStrategy).Error)
-	report, err := documents.createReport(h.ctx, &generated, "Report original", "# Report original\n\nDatabase recovery copy.", nil, nil)
+	report, err := documents.createReport(
+		h.ctx,
+		&generated,
+		"Report original",
+		"# Report original\n\nDatabase recovery copy.",
+		nil,
+	)
 	require.NoError(t, err)
 	_ = report
 	importedPersonal := createMaintenanceMineFixture(t, h.ctx, documents, v, &indexing)

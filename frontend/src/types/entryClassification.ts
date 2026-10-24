@@ -12,7 +12,7 @@ export interface ClassifiedEntry {
   latest_entry_id?: string
   library_id?: string
   library_name?: string
- library_content_types?: { name: string; enabled: boolean; extract_graph: boolean; position: number }[]
+ library_content_types?: { name: string; enabled: boolean; position: number }[]
  image_descriptions?: { url: string; description?: string; skip_reason?: string; ordinal: number; locations: { paragraph: number; start: number; end: number }[] }[]
   acquisition?: Acquisition | ''
   related_entry_id?: string

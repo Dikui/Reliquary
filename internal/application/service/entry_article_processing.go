@@ -11,10 +11,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
-	"strings"
-	"time"
-
 	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
@@ -22,11 +18,22 @@ import (
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
+	"sort"
+	"strings"
+	"time"
 )
 
 func articleProcessingPrompt() string {
 	return config.Prompt("article_processing") + `
-输出所有字段，格式：{"title":"资料标题","content_type":"所属库类型","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[],"topics":["已给定的主题 ID"],"relations":[]}
+输出所有字段，格式：{"title":"资料标题",
+"content_type":"所属库类型",
+"summary":{"overview":"一句话概述",
+"points":["要点一",
+"要点二",
+"要点三"],
+"key_terms":["关键名词"]},
+"entities":[],
+"topics":["已给定的主题 ID"]}
 segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
 }
 
@@ -35,15 +42,16 @@ func articleEntityProcessingPrompt() string {
 实体输出格式："entities":[{"name":"名称","type":"company","aliases":[],"description":"原文支持的简短介绍","relevance":"central","evidence_ids":[1]}]。`
 }
 
-const defaultArticleBodyChars = 24000
-const defaultArticleImages = 8
-const defaultArticleCompletionTokens = 4096
+const (
+	defaultArticleBodyChars        = 24000
+	defaultArticleImages           = 8
+	defaultArticleCompletionTokens = 4096
+)
 
 // articleProcessingResult keeps required fields nullable while decoding so an
 // omitted field is distinguishable from an intentionally empty array.
 type articleProcessingResult struct {
 	Title            string                           `json:"title,omitempty"`
-	Relations        []extractedRelation              `json:"relations"`
 	Images           []types.ProcessingImage          `json:"images_result,omitempty"`
 	ContentType      *string                          `json:"content_type"`
 	Summary          *types.EntrySummary              `json:"summary"`
@@ -92,7 +100,7 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 	if len([]rune(result.Title)) > 255 || strings.ContainsAny(result.Title, "\r\n\x00") {
 		return nil, errors.New("article processing title must be a single line of at most 255 characters without NUL")
 	}
-	if result.Summary == nil || result.Entities == nil || result.Topics == nil || result.Relations == nil ||
+	if result.Summary == nil || result.Entities == nil || result.Topics == nil ||
 		strings.TrimSpace(result.Summary.Overview) == "" || result.Summary.Points == nil || result.Summary.KeyTerms == nil {
 		return nil, errors.New("article processing output is missing required fields")
 	}
@@ -305,9 +313,6 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 	}
 	// Verify only structurally eligible candidates. The caller restores whole-document coordinates.
 	qualifySegmentOutput(library, k, body, types.ProcessingSegment{End: len([]rune(body))}, result)
-	if err := verifyArticleGraph(ctx, modelChat, model, input, images, completion, result); err != nil {
-		return nil, err
-	}
 	return result, nil
 }
 
@@ -380,11 +385,17 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 			k.ContentTypeHint, k.RelatedEntryID = latest.ContentTypeHint, latest.RelatedEntryID
 		}
 		var current types.Entry
-		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Select("title", "file_name", "content_type", "content_type_corrected", "source_unverified", "graph").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&current).Error; err != nil {
+		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Select("title",
+			"file_name",
+			"content_type",
+			"content_type_corrected",
+			"source_unverified").Where("id=? AND space_id=?",
+			k.ID,
+			k.SpaceID).Take(&current).Error; err != nil {
 			return err
 		}
 		k.Title, k.FileName = current.Title, current.FileName
-		k.SourceUnverified, k.Graph = current.SourceUnverified, current.Graph
+		k.SourceUnverified = current.SourceUnverified
 		if current.ContentTypeCorrected {
 			k.ContentType, k.ContentTypeCorrected = current.ContentType, true
 		}
@@ -410,7 +421,6 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if s.db != nil {
 		if !library.ExtractsEntities() {
 			result.Entities = []articleProcessingEntity{}
-			result.Relations = []extractedRelation{}
 			result.ResolvedEntities = nil
 		}
 		candidates := make([]types.EntityCandidate, 0, len(result.Entities))
@@ -433,7 +443,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 				return fmt.Errorf("resolve article entities: %w", err)
 			}
 		}
-		if err := s.saveProcessingOutput(ctx, library, k, body, result, resolved); err != nil {
+		if err := s.saveProcessingOutput(ctx, k, body, result); err != nil {
 			return err
 		}
 		ids := []string{}
@@ -485,11 +495,6 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	}
 	if err := indexArticleImages(ctx, s.db, s.modelService, library, s.vault, k); err != nil {
 		if err := s.deferEntryVectors(ctx, k, err); err != nil {
-			return err
-		}
-	}
-	if s.db != nil {
-		if err := s.publishEntryRelations(ctx, k.ID, result.RunID); err != nil {
 			return err
 		}
 	}

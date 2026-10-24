@@ -2,13 +2,14 @@ package handler
 
 import (
 	"net/http"
+	"reliquary/internal/application/service"
+	"reliquary/internal/types"
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"reliquary/internal/application/service"
 	apperrors "reliquary/internal/errors"
-	"reliquary/internal/types"
+
+	"github.com/gin-gonic/gin"
 )
 
 type EvaluationHandler struct {
@@ -19,6 +20,7 @@ type EvaluationHandler struct {
 func NewEvaluationHandler(s *service.EvaluationService, records *service.SearchRecorder) *EvaluationHandler {
 	return &EvaluationHandler{service: s, records: records}
 }
+
 func evaluationJSON(c *gin.Context, data any, err error) {
 	if err != nil {
 		c.Error(err)
@@ -26,6 +28,7 @@ func evaluationJSON(c *gin.Context, data any, err error) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }
+
 func evaluationBody(c *gin.Context, target any) bool {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
 	if err := decodeSearchJSON(c, target); err != nil {
@@ -34,6 +37,7 @@ func evaluationBody(c *gin.Context, target any) bool {
 	}
 	return true
 }
+
 func evaluationPage(c *gin.Context) (int, int, bool) {
 	limit, offset := 50, 0
 	for key, target := range map[string]*int{"limit": &limit, "offset": &offset} {
@@ -48,6 +52,7 @@ func evaluationPage(c *gin.Context) (int, int, bool) {
 	}
 	return limit, offset, true
 }
+
 func (h *EvaluationHandler) Register(v1 *gin.RouterGroup) {
 	v1.GET("/search/records", h.ListRecords)
 	v1.GET("/evaluation/vector-sets", func(c *gin.Context) {
@@ -115,6 +120,7 @@ func (h *EvaluationHandler) Register(v1 *gin.RouterGroup) {
 		evaluationJSON(c, data, err)
 	})
 }
+
 func (h *EvaluationHandler) SaveSet(c *gin.Context) {
 	var input struct {
 		Name        string `json:"name"`
@@ -126,6 +132,7 @@ func (h *EvaluationHandler) SaveSet(c *gin.Context) {
 	data, err := h.service.SaveSet(c.Request.Context(), c.Param("set_id"), input.Name, input.Description)
 	evaluationJSON(c, data, err)
 }
+
 func (h *EvaluationHandler) SaveQuestion(c *gin.Context) {
 	var input struct {
 		Method  string                   `json:"method"`
@@ -138,6 +145,7 @@ func (h *EvaluationHandler) SaveQuestion(c *gin.Context) {
 	data, err := h.service.SaveQuestion(c.Request.Context(), c.Param("set_id"), c.Param("question_id"), types.EvaluationQuestion{Method: input.Method, Request: input.Request, Answers: input.Answers})
 	evaluationJSON(c, data, err)
 }
+
 func (h *EvaluationHandler) ListQuestions(c *gin.Context) {
 	limit, offset, ok := evaluationPage(c)
 	if !ok {
@@ -151,6 +159,7 @@ func (h *EvaluationHandler) ListQuestions(c *gin.Context) {
 	data, err := h.service.ListQuestions(c.Request.Context(), c.Param("set_id"), status, limit, offset)
 	evaluationJSON(c, data, err)
 }
+
 func (h *EvaluationHandler) FromRecord(c *gin.Context) {
 	var input struct {
 		RecordID string                   `json:"record_id"`
@@ -162,6 +171,7 @@ func (h *EvaluationHandler) FromRecord(c *gin.Context) {
 	data, err := h.service.QuestionFromRecord(c.Request.Context(), c.Param("set_id"), input.RecordID, input.Answers)
 	evaluationJSON(c, data, err)
 }
+
 func (h *EvaluationHandler) GenerateCandidates(c *gin.Context) {
 	var input service.EvaluationGenerateRequest
 	if !evaluationBody(c, &input) {
@@ -170,6 +180,7 @@ func (h *EvaluationHandler) GenerateCandidates(c *gin.Context) {
 	data, err := h.service.GenerateCandidates(c.Request.Context(), c.Param("set_id"), input)
 	evaluationJSON(c, data, err)
 }
+
 func (h *EvaluationHandler) ConfirmCandidate(c *gin.Context) {
 	var input struct {
 		Answers []types.EvaluationAnswer `json:"answers"`
@@ -180,6 +191,7 @@ func (h *EvaluationHandler) ConfirmCandidate(c *gin.Context) {
 	data, err := h.service.ConfirmCandidate(c.Request.Context(), c.Param("set_id"), c.Param("question_id"), input.Answers)
 	evaluationJSON(c, data, err)
 }
+
 func (h *EvaluationHandler) ListRecords(c *gin.Context) {
 	limit, offset, ok := evaluationPage(c)
 	if !ok {
@@ -212,7 +224,7 @@ func (h *EvaluationHandler) ListRecords(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("invalid source"))
 		return
 	}
-	if input.Method != "" && input.Method != "ordinary" && input.Method != "graph" {
+	if input.Method != "" && input.Method != "ordinary" {
 		c.Error(apperrors.NewBadRequestError("invalid method"))
 		return
 	}

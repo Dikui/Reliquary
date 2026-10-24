@@ -6,25 +6,22 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reliquary/internal/application/service"
+	"reliquary/internal/logger"
+	"reliquary/internal/middleware/taskdl"
+	"reliquary/internal/queue"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"strings"
 	"time"
 
 	"go.uber.org/dig"
 	"gorm.io/gorm"
-	"reliquary/internal/graphreplica"
-	"reliquary/internal/queue"
-
-	"reliquary/internal/application/service"
-	"reliquary/internal/logger"
-	"reliquary/internal/middleware/taskdl"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 type TaskParams struct {
 	dig.In
 	ContentChecks       *service.ContentCheckService `optional:"true"`
-	GraphReplica        *graphreplica.Service        `optional:"true"`
 	Client              *queue.Client
 	SystemSettings      interfaces.SystemSettingService
 	EntryService        interfaces.EntryService
@@ -79,11 +76,6 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.Use(backgroundTaskMiddleware())
 	if params.ContentChecks != nil {
 		mux.HandleFunc(types.TypeContentCheck, params.ContentChecks.Handle)
-	}
-	if params.GraphReplica != nil {
-		mux.HandleFunc(graphreplica.TypeSync, params.GraphReplica.HandleSync)
-		mux.HandleFunc(graphreplica.TypeCheck, params.GraphReplica.HandleCheck)
-		mux.HandleFunc(graphreplica.TypeRebuild, params.GraphReplica.HandleRebuild)
 	}
 	mux.HandleFunc(types.TypeDocumentProcess, params.EntryService.ProcessDocument)
 	mux.HandleFunc(types.TypeManualProcess, params.EntryService.ProcessManualUpdate)
@@ -233,7 +225,8 @@ func markEntryListDeleteFailed(
 	ctx context.Context,
 	repo interfaces.EntryRepository,
 	t *queue.Task,
-	taskErr error) {
+	taskErr error,
+) {
 	var payload deadLetterEntryListDeletePayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil || len(payload.EntryIDs) == 0 {
 		return

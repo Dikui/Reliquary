@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reliquary/internal/vaultpath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
-
-	"reliquary/internal/vaultpath"
 
 	"gorm.io/gorm"
 )
@@ -263,6 +263,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		projectVectorSnapshot(snapshot, now, now, vectorSnapshotLegacy(snapshot))
 	}
+	projectRetiredSnapshot(snapshot, targetVersion)
 	order, err := replicaImportOrder(db, snapshot)
 	if err != nil {
 		return nil, err
@@ -399,6 +400,9 @@ func replicaImportOrder(db *gorm.DB, snapshot *Snapshot) ([]string, error) {
 			}
 		}
 		order = filtered
+	}
+	if !db.Migrator().HasTable("library_relation_types") {
+		order = slices.DeleteFunc(order, func(table string) bool { return table == "library_relation_types" })
 	}
 	order, err := registeredImportOrder(order, snapshot.Tables)
 	if err != nil {

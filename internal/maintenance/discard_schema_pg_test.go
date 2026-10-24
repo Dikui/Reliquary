@@ -3,12 +3,12 @@ package maintenance
 import (
 	"context"
 	"path/filepath"
+	"reliquary/internal/testutil/pgtest"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func TestLibraryIntakeMigrationPreservesHistoricalRows(t *testing.T) {
@@ -38,8 +38,16 @@ func TestLibraryIntakeMigrationPreservesHistoricalRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(bm, am))
 	for table, rows := range before.Tables {
-		if table == "schema_migrations" {
+		if table == "schema_migrations" || table == "library_relation_types" {
 			continue
+		}
+		for _, row := range rows {
+			if table == "entries" {
+				delete(row, "graph")
+			}
+			if table == "library_content_types" {
+				delete(row, "extract_graph")
+			}
 		}
 		actual := preservedBeforeVectorDefaults(t, table, rows, after.Tables[table])
 		if table == "ingest_discards" {

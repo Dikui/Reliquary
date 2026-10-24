@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/types"
 	"time"
+
+	taskqueue "reliquary/internal/queue"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/application/graph"
-	"reliquary/internal/application/repository"
-	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
 )
 
 type libraryReviewContextKey struct{}
@@ -162,14 +162,6 @@ func (s *entryService) processLibraryReviewEntry(ctx context.Context, entry *typ
 			return err
 		}
 		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			if err := graph.Lock(tx, entry.SpaceID); err != nil {
-				return err
-			}
-			if rejected {
-				if err := graph.WithdrawTx(tx, []string{entry.ID}); err != nil {
-					return err
-				}
-			}
 			if err := repository.NewEntryRepository(tx).UpdateEntry(ctx, entry); err != nil {
 				return err
 			}

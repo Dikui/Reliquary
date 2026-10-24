@@ -12,7 +12,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOY = ROOT / 'deploy'
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-SERVICES = {'app', 'frontend', 'postgres', 'redis', 'neo4j'}
+SERVICES = {'app', 'frontend', 'postgres', 'redis'}
 COMPOSE = ['docker', 'compose', '--project-directory', str(DEPLOY)]
 
 
@@ -48,7 +48,7 @@ def main(ollama):
         row.get('State') == 'running' and row.get('Health', '') in ('', 'healthy') for row in rows)
     if not ready:
         print('Restoring project services', flush=True)
-        for services in (['postgres', 'redis', 'neo4j'], []):
+        for services in (['postgres', 'redis'], []):
             run(COMPOSE + ['up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '120'] + services, timeout=180)
     config = json.loads(run(COMPOSE + ['config', '--format', 'json']))
     for name, target, path in [('app', 8080, '/health'), ('frontend', 80, '/')]:

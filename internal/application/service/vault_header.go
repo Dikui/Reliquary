@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reliquary/internal/types"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
-
-	"reliquary/internal/types"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,7 +23,6 @@ type VaultArticleHeader struct {
 	Identifier        string                  `yaml:"identifier,omitempty" json:"identifier,omitempty"`
 	HasUpdate         bool                    `yaml:"has_update,omitempty" json:"has_update,omitempty"`
 	LatestEntryID     string                  `yaml:"latest_entry_id,omitempty" json:"latest_entry_id,omitempty"`
-	Graph             *bool                   `yaml:"graph,omitempty" json:"graph,omitempty"`
 	CannotBeFact      bool                    `yaml:"cannot_be_fact,omitempty" json:"cannot_be_fact,omitempty"`
 	RelatedEntities   []ReportEntityReference `yaml:"related_entities,omitempty" json:"related_entities,omitempty"`
 	TopicIDs          []string                `yaml:"topic_ids,omitempty" json:"topic_ids,omitempty"`
@@ -96,9 +94,6 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 		b.WriteString("has_update: true\n")
 	}
 	scalar("latest_entry_id", h.LatestEntryID)
-	if h.Graph != nil {
-		fmt.Fprintf(&b, "graph: %t\n", *h.Graph)
-	}
 	if len(h.RelatedEntryIDs) > 0 {
 		writeVaultList(&b, "related_entry_ids", h.RelatedEntryIDs, true)
 	}

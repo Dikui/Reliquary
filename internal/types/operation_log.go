@@ -26,8 +26,7 @@ var OperationTypes = []string{
 	"review_supplement_url", "review_admit_unverified",
 	"star", "unstar", "correct_content_type", "correct_topics", "merge_entities",
 	"create_topic", "update_topic", "delete_topic",
-	"graph_check", "graph_rebuild",
-	"follow", "unfollow", "add_relation_type", "delete_relation", "merge_relation_types",
+	"follow", "unfollow",
 }
 
 type OperationLogPage struct {

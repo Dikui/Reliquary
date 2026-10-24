@@ -148,7 +148,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   if (unavailable) {
     modules['@/api/entities'] = { ENTITY_TYPES: ['company'], listEntities: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:[{id:'recovered',canonical_name:'Recovered entity',entity_type:'company',aliases:[]}] } }, getEntityNameEmbeddingRebuildStatus: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:{pending_count:0}} } }
     modules['@/stores/follows'] = {useFollowStore:()=>({refreshAfterTargetChange:async()=>{}})}
-    modules['./EntityGraph.vue']=empty;modules['./MergeSuggestions.vue']=empty;modules['./EntityRelations.vue']=empty;modules['@/components/FollowToggle.vue']=empty
+    modules['./MergeSuggestions.vue']=empty;modules['@/components/FollowToggle.vue']=empty
     modules['./components/EntryWorkbench.vue']=moduleOf(loadComponent(new URL('./components/EntryWorkbench.vue',import.meta.url),modules))
   }
   const library = loadComponent(new URL('./Library.vue', import.meta.url), modules)

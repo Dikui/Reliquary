@@ -7,6 +7,11 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"reliquary/internal/config"
+	"reliquary/internal/models/chat"
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
+	"reliquary/internal/utils"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,11 +21,6 @@ import (
 	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/config"
-	"reliquary/internal/models/chat"
-	"reliquary/internal/models/embedding"
-	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 func entityRecallLimit(variable string, fallback int) int {
@@ -34,6 +34,7 @@ func entityRecallLimit(variable string, fallback int) int {
 func compatibleEntityTypes(entityType string) []string {
 	return []string{types.NormalizeEntityType(entityType)}
 }
+
 func entityNameKey(entityType, name string) string {
 	return fmt.Sprintf("%q:%q", types.NormalizeEntityType(entityType), normalizeEntityName(name))
 }
@@ -385,6 +386,7 @@ func (s *EntityService) judgeEntity(ctx context.Context, model chat.Chat, item e
 	}
 	return result, nil
 }
+
 func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, error) {
 	if len(entities) > 0 {
 		if err := lockEntitySpaceShared(tx, entities[0].SpaceID); err != nil {
@@ -444,11 +446,6 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			if created.Error != nil {
 				return nil, created.Error
 			}
-			if created.RowsAffected > 0 {
-				if err := notifyEntityProjection(tx, entity.SpaceID, entity.ID); err != nil {
-					return nil, err
-				}
-			}
 			if err := tx.Where("space_id=? AND entity_type=? AND normalized_name=?", entity.SpaceID, entity.EntityType, entity.NormalizedName).First(&existing).Error; err != nil {
 				return nil, err
 			}
@@ -459,11 +456,6 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 				Updates(map[string]any{"description": description, "embedding_needs_rebuild": true, "updated_at": time.Now()})
 			if updated.Error != nil {
 				return nil, updated.Error
-			}
-			if updated.RowsAffected > 0 {
-				if err := notifyEntityProjection(tx, entity.SpaceID, entity.ID); err != nil {
-					return nil, err
-				}
 			}
 		}
 		ids[planned.ID] = entity.ID
@@ -555,6 +547,7 @@ type entityMatch struct {
 func normalizeEntityName(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(norm.NFKC.String(value)), " "))
 }
+
 func appendUniqueEntityString(items []string, value string) []string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -567,6 +560,7 @@ func appendUniqueEntityString(items []string, value string) []string {
 	}
 	return append(items, value)
 }
+
 func unionEntityStrings(left, right []string) []string {
 	result := append([]string{}, left...)
 	for _, value := range right {
@@ -574,6 +568,7 @@ func unionEntityStrings(left, right []string) []string {
 	}
 	return result
 }
+
 func entityConfiguredPositive(name string, fallback int) int {
 	value, err := strconv.Atoi(os.Getenv(name))
 	if err != nil || value < 1 {

@@ -5,9 +5,10 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"gorm.io/gorm"
 )
@@ -20,15 +21,14 @@ const (
 
 // Library represents a library entity
 type Library struct {
-	SystemRole         string                `json:"system_role"`
-	Template           string                `json:"template" gorm:"default:own"`
-	Directory          string                `json:"directory"`
-	ReviewCriteria     string                `json:"review_criteria"`
-	SourceEvidenceRule string                `json:"source_evidence_rule"`
-	FeedEnabled        bool                  `json:"feed_enabled"`
-	ContentTypes       []LibraryContentType  `json:"content_types" gorm:"foreignKey:LibraryID"`
-	RelationTypes      []LibraryRelationType `json:"relation_types" gorm:"foreignKey:LibraryID"`
-	ModelTiers         ModelTierConfig       `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
+	SystemRole         string               `json:"system_role"`
+	Template           string               `json:"template" gorm:"default:own"`
+	Directory          string               `json:"directory"`
+	ReviewCriteria     string               `json:"review_criteria"`
+	SourceEvidenceRule string               `json:"source_evidence_rule"`
+	FeedEnabled        bool                 `json:"feed_enabled"`
+	ContentTypes       []LibraryContentType `json:"content_types" gorm:"foreignKey:LibraryID"`
+	ModelTiers         ModelTierConfig      `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	// Unique identifier of the library
 	ID string `yaml:"id"                      json:"id"                      gorm:"type:varchar(36);primaryKey"`
 	// Name of the library
@@ -191,7 +191,6 @@ func (library *Library) EnsureDefaults() {
 	if library.IndexingStrategy.IsZero() {
 		library.IndexingStrategy = DefaultIndexingStrategy()
 	}
-
 }
 
 // LibraryCapabilities describes the functional features a library exposes.
@@ -274,7 +273,7 @@ func (library *Library) BeforeCreate(_ *gorm.DB) error {
 
 // IngestFields describes shared admission fields in the public catalog.
 func (library *Library) IngestFields() map[string]string {
-	fields := map[string]string{"library": "Required library ID or directory", "graph": "Optional boolean; null enables supported relations by default, false disables relations"}
+	fields := map[string]string{"library": "Required library ID or directory"}
 	fields["source_ref"] = "Optional source identity, at most 2048 Unicode code points; changed content replaces the existing entry"
 	fields["identifier"] = "Optional scheme:value, at most 2048 Unicode code points; scheme and DOI value are lowercased"
 	fields["acquisition"] = "Optional verbatim, extracted or model_written; omitted means unknown"

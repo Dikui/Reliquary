@@ -44,6 +44,20 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				delete(copy, table)
 			}
 		}
+		if migration.Version >= 33 {
+			for _, table := range retiredTables {
+				delete(copy, table)
+			}
+			rule := copy["entries"]
+			rule.Sidecar = strings.ReplaceAll(" "+rule.Sidecar+" ", " graph ", " ")
+			copy["entries"] = rule
+			rule = copy["entry_processing_outputs"]
+			rule.Sidecar = strings.ReplaceAll(" "+rule.Sidecar+" ", " relations ", " ")
+			copy["entry_processing_outputs"] = rule
+			rule = copy["library_content_types"]
+			rule.Configuration = strings.ReplaceAll(" "+rule.Configuration+" ", " extract_graph ", " ")
+			copy["library_content_types"] = rule
+		}
 		if migration.Version < 19 {
 			rule := copy["graph_pending_sync"]
 			rule.Regenerated = strings.TrimSpace(strings.ReplaceAll(rule.Regenerated, "completed_at", ""))

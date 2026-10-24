@@ -1,7 +1,7 @@
 export const ikb18Zh = {
   admissionPolicyTitle: '入库规则',
   admissionPolicyHint: '默认接收可读的 Markdown 正文；拒绝空内容、纯链接、仅图片和技术异常。不逐条调用模型评价价值，不因来源、篇幅或完整度不足进入待审。',
-  processingPolicy: '先保存正文和图片，再后台建立正文索引并运行摘要、分类、主题、实体和图谱。后台处理失败不撤销已保存正文。',
+  processingPolicy: '先保存正文和图片，再后台建立正文索引并运行摘要、分类、主题、实体。后台处理失败不撤销已保存正文。',
   parentChildFixed: '父子分块由模板决定：参考文档启用，其他库关闭。',
   sharedEmbedding: '共享向量模型',
 
@@ -12,10 +12,10 @@ export const ikb18Zh = {
   template: '模板', directory: '目录名', systemRole: '系统角色', custom: '自建库',
   name: '名称', description: '说明', review: '收录审核标准', evidence: '来源证据规则',
   linkRequired: '必须有链接', linkOrDate: '链接，或机构名称加发布日期', feed: '关注动态',
-  contentTypes: '内容类型', relationTypes: '关系类型', enabled: '启用', graph: '抽取图谱',
-  add: '添加类型', up: '上移', down: '下移', remove: '移除', merge: '合并关系类型',
-  from: '被合并类型', to: '保留类型', mergeHint: '现有关系、来源与抑制记录会归入保留类型，后续抽取也使用保留类型。',
-  mergeConfirm: '确认合并', deleteLibrary: '删除库', deleteHint: '只可删除无资料的库。删除后不会自动重建，可以不保留任何库。',
+  contentTypes: '内容类型', enabled: '启用',
+  add: '添加类型', up: '上移', down: '下移', remove: '移除',
+
+  deleteLibrary: '删除库', deleteHint: '只可删除无资料的库。删除后不会自动重建，可以不保留任何库。',
   deleteConfirm: '确认删除这个空库？', invalidName: '名称不能为空，最多 255 个字符。',
   invalidDirectory: '目录名最多 100 个字符，只能包含小写字母、数字和单个连字符。',
   invalidTypes: '类型名称不能为空或重复，最多 100 个字符。', unsaved: '资料库设置尚未保存，是否放弃修改？',
@@ -24,9 +24,9 @@ export const ikb18Zh = {
   external_durableHint: '共用入库与后台处理规则；默认启用父子分块。',
   ownHint: '共用入库与后台处理规则；同来源内容变化时覆盖原资料。',
   generatedHint: '共用入库与后台处理规则；保留 AI 产出标记，不能直接当作已核实事实。',
-  relationSources: '来源资料', relations: '关系', incoming: '指向此实体', outgoing: '此实体指向', sources: '来源资料数：{count}',
-  noRelations: '当前库范围内没有关系', speaker: '发言人', paragraph: '段落 {number}',
-  deleteRelation: '删除关系', suppressHint: '删除后会保存抑制记录，重新处理资料时不再抽出这条关系。',
+
+  paragraph: '段落 {number}',
+
   reference: '正文引用', bodyChanged: '正文已变化，仅定位到段落，未应用旧字符范围。',
   noLocation: '没有可用的正文位置，请查看资料全文。', incompleteHint: '按资料 ID 补交图片。已入库资料仍可检索，也可接受缺失或丢弃。',
   reindex: '重新处理 AI产出', reindexHint: '保留原文，重新建立索引并运行后台内容处理。',
@@ -35,7 +35,7 @@ export const ikb18Zh = {
 export const ikb18En: typeof ikb18Zh = {
   admissionPolicyTitle: 'Admission policy',
   admissionPolicyHint: 'Accept readable Markdown by default. Reject empty content, links without text, image-only content and technical errors. Do not run per-item value review or queue materials for review because of missing sources, length or completeness.',
-  processingPolicy: 'Save the body and images first. Build the body index, then run summaries, classification, topics, entities and graph processing in the background. Background failures do not undo the saved body.',
+  processingPolicy: 'Save the body and images first. Build the body index, then run summaries, classification, topics, entity processing in the background. Background failures do not undo the saved body.',
   parentChildFixed: 'The template enables parent–child chunks for reference documents and disables them for other libraries.',
   sharedEmbedding: 'Shared embedding model',
 
@@ -46,10 +46,10 @@ export const ikb18En: typeof ikb18Zh = {
   template: 'Template', directory: 'Directory', systemRole: 'System role', custom: 'Custom library',
   name: 'Name', description: 'Description', review: 'Intake review criteria', evidence: 'Source evidence rule',
   linkRequired: 'Link required', linkOrDate: 'Link, or publisher and publication date', feed: 'Follow feed',
-  contentTypes: 'Content types', relationTypes: 'Relation types', enabled: 'Enabled', graph: 'Extract graph',
-  add: 'Add type', up: 'Move up', down: 'Move down', remove: 'Remove', merge: 'Merge relation types',
-  from: 'Type to merge', to: 'Retained type', mergeHint: 'Existing relations, sources and suppression records move to the retained type. Future extraction uses the retained type.',
-  mergeConfirm: 'Confirm merge', deleteLibrary: 'Delete library', deleteHint: 'Only empty libraries can be deleted. Deleted libraries are not recreated automatically. No libraries are required.',
+  contentTypes: 'Content types', enabled: 'Enabled',
+  add: 'Add type', up: 'Move up', down: 'Move down', remove: 'Remove',
+
+  deleteLibrary: 'Delete library', deleteHint: 'Only empty libraries can be deleted. Deleted libraries are not recreated automatically. No libraries are required.',
   deleteConfirm: 'Delete this empty library?', invalidName: 'Enter a name of up to 255 characters.',
   invalidDirectory: 'Use up to 100 lowercase letters, digits and single hyphens for the directory.',
   invalidTypes: 'Type names must be unique, nonempty and at most 100 characters.', unsaved: 'Discard unsaved library settings?',
@@ -58,9 +58,9 @@ export const ikb18En: typeof ikb18Zh = {
   external_durableHint: 'Uses the shared admission and background processing policy. Parent–child chunks are enabled by default.',
   ownHint: 'Uses the shared admission and background processing policy. Changed content from the same source replaces the stored entry.',
   generatedHint: 'Uses the shared admission and background processing policy. Retains the AI-output marker; statements are not automatically verified facts.',
-  relationSources: 'Source materials', relations: 'Relations', incoming: 'Points to this entity', outgoing: 'This entity points to', sources: 'Source materials: {count}',
-  noRelations: 'No relations in this library scope', speaker: 'Speaker', paragraph: 'Paragraph {number}',
-  deleteRelation: 'Delete relation', suppressHint: 'Deletion saves a suppression record. Processing these materials again will not extract this relation.',
+
+  paragraph: 'Paragraph {number}',
+
   reference: 'Body reference', bodyChanged: 'The body has changed. Only the paragraph is located; the old character range was skipped.',
   noLocation: 'No body location is available. Read the complete material.', incompleteHint: 'Submit missing images by material ID. Saved materials remain searchable; you can also accept missing images or discard the material.',
   reindex: 'Reprocess AI output', reindexHint: 'Keep the body, rebuild its index and run background content processing.',

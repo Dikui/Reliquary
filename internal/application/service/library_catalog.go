@@ -3,22 +3,36 @@ package service
 import (
 	"context"
 	"errors"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/types"
 	"time"
+
+	apperrors "reliquary/internal/errors"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/application/repository"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 func (s *libraryService) ListLibraries(ctx context.Context) ([]*types.Library, error) {
 	return s.repo.ListLibraries(ctx, types.MustSpaceIDFromContext(ctx))
 }
 
-func (s *libraryService) CreateLibrary(ctx context.Context, request types.CreateLibraryRequest) (*types.Library, error) {
-	library := &types.Library{ID: uuid.NewString(), SpaceID: types.MustSpaceIDFromContext(ctx), Name: request.Name, Description: request.Description, Template: request.Template, Directory: request.Directory, CreatedAt: time.Now(), UpdatedAt: time.Now(), ContentTypes: []types.LibraryContentType{}, RelationTypes: []types.LibraryRelationType{}}
+func (s *libraryService) CreateLibrary(
+	ctx context.Context,
+	request types.CreateLibraryRequest,
+) (*types.Library, error) {
+	library := &types.Library{
+		ID:           uuid.NewString(),
+		SpaceID:      types.MustSpaceIDFromContext(ctx),
+		Name:         request.Name,
+		Description:  request.Description,
+		Template:     request.Template,
+		Directory:    request.Directory,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+		ContentTypes: []types.LibraryContentType{},
+	}
 	if library.Template == types.TemplateExternalTimely {
 		library.SourceEvidenceRule = "link_required"
 	}
@@ -94,13 +108,6 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 			for i := range library.ContentTypes {
 				library.ContentTypes[i].LibraryID = id
 				library.ContentTypes[i].Position = i
-			}
-		}
-		if patch.RelationTypes != nil {
-			library.RelationTypes = *patch.RelationTypes
-			for i := range library.RelationTypes {
-				library.RelationTypes[i].LibraryID = id
-				library.RelationTypes[i].Position = i
 			}
 		}
 		if err := types.ValidateLibrary(library); err != nil {

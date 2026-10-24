@@ -3,10 +3,10 @@ package router
 import (
 	"encoding/json"
 	"net/http"
+	"reliquary/internal/types"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/types"
 )
 
 func TestIngestLibraryHTTPAndMCPAgreement(t *testing.T) {
@@ -40,12 +40,44 @@ func TestIngestLibraryHTTPAndMCPAgreement(t *testing.T) {
 		items := []any{
 			map[string]any{"content": "Missing library", "acquisition": "verbatim"},
 			map[string]any{"library": "unknown", "content": "Unknown library", "acquisition": "verbatim"},
-			map[string]any{"library": "personal", "content": "My original " + protocol, "acquisition": "verbatim", "source_ref": protocol, "graph": false},
-			map[string]any{"library": ids["personal"], "content": "My original " + protocol, "acquisition": "verbatim", "source_ref": protocol, "graph": false},
-			map[string]any{"library": "official", "content": "My original", "acquisition": "verbatim", "source_ref": "wrong"},
-			map[string]any{"library": "personal", "content": "My original", "acquisition": "verbatim", "identifier": "doi:wrong"},
-			map[string]any{"library": "references", "content": "Research from " + protocol, "acquisition": "verbatim", "identifier": " DOI: 10.1234/" + protocol + " ", "url": "https://example.org/" + protocol, "publisher": "Journal"},
-			map[string]any{"library": "ai-output", "title": "Agent findings " + protocol, "content": "# Analysis\n\nGenerated observations.", "acquisition": "model_written"},
+			map[string]any{
+				"library":     "personal",
+				"content":     "My original " + protocol,
+				"acquisition": "verbatim",
+				"source_ref":  protocol,
+			},
+			map[string]any{
+				"library":     ids["personal"],
+				"content":     "My original " + protocol,
+				"acquisition": "verbatim",
+				"source_ref":  protocol,
+			},
+			map[string]any{
+				"library":     "official",
+				"content":     "My original",
+				"acquisition": "verbatim",
+				"source_ref":  "wrong",
+			},
+			map[string]any{
+				"library":     "personal",
+				"content":     "My original",
+				"acquisition": "verbatim",
+				"identifier":  "doi:wrong",
+			},
+			map[string]any{
+				"library":     "references",
+				"content":     "Research from " + protocol,
+				"acquisition": "verbatim",
+				"identifier":  " DOI: 10.1234/" + protocol + " ",
+				"url":         "https://example.org/" + protocol,
+				"publisher":   "Journal",
+			},
+			map[string]any{
+				"library":     "ai-output",
+				"title":       "Agent findings " + protocol,
+				"content":     "# Analysis\n\nGenerated observations.",
+				"acquisition": "model_written",
+			},
 		}
 		result := send(protocol, items)
 		require.Len(t, result.Items, len(items))
@@ -61,8 +93,6 @@ func TestIngestLibraryHTTPAndMCPAgreement(t *testing.T) {
 		}
 		require.Equal(t, "exists", result.Items[3].Status)
 		require.Equal(t, result.Items[2].EntryID, result.Items[3].EntryID)
-		require.NotNil(t, result.Items[2].Graph)
-		require.False(t, *result.Items[2].Graph)
 		require.Equal(t, "doi:10.1234/"+protocol, result.Items[6].Identifier)
 		require.Equal(t, ids["ai-output"], result.Items[7].LibraryID)
 	}

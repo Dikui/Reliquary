@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reliquary/internal/types"
+	"reliquary/internal/utils"
 	"strings"
 	"time"
 
+	werrors "reliquary/internal/errors"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/application/graph"
-	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 // Source identity never uses body similarity or an unprovided source inferred by a model.
@@ -54,9 +54,6 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		if err := lockEntitySpace(s.db.WithContext(ctx), entry.SpaceID); err != nil {
 			return nil, err
 		}
-		if err := graph.Lock(s.db.WithContext(ctx), entry.SpaceID); err != nil {
-			return nil, err
-		}
 		if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", existing.ID, entry.SpaceID).First(existing).Error; err != nil {
 			return nil, err
 		}
@@ -80,9 +77,6 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		}
 		if request.URL == "" || normalizeMessageURL(request.URL) == existing.NormalizedURL {
 			entry.Source = existing.Source
-		}
-		if request.Graph == nil {
-			entry.Graph = existing.Graph
 		}
 		if request.CollectReason == "" {
 			entry.CollectReason = existing.CollectReason
@@ -172,7 +166,7 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 			existing.SourceRef == entry.SourceRef && existing.Identifier == entry.Identifier &&
 			existing.CollectReason == entry.CollectReason && existing.ContentTypeHint == entry.ContentTypeHint &&
 			existing.AgentSummary == entry.AgentSummary && bytes.Equal(existing.AgentTags, entry.AgentTags) &&
-			existing.SourceName == entry.SourceName && bytes.Equal(oldSource, newSource) && sameGraphOverride(existing.Graph, entry.Graph) {
+			existing.SourceName == entry.SourceName && bytes.Equal(oldSource, newSource) {
 			return ingestResult(existing, "exists", "保存内容未变化。", "", ""), nil
 		}
 		if err := s.cleanupLibraryRebuild(ctx, existing); err != nil {
@@ -210,10 +204,6 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 	}
 	entry.LibraryName = library.Name
 	return ingestResult(entry, "accepted", "已保存，正在后台建立索引和处理。", "", ""), nil
-}
-
-func sameGraphOverride(a, b *bool) bool {
-	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }
 
 // Reuse existing attachment bytes before allocating files, so exact retries remain exact.

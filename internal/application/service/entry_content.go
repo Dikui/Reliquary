@@ -9,14 +9,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reliquary/internal/types"
+	"reliquary/internal/utils"
 	"strings"
 	"time"
 
-	"gorm.io/gorm/clause"
-	"reliquary/internal/application/graph"
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
-	"reliquary/internal/utils"
+
+	"gorm.io/gorm/clause"
 )
 
 // UpdateEntryContent replaces an explicitly selected entry.
@@ -55,7 +55,7 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	if err != nil {
 		return nil, err
 	}
-	// Serialize library writes while allowing graph inserts' FK key-share locks.
+	// Serialize writes to the library without excluding foreign-key readers.
 	var library types.Library
 	if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "NO KEY UPDATE"}).Where("id=? AND space_id=?", entry.LibraryID, spaceID).First(&library).Error; err != nil {
 		return nil, err
@@ -64,9 +64,6 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 		return nil, err
 	}
 	if err := lockEntitySpace(s.db.WithContext(ctx), spaceID); err != nil {
-		return nil, err
-	}
-	if err := graph.Lock(s.db.WithContext(ctx), spaceID); err != nil {
 		return nil, err
 	}
 	if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, spaceID).First(entry).Error; err != nil {

@@ -37,7 +37,7 @@ func TestIKB11ProcessingOutputMigrationReplicaAndTamperDetection(t *testing.T) {
 	_, err = Import(ctx, fresh, root, "", nil)
 	require.NoError(t, err)
 	require.NoError(t, VerifyImportedReplica(ctx, fresh, root))
-	require.NoError(t, fresh.Exec(`UPDATE entry_processing_outputs SET relations='[]'`).Error)
+	require.NoError(t, fresh.Exec(`UPDATE entry_processing_outputs SET images='[]'`).Error)
 	require.Error(t, VerifyImportedReplica(ctx, fresh, root))
 	require.NoError(t, db.Exec(`UPDATE entries SET content_type='自定义类型' WHERE id='article'`).Error)
 	// Development downgrade refuses data the old global check cannot represent.

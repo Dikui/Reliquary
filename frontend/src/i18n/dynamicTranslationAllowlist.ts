@@ -6,11 +6,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   { file: 'components/EntryBatchDialog.vue', expressions: ['`entryBatch.actions.${value}`', '`entryBatch.actions.${batch.action}`', '`entryBatch.reasons.${reason.code}`', '`entryBatch.status.${batch.status}`', '`entryBatch.status.${item.status}`'], reason: 'Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code.' },
   { file: 'components/EntryProcessingStatus.vue', expressions: ['state.label'], reason: 'entryProcessingState returns the fixed admission and processing label keys defined in the locale bundles.' },
   {
-    file: 'views/library/components/EntityRelations.vue',
-    expressions: ['`ikb18.${relation.direction}`'],
-    reason: 'Relation direction has two HTTP enum values covered by ikb18 component tests.',
-  },
-  {
     file: 'views/settings/LibraryCatalogSettings.vue',
     expressions: ['`ikb18.${draft.template}`', '`ikb18.${draft.template}Hint`', '`ikb18.${value}`', '`ikb18.${value}Hint`', '`ikb18.${newLibrary.template}Hint`'],
     reason: 'Four immutable library template enums and their descriptions are tested in both locales.',

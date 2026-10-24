@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"reliquary/internal/application/service/metric"
+	"reliquary/internal/types"
 	"slices"
 	"strings"
 	"time"
 
+	apperrors "reliquary/internal/errors"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/application/service/metric"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 func validateRunOptions(options *types.EvaluationRunOptions) error {
@@ -70,8 +71,8 @@ func (s *EvaluationService) Run(ctx context.Context, setID string, options types
 			if q.AnswerDeleted {
 				return apperrors.NewBadRequestError("answer document deleted for question " + q.ID)
 			}
-			if q.Method == "graph" && s.GraphSearch == nil {
-				return apperrors.NewServiceUnavailableError("graph evaluation adapter not integrated")
+			if q.Method != "ordinary" {
+				return apperrors.NewBadRequestError("only ordinary retrieval can be evaluated")
 			}
 			run.Results = append(run.Results, types.EvaluationRunResult{RunID: run.ID, QuestionID: q.ID, Question: q, Snapshot: json.RawMessage(`{}`), Results: &types.EntrySearchResponse{Results: []*types.EntrySearchResult{}}, Hits: []string{}})
 		}
@@ -97,8 +98,6 @@ func (s *EvaluationService) Run(ctx context.Context, setID string, options types
 		var searchErr error
 		if err := ctx.Err(); err != nil {
 			searchErr = err
-		} else if row.Question.Method == "graph" {
-			response, searchErr = s.GraphSearch(executionCtx, request)
 		} else {
 			response, searchErr = s.search.Search(executionCtx, request)
 		}
@@ -204,9 +203,11 @@ func freezeEvaluationRun(ctx context.Context, tx *gorm.DB, run *types.Evaluation
 	run.Snapshot, _ = json.Marshal(map[string]any{"version": 1, "libraries": librarySnapshots, "vector_set": set, "retrieval_config": run.Options.RetrievalConfig, "k": run.Options.K, "collapse_similar": run.Options.CollapseSimilar, "folded_member_rule": "representatives_only"})
 	return nil
 }
+
 func addEvaluationMetrics(a, b types.EvaluationMetrics, factor float64) types.EvaluationMetrics {
 	return types.EvaluationMetrics{Precision: a.Precision + b.Precision*factor, Recall: a.Recall + b.Recall*factor, MRR: a.MRR + b.MRR*factor, NDCG: a.NDCG + b.NDCG*factor, MAP: a.MAP + b.MAP*factor}
 }
+
 func (s *EvaluationService) GetRun(ctx context.Context, id string) (*types.EvaluationRun, error) {
 	scope, err := evaluationScope(ctx, s.db)
 	if err != nil {
@@ -218,6 +219,7 @@ func (s *EvaluationService) GetRun(ctx context.Context, id string) (*types.Evalu
 	}
 	return &run, nil
 }
+
 func (s *EvaluationService) ListRuns(ctx context.Context, setID string, limit, offset int) ([]types.EvaluationRun, error) {
 	scope, err := evaluationScope(ctx, s.db)
 	if err != nil {

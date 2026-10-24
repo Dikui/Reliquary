@@ -15,7 +15,7 @@ import * as references from './utils/bodyReference'
 import { copyModelTiers } from './utils/modelTiers'
 const require = createRequire(import.meta.url)
 const empty = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
-const library = (id = 'mine', extra = {}) => ({ id, name: '我的资料', display_name: '我的资料', directory: id === 'mine' ? 'personal' : id, template: 'own', system_role: id === 'mine' ? 'personal' : '', description: '', review_criteria: '完整', default_review_criteria: '建议规则', processing_model_tiers: ['light', 'generation'], chunking_config: { chunk_size: 512, chunk_overlap: 50, separators: ['\n\n'], enable_parent_child: false, parent_chunk_size: 4096, child_chunk_size: 384 }, content_types: [{ name: '笔记', enabled: true, position: 0, extract_graph: false }], relation_types: [{ name: '合作', enabled: true, position: 0 }, { name: '依赖', enabled: true, position: 1 }], feed_enabled: false, entry_count: 0, ...extra })
+const library = (id = 'mine', extra = {}) => ({ id, name: '我的资料', display_name: '我的资料', directory: id === 'mine' ? 'personal' : id, template: 'own', system_role: id === 'mine' ? 'personal' : '', description: '', review_criteria: '完整', default_review_criteria: '建议规则', processing_model_tiers: ['light', 'generation'], chunking_config: { chunk_size: 512, chunk_overlap: 50, separators: ['\n\n'], enable_parent_child: false, parent_chunk_size: 4096, child_chunk_size: 384 }, content_types: [{ name: '笔记', enabled: true, position: 0 }], feed_enabled: false, entry_count: 0, ...extra })
 async function scenario(path: string, props: Record<string, unknown>, modules: Record<string, any>, action: (state: any) => Promise<void>, locale = 'zh-CN') {
   const filename = new URL(path, import.meta.url).pathname
   const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
@@ -49,7 +49,7 @@ function catalogModules(calls: any[], options: { fail?: boolean } = {}) {
       listLibraries: async () => ({ success: true, data: [current] }), getCatalogLibrary: async () => ({ success: true, data: JSON.parse(JSON.stringify(current)) }),
       saveCatalogLibrary: async (id: string, body: any) => { calls.push({ id, body }); if (options.fail) return { success: false, message: 'offline' }; current = { ...current, ...body }; return { success: true } },
       createCatalogLibrary: async (body: any) => { calls.push({ create: body }); current = library('new-notes', body); return { success: true, data: current } },
-      mergeLibraryRelationTypes: async (...args: any[]) => { calls.push({ merge: args }); return { success: true } }, deleteCatalogLibrary: async (id: string) => { calls.push({ delete: id }); return { success: true } },
+      deleteCatalogLibrary: async (id: string) => { calls.push({ delete: id }); return { success: true } },
     },
     dialog: () => dialog,
   }
@@ -62,20 +62,18 @@ for (const locale of ['zh-CN', 'en-US']) {
       state.draft.value.name = '  Notes  '
       state.draft.value.model_tiers.generation = 'notes-model'
       state.updateChunking({ ...state.chunkingConfig.value, chunkSize: 256 })
-      state.draft.value.content_types.push({ name: 'SOP', enabled: false, extract_graph: true, position: 4 })
+      state.draft.value.content_types.push({ name: 'SOP', enabled: false, position: 4 })
       state.moveType(state.draft.value.content_types, 1, -1)
-      state.draft.value.relation_types.splice(1, 1)
       await state.save()
       assert.equal(state.dirty.value, false)
       const body = calls[0].body
       assert.equal(body.model_tiers.generation, 'notes-model')
       assert.equal(body.chunking_config.chunk_size, 256)
-      assert.equal(body.name, 'Notes'); assert.deepEqual(body.content_types[0], { name: 'SOP', enabled: false, extract_graph: true, position: 0 })
-      assert.equal(body.relation_types.length, 1)
+      assert.equal(body.name, 'Notes'); assert.deepEqual(body.content_types[0], { name: 'SOP', enabled: false, position: 0 })
       for (const field of ['directory', 'template', 'system_role', 'review_criteria', 'source_evidence_rule']) assert.equal(field in body, false)
     }, locale)
     assert.match(html, /personal\//); assert.match(html, /Delete library|删除库/)
-    assert.doesNotMatch(html, /抽取图谱|Extract graph/)
+    assert.doesNotMatch(html, /关系类型|Relation types|抽取图谱|Extract graph/)
     assert.ok(html.includes((locale === 'zh-CN' ? zh : en).ikb18.admissionPolicyHint))
   })
   test(`${locale}: new library validates directory and enters created library settings`, async () => {
@@ -88,25 +86,25 @@ for (const locale of ['zh-CN', 'en-US']) {
     }, locale)
   })
 }
-test('generated libraries expose content and relation types under the shared admission policy', async () => {
+test('generated libraries expose content types under the shared admission policy', async () => {
   const original = library('reports', { template: 'generated', review_criteria: '旧审核规则', source_evidence_rule: 'link_required', processing_model_tiers: ['generation', 'entity_resolution'] })
   const calls: any[] = [], modules = catalogModules(calls)
   modules['@/api/library'].listLibraries = async () => ({ success: true, data: [original] })
   modules['@/api/library'].getCatalogLibrary = async () => ({ success: true, data: structuredClone(original) })
   const html = await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
     await state.load()
-    assert.deepEqual(state.typeSections, ['content_types', 'relation_types'])
+    assert.deepEqual(state.typeSections, ['content_types'])
     assert.deepEqual(state.modelTiers.value, ['generation', 'entity_resolution', 'rerank'])
     state.draft.value.name = 'Updated reports'
     await state.save()
-    assert.deepEqual(calls[0].body.content_types, [{ name: '笔记', enabled: true, position: 0, extract_graph: false }])
+    assert.deepEqual(calls[0].body.content_types, [{ name: '笔记', enabled: true, position: 0 }])
     assert.equal('review_criteria' in calls[0].body, false)
     assert.equal('source_evidence_rule' in calls[0].body, false)
     assert.equal(original.review_criteria, '旧审核规则')
   })
   assert.ok(html.includes(zh.ikb18.admissionPolicyHint))
   assert.match(html, /内容类型/)
-  assert.match(html, /关系类型/)
+  assert.doesNotMatch(html, /关系类型/)
   assert.doesNotMatch(html, /旧审核规则|抽取图谱|来源证据规则/)
 })
 test('deleting the last empty system library leaves the catalogue ready to create a library', async () => {
@@ -124,16 +122,13 @@ test('deleting the last empty system library leaves the catalogue ready to creat
   assert.doesNotMatch(html, /personal\//)
   assert.match(html, /新建/)
 })
-test('library validation preserves failed drafts, rejects duplicate and empty types, and confirms relation merging', async () => {
+test('library validation preserves failed drafts, rejects duplicate and empty types', async () => {
   const calls: any[] = [], modules = catalogModules(calls)
   await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
     await state.load(); state.draft.value.name = ' '; await state.save(); assert.equal(calls.length, 0)
-    state.draft.value.name = 'Notes'; state.draft.value.content_types.push({ name: '笔记', enabled: true, extract_graph: false })
+    state.draft.value.name = 'Notes'; state.draft.value.content_types.push({ name: '笔记', enabled: true })
     await state.save(); assert.equal(calls.length, 0)
     state.draft.value.content_types.pop(); state.draft.value = JSON.parse(state.saved.value)
-    state.fromType.value = '合作'; state.toType.value = '依赖'; state.merge()
-    assert.equal(calls.length, 0); assert.ok(modules.dialog().body.includes('合作 → 依赖'))
-    await modules.dialog().onConfirm(); assert.deepEqual(calls[0].merge, ['mine', '合作', '依赖'])
   })
   await scenario('./views/settings/LibraryCatalogSettings.vue', {}, catalogModules([], { fail: true }), async state => {
     await state.load(); state.draft.value.name = 'Draft'; state.draft.value.model_tiers.generation = 'pending-model'; await state.save(); assert.equal(state.draft.value.name, 'Draft'); assert.equal(state.draft.value.model_tiers.generation, 'pending-model'); assert.equal(state.error.value, 'offline'); assert.equal(state.dirty.value, true)
@@ -184,27 +179,6 @@ test('body paragraphs preserve fenced code, list items, CRLF, tables and setext 
   const body = '# H\r\n\r\nA😀\r\n\r\n- one\n- two\n\n```md\n# inside\n\ncode\n```\n\n| a |\n| - |\n\nTitle\n=====\n'
   const blocks = references.bodyParagraphs(body); assert.equal(blocks.length, 7); assert.equal(blocks.map(block => block.text).join(''), body); assert.match(blocks[4].text, /# inside\n\ncode/)
 })
-test('entity relation groups filter libraries, source links retain positions, and deletion requires suppression confirmation', async () => {
-  const calls: string[] = [], libraryScope = ref<string[]>([])
-  const location = { start: 1, end: 3, paragraph: 2, body_hash: '', heading_path: ['H'], mapping: 'exact' }
-  const relation = { id: 'r', relation_type: '合作', direction: 'outgoing', peer: { id: 'p', canonical_name: 'Peer' }, library_id: 'mine', library_name: 'Notes', source_count: 1, sources: [{ entry_id: 'a', title: 'Source', body_hash: 'hash', evidence: [{ locations: [location], speaker: { name: 'Speaker' } }] }] }
-  let deleted = false
-  const html = await scenario('./views/library/components/EntityRelations.vue', { entityId: 'e' }, {
-    '@/composables/useLibraryScope': { useLibraryScope: () => libraryScope },
-    '@/api/relations': { listEntityRelations: async () => ({ success: true, data: deleted ? [] : [{ relation_type: '合作', relations: [relation] }] }), deleteEntityRelation: async (id: string) => { calls.push(id); deleted = true; return { success: true } } },
-  }, async state => {
-    await state.load(); assert.equal(state.filtered.value[0].relation_type, '合作')
-    libraryScope.value = ['other']; assert.equal(state.filtered.value.length, 0); libraryScope.value = []
-    assert.equal(state.locationFor(relation.sources[0], location).body_hash, 'hash')
-    state.deleting.value = relation; assert.equal(calls.length, 0)
-  })
-  assert.match(html, /Peer/); assert.match(html, /Source/); assert.match(html, /Speaker/); assert.match(html, /抑制记录/); assert.match(html, /段落 2/)
-  await scenario('./views/library/components/EntityRelations.vue', { entityId: 'e' }, {
-    '@/composables/useLibraryScope': { useLibraryScope: () => ref([]) },
-    '@/api/relations': { listEntityRelations: async () => ({ success: true, data: [] }), deleteEntityRelation: async (id: string) => { calls.push(id); return { success: true } } },
-  }, async state => { state.deleting.value = relation; await state.remove(); assert.equal(state.deleting.value, null) })
-  assert.deepEqual(calls, ['r'])
-})
 for (const locale of ['zh-CN', 'en-US']) test(`${locale}: pending review shows library and segment reason and filters intake by library`, async () => {
   const calls: any[] = []
   const modules = {
@@ -215,29 +189,6 @@ for (const locale of ['zh-CN', 'en-US']) test(`${locale}: pending review shows l
   assert.match(html, /Notes/); assert.match(html, /第 2\/3 段/); assert.deepEqual(calls[0].libraries, ['mine'])
 })
 
-test('mounted relation source opens exact body position and suppression deletion waits for confirm', async () => {
-  const { loadComponent, renderer, element, descendants, click, registerPrimitives, settle, visibleText } = await import('./views/library/componentTestHarness')
-  const location = { start: 2, end: 5, paragraph: 2, body_hash: '', heading_path: ['H'], mapping: 'exact' }
-  const relation = { id: 'rel', relation_type: '合作', direction: 'incoming', peer: { id: 'peer', canonical_name: 'Peer' }, library_id: 'mine', library_name: 'Notes', source_count: 1, sources: [{ entry_id: 'source', title: 'Source title', body_hash: 'saved-hash', evidence: [{ locations: [location], speaker: { name: 'Speaker' } }] }] }
-  const scopeRef = ref<string[]>([]), opened: any[] = [], deleted: string[] = []
-  let exists = true
-  const component = loadComponent(new URL('./views/library/components/EntityRelations.vue', import.meta.url), {
-    '@/composables/useLibraryScope': { useLibraryScope: () => scopeRef }, '@/components/LibraryScopeSelect.vue': empty,
-    '@/api/relations': { listEntityRelations: async () => ({ success: true, data: exists ? [{ relation_type: '合作', relations: [relation] }] : [] }), deleteEntityRelation: async (id: string) => { deleted.push(id); exists = false; return { success: true } } },
-  })
-  const root = element('root'), app = renderer.createApp(component, { entityId: 'entity', onOpenSource: (...args: any[]) => opened.push(args) })
-  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } })); registerPrimitives(app); app.mount(root)
-  try {
-    await settle()
-    assert.ok(visibleText(root).includes('指向此实体'))
-    const button = (label: string) => descendants(root).find(node => node.tag === 'button' && visibleText(node) === label)!
-    await click(button('Source title')); assert.deepEqual(opened, [['source', { ...location, body_hash: 'saved-hash' }]])
-    scopeRef.value = ['references']; await settle(); assert.ok(!visibleText(root).includes('Source title'))
-    scopeRef.value = []; await settle(); await click(button('删除关系'))
-    assert.equal(deleted.length, 0); assert.ok(visibleText(root).includes('抑制记录'))
-    await click(button('确认')); assert.deepEqual(deleted, ['rel']); assert.ok(!visibleText(root).includes('Source title'))
-  } finally { app.unmount() }
-})
 
 test('compact global search thumbnails expose the shared image viewer trigger', async () => {
   const html = await scenario('./components/SearchImage.vue', { articleId: 'material', path: 'chart.png', title: 'Chart', compact: true, interactive: true }, {

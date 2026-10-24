@@ -63,7 +63,7 @@ errors=0
 check_var() {
     local var_name=$1
     local var_value="${!var_name}"
-    
+
     if [ -z "$var_value" ]; then
         log_error "$var_name 未设置"
         errors=$((errors + 1))
@@ -81,9 +81,6 @@ check_var "DB_USER"
 check_var "DB_PASSWORD"
 check_var "DB_NAME"
 check_var "REDIS_ADDR"
-check_var "NEO4J_URI"
-check_var "NEO4J_USERNAME"
-check_var "NEO4J_PASSWORD"
 
 echo ""
 log_info "存储配置:"
@@ -146,7 +143,7 @@ log_info "检查 Docker 环境..."
 if command -v docker &> /dev/null; then
     docker_version=$(docker --version)
     log_success "Docker 已安装: $docker_version"
-    
+
     if docker info &> /dev/null; then
         log_success "Docker 服务正在运行"
     else

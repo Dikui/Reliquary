@@ -14,15 +14,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
-	"sync"
-	"time"
-
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
+	"sort"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -85,15 +84,17 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	if url == "" && (k.Type == "url" || k.Type == "file_url") {
 		url = k.Source
 	}
-	h := VaultArticleHeader{ID: k.ID, URL: url, Title: k.Title, Publisher: source.Publisher, Author: source.Author,
+	h := VaultArticleHeader{
+		ID: k.ID, URL: url, Title: k.Title, Publisher: source.Publisher, Author: source.Author,
 		PublishedAt: canonicalVaultDate(source.PublishedAt), CollectedAt: k.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
-		ContentType: k.ContentType, Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason}
+		ContentType: k.ContentType, Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason,
+	}
 	var library types.Library
 	if err := v.db.WithContext(ctx).First(&library, "id=?", k.LibraryID).Error; err != nil {
 		return h, err
 	}
 	h.LibraryID, h.Library = library.ID, library.Name
-	h.SourceRef, h.Identifier, h.Graph = k.SourceRef, k.Identifier, k.Graph
+	h.SourceRef, h.Identifier = k.SourceRef, k.Identifier
 	h.HasUpdate, h.LatestEntryID = k.HasUpdate, k.LatestEntryID
 	if k.SourceRef != "" && h.LatestEntryID == "" {
 		h.LatestEntryID = k.ID
@@ -216,10 +217,10 @@ func (v *VaultService) writeAttachment(relative string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
+	if err = os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(abs, data, 0644)
+	return os.WriteFile(abs, data, 0o644)
 }
 
 func (v *VaultService) copyArticleImages(ctx context.Context, k *types.Entry, articlePath, body string, read func(context.Context, string) (io.ReadCloser, error)) (string, error) {
@@ -389,7 +390,7 @@ func (v *VaultService) refreshHeader(ctx context.Context, entryID string) (writt
 // atomicArticleWrite verifies the actual temporary file's body before rename.
 // A mismatch leaves the destination untouched and removes the temporary file.
 func (v *VaultService) atomicArticleWrite(abs string, header, body, previous []byte) error {
-	if err := os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return err
 	}
 	data := append(bytes.Clone(header), body...)
@@ -402,7 +403,7 @@ func (v *VaultService) atomicArticleWrite(abs string, header, body, previous []b
 	}
 	defer os.Remove(file.Name())
 	defer file.Close()
-	if err = file.Chmod(0644); err != nil {
+	if err = file.Chmod(0o644); err != nil {
 		return err
 	}
 	if _, err = file.Write(data); err != nil {

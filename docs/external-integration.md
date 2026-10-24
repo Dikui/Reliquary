@@ -41,17 +41,17 @@ HTTP 响应一般使用 success/data 包装。MCP 工具结果在 content 中返
 
 ## 选择库
 
-HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每个库返回 id、directory、用途、模板、审核标准、来源证据、去重说明、accepted_fields、内容类型、关系类型和动态开关。优先使用稳定 ID 或英文 directory，不用中文显示名称作为收录或检索参数。自建库按模板执行相同规则，入库后不能换库。库 ID 不随目录更名变化。外部工具应通过 `list_libraries` 获取当前 directory，或继续使用已有库 ID。
+HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每个库返回 id、directory、用途、模板、审核标准、来源证据、去重说明、accepted_fields、内容类型和动态开关。优先使用稳定 ID 或英文 directory，不用中文显示名称作为收录或检索参数。自建库按模板执行相同规则，入库后不能换库。库 ID 不随目录更名变化。外部工具应通过 `list_libraries` 获取当前 directory，或继续使用已有库 ID。
 
 | 库目录 | 该收什么 | 来源要求与注意事项 |
 | --- | --- | --- |
 | official | 机构、公司、媒体发布的新闻、公告、财报、时效研报、政策 | 外部时效型；链接必需，配置允许时可用机构加有效发布日期，标记来源未核实 |
-| media | 外部人物的评论、访谈、观点文章 | 外部时效型；按库来源规则，尽量填写 author，关系证据保留发言人 |
+| media | 外部人物的评论、访谈、观点文章 | 外部时效型；按库来源规则，尽量填写 author |
 | references | 长期引用的论文、书籍、标准、官方文档、教程 | 外部长效型；链接或 identifier，例 doi:10.1234/example |
 | personal | 本人的工作资料、经验、SOP、笔记 | 自有型；可空链接，source_ref 标识同一来源，正文变化覆盖原记录 |
 | ai-output | 外部 AI 写出的综合分析和报告 | 生成型；先保存、后台处理，cannot_be_fact=true |
 
-有时效的机构研报收 official，作为定义与方法长期引用的白皮书收 references。人物评论收 media，不能因提到机构就改收 official。所有模板均接受可选 source_ref、identifier 和 graph，具体格式见 accepted_fields。
+有时效的机构研报收 official，作为定义与方法长期引用的白皮书收 references。人物评论收 media，不能因提到机构就改收 official。所有模板均接受可选 source_ref 和 identifier，具体格式见 accepted_fields。
 
 ## 收录与图片提交
 
@@ -77,16 +77,6 @@ HTTP `POST /api/v1/search` 对应 MCP `search`：
 
 libraries 必填，可多选。支持所属库的 content_types、entity_ids、topic_ids、published_from、published_to 与 starred。结果按资料合并，返回库、摘要、命中 snippets 和正文位置。vector_unavailable 与 rerank_status 说明退回全文或原排序；检索返回 cannot_be_fact 的报告和 source_unverified 的来源时，外部工具应保留这些标记。完整坐标与过滤规则见 [检索接口](search-api.md)。MCP `get_entry` 可分段读取全文，HTTP 为 `GET /api/v1/entries/:id/body`。
 
-## 图谱检索
-
-HTTP `POST /api/v1/graph/search` 对应 MCP `graph_search`，参数和返回 data 字段一致：
-
-```json
-{"libraries":["official","media"],"entity":{"name":"Acme"},"mode":"neighbors","hops":2,"limit":20}
-```
-
-两点路径使用 mode=path，加 target 的 id 或 name。hops 为 1 至 3。名称不明确时 status=needs_selection，选 candidates 中的实体 ID 后重查。检索不调用模型，逐边按库过滤，从 PG 回填来源、发言人和正文位置。truncated 表示未遍历完，pending_sync 提示副本可能落后，不能据此断言没有路径。Neo4j 不可用返回明确失败。字段见 [图谱检索](search-api.md#图谱检索)，人工关系操作见 [关系管理](relations-api.md)。
-
 ## 写入 AI产出
 
 五个库统一使用 HTTP `POST /api/v1/ingest` 或 MCP `ingest`。写入 AI产出时指定 `library: "ai-output"`，提交标题、Markdown 正文和收录方式：
@@ -95,7 +85,7 @@ HTTP `POST /api/v1/graph/search` 对应 MCP `graph_search`，参数和返回 dat
 {"items":[{"library":"ai-output","title":"校准分析报告","content":"# 校准分析\n\n基于正文中引用资料的综合分析。","acquisition":"model_written"}]}
 ```
 
-MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他模板共用先保存、后建正文索引并运行摘要、分类、实体和图谱的链路。相同来源且保存内容未变时返回已有资料；缺来源标识时新建。字段和状态见 [收录 API](ingest-api.md#ai产出收录)。
+MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他模板共用先保存、后建正文索引并运行摘要、分类和实体的链路。相同来源且保存内容未变时返回已有资料；缺来源标识时新建。字段和状态见 [收录 API](ingest-api.md#ai产出收录)。
 
 ## 接收故障与短期故障包
 
@@ -129,4 +119,4 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他模板共�
 
 HTTP、MCP 和文件库统一使用 Entry 命名。资料 ID 为 `entry_id`，列表为 `entry_ids`，更新指针为 `latest_entry_id`，关联资料为 `related_entry_id` 或 `related_entry_ids`。MCP 读取工具为 `get_entry`，实体详情返回 `entries`。不接受旧字段或旧工具名称的别名。资料对象与文件库表头自身的主键保持 `id`，读取 HTTP 路径保持 `/api/v1/entries/:id`。
 
-测评集与运行、检索记录、模型调用统计通过 HTTP 管理，分别见 [测评 API](search-evaluation-api.md) 与 [调用统计](model-calls.md)。当前没有这些管理操作的 MCP 工具。备份、恢复、队列重推及图谱重建由部署维护者执行，见 [个人使用](personal-use.md)。
+测评集与运行、检索记录、模型调用统计通过 HTTP 管理，分别见 [测评 API](search-evaluation-api.md) 与 [调用统计](model-calls.md)。当前没有这些管理操作的 MCP 工具。备份、恢复及队列重推由部署维护者执行，见 [个人使用](personal-use.md)。

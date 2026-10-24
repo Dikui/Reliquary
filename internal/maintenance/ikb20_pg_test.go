@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/pgtest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func TestIKB20AuditEveryInstalledColumn(t *testing.T) {
@@ -26,7 +26,7 @@ func TestIKB20AuditEveryInstalledColumn(t *testing.T) {
 	if path := os.Getenv("RELIQUARY_AUDIT_OUTPUT"); path != "" {
 		data, err := json.MarshalIndent(rows, "", "  ")
 		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(path, append(data, '\n'), 0600))
+		require.NoError(t, os.WriteFile(path, append(data, '\n'), 0o600))
 	}
 	// Deliberately omit an existing table and column, as well as unknown DDL.
 	original := Rules["evaluation_answers"]
@@ -41,9 +41,12 @@ func TestIKB20AuditEveryInstalledColumn(t *testing.T) {
 	require.NoError(t, db.Exec("CREATE TABLE public.unowned_table(id text)").Error)
 	_, err = Audit(ctx, db)
 	require.ErrorContains(t, err, "unowned_table")
-	require.NoError(t, db.Exec("DROP TABLE public.unowned_table; ALTER TABLE relations ADD COLUMN unowned_column text").Error)
+	require.NoError(
+		t,
+		db.Exec("DROP TABLE public.unowned_table; ALTER TABLE evaluation_answers ADD COLUMN unowned_column text").Error,
+	)
 	_, err = Audit(ctx, db)
-	require.ErrorContains(t, err, "relations.unowned_column")
+	require.ErrorContains(t, err, "evaluation_answers.unowned_column")
 }
 
 func TestIKB20ReplicaFileTamperReportsSpecificRow(t *testing.T) {
@@ -58,7 +61,12 @@ func TestIKB20ReplicaFileTamperReportsSpecificRow(t *testing.T) {
 	path := filepath.Join(root, ".reliquary/data/evaluation_sets.json")
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(data), "Original set", "Changed set")), 0600))
+	require.NoError(t,
+		os.WriteFile(path,
+			[]byte(strings.ReplaceAll(string(data),
+				"Original set",
+				"Changed set")),
+			0o600))
 	result, err := VerifyReplica(ctx, db, root, "", false)
 	require.NoError(t, err)
 	require.False(t, result.OK)
@@ -93,11 +101,11 @@ func TestIKB20ImportOrderCoversActualForeignKeys(t *testing.T) {
 }
 
 func TestIKB20DiagnosticsIdentifyCompositeRowsAndPreserveTaskPayloads(t *testing.T) {
-	before := []map[string]any{{"relation_id": "r", "entry_id": "e", "evidence": "original"}}
-	after := []map[string]any{{"relation_id": "r", "entry_id": "e", "evidence": "tampered"}}
-	differences := rowDifferences("relation_sources", before, after)
+	before := []map[string]any{{"question_id": "q", "entry_id": "e", "grade": 1}}
+	after := []map[string]any{{"question_id": "q", "entry_id": "e", "grade": 2}}
+	differences := rowDifferences("evaluation_answers", before, after)
 	require.Len(t, differences, 1)
-	require.Contains(t, differences[0], `"relation_id":"r"`)
+	require.Contains(t, differences[0], `"question_id":"q"`)
 	require.Contains(t, differences[0], `"entry_id":"e"`)
 	op := map[string]any{"id": "op", "state": "active", "delivery": json.Number("4"), "generation": json.Number("7"), "payload": map[string]any{"entry_id": "e"}, "retried": 2, "completed_at": nil}
 	copy := map[string]any{}

@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
+	"reliquary/internal/models/chat"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/models/chat"
-	"reliquary/internal/types"
 )
 
 type cancelOwnSegmentChat struct {
@@ -52,7 +52,7 @@ func TestOwnReprocessAfterFailureAndCancellationReusesCompletedSegments(t *testi
 	h, m := segmentedHarness(t)
 	h.library.SystemRole = ""
 	h.library.ID, h.library.Directory, h.library.Template, h.library.SourceEvidenceRule = "own-retry", "own-retry", types.TemplateOwn, ""
-	require.NoError(t, h.db.Omit("ContentTypes", "RelationTypes").Create(h.library).Error)
+	require.NoError(t, h.db.Omit("ContentTypes").Create(h.library).Error)
 	k := segmentedEntry(t, h)
 	k.SourceKind, k.VaultBody = "mine", "# Original\n\n"+strings.Repeat("Complete original measurements. ", 20)
 	require.NoError(t, k.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved"}))
@@ -80,7 +80,7 @@ func TestGeneratedReparseRunsProcessingAndPreservesUserTopics(t *testing.T) {
 	h, m := segmentedHarness(t)
 	h.library.SystemRole = ""
 	h.library.ID, h.library.Directory, h.library.Template, h.library.SourceEvidenceRule = "generated-reindex", "generated-reindex", types.TemplateGenerated, ""
-	require.NoError(t, h.db.Omit("ContentTypes", "RelationTypes").Create(h.library).Error)
+	require.NoError(t, h.db.Omit("ContentTypes").Create(h.library).Error)
 	k := segmentedEntry(t, h)
 	k.SourceKind, k.ParseStatus, k.EnableStatus = "report", types.ParseStatusCompleted, "enabled"
 	k.VaultBody, k.Description, k.ContentType = "# Caller report\n\nOriginal report material.", "Caller summary", "research"

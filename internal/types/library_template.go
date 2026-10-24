@@ -74,14 +74,6 @@ func evidencePublisherPresent(value string) bool {
 }
 
 type LibraryContentType struct {
-	LibraryID    string `json:"-" gorm:"primaryKey"`
-	Name         string `json:"name" gorm:"primaryKey"`
-	Position     int    `json:"position"`
-	Enabled      bool   `json:"enabled"`
-	ExtractGraph bool   `json:"extract_graph"`
-}
-
-type LibraryRelationType struct {
 	LibraryID string `json:"-" gorm:"primaryKey"`
 	Name      string `json:"name" gorm:"primaryKey"`
 	Position  int    `json:"position"`
@@ -91,18 +83,17 @@ type LibraryRelationType struct {
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
-	Name               *string                `json:"name"`
-	Description        *string                `json:"description"`
-	ReviewCriteria     *string                `json:"review_criteria"`
-	ModelTiers         *ModelTierConfig       `json:"model_tiers"`
-	ChunkingConfig     *ChunkingConfig        `json:"chunking_config"`
-	SourceEvidenceRule *string                `json:"source_evidence_rule"`
-	FeedEnabled        *bool                  `json:"feed_enabled"`
-	ContentTypes       *[]LibraryContentType  `json:"content_types"`
-	RelationTypes      *[]LibraryRelationType `json:"relation_types"`
-	Template           *string                `json:"template"`
-	Directory          *string                `json:"directory"`
-	SystemRole         *string                `json:"system_role"`
+	Name               *string               `json:"name"`
+	Description        *string               `json:"description"`
+	ReviewCriteria     *string               `json:"review_criteria"`
+	ModelTiers         *ModelTierConfig      `json:"model_tiers"`
+	ChunkingConfig     *ChunkingConfig       `json:"chunking_config"`
+	SourceEvidenceRule *string               `json:"source_evidence_rule"`
+	FeedEnabled        *bool                 `json:"feed_enabled"`
+	ContentTypes       *[]LibraryContentType `json:"content_types"`
+	Template           *string               `json:"template"`
+	Directory          *string               `json:"directory"`
+	SystemRole         *string               `json:"system_role"`
 }
 
 const (
@@ -177,7 +168,7 @@ func ValidateLibrary(l *Library) error {
 	} else if l.SourceEvidenceRule != "" {
 		return fmt.Errorf("source evidence rule is only configurable for external_timely")
 	}
-	for _, names := range [][]string{contentTypeNames(l.ContentTypes), relationTypeNames(l.RelationTypes)} {
+	for _, names := range [][]string{contentTypeNames(l.ContentTypes)} {
 		seen := map[string]bool{}
 		for _, name := range names {
 			if strings.TrimSpace(name) == "" || len([]rune(name)) > 100 || seen[name] {
@@ -188,14 +179,8 @@ func ValidateLibrary(l *Library) error {
 	}
 	return nil
 }
+
 func contentTypeNames(rows []LibraryContentType) []string {
-	names := []string{}
-	for _, row := range rows {
-		names = append(names, row.Name)
-	}
-	return names
-}
-func relationTypeNames(rows []LibraryRelationType) []string {
 	names := []string{}
 	for _, row := range rows {
 		names = append(names, row.Name)
@@ -215,25 +200,70 @@ func SystemRoleForSource(kind string) string {
 }
 
 func SystemLibraryDefaults() []*Library {
-	official := []string{"投资", "收购", "合作", "竞争", "任职", "发布", "供应", "客户", "监管", "隶属"}
-	makeLibrary := func(role, name, template, description, criteria, evidence string, feed bool, names []string, graphCount int, relations []string) *Library {
-		l := &Library{SystemRole: role, Directory: role, Name: name, Template: template, Description: description, SourceEvidenceRule: evidence, FeedEnabled: feed, ContentTypes: []LibraryContentType{}, RelationTypes: []LibraryRelationType{}}
+	makeLibrary := func(role, name, template, description, evidence string, feed bool, names []string) *Library {
+		l := &Library{
+			SystemRole:         role,
+			Directory:          role,
+			Name:               name,
+			Template:           template,
+			Description:        description,
+			SourceEvidenceRule: evidence,
+			FeedEnabled:        feed,
+			ContentTypes:       []LibraryContentType{},
+		}
 		l.ReviewCriteria = l.DefaultReviewCriteria()
 		for i, n := range names {
-			l.ContentTypes = append(l.ContentTypes, LibraryContentType{Name: n, Position: i, Enabled: true, ExtractGraph: i < graphCount})
-		}
-		for i, n := range relations {
-			l.RelationTypes = append(l.RelationTypes, LibraryRelationType{Name: n, Position: i, Enabled: true})
+			l.ContentTypes = append(l.ContentTypes, LibraryContentType{Name: n, Position: i, Enabled: true})
 		}
 		l.EnsureDefaults()
 		return l
 	}
 	return []*Library{
-		makeLibrary("official", "官方信息", TemplateExternalTimely, "官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。", OfficialReviewCriteria, "link_or_publisher_date", true, []string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"}, 5, official),
-		makeLibrary("media", "媒体信息", TemplateExternalTimely, "外部媒体、机构账号或个人的报道、观点、分析与实践经验；不要求个人署名。", MediaReviewCriteria, "link_required", true, []string{"评论", "分析", "预测", "访谈", "其他"}, 4, append([]string{"看好", "看空", "评价", "预测", "批评", "推荐"}, official...)),
-		makeLibrary("references", "参考文档", TemplateExternalDurable, "长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。", ReferenceReviewCriteria, "", false, []string{"论文", "书籍", "标准", "官方文档", "教程", "其他"}, 0, []string{"提出", "引用", "属于", "依赖", "对比"}),
-		makeLibrary("personal", "个人产出", TemplateOwn, "本人的工作资料、经验、SOP、笔记。", PersonalReviewCriteria, "", false, []string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"}, 0, []string{"负责", "参与", "合作", "客户", "供应", "依赖", "属于", "决定"}),
-		makeLibrary("ai-output", "AI产出", TemplateGenerated, "外部 AI 按要求写回的报告；不能当作事实。", GeneratedReviewCriteria, "", false, nil, 0, nil),
+		makeLibrary(
+			"official",
+			"官方信息",
+			TemplateExternalTimely,
+			"官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。",
+			"link_or_publisher_date",
+			true,
+			[]string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"},
+		),
+		makeLibrary(
+			"media",
+			"媒体信息",
+			TemplateExternalTimely,
+			"外部媒体、机构账号或个人的报道、观点、分析与实践经验；不要求个人署名。",
+			"link_required",
+			true,
+			[]string{"评论", "分析", "预测", "访谈", "其他"},
+		),
+		makeLibrary(
+			"references",
+			"参考文档",
+			TemplateExternalDurable,
+			"长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。",
+			"",
+			false,
+			[]string{"论文", "书籍", "标准", "官方文档", "教程", "其他"},
+		),
+		makeLibrary(
+			"personal",
+			"个人产出",
+			TemplateOwn,
+			"本人的工作资料、经验、SOP、笔记。",
+			"",
+			false,
+			[]string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"},
+		),
+		makeLibrary(
+			"ai-output",
+			"AI产出",
+			TemplateGenerated,
+			"外部 AI 按要求写回的报告；不能当作事实。",
+			"",
+			false,
+			nil,
+		),
 	}
 }
 

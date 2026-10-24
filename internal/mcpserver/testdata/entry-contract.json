@@ -41,7 +41,6 @@
         "file_path": "",
         "file_size": 0,
         "file_type": "",
-        "graph": null,
         "has_update": false,
         "id": "item",
         "ingest_api_key_id": 0,
@@ -95,7 +94,6 @@
     "file_path": "",
     "file_size": 0,
     "file_type": "",
-    "graph": null,
     "has_update": false,
     "id": "item",
     "ingest_api_key_id": 0,
@@ -130,7 +128,6 @@
   "read": {
     "acquisition": "",
     "body": "Original body",
-    "graph": null,
     "has_update": false,
     "header": {
       "author": "",
@@ -166,7 +163,6 @@
         "content_type": "",
         "entities": null,
         "entry_id": "item",
-        "graph": null,
         "has_update": false,
         "library_directory": "",
         "library_id": "",

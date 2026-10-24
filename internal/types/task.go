@@ -46,7 +46,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeEntryVector, TypeTopicBackfill}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeEntryListDelete, TypeEntryListReparse, TypeEntryBatch, TypeContentCheck,
-		TypeIngestAssetCleanup, TypeReportIndex, "graph:sync", "graph:check", "graph:rebuild",
+		TypeIngestAssetCleanup, TypeReportIndex,
 	}},
 }
 

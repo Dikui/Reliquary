@@ -4,17 +4,27 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/pgtest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	db := pgtest.Open(t)
 	seed(t, db)
-	require.NoError(t, db.Exec(`INSERT INTO library_content_types(library_id,name,position,enabled,extract_graph) SELECT id,'项目类型',42,true,false FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`).Error)
-	require.NoError(t, db.Exec(`INSERT INTO library_relation_types(library_id,name,position,enabled) SELECT id,'引用',17,true FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`).Error)
+	require.NoError(
+		t,
+		db.Exec(
+			`INSERT INTO library_content_types(library_id,
+name,
+position,
+enabled) SELECT id,
+'项目类型',
+42,
+true FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`,
+		).Error,
+	)
 	ctx := context.Background()
 	root := t.TempDir()
 	snapshot, err := Capture(ctx, db)
@@ -22,7 +32,7 @@ func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
 	registry, err := os.ReadFile(filepath.Join(root, ".reliquary/registry.json"))
 	require.NoError(t, err)
-	for _, table := range []string{"libraries", "library_content_types", "library_relation_types"} {
+	for _, table := range []string{"libraries", "library_content_types"} {
 		require.Contains(t, string(registry), table)
 	}
 	fresh := pgtest.Open(t)
@@ -42,7 +52,7 @@ func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	path := filepath.Join(root, ".reliquary/data/library_content_types.json")
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, append(data, ' '), 0600))
+	require.NoError(t, os.WriteFile(path, append(data, ' '), 0o600))
 	_, err = Load(root)
 	require.ErrorContains(t, err, "checksum mismatch")
 }

@@ -4,20 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/models/chat"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/repository"
-	"reliquary/internal/models/chat"
-	"reliquary/internal/types"
 )
 
 type segmentedChat struct {
 	retainedProcessingChat
 	calls             map[string]map[int]int
 	fail              int
-	verifyFail        int
 	reject            int
 	mergeCalls        int
 	mergeFail         bool
@@ -33,22 +32,6 @@ type segmentedChat struct {
 
 func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
-	if stage == "article_graph_verification" {
-		var input struct {
-			Source struct {
-				Segment struct {
-					Number int `json:"number"`
-				} `json:"segment"`
-			} `json:"source"`
-		}
-		if err := json.Unmarshal([]byte(messages[len(messages)-1].Content), &input); err != nil {
-			return nil, err
-		}
-		if m.verifyFail > 0 && input.Source.Segment.Number == m.verifyFail {
-			return nil, fmt.Errorf("verification failure %d", m.verifyFail)
-		}
-		return supportedGraphVerificationFixture(messages)
-	}
 	if stage == "article_summary_merge" {
 		m.mergeCalls++
 		if m.mergeFail {
@@ -130,6 +113,7 @@ func segmentedHarness(t *testing.T) (*articleProcessingHarness, *segmentedChat) 
 	models.summaryStateModelService.model = m
 	return h, m
 }
+
 func segmentedEntry(t *testing.T, h *articleProcessingHarness) *types.Entry {
 	k := &types.Entry{ID: "segment-entry", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Title: "Segment test", Type: "manual", ParseStatus: types.ParseStatusProcessing, SourceKind: "article"}
 	require.NoError(t, h.db.Create(k).Error)
@@ -149,10 +133,10 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	require.NoError(t, err)
 	m.topic = topic.ID
 	body := "# Main\n\n" + strings.Repeat("paragraph with meaningful original material. ", 13)
-	m.verifyFail = 3
+	m.fail = 3
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.ErrorContains(t, err, "第 3/")
-	require.ErrorContains(t, err, "verification failure 3")
+	require.ErrorContains(t, err, "fixture failure 3")
 	var first entrySegmentRun
 	require.NoError(t, h.db.Where("entry_id=?", k.ID).First(&first).Error)
 	require.NotEqual(t, "completed", first.Status)
@@ -168,7 +152,7 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	}
 	// A fresh service value models the absence of any in-memory checkpoint.
 	restarted := *h.service
-	m.verifyFail = 0
+	m.fail = 0
 	result, err := restarted.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.calls["article_processing"][1])

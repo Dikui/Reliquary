@@ -4,30 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"strings"
 	"time"
+
+	apperrors "reliquary/internal/errors"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
-// GraphEvaluationSearch must invoke the graph service's public search entry
-// point, including its RecordSearch adapter, when ikb-14 is integrated.
-type GraphEvaluationSearch func(context.Context, types.EntrySearchRequest) (*types.EntrySearchResponse, error)
 type EvaluationService struct {
-	db          *gorm.DB
-	search      interfaces.SearchService
-	models      interfaces.ModelService
-	GraphSearch GraphEvaluationSearch
+	db     *gorm.DB
+	search interfaces.SearchService
+	models interfaces.ModelService
 }
 
 func NewEvaluationService(db *gorm.DB, search interfaces.SearchService, models interfaces.ModelService) *EvaluationService {
 	return &EvaluationService{db: db, search: search, models: models}
 }
+
 func evaluationScope(ctx context.Context, db *gorm.DB) (*gorm.DB, error) {
 	id, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
@@ -35,12 +33,14 @@ func evaluationScope(ctx context.Context, db *gorm.DB) (*gorm.DB, error) {
 	}
 	return db.WithContext(ctx).Where("space_id=?", id), nil
 }
+
 func evaluationError(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return apperrors.NewNotFoundError("evaluation resource not found")
 	}
 	return err
 }
+
 func (s *EvaluationService) ListSets(ctx context.Context, limit, offset int) ([]types.EvaluationSet, error) {
 	q, err := evaluationScope(ctx, s.db)
 	if err != nil {
@@ -50,6 +50,7 @@ func (s *EvaluationService) ListSets(ctx context.Context, limit, offset int) ([]
 	err = q.Order("created_at DESC,id").Limit(pageLimit(limit)).Offset(max(offset, 0)).Find(&rows).Error
 	return rows, err
 }
+
 func (s *EvaluationService) GetSet(ctx context.Context, id string) (*types.EvaluationSet, error) {
 	q, err := evaluationScope(ctx, s.db)
 	if err != nil {
@@ -61,6 +62,7 @@ func (s *EvaluationService) GetSet(ctx context.Context, id string) (*types.Evalu
 	}
 	return &set, nil
 }
+
 func (s *EvaluationService) SaveSet(ctx context.Context, id, name, description string) (*types.EvaluationSet, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 500 || len(description) > 10000 {
@@ -82,6 +84,7 @@ func (s *EvaluationService) SaveSet(ctx context.Context, id, name, description s
 	set.Description = description
 	return set, s.db.WithContext(ctx).Save(set).Error
 }
+
 func (s *EvaluationService) DeleteSet(ctx context.Context, id string) error {
 	set, err := s.GetSet(ctx, id)
 	if err != nil {
@@ -89,6 +92,7 @@ func (s *EvaluationService) DeleteSet(ctx context.Context, id string) error {
 	}
 	return s.db.WithContext(ctx).Delete(set).Error
 }
+
 func (s *EvaluationService) ListQuestions(ctx context.Context, setID, status string, limit, offset int) ([]types.EvaluationQuestion, error) {
 	if _, err := s.GetSet(ctx, setID); err != nil {
 		return nil, err
@@ -104,6 +108,7 @@ func (s *EvaluationService) ListQuestions(ctx context.Context, setID, status str
 	err = q.Where("set_id=?", setID).Preload("Answers", func(db *gorm.DB) *gorm.DB { return db.Order("entry_id") }).Order("created_at,id").Limit(pageLimit(limit)).Offset(max(offset, 0)).Find(&rows).Error
 	return rows, err
 }
+
 func (s *EvaluationService) GetQuestion(ctx context.Context, setID, id string) (*types.EvaluationQuestion, error) {
 	q, err := evaluationScope(ctx, s.db)
 	if err != nil {
@@ -116,14 +121,12 @@ func (s *EvaluationService) GetQuestion(ctx context.Context, setID, id string) (
 	}
 	return &question, nil
 }
+
 func validateQuestion(ctx context.Context, db *gorm.DB, question *types.EvaluationQuestion) error {
-	if question.Method != "ordinary" && question.Method != "graph" {
-		return apperrors.NewBadRequestError("method must be ordinary or graph")
+	if question.Method != "ordinary" {
+		return apperrors.NewBadRequestError("method must be ordinary")
 	}
 	validationRequest := question.Request
-	if question.Method == "graph" {
-		validationRequest.GraphParameters = nil
-	}
 	if _, err := normalizeEntrySearch(validationRequest); err != nil {
 		return err
 	}
@@ -216,6 +219,7 @@ func (s *EvaluationService) SaveQuestion(ctx context.Context, setID, id string, 
 	}
 	return s.GetQuestion(ctx, setID, input.ID)
 }
+
 func saveEvaluationQuestion(ctx context.Context, tx *gorm.DB, q *types.EvaluationQuestion, replace bool) error {
 	if err := validateQuestion(ctx, tx, q); err != nil {
 		return err
@@ -235,6 +239,7 @@ func saveEvaluationQuestion(ctx context.Context, tx *gorm.DB, q *types.Evaluatio
 	}
 	return nil
 }
+
 func (s *EvaluationService) DeleteQuestion(ctx context.Context, setID, id string) error {
 	q, err := s.GetQuestion(ctx, setID, id)
 	if err != nil {
@@ -242,6 +247,7 @@ func (s *EvaluationService) DeleteQuestion(ctx context.Context, setID, id string
 	}
 	return s.db.WithContext(ctx).Select(clause.Associations).Delete(q).Error
 }
+
 func (s *EvaluationService) QuestionFromRecord(ctx context.Context, setID, recordID string, answers []types.EvaluationAnswer) (*types.EvaluationQuestion, error) {
 	set, err := s.GetSet(ctx, setID)
 	if err != nil {
@@ -257,9 +263,6 @@ func (s *EvaluationService) QuestionFromRecord(ctx context.Context, setID, recor
 	}
 	request.Query = record.Query
 	request.Libraries = record.Libraries
-	if record.Method == "graph" {
-		request.GraphParameters = append(json.RawMessage{}, record.Request...)
-	}
 	q := types.EvaluationQuestion{ID: uuid.NewString(), SpaceID: set.SpaceID, SetID: setID, Method: record.Method, Request: request, Source: "search_record", Status: "confirmed", SourceRecordID: recordID, SuggestedResults: record.Results, Answers: answers, Revision: 1}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return saveEvaluationQuestion(ctx, tx, &q, false) })
 	if err != nil {
@@ -267,6 +270,7 @@ func (s *EvaluationService) QuestionFromRecord(ctx context.Context, setID, recor
 	}
 	return s.GetQuestion(ctx, setID, q.ID)
 }
+
 func (s *EvaluationService) ConfirmCandidate(ctx context.Context, setID, id string, answers []types.EvaluationAnswer) (*types.EvaluationQuestion, error) {
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		scope, err := evaluationScope(ctx, tx)

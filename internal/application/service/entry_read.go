@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"io"
+	"reliquary/internal/types"
 	"sort"
 	"strings"
 
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 // EntryReadResult exposes the database-owned header and a Unicode-safe body slice.
@@ -16,7 +16,6 @@ type EntryReadResult struct {
 	LibraryName      string             `json:"library_name"`
 	SourceRef        string             `json:"source_ref,omitempty"`
 	Identifier       string             `json:"identifier,omitempty"`
-	Graph            *bool              `json:"graph"`
 	HasUpdate        bool               `json:"has_update"`
 	LatestEntryID    string             `json:"latest_entry_id,omitempty"`
 	Header           VaultArticleHeader `json:"header"`
@@ -60,8 +59,21 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	}
 	sort.Strings(header.Entities)
 	sort.Strings(header.Topics)
-	result := &EntryReadResult{LibraryID: entry.LibraryID, LibraryName: entry.LibraryName, SourceRef: entry.SourceRef, Identifier: entry.Identifier, Graph: entry.Graph, HasUpdate: entry.HasUpdate, LatestEntryID: entry.LatestEntryID, Header: header, OriginalURL: header.URL,
-		CannotBeFact: entry.SourceKind == "report", ParseStatus: entry.ParseStatus, SourceUnverified: entry.SourceUnverified, Acquisition: entry.Acquisition, Offset: offset}
+	result := &EntryReadResult{
+		LibraryID:        entry.LibraryID,
+		LibraryName:      entry.LibraryName,
+		SourceRef:        entry.SourceRef,
+		Identifier:       entry.Identifier,
+		HasUpdate:        entry.HasUpdate,
+		LatestEntryID:    entry.LatestEntryID,
+		Header:           header,
+		OriginalURL:      header.URL,
+		CannotBeFact:     entry.SourceKind == "report",
+		ParseStatus:      entry.ParseStatus,
+		SourceUnverified: entry.SourceUnverified,
+		Acquisition:      entry.Acquisition,
+		Offset:           offset,
+	}
 	reader, _, err := s.GetEntryBody(ctx, id)
 	if err != nil {
 		return nil, err

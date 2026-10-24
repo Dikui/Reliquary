@@ -4,16 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-
-	"reliquary/internal/application/graph"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
-	"reliquary/internal/utils"
 )
 
 var ErrEntryNotFound = errors.New("entry not found")
@@ -46,8 +44,25 @@ func escapeLikeKeyword(keyword string) string {
 // the column here means Save can never touch it.
 // User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
-var omitFieldsOnUpdate = []string{"SourceRef", "SourceBodyHash", "Identifier", "Graph", "DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected", "SourceUnverified",
-	"Acquisition", "ContentTypeHint", "RelatedEntryID", "IngestAPIKeyID", "IngestAPIKeyName", "LastIngestAPIKeyID", "LastIngestAPIKeyName"}
+var omitFieldsOnUpdate = []string{
+	"SourceRef",
+	"SourceBodyHash",
+	"Identifier",
+	"DeletedAt",
+	"PendingSubtasksCount",
+	"Starred",
+	"CollectReason",
+	"ContentTypeCorrected",
+	"SourceUnverified",
+
+	"Acquisition",
+	"ContentTypeHint",
+	"RelatedEntryID",
+	"IngestAPIKeyID",
+	"IngestAPIKeyName",
+	"LastIngestAPIKeyID",
+	"LastIngestAPIKeyName",
+}
 
 // entryRepository implements library and entry repository interface
 type entryRepository struct {
@@ -267,9 +282,6 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 		return nil
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := graph.Lock(tx, spaceID); err != nil {
-			return err
-		}
 		var articles []types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("space_id=? AND id IN ?", spaceID, ids).Order("id").Find(&articles).Error; err != nil {
 			return err
@@ -280,7 +292,7 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 		if err := tx.Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryTopic{}).Error; err != nil {
 			return err
 		}
-		return graph.DeleteEntriesTx(tx, spaceID, ids, false)
+		return tx.Where("space_id=? AND id IN ?", spaceID, ids).Delete(&types.Entry{}).Error
 	})
 }
 
@@ -595,7 +607,7 @@ func (r *entryRepository) CountEntryByStatus(
 // DeleteEntry's soft-delete cascade so sync-internal deletions never
 // become tombstones that block a later re-sync of the same external item.
 func (r *entryRepository) HardDeleteEntry(ctx context.Context, spaceID uint64, id string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return graph.DeleteEntriesTx(tx, spaceID, []string{id}, true) })
+	return r.db.WithContext(ctx).Unscoped().Where("space_id=? AND id=?", spaceID, id).Delete(&types.Entry{}).Error
 }
 
 func (r *entryRepository) SearchEntry(

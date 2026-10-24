@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
@@ -17,6 +14,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func entityFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService) {
@@ -29,23 +30,27 @@ func entityFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService) {
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "entity-reviewer")
 	return db, ctx, NewEntityService(db, nil)
 }
+
 func entityArticle(t *testing.T, db *gorm.DB, id string) *types.Entry {
 	t.Helper()
 	article := &types.Entry{ID: id, SpaceID: 1, LibraryID: "entity-library", Title: id, Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	require.NoError(t, db.Create(article).Error)
 	return article
 }
+
 func entityRecord(id, name, kind string) types.Entity {
 	return types.Entity{ID: id, SpaceID: 1, CanonicalName: name, NormalizedName: normalizeEntityName(name), EntityType: types.NormalizeEntityType(kind), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 }
 
-type entityChatInterface interface{ chat.Chat }
-type entityCountingChat struct {
-	entityChatInterface
-	mu    sync.Mutex
-	calls int
-	reply func(context.Context, []chat.Message) string
-}
+type (
+	entityChatInterface interface{ chat.Chat }
+	entityCountingChat  struct {
+		entityChatInterface
+		mu    sync.Mutex
+		calls int
+		reply func(context.Context, []chat.Message) string
+	}
+)
 
 func (m *entityCountingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	m.mu.Lock()
@@ -65,16 +70,19 @@ type entityTestModels struct {
 func (m entityTestModels) GetChatModel(context.Context, string) (chat.Chat, error) {
 	return m.model, nil
 }
+
 func (m entityTestModels) GetEmbeddingModel(context.Context, string) (embedding.Embedder, error) {
 	return nil, errors.New("embedding test model unconfigured")
 }
 
-type entityEmbeddingInterface interface{ embedding.Embedder }
-type entityEmbedder struct {
-	entityEmbeddingInterface
-	dimension int
-	calls     int
-}
+type (
+	entityEmbeddingInterface interface{ embedding.Embedder }
+	entityEmbedder           struct {
+		entityEmbeddingInterface
+		dimension int
+		calls     int
+	}
+)
 
 func (m *entityEmbedder) Embed(context.Context, string) ([]float32, error) {
 	m.calls++
@@ -93,6 +101,7 @@ type entityEmbeddingModels struct {
 func (m entityEmbeddingModels) GetEmbeddingModel(context.Context, string) (embedding.Embedder, error) {
 	return m.model, nil
 }
+
 func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	entities := []types.Entity{entityRecord("moonshot", "Moonshot AI", "company"), entityRecord("kimi-k2", "Kimi K2", "product"), entityRecord("different-type", "Same Name", "product")}
@@ -533,9 +542,6 @@ func TestEntityResolutionJudgesOrganizationIdentityAndFillsOnlyEmptyDescription(
 	require.Equal(t, "An AI company.", stored.Description)
 	require.True(t, stored.EmbeddingNeedsRebuild)
 	require.Equal(t, known.Description, readNameEntity(t, db, known.ID).Description)
-	var notifications int64
-	require.NoError(t, db.Model(&types.GraphPendingSync{}).Where("entity_id=?", acme.ID).Count(&notifications).Error)
-	require.EqualValues(t, 1, notifications)
 	require.Equal(t, 3, model.count())
 }
 
@@ -575,7 +581,4 @@ func TestEntityResolutionProtectsConcurrentDescriptionsAndReturnsPersistedIDs(t 
 	require.False(t, readNameEntity(t, db, guarded.ID).EmbeddingNeedsRebuild)
 	require.NotEqual(t, uncertain.ID, ids[entityNameKey("company", "Uncertain")])
 	require.Equal(t, concurrent.ID, ids[entityNameKey("company", "Concurrent New")])
-	var notifications int64
-	require.NoError(t, db.Model(&types.GraphPendingSync{}).Where("entity_id=?", guarded.ID).Count(&notifications).Error)
-	require.Zero(t, notifications)
 }

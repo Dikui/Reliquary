@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type evaluationBrokenSearch struct{ interfaces.SearchService }
@@ -47,17 +48,30 @@ func TestEvaluationFoldedMembersNeverCountAndFailurePersists(t *testing.T) {
 	require.EqualValues(t, 2, snapshot["k"])
 }
 
-func TestGraphRecordContractAndEvaluationIsolation(t *testing.T) {
+func TestSearchRecordEvaluationIsolation(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	recorder := NewSearchRecorder(h.db)
-	record := &types.SearchRecord{Method: "graph", Query: "entity-a", Libraries: []string{h.library.ID}, Request: json.RawMessage(`{"libraries":["search-library"],"query":"entity-a","entity_ids":["entity-a"]}`), Results: []types.RankedEntry{{EntryID: "doc", Rank: 1}}, DurationMS: 12}
-	require.NoError(t, recorder.RecordSearch(types.WithEvaluationRun(types.WithSearchSource(h.ctx, "mcp"), "graph-run"), record))
+	record := &types.SearchRecord{
+		Method:     "ordinary",
+		Query:      "entity-a",
+		Libraries:  []string{h.library.ID},
+		Request:    json.RawMessage(`{"libraries":["search-library"],"query":"entity-a","entity_ids":["entity-a"]}`),
+		Results:    []types.RankedEntry{{EntryID: "doc", Rank: 1}},
+		DurationMS: 12,
+	}
+	require.NoError(
+		t,
+		recorder.RecordSearch(types.WithEvaluationRun(types.WithSearchSource(h.ctx, "mcp"), "evaluation-run"), record),
+	)
 	rows, err := recorder.List(h.ctx, SearchRecordFilter{})
 	require.NoError(t, err)
 	require.Empty(t, rows)
-	rows, err = recorder.List(h.ctx, SearchRecordFilter{Method: "graph", RunID: "graph-run", Library: h.library.ID})
+	rows, err = recorder.List(
+		h.ctx,
+		SearchRecordFilter{Method: "ordinary", RunID: "evaluation-run", Library: h.library.ID},
+	)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "evaluation", rows[0].Source)
-	require.Equal(t, "graph", rows[0].Method)
+	require.Equal(t, "ordinary", rows[0].Method)
 }

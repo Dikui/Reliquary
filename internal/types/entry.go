@@ -128,7 +128,6 @@ type Entry struct {
 	SourceRef      string `json:"source_ref,omitempty" gorm:"not null;default:''"`
 	SourceBodyHash string `json:"-" gorm:"not null;default:''"`
 	Identifier     string `json:"identifier,omitempty" gorm:"not null;default:''"`
-	Graph          *bool  `json:"graph"`
 	HasUpdate      bool   `json:"has_update" gorm:"-"`
 	LatestEntryID  string `json:"latest_entry_id,omitempty" gorm:"-"`
 	// Unique identifier of the entry

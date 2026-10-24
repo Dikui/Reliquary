@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reliquary/internal/vaultpath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"reliquary/internal/vaultpath"
 
 	"gorm.io/gorm"
 )
@@ -429,7 +428,7 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 			path := filepath.Join(root, ".reliquary", "operation_logs.jsonl")
 			if _, statErr := os.Stat(path); statErr == nil {
 				quarantine := filepath.Join(root, ".reliquary", "quarantine", fmt.Sprintf("operation_logs-%d.corrupt.jsonl", time.Now().UnixNano()))
-				if err := os.MkdirAll(filepath.Dir(quarantine), 0700); err != nil {
+				if err := os.MkdirAll(filepath.Dir(quarantine), 0o700); err != nil {
 					return result, err
 				}
 				if err := os.Rename(path, quarantine); err != nil {
@@ -520,6 +519,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectEntryBatchManifest(expected, actual)
 	expected, actual = projectCallPricingManifest(expected, actual)
 	expected, actual = projectContentCheckManifest(expected, actual)
+	expected, actual = projectRetiredManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}
