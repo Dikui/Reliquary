@@ -139,3 +139,35 @@ test('closing preview releases its content and ignores an unfinished detail resp
   assert.equal(hook.details.id, '')
   assert.deepEqual(hook.details.md, [])
 })
+
+
+test('fresh detail loading restores the manual entity choice, including an empty choice', async () => {
+  const hook = createHook(async id => ({ success: true, data: {
+    id, updated_at: '2026-10-24T00:00:00Z', entities_manual: true,
+    entities: id === 'empty-choice' ? [] : [{ id: 'institution', canonical_name: 'Research Institute', entity_type: 'organization' }],
+  } }))
+  hook.getCardDetails({ id: 'manual-choice' })
+  await settle()
+  assert.equal(hook.details.entities_manual, true)
+  assert.equal(hook.details.entities[0].id, 'institution')
+  hook.getCardDetails({ id: 'empty-choice' })
+  await settle()
+  assert.equal(hook.details.entities_manual, true)
+  assert.deepEqual(hook.details.entities, [])
+})
+
+test('initialization, closing and switching details reset the manual entity marker', async () => {
+  const hook = createHook(async id => ({ success: true, data: {
+    id, updated_at: '2026-10-24T00:00:00Z', ...(id === 'manual-choice' ? { entities_manual: true } : {}),
+  } }))
+  assert.equal(hook.details.entities_manual, false)
+  hook.getCardDetails({ id: 'manual-choice' }); await settle()
+  assert.equal(hook.details.entities_manual, true)
+  hook.clearCardDetails()
+  assert.equal(hook.details.entities_manual, false)
+  hook.getCardDetails({ id: 'manual-choice' }); await settle()
+  hook.getCardDetails({ id: 'automatic-choice' })
+  assert.equal(hook.details.entities_manual, false)
+  await settle()
+  assert.equal(hook.details.entities_manual, false)
+})

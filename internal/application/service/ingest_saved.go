@@ -79,6 +79,7 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		entry.IngestAPIKeyID, entry.IngestAPIKeyName = existing.IngestAPIKeyID, existing.IngestAPIKeyName
 		entry.SourceUnverified, entry.Starred = existing.SourceUnverified, existing.Starred
 		entry.CustomMetadata = existing.CustomMetadata
+		entry.EntitiesManual = existing.EntitiesManual
 		entry.RelatedEntryID = existing.RelatedEntryID
 		if request.Title == "" {
 			entry.Title, entry.FileName = existing.Title, existing.FileName

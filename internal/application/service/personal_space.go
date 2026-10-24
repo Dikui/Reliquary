@@ -3,11 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
-
-	"gorm.io/gorm"
-
 	"reliquary/internal/application/repository"
 	"reliquary/internal/types"
+
+	"gorm.io/gorm"
 )
 
 // EnsurePersonalSpace runs before any request or background task starts.
@@ -25,7 +24,7 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 			return err
 		}
 		if len(spaces) == 1 && spaces[0].ID == types.SingleSpaceID {
-			return nil
+			return ensurePresetEntities(tx, types.SingleSpaceID)
 		}
 		if len(spaces) != 0 {
 			return fmt.Errorf("expected only personal workspace %d, found %d workspaces", types.SingleSpaceID, len(spaces))
@@ -34,7 +33,10 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 		_, err = svc.CreateSpace(ctx, &types.Space{
 			ID: types.SingleSpaceID, EmbeddingModelID: "builtin-qwen3-embedding-06b", Name: "Personal workspace", Description: "Personal entry", Status: "active",
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return ensurePresetEntities(tx, types.SingleSpaceID)
 	})
 	if err != nil {
 		return err

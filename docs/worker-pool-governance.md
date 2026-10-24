@@ -10,7 +10,7 @@ database connection limits.
 | Pool | Default per instance | Queues | Purpose |
 | --- | ---: | --- | --- |
 | Core | 8 | `default` | Parsing, one article processing call and indexing |
-| Enrichment | 12 | `entity` | Entity and article embedding rebuilds, topic backfill |
+| Enrichment | 12 | `entity` | Full content embedding rebuilds |
 | Maintenance | 4 | `low` | Batch reprocessing and deletion |
 | Shared | 6 | Core and enrichment queues | Elastic capacity borrowed by the side with backlog |
 
@@ -57,8 +57,8 @@ required workers = ceil(peak task arrival rate * mean task runtime / 0.70)
 ```
 
 Use task arrival rate for each queue. One approved article uses one processing
-call for its content type, summary, entities and topics; body images are read
-within that call when the selected model supports vision.
+call for its content type, summary and topics; manual entity links are retained.
+Body images are read within that call when the selected model supports vision.
 Queue count is not a capacity signal.
 
 The runtime dashboard reports:
@@ -71,6 +71,6 @@ The runtime dashboard reports:
 - model concurrency and limiter waiting.
 
 Increase a pool only when backlog age grows while its downstream dependency has
-headroom. Reallocate to enrichment when core stays underutilized and entity
-rebuild queues grow. Reduce core admission when parser CPU, memory, or latency is the
-bottleneck.
+headroom. Reallocate to enrichment when core stays underutilized and content
+embedding rebuild queues grow. Reduce core admission when parser CPU, memory,
+or latency is the bottleneck.

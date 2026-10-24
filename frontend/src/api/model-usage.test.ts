@@ -96,8 +96,8 @@ test('maps library bindings to the configuration section that owns them', () => 
 })
 
 test('model tier bindings stay attached to the unique knowledge settings', () => {
-  const details = parseModelUsageDetails({ libraries: [{ id: 'library-1', name: 'Library', bindings: ['light_model_tier', 'entity_resolution_model_tier'] }] })
+  const details = parseModelUsageDetails({ libraries: [{ id: 'library-1', name: 'Library', bindings: ['light_model_tier', 'generation_model_tier'] }] })
   assert.equal(details?.libraries.length, 1)
-  assert.deepEqual(details?.libraries[0]?.bindings, ['light_model_tier', 'entity_resolution_model_tier'])
+  assert.deepEqual(details?.libraries[0]?.bindings, ['light_model_tier', 'generation_model_tier'])
   assert.equal(modelUsageBindingI18nKey('light_model_tier'), 'modelSettings.usage.bindings.light_model_tier')
 })

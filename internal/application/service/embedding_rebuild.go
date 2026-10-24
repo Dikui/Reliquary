@@ -6,15 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 	"strings"
 	"time"
 
 	apperrors "reliquary/internal/errors"
-	"reliquary/internal/models/embedding"
 	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
-	"reliquary/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/pgvector/pgvector-go"
@@ -27,22 +27,15 @@ var errRebuildStopped = errors.New("embedding rebuild paused or superseded")
 // EmbeddingRebuilder checkpoints every vector together with its destination
 // write. Restarting or retrying never repeats successful checkpoint items.
 type EmbeddingRebuilder struct {
-	db                              *gorm.DB
-	profiles                        *EntityNameEmbeddingRebuilder
-	tasks                           interfaces.TaskEnqueuer
-	vault                           *VaultService
-	preserveEntityProfileTimestamps bool
-	targetModelID                   string
+	db            *gorm.DB
+	profiles      *embeddingProfiles
+	tasks         interfaces.TaskEnqueuer
+	vault         *VaultService
+	targetModelID string
 }
 
 func NewEmbeddingRebuilder(db *gorm.DB, models interfaces.ModelService, tasks interfaces.TaskEnqueuer, vault *VaultService) *EmbeddingRebuilder {
-	return &EmbeddingRebuilder{db: db, profiles: NewEntityNameEmbeddingRebuilder(db, models, nil), tasks: tasks, vault: vault}
-}
-
-// PreserveEntityProfileTimestamps is configured before starting a maintenance
-// rebuild. Vector regeneration must retain the portable entity profile values.
-func (r *EmbeddingRebuilder) PreserveEntityProfileTimestamps(preserve bool) {
-	r.preserveEntityProfileTimestamps = preserve
+	return &EmbeddingRebuilder{db: db, profiles: &embeddingProfiles{db: db, models: models}, tasks: tasks, vault: vault}
 }
 
 func (r *EmbeddingRebuilder) Status(ctx context.Context, spaceID uint64) (*types.EmbeddingRebuildStatus, error) {
@@ -67,18 +60,33 @@ func (r *EmbeddingRebuilder) StatusForRun(ctx context.Context, spaceID uint64, r
 	return r.statusForRun(ctx, spaceID, &run)
 }
 
-func (r *EmbeddingRebuilder) statusForRun(ctx context.Context, spaceID uint64, run *types.EmbeddingRebuildRun) (*types.EmbeddingRebuildStatus, error) {
+func (r *EmbeddingRebuilder) statusForRun(
+	ctx context.Context,
+	spaceID uint64,
+	run *types.EmbeddingRebuildRun,
+) (*types.EmbeddingRebuildStatus, error) {
 	status := &types.EmbeddingRebuildStatus{LatestRun: run, FailedItems: []types.EmbeddingRebuildItem{}}
-	currentID, profileErr := ResolveModelTier(context.WithValue(ctx, types.SpaceIDContextKey, spaceID), r.db, nil, types.ModelTierEmbedding)
+	currentID, profileErr := ResolveModelTier(
+		context.WithValue(ctx, types.SpaceIDContextKey, spaceID),
+		r.db,
+		nil,
+		types.ModelTierEmbedding,
+	)
 	if profileErr == nil && currentID == run.ModelID {
 		metadata, metadataErr := r.profiles.profileMetadata(ctx, currentID, spaceID)
-		status.CurrentModelMatches = metadataErr == nil && entityEmbeddingProfileHash(currentID, run.Dimension, metadata) == run.ProfileHash
+		status.CurrentModelMatches = metadataErr == nil &&
+			types.EmbeddingProfileHash(currentID, run.Dimension, metadata) == run.ProfileHash
 	}
-	err := r.db.WithContext(ctx).Where("run_id=? AND status='failed'", run.ID).Order("kind,source_id,attachment_path").Limit(100).Find(&status.FailedItems).Error
+	err := r.db.WithContext(ctx).
+		Where("run_id=? AND status='failed'", run.ID).
+		Order("kind,source_id,attachment_path").
+		Limit(100).
+		Find(&status.FailedItems).
+		Error
 	return status, err
 }
 
-// Start snapshots current articles, documents, entities, and body images. It
+// Start snapshots current articles, documents and body images. It
 // does not change source files or remove vectors before replacements exist.
 func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.EmbeddingRebuildRun, error) {
 	profile, err := r.rebuildProfile(ctx, spaceID, r.targetModelID)
@@ -86,8 +94,19 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 		return nil, err
 	}
 	now := time.Now().UTC()
-	run := &types.EmbeddingRebuildRun{Candidate: r.targetModelID != "", ID: uuid.NewString(), SpaceID: spaceID, Status: "pending", ModelID: profile.modelID,
-		ModelName: profile.embedder.GetModelName(), Dimension: profile.dimension, ProfileHash: profile.hash, CreatedAt: now, UpdatedAt: now}
+	run := &types.EmbeddingRebuildRun{
+		Candidate: r.targetModelID != "",
+		ID:        uuid.NewString(),
+		SpaceID:   spaceID,
+		Status:    "pending",
+		ModelID:   profile.modelID,
+
+		ModelName:   profile.embedder.GetModelName(),
+		Dimension:   profile.dimension,
+		ProfileHash: profile.hash,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Serialize creation in the personal library while retaining its
 		// normal keyword and vector queries throughout the rebuild.
@@ -120,8 +139,10 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 		}
 		items := make([]types.EmbeddingRebuildItem, 0, len(chunks))
 		add := func(kind, sourceID, path string) {
-			items = append(items, types.EmbeddingRebuildItem{ID: uuid.NewString(), RunID: run.ID, Kind: kind,
-				SourceID: sourceID, AttachmentPath: path, Status: "pending", CreatedAt: now, UpdatedAt: now})
+			items = append(items, types.EmbeddingRebuildItem{
+				ID: uuid.NewString(), RunID: run.ID, Kind: kind,
+				SourceID: sourceID, AttachmentPath: path, Status: "pending", CreatedAt: now, UpdatedAt: now,
+			})
 		}
 		for _, chunk := range chunks {
 			kind := "article_chunk"
@@ -145,13 +166,6 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 					add("image", article.ID, path)
 				}
 			}
-		}
-		var entities []types.Entity
-		if err := tx.Select("id").Where("space_id=? AND merged_into_id=''", spaceID).Order("id").Find(&entities).Error; err != nil {
-			return err
-		}
-		for _, entity := range entities {
-			add("entity", entity.ID, "")
 		}
 		if len(items) > 0 {
 			if err := tx.CreateInBatches(items, 500).Error; err != nil {
@@ -197,8 +211,10 @@ func (r *EmbeddingRebuilder) Continue(ctx context.Context, spaceID uint64, runID
 			}
 			run.FailedCount = 0
 		}
-		return tx.Model(&run).Updates(map[string]any{"status": "pending", "error": "", "failed_count": run.FailedCount,
-			"attempt_id": "", "lease_until": nil, "finished_at": nil}).Error
+		return tx.Model(&run).Updates(map[string]any{
+			"status": "pending", "error": "", "failed_count": run.FailedCount,
+			"attempt_id": "", "lease_until": nil, "finished_at": nil,
+		}).Error
 	})
 }
 
@@ -256,8 +272,10 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID stri
 			run.StartedAt = &now
 		}
 		claimed = true
-		return tx.Model(&run).Updates(map[string]any{"status": "running", "attempt_id": run.AttemptID, "lease_until": now.Add(2 * time.Minute),
-			"started_at": run.StartedAt, "finished_at": nil, "error": ""}).Error
+		return tx.Model(&run).Updates(map[string]any{
+			"status": "running", "attempt_id": run.AttemptID, "lease_until": now.Add(2 * time.Minute),
+			"started_at": run.StartedAt, "finished_at": nil, "error": "",
+		}).Error
 	}); err != nil {
 		return err
 	}
@@ -368,7 +386,13 @@ func (r *EmbeddingRebuilder) Run(ctx context.Context, spaceID uint64, runID stri
 	return nil
 }
 
-func (r *EmbeddingRebuilder) checkRun(ctx context.Context, db *gorm.DB, run *types.EmbeddingRebuildRun, profile entityEmbeddingProfile, lock bool) error {
+func (r *EmbeddingRebuilder) checkRun(
+	ctx context.Context,
+	db *gorm.DB,
+	run *types.EmbeddingRebuildRun,
+	profile embeddingProfile,
+	lock bool,
+) error {
 	query := db.WithContext(ctx)
 	if lock {
 		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
@@ -385,35 +409,14 @@ func (r *EmbeddingRebuilder) checkRun(ctx context.Context, db *gorm.DB, run *typ
 
 type embeddingItemWrite func(*gorm.DB) error
 
-func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.EmbeddingRebuildRun, item types.EmbeddingRebuildItem, profile entityEmbeddingProfile) (embeddingItemWrite, error) {
+func (r *EmbeddingRebuilder) prepareItem(
+	ctx context.Context,
+	run *types.EmbeddingRebuildRun,
+	item types.EmbeddingRebuildItem,
+	profile embeddingProfile,
+) (embeddingItemWrite, error) {
 	if run.Candidate {
 		return r.prepareCandidateItem(ctx, run, item, profile)
-	}
-	if item.Kind == "entity" {
-		var entity types.Entity
-		if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", run.SpaceID, item.SourceID).First(&entity).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, nil
-			}
-			return nil, err
-		}
-		vector, err := rebuildTextVector(ctx, profile, entityNameEmbeddingText(entity.CanonicalName, entity.EntityType, entity.Description))
-		if err != nil {
-			return nil, err
-		}
-		return func(tx *gorm.DB) error {
-			if err := lockEntitySpaceShared(tx, run.SpaceID); err != nil {
-				return err
-			}
-			query := tx.Model(&types.Entity{}).Where("id=? AND space_id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=?", entity.ID, run.SpaceID, entity.CanonicalName, entity.EntityType, entity.Description)
-			updates := map[string]any{"name_embedding": types.EntityNameEmbedding(vector), "embedding_model_id": run.ModelID, "embedding_dimension": run.Dimension, "embedding_needs_rebuild": false}
-			if r.preserveEntityProfileTimestamps {
-				query = query.Where("updated_at=?", entity.UpdatedAt)
-				updates["updated_at"] = entity.UpdatedAt
-			}
-			result := query.Updates(updates)
-			return rebuildSourceWriteResult(result)
-		}, nil
 	}
 	var article types.Entry
 	var chunk types.Chunk
@@ -434,7 +437,6 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		return nil, err
 	}
 	if item.Kind == "image" {
-
 		return prepareArticleImageEmbedding(ctx, r.db, r.vault, profile.embedder, &article, item.AttachmentPath, true)
 	}
 	content := buildEntryIndexContent(&article, chunk.Content)
@@ -495,7 +497,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 	}, nil
 }
 
-func rebuildTextVector(ctx context.Context, profile entityEmbeddingProfile, content string) ([]float32, error) {
+func rebuildTextVector(ctx context.Context, profile embeddingProfile, content string) ([]float32, error) {
 	types.RecordModelCall(ctx, profile.modelID)
 	vector, err := profile.embedder.Embed(ctx, content)
 	if err != nil {

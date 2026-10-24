@@ -14,7 +14,13 @@ import (
 
 func mcpFollowTargets(t *testing.T, f *mcpFixture) types.Entity {
 	t.Helper()
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "Follow Acme", NormalizedName: "follow acme", EntityType: "company"}
+	entity := types.Entity{
+		ID:             uuid.NewString(),
+		SpaceID:        types.SingleSpaceID,
+		CanonicalName:  "Follow Acme",
+		NormalizedName: "follow acme",
+		EntityType:     "organization",
+	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	return entity
 }
@@ -76,7 +82,13 @@ func TestMCPFollowToolsValidateArgumentsWithoutWrites(t *testing.T) {
 func TestMCPFollowMergedEntityIDResolvesToRetainedTarget(t *testing.T) {
 	f := newMCPFixture(t)
 	merged := mcpFollowTargets(t, f)
-	retained := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "Retained Acme", NormalizedName: "retained acme", EntityType: "company"}
+	retained := types.Entity{
+		ID:             uuid.NewString(),
+		SpaceID:        types.SingleSpaceID,
+		CanonicalName:  "Retained Acme",
+		NormalizedName: "retained acme",
+		EntityType:     "organization",
+	}
 	require.NoError(t, f.db.Create(&retained).Error)
 	client := f.connect(t, "2025-11-25")
 	mcpCall(t, client, "follow", map[string]any{"target_type": "entity", "target_id": merged.ID}, nil)

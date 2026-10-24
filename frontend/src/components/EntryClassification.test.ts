@@ -57,14 +57,14 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
 const article = {
   id: 'article', file_name: 'Example.md', type: 'manual', parse_status: 'completed',  processing_mode: 'full',
   structured_summary: { overview: 'A product was announced.', points: ['Launch date', 'Main feature', 'Availability'], key_terms: ['Example Company', '42'] },
-  entities: [{ id: 'entity-1', canonical_name: 'Example Company', entity_type: 'company' }],  md: [], total: 0, metadata: {},
+  entities: [{ id: 'entity-1', canonical_name: 'Example Company', entity_type: 'organization' }],  md: [], total: 0, metadata: {},
 }
 const listModules = {
   '@/components/EntryProcessingStatus.vue': emptyModule,
   '@/components/EntryUpdateNotice.vue': emptyModule,
   '@/utils/markdownPlainText': markdownPlainText,
   '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': emptyModule, './DocumentMenuDelete.vue': emptyModule,
-  '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
+  '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryEntitiesEditor.vue': { __esModule: true, default: { setup: () => () => null } }, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
 }
 const props = { selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }
 

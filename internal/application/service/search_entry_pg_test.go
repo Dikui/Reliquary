@@ -152,10 +152,28 @@ func entrySearchNoCollapse() *bool { value := false; return &value }
 func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	h.add(t, "summary", "article", "2026-10-01", "reference", "semanticlaunch", 0)
-	entity := &types.Entity{ID: "entity-a", SpaceID: 1, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}
+	entity := &types.Entity{
+		ID:             "entity-a",
+		SpaceID:        1,
+		CanonicalName:  "Canonicalneedle",
+		NormalizedName: "canonicalneedle",
+		EntityType:     "organization",
+	}
 	require.NoError(t, h.db.Create(entity).Error)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: "summary", EntityID: entity.ID}).Error)
-	require.NoError(t, h.db.Create(&types.EntityAlias{ID: "alias-a", SpaceID: 1, EntityID: entity.ID, Alias: "Aliasneedle", NormalizedAlias: "aliasneedle", EntityType: "company"}).Error)
+	require.NoError(
+		t,
+		h.db.Create(
+			&types.EntityAlias{
+				ID:              "alias-a",
+				SpaceID:         1,
+				EntityID:        entity.ID,
+				Alias:           "Aliasneedle",
+				NormalizedAlias: "aliasneedle",
+				EntityType:      "organization",
+			},
+		).Error,
+	)
 	h.add(t, "unrelated", "article", "2026-10-01", "reference", "othersemantic", 0)
 	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
 	require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)
@@ -196,7 +214,14 @@ func TestEntrySearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 	h.add(t, "mine", "mine", "", "", "semanticlaunch", 1)
 	h.add(t, "report", "report", "", "", "semanticlaunch", 1)
 	for _, id := range []string{"a", "b"} {
-		require.NoError(t, h.db.Create(&types.Entity{ID: "entity-" + id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "company"}).Error)
+		require.NoError(t,
+			h.db.Create(&types.Entity{
+				ID:             "entity-" + id,
+				SpaceID:        1,
+				CanonicalName:  id,
+				NormalizedName: id,
+				EntityType:     "organization",
+			}).Error)
 		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: id, EntityID: "entity-" + id}).Error)
 	}
 	// Keep query recall entirely semantic so the unrelated missing article is excluded.

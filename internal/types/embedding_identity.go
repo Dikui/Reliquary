@@ -20,5 +20,5 @@ func RetireEmbeddingVectors(ctx context.Context, tx *gorm.DB, modelID string) er
 			return err
 		}
 	}
-	return tx.WithContext(ctx).Model(&Entity{}).Where("embedding_model_id=?", modelID).Updates(map[string]any{"embedding_model_id": stale, "embedding_needs_rebuild": true}).Error
+	return nil
 }

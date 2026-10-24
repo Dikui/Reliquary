@@ -73,14 +73,15 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	output := articleProcessingOutput(
 		t,
-		[]types.EntityCandidate{
-			{Name: "OldCo", EntityType: "company"},
-			{Name: "Partner", EntityType: "company"},
-			{Name: "ObsoleteTool", EntityType: "product"},
+		[]legacyEntityCandidate{
+			{Name: "OldCo", EntityType: "organization"},
+			{Name: "Partner", EntityType: "organization"},
+			{Name: "ObsoleteTool", EntityType: "organization"},
 		},
 	)
 	h.processor.output = output
 	k := h.upload(t, "rebuild", "# OldCo and Partner\n\n"+strings.Repeat("Measured original observations remain unchanged. ", 35)+"\n\n![chart]("+articleImageDataURI(t, 7)+")")
+	maintainTestEntities(h.ctx, t, h.db, k.ID, "OldCo", "Partner", "ObsoleteTool")
 	originalBody, err := vault.ReadBody(k)
 	require.NoError(t, err)
 	originalImages := rebuildAttachments(t, vault.root, k.ID)
@@ -94,7 +95,6 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Where("canonical_name=?", "OldCo").First(&oldEntity).Error)
 	var orphan types.Entity
 	require.NoError(t, h.db.Where("canonical_name=?", "ObsoleteTool").First(&orphan).Error)
-	require.NoError(t, h.db.Create(&types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: k.SpaceID, EntryID: k.ID, NewEntityID: orphan.ID, CandidateEntityID: oldEntity.ID, Status: "pending"}).Error)
 	otherLibrary := *h.library
 	otherLibrary.ID, otherLibrary.SystemRole, otherLibrary.Directory = "other-library", "", "other-library"
 	require.NoError(t, h.db.Create(&otherLibrary).Error)
@@ -103,15 +103,39 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	var shared []types.Entity
 	require.NoError(t, h.db.Where("canonical_name IN ?", []string{"OldCo", "Partner"}).Find(&shared).Error)
 	for _, entity := range shared {
-		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: k.SpaceID, EntryID: other.ID, EntityID: entity.ID}).Error)
+		require.NoError(
+			t,
+			h.db.Create(&types.EntryEntity{SpaceID: k.SpaceID, EntryID: other.ID, EntityID: entity.ID}).Error,
+		)
 	}
-	completed := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Already completed source"}
+	completed := &types.Entry{
+		ID:          uuid.NewString(),
+		SpaceID:     k.SpaceID,
+		LibraryID:   k.LibraryID,
+		SourceKind:  "article",
+		ParseStatus: types.ParseStatusCompleted,
+		VaultBody:   "Already completed source",
+	}
 	require.NoError(t, h.db.Create(completed).Error)
-	cancelled := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCancelled, VaultBody: "Cancelled source"}
+	cancelled := &types.Entry{
+		ID:          uuid.NewString(),
+		SpaceID:     k.SpaceID,
+		LibraryID:   k.LibraryID,
+		SourceKind:  "article",
+		ParseStatus: types.ParseStatusCancelled,
+		VaultBody:   "Cancelled source",
+	}
 	require.NoError(t, h.db.Create(cancelled).Error)
-	h.library.ChunkingConfig = types.ChunkingConfig{ChunkSize: 100, ChunkOverlap: 0, Separators: []string{"\n\n", " ", ""}}
+	h.library.ChunkingConfig = types.ChunkingConfig{
+		ChunkSize:    100,
+		ChunkOverlap: 0,
+		Separators:   []string{"\n\n", " ", ""},
+	}
 	require.NoError(t, h.db.Save(h.library).Error)
-	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "NewCo", EntityType: "company"}})
+	h.processor.output = articleProcessingOutput(
+		t,
+		[]legacyEntityCandidate{{Name: "NewCo", EntityType: "organization"}},
+	)
 	var fresh map[string]any
 	require.NoError(t, json.Unmarshal([]byte(h.processor.output), &fresh))
 	fresh["summary"].(map[string]any)["overview"] = "New computed summary"
@@ -152,17 +176,9 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 		require.Positive(t, count, table)
 	}
 	require.NoError(t, h.db.Model(&types.EntryEntity{}).Where("entry_id=? AND entity_id=?", k.ID, oldEntity.ID).Count(&count).Error)
-	require.Zero(t, count)
+	require.EqualValues(t, 1, count)
 	var preserved types.Entity
-	require.NoError(t, h.db.First(&preserved, "id=?", oldEntity.ID).Error)
-	require.Equal(t, oldEntity.Description, preserved.Description)
-	require.ErrorIs(t, h.db.First(&types.Entity{}, "id=?", orphan.ID).Error, gorm.ErrRecordNotFound)
-	for _, model := range []any{&types.EntityAlias{}, &types.EntryEntity{}} {
-		require.NoError(t, h.db.Model(model).Where("entity_id=?", orphan.ID).Count(&count).Error)
-		require.Zero(t, count)
-	}
-	require.NoError(t, h.db.Model(&types.EntityMergeSuggestion{}).Where("new_entity_id=? OR candidate_entity_id=?", orphan.ID, orphan.ID).Count(&count).Error)
-	require.Zero(t, count)
+	require.NoError(t, h.db.First(&preserved, "id=?", orphan.ID).Error)
 	// Redelivering the parent after processing must not reset the completed child.
 	require.NoError(t, h.service.ProcessEntryListReparse(h.ctx, rebuildTask(t, h.db, run.TaskID)))
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)

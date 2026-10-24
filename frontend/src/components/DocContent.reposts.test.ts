@@ -109,6 +109,8 @@ interface DetailRenderOptions {
   details?: Record<string, unknown>
   loadedDetails?: Record<string, unknown>
   classification?: unknown
+  entityEditor?: unknown
+  onProcessingStateChange?: (value: Record<string, unknown>) => void
   reviewActions?: unknown
   articleJudgments?: unknown
   personalDelete?: unknown
@@ -128,7 +130,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule, '@/components/EntryStarToggle.vue': emptyModule,
+    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryEntitiesEditor.vue': options.entityEditor || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule, '@/components/EntryStarToggle.vue': emptyModule,
     '@/components/EntryUpdateNotice.vue': emptyModule,
     '@/components/ReportAssociations.vue': emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
@@ -149,6 +151,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
   return renderComponent(component, {
     visible: true, canEditLibrary: false, canDownloadLibrary: false, libraryId: 'library-a', entryType: 'document',
     onReviewChanged: options.onReviewChanged,
+    onProcessingStateChange: options.onProcessingStateChange,
     onCloseDoc: options.onCloseDoc,
     details: options.loadedDetails ?? { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
       md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
@@ -763,4 +766,56 @@ for (const width of [390, 1440]) test(`trace drawer is bounded by its ${width}px
   })
   assert.match(html, /data-drawer-size="min\(820px, 100vw\)"/)
   if (width === 390) assert.ok(!html.includes('trace-drawer-resize-handle'))
+})
+
+
+test('saving entities preserves loaded detail and card display fields until and after a fresh read', async () => {
+  const entities = [{ id: 'institute', canonical_name: 'Research Institute', entity_type: 'organization' }]
+  const record = { file_name: 'Material title.md', library_id: 'reference', library_name: 'Reference library' }
+  const loader = createArticleDetailsLoader({ material: { ...record, entities: [], entities_manual: false } })
+  const details = await loader.load('material')
+  const card = { id: 'material', ...record, file_name: 'Material title', display_name: 'Material title', entities: [], entities_manual: false }
+  const requests: unknown[] = []
+  const editor = compileSFC('./EntryEntitiesEditor.vue').create({
+    '@/api/entities': {
+      listEntities: () => envelope(entities),
+      setEntryEntities: (id: string, selected: string[]) => {
+        requests.push({ id, selected })
+        // The mutation returns a raw Entry without the GET enrichment or card formatting.
+        return envelope({ id, ...record, library_name: '', title: 'Raw heading', entities, entities_manual: true })
+      },
+    },
+    'tdesign-vue-next': { MessagePlugin: { success() {} } },
+  })
+  const setup = editor.setup
+  editor.setup = (props: object, context: object) => {
+    const state = setup(props, context)
+    onServerPrefetch(async () => {
+      state.open()
+      await nextTick()
+      state.selected.value = ['institute']
+      await state.save()
+    })
+    return state
+  }
+  const events: Record<string, unknown>[] = []
+  await renderDetails([], 'zh-CN', {
+    loadedDetails: details, entityEditor: { __esModule: true, default: editor },
+    onProcessingStateChange(value) { events.push(value); Object.assign(card, value) },
+  })
+  assert.deepEqual(requests, [{ id: 'material', selected: ['institute'] }])
+  assert.equal(details.library_name, 'Reference library')
+  assert.equal(details.title, 'Material title.md')
+  assert.equal(card.library_name, 'Reference library')
+  assert.equal(card.file_name, 'Material title')
+  assert.equal(card.display_name, 'Material title')
+  assert.deepEqual(details.entities, entities)
+  assert.equal(details.entities_manual, true)
+  assert.deepEqual(card.entities, entities)
+  assert.equal(card.entities_manual, true)
+  assert.deepEqual(events, [{ id: 'material', entities, entities_manual: true }])
+  const fresh = await createArticleDetailsLoader({ material: { ...record, entities, entities_manual: true } }).load('material')
+  for (const key of ['title', 'library_id', 'library_name', 'entities', 'entities_manual']) {
+    assert.deepEqual(details[key], fresh[key], `${key} matches a fresh GET`)
+  }
 })

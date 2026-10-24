@@ -23,6 +23,7 @@ import { useI18n } from 'vue-i18n';
 import RepostSources from '@/views/library/components/RepostSources.vue';
 import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import EntryEntitiesEditor from '@/components/EntryEntitiesEditor.vue';
 import EntryProcessingStatus from '@/components/EntryProcessingStatus.vue';
 import { entryProcessingState } from '@/utils/entryProcessingStatus';
 import ReportAssociations from '@/components/ReportAssociations.vue';
@@ -1336,7 +1337,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               <p>{{ image.description }}</p>
             </div>
           </details>
-          <EntryClassification :entry="details" followable :hide-relations="details.source_kind === 'report'" @open-entity="emit('openEntity', $event)" />
+          <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
+          <EntryEntitiesEditor :key="details.id" :entry-id="details.id" :entities="details.entities || []" :manual="details.entities_manual" @saved="applyProcessingState" />
         <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
           <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" />
           <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />

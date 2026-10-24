@@ -259,7 +259,7 @@ func registerTools(server *mcp.Server, services Services) {
 			return services.Entries.ReadEntry(ctx, in.ID, in.Offset, in.Length)
 		})
 
-	addTool(server, "list_entities", "查询个人空间的实体档案，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
+	addTool(server, "list_entities", "查询个人空间人工维护的机构、人物，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
 		object(map[string]any{
 			"entity":      text("名称或别名中的文本，省略查询全部"),
 			"entity_type": enum("实体类型，省略查询全部", types.EntityTypes...),
@@ -269,7 +269,7 @@ func registerTools(server *mcp.Server, services Services) {
 			items, err := services.Entities.ListEntities(ctx, in)
 			return map[string]any{"entities": items}, err
 		})
-	addTool(server, "get_entity", "按 ID 读取实体档案和提及该实体的资料列表；已合并的实体 ID 自动解析到保留档案。"+externalContentNotice,
+	addTool(server, "get_entity", "按 ID 读取实体详情和涉及该实体的资料列表；已合并的实体 ID 自动解析到保留实体。"+externalContentNotice,
 		object(map[string]any{"id": text("实体 ID，必填")}, "id"),
 		func(ctx context.Context, in idInput) (any, error) { return services.Entities.EntityDetail(ctx, in.ID) })
 	addTool(

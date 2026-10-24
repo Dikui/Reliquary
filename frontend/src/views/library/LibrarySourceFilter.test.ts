@@ -145,9 +145,9 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     loadComponent(new URL(`./components/Document${view}View.vue`, import.meta.url), modules),
   )
   if (unavailable) {
-    modules['@/api/entities'] = { ENTITY_TYPES: ['company'], listEntities: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:[{id:'recovered',canonical_name:'Recovered entity',entity_type:'company',aliases:[]}] } }, getEntityNameEmbeddingRebuildStatus: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:{pending_count:0}} } }
+    modules['@/api/entities'] = { ENTITY_TYPES: ['organization'], listEntities: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:[{id:'recovered',canonical_name:'Recovered entity',entity_type:'organization',aliases:[]}] } } }
     modules['@/stores/follows'] = {useFollowStore:()=>({refreshAfterTargetChange:async()=>{}})}
-    modules['./MergeSuggestions.vue']=empty;modules['@/components/FollowToggle.vue']=empty
+    modules['./EntityEditor.vue']=empty;modules['@/components/FollowToggle.vue']=empty
     modules['./components/EntryWorkbench.vue']=moduleOf(loadComponent(new URL('./components/EntryWorkbench.vue',import.meta.url),modules))
   }
   const library = loadComponent(new URL('./Library.vue', import.meta.url), modules)
@@ -359,7 +359,7 @@ test('bulk management retains exact filters and server count across both steps a
     assert.equal(button('entryBatch.preview'), undefined)
     assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 73 })), 'count comes from the batch server, not the displayed list')
     for (const value of ['Research', 'Needle', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.parseStatusFailed'), env.t('knowledgeSearch.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
-    const selection = { filters: { libraries: ['library-source'],  published_from: '2026-10-01', keyword: 'Needle', starred: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md',  start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
+    const selection = { filters: { entity_ids: ['entity-1'], libraries: ['library-source'],  published_from: '2026-10-01', keyword: 'Needle', starred: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md',  start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
     assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/entries/batches/preview', data: { action: 'star', starred: true, selection } }])
     const firstSummary = summary()
     button('entryBatch.nextAction')!.props.onClick(); await settle()

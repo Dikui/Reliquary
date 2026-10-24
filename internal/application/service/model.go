@@ -4,14 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"net/http"
 	"reliquary/internal/chatgpt"
-	"strings"
-
-	"reliquary/internal/application/repository"
-	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/chat"
@@ -21,6 +15,12 @@ import (
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
 	"reliquary/internal/utils/ollama"
+	"strings"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
+	apperrors "reliquary/internal/errors"
 )
 
 // ErrModelNotFound is returned when a model cannot be found in the repository
@@ -28,16 +28,15 @@ var ErrModelNotFound = errors.New("model not found")
 
 // modelService implements the model service interface
 type modelService struct {
-	chatGPT                *chatgpt.Manager
-	chatGPTPolicy          *ChatGPTPolicyService
-	chatGPTHTTPClient      *http.Client
-	db                     *gorm.DB
-	repo                   interfaces.ModelRepository
-	libraryRepo            interfaces.LibraryRepository
-	ollamaService          *ollama.OllamaService
-	pooler                 embedding.EmbedderPooler
-	spaceService           interfaces.SpaceService
-	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
+	chatGPT           *chatgpt.Manager
+	chatGPTPolicy     *ChatGPTPolicyService
+	chatGPTHTTPClient *http.Client
+	db                *gorm.DB
+	repo              interfaces.ModelRepository
+	libraryRepo       interfaces.LibraryRepository
+	ollamaService     *ollama.OllamaService
+	pooler            embedding.EmbedderPooler
+	spaceService      interfaces.SpaceService
 }
 
 func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, libraryRepo interfaces.LibraryRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, spaceService interfaces.SpaceService, db *gorm.DB) interfaces.ModelService {
@@ -242,21 +241,6 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 
 // UpdateModel updates an existing model in the repository
 func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) error {
-	if s.nameEmbeddingRebuilder != nil && s.db != nil && !entityDatabaseInTransaction(s.db) {
-		return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			copy := *s
-			copy.db = tx
-			copy.repo = repository.NewModelRepository(tx)
-			copy.libraryRepo = repository.NewLibraryRepository(tx)
-			bound, err := s.nameEmbeddingRebuilder.BindTransaction(ctx, tx)
-			if err != nil {
-				return err
-			}
-			copy.nameEmbeddingRebuilder = bound
-			return copy.UpdateModel(ctx, model)
-		})
-	}
-
 	if model.Type != "" && !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
 	}
@@ -322,7 +306,15 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 				return err
 			}
 			changed := (current.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
-				entityEmbeddingProfileHash(current.ID, current.Parameters.EmbeddingParameters.Dimension, &current) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model)
+				types.EmbeddingProfileHash(
+					current.ID,
+					current.Parameters.EmbeddingParameters.Dimension,
+					&current,
+				) != types.EmbeddingProfileHash(
+					model.ID,
+					model.Parameters.EmbeddingParameters.Dimension,
+					model,
+				)
 			if err := tx.Model(&types.Model{}).Where("id=? AND space_id=?", model.ID, model.SpaceID).Select("*").Updates(model).Error; err != nil {
 				return err
 			}
@@ -350,19 +342,7 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	}
 
 	logger.Infof(ctx, "Model updated successfully: %s", model.ID)
-	if s.nameEmbeddingRebuilder != nil && existingModel != nil &&
-		(existingModel.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
-		entityEmbeddingProfileHash(existingModel.ID, existingModel.Parameters.EmbeddingParameters.Dimension, existingModel) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model) {
-		profileModel, resolveErr := ResolveModelTier(ctx, s.db, nil, types.ModelTierEmbedding)
-		if resolveErr != nil {
-			return fmt.Errorf("model update could not resolve name embedding profile: %w", resolveErr)
-		}
-		if profileModel == model.ID {
-			if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, types.SingleSpaceID, "embedding_model_updated"); err != nil {
-				return fmt.Errorf("model update could not enqueue name embedding rebuild: %w", err)
-			}
-		}
-	}
+
 	return nil
 }
 

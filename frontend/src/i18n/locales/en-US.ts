@@ -1,5 +1,28 @@
 import { ikb18En } from './ikb18'
 export default {
+ entityMaintenance: {
+  "type": "Type",
+  "person": "Person",
+  "organization": "Institution",
+  "requestFailed": "Request failed. Try again.",
+  "loadMore": "Load more",
+
+  "create": "Add entity",
+  "edit": "Edit entity",
+  "delete": "Delete entity",
+  "name": "Canonical name",
+  "aliases": "Aliases (one per line)",
+  "saved": "Entities saved",
+  "deleted": "Entity deleted",
+  "nameRequired": "Enter a canonical name",
+  "deleteHint": "Delete “{name}”, its material associations and follows. Material content is retained. This cannot be undone.",
+  "discardTitle": "Discard changes?",
+  "discardHint": "Unsaved entity changes will be lost.",
+  "discard": "Discard changes",
+  "manual": "Manually edited",
+  "editEntry": "Edit involved entities",
+  "entryHint": "Select 0–3 institutions or people. Saving marks this choice as manually edited."
+},
   entryStatus: {
     title: 'Storage and background processing', saved: 'Saved', indexPending: 'Index queued', indexing: 'Indexing body', indexFailed: 'Body indexing failed',
     pending: 'Background work queued', processing: 'Processing in background', completed: 'Background work completed', failed: 'Background processing failed',
@@ -365,8 +388,8 @@ export default {
         "processing": "Material processing",
         "segmentMerge": "Segment merge",
         "imageDescription": "Image description",
-        "entityResolution": "Entity resolution",
-        "entityEmbedding": "Entity name embedding",
+        "entityResolution": "Historical call: entity resolution",
+        "entityEmbedding": "Historical call: entity name embedding",
         "bodyEmbedding": "Body embedding",
         "rerank": "Rerank",
         "evaluation": "Evaluation generation",
@@ -439,7 +462,7 @@ export default {
 },
   embeddingRebuild: {
     title: 'Rebuild all embeddings',
-    description: 'Use the current model to rebuild body chunks, materials, images, my materials, AI reports and entity name embeddings.',
+    description: 'Use the current model to rebuild embeddings for body chunks, material titles and summaries, images and AI reports.',
     currentModel: 'Current model: {name}',
     runModel: 'Model for this rebuild: {name}, {dimension} dimensions',
     saveFirst: 'Save model settings before starting or continuing a rebuild.',
@@ -460,7 +483,7 @@ export default {
     failureLimit: 'Showing the first {shown} of {total} failed items.',
     attempts: 'Attempts: {count}',
     status: { pending: 'Queued', running: 'Rebuilding', paused: 'Paused, ready to resume', completed: 'Rebuild complete', completed_with_errors: 'Finished with failed items', failed: 'Failed, ready to resume' },
-    kinds: { article_chunk: 'Body chunk', article: 'Material', image: 'Image', mine_chunk: 'Your document chunk', report_chunk: 'Saved report chunk', entity: 'Entity name' },
+    kinds: { article_chunk: 'Body chunk', article: 'Material', image: 'Image', mine_chunk: 'Your document chunk', report_chunk: 'Saved report chunk' },
   },
   follows: {
     library: 'Library',
@@ -671,14 +694,13 @@ export default {
     "generation": "Material processing",
     "embedding": "Embedding",
     "rerank": "Rerank",
-    "entity_resolution": "Entity resolution"
+    "entity_resolution": "Entity resolution (retired)"
   },
   "uses": {
     "light": "Review material against this library’s admission criteria",
-    "generation": "Summaries, entity processing",
-    "embedding": "Document retrieval and entity name similarity",
+    "generation": "Generate material summaries",
+    "embedding": "Content retrieval",
     "rerank": "Rank retrieved results",
-    "entity_resolution": "Determine whether entity candidates belong to existing entities"
   },
   "sources": {
     "generation": "Material processing tier",
@@ -690,40 +712,14 @@ export default {
     "unconfigured": "Unconfigured"
   },
 
+  "explicitChoice": "Intake review uses this library’s processing model when not selected separately. Models are never inherited from another library.",
   "useDefault": "Choose a model",
   "effective": "Current model: {model} ({source})",
   "unconfigured": "No model configured",
-  "explicitChoice": "Entity resolution uses this library’s processing model when not selected separately. Models are never inherited from another library.",
   "loadFailed": "Could not load model configuration. Try again.",
   "saveFailed": "Could not save model configuration. Try again.",
   "saved": "Model tiers saved",
   "retry": "Reload model configuration"
-},
-  mergeSuggestions: {
-  "title": "Merge suggestions",
-  "description": "Entities with unresolved identities stay separate. Check the material before merging with an existing entity.",
-  "statusFilter": "Suggestion status",
-  "status": {
-    "pending": "Pending",
-    "accepted": "Merged",
-    "rejected": "Rejected"
-  },
-  "empty": {
-    "pending": "No pending merge suggestions.",
-    "accepted": "No accepted merge suggestions yet.",
-    "rejected": "No rejected merge suggestions yet."
-  },
-  "pair": "{source} → {target}",
-  "noReason": "No decision reason was provided.",
-  "accept": "Accept and merge",
-  "reject": "Reject suggestion",
-  "confirmTitle": "Accept and merge entities",
-  "confirmBody": "Merge “{source}” into “{target}”? Aliases and material links in this space will move to the retained entity.",
-  "feedback": {
-    "accept": "Suggestion accepted and entities merged",
-    "reject": "Suggestion rejected and entities kept separate"
-  },
-  "loaded": "Loaded {count} suggestion | Loaded {count} suggestions"
 },
   modelCalls: {
   "callsTitle": "Model calls",
@@ -734,10 +730,10 @@ export default {
   "totalCalls": "Total",
   "otherCall": "Other model call",
   "stages": {
-    "entity_judgment": "Entity identity judgment",
-    "entity_resolution": "Entity identity resolution",
-    "entity_embedding": "Entity name embedding",
-    "entity_embedding_rebuild": "Entity name embedding rebuild",
+    "entity_judgment": "Historical call: entity identity judgment",
+    "entity_resolution": "Historical call: entity identity resolution",
+    "entity_embedding": "Historical call: entity name embedding",
+    "entity_embedding_rebuild": "Historical call: entity name embedding rebuild",
     "image_embedding": "Image embedding",
     "intake": "Intake review",
     "filter": "Intake review",
@@ -747,7 +743,7 @@ export default {
   knowledgeWorkbench: {
   "tabLabel": "Entities",
   "title": "Entities",
-  "subtitle": "Manage entity profiles and merge suggestions",
+  "subtitle": "Maintain institutions, people and their aliases",
   "sections": "Entity sections",
   "refresh": "Refresh",
   "requestFailed": "The request failed. Please try again.",
@@ -755,7 +751,6 @@ export default {
   "loadMore": "Load more",
   "nav": {
     "entities": "Entities",
-    "merges": "Merge suggestions"
   },
 
   "sourceTime": {
@@ -772,22 +767,6 @@ export default {
       "other": "Other method"
     }
   },
-  "nameEmbeddings": {
-    "title": "Entity name embeddings",
-    "pending": "Entity name pending rebuild: {count} | Entity names pending rebuild: {count}",
-    "unknown": "Unavailable",
-    "rebuild": "Rebuild now",
-    "latest": "Latest rebuild: {status}, {processed}/{total} entity processed | Latest rebuild: {status}, {processed}/{total} entities processed",
-    "noRun": "No rebuild has run yet",
-    "failure": "Failure reason: {reason}",
-    "queued": "Entity name embedding rebuild queued",
-    "status": {
-      "pending": "Pending",
-      "running": "Running",
-      "completed": "Completed",
-      "failed": "Failed"
-    }
-  },
   "entities": {
     "title": "Entities",
     "description": "Browse entity types, aliases and materials mentioning each entity.",
@@ -799,7 +778,7 @@ export default {
       "person": "Person",
       "product": "Product",
       "project": "Project",
-      "organization": "Organization",
+      "organization": "Institution",
       "other": "Other"
     },
     "empty": "No entities yet",
@@ -807,7 +786,7 @@ export default {
     "aliases": "alias | aliases",
     "aliasLabel": "Aliases",
     "noAliases": "No aliases",
-    "choose": "Select an entity to view its profile",
+    "choose": "Select an entity to view its details and related materials",
     "articles": "Materials mentioning this entity",
     "noArticles": "No materials mention this entity yet.",
     "openArticle": "Open material",
@@ -947,9 +926,9 @@ export default {
     allImageStatuses: 'All image states',
     missingImagesOnly: 'Missing images',
     noMissingImages: 'No missing images',
-    rebuildLibraryConfirm: 'Rebuild only failed materials in “{name}”? Completed and cancelled materials are excluded. Keep their body text, images and manual decisions. Regenerate chunks, summaries, entities and vectors with the current settings. Materials whose review failed are reviewed again before processing. Failed materials with saved body text are included even if images are missing; missing-image records are kept. Pending and deleting materials are excluded. Some materials may be unavailable in search during processing. Keep the library settings unchanged. This calls the models again and incurs costs.',
+    rebuildLibraryConfirm: 'Rebuild only failed materials in “{name}”? Completed and cancelled materials are excluded. Keep their body text, images and manual decisions. Regenerate chunks, summaries and vectors with the current settings. Keep manually maintained entity links. Materials whose review failed are reviewed again before processing. Failed materials with saved body text are included even if images are missing; missing-image records are kept. Pending and deleting materials are excluded. Some materials may be unavailable in search during processing. Keep the library settings unchanged. This calls the models again and incurs costs.',
     rebuildLibrarySubmitted: 'Submitted a rebuild task for {count} failed material. View progress in Runtime queues. | Submitted rebuild tasks for {count} failed materials. View progress in Runtime queues.',
-    rebuildLibraryAllConfirm: 'Rebuild all eligible materials in “{name}”? Completed materials will be processed again; approved cancelled materials are included too. Keep their body text, images and manual decisions. Regenerate chunks, summaries, entities and vectors with the current settings. Materials whose review failed are reviewed again before processing. Materials with saved body text are included even if images are missing; missing-image records are kept. Pending and deleting materials are excluded. Some materials may be unavailable in search during processing. Keep the library settings unchanged. This calls the models again and incurs costs.',
+    rebuildLibraryAllConfirm: 'Rebuild all eligible materials in “{name}”? Completed materials will be processed again; approved cancelled materials are included too. Keep their body text, images and manual decisions. Regenerate chunks, summaries and vectors with the current settings. Keep manually maintained entity links. Materials whose review failed are reviewed again before processing. Materials with saved body text are included even if images are missing; missing-image records are kept. Pending and deleting materials are excluded. Some materials may be unavailable in search during processing. Keep the library settings unchanged. This calls the models again and incurs costs.',
     rebuildLibraryAllSubmitted: 'Submitted a full rebuild task for {count} material. View progress in Runtime queues. | Submitted full rebuild tasks for {count} materials. View progress in Runtime queues.',
     cancelParse: 'Stop processing',
     cancelParseConfirmBody: "Stop processing \"{title}\"? Saved chunks remain and can be rebuilt later. Pending processing tasks for this material will be cancelled.",
@@ -1786,7 +1765,6 @@ export default {
 
             indexDelete: 'Index deletion',
 
-            entityNameEmbeddingRebuild: 'Entity name embedding rebuild',
             embeddingRebuild: 'Rebuild all embeddings',
             reportIndex: 'Report indexing',
           }
@@ -1817,19 +1795,19 @@ export default {
         },
         poolDescriptions: {
           core: 'Guaranteed document and manual processing capacity',
-          enrichment: "Rebuild entity name embeddings or all embeddings,",
+          enrichment: "Rebuild all embeddings",
           maintenance: "Batch work and deletion cleanup",
           shared: 'Borrowed by core or enrichment according to backlog',
         },
         queueNames: {
           default: 'Document processing',
           low: 'Maintenance & batch',
-          entity: "Entities",
+          entity: "Embedding rebuild",
         },
         queueDescriptions: {
           default: 'Body processing, manual reprocess',
           low: "Batch reprocess and cleanup",
-          entity: "Rebuild entity name embeddings or all embeddings,",
+          entity: "Rebuild all embeddings",
         }
       },
       keyLabels: {
@@ -1856,7 +1834,7 @@ export default {
         },
         queue: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual processing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
-          enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings, with shared capacity available. Restart after changing.",
+          enrichment_concurrency: "Reserved concurrency per instance for rebuilding all embeddings, with shared capacity available. Restart after changing.",
           maintenance_concurrency: "Per-process concurrency for batch work and cleanup, isolated from material processing. Minimum 1; requires a service restart.",
           shared_concurrency: 'Per-process elastic concurrency shared by core processing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
@@ -2255,7 +2233,6 @@ export default {
       truncated: 'Showing the first {shown} of {total}',
       bindings: {
           light_model_tier: 'Light tier',
-          entity_resolution_model_tier: "Entity resolution tier",
           generation_model_tier: 'Generation tier',
           embedding_model_tier: 'Embedding tier',
           rerank_model_tier: 'Rerank tier',

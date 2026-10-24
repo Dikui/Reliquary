@@ -5,7 +5,6 @@ export const KNOWN_MODEL_USAGE_BINDINGS = [
   'summary_model',
   'rerank_model',
   'light_model_tier',
-  'entity_resolution_model_tier',
   'generation_model_tier',
   'embedding_model_tier',
   'rerank_model_tier',

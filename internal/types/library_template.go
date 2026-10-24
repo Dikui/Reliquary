@@ -13,10 +13,6 @@ const (
 	TemplateGenerated       = "generated"
 )
 
-func (l *Library) ExtractsEntities() bool {
-	return l != nil
-}
-
 // IdentityRules define the independent matching keys available to a template.
 type IdentityRules struct {
 	URL, Body, NearDuplicate, PublisherDate, Identifier, SourceRef bool
@@ -137,9 +133,6 @@ func (l *Library) ProcessingModelTiers() []ModelTier {
 	}
 	if rules.Process {
 		tiers = append(tiers, ModelTierGeneration)
-	}
-	if l.ExtractsEntities() {
-		tiers = append(tiers, ModelTierEntityResolution)
 	}
 	return tiers
 }

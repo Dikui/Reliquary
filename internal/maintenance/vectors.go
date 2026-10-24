@@ -54,7 +54,6 @@ func CheckVectorDimensions(ctx context.Context, db *gorm.DB) ([]string, error) {
 		"article_embeddings": `SELECT e.entry_id AS identity,e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM article_embeddings e WHERE e.embedding IS NOT NULL`,
 		"image_embeddings":   `SELECT e.entry_id||'/'||e.attachment_path AS identity,e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM image_embeddings e WHERE e.embedding IS NOT NULL`,
 		"embeddings":         `SELECT e.id AS identity,e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM embeddings e WHERE e.embedding IS NOT NULL AND e.is_enabled`,
-		"entities":           `SELECT e.id AS identity,e.embedding_model_id AS model_id,e.embedding_dimension AS dimension,vector_dims(e.name_embedding) AS actual FROM entities e WHERE e.name_embedding IS NOT NULL`,
 	}
 	differences := []string{}
 	dimensions := map[string]map[int]bool{}
@@ -102,7 +101,6 @@ func VectorProfiles(ctx context.Context, db *gorm.DB) ([]VectorProfile, error) {
 	queries := map[string]string{
 		"article_embeddings": `SELECT model_id,dimension,jsonb_build_array(space_id,library_id,entry_id,content_hash)::text AS source FROM public.article_embeddings`,
 		"image_embeddings":   `SELECT model_id,dimension,jsonb_build_array(space_id,library_id,entry_id,attachment_path,content_hash)::text AS source FROM public.image_embeddings`,
-		"entities":           `SELECT embedding_model_id AS model_id,embedding_dimension AS dimension,jsonb_build_array(space_id,id,normalized_name)::text AS source FROM public.entities WHERE name_embedding IS NOT NULL AND merged_into_id=''`,
 		"embeddings":         `SELECT e.model_id,e.dimension,jsonb_build_array(e.library_id,e.entry_id,e.source_type,c.chunk_index,c.content_hash)::text AS source FROM public.embeddings e LEFT JOIN public.chunks c ON c.id=e.chunk_id WHERE e.embedding IS NOT NULL AND e.is_enabled`,
 	}
 	type source struct {

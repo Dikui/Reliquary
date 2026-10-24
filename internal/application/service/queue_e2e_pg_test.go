@@ -3,14 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/redistest"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/repository"
 	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/testutil/redistest"
-	"reliquary/internal/types"
+
+	"github.com/stretchr/testify/require"
 )
 
 func awaitOperation(t *testing.T, c *taskqueue.Client, id string) {
@@ -20,6 +21,7 @@ func awaitOperation(t *testing.T, c *taskqueue.Client, id string) {
 		return c.DB().First(&op, "id=?", id).Error == nil && op.State == taskqueue.TaskStateCompleted
 	}, 15*time.Second, 20*time.Millisecond)
 }
+
 func startEntryOperations(t *testing.T, h *articleProcessingHarness) *taskqueue.Client {
 	t.Helper()
 	c := redistest.NewClient(t, h.db)
@@ -32,6 +34,7 @@ func startEntryOperations(t *testing.T, h *articleProcessingHarness) *taskqueue.
 	require.NoError(t, c.Start(context.Background(), mux, taskqueue.Config{CheckInterval: 20 * time.Millisecond}))
 	return c
 }
+
 func TestRedisEntryHandlersEndToEnd(t *testing.T) {
 	t.Run("document_process", func(t *testing.T) {
 		h := newArticleProcessingHarness(t, false)
@@ -70,6 +73,7 @@ func TestRedisEntryHandlersEndToEnd(t *testing.T) {
 		require.Zero(t, count)
 	})
 }
+
 func TestRedisEmbeddingHandlersEndToEnd(t *testing.T) {
 	t.Run("all_embeddings", func(t *testing.T) {
 		h := newAllRebuildFixture(t, false)
@@ -86,21 +90,8 @@ func TestRedisEmbeddingHandlersEndToEnd(t *testing.T) {
 		require.Equal(t, "completed", result.LatestRun.Status)
 		require.Positive(t, result.LatestRun.CompletedCount)
 	})
-	t.Run("entity_name", func(t *testing.T) {
-		db, ctx, _, rebuilder, models, _ := nameRebuildFixture(t)
-		c := redistest.NewClient(t, db)
-		rebuilder.tasks = c
-		configureNameEmbedding(t, db, "redis-embedding", 2)
-		models.models["redis-embedding"] = &nameRebuildEmbedder{dimension: 2, id: "redis-embedding"}
-		pendingNameEntity(t, db, "redis-entity", "Redis Entity")
-		require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "redis-e2e"))
-		require.NoError(t, c.Start(context.Background(), taskqueue.HandlerFunc(rebuilder.Handle), taskqueue.Config{CheckInterval: 20 * time.Millisecond}))
-		var op taskqueue.Job
-		require.NoError(t, db.Where("task_type=?", types.TypeEntityNameEmbeddingRebuild).First(&op).Error)
-		awaitOperation(t, c, op.ID)
-		require.False(t, readNameEntity(t, db, "redis-entity").EmbeddingNeedsRebuild)
-	})
 }
+
 func TestRedisAssetCleanupEndToEnd(t *testing.T) {
 	s, ctx, _ := newIngestAssetHarness(t, true)
 	c := s.task.(*taskqueue.Client)

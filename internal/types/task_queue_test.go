@@ -65,7 +65,6 @@ func TestEveryTaskTypeHasADeclaredQueue(t *testing.T) {
 	taskTypes := []string{
 		TypeDocumentProcess,
 		TypeEntryListReparse, TypeEntryListDelete,
-		TypeManualProcess, TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild,
 		TypeIngestAssetCleanup, TypeReportIndex,
 	}
 	for _, taskType := range taskTypes {

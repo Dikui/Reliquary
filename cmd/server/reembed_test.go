@@ -10,14 +10,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"testing"
-
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/service"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
+	"testing"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseReembedArguments(t *testing.T) {
@@ -55,17 +55,56 @@ func TestReembedHistoricalFailedRunReportsItsOwnStatusAndExitError(t *testing.T)
 	}))
 	defer provider.Close()
 	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "CLI rebuild", EmbeddingModelID: "cli-model"}).Error)
-	require.NoError(t, db.Create(&types.Library{ID: "cli-library", SpaceID: 1, Name: "CLI", ModelTiers: types.ModelTierConfig{Embedding: "cli-model"}}).Error)
-	require.NoError(t, db.Create(&types.Model{ID: "cli-model", SpaceID: 1, Name: "Fixture model", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
-		Parameters: types.ModelParameters{BaseURL: provider.URL + "/v1", InterfaceType: "openai", EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
-	require.NoError(t, db.Create(&types.Entity{ID: "cli-entity", SpaceID: 1, CanonicalName: "CLI Entity", NormalizedName: "cli entity", EntityType: "product", EmbeddingNeedsRebuild: true}).Error)
+	require.NoError(
+		t,
+		db.Create(
+			&types.Library{
+				ID:         "cli-library",
+				SpaceID:    1,
+				Name:       "CLI",
+				ModelTiers: types.ModelTierConfig{Embedding: "cli-model"},
+			},
+		).Error,
+	)
+	require.NoError(
+		t,
+		db.Create(
+			&types.Model{
+				ID:      "cli-model",
+				SpaceID: 1,
+				Name:    "Fixture model",
+				Type:    types.ModelTypeEmbedding,
+				Source:  types.ModelSourceRemote,
+				Status:  types.ModelStatusActive,
+				Parameters: types.ModelParameters{
+					BaseURL:             provider.URL + "/v1",
+					InterfaceType:       "openai",
+					EmbeddingParameters: types.EmbeddingParameters{Dimension: 3},
+				},
+			},
+		).Error,
+	)
+	require.NoError(t, db.Create(&types.Entry{
+		ID: "cli-entry", SpaceID: 1, LibraryID: "cli-library", Type: types.EntryTypeManual,
+		Title: "CLI material", SourceKind: "mine", ParseStatus: types.ParseStatusCompleted,
+		StructuredSummary: &types.EntrySummary{Overview: "CLI summary", Points: []string{}, KeyTerms: []string{}},
+		VaultBody:         "Original CLI material",
+	}).Error)
+
 	var databaseName string
 	require.NoError(t, db.Raw("SELECT current_database()").Scan(&databaseName).Error)
 	dsn, err := url.Parse(os.Getenv(pgtest.DSNEnv))
 	require.NoError(t, err)
 	password, _ := dsn.User.Password()
-	for name, value := range map[string]string{"DB_DRIVER": "postgres", "DB_HOST": dsn.Hostname(), "DB_PORT": dsn.Port(), "DB_USER": dsn.User.Username(), "DB_PASSWORD": password,
-		"DB_NAME": databaseName, "AUTO_MIGRATE": "false", "VAULT_ROOT": t.TempDir(), "SSRF_WHITELIST": "127.0.0.1"} {
+	for name, value := range map[string]string{
+		"DB_DRIVER":   "postgres",
+		"DB_HOST":     dsn.Hostname(),
+		"DB_PORT":     dsn.Port(),
+		"DB_USER":     dsn.User.Username(),
+		"DB_PASSWORD": password,
+
+		"DB_NAME": databaseName, "AUTO_MIGRATE": "false", "VAULT_ROOT": t.TempDir(), "SSRF_WHITELIST": "127.0.0.1",
+	} {
 		t.Setenv(name, value)
 	}
 	utils.ResetSSRFWhitelistForTest()

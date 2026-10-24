@@ -9,7 +9,7 @@
 | [快速开发模式](quick-development.md) | 开发与生产模式的架构对比 |
 | [内置模型管理](builtin-models.md) | YAML 声明、SQL 管理与模型生命周期 |
 | [分块指南](chunking.md) | 分块策略、参数与预览接口 |
-| [实体档案与文章检索](entity-profiles-and-retrieval.md) | 收集、实体身份、向量与检索 |
+| [实体维护与资料检索](entity-profiles-and-retrieval.md) | 机构、人物、别名、人工关联与检索 |
 | [常见问题](faq.md) | 部署及使用排障 |
 | [日志配置](logging.md) | 日志环境变量与格式 |
 | [数据库迁移排障](migration-troubleshooting.md) | 基线重建及迁移失败恢复 |

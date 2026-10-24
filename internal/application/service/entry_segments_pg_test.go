@@ -148,7 +148,7 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	require.Equal(t, 1, m.calls["article_processing"][2])
 	require.Equal(t, 2, m.calls["article_processing"][3])
 	require.Equal(t, 1, m.mergeCalls)
-	require.Len(t, result.Entities, 1)
+	require.Empty(t, result.Entities)
 
 	require.Len(t, result.Provenance.Entities, len(result.Entities))
 	_, err = restarted.callArticleProcessing(h.ctx, h.library, k, body, nil)
@@ -214,17 +214,17 @@ func TestShortArticleStillOneCall(t *testing.T) {
 }
 
 func TestSegmentPersistenceResolvesGlobalProvenance(t *testing.T) {
-	h, m := segmentedHarness(t)
+	h, _ := segmentedHarness(t)
 	k := h.upload(t, "long-persisted", "# Original\n\n"+strings.Repeat("This original document describes Acme products and measurements. ", 15))
 	require.Equal(t, types.ParseStatusCompleted, k.ParseStatus)
 	var entities []types.EntryEntity
 	require.NoError(t, h.db.Where("entry_id=?", k.ID).Find(&entities).Error)
-	require.Len(t, entities, 1)
+	require.Empty(t, entities)
 	var run entrySegmentRun
 	require.NoError(t, h.db.Where("entry_id=? AND phase='processing'", k.ID).First(&run).Error)
 	var result articleProcessingResult
 	require.NoError(t, json.Unmarshal(run.Result, &result))
-	require.Len(t, result.Provenance.ResolvedEntities[entities[0].EntityID], len(m.calls["article_processing"]))
+	require.Empty(t, result.Provenance.ResolvedEntities)
 }
 
 func TestSegmentInlineReviewUsesTheFullEnvelopeBudget(t *testing.T) {

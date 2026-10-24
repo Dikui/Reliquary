@@ -520,6 +520,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectCallPricingManifest(expected, actual)
 	expected, actual = projectContentCheckManifest(expected, actual)
 	expected, actual = projectRetiredManifest(expected, actual)
+	expected, actual = projectEntitySeedManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}

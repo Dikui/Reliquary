@@ -3,10 +3,10 @@ import test from 'node:test'
 import { copyModelTiers, modelTypeForTier, previewModelTiers } from './modelTiers'
 
 test('draft model tier preview overrides only selected tiers and inherits each remaining tier', () => {
-  const inherited = { light: { model_id: 'global-light', source: 'global' }, entity_resolution: { model_id: 'global-resolution', source: 'global' } }
-  const resolved = previewModelTiers({ light: ' library-light ', entity_resolution: '' }, inherited, 'library')
+  const inherited = { light: { model_id: 'global-light', source: 'global' }, rerank: { model_id: 'global-resolution', source: 'global' } }
+  const resolved = previewModelTiers({ light: ' library-light ', rerank: '' }, inherited, 'library')
   assert.deepEqual(resolved.light, { model_id: 'library-light', source: 'library' })
-  assert.deepEqual(resolved.entity_resolution, inherited.entity_resolution)
+  assert.deepEqual(resolved.rerank, inherited.rerank)
   assert.deepEqual(resolved.generation, { model_id: '', source: 'unconfigured' })
   assert.equal(inherited.light.model_id, 'global-light')
 })
@@ -19,5 +19,5 @@ test('clearing a saved tier selects its parent and copies preserve draft isolati
 test('embedding and rerank tiers select compatible model types', () => {
   assert.equal(modelTypeForTier('embedding'), 'Embedding')
   assert.equal(modelTypeForTier('rerank'), 'Rerank')
-  for (const tier of ['light', 'entity_resolution', 'generation'] as const) assert.equal(modelTypeForTier(tier), 'KnowledgeQA')
+  for (const tier of ['light', 'generation'] as const) assert.equal(modelTypeForTier(tier), 'KnowledgeQA')
 })

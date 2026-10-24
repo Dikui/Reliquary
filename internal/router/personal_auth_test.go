@@ -8,20 +8,21 @@ import (
 	"hash/crc32"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
+	"strings"
+	"testing"
+	"time"
+
+	apprepo "reliquary/internal/application/repository"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type personalAuthFixture struct {
@@ -167,10 +168,39 @@ func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 		libraryID := library.ID
 		entryID := fmt.Sprintf("personal-message-%d", i)
 		entityID := fmt.Sprintf("personal-entity-%d", i)
-		require.NoError(t, f.db.Create(&types.Entry{ID: entryID, SpaceID: 1, LibraryID: libraryID, Type: types.EntryTypeManual, Title: "Acme source", FileName: entryID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, SpaceID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
+		require.NoError(t,
+			f.db.Create(&types.Entry{
+				ID:           entryID,
+				SpaceID:      1,
+				LibraryID:    libraryID,
+				Type:         types.EntryTypeManual,
+				Title:        "Acme source",
+				FileName:     entryID,
+				ParseStatus:  types.ParseStatusCompleted,
+				EnableStatus: "enabled",
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}).Error)
+		require.NoError(t,
+			f.db.Create(&types.Entity{
+				ID:      entityID,
+				SpaceID: 1,
+				CanonicalName: fmt.Sprintf("Acme %d",
+					i),
+				NormalizedName: fmt.Sprintf("acme %d",
+					i),
+				EntityType: "organization",
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			}).Error)
 
-		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entryID, EntityID: entityID, CreatedAt: now}).Error)
+		require.NoError(t,
+			f.db.Create(&types.EntryEntity{
+				SpaceID:   1,
+				EntryID:   entryID,
+				EntityID:  entityID,
+				CreatedAt: now,
+			}).Error)
 	}
 }
 

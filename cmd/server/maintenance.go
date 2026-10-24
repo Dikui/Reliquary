@@ -302,12 +302,21 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			ids[embeddingID] = true
 		}
 		for _, library := range libraries {
-			for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation, library.ModelTiers.Rerank} {
+			for _, id := range []string{
+				library.SummaryModelID,
+				library.ModelTiers.Light,
+				library.ModelTiers.Generation,
+				library.ModelTiers.Rerank,
+			} {
 				if id != "" {
 					ids[id] = true
 				}
 			}
-			for _, id := range []string{library.SummaryModelID, library.ModelTiers.Light, library.ModelTiers.EntityResolution, library.ModelTiers.Generation} {
+			for _, id := range []string{
+				library.SummaryModelID,
+				library.ModelTiers.Light,
+				library.ModelTiers.Generation,
+			} {
 				if id != "" {
 					generation[id] = true
 				}

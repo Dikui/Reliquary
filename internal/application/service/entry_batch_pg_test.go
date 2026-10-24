@@ -34,7 +34,13 @@ func TestEntryBatchFreezesFilteredMembership(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	h.service.task = &libraryRebuildQueue{db: h.db}
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: 1, CanonicalName: "Batch target", NormalizedName: "batch target", EntityType: "company"}
+	entity := types.Entity{
+		ID:             uuid.NewString(),
+		SpaceID:        1,
+		CanonicalName:  "Batch target",
+		NormalizedName: "batch target",
+		EntityType:     "organization",
+	}
 	require.NoError(t, h.db.Create(&entity).Error)
 	seed := func(name string) string {
 		entry := types.Entry{

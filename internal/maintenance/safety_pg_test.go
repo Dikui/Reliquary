@@ -124,27 +124,28 @@ func TestVectorDimensionsMatchActualValuesAndModelConfiguration(t *testing.T) {
 		`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding) VALUES('dim-chunk',0,'dim-chunk','article','library','embed',3,'[1,0,0]')`,
 		`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','embed',3,'[1,0,0]','articlehash')`,
 		`INSERT INTO image_embeddings(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','image.png','embed',3,'[1,0,0]','imagehash')`,
-		`UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`,
 	} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
 	differences, err := CheckVectorDimensions(ctx, db)
 	require.NoError(t, err)
 	require.Empty(t, differences)
-	for table, column := range map[string]string{"embeddings": "dimension", "article_embeddings": "dimension", "image_embeddings": "dimension", "entities": "embedding_dimension"} {
+	for table, column := range map[string]string{
+		"embeddings":         "dimension",
+		"article_embeddings": "dimension",
+		"image_embeddings":   "dimension",
+	} {
 		vectorColumn := "embedding"
-		if table == "entities" {
-			vectorColumn = "name_embedding"
-		}
-		require.NoError(t, db.Exec("UPDATE "+table+" SET "+column+"=4,"+vectorColumn+"='[1,0,0,0]' WHERE "+column+"=3").Error)
+		require.NoError(t,
+			db.Exec("UPDATE "+table+" SET "+column+"=4,"+vectorColumn+"='[1,0,0,0]' WHERE "+column+"=3").Error)
 		differences, err = CheckVectorDimensions(ctx, db)
 		require.NoError(t, err)
 		require.Contains(t, strings.Join(differences, ";"), table)
 		require.NoError(t, db.Exec("UPDATE "+table+" SET "+column+"=3,"+vectorColumn+"='[1,0,0]' WHERE "+column+"=4").Error)
 	}
 	// The article and image tables already reject a declared/actual mismatch.
-	// Legacy chunks and entity vectors also need the maintenance check.
-	for table, column := range map[string]string{"embeddings": "dimension", "entities": "embedding_dimension"} {
+	// Legacy chunk vectors also need the maintenance check.
+	for table, column := range map[string]string{"embeddings": "dimension"} {
 		require.NoError(t, db.Table(table).Where(column+"=3").UpdateColumn(column, 4).Error)
 		differences, err = CheckVectorDimensions(ctx, db)
 		require.NoError(t, err)
@@ -154,7 +155,7 @@ func TestVectorDimensionsMatchActualValuesAndModelConfiguration(t *testing.T) {
 	require.NoError(t, db.Exec(`UPDATE models SET parameters=jsonb_set(parameters,'{embedding_parameters}','{"dimension":4}'::jsonb) WHERE id='embed'`).Error)
 	differences, err = CheckVectorDimensions(ctx, db)
 	require.NoError(t, err)
-	require.Len(t, differences, 4)
+	require.Len(t, differences, 3)
 }
 
 func TestGitBundleCredentialScanReadsCompressedHistoryObjects(t *testing.T) {

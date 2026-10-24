@@ -239,7 +239,6 @@ func TestLibraryReviewRoutingMigrationPreservesCustomPoliciesAndModels(t *testin
 	require.NoError(t, db.Raw("SELECT model_tiers FROM libraries WHERE id='routing-media'").Row().Scan(&models))
 	require.Equal(t, "old-review", models.Light)
 	require.Equal(t, "old-generation", models.Generation)
-	require.Equal(t, "old-entity", models.EntityResolution)
 	require.Equal(t, "old-rerank", models.Rerank)
 	require.NoError(t, db.Raw("SELECT model_tiers FROM libraries WHERE id='routing-reference'").Row().Scan(&models))
 	require.Equal(t, "reference-review", models.Light)

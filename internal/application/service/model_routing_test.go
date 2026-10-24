@@ -3,20 +3,36 @@ package service
 import (
 	"context"
 	"errors"
-	"testing"
-
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestModelTiersUseSpaceEmbeddingAndLibraryProcessingSettings(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
-	library := &types.Library{ID: "library", SpaceID: 1, SystemRole: "official", Template: types.TemplateExternalTimely, Directory: "official", SourceEvidenceRule: "link_required", Name: "Library", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
+	library := &types.Library{
+		ID:                 "library",
+		SpaceID:            1,
+		SystemRole:         "official",
+		Template:           types.TemplateExternalTimely,
+		Directory:          "official",
+		SourceEvidenceRule: "link_required",
+		Name:               "Library",
+		SummaryModelID:     "summary",
+		EmbeddingModelID:   "embedding",
+		ModelTiers: types.ModelTierConfig{
+			Light:      "chosen-light",
+			Generation: "chosen-generation",
+			Embedding:  "chosen-embedding",
+			Rerank:     "chosen-rerank",
+		},
+	}
 	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Space", EmbeddingModelID: "chosen-embedding"}).Error)
 	require.NoError(t, db.Create(library).Error)
 	for _, tier := range types.ModelTiers {
@@ -75,6 +91,7 @@ func (m *tierTestChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatO
 	m.tier = types.ModelTierFromContext(ctx)
 	return &types.ChatResponse{Content: `{"approved":true,"reason":"supported"}`}, m.err
 }
+
 func (m *tierTestChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	return nil, errors.New("unused")
 }

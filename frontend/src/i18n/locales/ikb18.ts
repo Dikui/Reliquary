@@ -1,7 +1,7 @@
 export const ikb18Zh = {
   admissionPolicyTitle: '入库规则',
   admissionPolicyHint: '默认接收可读的 Markdown 正文；拒绝空内容、纯链接、仅图片和技术异常。不逐条调用模型评价价值，不因来源、篇幅或完整度不足进入待审。',
-  processingPolicy: '先保存正文和图片，再后台建立正文索引、生成摘要和抽取实体。后台处理失败不撤销已保存正文。',
+  processingPolicy: '先保存正文和图片，再后台建立正文索引、生成摘要。后台处理失败不撤销已保存正文。',
   parentChildFixed: '父子分块由模板决定：参考文档启用，其他库关闭。',
   sharedEmbedding: '共享向量模型',
 
@@ -35,7 +35,7 @@ export const ikb18Zh = {
 export const ikb18En: typeof ikb18Zh = {
   admissionPolicyTitle: 'Admission policy',
   admissionPolicyHint: 'Accept readable Markdown by default. Reject empty content, links without text, image-only content and technical errors. Do not run per-item value review or queue materials for review because of missing sources, length or completeness.',
-  processingPolicy: 'Save the body and images first. Build the body index, then run summaries and entity processing in the background. Background failures do not undo the saved body.',
+  processingPolicy: 'Save the body and images first. Build the body index, then generate summaries in the background. Background failures do not undo the saved body.',
   parentChildFixed: 'The template enables parent–child chunks for reference documents and disables them for other libraries.',
   sharedEmbedding: 'Shared embedding model',
 

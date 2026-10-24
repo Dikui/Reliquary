@@ -14,7 +14,7 @@
         <p v-if="tier === 'embedding' && embeddingLocked" class="model-tier-current">{{ t('knowledgeEditor.models.embeddingLocked') }}</p>
       </div>
     </div>
-    <p v-if="scope === 'library' && (tiers.includes('light') || tiers.includes('entity_resolution'))" class="model-tier-footnote">{{ t('modelTiers.explicitChoice') }}</p>
+    <p v-if="scope === 'library' && (tiers.includes('light'))" class="model-tier-footnote">{{ t('modelTiers.explicitChoice') }}</p>
   </section>
 </template>
 <script setup lang="ts">
@@ -36,7 +36,7 @@ const loading = ref(false), error = ref('')
 const models = computed(() => props.allModels || resources.allModels)
 const resolved = computed(() => {
   const generation = props.modelValue.generation || ''
-  const inherited: ResolvedModelTiers = generation ? Object.fromEntries(['light', 'entity_resolution'].map(tier => [tier, { model_id: generation, source: 'generation' }])) : {}
+  const inherited: ResolvedModelTiers = generation ? Object.fromEntries(['light'].map(tier => [tier, { model_id: generation, source: 'generation' }])) : {}
   return previewModelTiers(props.modelValue, props.scope === 'library' ? inherited : {}, props.scope)
 })
 function modelName(modelId?: string): string { const model = models.value?.find(item => item.id === modelId); return model?.display_name || model?.name || modelId || t('modelTiers.unconfigured') }

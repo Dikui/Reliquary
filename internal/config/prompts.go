@@ -22,7 +22,6 @@ var promptFiles = []struct {
 		"processing.yaml",
 		[]string{
 			"article_processing",
-			"article_entities",
 			"library_media",
 			"library_reference",
 			"library_own",
@@ -30,7 +29,6 @@ var promptFiles = []struct {
 			"summary_merge",
 		},
 	},
-	{"entity_resolution.yaml", []string{"entity_resolution"}},
 	{"evaluation.yaml", []string{"evaluation_questions"}},
 }
 

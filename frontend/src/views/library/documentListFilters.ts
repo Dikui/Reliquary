@@ -3,6 +3,7 @@ import { normalizeEntryFileType } from '../../utils/entrySourceLabels'
 import { SEARCH_SOURCES, type SearchSource } from '../../types/search'
 
 export interface DocumentListFilters {
+  entityIds?: string
   keyword: string
   fileType: string
   starred: '' | 'true' | 'false'
@@ -16,7 +17,7 @@ export interface DocumentListFilters {
 }
 
 const queryFields = {
-  keyword: 'keyword', fileType: 'file_type', starred: 'starred',
+  entityIds: 'entity_ids', keyword: 'keyword', fileType: 'file_type', starred: 'starred',
   parseStatus: 'parse_status', source: 'source', sourceKind: 'source_kind',
   startDate: 'start_date', endDate: 'end_date', publishedFrom: 'published_from', publishedTo: 'published_to',
 } as const
@@ -37,7 +38,9 @@ const date = (value: unknown): string => {
 }
 
 export function documentListFiltersFromQuery(query: LocationQuery): DocumentListFilters {
+  const entityIds = [...new Set(queryString(query.entity_ids).split(',').map(value => value.trim()).filter(Boolean))].slice(0, 100).join(',')
   return {
+    ...(entityIds ? { entityIds } : {}),
     keyword: queryString(query.keyword).trim(),
     fileType: normalizeEntryFileType(choice(query.file_type, fileTypes)),
     starred: choice(query.starred, ['true', 'false']) as DocumentListFilters['starred'],
@@ -53,7 +56,7 @@ export function documentListFiltersFromQuery(query: LocationQuery): DocumentList
 export function documentListFiltersToQuery(query: LocationQuery, filters: DocumentListFilters): LocationQueryRaw {
   const result: LocationQueryRaw = { ...query }
   for (const [field, key] of Object.entries(queryFields)) {
-    const value = filters[field as keyof DocumentListFilters].trim()
+    const value = (filters[field as keyof DocumentListFilters] || '').trim()
     if (value) result[key] = value
     else delete result[key]
   }
@@ -65,5 +68,5 @@ export function documentListFilterQueriesEqual(query: LocationQuery, canonical: 
 }
 
 export function documentListFiltersEqual(left: DocumentListFilters, right: DocumentListFilters): boolean {
-  return Object.keys(queryFields).every(field => left[field as keyof DocumentListFilters] === right[field as keyof DocumentListFilters])
+  return Object.keys(queryFields).every(field => (left[field as keyof DocumentListFilters] || '') === (right[field as keyof DocumentListFilters] || ''))
 }

@@ -506,12 +506,34 @@ func currentMCPTestFields(value any) any {
 
 func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	f := newMCPFixture(t)
-	article := f.seedArticle(t, "MCP searchfixture article", "full", "# MCP searchfixture\n\n中文与 emoji 🙂 support complete segments.\n")
+	article := f.seedArticle(t,
+		"MCP searchfixture article",
+		"full",
+		"# MCP searchfixture\n\n中文与 emoji 🙂 support complete segments.\n")
 	approve, discard := f.seedPending(t, "Approve fixture"), f.seedPending(t, "Discard fixture")
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "MCP Acme", NormalizedName: "mcp acme", EntityType: "company"}
+	entity := types.Entity{
+		ID:             uuid.NewString(),
+		SpaceID:        types.SingleSpaceID,
+		CanonicalName:  "MCP Acme",
+		NormalizedName: "mcp acme",
+		EntityType:     "organization",
+	}
 	require.NoError(t, f.db.Create(&entity).Error)
-	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, EntityID: entity.ID, Alias: "MCP alias", NormalizedAlias: "mcp alias", EntityType: "company"}).Error)
-	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entity.ID}).Error)
+	require.NoError(t,
+		f.db.Create(&types.EntityAlias{
+			ID:              uuid.NewString(),
+			SpaceID:         types.SingleSpaceID,
+			EntityID:        entity.ID,
+			Alias:           "MCP alias",
+			NormalizedAlias: "mcp alias",
+			EntityType:      "organization",
+		}).Error)
+	require.NoError(t,
+		f.db.Create(&types.EntryEntity{
+			SpaceID:  types.SingleSpaceID,
+			EntryID:  article.ID,
+			EntityID: entity.ID,
+		}).Error)
 	client := f.connect(t, "2025-11-25")
 	tools, err := client.ListTools(context.Background(), nil)
 	require.NoError(t, err)
@@ -571,7 +593,9 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	var entities struct {
 		Entities []types.Entity `json:"entities"`
 	}
-	mcpCall(t, client, "list_entities", map[string]any{"entity": "alias", "entity_type": "company", "limit": 10, "offset": 0}, &entities)
+	mcpCall(t, client, "list_entities",
+		map[string]any{"entity": "alias", "entity_type": "organization", "limit": 10, "offset": 0},
+		&entities)
 	require.Len(t, entities.Entities, 1)
 	require.Equal(t, entity.ID, entities.Entities[0].ID)
 	var detail types.EntityDetail

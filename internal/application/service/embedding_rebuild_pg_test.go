@@ -73,16 +73,6 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
 	h.add(t, "mine", "mine", "", "", "personal", 1)
 	h.add(t, "report", "report", "", "", "analysis", 1)
-	require.NoError(t, h.db.Create(&types.Entity{
-		ID:                    "entity",
-		SpaceID:               1,
-		CanonicalName:         "Rebuild Entity",
-		NormalizedName:        "rebuild entity",
-		EntityType:            "product",
-		EmbeddingNeedsRebuild: true,
-
-		EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, NameEmbedding: types.EntityNameEmbedding{0, 1, 0},
-	}).Error)
 	root := t.TempDir()
 	vault, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: root}})
 	require.NoError(t, err)
@@ -119,27 +109,23 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	h := newAllRebuildFixture(t, true)
 	run, err := h.rebuilder.Start(h.ctx, 1)
 	require.NoError(t, err)
-	require.EqualValues(t, 8, run.TotalCount)
+	require.EqualValues(t, 7, run.TotalCount)
 	require.NoError(t, h.rebuilder.Enqueue(h.ctx, run))
 	require.Equal(t, types.TypeEmbeddingRebuild, h.queue.last(t).Type())
 	var progress []int64
 	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, func(value *types.EmbeddingRebuildRun) { progress = append(progress, value.CompletedCount) }))
-	require.Equal(t, []int64{1, 2, 3, 4, 5, 6, 7, 8}, progress)
+	require.Equal(t, []int64{1, 2, 3, 4, 5, 6, 7}, progress)
 	status := h.state(t)
 	require.Equal(t, "completed", status.Status)
-	require.EqualValues(t, 8, status.CompletedCount)
+	require.EqualValues(t, 7, status.CompletedCount)
 	require.Zero(t, status.FailedCount)
-	require.Equal(t, 7, h.embedder.calls)
+	require.Equal(t, 6, h.embedder.calls)
 	require.Equal(t, 1, h.embedder.imageCalls)
 	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 		var wrong int64
 		require.NoError(t, h.db.Table(table).Where("model_id<>? OR dimension<>3", "replacement-model").Count(&wrong).Error)
 		require.Zero(t, wrong, table)
 	}
-	entity := readNameEntity(t, h.db, "entity")
-	require.Equal(t, "replacement-model", entity.EmbeddingModelID)
-	require.Equal(t, 3, entity.EmbeddingDimension)
-	require.False(t, entity.EmbeddingNeedsRebuild)
 	var documents []types.Entry
 	require.NoError(t, h.db.Find(&documents).Error)
 	for _, document := range documents {
@@ -149,62 +135,7 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	require.Contains(t, strings.Join(h.embedder.texts, "\n"), "整理结果")
 	// Consuming the previously queued task cannot rerun completed work.
 	require.NoError(t, h.rebuilder.Handle(h.ctx, h.queue.last(t)))
-	require.Equal(t, 7, h.embedder.calls)
-}
-
-func TestMaintenanceEmbeddingRebuildPreservesAllEntityProfileColumns(t *testing.T) {
-	for _, preserve := range []bool{true, false} {
-		name := "normal"
-		if preserve {
-			name = "maintenance"
-		}
-		t.Run(name, func(t *testing.T) {
-			h := newAllRebuildFixture(t, false)
-			originalAt := time.Date(2025, 1, 2, 3, 4, 5, 123456000, time.UTC)
-			require.NoError(t, h.db.Model(&types.Entity{}).Where("id='entity'").UpdateColumn("updated_at", originalAt).Error)
-			var before, after string
-			profileSQL := `SELECT (to_jsonb(e)-'name_embedding'-'embedding_model_id'-'embedding_dimension'-'embedding_needs_rebuild')::text FROM entities e WHERE id='entity'`
-			require.NoError(t, h.db.Raw(profileSQL).Scan(&before).Error)
-			h.rebuilder.PreserveEntityProfileTimestamps(preserve)
-			run, err := h.rebuilder.Start(h.ctx, 1)
-			require.NoError(t, err)
-			require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
-			require.Equal(t, "completed", h.state(t).Status)
-			require.NoError(t, h.db.Raw(profileSQL).Scan(&after).Error)
-			entity := readNameEntity(t, h.db, "entity")
-			require.Equal(t, "replacement-model", entity.EmbeddingModelID)
-			require.Equal(t, 3, entity.EmbeddingDimension)
-			require.False(t, entity.EmbeddingNeedsRebuild)
-			require.Equal(t, types.EntityNameEmbedding(h.embedder.vector()), entity.NameEmbedding)
-			if preserve {
-				require.JSONEq(t, before, after, "all nonregenerated profile columns must survive maintenance")
-				require.True(t, entity.UpdatedAt.Equal(originalAt))
-			} else {
-				require.True(t, entity.UpdatedAt.After(originalAt), "ordinary task 12 rebuild keeps its existing timestamp behavior")
-			}
-		})
-	}
-}
-
-func TestMaintenanceEmbeddingRebuildRejectsConcurrentEntityTimestampEdit(t *testing.T) {
-	h := newAllRebuildFixture(t, false)
-	h.rebuilder.PreserveEntityProfileTimestamps(true)
-	var editedAt time.Time
-	h.embedder.onEmbed = func(_ context.Context, text string) error {
-		if strings.Contains(text, "Rebuild Entity") {
-			editedAt = time.Date(2026, 10, 11, 10, 20, 30, 123456000, time.UTC)
-			require.NoError(t, h.db.Model(&types.Entity{}).Where("id='entity'").UpdateColumn("updated_at", editedAt).Error)
-		}
-		return nil
-	}
-	run, err := h.rebuilder.Start(h.ctx, 1)
-	require.NoError(t, err)
-	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
-	require.EqualValues(t, 1, h.state(t).FailedCount)
-	entity := readNameEntity(t, h.db, "entity")
-	require.True(t, entity.UpdatedAt.Equal(editedAt), "maintenance must not overwrite a concurrent profile edit")
-	require.Equal(t, "fixture-model", entity.EmbeddingModelID)
-	require.True(t, entity.EmbeddingNeedsRebuild)
+	require.Equal(t, 6, h.embedder.calls)
 }
 
 func TestAllEmbeddingRebuildInterruptResumeAndFailedRetry(t *testing.T) {
@@ -222,7 +153,7 @@ func TestAllEmbeddingRebuildInterruptResumeAndFailedRetry(t *testing.T) {
 	require.Equal(t, "paused", paused.Status)
 	require.EqualValues(t, 2, paused.CompletedCount)
 	h.embedder.onEmbed = func(_ context.Context, text string) error {
-		if strings.Contains(text, "Rebuild Entity") {
+		if strings.Contains(text, "semanticlaunch body passage 1") {
 			return errors.New("temporary model outage")
 		}
 		return nil
@@ -231,13 +162,13 @@ func TestAllEmbeddingRebuildInterruptResumeAndFailedRetry(t *testing.T) {
 	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
 	failed := h.state(t)
 	require.Equal(t, "completed_with_errors", failed.Status)
-	require.EqualValues(t, 7, failed.CompletedCount)
+	require.EqualValues(t, 6, failed.CompletedCount)
 	require.EqualValues(t, 1, failed.FailedCount)
 	status, err := h.rebuilder.Status(h.ctx, 1)
 	require.NoError(t, err)
 	require.Len(t, status.FailedItems, 1)
 	require.True(t, status.CurrentModelMatches)
-	require.Equal(t, "entity", status.FailedItems[0].Kind)
+	require.Equal(t, "article_chunk", status.FailedItems[0].Kind)
 	require.Contains(t, status.FailedItems[0].Error, "temporary model outage")
 	calls := h.embedder.calls
 	h.embedder.onEmbed = nil
@@ -245,9 +176,11 @@ func TestAllEmbeddingRebuildInterruptResumeAndFailedRetry(t *testing.T) {
 	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
 	require.Equal(t, calls+1, h.embedder.calls, "failed retry does not repeat completed vectors")
 	require.Equal(t, "completed", h.state(t).Status)
-	require.EqualValues(t, 8, h.state(t).CompletedCount)
+	require.EqualValues(t, 7, h.state(t).CompletedCount)
 	var item types.EmbeddingRebuildItem
-	require.NoError(t, h.db.Where("run_id=? AND kind='entity'", run.ID).First(&item).Error)
+	require.NoError(t,
+		h.db.Where("run_id=? AND kind='article_chunk' AND source_id='full-chunk-001'",
+			run.ID).First(&item).Error)
 	require.Equal(t, 2, item.Attempts)
 }
 
@@ -278,7 +211,7 @@ func TestAllEmbeddingRebuildTextOnlyAndModelChange(t *testing.T) {
 	h := newAllRebuildFixture(t, false)
 	run, err := h.rebuilder.Start(h.ctx, 1)
 	require.NoError(t, err)
-	require.EqualValues(t, 7, run.TotalCount)
+	require.EqualValues(t, 6, run.TotalCount)
 	require.NoError(t, h.rebuilder.Pause(h.ctx, 1, run.ID))
 	configureNameEmbedding(t, h.db, "another-model", 2)
 	h.models.models["another-model"] = &allRebuildEmbedder{nameRebuildEmbedder: nameRebuildEmbedder{id: "another-model", dimension: 2}}
@@ -313,7 +246,7 @@ func TestAllEmbeddingRebuildImagePauseDoesNotWaitForProvider(t *testing.T) {
 	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
 	paused := h.state(t)
 	require.Equal(t, "paused", paused.Status)
-	require.EqualValues(t, 5, paused.CompletedCount)
+	require.EqualValues(t, 4, paused.CompletedCount)
 	var identity string
 	require.NoError(t, h.db.Table("image_embeddings").Select("model_id").Where("entry_id=?", h.full.ID).Scan(&identity).Error)
 	require.Equal(t, "fixture-model", identity)
@@ -350,13 +283,25 @@ func TestAllEmbeddingRebuildLeaseRecoveryAndWriteFailureRetry(t *testing.T) {
 	run, err := h.rebuilder.Start(h.ctx, 1)
 	require.NoError(t, err)
 	// A killed process leaves pending items, and an expired lease is resumable.
-	require.NoError(t, h.db.Model(run).Updates(map[string]any{"status": "running", "attempt_id": "crashed", "lease_until": time.Now().Add(-time.Minute)}).Error)
+	require.NoError(
+		t,
+		h.db.Model(run).
+			Updates(map[string]any{
+				"status":      "running",
+				"attempt_id":  "crashed",
+				"lease_until": time.Now().Add(-time.Minute),
+			}).
+			Error,
+	)
 	require.NoError(t, h.rebuilder.Continue(h.ctx, 1, run.ID, false))
 	changed := false
 	h.embedder.onEmbed = func(_ context.Context, text string) error {
-		if !changed && strings.Contains(text, "Rebuild Entity") {
+		if !changed && strings.Contains(text, "full") {
 			changed = true
-			require.NoError(t, h.db.Model(&types.Entity{}).Where("id='entity'").Update("description", "Changed while embedding").Error)
+			require.NoError(
+				t,
+				h.db.Model(&types.Entry{}).Where("id='full'").Update("title", "Changed while embedding").Error,
+			)
 		}
 		return nil
 	}
@@ -376,7 +321,7 @@ func TestAllEmbeddingRebuildQueueFailurePreservesPendingCheckpoints(t *testing.T
 	require.ErrorContains(t, h.rebuilder.Enqueue(h.ctx, run), "task queue unavailable")
 	require.Equal(t, "failed", h.state(t).Status)
 	require.Zero(t, h.state(t).CompletedCount)
-	require.EqualValues(t, 7, h.state(t).TotalCount)
+	require.EqualValues(t, 6, h.state(t).TotalCount)
 	h.queue.err = nil
 	require.NoError(t, h.rebuilder.Continue(h.ctx, 1, run.ID, false))
 	require.NoError(t, h.rebuilder.Enqueue(h.ctx, run))
@@ -411,13 +356,13 @@ func TestAllEmbeddingRebuildRejectsBadVectorAndRetriesOnlyFailures(t *testing.T)
 	h.embedder.returnedDimension = 2
 	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
 	require.Equal(t, "completed_with_errors", h.state(t).Status)
-	require.EqualValues(t, 7, h.state(t).FailedCount)
+	require.EqualValues(t, 6, h.state(t).FailedCount)
 	require.Zero(t, h.state(t).CompletedCount)
 	h.embedder.returnedDimension = 0
 	require.NoError(t, h.rebuilder.Continue(h.ctx, 1, run.ID, true))
 	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
 	require.Equal(t, "completed", h.state(t).Status)
-	require.EqualValues(t, 7, h.state(t).CompletedCount)
+	require.EqualValues(t, 6, h.state(t).CompletedCount)
 }
 
 func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *testing.T) {
@@ -437,7 +382,7 @@ func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *te
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 	run, err := h.rebuilder.Start(h.ctx, 1)
 	require.NoError(t, err)
-	require.EqualValues(t, 10, run.TotalCount)
+	require.EqualValues(t, 9, run.TotalCount)
 	require.NoError(t, h.rebuilder.Run(h.ctx, 1, run.ID, nil))
 	require.Equal(t, "completed", h.state(t).Status)
 	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {

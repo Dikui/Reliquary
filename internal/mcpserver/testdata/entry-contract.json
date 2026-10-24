@@ -1,16 +1,15 @@
 {
   "association": {
-    "tenant_id": 1,
-    "entry_id": "item",
+    "created_at": "0001-01-01T00:00:00Z",
     "entity_id": "entity",
-    "created_at": "0001-01-01T00:00:00Z"
+    "entry_id": "item",
+    "tenant_id": 1
   },
   "entity_detail": {
     "entity": {
       "aliases": [],
       "canonical_name": "",
       "created_at": "0001-01-01T00:00:00Z",
-      "embedding_needs_rebuild": false,
       "entity_type": "",
       "id": "",
       "tenant_id": 0,
@@ -30,6 +29,7 @@
         "embedding_model_id": "",
         "enable_status": "",
         "entities": null,
+        "entities_manual": false,
         "error_message": "",
         "file_hash": "",
         "file_name": "",
@@ -79,6 +79,7 @@
     "embedding_model_id": "",
     "enable_status": "",
     "entities": null,
+    "entities_manual": false,
     "error_message": "",
     "file_hash": "",
     "file_name": "",

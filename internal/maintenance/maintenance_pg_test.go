@@ -27,11 +27,22 @@ func seedCurrentNames(t *testing.T, db *gorm.DB) {
 	statements := []string{
 		`INSERT INTO spaces(id,name,business,credentials) VALUES(1,'Owner','personal','{"app_secret":"SPACE_SECRET"}')`,
 		`INSERT INTO users(id,username,email,password_hash,space_id) VALUES('owner','owner','owner@example.test','$2a$10$preserved-owner-password-hash',1)`,
+
 		`INSERT INTO libraries(id,name,space_id,embedding_model_id,summary_model_id,chunking_config,indexing_strategy) VALUES('library','Personal',1,'embed','chat','{"chunk_size":512,"chunk_overlap":0}','{"keyword_enabled":true,"vector_enabled":true}')`,
+
 		`INSERT INTO models(id,space_id,name,type,source,parameters) VALUES('chat',1,'chat','KnowledgeQA','remote','{"api_key":"MODEL_SECRET","base_url":"http://user:PASSWORD@example.test/v1?api_key=QUERY_SECRET&normal=kept","nested":{"headers":{"Authorization":"Bearer HEADER_SECRET"},"ordinary":"keep"}}'),('embed',1,'embedding','Embedding','remote','{"dimension":3,"base_url":"http://localhost:19100"}')`,
-		`INSERT INTO entities(id,space_id,canonical_name,normalized_name,entity_type,description,created_at,updated_at) VALUES('entity-a',1,'Company A','company a','company','Owner description',now(),now()),('entity-b',1,'Company B','company b','company','Merged description',now(),now())`,
-		`INSERT INTO entity_aliases(id,space_id,entity_type,entity_id,alias,normalized_alias,resolution_method,created_at) VALUES('alias',1,'company','entity-a','A Inc','a inc','exact',now())`,
+
+		`INSERT INTO entities(id,space_id,canonical_name,normalized_name,entity_type,
+description,created_at,updated_at) VALUES('entity-a',1,'Company A','company a',
+'organization','Owner description',now(),now()),('entity-b',1,'Company B','company b',
+'organization','Merged description',now(),now())`,
+
+		`INSERT INTO entity_aliases(id,space_id,entity_type,entity_id,alias,normalized_alias,
+resolution_method,created_at) VALUES('alias',1,'organization','entity-a','A Inc',
+'a inc','exact',now())`,
+
 		`INSERT INTO entity_merge_records(id,space_id,keep_entity_id,merge_entity_id,actor,created_at) VALUES('merge',1,'entity-a','entity-b','owner',now())`,
+
 		`UPDATE entities SET merged_into_id='entity-a' WHERE id='entity-b'`,
 		`INSERT INTO topics(id,space_id,name,description) VALUES('topic',1,'Maintenance','User topic description')`,
 		`INSERT INTO entries(id,space_id,library_id,type,title,content_type,content_type_corrected,source_unverified,source_kind,source,parse_status,metadata,custom_metadata,collect_reason,agent_summary,agent_tags,vault_body) VALUES('pending',1,'library','manual','Pending source','research',false,false,'article','','rejected','{"manual":{"content":"Original review text"},"intake":{"decision":"rejected","reason":"missing link"}}','{"caller":"Grok"}','collect because useful','Caller summary','["tag"]','Pending original'),('article',1,'library','manual','Research article','research',true,true,'article','','completed','{"intake":{"decision":"approved","source_info":{"publisher":"Publisher"}}}','{}','owner reason','','[]','Immutable body')`,
@@ -50,6 +61,13 @@ func seedCurrentNames(t *testing.T, db *gorm.DB) {
 		`UPDATE maintenance_state SET backup_at='2026-10-01T12:00:00Z',backup_status='success',backup_path='/old-machine/backup',backup_size_bytes=1234,backup_error='',drill_at='2026-10-02T12:00:00Z',drill_status='failed',drill_error='retained historical failure' WHERE id=true`,
 	}
 	for _, statement := range statements {
+		statement = strings.ReplaceAll(statement, "\n", "")
+		if !db.Migrator().HasColumn("entities", "description") && strings.Contains(statement, "INSERT INTO entities(") {
+			statement = strings.ReplaceAll(statement, "entity_type,description,created_at", "entity_type,created_at")
+			statement = strings.ReplaceAll(statement, "'organization','Owner description'", "'organization'")
+			statement = strings.ReplaceAll(statement, "'organization','Merged description'", "'organization'")
+		}
+
 		if !db.Migrator().HasTable("topics") {
 			if strings.Contains(statement, "INSERT INTO topics(") ||
 				strings.Contains(statement, "INSERT INTO entry_topics(") {
@@ -258,17 +276,31 @@ func TestVectorManifestComparesCoverageAndProfileNotValuesOrChunkIDs(t *testing.
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
-	for _, statement := range []string{`INSERT INTO chunks(id,space_id,library_id,entry_id,content,chunk_index,start_at,end_at,content_hash) VALUES('chunk-a',1,'library','article','observations',0,0,12,'chunkhash')`, `INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding) VALUES('chunk-a',0,'chunk-a','article','library','embed',3,'[1,0,0]')`, `INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','embed',3,'[1,0,0]','articlehash')`, `INSERT INTO image_embeddings(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES('article',1,'library','../../attachments/article/image.png','embed',3,'[1,0,0]','imagehash')`, `UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'`} {
+	for _, statement := range []string{
+		`INSERT INTO chunks(id,space_id,library_id,entry_id,content,chunk_index,start_at,
+end_at,content_hash) VALUES('chunk-a',1,'library','article','observations',
+0,0,12,'chunkhash')`,
+
+		`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,model_id,
+dimension,embedding) VALUES('chunk-a',0,'chunk-a','article','library','embed',
+3,'[1,0,0]')`,
+
+		`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,
+embedding,content_hash) VALUES('article',1,'library','embed',3,'[1,0,0]','articlehash')`,
+
+		`INSERT INTO image_embeddings(entry_id,space_id,library_id,attachment_path,model_id,
+dimension,embedding,content_hash) VALUES('article',1,'library','../../attachments/article/image.png',
+'embed',3,'[1,0,0]','imagehash')`,
+	} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
 	wanted, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
-	require.Len(t, wanted.Vectors, 4)
+	require.Len(t, wanted.Vectors, 3)
 	require.Contains(t, wanted.Retrieval[1].IDs, "article")
 	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 		require.NoError(t, db.Exec("UPDATE "+table+" SET embedding='[0,1,0]'").Error)
 	}
-	require.NoError(t, db.Exec("UPDATE entities SET name_embedding='[0,1,0]' WHERE id='entity-a'").Error)
 	require.NoError(t, db.Exec("UPDATE chunks SET id='chunk-b' WHERE id='chunk-a'").Error)
 	require.NoError(t, db.Exec("UPDATE embeddings SET chunk_id='chunk-b',source_id='chunk-b' WHERE chunk_id='chunk-a'").Error)
 	actual, err := BuildManifest(ctx, db, root, "")
@@ -304,7 +336,7 @@ func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
 	require.NoError(
 		t,
 		db.Exec(
-			"UPDATE entities SET description=? WHERE id='entity-a'",
+			"UPDATE entities SET canonical_name=? WHERE id='entity-a'",
 			strings.Repeat("changed", 8),
 		).Error,
 	)
@@ -324,7 +356,7 @@ func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
 	require.NoError(t, err)
 	// Each class changes through raw SQL, exercising the periodic fallback too.
 	for _, statement := range []string{
-		`UPDATE entities SET description='new description' WHERE id='entity-a'`,
+		`UPDATE entities SET canonical_name='new description' WHERE id='entity-a'`,
 		`UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`,
 		`UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`,
 		`UPDATE entry_entities SET created_at=now() WHERE entity_id='entity-a'`,

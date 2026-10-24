@@ -195,25 +195,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
 
-  {
-    "file": "views/library/components/EntryWorkbench.vue",
-    "expressions": [
-      "`knowledgeWorkbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`",
-      "`knowledgeWorkbench.nameEmbeddings.status.${status}`",
-      "`knowledgeWorkbench.nav.${section}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/library/components/MergeSuggestions.vue",
-    "expressions": [
-      "`mergeSuggestions.empty.${status}`",
-      "`mergeSuggestions.feedback.${action}`",
-      "`mergeSuggestions.status.${item.status}`",
-      "`mergeSuggestions.status.${value}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
+
   {
     "file": "views/library/components/RepostSources.vue",
     "expressions": [

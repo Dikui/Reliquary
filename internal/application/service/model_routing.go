@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
-
-	"gorm.io/gorm"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"strings"
+
+	"gorm.io/gorm"
 )
 
 type ResolvedModelTier struct {
@@ -87,7 +87,7 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 		if id := library.ModelTiers.ModelID(tier); id != "" {
 			return ResolvedModelTier{id, "library"}, nil
 		}
-		if tier == types.ModelTierLight || tier == types.ModelTierEntityResolution {
+		if tier == types.ModelTierLight {
 			if id := library.ModelTiers.ModelID(types.ModelTierGeneration); id != "" {
 				return ResolvedModelTier{id, "generation"}, nil
 			}
@@ -100,7 +100,7 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, library *types.Library, 
 			if strings.TrimSpace(id) == "" {
 				id = library.SummaryModelID
 			}
-		case types.ModelTierEntityResolution, types.ModelTierGeneration:
+		case types.ModelTierGeneration:
 			id = library.SummaryModelID
 		case types.ModelTierEmbedding:
 			id = library.EmbeddingModelID
@@ -138,6 +138,7 @@ func (m *tierChat) Chat(ctx context.Context, messages []chat.Message, opts *chat
 	types.RecordModelCall(ctx, m.GetModelID())
 	return m.inner.Chat(ctx, messages, opts)
 }
+
 func (m *tierChat) ChatStream(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	ctx = types.WithModelTier(ctx, m.tier)
 	types.RecordModelCall(ctx, m.GetModelID())
@@ -194,11 +195,13 @@ func (m *tierEmbedder) Embed(ctx context.Context, text string) ([]float32, error
 	types.RecordModelCall(ctx, m.GetModelID())
 	return m.inner.Embed(ctx, text)
 }
+
 func (m *tierEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
 	types.RecordModelCall(ctx, m.GetModelID())
 	return m.inner.BatchEmbed(ctx, texts)
 }
+
 func (m *tierEmbedder) BatchEmbedWithPool(ctx context.Context, model embedding.Embedder, texts []string) ([][]float32, error) {
 	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
 	return m.inner.BatchEmbedWithPool(ctx, m, texts)

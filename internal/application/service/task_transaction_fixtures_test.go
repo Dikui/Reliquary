@@ -2,8 +2,9 @@ package service
 
 import (
 	"context"
-	"gorm.io/gorm"
 	taskqueue "reliquary/internal/queue"
+
+	"gorm.io/gorm"
 )
 
 // These fixtures inspect payloads while PostgreSQL integration tests exercise
@@ -18,10 +19,6 @@ func (q *intakeTask) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Ta
 }
 
 func (q *metadataUpdateTaskEnqueuer) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
-	return q.Enqueue(task, opts...)
-}
-
-func (q *nameEmbeddingTriggerQueue) EnqueueTx(_ context.Context, _ *gorm.DB, task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	return q.Enqueue(task, opts...)
 }
 

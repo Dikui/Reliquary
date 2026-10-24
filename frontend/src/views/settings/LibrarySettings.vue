@@ -120,7 +120,7 @@ async function load() {
     hasFiles.value = (files?.total || 0) > 0
     formData.value = {
 
-      modelTiers: copyModelTiers({ light: library.summary_model_id || '', entity_resolution: library.summary_model_id || '', generation: library.summary_model_id || '', embedding: library.embedding_model_id || '', ...library.model_tiers }),
+      modelTiers: copyModelTiers({ light: library.summary_model_id || '', generation: library.summary_model_id || '', embedding: library.embedding_model_id || '', ...library.model_tiers }),
       name: library.name || '',
       description: library.description || '',
 

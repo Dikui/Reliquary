@@ -115,7 +115,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 		}
 	}
 	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{
-		input, prompt, segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget,
+		input, prompt, segmentSummaryPrompt(), segmentModelIdentity(model), budget,
 	})
 	if err != nil {
 		return nil, err
@@ -188,40 +188,6 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	return result, nil
 }
 
-func (s *entryService) resolveProcessingEntities(ctx context.Context, k *types.Entry, candidates []types.EntityCandidate, result *articleProcessingResult) ([]types.Entity, error) {
-	resolved := []types.Entity{}
-	identities := map[string]string{}
-	for offset := 0; offset < len(candidates); offset += 500 {
-		batch, mapping, err := NewEntityService(s.db, s.modelService).resolveEntityCandidates(ctx, k.ID, candidates[offset:min(offset+500, len(candidates))])
-		if err != nil {
-			return nil, err
-		}
-		resolved = append(resolved, batch...)
-		for key, id := range mapping {
-			identities[key] = id
-		}
-	}
-	result.ResolvedEntities = identities
-	if result.Provenance != nil {
-		result.Provenance.ResolvedEntities = map[string][]int{}
-		for key, id := range identities {
-			for _, n := range result.Provenance.Entities[key] {
-				result.Provenance.ResolvedEntities[id] = appendSegmentNumber(result.Provenance.ResolvedEntities[id], n)
-			}
-		}
-		if result.RunID != "" {
-			data, err := json.Marshal(result)
-			if err != nil {
-				return nil, err
-			}
-			if err = s.db.WithContext(ctx).Model(&entrySegmentRun{}).Where("id=? AND entry_id=? AND space_id=?", result.RunID, k.ID, k.SpaceID).Update("result", types.JSON(data)).Error; err != nil {
-				return nil, err
-			}
-		}
-	}
-	return resolved, nil
-}
-
 func appendSegmentNumber(values []int, n int) []int {
 	for _, v := range values {
 		if v == n {
@@ -231,8 +197,7 @@ func appendSegmentNumber(values []int, n int) []int {
 	return append(values, n)
 }
 
-// Entity identity remains the existing resolver's responsibility. This merge
-// collapses exact normalized name/type candidates and retains all aliases.
+// Merge summaries, images and extension contributions from accepted segments.
 func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingResult {
 	p := &articleProcessingProvenance{Entities: map[string][]int{}}
 	merged := &articleProcessingResult{
@@ -242,28 +207,10 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 		Provenance: p,
 		Extensions: map[string][]SegmentContribution{},
 	}
-	entityIndex := map[string]int{}
 	for i, part := range parts {
 		n := i + 1
 		merged.Images = append(merged.Images, part.Images...)
 		p.Summary = append(p.Summary, n)
-		for _, entity := range part.Entities {
-			key := entityNameKey(*entity.Type, entity.Name)
-			if index, ok := entityIndex[key]; ok {
-				if merged.Entities[index].Description == "" {
-					merged.Entities[index].Description = entity.Description
-					merged.Entities[index].Evidence = entity.Evidence
-					merged.Entities[index].EvidenceIDs = entity.EvidenceIDs
-				}
-				for _, alias := range entity.Aliases {
-					merged.Entities[index].Aliases = appendUniqueEntityString(merged.Entities[index].Aliases, alias)
-				}
-			} else {
-				entityIndex[key] = len(merged.Entities)
-				merged.Entities = append(merged.Entities, entity)
-			}
-			p.Entities[key] = appendSegmentNumber(p.Entities[key], n)
-		}
 		for key, values := range part.Extensions {
 			for _, value := range values {
 				value.Segment = n

@@ -82,16 +82,15 @@ SELECT * FROM jsonb_populate_record(NULL::entry_entities,?::jsonb)`,
 		},
 		{
 			name:     "changed_description",
-			mutate:   `UPDATE entities SET description='Changed user description' WHERE id='entity-a'`,
-			restore:  `UPDATE entities SET description='Owner description' WHERE id='entity-a'`,
+			mutate:   `UPDATE entities SET canonical_name='Changed name' WHERE id='entity-a'`,
+			restore:  `UPDATE entities SET canonical_name='Company A' WHERE id='entity-a'`,
 			expected: "table entities",
 		},
 		{
 			name: "unexpected_row",
 			mutate: `INSERT INTO entities(id,space_id,canonical_name,normalized_name,
-entity_type,description,created_at,updated_at)
-VALUES('unexpected',1,'Unexpected','unexpected','company',
-'Must not be absorbed into a fresh baseline',now(),now())`,
+entity_type,created_at,updated_at)
+VALUES('unexpected',1,'Unexpected','unexpected','organization',now(),now())`,
 			restore:  `DELETE FROM entities WHERE id='unexpected'`,
 			expected: "table entities",
 		},

@@ -7,23 +7,22 @@ import (
 
 // Entity is a canonical entity shared by the personal space.
 type Entity struct {
-	ID                       string                  `json:"id" gorm:"type:varchar(36);primaryKey"`
-	SpaceID                  uint64                  `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_canonical"`
-	CanonicalName            string                  `json:"canonical_name" gorm:"type:varchar(512);not null"`
-	NormalizedName           string                  `json:"-" gorm:"type:varchar(512);not null;uniqueIndex:idx_entity_canonical"`
-	EntityType               string                  `json:"entity_type" gorm:"type:varchar(128);not null;default:'other';uniqueIndex:idx_entity_canonical"`
-	Description              string                  `json:"description,omitempty" gorm:"type:text;not null;default:''"`
-	NameEmbedding            EntityNameEmbedding     `json:"-" gorm:"type:vector"`
-	NameEmbeddingProfileHash string                  `json:"-" gorm:"-"`
-	EmbeddingModelID         string                  `json:"embedding_model_id,omitempty" gorm:"type:varchar(64);not null;default:''"`
-	EmbeddingDimension       int                     `json:"embedding_dimension,omitempty" gorm:"not null;default:0"`
-	EmbeddingNeedsRebuild    bool                    `json:"embedding_needs_rebuild" gorm:"not null"`
-	MergedIntoID             string                  `json:"merged_into_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
-	CreatedAt                time.Time               `json:"created_at"`
-	UpdatedAt                time.Time               `json:"updated_at"`
-	Aliases                  []string                `json:"aliases" gorm:"-"`
-	AliasResolutions         []EntityAlias           `json:"-" gorm:"-"`
-	MergeSuggestions         []EntityMergeSuggestion `json:"-" gorm:"-"`
+	ID             string    `json:"id" gorm:"type:varchar(36);primaryKey"`
+	SpaceID        uint64    `json:"space_id" gorm:"not null"`
+	CanonicalName  string    `json:"canonical_name" gorm:"type:varchar(512);not null"`
+	NormalizedName string    `json:"-" gorm:"type:varchar(512);not null"`
+	EntityType     string    `json:"entity_type" gorm:"type:varchar(128);not null"`
+	MergedIntoID   string    `json:"merged_into_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	Aliases        []string  `json:"aliases" gorm:"-"`
+}
+
+// EntityInput replaces an entity's editable directory fields.
+type EntityInput struct {
+	CanonicalName string   `json:"canonical_name" binding:"required"`
+	EntityType    string   `json:"entity_type" binding:"required"`
+	Aliases       []string `json:"aliases"`
 }
 
 func (Entity) TableName() string { return "entities" }
@@ -41,24 +40,6 @@ type EntityAlias struct {
 }
 
 func (EntityAlias) TableName() string { return "entity_aliases" }
-
-type EntityMergeSuggestion struct {
-	EntryID             string     `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
-	ID                  string     `json:"id" gorm:"type:varchar(36);primaryKey"`
-	SpaceID             uint64     `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
-	NewEntityID         string     `json:"new_entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
-	CandidateEntityID   string     `json:"candidate_entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_merge_suggestion_pair"`
-	Reason              string     `json:"reason" gorm:"type:text;not null"`
-	Status              string     `json:"status" gorm:"type:varchar(16);not null;default:'pending';index"`
-	CreatedAt           time.Time  `json:"created_at"`
-	DecidedAt           *time.Time `json:"decided_at,omitempty"`
-	NewEntityName       string     `json:"new_entity_name" gorm:"column:new_entity_name;->;-:migration"`
-	CandidateEntityName string     `json:"candidate_entity_name" gorm:"column:candidate_entity_name;->;-:migration"`
-}
-
-func (EntityMergeSuggestion) TableName() string {
-	return "entity_merge_suggestions"
-}
 
 // EntryEntity associates an article with a canonical entity.
 type EntryEntity struct {
@@ -81,14 +62,6 @@ type EntityMergeRecord struct {
 
 func (EntityMergeRecord) TableName() string { return "entity_merge_records" }
 
-// EntityCandidate is supplied by a caller that has already recognized names.
-type EntityCandidate struct {
-	Name        string   `json:"name"`
-	EntityType  string   `json:"entity_type"`
-	Aliases     []string `json:"aliases,omitempty"`
-	Description string   `json:"description,omitempty"`
-}
-
 type EntityQuery struct {
 	Entity     string `json:"entity,omitempty"`
 	EntityType string `json:"entity_type,omitempty"`
@@ -108,9 +81,9 @@ type EntityDetail struct {
 	Entries       []Entry              `json:"entries"`
 }
 
-var EntityTypes = []string{"company", "person", "product", "project", "organization", "other"}
+// EntityTypes are the supported kinds of maintained entities.
+var EntityTypes = []string{"organization", "person"}
 
-// NormalizeEntityType maps unknown types to other.
 func NormalizeEntityType(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	for _, allowed := range EntityTypes {
@@ -118,5 +91,5 @@ func NormalizeEntityType(value string) string {
 			return value
 		}
 	}
-	return "other"
+	return ""
 }

@@ -31,10 +31,7 @@ func libraryProcessingPrompt(l *types.Library, _ *types.Entry) string {
 	default:
 		prompt += "\n" + config.Prompt("library_institutional")
 	}
-	if !l.ExtractsEntities() {
-		return prompt + "\n本库不抽取实体或实体短介绍。entities 必须返回空数组。"
-	}
-	return prompt + "\n" + articleEntityProcessingPrompt()
+	return prompt
 }
 
 func bodyRangeLocations(body string, start, end int, mapping string) []types.SourceLocation {
@@ -79,46 +76,26 @@ func articleEvidenceLocations(ids []int, blocks []types.SourceLocation) []types.
 	return locations
 }
 
-func eligibleProcessingEntity(entity articleProcessingEntity) bool {
-	if entity.Type == nil || (entity.Relevance != "central" && entity.Relevance != "participant") {
-		return false
-	}
-	switch types.NormalizeEntityType(*entity.Type) {
-	case "company", "product", "organization":
-		return true
-	}
-	return false
-}
-
-func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types.ProcessingSegment, result *articleProcessingResult) {
-	if !l.ExtractsEntities() {
-		result.Entities = []articleProcessingEntity{}
-	}
-	runes := []rune(body)
-	_, blocks := articleEvidenceBody(string(runes[p.Start:p.End]))
-	accepted := []articleProcessingEntity{}
-	for _, entity := range result.Entities {
-		if !eligibleProcessingEntity(entity) {
-			continue
-		}
-		entity.Aliases = nil
-		entity.Description = strings.TrimSpace(entity.Description)
-		locations := articleEvidenceLocations(entity.EvidenceIDs, blocks)
-		if len(locations) == 0 {
-			continue
-		}
-		entity.Evidence = []types.SourceLocation{}
-		for _, location := range locations {
-			entity.Evidence = append(entity.Evidence, bodyRangeLocations(body, p.Start+location.Start, p.Start+location.End, "exact")...)
-		}
-		accepted = append(accepted, entity)
-	}
-	result.Entities = accepted
+func qualifySegmentOutput(
+	_ *types.Library,
+	_ *types.Entry,
+	_ string,
+	_ types.ProcessingSegment,
+	result *articleProcessingResult,
+) {
+	// Ignore legacy segment payloads containing extracted names.
+	result.Entities = nil
+	result.ResolvedEntities = nil
 }
 
 // ReadEntryProcessingOutput supplies the latest accepted processing evidence.
 // Scope and saved-body hash let consumers reject stale evidence after supplementation.
-func ReadEntryProcessingOutput(ctx context.Context, db *gorm.DB, spaceID uint64, entryID string) (*types.EntryProcessingOutput, error) {
+func ReadEntryProcessingOutput(
+	ctx context.Context,
+	db *gorm.DB,
+	spaceID uint64,
+	entryID string,
+) (*types.EntryProcessingOutput, error) {
 	var result types.EntryProcessingOutput
 	err := db.WithContext(ctx).Where("space_id=? AND entry_id=?", spaceID, entryID).First(&result).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

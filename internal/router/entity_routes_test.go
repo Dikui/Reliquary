@@ -3,15 +3,15 @@ package router
 import (
 	"encoding/json"
 	"net/http"
+	"reliquary/internal/application/service"
+	"reliquary/internal/handler"
+	"reliquary/internal/middleware"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/service"
-	"reliquary/internal/handler"
-	"reliquary/internal/middleware"
-	"reliquary/internal/types"
 )
 
 func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T) {
@@ -20,16 +20,52 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	library := types.Library{ID: "route-library", SpaceID: 1, Name: "Articles", Type: "document"}
 	library.EnsureDefaults()
 	require.NoError(t, db.Create(&library).Error)
-	entity := types.Entity{ID: "route-entity", SpaceID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
+	entity := types.Entity{
+		ID:             "route-entity",
+		SpaceID:        1,
+		CanonicalName:  "Acme",
+		NormalizedName: "acme",
+		EntityType:     "organization",
+	}
 	require.NoError(t, db.Create(&entity).Error)
-	require.NoError(t, db.Create(&types.EntityAlias{ID: "route-alias", SpaceID: 1, EntityID: entity.ID, EntityType: "company", Alias: "艾克米", NormalizedAlias: "艾克米", ResolutionMethod: "exact", CreatedAt: time.Now()}).Error)
-	article := types.Entry{ID: "route-article", SpaceID: 1, LibraryID: library.ID, Title: "Article mention", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
+	require.NoError(t,
+		db.Create(&types.EntityAlias{
+			ID:               "route-alias",
+			SpaceID:          1,
+			EntityID:         entity.ID,
+			EntityType:       "organization",
+			Alias:            "艾克米",
+			NormalizedAlias:  "艾克米",
+			ResolutionMethod: "exact",
+			CreatedAt:        time.Now(),
+		}).Error)
+	article := types.Entry{
+		ID:           "route-article",
+		SpaceID:      1,
+		LibraryID:    library.ID,
+		Title:        "Article mention",
+		Type:         types.EntryTypeManual,
+		ParseStatus:  types.ParseStatusCompleted,
+		EnableStatus: "enabled",
+	}
 	require.NoError(t, db.Create(&article).Error)
-	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: entity.ID, CreatedAt: time.Now()}).Error)
+	require.NoError(t,
+		db.Create(&types.EntryEntity{
+			SpaceID:   1,
+			EntryID:   article.ID,
+			EntityID:  entity.ID,
+			CreatedAt: time.Now(),
+		}).Error)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), entityIdentityMiddleware())
 	RegisterEntityRoutes(engine.Group("/api/v1"), handler.NewEntityHandler(service.NewEntityService(db, nil)))
-	response := entityRequest(t, engine, http.MethodGet, "/api/v1/entities?entity_type=company&entity=艾克米&limit=1&offset=0", "", 1, entityOwnerID)
+	response := entityRequest(t,
+		engine,
+		http.MethodGet,
+		"/api/v1/entities?entity_type=organization&entity=艾克米&limit=1&offset=0",
+		"",
+		1,
+		entityOwnerID)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var envelope entityEnvelope
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
@@ -42,7 +78,7 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
 	var detail types.EntityDetail
 	require.NoError(t, json.Unmarshal(envelope.Data, &detail))
-	require.Equal(t, "company", detail.Entity.EntityType)
+	require.Equal(t, "organization", detail.Entity.EntityType)
 	require.Equal(t, []string{"艾克米"}, detail.Entity.Aliases)
 	require.Len(t, detail.Entries, 1)
 	require.Equal(t, article.ID, detail.Entries[0].ID)
@@ -55,7 +91,9 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 }
 
 func TestEntityResponsesEncodeEmptyAliasesAndArticlesAsArrays(t *testing.T) {
-	encoded, err := json.Marshal(types.EntityDetail{Entity: types.Entity{ID: "empty-entity", EntityType: "other"}})
+	encoded, err := json.Marshal(types.EntityDetail{
+		Entity: types.Entity{ID: "empty-entity", EntityType: "organization"},
+	})
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(encoded, &fields))

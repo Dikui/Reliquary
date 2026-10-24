@@ -200,7 +200,7 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 	embedding.Source = types.ModelSourceRemote
 	embedding.Parameters.BaseURL, embedding.Parameters.Provider = server.URL+"/v1", "generic"
 	require.NoError(t, h.db.Save(&embedding).Error)
-	h.library.ModelTiers = types.ModelTierConfig{Light: model.ID, Generation: model.ID, EntityResolution: model.ID, Embedding: embedding.ID}
+	h.library.ModelTiers = types.ModelTierConfig{Light: model.ID, Generation: model.ID, Embedding: embedding.ID}
 	h.library.SummaryModelID, h.library.EmbeddingModelID = model.ID, embedding.ID
 	require.NoError(t, h.db.Save(h.library).Error)
 	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", h.library.EmbeddingModelID).Error)
@@ -221,7 +221,12 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 	case "intake_review":
 		return `{"approved":true,"reason":"Complete original publication"}`, ""
 	case "article_processing":
-		return articleProcessingOutput(t, []types.EntityCandidate{{Name: "Fixture Acme", EntityType: "company"}}), ""
+		return articleProcessingOutput(t,
+				[]legacyEntityCandidate{{
+					Name:       "Fixture Acme",
+					EntityType: "organization",
+				}}),
+			""
 	case "entity_resolution":
 		return `{"decision":"new","confidence":1}`, ""
 	default:
@@ -229,17 +234,13 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 	}
 }
 
-func TestChatGPTGenerationRunsProcessingEntityJudgement(t *testing.T) {
+func TestChatGPTGenerationRunsProcessingWithoutEntityJudgement(t *testing.T) {
 	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
 		if request.stage() == "entity_resolution" {
 			return `{"decision":"match","entity_id":"existing-acme","confidence":0.99}`, ""
 		}
 		return chatGPTGenerationSuccess(t, request)
 	})
-	// Identity judgment needs a candidate; empty recall now creates directly.
-	existing := entityRecord("existing-acme", "Fixture Acme", "organization")
-	existing.SpaceID = h.library.SpaceID
-	require.NoError(t, h.db.Create(&existing).Error)
 	image := articleImageDataURI(t, 22)
 	article := h.upload(t, "chatgpt-original", "# Original product announcement\n\nFixture Acme published measured product capabilities and deployment details.\n\n![chart]("+image+")")
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
@@ -251,10 +252,9 @@ func TestChatGPTGenerationRunsProcessingEntityJudgement(t *testing.T) {
 	require.Equal(t, "approved", intake.Decision)
 	var entities []types.Entity
 	require.NoError(t, h.db.Find(&entities).Error)
-	require.Len(t, entities, 1)
-	require.Equal(t, "Fixture Acme", entities[0].CanonicalName)
+	require.Empty(t, entities)
 	requests := h.requests()
-	require.Len(t, requests, 2, "each retained generation path must reach the real ChatGPT model service")
+	require.Len(t, requests, 1, "each retained generation path must reach the real ChatGPT model service")
 	stages := make([]string, 0, len(requests))
 	for _, request := range requests {
 		stages = append(stages, request.stage())
@@ -269,10 +269,10 @@ func TestChatGPTGenerationRunsProcessingEntityJudgement(t *testing.T) {
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
 	}
-	require.Equal(t, []string{"article_processing", "entity_resolution"}, stages)
+	require.Equal(t, []string{"article_processing"}, stages)
 	policy, err := h.policy.Get(h.ctx)
 	require.NoError(t, err)
-	require.Equal(t, 2, policy.DailyUsed)
+	require.Equal(t, 1, policy.DailyUsed)
 	_, err = h.models.GetEmbeddingModel(h.ctx, "chatgpt-generation")
 	require.Error(t, err, "subscription generation model cannot supply embedding")
 }

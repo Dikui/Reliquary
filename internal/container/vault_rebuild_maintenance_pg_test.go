@@ -2,18 +2,18 @@ package container
 
 import (
 	"context"
-	"reliquary/internal/testutil/redistest"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
 	"reliquary/internal/maintenance"
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/testutil/redistest"
 	"reliquary/internal/types"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTasks(t *testing.T) {
@@ -23,10 +23,21 @@ func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTas
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", uploads)
 	_, err := repository.EnsureSystemLibraries(ctx, source, types.SingleSpaceID, "")
 	require.NoError(t, err)
-	require.NoError(t, source.Create(&types.Entity{ID: "preserved-profile", SpaceID: 1, CanonicalName: "Preserved owner profile", NormalizedName: "preserved owner profile", EntityType: "product", Description: "Keep user information while configuring recovery"}).Error)
+	require.NoError(t,
+		source.Create(&types.Entity{
+			ID:             "preserved-profile",
+			SpaceID:        1,
+			CanonicalName:  "Preserved owner profile",
+			NormalizedName: "preserved owner profile",
+			EntityType:     "organization",
+		}).Error)
 	jobs := redistest.NewClient(t, source)
 	for _, state := range []string{"active", "pending"} {
-		_, err := jobs.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"entry_id":"preserved-article","original":"accepted original"}`)), queue.TaskID(state), queue.MaxRetry(7))
+		_,
+			err := jobs.Enqueue(queue.NewTask(types.TypeManualProcess,
+			[]byte(`{"entry_id":"preserved-article","original":"accepted original"}`)),
+			queue.TaskID(state),
+			queue.MaxRetry(7))
 		require.NoError(t, err)
 		require.NoError(t, source.Exec(`UPDATE task_pending_ops SET state=?,retried=2,fail_count=1,last_error='preserved previous failure' WHERE id=?`, state, state).Error)
 	}

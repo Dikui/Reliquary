@@ -2,14 +2,13 @@ package service
 
 import (
 	"context"
-	"testing"
-
-	"github.com/stretchr/testify/require"
-
 	"reliquary/internal/application/repository"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type intakeDeleteRepo struct {
@@ -21,7 +20,13 @@ type intakeDeleteRepo struct {
 func TestDeleteArticleRemovesEntityAssociationsAndRetainsEntity(t *testing.T) {
 	db := pgtest.Open(t)
 	article := &types.Entry{ID: "article", SpaceID: 1, LibraryID: "library", ParseStatus: types.ParseStatusCompleted}
-	entity := &types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
+	entity := &types.Entity{
+		ID:             "entity",
+		SpaceID:        1,
+		CanonicalName:  "Acme",
+		NormalizedName: "acme",
+		EntityType:     "organization",
+	}
 	require.NoError(t, db.Create(article).Error)
 	require.NoError(t, db.Create(entity).Error)
 	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: entity.ID}).Error)

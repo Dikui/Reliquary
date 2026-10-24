@@ -199,13 +199,6 @@ func (v *VaultService) verify(ctx context.Context, repair, exported bool) (*main
 	for key, query := range map[string]string{
 		"articles": `SELECT count(*) FROM entries k JOIN libraries b ON b.id=k.library_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
 		"chunks":   `SELECT count(*) FROM chunks c JOIN libraries b ON b.id=c.library_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
-		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
- SELECT 1 FROM libraries b LEFT JOIN models m ON m.id=EMBEDDING_MODEL_SQL
- WHERE b.space_id=e.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
- e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
- OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
- OR (COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0)>0
- AND e.embedding_dimension<>COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0))))`,
 	} {
 		var count int64
 		if err := v.db.WithContext(ctx).Raw(strings.ReplaceAll(query, "EMBEDDING_MODEL_SQL", embeddingModelSQL)).Scan(&count).Error; err != nil {

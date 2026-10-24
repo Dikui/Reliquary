@@ -1,3 +1,4 @@
+import { CHUNKING_SAMPLES } from '../views/library/settings/chunkingSamples'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import test from 'node:test'
@@ -83,4 +84,20 @@ test('both locales remove knowledge labels and retired interaction sections with
     assert.doesNotMatch(key, retired)
     assert.doesNotMatch(key, /^library\.(?:tag|batchTag|anomalies|strategy|chunkHistory|sourceUpdate|rssUpdate)/)
   }
+})
+
+
+test('entity maintenance copy describes the supported directory and content vectors', () => {
+  const retired = /待合并建议|merge suggestions|实体档案|entity profiles|entity name (?:embedding|similarity)|实体名(?:称)?向量|抽取实体|实体识别|实体解析档位|Entity resolution tier|extract(?:ing)? entities/i
+  for (const [locale, bundle] of Object.entries({ 'en-US': enUS, 'zh-CN': zhCN })) {
+    for (const key of collectLocaleKeys(bundle)) {
+      const value = getLocaleValueAtPath(bundle, key) as string
+      if (/^(?:历史调用：|Historical call:)/.test(value)) continue
+      assert.doesNotMatch(value, retired, `${locale}: ${key}`)
+    }
+    assert.equal('mergeSuggestions' in bundle, false)
+    assert.equal('nameEmbeddings' in bundle.knowledgeWorkbench, false)
+    assert.equal('entity' in bundle.embeddingRebuild.kinds, false)
+  }
+  for (const sample of CHUNKING_SAMPLES) assert.doesNotMatch(sample.text, retired, sample.id)
 })

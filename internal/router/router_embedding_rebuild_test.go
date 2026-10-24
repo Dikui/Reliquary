@@ -5,10 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"testing"
-
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
@@ -16,6 +12,10 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 type rebuildRouteModel struct {
@@ -38,20 +38,46 @@ func (e *rebuildRouteEmbedder) Embed(context.Context, string) ([]float32, error)
 	}
 	return []float32{1, 0}, nil
 }
+
 func (e *rebuildRouteEmbedder) BatchEmbed(context.Context, []string) ([][]float32, error) {
 	return nil, nil
 }
+
 func (e *rebuildRouteEmbedder) BatchEmbedWithPool(context.Context, embedding.Embedder, []string) ([][]float32, error) {
 	return nil, nil
 }
 
 func TestEmbeddingRebuildHTTPProgressPauseResumeAndRetry(t *testing.T) {
 	db := entityFixtureDB(t)
-	require.NoError(t, db.Create(&types.Space{ID: 1, EmbeddingModelID: "http-embedding", Name: "Embedding owner"}).Error)
-	require.NoError(t, db.Create(&types.Library{ID: "http-library", SpaceID: 1, Name: "HTTP", ModelTiers: types.ModelTierConfig{Embedding: "http-embedding"}}).Error)
-	require.NoError(t, db.Create(&types.Model{ID: "http-embedding", SpaceID: 1, Name: "HTTP embedding", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive,
-		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 2}}}).Error)
-	require.NoError(t, db.Create(&types.Entity{ID: "rebuild-http-entity", SpaceID: 1, CanonicalName: "HTTP", NormalizedName: "http", EntityType: "product", EmbeddingNeedsRebuild: true}).Error)
+	require.NoError(t,
+		db.Create(&types.Space{
+			ID:               1,
+			EmbeddingModelID: "http-embedding",
+			Name:             "Embedding owner",
+		}).Error)
+	require.NoError(t,
+		db.Create(&types.Library{
+			ID:         "http-library",
+			SpaceID:    1,
+			Name:       "HTTP",
+			ModelTiers: types.ModelTierConfig{Embedding: "http-embedding"},
+		}).Error)
+	require.NoError(t, db.Create(&types.Model{
+		ID:      "http-embedding",
+		SpaceID: 1,
+		Name:    "HTTP embedding",
+		Type:    types.ModelTypeEmbedding,
+		Status:  types.ModelStatusActive,
+
+		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 2}},
+	}).Error)
+	require.NoError(t, db.Create(&types.Entry{
+		ID: "rebuild-http-entry", SpaceID: 1, LibraryID: "http-library", Type: types.EntryTypeManual,
+		Title: "HTTP", SourceKind: "mine", ParseStatus: types.ParseStatusCompleted,
+		StructuredSummary: &types.EntrySummary{Overview: "HTTP summary", Points: []string{}, KeyTerms: []string{}},
+		VaultBody:         "HTTP original material",
+	}).Error)
+
 	vault, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: t.TempDir()}})
 	require.NoError(t, err)
 	embedder := &rebuildRouteEmbedder{fail: true}

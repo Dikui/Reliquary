@@ -49,7 +49,6 @@ var queueDefinitions = []QueueDefinition{
 		Weight:       1,
 		SharedWeight: 1,
 		TaskTypes: []string{
-			TypeEntityNameEmbeddingRebuild,
 			TypeEmbeddingRebuild,
 			TypeEntryVector,
 		},
@@ -196,16 +195,16 @@ type WorkerServerStat struct {
 	Queues      map[string]int
 }
 
+// Active durable task types.
 const (
-	TypeDocumentProcess            = "document:process"       // 文档处理任务
-	TypeEntryListDelete            = "knowledge:list_delete"  // 批量删除知识任务
-	TypeEntryListReparse           = "knowledge:list_reparse" // 批量重解析知识任务
-	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
-	TypeEntryVector                = "entry:vector"
-	TypeEmbeddingRebuild           = "knowledge:embedding_rebuild"
-	TypeManualProcess              = "manual:process" // 文章正文处理任务，兼容已有持久队列名称
-	TypeIngestAssetCleanup         = "ingest:asset_cleanup"
-	TypeReportIndex                = "report:index"
+	TypeDocumentProcess    = "document:process"       // 文档处理任务
+	TypeEntryListDelete    = "knowledge:list_delete"  // 批量删除知识任务
+	TypeEntryListReparse   = "knowledge:list_reparse" // 批量重解析知识任务
+	TypeEntryVector        = "entry:vector"
+	TypeEmbeddingRebuild   = "knowledge:embedding_rebuild"
+	TypeManualProcess      = "manual:process" // 文章正文处理任务，兼容已有持久队列名称
+	TypeIngestAssetCleanup = "ingest:asset_cleanup"
+	TypeReportIndex        = "report:index"
 )
 
 // DocumentProcessPayload represents the document process task payload

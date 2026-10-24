@@ -30,14 +30,8 @@ func articleProcessingPrompt() string {
 "points":["要点一",
 "要点二",
 "要点三"],
-"key_terms":["关键名词"]},
-"entities":[]}
+"key_terms":["关键名词"]}}
 segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
-}
-
-func articleEntityProcessingPrompt() string {
-	return config.Prompt("article_entities") + `
-实体输出格式："entities":[{"name":"名称","type":"company","aliases":[],"description":"原文支持的简短介绍","relevance":"central","evidence_ids":[1]}]。`
 }
 
 const (
@@ -88,18 +82,13 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 	if len([]rune(result.Title)) > 255 || strings.ContainsAny(result.Title, "\r\n\x00") {
 		return nil, errors.New("article processing title must be a single line of at most 255 characters without NUL")
 	}
-	if result.Summary == nil || result.Entities == nil ||
+	if result.Summary == nil ||
 		strings.TrimSpace(result.Summary.Overview) == "" || result.Summary.Points == nil || result.Summary.KeyTerms == nil {
 		return nil, errors.New("article processing output is missing required fields")
 	}
 	for _, point := range result.Summary.Points {
 		if strings.TrimSpace(point) == "" {
 			return nil, errors.New("article processing summary contains an empty point")
-		}
-	}
-	for _, entity := range result.Entities {
-		if strings.TrimSpace(entity.Name) == "" || entity.Type == nil || strings.TrimSpace(*entity.Type) == "" {
-			return nil, errors.New("article processing entity is missing name or type")
 		}
 	}
 	return &result, nil
@@ -396,42 +385,9 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		return err
 	}
 	if s.db != nil {
-		if !library.ExtractsEntities() {
-			result.Entities = []articleProcessingEntity{}
-			result.ResolvedEntities = nil
-		}
-		candidates := make([]types.EntityCandidate, 0, len(result.Entities))
-		accepted := make([]articleProcessingEntity, 0, len(result.Entities))
-		for _, entity := range result.Entities {
-			// Saved segment results can bypass the current extraction prompt.
-			if !eligibleProcessingEntity(entity) {
-				continue
-			}
-			entity.Aliases = nil
-			accepted = append(accepted, entity)
-			candidates = append(candidates, types.EntityCandidate{Name: entity.Name, EntityType: types.NormalizeEntityType(*entity.Type), Description: entity.Description})
-		}
-		result.Entities = accepted
-		resolved := []types.Entity{}
-		if library.ExtractsEntities() {
-			var err error
-			resolved, err = s.resolveProcessingEntities(ctx, k, candidates, result)
-			if err != nil {
-				return fmt.Errorf("resolve article entities: %w", err)
-			}
-		}
+		result.Entities = nil
+		result.ResolvedEntities = nil
 		if err := s.saveProcessingOutput(ctx, k, body, result); err != nil {
-			return err
-		}
-		ids := []string{}
-		for _, entity := range resolved {
-			ids = append(ids, entity.ID)
-		}
-		query := s.db.WithContext(ctx).Where("space_id=? AND entry_id=?", k.SpaceID, k.ID)
-		if len(ids) > 0 {
-			query = query.Where("entity_id NOT IN ?", ids)
-		}
-		if err := query.Delete(&types.EntryEntity{}).Error; err != nil {
 			return err
 		}
 	}

@@ -1,5 +1,28 @@
 import { ikb18Zh } from './ikb18'
 export default {
+ entityMaintenance: {
+  "type": "类型",
+  "person": "人物",
+  "organization": "机构",
+  "requestFailed": "请求失败，请重试",
+  "loadMore": "加载更多",
+
+  "create": "新增实体",
+  "edit": "编辑实体",
+  "delete": "删除实体",
+  "name": "规范名",
+  "aliases": "别名（每行一个）",
+  "saved": "实体已保存",
+  "deleted": "实体已删除",
+  "nameRequired": "请输入规范名",
+  "deleteHint": "删除“{name}”及其资料关联与关注，资料正文保留。此操作无法撤销。",
+  "discardTitle": "放弃修改？",
+  "discardHint": "尚未保存的实体修改将丢失。",
+  "discard": "放弃修改",
+  "manual": "人工修改",
+  "editEntry": "编辑涉及的实体",
+  "entryHint": "选择 0–3 个机构或人物，保存后标为人工修改。"
+},
   entryStatus: {
     title: '入库与后台处理状态', saved: '已入库', indexPending: '索引待处理', indexing: '正在建立正文索引', indexFailed: '正文索引失败',
     pending: '后台待处理', processing: '后台处理中', completed: '后台处理完成', failed: '后台处理失败',
@@ -365,8 +388,8 @@ export default {
         "processing": "资料处理",
         "segmentMerge": "分段合并",
         "imageDescription": "图片说明",
-        "entityResolution": "实体归一",
-        "entityEmbedding": "实体名向量",
+        "entityResolution": "历史调用：实体归一",
+        "entityEmbedding": "历史调用：实体名向量",
         "bodyEmbedding": "正文向量",
         "rerank": "重排",
         "evaluation": "测评生成",
@@ -439,7 +462,7 @@ export default {
 },
   embeddingRebuild: {
     title: '重建全部向量',
-    description: '使用当前模型重新生成正文分块、资料、图片、资料、AI产出和实体名称的向量。',
+    description: '使用当前模型重新生成正文分块、资料标题与摘要、图片和 AI产出的向量。',
     currentModel: '当前模型：{name}',
     runModel: '本次重建模型：{name}，{dimension} 维',
     saveFirst: '先保存模型设置，再开始或继续重建。',
@@ -460,7 +483,7 @@ export default {
     failureLimit: '显示前 {shown} 项，共 {total} 项失败。',
     attempts: '已尝试 {count} 次',
     status: { pending: '等待执行', running: '重建中', paused: '已中断，可继续', completed: '重建完成', completed_with_errors: '重建结束，有失败项', failed: '重建失败，可继续' },
-    kinds: { article_chunk: '正文分块', article: '资料', image: '图片', mine_chunk: '资料分块', report_chunk: 'AI产出分块', entity: '实体名称' },
+    kinds: { article_chunk: '正文分块', article: '资料', image: '图片', mine_chunk: '资料分块', report_chunk: 'AI产出分块' },
   },
   follows: {
     library: '库',
@@ -671,14 +694,13 @@ export default {
     "generation": "资料处理",
     "embedding": "向量",
     "rerank": "重排",
-    "entity_resolution": "实体解析"
+    "entity_resolution": "实体判断（已停用）"
   },
   "uses": {
     "light": "按当前库的标准审核收录内容",
-    "generation": "资料摘要与实体",
-    "embedding": "内容检索与实体名称相似度",
+    "generation": "生成资料摘要",
+    "embedding": "内容检索",
     "rerank": "重排检索结果",
-    "entity_resolution": "判断实体候选是否属于已有实体"
   },
   "sources": {
     "generation": "资料处理模型档位",
@@ -690,40 +712,14 @@ export default {
     "unconfigured": "未配置"
   },
 
+  "explicitChoice": "未单独选择收录审核模型时，使用本库的资料处理模型；不继承其他库的模型。",
   "useDefault": "选择模型",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
-  "explicitChoice": "实体归一未单独选择时，使用本库的资料处理模型；不继承其他库的模型。",
   "loadFailed": "无法加载模型配置，请重试。",
   "saveFailed": "模型配置保存失败，请重试。",
   "saved": "模型档位已保存",
   "retry": "重新加载模型配置"
-},
-  mergeSuggestions: {
-  "title": "待合并建议",
-  "description": "无法确认的实体保持独立，核验资料后决定是否合并到候选实体。",
-  "statusFilter": "建议状态",
-  "status": {
-    "pending": "待处理",
-    "accepted": "已合并",
-    "rejected": "已拒绝"
-  },
-  "empty": {
-    "pending": "没有待处理的合并建议。",
-    "accepted": "还没有已合并的建议。",
-    "rejected": "还没有已拒绝的建议。"
-  },
-  "pair": "{source} → {target}",
-  "noReason": "未提供判断理由。",
-  "accept": "接受并合并",
-  "reject": "拒绝建议",
-  "confirmTitle": "接受并合并实体",
-  "confirmBody": "将“{source}”合并到“{target}”？本空间的别名和资料关联将转移到保留实体。",
-  "feedback": {
-    "accept": "建议已接受，实体已合并",
-    "reject": "建议已拒绝，实体保持独立"
-  },
-  "loaded": "已加载 {count} 条建议"
 },
   modelCalls: {
   "callsTitle": "模型调用",
@@ -734,10 +730,10 @@ export default {
   "totalCalls": "合计",
   "otherCall": "其他模型调用",
   "stages": {
-    "entity_judgment": "实体身份判断",
-    "entity_resolution": "实体身份解析",
-    "entity_embedding": "实体名称向量生成",
-    "entity_embedding_rebuild": "实体名称向量重建",
+    "entity_judgment": "历史调用：实体身份判断",
+    "entity_resolution": "历史调用：实体身份解析",
+    "entity_embedding": "历史调用：实体名向量",
+    "entity_embedding_rebuild": "历史调用：实体名向量重建",
     "image_embedding": "图片向量生成",
     "intake": "收录审核",
     "filter": "收录审核",
@@ -747,7 +743,7 @@ export default {
   knowledgeWorkbench: {
   "tabLabel": "实体",
   "title": "实体",
-  "subtitle": "管理实体档案与待合并建议",
+  "subtitle": "维护机构、人物及其别名",
   "sections": "实体功能",
   "refresh": "刷新",
   "requestFailed": "请求失败，请稍后重试。",
@@ -755,7 +751,6 @@ export default {
   "loadMore": "加载更多",
   "nav": {
     "entities": "实体",
-    "merges": "待合并建议"
   },
 
   "sourceTime": {
@@ -772,22 +767,6 @@ export default {
       "other": "其他方式"
     }
   },
-  "nameEmbeddings": {
-    "title": "实体名称向量",
-    "pending": "实体名称向量待重建数量：{count}",
-    "unknown": "暂不可用",
-    "rebuild": "立即重建",
-    "latest": "最近一次重建：{status}，已处理 {processed}/{total} 个实体",
-    "noRun": "尚无重建记录",
-    "failure": "失败原因：{reason}",
-    "queued": "实体名称向量重建已加入队列",
-    "status": {
-      "pending": "等待执行",
-      "running": "正在重建",
-      "completed": "已完成",
-      "failed": "失败"
-    }
-  },
   "entities": {
     "title": "实体",
     "description": "查看实体类型、别名和提及该实体的资料。",
@@ -799,7 +778,7 @@ export default {
       "person": "人物",
       "product": "产品",
       "project": "项目",
-      "organization": "组织",
+      "organization": "机构",
       "other": "其他"
     },
     "empty": "还没有实体",
@@ -807,7 +786,7 @@ export default {
     "aliases": "个别名",
     "aliasLabel": "别名",
     "noAliases": "暂无别名",
-    "choose": "选择一个实体查看档案",
+    "choose": "选择一个实体查看详情与涉及的资料",
     "articles": "提及该实体的资料",
     "noArticles": "还没有资料提及该实体。",
     "openArticle": "打开资料",
@@ -1085,7 +1064,6 @@ export default {
       truncated: '仅显示前 {shown} 个，共 {total} 个',
       bindings: {
           light_model_tier: '轻量档位',
-          entity_resolution_model_tier: "实体解析档位",
           generation_model_tier: '生成档位',
           embedding_model_tier: '向量档位',
           rerank_model_tier: '重排档位',
@@ -1573,7 +1551,7 @@ export default {
         },
         queue: {
           core_concurrency: '正文处理与手工重新处理的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
-          enrichment_concurrency: "实体名称向量重建与全部向量重建的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
+          enrichment_concurrency: "全部向量重建的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
           maintenance_concurrency: "每实例批处理与删除清理的并发数，独立于资料处理；最小为 1，修改后需重启服务。",
           shared_concurrency: '核心处理与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
@@ -1723,7 +1701,6 @@ export default {
 
             indexDelete: '索引删除',
 
-            entityNameEmbeddingRebuild: '实体名称向量重建',
             embeddingRebuild: '全部向量重建',
             reportIndex: 'AI产出索引',
           }
@@ -1766,19 +1743,19 @@ export default {
         },
         poolDescriptions: {
           core: '正文处理与手工重新处理的保底容量',
-          enrichment: "实体名称向量重建与全部向量重建",
+          enrichment: "全部向量重建",
           maintenance: "批处理与删除清理",
           shared: '由核心处理与内容富化按积压借用',
         },
         queueNames: {
           default: '正文处理',
           low: '维护与批处理',
-          entity: "实体",
+          entity: "向量重建",
         },
         queueDescriptions: {
           default: '正文处理、手工重新处理',
           low: "批量重新处理、删除清理",
-          entity: "实体名称向量重建与全部向量重建",
+          entity: "全部向量重建",
         },
         errors: {
           generic: '获取队列状态失败'
@@ -2439,9 +2416,9 @@ export default {
     allImageStatuses: '全部图片状态',
     missingImagesOnly: '缺少图片',
     noMissingImages: '无缺图记录',
-    rebuildLibraryConfirm: '仅重建“{name}”中处理失败的资料？已完成和已取消的资料不参与。保留正文、图片和人工判断，按当前配置重新生成分块、摘要、实体和向量。审核阶段失败的资料会先重新审核，通过后再处理。正文完整但缺少图片的失败资料也会参与，缺图记录保留。待审及删除中的资料不参与。处理期间部分资料暂不可检索，请保持库配置稳定。此操作会重新调用模型并产生费用。',
+    rebuildLibraryConfirm: '仅重建“{name}”中处理失败的资料？已完成和已取消的资料不参与。保留正文、图片和人工判断，按当前配置重新生成分块、摘要和向量，保留人工维护的实体关联。审核阶段失败的资料会先重新审核，通过后再处理。正文完整但缺少图片的失败资料也会参与，缺图记录保留。待审及删除中的资料不参与。处理期间部分资料暂不可检索，请保持库配置稳定。此操作会重新调用模型并产生费用。',
     rebuildLibrarySubmitted: '已提交 {count} 条失败资料的重建任务，请在运行队列查看处理进度。',
-    rebuildLibraryAllConfirm: '全量重建“{name}”？已完成的资料也会重新处理；已通过审核的已取消资料也会参与。保留正文、图片和人工判断，按当前配置重新生成分块、摘要、实体和向量。审核阶段失败的资料会先重新审核，通过后再处理。正文完整但缺少图片的资料也会参与，缺图记录保留。待审及删除中的资料不参与。处理期间部分资料暂不可检索，请保持库配置稳定。此操作会重新调用模型并产生费用。',
+    rebuildLibraryAllConfirm: '全量重建“{name}”？已完成的资料也会重新处理；已通过审核的已取消资料也会参与。保留正文、图片和人工判断，按当前配置重新生成分块、摘要和向量，保留人工维护的实体关联。审核阶段失败的资料会先重新审核，通过后再处理。正文完整但缺少图片的资料也会参与，缺图记录保留。待审及删除中的资料不参与。处理期间部分资料暂不可检索，请保持库配置稳定。此操作会重新调用模型并产生费用。',
     rebuildLibraryAllSubmitted: '已提交 {count} 条资料的全量重建任务，请在运行队列查看处理进度。',
     cancelParse: '停止处理',
     cancelParseConfirmBody: "确认停止处理\"{title}\"？已写入的分块会保留，可稍后通过\"重建\"重新触发；该资料尚未执行的处理任务会被取消。",

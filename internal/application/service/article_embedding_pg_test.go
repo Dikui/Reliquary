@@ -216,9 +216,10 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	h.processor.output = articleProcessingOutput(
 		t,
 
-		[]types.EntityCandidate{{Name: "Entitymarker", EntityType: "company"}},
+		[]legacyEntityCandidate{{Name: "Entitymarker", EntityType: "organization"}},
 	)
 	article := h.upload(t, "Headermarker", "discardedfixture reference source body")
+	maintainTestEntities(h.ctx, t, h.db, article.ID, "Entitymarker")
 	var entity types.Entity
 	require.NoError(t, h.db.Where("canonical_name=?", "Entitymarker").First(&entity).Error)
 	require.NoError(t, saveEntityAlias(h.db, entity, "Aliasmarker", "manual"))
@@ -254,7 +255,7 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	require.NoError(t, h.db.Table("entry_entities").Where("entry_id=?", article.ID).Pluck("entity_id", &entityID).Error)
 	require.NoError(t, h.db.Table("entities").Where("id=?", entityID).Update("canonical_name", "Renamedentitymarker").Error)
 	assertHit("Renamedentitymarker", 1)
-	assertHit("Entitymarker", 1) // The original mention remains an alias after a canonical rename.
+	assertHit("Entitymarker", 0) // Only explicitly maintained aliases remain searchable.
 	require.NoError(t, h.db.Table("entity_aliases").Where("entity_id=?", entityID).Update("alias", "Updatedaliasmarker").Error)
 	assertHit("Updatedaliasmarker", 1)
 	assertHit("Aliasmarker", 0)

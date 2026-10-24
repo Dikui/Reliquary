@@ -8,16 +8,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
+	"reliquary/internal/utils"
 	"strings"
 	"time"
+
+	apperrors "reliquary/internal/errors"
 
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/models/embedding"
-	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 type candidateVector struct {
@@ -35,13 +36,24 @@ type candidateVector struct {
 
 func (candidateVector) TableName() string { return "embedding_rebuild_vectors" }
 
-func (r *EmbeddingRebuilder) rebuildProfile(ctx context.Context, spaceID uint64, target string) (entityEmbeddingProfile, error) {
+func (r *EmbeddingRebuilder) rebuildProfile(
+	ctx context.Context,
+	spaceID uint64,
+	target string,
+) (embeddingProfile, error) {
 	if target == "" {
 		return r.profiles.profile(ctx, spaceID)
 	}
 	return r.profiles.profileForModel(ctx, spaceID, target, false)
 }
-func (r *EmbeddingRebuilder) checkRebuildProfile(ctx context.Context, db *gorm.DB, spaceID uint64, p entityEmbeddingProfile, candidate bool) error {
+
+func (r *EmbeddingRebuilder) checkRebuildProfile(
+	ctx context.Context,
+	db *gorm.DB,
+	spaceID uint64,
+	p embeddingProfile,
+	candidate bool,
+) error {
 	if !candidate {
 		return r.profiles.checkProfile(db.WithContext(ctx), spaceID, p)
 	}
@@ -49,11 +61,13 @@ func (r *EmbeddingRebuilder) checkRebuildProfile(ctx context.Context, db *gorm.D
 	if err := db.WithContext(ctx).Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (space_id=? OR is_builtin=true)", p.modelID, spaceID).First(&model).Error; err != nil {
 		return err
 	}
-	if model.Type != types.ModelTypeEmbedding || model.Status != types.ModelStatusActive || types.EmbeddingProfileHash(p.modelID, p.dimension, &model) != p.hash {
+	if model.Type != types.ModelTypeEmbedding || model.Status != types.ModelStatusActive ||
+		types.EmbeddingProfileHash(p.modelID, p.dimension, &model) != p.hash {
 		return errors.New("candidate embedding profile changed")
 	}
 	return nil
 }
+
 func (r *EmbeddingRebuilder) StartCandidateAndEnqueue(ctx context.Context, spaceID uint64, modelID string) (*types.EmbeddingRebuildRun, error) {
 	copy := *r
 	copy.targetModelID = modelID
@@ -61,13 +75,6 @@ func (r *EmbeddingRebuilder) StartCandidateAndEnqueue(ctx context.Context, space
 }
 
 func (r *EmbeddingRebuilder) candidateContent(ctx context.Context, db *gorm.DB, spaceID uint64, item types.EmbeddingRebuildItem) (string, *types.Entry, error) {
-	if item.Kind == "entity" {
-		var entity types.Entity
-		if err := db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", spaceID, item.SourceID).First(&entity).Error; err != nil {
-			return "", nil, err
-		}
-		return entityNameEmbeddingText(entity.CanonicalName, entity.EntityType, entity.Description), nil, nil
-	}
 	entryID := item.SourceID
 	var chunk types.Chunk
 	if strings.HasSuffix(item.Kind, "_chunk") {
@@ -104,7 +111,13 @@ func (r *EmbeddingRebuilder) candidateContent(ctx context.Context, db *gorm.DB, 
 	}
 	return buildEntryIndexContent(&entry, chunk.Content), &entry, nil
 }
-func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *types.EmbeddingRebuildRun, item types.EmbeddingRebuildItem, p entityEmbeddingProfile) (embeddingItemWrite, error) {
+
+func (r *EmbeddingRebuilder) prepareCandidateItem(
+	ctx context.Context,
+	run *types.EmbeddingRebuildRun,
+	item types.EmbeddingRebuildItem,
+	p embeddingProfile,
+) (embeddingItemWrite, error) {
 	content, entry, err := r.candidateContent(ctx, r.db, run.SpaceID, item)
 	if err != nil {
 		return nil, err
@@ -214,13 +227,21 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 		}
 		if err := tx.Exec(`INSERT INTO embedding_vector_archives(run_id,space_id,payload)
    SELECT ?,?,jsonb_build_object(
-   'embeddings',COALESCE((SELECT jsonb_agg(to_jsonb(e)) FROM embeddings e JOIN entries k ON k.id=e.entry_id WHERE k.space_id=?),'[]'::jsonb),
-   'article_embeddings',COALESCE((SELECT jsonb_agg(to_jsonb(a)) FROM article_embeddings a WHERE a.space_id=?),'[]'::jsonb),
-   'image_embeddings',COALESCE((SELECT jsonb_agg(to_jsonb(i)) FROM image_embeddings i WHERE i.space_id=?),'[]'::jsonb),
-   'entities',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',id,'name_embedding',name_embedding,'embedding_model_id',embedding_model_id,'embedding_dimension',embedding_dimension)) FROM entities WHERE space_id=?),'[]'::jsonb))`, run.ID, spaceID, spaceID, spaceID, spaceID, spaceID).Error; err != nil {
+   'embeddings',
+COALESCE((SELECT jsonb_agg(to_jsonb(e)) FROM embeddings e JOIN entries k ON k.id=e.entry_id WHERE k.space_id=?),
+'[]'::jsonb),
+
+   'article_embeddings',
+COALESCE((SELECT jsonb_agg(to_jsonb(a)) FROM article_embeddings a WHERE a.space_id=?),
+'[]'::jsonb),
+
+   'image_embeddings',
+COALESCE((SELECT jsonb_agg(to_jsonb(i)) FROM image_embeddings i WHERE i.space_id=?),
+'[]'::jsonb))`, run.ID, spaceID, spaceID, spaceID, spaceID).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec("DELETE FROM embeddings WHERE entry_id IN (SELECT id FROM entries WHERE space_id=?)", spaceID).Error; err != nil {
+		if err := tx.Exec("DELETE FROM embeddings WHERE entry_id IN (SELECT id FROM entries WHERE space_id=?)",
+			spaceID).Error; err != nil {
 			return err
 		}
 		if err := tx.Exec("DELETE FROM article_embeddings WHERE space_id=?", spaceID).Error; err != nil {
@@ -239,8 +260,6 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 				err = tx.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash) VALUES (?,?,?,?,?,?,?)`, v.EntryID, spaceID, v.LibraryID, v.ModelID, v.Dimension, v.Embedding, v.ContentHash).Error
 			case v.Kind == "image":
 				err = tx.Exec(`INSERT INTO image_embeddings(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES (?,?,?,?,?,?,?,?)`, v.EntryID, spaceID, v.LibraryID, v.AttachmentPath, v.ModelID, v.Dimension, v.Embedding, v.ContentHash).Error
-			case v.Kind == "entity":
-				err = tx.Model(&types.Entity{}).Where("id=? AND space_id=?", v.SourceID, spaceID).Updates(map[string]any{"name_embedding": types.EntityNameEmbedding(v.Embedding.Slice()), "embedding_model_id": v.ModelID, "embedding_dimension": v.Dimension, "embedding_needs_rebuild": false}).Error
 			default:
 				return fmt.Errorf("unknown vector kind %s", v.Kind)
 			}
@@ -257,6 +276,7 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 		return tx.Model(&run).Update("switched_at", time.Now()).Error
 	})
 }
+
 func (r *EmbeddingRebuilder) DeleteOldVectors(ctx context.Context, spaceID uint64, runID string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var run types.EmbeddingRebuildRun

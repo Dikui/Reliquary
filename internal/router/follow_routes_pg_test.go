@@ -24,7 +24,13 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	require.Equal(t, http.StatusOK, r.Code)
 	var library struct{ Data types.Library }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &library))
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "HTTP followed entity", NormalizedName: "http followed entity", EntityType: "company"}
+	entity := types.Entity{
+		ID:             uuid.NewString(),
+		SpaceID:        types.SingleSpaceID,
+		CanonicalName:  "HTTP followed entity",
+		NormalizedName: "http followed entity",
+		EntityType:     "organization",
+	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	for _, target := range [][2]string{{"entity", entity.ID}} {
 		for range 2 {

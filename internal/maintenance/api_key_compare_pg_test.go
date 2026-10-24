@@ -2,9 +2,10 @@ package maintenance
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/testutil/pgtest"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRecoveryCredentialChangesRemainScopedAndPreserveOriginalMetadata(t *testing.T) {
@@ -21,7 +22,11 @@ func TestRecoveryCredentialChangesRemainScopedAndPreserveOriginalMetadata(t *tes
 	require.Contains(t, CompareManifest(expected, actual), "table api_keys")
 	options := CompareOptions{AllowReconfigurationAppend: true}
 	require.Empty(t, CompareManifestWithSettings(expected, actual, options))
-	for _, statement := range []string{`UPDATE api_keys SET name='tampered' WHERE id=1`, `DELETE FROM api_keys WHERE id=1`, `UPDATE entities SET description='tampered' WHERE id='entity-a'`} {
+	for _, statement := range []string{
+		`UPDATE api_keys SET name='tampered' WHERE id=1`,
+		`DELETE FROM api_keys WHERE id=1`,
+		`UPDATE entities SET canonical_name='tampered' WHERE id='entity-a'`,
+	} {
 		t.Run(statement, func(t *testing.T) {
 			tx := db.Begin()
 			defer tx.Rollback()

@@ -55,23 +55,14 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 			return err
 		}
 		for _, alias := range aliases {
-			var collision types.EntityAlias
-			err := tx.Where("space_id = ? AND entity_type = ? AND normalized_alias = ? AND entity_id <> ?", spaceID, keep.EntityType, alias.NormalizedAlias, merged.ID).First(&collision).Error
-			if err == nil {
-				if collision.EntityID != keep.ID {
-					return werrors.NewBadRequestError("merge alias conflicts with another space entity")
-				}
-				if err := tx.Delete(&alias).Error; err != nil {
-					return err
-				}
-				continue
-			}
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := saveEntityAlias(tx, keep, alias.Alias, "merge"); err != nil {
 				return err
 			}
-			if err := tx.Model(&alias).Updates(map[string]any{"entity_id": keep.ID, "entity_type": keep.EntityType}).Error; err != nil {
-				return err
-			}
+		}
+		if err := tx.Where("space_id=? AND entity_id=?",
+			spaceID,
+			merged.ID).Delete(&types.EntityAlias{}).Error; err != nil {
+			return err
 		}
 		if err := tx.Exec(`INSERT INTO entry_entities (space_id, entry_id, entity_id, created_at)
             SELECT space_id, entry_id, ?, created_at FROM entry_entities WHERE space_id=? AND entity_id=?
@@ -94,23 +85,30 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 			return err
 		}
 		actor, _ := types.PrincipalFromContext(ctx)
-		record := types.EntityMergeRecord{ID: uuid.NewString(), SpaceID: spaceID, KeepEntityID: keep.ID, MergeEntityID: merged.ID, Actor: actor.StorageID(), CreatedAt: time.Now()}
+		record := types.EntityMergeRecord{
+			ID:            uuid.NewString(),
+			SpaceID:       spaceID,
+			KeepEntityID:  keep.ID,
+			MergeEntityID: merged.ID,
+			Actor:         actor.StorageID(),
+			CreatedAt:     time.Now(),
+		}
 		if err := tx.Create(&record).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&merged).Update("merged_into_id", keep.ID).Error; err != nil {
+		if err := tx.Model(&types.Entity{}).Where("space_id=? AND merged_into_id=?",
+			spaceID,
+			merged.ID).Update("merged_into_id",
+			keep.ID).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&keep).Updates(map[string]any{"embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
+		if err := tx.Model(&merged).Update("merged_into_id", keep.ID).Error; err != nil {
 			return err
 		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "merge_entities", keep.ID,
 			map[string]any{"keep_entity_id": keep.ID, "merge_entity_id": merged.ID, "merged_into_id": ""},
 			map[string]any{"keep_entity_id": keep.ID, "merge_entity_id": merged.ID, "merged_into_id": keep.ID}); err != nil {
 			return err
-		}
-		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "entity_merge")
 		}
 		return nil
 	})
@@ -138,61 +136,6 @@ func (s *EntityService) refreshArticleHeadersForEntity(ctx context.Context, spac
 	return nil
 }
 
-// RenameEntity preserves the old canonical spelling as an alias and schedules
-// a header refresh for every article linked to this identity.
-func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string) (*types.Entity, error) {
-	spaceID, err := s.requireSpace(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, ok := types.PrincipalFromContext(ctx); !ok {
-		return nil, werrors.NewUnauthorizedError("authenticated entity editor required")
-	}
-	name = strings.TrimSpace(name)
-	if name == "" || len([]rune(name)) > 512 {
-		return nil, werrors.NewBadRequestError("entity name must contain 1 to 512 characters")
-	}
-	var entity types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpace(tx, spaceID); err != nil {
-			return err
-		}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=? AND merged_into_id=''", entityID, spaceID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			return werrors.NewNotFoundError("entity not found")
-		} else if err != nil {
-			return err
-		}
-		var collisions int64
-		if err := tx.Model(&types.Entity{}).Where("space_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", spaceID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
-			return err
-		}
-		if collisions > 0 {
-			return werrors.NewBadRequestError("entity name conflicts with another entity")
-		}
-		if err := saveEntityAlias(tx, entity, name, "rename"); err != nil {
-			return err
-		}
-		if err := saveEntityAlias(tx, entity, entity.CanonicalName, "rename"); err != nil {
-			return err
-		}
-		if err := tx.Model(&entity).Updates(map[string]any{"canonical_name": name, "normalized_name": normalizeEntityName(name), "embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
-			return err
-		}
-		entity.CanonicalName, entity.NormalizedName, entity.EmbeddingNeedsRebuild = name, normalizeEntityName(name), true
-		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "entity_renamed")
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err = s.refreshArticleHeadersForEntity(ctx, spaceID, entityID); err != nil {
-		return &entity, err
-	}
-	return &entity, nil
-}
-
 func entityDatabaseInTransaction(db *gorm.DB) bool {
 	if db == nil || db.Statement == nil {
 		return false
@@ -201,7 +144,63 @@ func entityDatabaseInTransaction(db *gorm.DB) bool {
 	return ok
 }
 
-func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, description string) (*types.Entity, error) {
+func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	alias := types.EntityAlias{
+		ID:               uuid.NewString(),
+		SpaceID:          entity.SpaceID,
+		EntityType:       entity.EntityType,
+		EntityID:         entity.ID,
+		Alias:            name,
+		NormalizedAlias:  types.NormalizeEntityKey(name),
+		ResolutionMethod: method,
+		CreatedAt:        time.Now(),
+	}
+	return tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "space_id"},
+			{Name: "entity_id"},
+			{Name: "normalized_alias"},
+		},
+		DoNothing: true,
+	}).
+		Create(&alias).
+		Error
+}
+
+func validateEntityInput(input types.EntityInput) (types.EntityInput, error) {
+	input.CanonicalName = strings.TrimSpace(input.CanonicalName)
+	input.EntityType = types.NormalizeEntityType(input.EntityType)
+	if types.NormalizeEntityKey(input.CanonicalName) == "" || len([]rune(input.CanonicalName)) > 512 ||
+		len([]rune(types.NormalizeEntityKey(input.CanonicalName))) > 512 ||
+		strings.ContainsAny(input.CanonicalName, "\r\n\x00") {
+		return input, werrors.NewBadRequestError("entity name must be a single line of 1 to 512 characters")
+	}
+	if input.EntityType == "" {
+		return input, werrors.NewBadRequestError("entity type must be organization or person")
+	}
+	aliases := []string{}
+	seen := map[string]bool{types.NormalizeEntityKey(input.CanonicalName): true}
+	for _, alias := range input.Aliases {
+		alias = strings.TrimSpace(alias)
+		key := types.NormalizeEntityKey(alias)
+		if key == "" || len([]rune(alias)) > 512 || len([]rune(key)) > 512 || strings.ContainsAny(alias, "\r\n\x00") {
+			return input, werrors.NewBadRequestError("alias must be a single line of 1 to 512 characters")
+		}
+		if !seen[key] {
+			aliases = append(aliases, alias)
+			seen[key] = true
+		}
+	}
+	input.Aliases = aliases
+	return input, nil
+}
+
+// SaveEntity replaces the editable name, type and aliases in one transaction.
+func (s *EntityService) SaveEntity(ctx context.Context, id string, input types.EntityInput) (*types.Entity, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -209,50 +208,103 @@ func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, d
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, werrors.NewUnauthorizedError("authenticated entity editor required")
 	}
-	description = strings.TrimSpace(description)
-	if len([]rune(description)) > 20000 {
-		return nil, werrors.NewBadRequestError("entity description exceeds 20000 characters")
+	input, err = validateEntityInput(input)
+	if err != nil {
+		return nil, err
 	}
-	var entity types.Entity
+	entity := types.Entity{}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=? AND merged_into_id=''", entityID, spaceID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			return werrors.NewNotFoundError("entity not found")
-		} else if err != nil {
+		if id != "" {
+			if err := tx.Where("space_id=? AND id=? AND merged_into_id=''",
+				spaceID,
+				id).First(&entity).Error; errors.Is(
+				err,
+				gorm.ErrRecordNotFound,
+			) {
+				return werrors.NewNotFoundError("entity not found")
+			} else if err != nil {
+				return err
+			}
+		} else {
+			entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, CreatedAt: time.Now()}
+		}
+		var count int64
+		query := tx.Model(&types.Entity{}).
+			Where("space_id=? AND entity_type=? AND normalized_name=?",
+				spaceID, input.EntityType, types.NormalizeEntityKey(input.CanonicalName)).
+			Where("id<>? AND merged_into_id=''", entity.ID)
+		if err := query.Count(&count).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&entity).Updates(map[string]any{"description": description, "embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
+
+		if count > 0 {
+			return werrors.NewBadRequestError("entity name conflicts with another entity")
+		}
+		entity.CanonicalName, entity.NormalizedName, entity.EntityType = input.CanonicalName, types.NormalizeEntityKey(
+			input.CanonicalName,
+		), input.EntityType
+		entity.UpdatedAt = time.Now()
+		if err := tx.Save(&entity).Error; err != nil {
 			return err
 		}
-		entity.Description = description
-		entity.EmbeddingNeedsRebuild = true
-		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "entity_description_updated")
+		if err := tx.Where("space_id=? AND entity_id=?",
+			spaceID,
+			entity.ID).Delete(&types.EntityAlias{}).Error; err != nil {
+			return err
 		}
+		for _, alias := range input.Aliases {
+			if err := saveEntityAlias(tx, entity, alias, "manual"); err != nil {
+				return err
+			}
+		}
+		entity.Aliases = input.Aliases
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &entity, nil
+	return &entity, s.refreshArticleHeadersForEntity(ctx, spaceID, entity.ID)
 }
 
-func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) error {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil
-	}
-	var collision types.EntityAlias
-	if err := tx.Where("space_id=? AND entity_type=? AND normalized_alias=?", entity.SpaceID, entity.EntityType, normalizeEntityName(name)).First(&collision).Error; err == nil {
-		if collision.EntityID != entity.ID {
-			return werrors.NewBadRequestError("merge alias conflicts with another entity")
-		}
-		return nil
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+// DeleteEntity removes the entity, redirects, mentions and follows.
+func (s *EntityService) DeleteEntity(ctx context.Context, id string) error {
+	spaceID, err := s.requireSpace(ctx)
+	if err != nil {
 		return err
 	}
-	alias := types.EntityAlias{ID: uuid.NewString(), SpaceID: entity.SpaceID, EntityType: entity.EntityType, EntityID: entity.ID, Alias: name, NormalizedAlias: normalizeEntityName(name), ResolutionMethod: method, CreatedAt: time.Now()}
-	return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error
+	if _, ok := types.PrincipalFromContext(ctx); !ok {
+		return werrors.NewUnauthorizedError("authenticated entity editor required")
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
+			return err
+		}
+		var entity types.Entity
+		if err := tx.Where("space_id=? AND id=? AND merged_into_id=''", spaceID, id).First(&entity).Error; errors.Is(
+			err,
+			gorm.ErrRecordNotFound,
+		) {
+			return werrors.NewNotFoundError("entity not found")
+		} else if err != nil {
+			return err
+		}
+		// Old merge URLs must not resolve to a deleted target.
+		var ids []string
+		if err := tx.Model(&types.Entity{}).Where("space_id=? AND (id=? OR merged_into_id=?)",
+			spaceID,
+			id,
+			id).Pluck("id",
+			&ids).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("space_id=? AND entity_id IN ?",
+			spaceID,
+			ids).Delete(&types.EntityAlias{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("space_id=? AND id IN ?", spaceID, ids).Delete(&types.Entity{}).Error
+	})
 }

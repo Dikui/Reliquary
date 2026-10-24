@@ -3,17 +3,16 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/logger"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
-	"reliquary/internal/logger"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 // ErrInvalidSpaceID represents an error for invalid space ID
@@ -28,8 +27,7 @@ type libraryService struct {
 	modelService   interfaces.ModelService
 	retrieveEngine interfaces.RetrievalService
 
-	resourceCatalog        interfaces.ResourceCatalog
-	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
+	resourceCatalog interfaces.ResourceCatalog
 }
 
 // NewLibraryService creates a new library service
@@ -166,23 +164,6 @@ func (s *libraryService) UpdateLibrary(ctx context.Context,
 	description string,
 	config *types.LibraryConfig,
 ) (*types.Library, error) {
-	if s.nameEmbeddingRebuilder != nil && s.db != nil && !entityDatabaseInTransaction(s.db) {
-		var result *types.Library
-		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			copy := *s
-			copy.db = tx
-			copy.repo = repository.NewLibraryRepository(tx)
-			bound, err := s.nameEmbeddingRebuilder.BindTransaction(ctx, tx)
-			if err != nil {
-				return err
-			}
-			copy.nameEmbeddingRebuilder = bound
-			result, err = copy.UpdateLibrary(ctx, id, name, description, config)
-			return err
-		})
-		return result, err
-	}
-
 	if id == "" {
 		logger.Error(ctx, "Library ID is empty")
 		return nil, errors.New("library ID cannot be empty")
@@ -202,7 +183,6 @@ func (s *libraryService) UpdateLibrary(ctx context.Context,
 	original := *library
 	current := *library
 	library = &current
-	previousEmbeddingModelID, _ := ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
 	// Update the library properties
 	library.Name = name
 	library.Description = description
@@ -240,12 +220,6 @@ func (s *libraryService) UpdateLibrary(ctx context.Context,
 			"library_id": id,
 		})
 		return nil, err
-	}
-	currentEmbeddingModelID, _ := ResolveModelTier(ctx, s.db, library, types.ModelTierEmbedding)
-	if s.nameEmbeddingRebuilder != nil && previousEmbeddingModelID != currentEmbeddingModelID {
-		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, library.SpaceID, "library_embedding_model_changed"); err != nil {
-			return library, fmt.Errorf("library update could not enqueue name embedding rebuild: %w", err)
-		}
 	}
 
 	logger.Infof(ctx, "Library updated successfully, ID: %s, name: %s", library.ID, library.Name)

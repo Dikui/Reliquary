@@ -1,7 +1,7 @@
 import { get, post } from '@/utils/request'
 
 export type EmbeddingRebuildStatus = 'pending' | 'running' | 'paused' | 'completed' | 'completed_with_errors' | 'failed' | 'cancelled'
-export type EmbeddingRebuildKind = 'article_chunk' | 'article' | 'image' | 'mine_chunk' | 'report_chunk' | 'entity'
+export type EmbeddingRebuildKind = 'article_chunk' | 'article' | 'image' | 'mine_chunk' | 'report_chunk'
 export type EmbeddingRebuildAction = 'start' | 'pause' | 'resume' | 'retry_failed' | 'switch' | 'delete_old' | 'cancel'
 export interface EmbeddingRebuildRun {
   id: string

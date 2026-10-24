@@ -2,12 +2,13 @@ package maintenance
 
 import (
 	"context"
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
 	"path/filepath"
 	"reliquary/internal/testutil/pgtest"
 	"testing"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
 )
 
 func TestSegmentCheckpointMigrationAndReplica(t *testing.T) {
@@ -37,7 +38,11 @@ func TestSegmentCheckpointMigrationAndReplica(t *testing.T) {
 	require.NoError(t, VerifyImportedReplica(ctx, fresh, root))
 	var count int64
 	require.NoError(t, fresh.Table("entry_segment_runs").Where("id='checkpoint'").Count(&count).Error)
-	require.EqualValues(t, 1, count)
+	require.Zero(t, count)
+	require.NoError(t,
+		fresh.Exec(`INSERT INTO entry_segment_runs(id,space_id,entry_id,phase,plan_hash,body_hash,
+plan,status) VALUES('current-checkpoint',1,'article','processing','plan','body',
+'[{"number":1}]','running')`).Error)
 	current, err := BuildManifest(ctx, fresh, "", "")
 	require.NoError(t, err)
 	require.NoError(t, fresh.Exec(`UPDATE entry_segment_runs SET plan='[]'`).Error)

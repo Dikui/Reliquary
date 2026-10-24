@@ -13,31 +13,29 @@ import (
 // ModelTier identifies an independent processing and model selection budget.
 type ModelTier string
 
+// Model selection tiers used by active processing stages.
 const (
-	ModelTierLight            ModelTier = "light"
-	ModelTierEntityResolution ModelTier = "entity_resolution"
-	ModelTierGeneration       ModelTier = "generation"
-	ModelTierEmbedding        ModelTier = "embedding"
-	ModelTierRerank           ModelTier = "rerank"
+	ModelTierLight      ModelTier = "light"
+	ModelTierGeneration ModelTier = "generation"
+	ModelTierEmbedding  ModelTier = "embedding"
+	ModelTierRerank     ModelTier = "rerank"
 )
 
-var ModelTiers = []ModelTier{ModelTierLight, ModelTierEntityResolution, ModelTierGeneration, ModelTierEmbedding, ModelTierRerank}
+// ModelTiers lists the configurable processing tiers.
+var ModelTiers = []ModelTier{ModelTierLight, ModelTierGeneration, ModelTierEmbedding, ModelTierRerank}
 
 // ModelTierConfig stores the model choices for the library.
 type ModelTierConfig struct {
-	Light            string `json:"light"`
-	EntityResolution string `json:"entity_resolution"`
-	Generation       string `json:"generation"`
-	Embedding        string `json:"embedding"`
-	Rerank           string `json:"rerank"`
+	Light      string `json:"light"`
+	Generation string `json:"generation"`
+	Embedding  string `json:"embedding"`
+	Rerank     string `json:"rerank"`
 }
 
 func (c ModelTierConfig) ModelID(tier ModelTier) string {
 	switch tier {
 	case ModelTierLight:
 		return strings.TrimSpace(c.Light)
-	case ModelTierEntityResolution:
-		return strings.TrimSpace(c.EntityResolution)
 	case ModelTierGeneration:
 		return strings.TrimSpace(c.Generation)
 	case ModelTierEmbedding:
@@ -85,12 +83,15 @@ func (c *ModelTierConfig) Scan(value any) error {
 	return json.Unmarshal(data, c)
 }
 
-type modelTierContextKey struct{}
-type modelCallsContextKey struct{}
+type (
+	modelTierContextKey  struct{}
+	modelCallsContextKey struct{}
+)
 
 func WithModelTier(ctx context.Context, tier ModelTier) context.Context {
 	return context.WithValue(ctx, modelTierContextKey{}, tier)
 }
+
 func ModelTierFromContext(ctx context.Context) ModelTier {
 	tier, _ := ctx.Value(modelTierContextKey{}).(ModelTier)
 	return tier
@@ -113,6 +114,7 @@ func WithModelCallCollector(ctx context.Context) (context.Context, *ModelCallCol
 	c := &ModelCallCollector{counts: map[string]ModelCallCount{}}
 	return context.WithValue(ctx, modelCallsContextKey{}, c), c
 }
+
 func RecordModelCall(ctx context.Context, modelID string) {
 	c, _ := ctx.Value(modelCallsContextKey{}).(*ModelCallCollector)
 	if c == nil {
@@ -138,6 +140,7 @@ func ModelCallCountsFromContext(ctx context.Context) []ModelCallCount {
 	}
 	return c.Snapshot()
 }
+
 func (c *ModelCallCollector) Snapshot() []ModelCallCount {
 	if c == nil {
 		return []ModelCallCount{}

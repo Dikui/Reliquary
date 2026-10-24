@@ -148,10 +148,19 @@ func TestExplicitIngestSelectsSystemLibrary(t *testing.T) {
 
 func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	f := newMCPFixture(t)
-	require.NoError(t, f.db.Model(&types.Library{}).Where("space_id=?", types.SingleSpaceID).Update("indexing_strategy", types.IndexingStrategy{KeywordEnabled: true}).Error)
+	require.NoError(t,
+		f.db.Model(&types.Library{}).Where("space_id=?",
+			types.SingleSpaceID).Update("indexing_strategy",
+			types.IndexingStrategy{KeywordEnabled: true}).Error)
 	var libraries []types.Library
 	require.NoError(t, f.db.Find(&libraries).Error)
-	entity := types.Entity{ID: "multi-entity", SpaceID: 1, CanonicalName: "Multi entity", NormalizedName: "multi entity", EntityType: "company"}
+	entity := types.Entity{
+		ID:             "multi-entity",
+		SpaceID:        1,
+		CanonicalName:  "Multi entity",
+		NormalizedName: "multi entity",
+		EntityType:     "organization",
+	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	follows := service.NewFollowService(f.db)
 	_, err := follows.Follow(f.ctx, "entity", entity.ID)

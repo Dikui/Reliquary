@@ -20,7 +20,18 @@ func TestNamingFixedQueries(t *testing.T) {
 	h.add(t, "mine", "mine", "", "", "semanticlaunch", 2)
 	h.add(t, "report", "report", "", "", "othersemantic", 1)
 	h.add(t, "missing", "article", "", "research", "othersemantic", 1)
-	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}).Error)
+	require.NoError(
+		t,
+		h.db.Create(
+			&types.Entity{
+				ID:             "entity",
+				SpaceID:        1,
+				CanonicalName:  "Canonicalneedle",
+				NormalizedName: "canonicalneedle",
+				EntityType:     "organization",
+			},
+		).Error,
+	)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: "alpha", EntityID: "entity"}).Error)
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id='alpha'").Update("starred", true).Error)
 	cases := []struct {

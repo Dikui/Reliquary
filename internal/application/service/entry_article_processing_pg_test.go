@@ -169,16 +169,50 @@ func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHa
 	h := newRetainedIntakeHarness(t)
 
 	model := &articleProcessingChat{output: validProcessingFixture()}
-	metadata := &types.Model{ID: "local-fixture", SpaceID: h.library.SpaceID, Name: "Processing fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
+	metadata := &types.Model{
+		ID:         "local-fixture",
+		SpaceID:    h.library.SpaceID,
+		Name:       "Processing fixture",
+		Type:       types.ModelTypeGeneration,
+		Source:     types.ModelSourceRemote,
+		Status:     types.ModelStatusActive,
+		Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768},
+	}
 	require.NoError(t, h.db.Create(metadata).Error)
-	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", SpaceID: h.library.SpaceID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
-	h.library.ModelTiers = types.ModelTierConfig{Light: "local-fixture", Generation: "local-fixture", EntityResolution: "local-fixture", Embedding: "embedding"}
+	require.NoError(
+		t,
+		h.db.Create(
+			&types.Model{
+				ID:         "embedding",
+				SpaceID:    h.library.SpaceID,
+				Name:       "Vector fixture",
+				Type:       types.ModelTypeEmbedding,
+				Status:     types.ModelStatusActive,
+				Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}},
+			},
+		).Error,
+	)
+	h.library.ModelTiers = types.ModelTierConfig{
+		Light:      "local-fixture",
+		Generation: "local-fixture",
+		Embedding:  "embedding",
+	}
 	h.library.EmbeddingModelID = "embedding"
 	h.library.IndexingStrategy = types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: true}
 	require.NoError(t, h.db.Save(h.library).Error)
-	require.NoError(t, h.db.Model(&types.Space{}).Where("id=?", h.library.SpaceID).Update("embedding_model_id", h.library.EmbeddingModelID).Error)
-	h.service.modelService = articleProcessingModels{summaryStateModelService: &summaryStateModelService{model: model, metadata: metadata}}
-	h.service.retrieveEngine = retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(h.db))
+	require.NoError(
+		t,
+		h.db.Model(&types.Space{}).
+			Where("id=?", h.library.SpaceID).
+			Update("embedding_model_id", h.library.EmbeddingModelID).
+			Error,
+	)
+	h.service.modelService = articleProcessingModels{
+		summaryStateModelService: &summaryStateModelService{model: model, metadata: metadata},
+	}
+	h.service.retrieveEngine = retriever.NewPostgresRetrievalService(
+		pgretriever.NewPostgresRetrieveEngineRepository(h.db),
+	)
 	chunks := h.service.chunkService.(*chunkService)
 	chunks.entryRepo = h.service.repo
 	chunks.libraryRepository = repository.NewLibraryRepository(h.db)
@@ -211,7 +245,7 @@ func (h *articleProcessingHarness) upload(t *testing.T, title, body string) *typ
 	return h.article(t, article.ID)
 }
 
-func articleProcessingOutput(t *testing.T, entities []types.EntityCandidate) string {
+func articleProcessingOutput(t *testing.T, entities []legacyEntityCandidate) string {
 	t.Helper()
 	var result map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(validProcessingFixture()), &result))
@@ -261,7 +295,7 @@ func TestArticleProcessingRejectsMultilineGeneratedTitle(t *testing.T) {
 	require.ErrorContains(t, err, "title must be a single line")
 }
 
-func TestAllTemplatesProcessEntities(t *testing.T) {
+func TestAllTemplatesIgnoreOpenEntityExtraction(t *testing.T) {
 	for _, library := range []string{"personal", "references", "ai-output"} {
 		t.Run(library, func(t *testing.T) {
 			h, vault := newIngestHarness(t)
@@ -269,9 +303,9 @@ func TestAllTemplatesProcessEntities(t *testing.T) {
 				articleProcessingOutput(
 					t,
 
-					[]types.EntityCandidate{
-						{Name: "Acme", EntityType: "company", Description: "A partner of Beta."},
-						{Name: "Beta", EntityType: "company", Description: "A partner of Acme."},
+					[]legacyEntityCandidate{
+						{Name: "Acme", EntityType: "organization", Description: "A partner of Beta."},
+						{Name: "Beta", EntityType: "organization", Description: "A partner of Acme."},
 					},
 				),
 			)
@@ -297,7 +331,7 @@ func TestAllTemplatesProcessEntities(t *testing.T) {
 			for _, table := range []string{"entities", "entry_entities"} {
 				var count int64
 				require.NoError(t, h.db.Table(table).Count(&count).Error)
-				require.Positive(t, count, table)
+				require.Zero(t, count, table)
 			}
 			for _, table := range []string{"chunks", "article_embeddings"} {
 				if library == "ai-output" && table == "article_embeddings" {
@@ -309,9 +343,9 @@ func TestAllTemplatesProcessEntities(t *testing.T) {
 			}
 
 			_, header, _ := readVaultArticle(t, vault, article)
-			require.Contains(t, string(header), "[[Acme]]")
+			require.NotContains(t, string(header), "[[Acme]]")
 			require.Len(t, h.processor.requests, 1, "no entity judgement calls")
-			require.Contains(t, h.processor.requests[0][0].Content, "每个实体输出")
+			require.NotContains(t, h.processor.requests[0][0].Content, "每个实体输出")
 			require.NotContains(t, h.processor.requests[0][0].Content, "relation_types=")
 			require.NotContains(t, h.processor.requests[0][0].Content, "本库不抽取实体")
 		})
@@ -323,7 +357,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	h.processor.output = articleProcessingOutput(
 		t,
 
-		[]types.EntityCandidate{{Name: "Acme", EntityType: "company", Aliases: []string{"Acme Inc"}}},
+		[]legacyEntityCandidate{{Name: "Acme", EntityType: "organization", Aliases: []string{"Acme Inc"}}},
 	)
 	body := "# First announcement\n\nAcme released a widget with original measureme" +
 		"nts.\n\n![chart](" + articleImageDataURI(
@@ -341,7 +375,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", article.ID).Count(&chunks).Error)
 	require.Positive(t, chunks)
 	require.NoError(t, h.db.Model(&types.EntryEntity{}).Where("entry_id=?", article.ID).Count(&links).Error)
-	require.EqualValues(t, 1, links)
+	require.Zero(t, links)
 	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, LibraryIDs: []string{h.library.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: .9}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
@@ -369,14 +403,12 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.NotEmpty(t, article.FilePath)
 	firstEntities, err := NewEntityService(h.db, h.service.modelService).ListEntities(h.ctx, types.EntityQuery{})
 	require.NoError(t, err)
-	require.Len(t, firstEntities, 1)
-	require.NotEmpty(t, firstEntities[0].Description)
-	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "Acme", EntityType: "company"}})
+	require.Empty(t, firstEntities)
+	h.processor.output = articleProcessingOutput(t, []legacyEntityCandidate{{Name: "Acme", EntityType: "organization"}})
 	second := h.upload(t, "second-event", "# Second announcement\n\nAcme opened a new office on a different continent. This is an original report of the expansion and its date.")
 	var entityLinks []types.EntryEntity
 	require.NoError(t, h.db.Where("entry_id IN ?", []string{article.ID, second.ID}).Find(&entityLinks).Error)
-	require.Len(t, entityLinks, 2)
-	require.Equal(t, entityLinks[0].EntityID, entityLinks[1].EntityID)
+	require.Empty(t, entityLinks)
 	request := h.processor.requests[0][1]
 	require.Len(t, request.Images, 1)
 	require.Len(t, h.processor.requests, 2, "one processing call per approved article")

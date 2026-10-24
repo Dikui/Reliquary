@@ -237,6 +237,9 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 			if err != nil {
 				return err
 			}
+			if entity == nil {
+				continue
+			}
 			var existing int64
 			if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entry_id=? AND entity_id=?", library.SpaceID, entry.ID, entity.ID).Count(&existing).Error; err != nil {
 				return err
@@ -255,24 +258,19 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 	return entry, err
 }
 
-// The header carries names rather than entity types or IDs. Restore exact
-// canonical/alias matches and create otherwise unknown names as the other type.
-func restoreVaultEntity(tx *gorm.DB, spaceID uint64, name string, now time.Time) (*types.Entity, error) {
-	normalized := normalizeEntityName(name)
-	var entity types.Entity
-	err := tx.Where("space_id=? AND normalized_name=? AND merged_into_id=''", spaceID, normalized).
-		Order("canonical_name, id").First(&entity).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		err = tx.Table("entities").Joins("JOIN entity_aliases AS aliases ON aliases.entity_id=entities.id AND aliases.space_id=entities.space_id").
-			Where("entities.space_id=? AND aliases.normalized_alias=? AND entities.merged_into_id=''", spaceID, normalized).
-			Order("entities.canonical_name, entities.id").Select("entities.*").First(&entity).Error
+// Restored headers may reference only names already in the maintained directory.
+func restoreVaultEntity(tx *gorm.DB, spaceID uint64, name string, _ time.Time) (*types.Entity, error) {
+	var entities []types.Entity
+	key := types.NormalizeEntityKey(name)
+	err := tx.Where("space_id=? AND merged_into_id=''", spaceID).
+		Where(`(normalized_name=? OR id IN
+ (SELECT entity_id FROM entity_aliases WHERE space_id=? AND normalized_alias=?))`, key, spaceID, key).
+		Find(&entities).Error
+	if err != nil {
+		return nil, err
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		entity = types.Entity{
-			ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: name, NormalizedName: normalized,
-			EntityType: "other", EmbeddingNeedsRebuild: true, CreatedAt: now, UpdatedAt: now,
-		}
-		err = tx.Create(&entity).Error
+	if len(entities) != 1 {
+		return nil, nil
 	}
-	return &entity, err
+	return &entities[0], nil
 }

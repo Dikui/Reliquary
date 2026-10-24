@@ -45,11 +45,8 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	}
 	library := &types.Library{}
 	qualifySegmentOutput(library, &types.Entry{}, body, types.ProcessingSegment{End: len([]rune(body))}, result)
-	require.Len(t, result.Entities, 3)
-	require.Empty(t, result.Entities[2].Description, "a supported identity does not require a description")
-	require.Equal(t, blocks[1:2], result.Entities[0].Evidence)
-	location := result.Entities[0].Evidence[0]
-	require.Equal(t, "[Acme](https://example.org/acme) 与 **Beta** 合作。\r\nAcme 的产品是 Suite。\r\n", string([]rune(body)[location.Start:location.End]))
+	require.Empty(t, result.Entities)
+	require.NotEmpty(t, blocks)
 }
 
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {

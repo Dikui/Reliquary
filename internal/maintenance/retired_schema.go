@@ -24,9 +24,10 @@ var retiredColumns = map[string]string{
 }
 
 type retirement struct {
-	tables  []string
-	columns map[string][]string
-	tasks   []string
+	tables        []string
+	columns       map[string][]string
+	tasks         []string
+	resetEntities bool
 }
 
 func retirementAt(version int64) retirement {
@@ -59,16 +60,65 @@ func retirementAt(version int64) retirement {
 		r.columns["follows"] = []string{"topic_id"}
 		r.tasks = append(r.tasks, "topic:backfill", "content:check")
 	}
+	if version >= 36 {
+		r.tables = append(r.tables, "entity_merge_suggestions", "entity_embedding_rebuild_runs")
+		r.columns["entities"] = []string{
+			"description",
+			"name_embedding",
+			"embedding_model_id",
+			"embedding_dimension",
+			"embedding_needs_rebuild",
+		}
+		r.tasks = append(r.tasks, "entity:name_embedding_rebuild")
+	}
+
 	return r
 }
 
 func (r retirement) dropsRow(table string, row map[string]any) bool {
+	if r.resetEntities {
+		switch table {
+		case "entities", "entity_aliases", "entry_entities", "entity_merge_records":
+			return true
+		case "follows":
+			if row["target_type"] == "entity" {
+				return true
+			}
+		case "entry_segment_runs":
+			if row["phase"] == "processing" {
+				return true
+			}
+		case "embedding_rebuild_items", "embedding_rebuild_vectors":
+			if row["kind"] == "entity" {
+				return true
+			}
+		}
+	}
 	return table == "task_pending_ops" && slices.Contains(r.tasks, stringValue(row["task_type"])) ||
 		table == "follows" && len(r.columns["follows"]) > 0 && row["target_type"] == "topic"
 }
 
+func (r retirement) projectRow(table string, row map[string]any) {
+	for _, column := range r.columns[table] {
+		delete(row, column)
+	}
+	if r.resetEntities && table == "libraries" {
+		if tiers, ok := row["model_tiers"].(map[string]any); ok {
+			delete(tiers, "entity_resolution")
+		}
+	}
+}
+
 func projectRetiredSnapshot(snapshot *Snapshot, targetVersion int64) {
+	if targetVersion >= 36 {
+		projectEntryDefaults(snapshot, map[string]any{"entities_manual": false})
+		if _, ok := snapshot.Tables["entity_seed_imports"]; !ok {
+			snapshot.Tables["entity_seed_imports"] = []map[string]any{}
+		}
+	}
+
 	r := retirementAt(targetVersion)
+	r.resetEntities = snapshot.schemaVersion < 36 && targetVersion >= 36
 	for _, table := range r.tables {
 		delete(snapshot.Tables, table)
 		delete(snapshot.JSONNulls, table)
@@ -79,9 +129,7 @@ func projectRetiredSnapshot(snapshot *Snapshot, targetVersion int64) {
 				delete(snapshot.JSONNulls[table], rowIdentity(row))
 				return true
 			}
-			for _, column := range r.columns[table] {
-				delete(row, column)
-			}
+			r.projectRow(table, row)
 			return false
 		})
 		snapshot.Tables[table] = kept
@@ -96,6 +144,7 @@ func projectRetiredManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 		return expected, actual
 	}
 	r := retirementAt(actual.SchemaVersion)
+	r.resetEntities = expected.SchemaVersion < 36 && actual.SchemaVersion >= 36
 	left := *expected
 	left.Tables = make(map[string]TableManifest, len(expected.Tables))
 	left.Files = make(map[string][]File, len(expected.Files))
@@ -105,7 +154,7 @@ func projectRetiredManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 			continue
 		}
 		columns := r.columns[table]
-		needsProjection := slices.ContainsFunc(
+		needsProjection := r.resetEntities && table == "libraries" || slices.ContainsFunc(
 			columns,
 			func(column string) bool { return slices.Contains(item.Columns, column) },
 		)
@@ -137,9 +186,7 @@ func projectRetiredManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 				nulls[id] = append([]string{}, columns...)
 			}
 			for _, row := range rows {
-				for _, column := range columns {
-					delete(row, column)
-				}
+				r.projectRow(table, row)
 				if r.dropsRow(table, row) {
 					delete(nulls, rowIdentity(row))
 				}

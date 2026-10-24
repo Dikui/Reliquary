@@ -3,13 +3,13 @@ package container
 import (
 	"context"
 	"fmt"
-
-	"github.com/panjf2000/ants/v2"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+
+	"github.com/panjf2000/ants/v2"
 )
 
 // Reembed runs synchronously for CLI use with the same persistent checkpoints
@@ -46,7 +46,6 @@ func Reembed(ctx context.Context, action, runID string, progress func(*types.Emb
 	defer vault.Close()
 	rebuilder := service.NewEmbeddingRebuilder(db, models, nil, vault)
 	if action == "maintenance_start" {
-		rebuilder.PreserveEntityProfileTimestamps(true)
 		action = "start"
 	}
 	ctx = context.WithValue(ctx, types.SpaceIDContextKey, types.SingleSpaceID)

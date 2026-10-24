@@ -189,34 +189,6 @@ func TestDatabaseArticlePreviewDoesNotPersistMarkdown(t *testing.T) {
 	require.NoFileExists(t, path)
 }
 
-func TestVaultEntityMergeAndRenameRefreshEveryRelatedArticle(t *testing.T) {
-	h, v := newVaultArticleHarness(t)
-	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "旧公司", EntityType: "company"}})
-	first := h.upload(t, "关联一", "# Article one\n\nThe company introduced the first widget with detailed specifications.")
-	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "新公司", EntityType: "company"}})
-	second := h.upload(t, "关联二", "# Article two\n\nThe second organization published distinct measurements for another product.")
-	var oldEntity, keep types.Entity
-	require.NoError(t, h.db.Where("canonical_name=?", "旧公司").First(&oldEntity).Error)
-	require.NoError(t, h.db.Where("canonical_name=?", "新公司").First(&keep).Error)
-	entities := NewEntityService(h.db, h.service.modelService)
-	entities.SetHeaderRefresher(v)
-	require.NoError(t, entities.MergeEntities(h.ctx, keep.ID, oldEntity.ID))
-	require.NoError(t, v.RefreshHeader(h.ctx, first.ID))
-	require.Eventually(t, func() bool {
-		data, err := os.ReadFile(filepath.Join(v.root, first.VaultPath))
-		return err == nil && strings.Contains(string(data), "[[新公司]]") && !strings.Contains(string(data), "[[旧公司]]")
-	}, 3*time.Second, 10*time.Millisecond)
-	_, err := entities.RenameEntity(h.ctx, keep.ID, "最终公司")
-	require.NoError(t, err)
-	for _, k := range []*types.Entry{first, second} {
-		require.NoError(t, v.RefreshHeader(h.ctx, k.ID))
-		require.Eventually(t, func() bool {
-			data, err := os.ReadFile(filepath.Join(v.root, k.VaultPath))
-			return err == nil && strings.Contains(string(data), "[[最终公司]]") && !strings.Contains(string(data), "[[新公司]]")
-		}, 3*time.Second, 10*time.Millisecond)
-	}
-}
-
 func TestVaultExternallyDeletedArticleRebuildsCompleteSavedBody(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	k := h.upload(t, "删除恢复", "# Rebuild\n\nOriginal body contains a source chart.\n\n![image]("+articleImageDataURI(t, 9)+")")
@@ -236,28 +208,6 @@ func TestVaultExternallyDeletedArticleRebuildsCompleteSavedBody(t *testing.T) {
 	require.Contains(t, string(body), "Reference source explains configuration options and defaults.")
 }
 
-func TestVaultAcceptedEntityMergeSuggestionRefreshesHeader(t *testing.T) {
-	h, v := newVaultArticleHarness(t)
-	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "待合并实体", EntityType: "company"}})
-	k := h.upload(t, "接受合并", "# Suggested merge\n\nThe organization published original product specifications and measured results.")
-	require.NoError(t, v.RefreshHeader(h.ctx, k.ID))
-	var old types.Entity
-	require.NoError(t, h.db.Where("canonical_name=?", "待合并实体").First(&old).Error)
-	keep := entityRecord(uuid.NewString(), "规范实体", "company")
-	require.NoError(t, h.db.Create(&keep).Error)
-	suggestion := &types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: h.library.SpaceID, NewEntityID: old.ID, CandidateEntityID: keep.ID, EntryID: k.ID, Reason: "同一主体", Status: "pending", CreatedAt: time.Now()}
-	require.NoError(t, h.db.Create(suggestion).Error)
-	entities := NewEntityService(h.db, h.service.modelService)
-	entities.SetHeaderRefresher(v)
-	_, err := entities.DecideMergeSuggestion(h.ctx, suggestion.ID, true)
-	require.NoError(t, err)
-	require.NoError(t, v.RefreshHeader(h.ctx, k.ID))
-	require.Eventually(t, func() bool {
-		data, err := os.ReadFile(filepath.Join(v.root, k.VaultPath))
-		return err == nil && strings.Contains(string(data), "[[规范实体]]") && !strings.Contains(string(data), "[[待合并实体]]")
-	}, 3*time.Second, 10*time.Millisecond)
-}
-
 func TestVaultDeleteArticleRemovesFileAndAttachments(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
 	k := h.upload(t, "删除文章", "# Delete\n\nDelete the article file and its isolated attachment directory.\n\n![image]("+articleImageDataURI(t, 5)+")")
@@ -274,7 +224,7 @@ func TestVaultReprocessingUpdatesHeaderAndReadsVaultBody(t *testing.T) {
 	k := h.upload(t, "重新处理", "# Reprocess\n\nMeasured product capabilities remain in the immutable article body.\n\n![chart]("+articleImageDataURI(t, 6)+")")
 	require.NoError(t, v.RefreshHeader(h.ctx, k.ID))
 	_, _, beforeBody := readVaultArticle(t, v, k)
-	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{})
+	h.processor.output = articleProcessingOutput(t, []legacyEntityCandidate{})
 	var metadata map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(k.Metadata, &metadata))
 	intake, err := k.IntakeMetadata()

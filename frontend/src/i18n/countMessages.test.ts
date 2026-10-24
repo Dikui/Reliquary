@@ -7,8 +7,6 @@ import zhCN from './locales/zh-CN'
 
 const cases = [
   ["knowledgeWorkbench.sourceTime.excluded","count","Source excluded because publication time is missing: {count}","Sources excluded because publication time is missing: {count}"],
-  ["knowledgeWorkbench.nameEmbeddings.pending","count","Entity name pending rebuild: {count}","Entity names pending rebuild: {count}"],
-  ["knowledgeWorkbench.nameEmbeddings.latest","total","Latest rebuild: {status}, {processed}/{total} entity processed","Latest rebuild: {status}, {processed}/{total} entities processed"],
   ["library.batchDeleteSuccess","count","Deleted {count} material","Deleted {count} materials"],
   ["library.batchReparseSuccess","count","Submitted {count} rebuild task","Submitted {count} rebuild tasks"],
   ["model.editor.contextWindowTokens","count","{count} token","{count} tokens"],

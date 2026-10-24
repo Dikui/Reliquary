@@ -21,15 +21,14 @@ import (
 
 type TaskParams struct {
 	dig.In
-	Client              *queue.Client
-	SystemSettings      interfaces.SystemSettingService
-	EntryService        interfaces.EntryService
-	LibraryService      interfaces.LibraryService
-	EntityNameEmbedding *service.EntityNameEmbeddingRebuilder
-	EmbeddingRebuild    *service.EmbeddingRebuilder
-	Reports             *service.VaultDocumentService `optional:"true"`
-	SpanTracker         service.SpanTracker
-	Cleaner             interfaces.ResourceCleaner
+	Client           *queue.Client
+	SystemSettings   interfaces.SystemSettingService
+	EntryService     interfaces.EntryService
+	LibraryService   interfaces.LibraryService
+	EmbeddingRebuild *service.EmbeddingRebuilder
+	Reports          *service.VaultDocumentService `optional:"true"`
+	SpanTracker      service.SpanTracker
+	Cleaner          interfaces.ResourceCleaner
 }
 
 // backgroundTaskMiddleware tags every task's context as a background worker
@@ -81,7 +80,6 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	}); ok {
 		mux.HandleFunc(types.TypeEntryBatch, batches.ProcessEntryBatch)
 	}
-	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
 	mux.HandleFunc(types.TypeEntryVector, params.EmbeddingRebuild.HandleEntryVector)
 	if params.Reports != nil {

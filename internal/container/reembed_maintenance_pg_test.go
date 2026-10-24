@@ -8,13 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"testing"
-	"time"
-
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
@@ -22,6 +15,13 @@ import (
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
+	"testing"
+	"time"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func TestOfflineReembedPersistsAuditWithoutExportOnCompletionCancellationAndFailedItems(t *testing.T) {
@@ -46,17 +46,45 @@ func TestOfflineReembedPersistsAuditWithoutExportOnCompletionCancellationAndFail
 				_, _ = w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0,0]}],"usage":{"total_tokens":1}}`))
 			}))
 			defer server.Close()
-			model := &types.Model{ID: "offline-reembed", SpaceID: 1, Name: "fixture", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
-				Parameters: types.ModelParameters{InterfaceType: "openai", Provider: "generic", BaseURL: server.URL + "/v1", EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}
+			model := &types.Model{
+				ID:      "offline-reembed",
+				SpaceID: 1,
+				Name:    "fixture",
+				Type:    types.ModelTypeEmbedding,
+				Source:  types.ModelSourceRemote,
+				Status:  types.ModelStatusActive,
+
+				Parameters: types.ModelParameters{
+					InterfaceType:       "openai",
+					Provider:            "generic",
+					BaseURL:             server.URL + "/v1",
+					EmbeddingParameters: types.EmbeddingParameters{Dimension: 3},
+				},
+			}
 			require.NoError(t, db.Create(model).Error)
 			library.EmbeddingModelID, library.ModelTiers.Embedding = model.ID, model.ID
 			require.NoError(t, db.Save(library).Error)
-			require.NoError(t, db.Model(&types.Space{}).Where("id=?", library.SpaceID).Update("embedding_model_id", model.ID).Error)
+			require.NoError(t,
+				db.Model(&types.Space{}).Where("id=?",
+					library.SpaceID).Update("embedding_model_id",
+					model.ID).Error)
 			for _, id := range []string{"first", "second"} {
-				require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "product", Description: "Preserve original profile", UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}).Error)
+				require.NoError(t, db.Create(&types.Entry{
+					ID: id, SpaceID: 1, LibraryID: library.ID, Type: types.EntryTypeManual,
+					Title: id, SourceKind: "mine", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
+					VaultBody: "Original material " + id,
+					StructuredSummary: &types.EntrySummary{
+						Overview: "Original summary " + id, Points: []string{}, KeyTerms: []string{},
+					},
+				}).Error)
 			}
 			configureOfflineReembed(t, db, root, uploads)
-			initial, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: time.Hour}})
+			initial,
+				err := service.NewVaultService(db,
+				&config.Config{Vault: &config.VaultConfig{
+					Root:           root,
+					HeaderDebounce: time.Hour,
+				}})
 			require.NoError(t, err)
 			require.NoError(t, initial.Close())
 			require.NoDirExists(t, filepath.Join(root, ".reliquary"))
@@ -116,15 +144,29 @@ func configureOfflineReembed(t *testing.T, db *gorm.DB, root, uploads string) {
 	password, _ := dsn.User.Password()
 	// Register this before t.Setenv so its environment cleanup runs first.
 	t.Cleanup(utils.ResetSSRFWhitelistForTest)
-	for name, value := range map[string]string{"DB_DRIVER": "postgres", "DB_HOST": dsn.Hostname(), "DB_PORT": dsn.Port(), "DB_USER": dsn.User.Username(), "DB_PASSWORD": password,
-		"DB_NAME": dsn.Path[1:], "AUTO_MIGRATE": "false", "OLLAMA_OPTIONAL": "true", "VAULT_ROOT": root, "LOCAL_STORAGE_BASE_DIR": uploads, "VAULT_HEADER_DEBOUNCE": "1h", "SSRF_WHITELIST": "127.0.0.1", "SSRF_WHITELIST_EXTRA": ""} {
+	for name, value := range map[string]string{
+		"DB_DRIVER":   "postgres",
+		"DB_HOST":     dsn.Hostname(),
+		"DB_PORT":     dsn.Port(),
+		"DB_USER":     dsn.User.Username(),
+		"DB_PASSWORD": password,
+
+		"DB_NAME":                dsn.Path[1:],
+		"AUTO_MIGRATE":           "false",
+		"OLLAMA_OPTIONAL":        "true",
+		"VAULT_ROOT":             root,
+		"LOCAL_STORAGE_BASE_DIR": uploads,
+		"VAULT_HEADER_DEBOUNCE":  "1h",
+		"SSRF_WHITELIST":         "127.0.0.1",
+		"SSRF_WHITELIST_EXTRA":   "",
+	} {
 		t.Setenv(name, value)
 	}
 	utils.ResetSSRFWhitelistForTest()
 	data, err := os.ReadFile(filepath.Join("..", "..", "config", "config.yaml"))
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(path, data, 0600))
+	require.NoError(t, os.WriteFile(path, data, 0o600))
 	require.NoError(t, os.CopyFS(filepath.Join(filepath.Dir(path), "prompt_templates"), os.DirFS("../../config/prompt_templates")))
 	viper.Reset()
 	viper.SetConfigFile(path)

@@ -4,14 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/repository"
-	"reliquary/internal/models/embedding"
-	"reliquary/internal/types"
 )
 
 type profileRaceModels struct {
@@ -69,9 +69,6 @@ func TestBuiltinYAMLChangesRetireEmbeddingIdentity(t *testing.T) {
 	enableImageSearchFixture(t, h)
 	article := h.add(t, "yaml-article", "article", "2026-10-01", "research", "unrelated observations", 1)
 	addImageSearchVector(t, h, article, "../../attachments/yaml-article/chart.png", "fixture-model", []float32{0, 1, 0})
-	entity := &types.Entity{ID: "yaml-entity", SpaceID: 1, CanonicalName: "YAML entity", NormalizedName: "yaml entity", EntityType: "company",
-		NameEmbedding: types.EntityNameEmbedding{0, 1, 0}, EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, EmbeddingNeedsRebuild: false}
-	require.NoError(t, h.db.Create(entity).Error)
 	require.NoError(t, h.db.Model(&types.Model{}).Where("id='fixture-model'").Updates(map[string]any{"is_builtin": true, "managed_by": types.BuiltinModelManagedBy}).Error)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "builtin_models.yaml"), []byte(`builtin_models:
@@ -85,16 +82,13 @@ func TestBuiltinYAMLChangesRetireEmbeddingIdentity(t *testing.T) {
         dimension: 3
         supports_images: true
         multimodal_format: jina
-`), 0644))
+`), 0o644))
 	require.NoError(t, types.LoadBuiltinModelsConfig(h.ctx, h.db, dir))
 	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 		var identity string
 		require.NoError(t, h.db.Table(table).Where("entry_id=?", article.ID).Pluck("model_id", &identity).Error)
 		require.True(t, strings.HasPrefix(identity, "stale:"), table)
 	}
-	require.NoError(t, h.db.First(entity, "id=?", entity.ID).Error)
-	require.True(t, entity.EmbeddingNeedsRebuild)
-	require.True(t, strings.HasPrefix(entity.EmbeddingModelID, "stale:"))
 	response := h.search(t, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "othersemantic"})
 	require.Empty(t, response.Results)
 }
@@ -113,18 +107,22 @@ func (e *changingEmbeddingClient) callChange() {
 		change()
 	}
 }
+
 func (e *changingEmbeddingClient) Embed(ctx context.Context, text string) ([]float32, error) {
 	e.callChange()
 	return e.chunkSearchEmbedder.Embed(ctx, text)
 }
+
 func (e *changingEmbeddingClient) EmbedImage(ctx context.Context, image string) ([]float32, error) {
 	e.callChange()
 	return e.articleImageFixtureEmbedder.EmbedImage(ctx, image)
 }
+
 func (e *changingEmbeddingClient) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 	e.callChange()
 	return e.chunkSearchEmbedder.BatchEmbed(ctx, texts)
 }
+
 func (e *changingEmbeddingClient) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, texts []string) ([][]float32, error) {
 	return e.BatchEmbed(ctx, texts)
 }
@@ -154,8 +152,13 @@ func TestRunningEmbeddingClientCannotRepublishRetiredIdentity(t *testing.T) {
 			default:
 				var chunk types.Chunk
 				require.NoError(t, h.db.First(&chunk, "entry_id=?", article.ID).Error)
-				index := &types.IndexInfo{SourceID: chunk.ID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID,
-					EntryID: article.ID, LibraryID: h.library.ID, Content: buildEntryIndexContent(article, chunk.Content)}
+				index := &types.IndexInfo{
+					SourceID: chunk.ID, SourceType: types.ChunkSourceType, ChunkID: chunk.ID,
+					EntryID:   article.ID,
+					LibraryID: h.library.ID,
+					Content: buildEntryIndexContent(article,
+						chunk.Content),
+				}
 				if kind == "chunk" {
 					err = h.service.retrieveEngine.Index(h.ctx, embedder, index)
 				} else {

@@ -2,10 +2,9 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
-
 	"reliquary/internal/application/service"
 	"reliquary/internal/types"
+	"strconv"
 
 	werrors "reliquary/internal/errors"
 
@@ -13,15 +12,10 @@ import (
 )
 
 type EntityHandler struct {
-	service   *service.EntityService
-	rebuilder *service.EntityNameEmbeddingRebuilder
+	service *service.EntityService
 }
 
 func NewEntityHandler(s *service.EntityService) *EntityHandler { return &EntityHandler{service: s} }
-func (h *EntityHandler) SetNameEmbeddingRebuilder(r *service.EntityNameEmbeddingRebuilder) {
-	h.rebuilder = r
-}
-
 func entityListQuery(c *gin.Context) (types.EntityQuery, error) {
 	q := types.EntityQuery{Entity: c.Query("entity"), EntityType: c.Query("entity_type")}
 	var err error
@@ -84,84 +78,47 @@ func (h *EntityHandler) MergeEntities(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-func (h *EntityHandler) UpdateEntityDescription(c *gin.Context) {
+// SaveEntity handles entity creation and replacement.
+func (h *EntityHandler) SaveEntity(c *gin.Context) {
+	var input types.EntityInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		_ = c.Error(werrors.NewBadRequestError("entity name and type required"))
+		return
+	}
+	item, err := h.service.SaveEntity(c.Request.Context(), c.Param("entity_id"), input)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	status := http.StatusOK
+	if c.Param("entity_id") == "" {
+		status = http.StatusCreated
+	}
+	c.JSON(status, gin.H{"success": true, "data": item})
+}
+
+// DeleteEntity removes an entity and its associations.
+func (h *EntityHandler) DeleteEntity(c *gin.Context) {
+	if err := h.service.DeleteEntity(c.Request.Context(), c.Param("entity_id")); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// SetEntryEntities stores a manual material association choice.
+func (h *EntityHandler) SetEntryEntities(c *gin.Context) {
 	var input struct {
-		Description *string `json:"description" binding:"required"`
+		EntityIDs *[]string `json:"entity_ids" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(werrors.NewBadRequestError("description is required"))
+		_ = c.Error(werrors.NewBadRequestError("entity_ids array required"))
 		return
 	}
-	item, err := h.service.UpdateEntityDescription(c.Request.Context(), c.Param("entity_id"), *input.Description)
+	item, err := h.service.SetEntryEntities(c.Request.Context(), c.Param("id"), *input.EntityIDs)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
-}
-
-func (h *EntityHandler) RenameEntity(c *gin.Context) {
-	var input struct {
-		Name string `json:"name" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(werrors.NewBadRequestError("entity name is required"))
-		return
-	}
-	item, err := h.service.RenameEntity(c.Request.Context(), c.Param("entity_id"), input.Name)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
-}
-
-func (h *EntityHandler) MergeSuggestions(c *gin.Context) {
-	q, err := entityListQuery(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	items, err := h.service.ListMergeSuggestions(c.Request.Context(), q, c.Query("status"))
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
-}
-func (h *EntityHandler) AcceptMergeSuggestion(c *gin.Context) { h.decideMergeSuggestion(c, true) }
-func (h *EntityHandler) RejectMergeSuggestion(c *gin.Context) { h.decideMergeSuggestion(c, false) }
-func (h *EntityHandler) decideMergeSuggestion(c *gin.Context, accept bool) {
-	item, err := h.service.DecideMergeSuggestion(c.Request.Context(), c.Param("suggestion_id"), accept)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
-}
-
-func (h *EntityHandler) NameEmbeddingRebuildStatus(c *gin.Context) {
-	if h.rebuilder == nil {
-		c.Error(werrors.NewInternalServerError("name embedding rebuilder unavailable"))
-		return
-	}
-	item, err := h.rebuilder.Status(c.Request.Context(), types.MustSpaceIDFromContext(c.Request.Context()))
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
-}
-
-func (h *EntityHandler) RebuildNameEmbeddings(c *gin.Context) {
-	if h.rebuilder == nil {
-		c.Error(werrors.NewInternalServerError("name embedding rebuilder unavailable"))
-		return
-	}
-	ctx := c.Request.Context()
-	if err := h.rebuilder.MarkAndEnqueue(ctx, types.MustSpaceIDFromContext(ctx), "administrator"); err != nil {
-		c.Error(err)
-		return
-	}
-	h.NameEmbeddingRebuildStatus(c)
 }

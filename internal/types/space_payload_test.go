@@ -15,7 +15,6 @@ func TestSpacePayloadAcceptsBothKeysWithoutChangingPersistentWriters(t *testing.
 			&EntryListDeletePayload{},
 			&EntryListReparsePayload{},
 			&EmbeddingRebuildPayload{},
-			&EntityNameEmbeddingRebuildPayload{},
 		}
 		for _, payload := range payloads {
 			require.NoError(t, json.Unmarshal([]byte(data), payload))

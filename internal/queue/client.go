@@ -150,8 +150,6 @@ func (c *Client) EnqueueTx(ctx context.Context, tx *gorm.DB, t *Task, opts ...Op
 		table = "entries"
 	case types.TypeEmbeddingRebuild:
 		table = "embedding_rebuild_runs"
-	case types.TypeEntityNameEmbeddingRebuild:
-		table = "entity_embedding_rebuild_runs"
 	case types.TypeIngestAssetCleanup:
 		table = "ingest_assets"
 	}

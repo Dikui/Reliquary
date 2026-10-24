@@ -68,8 +68,3 @@ func (p *EmbeddingRebuildPayload) UnmarshalJSON(data []byte) error {
 	type plain EmbeddingRebuildPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
-
-func (p *EntityNameEmbeddingRebuildPayload) UnmarshalJSON(data []byte) error {
-	type plain EntityNameEmbeddingRebuildPayload
-	return UnmarshalSpacePayload(data, (*plain)(p))
-}

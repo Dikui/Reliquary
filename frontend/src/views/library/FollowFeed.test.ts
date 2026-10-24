@@ -21,7 +21,7 @@ const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
 async function settle() { await settleNodes(); await new Promise<void>(resolve => setImmediate(resolve)); await settleNodes() }
 async function click(node: Element) { await clickNode(node); await settle() }
 const empty = moduleOf(defineComponent({ setup: () => () => null }))
-const entity = { id: 'entity-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
+const entity = { id: 'entity-a', canonical_name: 'Aurora', entity_type: 'organization', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
 const secondEntity = { id: 'entity-b', name: 'Space Labs', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
 const follow = (type: 'entity', id: string, name: string) => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00Z', recent_entry_count: 2 })
 const entityFollow = follow('entity', entity.id, entity.canonical_name), secondEntityFollow = follow('entity', secondEntity.id, secondEntity.name)
@@ -95,9 +95,10 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const urls: any[] = []
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
-  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI,  '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI,  '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './EntityEditor.vue': empty }
   modules['@/components/EntryUpdateNotice.vue'] = modules['./EntryUpdateNotice.vue'] = empty
   modules['./BodyReference.vue'] = empty
+  modules['@/components/EntryEntitiesEditor.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
   modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)

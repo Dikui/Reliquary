@@ -2,14 +2,14 @@
 
 ## Product context
 
-Reliquary serves a single user collecting source material and maintaining entity profiles. The supported locales are zh-CN and en-US. Existing locale files own product copy. Light and dark themes retain the same hierarchy. New controls target WCAG 2.2 AA.
+Reliquary serves a single user collecting source material and maintaining an entity directory. The supported locales are zh-CN and en-US. Existing locale files own product copy. Light and dark themes retain the same hierarchy. New controls target WCAG 2.2 AA.
 
 ## Business-context sources
 
 | Scope | Source |
 | --- | --- |
-| Current entity terminology and component scope | CONTEXT.md and docs/adr/0009-kb-collect-store-retrieve.md |
-| Shared entity identity and article attribution | docs/adr/0002-global-entity-registry.md and the task 01 entity API contract |
+| Current entity terminology and component scope | CONTEXT.md and docs/adr/0016-store-and-track-event-layer.md |
+| Shared entity maintenance and material attribution | docs/adr/0016-store-and-track-event-layer.md and docs/entity-profiles-and-retrieval.md |
 | Features retained during staged implementation | .scratch/kb-reshape/spec.md (local only) and the explicit task 02 request |
 | Single-user access | docs/adr/0007-personal-single-user.md |
 | Imported personal documents and deletion | docs/adr/0013-user-documents-imported.md |
@@ -26,9 +26,8 @@ Reliquary serves a single user collecting source material and maintaining entity
 | Scrollbar | Global application theme stylesheet | UX-CONTRACT.md and frontend/src/assets/theme/theme.css | Stable gutter for bounded regions | Premium static audit |
 | Toast | TDesign MessagePlugin | Existing settings workflows | Success, warning, error and information | Frontend component tests |
 | Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Independent library stages; shared space embedding | Model preview tests and frontend checks |
-| Merge suggestions | MergeSuggestions and shared useConfirmDelete | Entity API and ADR 0002 | Pending, accepted and rejected | Backend lifecycle and frontend component tests |
 | Model call budgets | ModelCallSummary | Processing span model_calls | Processing details | Budget validation and component tests |
-| CRUD | Library editor, entity API and existing document detail | Entity profiles and library management | Entity merge refreshes the owning list | Entity lifecycle and editor tests |
+| CRUD | EntityEditor, EntryEntitiesEditor, library editor and TDesign dialogs | Entity API and ADR 0016 | Entity management and manual material associations | Route PG tests and frontend checks |
 | Repost sources | RepostSources | Entry detail API | Document preview | Shared component and full SFC regression tests |
 | Article classification | EntryClassification | Article structured_summary and entities | Compact list and complete detail | Actual SFC render, link safety and locale tests |
 | Image preview | ImagePreview wrapping TDesign ImageViewer | SearchImage and picture-preview | Authenticated search Blob and existing picture URL | Real browser Escape, opening focus and trigger focus restoration |
@@ -37,19 +36,16 @@ Reliquary serves a single user collecting source material and maintaining entity
 
 | Operation | Pending | Success | Failure recovery |
 | --- | --- | --- | --- |
-| View entity | Clear the previous article list and show loading | Show type, aliases and articles mentioning the entity in the single library | Keep selection, show inline error and allow refresh |
+| View entity | Clear the previous material list and show loading | Show type, aliases and materials involving the entity grouped by library | Keep selection, show inline error and allow refresh |
 | Filter entity list | Debounce search and invalidate older requests | Show the filtered list with explicit load more | Show inline error and allow refresh |
 | Merge entity | App-owned dialog names the retained entity and space-wide consequences; disable duplicate requests | Refresh the entity list and announce success | Keep selected target and show inline error |
-| Accept merge suggestion | Shared confirmation names both entities and space-wide consequences | Refresh the list, retain filter and announce success | Keep list and show inline error |
-| Reject merge suggestion | Disable duplicate requests | Keep entities separate and refresh suggestions | Keep list and show inline error |
-| Rebuild entity name embeddings | Disable duplicate starts; poll active runs every five seconds | Show status and processed/total counts | Preserve failure reason and retry controls |
 
 ## Dataset and draft state
 
 The library catalogue permits an empty list and keeps library creation available. Empty libraries, including historical system libraries, use the existing delete confirmation and server-side emptiness check. Successful deletion refreshes the catalogue; deleting the final library clears its editor. Startup and registration do not recreate deleted libraries. The four template behaviors remain available when creating a library. Source: ADR 0014, revised 2026-10-21.
 
 
-Entity and suggestion lists use explicit load more with fifty and twenty rows per request. Filter changes invalidate older results. Entity details show the shared identity and articles in the single library. Entity workbench filters and selected section are transient within the article view; its main documents/entities tab remains in URL state. Every article list filter persists in the URL: library scope, starred, keyword, published_from and published_to. Default values are omitted. Refresh and history navigation restore the controls and results together, retaining unrelated query parameters. The source category reuses the search source values and labels. Filters combine in both cards and rows. The filter panel uses aligned, wrapping controls; review and rebuild actions remain separate from the filter grid. Switching filters resets paging and clears hidden selections. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
+Entity lists use explicit load more with fifty rows per request. Filter changes invalidate older results. Entity details show the shared identity and materials across libraries. Entity directory search and type filters are transient within the material view; its main documents/entities tab remains in URL state. Every article list filter persists in the URL: library scope, starred, keyword, entity_ids, published_from and published_to. Default values are omitted. Refresh and history navigation restore the controls and results together, retaining unrelated query parameters. The source category reuses the search source values and labels. Filters combine in both cards and rows. The filter panel uses aligned, wrapping controls; review and rebuild actions remain separate from the filter grid. Switching filters resets paging and clears hidden selections. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
 
 Model tiers and article processing configuration save in the library settings page. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
 
@@ -61,7 +57,7 @@ The settings-content container stacks rows at 720px or less. Shared settings-lay
 
 Document details fill the viewport at widths of 720px or less. Desktop drawer width remains the user's preference. Narrow details hide the desktop resize handle. Long source links wrap; code and tables may keep bounded local scrolling.
 
-All materials show the complete Markdown body alongside the original link, structured summary and entities. Selecting an entity opens its profile in the existing workbench. Reprocess queues the existing processing call and retains failure feedback and retry.
+All materials show the complete Markdown body alongside the original link, structured summary and entities. Selecting an entity opens its details in the existing workbench. Reprocess queues the existing processing call and retains failure feedback and retry.
 
 Source lists show publisher, original URL, publication time or a missing marker, and matching method. URLs use the shared absolute HTTP(S) URL helper; unsafe values remain escaped text. Opening a different document clears old source data and ignores earlier responses.
 
@@ -78,7 +74,7 @@ The article detail uses EntryArticleJudgments for the shared star control. The o
 
 The main navigation groups existing entries into Materials, Needs attention, Diagnostics and Configuration. Needs attention opens /platform/entries?tab=reviews and retains only intake review and missing images. Diagnostics opens /platform/diagnostics and also groups the existing evaluation and model-call pages. Existing contextual entries remain available. The entity entry opens /platform/entries?tab=entities. Settings retain library, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
 
-Follow controls share server state in entity profiles, topic management and article detail relation labels. Successful mutations update all controls and the sidebar count; failures preserve the prior follow state and show an inline error with retry. Article stars retain their bookmark behavior. Entity merges transfer follows to the retained entity and deduplicate them; topic deletion removes its follow.
+Follow controls share server state in entity details, topic management and article detail relation labels. Successful mutations update all controls and the sidebar count; failures preserve the prior follow state and show an inline error with retry. Article stars retain their bookmark behavior. Entity merges transfer follows to the retained entity and deduplicate them; topic deletion removes its follow.
 
 The follow feed lives at /platform/follows and shows completed external articles newest collected first, with each article's matching followed entities. It excludes personal documents, reports and intake review. New markers use the later of feed qualification and association creation, independent of collection time. Historical topic backfill links do not produce new markers or unread counts. Adding a follow does not reset old articles' entrance times. Object filters and the existing similar report switch keep the feed's original new-marker snapshot across refreshes. Each folded article retains its own matches and new marker. Successful first loading records the captured opening time; loading failures do not advance it. The sidebar count tracks distinct unseen articles and refreshes on navigation, visibility and every thirty seconds. Mark all viewed advances the checkpoint and clears new markers. MCP reads share feed data without changing that checkpoint and paginate through a fixed initial window using cursor and next_cursor. External AI owns brief writing and uses write_report to save it.
 
@@ -98,15 +94,15 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 唯一库的根面包屑使用 library.title，中文显示“库”，英文显示“Library”，不随数据库中的库名称变化。文章、待处理、实体及设置背景共用此名称。
 
-实体页面包含实体档案和待合并建议。实体详情以类型、别名和提及该实体的文章为主要信息结构，文章可通过原有文章详情入口打开。实体类型固定为公司、人物、产品、项目、组织、其他。模型配置、合并操作和名称向量重建沿用现有 TDesign 组件与中英文文案。
+实体页面维护机构和人物名录。实体详情显示规范名、类型、别名以及跨库涉及该实体的资料，资料可通过原有详情入口打开。新增、编辑、删除和合并沿用 TDesign 组件与中英文文案，不再提供待合并建议和名称向量重建。
 
 运行时样式以 frontend/src/assets/theme/theme.css 为唯一色彩与圆角来源，经 frontend/src/main.ts 加载后供 TDesign 组件及 var(--td-*) 使用。字体由 frontend/src/composables/useFont.ts 管理，保留既有中文与英文选择。新增区域不另建色彩、字体或阴影体系。滚动条使用全局主题变量，所有新增溢出区域自动继承。
 
-实体列表使用显式加载更多，实体详情保持自然高度。窄屏把实体列表与档案改为上下排列，长实体名、别名和文章标题换行。实体合并前明确保留实体与相关文章影响，待合并建议通过共享确认对话框处理。
+实体列表使用显式加载更多，实体详情保持自然高度。窄屏把实体列表与档案改为上下排列，长实体名、别名和文章标题换行。实体合并前明确保留实体及资料关联、关注的转移；删除前确认所删实体与关联范围。
 
 模型档位在设置中心的库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。库目录按选中库展示统一的只读入库规则，并编辑适用模型、分块参数；生成型也可配置这些处理能力。审核标准、来源门槛和按类型抽图开关不再提供编辑。共享嵌入页签仅配置空间向量模型。每一行显示用途、选择和生效来源，不暗示其他库提供默认值。切库和离开前沿用未保存确认，失败保留草稿。父子分块开关按模板锁定。待审区明确标为历史资料的人工处置入口。资料和实体页面使用 /platform/entries；内容由外部工具通过收录接口送入。模型调用继续使用共享 ModelCallSummary 表格。
 
-主导航按资料管理、待处理、辅助诊断、系统配置分组。待处理直达原待审区，只保留收录待审；实体入口打开现有实体档案页签。设置中心提供库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
+主导航按资料管理、待处理、辅助诊断、系统配置分组。待处理直达原待审区，只保留收录待审；实体入口打开现有实体详情页签。设置中心提供库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
 
 自动增高文本框共用 SafeTextarea，保留 TDesign 外观与输入交互，项目负责可取消的安全高度测量。API Key 有效期使用 TDesign 日期时间选择器与全局中英文语言配置，保持原本本地时间、分钟精度与 Unix 秒提交方式。
 
@@ -130,7 +126,7 @@ Details distinguish unknown outcomes, partial inputs, unavailable materials and 
 
 ## Bulk material management
 
-The materials toolbar always offers the shared EntryBatchDialog, including when no loaded row is checked. DocumentBatchBar opens the same dialog for checked rows. Scope selection is step one; action selection and preview are step two. Both steps retain a scope summary of the captured filters and the exact server batch count, including unloaded and uncollapsed materials. Checked scopes distinguish available and unavailable IDs and never expand to all matching filters. Count failures stay visible with retry; loading or failed counts block advancement. Scope count requests are independent of action previews and ignore stale responses. Returning to scope preserves this summary but invalidates the action preview and confirmation. Checked rows and all matching server results are separate scopes. All-match selection includes unloaded results and fixes membership at confirmation submission. Entity IDs, topic IDs and publication dates join existing URL-backed document filters. Entity profiles and topic records link to the matching documents view. Publication date filtering excludes missing dates. Filter or library changes clear hidden selections.
+The materials toolbar always offers the shared EntryBatchDialog, including when no loaded row is checked. DocumentBatchBar opens the same dialog for checked rows. Scope selection is step one; action selection and preview are step two. Both steps retain a scope summary of the captured filters and the exact server batch count, including unloaded and uncollapsed materials. Checked scopes distinguish available and unavailable IDs and never expand to all matching filters. Count failures stay visible with retry; loading or failed counts block advancement. Scope count requests are independent of action previews and ignore stale responses. Returning to scope preserves this summary but invalidates the action preview and confirmation. Checked rows and all matching server results are separate scopes. All-match selection includes unloaded results and fixes membership at confirmation submission. Entity IDs, topic IDs and publication dates join existing URL-backed document filters. Entity details and topic records link to the matching documents view. Publication date filtering excludes missing dates. Filter or library changes clear hidden selections.
 
 Delete, reprocess, review, star changes, content type corrections and topic add/remove share this dialog. The materials toolbar has no separate whole-library review or rebuild shortcuts. All-match scope preserves every current list filter. To reprocess a library, filter by that library; add failed status to target only failures. The intake page retains its explicit pending-review context. Content types come from a single library catalogue. Preview shows eligible, skipped and blocked counts, reasons and samples; a named scope and explicit confirmation precede submission. Delete explains irreversible removal. Reprocess uses current library policy and excludes generated output, whose index maintenance remains separate. Review preserves source text and never performs user rejection deletion.
 
@@ -148,3 +144,8 @@ The entry API's parse_status describes body indexing, and summary_status describ
 ## Weekly content checks
 
 Source: .scratch/weekly-self-check/spec.md (local only). ContentChecksPage under Diagnostics reuses TDesign selects, input, switch, buttons, loading and pagination, the shared theme and the existing entry reference route. Settings are explicitly saved; no model or schedule is enabled by default. List page and selected run live in URL state. Inline failures remain visible with existing results; only explicit recheck starts another run. Details expose source excerpts as escaped text and navigate through the existing reference/hash validation.
+
+
+Entity maintenance follows ADR 0016. The Entities page edits institutions and people with canonical names and explicit aliases, using the existing TDesign dialogs and MessagePlugin. Canonical name, type and aliases use native input, select and textarea controls with labels bound to the actual controls. Deletion names the entity and explains removal of links and follows while retaining material content. Merge moves links and follows to the retained entity. Removed merge suggestions and entity vector rebuilding have no navigation or actions.
+
+Material details allow an explicit choice of zero to three existing entities and display the manual-edit marker, including an empty choice. Fresh detail loads restore this marker; closing or switching details resets it. Saving associations updates only entity fields, preserving enriched library names and formatted titles in the current detail and list cards. Material-list entity filters persist in entity_ids and participate in batch selection. Directory loading, errors, retries and paging use existing compact controls. These changes retain DESIGN.md tokens and the zh-CN/en-US locale policy.

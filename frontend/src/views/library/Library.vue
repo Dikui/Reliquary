@@ -153,6 +153,28 @@ const starredOptions = computed(() => [
   { value: 'false', label: t('articleJudgments.unstarredOnly') },
 ]);
 const selectedEntityId = ref('');
+const selectedEntityIds = ref<string[]>((initialDocumentFilters.entityIds || '').split(',').filter(Boolean));
+const filterEntities = ref<Entity[]>([]), filterEntitiesLoading = ref(false), filterEntitiesError = ref(''), moreFilterEntities = ref(false);
+const filterEntityOptions = computed(() => {
+  const options = filterEntities.value.map(entity => ({ value: entity.id, label: entity.canonical_name }));
+  for (const id of selectedEntityIds.value) if (!options.some(option => option.value === id)) options.push({ value: id, label: id });
+  return options;
+});
+let filterEntitiesRequest = 0;
+async function loadFilterEntities(more = false) {
+  const current = ++filterEntitiesRequest;
+  filterEntitiesLoading.value = true; filterEntitiesError.value = '';
+  try {
+    const response = await listEntities({ limit: 100, offset: more ? filterEntities.value.length : 0 });
+    if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed'));
+    if (current === filterEntitiesRequest) { filterEntities.value = more ? [...filterEntities.value, ...response.data] : response.data; moreFilterEntities.value = response.data.length === 100; }
+  } catch (cause) { if (current === filterEntitiesRequest) filterEntitiesError.value = cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed'); }
+  finally { if (current === filterEntitiesRequest) filterEntitiesLoading.value = false; }
+}
+onMounted(() => { void loadFilterEntities(); });
+watch(activeLibraryTab, tab => { if (tab === 'documents') void loadFilterEntities(); });
+onUnmounted(() => { filterEntitiesRequest++; });
+
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
 const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };
 const fileTypeOptions = computed(() => [
@@ -203,6 +225,7 @@ const updatedTimeRange = ref<string[]>(
     ? [initialDocumentFilters.startDate, initialDocumentFilters.endDate] : [],
 );
 const documentFilters = computed<DocumentListFilters>(() => ({
+  ...(selectedEntityIds.value.length ? { entityIds: selectedEntityIds.value.join(',') } : {}),
   keyword: docSearchKeyword.value.trim(),
   fileType: selectedFileType.value || '',
   starred: selectedStarred.value || '',
@@ -220,6 +243,7 @@ const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
   return {
     libraries: libraryScope.value,
+    entity_ids: selectedEntityIds.value.length ? selectedEntityIds.value : undefined,
     published_from: publishedRange.value?.[0] || undefined, published_to: publishedRange.value?.[1] || undefined,
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
     file_type: selectedFileType.value || undefined,
@@ -334,6 +358,7 @@ watch(() => route.query, query => {
   const restored = documentListFiltersFromQuery(query);
   if (!documentListFiltersEqual(documentFilters.value, restored)) {
     documentFiltersRestoredFromRoute = true;
+    selectedEntityIds.value = (restored.entityIds || '').split(',').filter(Boolean);
     docSearchKeyword.value = restored.keyword;
     selectedFileType.value = restored.fileType;
     selectedStarred.value = restored.starred;
@@ -885,7 +910,7 @@ const handleListAction = (
 
 // Clear selection on filter/library change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, publishedRange, libraryId],
+  [selectedEntityIds, docSearchKeyword, selectedFileType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, publishedRange, libraryId],
   () => {
     clearSelection();
   },
@@ -967,6 +992,12 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </t-input>
                 <div class="doc-filter-bar__filters">
                 <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedEntityIds" multiple filterable clearable :options="filterEntityOptions" :loading="filterEntitiesLoading" :placeholder="t('library.articleEntities')" :aria-label="t('library.articleEntities')" class="doc-filter-field__control" />
+                  <t-button v-if="moreFilterEntities" size="small" variant="text" :loading="filterEntitiesLoading" @click="loadFilterEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
+                  <p v-if="filterEntitiesError" role="alert">{{ filterEntitiesError }} <t-button size="small" variant="text" @click="loadFilterEntities()">{{ t('common.retry') }}</t-button></p>
+                </div>
+
 
 
 
@@ -1075,7 +1106,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
+      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :entity-options="filterEntityOptions" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
     <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId" @openEntry="openSourceDoc" @openEntity="openArticleEntity"
         @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">

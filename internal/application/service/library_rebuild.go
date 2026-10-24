@@ -176,22 +176,15 @@ func (s *entryService) cleanupLibraryRebuild(ctx context.Context, entry *types.E
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", entry.ID, entry.SpaceID).First(&current).Error; err != nil {
 			return err
 		}
-		var entityIDs []string
-		if err := tx.Model(&types.EntryEntity{}).Where("entry_id=? AND space_id=?", entry.ID, entry.SpaceID).Pluck("entity_id", &entityIDs).Error; err != nil {
-			return err
-		}
 		for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 			if err := tx.Table(table).Where("entry_id=? AND library_id=?", entry.ID, entry.LibraryID).Delete(nil).Error; err != nil {
 				return err
 			}
 		}
-		for _, value := range []any{&types.Chunk{}, &types.EntryEntity{}, &types.EntryProcessingOutput{}} {
+		for _, value := range []any{&types.Chunk{}, &types.EntryProcessingOutput{}} {
 			if err := tx.Where("entry_id=? AND space_id=?", entry.ID, entry.SpaceID).Delete(value).Error; err != nil {
 				return err
 			}
-		}
-		if err := pruneUnreferencedEntities(tx, entry.SpaceID, entityIDs); err != nil {
-			return err
 		}
 		if current.StorageSize > 0 {
 			if err := repository.NewSpaceRepository(tx).AdjustStorageUsed(ctx, entry.SpaceID, -current.StorageSize); err != nil {

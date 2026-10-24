@@ -16,9 +16,28 @@ func TestImportedDocumentSearchUsesSummaryFilters(t *testing.T) {
 	mine.Starred = true
 	require.NoError(t, h.db.Save(mine).Error)
 	vector := pgvector.NewHalfVector(entrySearchFixtureEmbedding(mine.Title + "\n" + mine.Description))
-	require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
-		VALUES (?,1,?,'fixture-model',3,?,'fixture')`, mine.ID, h.library.ID, vector).Error)
-	require.NoError(t, h.db.Create(&types.Entity{ID: "document-entity", SpaceID: 1, CanonicalName: "Document entity", NormalizedName: "document entity", EntityType: "project"}).Error)
+	require.NoError(
+		t,
+		h.db.Exec(
+			`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
+		VALUES (?,1,?,'fixture-model',3,?,'fixture')`,
+			mine.ID,
+			h.library.ID,
+			vector,
+		).Error,
+	)
+	require.NoError(
+		t,
+		h.db.Create(
+			&types.Entity{
+				ID:             "document-entity",
+				SpaceID:        1,
+				CanonicalName:  "Document entity",
+				NormalizedName: "document entity",
+				EntityType:     "organization",
+			},
+		).Error,
+	)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: mine.ID, EntityID: "document-entity"}).Error)
 	h.library.IndexingStrategy.KeywordEnabled = false
 	require.NoError(t, h.db.Model(h.library).Update("indexing_strategy", h.library.IndexingStrategy).Error)

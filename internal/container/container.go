@@ -101,7 +101,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewEntityService))
 	must(container.Provide(service.NewFollowService))
 	must(container.Provide(service.NewOperationLogService))
-	must(container.Provide(service.NewEntityNameEmbeddingRebuilder))
 	must(container.Provide(service.NewEmbeddingRebuilder))
 	must(container.Provide(embedding.NewBatchEmbedder))
 	must(container.Provide(func(db *gorm.DB) *chatgpt.Manager { return chatgpt.NewManager(db) }))
@@ -154,7 +153,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// local:// images that live under a space's configured storage PathPrefix
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerModelLocalImageResolver))
-	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
 	must(container.Invoke(registerVaultIntegration))
 	must(container.Invoke(registerIngestDiagnostics))
 
@@ -162,45 +160,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
 	must(container.Provide(router.NewRouter))
 	must(container.Invoke(router.RunTaskServer))
-	must(container.Invoke(recoverEntityNameEmbeddings))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
 	return container
-}
-
-func registerNameEmbeddingRebuildIntegration(
-	rebuilder *service.EntityNameEmbeddingRebuilder,
-	entityService *service.EntityService,
-	libraries interfaces.LibraryService,
-	models interfaces.ModelService,
-	entityHandler *handler.EntityHandler,
-) error {
-	setter := func(target any) error {
-		integration, ok := target.(interface {
-			SetNameEmbeddingRebuilder(service.EntityNameEmbeddingRebuildTrigger)
-		})
-		if !ok {
-			return fmt.Errorf("name embedding rebuild integration unavailable for %T", target)
-		}
-		integration.SetNameEmbeddingRebuilder(rebuilder)
-		return nil
-	}
-	if err := setter(libraries); err != nil {
-		return err
-	}
-	if err := setter(models); err != nil {
-		return err
-	}
-	entityService.SetNameEmbeddingRebuilder(rebuilder)
-	entityHandler.SetNameEmbeddingRebuilder(rebuilder)
-	return nil
-}
-
-func recoverEntityNameEmbeddings(rebuilder *service.EntityNameEmbeddingRebuilder) error {
-	if err := rebuilder.Startup(context.Background()); err != nil {
-		logger.Warnf(context.Background(), "[Container] Name embedding rebuild startup recovery failed: %v", err)
-	}
-	return nil
 }
 
 // registerModelLocalImageResolver loads catalog-backed local images for model calls.

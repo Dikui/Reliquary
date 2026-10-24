@@ -6,12 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/types"
 	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"reliquary/internal/application/repository"
-	"reliquary/internal/types"
 )
 
 type runtimeTestSettings struct{}
@@ -39,6 +39,7 @@ func (runtimeTestSettings) List(context.Context) ([]*types.SystemSetting, error)
 func (runtimeTestSettings) Get(context.Context, string) (*types.SystemSetting, error) {
 	return nil, nil
 }
+
 func (runtimeTestSettings) Update(context.Context, string, any) (*types.SystemSetting, error) {
 	return nil, nil
 }
@@ -55,12 +56,15 @@ type runtimeTestInspector struct{}
 func (runtimeTestInspector) CancelTasksForEntry(context.Context, string) (int, int, error) {
 	return 0, 0, nil
 }
+
 func (runtimeTestInspector) HasQueuedTasksForEntry(context.Context, string) (bool, error) {
 	return false, nil
 }
+
 func (runtimeTestInspector) QueueStats(context.Context) ([]types.QueueStat, bool, error) {
 	return []types.QueueStat{}, true, nil
 }
+
 func (runtimeTestInspector) WorkerServerStats(context.Context) ([]types.WorkerServerStat, bool, error) {
 	return []types.WorkerServerStat{
 		{Concurrency: 8, Active: 4, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolCore)},
@@ -544,7 +548,7 @@ func TestRuntimeTaskActionsRejectForeignSpaceBeforeMutation(t *testing.T) {
 func TestRuntimeTaskCancelPurgesOrphanWhenEntryGone(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
-		ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
+		ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEmbeddingRebuild,
 		State: types.RuntimeTaskRetry, SpaceID: types.SingleSpaceID, EntryID: "entry-gone",
 		AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 	}}}
@@ -574,7 +578,7 @@ func TestRuntimeTaskCancelPurgesOrphanAfterSiblingSweep(t *testing.T) {
 	inspector := &runtimeTaskTestInspector{
 		cancelDeleted: 2,
 		tasks: []types.RuntimeTaskInfo{{
-			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
+			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEmbeddingRebuild,
 			State: types.RuntimeTaskArchived, SpaceID: types.SingleSpaceID, EntryID: "entry-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
@@ -608,7 +612,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenSweepAlreadyRemovedTask(t *testing.T) 
 		getRuntimeErr:     errors.New("task not found"),
 		getRuntimeErrFrom: 2,
 		tasks: []types.RuntimeTaskInfo{{
-			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
+			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEmbeddingRebuild,
 			State: types.RuntimeTaskRetry, SpaceID: types.SingleSpaceID, EntryID: "entry-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},

@@ -21,5 +21,6 @@ export interface ClassifiedEntry {
   description?: string
   source?: string
   metadata?: { intake?: { decision?: string; reason?: string; source?: string; original_path?: string; source_info?: { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string } } }
+  entities_manual?: boolean
   entities?: Pick<Entity, 'id' | 'canonical_name' | 'entity_type'>[]
 }

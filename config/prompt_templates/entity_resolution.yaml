@@ -1,6 +1,0 @@
-# 修改后重启后端生效；程序部署默认保留运行目录中的此文件。
-templates:
-  - id: entity_resolution
-    name: 实体归一
-    content: |-
-      Decide whether the source mention is the exact same real-world entity as one candidate. Compare the source description with candidate descriptions and aliases to establish identity. A difference in type labels alone proves neither a different nor the same identity. Similar names, different versions, or a shared topic do not prove identity.

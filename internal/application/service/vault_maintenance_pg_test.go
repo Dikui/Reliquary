@@ -78,36 +78,6 @@ func TestVaultVerifyRepairsAllLibraryFilesAndReplica(t *testing.T) {
 	require.Equal(t, "broken log", string(mustVaultRead(t, quarantined[0])))
 }
 
-func TestVaultVerifyMarksSameDimensionOldEntityModelPendingAndExcludesMergedEntities(t *testing.T) {
-	h, v := newVaultArticleHarness(t)
-	require.NoError(t, h.db.Exec(`INSERT INTO models(id,space_id,name,type,source,parameters,status) VALUES('old-entity-model',1,'Old entity model','Embedding','remote','{"embedding_parameters":{"dimension":3}}','active')`).Error)
-	require.NoError(t, h.db.Exec(`INSERT INTO entities(id,space_id,canonical_name,normalized_name,entity_type,name_embedding,embedding_model_id,embedding_dimension,embedding_needs_rebuild,merged_into_id,created_at,updated_at) VALUES
- ('current-entity',1,'Current entity','current entity','company','[1,0,0]','embedding',3,false,'',now(),now()),
- ('stale-entity',1,'Stale entity','stale entity','company','[1,0,0]','old-entity-model',3,false,'',now(),now()),
- ('merged-entity',1,'Merged entity','merged entity','company','[1,0,0]','old-entity-model',3,true,'current-entity',now(),now())`).Error)
-	dimensions, err := maintenance.CheckVectorDimensions(h.ctx, h.db)
-	require.NoError(t, err)
-	require.Empty(t, dimensions, "the obsolete entity vector remains dimensionally valid")
-	checkPending := func(expected int64) {
-		t.Helper()
-		require.NoError(t, v.Flush(h.ctx))
-		result, err := v.Verify(h.ctx, false)
-		require.NoError(t, err)
-		require.True(t, result.OK)
-		require.Equal(t, expected, result.PendingVectors["entities"])
-	}
-	checkPending(1)
-	require.NoError(t, h.db.Exec(`UPDATE entities SET embedding_model_id='embedding' WHERE id='stale-entity'`).Error)
-	checkPending(0)
-	require.NoError(t, h.db.Exec(`UPDATE entities SET embedding_needs_rebuild=true WHERE id='stale-entity'`).Error)
-	checkPending(1)
-	require.NoError(t, h.db.Exec(`UPDATE entities SET embedding_needs_rebuild=false,embedding_dimension=4 WHERE id='stale-entity'`).Error)
-	checkPending(1)
-	require.NoError(t, h.db.Exec(`UPDATE entities SET embedding_dimension=3 WHERE id='stale-entity'`).Error)
-	require.NoError(t, h.db.Exec(`UPDATE models SET parameters=jsonb_set(parameters,'{embedding_parameters,dimension}','4'::jsonb) WHERE id='embedding'`).Error)
-	checkPending(2)
-}
-
 func mustVaultRead(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -230,14 +200,21 @@ func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testin
 
 func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "Company", EntityType: "company"}})
-	full := h.upload(t, "Research preservation", "# Original research\n\nImmutable original measurements and reasoning.")
+	h.processor.output = articleProcessingOutput(t,
+		[]legacyEntityCandidate{{
+			Name:       "Company",
+			EntityType: "organization",
+		}})
+	full := h.upload(t,
+		"Research preservation",
+		"# Original research\n\nImmutable original measurements and reasoning.")
+	maintainTestEntities(h.ctx, t, h.db, full.ID, "Company")
 	h.processor.output = articleProcessingOutput(t, nil)
 	summary := h.upload(t, "Reference preservation", "# Summary reference\n\nComplete reference text is retained.")
 	require.NoError(t, h.db.Model(full).Updates(map[string]any{"collect_reason": "User reason"}).Error)
 	var entity types.Entity
 	require.NoError(t, h.db.Where("canonical_name='Company'").First(&entity).Error)
-	require.NoError(t, h.db.Model(&entity).Update("description", "User entity description").Error)
+
 	require.NoError(
 		t,
 		h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?)", entity.ID).Error,

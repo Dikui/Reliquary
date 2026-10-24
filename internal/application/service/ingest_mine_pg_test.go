@@ -38,7 +38,7 @@ func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) 
 	h.processor.output = articleProcessingOutput(
 		t,
 
-		[]types.EntityCandidate{{Name: "Spectrometer", EntityType: "product"}},
+		[]legacyEntityCandidate{{Name: "Spectrometer", EntityType: "organization"}},
 	)
 	content := "# Calibration notes\n\nSpectrometer observations record verified values. Follow the measured calibration procedure and compare the original readings.\n\n来源: https://example.org/reference-not-my-document"
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "personal", SourceRef: "fixture-mine", Acquisition: "verbatim", Title: "校准笔记", Content: content})
@@ -67,7 +67,7 @@ func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) 
 	require.Equal(t, k.LibraryID, header.LibraryID)
 	require.Equal(t, k.VaultBody, string(body))
 	require.Contains(t, string(body), content)
-	require.Contains(t, string(data), "[[Spectrometer]]")
+	require.NotContains(t, string(data), "[[Spectrometer]]")
 	require.Empty(t, k.Entities)
 	require.NotContains(t, string(data), "url: null")
 	require.NotContains(t, string(data), "publisher: null")

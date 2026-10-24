@@ -12,9 +12,6 @@ import zhCN from '../i18n/locales/zh-CN'
 
 const require = createRequire(import.meta.url)
 const stageNames = {
-  entity_judgment: ['实体身份判断', 'Entity identity judgment'],
-  entity_embedding: ['实体名称向量生成', 'Entity name embedding'],
-  entity_embedding_rebuild: ['实体名称向量重建', 'Entity name embedding rebuild'],
   image_embedding: ['图片向量生成', 'Image embedding'],
 } as const
 
