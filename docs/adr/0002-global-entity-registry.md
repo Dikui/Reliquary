@@ -1,6 +1,6 @@
 # 0002 对象身份在团队空间内全局统一
 
-Status: accepted
+Status: accepted；自动建档与身份判断部分被 [0016](0016-store-and-track-event-layer.md) 取代
 日期：2026-10-07
 
 ## 背景

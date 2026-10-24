@@ -1,6 +1,6 @@
 # 0009 知识库收窄为收集、存储、检索组件
 
-Status: accepted；收录入口、订阅源与正文定稿部分被 [0012](0012-ingest-only-no-collection.md) 取代
+Status: accepted；收录入口、订阅源与正文定稿部分被 [0012](0012-ingest-only-no-collection.md) 取代；不建事实与事件、删除领域部分被 [0016](0016-store-and-track-event-layer.md) 取代
 日期：2026-10-11
 部分被 [0014](0014-internal-knowledge-base.md) 取代（2026-10-14）。
 取代 [0004](0004-domain-templates-open-fields.md)、[0005](0005-event-layer-bounds.md)、[0006](0006-on-demand-structured-extraction.md)、[0008](0008-focus-precheck-and-backfill.md)；部分取代 [0007](0007-personal-single-user.md)
